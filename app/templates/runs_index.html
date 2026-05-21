@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}{{ methodology }} runs{% endblock %}
+
+{% block header_extra %}
+<a href="/methodology/{{ methodology }}" class="back-link">← {{ methodology }}</a>
+{% endblock %}
+
+{% block content %}
+<h1>Runs of <code>{{ methodology }}</code></h1>
+{% if runs %}
+<table class="stages">
+    <thead>
+        <tr><th>run id</th><th>started</th><th>status</th><th>stages</th></tr>
+    </thead>
+    <tbody>
+        {% for r in runs %}
+        <tr>
+            <td><a href="/methodology/{{ methodology }}/runs/{{ r.run_id }}"><code>{{ r.run_id }}</code></a></td>
+            <td>{{ r.started_at }}</td>
+            <td><span class="run-status status-{{ r.status }}">{{ r.status }}</span></td>
+            <td>
+                {{ r.stages_ok }}/{{ r.stages_total }} ok
+                {% if r.stages_error %}· <span class="status-error">{{ r.stages_error }} error{% if r.stages_error != 1 %}s{% endif %}</span>{% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<p><em>No runs yet. Click "Run pipeline" on the methodology page.</em></p>
+{% endif %}
+{% endblock %}

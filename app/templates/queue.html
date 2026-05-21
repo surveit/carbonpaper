@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+{% block title %}Review queue · {{ stage_id }} · {{ run_id }}{% endblock %}
+
+{% block header_extra %}
+<a href="/methodology/{{ methodology }}/runs/{{ run_id }}" class="back-link">← Run {{ run_id }}</a>
+{% endblock %}
+
+{% block content %}
+<div class="stage-header">
+    <span class="type-tag human">👤 human_review_queue</span>
+    <h1>{{ stage_def.name }}</h1>
+    <p class="stage-id"><code>{{ stage_id }}</code> · run <code>{{ run_id }}</code></p>
+</div>
+
+<div class="queue-progress">
+    <div class="bar"><div class="fill" style="width: {{ (100 * reviewed_count / total) | round if total else 0 }}%"></div></div>
+    <p><strong>{{ reviewed_count }}</strong> of <strong>{{ total }}</strong> reviewed</p>
+    {% if all_reviewed %}
+    <form action="/methodology/{{ methodology }}/runs/{{ run_id }}/resume" method="post" style="display:inline">
+        <button type="submit" class="btn primary">▶ Resume run</button>
+    </form>
+    {% endif %}
+</div>
+
+{% if stage_def.queue and stage_def.queue.reviewer_instructions %}
+<details class="reviewer-instructions" open>
+    <summary>Reviewer instructions</summary>
+    <pre class="instructions">{{ stage_def.queue.reviewer_instructions }}</pre>
+</details>
+{% endif %}
+
+{% if not items %}
+<p class="muted"><em>No items to review.</em></p>
+{% endif %}
+
+<div class="queue-items">
+{% for item in items %}
+<article class="queue-card {% if item.prior_decision %}decided decided-{{ item.prior_decision.decision }}{% endif %}"
+         data-content-hash="{{ item.content_hash }}">
+    <header>
+        <span class="ai-score score-{{ item.row.get('score', '0') }}">AI score: {{ item.row.get('score', '?') }}</span>
+        {% if item.row.get('entity_id') %}<code>{{ item.row.entity_id }}</code>{% endif %}
+        {% if item.row.get('query_id') %}· <code>{{ item.row.query_id }}</code>{% endif %}
+        {% if item.row.get('benchmark_id') %}· <code>{{ item.row.benchmark_id }}</code>{% endif %}
+    </header>
+    {% if item.row.get('quote') %}
+    <blockquote>{{ item.row.quote }}</blockquote>
+    {% endif %}
+    {% if item.row.get('reasoning') %}
+    <p class="reasoning"><strong>Model reasoning:</strong> {{ item.row.reasoning }}</p>
+    {% endif %}
+    {% if item.row.get('precedence_failure') %}
+    <p class="warn-flag">⚠ precedence_failure</p>
+    {% endif %}
+
+    {% if item.prior_decision %}
+    <p class="prior-decision">
+        Current: <strong>{{ item.prior_decision.decision }}</strong>
+        {% if item.prior_decision.modified_score is not none and item.prior_decision.modified_score == item.prior_decision.modified_score %}
+          · score → <code>{{ item.prior_decision.modified_score }}</code>
+        {% endif %}
+        <span class="muted">by {{ item.prior_decision.reviewer }} at {{ item.prior_decision.reviewed_at }}</span>
+    </p>
+    {% endif %}
+    <div class="decision-controls">
+        <button type="button" class="btn approve {% if item.prior_decision and item.prior_decision.decision == 'approve' %}selected{% endif %}" data-action="approve">✓ Approve</button>
+        <button type="button" class="btn reject  {% if item.prior_decision and item.prior_decision.decision == 'reject'  %}selected{% endif %}" data-action="reject">✗ Reject</button>
+        <span class="modify-group">
+            <label>Modify score:
+                <input type="number" step="1" min="-2" max="2"
+                       placeholder="e.g. -1"
+                       value="{% if item.prior_decision and item.prior_decision.decision == 'modify' and item.prior_decision.modified_score == item.prior_decision.modified_score %}{{ item.prior_decision.modified_score | int }}{% endif %}"
+                       data-role="score">
+            </label>
+            <button type="button" class="btn modify {% if item.prior_decision and item.prior_decision.decision == 'modify' %}selected{% endif %}" data-action="modify">Save</button>
+        </span>
+    </div>
+    <details class="raw-row">
+        <summary>raw row</summary>
+        <pre>{{ item.row | tojson(indent=2) }}</pre>
+    </details>
+</article>
+{% endfor %}
+</div>
+
+<script>
+(function () {
+  const METHODOLOGY = {{ methodology | tojson }};
+  const RUN_ID = {{ run_id | tojson }};
+  const STAGE_ID = {{ stage_id | tojson }};
+  const DECIDE_URL = `/methodology/${METHODOLOGY}/runs/${RUN_ID}/queue/${STAGE_ID}/decide`;
+
+  async function submitDecision(card, decision, modifiedScore) {
+    const fd = new FormData();
+    fd.append('content_hash', card.dataset.contentHash);
+    fd.append('decision', decision);
+    if (modifiedScore !== undefined && modifiedScore !== null && modifiedScore !== '') {
+      fd.append('modified_score', modifiedScore);
+    }
+    const r = await fetch(DECIDE_URL, { method: 'POST', body: fd });
+    if (!r.ok) {
+      const text = await r.text();
+      alert(`Failed: ${r.status} ${text}`);
+      return;
+    }
+    // Reload to update progress and reveal Resume button when complete.
+    window.location.reload();
+  }
+
+  document.addEventListener('click', function (ev) {
+    const btn = ev.target.closest('[data-action]');
+    if (!btn) return;
+    const card = btn.closest('.queue-card');
+    if (!card) return;
+    const action = btn.dataset.action;
+    if (action === 'approve' || action === 'reject') {
+      submitDecision(card, action);
+    } else if (action === 'modify') {
+      const input = card.querySelector('[data-role="score"]');
+      if (!input || input.value === '') {
+        alert('Enter a score to modify to.');
+        return;
+      }
+      submitDecision(card, 'modify', input.value);
+    }
+  });
+})();
+</script>
+{% endblock %}

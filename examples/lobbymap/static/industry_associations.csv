@@ -1,0 +1,6 @@
+association_id,name,jurisdiction,sectors,cross_sector_federation
+api,American Petroleum Institute,United States,"[oil_and_gas]",false
+acea,European Automobile Manufacturers Association,European Union,"[auto]",false
+us_chamber,U.S. Chamber of Commerce,United States,"[multi]",true
+businesseurope,BusinessEurope,European Union,"[multi]",true
+edison_electric,Edison Electric Institute,United States,"[utilities]",false

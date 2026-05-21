@@ -1,0 +1,29 @@
+sector,source_class,query_id,weight
+Oil & Gas Operations,regulatory_consultation,Q1,2.0
+Oil & Gas Operations,regulatory_consultation,Q3,2.5
+Oil & Gas Operations,regulatory_consultation,Q5,2.5
+Oil & Gas Operations,regulatory_consultation,Q9,3.0
+Oil & Gas Operations,regulatory_consultation,Q11,3.0
+Oil & Gas Operations,corporate_media,Q1,1.0
+Oil & Gas Operations,corporate_media,Q3,1.0
+Oil & Gas Operations,corporate_media,Q5,1.5
+Oil & Gas Operations,corporate_media,Q7,1.0
+Oil & Gas Operations,corporate_media,Q9,1.5
+Oil & Gas Operations,financial_disclosure,Q5,2.0
+Oil & Gas Operations,financial_disclosure,Q3,2.0
+Oil & Gas Operations,cdp_response,Q1,1.5
+Oil & Gas Operations,cdp_response,Q3,2.0
+Oil & Gas Operations,cdp_response,Q5,2.0
+Oil & Gas Operations,paid_climate_advertising,Q7,1.0
+Oil & Gas Operations,lobbying_register,Q5,2.5
+Auto & Truck Manufacturers,corporate_media,Q10,2.5
+Auto & Truck Manufacturers,corporate_media,Q11,2.0
+Auto & Truck Manufacturers,regulatory_consultation,Q10,3.0
+Utilities,cdp_response,Q5,2.0
+Utilities,cdp_response,Q7,2.5
+oil_and_gas,regulatory_consultation,Q11,3.0
+oil_and_gas,corporate_media,Q11,1.5
+auto,regulatory_consultation,Q10,3.0
+multi,corporate_media,Q1,1.0
+multi,corporate_media,Q5,1.5
+utilities,corporate_media,Q7,2.0

@@ -1,0 +1,42 @@
+id: importance_tagging
+name: Tag evidence with importance + recency weight
+type: python_transform
+
+source:
+  doc: examples/lobbymap/stages/05_importance_tagging.md
+  section: "§4.4 (importance), §4.6 (recency)"
+  lines: [331, 365]
+
+inputs:
+  - id: evidence_extraction
+    schema:
+      primary_key: [evidence_id]
+      columns:
+        - {name: evidence_id, type: str, nullable: false}
+        - {name: published_at, type: datetime, nullable: false}
+        - {name: source_class, type: str, nullable: false}
+        - {name: confidence, type: float, nullable: false, range: [0.0, 1.0]}
+
+function:
+  kind: module
+  module: examples.lobbymap.code.importance_tagging
+  function: transform
+  requirements: [pandas]
+
+output_schema:
+  primary_key: [evidence_id]
+  estimated_rows: 30000
+  columns:
+    - {name: evidence_id, type: str, nullable: false}
+    - {name: published_at, type: datetime, nullable: false}
+    - {name: source_class, type: str, nullable: false}
+    - {name: importance, type: int, nullable: false, range: [0, 10]}
+    - {name: recency_weight, type: float, nullable: false, range: [0.0, 1.0]}
+    - {name: composite_weight, type: float, nullable: false, range: [0.0, 10.0]}
+
+compiler_notes:
+  - "Production LobbyMap uses an LLM to score importance 0-10 (§4.4 line 333).
+     For the demo this is a deterministic source-class lookup; flagged for
+     replacement with an llm_transform once we have eval data for it."
+  - "Recency decay shape (linear over 5 years) is the compiler's choice; prose
+     is non-specific (line 358)."

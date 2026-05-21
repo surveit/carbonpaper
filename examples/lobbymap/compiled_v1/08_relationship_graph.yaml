@@ -1,0 +1,215 @@
+id: relationship_graph
+name: Industry-association ↔ company relationship graph
+type: build_relationship
+
+source:
+  doc: examples/lobbymap/stages/08_relationship_graph.md
+  section: "§4.9"
+  lines: [366, 389]
+
+inputs:
+  - universe_selection
+
+parameters:
+  relationship_type: company_industry_association_membership
+  description: |
+    Build the bipartite graph of (company → industry association) edges from the
+    universe defined in Stage 1. Each edge carries two scalar attributes used
+    downstream by Stage 9 (indirect_performance_band):
+      - relationship_strength (1–10): structural strength of the company's tie
+        to the association. Derivable from public data (membership rosters,
+        board listings, exec biographies, corporate disclosures).
+      - relative_ranking (0–10): the association's political weight in its
+        jurisdiction. NOT derivable from public structural data — sourced from
+        an external stakeholder survey loaded as a static file (see
+        compiler_notes for the limits of this approach).
+
+  sources:
+    - kind: association_membership_rosters
+      description: |
+        Public membership lists published on industry-association websites
+        and/or annual reports. The primary structural-edge source.
+      collection: scrape_or_manual_upload
+    - kind: association_board_committee_listings
+      description: |
+        Board, executive committee, and standing-committee rosters published
+        by associations. Drives the board/committee boost in
+        relationship_strength.
+      collection: scrape_or_manual_upload
+    - kind: company_disclosures_and_press
+      description: |
+        Company sustainability reports, climate-policy review documents, and
+        public statements expressing alignment with — or divergence from —
+        their associations' climate positions. Drives the public-disagreement
+        penalty in relationship_strength.
+      collection: scrape_or_manual_upload
+    - kind: relative_ranking_survey
+      description: |
+        External stakeholder-survey artifact: a static CSV mapping each
+        industry association to a 0–10 Relative Ranking per jurisdiction.
+        InfluenceMap produces this by surveying businesspeople, policymakers,
+        and civil-society contacts familiar with each jurisdiction. The
+        survey infrastructure is OUT OF SCOPE for this pipeline — see
+        compiler_notes.
+      path: examples/lobbymap/static/relative_ranking_survey.csv
+      collection: static_file
+
+  strength_metric:
+    name: relationship_strength
+    range: [1, 10]
+    scale: integer
+    direction: higher_is_stronger
+    factors:
+      - id: association_size
+        description: |
+          Smaller associations imply higher per-member significance. A company
+          that is one of <10 members carries a stronger edge than one of 200.
+        direction: inverse  # smaller membership → higher strength
+        signal_source: association_membership_rosters
+      - id: board_or_committee_membership
+        description: |
+          Boost when the company holds a seat on the association's board or
+          a key standing committee.
+        direction: boost
+        signal_source: association_board_committee_listings
+      - id: senior_executive_role
+        description: |
+          Larger boost when senior company executives hold formal roles at
+          the association (e.g., CEO serving as chair = very strong tie).
+        direction: boost
+        signal_source: association_board_committee_listings
+      - id: public_disagreement_disclosure
+        description: |
+          Penalty when the company has clearly and transparently disclosed
+          disagreement with the association's climate position (e.g., via
+          enhanced corporate climate-policy review disclosure).
+        direction: penalty
+        signal_source: company_disclosures_and_press
+    rubric_status: underspecified_in_prose
+
+  ranking_metric:
+    name: relative_ranking
+    range: [0, 10]
+    scale: integer
+    description: |
+      Per-association political weight in a given jurisdiction (US, EU, Japan,
+      international, etc.). Loaded directly from the static survey CSV; not
+      derived in this stage.
+    signal_source: relative_ranking_survey
+    derivation: external_static_input
+
+outputs:
+  relationship_edges:
+    type: list
+    items:
+      company_id: str
+      association_id: str
+      relationship_strength: int          # 1–10
+      relationship_strength_factors:
+        association_size: number          # member count, when known
+        on_board: bool
+        on_key_committee: bool
+        senior_exec_role: str | null      # e.g., "chair", "board member", null
+        public_disagreement_disclosed: bool
+      jurisdiction: str                   # for joining to relative_ranking
+      relative_ranking: int | null        # 0–10, null if no survey row
+      evidence_links:
+        type: list
+        items:
+          source_url: str
+          source_kind: str                # one of the `sources` kinds above
+          retrieved_at: datetime
+      last_updated: datetime
+  associations_index:
+    type: list
+    items:
+      association_id: str
+      name: str
+      member_count: int | null
+      jurisdictions: list[str]
+      relative_ranking_by_jurisdiction:
+        type: dict   # jurisdiction → 0–10
+        source: relative_ranking_survey
+
+review:
+  when: "edge has senior_exec_role != null OR public_disagreement_disclosed == true OR association_size < 10"
+  routing: "1-of-1"
+  rationale: |
+    Most edges are low-stakes membership records. The high-impact edges —
+    very small associations, executive/board roles, and public-disagreement
+    disclosures — disproportionately drive the downstream Relationship Score
+    (Stage 9) and are the ones most likely to be reputationally costly if
+    miscoded. Asymmetric review: queue only the structurally heavy edges;
+    skim-list the rest. The Relative Ranking values are not reviewed here —
+    they are an upstream survey artifact (see compiler_notes).
+
+compiler_notes:
+  - |
+    SCOPE: this stage models ONLY the structural-data half of §4.9. The
+    methodology actually defines TWO sub-metrics that feed the downstream
+    Relationship Score:
+      (a) Relationship Strength (1–10) — structural, derivable from public
+          membership rosters, board listings, and corporate disclosures.
+          Modeled here as the strength_metric.
+      (b) Relative Ranking (0–10) — explicitly defined as "surveying and
+          aggregating the opinions of businesspeople, policymakers, and
+          civil society groups familiar with the jurisdiction and the
+          group's political influence." This is recurring stakeholder-survey
+          work, not graph derivation, and CANNOT be expressed in this
+          stage's parameters.
+  - |
+    HANDLING OF (b): per the compiler-build plan, the Relative Ranking is
+    treated as an external static input loaded via
+    `examples/lobbymap/static/relative_ranking_survey.csv`. This file is
+    HYPOTHETICAL — it does not exist yet. The user/methodology owner must
+    populate it from their own survey infrastructure. The stage will
+    surface a clear "missing input" error if it is absent at runtime.
+  - |
+    NOT MODELED IN THIS PIPELINE: the survey infrastructure itself
+    (panel construction, respondent recruitment, jurisdiction coverage,
+    aggregation rule from raw responses to a 0–10 integer, refresh
+    cadence, calibration across waves, conflict-of-interest screening of
+    panelists). Splitting Relative Ranking into its own stage was
+    considered (Option A) but rejected because (i) the compiler emits
+    one stage per prose chunk and (ii) none of the existing stage types
+    fit a recurring human-survey product. If the runtime later grows a
+    `human_survey` or similar stage type, the Relative Ranking input
+    should be promoted from a static file to that upstream stage.
+  - |
+    INPUTS: only `universe_selection` is listed. `org_score_intensity`
+    (Stage 7) is NOT taken as an input to this stage — relationships are
+    structural facts independent of the associations' Org Scores. Stage 9
+    (`indirect_performance_band`) is the join point: it consumes
+    relationship_edges from here, Org Scores from Stage 7, and computes
+    the company-level Relationship Score (0–100). Modeling the Org Score
+    as an input here would create a false dependency.
+  - |
+    STRENGTH RUBRIC UNDERSPECIFIED: the prose says relationship_strength
+    follows "precise guidelines" but only lists the four contributing
+    factors (modeled in `parameters.strength_metric.factors`). The full
+    1→10 mapping (e.g., what combination of factors produces a 7 vs an 8)
+    is not in the prose. The runtime will need either a heuristic default
+    formula or a manual coding workflow; flagged as
+    `rubric_status: underspecified_in_prose`. A future stage compiler
+    pass — or a human reviewer — should attach an explicit scoring table.
+  - |
+    NO LLM, NO EVAL: this is structural derivation from rosters and a
+    survey CSV. There is no prediction task, so no `eval` block. A
+    `review` block IS included because the high-impact edges (small
+    associations, exec roles, disagreement disclosures) carry asymmetric
+    cost downstream.
+  - |
+    JURISDICTION FIELD: the relative_ranking is jurisdiction-scoped
+    ("US, EU, Japan, international"). The schema carries a `jurisdiction`
+    column on each edge so a multinational company can pick up
+    different Relative Rankings for the same association across regions.
+    The prose does not specify the jurisdiction-resolution rule for an
+    edge (which jurisdiction's ranking applies when a global company sits
+    on a US-headquartered but globally-active association). Defaulted to
+    "carry all jurisdiction rankings on the edge; Stage 9 chooses." Flag
+    for human review.
+  - |
+    N/A HANDLING: prose says the downstream Relationship Score is "n/a"
+    when limited evidence has been collected on a company's industry-
+    association links. That cutoff lives in Stage 9, not here. This stage
+    emits whatever edges exist and lets Stage 9 apply the n/a threshold.

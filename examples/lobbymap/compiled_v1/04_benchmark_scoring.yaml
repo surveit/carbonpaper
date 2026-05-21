@@ -1,0 +1,205 @@
+id: benchmark_scoring
+name: Per-evidence benchmark scoring
+type: classify_rubric
+
+source:
+  doc: examples/lobbymap/stages/04_benchmark_scoring.md
+  section: "§4.2, §4.3, §4.4 (Tables 5–6)"
+  lines: [292, 330]
+
+inputs:
+  - evidence_extraction
+
+parameters:
+  model: claude-sonnet-4-6
+
+  # Benchmark library is authored out-of-band (Appendix A, "stage 0").
+  # The runtime treats the benchmark catalog as a static external resource
+  # supplied by the user, not as the output of an upstream DAG stage.
+  benchmarks_source: static
+  benchmarks_reference: examples/lobbymap/benchmarks/  # user-provided directory; expected to contain science_based/*.md and government_policy/*.md
+
+  # Two benchmark families per Table 5. The runtime is expected to select the
+  # right one for each evidence piece using benchmark_selection_rule below.
+  benchmark_families:
+    - id: science_based
+      name: Science-Based Policy Benchmarks
+      source: Intergovernmental Panel on Climate Change (IPCC)
+      description: |
+        Summaries of the IPCC on particular technology and policy pathways
+        to decarbonize different aspects of the global economy.
+      application: |
+        Entity engagement with high-level policy issues relevant for the
+        climate transition. Default benchmark family per §4.3.
+    - id: government_policy
+      name: Government Policy Benchmarks
+      source: Government websites and announcements
+      description: |
+        Policy and regulatory proposals from government bodies mandated to
+        deliver greenhouse gas (GHG) emission reductions in line with a
+        country's Nationally Determined Contribution.
+      application: |
+        Entity engagement with specific climate-related policy and
+        regulatory proposals.
+
+  # §4.3: science-based is the default; government policy takes precedence
+  # only when ALL four §4.4 conditions are met.
+  benchmark_selection_rule:
+    default_family: science_based
+    use_government_policy_when_all_true:
+      - "Engagement relates to a specific policy in a particular country/region with a clearly communicated proposal from a government body mandated to address climate change and deliver the region's NDC."
+      - "The government body proposal is a close representation of its original policy intent (i.e., not already significantly influenced by corporate/industry engagement)."
+      - "The government in question remains a party to the Paris Agreement."
+      - "The government body proposal is not clearly at odds with IPCC guidance on the topic, but instead falls within the range of potential policy pathways assessed to be consistent with Paris-aligned temperature goals."
+
+  # Table 6 — pulled verbatim from the prose. Do not paraphrase.
+  rubric:
+    "+2":
+      label: Strongly supporting
+      science_based: "Detailed position that is aligned with IPCC analysis"
+      government_policy: "Strong support for the policy and/or advocacy that would strengthen the policy further"
+    "+1":
+      label: Supporting
+      science_based: "Broad alignment with IPCC analysis"
+      government_policy: "General or high-level support for the policy"
+    "0":
+      label: No position / Mixed position
+      science_based: "Unclear if position is aligned with IPCC analysis"
+      government_policy: "Unclear if position is supportive of the policy"
+    "-1":
+      label: Not supporting
+      science_based: "Position appears misaligned with IPCC analysis"
+      government_policy: "Unsupportive of the policy and/or communicates support for the policy but with major caveats and/or conditions that would weaken the strength of the proposal"
+    "-2":
+      label: Opposing
+      science_based: "Position contradicts IPCC analysis"
+      government_policy: "Opposes the policy"
+
+  prompt_template: |
+    You are scoring a single piece of evidence of a company or industry
+    association's climate policy engagement against an external benchmark,
+    following the InfluenceMap LobbyMap methodology (§4.2).
+
+    The score reflects the extent to which the entity's position in the
+    evidence aligns with the benchmark. Strong alignment with the benchmark
+    indicates strong support for the relevant climate policy or
+    climate-policy-relevant issue (high score, +2). Strong misalignment
+    indicates opposition (low score, -2).
+
+    Use the following 5-point scale (Table 6, verbatim):
+
+    +2  Strongly supporting
+        - Science-Based Policy Benchmark: Detailed position that is aligned with IPCC analysis.
+        - Government Policy Benchmark:    Strong support for the policy and/or advocacy that would strengthen the policy further.
+    +1  Supporting
+        - Science-Based Policy Benchmark: Broad alignment with IPCC analysis.
+        - Government Policy Benchmark:    General or high-level support for the policy.
+     0  No position / Mixed position
+        - Science-Based Policy Benchmark: Unclear if position is aligned with IPCC analysis.
+        - Government Policy Benchmark:    Unclear if position is supportive of the policy.
+    -1  Not supporting
+        - Science-Based Policy Benchmark: Position appears misaligned with IPCC analysis.
+        - Government Policy Benchmark:    Unsupportive of the policy and/or communicates support for the policy but with major caveats and/or conditions that would weaken the strength of the proposal.
+    -2  Opposing
+        - Science-Based Policy Benchmark: Position contradicts IPCC analysis.
+        - Government Policy Benchmark:    Opposes the policy.
+
+    Apply the rubric column that matches the benchmark family being used.
+
+    --- POLICY QUERY (the climate-policy issue this evidence has been routed to) ---
+    {policy_query}
+
+    --- BENCHMARK (external standard to compare against) ---
+    {benchmark}
+
+    --- EVIDENCE ---
+    {evidence}
+
+    Return a JSON object with exactly these fields:
+    {
+      "score": <one of -2, -1, 0, 1, 2>,
+      "reasoning": "<2-4 sentences explaining alignment or misalignment with the benchmark, citing the specific rubric tier>",
+      "quote": "<the single most load-bearing verbatim quote from the evidence that determined the score>"
+    }
+
+    Score only on alignment with the benchmark. Do not penalize or reward
+    based on the perceived quality of the policy itself — InfluenceMap is
+    policy-neutral; the benchmark is the only standard.
+
+  output_schema:
+    score:
+      type: integer
+      enum: [-2, -1, 0, 1, 2]
+    reasoning:
+      type: string
+    quote:
+      type: string
+    benchmark_family_used:
+      type: string
+      enum: [science_based, government_policy]
+    benchmark_id:
+      type: string
+      description: Identifier of the specific benchmark document used.
+
+outputs:
+  scored_evidence:
+    type: list
+    items:
+      evidence_id: str
+      entity_id: str
+      policy_query: str
+      benchmark_family_used: str
+      benchmark_id: str
+      score: int           # one of {-2, -1, 0, 1, 2}
+      score_label: str     # one of {Opposing, Not supporting, No/Mixed, Supporting, Strongly supporting}
+      reasoning: str
+      quote: str
+      source_url: str
+
+eval:
+  reference: examples/lobbymap/eval_data/scored_evidence.csv
+  ground_truth_field: human_score
+  metrics:
+    - exact_agreement              # share where LLM score == human score
+    - off_by_one_agreement         # share where |LLM - human| <= 1
+    - signed_direction_agreement   # share where sign(LLM) == sign(human) (support / oppose / neutral)
+    - mean_absolute_error
+    - confusion_matrix             # 5x5 over the rubric tiers
+    - extreme_score_precision      # precision on |score| == 2 — the reputationally costly cells
+  notes: |
+    Ground truth comes from the user's prior LobbyMap coding of evidence on
+    the same policy queries — i.e., human-coded {-2..+2} scores attached to
+    individual evidence pieces. The CSV is expected to have columns:
+    evidence_id, policy_query, benchmark_id, human_score, human_reasoning.
+    The runtime joins on evidence_id to compare LLM score vs. human score.
+    Off-by-one agreement is reported alongside exact agreement because the
+    rubric's middle tiers ("broad alignment" vs. "unclear") are inherently
+    fuzzy in the prose.
+
+review:
+  when: "score in [-2, 2]"
+  routing: "1-of-2-disagreement-escalates"
+  rationale: |
+    Extreme tiers (-2 "Opposing" and +2 "Strongly supporting") are the
+    reputationally load-bearing cells of the LobbyMap output. A false
+    positive at -2 misattributes opposition to a company; a false positive
+    at +2 launders weak corporate language as climate leadership. Both are
+    expensive to retract.
+
+    Routing: each extreme-scored evidence piece is independently scored by
+    a second LLM run (or a human reviewer in the human queue). If the two
+    agree, the score stands. If they disagree, the item escalates to a
+    human reviewer for adjudication. Mid-scale items (-1, 0, +1) are not
+    routed by default; eval metrics decide whether the review threshold
+    should be widened.
+
+compiler_notes:
+  - "Stage type classify_rubric is a clean fit; this is the canonical example of the type."
+  - "Model defaulted to claude-sonnet-4-6 per SCHEMA.md guidance for analysis tasks. The methodology does not specify a model. Discourse analysis at this nuance level is plausibly stronger on a frontier model than on gpt-4o-mini, but cost-sensitive runs may want to A/B."
+  - "benchmarks_source set to 'static'. The benchmark library (science-based + government policy benchmarks) is produced by Appendix A authorship work that the prototype build plan explicitly treats as Stage 0 / out-of-scope. The user supplies the benchmark catalog as an external resource (benchmarks_reference path); it is NOT an upstream DAG stage. If the user later wants benchmark authorship inside the DAG, this becomes an inputs: dependency."
+  - "Rubric was pulled verbatim from Table 6. Both the science_based and government_policy descriptions per tier are preserved because the prose presents them as separate columns of the same scale, not as alternatives."
+  - "Benchmark selection logic (§4.3 default-to-IPCC + §4.4 four conditions) is encoded as benchmark_selection_rule, but the rule itself requires LLM judgment to apply (e.g., 'is the government body mandated to deliver climate policy?'). The runtime may need a small upstream classifier or a manual benchmark-routing step. Flagged for human review of pipeline shape."
+  - "policy_query placeholder assumes Stage 3 (evidence_extraction) emits a routed policy query (Q1..Qn from Table 4) per evidence piece. If Stage 3 does not emit that, the prompt should fall back to {benchmark} alone — but the score will be noisier."
+  - "Tie-breaker for competing benchmarks within the same evidence is not specified in the prose (per stages/04_benchmark_scoring.md compiler notes). Current spec assumes benchmark routing is one-to-one per evidence piece. If multiple benchmarks could apply, the runtime should fan out and emit one scored_evidence row per (evidence, benchmark) pair."
+  - "Rubric vocabulary ('detailed position', 'broad alignment', 'unclear') is qualitative and the prose offers no formal threshold criteria. Inter-rater agreement on the middle tiers (-1, 0, +1) is expected to be lower than on the extremes; eval metrics are designed to expose that (off_by_one_agreement, signed_direction_agreement) rather than hide it inside a single accuracy number."
+  - "Review block routes only |score| == 2 by default. This is a deliberate cost/coverage trade. If eval shows the LLM is over-confident at the +1/-1 boundary, widen the review threshold to score in [-2, -1, 1, 2]."

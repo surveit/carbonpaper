@@ -1,0 +1,517 @@
+{
+  "run_id": "20260427T070851",
+  "started_at": "2026-04-27T07:08:51",
+  "methodology": "lobbymap",
+  "stages": [
+    {
+      "stage_id": "forbes_global_2000",
+      "type": "input_data",
+      "name": "Forbes Global 2000 (3-year average rank)",
+      "started_at": "2026-04-27T07:08:51",
+      "status": "ok",
+      "input_validation": [],
+      "output_validation": {
+        "stage_id": "forbes_global_2000",
+        "phase": "output",
+        "rows": 8,
+        "ok": true,
+        "issues": []
+      },
+      "elapsed_ms": 118,
+      "rows": 8,
+      "error": null,
+      "output_path": "outputs\\forbes_global_2000.parquet",
+      "finished_at": "2026-04-27T07:08:51"
+    },
+    {
+      "stage_id": "industry_associations",
+      "type": "input_data",
+      "name": "LobbyMap-tracked industry associations (curated)",
+      "started_at": "2026-04-27T07:08:51",
+      "status": "ok",
+      "input_validation": [],
+      "output_validation": {
+        "stage_id": "industry_associations",
+        "phase": "output",
+        "rows": 5,
+        "ok": true,
+        "issues": []
+      },
+      "elapsed_ms": 11,
+      "rows": 5,
+      "error": null,
+      "output_path": "outputs\\industry_associations.parquet",
+      "finished_at": "2026-04-27T07:08:51"
+    },
+    {
+      "stage_id": "tracked_entities",
+      "type": "python_transform",
+      "name": "LobbyMap-tracked entity set (companies + associations)",
+      "started_at": "2026-04-27T07:08:51",
+      "status": "ok",
+      "input_validation": [
+        {
+          "stage_id": "tracked_entities",
+          "phase": "input:forbes_global_2000",
+          "rows": 8,
+          "ok": true,
+          "issues": [
+            {
+              "severity": "warning",
+              "column": null,
+              "message": "3 undeclared column(s) present (will be passed through): ['market_cap_usd_b', 'revenue_usd_b', 'forbes_url']"
+            }
+          ]
+        },
+        {
+          "stage_id": "tracked_entities",
+          "phase": "input:industry_associations",
+          "rows": 5,
+          "ok": true,
+          "issues": [
+            {
+              "severity": "warning",
+              "column": null,
+              "message": "1 undeclared column(s) present (will be passed through): ['cross_sector_federation']"
+            }
+          ]
+        }
+      ],
+      "output_validation": {
+        "stage_id": "tracked_entities",
+        "phase": "output",
+        "rows": 13,
+        "ok": true,
+        "issues": []
+      },
+      "elapsed_ms": 30,
+      "rows": 13,
+      "error": null,
+      "output_path": "outputs\\tracked_entities.parquet",
+      "finished_at": "2026-04-27T07:08:51"
+    },
+    {
+      "stage_id": "documents_corpus",
+      "type": "input_data",
+      "name": "Documents corpus (8 source classes per \u00a74.5)",
+      "started_at": "2026-04-27T07:08:51",
+      "status": "ok",
+      "input_validation": [],
+      "output_validation": {
+        "stage_id": "documents_corpus",
+        "phase": "output",
+        "rows": 12,
+        "ok": true,
+        "issues": []
+      },
+      "elapsed_ms": 19,
+      "rows": 12,
+      "error": null,
+      "output_path": "outputs\\documents_corpus.parquet",
+      "finished_at": "2026-04-27T07:08:51"
+    },
+    {
+      "stage_id": "evidence_extraction",
+      "type": "llm_transform",
+      "name": "Extract evidence pieces and tag to policy queries",
+      "started_at": "2026-04-27T07:08:51",
+      "status": "ok",
+      "input_validation": [
+        {
+          "stage_id": "evidence_extraction",
+          "phase": "input:documents_corpus",
+          "rows": 12,
+          "ok": true,
+          "issues": [
+            {
+              "severity": "warning",
+              "column": null,
+              "message": "1 undeclared column(s) present (will be passed through): ['title']"
+            }
+          ]
+        }
+      ],
+      "output_validation": {
+        "stage_id": "evidence_extraction",
+        "phase": "output",
+        "rows": 15,
+        "ok": true,
+        "issues": []
+      },
+      "elapsed_ms": 11,
+      "rows": 15,
+      "error": null,
+      "output_path": "outputs\\evidence_extraction.parquet",
+      "finished_at": "2026-04-27T07:08:51"
+    },
+    {
+      "stage_id": "benchmark_library",
+      "type": "input_data",
+      "name": "IPCC + government-policy benchmark catalog",
+      "started_at": "2026-04-27T07:08:51",
+      "status": "ok",
+      "input_validation": [],
+      "output_validation": {
+        "stage_id": "benchmark_library",
+        "phase": "output",
+        "rows": 8,
+        "ok": true,
+        "issues": []
+      },
+      "elapsed_ms": 9,
+      "rows": 8,
+      "error": null,
+      "output_path": "outputs\\benchmark_library.parquet",
+      "finished_at": "2026-04-27T07:08:51"
+    },
+    {
+      "stage_id": "importance_tagging",
+      "type": "python_transform",
+      "name": "Tag evidence with importance + recency weight",
+      "started_at": "2026-04-27T07:08:51",
+      "status": "ok",
+      "input_validation": [
+        {
+          "stage_id": "importance_tagging",
+          "phase": "input:evidence_extraction",
+          "rows": 15,
+          "ok": true,
+          "issues": [
+            {
+              "severity": "warning",
+              "column": null,
+              "message": "7 undeclared column(s) present (will be passed through): ['doc_id', 'entity_id', 'query_id', 'quote', 'stance_summary', 'char_offset_start', 'char_offset_end']"
+            }
+          ]
+        }
+      ],
+      "output_validation": {
+        "stage_id": "importance_tagging",
+        "phase": "output",
+        "rows": 15,
+        "ok": true,
+        "issues": []
+      },
+      "elapsed_ms": 8,
+      "rows": 15,
+      "error": null,
+      "output_path": "outputs\\importance_tagging.parquet",
+      "finished_at": "2026-04-27T07:08:51"
+    },
+    {
+      "stage_id": "evidence_with_benchmarks",
+      "type": "join",
+      "name": "Join evidence to applicable benchmarks",
+      "started_at": "2026-04-27T07:08:51",
+      "status": "ok",
+      "input_validation": [
+        {
+          "stage_id": "evidence_with_benchmarks",
+          "phase": "input:evidence_extraction",
+          "rows": 15,
+          "ok": true,
+          "issues": [
+            {
+              "severity": "warning",
+              "column": null,
+              "message": "6 undeclared column(s) present (will be passed through): ['doc_id', 'source_class', 'published_at', 'stance_summary', 'char_offset_start', 'char_offset_end']"
+            }
+          ]
+        },
+        {
+          "stage_id": "evidence_with_benchmarks",
+          "phase": "input:benchmark_library",
+          "rows": 8,
+          "ok": true,
+          "issues": [
+            {
+              "severity": "warning",
+              "column": null,
+              "message": "1 undeclared column(s) present (will be passed through): ['source_citation']"
+            }
+          ]
+        }
+      ],
+      "output_validation": {
+        "stage_id": "evidence_with_benchmarks",
+        "phase": "output",
+        "rows": 18,
+        "ok": true,
+        "issues": []
+      },
+      "elapsed_ms": 11,
+      "rows": 18,
+      "error": null,
+      "output_path": "outputs\\evidence_with_benchmarks.parquet",
+      "finished_at": "2026-04-27T07:08:51"
+    },
+    {
+      "stage_id": "benchmark_scoring",
+      "type": "llm_transform",
+      "name": "Score evidence against benchmark on the 5-point rubric",
+      "started_at": "2026-04-27T07:08:51",
+      "status": "ok",
+      "input_validation": [
+        {
+          "stage_id": "benchmark_scoring",
+          "phase": "input:evidence_with_benchmarks",
+          "rows": 18,
+          "ok": true,
+          "issues": [
+            {
+              "severity": "warning",
+              "column": null,
+              "message": "2 undeclared column(s) present (will be passed through): ['confidence', 'precedence_rule']"
+            }
+          ]
+        }
+      ],
+      "output_validation": {
+        "stage_id": "benchmark_scoring",
+        "phase": "output",
+        "rows": 18,
+        "ok": true,
+        "issues": []
+      },
+      "elapsed_ms": 7,
+      "rows": 18,
+      "error": null,
+      "output_path": "outputs\\benchmark_scoring.parquet",
+      "finished_at": "2026-04-27T07:08:51"
+    },
+    {
+      "stage_id": "extreme_score_review",
+      "type": "human_review_queue",
+      "name": "Human review of extreme scores (|score|=2)",
+      "started_at": "2026-04-27T07:08:51",
+      "status": "ok",
+      "input_validation": [
+        {
+          "stage_id": "extreme_score_review",
+          "phase": "input:benchmark_scoring",
+          "rows": 18,
+          "ok": true,
+          "issues": [
+            {
+              "severity": "warning",
+              "column": null,
+              "message": "1 undeclared column(s) present (will be passed through): ['kind']"
+            }
+          ]
+        }
+      ],
+      "output_validation": {
+        "stage_id": "extreme_score_review",
+        "phase": "output",
+        "rows": 18,
+        "ok": true,
+        "issues": []
+      },
+      "elapsed_ms": 9,
+      "rows": 18,
+      "error": null,
+      "output_path": "outputs\\extreme_score_review.parquet",
+      "finished_at": "2026-04-27T07:08:51"
+    },
+    {
+      "stage_id": "cell_aggregation",
+      "type": "python_transform",
+      "name": "Aggregate scored evidence into (entity \u00d7 source \u00d7 query) cells",
+      "started_at": "2026-04-27T07:08:51",
+      "status": "ok",
+      "input_validation": [
+        {
+          "stage_id": "cell_aggregation",
+          "phase": "input:extreme_score_review",
+          "rows": 18,
+          "ok": true,
+          "issues": [
+            {
+              "severity": "warning",
+              "column": null,
+              "message": "6 undeclared column(s) present (will be passed through): ['benchmark_id', 'ai_score', 'human_score', 'reviewer_id', 'reviewed_at', 'review_notes']"
+            }
+          ]
+        },
+        {
+          "stage_id": "cell_aggregation",
+          "phase": "input:importance_tagging",
+          "rows": 15,
+          "ok": true,
+          "issues": [
+            {
+              "severity": "warning",
+              "column": null,
+              "message": "2 undeclared column(s) present (will be passed through): ['importance', 'recency_weight']"
+            }
+          ]
+        }
+      ],
+      "output_validation": {
+        "stage_id": "cell_aggregation",
+        "phase": "output",
+        "rows": 12,
+        "ok": true,
+        "issues": []
+      },
+      "elapsed_ms": 24,
+      "rows": 12,
+      "error": null,
+      "output_path": "outputs\\cell_aggregation.parquet",
+      "finished_at": "2026-04-27T07:08:51"
+    },
+    {
+      "stage_id": "cell_weights",
+      "type": "input_data",
+      "name": "Sector \u00d7 source \u00d7 query weight table (config)",
+      "started_at": "2026-04-27T07:08:51",
+      "status": "ok",
+      "input_validation": [],
+      "output_validation": {
+        "stage_id": "cell_weights",
+        "phase": "output",
+        "rows": 28,
+        "ok": true,
+        "issues": []
+      },
+      "elapsed_ms": 8,
+      "rows": 28,
+      "error": null,
+      "output_path": "outputs\\cell_weights.parquet",
+      "finished_at": "2026-04-27T07:08:51"
+    },
+    {
+      "stage_id": "org_score",
+      "type": "python_transform",
+      "name": "Organisation Score and Engagement Intensity",
+      "started_at": "2026-04-27T07:08:51",
+      "status": "ok",
+      "input_validation": [
+        {
+          "stage_id": "org_score",
+          "phase": "input:cell_aggregation",
+          "rows": 12,
+          "ok": true,
+          "issues": [
+            {
+              "severity": "warning",
+              "column": null,
+              "message": "2 undeclared column(s) present (will be passed through): ['evidence_count', 'latest_evidence_at']"
+            }
+          ]
+        },
+        {
+          "stage_id": "org_score",
+          "phase": "input:cell_weights",
+          "rows": 28,
+          "ok": true,
+          "issues": []
+        },
+        {
+          "stage_id": "org_score",
+          "phase": "input:tracked_entities",
+          "rows": 13,
+          "ok": true,
+          "issues": [
+            {
+              "severity": "warning",
+              "column": null,
+              "message": "3 undeclared column(s) present (will be passed through): ['entity_kind', 'name', 'jurisdiction']"
+            }
+          ]
+        }
+      ],
+      "output_validation": {
+        "stage_id": "org_score",
+        "phase": "output",
+        "rows": 8,
+        "ok": true,
+        "issues": []
+      },
+      "elapsed_ms": 22,
+      "rows": 8,
+      "error": null,
+      "output_path": "outputs\\org_score.parquet",
+      "finished_at": "2026-04-27T07:08:51"
+    },
+    {
+      "stage_id": "publish_org_profiles",
+      "type": "publish",
+      "name": "Publish per-organisation profile pages",
+      "started_at": "2026-04-27T07:08:51",
+      "status": "validation_warnings",
+      "input_validation": [
+        {
+          "stage_id": "publish_org_profiles",
+          "phase": "input:org_score",
+          "rows": 8,
+          "ok": true,
+          "issues": []
+        },
+        {
+          "stage_id": "publish_org_profiles",
+          "phase": "input:tracked_entities",
+          "rows": 13,
+          "ok": true,
+          "issues": [
+            {
+              "severity": "warning",
+              "column": null,
+              "message": "1 undeclared column(s) present (will be passed through): ['entity_kind']"
+            }
+          ]
+        },
+        {
+          "stage_id": "publish_org_profiles",
+          "phase": "input:extreme_score_review",
+          "rows": 18,
+          "ok": false,
+          "issues": [
+            {
+              "severity": "error",
+              "column": "quote",
+              "message": "Missing column 'quote'"
+            },
+            {
+              "severity": "warning",
+              "column": null,
+              "message": "6 undeclared column(s) present (will be passed through): ['benchmark_id', 'ai_score', 'human_score', 'reviewer_id', 'reviewed_at', 'review_notes']"
+            }
+          ]
+        },
+        {
+          "stage_id": "publish_org_profiles",
+          "phase": "input:cell_aggregation",
+          "rows": 12,
+          "ok": true,
+          "issues": [
+            {
+              "severity": "warning",
+              "column": null,
+              "message": "2 undeclared column(s) present (will be passed through): ['cell_intensity', 'latest_evidence_at']"
+            }
+          ]
+        }
+      ],
+      "output_validation": {
+        "stage_id": "publish_org_profiles",
+        "phase": "output",
+        "rows": 8,
+        "ok": true,
+        "issues": []
+      },
+      "elapsed_ms": 21,
+      "rows": 8,
+      "error": null,
+      "output_path": "outputs\\publish_org_profiles.parquet",
+      "finished_at": "2026-04-27T07:08:51"
+    }
+  ],
+  "finished_at": "2026-04-27T07:08:51",
+  "queue_stats": {
+    "extreme_score_review": {
+      "note": "filter unevaluable in demo"
+    }
+  },
+  "status": "warnings"
+}

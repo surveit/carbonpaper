@@ -1,0 +1,131 @@
+{% extends "base.html" %}
+{% block title %}{{ methodology }} · DAG{% endblock %}
+
+{% block head_extra %}
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<script>
+  // Mermaid click handler: change route to call window.loadStage() instead of navigating.
+  window.loadStage = function (stageId) {
+    if (window._loadStage) { window._loadStage(stageId); }
+  };
+  document.addEventListener("DOMContentLoaded", function () {
+    mermaid.initialize({
+      startOnLoad: true,
+      theme: "default",
+      flowchart: { curve: "basis", padding: 20, useMaxWidth: true },
+      securityLevel: "loose"
+    });
+  });
+</script>
+{% endblock %}
+
+{% block content %}
+<div class="methodology-header">
+    <h1>{{ methodology }}</h1>
+    <div class="actions">
+        <form action="/methodology/{{ methodology }}/run" method="post" style="display:inline;">
+            <button type="submit" class="btn primary">▶ Run pipeline</button>
+        </form>
+        <a href="/methodology/{{ methodology }}/data-model" class="btn">Data model</a>
+        <a href="/methodology/{{ methodology }}/runs" class="btn">All runs</a>
+    </div>
+</div>
+<p class="lede">{{ stages|length }} compiled stage{% if stages|length != 1 %}s{% endif %}. Click any node in the DAG (or any row in the table) to load that stage's detail in the right panel. Click <strong>Run pipeline</strong> to execute end-to-end.</p>
+
+<div class="split-view">
+    <div class="left-pane">
+        <div class="legend">
+            <span class="badge input">▶ input_data</span>
+            <span class="badge llm">✦ llm_transform</span>
+            <span class="badge python">λ python_transform</span>
+            <span class="badge join">⋈ join</span>
+            <span class="badge aggregate">Σ aggregate</span>
+            <span class="badge human">👤 human_review_queue</span>
+            <span class="badge publish">📤 publish</span>
+        </div>
+
+        <div class="dag">
+            <pre class="mermaid">
+{{ mermaid }}
+            </pre>
+        </div>
+
+        <h2>Stage list</h2>
+        <table class="stages compact">
+            <thead><tr><th>#</th><th>id</th><th>type</th><th></th></tr></thead>
+            <tbody>
+                {% for s in stages %}
+                <tr>
+                    <td>{{ s._order }}</td>
+                    <td><a href="#" data-stage-link="{{ s.id }}"><code>{{ s.id }}</code></a></td>
+                    <td><span class="type-tag {{ type_class.get(s.type, 'custom') }}">{{ type_glyph.get(s.type, '') }}</span></td>
+                    <td>
+                        {% if s.compiler_notes %}<span class="signal warn" title="compiler notes">⚠</span>{% endif %}
+                        {% if s.eval %}<span class="signal eval" title="eval">📊</span>{% endif %}
+                        {% if s.review %}<span class="signal review" title="review">👤</span>{% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <div class="right-pane" id="stage-panel">
+        <div class="empty-state">
+            <h2>Select a stage</h2>
+            <p>Click any node in the DAG, or pick a row from the stage list.</p>
+        </div>
+    </div>
+</div>
+
+<script>
+(function () {
+  const METHODOLOGY = {{ methodology | tojson }};
+  const panel = document.getElementById('stage-panel');
+
+  async function loadStage(stageId) {
+    if (!stageId) return;
+    panel.classList.add('loading');
+    try {
+      const r = await fetch(`/methodology/${encodeURIComponent(METHODOLOGY)}/stage/${encodeURIComponent(stageId)}/partial`);
+      if (!r.ok) {
+        panel.innerHTML = `<div class="empty-state"><h2>Error</h2><p>${r.status} loading stage <code>${stageId}</code></p></div>`;
+        return;
+      }
+      panel.innerHTML = await r.text();
+      // Update URL hash without reloading
+      if (location.hash !== `#${stageId}`) {
+        history.replaceState(null, '', `#${stageId}`);
+      }
+      // Highlight the active row
+      document.querySelectorAll('table.stages tr').forEach(tr => tr.classList.remove('active'));
+      const link = document.querySelector(`[data-stage-link="${stageId}"]`);
+      if (link) {
+        const row = link.closest('tr');
+        if (row) row.classList.add('active');
+      }
+      panel.scrollTop = 0;
+    } finally {
+      panel.classList.remove('loading');
+    }
+  }
+
+  // Expose for Mermaid click callback
+  window._loadStage = loadStage;
+
+  // Intercept stage-link clicks (table rows + cross-references inside the panel)
+  document.addEventListener('click', function (ev) {
+    const a = ev.target.closest('[data-stage-link]');
+    if (!a) return;
+    ev.preventDefault();
+    loadStage(a.getAttribute('data-stage-link'));
+  });
+
+  // Open from URL hash if present
+  if (location.hash) {
+    const sid = decodeURIComponent(location.hash.slice(1));
+    loadStage(sid);
+  }
+})();
+</script>
+{% endblock %}

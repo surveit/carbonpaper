@@ -1,0 +1,220 @@
+id: source_ingestion
+name: Data-source ingestion
+type: ingest_source
+
+source:
+  doc: examples/lobbymap/stages/02_source_ingestion.md
+  section: "§3.2 (Table 3)"
+  lines: [241, 252]
+
+inputs:
+  - universe_selection
+
+parameters:
+  description: |
+    Fetch publicly available documents and communications for every entity in
+    the assessed universe (companies + industry associations from
+    universe_selection), drawn from eight distinct source classes. Source
+    selection criteria from §3.2: (1) publicly available, (2) ideally
+    applicable to all entities in the universe, (3) reliable insight into
+    corporate activities/behaviors. Two source classes (CDP, Financial
+    Disclosures) do NOT apply to industry associations and will yield N/A
+    cells downstream (see Stage 6 cell_aggregation).
+  source_classes:
+    - id: D1
+      name: Organizational Websites
+      description: |
+        The main organizational web site of the company and its subsidiaries.
+      collection_method: scrape
+      applies_to: [company, industry_association]
+      refresh: monthly
+    - id: D2
+      name: Corporate Media
+      description: |
+        Additional media communications controlled by the organization,
+        including social media channels (Twitter/X, LinkedIn, Facebook,
+        Instagram, YouTube, etc.).
+      collection_method: scrape
+      applies_to: [company, industry_association]
+      refresh: weekly
+    - id: D3
+      name: CDP Disclosures
+      description: |
+        Responses to questions within CDP's system (specifically question
+        12.3) related to climate policy engagement.
+      collection_method: api
+      applies_to: [company]
+      refresh: ad_hoc
+      notes: "CDP runs an annual disclosure cycle; refresh tracks that cycle."
+    - id: D4
+      name: Direct Consultation with Governments
+      description: |
+        Comments from the entity submitted through official regulatory and
+        legislative consultation processes (e.g., regulations.gov), or via
+        meetings and other direct engagements with policymakers. Includes
+        evidence obtained by InfluenceMap through Freedom of Information Act
+        (FOIA) requests.
+      collection_method: scrape
+      sub_methods: [regulatory_portal_scrape, foia_request, manual_upload]
+      applies_to: [company, industry_association]
+      refresh: ad_hoc
+      notes: |
+        FOIA returns and meeting records arrive irregularly and are typically
+        ingested manually once received. D4 is one of the two highest-weighted
+        source classes in Stage 7 org-score weighting.
+    - id: D5
+      name: Reliable Media
+      description: |
+        Reports of corporate climate policy engagement by well-established
+        media outlets.
+      collection_method: rss
+      applies_to: [company, industry_association]
+      refresh: weekly
+      notes: |
+        Prose does not operationally define "well-established" / "reliable" —
+        see compiler_notes.
+    - id: D6
+      name: Management Messaging
+      description: |
+        Direct quotes or transcripts of statements by an entity's CEO/Chairman
+        under a variety of circumstances (interviews, speeches, op-eds,
+        keynotes).
+      collection_method: scrape
+      sub_methods: [media_scrape, manual_upload]
+      applies_to: [company, industry_association]
+      refresh: weekly
+      notes: |
+        D6 is the other of the two highest-weighted source classes in Stage 7.
+    - id: D7
+      name: Financial Disclosures and Investor Transcripts
+      description: |
+        Submissions by the company to financial regulators (10-K, 20-F, annual
+        reports, sustainability filings) and officially recorded transcripts
+        of company-investor calls (earnings calls).
+      collection_method: scrape
+      sub_methods: [regulator_filing_scrape, transcript_scrape]
+      applies_to: [company]
+      refresh: quarterly
+    - id: D8
+      name: Paid Targeted Climate Advertising
+      description: |
+        Paid-for, targeted climate advertising — Facebook/Instagram/Google ad
+        library entries, advertorials, sponsored posts, etc. Prose calls D8
+        "newly introduced" and lists Advertising as Proposed in Table 3; user
+        spec includes it as one of the 8 active source classes.
+      collection_method: api
+      sub_methods: [meta_ad_library, google_ad_transparency, manual_upload]
+      applies_to: [company, industry_association]
+      refresh: weekly
+      status: newly_introduced
+      notes: |
+        Table 3 lists "Lobbying Disclosures (Proposed)" and "Advertising
+        (Proposed)" as the two proposed sources; the prose body separately
+        promotes paid social ads to D8. The user spec lists 8 source classes
+        and groups "lobbying registers" with D4 (regulatory consultations).
+        See compiler_notes for the alternative interpretation.
+  collection_method: mixed
+  refresh: per_source_class
+  selection_criteria:
+    - publicly_available
+    - applicable_to_all_entities_in_universe
+    - reliable_insight_into_corporate_behavior
+  regional_variation: |
+    Data sources vary in availability across regions/jurisdictions. When the
+    system is expanded to a new region, InfluenceMap conducts stakeholder
+    consultations to gauge data availability and adapts the source mix
+    accordingly.
+  archival_format: unspecified
+  out_of_scope:
+    - private_meetings
+    - undisclosed_financial_transactions
+    - non_public_internal_communications
+
+outputs:
+  raw_documents:
+    type: list
+    description: |
+      One record per ingested document/post/filing/transcript, ready for
+      Stage 3 (evidence_extraction) to mine for climate-policy-relevant
+      snippets.
+    items:
+      doc_id: str
+      entity_id: str            # foreign key into universe_selection
+      entity_type: str          # "company" | "industry_association"
+      source_class: str         # one of D1..D8
+      source_url: str
+      title: str
+      author_or_speaker: str    # populated for D6 (CEO/Chair) and some D5
+      published_at: datetime
+      ingested_at: datetime
+      jurisdiction: str         # for D4 (e.g., "US-federal", "EU")
+      content_text: str         # extracted plain text
+      content_format: str       # "html" | "pdf" | "transcript" | "social_post" | "ad_creative"
+      raw_blob_ref: str         # pointer to archived original (PDF/HTML/screenshot)
+      provenance: dict          # collection_method used, foia_request_id if applicable, etc.
+  source_class_index:
+    type: dict
+    description: |
+      Lookup of D1..D8 -> count of documents ingested per entity, used by
+      Stage 6 to know which (entity, source_class) cells are populated vs.
+      N/A vs. empty.
+
+compiler_notes:
+  - |
+    Modeled as ONE ingest_source stage with a list of 8 source_classes rather
+    than 8 parallel ingest_source stages. Rationale: (a) the prose presents
+    the 8 sources as a single Table 3 with shared selection criteria;
+    (b) downstream stages (especially Stage 6 cell_aggregation and Stage 7
+    org_score_intensity) treat source_class as a dimension over a uniform
+    document stream, not as 8 independent pipelines; (c) the per-class
+    differences are parameter-level (collection_method, refresh, applies_to),
+    which the source_classes list expresses cleanly. If the runtime later
+    needs per-class scheduling/retry/observability, this stage can be fanned
+    out without changing the downstream contract.
+  - |
+    Source-class enumeration mismatch. Table 3 in the prose lists 7 active +
+    2 "Proposed" rows (Lobbying Disclosures, Advertising). The prose body
+    then promotes paid social advertising to "D8 (newly introduced)". The
+    user spec for this compiler says 8 source classes including "lobbying
+    registers" but does NOT mention paid advertising. Two reasonable
+    canonicalizations:
+      (A) D1..D7 from Table 3 + D8 = Paid Targeted Advertising  (chosen here,
+          because the prose body explicitly numbers ads as D8 and the
+          stage 02 prose-author note flags this).
+      (B) D1..D7 from Table 3 + D8 = Lobbying Disclosures / Transparency
+          Registers (matches the user-spec wording "lobbying registers").
+    Recommend a human review this choice; if (B) is preferred, swap the D8
+    entry for an EU-Transparency-Register / OpenSecrets / lobbying-disclosure
+    source class. Note also: the user-spec phrase "regulatory consultations
+    including FOIA" maps cleanly onto D4 here.
+  - |
+    D-numbering canonicalized as D1..D8 in the order Table 3 presents them.
+    Table 3 itself does not number the rows (per stage-prose author note);
+    informal D-numbers appear elsewhere in the methodology. Downstream
+    stages should reference these IDs.
+  - |
+    Refresh cadences (weekly/monthly/quarterly/ad_hoc) are not specified in
+    the prose — chosen as reasonable defaults per source-class character
+    (social media is high-velocity, regulator filings are quarterly, FOIA is
+    ad hoc). Flag for operator tuning.
+  - |
+    "Reliable Media" (D5) is not operationally defined in the prose. The
+    runtime will need an allowlist of outlets or a tier definition. Left
+    as an unresolved parameter; see selection_criteria.
+  - |
+    Archival format is unspecified in this stage's prose. A passing
+    reference at line 336 (in Stage 5 territory) mentions PDFs/text. This
+    stage stores raw_blob_ref pointing at archived originals so that
+    downstream evidence_extraction can re-read the source if needed; the
+    concrete storage format is left to the runtime.
+  - |
+    No LLM step is included. Per the user spec, source ingestion is mostly
+    deterministic scraping/fetching. Relevance filtering (deciding which
+    pieces of an ingested doc are about climate policy) is Stage 3, not
+    here. Therefore no eval block and no review block on this stage —
+    accuracy of ingestion is a plumbing concern, not a judgment one.
+  - |
+    CDP (D3) and Financial Disclosures (D7) explicitly do not apply to
+    industry associations. The applies_to field on each source_class
+    encodes this so Stage 6 can correctly mark those (entity, source_class)
+    cells as N/A rather than empty.

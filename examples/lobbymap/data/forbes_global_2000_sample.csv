@@ -1,0 +1,9 @@
+forbes_id,name,rank_3y_avg,country,industry,market_cap_usd_b,revenue_usd_b,forbes_url
+exxonmobil,ExxonMobil,38,United States,Oil & Gas Operations,475.0,344.0,https://www.forbes.com/companies/exxon-mobil/
+shell,Shell plc,42,United Kingdom,Oil & Gas Operations,210.0,316.0,https://www.forbes.com/companies/shell/
+bp,BP,76,United Kingdom,Oil & Gas Operations,98.0,213.0,https://www.forbes.com/companies/bp/
+totalenergies,TotalEnergies,68,France,Oil & Gas Operations,151.0,237.0,https://www.forbes.com/companies/totalenergies/
+nextera_energy,NextEra Energy,141,United States,Utilities,140.0,28.0,https://www.forbes.com/companies/nextera-energy/
+volkswagen,Volkswagen Group,49,Germany,Auto & Truck Manufacturers,68.0,322.0,https://www.forbes.com/companies/volkswagen/
+toyota,Toyota Motor,17,Japan,Auto & Truck Manufacturers,295.0,303.0,https://www.forbes.com/companies/toyota-motor/
+microsoft,Microsoft,5,United States,Software & Programming,2900.0,236.0,https://www.forbes.com/companies/microsoft/

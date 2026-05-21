@@ -1,0 +1,78 @@
+id: publish_org_profiles
+name: Publish per-organisation profile pages
+type: publish
+
+source:
+  doc: examples/lobbymap/stages/07_org_score_intensity.md
+  section: "§2.5"
+  lines: [220, 230]
+
+inputs:
+  - id: org_score
+    schema:
+      primary_key: [entity_id]
+      columns:
+        - {name: entity_id, type: str, nullable: false}
+        - {name: org_score, type: float, nullable: true, range: [0.0, 100.0]}
+        - {name: org_score_band, type: str, nullable: true}
+        - {name: engagement_intensity, type: float, nullable: false}
+        - {name: intensity_label, type: str, nullable: false}
+  - id: tracked_entities
+    schema:
+      primary_key: [entity_id]
+      columns:
+        - {name: entity_id, type: str, nullable: false}
+        - {name: name, type: str, nullable: false}
+        - {name: jurisdiction, type: str, nullable: true}
+        - {name: sectors, type: "list[str]", nullable: false}
+  - id: extreme_score_review
+    schema:
+      primary_key: [evidence_id, benchmark_id]
+      columns:
+        - {name: evidence_id, type: str, nullable: false}
+        - {name: entity_id, type: str, nullable: false}
+        - {name: query_id, type: str, nullable: false}
+        - {name: final_score, type: int, nullable: true}
+        - {name: quote, type: str, nullable: true}
+  - id: cell_aggregation
+    schema:
+      primary_key: [entity_id, source_class, query_id]
+      columns:
+        - {name: entity_id, type: str, nullable: false}
+        - {name: source_class, type: str, nullable: false}
+        - {name: query_id, type: str, nullable: false}
+        - {name: cell_score, type: float, nullable: true}
+        - {name: evidence_count, type: int, nullable: false}
+
+publish:
+  format: html_report
+  destination: build/profiles/
+  one_file_per: entity_id
+  cross_link: true
+
+# A publish stage is also executable: it carries a function: block whose
+# python is responsible for actually writing the artifacts.
+function:
+  kind: module
+  module: examples.lobbymap.code.publish_org_profiles
+  function: transform
+  requirements: [pandas]
+
+output_schema:
+  estimated_rows: 930
+  primary_key: [output_path]
+  columns:
+    - {name: entity_id, type: str, nullable: false}
+    - {name: output_path, type: str, nullable: false}
+    - {name: rendered_at, type: datetime, nullable: false}
+    - {name: bytes, type: int, nullable: false}
+
+compiler_notes:
+  - "Template path points to a file that doesn't exist yet — the methodology
+     publishes per-org profiles publicly and the template would mirror the
+     LobbyMap.org profile pages. Building the template is a separate
+     publication-pipeline concern."
+  - "reviewed_evidence_excerpts only includes pieces that went through
+     extreme_score_review, ensuring published evidence has a human verification
+     trail. Lower-confidence non-extreme scores are not surfaced in the public
+     view."

@@ -1,0 +1,254 @@
+id: evidence_extraction
+name: Evidence extraction & relevance filter
+type: extract_evidence
+
+source:
+  doc: examples/lobbymap/stages/03_evidence_extraction.md
+  section: "§3.3 / Table 4 (with §4.1 intro and Appendix B references)"
+  lines: [253, 262]
+
+inputs:
+  - source_ingestion
+
+parameters:
+  model: claude-sonnet-4-6
+
+  relevance_filter: |
+    A snippet is relevant iff it constitutes evidence of the entity's
+    engagement with climate policy as defined in §3.3:
+      - Existing, evolving, or likely future policy measures issued by
+        "mandated bodies" (governments or government-authorized bodies
+        tasked with NDC implementation).
+      - Climate policy spans a spectrum from high-level statements of
+        intent to detailed/prescriptive legislation: targets,
+        implementation standards, fiscal interventions, and binding
+        regulatory requirements.
+      - Climate-related components within otherwise non-climate policy
+        (building codes, land use, trade, fiscal regulation) are in scope.
+    Snippets that do not map to at least one query in the taxonomy below
+    are dropped.
+
+  taxonomy:
+    # Canonical query set per Table 4 (literal count = 13).
+    # User spec mentioned 14 — see compiler_notes.
+    standard:
+      high_level:
+        - id: Q_HL_CLIMATE_SCIENCE
+          name: Climate Science
+          description: Transparency around climate change science
+        - id: Q_HL_CLIMATE_SCIENCE_STANCE
+          name: Climate Science Stance
+          description: Position on the needed response to climate change science
+        - id: Q_HL_NEED_FOR_REGULATION
+          name: Need for Climate Regulation
+          description: Support for regulations to tackle climate change in general
+        - id: Q_HL_UN_PROCESS
+          name: The UN Climate Process
+          description: Support for the UNFCCC process on climate change
+      policy_level:
+        - id: Q_PL_CARBON_TAX
+          name: Carbon Tax
+          description: Support for policies/regulation on this topic
+          consultation_flag: true
+        - id: Q_PL_EMISSIONS_TRADING
+          name: Emissions Trading
+          description: Support for policies/regulation on this topic
+          consultation_flag: true
+        - id: Q_PL_ENERGY_EFFICIENCY
+          name: Energy & Resource Efficiency
+          description: Support for policies/regulation on this topic
+        - id: Q_PL_RENEWABLE_ENERGY
+          name: Renewable Energy
+          description: Support for policies/regulation on this topic
+          consultation_flag: true
+        - id: Q_PL_ENERGY_TRANSITION
+          name: Energy Transition & Zero Carbon Technologies
+          description: Support for policies/regulation on this topic
+          consultation_flag: true
+        - id: Q_PL_GHG_REGULATION
+          name: GHG Emission Regulation
+          description: Support for policies/regulation on this topic
+        - id: Q_PL_CARBON_SINKS
+          name: Carbon Sinks
+          description: Support for policies/regulation on this topic
+      disclosure_transparency:
+        # These two are benchmarked against the Global Standard on
+        # Responsible Climate Lobbying (not IPCC) — flag carried downstream
+        # so Stage 4 picks the right benchmark library.
+        - id: Q_DT_DIRECT_ENGAGEMENT
+          name: Direct Policy Engagement
+          description: Transparency on positions and activities to influence climate policy/legislation
+          benchmark_library: global_standard_responsible_climate_lobbying
+        - id: Q_DT_INDIRECT_ENGAGEMENT
+          name: Indirect Policy Engagement
+          description: Transparency on industry association relationships and their policy engagement activities
+          benchmark_library: global_standard_responsible_climate_lobbying
+
+    # Appendix B variant — used when the entity is in the finance sector.
+    # Real-economy queries are consolidated; finance-specific climate
+    # finance queries are also added (drawn from UNEP 2015 + EU HLEG 2016).
+    finance_sector:
+      real_economy:
+        - id: Q_PL_REAL_ECONOMY_REGS
+          name: Real Economy Climate Regulations
+          consolidates:
+            - Q_PL_CARBON_TAX
+            - Q_PL_EMISSIONS_TRADING
+            - Q_PL_ENERGY_EFFICIENCY
+            - Q_PL_GHG_REGULATION
+        - id: Q_PL_ENERGY_INDUSTRY_LAND_TRANSITIONS
+          name: Energy, Industry and Land Transitions
+          consolidates:
+            - Q_PL_RENEWABLE_ENERGY
+            - Q_PL_ENERGY_TRANSITION
+            - Q_PL_CARBON_SINKS
+      climate_finance:
+        # Specific queries not enumerated in Table 4 — sourced from
+        # "The Financial System We Need" (UNEP 2015) and the EU HLEG 2016
+        # findings. Treated as an external query list to be plugged in.
+        source: external_finance_query_list
+
+  prompt_template: |
+    You are an evidence extractor for the LobbyMap methodology. Your job is to
+    pull every snippet from the document below that is evidence of an entity's
+    engagement with climate policy, and tag each snippet with exactly one
+    policy query from the taxonomy.
+
+    DEFINITION OF CLIMATE POLICY (from §3.3):
+    The LobbyMap system considers existing, evolving, and likely future policy
+    measures issued by mandated bodies (governments or government-authorized
+    bodies tasked with NDC implementation). Climate policy measures encompass
+    a spectrum of actions ranging from high-level statements of intent to
+    detailed and prescriptive legislation, including targets, implementation
+    standards, fiscal interventions, and other binding regulatory requirements.
+    Climate-related components within otherwise non-climate policy (building
+    codes, land use, trade, fiscal regulation) are in scope.
+
+    TAXONOMY (tag each snippet with exactly one query_id):
+    High-level:
+      - Q_HL_CLIMATE_SCIENCE: Transparency around climate change science
+      - Q_HL_CLIMATE_SCIENCE_STANCE: Position on the needed response to climate change science
+      - Q_HL_NEED_FOR_REGULATION: Support for regulations to tackle climate change in general
+      - Q_HL_UN_PROCESS: Support for the UNFCCC process on climate change
+    Policy-level (support for policies/regulation on this topic):
+      - Q_PL_CARBON_TAX: Carbon Tax
+      - Q_PL_EMISSIONS_TRADING: Emissions Trading
+      - Q_PL_ENERGY_EFFICIENCY: Energy & Resource Efficiency
+      - Q_PL_RENEWABLE_ENERGY: Renewable Energy
+      - Q_PL_ENERGY_TRANSITION: Energy Transition & Zero Carbon Technologies
+      - Q_PL_GHG_REGULATION: GHG Emission Regulation
+      - Q_PL_CARBON_SINKS: Carbon Sinks
+    Disclosure & Transparency (benchmarked against the Global Standard on
+    Responsible Climate Lobbying):
+      - Q_DT_DIRECT_ENGAGEMENT: Transparency on positions and activities to influence climate policy/legislation
+      - Q_DT_INDIRECT_ENGAGEMENT: Transparency on industry association relationships and their policy engagement activities
+
+    INSTRUCTIONS:
+    1. Read the document and identify every passage that constitutes evidence
+       of the entity's engagement with climate policy as defined above.
+    2. For each piece of evidence, extract:
+       - The verbatim quote (preserve wording; trim only obvious boilerplate).
+       - A character-level span (start, end) into the document if determinable.
+       - The single best-fit query_id from the taxonomy. If a snippet
+         genuinely spans two queries, pick the dominant one and list the
+         secondary in `alternate_query_ids`.
+       - A one-sentence rationale for why this snippet is in scope and why
+         this query is the best fit.
+       - A confidence score in [0.0, 1.0] reflecting how clearly this snippet
+         is in-scope evidence for that query.
+    3. Drop any passage that is not evidence of climate policy engagement
+       under the §3.3 definition. Marketing language with no policy content,
+       generic sustainability claims with no policy referent, and operational
+       emissions reporting with no advocacy framing should NOT be extracted.
+    4. Return a JSON array conforming to the output schema below.
+       If no in-scope evidence exists, return an empty array.
+
+    DOCUMENT:
+    {document}
+
+  output_schema:
+    type: list
+    items:
+      evidence_id: str          # stable id, e.g. "<source_id>:<n>"
+      source_id: str            # passthrough from source_ingestion
+      source_url: str           # passthrough from source_ingestion
+      quote: str                # verbatim snippet
+      span:
+        start: int              # char offset, nullable
+        end: int                # char offset, nullable
+      query_id: str             # one of the taxonomy ids above
+      query_name: str           # human-readable name
+      query_tier: str           # "high_level" | "policy_level" | "disclosure_transparency"
+      alternate_query_ids:      # secondary tags when snippet spans queries
+        type: list
+        items: str
+      rationale: str            # one-sentence justification
+      confidence: float         # [0.0, 1.0]
+      benchmark_library: str    # "ipcc_distillation" (default) or
+                                # "global_standard_responsible_climate_lobbying" (D&T)
+      taxonomy_variant: str     # "standard" | "finance_sector"
+
+outputs:
+  extracted_evidence:
+    type: list
+    items:
+      evidence_id: str
+      source_id: str
+      source_url: str
+      quote: str
+      span:
+        start: int
+        end: int
+      query_id: str
+      query_name: str
+      query_tier: str
+      alternate_query_ids:
+        type: list
+        items: str
+      rationale: str
+      confidence: float
+      benchmark_library: str
+      taxonomy_variant: str
+
+eval:
+  reference: examples/lobbymap/eval_data/extracted_evidence.csv
+  ground_truth_field: human_query_id
+  metrics:
+    - agreement              # human vs. LLM query_id match rate
+    - precision              # of LLM-extracted snippets, fraction judged in-scope by human
+    - recall                 # of human-curated snippets in source doc, fraction recovered by LLM
+    - taxonomy_confusion     # confusion matrix across the 13 query_ids
+  notes: |
+    The user populates the reference CSV from the existing LobbyMap evidence
+    base: each row is a human-curated snippet with source_url, quote, and the
+    analyst-assigned query_id (one of the 13 in Table 4). For recall, the
+    eval runner needs the original source documents on disk so the LLM can
+    re-extract from the same input. Confusion across tiers (high-level vs.
+    policy-level vs. disclosure & transparency) is the most actionable cut.
+
+review:
+  when: "confidence < 0.7 OR alternate_query_ids non-empty OR query_tier == 'disclosure_transparency'"
+  routing: "1-of-1"
+  rationale: |
+    Extraction errors propagate downstream: a misclassified snippet hits the
+    wrong benchmark in Stage 4 (benchmark_scoring), the wrong row of the
+    matrix in Stage 6 (cell_aggregation), and contaminates the org score.
+    Spot-check is asymmetric:
+      - Low-confidence items: catch hallucinated extractions and ambiguous
+        tags before they harden.
+      - Multi-query items: human disambiguates the dominant query.
+      - Disclosure & Transparency items: these route to a different benchmark
+        library (Global Standard on Responsible Climate Lobbying, not IPCC),
+        so a tier mistake here is structurally costly.
+    1-of-1 is sufficient at this stage; the per-evidence scoring stage
+    (Stage 4) gets heavier review.
+
+compiler_notes:
+  - "Query count discrepancy: user spec says 14 policy queries, but Table 4 enumerates 13 rows (4 high-level + 7 policy-level + 2 disclosure & transparency). Per task instructions, treated Table 4 as canonical and used 13. The README at examples/lobbymap/stages/README.md (Known prose ambiguities) records the same discrepancy."
+  - "Model choice: defaulted to claude-sonnet-4-6 per SCHEMA.md guidance for analysis tasks. Document text classification with a 13-way taxonomy and an in/out-of-scope filter is high-quality classification, not high-volume cheap classification, so Sonnet is the right tier over gpt-4o-mini. Revisit if cost dominates."
+  - "Procedural gap in prose: §3.3 defines the resulting taxonomy but does not describe HOW operators identify candidate evidence pieces from a source document. The prompt_template fills this gap with a generic 'extract every passage that constitutes evidence' instruction plus the §3.3 scope definition. A human should sanity-check the prompt against a handful of real LobbyMap evidence cards to confirm the extraction style matches analyst practice."
+  - "Single-tag vs. multi-tag is unstated in the prose. Chose single primary tag with optional alternate_query_ids list — primary tag drives downstream Stage 4/6 routing, alternates are advisory and trigger review. If the LobbyMap evidence base shows snippets routinely tagged to multiple queries, switch to multi-label and update Stage 6 aggregation accordingly."
+  - "Disclosure & Transparency rows carry benchmark_library='global_standard_responsible_climate_lobbying' on the output so Stage 4 selects the right benchmark; all other rows default to 'ipcc_distillation'. This is a forward dependency — confirmed by §3.3 prose ('benchmarked against the indicators outlined in the Global Standard on Responsible Climate Lobbying')."
+  - "Finance sector variant (Appendix B) is modeled as taxonomy_variant='finance_sector' with consolidated real-economy queries plus an external climate-finance query list. The climate-finance queries themselves are not enumerated in the prose (sourced from UNEP 2015 and EU HLEG 2016), so the actual list is left as an external resource the user plugs in. Sector routing (which entity gets which variant) presumably comes from upstream universe_selection metadata; not wired here."
+  - "Mandated-bodies definition is qualitative in the prose. The relevance_filter and prompt_template both quote it directly rather than operationalizing it — left to LLM judgment with eval as the calibration mechanism."
+  - "Span offsets (start/end) are nullable: source_ingestion may produce documents (PDFs, scraped pages) where reliable character offsets aren't available. Downstream consumers should not assume spans are always populated."

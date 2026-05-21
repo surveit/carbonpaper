@@ -1,0 +1,110 @@
+id: cell_aggregation
+name: Cell aggregation
+type: aggregate_cell
+
+source:
+  doc: examples/lobbymap/stages/06_cell_aggregation.md
+  section: "§4.6 (matrix architecture); §4.7 (weights, partial); §4.8 (intensity, partial)"
+  lines: [338, 363]
+
+inputs:
+  - benchmark_scoring
+  - importance_tagging
+
+parameters:
+  description: |
+    Group scored evidence into the (data-source × policy-query) matrix cells, then
+    compute two per-cell intermediate metrics:
+      - Cell Score: a weighted aggregate of evidence scores (-2..+2) within the cell,
+        weighted by per-evidence importance (0..10) and recency.
+      - Cell Intensity: the additive sum of per-evidence intensities within the cell
+        (intensity is itself derived from score, importance, flags, and age — see notes).
+    Cells with no evidence are marked N/S ("Not Scored"); cells where the source is
+    structurally inapplicable to the entity type (e.g., industry assoc × CDP, industry
+    assoc × Financial Disclosures) are marked N/A ("Not Applicable").
+
+  group_by:
+    - data_source       # column axis — from Stage 2 source_ingestion (D1..D8 canonicalized)
+    - policy_query      # row axis — from the query catalog used by Stage 4 benchmark_scoring
+    - entity_id         # cells are computed per company / industry-association
+
+  aggregations:
+    cell_score:
+      basis: weighted_aggregate_of_evidence_score
+      evidence_score_field: score          # -2..+2 from benchmark_scoring
+      weight_factors:
+        - importance                       # 0..10 from importance_tagging
+        - recency_weight                   # see recency_decay below
+      formula: |
+        UNDERSPECIFIED. Prose says Cell Score is "based on the individual scores of
+        the evidence pieces in the cell, their importance, and their year" but does
+        not give a closed-form expression. Likely a weighted mean of the form
+            cell_score = sum(score_i * importance_i * recency_weight_i)
+                       / sum(importance_i * recency_weight_i)
+        but this is the compiler's reconstruction, not the prose. See compiler_notes.
+      output_range: [-2.0, 2.0]
+    cell_intensity:
+      basis: additive_sum_of_evidence_intensity
+      evidence_intensity_field: evidence_intensity   # from importance_tagging (Stage 5)
+      formula: |
+        cell_intensity = sum(evidence_intensity_i for i in cell)
+      output_range: unbounded_nonnegative
+      notes: |
+        Per line 363: "Each cell ... is assigned a 'cell intensity' by adding the
+        evidence intensity of the evidence items." Evidence intensity itself is a
+        function of score, importance, flags, and age — its formula is also not
+        given in closed form (flagged in Stage 5 as well).
+
+  recency_decay:
+    window_years: 5
+    hard_cutoff: true
+    cutoff_rule: |
+      Per lines 358–359: "Evidence is collected up to five years before the date of
+      the assessment ... Cells that contain no evidence that is more recent than
+      five years are automatically excluded from the overall calculations."
+      So evidence older than 5y is dropped entirely; cells whose remaining evidence
+      is all >5y old become N/S and are excluded from downstream org-level calcs.
+    decay_shape: piecewise_or_linear_UNCLEAR
+    decay_notes: |
+      Prose says "Older evidence pieces carry less weight ... only those from the
+      last three years contribute significantly." This implies a decay curve with
+      a notable elbow at 3 years and a hard cutoff at 5 years. The exact shape
+      (linear, exponential, step-function with full-weight ≤3y and reduced-weight
+      3–5y) is not specified. Default reconstruction: linear decay from weight=1.0
+      at age=0 to weight≈0.2 at age=5, with full weight ≤3y treated as the
+      "significant" tier — but flag for human calibration.
+
+  cell_status_codes:
+    NS:
+      label: "Not Scored"
+      condition: "cell has no evidence within the 5-year window"
+    NA:
+      label: "Not Applicable"
+      condition: |
+        data source is structurally inapplicable to the entity type
+        (e.g., industry associations do not disclose to CDP or to financial regulators)
+      precomputed_from: stage_2_source_ingestion_applicability_matrix
+
+outputs:
+  cells:
+    type: list
+    items:
+      entity_id: str
+      data_source: str
+      policy_query: str
+      cell_score: "float | null"      # null when status is NS or NA
+      cell_intensity: "float | null"  # null when status is NS or NA
+      status: "scored | NS | NA"
+      evidence_count: int
+      evidence_ids: list[str]         # back-reference to scored evidence rows
+      most_recent_evidence_date: "date | null"
+
+compiler_notes:
+  - "Cell Score formula is UNDERSPECIFIED in the prose. §4.6 names the inputs (per-evidence score, importance, year) but gives no closed-form expression. Compiler reconstructed a weighted-mean default (sum(score*importance*recency) / sum(importance*recency)) — flag for human confirmation against InfluenceMap's actual implementation."
+  - "Recency decay shape is UNCLEAR. Prose has two signals: (a) hard 5-year cutoff (lines 358–359) and (b) 'only those from the last three years contribute significantly' (line ~344). This suggests an elbow at 3y and a cutoff at 5y, but whether the 0–5y curve is linear, exponential, or a two-tier step function is not stated. Compiler defaulted to linear decay with full weight ≤3y as the 'significant' tier; surface as a tunable knob in the DAG view."
+  - "Cell Intensity depends on per-evidence 'evidence intensity', whose formula is also not given in closed form (Stage 5 / line 363 — same flag carried forward). Cell Intensity itself is cleanly additive once evidence intensity is defined."
+  - "No QA / human-review block added: the prose does not call for human review of cell-level aggregations, and this stage is purely deterministic arithmetic over Stage 4 + Stage 5 outputs. If a reviewer wants spot-checks of the weighted-mean output, that should live as a downstream sampling stage rather than blocking aggregation."
+  - "N/A applicability matrix is assumed to be carried as metadata from Stage 2 (source_ingestion) — e.g., (industry_association × CDP) and (industry_association × Financial Disclosures) are marked NA at ingestion-time, not recomputed here. If Stage 2's spec doesn't carry this, the applicability matrix needs to be added there or constructed as a small static lookup."
+  - "Behavior for cells whose evidence is all '0 / no position' is not addressed by the prose. Compiler default: cell_score = 0 (scored, not NS), cell_intensity computed normally from evidence intensities. Worth a human sanity-check — InfluenceMap may treat all-zero cells as NS in practice."
+  - "Group-by includes entity_id implicitly: each company / industry association has its own matrix. The prose talks about 'a company's' matrix throughout §4.6, so per-entity grouping is assumed."
+  - "Output feeds Stage 7 (org_score_intensity). The N/S redistribution rule (how missing cells are handled when rolling up to org-level scores) is described at line 357 and lives in Stage 7's spec, not here."

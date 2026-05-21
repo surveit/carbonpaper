@@ -1,0 +1,33 @@
+{# Renders a TableSchema (columns list with type, nullable, range, description) as a table. #}
+{% macro schema_table(schema) %}
+{% if schema and schema.columns %}
+<table class="schema">
+    <thead>
+        <tr><th>column</th><th>type</th><th>null?</th><th>range / enum</th><th>description</th></tr>
+    </thead>
+    <tbody>
+        {% for c in schema.columns %}
+        <tr>
+            <td><code>{{ c.name }}</code></td>
+            <td><span class="type-pill">{{ c.type }}</span></td>
+            <td>{% if c.nullable %}<span class="muted">nullable</span>{% else %}<span class="strong">not null</span>{% endif %}</td>
+            <td>
+                {% if c.range %}
+                    <code class="range">{{ c.range }}</code>
+                {% else %}
+                    <span class="muted">—</span>
+                {% endif %}
+            </td>
+            <td>{{ c.description or '' }}{% if c.source %} <span class="muted">[{{ c.source }}]</span>{% endif %}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+<p class="schema-meta">
+    {% if schema.primary_key %}<span><b>primary key:</b> {{ schema.primary_key | join(', ') }}</span>{% endif %}
+    {% if schema.estimated_rows %}<span><b>est rows:</b> {{ "{:,}".format(schema.estimated_rows) }}</span>{% endif %}
+</p>
+{% else %}
+<p class="muted"><em>(no schema declared)</em></p>
+{% endif %}
+{% endmacro %}

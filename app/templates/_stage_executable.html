@@ -1,0 +1,152 @@
+{# Executable handle for a stage — connector / llm / function / join /
+   aggregate / queue / publish. Used on both the static stage page and the
+   run-detail right panel.
+
+   Required context: stage, function_code (may be None).
+   Optional context: llm_example {prompt, columns} — a rendered prompt
+   from this run's actual input first row, for LLM stages. #}
+
+{% if stage.connector %}
+<section class="exec-block">
+    <h2>▶ Connector</h2>
+    <dl class="kv">
+        <dt>kind</dt><dd><code>{{ stage.connector.kind }}</code></dd>
+        <dt>refresh</dt><dd>{{ stage.connector.refresh }}</dd>
+    </dl>
+    {% if stage.connector.params %}
+    <h3>params</h3>
+    <pre class="yaml-block">{{ stage.connector.params | tojson(indent=2) }}</pre>
+    {% endif %}
+    {% if stage.connector.notes %}
+    <h3>notes</h3>
+    <p>{{ stage.connector.notes }}</p>
+    {% endif %}
+</section>
+{% endif %}
+
+{% if stage.llm %}
+<section class="exec-block">
+    <h2>✦ LLM call</h2>
+    <dl class="kv">
+        <dt>model</dt><dd><code>{{ stage.llm.model }}</code></dd>
+        <dt>temperature</dt><dd>{{ stage.llm.temperature }}</dd>
+        <dt>response_format</dt><dd>{{ stage.llm.response_format }}</dd>
+        {% if stage.llm.max_retries is defined %}<dt>max_retries</dt><dd>{{ stage.llm.max_retries }}</dd>{% endif %}
+    </dl>
+    <h3>prompt template</h3>
+    <pre class="prompt">{{ stage.llm.prompt_template }}</pre>
+    {% if llm_example %}
+    <details {% if llm_example.error %}{% else %}open{% endif %}>
+        <summary>Example rendered prompt (first input row{% if llm_example.source_id %} from <code>{{ llm_example.source_id }}</code>{% endif %})</summary>
+        {% if llm_example.error %}
+        <p class="muted"><em>{{ llm_example.error }}</em></p>
+        {% else %}
+        <pre class="prompt rendered">{{ llm_example.rendered }}</pre>
+        {% endif %}
+    </details>
+    {% endif %}
+    {% if stage.llm.rubric %}
+    <details>
+        <summary>Rubric ({{ stage.llm.rubric|length }} tier{% if stage.llm.rubric|length != 1 %}s{% endif %})</summary>
+        <pre class="yaml-block">{{ stage.llm.rubric | tojson(indent=2) }}</pre>
+    </details>
+    {% endif %}
+</section>
+{% endif %}
+
+{% if stage.function %}
+<section class="exec-block">
+    <h2>λ Python function</h2>
+    <dl class="kv">
+        <dt>kind</dt><dd>{{ stage.function.kind }}</dd>
+        {% if stage.function.module %}<dt>module</dt><dd><code>{{ stage.function.module }}</code></dd>{% endif %}
+        {% if stage.function.function %}<dt>function</dt><dd><code>{{ stage.function.function }}</code></dd>{% endif %}
+        {% if stage.function.requirements %}<dt>requirements</dt><dd>{{ stage.function.requirements | join(', ') }}</dd>{% endif %}
+    </dl>
+    {% if function_code %}
+    <h3>code</h3>
+    <pre class="code">{{ function_code }}</pre>
+    {% else %}
+    <p class="muted"><em>(function source not found on disk)</em></p>
+    {% endif %}
+</section>
+{% endif %}
+
+{% if stage.join %}
+<section class="exec-block">
+    <h2>⋈ Join</h2>
+    <dl class="kv">
+        <dt>type</dt><dd><code>{{ stage.join.type }}</code></dd>
+    </dl>
+    <h3>keys</h3>
+    <table class="join-keys">
+        <thead><tr><th>left</th><th>right</th></tr></thead>
+        <tbody>
+            {% for k in (stage.join['keys'] or stage.join['on'] or []) %}
+            <tr><td><code>{{ k.left }}</code></td><td><code>{{ k.right }}</code></td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% if stage.join.select %}
+    <h3>select</h3>
+    <p>{% for c in stage.join.select %}<code>{{ c }}</code>{% if not loop.last %}, {% endif %}{% endfor %}</p>
+    {% endif %}
+</section>
+{% endif %}
+
+{% if stage.aggregate %}
+<section class="exec-block">
+    <h2>Σ Aggregate</h2>
+    <h3>group by</h3>
+    <p>{% for g in stage.aggregate.group_by %}<code>{{ g }}</code>{% if not loop.last %}, {% endif %}{% endfor %}</p>
+    <h3>aggregations</h3>
+    <table class="aggs">
+        <thead><tr><th>output</th><th>formula</th><th>value</th><th>weight</th><th>where</th></tr></thead>
+        <tbody>
+            {% for a in stage.aggregate.aggregations %}
+            <tr>
+                <td><code>{{ a.output_column }}</code></td>
+                <td><code>{{ a.formula }}</code></td>
+                <td>{% if a.value_column %}<code>{{ a.value_column }}</code>{% else %}<span class="muted">—</span>{% endif %}</td>
+                <td>{% if a.weight_column %}<code>{{ a.weight_column }}</code>{% else %}<span class="muted">—</span>{% endif %}</td>
+                <td>{% if a.where %}<code>{{ a.where }}</code>{% else %}<span class="muted">—</span>{% endif %}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</section>
+{% endif %}
+
+{% if stage.queue %}
+<section class="exec-block">
+    <h2>👤 Review queue</h2>
+    <dl class="kv">
+        {% if stage.queue.routing %}<dt>routing</dt><dd>{{ stage.queue.routing }}</dd>{% endif %}
+        {% if stage.queue.conflict_resolution %}<dt>conflict resolution</dt><dd>{{ stage.queue.conflict_resolution }}</dd>{% endif %}
+        {% if stage.queue.estimated_volume_per_week %}<dt>est. volume / week</dt><dd>{{ stage.queue.estimated_volume_per_week }}</dd>{% endif %}
+        {% if stage.queue.filter %}<dt>filter</dt><dd><code>{{ stage.queue.filter }}</code></dd>{% endif %}
+    </dl>
+    {% if stage.queue.reviewer_instructions %}
+    <h3>reviewer instructions</h3>
+    <pre class="instructions">{{ stage.queue.reviewer_instructions }}</pre>
+    {% endif %}
+</section>
+{% endif %}
+
+{% if stage.publish %}
+<section class="exec-block">
+    <h2>📤 Publish</h2>
+    <dl class="kv">
+        {% for k, v in stage.publish.items() %}
+        <dt>{{ k }}</dt>
+        <dd>
+            {% if v is mapping or (v is sequence and v is not string) %}
+            <pre class="yaml-block">{{ v | tojson(indent=2) }}</pre>
+            {% else %}
+            {{ v }}
+            {% endif %}
+        </dd>
+        {% endfor %}
+    </dl>
+</section>
+{% endif %}

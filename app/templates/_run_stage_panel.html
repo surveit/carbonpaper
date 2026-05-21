@@ -1,0 +1,121 @@
+{# Per-run stage detail panel: status, validation, preview, error.
+   Rendered into the run-detail right pane via fetch. #}
+<div class="stage-header">
+    <span class="type-tag {{ type_class.get(stage.type, 'custom') }}">{{ type_glyph.get(stage.type, '') }} {{ stage.type }}</span>
+    <span class="run-status status-{{ stage.status }}">{{ stage.status }}</span>
+    <h2><code>{{ stage.stage_id }}</code></h2>
+    <p class="stage-id">{{ stage.name }}</p>
+    <p class="muted">
+        {{ stage.elapsed_ms }} ms · {{ "{:,}".format(stage.rows or 0) }} row{% if (stage.rows or 0) != 1 %}s{% endif %}
+        · started <code>{{ stage.started_at }}</code>
+        {% if stage.finished_at %} · finished <code>{{ stage.finished_at }}</code>{% endif %}
+    </p>
+    <p><a href="/methodology/{{ methodology }}/stage/{{ stage.stage_id }}" class="back-link">open static stage definition →</a></p>
+</div>
+
+{% if stage.error %}
+<section class="run-error">
+    <h3>Error</h3>
+    <p><strong>{{ stage.error.type }}</strong>: {{ stage.error.message }}</p>
+    <details>
+        <summary>traceback</summary>
+        <pre>{{ stage.error.traceback }}</pre>
+    </details>
+</section>
+{% endif %}
+
+{% if stage.status == 'awaiting_review' %}
+<section class="banner banner-review">
+    <p>⏸ <strong>{{ stage.rows }} item{% if stage.rows != 1 %}s{% endif %}</strong> awaiting human review. Downstream stages won't run until the queue is cleared.</p>
+    <p><a href="/methodology/{{ methodology }}/runs/{{ run_id }}/queue/{{ stage.stage_id }}" class="btn primary">Open review queue →</a></p>
+</section>
+{% elif stage.status == 'pending' %}
+<p class="muted"><em>This stage hasn't run yet — upstream is awaiting review.</em></p>
+{% endif %}
+
+{% set in_issues = [] %}
+{% for v in stage.input_validation %}
+    {% for i in v.issues %}{% set _ = in_issues.append(i) %}{% endfor %}
+{% endfor %}
+{% set out_issues = (stage.output_validation.issues if stage.output_validation else []) %}
+{% if in_issues or out_issues %}
+<section class="validation-block">
+    <h3>Validation</h3>
+    {% if in_issues %}
+    <h4>input</h4>
+    <ul class="validation-list">
+        {% for i in in_issues %}
+        <li class="sev-{{ i.severity }}"><strong>{{ i.severity }}</strong>{% if i.column %} · <code>{{ i.column }}</code>{% endif %} — {{ i.message }}</li>
+        {% endfor %}
+    </ul>
+    {% endif %}
+    {% if out_issues %}
+    <h4>output</h4>
+    <ul class="validation-list">
+        {% for i in out_issues %}
+        <li class="sev-{{ i.severity }}"><strong>{{ i.severity }}</strong>{% if i.column %} · <code>{{ i.column }}</code>{% endif %} — {{ i.message }}</li>
+        {% endfor %}
+    </ul>
+    {% endif %}
+</section>
+{% else %}
+<p class="muted"><em>No validation issues.</em></p>
+{% endif %}
+
+{% if input_previews %}
+<section class="preview-block">
+    <h3>Input preview{% if input_previews|length != 1 %}s{% endif %}</h3>
+    {% for ip in input_previews %}
+    <details {% if loop.first %}open{% endif %}>
+        <summary>
+            <a href="/methodology/{{ methodology }}/runs/{{ run_id }}#{{ ip.id }}"><code>{{ ip.id }}</code></a>
+            {% if ip.preview and ip.preview.preview %}
+            <span class="muted">· first 5 of {{ "{:,}".format(ip.preview.rows_total) }} row{% if ip.preview.rows_total != 1 %}s{% endif %}</span>
+            {% endif %}
+        </summary>
+        {% if ip.preview and ip.preview.preview %}
+        <div class="table-scroll">
+            <table class="data-preview">
+                <thead><tr>{% for c in ip.preview.columns %}<th>{{ c }}</th>{% endfor %}</tr></thead>
+                <tbody>
+                {% for row in ip.preview.preview %}
+                <tr>{% for c in ip.preview.columns %}<td>{{ row[c] | string | truncate(120) }}</td>{% endfor %}</tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% elif ip.preview and ip.preview.error %}
+        <p class="muted"><em>preview unavailable: {{ ip.preview.error }}</em></p>
+        {% else %}
+        <p class="muted"><em>no upstream output found in this run</em></p>
+        {% endif %}
+    </details>
+    {% endfor %}
+</section>
+{% endif %}
+
+{% if stage_def %}
+{% with stage = stage_def %}
+{% include "_stage_executable.html" %}
+{% endwith %}
+{% endif %}
+
+{% if preview and preview.preview %}
+<section class="preview-block">
+    <h3>Output preview <span class="muted">· first 5 of {{ "{:,}".format(preview.rows_total) }} row{% if preview.rows_total != 1 %}s{% endif %}</span></h3>
+    <div class="table-scroll">
+        <table class="data-preview">
+            <thead><tr>{% for c in preview.columns %}<th>{{ c }}</th>{% endfor %}</tr></thead>
+            <tbody>
+            {% for row in preview.preview %}
+            <tr>{% for c in preview.columns %}<td>{{ row[c] | string | truncate(120) }}</td>{% endfor %}</tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% elif preview and preview.error %}
+<p class="muted"><em>output preview unavailable: {{ preview.error }}</em></p>
+{% elif stage.output_path %}
+<p class="muted"><em>output file missing on disk: <code>{{ stage.output_path }}</code></em></p>
+{% endif %}
