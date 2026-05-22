@@ -1,0 +1,21 @@
+entity_id,bioguide_id,name,state,party,chamber,early_release_count,recent_release_count
+M:B001277,B001277,Richard Blumenthal,CT,Democrat,Senate,41,25
+M:C001056,C001056,John Cornyn,TX,Republican,Senate,34,29
+M:D000563,D000563,Richard J. Durbin,IL,Democrat,Senate,84,57
+M:D000622,D000622,Tammy Duckworth,IL,Democrat,Senate,42,36
+M:G000386,G000386,Chuck Grassley,IA,Republican,Senate,42,26
+M:G000555,G000555,Kirsten E. Gillibrand,NY,Democrat,Senate,25,54
+M:G000574,G000574,Ruben Gallego,AZ,Democrat,Senate,39,36
+M:H001046,H001046,Martin Heinrich,NM,Democrat,Senate,52,32
+M:H001079,H001079,Cindy Hyde-Smith,MS,Republican,Senate,30,46
+M:J000294,J000294,Hakeem S. Jeffries,NY,Democrat,House,46,44
+M:K000384,K000384,Tim Kaine,VA,Democrat,Senate,47,26
+M:K000404,K000404,Kimberlyn King-Hinds,MP,Republican,House,58,60
+M:L000557,L000557,John B. Larson,CT,Democrat,House,42,32
+M:M001111,M001111,Patty Murray,WA,Democrat,Senate,50,30
+M:M001176,M001176,Jeff Merkley,OR,Democrat,Senate,44,32
+M:P000145,P000145,Alex Padilla,CA,Democrat,Senate,45,27
+M:S000522,S000522,Christopher H. Smith,NJ,Republican,House,45,42
+M:W000800,W000800,Peter Welch,VT,Democrat,Senate,39,34
+M:W000805,W000805,Mark R. Warner,VA,Democrat,Senate,40,20
+M:W000817,W000817,Elizabeth Warren,MA,Democrat,Senate,45,21

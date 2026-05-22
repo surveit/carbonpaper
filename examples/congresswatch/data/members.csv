@@ -1,0 +1,219 @@
+entity_id,bioguide_id,name,state,party,chamber
+M:A000055,A000055,Robert B. Aderholt,AL,Republican,House
+M:A000370,A000370,Alma S. Adams,NC,Democrat,House
+M:A000371,A000371,Pete Aguilar,CA,Democrat,House
+M:A000375,A000375,Jodey C. Arrington,TX,Republican,House
+M:A000380,A000380,Gabe Amo,RI,Democrat,House
+M:B000490,B000490,"Sanford D. Bishop, Jr.",GA,Democrat,House
+M:B001230,B001230,Tammy Baldwin,WI,Democrat,Senate
+M:B001236,B001236,John Boozman,AR,Republican,Senate
+M:B001243,B001243,Marsha Blackburn,TN,Republican,Senate
+M:B001257,B001257,Gus M. Bilirakis,FL,Republican,House
+M:B001260,B001260,Vern Buchanan,FL,Republican,House
+M:B001261,B001261,John Barrasso,WY,Republican,Senate
+M:B001277,B001277,Richard Blumenthal,CT,Democrat,Senate
+M:B001281,B001281,Joyce Beatty,OH,Democrat,House
+M:B001287,B001287,Ami Bera,CA,Democrat,House
+M:B001292,B001292,"Donald S. Beyer, Jr.",VA,Democrat,House
+M:B001296,B001296,Brendan F. Boyle,PA,Democrat,House
+M:B001299,B001299,Jim Banks,IN,Republican,Senate
+M:B001313,B001313,Shontel M. Brown,OH,Democrat,House
+M:B001314,B001314,Aaron Bean,FL,Republican,House
+M:B001316,B001316,Eric Burlison,MO,Republican,House
+M:B001318,B001318,Becca Balint,VT,Democrat,House
+M:B001321,B001321,Tom Barrett,MI,Republican,House
+M:B001323,B001323,Nicholas J. Begich III,AK,Republican,House
+M:B001324,B001324,Wesley Bell,MO,Democrat,House
+M:B001327,B001327,"Robert P. Bresnahan, Jr.",PA,Republican,House
+M:C000880,C000880,Mike Crapo,ID,Republican,Senate
+M:C001047,C001047,Shelley Moore Capito,WV,Republican,Senate
+M:C001055,C001055,Ed Case,HI,Democrat,House
+M:C001056,C001056,John Cornyn,TX,Republican,Senate
+M:C001059,C001059,Jim Costa,CA,Democrat,House
+M:C001061,C001061,Emanuel Cleaver,MO,Democrat,House
+M:C001063,C001063,Henry Cuellar,TX,Democrat,House
+M:C001066,C001066,Kathy Castor,FL,Democrat,House
+M:C001069,C001069,Joe Courtney,CT,Democrat,House
+M:C001075,C001075,Bill Cassidy,LA,Republican,Senate
+M:C001080,C001080,Judy Chu,CA,Democrat,House
+M:C001096,C001096,Kevin Cramer,ND,Republican,Senate
+M:C001101,C001101,Katherine M. Clark,MA,Democrat,House
+M:C001103,C001103,"Earl L. ""Buddy"" Carter",GA,Republican,House
+M:C001110,C001110,J. Luis Correa,CA,Democrat,House
+M:C001118,C001118,Ben Cline,VA,Republican,House
+M:C001121,C001121,Jason Crow,CO,Democrat,House
+M:C001125,C001125,Troy A. Carter,LA,Democrat,House
+M:C001126,C001126,Mike Carey,OH,Republican,House
+M:C001129,C001129,Mike Collins,GA,Republican,House
+M:C001130,C001130,Jasmine Crockett,TX,Democrat,House
+M:C001133,C001133,Juan Ciscomani,AZ,Republican,House
+M:C001137,C001137,Jeff Crank,CO,Republican,House
+M:D000197,D000197,Diana DeGette,CO,Democrat,House
+M:D000216,D000216,Rosa L. DeLauro,CT,Democrat,House
+M:D000230,D000230,Donald G. Davis,NC,Democrat,House
+M:D000530,D000530,Christopher R. Deluzio,PA,Democrat,House
+M:D000563,D000563,Richard J. Durbin,IL,Democrat,Senate
+M:D000600,D000600,Mario Diaz-Balart,FL,Republican,House
+M:D000617,D000617,Suzan K. DelBene,WA,Democrat,House
+M:D000622,D000622,Tammy Duckworth,IL,Democrat,Senate
+M:D000623,D000623,Mark DeSaulnier,CA,Democrat,House
+M:D000629,D000629,Sharice Davids,KS,Democrat,House
+M:E000294,E000294,Tom Emmer,MN,Republican,House
+M:E000298,E000298,Ron Estes,KS,Republican,House
+M:E000299,E000299,Veronica Escobar,TX,Democrat,House
+M:F000110,F000110,Cleo Fields,LA,Democrat,House
+M:F000446,F000446,Randy Feenstra,IA,Republican,House
+M:F000454,F000454,Bill Foster,IL,Democrat,House
+M:F000462,F000462,Lois Frankel,FL,Democrat,House
+M:F000468,F000468,Lizzie Fletcher,TX,Democrat,House
+M:F000469,F000469,Russ Fulcher,ID,Republican,House
+M:F000471,F000471,Scott Fitzgerald,WI,Republican,House
+M:F000472,F000472,Scott Franklin,FL,Republican,House
+M:F000474,F000474,Mike Flood,NE,Republican,House
+M:F000480,F000480,Vince Fong,CA,Republican,House
+M:F000482,F000482,Julie Fedorchak,ND,Republican,House
+M:F000483,F000483,Laura Friedman,CA,Democrat,House
+M:G000359,G000359,Lindsey Graham,SC,Republican,Senate
+M:G000386,G000386,Chuck Grassley,IA,Republican,Senate
+M:G000553,G000553,Al Green,TX,Democrat,House
+M:G000555,G000555,Kirsten E. Gillibrand,NY,Democrat,Senate
+M:G000558,G000558,Brett Guthrie,KY,Republican,House
+M:G000574,G000574,Ruben Gallego,AZ,Democrat,Senate
+M:G000576,G000576,Glenn Grothman,WI,Republican,House
+M:G000585,G000585,Jimmy Gomez,CA,Democrat,House
+M:G000592,G000592,Jared F. Golden,ME,Democrat,House
+M:G000602,G000602,Laura Gillen,NY,Democrat,House
+M:H000273,H000273,John W. Hickenlooper,CO,Democrat,Senate
+M:H001046,H001046,Martin Heinrich,NM,Democrat,Senate
+M:H001047,H001047,James A. Himes,CT,Democrat,House
+M:H001066,H001066,Steven Horsford,NV,Democrat,House
+M:H001067,H001067,Richard Hudson,NC,Republican,House
+M:H001076,H001076,Margaret Wood Hassan,NH,Democrat,Senate
+M:H001079,H001079,Cindy Hyde-Smith,MS,Republican,Senate
+M:H001081,H001081,Jahana Hayes,CT,Democrat,House
+M:H001082,H001082,Kevin Hern,OK,Republican,House
+M:H001091,H001091,Ashley Hinson,IA,Republican,House
+M:H001103,H001103,Pablo José Hernández,PR,Democrat,House
+M:J000294,J000294,Hakeem S. Jeffries,NY,Democrat,House
+M:J000298,J000298,Pramila Jayapal,WA,Democrat,House
+M:J000301,J000301,Dusty Johnson,SD,Republican,House
+M:J000310,J000310,Julie Johnson,TX,Democrat,House
+M:K000009,K000009,Marcy Kaptur,OH,Democrat,House
+M:K000376,K000376,Mike Kelly,PA,Republican,House
+M:K000377,K000377,Mark Kelly,AZ,Democrat,Senate
+M:K000383,K000383,"Angus S. King, Jr.",ME,Independent,Senate
+M:K000384,K000384,Tim Kaine,VA,Democrat,Senate
+M:K000391,K000391,Raja Krishnamoorthi,IL,Democrat,House
+M:K000393,K000393,John Kennedy,LA,Republican,Senate
+M:K000397,K000397,Young Kim,CA,Republican,House
+M:K000400,K000400,Sydney Kamlager-Dove,CA,Democrat,House
+M:K000404,K000404,Kimberlyn King-Hinds,MP,Republican,House
+M:L000273,L000273,Teresa Leger Fernandez,NM,Democrat,House
+M:L000557,L000557,John B. Larson,CT,Democrat,House
+M:L000560,L000560,Rick Larsen,WA,Democrat,House
+M:L000570,L000570,Ben Ray Luján,NM,Democrat,Senate
+M:L000582,L000582,Ted Lieu,CA,Democrat,House
+M:L000590,L000590,Susie Lee,NV,Democrat,House
+M:L000599,L000599,Michael Lawler,NY,Republican,House
+M:L000602,L000602,Summer L. Lee,PA,Democrat,House
+M:L000607,L000607,Sam T. Liccardo,CA,Democrat,House
+M:M000317,M000317,Nicole Malliotakis,NY,Republican,House
+M:M000687,M000687,Kweisi Mfume,MD,Democrat,House
+M:M001111,M001111,Patty Murray,WA,Democrat,Senate
+M:M001137,M001137,Gregory W. Meeks,NY,Democrat,House
+M:M001160,M001160,Gwen Moore,WI,Democrat,House
+M:M001163,M001163,Doris O. Matsui,CA,Democrat,House
+M:M001169,M001169,Christopher Murphy,CT,Democrat,Senate
+M:M001176,M001176,Jeff Merkley,OR,Democrat,Senate
+M:M001194,M001194,John R. Moolenaar,MI,Republican,House
+M:M001196,M001196,Seth Moulton,MA,Democrat,House
+M:M001205,M001205,Carol D. Miller,WV,Republican,House
+M:M001206,M001206,Joseph D. Morelle,NY,Democrat,House
+M:M001210,M001210,Gregory F. Murphy,NC,Republican,House
+M:M001212,M001212,Barry Moore,AL,Republican,House
+M:M001214,M001214,Frank J. Mrvan,IN,Democrat,House
+M:M001215,M001215,Mariannette Miller-Meeks,IA,Republican,House
+M:M001219,M001219,James C. Moylan,GU,Republican,House
+M:M001225,M001225,Kevin Mullin,CA,Democrat,House
+M:M001226,M001226,Robert Menendez,NJ,Democrat,House
+M:M001227,M001227,Jennifer L. McClellan,VA,Democrat,House
+M:M001228,M001228,Celeste Maloy,UT,Republican,House
+M:M001230,M001230,Ryan Mackenzie,PA,Republican,House
+M:M001231,M001231,John W. Mannion,NY,Democrat,House
+M:M001232,M001232,April McClain Delaney,MD,Democrat,House
+M:M001237,M001237,Kristen McDonald Rivet,MI,Democrat,House
+M:M001238,M001238,Sarah McBride,DE,Democrat,House
+M:M001241,M001241,Dave Min,CA,Democrat,House
+M:M001242,M001242,Bernie Moreno,OH,Republican,Senate
+M:N000015,N000015,Richard E. Neal,MA,Democrat,House
+M:N000026,N000026,Troy E. Nehls,TX,Republican,House
+M:N000188,N000188,Donald Norcross,NJ,Democrat,House
+M:O000173,O000173,Ilhan Omar,MN,Democrat,House
+M:O000176,O000176,"Johnny Olszewski, Jr.",MD,Democrat,House
+M:P000034,P000034,"Frank Pallone, Jr.",NJ,Democrat,House
+M:P000145,P000145,Alex Padilla,CA,Democrat,Senate
+M:P000197,P000197,Nancy Pelosi,CA,Democrat,House
+M:P000595,P000595,Gary C. Peters,MI,Democrat,Senate
+M:P000597,P000597,Chellie Pingree,ME,Democrat,House
+M:P000603,P000603,Rand Paul,KY,Republican,Senate
+M:P000608,P000608,Scott H. Peters,CA,Democrat,House
+M:P000610,P000610,Stacey E. Plaskett,VI,Democrat,House
+M:P000614,P000614,Chris Pappas,NH,Democrat,House
+M:P000620,P000620,Brittany Pettersen,CO,Democrat,House
+M:P000621,P000621,Nellie Pou,NJ,Democrat,House
+M:R000122,R000122,Jack Reed,RI,Democrat,Senate
+M:R000305,R000305,Deborah K. Ross,NC,Democrat,House
+M:R000395,R000395,Harold Rogers,KY,Republican,House
+M:R000579,R000579,Patrick Ryan,NY,Democrat,House
+M:R000605,R000605,Mike Rounds,SD,Republican,Senate
+M:R000606,R000606,Jamie Raskin,MD,Democrat,House
+M:R000618,R000618,Pete Ricketts,NE,Republican,Senate
+M:R000620,R000620,Luz M. Rivas,CA,Democrat,House
+M:R000621,R000621,Emily Randall,WA,Democrat,House
+M:R000622,R000622,Josh Riley,NY,Democrat,House
+M:S000185,S000185,"Robert C. ""Bobby"" Scott",VA,Democrat,House
+M:S000522,S000522,Christopher H. Smith,NJ,Republican,House
+M:S001145,S001145,Janice D. Schakowsky,IL,Democrat,House
+M:S001157,S001157,David Scott,GA,Democrat,House
+M:S001181,S001181,Jeanne Shaheen,NH,Democrat,Senate
+M:S001184,S001184,Tim Scott,SC,Republican,Senate
+M:S001185,S001185,Terri A. Sewell,AL,Democrat,House
+M:S001195,S001195,Jason Smith,MO,Republican,House
+M:S001198,S001198,Dan Sullivan,AK,Republican,Senate
+M:S001199,S001199,Lloyd Smucker,PA,Republican,House
+M:S001208,S001208,Elissa Slotkin,MI,Democrat,Senate
+M:S001211,S001211,Greg Stanton,AZ,Democrat,House
+M:S001215,S001215,Haley M. Stevens,MI,Democrat,House
+M:S001216,S001216,Kim Schrier,WA,Democrat,House
+M:S001217,S001217,Rick Scott,FL,Republican,Senate
+M:S001218,S001218,Melanie A. Stansbury,NM,Democrat,House
+M:S001223,S001223,Emilia Strong Sykes,OH,Democrat,House
+M:S001225,S001225,Eric Sorensen,IL,Democrat,House
+M:S001226,S001226,Andrea Salinas,OR,Democrat,House
+M:S001230,S001230,Suhas Subramanyam,VA,Democrat,House
+M:S001231,S001231,Lateefah Simon,CA,Democrat,House
+M:T000250,T000250,John Thune,SD,Republican,Senate
+M:T000278,T000278,Tommy Tuberville,AL,Republican,Senate
+M:T000460,T000460,Mike Thompson,CA,Democrat,House
+M:T000468,T000468,Dina Titus,NV,Democrat,House
+M:T000476,T000476,Thom Tillis,NC,Republican,Senate
+M:T000482,T000482,Lori Trahan,MA,Democrat,House
+M:T000487,T000487,Jill N. Tokuda,HI,Democrat,House
+M:T000488,T000488,Shri Thanedar,MI,Democrat,House
+M:T000490,T000490,David J. Taylor,OH,Republican,House
+M:T000491,T000491,Derek Tran,CA,Democrat,House
+M:U000040,U000040,Lauren Underwood,IL,Democrat,House
+M:V000128,V000128,Chris Van Hollen,MD,Democrat,Senate
+M:V000129,V000129,David G. Valadao,CA,Republican,House
+M:V000134,V000134,Beth Van Duyne,TX,Republican,House
+M:V000136,V000136,Gabe Vasquez,NM,Democrat,House
+M:V000138,V000138,Eugene Simon Vindman,VA,Democrat,House
+M:W000779,W000779,Ron Wyden,OR,Democrat,Senate
+M:W000790,W000790,Raphael G. Warnock,GA,Democrat,Senate
+M:W000797,W000797,Debbie Wasserman Schultz,FL,Democrat,House
+M:W000800,W000800,Peter Welch,VT,Democrat,Senate
+M:W000805,W000805,Mark R. Warner,VA,Democrat,Senate
+M:W000806,W000806,Daniel Webster,FL,Republican,House
+M:W000831,W000831,James R. Walkinshaw,VA,Democrat,House
+M:Y000064,Y000064,Todd Young,IN,Republican,Senate
+M:Z000018,Z000018,Ryan K. Zinke,MT,Republican,House

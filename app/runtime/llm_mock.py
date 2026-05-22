@@ -24,7 +24,7 @@ from typing import Any
 
 # ─── Evidence extraction ─────────────────────────────────────────────────────
 
-# Map keyword regex → policy_query and inferred stance.
+# Map keyword regex → policy_query and inferred stance. (LobbyMap / climate.)
 QUERY_KEYWORD_TABLE: list[tuple[str, str, str]] = [
     # (regex, query_id, default_stance)
     (r"\bcarbon\s+(tax|pric(ing|e))\b", "Q5", "supports"),
@@ -41,6 +41,34 @@ QUERY_KEYWORD_TABLE: list[tuple[str, str, str]] = [
     (r"\bclimate\s+disclosure\b|\bclimate\s+risk\b", "Q4", "supports"),
     (r"\blobby(ing)?\b|\btransparenc[yi]e?\b", "Q12", "supports"),
 ]
+
+# CongressWatch healthcare queries (active when entity_id starts with 'M:').
+CW_QUERY_TABLE: list[tuple[str, str, str]] = [
+    (r"\b(ACA|Affordable\s+Care\s+Act|enhanced\s+premium|premium\s+tax\s+credit)\b",
+     "Q1_aca_premium_credits", "supports"),
+    (r"\b(Medicare\s+(drug|prescription)|drug\s+price\s+negotiation|Inflation\s+Reduction\s+Act|IRA\s+drug)\b",
+     "Q2_medicare_drug_pricing", "supports"),
+    (r"\b(Medicaid(\s+funding)?|work\s+requirement)\b",
+     "Q3_medicaid_funding", "supports"),
+    (r"\b(drug\s+import(ation)?|Canadian\s+drugs?|importation\s+pathway)\b",
+     "Q4_drug_imports", "supports"),
+    (r"\b(prior\s+auth(orization)?|insurer\s+deni(al|es)|network\s+adequacy|surprise\s+billing)\b",
+     "Q5_insurer_regulation", "supports"),
+]
+
+# Member-specific stance hints common in political speech.
+CW_OPPOSE_HINTS = re.compile(
+    r"\b(let\s+(it|them)\s+expire|cut\s+|repeal|roll\s+back|sunset|defund|block|"
+    r"reject\s+|stop\s+the|wasteful|fraud|abuse|out\s+of\s+control|"
+    r"socialized|government\s+takeover|killed|burden)\b",
+    re.IGNORECASE,
+)
+CW_SUPPORT_HINTS = re.compile(
+    r"\b(extend|protect|defend|expand|strengthen|preserve|fight\s+for|fighting\s+for|"
+    r"committed\s+to|will\s+(vote|fight)\s+to|introduce(d)?|signed\s+on|"
+    r"co-?sponsor|championing)\b",
+    re.IGNORECASE,
+)
 
 # Keywords that flip stance toward opposition.
 OPPOSITION_HINTS = re.compile(
@@ -60,20 +88,34 @@ HEDGE_HINTS = re.compile(
 
 
 def mock_evidence_extraction(input_row: dict[str, Any]) -> list[dict[str, Any]]:
-    """For evidence_extraction: extract policy-relevant snippets."""
+    """For evidence_extraction: extract policy-relevant snippets.
+
+    Switches between LobbyMap (climate) and CongressWatch (healthcare)
+    keyword tables based on entity_id prefix. Members of Congress use the
+    'M:' prefix; companies/associations use 'C:'/'A:'."""
+    entity_id = str(input_row.get("entity_id") or "")
+    if entity_id.startswith("M:"):
+        table = CW_QUERY_TABLE
+        oppose_hints = CW_OPPOSE_HINTS
+        support_hints = CW_SUPPORT_HINTS
+    else:
+        table = QUERY_KEYWORD_TABLE
+        oppose_hints = OPPOSITION_HINTS
+        support_hints = SUPPORT_HINTS
+
     body = input_row.get("body", "") or ""
     sentences = _split_sentences(body)
     out: list[dict[str, Any]] = []
     seen_queries = set()
     for idx, sent in enumerate(sentences):
-        for pattern, query_id, default_stance in QUERY_KEYWORD_TABLE:
+        for pattern, query_id, default_stance in table:
             if re.search(pattern, sent, re.IGNORECASE):
                 stance = default_stance
-                if OPPOSITION_HINTS.search(sent):
+                if oppose_hints.search(sent):
                     stance = "opposes"
-                elif HEDGE_HINTS.search(sent) and not SUPPORT_HINTS.search(sent):
+                elif HEDGE_HINTS.search(sent) and not support_hints.search(sent):
                     stance = "mixed"
-                elif SUPPORT_HINTS.search(sent):
+                elif support_hints.search(sent):
                     stance = "supports"
                 key = (query_id, sent[:60])
                 if key in seen_queries:
@@ -83,7 +125,8 @@ def mock_evidence_extraction(input_row: dict[str, Any]) -> list[dict[str, Any]]:
                     "query_id": query_id,
                     "quote": sent.strip(),
                     "stance_summary": stance,
-                    "confidence": 0.78 + 0.05 * (1 if SUPPORT_HINTS.search(sent) or OPPOSITION_HINTS.search(sent) else 0),
+                    "confidence": 0.78 + 0.05 * (1 if support_hints.search(sent) or oppose_hints.search(sent) else 0),
+                    "rationale": f"matched pattern for {query_id}; stance from {stance} keywords",
                     "char_offset_start": body.find(sent),
                     "char_offset_end": body.find(sent) + len(sent),
                 })
@@ -99,10 +142,10 @@ def mock_benchmark_scoring(input_row: dict[str, Any]) -> dict[str, Any]:
     benchmark = input_row.get("benchmark_text", "") or ""
     kind = input_row.get("kind", "science_based")
 
-    has_strong_support = bool(re.search(r"\b(strongly support|fully endorse|champion|commit to|will deliver|driven to)\b", quote, re.IGNORECASE))
-    has_support = bool(SUPPORT_HINTS.search(quote))
-    has_oppose = bool(OPPOSITION_HINTS.search(quote))
-    has_strong_oppose = bool(re.search(r"\b(strongly oppose|reject|fundamentally disagree|cannot support|will not)\b", quote, re.IGNORECASE))
+    has_strong_support = bool(re.search(r"\b(strongly support|fully endorse|champion|commit to|will deliver|driven to|fight to extend|protect|defend)\b", quote, re.IGNORECASE))
+    has_support = bool(SUPPORT_HINTS.search(quote) or CW_SUPPORT_HINTS.search(quote))
+    has_oppose = bool(OPPOSITION_HINTS.search(quote) or CW_OPPOSE_HINTS.search(quote))
+    has_strong_oppose = bool(re.search(r"\b(strongly oppose|reject|fundamentally disagree|cannot support|will not|repeal|let.*expire|defund)\b", quote, re.IGNORECASE))
     has_hedge = bool(HEDGE_HINTS.search(quote))
 
     if has_strong_oppose:

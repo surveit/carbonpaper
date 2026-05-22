@@ -1,0 +1,468 @@
+{
+  "run_id": "20260521T074926",
+  "started_at": "2026-05-21T07:49:26",
+  "methodology": "congresswatch",
+  "stages": [
+    {
+      "stage_id": "members_universe",
+      "type": "input_data",
+      "name": "Members of Congress (active in slice)",
+      "started_at": "2026-05-21T07:49:26",
+      "status": "ok",
+      "input_validation": [],
+      "output_validation": {
+        "stage_id": "members_universe",
+        "phase": "output",
+        "rows": 218,
+        "ok": true,
+        "issues": []
+      },
+      "elapsed_ms": 18,
+      "rows": 218,
+      "error": null,
+      "output_path": "outputs\\members_universe.parquet",
+      "finished_at": "2026-05-21T07:49:26"
+    },
+    {
+      "stage_id": "press_corpus",
+      "type": "input_data",
+      "name": "Press releases (slice window)",
+      "started_at": "2026-05-21T07:49:26",
+      "status": "ok",
+      "input_validation": [],
+      "output_validation": {
+        "stage_id": "press_corpus",
+        "phase": "output",
+        "rows": 385,
+        "ok": true,
+        "issues": []
+      },
+      "elapsed_ms": 26,
+      "rows": 385,
+      "error": null,
+      "output_path": "outputs\\press_corpus.parquet",
+      "finished_at": "2026-05-21T07:49:26"
+    },
+    {
+      "stage_id": "lobbying_filings",
+      "type": "input_data",
+      "name": "Lobbying disclosures (slice window, filtered by issue code)",
+      "started_at": "2026-05-21T07:49:26",
+      "status": "validation_warnings",
+      "input_validation": [],
+      "output_validation": {
+        "stage_id": "lobbying_filings",
+        "phase": "output",
+        "rows": 4723,
+        "ok": false,
+        "issues": [
+          {
+            "severity": "error",
+            "column": "filer_org",
+            "message": "16 null value(s) in non-nullable column"
+          },
+          {
+            "severity": "error",
+            "column": "filing_id",
+            "message": "Primary key duplicated on 136 row(s)"
+          }
+        ]
+      },
+      "elapsed_ms": 24,
+      "rows": 4723,
+      "error": null,
+      "output_path": "outputs\\lobbying_filings.parquet",
+      "finished_at": "2026-05-21T07:49:26"
+    },
+    {
+      "stage_id": "policy_queries",
+      "type": "input_data",
+      "name": "Policy queries (topic catalog)",
+      "started_at": "2026-05-21T07:49:26",
+      "status": "ok",
+      "input_validation": [],
+      "output_validation": {
+        "stage_id": "policy_queries",
+        "phase": "output",
+        "rows": 5,
+        "ok": true,
+        "issues": []
+      },
+      "elapsed_ms": 2,
+      "rows": 5,
+      "error": null,
+      "output_path": "outputs\\policy_queries.parquet",
+      "finished_at": "2026-05-21T07:49:26"
+    },
+    {
+      "stage_id": "evidence_extraction",
+      "type": "llm_transform",
+      "name": "Extract stance evidence per press release \u00d7 query",
+      "started_at": "2026-05-21T07:49:26",
+      "status": "ok",
+      "input_validation": [
+        {
+          "stage_id": "evidence_extraction",
+          "phase": "input:press_corpus",
+          "rows": 385,
+          "ok": true,
+          "issues": []
+        },
+        {
+          "stage_id": "evidence_extraction",
+          "phase": "input:policy_queries",
+          "rows": 5,
+          "ok": true,
+          "issues": []
+        }
+      ],
+      "output_validation": {
+        "stage_id": "evidence_extraction",
+        "phase": "output",
+        "rows": 765,
+        "ok": true,
+        "issues": [
+          {
+            "severity": "warning",
+            "column": null,
+            "message": "1 undeclared column(s) present (will be passed through): ['source_class']"
+          }
+        ]
+      },
+      "elapsed_ms": 330,
+      "rows": 765,
+      "error": null,
+      "output_path": "outputs\\evidence_extraction.parquet",
+      "finished_at": "2026-05-21T07:49:26"
+    },
+    {
+      "stage_id": "benchmark_library",
+      "type": "input_data",
+      "name": "Stance benchmarks per query",
+      "started_at": "2026-05-21T07:49:26",
+      "status": "ok",
+      "input_validation": [],
+      "output_validation": {
+        "stage_id": "benchmark_library",
+        "phase": "output",
+        "rows": 5,
+        "ok": true,
+        "issues": []
+      },
+      "elapsed_ms": 4,
+      "rows": 5,
+      "error": null,
+      "output_path": "outputs\\benchmark_library.parquet",
+      "finished_at": "2026-05-21T07:49:26"
+    },
+    {
+      "stage_id": "evidence_with_benchmarks",
+      "type": "join",
+      "name": "Join evidence to applicable benchmarks",
+      "started_at": "2026-05-21T07:49:26",
+      "status": "ok",
+      "input_validation": [
+        {
+          "stage_id": "evidence_with_benchmarks",
+          "phase": "input:evidence_extraction",
+          "rows": 765,
+          "ok": true,
+          "issues": [
+            {
+              "severity": "warning",
+              "column": null,
+              "message": "1 undeclared column(s) present (will be passed through): ['source_class']"
+            }
+          ]
+        },
+        {
+          "stage_id": "evidence_with_benchmarks",
+          "phase": "input:benchmark_library",
+          "rows": 5,
+          "ok": true,
+          "issues": []
+        }
+      ],
+      "output_validation": {
+        "stage_id": "evidence_with_benchmarks",
+        "phase": "output",
+        "rows": 765,
+        "ok": true,
+        "issues": [
+          {
+            "severity": "warning",
+            "column": null,
+            "message": "7 undeclared column(s) present (will be passed through): ['doc_id', 'rationale', 'source_class', 'kind', 'scale_low', 'scale_high', 'source_citation']"
+          }
+        ]
+      },
+      "elapsed_ms": 8,
+      "rows": 765,
+      "error": null,
+      "output_path": "outputs\\evidence_with_benchmarks.parquet",
+      "finished_at": "2026-05-21T07:49:26"
+    },
+    {
+      "stage_id": "benchmark_scoring",
+      "type": "llm_transform",
+      "name": "Score each (evidence, benchmark) on the stance axis",
+      "started_at": "2026-05-21T07:49:26",
+      "status": "ok",
+      "input_validation": [
+        {
+          "stage_id": "benchmark_scoring",
+          "phase": "input:evidence_with_benchmarks",
+          "rows": 765,
+          "ok": true,
+          "issues": [
+            {
+              "severity": "warning",
+              "column": null,
+              "message": "7 undeclared column(s) present (will be passed through): ['doc_id', 'rationale', 'source_class', 'kind', 'scale_low', 'scale_high', 'source_citation']"
+            }
+          ]
+        }
+      ],
+      "output_validation": {
+        "stage_id": "benchmark_scoring",
+        "phase": "output",
+        "rows": 765,
+        "ok": true,
+        "issues": [
+          {
+            "severity": "warning",
+            "column": null,
+            "message": "2 undeclared column(s) present (will be passed through): ['doc_id', 'source_class']"
+          }
+        ]
+      },
+      "elapsed_ms": 109,
+      "rows": 765,
+      "error": null,
+      "output_path": "outputs\\benchmark_scoring.parquet",
+      "finished_at": "2026-05-21T07:49:27"
+    },
+    {
+      "stage_id": "extreme_score_review",
+      "type": "human_review_queue",
+      "name": "Human review of extreme or low-confidence scores",
+      "started_at": "2026-05-21T07:52:28",
+      "status": "ok",
+      "input_validation": [
+        {
+          "stage_id": "extreme_score_review",
+          "phase": "input:benchmark_scoring",
+          "rows": 765,
+          "ok": true,
+          "issues": [
+            {
+              "severity": "warning",
+              "column": null,
+              "message": "2 undeclared column(s) present (will be passed through): ['doc_id', 'source_class']"
+            }
+          ]
+        }
+      ],
+      "output_validation": {
+        "stage_id": "extreme_score_review",
+        "phase": "output",
+        "rows": 765,
+        "ok": true,
+        "issues": [
+          {
+            "severity": "warning",
+            "column": null,
+            "message": "1 undeclared column(s) present (will be passed through): ['quote']"
+          }
+        ]
+      },
+      "elapsed_ms": 92,
+      "rows": 765,
+      "error": null,
+      "output_path": "outputs\\extreme_score_review.parquet",
+      "finished_at": "2026-05-21T07:52:28"
+    },
+    {
+      "stage_id": "cell_aggregation",
+      "type": "python_transform",
+      "name": "Per (member, query) cell score with recency weighting",
+      "started_at": "2026-05-21T07:52:28",
+      "status": "ok",
+      "input_validation": [
+        {
+          "stage_id": "cell_aggregation",
+          "phase": "input:extreme_score_review",
+          "rows": 765,
+          "ok": true,
+          "issues": [
+            {
+              "severity": "warning",
+              "column": null,
+              "message": "7 undeclared column(s) present (will be passed through): ['benchmark_id', 'ai_score', 'human_score', 'reviewer_id', 'reviewed_at', 'review_notes', 'quote']"
+            }
+          ]
+        }
+      ],
+      "output_validation": {
+        "stage_id": "cell_aggregation",
+        "phase": "output",
+        "rows": 227,
+        "ok": true,
+        "issues": []
+      },
+      "elapsed_ms": 120,
+      "rows": 227,
+      "error": null,
+      "output_path": "outputs\\cell_aggregation.parquet",
+      "finished_at": "2026-05-21T07:52:28"
+    },
+    {
+      "stage_id": "lobbying_by_query",
+      "type": "python_transform",
+      "name": "Aggregate lobbying filings per policy query",
+      "started_at": "2026-05-21T07:52:28",
+      "status": "validation_warnings",
+      "input_validation": [
+        {
+          "stage_id": "lobbying_by_query",
+          "phase": "input:lobbying_filings",
+          "rows": 4723,
+          "ok": false,
+          "issues": [
+            {
+              "severity": "error",
+              "column": "filer_org",
+              "message": "16 null value(s) in non-nullable column"
+            },
+            {
+              "severity": "error",
+              "column": "filing_id",
+              "message": "Primary key duplicated on 136 row(s)"
+            },
+            {
+              "severity": "warning",
+              "column": null,
+              "message": "5 undeclared column(s) present (will be passed through): ['issues_text', 'report_year', 'report_type', 'lobbyists', 'source_path']"
+            }
+          ]
+        },
+        {
+          "stage_id": "lobbying_by_query",
+          "phase": "input:policy_queries",
+          "rows": 5,
+          "ok": true,
+          "issues": [
+            {
+              "severity": "warning",
+              "column": null,
+              "message": "2 undeclared column(s) present (will be passed through): ['left_pole', 'right_pole']"
+            }
+          ]
+        }
+      ],
+      "output_validation": {
+        "stage_id": "lobbying_by_query",
+        "phase": "output",
+        "rows": 5,
+        "ok": true,
+        "issues": []
+      },
+      "elapsed_ms": 548,
+      "rows": 5,
+      "error": null,
+      "output_path": "outputs\\lobbying_by_query.parquet",
+      "finished_at": "2026-05-21T07:52:29"
+    },
+    {
+      "stage_id": "publish_member_profiles",
+      "type": "publish",
+      "name": "Publish per-member profile pages",
+      "started_at": "2026-05-21T07:52:29",
+      "status": "ok",
+      "input_validation": [
+        {
+          "stage_id": "publish_member_profiles",
+          "phase": "input:cell_aggregation",
+          "rows": 227,
+          "ok": true,
+          "issues": []
+        },
+        {
+          "stage_id": "publish_member_profiles",
+          "phase": "input:members_universe",
+          "rows": 218,
+          "ok": true,
+          "issues": [
+            {
+              "severity": "warning",
+              "column": null,
+              "message": "1 undeclared column(s) present (will be passed through): ['bioguide_id']"
+            }
+          ]
+        },
+        {
+          "stage_id": "publish_member_profiles",
+          "phase": "input:extreme_score_review",
+          "rows": 765,
+          "ok": true,
+          "issues": [
+            {
+              "severity": "warning",
+              "column": null,
+              "message": "7 undeclared column(s) present (will be passed through): ['benchmark_id', 'ai_score', 'human_score', 'reviewer_id', 'reviewed_at', 'review_notes', 'published_at']"
+            }
+          ]
+        },
+        {
+          "stage_id": "publish_member_profiles",
+          "phase": "input:policy_queries",
+          "rows": 5,
+          "ok": true,
+          "issues": [
+            {
+              "severity": "warning",
+              "column": null,
+              "message": "1 undeclared column(s) present (will be passed through): ['issue_codes']"
+            }
+          ]
+        },
+        {
+          "stage_id": "publish_member_profiles",
+          "phase": "input:lobbying_by_query",
+          "rows": 5,
+          "ok": true,
+          "issues": [
+            {
+              "severity": "warning",
+              "column": null,
+              "message": "1 undeclared column(s) present (will be passed through): ['top_filers_json']"
+            }
+          ]
+        }
+      ],
+      "output_validation": {
+        "stage_id": "publish_member_profiles",
+        "phase": "output",
+        "rows": 218,
+        "ok": true,
+        "issues": []
+      },
+      "elapsed_ms": 1797,
+      "rows": 218,
+      "error": null,
+      "output_path": "outputs\\publish_member_profiles.parquet",
+      "finished_at": "2026-05-21T07:52:30"
+    }
+  ],
+  "finished_at": "2026-05-21T07:52:30",
+  "queue_stats": {
+    "extreme_score_review": {
+      "items_queued_total": 63,
+      "items_passed_through": 702,
+      "items_pending": 0,
+      "items_decided": 63
+    }
+  },
+  "status": "warnings",
+  "resumed_at": "2026-05-21T07:52:28"
+}

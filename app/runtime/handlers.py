@@ -18,6 +18,7 @@ from typing import Any
 import pandas as pd
 
 from .llm_mock import mock_llm_call
+from .llm import call_llm, call_llm_batch, backend_status
 
 
 class HaltForReview(Exception):
@@ -185,16 +186,16 @@ def handle_llm_transform(stage: dict[str, Any], inputs: dict[str, pd.DataFrame],
     src = inputs[inps[0]["id"]]
     out_rows = []
 
-    for _, row in src.iterrows():
-        row_dict = row.to_dict()
-        result = mock_llm_call(stage["id"], llm, row_dict)
+    # Record which backend handled this stage so the UI/manifest can label it.
+    ctx.setdefault("llm_backend", {})[stage["id"]] = backend_status()
 
-        # If the mock returned a list (e.g. evidence_extraction can produce
-        # multiple evidence pieces per document), emit one output row per
-        # element. Otherwise emit one row.
+    row_dicts = [row.to_dict() for _, row in src.iterrows()]
+    results = call_llm_batch(stage["id"], llm, row_dicts)
+
+    for row_dict, result in zip(row_dicts, results):
         if isinstance(result, list):
             for idx, item in enumerate(result):
-                merged = {**row_dict, **item}
+                merged = {**row_dict, **(item if isinstance(item, dict) else {"_value": item})}
                 merged["evidence_id"] = _evidence_id_for(row_dict, idx)
                 out_rows.append(merged)
         elif isinstance(result, dict):
