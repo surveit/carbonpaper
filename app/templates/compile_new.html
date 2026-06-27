@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}New compilation · transcript → DAG{% endblock %}
+
+{% block head_extra %}
+<style>
+  .transcript-pick li { margin-bottom: 6px; }
+  .pill { display:inline-block; padding:1px 7px; border-radius:10px; font-size:11px; background:#eee; }
+  .meta-line { color:#666; font-size:13px; margin:4px 0 16px; }
+  .compile-form { max-width: 560px; }
+</style>
+{% endblock %}
+
+{% block header_extra %}
+<a href="/compile" class="back-link">← compilations</a>
+{% endblock %}
+
+{% block content %}
+<h1>New compilation · research transcript → draft DAG</h1>
+<p class="lede">
+  The compiler distills an open-ended Claude Code research run (a tool-call
+  transcript) into a structured methodology DAG — most steps deterministic, the
+  LLM only at the genuine judgment points. Output validates against
+  <code>app/dag_schema.py</code>. This compile is persisted as a
+  <strong>compilation object</strong>.
+</p>
+
+<div class="compile-form">
+  {% if transcripts %}
+  <form method="post" action="/compile/new">
+    <h2>Transcript</h2>
+    <ul class="transcript-pick">
+      {% for t in transcripts %}
+      <li>
+        <label>
+          <input type="radio" name="transcript" value="{{ t.path }}"
+                 {% if loop.first %}checked{% endif %}>
+          <code>{{ t.filename }}</code>
+          <span class="pill">{{ t.size_kb }} KB</span>
+        </label>
+      </li>
+      {% endfor %}
+    </ul>
+    <p>
+      <label>out name:
+        <input type="text" name="out_name"
+               value="{{ transcripts[0].name if transcripts else 'compiled' }}">
+      </label>
+    </p>
+    <p>
+      <label>model:
+        <select name="model">
+          <option value="sonnet" selected>sonnet (quality)</option>
+          <option value="haiku">haiku (fast)</option>
+        </select>
+      </label>
+    </p>
+    <button type="submit" class="btn primary">▶ Compile</button>
+    <p class="meta-line">A sonnet compile takes ~1–3 min (large structured generation).
+      You'll be redirected to the compilation object page, which polls until it finishes.</p>
+  </form>
+  {% else %}
+  <p><em>No transcripts found under <code>examples/palm_osint/research_runs/</code>.</em></p>
+  {% endif %}
+</div>
+{% endblock %}

@@ -41,3 +41,35 @@ have side effects).
 `main.py` (routes) · `templates/` (`run_detail.html`, `_run_stage_panel.html`,
 `_stage_executable.html`, `_stage_content.html`, + base/index/methodology/queue/…)
 · `static/style.css` · `runtime/preview.py` (scratch-run backend).
+
+---
+
+# Compiler — `/compile` (transcript / prose → draft DAG)
+
+The third feature on the DAG artifact. `app/compiler.py` distills an unstructured
+Claude Code run (a transcript `.jsonl`) — or prose — into a *draft* methodology
+that conforms to `app/dag_schema`. **Separation rule:** the compiler imports only
+`app.dag_schema` + `claude_agent_sdk`; it must NOT import `app.runtime` (the
+runner stays ignorant of the compiler). `app/main.py` (the app shell) may wire the
+`/compile` routes.
+
+## How it works (`app/compiler.py`)
+- `parse_transcript` — extract the tool-call sequence (WebSearch/WebFetch/Bash) + the final report from a transcript jsonl.
+- `compile_from_transcript` — build a prompt that frames the node-type contract straight from `dag_schema.NODE_TYPES` (so it can't drift), and asks the model (Agent SDK) to emit a methodology as JSON: stages valid per the contract + `methodology_raw.md` + compiler_notes. Bounded retry on malformed JSON.
+- `validate` — runs `dag_schema.validate_methodology` on the output as a self-check.
+- `harvest_eval_fixtures` — pulls (search→chosen-url) and (doc→fields) pairs from the transcript as eval seeds.
+
+## A compilation is a first-class object (parallels a run)
+Persisted at `compilations/<id>/` (gitignored): `manifest.json` (status, model,
+n_stages, validation_issues, stage_summary) + `what_happened.json` (parsed tool
+sequence + the LLM prompt sent + the raw response + validation) + `dag/` (the
+generated `compiled/*.yaml` + `methodology_raw.md`) + `eval_fixtures.jsonl`.
+
+## Pages
+`GET /compile` (list of compilations) · `GET /compile/new` (form: pick transcript /
+out-name / model) · `POST /compile/new` (runs in a background thread, redirects) ·
+`GET /compile/<id>` (the object view: **Input** · **What happened** · **DAG output**
+with mermaid). Sample output is committed at `examples/_compiled_sungai_lilin/` (a
+draft DAG the compiler produced from the sungai_lilin transcript; validates clean
+and independently reproduced the locate/extract/adjudicate backbone).
+

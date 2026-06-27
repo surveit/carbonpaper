@@ -1,0 +1,56 @@
+id: locate_documents
+name: Locate and rank authoritative documents (LLM judgment)
+type: llm_transform
+source:
+  doc: transcript_summary
+  section: move_2_move_3_recency_authority_ranking
+inputs:
+- id: build_queries
+  schema:
+    primary_key:
+    - facility_id
+    - query_id
+    columns:
+    - name: facility_id
+      type: str
+    - name: query_id
+      type: str
+    - name: search_query
+      type: str
+    - name: query_intent
+      type: str
+llm:
+  model: haiku
+  temperature: 0.0
+  response_format: json
+  tools:
+  - WebSearch
+  prompt_template: 'Search for {query_intent} using: {search_query}. Return up to 5 results with {url,
+    title, doc_type [rspo_announcement|rspo_pc_report|permit|news|other], certification_body [control_union|sgs|sucofindo|cargill|other],
+    year, confidence}. Prioritize RSPO-official, recent (2020+), mill-specific over operator-level or
+    press.'
+output_schema:
+  primary_key:
+  - facility_id
+  - source_url
+  columns:
+  - name: facility_id
+    type: str
+  - name: query_id
+    type: str
+  - name: source_url
+    type: str
+  - name: doc_type
+    type: str
+  - name: certification_body
+    type: str
+  - name: year
+    type: int
+  - name: confidence
+    type: str
+compiler_notes:
+- 'JUDGMENT POINT: The LLM decides which documents are authoritative and recent. In the run, hierarchy
+  was: Control Union 2023 > SGS/Sucofindo older > news/PR.'
+- The LLM uses WebSearch tool. Multiple queries may return overlapping URLs; next stage (fetch) handles
+  dedup.
+- Temperature 0 because ranking is deterministic, not creative.

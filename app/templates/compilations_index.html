@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Compilations · transcript → DAG{% endblock %}
+
+{% block content %}
+<div class="stage-header">
+    <h1>Compilations</h1>
+    <p class="stage-id">Each compilation is a persisted object — what happened during the
+    compile, plus the draft DAG it produced. Parallels a run.</p>
+</div>
+
+<p>
+    <a href="/compile/new" class="btn primary">＋ New compilation</a>
+</p>
+
+{% if compilations %}
+<table class="stages">
+    <thead>
+        <tr><th>compilation id</th><th>created</th><th>name</th><th>input</th><th>model</th><th>status</th><th>stages</th></tr>
+    </thead>
+    <tbody>
+        {% for c in compilations %}
+        <tr>
+            <td><a href="/compile/{{ c.compilation_id }}"><code>{{ c.compilation_id }}</code></a></td>
+            <td>{{ c.created_at }}</td>
+            <td><code>{{ c.name }}</code></td>
+            <td><code>{{ c.input.replace('\\', '/').split('/')[-1] if c.input else '' }}</code></td>
+            <td>{{ c.model }}</td>
+            <td><span class="run-status status-{{ c.status }}">{{ c.status }}</span></td>
+            <td>
+                {{ c.n_stages }} stage{% if c.n_stages != 1 %}s{% endif %}
+                {% if c.n_validation_issues %}· <span class="status-error">{{ c.n_validation_issues }} issue{% if c.n_validation_issues != 1 %}s{% endif %}</span>{% else %}{% if c.status == 'ok' %}· <span class="status-ok">clean</span>{% endif %}{% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<p><em>No compilations yet. Click "New compilation" to distill a research transcript into a draft DAG.</em></p>
+{% endif %}
+{% endblock %}

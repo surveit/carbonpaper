@@ -1,0 +1,62 @@
+id: enrich_context
+name: Enrich with corporate and regulatory context
+type: python_transform
+source:
+  doc: transcript_summary
+  section: identity_corporate
+inputs:
+- id: adjudicate_conflicts
+  schema:
+    primary_key:
+    - facility_id
+    columns:
+    - name: facility_id
+      type: str
+    - name: fbb_capacity_mt_hr_final
+      type: float
+    - name: cpo_mt_yr_final
+      type: float
+function:
+  kind: inline
+  code: 'Add canonical identity data: facility_name, parent_company (Cargill), country, region, coordinates,
+    RSPO membership number, PalmTrace ID, supply_chain_model. These are deterministic lookups or hand-curated
+    from high-confidence sources (Control Union 2023 announcement). Output one row per facility.'
+output_schema:
+  primary_key:
+  - facility_id
+  columns:
+  - name: facility_id
+    type: str
+  - name: facility_name
+    type: str
+  - name: parent_company
+    type: str
+  - name: country
+    type: str
+  - name: region
+    type: str
+  - name: coordinates
+    type: json
+  - name: rspo_membership
+    type: str
+  - name: rspo_palmtrace_id
+    type: str
+  - name: supply_chain_model
+    type: str
+  - name: fbb_capacity_mt_hr_final
+    type: float
+  - name: cpo_mt_yr_final
+    type: float
+  - name: pk_mt_yr_final
+    type: float
+  - name: ghg_kg_co2e_per_t_cpo_final
+    type: float
+  - name: pome_treatment_final
+    type: str
+  - name: methane_capture_mw_final
+    type: float
+  - name: biomass_boiler_mw_final
+    type: float
+compiler_notes:
+- Optional enrichment stage. Could be folded into consolidate_per_facility or adjudicate_conflicts.
+- Adds canonical names and corporate/regulatory identifiers from high-confidence sources.

@@ -15,6 +15,7 @@ Then open http://localhost:8765/
 from __future__ import annotations
 
 import json
+import re
 import threading
 import traceback
 from datetime import datetime
@@ -31,6 +32,7 @@ from fastapi.templating import Jinja2Templates
 from app.runtime.runner import execute_run, prepare_run, resume_run, run_prepared
 from app.runtime.preview import run_stage_preview, PreviewError, PREVIEWABLE_TYPES
 
+from app import compiler  # the COMPILER feature (transcript → draft DAG)
 
 
 # ─── Paths ───────────────────────────────────────────────────────────────────
@@ -40,6 +42,7 @@ APP_DIR = Path(__file__).resolve().parent
 TEMPLATES_DIR = APP_DIR / "templates"
 STATIC_DIR = APP_DIR / "static"
 EXAMPLES_DIR = REPO_ROOT / "examples"
+COMPILATIONS_DIR = REPO_ROOT / "compilations"
 
 
 # ─── App ─────────────────────────────────────────────────────────────────────
@@ -888,4 +891,119 @@ async def resume_run_route(methodology: str, run_id: str):
     return RedirectResponse(
         url=f"/methodology/{methodology}/runs/{run_id}",
         status_code=303,
+    )
+
+
+# ─── /compile — the COMPILER feature (transcript → draft DAG) ────────────────
+
+RESEARCH_RUNS_DIR = EXAMPLES_DIR / "palm_osint" / "research_runs"
+
+
+def list_transcripts() -> list[dict[str, Any]]:
+    """Available research-run transcripts the compiler can distill."""
+    if not RESEARCH_RUNS_DIR.is_dir():
+        return []
+    out: list[dict[str, Any]] = []
+    for p in sorted(RESEARCH_RUNS_DIR.glob("*.jsonl")):
+        # Suggest an out_name from the leading slug of the filename.
+        slug = p.stem.split("__", 1)[0]
+        out.append({
+            "filename": p.name,
+            "path": str(p.relative_to(REPO_ROOT)).replace("\\", "/"),
+            "name": slug,
+            "size_kb": round(p.stat().st_size / 1024),
+        })
+    return out
+
+
+@app.get("/compile", response_class=HTMLResponse)
+async def compilations_index(request: Request):
+    """LIST of compilation objects (parallels runs_index). Each row is a persisted
+    compilation; "New compilation" opens the form."""
+    return templates.TemplateResponse(
+        request,
+        "compilations_index.html",
+        {"compilations": compiler.list_compilations(COMPILATIONS_DIR)},
+    )
+
+
+@app.get("/compile/new", response_class=HTMLResponse)
+async def compile_new_form(request: Request):
+    """The compile FORM — pick a transcript, an out-name, a model. (The page that
+    used to live at GET /compile.)"""
+    return templates.TemplateResponse(
+        request,
+        "compile_new.html",
+        {"transcripts": list_transcripts()},
+    )
+
+
+@app.post("/compile/new")
+async def compile_new_submit(
+    transcript: str = Form(...),
+    out_name: str = Form(...),
+    model: str = Form("sonnet"),
+):
+    """Run + PERSIST a compilation as a first-class object, then redirect to its
+    detail page. The compile is a multi-minute LLM call, so — exactly like
+    trigger_run — we write an initial `running` manifest, kick the work off in a
+    background thread, and redirect immediately. The detail page polls."""
+    transcript_path = (REPO_ROOT / transcript).resolve()
+    # Confine to the research_runs dir (no arbitrary path read).
+    if RESEARCH_RUNS_DIR.resolve() not in transcript_path.parents or not transcript_path.is_file():
+        raise HTTPException(status_code=400, detail=f"Unknown transcript: {transcript}")
+
+    safe_name = re.sub(r"[^a-z0-9_]", "_", out_name.strip().lower()) or "compiled"
+
+    prep = compiler.prepare_compilation(
+        COMPILATIONS_DIR, str(transcript_path), safe_name, model
+    )
+    _run_in_background(compiler.run_prepared_compilation, prep)
+    return RedirectResponse(url=f"/compile/{prep['compilation_id']}", status_code=303)
+
+
+@app.get("/compile/{compilation_id}/status")
+async def compilation_status(compilation_id: str):
+    """Lightweight JSON for the live poller while a compile runs (parallels
+    run_status): just the manifest status + terminal flag."""
+    manifest_path = COMPILATIONS_DIR / compilation_id / "manifest.json"
+    if not manifest_path.exists():
+        raise HTTPException(status_code=404, detail="Compilation not found")
+    m = json.loads(manifest_path.read_text(encoding="utf-8"))
+    return JSONResponse({
+        "status": m.get("status"),
+        "terminal": m.get("status") != "running",
+        "n_stages": m.get("n_stages", 0),
+        "n_validation_issues": len(m.get("validation_issues") or []),
+    })
+
+
+@app.get("/compile/{compilation_id}", response_class=HTMLResponse)
+async def compilation_detail(request: Request, compilation_id: str):
+    """The COMPILATION OBJECT view (parallels run_detail). Three sections:
+    (a) INPUT — transcript + parsed tool-sequence summary;
+    (b) WHAT HAPPENED — the LLM prompt sent, the raw response, the validation result;
+    (c) DAG OUTPUT — mermaid graph + stage table + methodology_raw.md."""
+    try:
+        comp = compiler.load_compilation(COMPILATIONS_DIR, compilation_id)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Compilation not found")
+
+    stages = comp["stages"]
+    mermaid = build_mermaid_graph(stages, comp["manifest"].get("name", compilation_id)) if stages else None
+
+    return templates.TemplateResponse(
+        request,
+        "compile_detail.html",
+        {
+            "compilation_id": compilation_id,
+            "manifest": comp["manifest"],
+            "what_happened": comp["what_happened"],
+            "stages": stages,
+            "methodology_raw": comp["methodology_raw"],
+            "error_text": comp["error_text"],
+            "mermaid": mermaid,
+            "type_class": TYPE_CLASS,
+            "type_glyph": TYPE_GLYPH,
+        },
     )

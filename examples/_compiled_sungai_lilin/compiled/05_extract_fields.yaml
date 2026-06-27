@@ -1,0 +1,85 @@
+id: extract_fields
+name: Extract structured fields from documents (LLM parsing)
+type: llm_transform
+source:
+  doc: transcript_summary
+  section: move_4_mine_full_pc_reports_locally
+inputs:
+- id: fetch_documents
+  schema:
+    primary_key:
+    - facility_id
+    - source_url
+    columns:
+    - name: facility_id
+      type: str
+    - name: source_url
+      type: str
+    - name: document_text
+      type: str
+    - name: extraction_success
+      type: bool
+llm:
+  model: haiku
+  temperature: 0.0
+  response_format: json
+  prompt_template: 'Extract from this sustainability document: {cert_number, cert_body, audit_type, audit_start_date,
+    audit_end_date, cert_validity_start, cert_validity_end, fbb_capacity_mt_hr, cpo_mt_yr, pk_mt_yr, ghg_kg_co2e_per_t_cpo,
+    pome_treatment_system, pome_pond_count, methane_capture_mw, biomass_boiler_mw, employee_homes_powered,
+    production_year}. For each field return null if not mentioned; include per-field extraction_confidence
+    (high|medium|low) and overall_confidence. Add extraction_notes.'
+output_schema:
+  primary_key:
+  - facility_id
+  - source_url
+  columns:
+  - name: facility_id
+    type: str
+  - name: source_url
+    type: str
+  - name: cert_number
+    type: str
+  - name: cert_body
+    type: str
+  - name: audit_type
+    type: str
+  - name: audit_start_date
+    type: date
+  - name: audit_end_date
+    type: date
+  - name: cert_validity_start
+    type: date
+  - name: cert_validity_end
+    type: date
+  - name: fbb_capacity_mt_hr
+    type: float
+  - name: cpo_mt_yr
+    type: float
+  - name: pk_mt_yr
+    type: float
+  - name: ghg_kg_co2e_per_t_cpo
+    type: float
+  - name: pome_treatment_system
+    type: str
+  - name: pome_pond_count
+    type: int
+  - name: methane_capture_mw
+    type: float
+  - name: biomass_boiler_mw
+    type: float
+  - name: employee_homes_powered
+    type: int
+  - name: production_year
+    type: int
+  - name: extraction_confidence
+    type: str
+  - name: extraction_notes
+    type: str
+compiler_notes:
+- 'JUDGMENT POINT: The LLM must parse semi-structured document text and identify relevant fields. This
+  is genuine LLM judgment because documents are heterogeneous (PDFs, web articles, mix of tabular and
+  prose).'
+- Temperature 0 because extraction is deterministic (same input should yield same output).
+- The prompt asks for null for missing fields, confidence levels, and notes on ambiguity.
+- In the run, this is where 947.86 kg CO2e/t, 19-pond IPAL, 100 MT/hr capacity, and methane-vs-biomass
+  distinction were parsed from raw PDF text.

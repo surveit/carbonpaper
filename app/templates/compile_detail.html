@@ -1,0 +1,215 @@
+{% extends "base.html" %}
+{% block title %}Compilation {{ compilation_id }}{% endblock %}
+
+{% block head_extra %}
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    mermaid.initialize({
+      startOnLoad: true,
+      theme: "default",
+      flowchart: { curve: "basis", padding: 20, useMaxWidth: true },
+      securityLevel: "loose"
+    });
+  });
+</script>
+<style>
+  .issues-ok { color:#2a8a2a; font-weight:600; }
+  .issues-bad { color:#cc2a2a; font-weight:600; }
+  .issue-list li { color:#cc2a2a; font-family: ui-monospace, monospace; font-size:12px; }
+  .note-list li { color:#996600; font-size:13px; }
+  pre.raw-md { background:#fafafa; border:1px solid #eee; padding:12px; max-height:380px; overflow:auto; font-size:12px; white-space:pre-wrap; }
+  pre.raw-llm { background:#1e1e1e; color:#d4d4d4; border:1px solid #333; padding:12px; max-height:380px; overflow:auto; font-size:12px; white-space:pre-wrap; border-radius:4px; }
+  pre.prompt-pre { background:#fafafa; border:1px solid #eee; padding:12px; max-height:380px; overflow:auto; font-size:12px; white-space:pre-wrap; }
+  .err-box { background:#fdecec; border:1px solid #f3b6b6; padding:12px 16px; border-radius:6px; color:#a02020; }
+  .err-box pre { white-space:pre-wrap; font-size:11px; margin-top:8px; }
+  .meta-line { color:#666; font-size:13px; margin:4px 0 16px; }
+  .section { margin:28px 0; padding-top:8px; border-top:2px solid #eee; }
+  .section h2 { margin-bottom:4px; }
+  .section .sub { color:#888; font-size:13px; margin-top:0; }
+  .stage-row code { font-size:12px; }
+</style>
+{% endblock %}
+
+{% block header_extra %}
+<a href="/compile" class="back-link">← compilations</a>
+{% endblock %}
+
+{% block content %}
+<div class="stage-header">
+    <span id="comp-status-badge" class="run-status status-{{ manifest.status }}">{{ manifest.status }}</span>
+    <span id="live-note" class="muted">{% if manifest.status == "running" %}● live — compiling, this can take a few minutes{% endif %}</span>
+    <h1>Compilation <code>{{ compilation_id }}</code></h1>
+    <p class="stage-id">
+      <code>{{ manifest.name }}</code> · {{ manifest.model }} ·
+      created <code>{{ manifest.created_at }}</code>
+      {% if manifest.finished_at %}· finished <code>{{ manifest.finished_at }}</code>{% endif %}
+    </p>
+</div>
+
+{% if manifest.status == "running" %}
+<p class="banner">⏳ The compile is running in the background. This page updates itself when it finishes.</p>
+{% endif %}
+
+{% if manifest.status == "error" %}
+<div class="err-box">
+  <strong>Compile failed.</strong> The compiler reported this honestly rather than
+  emit a fake DAG:<br>
+  <code>{{ manifest.error }}</code>
+  {% if error_text %}<details><summary>traceback</summary><pre>{{ error_text }}</pre></details>{% endif %}
+</div>
+{% endif %}
+
+{# ─── (a) INPUT ─────────────────────────────────────────────────────────── #}
+<div class="section">
+  <h2>① Input</h2>
+  <p class="sub">What was fed into the compiler.</p>
+  <p>
+    <strong>Source:</strong>
+    <code>{{ manifest.input.replace('\\', '/').split('/')[-1] }}</code>
+    <span class="muted">({{ manifest.input_kind }})</span>
+  </p>
+  {% if what_happened and what_happened.tool_sequence_summary %}
+  {% set ts = what_happened.tool_sequence_summary %}
+  <div class="run-summary">
+    <div class="card"><div class="num">{{ ts.n_tool_calls }}</div><div class="lbl">tool calls</div></div>
+    <div class="card"><div class="num">{{ ts.n_searches }}</div><div class="lbl">searches</div></div>
+    <div class="card"><div class="num">{{ ts.n_fetches }}</div><div class="lbl">fetches</div></div>
+    <div class="card"><div class="num">{{ ts.n_commands }}</div><div class="lbl">bash</div></div>
+    <div class="card"><div class="num">{{ ts.n_reads }}</div><div class="lbl">reads</div></div>
+  </div>
+  {% if ts.searches %}
+  <details class="raw-yaml">
+    <summary>{{ ts.n_searches }} search queries · {{ ts.n_fetches }} fetch targets</summary>
+    {% if ts.searches %}<h4>WebSearch queries</h4>
+    <ul>{% for s in ts.searches %}<li><code>{{ s.query }}</code></li>{% endfor %}</ul>{% endif %}
+    {% if ts.fetches %}<h4>WebFetch targets</h4>
+    <ul>{% for f in ts.fetches %}<li><code>{{ f.url }}</code></li>{% endfor %}</ul>{% endif %}
+  </details>
+  {% endif %}
+  {% elif manifest.status != "running" %}
+  <p class="muted">No parsed tool-sequence summary available.</p>
+  {% endif %}
+</div>
+
+{# ─── (b) WHAT HAPPENED ─────────────────────────────────────────────────── #}
+<div class="section">
+  <h2>② What happened</h2>
+  <p class="sub">The prompt the compiler sent, the model's raw response, and the self-check.</p>
+
+  <h3>Validation — <code>validate_methodology()</code></h3>
+  {% if manifest.status == "running" %}
+  <p class="muted">…pending (compile still running)</p>
+  {% elif manifest.validation_issues %}
+  <p class="issues-bad">{{ manifest.validation_issues|length }} issue(s):</p>
+  <ul class="issue-list">
+    {% for iss in manifest.validation_issues %}<li>{{ iss }}</li>{% endfor %}
+  </ul>
+  {% elif manifest.status == "ok" %}
+  <p class="issues-ok">✓ CLEAN — 0 issues. Valid draft DAG.</p>
+  {% endif %}
+
+  {% if what_happened and what_happened.compiler_notes %}
+  <h3>Compiler notes (ambiguities)</h3>
+  <ul class="note-list">
+    {% for n in what_happened.compiler_notes %}<li>{{ n }}</li>{% endfor %}
+  </ul>
+  {% endif %}
+
+  {% if what_happened and what_happened.prompt %}
+  <details class="raw-yaml">
+    <summary>LLM prompt sent ({{ what_happened.prompt|length }} chars)</summary>
+    <pre class="prompt-pre">{{ what_happened.prompt }}</pre>
+  </details>
+  {% endif %}
+
+  {% if what_happened and what_happened.raw_llm_response %}
+  <details class="raw-yaml">
+    <summary>Raw LLM response ({{ what_happened.raw_llm_response|length }} chars)</summary>
+    <pre class="raw-llm">{{ what_happened.raw_llm_response }}</pre>
+  </details>
+  {% endif %}
+</div>
+
+{# ─── (c) DAG OUTPUT ────────────────────────────────────────────────────── #}
+<div class="section">
+  <h2>③ DAG output</h2>
+  <p class="sub">The proposed methodology — {{ manifest.n_stages }} stage{% if manifest.n_stages != 1 %}s{% endif %}.</p>
+
+  {% if mermaid %}
+  <div class="legend">
+    <span class="badge input">▶ input_data</span>
+    <span class="badge llm">✦ llm_transform</span>
+    <span class="badge python">λ python_transform</span>
+    <span class="badge join">⋈ join</span>
+    <span class="badge aggregate">Σ aggregate</span>
+    <span class="badge human">👤 human_review_queue</span>
+    <span class="badge publish">📤 publish</span>
+  </div>
+
+  <div class="dag">
+    <pre class="mermaid">
+{{ mermaid }}
+    </pre>
+  </div>
+
+  <h3>Stage list</h3>
+  <table class="stages compact">
+    <thead><tr><th>#</th><th>id</th><th>type</th><th>inputs</th></tr></thead>
+    <tbody>
+      {% for s in stages %}
+      <tr class="stage-row">
+        <td>{{ s._order }}</td>
+        <td><code>{{ s.id }}</code></td>
+        <td><span class="type-tag {{ type_class.get(s.type, 'custom') }}">{{ type_glyph.get(s.type, '') }}</span> {{ s.type }}</td>
+        <td><code>{{ (s.inputs or []) | map(attribute='id') | join(', ') }}</code></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  {% if methodology_raw %}
+  <h3>methodology_raw.md</h3>
+  <pre class="raw-md">{{ methodology_raw }}</pre>
+  {% endif %}
+  {% elif manifest.status == "running" %}
+  <p class="muted">…the DAG will appear here once the compile finishes.</p>
+  {% else %}
+  <p class="muted">No DAG output (the compile did not produce stages).</p>
+  {% endif %}
+</div>
+
+<script>
+(function () {
+  // ── Live poller ──────────────────────────────────────────────────────────
+  // While the compile runs, poll its status every 3s; on the transition to a
+  // terminal state, reload ONCE to render the full object (input summary, what
+  // happened, DAG). Mirrors the run page's poller.
+  const RUNNING = {{ (manifest.status == 'running') | tojson }};
+  if (!RUNNING) return;
+  const COMPILATION_ID = {{ compilation_id | tojson }};
+  const statusUrl = `/compile/${encodeURIComponent(COMPILATION_ID)}/status`;
+  let timer = setInterval(poll, 3000);
+
+  async function poll() {
+    let d;
+    try {
+      const r = await fetch(statusUrl, { cache: 'no-store' });
+      if (!r.ok) return;
+      d = await r.json();
+    } catch (e) { return; }
+
+    const badge = document.getElementById('comp-status-badge');
+    if (badge) { badge.textContent = d.status; badge.className = 'run-status status-' + d.status; }
+
+    if (d.terminal) {
+      if (timer) clearInterval(timer);
+      const note = document.getElementById('live-note');
+      if (note) note.textContent = '✓ finished — loading results…';
+      setTimeout(() => location.reload(), 600);
+    }
+  }
+  poll();
+})();
+</script>
+{% endblock %}

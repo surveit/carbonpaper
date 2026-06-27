@@ -1,0 +1,26 @@
+id: seed_entity
+name: Seed mill entity (PT Hindoli Sungai Lilin)
+type: input_data
+source:
+  doc: transcript_summary
+  section: research_target
+inputs: []
+connector:
+  kind: computed_static
+  notes: 'Single row: the mill we are researching. Identified by local name, region, and UML code RSPO_PO1000000058.'
+output_schema:
+  primary_key:
+  - facility_id
+  columns:
+  - name: facility_id
+    type: str
+  - name: facility_name
+    type: str
+  - name: region
+    type: str
+  - name: country
+    type: str
+compiler_notes:
+- 'The input is a single known entity: sungai_lilin (PT Hindoli Sungai Lilin, UML RSPO_PO1000000058, located
+  at ~104.127°E, 2.612°S in Musi Banyuasin, South Sumatra, Indonesia).'
+- This stage represents the query seed.

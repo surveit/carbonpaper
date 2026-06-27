@@ -1,0 +1,44 @@
+id: fetch_documents
+name: Fetch and convert PDFs to text
+type: python_transform
+source:
+  doc: transcript_summary
+  section: move_4_mine_full_pc_reports_locally
+inputs:
+- id: locate_documents
+  schema:
+    primary_key:
+    - facility_id
+    - source_url
+    columns:
+    - name: facility_id
+      type: str
+    - name: source_url
+      type: str
+    - name: doc_type
+      type: str
+function:
+  kind: inline
+  code: 'For each unique source_url: (1) Fetch via WebFetch, (2) If PDF, extract text with pypdf, (3)
+    If HTML, extract visible text, (4) Return {facility_id, source_url, document_text, extraction_success,
+    error_message}. Handle retries on 403/timeout; record partial success if some pages extracted.'
+output_schema:
+  primary_key:
+  - facility_id
+  - source_url
+  columns:
+  - name: facility_id
+    type: str
+  - name: source_url
+    type: str
+  - name: document_text
+    type: str
+  - name: extraction_success
+    type: bool
+  - name: error_message
+    type: str
+compiler_notes:
+- 'DETERMINISTIC: WebFetch + text extraction logic.'
+- In the run, pypdf extraction was essential because image-based PDFs cannot be parsed by simple text
+  tools.
+- Records extraction_success=false and error_message if fetch fails. Next stage filters for success=true.
