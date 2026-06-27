@@ -1,5 +1,13 @@
-{# Per-run stage detail panel: status, validation, preview, error.
-   Rendered into the run-detail right pane via fetch. #}
+{# Per-run stage detail panel — 3-tier left-to-right layout:
+       Inputs │ Transform │ Outputs
+   Inputs  : input schema(s) + upstream DATA preview (with row-select for scratch re-run)
+   Transform: the RAW executable handle (prompt / code / join / aggregate / ...)
+   Outputs : output schema + output DATA preview + VALIDATION (input + output)
+
+   NOTE: compiler_notes are deliberately NOT rendered here — they belong only on
+   the /compile pages. Validation warnings/failures ARE shown (in Outputs). #}
+{% from "_schema_table.html" import schema_table %}
+
 <div class="stage-header">
     <span class="type-tag {{ type_class.get(stage.type, 'custom') }}">{{ type_glyph.get(stage.type, '') }} {{ stage.type }}</span>
     <span class="run-status status-{{ stage.status }}">{{ stage.status }}</span>
@@ -33,89 +41,244 @@
 <p class="muted"><em>This stage hasn't run yet — upstream is awaiting review.</em></p>
 {% endif %}
 
+{# Precompute validation issue lists (rendered in the Outputs tier). #}
 {% set in_issues = [] %}
 {% for v in stage.input_validation %}
     {% for i in v.issues %}{% set _ = in_issues.append(i) %}{% endfor %}
 {% endfor %}
 {% set out_issues = (stage.output_validation.issues if stage.output_validation else []) %}
-{% if in_issues or out_issues %}
-<section class="validation-block">
-    <h3>Validation</h3>
-    {% if in_issues %}
-    <h4>input</h4>
-    <ul class="validation-list">
-        {% for i in in_issues %}
-        <li class="sev-{{ i.severity }}"><strong>{{ i.severity }}</strong>{% if i.column %} · <code>{{ i.column }}</code>{% endif %} — {{ i.message }}</li>
-        {% endfor %}
-    </ul>
-    {% endif %}
-    {% if out_issues %}
-    <h4>output</h4>
-    <ul class="validation-list">
-        {% for i in out_issues %}
-        <li class="sev-{{ i.severity }}"><strong>{{ i.severity }}</strong>{% if i.column %} · <code>{{ i.column }}</code>{% endif %} — {{ i.message }}</li>
-        {% endfor %}
-    </ul>
-    {% endif %}
-</section>
-{% else %}
-<p class="muted"><em>No validation issues.</em></p>
-{% endif %}
 
-{% if input_previews %}
-<section class="preview-block">
-    <h3>Input preview{% if input_previews|length != 1 %}s{% endif %}</h3>
-    {% for ip in input_previews %}
-    <details {% if loop.first %}open{% endif %}>
-        <summary>
-            <a href="/methodology/{{ methodology }}/runs/{{ run_id }}#{{ ip.id }}"><code>{{ ip.id }}</code></a>
-            {% if ip.preview and ip.preview.preview %}
-            <span class="muted">· first 5 of {{ "{:,}".format(ip.preview.rows_total) }} row{% if ip.preview.rows_total != 1 %}s{% endif %}</span>
-            {% endif %}
-        </summary>
-        {% if ip.preview and ip.preview.preview %}
-        <div class="table-scroll">
-            <table class="data-preview">
-                <thead><tr>{% for c in ip.preview.columns %}<th>{{ c }}</th>{% endfor %}</tr></thead>
-                <tbody>
-                {% for row in ip.preview.preview %}
-                <tr>{% for c in ip.preview.columns %}<td>{{ row[c] | string | truncate(120) }}</td>{% endfor %}</tr>
-                {% endfor %}
-                </tbody>
-            </table>
+<div class="tier-grid"
+     data-methodology="{{ methodology }}" data-run="{{ run_id }}" data-stage="{{ stage.stage_id }}">
+
+    {# ─── TIER 1 · INPUTS ──────────────────────────────────────────────── #}
+    <section class="tier tier-inputs">
+        <div class="tier-head"><h3>Inputs</h3></div>
+
+        {% if stage_def and stage_def.inputs %}
+        {% for inp in stage_def.inputs %}
+        <div class="schema-card">
+            <h4><a href="/methodology/{{ methodology }}/runs/{{ run_id }}#{{ inp.id }}"><code>{{ inp.id }}</code></a> schema</h4>
+            {{ schema_table(inp.schema) }}
         </div>
-        {% elif ip.preview and ip.preview.error %}
-        <p class="muted"><em>preview unavailable: {{ ip.preview.error }}</em></p>
-        {% else %}
-        <p class="muted"><em>no upstream output found in this run</em></p>
+        {% endfor %}
         {% endif %}
-    </details>
-    {% endfor %}
-</section>
-{% endif %}
 
-{% if stage_def %}
-{% with stage = stage_def %}
-{% include "_stage_executable.html" %}
-{% endwith %}
-{% endif %}
+        {% if input_previews %}
+        {% for ip in input_previews %}
+        <div class="preview-block input-preview" {% if loop.first %}data-primary="1"{% endif %}>
+            <div class="preview-head">
+                <a href="/methodology/{{ methodology }}/runs/{{ run_id }}#{{ ip.id }}"><code>{{ ip.id }}</code></a>
+                {% if ip.preview and ip.preview.preview %}
+                <span class="muted">· first 5 of {{ "{:,}".format(ip.preview.rows_total) }} row{% if ip.preview.rows_total != 1 %}s{% endif %}</span>
+                {% endif %}
+            </div>
 
-{% if preview and preview.preview %}
-<section class="preview-block">
-    <h3>Output preview <span class="muted">· first 5 of {{ "{:,}".format(preview.rows_total) }} row{% if preview.rows_total != 1 %}s{% endif %}</span></h3>
-    <div class="table-scroll">
-        <table class="data-preview">
-            <thead><tr>{% for c in preview.columns %}<th>{{ c }}</th>{% endfor %}</tr></thead>
-            <tbody>
-            {% for row in preview.preview %}
-            <tr>{% for c in preview.columns %}<td>{{ row[c] | string | truncate(120) }}</td>{% endfor %}</tr>
-            {% endfor %}
-            </tbody>
-        </table>
-    </div>
-</section>
-{% elif preview and preview.error %}
-<p class="muted"><em>output preview unavailable: {{ preview.error }}</em></p>
-{% elif stage.output_path %}
-<p class="muted"><em>output file missing on disk: <code>{{ stage.output_path }}</code></em></p>
+            {% if ip.preview and ip.preview.preview %}
+            {% set selectable = loop.first and previewable %}
+            <div class="table-scroll">
+                <table class="data-preview {% if selectable %}selectable{% endif %}">
+                    <thead><tr>
+                        {% if selectable %}<th class="pick-col"><input type="checkbox" class="pick-all" title="select all shown"></th>{% endif %}
+                        {% for c in ip.preview.columns %}<th>{{ c }}</th>{% endfor %}
+                    </tr></thead>
+                    <tbody>
+                    {% for row in ip.preview.preview %}
+                    <tr>
+                        {% if selectable %}<td class="pick-col"><input type="checkbox" class="row-pick" value="{{ loop.index0 }}"></td>{% endif %}
+                        {% for c in ip.preview.columns %}{% set v = row[c] | string %}{% if v[:4] == 'http' %}<td class="cell-url"><a href="{{ v }}" target="_blank" rel="noopener">{{ v }}</a></td>{% else %}<td>{{ v | truncate(240) }}</td>{% endif %}{% endfor %}
+                    </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% elif ip.preview and ip.preview.error %}
+            <p class="muted"><em>preview unavailable: {{ ip.preview.error }}</em></p>
+            {% else %}
+            <p class="muted"><em>no upstream output found in this run</em></p>
+            {% endif %}
+        </div>
+        {% endfor %}
+        {% endif %}
+
+        {% if previewable %}
+        <div class="scratch-controls">
+            <label class="scratch-firstn">
+                run first
+                <input type="number" class="firstn-input" min="1" max="5" value="1">
+                row(s)
+            </label>
+            <button type="button" class="btn scratch-run">▶ Run transform on selected</button>
+            <p class="scratch-hint muted">In-memory only. Runs <code>{{ stage.type }}</code> on the picked rows; nothing is saved.
+            {% if stage.type == 'llm_transform' %}<strong>This makes real LLM calls</strong> — keep the selection small.{% endif %}</p>
+        </div>
+        {% endif %}
+    </section>
+
+    {# ─── TIER 2 · TRANSFORM ───────────────────────────────────────────── #}
+    <section class="tier tier-transform">
+        <div class="tier-head"><h3>Transform</h3></div>
+        {% if stage_def %}
+        {% with stage = stage_def %}
+        {% include "_stage_executable.html" %}
+        {% endwith %}
+        {% else %}
+        <p class="muted"><em>No static stage definition found for this run.</em></p>
+        {% endif %}
+    </section>
+
+    {# ─── TIER 3 · OUTPUTS ─────────────────────────────────────────────── #}
+    <section class="tier tier-outputs">
+        <div class="tier-head"><h3>Outputs</h3></div>
+
+        {% if stage_def and stage_def.output_schema %}
+        <div class="schema-card">
+            <h4>output schema</h4>
+            {{ schema_table(stage_def.output_schema) }}
+        </div>
+        {% endif %}
+
+        {% if preview and preview.preview %}
+        <div class="preview-block">
+            <div class="preview-head">output data <span class="muted">· first 5 of {{ "{:,}".format(preview.rows_total) }} row{% if preview.rows_total != 1 %}s{% endif %}</span></div>
+            <div class="table-scroll">
+                <table class="data-preview">
+                    <thead><tr>{% for c in preview.columns %}<th>{{ c }}</th>{% endfor %}</tr></thead>
+                    <tbody>
+                    {% for row in preview.preview %}
+                    <tr>{% for c in preview.columns %}{% set v = row[c] | string %}{% if v[:4] == 'http' %}<td class="cell-url"><a href="{{ v }}" target="_blank" rel="noopener">{{ v }}</a></td>{% else %}<td>{{ v | truncate(240) }}</td>{% endif %}{% endfor %}</tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% elif preview and preview.error %}
+        <p class="muted"><em>output preview unavailable: {{ preview.error }}</em></p>
+        {% elif stage.output_path %}
+        <p class="muted"><em>output file missing on disk: <code>{{ stage.output_path }}</code></em></p>
+        {% endif %}
+
+        {# Scratch-preview results render here (filled by JS). #}
+        <div class="scratch-result" hidden></div>
+
+        {# Validation is treated as PART OF THE OUTPUT. #}
+        <div class="validation-block">
+            <h4>validation</h4>
+            {% if in_issues or out_issues %}
+            {% if in_issues %}
+            <p class="val-phase">input</p>
+            <ul class="validation-list">
+                {% for i in in_issues %}
+                <li class="sev-{{ i.severity }}"><strong>{{ i.severity }}</strong>{% if i.column %} · <code>{{ i.column }}</code>{% endif %} — {{ i.message }}</li>
+                {% endfor %}
+            </ul>
+            {% endif %}
+            {% if out_issues %}
+            <p class="val-phase">output</p>
+            <ul class="validation-list">
+                {% for i in out_issues %}
+                <li class="sev-{{ i.severity }}"><strong>{{ i.severity }}</strong>{% if i.column %} · <code>{{ i.column }}</code>{% endif %} — {{ i.message }}</li>
+                {% endfor %}
+            </ul>
+            {% endif %}
+            {% else %}
+            <p class="muted"><em>No validation issues.</em></p>
+            {% endif %}
+        </div>
+    </section>
+</div>
+
+{% if previewable %}
+<script>
+(function () {
+  const grid = document.currentScript.previousElementSibling
+      || document.querySelector('.tier-grid[data-stage]');
+  if (!grid) return;
+  const meth = grid.dataset.methodology, run = grid.dataset.run, stage = grid.dataset.stage;
+  const primary = grid.querySelector('.input-preview[data-primary] table.selectable');
+  const rowPicks = () => primary ? Array.from(primary.querySelectorAll('.row-pick')) : [];
+  const resultEl = grid.querySelector('.scratch-result');
+  const btn = grid.querySelector('.scratch-run');
+  const pickAll = primary ? primary.querySelector('.pick-all') : null;
+  const firstN = grid.querySelector('.firstn-input');
+
+  if (pickAll) {
+    pickAll.addEventListener('change', () => {
+      rowPicks().forEach(cb => { cb.checked = pickAll.checked; });
+    });
+  }
+
+  function selectedIndices() {
+    const checked = rowPicks().filter(cb => cb.checked).map(cb => parseInt(cb.value, 10));
+    if (checked.length) return checked;
+    // fall back to "run first N"
+    const n = Math.max(1, parseInt(firstN.value, 10) || 1);
+    return rowPicks().slice(0, n).map(cb => parseInt(cb.value, 10));
+  }
+
+  function esc(s) {
+    return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  }
+
+  function renderResult(d) {
+    resultEl.hidden = false;
+    if (!d.ok) {
+      resultEl.innerHTML = `<div class="scratch-head err">scratch preview failed</div>`
+        + `<p class="muted">${esc(d.error || 'unknown error')}</p>`
+        + (d.traceback ? `<details><summary>traceback</summary><pre>${esc(d.traceback)}</pre></details>` : '');
+      return;
+    }
+    let html = `<div class="scratch-head">⚡ scratch preview — not saved, does not affect the run</div>`;
+    html += `<p class="muted">${d.input_rows} input row(s) → ${d.rows_total} output row(s)</p>`;
+    if (d.rows_total === 0) {
+      html += `<p class="muted"><em>transform returned no rows</em></p>`;
+    } else {
+      html += '<div class="table-scroll"><table class="data-preview scratch"><thead><tr>';
+      d.columns.forEach(c => { html += `<th>${esc(c)}</th>`; });
+      html += '</tr></thead><tbody>';
+      d.preview.forEach(row => {
+        html += '<tr>';
+        d.columns.forEach(c => {
+          const v = String(row[c] === undefined || row[c] === null ? '' : row[c]);
+          if (v.slice(0, 4) === 'http') {
+            html += `<td class="cell-url"><a href="${esc(v)}" target="_blank" rel="noopener">${esc(v)}</a></td>`;
+          } else {
+            html += `<td>${esc(v.length > 240 ? v.slice(0, 240) + '…' : v)}</td>`;
+          }
+        });
+        html += '</tr>';
+      });
+      html += '</tbody></table></div>';
+    }
+    resultEl.innerHTML = html;
+  }
+
+  btn.addEventListener('click', async () => {
+    const indices = selectedIndices();
+    if (!indices.length) {
+      resultEl.hidden = false;
+      resultEl.innerHTML = `<div class="scratch-head err">no rows selected</div>`;
+      return;
+    }
+    btn.disabled = true;
+    const orig = btn.textContent;
+    btn.textContent = '… running';
+    resultEl.hidden = false;
+    resultEl.innerHTML = `<div class="scratch-head">running on ${indices.length} row(s)…</div>`;
+    try {
+      const r = await fetch(
+        `/methodology/${encodeURIComponent(meth)}/runs/${encodeURIComponent(run)}/stage/${encodeURIComponent(stage)}/preview`,
+        { method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ indices }) });
+      const d = await r.json();
+      renderResult(d);
+    } catch (e) {
+      resultEl.innerHTML = `<div class="scratch-head err">request failed</div><p class="muted">${esc(e)}</p>`;
+    } finally {
+      btn.disabled = false;
+      btn.textContent = orig;
+    }
+  });
+})();
+</script>
 {% endif %}

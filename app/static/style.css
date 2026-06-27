@@ -771,6 +771,15 @@ table.data-preview th, table.data-preview td {
     overflow: hidden;
     text-overflow: ellipsis;
 }
+/* URL cells: never clip — show the full link, wrapping if needed. */
+table.data-preview td.cell-url {
+    white-space: normal;
+    max-width: 560px;
+    overflow: visible;
+    text-overflow: clip;
+    word-break: break-all;
+}
+table.data-preview td.cell-url a { color: var(--accent, #1a3a72); }
 table.data-preview th {
     background: var(--code-bg);
     font-weight: 600;
@@ -780,4 +789,129 @@ table.data-preview th {
     color: var(--muted);
     position: sticky;
     top: 0;
+}
+
+/* ─── Node-detail 3-tier layout: Inputs │ Transform │ Outputs ───────────────
+   The run-detail right pane renders a stage as three left-to-right columns.
+   Give the run-detail split a wider right pane so the tiers have room; stack
+   the tiers on narrow panels. */
+.run-detail-split.split-view {
+    grid-template-columns: minmax(0, 3fr) minmax(0, 9fr);
+}
+@media (max-width: 1024px) {
+    .run-detail-split.split-view { grid-template-columns: 1fr; }
+}
+
+.tier-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 16px;
+    margin-top: 14px;
+    align-items: start;
+}
+/* Stack the tiers when the panel itself gets narrow. */
+@media (max-width: 1200px) {
+    .tier-grid { grid-template-columns: 1fr; }
+}
+
+.tier {
+    min-width: 0;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: #fcfcfb;
+    padding: 12px 14px 16px;
+}
+.tier-transform { background: #f7f7f4; }
+.tier-outputs { background: #fbfcfd; }
+
+.tier-head {
+    border-bottom: 2px solid var(--border);
+    margin: -2px 0 12px;
+    padding-bottom: 6px;
+}
+.tier-head h3 {
+    margin: 0;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    color: var(--fg);
+}
+.tier-inputs .tier-head { border-bottom-color: #9bb7e0; }
+.tier-transform .tier-head { border-bottom-color: var(--exec-border); }
+.tier-outputs .tier-head { border-bottom-color: #8fb89a; }
+
+/* In the cramped tier columns, neutralize the exec-block's full-width frame so
+   the raw transform reads cleanly. */
+.tier-transform .exec-block {
+    background: transparent;
+    border-left: 0;
+    padding: 0;
+    margin: 0 0 14px;
+}
+.tier-transform .exec-block h2 { font-size: 15px; }
+.tier .schema-card { margin-bottom: 14px; }
+.tier .schema-card h4,
+.tier .preview-head {
+    margin: 10px 0 4px;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    color: var(--muted);
+    font-weight: 600;
+}
+.tier table.schema { font-size: 11px; }
+.tier table.schema th, .tier table.schema td { padding: 3px 6px; }
+
+/* Row-pick column on the (primary) input preview. */
+table.data-preview .pick-col { width: 28px; text-align: center; white-space: nowrap; }
+table.data-preview.selectable tbody tr:hover { background: #f3f7ff; }
+
+/* Scratch re-run controls (Inputs tier). */
+.scratch-controls {
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px dashed var(--border);
+}
+.scratch-firstn { font-size: 12px; color: var(--muted); display: block; margin-bottom: 8px; }
+.scratch-firstn .firstn-input { width: 48px; padding: 2px 4px; }
+.btn.scratch-run {
+    background: var(--accent);
+    color: white;
+    border: 0;
+    border-radius: 5px;
+    padding: 7px 12px;
+    font-size: 13px;
+    cursor: pointer;
+}
+.btn.scratch-run:disabled { opacity: 0.6; cursor: default; }
+.scratch-hint { font-size: 11px; margin: 8px 0 0; }
+
+/* Scratch re-run results (Outputs tier). */
+.scratch-result {
+    margin: 12px 0;
+    border: 1px solid #c9a227;
+    background: #fffbe9;
+    border-radius: 6px;
+    padding: 10px 12px;
+}
+.scratch-result .scratch-head {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    color: #7a5c00;
+    margin-bottom: 6px;
+}
+.scratch-result .scratch-head.err { color: #802020; }
+table.data-preview.scratch th { background: #f3ecd0; }
+
+/* Validation block inside the Outputs tier. */
+.tier-outputs .validation-block { background: #fff; border: 1px solid var(--border); margin-top: 12px; }
+.validation-block .val-phase {
+    margin: 8px 0 2px;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    color: var(--muted);
+    font-weight: 600;
 }
