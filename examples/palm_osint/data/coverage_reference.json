@@ -1,0 +1,44 @@
+{
+  "as_of": "2026-06-10",
+  "facilities": 2326,
+  "countries": 33,
+  "pct_with_capacity": 60.5,
+  "pct_with_owner": 100.0,
+  "pct_with_latlon": 100.0,
+  "pct_multi_source": 52.5,
+  "capacity_note": "capacity is structured for Indonesia only (Trase); elsewhere null until Tier-2 enrichment",
+  "top_countries": [
+    [
+      "Indonesia",
+      1478
+    ],
+    [
+      "Malaysia",
+      494
+    ],
+    [
+      "Colombia",
+      75
+    ],
+    [
+      "Thailand",
+      59
+    ],
+    [
+      "Ecuador",
+      40
+    ],
+    [
+      "Guatemala",
+      19
+    ],
+    [
+      "Papua New Guinea",
+      18
+    ],
+    [
+      "C\u00f4te d'Ivoire",
+      18
+    ]
+  ]
+}

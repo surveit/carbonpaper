@@ -1,0 +1,62 @@
+id: enrichment_review
+name: Confirm Tier-2 feature claims before publish (human review)
+type: human_review_queue
+
+source:
+  doc: examples/palm_osint/methodology_raw.md
+  section: "§8"
+  lines: [57, 61]
+
+inputs:
+  - id: tier2_verify
+    schema:
+      primary_key: [facility_id, feature]
+      columns:
+        - {name: facility_id, type: str, nullable: false}
+        - {name: feature, type: str, nullable: false}
+        - {name: asserted_present, type: str, nullable: false}
+        - {name: confidence, type: str, nullable: true}
+        - {name: detail, type: str, nullable: true}
+        - {name: evidence_urls, type: json, nullable: true}
+        - {name: supported, type: bool, nullable: false}
+        - {name: verdict_reason, type: str, nullable: true}
+
+queue:
+  reviewer_instructions: |
+    For each feature claim the model took a definite stance on, confirm or
+    reject before it becomes part of the published asset.
+
+    - approve: the claim (or documented-negative) is fair to publish as-is.
+    - reject:  drop it entirely (e.g. the "no evidence found" is actually wrong,
+               or the cited source doesn't say what's claimed).
+    - modify:  not used here (no numeric score to override).
+
+    Pay special attention to any supported=false but asserted_present=true row:
+    that is an unverified positive and should usually be rejected.
+  routing: 1-of-1
+  conflict_resolution: single_reviewer
+  filter: "asserted_present != 'unknown'"
+  hash_columns: [facility_id, feature]
+
+output_schema:
+  primary_key: [facility_id, feature]
+  estimated_rows: 20
+  columns:
+    - {name: facility_id, type: str, nullable: false, source: passthrough}
+    - {name: feature, type: str, nullable: false, source: passthrough}
+    - {name: asserted_present, type: str, nullable: false, source: passthrough}
+    - {name: confidence, type: str, nullable: true, source: passthrough}
+    - {name: detail, type: str, nullable: true, source: passthrough}
+    - {name: evidence_urls, type: json, nullable: true, source: passthrough}
+    - {name: supported, type: bool, nullable: true, source: passthrough}
+    - {name: verdict_reason, type: str, nullable: true, source: passthrough}
+    - {name: review_notes, type: str, nullable: true}
+
+compiler_notes:
+  - "This is the ⚑ gate osint_integration_thinking.md highlights: Tier-2 today
+     has NO human-review primitive; here a halt-for-review is free. The run
+     stops as `awaiting_review`; decisions are hashed on (facility_id, feature)
+     so they survive re-runs (decision-durability)."
+  - "filter queues every definite stance (present != unknown), including
+     documented negatives, since a wrong 'no evidence found' is also a
+     publishable error worth a human's eyes."

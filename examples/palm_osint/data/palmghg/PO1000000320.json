@@ -1,0 +1,23 @@
+{
+  "facility_id": "palm:PO1000000320",
+  "as_of": "2018",
+  "calculator": "RSPO PalmGHG v3.0.1",
+  "doc": "RSPO ASA-1.1 surveillance audit, PT Mutuagung Lestari, ref 4006a/1.0/26072018 (cert MUTU-RSPO/017)",
+  "source_url": "https://web.archive.org/web/20251213074621/https://mutucertification.com/wp-content/uploads/2018/11/RSPO-ASA-1.1-Assessment-Report-of-Rantau-Panjang-Factory-PT-Guthrie-Pecconina-Indonesia-subsidiary-of-Sime-Darby-Plantation-Bhd.pdf",
+  "retrieval_note": "Original mutucertification.com URL returned HTTP 522; recovered via Wayback Machine snapshot 2025-12-13.",
+  "context": {"cpo_production_t": 39687.83, "planted_area_ha": 12313.86, "planted_on_peat_ha": 1002.219, "oer_pct": 21.49},
+  "net_tco2e_per_tcpo": 2.44,
+  "components": [
+    {"scope": "field_luc_land_conversion", "tco2e": 78532.73, "tco2e_per_tffb": 0.43},
+    {"scope": "field_peat_oxidation", "tco2e": 54720.66, "tco2e_per_tffb": 0.30},
+    {"scope": "field_fertiliser_co2", "tco2e": 49666.54, "tco2e_per_tffb": 0.27},
+    {"scope": "field_fertiliser_n2o", "tco2e": 18258.58, "tco2e_per_tffb": 0.10},
+    {"scope": "field_fuel", "tco2e": 3034.23, "tco2e_per_tffb": 0.02},
+    {"scope": "field_crop_sequestration_sink", "tco2e": -115279.09, "tco2e_per_tffb": -0.62},
+    {"scope": "field_conservation_sink", "tco2e": -858.22, "tco2e_per_tffb": 0.0},
+    {"scope": "field_total", "tco2e": 88075.43, "tco2e_per_tffb": 0.48},
+    {"scope": "mill_pome", "tco2e": 33041.41, "tco2e_per_tffb": 0.18},
+    {"scope": "mill_fuel", "tco2e": 1317.58, "tco2e_per_tffb": 0.01},
+    {"scope": "mill_total", "tco2e": 34358.99, "tco2e_per_tffb": 0.19}
+  ]
+}

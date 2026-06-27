@@ -1,0 +1,66 @@
+id: publish_facility_dossiers
+name: Publish per-facility OSINT dossiers
+type: publish
+
+source:
+  doc: examples/palm_osint/methodology_raw.md
+  section: "§10"
+  lines: [69, 71]
+
+inputs:
+  - id: select_for_enrichment
+    schema:
+      primary_key: [facility_id]
+      columns:
+        - {name: facility_id, type: str, nullable: false}
+        - {name: name, type: str, nullable: false}
+        - {name: owner, type: str, nullable: true}
+        - {name: parent_group, type: str, nullable: true}
+        - {name: country, type: str, nullable: true}
+        - {name: region, type: str, nullable: true}
+        - {name: lat, type: float, nullable: true}
+        - {name: lon, type: float, nullable: true}
+        - {name: capacity_value, type: float, nullable: true}
+        - {name: capacity_unit, type: str, nullable: true}
+        - {name: capacity_provenance, type: str, nullable: true}
+        - {name: capacity_source_url, type: str, nullable: true}
+        - {name: owner_source_url, type: str, nullable: true}
+        - {name: multi_source, type: bool, nullable: false}
+  - id: apply_verdicts
+    schema:
+      primary_key: [facility_id, feature]
+      columns:
+        - {name: facility_id, type: str, nullable: false}
+        - {name: feature, type: str, nullable: false}
+        - {name: enrichment_status, type: str, nullable: false}
+        - {name: final_confidence, type: str, nullable: false}
+        - {name: detail, type: str, nullable: true}
+        - {name: evidence_urls, type: json, nullable: true}
+        - {name: verdict_reason, type: str, nullable: true}
+
+publish:
+  format: html_report
+  destination: build/palm_dossiers/
+  one_file_per: facility
+  cross_link: true
+
+function:
+  kind: module
+  module: examples.palm_osint.code.publish_dossiers
+  function: transform
+  requirements: [pandas]
+
+output_schema:
+  primary_key: [output_path]
+  estimated_rows: 5
+  columns:
+    - {name: facility_id, type: str, nullable: false}
+    - {name: output_path, type: str, nullable: false}
+    - {name: rendered_at, type: datetime, nullable: false}
+    - {name: bytes, type: int, nullable: false}
+
+compiler_notes:
+  - "Reconstructs capacity provenance from the flat columns (inverse of
+     flatten_facilities) and renders the verified/negative/gap feature findings.
+     This is where the changelog→story-lead payoff (§6 of the thinking doc)
+     would attach a drift-brief llm_transform; left as a follow-up."
