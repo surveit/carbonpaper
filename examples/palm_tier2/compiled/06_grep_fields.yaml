@@ -1,0 +1,30 @@
+id: grep_fields
+name: Locate relevant passages (deterministic)
+type: python_transform
+source: {doc: examples/palm_tier2/methodology_raw.md, section: "§6", lines: [26, 29]}
+inputs:
+  - id: pdf_to_text
+    schema:
+      primary_key: [facility_id, url]
+      columns:
+        - {name: facility_id, type: str, nullable: false}
+        - {name: url, type: str, nullable: false}
+        - {name: doc_text, type: str, nullable: true}
+function: {kind: module, module: examples.palm_tier2.code.grep_fields, function: transform, requirements: [pandas]}
+output_schema:
+  primary_key: [facility_id, url]
+  columns:
+    - {name: facility_id, type: str, nullable: false}
+    - {name: name, type: str, nullable: false}
+    - {name: doc_type, type: str, nullable: false}
+    - {name: url, type: str, nullable: false}
+    - {name: parse_status, type: str, nullable: true}
+    - {name: n_anchors, type: int, nullable: false, range: [0, 20]}
+    - {name: field_snippets_json, type: json, nullable: false, source: "windows around fixed anchors"}
+compiler_notes:
+  - "Narrows the full 150–400pp report to a few KB of on-point snippets before the
+     EXTRACT llm reads it. v1 widened the anchor set to the full RSPO/CDM field set
+     (PalmGHG net-GHG appendix, POME methane-capture split %, OER/KER, cert no.+
+     dates, planted/peat area, CPO/PK/FFB production, cert body, biogas MW, supply-
+     chain model) and collects MULTIPLE non-overlapping windows per anchor — the
+     GHG appendix is at the END and recurs per audit year (see SOURCE_MAP.md)."

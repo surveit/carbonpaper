@@ -1,0 +1,95 @@
+id: extract
+name: Extract fields from the located doc (LLM)
+type: llm_transform
+source: {doc: examples/palm_tier2/methodology_raw.md, section: "§7", lines: [31, 36]}
+inputs:
+  - id: grep_fields
+    schema:
+      primary_key: [facility_id, url]
+      columns:
+        - {name: facility_id, type: str, nullable: false}
+        - {name: name, type: str, nullable: false}
+        - {name: doc_type, type: str, nullable: false}
+        - {name: url, type: str, nullable: false}
+        - {name: field_snippets_json, type: json, nullable: false}
+llm:
+  model: haiku
+  temperature: 0.0
+  response_format: json
+  prompt_template: |
+    You are the EXTRACTOR. Read ONLY the snippets below (already grepped from one
+    document) and extract structured fields for this mill. Do not use outside
+    knowledge; extract only what the snippets state. If a target field is not
+    stated in the snippets, OMIT it (leave it unknown) — never guess or fill a
+    default.
+
+    Mill: {name}   Document type: {doc_type}   Source URL: {url}
+    Snippets (key -> text): {field_snippets_json}
+
+    Target fields (use EXACTLY these field names; include one entry per field you
+    can support from the snippets):
+      - nameplate_capacity        — mill processing capacity, e.g. "60" unit "MT/hr"
+      - cpo_production            — crude palm oil produced (give the year in note if shown)
+      - ffb_processed             — fresh fruit bunches processed / received
+      - oer                       — oil extraction rate, % (e.g. "22.47")
+      - ker                       — kernel extraction rate, % (e.g. "6.17")
+      - pome_treatment            — how POME is treated (ponds/anaerobic/land app/IPAL…)
+      - methane_capture           — methane-capture status AND the split, e.g.
+                                    "54% to electricity, 46% flaring" or "no capture"
+      - palmghg_net_tco2e_per_tcpo — the PalmGHG / Net-GHG figure per t CPO
+                                    (state the unit verbatim: kg CO2e/t CPO or tCO2e/t CPO)
+      - certificate_number        — RSPO / CB certificate id (e.g. "CU-RSPO-819846")
+      - certificate_dates         — effective→expiry / validity window
+      - certification_body        — the CB (Sucofindo/SICS, Control Union, Mutuagung,
+                                    SGS, BSI, …)
+      - planted_area_ha           — total planted area, hectares
+      - peat_area_ha              — area planted on peat, hectares (0 if stated as none)
+      - supply_base               — supplying estates / smallholders description
+      - biogas_mw                 — installed biogas capacity (MW/kW) and/or engine count
+      - supply_chain_model        — Identity Preserved / Mass Balance / Segregated
+
+    Return ONE JSON object only (no prose, no fences):
+    {{"fields":[{{"field":"<one of the names above>","value":"<verbatim value>",
+       "unit":"<unit or ''>","confidence":"high|medium|low",
+       "grade":"primary|press","source_url":"{url}",
+       "note":"<optional: year / which snippet / caveat>"}}]}}
+    Only include a field if the snippets actually state it. If nothing is extractable,
+    return {{"fields":[]}}.
+output_schema:
+  primary_key: [facility_id, url]
+  columns:
+    - {name: facility_id, type: str, nullable: false}
+    - {name: name, type: str, nullable: false}
+    - {name: doc_type, type: str, nullable: false}
+    - {name: url, type: str, nullable: false}
+    - {name: fields, type: json, nullable: true, source: "LLM-extracted from snippets"}
+eval:
+  reference: examples/palm_tier2/eval/extract_truth.jsonl
+  reference_schema:
+    primary_key: [facility_id, field]
+    columns:
+      - {name: facility_id, type: str}
+      - {name: field, type: str}
+      - {name: expected_value, type: str}
+      - {name: unit, type: str}
+      - {name: source_url, type: str}
+      - {name: grade, type: str}
+  join_on: [facility_id, field]
+  metrics:
+    - field_coverage      # of the truth fields per facility, how many did we extract at all
+    - value_agreement     # of the fields we extracted, how many match the truth value
+  notes: |
+    Ground truth = the high-confidence PRIMARY values the 4 research subagents
+    recovered (SOURCE_MAP.md), one row per (facility_id, field), each carrying a
+    real source_url. ONLY values with a sourced document are included — fields we
+    could not source stay absent (never fabricated). field_coverage is the recall
+    lever this whole change targets (was 0–2 fields/mill); value_agreement guards
+    against the extractor pulling the wrong number off the right page. The eval
+    ENGINE that computes these metrics is a separate feature — this block only
+    declares the reference + join + metric names.
+compiler_notes:
+  - "JUDGMENT stage #2 — the one genuine extraction LLM. No tools: it reads the
+     pre-grepped snippets, doesn't browse. Grade=primary unless it's a press source."
+  - "v1 widened the target field set from 7 to 16 (OER/KER split, methane-capture
+     %, cert dates+body, planted/peat area, FFB, biogas MW, supply-chain model) to
+     match the rich RSPO/CDM docs the locate rewrite now finds (SOURCE_MAP.md)."

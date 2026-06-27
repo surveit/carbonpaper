@@ -1,0 +1,26 @@
+id: pdf_to_text
+name: Extract text locally (deterministic)
+type: python_transform
+source: {doc: examples/palm_tier2/methodology_raw.md, section: "§5", lines: [22, 24]}
+inputs:
+  - id: fetch_docs
+    schema:
+      primary_key: [facility_id, url]
+      columns:
+        - {name: facility_id, type: str, nullable: false}
+        - {name: url, type: str, nullable: false}
+        - {name: local_path, type: str, nullable: true}
+function: {kind: module, module: examples.palm_tier2.code.pdf_to_text, function: transform, requirements: [pandas, pypdf]}
+output_schema:
+  primary_key: [facility_id, url]
+  columns:
+    - {name: facility_id, type: str, nullable: false}
+    - {name: name, type: str, nullable: false}
+    - {name: doc_type, type: str, nullable: false}
+    - {name: url, type: str, nullable: false}
+    - {name: doc_text, type: str, nullable: true}
+    - {name: n_chars, type: int, nullable: false}
+    - {name: parse_status, type: str, nullable: true, source: "pdf:Np | html | pypdf_missing"}
+compiler_notes:
+  - "The distillation's hardest-won lesson: fetch tools fail on RSPO/CDM image PDFs;
+     extract locally with pypdf. Needs `pip install pypdf`."

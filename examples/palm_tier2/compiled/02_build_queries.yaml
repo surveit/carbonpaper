@@ -1,0 +1,27 @@
+id: build_queries
+name: Build target search queries (deterministic)
+type: python_transform
+source: {doc: examples/palm_tier2/methodology_raw.md, section: "§2", lines: [5, 8]}
+inputs:
+  - id: seeds
+    schema:
+      primary_key: [facility_id]
+      columns:
+        - {name: facility_id, type: str, nullable: false}
+        - {name: name, type: str, nullable: false}
+        - {name: operator_pt, type: str, nullable: true}
+        - {name: parent_group, type: str, nullable: true}
+function: {kind: module, module: examples.palm_tier2.code.build_queries, function: transform, requirements: [pandas]}
+output_schema:
+  primary_key: [facility_id]
+  columns:
+    - {name: facility_id, type: str, nullable: false}
+    - {name: uml_id, type: str, nullable: false}
+    - {name: name, type: str, nullable: false}
+    - {name: operator_pt, type: str, nullable: true}
+    - {name: parent_group, type: str, nullable: true}
+    - {name: province, type: str, nullable: true}
+    - {name: queries_json, type: json, nullable: false, source: "derived from identity"}
+compiler_notes:
+  - "Mechanism, not judgment: keys on UML id, prefers rspo.org PDFs, CDM for biogas,
+     press for PROPER — the query pattern all 3 research runs used."
