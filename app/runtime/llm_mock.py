@@ -182,6 +182,69 @@ def mock_benchmark_scoring(input_row: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+# ─── Palm-oil Tier-2 OSINT (honest, no-fabrication mock) ─────────────────────
+#
+# These two mocks stand in for `claude -p` when the CLI isn't on PATH. They are
+# deliberately *truthful*: the mock has NOT retrieved any document, so it never
+# asserts a feature is present and never invents an evidence URL. It emits
+# either documented negatives ("no project found in public registries") or
+# "unknown", at low confidence. This exercises the full extract → adversarial
+# verify → human-review → merge machinery without manufacturing findings —
+# which is the whole point of the methodology. Swap in real `claude -p` (put
+# claude on PATH) for genuine extraction.
+
+# Candidate on-site features for a palm-oil mill (mirrors the real
+# data/palm/enrichment.jsonl sample for PO1000000320 / Rantau Panjang).
+_PALM_FEATURES = [
+    ("methane_capture_POME",
+     "false",
+     "Mock backend did not retrieve mill documents. No methane-capture (biogas) "
+     "project for this mill was found in public CDM/Verra/Gold-Standard registries "
+     "at snapshot time. This reflects ABSENCE OF EVIDENCE, not confirmed absence. [unverified]"),
+    ("biomass_boiler_fiber_shell",
+     "unknown",
+     "Fibre/shell biomass boilers are near-universal at palm mills, but no document "
+     "was retrieved to confirm it for THIS mill. Marked unknown rather than assumed."),
+    ("rspo_certification_status",
+     "unknown",
+     "Mock backend did not fetch RSPO ACOP / audit PDFs; certification status unknown."),
+]
+
+
+def mock_tier2_extract(input_row: dict[str, Any]) -> list[dict[str, Any]]:
+    """Emit candidate on-site features for one facility. Truthful defaults
+    only: present ∈ {false, unknown}, low confidence, empty evidence_urls."""
+    out: list[dict[str, Any]] = []
+    for feature, present, detail in _PALM_FEATURES:
+        out.append({
+            "feature": feature,
+            "asserted_present": present,          # 'true' | 'false' | 'unknown'
+            "confidence": "low",
+            "detail": detail,
+            "evidence_urls": [],                  # mock cites nothing — by design
+        })
+    return out
+
+
+def mock_tier2_verify(input_row: dict[str, Any]) -> dict[str, Any]:
+    """Adversarial verification. Default = refuted. The mock cannot fetch the
+    cited sources, and an extract with no evidence_urls cannot be supported,
+    so every claim is (honestly) marked unsupported and will be demoted."""
+    urls = input_row.get("evidence_urls")
+    has_urls = bool(urls) and not (isinstance(urls, str) and urls.strip() in ("", "[]"))
+    if not has_urls:
+        return {
+            "supported": False,
+            "verdict_reason": "No evidence URL cited; default refuted — "
+                              "an asserted feature with no source cannot be verified.",
+        }
+    return {
+        "supported": False,
+        "verdict_reason": "Mock backend cannot re-fetch cited sources to confirm "
+                          "they support THIS mill now; default refuted.",
+    }
+
+
 # ─── Generic fallback ────────────────────────────────────────────────────────
 
 def mock_generic(prompt_template: str, input_row: dict[str, Any]) -> dict[str, Any]:
@@ -212,4 +275,8 @@ def mock_llm_call(stage_id: str, llm_config: dict[str, Any], input_row: dict[str
         return mock_evidence_extraction(input_row)
     if stage_id == "benchmark_scoring":
         return mock_benchmark_scoring(input_row)
+    if stage_id == "tier2_extract":
+        return mock_tier2_extract(input_row)
+    if stage_id == "tier2_verify":
+        return mock_tier2_verify(input_row)
     return mock_generic(llm_config.get("prompt_template", ""), input_row)
