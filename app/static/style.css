@@ -915,3 +915,64 @@ table.data-preview.scratch th { background: #f3ecd0; }
     color: var(--muted);
     font-weight: 600;
 }
+
+/* ── Run page redesign: progress framing, full-width DAG, nested-tab panel ── */
+.run-topbar h1 { margin-bottom: .1rem; }
+.run-progress { display: flex; align-items: center; gap: 1rem; margin: 1rem 0 .4rem; flex-wrap: wrap; }
+.spinner { width: 18px; height: 18px; border: 3px solid #e3e3e0; border-top-color: var(--accent);
+    border-radius: 50%; animation: spin .8s linear infinite; display: inline-block; flex: none; }
+.spinner[hidden] { display: none; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.overall-status { font-weight: 600; text-transform: capitalize; padding: .15rem .6rem;
+    border-radius: 5px; background: var(--hover); }
+.overall-status.status-running { background: #fff4d6; color: #8a6d00; }
+.overall-status.status-ok { background: #e6f4e6; color: #1f6b1f; }
+.overall-status.status-errors, .overall-status.status-error { background: #fdecea; color: #a11; }
+.overall-status.status-awaiting_review { background: var(--review-bg); color: var(--review-border); }
+.progress-track { flex: 1; min-width: 160px; max-width: 420px; height: 10px; background: #e8e8e4;
+    border-radius: 6px; overflow: hidden; }
+.progress-fill { height: 100%; background: #2a8a2a; transition: width .4s ease; }
+.progress-counts { font-size: .9rem; }
+.alert-strip { display: flex; gap: .6rem; margin: 0 0 1rem; flex-wrap: wrap; }
+.alert-strip[hidden] { display: none; }
+.alert { padding: .2rem .6rem; border-radius: 5px; font-size: .85rem; }
+.alert[hidden] { display: none; }
+.alert.err { background: #fdecea; color: #a11; }
+.alert.warn { background: var(--warn-bg); color: var(--warn-border); }
+.alert.awaiting { background: var(--review-bg); color: var(--review-border); }
+.lede .lg { padding: 0 .25rem; border-radius: 3px; font-weight: 600; }
+.lg-done { color: #2a8a2a; } .lg-run { color: #b8860b; } .lg-err { color: #cc2a2a; } .lg-pend { color: #999; }
+
+.dag-full { width: 100%; margin: 1rem 0 .3rem; }
+.stage-panel-full { margin-top: 1.2rem; border-top: 2px solid var(--border); padding-top: 1rem; min-height: 120px; }
+.stage-panel-full.loading { opacity: .5; }
+
+.stage-tabs { display: flex; gap: 1.2rem; align-items: stretch; border-bottom: 1px solid var(--border);
+    margin: .8rem 0 1rem; flex-wrap: wrap; }
+.tabs { display: flex; gap: .25rem; }
+.tabs-l1 { border-right: 1px solid var(--border); padding-right: 1.2rem; }
+.tabs button { background: none; border: none; padding: .45rem .85rem; cursor: pointer; font: inherit;
+    color: var(--muted); border-radius: 6px 6px 0 0; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.tabs button:hover { background: var(--hover); color: var(--fg); }
+.tabs button.active { color: var(--fg); background: var(--hover); border-bottom-color: var(--accent); font-weight: 600; }
+.tabs-l1 button.active { border-bottom-color: #7b3aa8; }
+.pane[hidden] { display: none; }
+.prompt-rendered { background: var(--code-deep); color: var(--code-fg); padding: .8rem; border-radius: 6px;
+    white-space: pre-wrap; max-height: 420px; overflow: auto; font-size: 12px; line-height: 1.45; }
+
+/* ── Review queue: surface the model INPUT so scores are reviewable ── */
+.model-input { margin: .5rem 0; }
+.mi-label { display: inline-block; font-size: .72rem; text-transform: uppercase; letter-spacing: .04em;
+    color: var(--muted); font-weight: 600; margin-bottom: .15rem; }
+.model-input blockquote { margin: .15rem 0; padding: .5rem .8rem; border-left: 3px solid var(--accent);
+    background: #f6f8fc; border-radius: 0 5px 5px 0; }
+.benchmark-text { margin: .15rem 0; padding: .5rem .8rem; background: var(--eval-bg);
+    border-left: 3px solid var(--eval-border); border-radius: 0 5px 5px 0; font-size: .92rem; }
+.model-input-prompt { margin: .4rem 0; }
+.model-input-prompt summary { cursor: pointer; color: var(--accent); font-size: .88rem; }
+.mi-missing { background: var(--warn-bg); padding: .4rem .6rem; border-radius: 5px; }
+
+/* ── Re-run failed stages action ── */
+.rerun-bar { display: flex; align-items: center; gap: .8rem; margin: 0 0 1rem; flex-wrap: wrap; }
+.rerun-bar form { margin: 0; }
+.rerun-bar .muted { font-size: .85rem; }
