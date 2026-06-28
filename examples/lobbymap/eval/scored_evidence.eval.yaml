@@ -1,0 +1,27 @@
+# Evidence-grain eval — ground truth derived from the `scored_evidence` generation
+# schema (consistency by construction; see dag_schema.build_ground_truth_schema).
+# Populated by eval/ingest_html.py from manually-saved LobbyMap cell pages.
+# Provenance: examples/lobbymap/eval/ground_truth/gt_scored_evidence.jsonl
+---
+name: gt_scored_evidence
+kind: ground_truth
+evaluates: scored_evidence
+mirror_columns: [company_id, influencer_id, query_id, source_id, score]
+join_on: [company_id, influencer_id, query_id, source_id]
+metrics:
+  - evidence_score_exact_agreement   # of co-present evidence, identical -2..+2
+  - score_confusion_5x5
+  - evidence_count_delta             # did we extract a similar number of items per cell
+source:
+  doc: examples/lobbymap/eval/ground_truth/gt_scored_evidence.jsonl
+  ref: "https://lobbymap.org/ (manually saved cell pages; not crawled)"
+extra_columns:
+  - {name: year, type: str, nullable: true, description: "InfluenceMap's year grouping for the item"}
+  - {name: im_comment, type: str, nullable: true, description: "InfluenceMap's reasoning"}
+  - {name: source_extract, type: str, nullable: true, description: "Their verbatim extract from the source doc"}
+  - {name: evidence_url, type: str, nullable: true, description: "Original-publisher source document URL"}
+notes: |
+  Evidence-grain agreement mostly measures benchmark fidelity + extraction overlap.
+  NOTE the Level-2 caveat: our scoring uses a benchmark RECONSTRUCTED from the query
+  definition, not InfluenceMap's Science-Based Benchmarks DB, so disagreement on
+  borderline cells is partly benchmark drift, not pure methodology error.

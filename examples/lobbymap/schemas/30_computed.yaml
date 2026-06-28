@@ -1,0 +1,83 @@
+# Computed tables — produced by DAG stages (authored SECOND, in the next step).
+# `produced_by` is null here: the data model stands alone before any DAG exists.
+# SCOPE: we deliberately STOP AT THE MATRIX (cell_score). The downstream rollup
+# scores InfluenceMap publishes — Organization Score, Relationship Score,
+# Performance Band — are intentionally OUT OF SCOPE: their aggregation is a
+# proprietary, undisclosed algorithm we can't faithfully reproduce, and the
+# matrix is the artifact worth building/evaluating. (Their full methodology is
+# still described in RESEARCH.md.)
+# Provenance: examples/lobbymap/RESEARCH.md
+---
+name: scored_evidence
+title: Scored evidence (the scored + sourced + reviewable unit)
+kind: computed
+produced_by: null
+description: |
+  One verbatim quote from a document that (a) takes a stance on one query,
+  (b) is attributed to one entity — a company XOR an influencer, (c) comes from
+  one data source, and (d) is SCORED -2..+2 against that query's benchmark. This
+  is the unit everything hinges on: it carries the provenance (quote + its
+  document), it is what a human reviews, it is what the eval compares against
+  InfluenceMap's evidence items, and `cell_score` is simply its aggregate. The
+  link from a generic `document` into our structure; one document yields 0..n.
+  (On the OMV scorecard each evidence item shows its own score, e.g. Q1-D6 = +1.)
+source:
+  doc: examples/lobbymap/RESEARCH.md
+  ref: "https://lobbymap.org/company/OMV-9575d9222925fe611b993356d67f507c"
+primary_key: [evidence_id]
+estimated_rows: 8000
+exclusive_arcs:
+  - [company_id, influencer_id]   # a quote scores a company XOR an influencer
+columns:
+  - {name: evidence_id, type: str, nullable: false}
+  - {name: doc_id, type: str, nullable: false, references: document.doc_id}
+  - {name: company_id, type: str, nullable: true, references: company.company_id,
+     description: "Set iff this scores a company (XOR influencer_id)"}
+  - {name: influencer_id, type: str, nullable: true, references: influencer.influencer_id,
+     description: "Set iff this scores an influencer (XOR company_id)"}
+  - {name: query_id, type: str, nullable: false, references: query.query_id}
+  - {name: source_id, type: str, nullable: false, references: data_source.source_id,
+     description: "The document's channel, carried here so cells can group by (entity, query, source)"}
+  - {name: benchmark_id, type: str, nullable: true, references: benchmark.benchmark_id,
+     description: "The benchmark this quote was scored against"}
+  - {name: quote, type: str, nullable: false, description: "Verbatim supporting text"}
+  - {name: score, type: int, nullable: false, range: [-2, 2],
+     description: "Per-item -2..+2 vs the benchmark. THE scored value; cell_score aggregates these."}
+  - {name: confidence, type: float, nullable: true, range: [0.0, 1.0],
+     description: "Model/reviewer confidence in the score"}
+  - {name: evidence_date, type: date, nullable: true}
+---
+name: cell_score
+title: Scoring matrix (the END PRODUCT)
+kind: computed
+produced_by: null
+description: |
+  One row per (entity, query, data_source) cell — the central fact table and the
+  final output of this methodology. The entity is a company XOR an influencer (the
+  matrix is built per universe; see RESEARCH/LEARNINGS). We stop here on purpose
+  (the org-score / band rollups are out of scope). Each cell is an AGGREGATE of the
+  scored_evidence rows in it. NOTE the modeling decision: -2..+2 plus NA (not
+  applicable) / NS (not scored / no evidence) does NOT fit one numeric column, so
+  `status` carries the categorical state and `score` is null unless status=scored.
+  Absence (NS) is NOT the same as 0 — the bug the congresswatch FINDINGS flagged.
+source:
+  doc: examples/lobbymap/RESEARCH.md
+  ref: "https://lobbymap.org/company/OMV-9575d9222925fe611b993356d67f507c"
+primary_key: [company_id, influencer_id, query_id, source_id]
+estimated_rows: 1440
+exclusive_arcs:
+  - [company_id, influencer_id]   # a cell scores a company XOR an influencer
+columns:
+  - {name: company_id, type: str, nullable: true, references: company.company_id,
+     description: "Set iff this cell scores a company (XOR influencer_id)"}
+  - {name: influencer_id, type: str, nullable: true, references: influencer.influencer_id,
+     description: "Set iff this cell scores an influencer (XOR company_id)"}
+  - {name: query_id, type: str, nullable: false, references: query.query_id}
+  - {name: source_id, type: str, nullable: false, references: data_source.source_id}
+  - {name: status, type: str, nullable: false, range: [scored, NA, NS],
+     description: "scored = has a -2..+2; NA = not applicable; NS = not scored / no evidence"}
+  - {name: score, type: int, nullable: true, range: [-2, 2],
+     description: "Null unless status=scored. Absence (NS) is NOT the same as 0."}
+  - {name: evidence_ids, type: "list[str]", nullable: true,
+     description: "The scored_evidence rows this cell aggregates"}
+  - {name: rationale, type: str, nullable: true}

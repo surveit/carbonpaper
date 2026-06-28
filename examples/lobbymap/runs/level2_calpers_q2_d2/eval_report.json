@@ -1,0 +1,31 @@
+{
+  "cell": "CalPERS / Q2 (Climate Science Stance) / D2 (Corporate Media)",
+  "benchmark": "RECONSTRUCTED from query definition (NOT InfluenceMap's benchmark DB)",
+  "ours": {
+    "n_evidence": 3,
+    "evidence_scores": [
+      2,
+      2,
+      2
+    ],
+    "cell_score": 2,
+    "cell_mean": 2.0
+  },
+  "ground_truth": {
+    "n_evidence": 3,
+    "evidence_scores": [
+      2,
+      2,
+      2
+    ],
+    "cell_score": 2
+  },
+  "agreement": {
+    "cell_score_match": true,
+    "cell_abs_error": 0,
+    "n_evidence_ours_vs_theirs": [
+      3,
+      3
+    ]
+  }
+}
