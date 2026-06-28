@@ -308,17 +308,19 @@ def build_mermaid_graph(
     """
     status_glyph = {
         "ok": "✓",
+        "running": "⟳",
         "validation_warnings": "⚠",
         "error": "✗",
         "awaiting_review": "👤",
         "pending": "…",
     }
     status_stroke = {
-        "ok": ("#2a8a2a", "3px"),
+        "ok": ("#2a8a2a", "3px"),                 # complete → green
+        "running": ("#e0a800", "3px"),            # in progress → yellow
         "validation_warnings": ("#cc8a00", "3px"),
-        "error": ("#cc2a2a", "3px"),
+        "error": ("#cc2a2a", "3px"),              # errored → red
         "awaiting_review": ("#2a6ac8", "4px"),
-        "pending": ("#aaaaaa", "1px"),
+        "pending": ("#cfcfcf", "1px"),
     }
     lines = ["flowchart LR"]
     for s in stages:
@@ -658,7 +660,10 @@ async def run_status(methodology: str, run_id: str):
         "halted_at": manifest.get("halted_at"),
         "finished_at": manifest.get("finished_at"),
         "counts": {"ok": _count("ok"), "warn": _count("validation_warnings"),
-                   "err": _count("error"), "total": len(mstages)},
+                   "err": _count("error"), "total": len(mstages),
+                   "done": _count("ok") + _count("validation_warnings"),
+                   "running": _count("running"), "pending": _count("pending"),
+                   "awaiting": _count("awaiting_review")},
         "stages": [{"stage_id": s["stage_id"], "status": s.get("status")} for s in mstages],
         "mermaid": mermaid,
     })
@@ -941,16 +946,61 @@ async def queue_page(request: Request, methodology: str, run_id: str, stage_id: 
                 "reviewed_at": row.get("reviewed_at"),
             }
 
+    # ── Recover the MODEL INPUT so the score is reviewable, not just visible. ──
+    # The queue snapshot holds the scoring stage's OUTPUT (score + reasoning + ids);
+    # the thing the model actually judged (the quote, the benchmark) lives in the
+    # scoring stage's INPUT, one stage upstream. Join it back + render the prompt.
+    from app.runtime.llm import render_prompt
+    output_by_id = {s.get("stage_id"): s.get("output_path") for s in manifest.get("stages", [])}
+    scored_ids = get_input_ids(stage_def)
+    scored_def = next((s for s in stages if s.get("id") == scored_ids[0]), None) if scored_ids else None
+    prompt_template = (scored_def.get("llm") or {}).get("prompt_template") if scored_def else None
+
+    input_lookup: dict[tuple, dict[str, Any]] = {}
+    join_keys: list[str] = []
+    if scored_def and get_input_ids(scored_def):
+        scored_in_id = get_input_ids(scored_def)[0]
+        scored_in_decls = scored_def.get("inputs") or []
+        pk = ((scored_in_decls[0].get("schema") or {}).get("primary_key")) if scored_in_decls else None
+        in_path = output_by_id.get(scored_in_id)
+        in_df = None
+        if in_path:
+            p = run_dir / in_path
+            if p.exists():
+                try:
+                    in_df = pd.read_parquet(p) if p.suffix == ".parquet" else pd.read_csv(p)
+                except Exception:  # noqa: BLE001
+                    in_df = None
+        if in_df is not None:
+            cols = list(in_df.columns)
+            join_keys = [k for k in (pk or []) if k in cols] or \
+                [c for c in ("evidence_id", "entity_id", "doc_id", "id") if c in cols]
+            if join_keys:
+                for _, r in in_df.iterrows():
+                    key = tuple(str(r[k]) for k in join_keys)
+                    input_lookup[key] = {k: _display_cell(v) for k, v in r.items()}
+
     items: list[dict[str, Any]] = []
     if snapshot is not None:
         for _, row in snapshot.iterrows():
             h = row["content_hash"]
             existing = decision_by_hash.get(h)
+            model_input = None
+            rendered_prompt = None
+            if input_lookup and join_keys and all(k in row.index for k in join_keys):
+                model_input = input_lookup.get(tuple(str(row[k]) for k in join_keys))
+                if model_input and prompt_template:
+                    try:
+                        rendered_prompt = render_prompt(prompt_template, model_input)
+                    except Exception:  # noqa: BLE001
+                        rendered_prompt = None
             items.append({
                 "content_hash": h,
                 "row": {k: _display_cell(v) for k, v in row.items()
                         if k not in ("content_hash", "decision", "modified_score",
                                      "reviewer", "reviewed_at")},
+                "model_input": model_input,
+                "rendered_prompt": rendered_prompt,
                 "prior_decision": existing,
             })
 
@@ -1012,8 +1062,10 @@ async def queue_decide(
 
 @app.post("/methodology/{methodology}/runs/{run_id}/resume")
 async def resume_run_route(methodology: str, run_id: str):
-    """Resume a halted run from where it stopped. Used after all queue
-    items have decisions."""
+    """Resume/continue a run from where it stopped, re-running any stage that is
+    NOT already complete (so this serves BOTH: a halted run after its review
+    decisions, AND an ERRORED run after the bug is fixed — it re-runs the failed
+    stage + downstream and reuses completed upstream outputs)."""
     methodology_dir = EXAMPLES_DIR / methodology
     if not methodology_dir.is_dir():
         raise HTTPException(status_code=404, detail=f"No methodology '{methodology}'")
