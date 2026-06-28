@@ -2,15 +2,19 @@
 {% block title %}Methodologies{% endblock %}
 {% block content %}
 <h1>Methodologies</h1>
-<p class="lede">Each methodology is a directory under <code>examples/</code> containing a compiled DAG.</p>
+<p class="lede">Each methodology is a directory under <code>examples/</code>. It is built in two steps: first a <strong>data model</strong> (named schemas in <code>schemas/</code>), then a <strong>DAG</strong> (typed stages in <code>compiled/</code>) that wires transforms between those schemas.</p>
 
 {% if methodologies %}
 <ul class="methodology-list">
     {% for m in methodologies %}
-    <li><a href="/methodology/{{ m }}">{{ m }}</a></li>
+    <li>
+        <strong>{{ m.name }}</strong>
+        {% if m.has_schemas %}<a href="/methodology/{{ m.name }}/schemas" class="btn">data model</a>{% endif %}
+        {% if m.has_dag %}<a href="/methodology/{{ m.name }}" class="btn">DAG</a>{% else %}<span class="muted">— data model only (no DAG yet)</span>{% endif %}
+    </li>
     {% endfor %}
 </ul>
 {% else %}
-<p><em>No methodologies found. Compile some YAML stages into <code>examples/&lt;name&gt;/compiled/</code>.</em></p>
+<p><em>No methodologies found. Author a data model in <code>examples/&lt;name&gt;/schemas/</code> or compile stages into <code>examples/&lt;name&gt;/compiled/</code>.</em></p>
 {% endif %}
 {% endblock %}

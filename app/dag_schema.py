@@ -187,6 +187,177 @@ def validate_table_schema(schema: dict[str, Any] | None, where: str) -> list[str
     return issues
 
 
+# ── Named schemas (the data model, authored BEFORE the DAG) ──────────────────
+#
+# A `TableSchema` (above) is anonymous: it lives inline on a stage's
+# `output_schema` or an input. A **named schema** promotes that same shape to a
+# first-class, addressable artifact that exists independent of any stage — the
+# data model. A methodology declares a *library* of named schemas in
+# `examples/<name>/schemas/*.yaml`, and the DAG (authored second) wires
+# transforms between them. This inverts the old order (DAG-first, data-model
+# derived from stage outputs) into data-model-first.
+#
+# A named schema is a TableSchema plus:
+#   name   : snake_case identity, referenced by stages via `schema_ref`
+#   kind   : where the table sits in the pipeline (the distinction the
+#            DAG-derived view could not express)
+#   columns[].references : a foreign key to another named schema (by name),
+#            optionally "schema.column" — makes the data model a real graph
+#            rather than relying on PK-name-collision heuristics.
+
+SCHEMA_KINDS: set[str] = {
+    "reference",     # dimension / lookup / benchmark data we must source, not compute
+    "input",         # raw data fetched into the pipeline
+    "computed",      # produced by a DAG stage
+    "ground_truth",  # external truth used only by eval (mirrors a computed schema)
+}
+
+NAMED_SCHEMA_KEYS: set[str] = {
+    "name", "title", "kind", "description", "source",
+    "columns", "primary_key", "estimated_rows", "notes",
+    "produced_by", "consumed_by", "exclusive_arcs",
+}
+
+
+def _parse_reference(ref: str) -> tuple[str, str | None]:
+    """`"company"` → (company, None); `"company.company_id"` → (company, company_id)."""
+    if "." in ref:
+        schema_name, col = ref.split(".", 1)
+        return schema_name.strip(), col.strip()
+    return ref.strip(), None
+
+
+def validate_named_schema(schema: dict[str, Any], where: str | None = None) -> list[str]:
+    """Validate ONE named schema dict (a TableSchema + name/kind/references).
+    Cross-schema reference resolution is checked by validate_schema_library."""
+    name = schema.get("name")
+    where = where or (f"schema `{name}`" if name else "schema <no-name>")
+    issues: list[str] = []
+    if not name or not isinstance(name, str):
+        issues.append(f"{where}: missing a string `name`")
+    elif not re.match(r"^[a-z][a-z0-9_]*$", name):
+        issues.append(f"`{name}`: name should be snake_case")
+
+    kind = schema.get("kind")
+    if kind not in SCHEMA_KINDS:
+        issues.append(f"{where}: kind `{kind}` must be one of {sorted(SCHEMA_KINDS)}")
+
+    # The column/PK shape is the same contract as an inline TableSchema.
+    issues += validate_table_schema(schema, where)
+
+    # `references` on a column must name a string (resolution checked library-wide).
+    for col in schema.get("columns") or []:
+        if isinstance(col, dict) and col.get("references") is not None:
+            if not isinstance(col["references"], str):
+                issues.append(f"{where}: column `{col.get('name')}` references must be a string")
+
+    # Exclusive arcs: "exactly one of these columns is non-null per row" — the XOR
+    # foreign key (e.g. a cell scores a company XOR an influencer). Each arc column
+    # must be declared and nullable (since each may be the one that is null). The
+    # exactly-one-set check on actual rows is a runtime DATA validation.
+    col_by_name = {c.get("name"): c for c in schema.get("columns") or [] if isinstance(c, dict)}
+    for arc in schema.get("exclusive_arcs") or []:
+        if not isinstance(arc, list) or len(arc) < 2:
+            issues.append(f"{where}: each exclusive_arc must list >= 2 columns")
+            continue
+        for cname in arc:
+            col = col_by_name.get(cname)
+            if col is None:
+                issues.append(f"{where}: exclusive_arc column `{cname}` is not declared")
+            elif col.get("nullable") is False:
+                issues.append(f"{where}: exclusive_arc column `{cname}` must be nullable (exactly one is set)")
+    return issues
+
+
+def validate_schema_library(schemas: list[dict[str, Any]]) -> list[str]:
+    """Validate a whole data model: each schema valid, names unique, and every
+    column `references` resolves to a real schema (and column, if given)."""
+    issues: list[str] = []
+    for s in schemas:
+        issues += validate_named_schema(s)
+
+    names = [s.get("name") for s in schemas if s.get("name")]
+    for d in sorted({n for n in names if names.count(n) > 1}):
+        issues.append(f"duplicate schema name `{d}`")
+
+    by_name: dict[str, dict[str, Any]] = {s["name"]: s for s in schemas if s.get("name")}
+    for s in schemas:
+        sname = s.get("name", "<no-name>")
+        for col in s.get("columns") or []:
+            if not (isinstance(col, dict) and col.get("references")):
+                continue
+            target_name, target_col = _parse_reference(col["references"])
+            target = by_name.get(target_name)
+            if target is None:
+                issues.append(
+                    f"`{sname}`.{col.get('name')}: references unknown schema `{target_name}`")
+                continue
+            if target_col is not None:
+                target_cols = {c.get("name") for c in target.get("columns") or []}
+                if target_col not in target_cols:
+                    issues.append(
+                        f"`{sname}`.{col.get('name')}: references `{target_name}.{target_col}` "
+                        f"which is not a column of `{target_name}`")
+    return issues
+
+
+# ── Eval data model (SEPARATE from generation; derives FROM it) ──────────────
+#
+# Ground truth for the eval is NOT part of the generation data model — eval is a
+# consumer of generation, one-directional, and generation has no knowledge of it.
+# An eval spec (examples/<name>/eval/*.yaml) names the generation schema it grades
+# (`evaluates`) and the columns it mirrors; the ground-truth schema is DERIVED
+# from that generation schema so it is consistent with generation BY CONSTRUCTION
+# — it cannot silently drift from what the pipeline produces.
+
+def build_ground_truth_schema(eval_spec: dict[str, Any],
+                              gen_schema: dict[str, Any]) -> dict[str, Any]:
+    """Derive the ground-truth named schema from the GENERATION schema it grades.
+    Mirrored columns ARE the generation columns (consistency by construction);
+    eval-only `extra_columns` are appended."""
+    gen_cols = {c["name"]: c for c in gen_schema.get("columns") or [] if c.get("name")}
+    mirror = eval_spec.get("mirror_columns") or list(gen_cols)
+    columns = [gen_cols[name] for name in mirror if name in gen_cols]
+    columns += eval_spec.get("extra_columns") or []
+    pk = [k for k in (gen_schema.get("primary_key") or []) if k in mirror]
+    # Inherit any exclusive arc whose columns are all mirrored, so the ground
+    # truth carries the same XOR constraint as what it grades.
+    arcs = [a for a in (gen_schema.get("exclusive_arcs") or []) if all(c in mirror for c in a)]
+    return {
+        "name": eval_spec.get("name"),
+        "kind": "ground_truth",
+        "evaluates": eval_spec.get("evaluates"),
+        "columns": columns,
+        "primary_key": pk or None,
+        "exclusive_arcs": arcs or None,
+        "notes": eval_spec.get("notes"),
+    }
+
+
+def validate_eval_spec(eval_spec: dict[str, Any],
+                       gen_by_name: dict[str, dict[str, Any]]) -> list[str]:
+    """Ensure an eval spec is consistent with the generation data model: it grades
+    a real generation schema, mirrors/joins on real columns of it, and adds no
+    eval-only column that collides with a generation column."""
+    issues: list[str] = []
+    name = eval_spec.get("name", "<no-name>")
+    target = eval_spec.get("evaluates")
+    gen = gen_by_name.get(target)
+    if gen is None:
+        issues.append(f"eval `{name}`: evaluates unknown generation schema `{target}`")
+        return issues
+    gen_cols = {c.get("name") for c in gen.get("columns") or []}
+    for key in ("mirror_columns", "join_on"):
+        for col in eval_spec.get(key) or []:
+            if col not in gen_cols:
+                issues.append(f"eval `{name}`.{key}: `{col}` is not a column of `{target}`")
+    for col in {c.get("name") for c in eval_spec.get("extra_columns") or []} & gen_cols:
+        issues.append(f"eval `{name}`: extra column `{col}` collides with generation `{target}`")
+    if not eval_spec.get("metrics"):
+        issues.append(f"eval `{name}`: declares no metrics")
+    return issues
+
+
 def validate_stage(stage: dict[str, Any]) -> list[str]:
     """Structural validation of ONE compiled stage dict against the contract.
     Returns a list of human-readable issues ([] means valid)."""
@@ -331,5 +502,8 @@ __all__ = [
     "CONNECTOR_KINDS", "IMPLEMENTED_CONNECTOR_KINDS", "FILE_FORMATS",
     "AGG_FORMULAS", "JOIN_TYPES", "FUNCTION_KINDS", "PUBLISH_FORMATS",
     "UNIVERSAL_KEYS", "NODE_TYPES", "NODE_TYPE_NAMES",
-    "validate_table_schema", "validate_stage", "validate_dag", "validate_methodology",
+    "SCHEMA_KINDS", "NAMED_SCHEMA_KEYS",
+    "validate_table_schema", "validate_named_schema", "validate_schema_library",
+    "build_ground_truth_schema", "validate_eval_spec",
+    "validate_stage", "validate_dag", "validate_methodology",
 ]

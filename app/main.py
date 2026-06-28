@@ -33,6 +33,7 @@ from app.runtime.runner import execute_run, prepare_run, resume_run, run_prepare
 from app.runtime.preview import run_stage_preview, PreviewError, PREVIEWABLE_TYPES
 
 from app import compiler  # the COMPILER feature (transcript → draft DAG)
+from app.dag_schema import validate_schema_library  # named-schema (data-model) contract
 
 
 # ─── Paths ───────────────────────────────────────────────────────────────────
@@ -76,14 +77,72 @@ TYPE_GLYPH = {
 }
 
 
-def list_methodologies() -> list[str]:
+def methodology_dirs() -> list[Path]:
+    """A methodology dir has EITHER a compiled DAG OR a named-schema data model
+    (or both). The data-model-only case is the point of named schemas: a
+    methodology can exist as just a data model, before any DAG is authored."""
     if not EXAMPLES_DIR.exists():
         return []
     return [
-        p.name
-        for p in sorted(EXAMPLES_DIR.iterdir())
-        if p.is_dir() and (p / "compiled").is_dir()
+        p for p in sorted(EXAMPLES_DIR.iterdir())
+        if p.is_dir() and ((p / "compiled").is_dir() or (p / "schemas").is_dir())
     ]
+
+
+# Named-schema kind → display. The four kinds are the distinction the
+# DAG-derived data-model view could not express.
+SCHEMA_KIND_CLASS = {
+    "reference": "input",      # reuse existing palette
+    "input": "aggregate",
+    "computed": "python",
+    "ground_truth": "human",
+}
+SCHEMA_KIND_GLYPH = {
+    "reference": "📚",
+    "input": "▶",
+    "computed": "λ",
+    "ground_truth": "✓",
+}
+SCHEMA_KIND_ORDER = ["reference", "input", "computed", "ground_truth"]
+
+
+def list_methodologies() -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
+    for p in methodology_dirs():
+        out.append({
+            "name": p.name,
+            "has_dag": (p / "compiled").is_dir(),
+            "has_schemas": (p / "schemas").is_dir(),
+        })
+    return out
+
+
+def load_schemas(methodology: str) -> list[dict[str, Any]]:
+    """Load the named-schema data model from examples/<name>/schemas/*.yaml.
+    Each file may hold one or many schemas (multi-doc YAML). Returns [] if the
+    methodology has no data model."""
+    schemas_dir = EXAMPLES_DIR / methodology / "schemas"
+    if not schemas_dir.is_dir():
+        return []
+    schemas: list[dict[str, Any]] = []
+    for yaml_file in sorted(schemas_dir.glob("*.yaml")):
+        with yaml_file.open("r", encoding="utf-8") as f:
+            try:
+                for doc in yaml.safe_load_all(f):
+                    if not doc:
+                        continue
+                    doc["_filename"] = yaml_file.name
+                    schemas.append(doc)
+            except yaml.YAMLError as exc:
+                schemas.append({
+                    "name": yaml_file.stem,
+                    "title": f"[YAML ERROR] {yaml_file.name}",
+                    "kind": "reference",
+                    "notes": f"YAML parse error: {exc}",
+                    "_filename": yaml_file.name,
+                    "_error": True,
+                })
+    return schemas
 
 
 def load_stages(methodology: str) -> list[dict[str, Any]]:
@@ -175,6 +234,54 @@ def build_er_diagram(stages: list[dict[str, Any]]) -> str:
                 continue
             lines.append(f"    {iid} ||--o{{ {s['id']} : feeds")
 
+    return "\n".join(lines)
+
+
+def build_schema_er_diagram(schemas: list[dict[str, Any]]) -> str:
+    """Mermaid erDiagram from NAMED schemas (the data model), authored before any
+    DAG. FK edges come from explicit column `references` (schema or schema.column)
+    — a real graph, not the PK-name-collision heuristic the DAG-derived view used."""
+    lines = ["erDiagram"]
+    names = {s.get("name") for s in schemas if s.get("name")}
+
+    for s in schemas:
+        sid = s.get("name")
+        if not sid:
+            continue
+        cols = s.get("columns") or []
+        pk_set = set(s.get("primary_key") or [])
+        lines.append(f"    {sid} {{")
+        if not cols:
+            lines.append(f"        any _ \"({s.get('kind', '')})\"")
+        for col in cols:
+            name = col.get("name", "")
+            if not name:
+                continue
+            t = _safe_mermaid_type(col.get("type", "str"))
+            marker = "PK" if name in pk_set else ("FK" if col.get("references") else "")
+            label = col.get("description") or ""
+            comment = f' "{label.replace(chr(34), chr(39))[:48]}"' if label else ""
+            line = f"        {t} {name}"
+            if marker:
+                line += f" {marker}"
+            lines.append(line + comment)
+        lines.append("    }")
+
+    # FK edges: a referencing column draws an edge from the target schema to this one.
+    seen_edges: set[str] = set()
+    for s in schemas:
+        sid = s.get("name")
+        for col in s.get("columns") or []:
+            ref = col.get("references") if isinstance(col, dict) else None
+            if not ref:
+                continue
+            target = ref.split(".", 1)[0].strip()
+            if target not in names or target == sid:
+                continue
+            edge = f"    {target} ||--o{{ {sid} : {col.get('name')}"
+            if edge not in seen_edges:
+                seen_edges.add(edge)
+                lines.append(edge)
     return "\n".join(lines)
 
 
@@ -329,6 +436,10 @@ async def index(request: Request):
 
 @app.get("/methodology/{methodology}", response_class=HTMLResponse)
 async def methodology_view(request: Request, methodology: str):
+    # Data-model-first: a methodology may have a schema library but no DAG yet.
+    compiled_dir = EXAMPLES_DIR / methodology / "compiled"
+    if not compiled_dir.is_dir() and (EXAMPLES_DIR / methodology / "schemas").is_dir():
+        return RedirectResponse(url=f"/methodology/{methodology}/schemas")
     stages = load_stages(methodology)
     mermaid = build_mermaid_graph(stages, methodology)
     return templates.TemplateResponse(
@@ -389,6 +500,30 @@ async def data_model_view(request: Request, methodology: str):
             "er_diagram": er,
             "type_class": TYPE_CLASS,
             "type_glyph": TYPE_GLYPH,
+        },
+    )
+
+
+@app.get("/methodology/{methodology}/schemas", response_class=HTMLResponse)
+async def schema_library_view(request: Request, methodology: str):
+    """The data model: named schemas authored independent of (and before) the DAG."""
+    schemas = load_schemas(methodology)
+    if not schemas:
+        raise HTTPException(status_code=404, detail=f"No data model (schemas/) for {methodology}")
+    issues = validate_schema_library(schemas)
+    has_dag = (EXAMPLES_DIR / methodology / "compiled").is_dir()
+    return templates.TemplateResponse(
+        request,
+        "schema_library.html",
+        {
+            "methodology": methodology,
+            "schemas": schemas,
+            "er_diagram": build_schema_er_diagram(schemas),
+            "issues": issues,
+            "has_dag": has_dag,
+            "kind_order": SCHEMA_KIND_ORDER,
+            "kind_class": SCHEMA_KIND_CLASS,
+            "kind_glyph": SCHEMA_KIND_GLYPH,
         },
     )
 

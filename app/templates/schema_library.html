@@ -1,0 +1,159 @@
+{% extends "base.html" %}
+{% block title %}{{ methodology }} · data model{% endblock %}
+
+{% block head_extra %}
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<style>
+  .diagram-tools { display: flex; gap: .4rem; align-items: center; margin: .5rem 0; flex-wrap: wrap; }
+  .diagram-tools button { font: inherit; padding: .25rem .6rem; cursor: pointer;
+    border: 1px solid #bbb; background: #f7f7f7; border-radius: 4px; }
+  .diagram-tools button:hover { background: #eee; }
+  .diagram-viewport { overflow: auto; max-height: 72vh; border: 1px solid #ddd;
+    border-radius: 6px; background:
+      linear-gradient(#f4f4f6 1px, transparent 1px) 0 0 / 100% 22px,
+      #fbfbfc; resize: vertical; cursor: grab; }
+  .diagram-viewport.grabbing { cursor: grabbing; }
+  .diagram-viewport:fullscreen { max-height: none; height: 100vh; background: #fbfbfc; }
+  .diagram-viewport .mermaid { margin: 0; padding: .5rem; }
+  .diagram-viewport .mermaid svg { max-width: none !important; height: auto; }
+</style>
+<script>
+  document.addEventListener("DOMContentLoaded", async function () {
+    mermaid.initialize({
+      startOnLoad: false, theme: "default",
+      er: { useMaxWidth: false, layoutDirection: "LR", entityPadding: 12, fontSize: 12 },
+      securityLevel: "loose"
+    });
+    try { await mermaid.run({ querySelector: ".diagram-viewport .mermaid" }); }
+    catch (e) { console.error("mermaid render failed", e); return; }
+
+    const vp = document.getElementById("schema-viewport");
+    const svg = vp && vp.querySelector("svg");
+    if (!svg) return;
+    // natural width from the viewBox; zoom resizes the svg so native scrollbars stay accurate
+    const vb = (svg.getAttribute("viewBox") || "0 0 1000 800").split(/\s+/).map(Number);
+    const baseW = vb[2] || svg.getBoundingClientRect().width || 1000;
+    let scale = Math.min(1, (vp.clientWidth - 24) / baseW);  // fit-to-width on load
+    const apply = () => { svg.style.width = (baseW * scale) + "px"; };
+    const zoom = (f) => {
+      const cx = vp.scrollLeft + vp.clientWidth / 2, cy = vp.scrollTop + vp.clientHeight / 2;
+      const r = (baseW * scale * f) / (baseW * scale);
+      scale = Math.min(8, Math.max(0.1, scale * f)); apply();
+      vp.scrollLeft = cx * r - vp.clientWidth / 2; vp.scrollTop = cy * r - vp.clientHeight / 2;
+    };
+    apply();
+
+    document.querySelectorAll("[data-zoom]").forEach(b => b.addEventListener("click", () => {
+      const k = b.dataset.zoom;
+      if (k === "reset") { scale = Math.min(1, (vp.clientWidth - 24) / baseW); apply(); }
+      else zoom(k === "in" ? 1.25 : 0.8);
+    }));
+    document.getElementById("diagram-fs").addEventListener("click", () => {
+      if (document.fullscreenElement) document.exitFullscreen();
+      else vp.requestFullscreen && vp.requestFullscreen();
+    });
+    // ⌘/Ctrl + wheel = zoom; plain wheel = native scroll
+    vp.addEventListener("wheel", (e) => {
+      if (!(e.ctrlKey || e.metaKey)) return;
+      e.preventDefault(); zoom(e.deltaY < 0 ? 1.1 : 0.9);
+    }, { passive: false });
+    // drag to pan
+    let down = false, sx = 0, sy = 0, sl = 0, st = 0;
+    vp.addEventListener("pointerdown", (e) => {
+      if (e.target.closest("a")) return;  // let entity links work
+      down = true; sx = e.clientX; sy = e.clientY; sl = vp.scrollLeft; st = vp.scrollTop;
+      vp.classList.add("grabbing"); vp.setPointerCapture(e.pointerId);
+    });
+    vp.addEventListener("pointermove", (e) => {
+      if (!down) return;
+      vp.scrollLeft = sl - (e.clientX - sx); vp.scrollTop = st - (e.clientY - sy);
+    });
+    const up = () => { down = false; vp.classList.remove("grabbing"); };
+    vp.addEventListener("pointerup", up); vp.addEventListener("pointercancel", up);
+  });
+</script>
+{% endblock %}
+
+{% block header_extra %}
+<a href="/" class="back-link">← methodologies</a>
+{% endblock %}
+
+{% block content %}
+<div class="methodology-header">
+    <h1>{{ methodology }} · data model</h1>
+    <div class="actions">
+        {% if has_dag %}<a href="/methodology/{{ methodology }}" class="btn">DAG view</a>
+        {% else %}<span class="muted">step 1 of 2 — no DAG authored yet</span>{% endif %}
+    </div>
+</div>
+<p class="lede">Named schemas authored <strong>before</strong> the DAG. Each table declares a <strong>kind</strong> — where it sits in the pipeline — a distinction the DAG-derived view can't express. <strong>PK</strong> = primary key. <strong>FK</strong> = explicit <code>references</code> to another schema. Lines show foreign-key relationships.</p>
+
+{% if issues %}
+<div class="validation-report error">
+    <strong>⚠ {{ issues|length }} data-model issue{% if issues|length != 1 %}s{% endif %}</strong>
+    <ul>{% for i in issues %}<li><code>{{ i }}</code></li>{% endfor %}</ul>
+</div>
+{% else %}
+<p class="validation-report ok"><strong>✓ data model valid</strong> — {{ schemas|length }} schemas, all references resolve.</p>
+{% endif %}
+
+<div class="diagram-tools">
+    <button data-zoom="in" title="Zoom in">+</button>
+    <button data-zoom="out" title="Zoom out">−</button>
+    <button data-zoom="reset" title="Fit to width">reset</button>
+    <button id="diagram-fs" title="Fullscreen">⛶ fullscreen</button>
+    <span class="muted">drag to pan · ⌘/Ctrl-scroll to zoom · scroll to move · drag bottom edge to resize</span>
+</div>
+<div class="diagram-viewport" id="schema-viewport">
+    <pre class="mermaid">
+{{ er_diagram }}
+    </pre>
+</div>
+
+<h2>Schemas by kind</h2>
+{% set kind_blurb = {
+    "reference": "Dimension / lookup / benchmark data we must SOURCE, not compute. The “missing intermediate databases.”",
+    "input": "Raw data fetched into the pipeline.",
+    "computed": "Produced by a DAG stage (authored in step 2).",
+    "ground_truth": "External truth used only by eval; mirrors a computed schema."
+} %}
+{% for kind in kind_order %}
+    {% set group = schemas | selectattr("kind", "equalto", kind) | list %}
+    {% if group %}
+    <h3 class="dm-group-heading">
+        <span class="type-tag {{ kind_class.get(kind, 'custom') }}">{{ kind_glyph.get(kind, '') }} {{ kind }}</span>
+        <span class="muted">— {{ group|length }} schema{% if group|length != 1 %}s{% endif %}</span>
+    </h3>
+    <p class="lede">{{ kind_blurb.get(kind, '') }}</p>
+    {% for s in group %}
+    <details class="dm-table" open>
+        <summary>
+            <code>{{ s.name }}</code>
+            <span class="muted">— {{ s.title or s.name }}</span>
+            {% if s.estimated_rows %}<span class="dm-rows">est {{ "{:,}".format(s.estimated_rows) }} rows</span>{% endif %}
+        </summary>
+        {% if s.description %}<p class="schema-desc">{{ s.description }}</p>{% endif %}
+        {% if s.source and s.source.ref %}<p class="schema-meta"><span><b>source:</b> <a href="{{ s.source.ref }}" target="_blank" rel="noopener">{{ s.source.ref }}</a></span></p>{% endif %}
+        <table class="schema">
+            <thead><tr><th>column</th><th>type</th><th>null?</th><th>references</th><th>range / enum</th><th>description</th></tr></thead>
+            <tbody>
+            {% for c in s.columns or [] %}
+                <tr>
+                    <td><code>{{ c.name }}</code>{% if s.primary_key and c.name in s.primary_key %} <span class="strong">PK</span>{% endif %}</td>
+                    <td><span class="type-pill">{{ c.type }}</span></td>
+                    <td>{% if c.nullable %}<span class="muted">nullable</span>{% else %}<span class="strong">not null</span>{% endif %}</td>
+                    <td>{% if c.references %}<code class="range">→ {{ c.references }}</code>{% else %}<span class="muted">—</span>{% endif %}</td>
+                    <td>{% if c.range %}<code class="range">{{ c.range }}</code>{% else %}<span class="muted">—</span>{% endif %}</td>
+                    <td>{{ c.description or '' }}</td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+        {% if s.primary_key %}<p class="schema-meta"><span><b>primary key:</b> {{ s.primary_key | join(', ') }}</span></p>{% endif %}
+        {% if s.notes %}<p class="schema-desc muted">{{ s.notes }}</p>{% endif %}
+    </details>
+    {% endfor %}
+    {% endif %}
+{% endfor %}
+
+{% endblock %}
