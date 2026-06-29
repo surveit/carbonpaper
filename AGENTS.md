@@ -2,64 +2,54 @@
 
 A platform for running data/OSINT pipelines as **DAGs of typed nodes** instead of
 opaque generic code. A "methodology" is a directed graph whose every edge is
-schema-validated, whose expensive/irreversible steps sit behind human-review
-gates, and whose runs are persisted with a full manifest — so an AI-driven
-pipeline is *testable and reviewable*, not a black box.
+schema-validated, whose expensive/irreversible steps sit behind human-review gates,
+and whose runs are persisted with a full manifest — an AI-driven pipeline that is
+*testable and reviewable*, not a black box. It exists to serve journalism and
+institutional accountability, which is why the conventions below are the product,
+not preferences.
 
-## The core idea: a DAG artifact + three features on top of it
+## 📖 Documentation index (`docs/`)
 
-The unit of everything is a **DAG artifact**: a folder `examples/<name>/` with
-`compiled/*.yaml` (one file per stage) and `methodology_raw.md` (the prose it was
-compiled from). Runs land in `examples/<name>/runs/<run_id>/`.
+New here? Read in this order:
 
-Three independent features operate on that artifact:
+1. **[docs/overview.md](docs/overview.md)** — product context: the mission, what a
+   methodology is, the data-model-first thesis, the three features, the LobbyMap
+   flagship. *Start here.*
+2. **[docs/architecture.md](docs/architecture.md)** — the code map: the `dag_schema`
+   contract, the runtime, the compiler, the app, the repo layout, how to run it.
+3. **[docs/named-schemas.md](docs/named-schemas.md)** — the data model + eval data
+   model (the core recent concept). Read before touching schemas or eval.
+4. **[docs/run-and-review-ui.md](docs/run-and-review-ui.md)** — the run page + review
+   queue UX and where the code lives.
+5. **[docs/lobbymap-eval.md](docs/lobbymap-eval.md)** — the LobbyMap reproduction
+   project: methodology, ground truth, the Level-2 run, how to extend, constraints.
 
-| Feature | Code | What it does |
-|---|---|---|
-| **Runner** | `app/runtime/` | Executes a DAG: validates I/O between stages, persists outputs + `manifest.json`, halts for human review, resumes. |
-| **Compiler** | `app/compiler.py` | Distills prose OR an unstructured Claude Code transcript into a *draft* DAG. |
-| **Eval** *(planned)* | — | Checks a methodology reproduces ground truth (`examples/*/eval/`). |
+Per-directory detail: `app/AGENTS.md`, `app/runtime/AGENTS.md`, `examples/*/AGENTS.md`.
+Example-specific notes: `examples/lobbymap/{RESEARCH,LEARNINGS,LEVEL2}.md`.
 
-**The clean interface — `app/dag_schema.py`.** This is the single coupling point:
-the canonical, machine-readable contract for the 7 node types (their executable
-handles, the column-type vocab, connector kinds, aggregation formulas) plus
-`validate_stage` / `validate_dag` / `validate_methodology`. The runtime validates
-*against* it; the compiler emits *to* it; **neither imports the other**. Keep it
-pure (no runtime/compiler imports) so it stays a trustworthy interface. The prose
-companion is `app/SCHEMA.md`.
+## The one file to understand first
 
-## The 7 node types
-`input_data` · `llm_transform` · `python_transform` · `join` · `aggregate` ·
-`human_review_queue` · `publish`. Each stage YAML declares typed `inputs`, a typed
-`output_schema`, and one executable-handle block (`connector`/`llm`/`function`/
-`join`/`aggregate`/`queue`/`publish`). See `app/dag_schema.py` for the contract.
-
-## Running it
-```
-pip install -r requirements.txt          # fastapi, pandas, pyarrow, pyyaml, claude-agent-sdk, ...
-python -m uvicorn app.main:app --port 8765   # web UI: DAG view, runs, review queue, /compile
-python -m app.runtime.runner examples/<name> # run a methodology from the CLI
-```
-LLM stages run through the Claude Agent SDK (`claude_agent_sdk`), which drives the
-installed `claude` CLI. Backend is selectable: `CW_LLM_BACKEND=agent_sdk|cli|mock`
-(default `auto`), or `CW_LLM_FORCE_MOCK=1` for a deterministic offline run.
-
-## Repo layout
-```
-app/dag_schema.py     the node-type contract (the interface)
-app/SCHEMA.md         prose schema spec
-app/runtime/          the Runner (executor, handlers, LLM backends, validation)  → app/runtime/AGENTS.md
-app/compiler.py       the Compiler (transcript/prose → draft DAG)
-app/main.py           FastAPI web app (DAG/run/queue/compile pages)              → app/AGENTS.md
-app/templates/, app/static/   the web UI
-examples/<name>/      DAG artifacts (compiled/ + methodology_raw.md + code/ + data/ + runs/)  → examples/*/AGENTS.md
-```
+`app/dag_schema.py` — THE canonical contract (the 7 node types + the named-schema +
+eval contracts + validators). It imports nothing from the runtime or compiler; both
+meet here. Keep it pure. Prose companion: `app/SCHEMA.md`.
 
 ## Conventions (load-bearing, not stylistic)
+
 - **Never fabricate.** A value that can't be sourced is `null`/`unknown`; the
   pipeline fails loudly or halts rather than inventing a number, URL, or citation.
-- **Every value carries provenance** — its source URL/publisher travels with it.
+- **Every value carries provenance** — its source travels with it.
 - **Gate the expensive/irreversible step** behind `human_review_queue` (halts the
   run; decisions are content-hashed so they survive re-runs).
-- **Adversarially verify LLM output** before it becomes asset; demote/​drop the
+- **Adversarially verify LLM output** before it becomes an asset; demote/drop the
   unverified.
+- **Eval never leaks into generation** — the eval data model derives from the
+  generation schema, one-directional.
+
+## Run it
+
+```
+pip install -r requirements.txt
+python -m uvicorn app.main:app --port 8765        # web UI
+python -m app.runtime.runner examples/<name>      # CLI run
+```
+(uvicorn without `--reload` does not hot-reload Python — restart after editing `app/*.py`.)
