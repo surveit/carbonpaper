@@ -85,11 +85,13 @@ is the gap.
 `Sourced[T]` is the **currency between the producer (SDK) and the checker (auditor).**
 Three parts, and the guarantee is their *combination*:
 
-1. **The SDK is the only minter.** SDK primitives are the sole sanctioned way to create
-   a `SourceRef` (and therefore a `Sourced[T]`): `fetch(url)` caches the bytes + hashes
-   them and returns a `Document` whose `.source` is real; `extract(doc, …)` returns
-   `Sourced[…]` carrying that document's `SourceRef`; `verify` stamps the grade. You
-   cannot mint a `retrieved`/`verified` value except by actually retrieving/verifying.
+1. **The SDK is the *issuing authority* — and the auditor doesn't trust the token, it
+   re-checks it.** A `Sourced[T]` the agent constructs by hand is worthless
+   self-attestation (see "The forgery hole" below). So the fetcher issues a `SourceRef`
+   that is *checkable against records the agent can't write*: `fetch(url)` caches the
+   raw bytes and registers `(url, content_hash, ts)` in an append-only fetch log (or
+   signs the ref with a key the agent never sees). `extract`/`verify` only attach refs
+   that already exist in that log.
 
 2. **The harness makes the SDK the only *path*.** Run the agent with the raw escape
    hatches denied — no bare `WebFetch`/`Bash` network; the only fetch is the SDK's.
@@ -98,11 +100,14 @@ Three parts, and the guarantee is their *combination*:
    way left to produce an unguaranteed fact is to assert it from the model's head — and
    that surfaces in (3) as an `asserted` value with no `SourceRef`.
 
-3. **The auditor measures the complement.** `audit(deliverable) -> {coverage,
-   ungrounded[]}` walks the deliverable's claims; any that don't resolve to a `Sourced`
-   record (with a cached, hashed source) are returned as `ungrounded`. That list — plus
-   any use of an escape hatch — is the review queue. Coverage is the trust metric;
-   `ungrounded` is where humans look.
+3. **The auditor independently re-derives provenance — it never takes `Sourced` at face
+   value.** `audit(deliverable) -> {coverage, ungrounded[]}` walks every claim and, for
+   each: (a) recomputes the `content_hash` from the cache (catches invented hashes);
+   (b) confirms that hash is in the fetcher's log / the ref's signature verifies
+   (catches "I cached bytes myself / made up a URL"); (c) confirms the value is actually
+   present in / entailed by the bytes (catches "real source, fabricated value"). Anything
+   failing (a)–(c) — or any escape-hatch use — is `ungrounded`: the review queue.
+   Coverage is the trust metric; `ungrounded` is where humans look.
 
 ```
 agent (raw tools denied) ──uses──▶ journalism SDK ──mints──▶ Sourced[T] / Claim
@@ -114,6 +119,30 @@ agent (raw tools denied) ──uses──▶ journalism SDK ──mints──▶
 
 The point in one line: **the SDK turns "source everything" from a convention the agent
 should follow into a property the system can measure the absence of.**
+
+### The forgery hole (why a constructible type isn't a guarantee)
+
+`Sourced[T]` is just a Python object — an agent can write `Sourced(99, SourceRef(...))`
+directly as a reward-hack, and a naive auditor that checks only "is this a `Sourced`?"
+is reading the agent's own rubber stamp. So the guarantee is **not** "it's typed
+`Sourced`" — it's the auditor's **independent re-derivation** above: a forged ref fails
+the hash-recompute / log-membership / value-in-bytes checks. The agent may still
+*construct* the object; it gains nothing.
+
+The whole thing rests on one **trust boundary — minting must live outside the agent's
+code-execution sandbox:**
+- **Live-agent phase:** `fetch` is a *harness/MCP tool the agent calls*, with the cache,
+  log, and signing key written harness-side. If the agent can run arbitrary Python
+  in-process with the SDK it can grab the key and forge check (b) — so the minter must
+  be isolated from agent code.
+- **DAG phase:** the `python_transform` code *is reviewed before it runs*, so a
+  hand-rolled `Sourced(99, …)` is caught in code review, not at runtime. Same guarantee,
+  different enforcement (isolated tool vs. reviewed code).
+
+This raises the *cost* of fabrication and makes it conspicuous; it is **not proof**.
+Check (c)'s entailment for non-extractive claims is an LLM judgment — and the fabricating
+model must not be its own verifier — so the human stays the backstop, now pointed only at
+the small `ungrounded` / low-grade set.
 
 ---
 
