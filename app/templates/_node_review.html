@@ -1,0 +1,178 @@
+{# ── Per-node REVIEW / EDIT panel (right side of the methodology split view) ──
+   Loaded as a partial via fetch() from methodology.html when a DAG node is
+   clicked. It answers the NODE-review question — "do we trust HOW this step is
+   modeled" — which is deliberately distinct from the ROW-review queue ("is this
+   run's DATA right", which halts a run). Node review only colours the DAG.
+
+   Context this partial expects (passed by GET /methodology/{m}/node/{id}/review-partial):
+     methodology  — str
+     stage        — the loaded stage dict (must include .id, .type, .name)
+     review       — approval_state_for(stage, df):
+                      {state, current_hash, matched_decision}
+                      state ∈ {approved, unreviewed, rejected, edited_stale}
+     raw_yaml     — str: yaml.safe_dump(stage) text to seed the editor
+     type_class   — TYPE_CLASS map (for the type tag)
+     type_glyph   — TYPE_GLYPH map
+#}
+{% set state = review.state %}
+{% set belief_label = {
+     'approved': 'approved',
+     'unreviewed': 'unreviewed',
+     'rejected': 'rejected',
+     'edited_stale': 'edited · stale',
+   } %}
+<div class="stage-header">
+    <span class="type-tag big {{ type_class.get(stage.type, 'custom') }}">{{ type_glyph.get(stage.type, '') }} {{ stage.type }}</span>
+    <h1>{{ stage.name }}</h1>
+    <p class="stage-id"><code>{{ stage.id }}</code></p>
+</div>
+
+{# What kind of review this is — keep it explicitly separate from the row queue. #}
+<p class="review-scope">
+    <strong>Node review</strong> — do we trust <em>how this step is modeled?</em>
+    Your decision colours the workflow; it does <em>not</em> halt a run.
+    <span class="muted">(That's <a href="/methodology/{{ methodology }}/runs">row review</a> in a run's queue — "is this run's <em>data</em> right?".)</span>
+</p>
+
+<div class="node-review" id="node-review-panel" data-stage-id="{{ stage.id }}">
+    <div class="nr-state-line">
+        <span class="belief-chip belief-{{ 'stale' if state == 'edited_stale' else state }}" data-role="state-chip">{{ belief_label.get(state, state) }}</span>
+        <code class="nr-hash" data-role="hash">{{ review.current_hash }}</code>
+        {% if review.matched_decision %}
+        <span class="muted nr-by">
+            {% if state == 'edited_stale' %}was approved by{% else %}by{% endif %}
+            {{ review.matched_decision.reviewer }}
+            {% if review.matched_decision.reviewed_at %}at {{ review.matched_decision.reviewed_at }}{% endif %}
+            {% if review.matched_decision.note %}— “{{ review.matched_decision.note }}”{% endif %}
+        </span>
+        {% endif %}
+    </div>
+    {% if state == 'edited_stale' %}
+    <p class="nr-stale-note muted">This node was approved, then its spec changed (the content hash no longer matches the approved one). Re-review the current spec to restore trust.</p>
+    {% endif %}
+
+    {# ── Decision controls — mirror queue.html's decision-controls + submitDecision. ── #}
+    <div class="decision-controls nr-decide">
+        <button type="button" class="btn approve {% if state == 'approved' %}selected{% endif %}" data-decision="approve">✓ Approve</button>
+        <button type="button" class="btn reject {% if state == 'rejected' %}selected{% endif %}" data-decision="reject">✗ Reject</button>
+        <button type="button" class="btn modify" data-decision="needs_changes">↻ Needs changes</button>
+        <input type="text" class="nr-note" data-role="note" placeholder="note (optional)">
+    </div>
+
+    {# ── Editable stage spec. The edit endpoint is the ONLY writer into compiled/;
+          it validates with validate_stage and refuses (400) on issues. ── #}
+    <div class="nr-edit">
+        <h3>Stage spec (YAML)</h3>
+        <p class="nr-edit-hint muted">Editing a knob changes the spec's content hash, so an approved node drops to <span class="belief-chip belief-stale inline">edited · stale</span> until re-approved. Save validates first — invalid YAML is refused, the file untouched.</p>
+        <textarea class="edit-textarea" data-role="yaml" spellcheck="false">{{ raw_yaml }}</textarea>
+        <div class="nr-edit-actions">
+            <button type="button" class="btn primary" data-role="save-yaml">Save spec</button>
+            <span class="nr-edit-msg" data-role="edit-msg"></span>
+        </div>
+        <ul class="nr-issues" data-role="issues" hidden></ul>
+    </div>
+</div>
+
+<details class="raw-yaml">
+    <summary>Raw YAML (as loaded)</summary>
+    <pre>{{ raw_yaml }}</pre>
+</details>
+
+<script>
+(function () {
+  // This partial is injected via innerHTML and its <script> re-executed by the
+  // methodology page's loadStage (which re-creates panel scripts). Scope to the
+  // freshly-inserted panel.
+  const panel = document.getElementById('node-review-panel');
+  if (!panel) return;
+  const METHODOLOGY = {{ methodology | tojson }};
+  const STAGE_ID = panel.dataset.stageId;
+  const DECIDE_URL = `/methodology/${encodeURIComponent(METHODOLOGY)}/node/${encodeURIComponent(STAGE_ID)}/decide`;
+  const EDIT_URL = `/methodology/${encodeURIComponent(METHODOLOGY)}/node/${encodeURIComponent(STAGE_ID)}/edit`;
+
+  const chip = panel.querySelector('[data-role="state-chip"]');
+  const hashEl = panel.querySelector('[data-role="hash"]');
+  const noteInput = panel.querySelector('[data-role="note"]');
+  const yamlEl = panel.querySelector('[data-role="yaml"]');
+  const editMsg = panel.querySelector('[data-role="edit-msg"]');
+  const issuesEl = panel.querySelector('[data-role="issues"]');
+
+  const BELIEF_LABEL = { approved: 'approved', unreviewed: 'unreviewed',
+                         rejected: 'rejected', edited_stale: 'edited · stale' };
+
+  function setChip(state) {
+    if (!chip) return;
+    const cls = state === 'edited_stale' ? 'stale' : state;
+    chip.className = 'belief-chip belief-' + cls;
+    chip.textContent = BELIEF_LABEL[state] || state;
+    panel.querySelectorAll('.nr-decide [data-decision]').forEach(b => {
+      b.classList.toggle('selected', b.dataset.decision === state);
+    });
+  }
+
+  // After any state-changing action, ask the methodology page to re-poll
+  // /review/status so the DAG node recolours live (the page exposes this hook).
+  function refreshDag() {
+    if (window._pollReviewStatus) window._pollReviewStatus();
+  }
+
+  // ── Approve / Reject / Needs-changes — mirrors queue.html submitDecision. ──
+  async function submitDecision(decision) {
+    const fd = new FormData();
+    fd.append('content_hash', hashEl ? hashEl.textContent.trim() : '');
+    fd.append('decision', decision);
+    if (noteInput && noteInput.value.trim()) fd.append('note', noteInput.value.trim());
+    const r = await fetch(DECIDE_URL, { method: 'POST', body: fd });
+    if (!r.ok) { alert(`Failed: ${r.status} ${await r.text()}`); return; }
+    // The decide endpoint returns the resulting state so the chip flips without
+    // a reload; fall back to the requested verb's obvious state if absent.
+    let state = decision === 'approve' ? 'approved'
+              : decision === 'reject' ? 'rejected' : 'unreviewed';
+    try { const d = await r.json(); if (d && d.state) state = d.state; } catch (e) {}
+    setChip(state);
+    refreshDag();
+  }
+
+  // ── Save edited spec — POST edit; on 400 render validate_stage issues. ──
+  async function saveYaml(btn) {
+    if (!yamlEl) return;
+    btn.disabled = true;
+    if (editMsg) { editMsg.textContent = 'Saving…'; editMsg.className = 'nr-edit-msg'; }
+    if (issuesEl) { issuesEl.hidden = true; issuesEl.innerHTML = ''; }
+    try {
+      const fd = new FormData();
+      fd.append('yaml_text', yamlEl.value);
+      const r = await fetch(EDIT_URL, { method: 'POST', body: fd });
+      let d = null;
+      try { d = await r.json(); } catch (e) {}
+      if (r.status === 400 && d && d.issues) {
+        // Validation refused the write — surface every issue, file unchanged.
+        if (editMsg) { editMsg.textContent = '✗ Not saved — validation failed'; editMsg.className = 'nr-edit-msg err'; }
+        if (issuesEl) {
+          issuesEl.hidden = false;
+          issuesEl.innerHTML = d.issues.map(i => `<li>${i}</li>`).join('');
+        }
+        return;
+      }
+      if (!r.ok || !d || !d.ok) {
+        if (editMsg) { editMsg.textContent = `✗ ${r.status} ${d && d.detail ? d.detail : ''}`.trim(); editMsg.className = 'nr-edit-msg err'; }
+        return;
+      }
+      // Saved. New hash + state come back so the node flips live.
+      if (hashEl && d.content_hash) hashEl.textContent = d.content_hash;
+      if (d.state) setChip(d.state);
+      if (editMsg) { editMsg.textContent = '✓ Saved'; editMsg.className = 'nr-edit-msg ok'; }
+      refreshDag();
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  panel.addEventListener('click', function (ev) {
+    const dec = ev.target.closest('[data-decision]');
+    if (dec) { submitDecision(dec.dataset.decision); return; }
+    const save = ev.target.closest('[data-role="save-yaml"]');
+    if (save) { saveYaml(save); return; }
+  });
+})();
+</script>

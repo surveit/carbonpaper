@@ -10,12 +10,19 @@
 {% if runs %}
 <table class="stages">
     <thead>
-        <tr><th>run id</th><th>started</th><th>status</th><th>stages</th></tr>
+        <tr><th>run id</th><th>version</th><th>started</th><th>status</th><th>stages</th></tr>
     </thead>
     <tbody>
         {% for r in runs %}
         <tr>
             <td><a href="/methodology/{{ methodology }}/runs/{{ r.run_id }}"><code>{{ r.run_id }}</code></a></td>
+            <td>
+                {% if r.dag_version %}
+                    <a href="/methodology/{{ methodology }}/versions"><code>{{ r.dag_version }}</code></a>
+                {% else %}
+                    <span class="muted">(unversioned)</span>
+                {% endif %}
+            </td>
             <td>{{ r.started_at }}</td>
             <td><span class="run-status status-{{ r.status }}">{{ r.status }}</span></td>
             <td>
