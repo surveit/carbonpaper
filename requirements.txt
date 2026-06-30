@@ -6,3 +6,4 @@ pandas>=2.0
 pyarrow>=15.0
 python-multipart>=0.0.9
 claude-agent-sdk>=0.2.10   # real LLM backend for llm_transform stages (needs the claude CLI installed)
+pydantic>=2                # DAG contract models (app/models.py)

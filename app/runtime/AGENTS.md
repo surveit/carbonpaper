@@ -1,7 +1,8 @@
 # app/runtime — the Runner (DAG executor)
 
-Executes a methodology DAG and persists the result. Imports `app.dag_schema` (the
-contract) but NOT the compiler or the web app.
+Executes a methodology DAG and persists the result. Reads stage dicts directly and
+does not import the compiler or the web app. (It does not yet validate against the
+`app/models.py` contract — that wiring is a TODO.)
 
 ## Files
 - **`runner.py`** — the executor.
@@ -44,8 +45,8 @@ contract) but NOT the compiler or the web app.
   - `llm_mock.py` — deterministic offline mock (incl. an honest palm Tier-2 stub
     that never asserts a feature or invents a URL).
 - **`validation.py`** — DATA validation of a dataframe against an `output_schema`
-  (present columns, types, ranges, nullability, PK uniqueness). Distinct from
-  `dag_schema`'s STAGE-SPEC validation.
+  (present columns, types, ranges, nullability, PK uniqueness). Distinct from the
+  STAGE-SPEC contract in `app/models.py`.
 
 ## Run / debug
 ```
