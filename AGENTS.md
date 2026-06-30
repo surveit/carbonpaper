@@ -20,7 +20,7 @@ Three independent features operate on that artifact:
 | **Compiler** | `app/compiler.py` | Distills prose OR an unstructured Claude Code transcript into a *draft* DAG. |
 | **Eval** *(planned)* | — | Checks a methodology reproduces ground truth (`examples/*/eval/`). |
 
-**The contract — `app/models.py`.** Pydantic models are the single source of truth
+**The contract — `app/models/`.** Pydantic models are the single source of truth
 for the 7 node types (their executable handles, the column-type vocab, connector
 kinds, aggregation formulas). Constructing a model validates it;
 `validate_methodology(stages)` returns a non-fatal issue list and `parse_methodology`
@@ -31,7 +31,7 @@ dicts through them — wiring that in is the next step; see `docs/models-and-sto
 `input_data` · `llm_transform` · `python_transform` · `join` · `aggregate` ·
 `human_review_queue` · `publish`. Each stage YAML declares typed `inputs`, a typed
 `output_schema`, and one executable-handle block (`connector`/`llm`/`function`/
-`join`/`aggregate`/`queue`/`publish`). See `app/models.py` for the contract.
+`join`/`aggregate`/`queue`/`publish`). See `app/models/` for the contract.
 
 ## Running it
 ```
@@ -45,7 +45,7 @@ installed `claude` CLI. Backend is selectable: `CW_LLM_BACKEND=agent_sdk|cli|moc
 
 ## Repo layout
 ```
-app/models.py         the node-type contract (Pydantic models)
+app/models/         the node-type contract (Pydantic models)
 app/SCHEMA.md         prose schema spec (legacy — superseded by models.py)
 app/runtime/          the Runner (executor, handlers, LLM backends, validation)  → app/runtime/AGENTS.md
 app/compiler.py       the Compiler (transcript/prose → draft DAG)

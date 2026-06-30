@@ -1,23 +1,8 @@
-"""
-models.py — the methodology DAG contract, as Pydantic models.
+"""Stage-level contract: the node types, their executable-handle blocks, and the
+Stage model. Constructing a model validates it.
 
-This is the single source of truth for what a valid stage and a valid DAG look
-like. Constructing a model validates it (Pydantic raises on a violation), so the
-contract is the model — there is no separate validator to keep in sync.
-
-Replaces two older things, now removed:
-  - app/schema.py     (dataclass *spec*, imported by nothing)
-  - app/dag_schema.py (hand-rolled validators returning issue lists)
-
-The runtime and the compiler meet here: import these to parse/validate a DAG.
-Models are lenient about *extra* keys (real compiled YAML carries provenance and
-notes we don't validate) but strict about the core contract.
-
-Cut per review (2026-06-29):
-  - connector kinds reduced to the implemented ones (file, computed_static); the
-    rest were declared but never had a handler. Add back when a handler exists.
-  - weighted aggregation formulas (weighted_mean/weighted_sum) — unused in the
-    compiled DAGs (weighting is done inside python_transform modules).
+Models ignore unknown keys (compiled YAML carries fields we pass through) but are
+strict about the fields declared here.
 """
 from __future__ import annotations
 
@@ -33,7 +18,6 @@ from pydantic import (
     field_validator,
     model_validator,
 )
-
 
 # ── Column-type vocabulary ───────────────────────────────────────────────────
 SCALAR_COLUMN_TYPES: set[str] = {
@@ -69,8 +53,6 @@ class StageType(str, Enum):
 class ConnectorKind(str, Enum):
     file = "file"
     computed_static = "computed_static"
-    # http / scrape / api / manual_upload / sql were declared but never
-    # implemented — cut. Commit a snapshot and use `file`, or add a handler.
 
 
 class FileFormat(str, Enum):
@@ -88,7 +70,6 @@ class AggFormula(str, Enum):
     max = "max"
     first = "first"
     list = "list"
-    # weighted_mean / weighted_sum cut — unused (weighting lives in python_transform).
 
 
 class JoinType(str, Enum):
@@ -110,11 +91,24 @@ class PublishFormat(str, Enum):
     evidence_cards = "evidence_cards"
 
 
+class LLMModel(str, Enum):
+    haiku = "haiku"
+    sonnet = "sonnet"
+    opus = "opus"
+    claude_sonnet_4_6 = "claude-sonnet-4-6"
+
+
 # ── Base ─────────────────────────────────────────────────────────────────────
 class _Base(BaseModel):
-    # Lenient about extra keys (compiled YAML carries source/eval/notes we pass
-    # through), strict about the fields we declare.
     model_config = ConfigDict(extra="ignore")
+
+
+# ── Provenance ───────────────────────────────────────────────────────────────
+class SourceRef(_Base):
+    """Where a stage's prose justification lives."""
+    doc: Optional[str] = None
+    section: Optional[str] = None
+    lines: Optional[list[int]] = None
 
 
 # ── Typed columns / schemas ──────────────────────────────────────────────────
@@ -153,7 +147,7 @@ class TableSchema(_Base):
         return self
 
 
-# ── Executable-handle blocks ─────────────────────────────────────────────────
+# ── Executable-handle blocks (each self-validates) ───────────────────────────
 class Connector(_Base):
     """input_data handle."""
     kind: ConnectorKind
@@ -173,7 +167,7 @@ class Connector(_Base):
 class LLMConfig(_Base):
     """llm_transform handle."""
     prompt_template: str
-    model: Optional[str] = None
+    model: Optional[LLMModel] = None
     temperature: float = 0.0
     max_retries: int = 3
     response_format: Literal["json", "text"] = "json"
@@ -204,7 +198,7 @@ class JoinKey(_Base):
 
 
 class JoinConfig(_Base):
-    """join handle. `keys` OR `on` is accepted (handle_join reads either)."""
+    """join handle. `keys` OR `on` is accepted."""
     type: JoinType = JoinType.inner
     keys: Optional[list[JoinKey]] = None
     on: Optional[list[JoinKey]] = None
@@ -232,16 +226,44 @@ class AggregateConfig(_Base):
     having: Optional[str] = None
 
 
+class QueueConfig(_Base):
+    """human_review_queue handle. `hash_columns` is optional; when absent the
+    runner content-hashes on the upstream primary key."""
+    filter: Optional[str] = None
+    hash_columns: Optional[list[str]] = None
+    reviewer_instructions: Optional[str] = None
+    routing: Optional[str] = None
+    conflict_resolution: Optional[str] = None
+    estimated_volume_per_week: Optional[int] = None
+
+
+class PublishConfig(_Base):
+    """publish handle (runs alongside a `function` block)."""
+    format: Optional[PublishFormat] = None
+    destination: Optional[str] = None
+    template: Optional[str] = None
+    one_file_per: Optional[str] = None
+    cross_link: Optional[bool] = None
+
+
+class ReviewConfig(_Base):
+    """Routes a stage's outputs into human review."""
+    when: Optional[str] = None
+    routing: Optional[str] = None
+    rationale: Optional[str] = None
+    queue_name: Optional[str] = None
+
+
 # ── Stage ────────────────────────────────────────────────────────────────────
 # type → which handle block it must carry, plus input arity.
 _TYPE_SPEC: dict[StageType, dict[str, Any]] = {
-    StageType.input_data:        {"handle": "connector", "requires_inputs": False, "min_inputs": 0},
-    StageType.llm_transform:     {"handle": "llm",       "requires_inputs": True,  "min_inputs": 1},
-    StageType.python_transform:  {"handle": "function",  "requires_inputs": True,  "min_inputs": 1},
-    StageType.join:              {"handle": "join",      "requires_inputs": True,  "min_inputs": 2},
-    StageType.aggregate:         {"handle": "aggregate", "requires_inputs": True,  "min_inputs": 1},
-    StageType.human_review_queue:{"handle": "queue",     "requires_inputs": True,  "min_inputs": 1},
-    StageType.publish:           {"handle": "publish",   "also_requires": ["function"], "requires_inputs": True, "min_inputs": 1},
+    StageType.input_data:         {"handle": "connector", "requires_inputs": False, "min_inputs": 0},
+    StageType.llm_transform:      {"handle": "llm",       "requires_inputs": True,  "min_inputs": 1},
+    StageType.python_transform:   {"handle": "function",  "requires_inputs": True,  "min_inputs": 1},
+    StageType.join:               {"handle": "join",      "requires_inputs": True,  "min_inputs": 2},
+    StageType.aggregate:          {"handle": "aggregate", "requires_inputs": True,  "min_inputs": 1},
+    StageType.human_review_queue: {"handle": "queue",     "requires_inputs": True,  "min_inputs": 1},
+    StageType.publish:            {"handle": "publish",   "also_requires": ["function"], "requires_inputs": True, "min_inputs": 1},
 }
 
 _SNAKE_RE = re.compile(r"^[a-z][a-z0-9_]*$")
@@ -249,12 +271,12 @@ _SNAKE_RE = re.compile(r"^[a-z][a-z0-9_]*$")
 
 class Stage(_Base):
     """One node in the methodology DAG. Exactly one handle block is required,
-    selected by `type` (see _TYPE_SPEC)."""
+    selected by `type`."""
     id: str
     type: StageType
-    name: Optional[str] = None
-    source: Optional[Any] = None          # provenance — not validated here
-    inputs: list[Any] = Field(default_factory=list)   # [{id, schema?}] or [id]
+    name: str
+    source: Optional[SourceRef] = None
+    inputs: list[str] = Field(default_factory=list)
     output_schema: Optional[TableSchema] = None
 
     # executable handles (exactly one populated, per type)
@@ -263,14 +285,20 @@ class Stage(_Base):
     function: Optional[PythonFunction] = None
     join: Optional[JoinConfig] = None
     aggregate: Optional[AggregateConfig] = None
-    queue: Optional[dict[str, Any]] = None
-    publish: Optional[dict[str, Any]] = None
+    queue: Optional[QueueConfig] = None
+    publish: Optional[PublishConfig] = None
 
-    # cross-cutting (loose)
-    eval: Optional[dict[str, Any]] = None
-    review: Optional[dict[str, Any]] = None
+    review: Optional[ReviewConfig] = None
     limit: Optional[int] = None
     compiler_notes: list[str] = Field(default_factory=list)
+
+    @field_validator("inputs", mode="before")
+    @classmethod
+    def _ids_only(cls, v: Any) -> Any:
+        """Accept inputs as [{id, schema}] or [id]; keep only the upstream id."""
+        if not isinstance(v, list):
+            return v
+        return [item.get("id") if isinstance(item, dict) else item for item in v]
 
     @field_validator("id")
     @classmethod
@@ -280,7 +308,7 @@ class Stage(_Base):
         return v
 
     @model_validator(mode="after")
-    def _type_contract(self) -> "Stage":
+    def _handle_for_type(self) -> "Stage":
         spec = _TYPE_SPEC[self.type]
         handle = spec["handle"]
         if getattr(self, handle) is None:
@@ -292,70 +320,11 @@ class Stage(_Base):
             raise ValueError(
                 f"type `{self.type.value}` needs >= {spec['min_inputs']} input(s), got {len(self.inputs)}"
             )
-        if self.type is StageType.human_review_queue:
-            q = self.queue or {}
-            if not q.get("hash_columns"):
-                first = self.inputs[0] if self.inputs else None
-                sch = first.get("schema") if isinstance(first, dict) else None
-                pk = sch.get("primary_key") if isinstance(sch, dict) else None
-                if not pk:
-                    raise ValueError("queue needs `hash_columns` or an upstream primary_key")
         return self
 
 
-def _input_id(inp: Any) -> Optional[str]:
-    return inp.get("id") if isinstance(inp, dict) else (inp if isinstance(inp, str) else None)
-
-
-class Methodology(_Base):
-    """A whole DAG: validated stages + cross-stage checks (unique ids, inputs
-    resolve, acyclic)."""
-    stages: list[Stage]
-
-    @model_validator(mode="after")
-    def _dag(self) -> "Methodology":
-        ids = [s.id for s in self.stages]
-        dupes = sorted({i for i in ids if ids.count(i) > 1})
-        if dupes:
-            raise ValueError(f"duplicate stage id(s): {dupes}")
-        id_set = set(ids)
-
-        edges: dict[str, list[str]] = {}
-        for s in self.stages:
-            deps: list[str] = []
-            for inp in s.inputs:
-                iid = _input_id(inp)
-                if iid and iid not in id_set:
-                    raise ValueError(f"`{s.id}`: input `{iid}` references no stage")
-                if iid:
-                    deps.append(iid)
-            edges[s.id] = deps
-
-        WHITE, GRAY, BLACK = 0, 1, 2
-        color = {sid: WHITE for sid in edges}
-
-        def visit(n: str, path: list[str]) -> None:
-            color[n] = GRAY
-            for nxt in edges.get(n, []):
-                if color.get(nxt) == GRAY:
-                    raise ValueError(f"cycle detected: {' -> '.join(path + [n, nxt])}")
-                if color.get(nxt) == WHITE:
-                    visit(nxt, path + [n])
-            color[n] = BLACK
-
-        for sid in edges:
-            if color[sid] == WHITE:
-                visit(sid, [])
-        return self
-
-
-# ── Convenience: parse / non-fatal validate ──────────────────────────────────
-def parse_methodology(stages: list[dict[str, Any]]) -> Methodology:
-    """Parse + validate a list of stage dicts. Raises ValidationError if invalid."""
-    return Methodology(stages=list(stages))
-
-
-def _format_errors(err: ValidationError) -> list[str]:
+def format_errors(err: ValidationError) -> list[str]:
+    """Pydantic errors → human-readable issue strings."""
     out: list[str] = []
     for e in err.errors():
         loc = ".".join(str(p) for p in e.get("loc", ()) if p != "stages")
@@ -364,30 +333,10 @@ def _format_errors(err: ValidationError) -> list[str]:
     return out
 
 
-def validate_methodology(stages: list[dict[str, Any]]) -> list[str]:
-    """Non-fatal: return a list of human-readable issues ([] means valid).
-    For the UI/compiler, which want to *show* problems rather than crash."""
-    try:
-        Methodology(stages=list(stages))
-        return []
-    except ValidationError as err:
-        return _format_errors(err)
-
-
 def validate_stage(stage: dict[str, Any]) -> list[str]:
-    """Non-fatal structural validation of one stage dict."""
+    """Non-fatal structural validation of one stage dict ([] means valid)."""
     try:
         Stage.model_validate(stage)
         return []
     except ValidationError as err:
-        return _format_errors(err)
-
-
-__all__ = [
-    "StageType", "ConnectorKind", "FileFormat", "AggFormula", "JoinType",
-    "FunctionKind", "PublishFormat", "is_valid_column_type",
-    "Column", "TableSchema", "Connector", "LLMConfig", "PythonFunction",
-    "JoinKey", "JoinConfig", "AggregationOp", "AggregateConfig",
-    "Stage", "Methodology",
-    "parse_methodology", "validate_methodology", "validate_stage",
-]
+        return format_errors(err)

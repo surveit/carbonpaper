@@ -1,6 +1,6 @@
 # Data model (Pydantic) + storage convention
 
-## Data model — `app/models.py` — IMPLEMENTED
+## Data model — `app/models/` — IMPLEMENTED
 
 The methodology DAG contract is a single Pydantic module: `Stage`, `Methodology`,
 and the handle blocks (`Connector`, `LLMConfig`, `PythonFunction`, `JoinConfig`,
