@@ -1,20 +1,46 @@
 {% extends "base.html" %}
 {% block title %}Methodologies{% endblock %}
 {% block content %}
-<h1>Methodologies</h1>
-<p class="lede">Each methodology is a directory under <code>examples/</code>. It is built in two steps: first a <strong>data model</strong> (named schemas in <code>schemas/</code>), then a <strong>DAG</strong> (typed stages in <code>compiled/</code>) that wires transforms between those schemas.</p>
+<div class="dash-header">
+    <div class="dash-header-text">
+        <h1>Methodology projects</h1>
+        <p class="lede">Each project is a directory under <code>examples/</code>, built in two steps: a <strong>data model</strong> (named schemas in <code>schemas/</code>), then a <strong>workflow</strong> (typed stages in <code>compiled/</code>) that wires transforms between those schemas, plus the <strong>runs</strong> executed against it.</p>
+    </div>
+    <a href="/methodology/new" class="btn primary new-methodology-btn">＋ New methodology</a>
+</div>
 
 {% if methodologies %}
-<ul class="methodology-list">
+<div class="project-grid">
     {% for m in methodologies %}
-    <li>
-        <strong>{{ m.name }}</strong>
-        {% if m.has_schemas %}<a href="/methodology/{{ m.name }}/schemas" class="btn">data model</a>{% endif %}
-        {% if m.has_dag %}<a href="/methodology/{{ m.name }}" class="btn">DAG</a>{% else %}<span class="muted">— data model only (no DAG yet)</span>{% endif %}
-    </li>
+    {% set open_url = ("/methodology/" ~ m.name) if m.has_dag else ("/methodology/" ~ m.name ~ "/schemas") %}
+    <div class="project-card">
+        <form class="project-delete" method="post" action="/methodology/{{ m.name }}/delete"
+              onsubmit="return confirm('Delete methodology &#39;{{ m.name }}&#39; and all its runs? This cannot be undone.');">
+            <button type="submit" class="delete-btn" title="Delete project &quot;{{ m.name }}&quot;" aria-label="Delete project {{ m.name }}">✕</button>
+        </form>
+        <a href="{{ open_url }}" class="project-name">{{ m.name }}</a>
+        <div class="project-status">
+            {% if m.has_dag %}
+            <span class="badge {% if m.has_schemas %}python{% else %}input{% endif %}">Workflow · {{ m.n_stages }} stage{% if m.n_stages != 1 %}s{% endif %}</span>
+            {% else %}
+            <span class="badge aggregate">Data model only</span>
+            {% endif %}
+            {% if m.n_runs > 0 %}<span class="status-dot">·</span><span class="status-meta">{{ m.n_runs }} run{% if m.n_runs != 1 %}s{% endif %}</span>{% endif %}
+            {% if m.has_schemas %}<span class="status-dot">·</span><span class="status-meta">{{ m.n_schemas }} schema{% if m.n_schemas != 1 %}s{% endif %}</span>{% endif %}
+        </div>
+        <div class="project-links">
+            {% if m.has_schemas %}<a href="/methodology/{{ m.name }}/schemas" class="proj-link">Data model</a>{% endif %}
+            {% if m.has_dag %}<a href="/methodology/{{ m.name }}/workflow" class="proj-link">Workflow</a>{% endif %}
+            {% if m.n_runs > 0 %}<a href="/methodology/{{ m.name }}/runs" class="proj-link">Runs</a>{% endif %}
+        </div>
+    </div>
     {% endfor %}
-</ul>
+</div>
 {% else %}
-<p><em>No methodologies found. Author a data model in <code>examples/&lt;name&gt;/schemas/</code> or compile stages into <code>examples/&lt;name&gt;/compiled/</code>.</em></p>
+<div class="empty-state">
+    <h2>No methodologies yet — start your first one</h2>
+    <p class="muted">A methodology project lives in <code>examples/&lt;name&gt;/</code>: author a data model, then a workflow, then run it.</p>
+    <a href="/methodology/new" class="btn primary new-methodology-btn">＋ New methodology</a>
+</div>
 {% endif %}
 {% endblock %}

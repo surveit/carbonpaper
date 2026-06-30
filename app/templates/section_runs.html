@@ -1,0 +1,76 @@
+{% extends "project_shell.html" %}
+{#
+  RUNS — the runs list (reuses runs_index.html's table shape), with awaiting-review
+  runs surfaced at the top.
+
+  Context the route passes:
+    state = project.project_state(mdir); section = "runs"
+    runs  = main._list_runs(state.name)  — list of
+            {run_id, status, started_at, dag_version, stages_total, stages_ok, stages_error}
+
+  The "awaiting review" count comes from state.runs.awaiting_review (a run halted at a
+  human_review_queue). Counts are truthful — only manifest-backed runs appear.
+#}
+{% block section %}
+<div class="sec-head wf-head">
+  <div class="wf-head-title">
+    <h1>Runs</h1>
+    <p class="lede">Each run pins to a workflow <strong>version</strong> and reads its
+      snapshot, so a run is reproducible against the exact workflow it executed.</p>
+  </div>
+  <div class="actions wf-actions">
+    {% if state.data_model.state == "approved" %}
+    <form action="/methodology/{{ state.name }}/run" method="post" style="display:inline;">
+      <button type="submit" class="btn primary">▶ Run workflow</button>
+    </form>
+    {% endif %}
+    <a href="/methodology/{{ state.name }}/workflow" class="btn">Workflow</a>
+  </div>
+</div>
+
+{% if state.runs.awaiting_review > 0 %}
+<div class="banner-review">
+  👤 <strong>{{ state.runs.awaiting_review }}</strong> run{% if state.runs.awaiting_review != 1 %}s{% endif %}
+  awaiting review — halted at a human-review queue. Open the run to clear its queue.
+</div>
+{% endif %}
+
+{% if runs %}
+<table class="stages">
+  <thead>
+    <tr><th>run id</th><th>version</th><th>started</th><th>status</th><th>stages</th></tr>
+  </thead>
+  <tbody>
+    {% for r in runs %}
+    <tr>
+      <td><a href="/methodology/{{ state.name }}/runs/{{ r.run_id }}"><code>{{ r.run_id }}</code></a></td>
+      <td>
+        {% if r.dag_version %}
+          <a href="/methodology/{{ state.name }}/workflow"><code>{{ r.dag_version }}</code></a>
+        {% else %}
+          <span class="muted">(unversioned)</span>
+        {% endif %}
+      </td>
+      <td>{{ r.started_at }}</td>
+      <td><span class="run-status status-{{ r.status }}">{{ r.status }}</span></td>
+      <td>
+        {{ r.stages_ok }}/{{ r.stages_total }} ok
+        {% if r.stages_error %}· <span class="status-error">{{ r.stages_error }} error{% if r.stages_error != 1 %}s{% endif %}</span>{% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<div class="empty-state">
+  <h2>No runs yet</h2>
+  <p class="muted">
+    {% if state.data_model.state == "approved" %}
+      Click <strong>▶ Run workflow</strong> above (or on the Workflow page) to execute the pipeline end-to-end.
+    {% else %}
+      Approve the data model and build the workflow first, then run it.
+    {% endif %}
+  </p>
+</div>
+{% endif %}
+{% endblock %}

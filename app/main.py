@@ -15,8 +15,7 @@ Then open http://localhost:8765/
 from __future__ import annotations
 
 import json
-import re
-import threading
+import shutil
 import traceback
 from datetime import datetime
 from pathlib import Path
@@ -27,122 +26,86 @@ import yaml
 from fastapi import FastAPI, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
 
 from app.runtime.runner import execute_run, prepare_run, resume_run, run_prepared
 from app.runtime.preview import run_stage_preview, PreviewError, PREVIEWABLE_TYPES
 
-from app import compiler  # the COMPILER feature (transcript → draft DAG)
-from app.dag_schema import validate_schema_library  # named-schema (data-model) contract
+from app import node_review  # node-level APPROVAL / BELIEF state (Piece B)
+from app import versioning  # immutable DAG version snapshots (Piece C)
+from app.dag_schema import validate_stage  # single-stage contract (node-edit writer)
 
-
-# ─── Paths ───────────────────────────────────────────────────────────────────
-
-REPO_ROOT = Path(__file__).resolve().parent.parent
-APP_DIR = Path(__file__).resolve().parent
-TEMPLATES_DIR = APP_DIR / "templates"
-STATIC_DIR = APP_DIR / "static"
-EXAMPLES_DIR = REPO_ROOT / "examples"
-COMPILATIONS_DIR = REPO_ROOT / "compilations"
+# Shared web primitives (templates, paths, DAG rendering, background runner) live
+# in app.web_context so the compiler's route modules (app.pages / app.api.compile)
+# can use them without importing this shell. Those modules own the /compile routes,
+# mounted via include_router below.
+from app.web_context import (
+    EXAMPLES_DIR,
+    REPO_ROOT,
+    STATIC_DIR,
+    SCHEMA_KIND_CLASS,
+    SCHEMA_KIND_GLYPH,
+    SCHEMA_KIND_ORDER,
+    TYPE_CLASS,
+    TYPE_GLYPH,
+    build_mermaid_graph,
+    get_input_ids,
+    templates,
+    _build_schema_er_diagram,
+    _load_schemas,
+    _run_in_background,
+)
+from app.dag_schema import validate_schema_library
+from app import pages
+from app import project  # PROJECT model — project_state snapshot for the unified sections
+from app.api import compile as compile_api
 
 
 # ─── App ─────────────────────────────────────────────────────────────────────
 
 app = FastAPI(title="Methodology DAG")
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
-templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
+
+# The compiler feature's routes (pages + actions), split out of this shell.
+app.include_router(pages.router)
+app.include_router(compile_api.router)
 
 
 # ─── Helpers ─────────────────────────────────────────────────────────────────
 
-# Stage-type → CSS class for DAG node + badges.
-TYPE_CLASS = {
-    "input_data": "input",
-    "llm_transform": "llm",
-    "python_transform": "python",
-    "join": "join",
-    "aggregate": "aggregate",
-    "human_review_queue": "human",
-    "publish": "publish",
-}
-
-TYPE_GLYPH = {
-    "input_data": "▶",
-    "llm_transform": "✦",
-    "python_transform": "λ",
-    "join": "⋈",
-    "aggregate": "Σ",
-    "human_review_queue": "👤",
-    "publish": "📤",
-}
-
-
-def methodology_dirs() -> list[Path]:
-    """A methodology dir has EITHER a compiled DAG OR a named-schema data model
-    (or both). The data-model-only case is the point of named schemas: a
-    methodology can exist as just a data model, before any DAG is authored."""
-    if not EXAMPLES_DIR.exists():
-        return []
-    return [
-        p for p in sorted(EXAMPLES_DIR.iterdir())
-        if p.is_dir() and ((p / "compiled").is_dir() or (p / "schemas").is_dir())
-    ]
-
-
-# Named-schema kind → display. The four kinds are the distinction the
-# DAG-derived data-model view could not express.
-SCHEMA_KIND_CLASS = {
-    "reference": "input",      # reuse existing palette
-    "input": "aggregate",
-    "computed": "python",
-    "ground_truth": "human",
-}
-SCHEMA_KIND_GLYPH = {
-    "reference": "📚",
-    "input": "▶",
-    "computed": "λ",
-    "ground_truth": "✓",
-}
-SCHEMA_KIND_ORDER = ["reference", "input", "computed", "ground_truth"]
-
 
 def list_methodologies() -> list[dict[str, Any]]:
+    """One project card per methodology dir under examples/ that has EITHER a DAG
+    (compiled/*.yaml) OR a data model (schemas/*.yaml). Returns the shape the index
+    dashboard renders: name, what's authored (has_dag / has_schemas), and the
+    counts shown on the badge (stages, schema docs, runs). Sorted by name."""
+    if not EXAMPLES_DIR.exists():
+        return []
     out: list[dict[str, Any]] = []
-    for p in methodology_dirs():
+    for p in sorted(EXAMPLES_DIR.iterdir()):
+        if not p.is_dir():
+            continue
+        compiled_dir = p / "compiled"
+        schemas_dir = p / "schemas"
+        n_stages = len(list(compiled_dir.glob("*.yaml"))) if compiled_dir.is_dir() else 0
+        has_dag = n_stages > 0
+        has_schemas = schemas_dir.is_dir() and any(schemas_dir.glob("*.yaml"))
+        # A schemas/*.yaml may hold multiple docs — count the loaded docs, not files.
+        n_schemas = len(_load_schemas(p)) if has_schemas else 0
+        runs_dir = p / "runs"
+        n_runs = (
+            sum(1 for r in runs_dir.iterdir() if r.is_dir()) if runs_dir.is_dir() else 0
+        )
+        if not (has_dag or has_schemas):
+            continue
         out.append({
             "name": p.name,
-            "has_dag": (p / "compiled").is_dir(),
-            "has_schemas": (p / "schemas").is_dir(),
+            "has_dag": has_dag,
+            "has_schemas": has_schemas,
+            "n_stages": n_stages,
+            "n_schemas": n_schemas,
+            "n_runs": n_runs,
         })
     return out
-
-
-def load_schemas(methodology: str) -> list[dict[str, Any]]:
-    """Load the named-schema data model from examples/<name>/schemas/*.yaml.
-    Each file may hold one or many schemas (multi-doc YAML). Returns [] if the
-    methodology has no data model."""
-    schemas_dir = EXAMPLES_DIR / methodology / "schemas"
-    if not schemas_dir.is_dir():
-        return []
-    schemas: list[dict[str, Any]] = []
-    for yaml_file in sorted(schemas_dir.glob("*.yaml")):
-        with yaml_file.open("r", encoding="utf-8") as f:
-            try:
-                for doc in yaml.safe_load_all(f):
-                    if not doc:
-                        continue
-                    doc["_filename"] = yaml_file.name
-                    schemas.append(doc)
-            except yaml.YAMLError as exc:
-                schemas.append({
-                    "name": yaml_file.stem,
-                    "title": f"[YAML ERROR] {yaml_file.name}",
-                    "kind": "reference",
-                    "notes": f"YAML parse error: {exc}",
-                    "_filename": yaml_file.name,
-                    "_error": True,
-                })
-    return schemas
 
 
 def load_stages(methodology: str) -> list[dict[str, Any]]:
@@ -166,20 +129,6 @@ def load_stages(methodology: str) -> list[dict[str, Any]]:
         data["_order"] = yaml_file.stem.split("_", 1)[0]
         stages.append(data)
     return stages
-
-
-def get_input_ids(stage: dict[str, Any]) -> list[str]:
-    """v2 inputs are objects with id; older shapes might be plain strings."""
-    inputs = stage.get("inputs") or []
-    out = []
-    for inp in inputs:
-        if isinstance(inp, dict):
-            iid = inp.get("id")
-            if iid:
-                out.append(iid)
-        elif isinstance(inp, str):
-            out.append(inp)
-    return out
 
 
 def build_er_diagram(stages: list[dict[str, Any]]) -> str:
@@ -237,54 +186,6 @@ def build_er_diagram(stages: list[dict[str, Any]]) -> str:
     return "\n".join(lines)
 
 
-def build_schema_er_diagram(schemas: list[dict[str, Any]]) -> str:
-    """Mermaid erDiagram from NAMED schemas (the data model), authored before any
-    DAG. FK edges come from explicit column `references` (schema or schema.column)
-    — a real graph, not the PK-name-collision heuristic the DAG-derived view used."""
-    lines = ["erDiagram"]
-    names = {s.get("name") for s in schemas if s.get("name")}
-
-    for s in schemas:
-        sid = s.get("name")
-        if not sid:
-            continue
-        cols = s.get("columns") or []
-        pk_set = set(s.get("primary_key") or [])
-        lines.append(f"    {sid} {{")
-        if not cols:
-            lines.append(f"        any _ \"({s.get('kind', '')})\"")
-        for col in cols:
-            name = col.get("name", "")
-            if not name:
-                continue
-            t = _safe_mermaid_type(col.get("type", "str"))
-            marker = "PK" if name in pk_set else ("FK" if col.get("references") else "")
-            label = col.get("description") or ""
-            comment = f' "{label.replace(chr(34), chr(39))[:48]}"' if label else ""
-            line = f"        {t} {name}"
-            if marker:
-                line += f" {marker}"
-            lines.append(line + comment)
-        lines.append("    }")
-
-    # FK edges: a referencing column draws an edge from the target schema to this one.
-    seen_edges: set[str] = set()
-    for s in schemas:
-        sid = s.get("name")
-        for col in s.get("columns") or []:
-            ref = col.get("references") if isinstance(col, dict) else None
-            if not ref:
-                continue
-            target = ref.split(".", 1)[0].strip()
-            if target not in names or target == sid:
-                continue
-            edge = f"    {target} ||--o{{ {sid} : {col.get('name')}"
-            if edge not in seen_edges:
-                seen_edges.add(edge)
-                lines.append(edge)
-    return "\n".join(lines)
-
-
 def _safe_mermaid_type(t: str) -> str:
     """Mermaid erDiagram is picky — strip brackets, slashes, etc."""
     return (
@@ -294,77 +195,6 @@ def _safe_mermaid_type(t: str) -> str:
          .replace(":", "_")
          .replace("+", "p")
     ) or "any"
-
-
-def build_mermaid_graph(
-    stages: list[dict[str, Any]],
-    methodology: str,
-    status_by_id: dict[str, str] | None = None,
-) -> str:
-    """Generate a Mermaid flowchart from stages.
-
-    If status_by_id is given, each node gets a status glyph in its label and a
-    coloured stroke override (green/amber/red/grey) layered over its type class.
-    """
-    status_glyph = {
-        "ok": "✓",
-        "running": "⟳",
-        "validation_warnings": "⚠",
-        "error": "✗",
-        "awaiting_review": "👤",
-        "pending": "…",
-    }
-    status_stroke = {
-        "ok": ("#2a8a2a", "3px"),                 # complete → green
-        "running": ("#e0a800", "3px"),            # in progress → yellow
-        "validation_warnings": ("#cc8a00", "3px"),
-        "error": ("#cc2a2a", "3px"),              # errored → red
-        "awaiting_review": ("#2a6ac8", "4px"),
-        "pending": ("#cfcfcf", "1px"),
-    }
-    lines = ["flowchart LR"]
-    for s in stages:
-        sid = s.get("id", s["_filename"])
-        name = s.get("name", sid)
-        stype = s.get("type", "?")
-        glyph = TYPE_GLYPH.get(stype, "")
-        klass = TYPE_CLASS.get(stype, "custom")
-        notes_indicator = "⚠ " if s.get("compiler_notes") else ""
-        eval_indicator = "📊" if s.get("eval") else ""
-        review_indicator = "👤" if s.get("review") else ""
-        small_line = f"{stype}".replace("_", " ")
-        flags = " ".join(filter(None, [eval_indicator, review_indicator]))
-        status = (status_by_id or {}).get(sid)
-        status_prefix = f"{status_glyph.get(status, '')} " if status else ""
-        # Use HTML in mermaid label
-        label = (
-            f'"<b>{status_prefix}{notes_indicator}{glyph} {name}</b>'
-            f'<br/><span style=\'font-size:10px;color:#888\'>{small_line}</span>'
-            + (f"<br/><span style='font-size:11px'>{flags}</span>" if flags else "")
-            + '"'
-        )
-        lines.append(f"    {sid}[{label}]:::{klass}")
-        lines.append(
-            f'    click {sid} call loadStage("{sid}") "Open stage"'
-        )
-        if status and status in status_stroke:
-            stroke, width = status_stroke[status]
-            lines.append(f"    style {sid} stroke:{stroke},stroke-width:{width}")
-    for s in stages:
-        sid = s.get("id", s["_filename"])
-        for upstream in get_input_ids(s):
-            lines.append(f"    {upstream} --> {sid}")
-    lines += [
-        "    classDef input fill:#e8f4f8,stroke:#3a8ca8,color:#000",
-        "    classDef llm fill:#fff4e6,stroke:#cc7a00,color:#000",
-        "    classDef python fill:#eef2f7,stroke:#4a5e85,color:#000",
-        "    classDef join fill:#f4ecfa,stroke:#7b3aa8,color:#000",
-        "    classDef aggregate fill:#f0f0e6,stroke:#888533,color:#000",
-        "    classDef human fill:#fce8f4,stroke:#c0399a,color:#000",
-        "    classDef publish fill:#e8f8e8,stroke:#3aa83a,color:#000",
-        "    classDef custom fill:#fde8e8,stroke:#cc3333,color:#000",
-    ]
-    return "\n".join(lines)
 
 
 def read_prose_excerpt(stage: dict[str, Any], methodology: str) -> str | None:
@@ -436,24 +266,174 @@ async def index(request: Request):
     )
 
 
-@app.get("/methodology/{methodology}", response_class=HTMLResponse)
-async def methodology_view(request: Request, methodology: str):
-    # Data-model-first: a methodology may have a schema library but no DAG yet.
-    compiled_dir = EXAMPLES_DIR / methodology / "compiled"
-    if not compiled_dir.is_dir() and (EXAMPLES_DIR / methodology / "schemas").is_dir():
-        return RedirectResponse(url=f"/methodology/{methodology}/schemas")
-    stages = load_stages(methodology)
-    mermaid = build_mermaid_graph(stages, methodology)
+@app.get("/methodology/{methodology}/schemas", response_class=HTMLResponse)
+async def methodology_schemas(request: Request, methodology: str):
+    """The DATA MODEL view — the NAMED schemas authored in examples/<name>/schemas/
+    (kind palette + ER diagram), the "step 1" of a methodology. Distinct from
+    /data-model, which derives an ER diagram from the DAG's output_schemas. 404 if
+    this methodology has no data model. Reuses the same loader + ER builder the gated
+    compile flow uses (now shared in web_context)."""
+    methodology_dir = EXAMPLES_DIR / methodology
+    schemas = _load_schemas(methodology_dir)
+    if not schemas:
+        raise HTTPException(
+            status_code=404, detail=f"No data model (schemas/) for {methodology}"
+        )
+    has_dag = (methodology_dir / "compiled").is_dir() and any(
+        (methodology_dir / "compiled").glob("*.yaml")
+    )
     return templates.TemplateResponse(
         request,
-        "methodology.html",
+        "schema_library.html",
         {
             "methodology": methodology,
+            "schemas": schemas,
+            "er_diagram": _build_schema_er_diagram(schemas),
+            "issues": validate_schema_library(schemas),
+            "has_dag": has_dag,
+            "kind_order": SCHEMA_KIND_ORDER,
+            "kind_class": SCHEMA_KIND_CLASS,
+            "kind_glyph": SCHEMA_KIND_GLYPH,
+        },
+    )
+
+
+@app.post("/methodology/{methodology}/delete")
+async def delete_methodology(methodology: str):
+    """DESTRUCTIVE — remove an entire methodology project (schemas, DAG, runs,
+    decisions, versions). Guarded carefully: resolve the target and refuse unless it
+    is a DIRECT child directory of examples/ (so a traversal like '..%2f..', an
+    absolute path, or a name resolving outside examples/ can never delete anything
+    here). Only reachable via POST (the dashboard's confirm()-gated form) — there is
+    deliberately no GET deletion. Redirects to the dashboard (303) on success."""
+    target = (EXAMPLES_DIR / methodology).resolve()
+    examples_root = EXAMPLES_DIR.resolve()
+    if target.parent != examples_root or not target.is_dir():
+        raise HTTPException(
+            status_code=404, detail=f"No methodology '{methodology}' to delete"
+        )
+    shutil.rmtree(target)
+    return RedirectResponse("/", status_code=303)
+
+
+# ─── Unified PROJECT sections ────────────────────────────────────────────────
+# One project (examples/<name>/) is framed by a left-sidebar shell (project_shell)
+# with five sections — Overview / Document / Data model / Workflow / Runs. Each
+# section route passes the SAME status snapshot (project.project_state) plus its
+# section name and the section-specific extras the matching section_*.html needs.
+# The shell reads ONLY from `state`; the workflow lock is the single source of
+# truth state.data_model.state == "approved" (the SAME gate the SSE stream uses).
+
+
+def _project_dir(methodology: str) -> Path:
+    """Resolve a project dir and 404 if it isn't a real methodology working copy.
+    Guards every section route: refuse anything that isn't a direct child of
+    examples/ (no traversal/absolute path), mirroring delete_methodology's guard."""
+    target = (EXAMPLES_DIR / methodology).resolve()
+    if target.parent != EXAMPLES_DIR.resolve() or not target.is_dir():
+        raise HTTPException(status_code=404, detail=f"No methodology '{methodology}'")
+    return EXAMPLES_DIR / methodology
+
+
+@app.get("/methodology/{methodology}", response_class=HTMLResponse)
+async def project_overview(request: Request, methodology: str):
+    """OVERVIEW — the project hub: identity (meta), the 5 status tiles, and the
+    prominent "do this next" CTA. Renders ONLY from project_state (no section extras);
+    unknown facts (a legacy model/date) show truthfully as 'unknown', never fabricated."""
+    mdir = _project_dir(methodology)
+    return templates.TemplateResponse(
+        request,
+        "section_overview.html",
+        {"state": project.project_state(mdir), "section": "overview"},
+    )
+
+
+@app.get("/methodology/{methodology}/document", response_class=HTMLResponse)
+async def project_document(request: Request, methodology: str):
+    """DOCUMENT — the source methodology document, read-only. The route reads the
+    file server-side (the template never touches the filesystem); `document` is '' /
+    None when the project has no document, and the template shows an empty state. The
+    path line is state.document_path (absolute, truthful)."""
+    mdir = _project_dir(methodology)
+    state = project.project_state(mdir)
+    document = ""
+    if state["document_path"]:
+        try:
+            document = Path(state["document_path"]).read_text(encoding="utf-8")
+        except OSError:
+            # The path came from project_state probing the disk; if it vanished
+            # between snapshot and read, show the empty state rather than 500.
+            document = ""
+    return templates.TemplateResponse(
+        request,
+        "section_document.html",
+        {"state": state, "section": "document", "document": document},
+    )
+
+
+@app.get("/methodology/{methodology}/data_model", response_class=HTMLResponse)
+async def project_data_model(request: Request, methodology: str):
+    """DATA MODEL — named-schema cards by kind + ER diagram + the approval GATE + the
+    per-schema edit + the authoring chat. Reuses the gated-flow render machinery
+    (_schema_library_approval / _schema_yaml_map live in app.api.compile), rehomed
+    onto this project section. The chat/approve/edit actions POST to the rehomed
+    /methodology/{name}/data-model/... routes."""
+    mdir = _project_dir(methodology)
+    schemas = _load_schemas(mdir)
+    approval = compile_api._schema_library_approval(mdir, schemas) if schemas else None
+    return templates.TemplateResponse(
+        request,
+        "section_data_model.html",
+        {
+            "state": project.project_state(mdir),
+            "section": "data_model",
+            "schemas": schemas,
+            "er_diagram": _build_schema_er_diagram(schemas) if schemas else None,
+            "issues": validate_schema_library(schemas) if schemas else [],
+            "approval": approval,
+            "schema_yaml": compile_api._schema_yaml_map(schemas),
+            "kind_order": SCHEMA_KIND_ORDER,
+            "kind_class": SCHEMA_KIND_CLASS,
+            "kind_glyph": SCHEMA_KIND_GLYPH,
+        },
+    )
+
+
+@app.get("/methodology/{methodology}/workflow", response_class=HTMLResponse)
+async def project_workflow(request: Request, methodology: str):
+    """WORKFLOW — the typed-stage pipeline (formerly the DAG view): the mermaid graph
+    coloured by belief, the per-node review split-view, the versions list, and the
+    Build / Run / Cut-version controls. LOCKED in the template until the data model is
+    approved — the SAME gate the SSE workflow stream enforces.
+
+    Stages load via project._load_compiled_stages (the loader convention that injects
+    _order/_filename), and is [] (not a 404) when there is no workflow yet, so the
+    locked/empty page renders. Belief colours the FIRST paint (review_by_id), coverage
+    drives the badge."""
+    mdir = _project_dir(methodology)
+    stages = project._load_compiled_stages(mdir)
+    decisions = node_review.load_node_decisions(mdir)
+    review_by_id = {
+        s["id"]: node_review.approval_state_for(s, decisions)["state"]
+        for s in stages if s.get("id")
+    }
+    coverage = node_review.coverage_for(stages, decisions) if stages else None
+    mermaid = (
+        build_mermaid_graph(stages, methodology, review_by_id=review_by_id)
+        if stages else None
+    )
+    return templates.TemplateResponse(
+        request,
+        "section_workflow.html",
+        {
+            "state": project.project_state(mdir),
+            "section": "workflow",
             "stages": stages,
             "mermaid": mermaid,
+            "coverage": coverage,
             "type_class": TYPE_CLASS,
             "type_glyph": TYPE_GLYPH,
-            "get_input_ids": get_input_ids,
+            "versions": versioning.list_versions(mdir),
         },
     )
 
@@ -506,30 +486,6 @@ async def data_model_view(request: Request, methodology: str):
     )
 
 
-@app.get("/methodology/{methodology}/schemas", response_class=HTMLResponse)
-async def schema_library_view(request: Request, methodology: str):
-    """The data model: named schemas authored independent of (and before) the DAG."""
-    schemas = load_schemas(methodology)
-    if not schemas:
-        raise HTTPException(status_code=404, detail=f"No data model (schemas/) for {methodology}")
-    issues = validate_schema_library(schemas)
-    has_dag = (EXAMPLES_DIR / methodology / "compiled").is_dir()
-    return templates.TemplateResponse(
-        request,
-        "schema_library.html",
-        {
-            "methodology": methodology,
-            "schemas": schemas,
-            "er_diagram": build_schema_er_diagram(schemas),
-            "issues": issues,
-            "has_dag": has_dag,
-            "kind_order": SCHEMA_KIND_ORDER,
-            "kind_class": SCHEMA_KIND_CLASS,
-            "kind_glyph": SCHEMA_KIND_GLYPH,
-        },
-    )
-
-
 @app.get("/methodology/{methodology}/stage/{stage_id}/partial", response_class=HTMLResponse)
 async def stage_view_partial(request: Request, methodology: str, stage_id: str):
     """Stage detail content only — no <html> wrapper. Used by the split-view JS swap."""
@@ -568,6 +524,216 @@ async def stage_raw_yaml(methodology: str, stage_id: str):
     return yaml.safe_dump(stage, sort_keys=False, allow_unicode=True)
 
 
+# ─── Node review (Piece B) ───────────────────────────────────────────────────
+# NODE review = "do we trust HOW this step is modeled?" — colours the DAG by a
+# content-hash approval state, does NOT halt a run. (Distinct from the ROW review
+# queue below, which is "is this run's DATA right?" and DOES halt a run.) Mirrors
+# the queue's decide/partial patterns, lifted from data rows to DAG node specs.
+
+
+@app.get("/methodology/{methodology}/review/status")
+async def review_status(methodology: str):
+    """Live poller for the methodology page: belief state per node, coverage, and a
+    freshly-built mermaid graph coloured by approval. Mirrors run_status — the page
+    swaps `mermaid` in place after a decision/edit so the DAG recolours without a
+    full reload."""
+    stages = load_stages(methodology)
+    decisions = node_review.load_node_decisions(EXAMPLES_DIR / methodology)
+    review_by_id = {
+        s["id"]: node_review.approval_state_for(s, decisions)["state"]
+        for s in stages if s.get("id")
+    }
+    coverage = node_review.coverage_for(stages, decisions)
+    mermaid = build_mermaid_graph(stages, methodology, review_by_id=review_by_id)
+    return JSONResponse({
+        "review_by_id": review_by_id,
+        "coverage": coverage,
+        "mermaid": mermaid,
+    })
+
+
+@app.get("/methodology/{methodology}/node/{stage_id}/review-partial", response_class=HTMLResponse)
+async def node_review_partial(request: Request, methodology: str, stage_id: str):
+    """Per-node REVIEW/EDIT panel (right side of the methodology split view). Mirrors
+    stage_view_partial, but answers the node-review question (approve / reject / edit
+    the spec) instead of showing the read-only stage detail."""
+    stages = load_stages(methodology)
+    stage = next((s for s in stages if s.get("id") == stage_id), None)
+    if stage is None:
+        raise HTTPException(status_code=404, detail=f"No stage '{stage_id}' in {methodology}")
+    decisions = node_review.load_node_decisions(EXAMPLES_DIR / methodology)
+    review = node_review.approval_state_for(stage, decisions)
+    return templates.TemplateResponse(
+        request,
+        "_node_review.html",
+        {
+            "methodology": methodology,
+            "stage": stage,
+            "review": review,
+            "raw_yaml": yaml.safe_dump(stage, sort_keys=False, allow_unicode=True),
+            "type_class": TYPE_CLASS,
+            "type_glyph": TYPE_GLYPH,
+        },
+    )
+
+
+@app.post("/methodology/{methodology}/node/{stage_id}/decide")
+async def node_decide(
+    methodology: str,
+    stage_id: str,
+    content_hash: str = Form(...),
+    decision: str = Form(...),
+    note: str | None = Form(None),
+):
+    """Record a reviewer's belief decision against a node's content_hash. Mirrors
+    queue_decide: validate the verb loudly, upsert by (stage_id, content_hash) via
+    node_review.record_node_decision, and return the resulting approval state so the
+    chip flips without a reload."""
+    if decision not in ("approve", "reject", "needs_changes"):
+        raise HTTPException(status_code=400, detail=f"unknown decision '{decision}'")
+    methodology_dir = EXAMPLES_DIR / methodology
+    if not methodology_dir.is_dir():
+        raise HTTPException(status_code=404, detail=f"No methodology '{methodology}'")
+
+    node_review.record_node_decision(
+        methodology_dir,
+        stage_id=stage_id,
+        content_hash=content_hash,
+        decision=decision,
+        reviewer="local",
+        note=(note or None),
+    )
+
+    # Recompute the state from the freshly-loaded store against the node's CURRENT
+    # spec — the same source of truth the DAG colours by — so the returned chip and
+    # the DAG agree. (record_node_decision stores 'needs_changes' verbatim, which
+    # approval_state_for reports as 'unreviewed' for colouring.)
+    stages = load_stages(methodology)
+    stage = next((s for s in stages if s.get("id") == stage_id), None)
+    if stage is None:
+        raise HTTPException(status_code=404, detail=f"No stage '{stage_id}' in {methodology}")
+    decisions = node_review.load_node_decisions(methodology_dir)
+    state = node_review.approval_state_for(stage, decisions)["state"]
+    return JSONResponse({"ok": True, "state": state})
+
+
+@app.post("/methodology/{methodology}/node/{stage_id}/edit")
+async def node_edit(
+    methodology: str,
+    stage_id: str,
+    yaml_text: str = Form(...),
+):
+    """The ONLY writer into compiled/. Parse the posted YAML, validate it with
+    validate_stage, and — only if it's clean — write it back to compiled/<id>.yaml.
+    On validation issues return 400 with the issue list and write NOTHING (fail
+    loudly, never a silent partial write). Editing changes the spec's content hash,
+    so an approved node auto-drops to edited_stale until re-approved; we return the
+    new hash + state so the node flips live."""
+    methodology_dir = EXAMPLES_DIR / methodology
+    if not methodology_dir.is_dir():
+        raise HTTPException(status_code=404, detail=f"No methodology '{methodology}'")
+
+    # Parse the posted YAML. A parse error is the reviewer's, not ours — surface it
+    # as a validation issue (400), file untouched.
+    try:
+        parsed = yaml.safe_load(yaml_text)
+    except yaml.YAMLError as exc:
+        return JSONResponse(
+            {"ok": False, "issues": [f"YAML parse error: {exc}"]}, status_code=400
+        )
+    if not isinstance(parsed, dict):
+        return JSONResponse(
+            {"ok": False, "issues": ["edited spec must be a YAML mapping (a single stage dict)"]},
+            status_code=400,
+        )
+
+    # Strip loader-injected bookkeeping keys before validating/writing — they are
+    # not part of the spec (and the canonical hash ignores them anyway).
+    stage = {k: v for k, v in parsed.items() if k not in node_review.CANONICAL_IGNORE_KEYS}
+
+    # Guard: the parsed id must equal the path id (no renaming a node via edit, no
+    # writing one file's content under another's name).
+    parsed_id = stage.get("id")
+    if parsed_id != stage_id:
+        return JSONResponse(
+            {"ok": False,
+             "issues": [f"id in the edited YAML ('{parsed_id}') must equal the node id '{stage_id}'"]},
+            status_code=400,
+        )
+
+    issues = validate_stage(stage)
+    if issues:
+        # Refused — the write never happens, the file is unchanged.
+        return JSONResponse({"ok": False, "issues": issues}, status_code=400)
+
+    # Guard: the target file must ALREADY exist. The edit endpoint revises an
+    # existing node; it does not create new compiled files (that's the compiler's
+    # job). Find the on-disk file for this stage id via the same loader convention.
+    compiled_dir = methodology_dir / "compiled"
+    target: Path | None = None
+    for yaml_file in sorted(compiled_dir.glob("*.yaml")):
+        try:
+            with yaml_file.open("r", encoding="utf-8") as f:
+                data = yaml.safe_load(f) or {}
+        except yaml.YAMLError:
+            continue
+        if data.get("id") == stage_id:
+            target = yaml_file
+            break
+    if target is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No existing compiled file for stage '{stage_id}' in {methodology}",
+        )
+
+    with target.open("w", encoding="utf-8") as f:
+        yaml.safe_dump(stage, f, sort_keys=False, allow_unicode=True)
+
+    new_hash = node_review.node_content_hash(stage)
+    decisions = node_review.load_node_decisions(methodology_dir)
+    state = node_review.approval_state_for(stage, decisions)["state"]
+    return JSONResponse({"ok": True, "content_hash": new_hash, "state": state})
+
+
+# ─── Versioning (Piece C) ────────────────────────────────────────────────────
+
+
+@app.post("/methodology/{methodology}/version")
+async def cut_version_route(methodology: str, message: str = Form(...)):
+    """Snapshot the working copy's {compiled/, schemas/} into a new immutable
+    version + freeze approval coverage at cut time. The parent is the latest
+    existing version (None for the very first cut). The JS redirects to the
+    versions list on success."""
+    methodology_dir = EXAMPLES_DIR / methodology
+    if not methodology_dir.is_dir():
+        raise HTTPException(status_code=404, detail=f"No methodology '{methodology}'")
+    existing = versioning.list_versions(methodology_dir)  # newest-first
+    parent = existing[0]["id"] if existing else None
+    try:
+        meta = versioning.cut_version(
+            methodology_dir, message=message, reviewer="local", parent_version=parent
+        )
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return JSONResponse({"ok": True, "version": meta})
+
+
+@app.get("/methodology/{methodology}/versions", response_class=HTMLResponse)
+async def versions_index(request: Request, methodology: str):
+    """List every version of a methodology, newest-first, with frozen coverage."""
+    methodology_dir = EXAMPLES_DIR / methodology
+    if not methodology_dir.is_dir():
+        raise HTTPException(status_code=404, detail=f"No methodology '{methodology}'")
+    return templates.TemplateResponse(
+        request,
+        "versions.html",
+        {
+            "methodology": methodology,
+            "versions": versioning.list_versions(methodology_dir),
+        },
+    )
+
+
 # ─── Run routes ─────────────────────────────────────────────────────────────
 
 def _runs_dir(methodology: str) -> Path:
@@ -593,6 +759,9 @@ def _list_runs(methodology: str) -> list[dict[str, Any]]:
                 "status": manifest.get("status", "unknown"),
                 "started_at": manifest.get("started_at"),
                 "finished_at": manifest.get("finished_at"),
+                # dag_version is None for legacy (pre-versioning) runs; the template
+                # renders "(unversioned)" — a displayed truth, not a fabricated id.
+                "dag_version": manifest.get("dag_version"),
                 "stages_total": len(manifest.get("stages", [])),
                 "stages_ok": sum(1 for s in manifest.get("stages", []) if s.get("status") == "ok"),
                 "stages_error": sum(1 for s in manifest.get("stages", []) if s.get("status") == "error"),
@@ -600,27 +769,27 @@ def _list_runs(methodology: str) -> list[dict[str, Any]]:
     return entries
 
 
-def _run_in_background(target, *args) -> None:
-    """Run a (possibly slow, LLM-driven) execution off the event loop so the
-    run page stays responsive and can poll live progress. Errors are recorded
-    on the manifest by the runner itself; this just keeps the thread from dying
-    silently."""
-    def _wrapped():
-        try:
-            target(*args)
-        except Exception:  # noqa: BLE001
-            traceback.print_exc()
-    threading.Thread(target=_wrapped, daemon=True).start()
-
-
 @app.post("/methodology/{methodology}/run")
 async def trigger_run(methodology: str):
     methodology_dir = EXAMPLES_DIR / methodology
     if not methodology_dir.is_dir():
         raise HTTPException(status_code=404, detail=f"No methodology '{methodology}'")
+    # Pin the run to a DAG version: the latest existing one, or — if this
+    # methodology has never been versioned — auto-cut an implicit version now so the
+    # run records the REAL snapshot it executed against (never a blank/fabricated
+    # id, never the mutable working copy). We resolve it here (rather than passing
+    # version_id=None) so we can set the new version's parent and so the resolved id
+    # is explicit at the call site. prepare_run loads stages from this snapshot.
+    existing = versioning.list_versions(methodology_dir)  # newest-first
+    if existing:
+        version_id = existing[0]["id"]
+    else:
+        version_id = versioning.cut_version(
+            methodology_dir, message="auto-cut on run", reviewer="system"
+        )["id"]
     # Set up the run (writes an initial `running` manifest), kick off execution
     # in a background thread, and redirect immediately. The run page polls.
-    prep = prepare_run(methodology_dir, REPO_ROOT)
+    prep = prepare_run(methodology_dir, REPO_ROOT, version_id)
     _run_in_background(run_prepared, prep)
     return RedirectResponse(
         url=f"/methodology/{methodology}/runs/{prep['run_id']}",
@@ -630,10 +799,17 @@ async def trigger_run(methodology: str):
 
 @app.get("/methodology/{methodology}/runs", response_class=HTMLResponse)
 async def runs_index(request: Request, methodology: str):
+    """RUNS — the runs list section (reuses _list_runs' shape), framed by the project
+    shell, with awaiting-review runs surfaced (driven by state.runs.awaiting_review)."""
+    mdir = _project_dir(methodology)
     return templates.TemplateResponse(
         request,
-        "runs_index.html",
-        {"methodology": methodology, "runs": _list_runs(methodology)},
+        "section_runs.html",
+        {
+            "state": project.project_state(mdir),
+            "section": "runs",
+            "runs": _list_runs(methodology),
+        },
     )
 
 
@@ -660,10 +836,7 @@ async def run_status(methodology: str, run_id: str):
         "halted_at": manifest.get("halted_at"),
         "finished_at": manifest.get("finished_at"),
         "counts": {"ok": _count("ok"), "warn": _count("validation_warnings"),
-                   "err": _count("error"), "total": len(mstages),
-                   "done": _count("ok") + _count("validation_warnings"),
-                   "running": _count("running"), "pending": _count("pending"),
-                   "awaiting": _count("awaiting_review")},
+                   "err": _count("error"), "total": len(mstages)},
         "stages": [{"stage_id": s["stage_id"], "status": s.get("status")} for s in mstages],
         "mermaid": mermaid,
     })
@@ -701,7 +874,34 @@ async def run_detail(request: Request, methodology: str, run_id: str):
             "preview": df.head(5).fillna("").astype(str).to_dict(orient="records"),
         }
 
-    stages = load_stages(methodology)
+    # Build the run-page DAG from the VERSION'S frozen stages, not the working copy,
+    # so the graph is an honest picture of what this run actually executed (working-
+    # copy edits since the run must not change how a past run is drawn). Legacy runs
+    # with no dag_version fall back to the working copy — the only place we read it,
+    # and a truthful one (the template also labels them "(unversioned)").
+    dag_version = manifest.get("dag_version")
+    if dag_version:
+        try:
+            stages = versioning.load_version_stages(EXAMPLES_DIR / methodology, dag_version)
+        except FileNotFoundError:
+            # The snapshot dir is gone (e.g. deleted). Don't fabricate a graph from
+            # the working copy as if it were the version; fail loudly so the gap is
+            # visible rather than silently misrepresenting what ran.
+            raise HTTPException(
+                status_code=404,
+                detail=f"Run {run_id} pinned to version '{dag_version}', "
+                       f"but its snapshot is missing.",
+            )
+        # load_version_stages deliberately does NOT inject the loader bookkeeping
+        # keys (_filename/_order) that load_stages adds, but build_mermaid_graph's
+        # id-fallback references s["_filename"] — and dict.get evaluates that default
+        # eagerly, so it KeyErrors on EVERY versioned stage without the key. Inject
+        # it (derived from the id, never displayed — purely the mermaid id-fallback)
+        # so the run-page DAG renders from the snapshot. Every stage has an id.
+        for s in stages:
+            s.setdefault("_filename", f"{s.get('id', 'stage')}.yaml")
+    else:
+        stages = load_stages(methodology)
     status_by_id = {s["stage_id"]: s.get("status", "") for s in manifest.get("stages", [])}
     mermaid = build_mermaid_graph(stages, methodology, status_by_id=status_by_id)
 
@@ -946,61 +1146,16 @@ async def queue_page(request: Request, methodology: str, run_id: str, stage_id: 
                 "reviewed_at": row.get("reviewed_at"),
             }
 
-    # ── Recover the MODEL INPUT so the score is reviewable, not just visible. ──
-    # The queue snapshot holds the scoring stage's OUTPUT (score + reasoning + ids);
-    # the thing the model actually judged (the quote, the benchmark) lives in the
-    # scoring stage's INPUT, one stage upstream. Join it back + render the prompt.
-    from app.runtime.llm import render_prompt
-    output_by_id = {s.get("stage_id"): s.get("output_path") for s in manifest.get("stages", [])}
-    scored_ids = get_input_ids(stage_def)
-    scored_def = next((s for s in stages if s.get("id") == scored_ids[0]), None) if scored_ids else None
-    prompt_template = (scored_def.get("llm") or {}).get("prompt_template") if scored_def else None
-
-    input_lookup: dict[tuple, dict[str, Any]] = {}
-    join_keys: list[str] = []
-    if scored_def and get_input_ids(scored_def):
-        scored_in_id = get_input_ids(scored_def)[0]
-        scored_in_decls = scored_def.get("inputs") or []
-        pk = ((scored_in_decls[0].get("schema") or {}).get("primary_key")) if scored_in_decls else None
-        in_path = output_by_id.get(scored_in_id)
-        in_df = None
-        if in_path:
-            p = run_dir / in_path
-            if p.exists():
-                try:
-                    in_df = pd.read_parquet(p) if p.suffix == ".parquet" else pd.read_csv(p)
-                except Exception:  # noqa: BLE001
-                    in_df = None
-        if in_df is not None:
-            cols = list(in_df.columns)
-            join_keys = [k for k in (pk or []) if k in cols] or \
-                [c for c in ("evidence_id", "entity_id", "doc_id", "id") if c in cols]
-            if join_keys:
-                for _, r in in_df.iterrows():
-                    key = tuple(str(r[k]) for k in join_keys)
-                    input_lookup[key] = {k: _display_cell(v) for k, v in r.items()}
-
     items: list[dict[str, Any]] = []
     if snapshot is not None:
         for _, row in snapshot.iterrows():
             h = row["content_hash"]
             existing = decision_by_hash.get(h)
-            model_input = None
-            rendered_prompt = None
-            if input_lookup and join_keys and all(k in row.index for k in join_keys):
-                model_input = input_lookup.get(tuple(str(row[k]) for k in join_keys))
-                if model_input and prompt_template:
-                    try:
-                        rendered_prompt = render_prompt(prompt_template, model_input)
-                    except Exception:  # noqa: BLE001
-                        rendered_prompt = None
             items.append({
                 "content_hash": h,
                 "row": {k: _display_cell(v) for k, v in row.items()
                         if k not in ("content_hash", "decision", "modified_score",
                                      "reviewer", "reviewed_at")},
-                "model_input": model_input,
-                "rendered_prompt": rendered_prompt,
                 "prior_decision": existing,
             })
 
@@ -1062,10 +1217,8 @@ async def queue_decide(
 
 @app.post("/methodology/{methodology}/runs/{run_id}/resume")
 async def resume_run_route(methodology: str, run_id: str):
-    """Resume/continue a run from where it stopped, re-running any stage that is
-    NOT already complete (so this serves BOTH: a halted run after its review
-    decisions, AND an ERRORED run after the bug is fixed — it re-runs the failed
-    stage + downstream and reuses completed upstream outputs)."""
+    """Resume a halted run from where it stopped. Used after all queue
+    items have decisions."""
     methodology_dir = EXAMPLES_DIR / methodology
     if not methodology_dir.is_dir():
         raise HTTPException(status_code=404, detail=f"No methodology '{methodology}'")
@@ -1078,119 +1231,4 @@ async def resume_run_route(methodology: str, run_id: str):
     return RedirectResponse(
         url=f"/methodology/{methodology}/runs/{run_id}",
         status_code=303,
-    )
-
-
-# ─── /compile — the COMPILER feature (transcript → draft DAG) ────────────────
-
-RESEARCH_RUNS_DIR = EXAMPLES_DIR / "palm_osint" / "research_runs"
-
-
-def list_transcripts() -> list[dict[str, Any]]:
-    """Available research-run transcripts the compiler can distill."""
-    if not RESEARCH_RUNS_DIR.is_dir():
-        return []
-    out: list[dict[str, Any]] = []
-    for p in sorted(RESEARCH_RUNS_DIR.glob("*.jsonl")):
-        # Suggest an out_name from the leading slug of the filename.
-        slug = p.stem.split("__", 1)[0]
-        out.append({
-            "filename": p.name,
-            "path": str(p.relative_to(REPO_ROOT)).replace("\\", "/"),
-            "name": slug,
-            "size_kb": round(p.stat().st_size / 1024),
-        })
-    return out
-
-
-@app.get("/compile", response_class=HTMLResponse)
-async def compilations_index(request: Request):
-    """LIST of compilation objects (parallels runs_index). Each row is a persisted
-    compilation; "New compilation" opens the form."""
-    return templates.TemplateResponse(
-        request,
-        "compilations_index.html",
-        {"compilations": compiler.list_compilations(COMPILATIONS_DIR)},
-    )
-
-
-@app.get("/compile/new", response_class=HTMLResponse)
-async def compile_new_form(request: Request):
-    """The compile FORM — pick a transcript, an out-name, a model. (The page that
-    used to live at GET /compile.)"""
-    return templates.TemplateResponse(
-        request,
-        "compile_new.html",
-        {"transcripts": list_transcripts()},
-    )
-
-
-@app.post("/compile/new")
-async def compile_new_submit(
-    transcript: str = Form(...),
-    out_name: str = Form(...),
-    model: str = Form("sonnet"),
-):
-    """Run + PERSIST a compilation as a first-class object, then redirect to its
-    detail page. The compile is a multi-minute LLM call, so — exactly like
-    trigger_run — we write an initial `running` manifest, kick the work off in a
-    background thread, and redirect immediately. The detail page polls."""
-    transcript_path = (REPO_ROOT / transcript).resolve()
-    # Confine to the research_runs dir (no arbitrary path read).
-    if RESEARCH_RUNS_DIR.resolve() not in transcript_path.parents or not transcript_path.is_file():
-        raise HTTPException(status_code=400, detail=f"Unknown transcript: {transcript}")
-
-    safe_name = re.sub(r"[^a-z0-9_]", "_", out_name.strip().lower()) or "compiled"
-
-    prep = compiler.prepare_compilation(
-        COMPILATIONS_DIR, str(transcript_path), safe_name, model
-    )
-    _run_in_background(compiler.run_prepared_compilation, prep)
-    return RedirectResponse(url=f"/compile/{prep['compilation_id']}", status_code=303)
-
-
-@app.get("/compile/{compilation_id}/status")
-async def compilation_status(compilation_id: str):
-    """Lightweight JSON for the live poller while a compile runs (parallels
-    run_status): just the manifest status + terminal flag."""
-    manifest_path = COMPILATIONS_DIR / compilation_id / "manifest.json"
-    if not manifest_path.exists():
-        raise HTTPException(status_code=404, detail="Compilation not found")
-    m = json.loads(manifest_path.read_text(encoding="utf-8"))
-    return JSONResponse({
-        "status": m.get("status"),
-        "terminal": m.get("status") != "running",
-        "n_stages": m.get("n_stages", 0),
-        "n_validation_issues": len(m.get("validation_issues") or []),
-    })
-
-
-@app.get("/compile/{compilation_id}", response_class=HTMLResponse)
-async def compilation_detail(request: Request, compilation_id: str):
-    """The COMPILATION OBJECT view (parallels run_detail). Three sections:
-    (a) INPUT — transcript + parsed tool-sequence summary;
-    (b) WHAT HAPPENED — the LLM prompt sent, the raw response, the validation result;
-    (c) DAG OUTPUT — mermaid graph + stage table + methodology_raw.md."""
-    try:
-        comp = compiler.load_compilation(COMPILATIONS_DIR, compilation_id)
-    except FileNotFoundError:
-        raise HTTPException(status_code=404, detail="Compilation not found")
-
-    stages = comp["stages"]
-    mermaid = build_mermaid_graph(stages, comp["manifest"].get("name", compilation_id)) if stages else None
-
-    return templates.TemplateResponse(
-        request,
-        "compile_detail.html",
-        {
-            "compilation_id": compilation_id,
-            "manifest": comp["manifest"],
-            "what_happened": comp["what_happened"],
-            "stages": stages,
-            "methodology_raw": comp["methodology_raw"],
-            "error_text": comp["error_text"],
-            "mermaid": mermaid,
-            "type_class": TYPE_CLASS,
-            "type_glyph": TYPE_GLYPH,
-        },
     )

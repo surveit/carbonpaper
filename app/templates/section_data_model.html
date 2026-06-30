@@ -1,0 +1,427 @@
+{% extends "project_shell.html" %}
+{#
+  DATA MODEL — named-schema cards by kind + ER diagram + the approval GATE + the AI
+  chat that authors/steers the model. Ported from compile_flow.html's step-2 body
+  (same render, same gate machinery), rehomed onto /methodology/{name}/... routes.
+
+  Context the route passes (Phase-1 FROZEN CONTRACT for this section):
+    state       = project.project_state(mdir); section = "data_model"
+    schemas     = _load_schemas(mdir)                         (list of schema dicts)
+    er_diagram  = _build_schema_er_diagram(schemas) | None
+    issues      = validate_schema_library(schemas)            (list[str], may be empty)
+    approval    = {state, current_hash, matched_decision} | None   (the gate; None iff no schemas)
+    schema_yaml = {schema_name: yaml_text}                    (per-schema edit seed)
+    kind_order  = SCHEMA_KIND_ORDER
+    kind_class  = SCHEMA_KIND_CLASS
+    kind_glyph  = SCHEMA_KIND_GLYPH
+
+  Endpoints (rehomed): chat opener GET /methodology/{name}/data-model/stream
+  (seeds from the document server-side); approve POST .../data-model/approve;
+  per-schema edit POST .../schema/{name}/edit.
+#}
+{% block section_head %}
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    mermaid.initialize({
+      startOnLoad: true, theme: "default",
+      er: { useMaxWidth: true, layoutDirection: "LR", entityPadding: 12, fontSize: 12 },
+      securityLevel: "loose"
+    });
+  });
+</script>
+{% endblock %}
+
+{% block section %}
+{% set dm_state = approval.state if approval else 'none' %}
+{% set is_approved = (dm_state == "approved") %}
+{% set belief_label = {
+     'approved': 'approved', 'unreviewed': 'unreviewed', 'edited_stale': 'edited · stale',
+     'rejected': 'rejected', 'none': 'none',
+   } %}
+
+<div class="sec-head">
+  <h1>Data model</h1>
+  <p class="lede">Named schemas authored <strong>before</strong> the workflow. Each
+    table declares a <strong>kind</strong> — where it sits in the pipeline. Approve the
+    whole data model to unlock the workflow. Use the chat to author or steer.</p>
+</div>
+
+<div class="dm-flow-body">
+  <div class="dm-flow-main">
+
+    {# ── The gate: approval bar over the whole schema set ─────────────────── #}
+    <div class="gate-bar">
+      <div class="gate-state">
+        <span class="belief-chip belief-{{ 'stale' if dm_state == 'edited_stale' else dm_state }}"
+              id="dm-state-chip">{{ belief_label.get(dm_state, dm_state) }}</span>
+        {% if approval and approval.matched_decision %}
+        <span class="gate-by" id="dm-state-by">
+          {% if dm_state == 'edited_stale' %}was approved by{% else %}approved by{% endif %}
+          {{ approval.matched_decision.reviewer }}
+          {% if approval.matched_decision.reviewed_at %}at {{ approval.matched_decision.reviewed_at }}{% endif %}
+        </span>
+        {% else %}
+        <span class="gate-by" id="dm-state-by"></span>
+        {% endif %}
+      </div>
+      <code class="nr-hash" id="dm-lib-hash">{{ (approval.current_hash if approval else '') or '' }}</code>
+      <button type="button" class="btn approve approve-dm-btn {% if is_approved %}is-approved selected{% endif %}"
+              id="approve-dm-btn" {% if not schemas %}disabled{% endif %}>{% if is_approved %}✓ Data model approved{% else %}✓ Approve data model{% endif %}</button>
+      {% if dm_state == 'edited_stale' %}
+      <p class="gate-stale-note" id="dm-stale-note">A schema changed after approval (the
+        library content hash no longer matches). Re-approve to unlock the workflow.</p>
+      {% endif %}
+    </div>
+
+    {# ── The current data model, rendered with the schema_library look ────── #}
+    <div class="dm-render" id="dm-render">
+      {% if schemas %}
+        {% if issues %}
+        <div class="validation-report error">
+          <strong>⚠ {{ issues|length }} data-model issue{% if issues|length != 1 %}s{% endif %}</strong>
+          <ul>{% for i in issues %}<li><code>{{ i }}</code></li>{% endfor %}</ul>
+        </div>
+        {% else %}
+        <p class="validation-report ok"><strong>✓ data model valid</strong> —
+          {{ schemas|length }} schema{% if schemas|length != 1 %}s{% endif %}, all references resolve.</p>
+        {% endif %}
+
+        {% if er_diagram %}
+        <div class="dag dm-er">
+          <pre class="mermaid">
+{{ er_diagram }}
+          </pre>
+        </div>
+        {% endif %}
+
+        {% set kind_blurb = {
+            "reference": "Dimension / lookup / benchmark data we must SOURCE, not compute.",
+            "input": "Raw data fetched into the pipeline.",
+            "computed": "Produced by a workflow stage.",
+            "ground_truth": "External truth used only by eval; mirrors a computed schema."
+        } %}
+        {% for kind in kind_order %}
+          {% set group = schemas | selectattr("kind", "equalto", kind) | list %}
+          {% if group %}
+          <h3 class="dm-group-heading">
+            <span class="type-tag {{ kind_class.get(kind, 'custom') }}">{{ kind_glyph.get(kind, '') }} {{ kind }}</span>
+            <span class="muted">— {{ group|length }} schema{% if group|length != 1 %}s{% endif %}</span>
+          </h3>
+          <p class="lede">{{ kind_blurb.get(kind, '') }}</p>
+          {% for sch in group %}
+          <details class="dm-table" open>
+            <summary>
+              <code>{{ sch.name }}</code>
+              <span class="muted">— {{ sch.title or sch.name }}</span>
+              {% if sch.estimated_rows %}<span class="dm-rows">est {{ "{:,}".format(sch.estimated_rows) }} rows</span>{% endif %}
+            </summary>
+            {% if sch.description %}<p class="schema-desc">{{ sch.description }}</p>{% endif %}
+            {% if sch.source and sch.source.ref %}<p class="schema-meta"><span><b>source:</b> <a href="{{ sch.source.ref }}" target="_blank" rel="noopener">{{ sch.source.ref }}</a></span></p>{% endif %}
+            <table class="schema">
+              <thead><tr><th>column</th><th>type</th><th>null?</th><th>references</th><th>range / enum</th><th>description</th></tr></thead>
+              <tbody>
+              {% for c in sch.columns or [] %}
+                <tr>
+                  <td><code>{{ c.name }}</code>{% if sch.primary_key and c.name in sch.primary_key %} <span class="strong">PK</span>{% endif %}</td>
+                  <td><span class="type-pill">{{ c.type }}</span></td>
+                  <td>{% if c.nullable %}<span class="muted">nullable</span>{% else %}<span class="strong">not null</span>{% endif %}</td>
+                  <td>{% if c.references %}<code class="range">→ {{ c.references }}</code>{% else %}<span class="muted">—</span>{% endif %}</td>
+                  <td>{% if c.range %}<code class="range">{{ c.range }}</code>{% else %}<span class="muted">—</span>{% endif %}</td>
+                  <td>{{ c.description or '' }}</td>
+                </tr>
+              {% endfor %}
+              </tbody>
+            </table>
+            {% if sch.primary_key %}<p class="schema-meta"><span><b>primary key:</b> {{ sch.primary_key | join(', ') }}</span></p>{% endif %}
+
+            {# ── Edit this schema (mirror _node_review.html save) ─────────── #}
+            <details class="dm-schema-edit">
+              <summary>Edit <code>{{ sch.name }}</code> (YAML)</summary>
+              <textarea class="schema-edit-textarea" data-role="schema-yaml"
+                        data-schema-name="{{ sch.name }}" spellcheck="false">{{ schema_yaml.get(sch.name, '') if schema_yaml else '' }}</textarea>
+              <div class="se-actions">
+                <button type="button" class="btn primary" data-role="save-schema"
+                        data-schema-name="{{ sch.name }}">Save schema</button>
+                <span class="se-msg" data-role="se-msg" data-schema-name="{{ sch.name }}"></span>
+              </div>
+              <ul class="se-issues" data-role="se-issues" data-schema-name="{{ sch.name }}" hidden></ul>
+            </details>
+          </details>
+          {% endfor %}
+          {% endif %}
+        {% endfor %}
+      {% else %}
+        <p class="dm-empty" id="dm-empty">No schemas yet. Use the chat on the right —
+          click <strong>Propose data model</strong> to seed from the document; schemas
+          appear here as they're persisted to <code>examples/{{ state.name }}/schemas/</code>.</p>
+      {% endif %}
+    </div>
+
+  </div>{# /.dm-flow-main #}
+
+  {# ════════════════ AI SIDEBAR ════════════════ #}
+  <aside class="flow-side">
+    <div class="flow-side-head">
+      <span class="flow-side-title">AI · data model</span>
+      <span class="chat-live-dot" id="chat-live" hidden>● streaming…</span>
+    </div>
+
+    <div class="chat-log" id="chat-log">
+      <div class="chat-msg system">No messages yet. Click
+        <strong>Propose data model</strong> to seed from the document, or type your
+        own instruction.</div>
+    </div>
+    <div class="chat-working" id="chat-working"><span class="spin"></span>
+      <span id="chat-working-label">authoring data model…</span></div>
+    <div class="chat-input-row">
+      <textarea id="chat-input" placeholder="Steer the data model… (Enter to send, Shift+Enter for newline)"></textarea>
+      <button id="chat-send" type="button">{% if schemas %}Steer{% else %}Propose data model{% endif %}</button>
+    </div>
+    <p class="chat-hint">"split donors and recipients into two tables" · "add a benchmark
+      reference table" · "this column should be nullable". Re-send any time to steer.</p>
+
+    <h4 class="chat-cards-head">Emitted this session</h4>
+    <div id="chat-cards">
+      <p class="muted" id="chat-cards-empty">Schema cards appear here as the agent emits
+        them, each with its <code>dag_schema</code> validation inline. A stray stage block
+        is <em>dropped</em> (the gate) and shown amber.</p>
+    </div>
+  </aside>{# /.flow-side #}
+</div>{# /.dm-flow-body #}
+
+<script>
+(function () {
+  // ════ Sidebar chat / EventSource plumbing (moved from compile_flow.html;
+  //      rehomed onto /methodology/{name}/data-model/stream) ════════════════
+  //   assistant_delta  → append token text to the live assistant bubble
+  //   schema_emitted   → a validation card; schema_dropped → an amber "dropped (gate)" card
+  //   data_model_proposed → terminal: settle, then reload to re-render server-side
+  //   error            → a red bubble
+  // DOUBLE-SUBMIT GUARD: send disabled + "working…" shown until a terminal event.
+  const METHODOLOGY = {{ state.name | tojson }};
+  const WORKING_LABEL = 'authoring data model…';
+  const DONE_NOTE = 'Review / edit, then approve to unlock the workflow. Refreshing…';
+
+  const log = document.getElementById('chat-log');
+  const cards = document.getElementById('chat-cards');
+  let cardsEmpty = document.getElementById('chat-cards-empty');
+  const input = document.getElementById('chat-input');
+  const sendBtn = document.getElementById('chat-send');
+  const liveDot = document.getElementById('chat-live');
+  const working = document.getElementById('chat-working');
+  const workingLabel = document.getElementById('chat-working-label');
+  let es = null;
+  let curAssistant = null;
+  let inFlight = false;
+  const history = [];
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => (
+      { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+    ));
+  }
+  function scrollLog() { log.scrollTop = log.scrollHeight; }
+
+  function addBubble(role, text) {
+    const div = document.createElement('div');
+    div.className = 'chat-msg ' + role;
+    div.textContent = text || '';
+    log.appendChild(div);
+    scrollLog();
+    return div;
+  }
+
+  function addCard(kind, obj, issues, path) {
+    if (cardsEmpty) { cardsEmpty.remove(); cardsEmpty = null; }
+    const name = kind === 'schema'
+      ? ((obj && (obj.name || obj.title)) || '(unnamed schema)')
+      : ((obj && obj.id) || '(unnamed stage)');
+    const hasIssues = issues && issues.length;
+    const card = document.createElement('div');
+    card.className = 'emit-card ' + kind + (hasIssues ? ' has-issues' : '');
+    let html = '<div class="ec-head">'
+      + '<span class="ec-name">' + escapeHtml(name) + '</span>'
+      + '<span class="ec-kind">' + kind + '</span></div>';
+    if (hasIssues) {
+      html += '<ul class="ec-issues">'
+        + issues.map(i => '<li>' + escapeHtml(i) + '</li>').join('')
+        + '</ul>';
+    } else {
+      html += '<div class="ec-ok">✓ valid' + (path
+        ? ' · saved ' + escapeHtml(String(path).replace(/\\/g, '/').split('/').pop()) : '')
+        + '</div>';
+    }
+    html += '<details><summary>JSON</summary><pre>'
+      + escapeHtml(JSON.stringify(obj, null, 2)) + '</pre></details>';
+    card.innerHTML = html;
+    cards.appendChild(card);
+  }
+
+  // Dropped block (the gate firing): show it amber so the human sees the AI tried to
+  // run ahead and was held back — never silently swallowed.
+  function addDropCard(kind, obj, reason) {
+    if (cardsEmpty) { cardsEmpty.remove(); cardsEmpty = null; }
+    const name = kind === 'schema'
+      ? ((obj && (obj.name || obj.title)) || '(unnamed schema)')
+      : ((obj && obj.id) || '(unnamed stage)');
+    const card = document.createElement('div');
+    card.className = 'emit-card ' + kind + ' dropped';
+    card.innerHTML = '<div class="ec-head">'
+      + '<span class="ec-name">' + escapeHtml(name) + '</span>'
+      + '<span class="ec-kind">' + kind + ' · dropped</span></div>'
+      + '<div class="ec-drop">⏸ ' + escapeHtml(reason || 'dropped by the phase gate') + '</div>';
+    cards.appendChild(card);
+  }
+
+  function setStreaming(on) {
+    inFlight = on;
+    if (liveDot) liveDot.hidden = !on;
+    if (working) working.classList.toggle('on', on);
+    sendBtn.disabled = on;            // ← the guard: no second submit while in-flight
+    input.disabled = on;
+  }
+
+  function closeStream() { if (es) { es.close(); es = null; } }
+
+  function send() {
+    if (inFlight) return;             // belt-and-suspenders: ignore re-entry
+    const message = (input.value || '').trim();
+    if (workingLabel) workingLabel.textContent = WORKING_LABEL;
+    if (message) { addBubble('user', message); history.push({ role: 'user', content: message }); }
+    input.value = '';
+    curAssistant = null;
+
+    const url = '/methodology/' + encodeURIComponent(METHODOLOGY)
+      + '/data-model/stream?message=' + encodeURIComponent(message);
+    es = new EventSource(url);
+    setStreaming(true);
+
+    es.onmessage = function (e) {
+      let ev;
+      try { ev = JSON.parse(e.data); } catch (err) { return; }
+      if (ev.type === 'assistant_delta') {
+        if (!curAssistant) { curAssistant = addBubble('assistant', ''); }
+        curAssistant.textContent += ev.text;
+        scrollLog();
+      } else if (ev.type === 'schema_emitted') {
+        addCard('schema', ev.schema, ev.issues, ev.path);
+      } else if (ev.type === 'stage_emitted') {
+        addCard('stage', ev.stage, ev.issues, ev.path);
+      } else if (ev.type === 'schema_dropped') {
+        addDropCard('schema', ev.schema, ev.reason);
+      } else if (ev.type === 'stage_dropped') {
+        addDropCard('stage', ev.stage, ev.reason);
+      } else if (ev.type === 'data_model_proposed' || ev.type === 'done') {
+        if (curAssistant) { history.push({ role: 'assistant', content: curAssistant.textContent }); }
+        const v = ev.validation || {};
+        const parts = [];
+        if (v.n_schemas !== undefined) parts.push(v.n_schemas + ' schema(s)');
+        if (v.n_stages !== undefined) parts.push(v.n_stages + ' stage(s)');
+        addBubble('system', 'Data model proposed — ' + parts.join(', ') + '. ' + DONE_NOTE);
+        closeStream();
+        setStreaming(false);
+        // Reload so the server re-renders the schema cards + gate state.
+        setTimeout(() => location.reload(), 900);
+      } else if (ev.type === 'error') {
+        addBubble('error', '⚠ ' + ev.message);
+        closeStream();
+        setStreaming(false);
+      }
+    };
+
+    es.onerror = function () {
+      if (es && es.readyState === EventSource.CLOSED) { setStreaming(false); }
+    };
+  }
+
+  sendBtn.addEventListener('click', send);
+  input.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
+  });
+})();
+</script>
+
+<script>
+(function () {
+  // ════ The data-model gate: approve + per-schema edit (rehomed onto /methodology) ══
+  // Approve = record the schema-library content hash (one decision over the whole set).
+  // Editing a schema changes the library hash, so an approved data model drops to
+  // "edited · stale" and re-locks the workflow — the page reloads to reflect that.
+  const METHODOLOGY = {{ state.name | tojson }};
+  const APPROVE_URL = '/methodology/' + encodeURIComponent(METHODOLOGY) + '/data-model/approve';
+  const hashEl = document.getElementById('dm-lib-hash');
+  const approveBtn = document.getElementById('approve-dm-btn');
+
+  // ── Approve the whole data model (the gate) ──
+  if (approveBtn) {
+    approveBtn.addEventListener('click', async function () {
+      approveBtn.disabled = true;
+      const original = approveBtn.textContent;
+      approveBtn.textContent = 'Approving…';
+      try {
+        const fd = new FormData();
+        fd.append('content_hash', hashEl ? hashEl.textContent.trim() : '');
+        const r = await fetch(APPROVE_URL, { method: 'POST', body: fd });
+        if (!r.ok) { alert('Approve failed: ' + r.status + ' ' + await r.text()); return; }
+        // Reload so the workflow unlocks (server re-evaluates data_model_state == approved).
+        window.location.reload();
+        return;
+      } finally {
+        approveBtn.disabled = false;
+        approveBtn.textContent = original;
+      }
+    });
+  }
+
+  // ── Save an edited schema — POST yaml_text; on 400 render validate_named_schema
+  //    issues (file untouched); on ok the library hash changed so approval drops.
+  //    Reload to recompute the gate state + re-render the data model. ──
+  function bySchema(role, name) {
+    return document.querySelector('[data-role="' + role + '"][data-schema-name="' + (window.CSS && CSS.escape ? CSS.escape(name) : name) + '"]');
+  }
+
+  async function saveSchema(name, btn) {
+    const ta = bySchema('schema-yaml', name);
+    const msg = bySchema('se-msg', name);
+    const issuesEl = bySchema('se-issues', name);
+    if (!ta) return;
+    btn.disabled = true;
+    if (msg) { msg.textContent = 'Saving…'; msg.className = 'se-msg'; }
+    if (issuesEl) { issuesEl.hidden = true; issuesEl.innerHTML = ''; }
+    try {
+      const fd = new FormData();
+      fd.append('yaml_text', ta.value);
+      const url = '/methodology/' + encodeURIComponent(METHODOLOGY)
+        + '/schema/' + encodeURIComponent(name) + '/edit';
+      const r = await fetch(url, { method: 'POST', body: fd });
+      let d = null;
+      try { d = await r.json(); } catch (e) {}
+      if (r.status === 400 && d && d.issues) {
+        if (msg) { msg.textContent = '✗ Not saved — validation failed'; msg.className = 'se-msg err'; }
+        if (issuesEl) {
+          issuesEl.hidden = false;
+          issuesEl.innerHTML = d.issues.map(i => '<li>' + i + '</li>').join('');
+        }
+        return;
+      }
+      if (!r.ok || !d || !d.ok) {
+        if (msg) { msg.textContent = ('✗ ' + r.status + ' ' + (d && d.detail ? d.detail : '')).trim(); msg.className = 'se-msg err'; }
+        return;
+      }
+      // Saved. The library hash changed → approval (if any) is now stale. Reload so
+      // the gate chip + workflow lock reflect it (mirrors node edit-clears-approval).
+      if (msg) { msg.textContent = '✓ Saved — data-model approval dropped (re-approve to unlock the workflow)'; msg.className = 'se-msg ok'; }
+      setTimeout(() => window.location.reload(), 700);
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  document.addEventListener('click', function (ev) {
+    const save = ev.target.closest('[data-role="save-schema"]');
+    if (save) { ev.preventDefault(); saveSchema(save.dataset.schemaName, save); }
+  });
+})();
+</script>
+{% endblock %}
