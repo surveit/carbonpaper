@@ -19,7 +19,6 @@ from app.models.stage import (
     JoinKey,
     JoinType,
     LLMConfig,
-    LLMModel,
     PublishConfig,
     PublishFormat,
     PythonFunction,
@@ -43,7 +42,7 @@ from app.models.methodology import (
 
 __all__ = [
     "StageType", "ConnectorKind", "FileFormat", "AggFormula", "JoinType",
-    "FunctionKind", "PublishFormat", "LLMModel", "is_valid_column_type",
+    "FunctionKind", "PublishFormat", "is_valid_column_type",
     "SourceRef", "Column", "TableSchema", "Connector", "LLMConfig",
     "PythonFunction", "JoinKey", "JoinConfig", "AggregationOp",
     "AggregateConfig", "QueueConfig", "PublishConfig", "ReviewConfig",

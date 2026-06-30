@@ -5,6 +5,7 @@ import pytest
 from pydantic import ValidationError
 
 from app import models as m
+from app.llm import LLMModel
 
 
 def S(**kw):
@@ -180,7 +181,7 @@ def test_unknown_file_format_rejected():
 def test_model_enum_accepts_known():
     s = m.Stage.model_validate(S(id="e", type="llm_transform", inputs=[{"id": "a"}],
                                  llm={"prompt_template": "p", "model": "haiku"}))
-    assert s.llm.model is m.LLMModel.haiku
+    assert s.llm.model is LLMModel.haiku
 
 
 def test_model_enum_rejects_unknown():

@@ -19,6 +19,8 @@ from pydantic import (
     model_validator,
 )
 
+from app.llm.options import LLMModel
+
 # ── Column-type vocabulary ───────────────────────────────────────────────────
 SCALAR_COLUMN_TYPES: set[str] = {
     "str", "int", "float", "bool", "datetime", "date", "dict", "json",
@@ -89,13 +91,6 @@ class PublishFormat(str, Enum):
     json = "json"
     csv = "csv"
     evidence_cards = "evidence_cards"
-
-
-class LLMModel(str, Enum):
-    haiku = "haiku"
-    sonnet = "sonnet"
-    opus = "opus"
-    claude_sonnet_4_6 = "claude-sonnet-4-6"
 
 
 # ── Base ─────────────────────────────────────────────────────────────────────
