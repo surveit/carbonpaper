@@ -1,33 +1,30 @@
 """
 compiler.py — the COMPILER feature of the methodology-DAG platform.
 
-Job: take an UNSTRUCTURED input — a Claude Code agent run captured as a transcript
-jsonl (or, in principle, prose) — and DISTILL it into a *draft* DAG: a list of
-compiled stage dicts targeting `app.dag_schema`, plus a `methodology_raw.md` and
-`compiler_notes` recording ambiguities.
+Job: take an UNSTRUCTURED input — a captured agent/tool transcript, working notes,
+or plain prose describing a research process — and DISTILL it into a *draft* DAG:
+a list of compiled stage dicts targeting `app.dag_schema`, plus a
+`methodology_raw.md` and `compiler_notes` recording ambiguities.
 
-The insight (see examples/palm_osint/research_runs/DISTILLATION.md): an open-ended
-agent run's tool-call sequence (search → fetch → parse → extract → report) can be
-classified into node types. Most steps are deterministic mechanism
-(python_transform / input_data / join); a *few* are genuine judgment
-(llm_transform). The compiler's value is collapsing ~40 tool calls into a handful
-of stages with the LLM sitting only at the real judgment points.
+The approach is deliberately thin: we do NOT pre-parse the input into a structured
+tool-call summary. We treat it as prose, hand it to the LLM with a system prompt
+that frames the dag_schema contract (see `app/prompt.py`), and ask the model to
+emit the DAG as JSON. The model recovers the pipeline; this module is just the
+mechanism around the one call: read → prompt → call → parse → validate → persist.
 
 Pipeline:
-    parse_transcript(path)          → compact summary of the run (tool sequence + report)
-    compile_from_transcript(path,..) → build an LLM prompt that frames the dag_schema
-                                       contract + run summary, call Claude (Agent SDK,
-                                       no tools), parse JSON → {stages, methodology_raw,
-                                       compiler_notes}
-    write_methodology(result, out)  → write compiled/NN_<id>.yaml + methodology_raw.md
-    validate(stages)                → dag_schema.validate_methodology issues (self-check)
-    harvest_eval_fixtures(parsed)   → candidate (search→url) and (doc→fields) eval rows
+    read_input(path)               → the raw input text (no structural parsing)
+    compile_methodology(text, ..)  → build the prompt (app.prompt), call Claude
+                                      (Agent SDK, no tools), parse JSON →
+                                      {stages, methodology_raw, compiler_notes}
+    write_methodology(result, out) → write compiled/NN_<id>.yaml + methodology_raw.md
+    validate(stages)               → dag_schema.validate_methodology issues (self-check)
 
 Dependency rule (critical, mirrors dag_schema's own): this module imports
-`app.dag_schema` from our code and `claude_agent_sdk` directly. It MUST NOT import
-`app.runtime.*` — the runner stays ignorant of the compiler; they meet only at the
-schema. The CLI-discovery + no-tools query() pattern below is replicated from (not
-imported from) app/runtime/llm_agent_sdk.py.
+`app.dag_schema` + `app.prompt` from our code and `claude_agent_sdk` directly. It
+MUST NOT import `app.runtime.*` — the runner stays ignorant of the compiler; they
+meet only at the schema. The CLI-discovery + no-tools query() pattern below is
+replicated from (not imported from) app/runtime/llm_agent_sdk.py.
 """
 
 from __future__ import annotations
@@ -39,321 +36,35 @@ import shutil
 import traceback
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, AsyncIterator
 
 import yaml
 
 from app import dag_schema
-
-# ─────────────────────────────────────────────────────────────────────────────
-# 1. TRANSCRIPT PARSING — extract a compact run summary from a Claude Code jsonl
-# ─────────────────────────────────────────────────────────────────────────────
-
-
-def _iter_records(path: str | Path) -> list[dict[str, Any]]:
-    records: list[dict[str, Any]] = []
-    with Path(path).open("r", encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                records.append(json.loads(line))
-            except json.JSONDecodeError:
-                # A malformed line is a parse defect we surface, not paper over.
-                continue
-    return records
-
-
-def _message_content(rec: dict[str, Any]) -> list[Any]:
-    msg = rec.get("message") or {}
-    content = msg.get("content")
-    if isinstance(content, list):
-        return content
-    if isinstance(content, str):
-        return [{"type": "text", "text": content}]
-    return []
-
-
-def _trunc(s: str, n: int) -> str:
-    s = s if isinstance(s, str) else str(s)
-    s = s.strip()
-    return s if len(s) <= n else s[:n] + f"… (+{len(s) - n} chars)"
-
-
-def parse_transcript(path: str | Path) -> dict[str, Any]:
-    """Read a Claude Code transcript jsonl and extract a COMPACT picture of the run.
-
-    Returns a dict with:
-      - searches:   [{query}]                      WebSearch queries, in order
-      - fetches:    [{url, prompt}]                WebFetch targets, in order
-      - commands:   [{command, description}]       Bash/PowerShell shell steps
-      - reads:      [file_path, ...]               local Read targets
-      - tool_sequence: ["WebSearch", ...]          flat ordered list of tool names
-      - report:     str                            the final assistant text (the report)
-      - n_records / n_tool_calls                   coarse size signals
-
-    Deliberately compact: the goal is enough signal for the LLM to classify the
-    run into node types, not a faithful replay.
-    """
-    records = _iter_records(path)
-    searches: list[dict[str, Any]] = []
-    fetches: list[dict[str, Any]] = []
-    commands: list[dict[str, Any]] = []
-    reads: list[str] = []
-    tool_sequence: list[str] = []
-    assistant_texts: list[str] = []
-
-    for rec in records:
-        if rec.get("type") != "assistant":
-            continue
-        for block in _message_content(rec):
-            if not isinstance(block, dict):
-                continue
-            btype = block.get("type")
-            if btype == "text":
-                txt = block.get("text", "")
-                if txt and txt.strip():
-                    assistant_texts.append(txt)
-            elif btype == "tool_use":
-                name = block.get("name", "")
-                inp = block.get("input", {}) or {}
-                tool_sequence.append(name)
-                if name == "WebSearch":
-                    searches.append({"query": inp.get("query", "")})
-                elif name == "WebFetch":
-                    fetches.append({
-                        "url": inp.get("url", ""),
-                        "prompt": _trunc(inp.get("prompt", ""), 220),
-                    })
-                elif name in ("Bash", "PowerShell"):
-                    commands.append({
-                        "command": _trunc(inp.get("command", ""), 200),
-                        "description": inp.get("description", ""),
-                    })
-                elif name == "Read":
-                    fp = inp.get("file_path", "")
-                    if fp:
-                        reads.append(fp)
-
-    # The final non-empty assistant text block is the report.
-    report = assistant_texts[-1] if assistant_texts else ""
-
-    return {
-        "source_path": str(path),
-        "n_records": len(records),
-        "n_tool_calls": len(tool_sequence),
-        "tool_sequence": tool_sequence,
-        "searches": searches,
-        "fetches": fetches,
-        "commands": commands,
-        "reads": reads,
-        "report": report,
-    }
-
-
-def summarize_run(parsed: dict[str, Any], report_chars: int = 6000) -> str:
-    """Render parse_transcript output as a compact, LLM-readable brief."""
-    lines: list[str] = []
-    lines.append(f"## Run summary ({parsed['n_tool_calls']} tool calls, "
-                 f"{parsed['n_records']} records)\n")
-
-    # Collapse the tool sequence to a run-length-ish shape so the model sees the
-    # search→fetch→parse→extract rhythm without 40 raw rows.
-    seq = parsed["tool_sequence"]
-    if seq:
-        collapsed: list[str] = []
-        for name in seq:
-            if collapsed and collapsed[-1].split(" x")[0] == name:
-                base = collapsed[-1].split(" x")[0]
-                count = int(collapsed[-1].split(" x")[1]) if " x" in collapsed[-1] else 1
-                collapsed[-1] = f"{base} x{count + 1}"
-            else:
-                collapsed.append(name)
-        lines.append("### Tool call shape (in order)")
-        lines.append(" → ".join(collapsed) + "\n")
-
-    if parsed["searches"]:
-        lines.append("### WebSearch queries")
-        for s in parsed["searches"]:
-            lines.append(f"- {s['query']}")
-        lines.append("")
-
-    if parsed["fetches"]:
-        lines.append("### WebFetch targets (url — extraction intent)")
-        for fe in parsed["fetches"]:
-            lines.append(f"- {fe['url']}\n    intent: {fe['prompt']}")
-        lines.append("")
-
-    if parsed["commands"]:
-        lines.append("### Shell commands (local processing)")
-        for c in parsed["commands"]:
-            desc = f" — {c['description']}" if c["description"] else ""
-            lines.append(f"- `{c['command']}`{desc}")
-        lines.append("")
-
-    if parsed["reads"]:
-        lines.append("### Local files read")
-        for r in parsed["reads"]:
-            lines.append(f"- {r}")
-        lines.append("")
-
-    if parsed["report"]:
-        lines.append("### Final report (the run's output — what the DAG must reproduce)")
-        lines.append(_trunc(parsed["report"], report_chars))
-
-    return "\n".join(lines)
+from app.prompt import SYSTEM_PROMPT, _node_type_contract, build_compile_prompt
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 2. THE DAG_SCHEMA CONTRACT, rendered into the prompt
+# 1. INPUT — read the unstructured account as text (no structural parsing)
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _node_type_contract() -> str:
-    """Render the 7 node types + their handle blocks straight from dag_schema, so
-    the prompt can never drift from the real contract."""
-    out: list[str] = ["The 7 node types (each carries its executable-handle block):\n"]
-    for tname, spec in dag_schema.NODE_TYPES.items():
-        handle = spec["handle"]
-        req = ", ".join(spec["required"]) or "(none)"
-        opt = ", ".join(spec.get("optional", [])) or "(none)"
-        also = spec.get("also_requires", [])
-        also_s = f"; also needs block(s): {', '.join(also)}" if also else ""
-        out.append(
-            f"- **{tname}** — {spec['summary']}\n"
-            f"    handle block: `{handle}:` required fields=[{req}] optional=[{opt}]{also_s}\n"
-            f"    min_inputs={spec['min_inputs']}, requires_inputs={spec['requires_inputs']}"
-        )
-    out.append("")
-    out.append("Column types: " + ", ".join(sorted(dag_schema.SCALAR_COLUMN_TYPES))
-               + ", or list[<type>].")
-    out.append("Connector kinds (input_data.connector.kind): "
-               + ", ".join(sorted(dag_schema.CONNECTOR_KINDS)) + ".")
-    out.append("python_transform.function.kind ∈ {module, inline} "
-               "(module → needs `module`; inline → needs `code`).")
-    out.append("join.type ∈ " + ", ".join(sorted(dag_schema.JOIN_TYPES))
-               + "; join needs `keys`. publish also needs a `function:` block.")
-    return "\n".join(out)
+def read_input(path: str | Path) -> str:
+    """Read the input file as raw text. Whether it is a transcript `.jsonl`, a
+    `.md` methodology note, or a `.txt` prose dump, the compiler treats it as
+    prose and hands it to the model verbatim — no tool-call parsing, no slicing.
 
-
-# A single concrete, schema-valid example stage so the model copies the exact key
-# layout (handle block, inputs-with-schema, output_schema, snake_case id).
-_EXAMPLE_STAGE = {
-    "id": "locate",
-    "name": "Locate the authoritative most-recent doc (LLM judgment)",
-    "type": "llm_transform",
-    "source": {"doc": "methodology_raw.md", "section": "§3"},
-    "inputs": [
-        {
-            "id": "build_queries",
-            "schema": {
-                "primary_key": ["facility_id"],
-                "columns": [
-                    {"name": "facility_id", "type": "str"},
-                    {"name": "name", "type": "str"},
-                    {"name": "queries_json", "type": "json"},
-                ],
-            },
-        }
-    ],
-    "llm": {
-        "model": "haiku",
-        "temperature": 0.0,
-        "response_format": "json",
-        "tools": ["WebSearch"],
-        "prompt_template": "Find the authoritative most-recent doc for {name}. Return JSON ...",
-    },
-    "output_schema": {
-        "primary_key": ["facility_id", "url"],
-        "columns": [
-            {"name": "facility_id", "type": "str"},
-            {"name": "url", "type": "str"},
-            {"name": "doc_type", "type": "str"},
-            {"name": "is_primary", "type": "bool"},
-        ],
-    },
-    "compiler_notes": ["JUDGMENT point: which doc is authoritative is not a fixed URL."],
-}
-
-
-def build_compile_prompt(parsed: dict[str, Any], name: str) -> str:
-    """Assemble the full distillation prompt: the contract + an example + the run."""
-    contract = _node_type_contract()
-    example = json.dumps(_EXAMPLE_STAGE, indent=2)
-    run_brief = summarize_run(parsed)
-
-    return f"""\
-You are a METHODOLOGY COMPILER. You are given a transcript summary of an
-open-ended Claude Code research run that investigated ONE subject end-to-end
-(here: a palm-oil mill named "{name}"). Your job is to DISTILL that ad-hoc run
-into a reusable, structured methodology DAG that would reproduce this class of
-research deterministically — with the LLM sitting at only the FEW genuine
-judgment points, and everything else as deterministic mechanism.
-
-# The output contract (target: app/dag_schema.py)
-Emit a methodology as a list of STAGE dicts. Each stage validates against this
-contract:
-
-{contract}
-
-Universal stage keys: id (snake_case), name, type, inputs (list of
-{{id, schema:{{columns:[{{name,type}}], primary_key:[...]}}}}), output_schema (same
-shape), source, compiler_notes (list of strings). The executable-handle block
-(connector / llm / function / join / aggregate / queue / publish) is keyed by the
-node type as shown above.
-
-Here is ONE complete, valid example stage — copy this exact key layout:
-
-{example}
-
-# The research run to distill
-{run_brief}
-
-# How to distill (the core insight)
-Classify the run's tool-call sequence into node types:
-- The seed identity (what was known going in) → an **input_data** stage.
-- Query construction (turning identity into search strings) → **python_transform**.
-- Deciding WHICH found document is authoritative + most-recent → **llm_transform**
-  (a real judgment point; the "connector needs an LLM").
-- Downloading a URL, converting PDF→text, grepping fixed anchor keys → each a
-  **python_transform** (deterministic mechanism, NOT an LLM stage).
-- Reading a document's text into a structured field set → **llm_transform** (EXTRACT).
-- Reconciling conflicting figures across documents/years → **llm_transform** (ADJUDICATE)
-  or a **human_review_queue** if it is low-volume / high-stakes.
-- Merging per-document rows back to one row per subject → **join** or python_transform.
-- Rendering the final dossier → **publish**.
-
-Aim for only ~3 llm_transform stages (locate, extract, adjudicate); make the rest
-deterministic. Wire `inputs` so the DAG is connected and acyclic: every input id
-must be the id of an upstream stage. Keep every id snake_case.
-
-# Output format — RAW JSON ONLY, no prose, no markdown fences:
-{{
-  "stages": [ <list of stage dicts as above> ],
-  "methodology_raw_md": "<a markdown methodology write-up: numbered sections, one
-      per stage, describing what it does and why — the human-readable spec>",
-  "compiler_notes": [ "<global ambiguities, judgment calls, things a human should
-      confirm — e.g. is ADJUDICATE an LLM or a review queue?>" ]
-}}
-
-Do not fabricate data values. If a step's behaviour is ambiguous, encode your best
-structural guess in the stage and record the ambiguity in compiler_notes. Output
-the JSON object now."""
+    Fails loudly (FileNotFoundError / empty-input ValueError) rather than
+    compiling from nothing."""
+    p = Path(path)
+    text = p.read_text(encoding="utf-8")
+    if not text.strip():
+        raise ValueError(f"Input is empty: {p}")
+    return text
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 3. LLM CALL — Agent SDK, no tools, model sonnet (pattern replicated, not imported)
+# 2. LLM CALL — Agent SDK, no tools (pattern replicated, not imported)
 # ─────────────────────────────────────────────────────────────────────────────
-
-_COMPILER_SYSTEM = (
-    "You are a methodology compiler. You convert an unstructured research-run "
-    "transcript into a structured DAG of typed stages. You have NO tools and NO "
-    "web access — work only from the transcript summary the user provides. Respond "
-    "with raw JSON exactly matching the shape requested: no prose, no markdown, no "
-    "code fences. Never fabricate data values, URLs, or numbers; encode structure "
-    "and record uncertainty in compiler_notes instead."
-)
-
 
 def _find_cli() -> str | None:
     """Locate the Claude Code CLI. Same discovery the runtime SDK backend uses (the
@@ -379,7 +90,7 @@ def _find_cli() -> str | None:
 _CLI_PATH = _find_cli()
 
 
-async def _aquery(prompt: str, model: str, timeout_s: int) -> str:
+async def _aquery(prompt_text: str, model: str, timeout_s: int) -> str:
     """One no-tools query() to Claude via the Agent SDK; returns the raw text."""
     from claude_agent_sdk import (
         AssistantMessage,
@@ -393,7 +104,7 @@ async def _aquery(prompt: str, model: str, timeout_s: int) -> str:
         max_turns=1,
         allowed_tools=[],          # no tools → single completion turn
         setting_sources=[],        # ignore inherited CLAUDE.md / settings
-        system_prompt=_COMPILER_SYSTEM,
+        system_prompt=SYSTEM_PROMPT,
     )
     if _CLI_PATH:
         opts_kwargs["cli_path"] = _CLI_PATH
@@ -403,7 +114,7 @@ async def _aquery(prompt: str, model: str, timeout_s: int) -> str:
 
     async def _collect() -> None:
         nonlocal text
-        async for msg in query(prompt=prompt, options=options):
+        async for msg in query(prompt=prompt_text, options=options):
             if isinstance(msg, AssistantMessage):
                 for block in msg.content:
                     if isinstance(block, TextBlock):
@@ -427,14 +138,14 @@ def _run_sync(coro):
         return ex.submit(lambda: asyncio.run(coro)).result()
 
 
-def call_llm(prompt: str, model: str = "sonnet", timeout_s: int = 600) -> str:
+def call_llm(prompt_text: str, model: str = "sonnet", timeout_s: int = 600) -> str:
     """Synchronous entry point: run the no-tools query to completion → raw text.
     Loop-safe: works from the CLI (no loop) and from inside a FastAPI handler."""
-    return _run_sync(_aquery(prompt, model, timeout_s))
+    return _run_sync(_aquery(prompt_text, model, timeout_s))
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 4. JSON PARSING of the model output
+# 3. JSON PARSING of the model output
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _extract_json_object(text: str) -> dict[str, Any]:
@@ -501,41 +212,41 @@ def _extract_json_object(text: str) -> dict[str, Any]:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 5. TOP-LEVEL COMPILE
+# 4. TOP-LEVEL COMPILE
 # ─────────────────────────────────────────────────────────────────────────────
 
-def compile_from_transcript(
-    path: str | Path,
+def compile_methodology(
+    input_text: str,
     name: str,
     model: str = "sonnet",
     timeout_s: int = 600,
     max_attempts: int = 3,
 ) -> dict[str, Any]:
-    """End-to-end: parse the transcript, prompt Claude to distill it, parse the
-    JSON, and return {name, stages, methodology_raw, compiler_notes, validation,
-    parsed, prompt}. Does NOT write files (write_methodology does that).
+    """End-to-end: prompt Claude to distill the prose `input_text` into a DAG, parse
+    the JSON, validate, and return {name, stages, methodology_raw, compiler_notes,
+    validation, prompt, raw_llm}. Does NOT write files (write_methodology does that).
 
     LLM JSON output is non-deterministic and the model occasionally emits a single
     bracket/comma slip in a large object. Rather than risk-repairing malformed JSON
     (which could silently corrupt structure), we RE-ASK up to `max_attempts` times
     with a corrective nudge. If every attempt fails we raise loudly with the last
     error — a messy result is never silently passed off as a clean compile."""
-    parsed = parse_transcript(path)
-    base_prompt = build_compile_prompt(parsed, name)
+    base_prompt = build_compile_prompt(input_text, name)
 
     obj: dict[str, Any] | None = None
     raw = ""
+    prompt_text = base_prompt
     last_err: str | None = None
     for attempt in range(1, max_attempts + 1):
-        prompt = base_prompt
+        prompt_text = base_prompt
         if attempt > 1 and last_err:
-            prompt = (
+            prompt_text = (
                 base_prompt
                 + f"\n\n# RETRY {attempt}: your previous reply was not valid JSON "
                 f"({last_err}). Emit ONLY a single, strictly-valid JSON object — "
                 "check every bracket/brace/comma. No prose, no code fences."
             )
-        raw = call_llm(prompt, model=model, timeout_s=timeout_s)
+        raw = call_llm(prompt_text, model=model, timeout_s=timeout_s)
         try:
             candidate = _extract_json_object(raw)
             if isinstance(candidate.get("stages"), list) and candidate["stages"]:
@@ -572,8 +283,7 @@ def compile_from_transcript(
         "methodology_raw": methodology_raw,
         "compiler_notes": compiler_notes,
         "validation": issues,
-        "parsed": parsed,
-        "prompt": prompt,
+        "prompt": prompt_text,
         "raw_llm": raw,
     }
 
@@ -585,7 +295,7 @@ def validate(stages: list[dict[str, Any]]) -> list[str]:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 6. WRITE OUT
+# 5. WRITE OUT
 # ─────────────────────────────────────────────────────────────────────────────
 
 def write_methodology(result: dict[str, Any], out_dir: str | Path) -> dict[str, Any]:
@@ -616,8 +326,6 @@ def write_methodology(result: dict[str, Any], out_dir: str | Path) -> dict[str, 
         "name": result.get("name"),
         "compiler_notes": result.get("compiler_notes"),
         "validation": result.get("validation"),
-        "source_path": (result.get("parsed") or {}).get("source_path"),
-        "n_tool_calls": (result.get("parsed") or {}).get("n_tool_calls"),
         "stages": result.get("stages"),
     }
     audit_path = out_dir / "compiler_result.json"
@@ -632,72 +340,10 @@ def write_methodology(result: dict[str, Any], out_dir: str | Path) -> dict[str, 
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 7. EVAL FIXTURE HARVESTING (stretch) — pull candidate eval rows from the run
-# ─────────────────────────────────────────────────────────────────────────────
-
-def harvest_eval_fixtures(parsed: dict[str, Any]) -> list[dict[str, Any]]:
-    """From a parsed transcript, harvest candidate eval rows for the two judgment
-    stages, using the run itself as ground truth:
-
-      LOCATE eval  ← (search queries  → the URLs the agent then chose to fetch)
-      EXTRACT eval ← (fetched url + extraction intent → ...expected fields)
-
-    The EXTRACT side is only PARTIAL here: this compact parser keeps the fetch
-    intent but not the full fetched document text or the agent's parsed fields,
-    so we emit the (url, intent) stimulus and mark expected_fields as a TODO to be
-    filled by a deeper pass over the raw tool_result blocks. The shape is final;
-    only the expected-field population is deferred.
-
-    Returns a list of {fixture_type, ...} dicts ready to write as jsonl.
-    """
-    fixtures: list[dict[str, Any]] = []
-
-    # LOCATE: the set of search queries → the set of URLs the run actually fetched.
-    # This is the (identity+search-hits → chosen authoritative doc) pair.
-    if parsed.get("searches") and parsed.get("fetches"):
-        fixtures.append({
-            "fixture_type": "locate",
-            "stimulus": {
-                "search_queries": [s["query"] for s in parsed["searches"]],
-            },
-            "expected": {
-                "chosen_urls": [fe["url"] for fe in parsed["fetches"]],
-            },
-            "provenance": parsed.get("source_path"),
-            "note": "chosen_urls = URLs the agent fetched after searching; a proxy "
-                    "for 'the authoritative docs it located'.",
-        })
-
-    # EXTRACT: each fetched doc + its extraction intent → fields (TODO: populate
-    # expected_fields from the tool_result text in a deeper pass).
-    for fe in parsed.get("fetches", []):
-        fixtures.append({
-            "fixture_type": "extract",
-            "stimulus": {"url": fe["url"], "extraction_intent": fe["prompt"]},
-            "expected_fields": None,  # TODO: harvest from tool_result block in raw jsonl
-            "provenance": parsed.get("source_path"),
-        })
-
-    return fixtures
-
-
-def write_eval_fixtures(parsed: dict[str, Any], out_dir: str | Path) -> str:
-    """Write harvested fixtures to <out_dir>/eval_fixtures.jsonl. Returns the path."""
-    out_dir = Path(out_dir)
-    out_dir.mkdir(parents=True, exist_ok=True)
-    fixtures = harvest_eval_fixtures(parsed)
-    path = out_dir / "eval_fixtures.jsonl"
-    with path.open("w", encoding="utf-8") as f:
-        for row in fixtures:
-            f.write(json.dumps(row, ensure_ascii=False) + "\n")
-    return str(path)
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# 7b. COMPILATION OBJECT — persist a compile as a first-class object (parallels a
-#     RUN). A compilation lives at <compilations_root>/<compilation_id>/ and holds
-#     the manifest ("what compiled, ok/invalid/error"), the what-happened record
-#     (parsed tool sequence + LLM prompt + raw response), and the DAG output.
+# 6. COMPILATION OBJECT — persist a compile as a first-class object (parallels a
+#    RUN). A compilation lives at <compilations_root>/<compilation_id>/ and holds
+#    the manifest ("what compiled, ok/invalid/error"), the what-happened record
+#    (the input excerpt + LLM prompt + raw response), and the DAG output.
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _stage_summary(stages: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -725,6 +371,7 @@ def prepare_compilation(
     comp_dir.mkdir(parents=True, exist_ok=True)
 
     input_path = Path(input_path)
+    # A display hint only — every input is compiled as prose regardless.
     input_kind = "transcript" if input_path.suffix == ".jsonl" else "prose"
 
     manifest = {
@@ -752,11 +399,15 @@ def prepare_compilation(
     }
 
 
+# How much of the raw input to echo into what_happened.json for the object view.
+_INPUT_EXCERPT_CHARS = 4000
+
+
 def run_prepared_compilation(prep: dict[str, Any]) -> str:
     """Execute a compilation previously set up by prepare_compilation(). Suitable
     for running in a background thread — the manifest on disk is rewritten to its
     terminal state (ok | invalid | error) when done, and the what_happened.json +
-    DAG output + eval fixtures are written alongside.
+    DAG output are written alongside.
 
     The compile itself can fail honestly (bad JSON from the model, an exception in
     parsing): in that case status is `error` and the manifest records the reason —
@@ -773,7 +424,8 @@ def run_prepared_compilation(prep: dict[str, Any]) -> str:
     manifest = json.loads((comp_dir / "manifest.json").read_text(encoding="utf-8"))
 
     try:
-        result = compile_from_transcript(input_path, name, model=model)
+        input_text = read_input(input_path)
+        result = compile_methodology(input_text, name, model=model)
     except Exception as exc:  # the compile failed — record it honestly, don't fake
         manifest["status"] = "error"
         manifest["error"] = f"{type(exc).__name__}: {exc}"
@@ -786,31 +438,18 @@ def run_prepared_compilation(prep: dict[str, Any]) -> str:
         return compilation_id
 
     stages = result["stages"]
-    parsed = result["parsed"]
     issues = result["validation"]
 
     # ── DAG output: compiled/NN_<id>.yaml + methodology_raw.md (+ audit json) ──
     dag_dir = comp_dir / "dag"
     write_methodology(result, dag_dir)
 
-    # ── eval fixtures (reuse the existing harvester) ──
-    write_eval_fixtures(parsed, comp_dir)
-
-    # ── what_happened.json: the tool-call summary, the prompt sent, raw response ──
+    # ── what_happened.json: the input excerpt, the prompt sent, raw response ──
     what_happened = {
-        "input": parsed.get("source_path"),
-        "tool_sequence_summary": {
-            "n_records": parsed.get("n_records"),
-            "n_tool_calls": parsed.get("n_tool_calls"),
-            "n_searches": len(parsed.get("searches", [])),
-            "n_fetches": len(parsed.get("fetches", [])),
-            "n_commands": len(parsed.get("commands", [])),
-            "n_reads": len(parsed.get("reads", [])),
-            "tool_sequence": parsed.get("tool_sequence"),
-            "searches": parsed.get("searches"),
-            "fetches": parsed.get("fetches"),
-            "commands": parsed.get("commands"),
-        },
+        "input": input_path,
+        "input_chars": len(input_text),
+        "input_excerpt": input_text[:_INPUT_EXCERPT_CHARS],
+        "input_truncated_in_excerpt": len(input_text) > _INPUT_EXCERPT_CHARS,
         "prompt": result.get("prompt"),
         "raw_llm_response": result.get("raw_llm"),
         "compiler_notes": result.get("compiler_notes"),
@@ -923,17 +562,654 @@ def load_compilation(compilations_root: str | Path, compilation_id: str) -> dict
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# 7. INTERACTIVE / GATED STREAMING COMPILE — grafted from the PR11/12 snapshot.
+#
+# stream_compile_chat() drives a live, human-in-the-loop compile chat: the
+# journalist sends a message and watches the agent author the DATA MODEL (named
+# schemas) first and then the DAG (stages), and can steer it mid-flow by sending
+# another message. It uses `ClaudeSDKClient` (a persistent session with `query()`
+# repeatable for steering and `receive_response()` yielding partial deltas when
+# `include_partial_messages=True`) instead of the fire-and-forget `query()` helper
+# above.
+#
+# Same dependency rule as the rest of this module: imports only `claude_agent_sdk`
+# and `app.dag_schema` (+ stdlib/yaml/app.prompt). It does NOT import app.runtime.* —
+# the CLI-discovery (`_find_cli`/`_CLI_PATH`) and event-loop handling are REUSED from
+# this module's section 2 (not re-defined). As schema/stage JSON blocks stream in
+# they are validated by dag_schema and persisted (raw alongside cooked) under
+# comp_dir/dag/{schemas,compiled} (or the methodology working copy); the turn is
+# appended to comp_dir/chat.jsonl. If the CLI/SDK is unavailable we yield a single
+# error event and stop — never a mock fallback.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# The interactive system prompt is built from the SAME _node_type_contract() the
+# one-shot compiler uses (imported from app.prompt), so it can never drift from the
+# real dag_schema contract. The block-fencing convention below is the wire format
+# the streamed-output parser keys on: each NAMED SCHEMA arrives in a ```schema fence,
+# each STAGE in a ```stage fence, each holding exactly one JSON object. That lets us
+# pull a complete object out of the stream the instant its fence closes (without
+# trying to parse partial JSON), validate it, and emit a card.
+
+_CHAT_SCHEMA_KINDS = ", ".join(sorted(dag_schema.SCHEMA_KINDS))
+
+
+# The two contract fragments below are the SINGLE SOURCE for the schema-block and
+# stage-block wire formats, so the "both"/"data_model"/"dag" prompts can't drift
+# apart from each other or from dag_schema. Each phase prompt assembles the
+# fragments it needs.
+
+def _schema_block_contract() -> str:
+    """The ```schema fenced-block wire format + the named-schema field contract,
+    shared by every phase that emits schemas."""
+    return f"""\
+Define the tables the methodology operates on as a set of NAMED SCHEMAS. Emit ONE
+schema per fenced block, each a single JSON object:
+
+```schema
+{{
+  "name": "<snake_case>",
+  "title": "<human title>",
+  "kind": "<one of: {_CHAT_SCHEMA_KINDS}>",
+  "description": "<what this table is>",
+  "primary_key": ["<col>", ...],
+  "columns": [
+    {{"name": "<snake_case>", "type": "<col type>", "nullable": true,
+      "description": "<optional>", "references": "<optional other_schema.col>"}}
+  ]
+}}
+```
+
+A column `references` (optional) names another schema (or `schema.column`) — use it to
+make the data model a real graph, not a name-collision guess. Column types: {", ".join(sorted(dag_schema.SCALAR_COLUMN_TYPES))}, or list[<type>]."""
+
+
+def _stage_block_contract() -> str:
+    """The ```stage fenced-block wire format + the full node-type/handle contract,
+    shared by every phase that emits stages."""
+    contract = _node_type_contract()
+    return f"""\
+Emit the DAG as a sequence of STAGES, ONE per fenced block, each a single JSON object
+validating against this contract:
+
+{contract}
+
+Universal stage keys: id (snake_case), name, type, inputs (list of
+{{id, schema:{{columns:[{{name,type}}], primary_key:[...]}}}}), output_schema (same shape),
+source, compiler_notes (list of strings). The executable-handle block (connector / llm /
+function / join / aggregate / queue / publish) is keyed by the node type above. Wire
+`inputs` so the DAG is connected and acyclic: every input id must be the id of an
+upstream stage. Put the LLM at only the FEW genuine judgment points; everything else is
+deterministic mechanism. Emit each stage like:
+
+```stage
+{{ <one stage dict as above> }}
+```"""
+
+
+def _chat_system_prompt() -> str:
+    """System prompt for the COMBINED (phase="both") interactive compiler chat —
+    the original one-shot behavior: schemas then stages in one turn. Authored from
+    the shared `_schema_block_contract()` / `_stage_block_contract()` fragments so
+    the type/handle/schema contracts can't drift."""
+    return f"""\
+You are an INTERACTIVE METHODOLOGY COMPILER working WITH a journalist in a live chat.
+Given a research transcript or prose description of an investigation, you co-author a
+reusable methodology in two ordered phases, narrating briefly as you go so the human
+can steer you. Do NOT think out loud in a hidden scratchpad — keep your visible prose
+short and put the real work in the fenced blocks described below.
+
+# Phase 1 — author the DATA MODEL first (NAMED SCHEMAS)
+Before any DAG stages, {_schema_block_contract()}
+
+# Phase 2 — author the DAG (STAGES)
+Only AFTER the schemas, {_stage_block_contract()}
+
+# Rules
+- SCHEMAS FIRST, then STAGES. One JSON object per fenced block. Valid JSON only inside
+  fences (no comments, no trailing commas).
+- Keep prose between blocks to a sentence or two so the human can interject.
+- NEVER fabricate data values, URLs, or numbers. Encode structure and record genuine
+  ambiguity in a stage's compiler_notes instead.
+- When the human steers you (e.g. "use sonnet for the scoring step", "add a review
+  queue"), revise and RE-EMIT the affected schema or stage in a fresh fenced block."""
+
+
+def _data_model_system_prompt() -> str:
+    """Phase-1 (phase="data_model") system prompt: describe the DATA MODEL as
+    named schemas, then STOP and wait for human approval. The model is told NOT to
+    design or emit any DAG stages — and the streamer enforces that too (any ```stage
+    block is dropped + flagged in this phase), so this is belt-and-suspenders."""
+    return f"""\
+You are an INTERACTIVE METHODOLOGY COMPILER working WITH a journalist in a live chat.
+This is PHASE 1 of a HUMAN-GATED build: your ONLY job right now is to describe the
+DATA MODEL — the set of tables the methodology will operate on — as NAMED SCHEMAS, and
+then STOP. A human reviews and APPROVES the data model before any DAG is built. Do NOT
+think out loud in a hidden scratchpad — keep your visible prose short (a sentence or two
+naming each table and why it exists) and put the real work in the fenced blocks below.
+
+# Your task: author the DATA MODEL (NAMED SCHEMAS), then STOP
+{_schema_block_contract()}
+
+# HARD STOP — do NOT build the DAG yet
+- Emit ONLY ```schema blocks this turn. Do NOT design, mention, or emit any DAG stages
+  or ```stage blocks — the pipeline wiring comes in a LATER phase, only after a human
+  approves this data model. If you emit a stage it will be DISCARDED.
+- After you have emitted the schemas, write ONE short closing line telling the human the
+  data model is ready for their review and approval, then STOP. Do not continue.
+
+# Rules
+- One JSON object per ```schema fenced block. Valid JSON only inside fences (no comments,
+  no trailing commas).
+- Keep prose between blocks to a sentence or two so the human can interject.
+- NEVER fabricate data values, URLs, or numbers. Encode structure and record genuine
+  ambiguity in a schema's `description`/`notes` instead.
+- When the human steers you (e.g. "split that table", "add a donor table"), revise and
+  RE-EMIT the affected schema in a fresh ```schema block."""
+
+
+def _format_approved_schemas(approved_schemas: list[dict[str, Any]]) -> str:
+    """Render the APPROVED data model as JSON for injection into the Phase-2 prompt,
+    so the model wires the real, human-approved schemas (not a re-guess). Falls back
+    to an explicit '(none on disk)' marker rather than fabricating tables — Phase 2
+    should not be reachable without an approved data model, and the marker makes a
+    misuse visible instead of silently inventing schemas."""
+    if not approved_schemas:
+        return "(none on disk — the data model is empty; do not invent tables)"
+    return json.dumps(approved_schemas, indent=2, ensure_ascii=False, default=str)
+
+
+def _dag_system_prompt(approved_schemas: list[dict[str, Any]]) -> str:
+    """Phase-2 (phase="dag") system prompt: the data model below is APPROVED; author
+    ONLY the DAG stages that wire those schemas. The approved schemas are injected
+    verbatim so the model builds against the exact tables the human signed off on.
+    The streamer accepts only ```stage blocks in this phase."""
+    return f"""\
+You are an INTERACTIVE METHODOLOGY COMPILER working WITH a journalist in a live chat.
+This is PHASE 2 of a HUMAN-GATED build. The DATA MODEL below has ALREADY been authored
+and APPROVED by the human — treat it as fixed. Your job now is to author ONLY the DAG
+STAGES that wire these approved schemas into an executable pipeline. Narrate briefly so
+the human can steer you, but put the real work in the ```stage blocks.
+
+# The APPROVED data model (do NOT redefine these tables; wire them)
+{_format_approved_schemas(approved_schemas)}
+
+# Your task: author the DAG (STAGES)
+{_stage_block_contract()}
+
+# Rules
+- Emit ONLY ```stage blocks this turn. The data model is already approved — do NOT emit
+  ```schema blocks or redefine the tables above; build the pipeline that produces and
+  consumes them.
+- One JSON object per ```stage fenced block. Valid JSON only inside fences (no comments,
+  no trailing commas).
+- Keep prose between blocks to a sentence or two so the human can interject.
+- NEVER fabricate data values, URLs, or numbers. Encode structure and record genuine
+  ambiguity in a stage's compiler_notes instead.
+- When the human steers you (e.g. "use sonnet for the scoring step", "add a review
+  queue"), revise and RE-EMIT the affected stage in a fresh ```stage block."""
+
+
+# Fenced-block scanner. We accumulate the model's authoritative text (from completed
+# TextBlocks, not partial deltas — deltas are for live display only) and pull out each
+# ```schema / ```stage block the moment it closes. Tolerant of an info string with
+# trailing text and of CRLF.
+_FENCE_RE = re.compile(
+    r"```(schema|stage)[^\n]*\n(.*?)```",
+    re.DOTALL,
+)
+
+
+def _scan_fenced_blocks(text: str, consumed_upto: int) -> tuple[list[tuple[str, str]], int]:
+    """Find newly-CLOSED ```schema / ```stage fenced blocks in `text` beyond the
+    `consumed_upto` character offset. Returns (blocks, new_offset) where blocks is a
+    list of (kind, inner_json_text) and new_offset is how far we've now consumed. We
+    only return a block once its closing fence is present, so partial JSON is never
+    parsed mid-stream."""
+    blocks: list[tuple[str, str]] = []
+    last_end = consumed_upto
+    for m in _FENCE_RE.finditer(text):
+        if m.start() < consumed_upto:
+            continue  # already handled in an earlier pass
+        kind = m.group(1)
+        inner = m.group(2).strip()
+        blocks.append((kind, inner))
+        last_end = m.end()
+    return blocks, max(last_end, consumed_upto)
+
+
+def _next_seq(dir_path: Path, suffix: str = ".yaml") -> int:
+    """Next NN ordinal for a numbered file in dir_path (mirrors the NN_<id>.yaml
+    scheme write_methodology uses). 1-based, gapless-ish (max existing + 1)."""
+    if not dir_path.is_dir():
+        return 1
+    nums: list[int] = []
+    for p in dir_path.glob(f"*{suffix}"):
+        head = p.stem.split("_", 1)[0]
+        if head.isdigit():
+            nums.append(int(head))
+    return (max(nums) + 1) if nums else 1
+
+
+def _persist_schema(
+    comp_dir: Path, schema: dict[str, Any], target_dir: Path | None = None
+) -> str:
+    """Write one named schema to <base>/schemas/NN_<name>.yaml (same yaml dump style
+    as write_methodology). `target_dir` is the base the schemas/ dir hangs off; it
+    defaults to comp_dir/dag (the original in-session location). PR#12 passes the
+    methodology working copy (examples/<name>) so schemas land in
+    examples/<name>/schemas where the data-model view / review UI already read them.
+    If a file for this schema `name` already exists (the model re-emitted it after
+    steering), overwrite that file in place rather than pile up duplicates. Returns
+    the file path."""
+    base = target_dir if target_dir is not None else comp_dir / "dag"
+    schemas_dir = Path(base) / "schemas"
+    schemas_dir.mkdir(parents=True, exist_ok=True)
+    name = schema.get("name") or "schema"
+    existing = sorted(schemas_dir.glob(f"*_{name}.yaml"))
+    if existing:
+        fpath = existing[0]
+    else:
+        seq = _next_seq(schemas_dir)
+        fpath = schemas_dir / f"{seq:02d}_{name}.yaml"
+    with fpath.open("w", encoding="utf-8") as f:
+        yaml.safe_dump(schema, f, sort_keys=False, allow_unicode=True, width=100)
+    return str(fpath)
+
+
+def _persist_stage(
+    comp_dir: Path, stage: dict[str, Any], target_dir: Path | None = None
+) -> str:
+    """Write one stage to <base>/compiled/NN_<id>.yaml (same scheme + dump style as
+    write_methodology). `target_dir` is the base the compiled/ dir hangs off; it
+    defaults to comp_dir/dag (the original in-session location). PR#12 passes the
+    methodology working copy (examples/<name>) so stages land in
+    examples/<name>/compiled where the review/version/run UI already read them.
+    Re-emitted stages (same `id`) overwrite in place. Returns the file path."""
+    base = target_dir if target_dir is not None else comp_dir / "dag"
+    compiled_dir = Path(base) / "compiled"
+    compiled_dir.mkdir(parents=True, exist_ok=True)
+    sid = stage.get("id") or "stage"
+    existing = sorted(compiled_dir.glob(f"*_{sid}.yaml"))
+    if existing:
+        fpath = existing[0]
+    else:
+        seq = _next_seq(compiled_dir)
+        fpath = compiled_dir / f"{seq:02d}_{sid}.yaml"
+    with fpath.open("w", encoding="utf-8") as f:
+        yaml.safe_dump(stage, f, sort_keys=False, allow_unicode=True, width=100)
+    return str(fpath)
+
+
+def _load_persisted(
+    comp_dir: Path, target_dir: Path | None = None
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Re-read every persisted schema + stage from <base>/{schemas,compiled} (in NN
+    order) so we can validate the whole library / methodology at end of turn.
+    `target_dir` is the base the dirs hang off; it defaults to comp_dir/dag (the
+    original in-session location) so back-compat callers see exactly what they did
+    before. PR#12 passes the methodology working copy so end-of-turn validation reads
+    the SAME files the persist step just wrote there. Mirrors how load_compilation
+    reads dag/compiled."""
+    base = target_dir if target_dir is not None else comp_dir / "dag"
+    schemas: list[dict[str, Any]] = []
+    schemas_dir = Path(base) / "schemas"
+    if schemas_dir.is_dir():
+        for yaml_file in sorted(schemas_dir.glob("*.yaml")):
+            with yaml_file.open("r", encoding="utf-8") as f:
+                data = yaml.safe_load(f) or {}
+            schemas.append(data)
+    stages: list[dict[str, Any]] = []
+    compiled_dir = Path(base) / "compiled"
+    if compiled_dir.is_dir():
+        for yaml_file in sorted(compiled_dir.glob("*.yaml")):
+            with yaml_file.open("r", encoding="utf-8") as f:
+                data = yaml.safe_load(f) or {}
+            stages.append(data)
+    return schemas, stages
+
+
+def _append_chat(comp_dir: Path, entry: dict[str, Any]) -> None:
+    """Append one record to comp_dir/chat.jsonl (raw alongside cooked — the durable
+    transcript of the steering conversation). Each record is one JSON line."""
+    comp_dir.mkdir(parents=True, exist_ok=True)
+    entry = {"ts": datetime.now().isoformat(timespec="seconds"), **entry}
+    with (comp_dir / "chat.jsonl").open("a", encoding="utf-8") as f:
+        f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+
+
+def _delta_text(event: dict[str, Any]) -> str | None:
+    """Pull assistant TEXT from a raw StreamEvent.event dict, DEFENSIVELY. The real
+    shape (verified against claude_agent_sdk 0.2.104): a partial-message event of
+    type 'content_block_delta' carries a `delta` sub-dict; a TEXT delta has
+    delta.type == 'text_delta' with a `text` field, whereas a THINKING delta has
+    `thinking` (no `text`) and must be IGNORED here. Any other event type
+    (message_start/stop, content_block_start/stop, message_delta, …) or a malformed
+    shape returns None — we never crash the stream on an unexpected event."""
+    if not isinstance(event, dict) or event.get("type") != "content_block_delta":
+        return None
+    delta = event.get("delta")
+    if not isinstance(delta, dict):
+        return None
+    txt = delta.get("text")
+    return txt if isinstance(txt, str) and txt else None
+
+
+def _build_steer_prompt(user_message: str, history: list[dict[str, Any]] | None) -> str:
+    """First turn: send the user's instruction plus the prior conversation as context
+    (the SDK session is created fresh per request, so we replay history into the
+    prompt rather than rely on server-side session memory). Keeps the conversation
+    self-contained and auditable."""
+    parts: list[str] = []
+    for h in history or []:
+        role = h.get("role", "?")
+        content = h.get("content") or h.get("text") or ""
+        if content:
+            parts.append(f"[{role}] {content}")
+    convo = "\n\n".join(parts)
+    if convo:
+        return (
+            "# Conversation so far\n" + convo
+            + "\n\n# New instruction from the journalist\n" + user_message
+        )
+    return user_message
+
+
+async def stream_compile_chat(
+    comp_dir: str | Path,
+    *,
+    user_message: str,
+    history: list[dict[str, Any]] | None = None,
+    model: str = "sonnet",
+    phase: str = "both",
+    methodology_dir: str | Path | None = None,
+) -> AsyncIterator[dict[str, Any]]:
+    """Drive ONE interactive compile-chat turn and yield typed event dicts as the
+    agent authors schemas and/or stages. This is an ASYNC GENERATOR designed to be
+    consumed directly by a FastAPI StreamingResponse on the event loop (the SSE route
+    the routes agent adds wraps it; see this module's notes for the exact wrapper).
+
+    GATED PHASES (PR#12)
+    --------------------
+    The compile is a human-gated, two-phase pipeline. `phase` selects which:
+      - "both"        : the ORIGINAL one-shot behavior — schemas THEN stages in one
+                        turn, ends with a {"type":"done"} event. With phase="both" and
+                        methodology_dir=None this is byte-for-byte the prior behavior,
+                        so the existing /compile/{id}/chat/stream route is unaffected.
+      - "data_model"  : Phase 1. The model DESCRIBES the data model as named schemas
+                        and STOPS — it must not design the DAG. ONLY ```schema blocks
+                        are accepted; any ```stage block is DROPPED + flagged (never
+                        persisted), belt-and-suspenders so the AI can't run ahead. The
+                        turn ends with {"type":"data_model_proposed"} (NOT "done").
+      - "dag"         : Phase 2. The APPROVED schemas (loaded from
+                        methodology_dir/schemas) are injected into the prompt and the
+                        model authors ONLY the DAG stages wiring them. Only ```stage
+                        blocks are accepted; ends with {"type":"done"}.
+
+    Parameters
+    ----------
+    comp_dir : the compilation dir (…/compilations/<id>/). chat.jsonl is ALWAYS written
+        here. When methodology_dir is None, emitted schemas/stages are persisted under
+        comp_dir/dag/{schemas,compiled} (back-compat).
+    user_message : the journalist's message for this turn (steering or the opener).
+    history : prior [{role, content}] turns, replayed into the prompt as context
+        (the SDK session is created per-request, not kept server-side).
+    model : Claude model alias (default 'sonnet').
+    phase : "both" | "data_model" | "dag" (default "both"). See above.
+    methodology_dir : when set (the examples/<name> working copy), schemas persist to
+        methodology_dir/schemas and stages to methodology_dir/compiled, and the phase=
+        "dag" approved-schema injection reads from methodology_dir/schemas. When None,
+        persistence stays under comp_dir/dag (back-compat).
+
+    Yields (one dict per event), all JSON-serialisable:
+        {"type": "assistant_delta", "text": <str>}          live token text
+        {"type": "schema_emitted", "schema": <dict>, "issues": [<str>], "path": <str>}
+        {"type": "stage_emitted",  "stage":  <dict>, "issues": [<str>], "path": <str>}
+        {"type": "stage_dropped",  "stage":  <dict>, "reason": <str>}
+                                   a ```stage block emitted during phase="data_model"
+                                   — surfaced (not silently swallowed) but NOT persisted
+        {"type": "data_model_proposed",
+         "validation": {"schema_library": [<str>], "n_schemas": <int>}}
+                                   terminal event for phase="data_model" (instead of done)
+        {"type": "done", "validation": {"schema_library": [<str>],
+                                        "methodology": [<str>],
+                                        "n_schemas": <int>, "n_stages": <int>}}
+                                   terminal event for phase ∈ {"both","dag"}
+        {"type": "error", "message": <str>}                 loud failure, then stop
+
+    On missing CLI / un-importable SDK it yields a single {"type":"error"} and
+    returns — NEVER a mock. On an SDK exception mid-stream it yields {"type":"error"}
+    and still emits the phase's terminal event with whatever validated so the UI
+    settles."""
+    comp_dir = Path(comp_dir)
+    methodology_dir = Path(methodology_dir) if methodology_dir is not None else None
+
+    if phase not in ("both", "data_model", "dag"):
+        msg = (
+            f"stream_compile_chat: unknown phase {phase!r} "
+            "(expected 'both' | 'data_model' | 'dag')"
+        )
+        _append_chat(comp_dir, {"role": "system", "event": "error", "content": msg})
+        yield {"type": "error", "message": msg}
+        return
+
+    # Where emitted schemas/stages + the end-of-turn validation read/write. None →
+    # comp_dir/dag (back-compat); set → the methodology working copy.
+    persist_base = methodology_dir
+
+    # ── Import + CLI guard: fail LOUDLY, never mock (mirrors llm_agent_sdk's stance) ──
+    try:
+        from claude_agent_sdk import (
+            AssistantMessage,
+            ClaudeAgentOptions,
+            ClaudeSDKClient,
+            StreamEvent,
+            TextBlock,
+        )
+    except Exception as exc:  # SDK not importable → loud error event, stop
+        msg = f"claude_agent_sdk not importable: {exc!r}"
+        _append_chat(comp_dir, {"role": "system", "event": "error", "content": msg})
+        yield {"type": "error", "message": msg}
+        return
+
+    if _CLI_PATH is None:
+        msg = (
+            "Claude Code CLI not found for the interactive compile chat "
+            "(looked on PATH and the usual ~/.local/bin, npm, .claude locations). "
+            "Cannot stream — refusing to fall back to a mock."
+        )
+        _append_chat(comp_dir, {"role": "system", "event": "error", "content": msg})
+        yield {"type": "error", "message": msg}
+        return
+
+    # ── Select the phase's system prompt. For phase="dag" inject the APPROVED data
+    # model so the model wires the exact tables the human signed off on. If phase=
+    # "dag" but no schemas exist on disk, that's a gate misuse (Phase 2 reached
+    # without a data model) — fail LOUDLY rather than let the model invent tables. ──
+    if phase == "data_model":
+        system_prompt = _data_model_system_prompt()
+    elif phase == "dag":
+        approved_schemas, _ = _load_persisted(comp_dir, persist_base)
+        if not approved_schemas:
+            msg = (
+                "phase='dag' but no approved schemas are on disk "
+                f"({(persist_base or comp_dir / 'dag')}/schemas is empty). The DAG "
+                "build must run only after a data model is authored and approved — "
+                "refusing to author stages with no data model."
+            )
+            _append_chat(comp_dir, {"role": "system", "event": "error", "content": msg})
+            yield {"type": "error", "message": msg}
+            return
+        system_prompt = _dag_system_prompt(approved_schemas)
+    else:  # "both" — the original combined prompt
+        system_prompt = _chat_system_prompt()
+
+    _append_chat(comp_dir, {"role": "user", "content": user_message, "phase": phase})
+
+    opts_kwargs: dict[str, Any] = dict(
+        model=model,
+        allowed_tools=[],                 # authoring only; no web/file tools
+        setting_sources=[],               # ignore inherited CLAUDE.md / settings
+        system_prompt=system_prompt,
+        include_partial_messages=True,    # → StreamEvent deltas for live display
+        cli_path=_CLI_PATH,
+    )
+    options = ClaudeAgentOptions(**opts_kwargs)
+
+    prompt = _build_steer_prompt(user_message, history)
+
+    # Authoritative assistant text, assembled from COMPLETED TextBlocks (partial
+    # deltas drive the live display but are not used for JSON extraction, so we never
+    # parse half a JSON object). `consumed` tracks how far the fence scanner has run.
+    assistant_text = ""
+    consumed = 0
+    full_reply = ""        # everything the assistant said this turn (for chat.jsonl)
+    emitted_error: str | None = None
+
+    def _drain_blocks() -> list[dict[str, Any]]:
+        """Scan assistant_text for newly-closed fenced blocks, persist + validate each,
+        and return the events to yield. Updates the `consumed` offset.
+
+        Phase-aware acceptance (belt-and-suspenders so the AI can't run ahead of the
+        human gate):
+          - phase="data_model": accept ONLY ```schema blocks. A ```stage block is
+            DROPPED (never persisted) and surfaced as a {"type":"stage_dropped"} event
+            so the human sees the AI tried to jump to the DAG — it is not silently
+            swallowed, and it never reaches disk.
+          - phase="dag": accept ONLY ```stage blocks; a stray ```schema block is
+            likewise dropped + surfaced (the data model is already approved/fixed).
+          - phase="both": accept both (original behavior)."""
+        nonlocal consumed
+        events: list[dict[str, Any]] = []
+        blocks, consumed = _scan_fenced_blocks(assistant_text, consumed)
+        for kind, inner in blocks:
+            try:
+                obj = json.loads(inner)
+            except json.JSONDecodeError as exc:
+                # A malformed fenced block is reported as an issue on a card, not a
+                # crash — the human sees it and can ask for a fix.
+                events.append({
+                    "type": "schema_emitted" if kind == "schema" else "stage_emitted",
+                    ("schema" if kind == "schema" else "stage"): {"_raw": inner},
+                    "issues": [f"block is not valid JSON: {exc}"],
+                    "path": None,
+                })
+                continue
+            if not isinstance(obj, dict):
+                events.append({
+                    "type": "schema_emitted" if kind == "schema" else "stage_emitted",
+                    ("schema" if kind == "schema" else "stage"): {"_raw": inner},
+                    "issues": [f"{kind} block must be a JSON object, got {type(obj).__name__}"],
+                    "path": None,
+                })
+                continue
+            # Gate: a stage block in phase="data_model" is dropped (not persisted) so
+            # the AI cannot author the DAG before the human approves the data model.
+            if kind == "stage" and phase == "data_model":
+                reason = ("stage emitted during phase='data_model' (data-model gate): "
+                          "dropped — author the DAG only after the data model is approved")
+                _append_chat(comp_dir, {"role": "assistant", "event": "stage_dropped",
+                                        "stage": obj, "reason": reason})
+                events.append({"type": "stage_dropped", "stage": obj, "reason": reason})
+                continue
+            # Gate: a schema block in phase="dag" is dropped — the data model is fixed.
+            if kind == "schema" and phase == "dag":
+                reason = ("schema emitted during phase='dag': dropped — the data model "
+                          "is already approved and fixed; emit DAG stages only")
+                _append_chat(comp_dir, {"role": "assistant", "event": "schema_dropped",
+                                        "schema": obj, "reason": reason})
+                events.append({"type": "schema_dropped", "schema": obj, "reason": reason})
+                continue
+            if kind == "schema":
+                issues = dag_schema.validate_named_schema(obj)
+                path = _persist_schema(comp_dir, obj, persist_base)
+                _append_chat(comp_dir, {"role": "assistant", "event": "schema_emitted",
+                                        "schema": obj, "issues": issues, "path": path})
+                events.append({"type": "schema_emitted", "schema": obj,
+                               "issues": issues, "path": path})
+            else:
+                issues = dag_schema.validate_stage(obj)
+                path = _persist_stage(comp_dir, obj, persist_base)
+                _append_chat(comp_dir, {"role": "assistant", "event": "stage_emitted",
+                                        "stage": obj, "issues": issues, "path": path})
+                events.append({"type": "stage_emitted", "stage": obj,
+                               "issues": issues, "path": path})
+        return events
+
+    try:
+        async with ClaudeSDKClient(options=options) as client:
+            await client.query(prompt)
+            async for msg in client.receive_response():
+                # (1) Live token text from partial-message StreamEvents.
+                if isinstance(msg, StreamEvent):
+                    txt = _delta_text(getattr(msg, "event", None) or {})
+                    if txt:
+                        full_reply += txt
+                        yield {"type": "assistant_delta", "text": txt}
+                    continue
+                # (2) Completed assistant text blocks = authoritative; scan for blocks.
+                if isinstance(msg, AssistantMessage):
+                    for block in msg.content:
+                        if isinstance(block, TextBlock):
+                            assistant_text += block.text
+                    for ev in _drain_blocks():
+                        yield ev
+                # Other message types (UserMessage tool echoes, ResultMessage) are not
+                # needed here — authoring is tool-less and single-voiced.
+    except Exception as exc:  # SDK/transport failure mid-stream → loud, then settle
+        emitted_error = f"{type(exc).__name__}: {exc}"
+        _append_chat(comp_dir, {"role": "system", "event": "error", "content": emitted_error})
+        yield {"type": "error", "message": emitted_error}
+
+    # Final sweep: catch any block that closed in the last chunk, then validate the
+    # whole library + methodology so the card layer can show end-of-turn state and the
+    # page can re-render the DAG from the persisted dag/compiled files.
+    for ev in _drain_blocks():
+        yield ev
+
+    _append_chat(comp_dir, {"role": "assistant", "event": "reply", "content": full_reply})
+
+    schemas, stages = _load_persisted(comp_dir, persist_base)
+
+    # Terminal event depends on the phase. phase="data_model" ends with
+    # `data_model_proposed` (validating the schema library only) and DELIBERATELY does
+    # NOT emit `done` — the turn STOPS for human approval before any DAG is built.
+    if phase == "data_model":
+        validation = {
+            "schema_library": dag_schema.validate_schema_library(schemas) if schemas else [],
+            "n_schemas": len(schemas),
+        }
+        _append_chat(comp_dir, {"role": "system", "event": "data_model_proposed",
+                                "validation": validation})
+        yield {"type": "data_model_proposed", "validation": validation}
+        return
+
+    # phase ∈ {"both","dag"} → validate the whole library + methodology and end with
+    # `done`, so the card layer can show end-of-turn state and the page can re-render
+    # the DAG from the persisted compiled files.
+    validation = {
+        "schema_library": dag_schema.validate_schema_library(schemas) if schemas else [],
+        "methodology": dag_schema.validate_methodology(stages) if stages else [],
+        "n_schemas": len(schemas),
+        "n_stages": len(stages),
+    }
+    _append_chat(comp_dir, {"role": "system", "event": "done", "validation": validation})
+    yield {"type": "done", "validation": validation}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # 8. CLI
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _cli(argv: list[str]) -> int:
     if len(argv) < 2:
-        print("usage: python -m app.compiler <transcript.jsonl> <out_name> "
-              "[--out DIR] [--model sonnet]")
+        print("usage: python -m app.compiler <input file (.jsonl/.md/.txt)> "
+              "<out_name> [--out DIR] [--model sonnet]")
         return 2
-    transcript = argv[0]
+    input_path = argv[0]
     out_name = argv[1]
     rest = argv[2:]
+    # Default scratch location is gitignored (examples/_compiled_*) so CLI output
+    # is never accidentally committed.
     out_dir = f"examples/_compiled_{out_name}"
     model = "sonnet"
     i = 0
@@ -947,13 +1223,11 @@ def _cli(argv: list[str]) -> int:
         else:
             i += 1
 
-    print(f"[compiler] parsing transcript: {transcript}")
-    parsed = parse_transcript(transcript)
-    print(f"[compiler]   {parsed['n_tool_calls']} tool calls, "
-          f"{len(parsed['searches'])} searches, {len(parsed['fetches'])} fetches, "
-          f"{len(parsed['commands'])} shell cmds; report {len(parsed['report'])} chars")
+    print(f"[compiler] reading input as prose: {input_path}")
+    input_text = read_input(input_path)
+    print(f"[compiler]   {len(input_text)} chars")
     print(f"[compiler] calling Claude ({model}) to distill — this can take a minute…")
-    result = compile_from_transcript(transcript, out_name, model=model)
+    result = compile_methodology(input_text, out_name, model=model)
 
     print(f"\n[compiler] generated {len(result['stages'])} stages:")
     for i, s in enumerate(result["stages"], 1):
@@ -968,11 +1242,9 @@ def _cli(argv: list[str]) -> int:
         print("\n[compiler] validate_methodology: CLEAN ✓ (0 issues)")
 
     manifest = write_methodology(result, out_dir)
-    eval_path = write_eval_fixtures(parsed, out_dir)
     print(f"\n[compiler] wrote {len(manifest['stage_files'])} stage files to {out_dir}/compiled/")
     print(f"[compiler] methodology_raw → {manifest['methodology_raw']}")
     print(f"[compiler] audit json      → {manifest['audit']}")
-    print(f"[compiler] eval fixtures   → {eval_path}")
 
     if result["compiler_notes"]:
         print("\n[compiler] compiler_notes (ambiguities):")

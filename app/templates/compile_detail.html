@@ -28,6 +28,44 @@
   .section h2 { margin-bottom:4px; }
   .section .sub { color:#888; font-size:13px; margin-top:0; }
   .stage-row code { font-size:12px; }
+
+  /* ── Interactive compile chat (Piece A) ─────────────────────────────────── */
+  .chat-wrap { display:flex; gap:18px; align-items:flex-start; }
+  .chat-col { flex:1 1 0; min-width:0; }
+  .chat-log { border:1px solid #e3e6ea; border-radius:8px; background:#fbfcfd;
+    padding:12px; height:440px; overflow-y:auto; display:flex; flex-direction:column; gap:10px; }
+  .chat-msg { max-width:92%; padding:8px 12px; border-radius:10px; font-size:13px;
+    line-height:1.45; white-space:pre-wrap; word-wrap:break-word; }
+  .chat-msg.user { align-self:flex-end; background:#2a6ac8; color:#fff; }
+  .chat-msg.assistant { align-self:flex-start; background:#fff; border:1px solid #e3e6ea; color:#222; }
+  .chat-msg.system { align-self:center; background:#f3f4f6; color:#666; font-size:12px;
+    font-style:italic; border:1px dashed #d4d7db; }
+  .chat-msg.error { align-self:center; background:#fdecec; border:1px solid #f3b6b6; color:#a02020;
+    font-style:normal; }
+  .chat-cards-col { flex:1 1 0; min-width:0; }
+  .emit-card { border:1px solid #e3e6ea; border-left-width:4px; border-radius:6px;
+    padding:8px 12px; margin-bottom:8px; background:#fff; font-size:12px; }
+  .emit-card.schema { border-left-color:#7a5cc8; }
+  .emit-card.stage  { border-left-color:#2a8a2a; }
+  .emit-card.has-issues { border-left-color:#cc2a2a; }
+  .emit-card .ec-head { display:flex; justify-content:space-between; align-items:baseline; gap:8px; }
+  .emit-card .ec-kind { font-size:10px; text-transform:uppercase; letter-spacing:.5px; color:#888; }
+  .emit-card .ec-name { font-family:ui-monospace, monospace; font-weight:600; font-size:13px; }
+  .emit-card .ec-ok { color:#2a8a2a; font-size:11px; }
+  .emit-card .ec-issues { margin:6px 0 0; padding-left:18px; }
+  .emit-card .ec-issues li { color:#cc2a2a; font-family:ui-monospace, monospace; font-size:11px; }
+  .emit-card details summary { cursor:pointer; color:#666; font-size:11px; margin-top:4px; }
+  .emit-card pre { background:#fafafa; border:1px solid #eee; padding:6px; margin-top:4px;
+    font-size:11px; max-height:180px; overflow:auto; white-space:pre-wrap; }
+  .chat-input-row { display:flex; gap:8px; margin-top:10px; }
+  .chat-input-row textarea { flex:1; resize:vertical; min-height:46px; padding:8px;
+    border:1px solid #cfd4da; border-radius:6px; font-family:inherit; font-size:13px; }
+  .chat-input-row button { padding:0 18px; border:none; border-radius:6px; background:#2a6ac8;
+    color:#fff; font-weight:600; cursor:pointer; }
+  .chat-input-row button:disabled { background:#9aa3ad; cursor:default; }
+  .chat-live-dot { color:#e0a800; font-weight:600; }
+  .chat-hint { color:#888; font-size:12px; margin:2px 0 10px; }
+  .chat-cards-col h4 { margin:0 0 8px; font-size:13px; color:#555; }
 </style>
 {% endblock %}
 
@@ -178,6 +216,174 @@
   <p class="muted">No DAG output (the compile did not produce stages).</p>
   {% endif %}
 </div>
+
+{# ─── (d) INTERACTIVE COMPILE CHAT (Piece A) ───────────────────────────────── #}
+<div class="section">
+  <h2>④ Interactive compile chat</h2>
+  <p class="sub">Co-author the methodology with the agent: it streams the
+    <strong>data model (named schemas) first</strong>, then the <strong>DAG (stages)</strong>.
+    Steer it any time — even mid-stream — by sending another message. Emitted schemas
+    and stages are saved under this compilation's <code>dag/{schemas,compiled}</code>;
+    the conversation is logged to <code>chat.jsonl</code>. The DAG above re-renders when
+    a turn finishes.</p>
+  <p class="chat-hint">Example openers: "Author a methodology for tracking corporate
+    political donations" · "Add a human review queue before publish" · "Use sonnet for
+    the scoring step".</p>
+
+  <div class="chat-wrap">
+    <div class="chat-col">
+      <div id="chat-log" class="chat-log">
+        <div class="chat-msg system">No messages yet. Describe the investigation (or paste
+          prose) and the agent will start authoring schemas, then stages.</div>
+      </div>
+      <div class="chat-input-row">
+        <textarea id="chat-input" placeholder="Message the compiler… (Enter to send, Shift+Enter for newline)"></textarea>
+        <button id="chat-send" type="button">Send</button>
+      </div>
+    </div>
+    <div class="chat-cards-col">
+      <h4>Emitted this session <span id="chat-live" class="chat-live-dot" hidden>● streaming…</span></h4>
+      <div id="chat-cards">
+        <p class="muted" id="chat-cards-empty">Schema and stage cards will appear here as
+          the agent emits them, each with its <code>dag_schema</code> validation inline.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  // ── Interactive compile chat (Piece A) ───────────────────────────────────
+  // Plain EventSource (no JS build step). On send we open an SSE stream to
+  //   /compile/{id}/chat/stream?message=…
+  // and consume typed events: assistant_delta (token text → current bubble),
+  // schema_emitted / stage_emitted (→ a card with inline validation issues),
+  // done (→ reload the page so the server re-renders the mermaid DAG from the
+  // freshly-persisted dag/compiled — same location.reload() the status poller
+  // uses), error (→ a red bubble). Re-sending mid-stream is allowed: it closes
+  // the in-flight EventSource and opens a new one (steering).
+  const COMPILATION_ID = {{ compilation_id | tojson }};
+  const log = document.getElementById('chat-log');
+  const cards = document.getElementById('chat-cards');
+  const cardsEmpty = document.getElementById('chat-cards-empty');
+  const input = document.getElementById('chat-input');
+  const sendBtn = document.getElementById('chat-send');
+  const liveDot = document.getElementById('chat-live');
+  let es = null;                 // the current EventSource (one at a time)
+  let curAssistant = null;       // the live assistant bubble being appended to
+  const history = [];            // [{role, content}] replayed to the server each turn
+
+  function scrollLog() { log.scrollTop = log.scrollHeight; }
+
+  function addBubble(role, text) {
+    const div = document.createElement('div');
+    div.className = 'chat-msg ' + role;
+    div.textContent = text || '';
+    log.appendChild(div);
+    scrollLog();
+    return div;
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => (
+      { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+    ));
+  }
+
+  function addCard(kind, obj, issues, path) {
+    if (cardsEmpty) { cardsEmpty.remove(); }
+    const name = kind === 'schema'
+      ? ((obj && (obj.name || obj.title)) || '(unnamed schema)')
+      : ((obj && obj.id) || '(unnamed stage)');
+    const hasIssues = issues && issues.length;
+    const card = document.createElement('div');
+    card.className = 'emit-card ' + kind + (hasIssues ? ' has-issues' : '');
+    let html = '<div class="ec-head">'
+      + '<span class="ec-name">' + escapeHtml(name) + '</span>'
+      + '<span class="ec-kind">' + kind + '</span></div>';
+    if (hasIssues) {
+      html += '<ul class="ec-issues">'
+        + issues.map(i => '<li>' + escapeHtml(i) + '</li>').join('')
+        + '</ul>';
+    } else {
+      html += '<div class="ec-ok">✓ valid' + (path
+        ? ' · saved ' + escapeHtml(String(path).replace(/\\/g, '/').split('/').pop()) : '')
+        + '</div>';
+    }
+    html += '<details><summary>JSON</summary><pre>'
+      + escapeHtml(JSON.stringify(obj, null, 2)) + '</pre></details>';
+    card.innerHTML = html;
+    cards.appendChild(card);
+  }
+
+  function setStreaming(on) {
+    liveDot.hidden = !on;
+    sendBtn.textContent = on ? 'Steer' : 'Send';
+  }
+
+  function closeStream() {
+    if (es) { es.close(); es = null; }
+  }
+
+  function send() {
+    const message = (input.value || '').trim();
+    if (!message) return;
+    // Re-sending mid-stream = steering: drop the in-flight stream, start a new one.
+    closeStream();
+    addBubble('user', message);
+    history.push({ role: 'user', content: message });
+    input.value = '';
+    curAssistant = null;
+
+    const url = '/compile/' + encodeURIComponent(COMPILATION_ID)
+      + '/chat/stream?message=' + encodeURIComponent(message);
+    es = new EventSource(url);
+    setStreaming(true);
+
+    es.onmessage = function (e) {
+      let ev;
+      try { ev = JSON.parse(e.data); } catch (err) { return; }
+      if (ev.type === 'assistant_delta') {
+        if (!curAssistant) { curAssistant = addBubble('assistant', ''); }
+        curAssistant.textContent += ev.text;
+        scrollLog();
+      } else if (ev.type === 'schema_emitted') {
+        addCard('schema', ev.schema, ev.issues, ev.path);
+      } else if (ev.type === 'stage_emitted') {
+        addCard('stage', ev.stage, ev.issues, ev.path);
+      } else if (ev.type === 'done') {
+        // Record the assistant turn, then reload so the server re-renders the
+        // mermaid DAG from the persisted dag/compiled (reuses the existing
+        // server-rendered mermaid path — no client-side mermaid re-draw needed).
+        if (curAssistant) { history.push({ role: 'assistant', content: curAssistant.textContent }); }
+        const v = ev.validation || {};
+        addBubble('system', 'Turn complete — ' + (v.n_schemas || 0) + ' schema(s), '
+          + (v.n_stages || 0) + ' stage(s). Refreshing the DAG…');
+        closeStream();
+        setStreaming(false);
+        setTimeout(() => location.reload(), 800);
+      } else if (ev.type === 'error') {
+        addBubble('error', '⚠ ' + ev.message);
+        closeStream();
+        setStreaming(false);
+      }
+    };
+
+    es.onerror = function () {
+      // EventSource fires onerror on normal server close too; only surface it if we
+      // were still mid-stream (the server always ends with done|error otherwise).
+      if (es && es.readyState === EventSource.CLOSED) {
+        setStreaming(false);
+      }
+    };
+  }
+
+  sendBtn.addEventListener('click', send);
+  input.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
+  });
+})();
+</script>
 
 <script>
 (function () {

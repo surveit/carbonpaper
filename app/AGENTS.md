@@ -2,8 +2,8 @@
 
 `app/main.py` serves the methodology DAGs, their runs, and the review queue. It
 imports the Runner (`app.runtime`) and the contract (`app.dag_schema`). (The
-Compiler feature adds `/compile` pages — see the "Compiler" section appended in
-that PR.)
+Compiler feature adds `/compile` pages, split into `app/pages.py` +
+`app/api/compile.py` — see the "Compiler" section below.)
 
 Run: `python -m uvicorn app.main:app --port 8765`.
 
@@ -38,38 +38,48 @@ calls; for `publish`/`human_review_queue`/`input_data` it's refused (those handl
 have side effects).
 
 ## Files
-`main.py` (routes) · `templates/` (`run_detail.html`, `_run_stage_panel.html`,
-`_stage_executable.html`, `_stage_content.html`, + base/index/methodology/queue/…)
-· `static/style.css` · `runtime/preview.py` (scratch-run backend).
+`main.py` (app shell + run/methodology/review routes) · `web_context.py` (shared
+templates / paths / type maps / `build_mermaid_graph` / background runner) ·
+`pages.py` + `api/compile.py` (the compiler's page + action routes) · `templates/`
+(`run_detail.html`, `_run_stage_panel.html`, `_stage_executable.html`,
+`_stage_content.html`, + base/index/methodology/queue/compile…) ·
+`static/style.css` · `runtime/preview.py` (scratch-run backend).
 
 ---
 
-# Compiler — `/compile` (transcript / prose → draft DAG)
+# Compiler — `/compile` (unstructured account → draft DAG)
 
-The third feature on the DAG artifact. `app/compiler.py` distills an unstructured
-Claude Code run (a transcript `.jsonl`) — or prose — into a *draft* methodology
-that conforms to `app/dag_schema`. **Separation rule:** the compiler imports only
-`app.dag_schema` + `claude_agent_sdk`; it must NOT import `app.runtime` (the
-runner stays ignorant of the compiler). `app/main.py` (the app shell) may wire the
-`/compile` routes.
+The third feature on the DAG artifact. `app/compiler.py` reads an UNSTRUCTURED
+input — a captured agent/tool transcript, working notes, or plain prose — **as
+prose** and asks the model to distill it into a *draft* methodology that conforms
+to `app/dag_schema`. It does no structured parsing of the input; the model recovers
+the pipeline. **Separation rule:** the compiler imports only `app.dag_schema`,
+`app.prompt`, + `claude_agent_sdk`; it must NOT import `app.runtime` (the runner
+stays ignorant of the compiler). The `/compile` routes live in `app/pages.py`
+(pages) + `app/api/compile.py` (actions), mounted on the app in `main.py`.
 
-## How it works (`app/compiler.py`)
-- `parse_transcript` — extract the tool-call sequence (WebSearch/WebFetch/Bash) + the final report from a transcript jsonl.
-- `compile_from_transcript` — build a prompt that frames the node-type contract straight from `dag_schema.NODE_TYPES` (so it can't drift), and asks the model (Agent SDK) to emit a methodology as JSON: stages valid per the contract + `methodology_raw.md` + compiler_notes. Bounded retry on malformed JSON.
-- `validate` — runs `dag_schema.validate_methodology` on the output as a self-check.
-- `harvest_eval_fixtures` — pulls (search→chosen-url) and (doc→fields) pairs from the transcript as eval seeds.
+## How it works
+- `app/prompt.py` — `SYSTEM_PROMPT` + `build_compile_prompt(input_text, name)`. The
+  node-type contract is rendered straight from `dag_schema.NODE_TYPES` so the prompt
+  can't drift from the real schema.
+- `compiler.read_input` — read the file as text (a `.jsonl` transcript is fed to the
+  model as prose, exactly like a `.md`/`.txt` note).
+- `compiler.compile_methodology` — one no-tools Agent-SDK call, then parse the JSON
+  (`stages` + `methodology_raw_md` + `compiler_notes`) with bounded retry on
+  malformed output. Never fabricates: a bad/empty result raises rather than being
+  passed off as a clean compile.
+- `compiler.validate` — runs `dag_schema.validate_methodology` as a self-check.
 
 ## A compilation is a first-class object (parallels a run)
 Persisted at `compilations/<id>/` (gitignored): `manifest.json` (status, model,
-n_stages, validation_issues, stage_summary) + `what_happened.json` (parsed tool
-sequence + the LLM prompt sent + the raw response + validation) + `dag/` (the
-generated `compiled/*.yaml` + `methodology_raw.md`) + `eval_fixtures.jsonl`.
+n_stages, validation_issues, stage_summary) + `what_happened.json` (the input
+excerpt + the LLM prompt sent + the raw response + compiler_notes) + `dag/` (the
+generated `compiled/*.yaml` + `methodology_raw.md`).
 
 ## Pages
-`GET /compile` (list of compilations) · `GET /compile/new` (form: pick transcript /
+`GET /compile` (list of compilations) · `GET /compile/new` (form: pick input /
 out-name / model) · `POST /compile/new` (runs in a background thread, redirects) ·
 `GET /compile/<id>` (the object view: **Input** · **What happened** · **DAG output**
-with mermaid). Sample output is committed at `examples/_compiled_sungai_lilin/` (a
-draft DAG the compiler produced from the sungai_lilin transcript; validates clean
-and independently reproduced the locate/extract/adjudicate backbone).
+with mermaid). The CLI — `python -m app.compiler <input> <out_name>` — writes its
+scratch output to the gitignored `examples/_compiled_<name>/`.
 

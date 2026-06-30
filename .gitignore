@@ -12,3 +12,7 @@ build/
 
 # Persisted compilation objects (file-backed, like examples/<m>/runs)
 compilations/
+
+# Compiler scratch output (CLI `python -m app.compiler` default --out); generated,
+# not curated — the canonical compilation store is compilations/.
+examples/_compiled_*/

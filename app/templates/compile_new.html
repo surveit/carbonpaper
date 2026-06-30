@@ -1,9 +1,9 @@
 {% extends "base.html" %}
-{% block title %}New compilation · transcript → DAG{% endblock %}
+{% block title %}New compilation · input → DAG{% endblock %}
 
 {% block head_extra %}
 <style>
-  .transcript-pick li { margin-bottom: 6px; }
+  .input-pick li { margin-bottom: 6px; }
   .pill { display:inline-block; padding:1px 7px; border-radius:10px; font-size:11px; background:#eee; }
   .meta-line { color:#666; font-size:13px; margin:4px 0 16px; }
   .compile-form { max-width: 560px; }
@@ -15,27 +15,28 @@
 {% endblock %}
 
 {% block content %}
-<h1>New compilation · research transcript → draft DAG</h1>
+<h1>New compilation · research account → draft DAG</h1>
 <p class="lede">
-  The compiler distills an open-ended Claude Code research run (a tool-call
-  transcript) into a structured methodology DAG — most steps deterministic, the
-  LLM only at the genuine judgment points. Output validates against
-  <code>app/dag_schema.py</code>. This compile is persisted as a
+  The compiler reads an <strong>unstructured account of a research process</strong>
+  — a captured agent/tool transcript, working notes, or plain prose — as prose, and
+  asks the model to distill it into a structured methodology DAG: most steps
+  deterministic, the LLM only at the genuine judgment points. Output validates
+  against <code>app/dag_schema.py</code>. This compile is persisted as a
   <strong>compilation object</strong>.
 </p>
 
 <div class="compile-form">
-  {% if transcripts %}
+  {% if inputs %}
   <form method="post" action="/compile/new">
-    <h2>Transcript</h2>
-    <ul class="transcript-pick">
-      {% for t in transcripts %}
+    <h2>Input</h2>
+    <ul class="input-pick">
+      {% for i in inputs %}
       <li>
         <label>
-          <input type="radio" name="transcript" value="{{ t.path }}"
+          <input type="radio" name="source" value="{{ i.path }}"
                  {% if loop.first %}checked{% endif %}>
-          <code>{{ t.filename }}</code>
-          <span class="pill">{{ t.size_kb }} KB</span>
+          <code>{{ i.filename }}</code>
+          <span class="pill">{{ i.size_kb }} KB</span>
         </label>
       </li>
       {% endfor %}
@@ -43,7 +44,7 @@
     <p>
       <label>out name:
         <input type="text" name="out_name"
-               value="{{ transcripts[0].name if transcripts else 'compiled' }}">
+               value="{{ inputs[0].name if inputs else 'compiled' }}">
       </label>
     </p>
     <p>
@@ -59,7 +60,8 @@
       You'll be redirected to the compilation object page, which polls until it finishes.</p>
   </form>
   {% else %}
-  <p><em>No transcripts found under <code>examples/palm_osint/research_runs/</code>.</em></p>
+  <p><em>No inputs found under <code>examples/palm_osint/research_runs/</code>
+     (looked for <code>.jsonl</code> / <code>.md</code> / <code>.txt</code>).</em></p>
   {% endif %}
 </div>
 {% endblock %}

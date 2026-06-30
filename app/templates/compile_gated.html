@@ -1,0 +1,610 @@
+{% extends "base.html" %}
+{% block title %}Gated compile · {{ name }}{% endblock %}
+
+{% block head_extra %}
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    mermaid.initialize({
+      startOnLoad: true,
+      theme: "default",
+      flowchart: { curve: "basis", padding: 20, useMaxWidth: true },
+      er: { useMaxWidth: true, layoutDirection: "LR", entityPadding: 12, fontSize: 12 },
+      securityLevel: "loose"
+    });
+  });
+</script>
+<style>
+  .gated-intro { color: var(--muted); margin-top:0; margin-bottom:20px; }
+  .err-box { background:#fdecec; border:1px solid #f3b6b6; padding:12px 16px; border-radius:6px; color:#a02020; }
+  .err-box pre { white-space:pre-wrap; font-size:11px; margin-top:8px; }
+
+  /* Phase / gate / lock primitives are shared and live in style.css (.phase,
+     .phase-head, .phase-num, .lock-hint, .phase-body, .gate-bar, .gate-*,
+     .approve-dm-btn) — see the "Gated compile" block there. Below are the
+     page-specific chat / card / data-model / schema-edit rules (kept inline,
+     same precedent as compile_detail.html's inline chat CSS). */
+
+  /* ── Chat (reused from compile_detail.html) ────────────────────────────── */
+  .chat-wrap { display:flex; gap:18px; align-items:flex-start; }
+  .chat-col { flex:1 1 0; min-width:0; }
+  .chat-log { border:1px solid #e3e6ea; border-radius:8px; background:#fbfcfd;
+    padding:12px; height:360px; overflow-y:auto; display:flex; flex-direction:column; gap:10px; }
+  .chat-msg { max-width:92%; padding:8px 12px; border-radius:10px; font-size:13px;
+    line-height:1.45; white-space:pre-wrap; word-wrap:break-word; }
+  .chat-msg.user { align-self:flex-end; background:#2a6ac8; color:#fff; }
+  .chat-msg.assistant { align-self:flex-start; background:#fff; border:1px solid #e3e6ea; color:#222; }
+  .chat-msg.system { align-self:center; background:#f3f4f6; color:#666; font-size:12px;
+    font-style:italic; border:1px dashed #d4d7db; }
+  .chat-msg.error { align-self:center; background:#fdecec; border:1px solid #f3b6b6; color:#a02020;
+    font-style:normal; }
+  .chat-cards-col { flex:1 1 0; min-width:0; }
+  .emit-card { border:1px solid #e3e6ea; border-left-width:4px; border-radius:6px;
+    padding:8px 12px; margin-bottom:8px; background:#fff; font-size:12px; }
+  .emit-card.schema { border-left-color:#7a5cc8; }
+  .emit-card.stage  { border-left-color:#2a8a2a; }
+  .emit-card.has-issues { border-left-color:#cc2a2a; }
+  .emit-card.dropped { border-left-color:#cc8a00; background:#fffaf2; }
+  .emit-card .ec-head { display:flex; justify-content:space-between; align-items:baseline; gap:8px; }
+  .emit-card .ec-kind { font-size:10px; text-transform:uppercase; letter-spacing:.5px; color:#888; }
+  .emit-card .ec-name { font-family:ui-monospace, monospace; font-weight:600; font-size:13px; }
+  .emit-card .ec-ok { color:#2a8a2a; font-size:11px; }
+  .emit-card .ec-drop { color:#996600; font-size:11px; }
+  .emit-card .ec-issues { margin:6px 0 0; padding-left:18px; }
+  .emit-card .ec-issues li { color:#cc2a2a; font-family:ui-monospace, monospace; font-size:11px; }
+  .emit-card details summary { cursor:pointer; color:#666; font-size:11px; margin-top:4px; }
+  .emit-card pre { background:#fafafa; border:1px solid #eee; padding:6px; margin-top:4px;
+    font-size:11px; max-height:180px; overflow:auto; white-space:pre-wrap; }
+  .chat-input-row { display:flex; gap:8px; margin-top:10px; }
+  .chat-input-row textarea { flex:1; resize:vertical; min-height:46px; padding:8px;
+    border:1px solid #cfd4da; border-radius:6px; font-family:inherit; font-size:13px; }
+  .chat-input-row button { padding:0 18px; border:none; border-radius:6px; background:#2a6ac8;
+    color:#fff; font-weight:600; cursor:pointer; }
+  .chat-input-row button:disabled { background:#9aa3ad; cursor:default; }
+  .chat-live-dot { color:#e0a800; font-weight:600; }
+  .chat-hint { color:#888; font-size:12px; margin:2px 0 10px; }
+  .chat-cards-col h4 { margin:0 0 8px; font-size:13px; color:#555; }
+
+  /* ── Data-model render (the schema_library look) ───────────────────────── */
+  .dm-render { margin-top:20px; padding-top:16px; border-top:1px solid var(--border); }
+  .validation-report { padding:10px 14px; border-radius:6px; margin:10px 0 16px; font-size:13px; }
+  .validation-report.ok { background:#e8f8e8; border:1px solid #3aa83a; color:#1f5a1f; }
+  .validation-report.error { background:#fde8e8; border:1px solid #f3b6b6; color:#802020; }
+  .validation-report ul { margin:6px 0 0; padding-left:20px; }
+  .schema-desc { font-size:13px; color:#444; margin:6px 0; }
+  .dm-er { margin:14px 0; }
+  .dm-empty { color:var(--muted); font-style:italic; padding:18px 0; }
+
+  /* Schema-edit textareas (mirror _node_review.html's .edit-textarea look). */
+  .dm-schema-edit { margin-top:8px; }
+  .dm-schema-edit summary { cursor:pointer; color:var(--accent); font-size:12px; }
+  .schema-edit-textarea {
+    width:100%; box-sizing:border-box; min-height:200px; resize:vertical;
+    background:var(--code-deep); color:var(--code-fg);
+    border:1px solid #333; border-radius:5px; padding:10px 12px; margin-top:8px;
+    font-size:12px; line-height:1.5;
+    font-family:"SFMono-Regular","Consolas","Liberation Mono",Menlo,monospace;
+    white-space:pre; overflow:auto; tab-size:2; }
+  .schema-edit-textarea:focus { outline:2px solid var(--accent); outline-offset:-1px; }
+  .se-actions { display:flex; align-items:center; gap:12px; margin-top:8px; }
+  .se-msg { font-size:13px; }
+  .se-msg.ok { color:#1f5a1f; font-weight:600; }
+  .se-msg.err { color:#802020; font-weight:600; }
+  .se-issues { margin:8px 0 0; padding:10px 14px 10px 30px; list-style:disc;
+    background:#fde8e8; border:1px solid #f3b6b6; border-radius:5px; }
+  .se-issues[hidden] { display:none; }
+  .se-issues li { color:#802020; font-family:"SFMono-Regular","Consolas",monospace; font-size:12px; margin:2px 0; }
+
+  /* ── DAG output (phase 2) ──────────────────────────────────────────────── */
+  .dag-done-link { margin:18px 0 0; }
+</style>
+{% endblock %}
+
+{% block header_extra %}
+<a href="/compile" class="back-link">← compilations</a>
+{% endblock %}
+
+{% block content %}
+{% set dm_state = data_model_state %}
+{% set is_approved = (dm_state == "approved") %}
+{% set belief_label = {
+     'approved': 'approved',
+     'unreviewed': 'unreviewed',
+     'edited_stale': 'edited · stale',
+   } %}
+
+<div class="stage-header">
+    <span class="run-status status-{{ manifest.status }}">{{ manifest.status }}</span>
+    <h1>Gated compile · <code>{{ name }}</code></h1>
+    <p class="stage-id">
+      session <code>{{ compilation_id }}</code> · {{ manifest.model }} ·
+      created <code>{{ manifest.created_at }}</code> · lands in
+      <code>examples/{{ name }}/</code>
+    </p>
+</div>
+
+<p class="gated-intro">
+  Two gates. <strong>Phase 1</strong> proposes the data model (named schemas) and
+  <strong>stops</strong>. You steer / edit, then <strong>approve</strong>. Only an approved
+  data model unlocks <strong>Phase 2</strong>, which authors the DAG that wires those exact
+  schemas. The result is a normal methodology with the per-node review / version / run UI.
+</p>
+
+{% if manifest.status == "error" %}
+<div class="err-box">
+  <strong>Compile session error.</strong> Reported honestly rather than emitting a fake model:<br>
+  <code>{{ manifest.error }}</code>
+</div>
+{% endif %}
+
+{# ════════════════ PHASE 1 — DATA MODEL ════════════════════════════════════ #}
+<section class="phase unlocked" id="phase-1">
+  <div class="phase-head">
+    <span class="phase-num">1</span>
+    <h2>Data model</h2>
+    <p class="phase-sub">The agent streams a short prose description + named schemas, then
+      <strong>STOPS</strong>. No stages here — those come only after you approve.</p>
+  </div>
+  <div class="phase-body">
+    <p class="chat-hint">Steer the data model: "split donors and recipients into two tables"
+      · "add a benchmark reference table for sector baselines" · "this column should be
+      nullable". Re-send any time (even mid-stream) to steer.</p>
+
+    <div class="chat-wrap">
+      <div class="chat-col">
+        <div id="dm-chat-log" class="chat-log">
+          <div class="chat-msg system">No messages yet. Click <strong>Propose data model</strong>
+            to seed from the pasted document, or type your own instruction.</div>
+        </div>
+        <div class="chat-input-row">
+          <textarea id="dm-chat-input" placeholder="Message the compiler… (Enter to send, Shift+Enter for newline)"></textarea>
+          <button id="dm-chat-send" type="button">Propose data model</button>
+        </div>
+      </div>
+      <div class="chat-cards-col">
+        <h4>Emitted this session <span id="dm-chat-live" class="chat-live-dot" hidden>● streaming…</span></h4>
+        <div id="dm-chat-cards">
+          <p class="muted" id="dm-chat-cards-empty">Schema cards appear here as the agent emits
+            them, each with its <code>dag_schema</code> validation inline. A stray stage block is
+            <em>dropped</em> (the gate) and shown amber.</p>
+        </div>
+      </div>
+    </div>
+
+    {# ── The gate: approval bar over the whole schema set ─────────────────── #}
+    <div class="gate-bar">
+      <div class="gate-state">
+        <span class="belief-chip belief-{{ 'stale' if dm_state == 'edited_stale' else dm_state }}"
+              id="dm-state-chip">{{ belief_label.get(dm_state, dm_state) }}</span>
+        {% if approval and approval.matched_decision %}
+        <span class="gate-by" id="dm-state-by">
+          {% if dm_state == 'edited_stale' %}was approved by{% else %}approved by{% endif %}
+          {{ approval.matched_decision.reviewer }}
+          {% if approval.matched_decision.reviewed_at %}at {{ approval.matched_decision.reviewed_at }}{% endif %}
+        </span>
+        {% else %}
+        <span class="gate-by" id="dm-state-by"></span>
+        {% endif %}
+      </div>
+      <code class="nr-hash" id="dm-lib-hash">{{ (approval.current_hash if approval else '') or '' }}</code>
+      <button type="button" class="btn approve approve-dm-btn {% if is_approved %}is-approved selected{% endif %}"
+              id="approve-dm-btn">{% if is_approved %}✓ Data model approved{% else %}✓ Approve data model{% endif %}</button>
+      {% if dm_state == 'edited_stale' %}
+      <p class="gate-stale-note" id="dm-stale-note">A schema changed after approval (the
+        library content hash no longer matches). Re-approve to unlock the DAG.</p>
+      {% endif %}
+    </div>
+
+    {# ── The current data model, rendered with the schema_library look ────── #}
+    <div class="dm-render" id="dm-render">
+      {% if schemas %}
+        {% if issues %}
+        <div class="validation-report error">
+          <strong>⚠ {{ issues|length }} data-model issue{% if issues|length != 1 %}s{% endif %}</strong>
+          <ul>{% for i in issues %}<li><code>{{ i }}</code></li>{% endfor %}</ul>
+        </div>
+        {% else %}
+        <p class="validation-report ok"><strong>✓ data model valid</strong> —
+          {{ schemas|length }} schema{% if schemas|length != 1 %}s{% endif %}, all references resolve.</p>
+        {% endif %}
+
+        {% if er_diagram %}
+        <div class="dag dm-er">
+          <pre class="mermaid">
+{{ er_diagram }}
+          </pre>
+        </div>
+        {% endif %}
+
+        {% set kind_blurb = {
+            "reference": "Dimension / lookup / benchmark data we must SOURCE, not compute.",
+            "input": "Raw data fetched into the pipeline.",
+            "computed": "Produced by a DAG stage (authored in Phase 2).",
+            "ground_truth": "External truth used only by eval; mirrors a computed schema."
+        } %}
+        {% for kind in kind_order %}
+          {% set group = schemas | selectattr("kind", "equalto", kind) | list %}
+          {% if group %}
+          <h3 class="dm-group-heading">
+            <span class="type-tag {{ kind_class.get(kind, 'custom') }}">{{ kind_glyph.get(kind, '') }} {{ kind }}</span>
+            <span class="muted">— {{ group|length }} schema{% if group|length != 1 %}s{% endif %}</span>
+          </h3>
+          <p class="lede">{{ kind_blurb.get(kind, '') }}</p>
+          {% for s in group %}
+          <details class="dm-table" open>
+            <summary>
+              <code>{{ s.name }}</code>
+              <span class="muted">— {{ s.title or s.name }}</span>
+              {% if s.estimated_rows %}<span class="dm-rows">est {{ "{:,}".format(s.estimated_rows) }} rows</span>{% endif %}
+            </summary>
+            {% if s.description %}<p class="schema-desc">{{ s.description }}</p>{% endif %}
+            {% if s.source and s.source.ref %}<p class="schema-meta"><span><b>source:</b> <a href="{{ s.source.ref }}" target="_blank" rel="noopener">{{ s.source.ref }}</a></span></p>{% endif %}
+            <table class="schema">
+              <thead><tr><th>column</th><th>type</th><th>null?</th><th>references</th><th>range / enum</th><th>description</th></tr></thead>
+              <tbody>
+              {% for c in s.columns or [] %}
+                <tr>
+                  <td><code>{{ c.name }}</code>{% if s.primary_key and c.name in s.primary_key %} <span class="strong">PK</span>{% endif %}</td>
+                  <td><span class="type-pill">{{ c.type }}</span></td>
+                  <td>{% if c.nullable %}<span class="muted">nullable</span>{% else %}<span class="strong">not null</span>{% endif %}</td>
+                  <td>{% if c.references %}<code class="range">→ {{ c.references }}</code>{% else %}<span class="muted">—</span>{% endif %}</td>
+                  <td>{% if c.range %}<code class="range">{{ c.range }}</code>{% else %}<span class="muted">—</span>{% endif %}</td>
+                  <td>{{ c.description or '' }}</td>
+                </tr>
+              {% endfor %}
+              </tbody>
+            </table>
+            {% if s.primary_key %}<p class="schema-meta"><span><b>primary key:</b> {{ s.primary_key | join(', ') }}</span></p>{% endif %}
+
+            {# ── Edit this schema (mirror _node_review.html save) ─────────── #}
+            <details class="dm-schema-edit">
+              <summary>Edit <code>{{ s.name }}</code> (YAML)</summary>
+              <textarea class="schema-edit-textarea" data-role="schema-yaml"
+                        data-schema-name="{{ s.name }}" spellcheck="false">{{ schema_yaml.get(s.name, '') if schema_yaml else '' }}</textarea>
+              <div class="se-actions">
+                <button type="button" class="btn primary" data-role="save-schema"
+                        data-schema-name="{{ s.name }}">Save schema</button>
+                <span class="se-msg" data-role="se-msg" data-schema-name="{{ s.name }}"></span>
+              </div>
+              <ul class="se-issues" data-role="se-issues" data-schema-name="{{ s.name }}" hidden></ul>
+            </details>
+          </details>
+          {% endfor %}
+          {% endif %}
+        {% endfor %}
+      {% else %}
+        <p class="dm-empty" id="dm-empty">No schemas yet. Propose the data model above; the
+          schemas will appear here as they're persisted to <code>examples/{{ name }}/schemas/</code>.</p>
+      {% endif %}
+    </div>
+  </div>
+</section>
+
+{# ════════════════ PHASE 2 — DAG ═══════════════════════════════════════════ #}
+<section class="phase {{ 'unlocked' if is_approved else 'locked' }}" id="phase-2">
+  <div class="phase-head">
+    <span class="phase-num">2</span>
+    <h2>DAG</h2>
+    <p class="phase-sub">The agent authors the typed stages that wire the
+      <strong>approved</strong> schemas into a pipeline, ending in <code>publish</code>.</p>
+    <span class="lock-hint" id="phase2-lock-hint">🔒 approve the data model to unlock</span>
+  </div>
+  <div class="phase-body">
+    <div class="chat-input-row" style="margin-top:0;">
+      <textarea id="dag-chat-input" placeholder="Optional steer for the DAG… (Enter to build/steer)"></textarea>
+      <button id="dag-build-btn" type="button" {% if not is_approved %}disabled{% endif %}>Build DAG</button>
+    </div>
+    <p class="chat-hint">Builds stages wiring the approved schemas. Steer with a message, or
+      just click Build DAG to let it author the full pipeline.</p>
+
+    <div class="chat-wrap">
+      <div class="chat-col">
+        <div id="dag-chat-log" class="chat-log">
+          <div class="chat-msg system">The DAG build streams here once you start it.</div>
+        </div>
+      </div>
+      <div class="chat-cards-col">
+        <h4>Stages emitted <span id="dag-chat-live" class="chat-live-dot" hidden>● streaming…</span></h4>
+        <div id="dag-chat-cards">
+          <p class="muted" id="dag-chat-cards-empty">Stage cards appear here as the agent emits
+            them, each with its <code>dag_schema</code> validation inline.</p>
+        </div>
+      </div>
+    </div>
+
+    <div id="dag-render">
+      {% if has_dag and mermaid %}
+      <div class="legend">
+        <span class="badge input">▶ input_data</span>
+        <span class="badge llm">✦ llm_transform</span>
+        <span class="badge python">λ python_transform</span>
+        <span class="badge join">⋈ join</span>
+        <span class="badge aggregate">Σ aggregate</span>
+        <span class="badge human">👤 human_review_queue</span>
+        <span class="badge publish">📤 publish</span>
+      </div>
+      <div class="dag">
+        <pre class="mermaid">
+{{ mermaid }}
+        </pre>
+      </div>
+      {% endif %}
+    </div>
+
+    <div class="dag-done-link" id="dag-done-link" {% if not has_dag %}hidden{% endif %}>
+      <a href="/methodology/{{ name }}" class="btn primary">Open methodology →</a>
+      <span class="muted">— per-node review, cut version, run.</span>
+    </div>
+  </div>
+</section>
+
+<script>
+(function () {
+  // ════ Shared chat/EventSource plumbing (reused from compile_detail.html) ════
+  // Plain EventSource (no JS build step). Each phase opens an SSE stream and
+  // consumes the SAME typed events the combined chat does:
+  //   assistant_delta  → append token text to the live assistant bubble
+  //   schema_emitted / stage_emitted → a validation card
+  //   schema_dropped / stage_dropped → an amber "dropped (gate)" card
+  //   data_model_proposed → PHASE-1 terminal (settle, then reload to show the gate)
+  //   done                → PHASE-2 terminal (settle, then reload to show the DAG)
+  //   error               → a red bubble
+  // Re-sending mid-stream is steering: close the in-flight ES, open a new one.
+  const COMPILATION_ID = {{ compilation_id | tojson }};
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => (
+      { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+    ));
+  }
+
+  // Factory: wire one phase's chat to one stream URL with one terminal handler.
+  function makeChat(opts) {
+    const log = document.getElementById(opts.logId);
+    const cards = document.getElementById(opts.cardsId);
+    let cardsEmpty = document.getElementById(opts.cardsEmptyId);
+    const input = document.getElementById(opts.inputId);
+    const sendBtn = document.getElementById(opts.sendId);
+    const liveDot = document.getElementById(opts.liveId);
+    let es = null;
+    let curAssistant = null;
+    const history = [];
+
+    function scrollLog() { log.scrollTop = log.scrollHeight; }
+
+    function addBubble(role, text) {
+      const div = document.createElement('div');
+      div.className = 'chat-msg ' + role;
+      div.textContent = text || '';
+      log.appendChild(div);
+      scrollLog();
+      return div;
+    }
+
+    function addCard(kind, obj, issues, path) {
+      if (cardsEmpty) { cardsEmpty.remove(); cardsEmpty = null; }
+      const name = kind === 'schema'
+        ? ((obj && (obj.name || obj.title)) || '(unnamed schema)')
+        : ((obj && obj.id) || '(unnamed stage)');
+      const hasIssues = issues && issues.length;
+      const card = document.createElement('div');
+      card.className = 'emit-card ' + kind + (hasIssues ? ' has-issues' : '');
+      let html = '<div class="ec-head">'
+        + '<span class="ec-name">' + escapeHtml(name) + '</span>'
+        + '<span class="ec-kind">' + kind + '</span></div>';
+      if (hasIssues) {
+        html += '<ul class="ec-issues">'
+          + issues.map(i => '<li>' + escapeHtml(i) + '</li>').join('')
+          + '</ul>';
+      } else {
+        html += '<div class="ec-ok">✓ valid' + (path
+          ? ' · saved ' + escapeHtml(String(path).replace(/\\/g, '/').split('/').pop()) : '')
+          + '</div>';
+      }
+      html += '<details><summary>JSON</summary><pre>'
+        + escapeHtml(JSON.stringify(obj, null, 2)) + '</pre></details>';
+      card.innerHTML = html;
+      cards.appendChild(card);
+    }
+
+    // Dropped block (the gate firing): show it amber so the human sees the AI
+    // tried to run ahead and was held back — never silently swallowed.
+    function addDropCard(kind, obj, reason) {
+      if (cardsEmpty) { cardsEmpty.remove(); cardsEmpty = null; }
+      const name = kind === 'schema'
+        ? ((obj && (obj.name || obj.title)) || '(unnamed schema)')
+        : ((obj && obj.id) || '(unnamed stage)');
+      const card = document.createElement('div');
+      card.className = 'emit-card ' + kind + ' dropped';
+      card.innerHTML = '<div class="ec-head">'
+        + '<span class="ec-name">' + escapeHtml(name) + '</span>'
+        + '<span class="ec-kind">' + kind + ' · dropped</span></div>'
+        + '<div class="ec-drop">⏸ ' + escapeHtml(reason || 'dropped by the phase gate') + '</div>';
+      cards.appendChild(card);
+    }
+
+    function setStreaming(on) {
+      if (liveDot) liveDot.hidden = !on;
+      sendBtn.textContent = on ? 'Steer' : opts.sendLabel;
+    }
+
+    function closeStream() { if (es) { es.close(); es = null; } }
+
+    function send() {
+      const message = (input.value || '').trim();
+      // Phase-1 allows an empty opener (seed from the pasted doc); phase-2 too.
+      closeStream();
+      if (message) { addBubble('user', message); history.push({ role: 'user', content: message }); }
+      input.value = '';
+      curAssistant = null;
+
+      const url = opts.streamUrl(COMPILATION_ID, message);
+      es = new EventSource(url);
+      setStreaming(true);
+
+      es.onmessage = function (e) {
+        let ev;
+        try { ev = JSON.parse(e.data); } catch (err) { return; }
+        if (ev.type === 'assistant_delta') {
+          if (!curAssistant) { curAssistant = addBubble('assistant', ''); }
+          curAssistant.textContent += ev.text;
+          scrollLog();
+        } else if (ev.type === 'schema_emitted') {
+          addCard('schema', ev.schema, ev.issues, ev.path);
+        } else if (ev.type === 'stage_emitted') {
+          addCard('stage', ev.stage, ev.issues, ev.path);
+        } else if (ev.type === 'schema_dropped') {
+          addDropCard('schema', ev.schema, ev.reason);
+        } else if (ev.type === 'stage_dropped') {
+          addDropCard('stage', ev.stage, ev.reason);
+        } else if (ev.type === 'data_model_proposed' || ev.type === 'done') {
+          if (curAssistant) { history.push({ role: 'assistant', content: curAssistant.textContent }); }
+          const v = ev.validation || {};
+          const parts = [];
+          if (v.n_schemas !== undefined) parts.push(v.n_schemas + ' schema(s)');
+          if (v.n_stages !== undefined) parts.push(v.n_stages + ' stage(s)');
+          addBubble('system', (ev.type === 'data_model_proposed'
+              ? 'Data model proposed — '
+              : 'DAG built — ') + parts.join(', ')
+            + '. ' + opts.doneNote);
+          closeStream();
+          setStreaming(false);
+          // Reload so the server re-renders: phase-1 → the schema render + gate
+          // state; phase-2 → the mermaid DAG (same location.reload() the combined
+          // chat uses). The new state determines whether phase-2 is unlocked.
+          setTimeout(() => location.reload(), 900);
+        } else if (ev.type === 'error') {
+          addBubble('error', '⚠ ' + ev.message);
+          closeStream();
+          setStreaming(false);
+        }
+      };
+
+      es.onerror = function () {
+        if (es && es.readyState === EventSource.CLOSED) { setStreaming(false); }
+      };
+    }
+
+    sendBtn.addEventListener('click', send);
+    input.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
+    });
+    return { send: send };
+  }
+
+  // ── Phase 1: data-model chat → /compile/{id}/data-model/stream ───────────
+  makeChat({
+    logId: 'dm-chat-log', cardsId: 'dm-chat-cards', cardsEmptyId: 'dm-chat-cards-empty',
+    inputId: 'dm-chat-input', sendId: 'dm-chat-send', liveId: 'dm-chat-live',
+    sendLabel: 'Propose data model',
+    doneNote: 'Review / edit, then approve to unlock the DAG. Refreshing…',
+    streamUrl: function (id, msg) {
+      return '/compile/' + encodeURIComponent(id) + '/data-model/stream'
+        + '?message=' + encodeURIComponent(msg);
+    },
+  });
+
+  // ── Phase 2: DAG chat → /compile/{id}/dag/stream (only enabled when approved) ──
+  const DM_APPROVED = {{ is_approved | tojson }};
+  if (DM_APPROVED) {
+    makeChat({
+      logId: 'dag-chat-log', cardsId: 'dag-chat-cards', cardsEmptyId: 'dag-chat-cards-empty',
+      inputId: 'dag-chat-input', sendId: 'dag-build-btn', liveId: 'dag-chat-live',
+      sendLabel: 'Build DAG',
+      doneNote: 'Opening the methodology with the review / version / run UI. Refreshing…',
+      streamUrl: function (id, msg) {
+        return '/compile/' + encodeURIComponent(id) + '/dag/stream'
+          + '?message=' + encodeURIComponent(msg);
+      },
+    });
+  }
+})();
+</script>
+
+<script>
+(function () {
+  // ════ The data-model gate: approve + per-schema edit ════════════════════════
+  // Approve = record the schema-library content hash (one decision over the whole
+  // set), mirroring the per-node decide. Editing a schema changes the library hash,
+  // so an approved data model drops to "edited · stale" and re-locks Phase 2 — the
+  // page reloads to reflect that. Same belt-and-suspenders as _node_review.html.
+  const COMPILATION_ID = {{ compilation_id | tojson }};
+  const APPROVE_URL = '/compile/' + encodeURIComponent(COMPILATION_ID) + '/data-model/approve';
+  const chip = document.getElementById('dm-state-chip');
+  const hashEl = document.getElementById('dm-lib-hash');
+  const approveBtn = document.getElementById('approve-dm-btn');
+
+  const BELIEF_LABEL = { approved: 'approved', unreviewed: 'unreviewed', edited_stale: 'edited · stale' };
+
+  // ── Approve the whole data model (the gate) ──
+  if (approveBtn) {
+    approveBtn.addEventListener('click', async function () {
+      approveBtn.disabled = true;
+      const original = approveBtn.textContent;
+      approveBtn.textContent = 'Approving…';
+      try {
+        const fd = new FormData();
+        fd.append('content_hash', hashEl ? hashEl.textContent.trim() : '');
+        const r = await fetch(APPROVE_URL, { method: 'POST', body: fd });
+        if (!r.ok) { alert('Approve failed: ' + r.status + ' ' + await r.text()); return; }
+        // Reload so Phase 2 unlocks (server re-evaluates data_model_state == approved).
+        window.location.reload();
+        return;
+      } finally {
+        approveBtn.disabled = false;
+        approveBtn.textContent = original;
+      }
+    });
+  }
+
+  // ── Save an edited schema — POST yaml_text; on 400 render validate_named_schema
+  //    issues (file untouched); on ok the library hash changed so approval drops.
+  //    Reload to recompute the gate state + re-render the data model. ──
+  function bySchema(role, name) {
+    return document.querySelector('[data-role="' + role + '"][data-schema-name="' + (window.CSS && CSS.escape ? CSS.escape(name) : name) + '"]');
+  }
+
+  async function saveSchema(name, btn) {
+    const ta = bySchema('schema-yaml', name);
+    const msg = bySchema('se-msg', name);
+    const issuesEl = bySchema('se-issues', name);
+    if (!ta) return;
+    btn.disabled = true;
+    if (msg) { msg.textContent = 'Saving…'; msg.className = 'se-msg'; }
+    if (issuesEl) { issuesEl.hidden = true; issuesEl.innerHTML = ''; }
+    try {
+      const fd = new FormData();
+      fd.append('yaml_text', ta.value);
+      const url = '/compile/' + encodeURIComponent(COMPILATION_ID)
+        + '/schema/' + encodeURIComponent(name) + '/edit';
+      const r = await fetch(url, { method: 'POST', body: fd });
+      let d = null;
+      try { d = await r.json(); } catch (e) {}
+      if (r.status === 400 && d && d.issues) {
+        if (msg) { msg.textContent = '✗ Not saved — validation failed'; msg.className = 'se-msg err'; }
+        if (issuesEl) {
+          issuesEl.hidden = false;
+          issuesEl.innerHTML = d.issues.map(i => '<li>' + i + '</li>').join('');
+        }
+        return;
+      }
+      if (!r.ok || !d || !d.ok) {
+        if (msg) { msg.textContent = ('✗ ' + r.status + ' ' + (d && d.detail ? d.detail : '')).trim(); msg.className = 'se-msg err'; }
+        return;
+      }
+      // Saved. The library hash changed → approval (if any) is now stale. Reload so
+      // the gate chip + Phase-2 lock reflect it (mirrors node edit-clears-approval).
+      if (msg) { msg.textContent = '✓ Saved — data-model approval dropped (re-approve to unlock the DAG)'; msg.className = 'se-msg ok'; }
+      setTimeout(() => window.location.reload(), 700);
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  document.addEventListener('click', function (ev) {
+    const save = ev.target.closest('[data-role="save-schema"]');
+    if (save) { ev.preventDefault(); saveSchema(save.dataset.schemaName, save); }
+  });
+})();
+</script>
+{% endblock %}
