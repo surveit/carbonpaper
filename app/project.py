@@ -342,22 +342,22 @@ def _next_action(
     if not workflow["present"]:
         return {
             "key": "build_workflow",
-            "label": "Build the workflow",
+            "label": "Build the methodology",
             "href": f"{base}/workflow",
         }
-    # 4. Workflow present but not fully approved → review the workflow.
+    # 4. Workflow present but not fully approved → review the methodology.
     cov = workflow["coverage"] or {}
     if cov.get("approved", 0) < cov.get("total", 0):
         return {
             "key": "review_workflow",
-            "label": "Review the workflow",
+            "label": "Review the methodology",
             "href": f"{base}/workflow",
         }
     # 5. Workflow fully approved but never run → run it (the run button is on /workflow).
     if runs["n"] == 0:
         return {
             "key": "run_workflow",
-            "label": "Run the workflow",
+            "label": "Run the methodology",
             "href": f"{base}/workflow",
         }
     # 6. A run is halted awaiting review → review the run.

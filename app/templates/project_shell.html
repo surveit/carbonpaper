@@ -74,7 +74,7 @@
      {'key': 'overview',   'label': 'Overview',   'href': base,                 'glyph': '◆',          'glyph_class': 'glyph-home', 'locked': false},
      {'key': 'document',   'label': 'Document',   'href': base ~ '/document',    'glyph': ('●' if state.has_document else '○'), 'glyph_class': ('glyph-ok' if state.has_document else 'glyph-none'), 'locked': false},
      {'key': 'data_model', 'label': 'Data model', 'href': base ~ '/data_model',  'glyph': dm_glyph[0],  'glyph_class': dm_glyph[1],  'locked': false},
-     {'key': 'workflow',   'label': 'Workflow',   'href': base ~ '/workflow',    'glyph': wf_glyph[0],  'glyph_class': wf_glyph[1],  'locked': wf_locked},
+     {'key': 'workflow',   'label': 'Methodology', 'href': base ~ '/workflow',   'glyph': wf_glyph[0],  'glyph_class': wf_glyph[1],  'locked': wf_locked},
      {'key': 'runs',       'label': 'Runs',       'href': base ~ '/runs',        'glyph': runs_glyph[0],'glyph_class': runs_glyph[1],'locked': false},
    ] %}
 
@@ -93,7 +93,7 @@
              section so the sidebar highlights where you are even while locked. #}
           <span class="app-nav-item locked {% if item.key == section %}current{% endif %}" tabindex="0"
                 {% if item.key == section %}aria-current="page"{% endif %}
-                title="Approve the data model first to unlock the workflow">
+                title="Approve the data model first to unlock the methodology">
             <span class="app-nav-glyph {{ item.glyph_class }}">{{ item.glyph }}</span>
             <span class="app-nav-label">{{ item.label }}</span>
           </span>

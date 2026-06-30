@@ -42,9 +42,9 @@
 
 <div class="sec-head">
   <h1>Data model</h1>
-  <p class="lede">Named schemas authored <strong>before</strong> the workflow. Each
+  <p class="lede">Named schemas authored <strong>before</strong> the methodology. Each
     table declares a <strong>kind</strong> — where it sits in the pipeline. Approve the
-    whole data model to unlock the workflow. Use the chat to author or steer.</p>
+    whole data model to unlock the methodology. Use the chat to author or steer.</p>
 </div>
 
 <div class="dm-flow-body">
@@ -70,7 +70,7 @@
               id="approve-dm-btn" {% if not schemas %}disabled{% endif %}>{% if is_approved %}✓ Data model approved{% else %}✓ Approve data model{% endif %}</button>
       {% if dm_state == 'edited_stale' %}
       <p class="gate-stale-note" id="dm-stale-note">A schema changed after approval (the
-        library content hash no longer matches). Re-approve to unlock the workflow.</p>
+        library content hash no longer matches). Re-approve to unlock the methodology.</p>
       {% endif %}
     </div>
 
@@ -98,7 +98,7 @@
         {% set kind_blurb = {
             "reference": "Dimension / lookup / benchmark data we must SOURCE, not compute.",
             "input": "Raw data fetched into the pipeline.",
-            "computed": "Produced by a workflow stage.",
+            "computed": "Produced by a methodology stage.",
             "ground_truth": "External truth used only by eval; mirrors a computed schema."
         } %}
         {% for kind in kind_order %}
@@ -152,9 +152,12 @@
           {% endif %}
         {% endfor %}
       {% else %}
-        <p class="dm-empty" id="dm-empty">No schemas yet. Use the chat on the right —
-          click <strong>Propose data model</strong> to seed from the document; schemas
-          appear here as they're persisted to <code>examples/{{ state.name }}/schemas/</code>.</p>
+        <div class="empty-state dm-empty-state" id="dm-empty">
+          <h2>No data model yet</h2>
+          <p class="muted">Describe the tables you want (optional), then <strong>Send</strong>
+            — the AI proposes a data model from your document. Schemas appear here as they're
+            persisted to <code>examples/{{ state.name }}/schemas/</code>.</p>
+        </div>
       {% endif %}
     </div>
 
@@ -168,15 +171,15 @@
     </div>
 
     <div class="chat-log" id="chat-log">
-      <div class="chat-msg system">No messages yet. Click
-        <strong>Propose data model</strong> to seed from the document, or type your
-        own instruction.</div>
+      <div class="chat-msg system">No messages yet. <strong>Send</strong> to seed a data
+        model from the document, or type your own instruction first.</div>
     </div>
     <div class="chat-working" id="chat-working"><span class="spin"></span>
-      <span id="chat-working-label">authoring data model…</span></div>
+      <span id="chat-working-label">Authoring…</span></div>
     <div class="chat-input-row">
       <textarea id="chat-input" placeholder="Steer the data model… (Enter to send, Shift+Enter for newline)"></textarea>
-      <button id="chat-send" type="button">{% if schemas %}Steer{% else %}Propose data model{% endif %}</button>
+      <button id="chat-send" type="button">Send</button>
+      <p class="chat-hint chat-input-hint">Leave blank to use your document, or add guidance.</p>
     </div>
     <p class="chat-hint">"split donors and recipients into two tables" · "add a benchmark
       reference table" · "this column should be nullable". Re-send any time to steer.</p>
@@ -200,8 +203,8 @@
   //   error            → a red bubble
   // DOUBLE-SUBMIT GUARD: send disabled + "working…" shown until a terminal event.
   const METHODOLOGY = {{ state.name | tojson }};
-  const WORKING_LABEL = 'authoring data model…';
-  const DONE_NOTE = 'Review / edit, then approve to unlock the workflow. Refreshing…';
+  const WORKING_LABEL = 'Authoring…';
+  const DONE_NOTE = 'Review / edit, then approve to unlock the methodology. Refreshing…';
 
   const log = document.getElementById('chat-log');
   const cards = document.getElementById('chat-cards');
@@ -411,7 +414,7 @@
       }
       // Saved. The library hash changed → approval (if any) is now stale. Reload so
       // the gate chip + workflow lock reflect it (mirrors node edit-clears-approval).
-      if (msg) { msg.textContent = '✓ Saved — data-model approval dropped (re-approve to unlock the workflow)'; msg.className = 'se-msg ok'; }
+      if (msg) { msg.textContent = '✓ Saved — data-model approval dropped (re-approve to unlock the methodology)'; msg.className = 'se-msg ok'; }
       setTimeout(() => window.location.reload(), 700);
     } finally {
       btn.disabled = false;

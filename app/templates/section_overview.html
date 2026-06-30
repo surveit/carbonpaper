@@ -62,11 +62,11 @@
     {% endif %}
   </a>
 
-  {# Workflow #}
+  {# Methodology (the typed-stage pipeline) #}
   {% set wf_locked = (s.data_model.state != "approved") %}
   <a class="ov-tile {% if wf_locked %}is-locked{% endif %}"
      href="/methodology/{{ s.name }}/workflow">
-    <span class="ov-tile-k">Workflow</span>
+    <span class="ov-tile-k">Methodology</span>
     {% if wf_locked %}
       <span class="ov-tile-v locked">🔒 locked</span>
       <span class="ov-tile-sub">approve the data model first</span>
@@ -116,7 +116,7 @@
 </div>
 
 <p class="ov-foot muted">A project is built in order: a source <b>document</b> → a
-  <b>data model</b> (named schemas) → a <b>workflow</b> (typed stages) → immutable
+  <b>data model</b> (named schemas) → a <b>methodology</b> (typed stages) → immutable
   <b>versions</b> → <b>runs</b>. The <b>Next</b> action above is the first unfinished
   rung.</p>
 {% endblock %}

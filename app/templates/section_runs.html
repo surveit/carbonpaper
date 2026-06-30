@@ -15,16 +15,16 @@
 <div class="sec-head wf-head">
   <div class="wf-head-title">
     <h1>Runs</h1>
-    <p class="lede">Each run pins to a workflow <strong>version</strong> and reads its
-      snapshot, so a run is reproducible against the exact workflow it executed.</p>
+    <p class="lede">Each run pins to a methodology <strong>version</strong> and reads its
+      snapshot, so a run is reproducible against the exact methodology it executed.</p>
   </div>
   <div class="actions wf-actions">
     {% if state.data_model.state == "approved" %}
     <form action="/methodology/{{ state.name }}/run" method="post" style="display:inline;">
-      <button type="submit" class="btn primary">▶ Run workflow</button>
+      <button type="submit" class="btn primary">▶ Run methodology</button>
     </form>
     {% endif %}
-    <a href="/methodology/{{ state.name }}/workflow" class="btn">Workflow</a>
+    <a href="/methodology/{{ state.name }}/workflow" class="btn">Methodology</a>
   </div>
 </div>
 
@@ -66,9 +66,9 @@
   <h2>No runs yet</h2>
   <p class="muted">
     {% if state.data_model.state == "approved" %}
-      Click <strong>▶ Run workflow</strong> above (or on the Workflow page) to execute the pipeline end-to-end.
+      Click <strong>▶ Run methodology</strong> above (or on the Methodology page) to execute the pipeline end-to-end.
     {% else %}
-      Approve the data model and build the workflow first, then run it.
+      Approve the data model and build the methodology first, then run it.
     {% endif %}
   </p>
 </div>

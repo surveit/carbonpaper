@@ -1517,6 +1517,25 @@ table.data-preview.scratch th { background: #f3ecd0; }
 .wf-right { display: block; }
 .wf-right.loading { opacity: 0.5; }
 
+/* In-column empty states (data model with no schemas / methodology with no stages):
+   sit compactly in the main column alongside the chat, not the full-page 80px veil. */
+.dm-empty-state, .wf-empty-state {
+    text-align: center;
+    padding: 40px 24px;
+    border: 1px dashed var(--border);
+    border-radius: 10px;
+    background: #fafafa;
+    margin: 8px 0 4px;
+}
+.dm-empty-state h2, .wf-empty-state h2 { margin: 0 0 8px; color: var(--fg); }
+.dm-empty-state p, .wf-empty-state p { max-width: 520px; margin: 0 auto; }
+
+/* Center the methodology graph in the main column — make it the focal point. The
+   .dag frame centres, and the mermaid flowchart SVG itself is centred within it. */
+.wf-graph { display: flex; justify-content: center; }
+.wf-graph .mermaid { max-width: 100%; margin: 0 auto; }
+.wf-graph .mermaid svg { display: block; margin: 0 auto; }
+
 /* ═══════════════════════════════════════════════════════════════════════════
    SHARED AI-CHAT + DATA-MODEL RENDER (used by section_data_model.html and
    section_workflow.html). Ported out of compile_flow.html's inline <style> so
@@ -1564,6 +1583,8 @@ table.data-preview.scratch th { background: #f3ecd0; }
     color: #fff; font-weight: 600; cursor: pointer; }
 .chat-input-row button:disabled { background: #9aa3ad; cursor: default; }
 .chat-hint { color: #888; font-size: 12px; margin: 2px 0 10px; }
+/* One-line hint pinned directly under the input (inside .chat-input-row). */
+.chat-input-hint { margin: 0; }
 .chat-cards-head { margin: 14px 0 8px; font-size: 13px; color: #555; }
 
 /* The in-flight "working" indicator (the double-submit guard's visible half). */

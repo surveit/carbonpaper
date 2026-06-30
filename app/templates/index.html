@@ -4,7 +4,7 @@
 <div class="dash-header">
     <div class="dash-header-text">
         <h1>Methodology projects</h1>
-        <p class="lede">Each project is a directory under <code>examples/</code>, built in two steps: a <strong>data model</strong> (named schemas in <code>schemas/</code>), then a <strong>workflow</strong> (typed stages in <code>compiled/</code>) that wires transforms between those schemas, plus the <strong>runs</strong> executed against it.</p>
+        <p class="lede">Each project is a directory under <code>examples/</code>, built in two steps: a <strong>data model</strong> (named schemas in <code>schemas/</code>), then a <strong>methodology</strong> (typed stages in <code>compiled/</code>) that wires transforms between those schemas, plus the <strong>runs</strong> executed against it.</p>
     </div>
     <a href="/methodology/new" class="btn primary new-methodology-btn">＋ New methodology</a>
 </div>
@@ -21,7 +21,7 @@
         <a href="{{ open_url }}" class="project-name">{{ m.name }}</a>
         <div class="project-status">
             {% if m.has_dag %}
-            <span class="badge {% if m.has_schemas %}python{% else %}input{% endif %}">Workflow · {{ m.n_stages }} stage{% if m.n_stages != 1 %}s{% endif %}</span>
+            <span class="badge {% if m.has_schemas %}python{% else %}input{% endif %}">Methodology · {{ m.n_stages }} stage{% if m.n_stages != 1 %}s{% endif %}</span>
             {% else %}
             <span class="badge aggregate">Data model only</span>
             {% endif %}
@@ -30,7 +30,7 @@
         </div>
         <div class="project-links">
             {% if m.has_schemas %}<a href="/methodology/{{ m.name }}/schemas" class="proj-link">Data model</a>{% endif %}
-            {% if m.has_dag %}<a href="/methodology/{{ m.name }}/workflow" class="proj-link">Workflow</a>{% endif %}
+            {% if m.has_dag %}<a href="/methodology/{{ m.name }}/workflow" class="proj-link">Methodology</a>{% endif %}
             {% if m.n_runs > 0 %}<a href="/methodology/{{ m.name }}/runs" class="proj-link">Runs</a>{% endif %}
         </div>
     </div>
@@ -39,7 +39,7 @@
 {% else %}
 <div class="empty-state">
     <h2>No methodologies yet — start your first one</h2>
-    <p class="muted">A methodology project lives in <code>examples/&lt;name&gt;/</code>: author a data model, then a workflow, then run it.</p>
+    <p class="muted">A methodology project lives in <code>examples/&lt;name&gt;/</code>: author a data model, then a methodology, then run it.</p>
     <a href="/methodology/new" class="btn primary new-methodology-btn">＋ New methodology</a>
 </div>
 {% endif %}

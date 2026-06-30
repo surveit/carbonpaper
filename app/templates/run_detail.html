@@ -33,9 +33,9 @@
     <p class="stage-id ran-against">
         {% if manifest.dag_version %}
             ran against version <a href="/methodology/{{ methodology }}/versions"><code>{{ manifest.dag_version }}</code></a>
-            <span class="muted">— the workflow below is this version's frozen snapshot.</span>
+            <span class="muted">— the methodology below is this version's frozen snapshot.</span>
         {% else %}
-            <span class="muted">ran against <strong>(unversioned)</strong> — predates workflow versioning.</span>
+            <span class="muted">ran against <strong>(unversioned)</strong> — predates methodology versioning.</span>
         {% endif %}
     </p>
 </div>
@@ -83,11 +83,11 @@
 {{ mermaid }}
     </pre>
 </div>
-<p class="lede">Click any node in the workflow above to inspect that stage below. Border: <span class="lg lg-done">green</span> complete · <span class="lg lg-run">yellow</span> in progress · <span class="lg lg-err">red</span> error · <span class="lg lg-pend">grey</span> pending.</p>
+<p class="lede">Click any node in the methodology above to inspect that stage below. Border: <span class="lg lg-done">green</span> complete · <span class="lg lg-run">yellow</span> in progress · <span class="lg lg-err">red</span> error · <span class="lg lg-pend">grey</span> pending.</p>
 
 {# ── Stage detail panel, below the DAG, full width. ── #}
 <div class="stage-panel-full" id="stage-panel">
-    <div class="empty-state"><h2>Select a stage</h2><p>Click any node in the workflow to load its run details.</p></div>
+    <div class="empty-state"><h2>Select a stage</h2><p>Click any node in the methodology to load its run details.</p></div>
 </div>
 
 <details class="raw-yaml"><summary>Raw manifest</summary><pre>{{ manifest | tojson(indent=2) }}</pre></details>
