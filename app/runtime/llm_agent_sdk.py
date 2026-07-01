@@ -21,6 +21,7 @@ import concurrent.futures
 import os
 import shutil
 from pathlib import Path
+from typing import Any
 
 _TIMEOUT_S = int(os.environ.get("CW_LLM_TIMEOUT_S", "180"))
 
@@ -112,15 +113,13 @@ async def _aquery(
     allow = list(tools or [])
     use_tools = bool(allow)
 
-    opts_kwargs = dict(
+    opts_kwargs: dict[str, Any] = dict(
         model=model,
         max_turns=max_turns or (16 if use_tools else 4),
         allowed_tools=allow,
         setting_sources=[],
     )
-    # No system prompt of our own by default — the model already knows how to
-    # answer in JSON and which tools it has. `system` is an explicit override
-    # (used by the inspector REPL), applied only when passed.
+    # No default system prompt; applied only when the caller passes `system`.
     if system:
         opts_kwargs["system_prompt"] = system
     if _CLI_PATH:

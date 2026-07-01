@@ -17,7 +17,7 @@ import json
 import os
 import subprocess
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Any, Callable
+from typing import Any, Callable, TypedDict, cast
 
 from . import llm_mock
 from . import llm_agent_sdk
@@ -29,6 +29,13 @@ from .options import (
     LLMError,
     get_llm_call_type,
 )
+
+
+class LLMConfigDict(TypedDict, total=False):
+    """A stage's `llm:` handle block, as `call_llm` consumes it."""
+    prompt_template: str
+    model: str
+    tools: list[str]
 
 
 def _call_claude_subprocess(prompt: str, model: str = DEFAULT_MODEL,
@@ -140,7 +147,7 @@ def render_prompt(template: str, row: dict[str, Any]) -> str:
         )
 
 
-def call_llm(stage_id: str, llm_config: dict[str, Any], input_row: dict[str, Any],
+def call_llm(stage_id: str, llm_config: LLMConfigDict, input_row: dict[str, Any],
              *, use_real: bool | None = None, model: str | None = None) -> Any:
     """Single-row LLM call, routed to the backend from `get_llm_call_type()`.
 
@@ -150,7 +157,7 @@ def call_llm(stage_id: str, llm_config: dict[str, Any], input_row: dict[str, Any
     backend = "mock" if use_real is False else get_llm_call_type()
 
     if backend == "mock":
-        return llm_mock.mock_llm_call(stage_id, llm_config, input_row)
+        return llm_mock.mock_llm_call(stage_id, cast("dict[str, Any]", llm_config), input_row)
 
     template = llm_config.get("prompt_template", "")
     if not template:
@@ -171,7 +178,7 @@ def call_llm(stage_id: str, llm_config: dict[str, Any], input_row: dict[str, Any
 
 def call_llm_batch(
     stage_id: str,
-    llm_config: dict[str, Any],
+    llm_config: LLMConfigDict,
     input_rows: list[dict[str, Any]],
     *,
     parallel: int = DEFAULT_PARALLEL,

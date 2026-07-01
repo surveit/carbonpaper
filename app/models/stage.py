@@ -51,8 +51,6 @@ class AggFormula(str, Enum):
     max = "max"
     first = "first"
     list = "list"
-    # Used by LobbyMap's cell_score (see handlers.handle_aggregate); each needs
-    # a value_column + weight_column (enforced on AggregationOp below).
     weighted_mean = "weighted_mean"
     weighted_sum = "weighted_sum"
 
