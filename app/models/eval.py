@@ -12,8 +12,8 @@ from typing import Any, Optional
 
 from pydantic import Field, ValidationError, model_validator
 
-from app.models.schema import NamedColumn, NamedSchema, SchemaKind
-from app.models.schema_column import _Base, format_errors
+from app.models.named_schemas import NamedColumn, NamedSchema, SchemaKind
+from app.models.schema import _Base, format_errors
 
 
 class EvalSpec(_Base):

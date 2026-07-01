@@ -12,7 +12,7 @@ from typing import Any, Literal, Optional
 from pydantic import Field, ValidationError, field_validator, model_validator
 
 from app.llm.options import LLMModel
-from app.models.schema_column import (
+from app.models.schema import (
     SourceRef,
     TableSchema,
     _Base,

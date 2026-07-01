@@ -1,4 +1,4 @@
-"""Tests for app/models/schema.py — named schemas (the data model)."""
+"""Tests for app/models/named_schemas.py — the named data model."""
 from __future__ import annotations
 
 import pytest

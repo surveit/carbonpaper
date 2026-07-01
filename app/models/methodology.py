@@ -10,7 +10,7 @@ from typing import Any
 
 from pydantic import ValidationError, model_validator
 
-from app.models.schema_column import _Base, format_errors
+from app.models.schema import _Base, format_errors
 from app.models.stage import Stage
 
 

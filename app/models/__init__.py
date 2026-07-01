@@ -1,12 +1,15 @@
 """The methodology DAG contract, as Pydantic models.
 
-Split across two modules:
-  - stage.py       — node types, handle blocks, the Stage model
-  - methodology.py — the Methodology (DAG) model + cross-stage graph checks
+Split across modules:
+  - schema.py        — model base + the Column/TableSchema primitives
+  - stage.py         — node types, handle blocks, the Stage model
+  - methodology.py   — the Methodology (DAG) model + cross-stage graph checks
+  - named_schemas.py — the named data model (NamedSchema, SchemaLibrary)
+  - eval.py          — the eval overlay (EvalSpec + ground-truth derivation)
 
 Import from `app.models` (this aggregator) for the stable public surface.
 """
-from app.models.schema_column import (
+from app.models.schema import (
     Column,
     SourceRef,
     TableSchema,
@@ -41,7 +44,7 @@ from app.models.methodology import (
     parse_methodology,
     validate_methodology,
 )
-from app.models.schema import (
+from app.models.named_schemas import (
     NamedColumn,
     NamedSchema,
     SchemaKind,

@@ -1,116 +1,109 @@
-"""Named schemas — the data model, authored before the DAG.
+"""Schema primitives — the model base and the anonymous Column / TableSchema.
 
-A NamedSchema is a TableSchema (the anonymous, inline schema a stage can make up
-on the fly) promoted to a first-class, addressable artifact: it adds a `name`, a
-`kind` (where it sits in the pipeline), and explicit foreign keys (`references` on
-its columns) so the data model is a real graph rather than a PK-name-collision
-heuristic. A SchemaLibrary is the whole data model: it checks names are unique and
-every reference resolves.
-
-Like methodology.py, the cross-schema checks are plain functions so they can be
-tested and read on their own.
+The pieces both the DAG (`stage.py`) and the named data model (`named_schemas.py`)
+build on: the model base, the column-type vocabulary, `Column`, `TableSchema` (an
+anonymous schema that can be declared inline), the `SourceRef` provenance handle,
+and the error formatter. They live *below* both modules — `stage.py` and
+`named_schemas.py` import from here, never the other way around — so `NamedColumn`
+and `NamedSchema` can extend `Column`/`TableSchema` without `named_schemas.py`
+depending on `stage.py`.
 """
 from __future__ import annotations
 
-from enum import Enum
+import re
 from typing import Any, Optional
 
-from pydantic import Field, ValidationError, field_validator, model_validator
-
-from app.models.schema_column import (
-    Column,
-    SourceRef,
-    TableSchema,
-    _Base,
-    _SNAKE_RE,
-    format_errors,
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    ValidationError,
+    field_validator,
+    model_validator,
 )
 
 
-class SchemaKind(str, Enum):
-    reference = "reference"        # source, don't compute (dimension / lookup / benchmark)
-    input = "input"                # raw data fetched into the pipeline
-    computed = "computed"          # produced by a DAG stage
-    ground_truth = "ground_truth"  # external truth used only by eval
+# ── Base ─────────────────────────────────────────────────────────────────────
+class _Base(BaseModel):
+    model_config = ConfigDict(extra="ignore")
 
 
-class NamedColumn(Column):
-    """A Column that may carry a foreign key (`references`) to another named
-    schema, by name or `schema.column`."""
-    references: Optional[str] = None
+# ── Identifiers ──────────────────────────────────────────────────────────────
+_SNAKE_RE = re.compile(r"^[a-z][a-z0-9_]*$")
 
 
-def parse_reference(ref: str) -> tuple[str, Optional[str]]:
-    """`"company"` -> (company, None); `"company.company_id"` -> (company, company_id)."""
-    if "." in ref:
-        schema_name, col = ref.split(".", 1)
-        return schema_name.strip(), col.strip()
-    return ref.strip(), None
+# ── Column-type vocabulary ───────────────────────────────────────────────────
+SCALAR_COLUMN_TYPES: set[str] = {
+    "str", "int", "float", "bool", "datetime", "date", "dict", "json",
+}
+_LIST_RE = re.compile(r"^list\[(.+)\]$")
 
 
-class NamedSchema(TableSchema):
-    """One named table in the data model — a TableSchema with a `name`, a `kind`,
-    and foreign-key-carrying columns. Column uniqueness and primary-key membership
-    are validated by TableSchema."""
+def is_valid_column_type(t: str) -> bool:
+    """Scalar, or list[<scalar>] / nested list[list[...]]."""
+    if not isinstance(t, str):
+        return False
+    if t in SCALAR_COLUMN_TYPES:
+        return True
+    m = _LIST_RE.match(t)
+    if m:
+        inner = m.group(1).strip()
+        return inner in SCALAR_COLUMN_TYPES or bool(_LIST_RE.match(inner))
+    return False
+
+
+# ── Provenance ───────────────────────────────────────────────────────────────
+class SourceRef(_Base):
+    """Where a stage's or schema's prose justification lives."""
+    doc: Optional[str] = None
+    section: Optional[str] = None
+    lines: Optional[list[int]] = None
+
+
+# ── Typed columns / schemas ──────────────────────────────────────────────────
+class Column(_Base):
     name: str
-    kind: SchemaKind
-    title: str
-    columns: list[NamedColumn] = Field(default_factory=list)
+    type: str = "str"
+    nullable: bool = True
     description: Optional[str] = None
-    source: Optional[SourceRef] = None
+    range: Optional[list[Any]] = None
+    source: Optional[str] = None
 
-    @field_validator("name")
+    @field_validator("type")
     @classmethod
-    def _snake_case(cls, v: str) -> str:
-        if not _SNAKE_RE.match(v):
-            raise ValueError(f"name {v!r} should be snake_case")
+    def _known_type(cls, v: str) -> str:
+        if not is_valid_column_type(v):
+            raise ValueError(f"unknown column type {v!r}")
         return v
 
 
-def check_unique_schema_names(schemas: list[NamedSchema]) -> None:
-    names = [s.name for s in schemas]
-    dupes = sorted({n for n in names if names.count(n) > 1})
-    if dupes:
-        raise ValueError(f"duplicate schema name(s): {dupes}")
-
-
-def check_references_resolve(schemas: list[NamedSchema]) -> None:
-    by_name = {s.name: s for s in schemas}
-    for s in schemas:
-        for col in s.columns:
-            if not col.references:
-                continue
-            target_name, target_col = parse_reference(col.references)
-            target = by_name.get(target_name)
-            if target is None:
-                raise ValueError(
-                    f"`{s.name}`.{col.name}: references unknown schema `{target_name}`")
-            if target_col is not None and target_col not in {c.name for c in target.columns}:
-                raise ValueError(
-                    f"`{s.name}`.{col.name}: references `{target_name}.{target_col}` "
-                    f"which is not a column of `{target_name}`")
-
-
-class SchemaLibrary(_Base):
-    """The whole data model: named schemas with unique names and resolvable FKs."""
-    schemas: list[NamedSchema]
+class TableSchema(_Base):
+    """An anonymous schema — columns plus an optional primary key — that can be
+    declared inline (e.g. a stage's `output_schema`). `NamedSchema` promotes it to
+    a first-class, named artifact."""
+    columns: list[Column]
+    estimated_rows: Optional[int] = None
+    primary_key: Optional[list[str]] = None
+    notes: Optional[str] = None
 
     @model_validator(mode="after")
-    def _validate_library(self) -> "SchemaLibrary":
-        check_unique_schema_names(self.schemas)
-        check_references_resolve(self.schemas)
+    def _consistent(self) -> "TableSchema":
+        seen: set[str] = set()
+        for c in self.columns:
+            if c.name in seen:
+                raise ValueError(f"duplicate column {c.name!r}")
+            seen.add(c.name)
+        for k in self.primary_key or []:
+            if k not in seen:
+                raise ValueError(f"primary_key {k!r} is not a declared column")
         return self
 
 
-def parse_schema_library(schemas: list[dict[str, Any]]) -> SchemaLibrary:
-    """Parse + validate the data model. Raises ValidationError if invalid."""
-    return SchemaLibrary(schemas=list(schemas))
-
-
-def validate_schema_library(schemas: list[dict[str, Any]]) -> list[str]:
-    """Non-fatal: validate the data model, return issues ([] means valid)."""
-    try:
-        SchemaLibrary(schemas=list(schemas))
-        return []
-    except ValidationError as err:
-        return format_errors(err)
+# ── Error formatting ─────────────────────────────────────────────────────────
+def format_errors(err: ValidationError) -> list[str]:
+    """Pydantic errors → human-readable issue strings."""
+    out: list[str] = []
+    for e in err.errors():
+        loc = ".".join(str(p) for p in e.get("loc", ()) if p != "stages")
+        msg = e.get("msg", "invalid")
+        out.append(f"{loc}: {msg}" if loc else msg)
+    return out
