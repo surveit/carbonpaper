@@ -32,7 +32,7 @@ from app.runtime.preview import run_stage_preview, PreviewError, PREVIEWABLE_TYP
 
 from app import node_review  # node-level APPROVAL / BELIEF state (Piece B)
 from app import versioning  # immutable DAG version snapshots (Piece C)
-from app.dag_schema import validate_stage  # single-stage contract (node-edit writer)
+from app.models import validate_stage  # single-stage contract (node-edit writer)
 
 # Shared web primitives (templates, paths, DAG rendering, background runner) live
 # in app.web_context so the compiler's route modules (app.pages / app.api.compile)
@@ -54,7 +54,7 @@ from app.web_context import (
     _load_schemas,
     _run_in_background,
 )
-from app.dag_schema import validate_schema_library
+from app.models import validate_schema_library
 from app import pages
 from app import project  # PROJECT model — project_state snapshot for the unified sections
 from app.api import compile as compile_api

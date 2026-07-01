@@ -1,6 +1,6 @@
 # app/runtime — the Runner (DAG executor)
 
-Executes a methodology DAG and persists the result. Imports `app.dag_schema` (the
+Executes a methodology DAG and persists the result. Imports `app.models` (the
 contract) but NOT the compiler or the web app.
 
 ## Files
@@ -45,7 +45,7 @@ contract) but NOT the compiler or the web app.
     that never asserts a feature or invents a URL).
 - **`validation.py`** — DATA validation of a dataframe against an `output_schema`
   (present columns, types, ranges, nullability, PK uniqueness). Distinct from
-  `dag_schema`'s STAGE-SPEC validation.
+  `models`' STAGE-SPEC validation.
 
 ## Run / debug
 ```

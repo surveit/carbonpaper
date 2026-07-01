@@ -1,7 +1,7 @@
 # app — the FastAPI web app (DAG / run / review UI)
 
 `app/main.py` serves the methodology DAGs, their runs, and the review queue. It
-imports the Runner (`app.runtime`) and the contract (`app.dag_schema`). (The
+imports the Runner (`app.runtime`) and the contract (`app.models`). (The
 Compiler feature adds `/compile` pages, split into `app/pages.py` +
 `app/api/compile.py` — see the "Compiler" section below.)
 
@@ -52,15 +52,15 @@ templates / paths / type maps / `build_mermaid_graph` / background runner) ·
 The third feature on the DAG artifact. `app/compiler.py` reads an UNSTRUCTURED
 input — a captured agent/tool transcript, working notes, or plain prose — **as
 prose** and asks the model to distill it into a *draft* methodology that conforms
-to `app/dag_schema`. It does no structured parsing of the input; the model recovers
-the pipeline. **Separation rule:** the compiler imports only `app.dag_schema`,
+to `app/models`. It does no structured parsing of the input; the model recovers
+the pipeline. **Separation rule:** the compiler imports only `app.models`,
 `app.prompt`, + `claude_agent_sdk`; it must NOT import `app.runtime` (the runner
 stays ignorant of the compiler). The `/compile` routes live in `app/pages.py`
 (pages) + `app/api/compile.py` (actions), mounted on the app in `main.py`.
 
 ## How it works
 - `app/prompt.py` — `SYSTEM_PROMPT` + `build_compile_prompt(input_text, name)`. The
-  node-type contract is rendered straight from `dag_schema.NODE_TYPES` so the prompt
+  node-type contract is rendered straight from `models.NODE_TYPES` so the prompt
   can't drift from the real schema.
 - `compiler.read_input` — read the file as text (a `.jsonl` transcript is fed to the
   model as prose, exactly like a `.md`/`.txt` note).
@@ -68,7 +68,7 @@ stays ignorant of the compiler). The `/compile` routes live in `app/pages.py`
   (`stages` + `methodology_raw_md` + `compiler_notes`) with bounded retry on
   malformed output. Never fabricates: a bad/empty result raises rather than being
   passed off as a clean compile.
-- `compiler.validate` — runs `dag_schema.validate_methodology` as a self-check.
+- `compiler.validate` — runs `models.validate_methodology` as a self-check.
 
 ## A compilation is a first-class object (parallels a run)
 Persisted at `compilations/<id>/` (gitignored): `manifest.json` (status, model,

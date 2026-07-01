@@ -15,7 +15,7 @@ Two reviews, deliberately distinct:
   - ROW review (app/runtime/handlers.py + app/main.py decisions store) = "is this
     run's data right?" — the human_review_queue, which DOES halt a run.
 
-Dependency rule (mirrors dag_schema.py's discipline): this module imports NOTHING
+Dependency rule (mirrors app/models' discipline): this module imports NOTHING
 from app.runtime or app.compiler. It is pure stdlib + yaml + pandas, so it stays
 a trustworthy, side-effect-light interface that both the routes layer and the
 versioning layer can lean on.

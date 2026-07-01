@@ -3,12 +3,12 @@ compiler.py — the COMPILER feature of the methodology-DAG platform.
 
 Job: take an UNSTRUCTURED input — a captured agent/tool transcript, working notes,
 or plain prose describing a research process — and DISTILL it into a *draft* DAG:
-a list of compiled stage dicts targeting `app.dag_schema`, plus a
+a list of compiled stage dicts targeting `app.models`, plus a
 `methodology_raw.md` and `compiler_notes` recording ambiguities.
 
 The approach is deliberately thin: we do NOT pre-parse the input into a structured
 tool-call summary. We treat it as prose, hand it to the LLM with a system prompt
-that frames the dag_schema contract (see `app/prompt.py`), and ask the model to
+that frames the models contract (see `app/prompt.py`), and ask the model to
 emit the DAG as JSON. The model recovers the pipeline; this module is just the
 mechanism around the one call: read → prompt → call → parse → validate → persist.
 
@@ -18,10 +18,10 @@ Pipeline:
                                       (Agent SDK, no tools), parse JSON →
                                       {stages, methodology_raw, compiler_notes}
     write_methodology(result, out) → write compiled/NN_<id>.yaml + methodology_raw.md
-    validate(stages)               → dag_schema.validate_methodology issues (self-check)
+    validate(stages)               → models.validate_methodology issues (self-check)
 
-Dependency rule (critical, mirrors dag_schema's own): this module imports
-`app.dag_schema` + `app.prompt` from our code and `claude_agent_sdk` directly. It
+Dependency rule (critical, mirrors models' own): this module imports
+`app.models` + `app.prompt` from our code and `claude_agent_sdk` directly. It
 MUST NOT import `app.runtime.*` — the runner stays ignorant of the compiler; they
 meet only at the schema. The CLI-discovery + no-tools query() pattern below is
 replicated from (not imported from) app/runtime/llm_agent_sdk.py.
@@ -40,7 +40,7 @@ from typing import Any, AsyncIterator
 
 import yaml
 
-from app import dag_schema
+from app import models
 from app.prompt import SYSTEM_PROMPT, _node_type_contract, build_compile_prompt
 
 
@@ -291,7 +291,7 @@ def compile_methodology(
 def validate(stages: list[dict[str, Any]]) -> list[str]:
     """Self-check: run the generated stages through the schema's own validator.
     [] means a clean-validating draft DAG."""
-    return dag_schema.validate_methodology(stages)
+    return models.validate_methodology(stages)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -573,10 +573,10 @@ def load_compilation(compilations_root: str | Path, compilation_id: str) -> dict
 # above.
 #
 # Same dependency rule as the rest of this module: imports only `claude_agent_sdk`
-# and `app.dag_schema` (+ stdlib/yaml/app.prompt). It does NOT import app.runtime.* —
+# and `app.models` (+ stdlib/yaml/app.prompt). It does NOT import app.runtime.* —
 # the CLI-discovery (`_find_cli`/`_CLI_PATH`) and event-loop handling are REUSED from
 # this module's section 2 (not re-defined). As schema/stage JSON blocks stream in
-# they are validated by dag_schema and persisted (raw alongside cooked) under
+# they are validated by models and persisted (raw alongside cooked) under
 # comp_dir/dag/{schemas,compiled} (or the methodology working copy); the turn is
 # appended to comp_dir/chat.jsonl. If the CLI/SDK is unavailable we yield a single
 # error event and stop — never a mock fallback.
@@ -584,18 +584,18 @@ def load_compilation(compilations_root: str | Path, compilation_id: str) -> dict
 
 # The interactive system prompt is built from the SAME _node_type_contract() the
 # one-shot compiler uses (imported from app.prompt), so it can never drift from the
-# real dag_schema contract. The block-fencing convention below is the wire format
+# real models contract. The block-fencing convention below is the wire format
 # the streamed-output parser keys on: each NAMED SCHEMA arrives in a ```schema fence,
 # each STAGE in a ```stage fence, each holding exactly one JSON object. That lets us
 # pull a complete object out of the stream the instant its fence closes (without
 # trying to parse partial JSON), validate it, and emit a card.
 
-_CHAT_SCHEMA_KINDS = ", ".join(sorted(dag_schema.SCHEMA_KINDS))
+_CHAT_SCHEMA_KINDS = ", ".join(sorted(models.SCHEMA_KINDS))
 
 
 # The two contract fragments below are the SINGLE SOURCE for the schema-block and
 # stage-block wire formats, so the "both"/"data_model"/"dag" prompts can't drift
-# apart from each other or from dag_schema. Each phase prompt assembles the
+# apart from each other or from models. Each phase prompt assembles the
 # fragments it needs.
 
 def _schema_block_contract() -> str:
@@ -620,7 +620,7 @@ schema per fenced block, each a single JSON object:
 ```
 
 A column `references` (optional) names another schema (or `schema.column`) — use it to
-make the data model a real graph, not a name-collision guess. Column types: {", ".join(sorted(dag_schema.SCALAR_COLUMN_TYPES))}, or list[<type>]."""
+make the data model a real graph, not a name-collision guess. Column types: {", ".join(sorted(models.SCALAR_COLUMN_TYPES))}, or list[<type>]."""
 
 
 def _stage_block_contract() -> str:
@@ -1120,14 +1120,14 @@ async def stream_compile_chat(
                 events.append({"type": "schema_dropped", "schema": obj, "reason": reason})
                 continue
             if kind == "schema":
-                issues = dag_schema.validate_named_schema(obj)
+                issues = models.validate_named_schema(obj)
                 path = _persist_schema(comp_dir, obj, persist_base)
                 _append_chat(comp_dir, {"role": "assistant", "event": "schema_emitted",
                                         "schema": obj, "issues": issues, "path": path})
                 events.append({"type": "schema_emitted", "schema": obj,
                                "issues": issues, "path": path})
             else:
-                issues = dag_schema.validate_stage(obj)
+                issues = models.validate_stage(obj)
                 path = _persist_stage(comp_dir, obj, persist_base)
                 _append_chat(comp_dir, {"role": "assistant", "event": "stage_emitted",
                                         "stage": obj, "issues": issues, "path": path})
@@ -1175,7 +1175,7 @@ async def stream_compile_chat(
     # NOT emit `done` — the turn STOPS for human approval before any DAG is built.
     if phase == "data_model":
         validation = {
-            "schema_library": dag_schema.validate_schema_library(schemas) if schemas else [],
+            "schema_library": models.validate_schema_library(schemas) if schemas else [],
             "n_schemas": len(schemas),
         }
         _append_chat(comp_dir, {"role": "system", "event": "data_model_proposed",
@@ -1187,8 +1187,8 @@ async def stream_compile_chat(
     # `done`, so the card layer can show end-of-turn state and the page can re-render
     # the DAG from the persisted compiled files.
     validation = {
-        "schema_library": dag_schema.validate_schema_library(schemas) if schemas else [],
-        "methodology": dag_schema.validate_methodology(stages) if stages else [],
+        "schema_library": models.validate_schema_library(schemas) if schemas else [],
+        "methodology": models.validate_methodology(stages) if stages else [],
         "n_schemas": len(schemas),
         "n_stages": len(stages),
     }

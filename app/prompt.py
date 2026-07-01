@@ -4,10 +4,10 @@ prompt.py — the COMPILER's system prompt + prompt builder.
 The compiler's whole job is one LLM call: hand the model an UNSTRUCTURED account
 of a research process (a captured agent/tool transcript, a set of notes, or plain
 prose) and ask it to emit a structured methodology DAG that validates against
-`app/dag_schema.py`. This module owns *how we ask* — kept separate from
+`app/models`. This module owns *how we ask* — kept separate from
 `app/compiler.py` (which owns the mechanism: call, parse, validate, persist).
 
-`_node_type_contract()` renders the contract straight from `dag_schema.NODE_TYPES`
+`_node_type_contract()` renders the contract straight from `models.NODE_TYPES`
 so the prompt can never drift from the real schema.
 """
 
@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import json
 
-from app import dag_schema
+from app import models
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -27,7 +27,7 @@ SYSTEM_PROMPT = (
     "research process — it may be a captured agent/tool transcript, a set of "
     "notes, or plain prose describing how an investigation was carried out — and "
     "you DISTILL it into a reusable, structured methodology DAG of typed stages "
-    "targeting app/dag_schema.\n\n"
+    "targeting app/models.\n\n"
     "You have NO tools and NO web access: work only from the text the user gives "
     "you. Put the LLM (llm_transform) only at the FEW genuine judgment points; "
     "everything mechanical (building queries, downloading, parsing, joining, "
@@ -41,14 +41,14 @@ SYSTEM_PROMPT = (
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# The dag_schema contract, rendered into the prompt (single source of truth)
+# The models contract, rendered into the prompt (single source of truth)
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _node_type_contract() -> str:
-    """Render the 7 node types + their handle blocks straight from dag_schema, so
+    """Render the 7 node types + their handle blocks straight from models, so
     the prompt can never drift from the real contract."""
     out: list[str] = ["The 7 node types (each carries its executable-handle block):\n"]
-    for tname, spec in dag_schema.NODE_TYPES.items():
+    for tname, spec in models.NODE_TYPES.items():
         handle = spec["handle"]
         req = ", ".join(spec["required"]) or "(none)"
         opt = ", ".join(spec.get("optional", [])) or "(none)"
@@ -60,13 +60,13 @@ def _node_type_contract() -> str:
             f"    min_inputs={spec['min_inputs']}, requires_inputs={spec['requires_inputs']}"
         )
     out.append("")
-    out.append("Column types: " + ", ".join(sorted(dag_schema.SCALAR_COLUMN_TYPES))
+    out.append("Column types: " + ", ".join(sorted(models.SCALAR_COLUMN_TYPES))
                + ", or list[<type>].")
     out.append("Connector kinds (input_data.connector.kind): "
-               + ", ".join(sorted(dag_schema.CONNECTOR_KINDS)) + ".")
+               + ", ".join(sorted(models.CONNECTOR_KINDS)) + ".")
     out.append("python_transform.function.kind ∈ {module, inline} "
                "(module → needs `module`; inline → needs `code`).")
-    out.append("join.type ∈ " + ", ".join(sorted(dag_schema.JOIN_TYPES))
+    out.append("join.type ∈ " + ", ".join(sorted(models.JOIN_TYPES))
                + "; join needs `keys`. publish also needs a `function:` block.")
     return "\n".join(out)
 
@@ -128,7 +128,7 @@ the FEW genuine judgment points and everything else as deterministic mechanism.
 
 Subject / out-name: "{name}"
 
-# The output contract (target: app/dag_schema.py)
+# The output contract (target: app/models)
 Emit a methodology as a list of STAGE dicts. Each stage validates against this
 contract:
 

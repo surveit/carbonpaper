@@ -46,7 +46,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Stre
 from app import compiler
 from app import node_review  # schema-library APPROVAL (the data-model gate)
 from app import project  # PROJECT model — write_project_meta for new working copies
-from app.dag_schema import validate_named_schema, validate_schema_library
+from app.models import validate_named_schema, validate_schema_library
 from app.web_context import (
     COMPILATIONS_DIR,
     EXAMPLES_DIR,
