@@ -25,7 +25,10 @@ class StageType(str, Enum):
     input_data = "input_data"
     llm_transform = "llm_transform"
     python_transform = "python_transform"
-    join = "join"
+    # Trailing underscore: a member literally named `join` would shadow
+    # str.join on every instance. The value — what YAML declares and
+    # StageType("join") looks up — is still "join".
+    join_ = "join"
     aggregate = "aggregate"
     human_review_queue = "human_review_queue"
     publish = "publish"
@@ -46,7 +49,7 @@ class FileFormat(str, Enum):
 class AggFormula(str, Enum):
     sum = "sum"
     mean = "mean"
-    count = "count"
+    count_ = "count"  # trailing underscore: `count` would shadow str.count
     min = "min"
     max = "max"
     first = "first"
@@ -197,7 +200,7 @@ _TYPE_SPEC: dict[StageType, dict[str, Any]] = {
     StageType.input_data:         {"handle": "connector", "requires_inputs": False, "min_inputs": 0},
     StageType.llm_transform:      {"handle": "llm",       "requires_inputs": True,  "min_inputs": 1},
     StageType.python_transform:   {"handle": "function",  "requires_inputs": True,  "min_inputs": 1},
-    StageType.join:               {"handle": "join",      "requires_inputs": True,  "min_inputs": 2},
+    StageType.join_:              {"handle": "join",      "requires_inputs": True,  "min_inputs": 2},
     StageType.aggregate:          {"handle": "aggregate", "requires_inputs": True,  "min_inputs": 1},
     StageType.human_review_queue: {"handle": "queue",     "requires_inputs": True,  "min_inputs": 1},
     StageType.publish:            {"handle": "publish",   "also_requires": ["function"], "requires_inputs": True, "min_inputs": 1},

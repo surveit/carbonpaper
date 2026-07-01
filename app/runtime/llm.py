@@ -133,8 +133,8 @@ def call_llm_real(prompt: str, model: str = DEFAULT_MODEL) -> Any:
 def render_prompt(template: str, row: dict[str, Any]) -> str:
     """Render the prompt template safely. Missing placeholders are left
     as-is so we can still call the LLM rather than KeyError out."""
-    class _Defaults(dict):
-        def __missing__(self, key: str) -> str:  # type: ignore[override]
+    class _Defaults(dict[str, Any]):
+        def __missing__(self, key: str) -> str:
             return "{" + key + "}"
     try:
         return template.format_map(_Defaults(row))

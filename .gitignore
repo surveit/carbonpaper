@@ -12,3 +12,9 @@ build/
 
 # Persisted compilation objects (file-backed, like examples/<m>/runs)
 compilations/
+
+# Example methodology content + scratch pipelines. Generated run outputs land
+# here, and lint/typecheck skip these dirs (ruff respects .gitignore).
+# Already-tracked files under examples/ stay tracked; new files need `git add -f`.
+examples/
+saydo/

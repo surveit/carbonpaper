@@ -28,7 +28,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, Red
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from app.runtime.runner import execute_run, prepare_run, resume_run, run_prepared
+from app.runtime.runner import prepare_run, resume_run, run_prepared
 from app.runtime.preview import run_stage_preview, PreviewError, PREVIEWABLE_TYPES
 
 
@@ -840,7 +840,7 @@ async def queue_page(request: Request, methodology: str, run_id: str, stage_id: 
             if join_keys:
                 for _, r in in_df.iterrows():
                     key = tuple(str(r[k]) for k in join_keys)
-                    input_lookup[key] = {k: _display_cell(v) for k, v in r.items()}
+                    input_lookup[key] = {str(k): _display_cell(v) for k, v in r.items()}
 
     items: list[dict[str, Any]] = []
     if snapshot is not None:
@@ -900,7 +900,7 @@ async def queue_decide(
         raise HTTPException(status_code=400, detail=f"unknown decision '{decision}'")
     mod_val: float | None = None
     if decision == "modify":
-        if modified_score in (None, ""):
+        if not modified_score:
             raise HTTPException(status_code=400, detail="modify requires modified_score")
         try:
             mod_val = float(modified_score)

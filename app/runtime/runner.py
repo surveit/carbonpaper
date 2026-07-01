@@ -26,7 +26,7 @@ import pandas as pd
 import yaml
 
 from .handlers import HANDLERS, HaltForReview
-from .validation import validate_dataframe, ValidationReport
+from .validation import validate_dataframe
 
 
 def topological_sort(stages: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -41,7 +41,7 @@ def topological_sort(stages: list[dict[str, Any]]) -> list[dict[str, Any]]:
             raise ValueError(f"Cycle detected: {' → '.join(path + [sid])}")
         for inp in by_id.get(sid, {}).get("inputs", []) or []:
             iid = inp.get("id") if isinstance(inp, dict) else inp
-            if iid in by_id:
+            if iid and iid in by_id:
                 visit(iid, path + [sid])
         visited.add(sid)
         order.append(by_id[sid])
