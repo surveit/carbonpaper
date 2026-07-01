@@ -4,16 +4,10 @@
 {% block head_extra %}
 <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
 <script>
-  window.loadStage = function (stageId) {
-    if (window._loadStage) { window._loadStage(stageId); }
-  };
+  window.loadStage = function (stageId) { if (window._loadStage) window._loadStage(stageId); };
   document.addEventListener("DOMContentLoaded", function () {
-    mermaid.initialize({
-      startOnLoad: true,
-      theme: "default",
-      flowchart: { curve: "basis", padding: 20, useMaxWidth: true },
-      securityLevel: "loose"
-    });
+    mermaid.initialize({ startOnLoad: true, theme: "default",
+      flowchart: { curve: "basis", padding: 20, useMaxWidth: true }, securityLevel: "loose" });
   });
 </script>
 {% endblock %}
@@ -23,67 +17,72 @@
 {% endblock %}
 
 {% block content %}
-<div class="stage-header">
-    <span id="run-status-badge" class="run-status status-{{ manifest.status }}">{{ manifest.status }}</span>
-    <span id="live-note" class="muted">{% if manifest.status == "running" %}● live — updating in place{% endif %}</span>
-    <h1>Run <code>{{ run_id }}</code></h1>
-    <p class="stage-id">started <code>{{ manifest.started_at }}</code> · finished <code>{{ manifest.finished_at }}</code></p>
-</div>
-
 {% set total = manifest.stages | length %}
 {% set ok = manifest.stages | selectattr('status', 'equalto', 'ok') | list | length %}
 {% set warn = manifest.stages | selectattr('status', 'equalto', 'validation_warnings') | list | length %}
 {% set err = manifest.stages | selectattr('status', 'equalto', 'error') | list | length %}
+{% set running = manifest.stages | selectattr('status', 'equalto', 'running') | list | length %}
+{% set pending = manifest.stages | selectattr('status', 'equalto', 'pending') | list | length %}
+{% set awaiting = manifest.stages | selectattr('status', 'equalto', 'awaiting_review') | list | length %}
+{% set done = ok + warn %}
+{% set is_running = manifest.status == 'running' %}
 
-<div class="run-summary">
-    <div class="card"><div class="num ok" id="cnt-ok">{{ ok }}</div><div class="lbl">ok</div></div>
-    <div class="card"><div class="num warn" id="cnt-warn">{{ warn }}</div><div class="lbl">warnings</div></div>
-    <div class="card"><div class="num err" id="cnt-err">{{ err }}</div><div class="lbl">errors</div></div>
-    <div class="card"><div class="num" id="cnt-total">{{ total }}</div><div class="lbl">total</div></div>
+<div class="run-topbar">
+    <h1>Run <code>{{ run_id }}</code></h1>
+    <p class="stage-id">started <code>{{ manifest.started_at }}</code>{% if manifest.finished_at %} · finished <code>{{ manifest.finished_at }}</code>{% endif %}</p>
 </div>
 
+{# ── Progress: steps to-do / in-progress / complete. Warnings & errors are a
+      separate strip that only appears when there's something to report. ── #}
+<div class="run-progress">
+    <span id="run-spinner" class="spinner" {% if not is_running %}hidden{% endif %}></span>
+    <span id="overall-status" class="overall-status status-{{ manifest.status }}">{{ manifest.status }}</span>
+    <div class="progress-track"><div id="progress-fill" class="progress-fill" style="width: {{ (100 * done / total) if total else 0 }}%"></div></div>
+    <span id="progress-counts" class="progress-counts">
+        <b>{{ done }}/{{ total }}</b> complete · <span id="pc-running">{{ running }}</span> in&nbsp;progress · <span id="pc-todo">{{ pending }}</span> to&nbsp;do
+    </span>
+</div>
+
+<div id="alert-strip" class="alert-strip" {% if not (warn or err or awaiting) %}hidden{% endif %}>
+    <span id="al-err" class="alert err" {% if not err %}hidden{% endif %}>✗ <b>{{ err }}</b> error{% if err != 1 %}s{% endif %}</span>
+    <span id="al-warn" class="alert warn" {% if not warn %}hidden{% endif %}>⚠ <b>{{ warn }}</b> warning{% if warn != 1 %}s{% endif %}</span>
+    <span id="al-awaiting" class="alert awaiting" {% if not awaiting %}hidden{% endif %}>👤 <b>{{ awaiting }}</b> awaiting review</span>
+</div>
+
+{% if err and not is_running %}
+<div class="rerun-bar">
+    <form action="/methodology/{{ methodology }}/runs/{{ run_id }}/resume" method="post">
+        <button type="submit" class="btn primary">↻ Re-run failed stage{% if err != 1 %}s{% endif %}</button>
+    </form>
+    <span class="muted">Re-runs the failed stage{% if err != 1 %}s{% endif %} + everything downstream. Completed stages are kept (their outputs are reused — no re-running, no new LLM calls).</span>
+</div>
+{% endif %}
+
+{% if manifest.status == 'awaiting_review' %}
+<p class="banner banner-review">
+    ⏸ Run halted at <code>{{ manifest.halted_at }}</code> — items need human review.
+    <a href="/methodology/{{ methodology }}/runs/{{ run_id }}/queue/{{ manifest.halted_at }}" class="btn primary">Open review queue →</a>
+</p>
+{% endif %}
 {% set publish_stage = manifest.stages | selectattr('type', 'equalto', 'publish') | first %}
 {% if publish_stage and publish_stage.status != 'error' %}
 <p class="banner">📤 Published artifact: <a href="/methodology/{{ methodology }}/runs/{{ run_id }}/artifact/profiles/index.html">browse generated org profiles</a></p>
 {% endif %}
 
-<p class="lede">Click any node in the DAG to view that stage's run details — status, validation, preview — in the right panel.</p>
-
-<div class="split-view run-detail-split">
-    <div class="left-pane">
-        <div class="legend">
-            <span class="badge ok">✓ ok</span>
-            <span class="badge warn">⚠ warnings</span>
-            <span class="badge err">✗ error</span>
-            <span class="badge awaiting">👤 awaiting review</span>
-            <span class="badge pending">… pending</span>
-        </div>
-        {% if manifest.status == 'awaiting_review' %}
-        <p class="banner banner-review">
-            ⏸ Run halted at <code>{{ manifest.halted_at }}</code> — items need human review.
-            <a href="/methodology/{{ methodology }}/runs/{{ run_id }}/queue/{{ manifest.halted_at }}" class="btn primary">Open review queue →</a>
-        </p>
-        {% endif %}
-
-        <div class="dag">
-            <pre class="mermaid">
+{# ── The DAG is the main object: full width, on top. ── #}
+<div class="dag dag-full">
+    <pre class="mermaid">
 {{ mermaid }}
-            </pre>
-        </div>
-    </div>
+    </pre>
+</div>
+<p class="lede">Click any node above to inspect that stage below. Border: <span class="lg lg-done">green</span> complete · <span class="lg lg-run">yellow</span> in progress · <span class="lg lg-err">red</span> error · <span class="lg lg-pend">grey</span> pending.</p>
 
-    <div class="right-pane" id="stage-panel">
-        <div class="empty-state">
-            <h2>Select a stage</h2>
-            <p>Click any node in the DAG to load its run details.</p>
-        </div>
-    </div>
+{# ── Stage detail panel, below the DAG, full width. ── #}
+<div class="stage-panel-full" id="stage-panel">
+    <div class="empty-state"><h2>Select a stage</h2><p>Click any node in the DAG to load its run details.</p></div>
 </div>
 
-<details class="raw-yaml">
-    <summary>Raw manifest</summary>
-    <pre>{{ manifest | tojson(indent=2) }}</pre>
-</details>
+<details class="raw-yaml"><summary>Raw manifest</summary><pre>{{ manifest | tojson(indent=2) }}</pre></details>
 
 <script>
 (function () {
@@ -96,72 +95,58 @@
     panel.classList.add('loading');
     try {
       const r = await fetch(`/methodology/${encodeURIComponent(METHODOLOGY)}/runs/${encodeURIComponent(RUN_ID)}/stage/${encodeURIComponent(stageId)}/partial`);
-      if (!r.ok) {
-        panel.innerHTML = `<div class="empty-state"><h2>Error</h2><p>${r.status} loading stage <code>${stageId}</code></p></div>`;
-        return;
-      }
+      if (!r.ok) { panel.innerHTML = `<div class="empty-state"><h2>Error</h2><p>${r.status} loading stage <code>${stageId}</code></p></div>`; return; }
       panel.innerHTML = await r.text();
-      if (location.hash !== `#${stageId}`) {
-        history.replaceState(null, '', `#${stageId}`);
-      }
-      panel.scrollTop = 0;
-    } finally {
-      panel.classList.remove('loading');
-    }
+      // innerHTML does not execute <script> tags — re-create them so the panel's
+      // tab-switching + scratch-preview JS runs.
+      panel.querySelectorAll('script').forEach(old => {
+        const s = document.createElement('script');
+        if (old.src) s.src = old.src; else s.textContent = old.textContent;
+        old.replaceWith(s);
+      });
+      if (location.hash !== `#${stageId}`) history.replaceState(null, '', `#${stageId}`);
+      panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } finally { panel.classList.remove('loading'); }
   }
-
   window._loadStage = loadStage;
+  if (location.hash) loadStage(decodeURIComponent(location.hash.slice(1)));
 
-  if (location.hash) {
-    const sid = decodeURIComponent(location.hash.slice(1));
-    loadStage(sid);
-  }
-
-  // ── Live progress poller ──────────────────────────────────────────────
-  // Updates the status badge, counts and DAG IN PLACE every 2s while the run
-  // is active, so the page stays clickable (no full-page reload). On the
-  // transition to a terminal state we reload ONCE to render the final page
-  // (previews, artifact + review banners).
-  const RUNNING = {{ (manifest.status == 'running') | tojson }};
+  // ── Live progress poller ──
+  const RUNNING = {{ is_running | tojson }};
   if (RUNNING) {
     const statusUrl = `/methodology/${encodeURIComponent(METHODOLOGY)}/runs/${encodeURIComponent(RUN_ID)}/status`;
     const mermaidEl = document.querySelector('pre.mermaid');
-    let lastSig = null;
-    let timer = null;
+    let lastSig = null, timer = null;
+    const $ = id => document.getElementById(id);
+    const show = (el, on) => { if (el) el.hidden = !on; };
 
     function rerenderDag(src) {
       if (!mermaidEl || !window.mermaid) return;
-      mermaidEl.removeAttribute('data-processed');
-      mermaidEl.textContent = src;
+      mermaidEl.removeAttribute('data-processed'); mermaidEl.textContent = src;
       try { mermaid.run({ nodes: [mermaidEl] }); } catch (e) {}
     }
-
     async function poll() {
-      let d;
-      try {
-        const r = await fetch(statusUrl, { cache: 'no-store' });
-        if (!r.ok) return;
-        d = await r.json();
-      } catch (e) { return; }
-
-      const badge = document.getElementById('run-status-badge');
-      if (badge) { badge.textContent = d.status; badge.className = 'run-status status-' + d.status; }
-      const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
-      set('cnt-ok', d.counts.ok); set('cnt-warn', d.counts.warn);
-      set('cnt-err', d.counts.err); set('cnt-total', d.counts.total);
+      let d; try { const r = await fetch(statusUrl, { cache: 'no-store' }); if (!r.ok) return; d = await r.json(); } catch (e) { return; }
+      const c = d.counts;
+      const os = $('overall-status'); if (os) { os.textContent = d.status; os.className = 'overall-status status-' + d.status; }
+      const fill = $('progress-fill'); if (fill && c.total) fill.style.width = (100 * c.done / c.total) + '%';
+      const pc = $('progress-counts'); if (pc) pc.innerHTML = `<b>${c.done}/${c.total}</b> complete · ${c.running} in&nbsp;progress · ${c.pending} to&nbsp;do`;
+      // alert strip
+      const anyAlert = c.err || c.warn || c.awaiting;
+      show($('alert-strip'), anyAlert);
+      show($('al-err'), c.err); if ($('al-err')) $('al-err').innerHTML = `✗ <b>${c.err}</b> error${c.err!=1?'s':''}`;
+      show($('al-warn'), c.warn); if ($('al-warn')) $('al-warn').innerHTML = `⚠ <b>${c.warn}</b> warning${c.warn!=1?'s':''}`;
+      show($('al-awaiting'), c.awaiting); if ($('al-awaiting')) $('al-awaiting').innerHTML = `👤 <b>${c.awaiting}</b> awaiting review`;
 
       const sig = d.stages.map(s => s.status).join(',');
       if (sig !== lastSig) { lastSig = sig; rerenderDag(d.mermaid); }
-
       if (d.terminal) {
         if (timer) clearInterval(timer);
-        const note = document.getElementById('live-note');
-        if (note) note.textContent = '✓ finished — loading results…';
-        setTimeout(() => location.reload(), 500);
+        show($('run-spinner'), false);
+        setTimeout(() => location.reload(), 600);
       }
     }
-    timer = setInterval(poll, 2000);
-    poll();
+    timer = setInterval(poll, 2000); poll();
   }
 })();
 </script>
