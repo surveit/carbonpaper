@@ -65,8 +65,11 @@ def _load_stages(methodology_dir: Path) -> list[dict[str, Any]]:
     return stages
 
 
-def execute_run(methodology_dir: Path, repo_root: Path) -> dict[str, Any]:
-    """Run the DAG once. Returns the manifest dict."""
+def prepare_run(methodology_dir: Path, repo_root: Path) -> dict[str, Any]:
+    """Create the run dir + id and write an initial `running` manifest (all
+    stages pending) so a caller can redirect to the run page immediately and
+    poll it while execution proceeds in the background. Returns a dict with the
+    run_id, run_dir, ctx, ordered stages and the manifest."""
     runs_dir = methodology_dir / "runs"
     run_id = datetime.now().strftime("%Y%m%dT%H%M%S")
     run_dir = runs_dir / run_id
@@ -82,15 +85,36 @@ def execute_run(methodology_dir: Path, repo_root: Path) -> dict[str, Any]:
         "methodology_dir": methodology_dir,
         "queue_stats": {},
     }
-
     manifest: dict[str, Any] = {
         "run_id": run_id,
         "started_at": datetime.now().isoformat(timespec="seconds"),
         "methodology": methodology_dir.name,
-        "stages": [],
+        "status": "running",
+        "stages": [
+            {"stage_id": s["id"], "type": s["type"], "name": s.get("name", s["id"]),
+             "status": "pending", "input_validation": [], "output_validation": None,
+             "elapsed_ms": 0, "rows": 0, "error": None,
+             "started_at": None, "finished_at": None}
+            for s in ordered
+        ],
     }
+    (run_dir / "manifest.json").write_text(
+        json.dumps(manifest, indent=2, default=str), encoding="utf-8"
+    )
+    return {"run_id": run_id, "run_dir": run_dir, "ctx": ctx,
+            "ordered": ordered, "manifest": manifest}
 
-    return _execute_stages(ordered, ctx, manifest, run_dir, outputs_so_far={})
+
+def run_prepared(prep: dict[str, Any]) -> dict[str, Any]:
+    """Execute a run previously set up by prepare_run(). Suitable for running in
+    a background thread (the manifest is updated on disk as stages complete)."""
+    return _execute_stages(prep["ordered"], prep["ctx"], prep["manifest"],
+                           prep["run_dir"], outputs_so_far={})
+
+
+def execute_run(methodology_dir: Path, repo_root: Path) -> dict[str, Any]:
+    """Run the DAG once (synchronous). Returns the manifest dict."""
+    return run_prepared(prepare_run(methodology_dir, repo_root))
 
 
 def _execute_stages(
@@ -116,6 +140,32 @@ def _execute_stages(
         r["stage_id"]: r for r in manifest.get("stages", [])
     }
 
+    def _pending_stub(s: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "stage_id": s["id"], "type": s["type"], "name": s.get("name", s["id"]),
+            "status": "pending", "input_validation": [], "output_validation": None,
+            "elapsed_ms": 0, "rows": 0, "error": None,
+            "started_at": None, "finished_at": None,
+        }
+
+    def flush(status: str = "running") -> None:
+        """Write the manifest mid-run so the run page can show live progress
+        (stages light up as they start/finish) instead of the whole pipeline
+        running silently and updating only at the very end."""
+        m = dict(manifest)
+        m["stages"] = [records_by_id.get(s["id"]) or _pending_stub(s) for s in ordered]
+        m["status"] = status
+        m["queue_stats"] = ctx.get("queue_stats", {})
+        m["updated_at"] = datetime.now().isoformat(timespec="seconds")
+        try:
+            (run_dir / "manifest.json").write_text(
+                json.dumps(m, indent=2, default=str), encoding="utf-8"
+            )
+        except Exception:
+            pass
+
+    flush("running")  # initial: all stages pending
+
     for idx, stage in enumerate(ordered):
         sid = stage["id"]
         stype = stage["type"]
@@ -137,6 +187,8 @@ def _execute_stages(
             "error": None,
         }
         t0 = time.perf_counter()
+        records_by_id[sid] = record
+        flush("running")  # show this stage as running
 
         try:
             inputs_for_stage: dict[str, pd.DataFrame] = {}
@@ -172,6 +224,17 @@ def _execute_stages(
 
             if output is None:
                 output = pd.DataFrame()
+
+            # Generic row cap. `limit:` on any stage truncates its output to
+            # the first N rows (after the handler runs, in the handler's
+            # emitted order). Used here to throttle the expensive Tier-2 LLM
+            # fan-out down to a handful of facilities for a demo/dry run.
+            limit = stage.get("limit")
+            if isinstance(limit, int) and limit >= 0 and len(output) > limit:
+                record.setdefault("notes", []).append(
+                    f"limit={limit}: truncated from {len(output)} to {limit} row(s)"
+                )
+                output = output.head(limit).copy()
 
             out_rep = validate_dataframe(
                 output, stage.get("output_schema"),
@@ -209,6 +272,7 @@ def _execute_stages(
                 record["elapsed_ms"] = int((time.perf_counter() - t0) * 1000)
                 record["finished_at"] = datetime.now().isoformat(timespec="seconds")
                 records_by_id[sid] = record
+            flush("running")  # persist this stage's result for the live page
 
     # If halted, mark remaining stages as pending so the DAG can render
     # them greyed out.

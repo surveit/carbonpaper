@@ -8,3 +8,7 @@ __pycache__/
 # OS
 .DS_Store
 Thumbs.db
+build/
+
+# Persisted compilation objects (file-backed, like examples/<m>/runs)
+compilations/

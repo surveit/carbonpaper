@@ -22,12 +22,36 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Callable
 
 from . import llm_mock
+from . import llm_agent_sdk
 
 
-CLAUDE_BIN = shutil.which("claude")
+CLAUDE_BIN = shutil.which("claude") or llm_agent_sdk._CLI_PATH
 DEFAULT_MODEL = os.environ.get("CW_LLM_MODEL", "haiku")
 DEFAULT_PARALLEL = int(os.environ.get("CW_LLM_PARALLEL", "4"))
 DEFAULT_TIMEOUT_S = int(os.environ.get("CW_LLM_TIMEOUT_S", "180"))
+
+
+def resolve_backend() -> str:
+    """Pick the active LLM backend.
+
+    CW_LLM_FORCE_MOCK=1 → 'mock'. CW_LLM_BACKEND ∈ {agent_sdk, cli, mock}
+    forces a choice (degrading gracefully if unavailable). Default 'auto'
+    prefers the Agent SDK, then the `claude -p` subprocess, then the mock."""
+    if os.environ.get("CW_LLM_FORCE_MOCK") == "1":
+        return "mock"
+    choice = os.environ.get("CW_LLM_BACKEND", "auto").lower()
+    if choice == "agent_sdk":
+        return "agent_sdk" if llm_agent_sdk.available() else ("cli" if CLAUDE_BIN else "mock")
+    if choice == "cli":
+        return "cli" if CLAUDE_BIN else "mock"
+    if choice == "mock":
+        return "mock"
+    # auto
+    if llm_agent_sdk.available():
+        return "agent_sdk"
+    if CLAUDE_BIN:
+        return "cli"
+    return "mock"
 
 
 class LLMError(Exception):
@@ -69,11 +93,10 @@ def _call_claude_subprocess(prompt: str, model: str = DEFAULT_MODEL,
     return envelope
 
 
-def _parse_inner_result(envelope: dict[str, Any]) -> Any:
-    """The model's reply is in envelope['result'] as a string. For
-    JSON-typed prompts we re-parse; for free-text we return the string
-    unchanged."""
-    raw = envelope.get("result", "")
+def _parse_text_result(raw: Any) -> Any:
+    """Parse a model's raw text reply. For JSON-typed prompts we strip any
+    markdown code fences and re-parse; for free-text we return the string
+    unchanged. Shared by the subprocess and Agent SDK backends."""
     if not isinstance(raw, str):
         return raw
     stripped = raw.strip()
@@ -86,11 +109,37 @@ def _parse_inner_result(envelope: dict[str, Any]) -> Any:
         if lines and lines[-1].strip().startswith("```"):
             lines = lines[:-1]
         stripped = "\n".join(lines)
-    # Try JSON parse; fall back to raw string
+    # Try JSON parse; fall back to extracting the last JSON value embedded in
+    # prose (research mode narrates, then emits the JSON), else the raw string.
     try:
         return json.loads(stripped)
     except json.JSONDecodeError:
-        return raw
+        extracted = _extract_last_json(stripped)
+        return extracted if extracted is not None else raw
+
+
+def _extract_last_json(s: str) -> Any:
+    """Return the last syntactically-complete JSON value embedded in `s`, or
+    None. Lets us recover the final answer when the agent prefixes it with
+    research narration."""
+    decoder = json.JSONDecoder()
+    best = None
+    i, n = 0, len(s)
+    while i < n:
+        if s[i] in "[{":
+            try:
+                val, end = decoder.raw_decode(s, i)
+                best, i = val, end
+                continue
+            except json.JSONDecodeError:
+                pass
+        i += 1
+    return best
+
+
+def _parse_inner_result(envelope: dict[str, Any]) -> Any:
+    """The model's reply is in envelope['result'] (subprocess path)."""
+    return _parse_text_result(envelope.get("result", ""))
 
 
 def call_llm_real(prompt: str, model: str = DEFAULT_MODEL) -> Any:
@@ -124,11 +173,9 @@ def call_llm(stage_id: str, llm_config: dict[str, Any], input_row: dict[str, Any
 
     use_real default: True if the CLI is available, False otherwise.
     Set CW_LLM_FORCE_MOCK=1 to force mock even when CLI is available."""
-    force_mock = os.environ.get("CW_LLM_FORCE_MOCK") == "1"
-    if use_real is None:
-        use_real = CLAUDE_BIN is not None and not force_mock
+    backend = "mock" if use_real is False else resolve_backend()
 
-    if not use_real:
+    if backend == "mock":
         return llm_mock.mock_llm_call(stage_id, llm_config, input_row)
 
     template = llm_config.get("prompt_template", "")
@@ -137,15 +184,24 @@ def call_llm(stage_id: str, llm_config: dict[str, Any], input_row: dict[str, Any
         return llm_mock.mock_llm_call(stage_id, llm_config, input_row)
 
     prompt = render_prompt(template, input_row)
+    mdl = model or llm_config.get("model") or DEFAULT_MODEL
+    # A stage may request web research tools (e.g. tools: [WebSearch, WebFetch]).
+    # Only the agent SDK backend can honor them.
+    tools = llm_config.get("tools")
     try:
-        return call_llm_real(prompt, model=model or llm_config.get("model") or DEFAULT_MODEL)
-    except LLMError as exc:
+        if backend == "agent_sdk":
+            if tools:
+                res = llm_agent_sdk.run_query(prompt, mdl, tools=tools)
+                return _parse_text_result(res["text"])
+            return _parse_text_result(llm_agent_sdk.call_agent_sdk(prompt, mdl))
+        return call_llm_real(prompt, model=mdl)  # cli subprocess
+    except Exception as exc:
         # Surface in handler so caller can mark stage warning; for now
         # degrade to mock with a marker.
-        sys.stderr.write(f"[llm] real-call failed for stage {stage_id}: {exc}\n")
+        sys.stderr.write(f"[llm] {backend} call failed for stage {stage_id}: {exc}\n")
         result = llm_mock.mock_llm_call(stage_id, llm_config, input_row)
         if isinstance(result, dict):
-            result["_llm_fallback"] = "mock_after_error"
+            result["_llm_fallback"] = f"mock_after_{backend}_error"
         return result
 
 
@@ -180,7 +236,9 @@ def call_llm_batch(
 def backend_status() -> dict[str, Any]:
     """For UI/diagnostics: report which backend is active."""
     return {
+        "backend": resolve_backend(),
         "claude_cli": CLAUDE_BIN,
+        "agent_sdk": llm_agent_sdk.status(),
         "model_default": DEFAULT_MODEL,
         "parallel_default": DEFAULT_PARALLEL,
         "force_mock": os.environ.get("CW_LLM_FORCE_MOCK") == "1",
