@@ -15,6 +15,8 @@ Then open http://localhost:8765/
 from __future__ import annotations
 
 import json
+import threading
+import traceback
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -26,7 +28,9 @@ from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, Red
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from app.runtime.runner import execute_run, resume_run
+from app.runtime.runner import execute_run, prepare_run, resume_run, run_prepared
+from app.runtime.preview import run_stage_preview, PreviewError, PREVIEWABLE_TYPES
+
 
 
 # ─── Paths ───────────────────────────────────────────────────────────────────
@@ -456,14 +460,30 @@ def _list_runs(methodology: str) -> list[dict[str, Any]]:
     return entries
 
 
+def _run_in_background(target, *args) -> None:
+    """Run a (possibly slow, LLM-driven) execution off the event loop so the
+    run page stays responsive and can poll live progress. Errors are recorded
+    on the manifest by the runner itself; this just keeps the thread from dying
+    silently."""
+    def _wrapped():
+        try:
+            target(*args)
+        except Exception:  # noqa: BLE001
+            traceback.print_exc()
+    threading.Thread(target=_wrapped, daemon=True).start()
+
+
 @app.post("/methodology/{methodology}/run")
 async def trigger_run(methodology: str):
     methodology_dir = EXAMPLES_DIR / methodology
     if not methodology_dir.is_dir():
         raise HTTPException(status_code=404, detail=f"No methodology '{methodology}'")
-    manifest = execute_run(methodology_dir, REPO_ROOT)
+    # Set up the run (writes an initial `running` manifest), kick off execution
+    # in a background thread, and redirect immediately. The run page polls.
+    prep = prepare_run(methodology_dir, REPO_ROOT)
+    _run_in_background(run_prepared, prep)
     return RedirectResponse(
-        url=f"/methodology/{methodology}/runs/{manifest['run_id']}",
+        url=f"/methodology/{methodology}/runs/{prep['run_id']}",
         status_code=303,
     )
 
@@ -475,6 +495,35 @@ async def runs_index(request: Request, methodology: str):
         "runs_index.html",
         {"methodology": methodology, "runs": _list_runs(methodology)},
     )
+
+
+@app.get("/methodology/{methodology}/runs/{run_id}/status")
+async def run_status(methodology: str, run_id: str):
+    """Lightweight JSON for the live poller: current status, per-stage statuses,
+    counts, and a freshly-built mermaid graph. Lets the run page update progress
+    in place (no full-page reload) so it stays clickable while running."""
+    run_dir = _runs_dir(methodology) / run_id
+    manifest_path = run_dir / "manifest.json"
+    if not manifest_path.exists():
+        raise HTTPException(status_code=404, detail="Run not found")
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    mstages = manifest.get("stages", [])
+    status_by_id = {s["stage_id"]: s.get("status", "") for s in mstages}
+    mermaid = build_mermaid_graph(load_stages(methodology), methodology, status_by_id=status_by_id)
+
+    def _count(st: str) -> int:
+        return sum(1 for s in mstages if s.get("status") == st)
+
+    return JSONResponse({
+        "status": manifest.get("status"),
+        "terminal": manifest.get("status") != "running",
+        "halted_at": manifest.get("halted_at"),
+        "finished_at": manifest.get("finished_at"),
+        "counts": {"ok": _count("ok"), "warn": _count("validation_warnings"),
+                   "err": _count("error"), "total": len(mstages)},
+        "stages": [{"stage_id": s["stage_id"], "status": s.get("status")} for s in mstages],
+        "mermaid": mermaid,
+    })
 
 
 @app.get("/methodology/{methodology}/runs/{run_id}", response_class=HTMLResponse)
@@ -606,10 +655,73 @@ async def run_stage_partial(
             "input_previews": input_previews,
             "function_code": function_code,
             "llm_example": llm_example,
+            "previewable": (stage_def or {}).get("type") in PREVIEWABLE_TYPES,
             "type_glyph": TYPE_GLYPH,
             "type_class": TYPE_CLASS,
         },
     )
+
+
+@app.post("/methodology/{methodology}/runs/{run_id}/stage/{stage_id}/preview")
+async def run_stage_scratch_preview(
+    request: Request, methodology: str, run_id: str, stage_id: str
+):
+    """SCRATCH in-memory re-run of one stage on a few selected input rows.
+
+    Reads the chosen rows from this run's upstream outputs, runs the stage's
+    handler in memory, and returns the output rows as JSON. Nothing is
+    persisted: no manifest change, no output file, no artifact. Used by the
+    node-detail panel's "Run transform on selected" button.
+
+    Body (JSON): {"indices": [int, ...]}  — positional row indices into the
+    stage's first upstream input.
+    """
+    run_dir = _runs_dir(methodology) / run_id
+    manifest_path = run_dir / "manifest.json"
+    if not manifest_path.exists():
+        raise HTTPException(status_code=404, detail="Run not found")
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+
+    try:
+        body = await request.json()
+    except Exception:  # noqa: BLE001
+        body = {}
+    indices_raw = (body or {}).get("indices", [])
+    indices: list[int] = []
+    for i in indices_raw:
+        try:
+            indices.append(int(i))
+        except (TypeError, ValueError):
+            continue
+
+    stages_static = load_stages(methodology)
+    stage_def = next((s for s in stages_static if s.get("id") == stage_id), None)
+    if stage_def is None:
+        raise HTTPException(status_code=404, detail=f"No stage '{stage_id}'")
+
+    output_by_id = {
+        s.get("stage_id"): s.get("output_path") for s in manifest.get("stages", [])
+    }
+
+    try:
+        result = run_stage_preview(
+            stage_def=stage_def,
+            run_dir=run_dir,
+            repo_root=REPO_ROOT,
+            methodology_dir=EXAMPLES_DIR / methodology,
+            output_by_id=output_by_id,
+            selected_indices=indices,
+        )
+    except PreviewError as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+    except Exception as exc:  # noqa: BLE001 — surface the real failure
+        return JSONResponse(
+            {"ok": False, "error": f"{type(exc).__name__}: {exc}",
+             "traceback": traceback.format_exc(limit=8)},
+            status_code=500,
+        )
+
+    return JSONResponse({"ok": True, **result})
 
 
 @app.get("/methodology/{methodology}/runs/{run_id}/artifact/{filename:path}", response_class=HTMLResponse)
@@ -639,6 +751,21 @@ def _load_decisions_df(methodology: str, stage_id: str) -> pd.DataFrame:
                      "reviewer", "reviewed_at", "source_run_id"]
         )
     return pd.read_parquet(p)
+
+
+def _display_cell(v: Any) -> Any:
+    """Scalar-safe cell formatting for the reviewer UI. pd.isna() raises on
+    list/array-valued cells (e.g. an evidence_urls JSON column), so handle
+    array-likes explicitly before the null check."""
+    if isinstance(v, (list, tuple)):
+        return ", ".join(str(x) for x in v) if len(v) else ""
+    if hasattr(v, "tolist") and not isinstance(v, str):  # numpy array from parquet
+        seq = v.tolist()
+        return ", ".join(str(x) for x in seq) if len(seq) else ""
+    try:
+        return "" if pd.isna(v) else v
+    except (ValueError, TypeError):
+        return v
 
 
 def _queue_snapshot(methodology: str, run_id: str, stage_id: str) -> pd.DataFrame | None:
@@ -683,7 +810,7 @@ async def queue_page(request: Request, methodology: str, run_id: str, stage_id: 
             existing = decision_by_hash.get(h)
             items.append({
                 "content_hash": h,
-                "row": {k: ("" if pd.isna(v) else v) for k, v in row.items()
+                "row": {k: _display_cell(v) for k, v in row.items()
                         if k not in ("content_hash", "decision", "modified_score",
                                      "reviewer", "reviewed_at")},
                 "prior_decision": existing,
@@ -752,10 +879,12 @@ async def resume_run_route(methodology: str, run_id: str):
     methodology_dir = EXAMPLES_DIR / methodology
     if not methodology_dir.is_dir():
         raise HTTPException(status_code=404, detail=f"No methodology '{methodology}'")
-    try:
-        resume_run(methodology_dir, run_id, REPO_ROOT)
-    except FileNotFoundError as exc:
-        raise HTTPException(status_code=404, detail=str(exc))
+    run_dir = _runs_dir(methodology) / run_id
+    if not (run_dir / "manifest.json").exists():
+        raise HTTPException(status_code=404, detail="Run not found")
+    # Resume re-runs the queue stage + downstream (LLM-heavy) — do it in the
+    # background and redirect immediately so the page can poll progress.
+    _run_in_background(resume_run, methodology_dir, run_id, REPO_ROOT)
     return RedirectResponse(
         url=f"/methodology/{methodology}/runs/{run_id}",
         status_code=303,

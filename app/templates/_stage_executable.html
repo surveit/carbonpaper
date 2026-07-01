@@ -32,6 +32,14 @@
         <dt>temperature</dt><dd>{{ stage.llm.temperature }}</dd>
         <dt>response_format</dt><dd>{{ stage.llm.response_format }}</dd>
         {% if stage.llm.max_retries is defined %}<dt>max_retries</dt><dd>{{ stage.llm.max_retries }}</dd>{% endif %}
+        <dt>tools</dt><dd>
+            {% if stage.llm.tools %}
+                {% for t in stage.llm.tools %}<code>{{ t }}</code>{% if not loop.last %}, {% endif %}{% endfor %}
+                <span class="muted">— agent may call these (agent_sdk backend)</span>
+            {% else %}
+                <span class="muted">none — blind completion from training knowledge</span>
+            {% endif %}
+        </dd>
     </dl>
     <h3>prompt template</h3>
     <pre class="prompt">{{ stage.llm.prompt_template }}</pre>

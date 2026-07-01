@@ -8,17 +8,8 @@
     <p class="stage-id"><code>{{ stage.id }}</code></p>
 </div>
 
-{% if stage.compiler_notes %}
-<section class="notes-block">
-    <h2>⚠ Compiler notes</h2>
-    <p class="notes-explainer">The compiler flagged these. The user should review.</p>
-    <ol>
-        {% for note in stage.compiler_notes %}
-        <li>{{ note }}</li>
-        {% endfor %}
-    </ol>
-</section>
-{% endif %}
+{# compiler_notes are intentionally NOT rendered here — they belong only on the
+   /compile pages (see compile_detail.html). #}
 
 <section>
     <h2>Source</h2>

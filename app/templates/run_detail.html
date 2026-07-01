@@ -24,7 +24,8 @@
 
 {% block content %}
 <div class="stage-header">
-    <span class="run-status status-{{ manifest.status }}">{{ manifest.status }}</span>
+    <span id="run-status-badge" class="run-status status-{{ manifest.status }}">{{ manifest.status }}</span>
+    <span id="live-note" class="muted">{% if manifest.status == "running" %}● live — updating in place{% endif %}</span>
     <h1>Run <code>{{ run_id }}</code></h1>
     <p class="stage-id">started <code>{{ manifest.started_at }}</code> · finished <code>{{ manifest.finished_at }}</code></p>
 </div>
@@ -35,10 +36,10 @@
 {% set err = manifest.stages | selectattr('status', 'equalto', 'error') | list | length %}
 
 <div class="run-summary">
-    <div class="card"><div class="num ok">{{ ok }}</div><div class="lbl">ok</div></div>
-    <div class="card"><div class="num warn">{{ warn }}</div><div class="lbl">warnings</div></div>
-    <div class="card"><div class="num err">{{ err }}</div><div class="lbl">errors</div></div>
-    <div class="card"><div class="num">{{ total }}</div><div class="lbl">total</div></div>
+    <div class="card"><div class="num ok" id="cnt-ok">{{ ok }}</div><div class="lbl">ok</div></div>
+    <div class="card"><div class="num warn" id="cnt-warn">{{ warn }}</div><div class="lbl">warnings</div></div>
+    <div class="card"><div class="num err" id="cnt-err">{{ err }}</div><div class="lbl">errors</div></div>
+    <div class="card"><div class="num" id="cnt-total">{{ total }}</div><div class="lbl">total</div></div>
 </div>
 
 {% set publish_stage = manifest.stages | selectattr('type', 'equalto', 'publish') | first %}
@@ -48,7 +49,7 @@
 
 <p class="lede">Click any node in the DAG to view that stage's run details — status, validation, preview — in the right panel.</p>
 
-<div class="split-view">
+<div class="split-view run-detail-split">
     <div class="left-pane">
         <div class="legend">
             <span class="badge ok">✓ ok</span>
@@ -114,6 +115,53 @@
   if (location.hash) {
     const sid = decodeURIComponent(location.hash.slice(1));
     loadStage(sid);
+  }
+
+  // ── Live progress poller ──────────────────────────────────────────────
+  // Updates the status badge, counts and DAG IN PLACE every 2s while the run
+  // is active, so the page stays clickable (no full-page reload). On the
+  // transition to a terminal state we reload ONCE to render the final page
+  // (previews, artifact + review banners).
+  const RUNNING = {{ (manifest.status == 'running') | tojson }};
+  if (RUNNING) {
+    const statusUrl = `/methodology/${encodeURIComponent(METHODOLOGY)}/runs/${encodeURIComponent(RUN_ID)}/status`;
+    const mermaidEl = document.querySelector('pre.mermaid');
+    let lastSig = null;
+    let timer = null;
+
+    function rerenderDag(src) {
+      if (!mermaidEl || !window.mermaid) return;
+      mermaidEl.removeAttribute('data-processed');
+      mermaidEl.textContent = src;
+      try { mermaid.run({ nodes: [mermaidEl] }); } catch (e) {}
+    }
+
+    async function poll() {
+      let d;
+      try {
+        const r = await fetch(statusUrl, { cache: 'no-store' });
+        if (!r.ok) return;
+        d = await r.json();
+      } catch (e) { return; }
+
+      const badge = document.getElementById('run-status-badge');
+      if (badge) { badge.textContent = d.status; badge.className = 'run-status status-' + d.status; }
+      const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+      set('cnt-ok', d.counts.ok); set('cnt-warn', d.counts.warn);
+      set('cnt-err', d.counts.err); set('cnt-total', d.counts.total);
+
+      const sig = d.stages.map(s => s.status).join(',');
+      if (sig !== lastSig) { lastSig = sig; rerenderDag(d.mermaid); }
+
+      if (d.terminal) {
+        if (timer) clearInterval(timer);
+        const note = document.getElementById('live-note');
+        if (note) note.textContent = '✓ finished — loading results…';
+        setTimeout(() => location.reload(), 500);
+      }
+    }
+    timer = setInterval(poll, 2000);
+    poll();
   }
 })();
 </script>
