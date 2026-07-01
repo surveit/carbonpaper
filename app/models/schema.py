@@ -1,10 +1,11 @@
 """Named schemas — the data model, authored before the DAG.
 
-A NamedSchema promotes an otherwise-anonymous TableSchema to a first-class,
-addressable artifact with a `name` and a `kind` (where it sits in the pipeline),
-and explicit foreign keys (`references`) so the data model is a real graph rather
-than a PK-name-collision heuristic. A SchemaLibrary is the whole data model: it
-checks names are unique and every reference resolves.
+A NamedSchema is a TableSchema (the anonymous, inline schema a stage can make up
+on the fly) promoted to a first-class, addressable artifact: it adds a `name`, a
+`kind` (where it sits in the pipeline), and explicit foreign keys (`references` on
+its columns) so the data model is a real graph rather than a PK-name-collision
+heuristic. A SchemaLibrary is the whole data model: it checks names are unique and
+every reference resolves.
 
 Like methodology.py, the cross-schema checks are plain functions so they can be
 tested and read on their own.
@@ -16,7 +17,14 @@ from typing import Any, Optional
 
 from pydantic import Field, ValidationError, field_validator, model_validator
 
-from app.models.stage import Column, _Base, _SNAKE_RE, format_errors
+from app.models.schema_column import (
+    Column,
+    SourceRef,
+    TableSchema,
+    _Base,
+    _SNAKE_RE,
+    format_errors,
+)
 
 
 class SchemaKind(str, Enum):
@@ -40,20 +48,16 @@ def parse_reference(ref: str) -> tuple[str, Optional[str]]:
     return ref.strip(), None
 
 
-class NamedSchema(_Base):
-    """One named table in the data model."""
+class NamedSchema(TableSchema):
+    """One named table in the data model — a TableSchema with a `name`, a `kind`,
+    and foreign-key-carrying columns. Column uniqueness and primary-key membership
+    are validated by TableSchema."""
     name: str
     kind: SchemaKind
+    title: str
     columns: list[NamedColumn] = Field(default_factory=list)
-    primary_key: Optional[list[str]] = None
-    title: Optional[str] = None
     description: Optional[str] = None
-    estimated_rows: Optional[int] = None
-    source: Optional[dict[str, Any]] = None
-    produced_by: Optional[str] = None
-    consumed_by: Optional[list[str]] = None
-    exclusive_arcs: Optional[list[list[str]]] = None
-    notes: Optional[str] = None
+    source: Optional[SourceRef] = None
 
     @field_validator("name")
     @classmethod
@@ -61,31 +65,6 @@ class NamedSchema(_Base):
         if not _SNAKE_RE.match(v):
             raise ValueError(f"name {v!r} should be snake_case")
         return v
-
-    @model_validator(mode="after")
-    def _consistent(self) -> "NamedSchema":
-        seen: set[str] = set()
-        for c in self.columns:
-            if c.name in seen:
-                raise ValueError(f"duplicate column {c.name!r}")
-            seen.add(c.name)
-        for k in self.primary_key or []:
-            if k not in seen:
-                raise ValueError(f"primary_key {k!r} is not a declared column")
-        # exclusive arc = "exactly one of these columns is non-null per row" (a XOR
-        # foreign key). Each arc column must be declared and nullable; the
-        # exactly-one-set check on real rows is a runtime DATA validation.
-        by_name = {c.name: c for c in self.columns}
-        for arc in self.exclusive_arcs or []:
-            if len(arc) < 2:
-                raise ValueError("each exclusive_arc must list >= 2 columns")
-            for cname in arc:
-                col = by_name.get(cname)
-                if col is None:
-                    raise ValueError(f"exclusive_arc column {cname!r} is not declared")
-                if col.nullable is False:
-                    raise ValueError(f"exclusive_arc column {cname!r} must be nullable (exactly one is set)")
-        return self
 
 
 def check_unique_schema_names(schemas: list[NamedSchema]) -> None:

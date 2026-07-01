@@ -6,40 +6,19 @@ strict about the fields declared here.
 """
 from __future__ import annotations
 
-import re
 from enum import Enum
 from typing import Any, Literal, Optional
 
-from pydantic import (
-    BaseModel,
-    ConfigDict,
-    Field,
-    ValidationError,
-    field_validator,
-    model_validator,
-)
+from pydantic import Field, ValidationError, field_validator, model_validator
 
 from app.llm.options import LLMModel
-
-# ── Column-type vocabulary ───────────────────────────────────────────────────
-SCALAR_COLUMN_TYPES: set[str] = {
-    "str", "int", "float", "bool", "datetime", "date", "dict", "json",
-}
-_LIST_RE = re.compile(r"^list\[(.+)\]$")
-
-
-def is_valid_column_type(t: str) -> bool:
-    """Scalar, or list[<scalar>] / nested list[list[...]]."""
-    if not isinstance(t, str):
-        return False
-    if t in SCALAR_COLUMN_TYPES:
-        return True
-    m = _LIST_RE.match(t)
-    if m:
-        inner = m.group(1).strip()
-        return inner in SCALAR_COLUMN_TYPES or bool(_LIST_RE.match(inner))
-    return False
-
+from app.models.schema_column import (
+    SourceRef,
+    TableSchema,
+    _Base,
+    _SNAKE_RE,
+    format_errors,
+)
 
 # ── Enumerated vocabularies ──────────────────────────────────────────────────
 class StageType(str, Enum):
@@ -91,55 +70,6 @@ class PublishFormat(str, Enum):
     json = "json"
     csv = "csv"
     evidence_cards = "evidence_cards"
-
-
-# ── Base ─────────────────────────────────────────────────────────────────────
-class _Base(BaseModel):
-    model_config = ConfigDict(extra="ignore")
-
-
-# ── Provenance ───────────────────────────────────────────────────────────────
-class SourceRef(_Base):
-    """Where a stage's prose justification lives."""
-    doc: Optional[str] = None
-    section: Optional[str] = None
-    lines: Optional[list[int]] = None
-
-
-# ── Typed columns / schemas ──────────────────────────────────────────────────
-class Column(_Base):
-    name: str
-    type: str = "str"
-    nullable: bool = True
-    description: Optional[str] = None
-    range: Optional[list[Any]] = None
-    source: Optional[str] = None
-
-    @field_validator("type")
-    @classmethod
-    def _known_type(cls, v: str) -> str:
-        if not is_valid_column_type(v):
-            raise ValueError(f"unknown column type {v!r}")
-        return v
-
-
-class TableSchema(_Base):
-    columns: list[Column]
-    estimated_rows: Optional[int] = None
-    primary_key: Optional[list[str]] = None
-    notes: Optional[str] = None
-
-    @model_validator(mode="after")
-    def _consistent(self) -> "TableSchema":
-        seen: set[str] = set()
-        for c in self.columns:
-            if c.name in seen:
-                raise ValueError(f"duplicate column {c.name!r}")
-            seen.add(c.name)
-        for k in self.primary_key or []:
-            if k not in seen:
-                raise ValueError(f"primary_key {k!r} is not a declared column")
-        return self
 
 
 # ── Executable-handle blocks (each self-validates) ───────────────────────────
@@ -261,8 +191,6 @@ _TYPE_SPEC: dict[StageType, dict[str, Any]] = {
     StageType.publish:            {"handle": "publish",   "also_requires": ["function"], "requires_inputs": True, "min_inputs": 1},
 }
 
-_SNAKE_RE = re.compile(r"^[a-z][a-z0-9_]*$")
-
 
 class Stage(_Base):
     """One node in the methodology DAG. Exactly one handle block is required,
@@ -316,16 +244,6 @@ class Stage(_Base):
                 f"type `{self.type.value}` needs >= {spec['min_inputs']} input(s), got {len(self.inputs)}"
             )
         return self
-
-
-def format_errors(err: ValidationError) -> list[str]:
-    """Pydantic errors → human-readable issue strings."""
-    out: list[str] = []
-    for e in err.errors():
-        loc = ".".join(str(p) for p in e.get("loc", ()) if p != "stages")
-        msg = e.get("msg", "invalid")
-        out.append(f"{loc}: {msg}" if loc else msg)
-    return out
 
 
 def validate_stage(stage: dict[str, Any]) -> list[str]:

@@ -6,11 +6,16 @@ Split across two modules:
 
 Import from `app.models` (this aggregator) for the stable public surface.
 """
+from app.models.schema_column import (
+    Column,
+    SourceRef,
+    TableSchema,
+    is_valid_column_type,
+)
 from app.models.stage import (
     AggFormula,
     AggregateConfig,
     AggregationOp,
-    Column,
     Connector,
     ConnectorKind,
     FileFormat,
@@ -24,11 +29,8 @@ from app.models.stage import (
     PythonFunction,
     QueueConfig,
     ReviewConfig,
-    SourceRef,
     Stage,
     StageType,
-    TableSchema,
-    is_valid_column_type,
     validate_stage,
 )
 from app.models.methodology import (

@@ -10,7 +10,8 @@ from typing import Any
 
 from pydantic import ValidationError, model_validator
 
-from app.models.stage import Stage, _Base, format_errors
+from app.models.schema_column import _Base, format_errors
+from app.models.stage import Stage
 
 
 def check_unique_ids(stages: list[Stage]) -> None:

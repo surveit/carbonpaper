@@ -7,7 +7,7 @@ from pydantic import ValidationError
 from app import models as m
 
 GEN = {
-    "name": "org_score", "kind": "computed",
+    "name": "org_score", "kind": "computed", "title": "Org score",
     "columns": [{"name": "company_id", "type": "str"}, {"name": "score", "type": "float"}],
     "primary_key": ["company_id"],
 }
@@ -35,6 +35,7 @@ def test_build_ground_truth_mirrors_generation():
     assert gt.kind is m.SchemaKind.ground_truth
     assert [c.name for c in gt.columns] == ["company_id", "score"]
     assert gt.primary_key == ["company_id"]
+    assert gt.title == "Org score"   # derived from the generation schema
 
 
 def test_build_ground_truth_appends_extra_and_drops_unmirrored_pk():
@@ -47,21 +48,6 @@ def test_build_ground_truth_appends_extra_and_drops_unmirrored_pk():
     names = [c.name for c in gt.columns]
     assert "score" in names and "reviewer" in names
     assert gt.primary_key is None   # company_id wasn't mirrored
-
-
-def test_build_ground_truth_inherits_fully_mirrored_arc():
-    gen = m.NamedSchema.model_validate(
-        {"name": "cell", "kind": "computed",
-         "columns": [{"name": "company_id", "type": "str", "nullable": True},
-                     {"name": "influencer_id", "type": "str", "nullable": True}],
-         "exclusive_arcs": [["company_id", "influencer_id"]]}
-    )
-    spec = m.EvalSpec.model_validate(
-        {"name": "t", "evaluates": "cell", "metrics": ["x"],
-         "mirror_columns": ["company_id", "influencer_id"]}
-    )
-    gt = m.build_ground_truth_schema(spec, gen)
-    assert gt.exclusive_arcs == [["company_id", "influencer_id"]]
 
 
 def test_validate_eval_spec_unknown_target():

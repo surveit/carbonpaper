@@ -13,7 +13,7 @@ from typing import Any, Optional
 from pydantic import Field, ValidationError, model_validator
 
 from app.models.schema import NamedColumn, NamedSchema, SchemaKind
-from app.models.stage import _Base, format_errors
+from app.models.schema_column import _Base, format_errors
 
 
 class EvalSpec(_Base):
@@ -36,20 +36,19 @@ class EvalSpec(_Base):
 def build_ground_truth_schema(eval_spec: EvalSpec, gen: NamedSchema) -> NamedSchema:
     """Derive the ground-truth schema FROM the generation schema it grades.
     Mirrored columns ARE the generation columns (consistent by construction);
-    eval-only `extra_columns` are appended. A PK / exclusive-arc carries over only
-    if all of its columns are mirrored."""
+    eval-only `extra_columns` are appended. The PK carries over only if all of its
+    columns are mirrored. Title is inherited from the generation schema."""
     gen_cols = {c.name: c for c in gen.columns}
     mirror = eval_spec.mirror_columns or list(gen_cols)
     columns: list[NamedColumn] = [gen_cols[n] for n in mirror if n in gen_cols]
     columns += list(eval_spec.extra_columns)
     pk = [k for k in (gen.primary_key or []) if k in mirror] or None
-    arcs = [a for a in (gen.exclusive_arcs or []) if all(c in mirror for c in a)] or None
     return NamedSchema(
         name=eval_spec.name,
         kind=SchemaKind.ground_truth,
+        title=gen.title,
         columns=columns,
         primary_key=pk,
-        exclusive_arcs=arcs,
         notes=eval_spec.notes,
     )
 
