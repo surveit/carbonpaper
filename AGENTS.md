@@ -20,19 +20,18 @@ Three independent features operate on that artifact:
 | **Compiler** | `app/compiler.py` | Distills prose OR an unstructured Claude Code transcript into a *draft* DAG. |
 | **Eval** *(planned)* | — | Checks a methodology reproduces ground truth (`examples/*/eval/`). |
 
-**The clean interface — `app/dag_schema.py`.** This is the single coupling point:
-the canonical, machine-readable contract for the 7 node types (their executable
-handles, the column-type vocab, connector kinds, aggregation formulas) plus
-`validate_stage` / `validate_dag` / `validate_methodology`. The runtime validates
-*against* it; the compiler emits *to* it; **neither imports the other**. Keep it
-pure (no runtime/compiler imports) so it stays a trustworthy interface. The prose
-companion is `app/SCHEMA.md`.
+**The contract — `app/models/`.** Pydantic models are the single source of truth
+for the 7 node types (their executable handles, the column-type vocab, connector
+kinds, aggregation formulas). Constructing a model validates it;
+`validate_methodology(stages)` returns a non-fatal issue list and `parse_methodology`
+raises. The compiler emits *to* these models. (The runtime does not yet parse stage
+dicts through them — wiring that in is the next step; see `docs/models-and-storage.md`.)
 
 ## The 7 node types
 `input_data` · `llm_transform` · `python_transform` · `join` · `aggregate` ·
 `human_review_queue` · `publish`. Each stage YAML declares typed `inputs`, a typed
 `output_schema`, and one executable-handle block (`connector`/`llm`/`function`/
-`join`/`aggregate`/`queue`/`publish`). See `app/dag_schema.py` for the contract.
+`join`/`aggregate`/`queue`/`publish`). See `app/models/` for the contract.
 
 ## Running it
 ```
@@ -46,8 +45,8 @@ installed `claude` CLI. Backend is selectable: `CW_LLM_BACKEND=agent_sdk|cli|moc
 
 ## Repo layout
 ```
-app/dag_schema.py     the node-type contract (the interface)
-app/SCHEMA.md         prose schema spec
+app/models/         the node-type contract (Pydantic models)
+app/SCHEMA.md         prose schema spec (legacy — superseded by models.py)
 app/runtime/          the Runner (executor, handlers, LLM backends, validation)  → app/runtime/AGENTS.md
 app/compiler.py       the Compiler (transcript/prose → draft DAG)
 app/main.py           FastAPI web app (DAG/run/queue/compile pages)              → app/AGENTS.md
