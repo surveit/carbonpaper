@@ -116,7 +116,9 @@ NODE_TYPES: dict[str, dict[str, Any]] = {
         "handle": "join",
         "requires_inputs": True,
         "min_inputs": 2,
-        "required": ["keys"],
+        # `keys` OR `on` satisfies a join (handle_join reads either); presence is
+        # checked in the join-specific block below, so neither is "required" here.
+        "required": [],
         "optional": ["type", "select", "on"],
     },
     "aggregate": {
@@ -254,10 +256,15 @@ def validate_stage(stage: dict[str, Any]) -> list[str]:
         if not (block.get("keys") or block.get("on")):
             issues.append(f"`{sid}`: join needs `keys`")
     elif stype == "aggregate":
-        for a in block.get("aggregations") or []:
+        for i, a in enumerate(block.get("aggregations") or []):
+            if not isinstance(a, dict):
+                issues.append(f"`{sid}`: aggregation[{i}] is not a mapping")
+                continue
             f = a.get("formula")
             if f not in AGG_FORMULAS:
                 issues.append(f"`{sid}`: unknown aggregation formula `{f}`")
+            if not a.get("output_column"):
+                issues.append(f"`{sid}`: aggregation[{i}] needs `output_column`")
             if f in WEIGHTED_FORMULAS and not (a.get("value_column") and a.get("weight_column")):
                 issues.append(f"`{sid}`: `{f}` needs value_column + weight_column")
     elif stype == "human_review_queue":
