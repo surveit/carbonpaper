@@ -2,7 +2,7 @@
 
 Executes a methodology DAG and persists the result. Reads stage dicts directly and
 does not import the compiler or the web app. (It does not yet validate against the
-`app/models.py` contract — that wiring is a TODO.)
+`app/models/` contract — that wiring is a TODO.)
 
 ## Files
 - **`runner.py`** — the executor.
@@ -30,23 +30,26 @@ does not import the compiler or the web app. (It does not yet validate against t
     on `hash_columns`/upstream PK → apply prior decisions or `HaltForReview`),
     `publish` (runs a `function` module that writes artifacts).
 - **LLM backends** (used by `llm_transform`):
-  - `llm.py` — `resolve_backend()` picks `agent_sdk | cli | mock` from
-    `CW_LLM_BACKEND` (default `auto`: agent_sdk → cli → mock) and `CW_LLM_FORCE_MOCK=1`.
-    `call_llm` / `call_llm_batch` render the prompt and dispatch; the JSON parser
-    recovers the last JSON value embedded in prose (for tool-using research output).
-    A stage's `llm.tools:` list (e.g. `[WebSearch, WebFetch]`) is honored only by
-    the agent_sdk backend.
+  - `options.py` — config knobs (`CLAUDE_BIN`, `DEFAULT_MODEL`/`PARALLEL`/`TIMEOUT_S`)
+    and `get_llm_call_type()`, which picks `agent_sdk | cli | mock` from
+    `CW_LLM_BACKEND` (default `auto`: agent_sdk → cli). The mock is opt-in
+    (`CW_LLM_FORCE_MOCK=1`); with no live backend it raises rather than silently
+    mocking.
+  - `llm.py` — `call_llm` / `call_llm_batch` render the prompt and dispatch; the
+    JSON parser recovers the last JSON value embedded in prose (for tool-using
+    research output). A stage's `llm.tools:` list (e.g. `[WebSearch, WebFetch]`)
+    is honored only by the agent_sdk backend.
   - `llm_agent_sdk.py` — drives `claude_agent_sdk.query()`. Locates `claude` (incl.
-    Windows `~/.local/bin/claude.exe`, which the SDK's own search misses). Default:
-    a tool-less single-turn JSON completion. With `tools`, it allows just those
-    tools so the agent can web-research and cite real sources. `run_query` returns
-    `{text, events}` (events = thinking/tool_use/tool_result/text) for tracing.
+    Windows `~/.local/bin/claude.exe`, which the SDK's own search misses). One
+    tool-less query per row, no system prompt of our own; with `tools` it allows
+    just those so the agent can web-research. `run_query` returns `{text, events}`
+    (events = thinking/tool_use/tool_result/text) for tracing.
   - `llm.py` `call_llm_real` — the legacy `claude -p` subprocess path (cli backend).
   - `llm_mock.py` — deterministic offline mock (incl. an honest palm Tier-2 stub
     that never asserts a feature or invents a URL).
 - **`validation.py`** — DATA validation of a dataframe against an `output_schema`
   (present columns, types, ranges, nullability, PK uniqueness). Distinct from the
-  STAGE-SPEC contract in `app/models.py`.
+  STAGE-SPEC contract in `app/models/`.
 
 ## Run / debug
 ```

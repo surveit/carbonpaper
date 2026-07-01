@@ -1,16 +1,17 @@
 """
-Agent SDK backend for llm_transform stages — uses `claude_agent_sdk.query()`,
-the same approach the Cassandra project uses, instead of shelling out to
-`claude -p` ourselves.
+Agent SDK backend for llm_transform stages — uses `claude_agent_sdk.query()`
+instead of shelling out to `claude -p` ourselves.
 
-One `query()` per row: max_turns=1, no tools, no inherited CLAUDE.md/settings
-(`setting_sources=[]`). The SDK drives the Claude Code CLI subprocess under the
-hood; we locate the CLI (it isn't always on PATH on Windows) and pass it via
+One `query()` per row, with no inherited CLAUDE.md/settings (`setting_sources=[]`)
+and no system prompt of our own. By default the model answers from its own
+knowledge with no tools; a stage may pass `tools` (e.g. WebSearch/WebFetch) to
+allow just those. The SDK drives the Claude Code CLI subprocess under the hood;
+we locate the CLI (it isn't always on PATH on Windows) and pass it via
 `cli_path`. Returns the model's raw text; the caller parses JSON.
 
 Selected by app.runtime.llm when claude_agent_sdk is importable. Set
-CW_LLM_BACKEND=cli to force the old subprocess path, or CW_LLM_FORCE_MOCK=1 for
-the offline mock.
+CW_LLM_BACKEND=cli to force the subprocess path, or CW_LLM_FORCE_MOCK=1 for the
+offline mock.
 """
 
 from __future__ import annotations
@@ -41,34 +42,6 @@ except Exception as exc:  # pragma: no cover - import guard
     _AVAILABLE = False
     _IMPORT_ERROR = repr(exc)
 
-
-# Tool-less mode: a pure extraction function. Used by the runner's default
-# llm_transform path (deterministic, cheap, no web).
-_JSON_SYSTEM_NOTOOLS = (
-    "You are a data-extraction function, not an interactive agent. You have NO "
-    "tools and NO web access — do not attempt to search, browse, fetch, or read "
-    "files. Answer ONLY from your own training knowledge. Respond with raw JSON "
-    "exactly matching the shape the user asks for: no prose, no markdown, no code "
-    "fences. When you cannot determine a value from your own knowledge, use the "
-    "'unknown' value the user describes; never guess, never fabricate a source "
-    "or a number."
-)
-
-# Research mode: the agent MAY use the web tools it was granted to actually find
-# and cite real sources. This is the fix for Tier-2 returning all 'unknown' — the
-# model can't know obscure mills from training, but it can look them up.
-_JSON_SYSTEM_TOOLS = (
-    "You are an OSINT research agent. Use the web tools you have been granted "
-    "(WebSearch, WebFetch) to find REAL, specific sources for the question. Open "
-    "pages and read them; do not assert anything you did not actually find. Every "
-    "cited URL must be one you genuinely retrieved. When you have finished "
-    "researching, output your FINAL answer as raw JSON exactly matching the shape "
-    "the user asks for — no prose, no markdown, no code fences. If after searching "
-    "you still cannot source a value, use the 'unknown' value the user describes; "
-    "never guess, never fabricate a URL or a number."
-)
-
-_JSON_SYSTEM = _JSON_SYSTEM_NOTOOLS  # back-compat alias
 
 # Tools that are safe + useful for the research path. Anything not listed is
 # blocked (default permission mode + an allowlist), so the agent can't touch the
@@ -144,8 +117,12 @@ async def _aquery(
         max_turns=max_turns or (16 if use_tools else 4),
         allowed_tools=allow,
         setting_sources=[],
-        system_prompt=system or (_JSON_SYSTEM_TOOLS if use_tools else _JSON_SYSTEM_NOTOOLS),
     )
+    # No system prompt of our own by default — the model already knows how to
+    # answer in JSON and which tools it has. `system` is an explicit override
+    # (used by the inspector REPL), applied only when passed.
+    if system:
+        opts_kwargs["system_prompt"] = system
     if _CLI_PATH:
         opts_kwargs["cli_path"] = _CLI_PATH
     options = ClaudeAgentOptions(**opts_kwargs)

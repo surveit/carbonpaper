@@ -167,10 +167,18 @@ def test_implemented_connectors_ok():
     m.Connector.model_validate({"kind": "computed_static", "params": {}})
 
 
-def test_weighted_formula_cut():
+def test_weighted_formula_accepted_with_value_and_weight():
+    # weighted_* ARE valid (LobbyMap's cell_score uses them, handlers implement
+    # them); they just need both a value_column and a weight_column.
+    op = m.AggregationOp.model_validate({"formula": "weighted_mean", "output_column": "o",
+                                         "value_column": "v", "weight_column": "w"})
+    assert op.formula is m.AggFormula.weighted_mean
+
+
+def test_weighted_formula_requires_value_and_weight():
     with pytest.raises(ValidationError):
-        m.AggregationOp.model_validate({"formula": "weighted_mean", "output_column": "o",
-                                        "value_column": "v", "weight_column": "w"})
+        m.AggregationOp.model_validate({"formula": "weighted_sum", "output_column": "o",
+                                        "value_column": "v"})  # missing weight_column
 
 
 def test_unknown_file_format_rejected():

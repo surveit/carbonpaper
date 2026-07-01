@@ -17,15 +17,16 @@ Three independent features operate on that artifact:
 | Feature | Code | What it does |
 |---|---|---|
 | **Runner** | `app/runtime/` | Executes a DAG: validates I/O between stages, persists outputs + `manifest.json`, halts for human review, resumes. |
-| **Compiler** | `app/compiler.py` | Distills prose OR an unstructured Claude Code transcript into a *draft* DAG. |
+| **Compiler** *(planned)* | — | Distills prose OR an unstructured Claude Code transcript into a *draft* DAG. |
 | **Eval** *(planned)* | — | Checks a methodology reproduces ground truth (`examples/*/eval/`). |
 
 **The contract — `app/models/`.** Pydantic models are the single source of truth
 for the 7 node types (their executable handles, the column-type vocab, connector
 kinds, aggregation formulas). Constructing a model validates it;
 `validate_methodology(stages)` returns a non-fatal issue list and `parse_methodology`
-raises. The compiler emits *to* these models. (The runtime does not yet parse stage
-dicts through them — wiring that in is the next step; see `docs/models-and-storage.md`.)
+raises. The compiler (planned) will emit *to* these models. (The runtime does not yet
+parse stage dicts through them — wiring that in is the next step; see
+`docs/models-and-storage.md`.)
 
 ## The 7 node types
 `input_data` · `llm_transform` · `python_transform` · `join` · `aggregate` ·
@@ -36,29 +37,29 @@ dicts through them — wiring that in is the next step; see `docs/models-and-sto
 ## Running it
 ```
 pip install -r requirements.txt          # fastapi, pandas, pyarrow, pyyaml, claude-agent-sdk, ...
-python -m uvicorn app.main:app --port 8765   # web UI: DAG view, runs, review queue, /compile
+python -m uvicorn app.main:app --port 8765   # web UI: DAG view, runs, review queue
 python -m app.runtime.runner examples/<name> # run a methodology from the CLI
 ```
 LLM stages run through the Claude Agent SDK (`claude_agent_sdk`), which drives the
 installed `claude` CLI. Backend is selectable: `CW_LLM_BACKEND=agent_sdk|cli|mock`
-(default `auto`), or `CW_LLM_FORCE_MOCK=1` for a deterministic offline run.
+(default `auto` → agent_sdk, else the CLI). It never silently falls back to the
+mock; `CW_LLM_FORCE_MOCK=1` opts into the offline mock.
 
 ## Repo layout
 ```
-app/models/         the node-type contract (Pydantic models)
-app/SCHEMA.md         prose schema spec (legacy — superseded by models.py)
+app/models/           the node-type contract (Pydantic models)
+app/SCHEMA.md         prose schema spec (legacy — superseded by app/models/)
 app/runtime/          the Runner (executor, handlers, LLM backends, validation)  → app/runtime/AGENTS.md
-app/compiler.py       the Compiler (transcript/prose → draft DAG)
-app/main.py           FastAPI web app (DAG/run/queue/compile pages)              → app/AGENTS.md
+app/main.py           FastAPI web app (DAG / run / review-queue pages)           → app/AGENTS.md
 app/templates/, app/static/   the web UI
-examples/<name>/      DAG artifacts (compiled/ + methodology_raw.md + code/ + data/ + runs/)  → examples/*/AGENTS.md
+examples/<name>/      DAG artifacts (compiled/ + methodology_raw.md + code/ + data/ + runs/)
 ```
 
 ## Conventions (load-bearing, not stylistic)
 - **Never fabricate.** A value that can't be sourced is `null`/`unknown`; the
   pipeline fails loudly or halts rather than inventing a number, URL, or citation.
-- **Every value carries provenance** — its source URL/publisher travels with it.
-- **Gate the expensive/irreversible step** behind `human_review_queue` (halts the
-  run; decisions are content-hashed so they survive re-runs).
-- **Adversarially verify LLM output** before it becomes asset; demote/​drop the
-  unverified.
+  The LLM backends are opt-in and never silently fall back to a mock.
+- **`human_review_queue` is how we handle asymmetrical risk.** Where a wrong
+  automated result is expensive or irreversible, gate that step behind human
+  sign-off: the runner halts, and decisions are content-hashed so they survive
+  re-runs.

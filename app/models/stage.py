@@ -51,6 +51,10 @@ class AggFormula(str, Enum):
     max = "max"
     first = "first"
     list = "list"
+    # Used by LobbyMap's cell_score (see handlers.handle_aggregate); each needs
+    # a value_column + weight_column (enforced on AggregationOp below).
+    weighted_mean = "weighted_mean"
+    weighted_sum = "weighted_sum"
 
 
 class JoinType(str, Enum):
@@ -142,6 +146,16 @@ class AggregationOp(_Base):
     value_column: Optional[str] = None
     weight_column: Optional[str] = None
     where: Optional[str] = None
+
+    @model_validator(mode="after")
+    def _weighted_needs_value_and_weight(self) -> "AggregationOp":
+        if self.formula in (AggFormula.weighted_mean, AggFormula.weighted_sum) and not (
+            self.value_column and self.weight_column
+        ):
+            raise ValueError(
+                f"{self.formula.value} needs both value_column and weight_column"
+            )
+        return self
 
 
 class AggregateConfig(_Base):
