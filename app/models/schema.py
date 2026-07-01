@@ -11,7 +11,7 @@ depending on `stage.py`.
 from __future__ import annotations
 
 import re
-from typing import Any, Optional
+from typing import Any, Optional, Sequence
 
 from pydantic import (
     BaseModel,
@@ -80,7 +80,10 @@ class TableSchema(_Base):
     """An anonymous schema — columns plus an optional primary key — that can be
     declared inline (e.g. a stage's `output_schema`). `NamedSchema` promotes it to
     a first-class, named artifact."""
-    columns: list[Column]
+    # Sequence (covariant), not list: subclasses narrow the element type
+    # (NamedSchema.columns is list[NamedColumn]), which an invariant list
+    # would forbid. Pydantic still validates/stores a list at runtime.
+    columns: Sequence[Column]
     estimated_rows: Optional[int] = None
     primary_key: Optional[list[str]] = None
     notes: Optional[str] = None

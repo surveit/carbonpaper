@@ -840,7 +840,7 @@ async def queue_page(request: Request, methodology: str, run_id: str, stage_id: 
             if join_keys:
                 for _, r in in_df.iterrows():
                     key = tuple(str(r[k]) for k in join_keys)
-                    input_lookup[key] = {k: _display_cell(v) for k, v in r.items()}
+                    input_lookup[key] = {str(k): _display_cell(v) for k, v in r.items()}
 
     items: list[dict[str, Any]] = []
     if snapshot is not None:

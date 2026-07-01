@@ -1,7 +1,9 @@
 # Dev/test-only dependencies (not needed to run the app).
 -r requirements.txt
 pytest>=8.0
-# Lint + typecheck are pinned exactly so new rule releases can't break CI;
-# bump deliberately.
+# Lint + typecheck are pinned exactly (stubs included) so new rule/stub
+# releases can't break CI; bump deliberately.
 ruff==0.15.20
 mypy==2.1.0
+pandas-stubs==3.0.3.260530
+types-PyYAML==6.0.12.20260518

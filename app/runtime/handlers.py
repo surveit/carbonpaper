@@ -189,7 +189,9 @@ def handle_llm_transform(stage: dict[str, Any], inputs: dict[str, pd.DataFrame],
     # Record which backend handled this stage so the UI/manifest can label it.
     ctx.setdefault("llm_backend", {})[stage["id"]] = backend_status()
 
-    row_dicts = [row.to_dict() for _, row in src.iterrows()]
+    # str(k) is a no-op for real data (parquet/CSV column labels are strings);
+    # it pins the key type down from pandas' Hashable.
+    row_dicts = [{str(k): v for k, v in row.items()} for _, row in src.iterrows()]
     results = call_llm_batch(stage["id"], llm, row_dicts)
 
     for row_dict, result in zip(row_dicts, results):
@@ -281,7 +283,12 @@ def handle_human_review_queue(stage: dict[str, Any], inputs: dict[str, pd.DataFr
     # Partition rows: those subject to review vs. those passing through.
     if flt:
         try:
-            queueable_mask = src.eval(_translate_where(flt))
+            # eval of a comparison yields a bool Series; the explicit dtype=bool
+            # conversion makes that a checked fact (anything else lands in the
+            # except below and is recorded as a filter_error).
+            queueable_mask = pd.Series(
+                src.eval(_translate_where(flt)), index=src.index, dtype=bool
+            )
         except Exception:
             queueable_mask = pd.Series([False] * len(src), index=src.index)
             ctx.setdefault("queue_stats", {}).setdefault(sid, {})[
@@ -373,6 +380,9 @@ def handle_human_review_queue(stage: dict[str, Any], inputs: dict[str, pd.DataFr
 
     if len(decided):
         decided = decided.apply(_apply, axis=1)
+        # Row-wise _apply returns Series rows, so apply(axis=1) builds a
+        # DataFrame — the stubs can't see that, so check it at runtime.
+        assert isinstance(decided, pd.DataFrame)
         # Drop rejected rows from the output (final_score is NA).
         decided = decided[decided["decision"] != "reject"].copy()
 

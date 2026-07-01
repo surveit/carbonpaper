@@ -55,9 +55,7 @@ class NamedSchema(TableSchema):
     name: str
     kind: SchemaKind
     title: str
-    # Narrows the base field's element type; Pydantic validates against
-    # NamedColumn here, but mypy sees an invariant-list override.
-    columns: list[NamedColumn] = Field(default_factory=list)  # type: ignore[assignment]
+    columns: list[NamedColumn] = Field(default_factory=list)
     description: Optional[str] = None
     source: Optional[SourceRef] = None
 

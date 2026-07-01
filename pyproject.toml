@@ -10,6 +10,5 @@ target-version = "py312"
 [tool.mypy]
 python_version = "3.12"
 files = ["app"]
-# Third-party deps without type stubs (pandas, yaml, claude_agent_sdk). This only
-# skips missing-stub errors — our own code is still fully checked.
-ignore_missing_imports = true
+# No ignore_missing_imports: pandas-stubs + types-PyYAML are installed via
+# requirements-dev.txt, and the other deps ship their own types.

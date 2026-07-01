@@ -21,7 +21,6 @@ import concurrent.futures
 import os
 import shutil
 from pathlib import Path
-from typing import Any
 
 _TIMEOUT_S = int(os.environ.get("CW_LLM_TIMEOUT_S", "180"))
 
@@ -113,18 +112,15 @@ async def _aquery(
     allow = list(tools or [])
     use_tools = bool(allow)
 
-    opts_kwargs: dict[str, Any] = dict(
+    options = ClaudeAgentOptions(
         model=model,
         max_turns=max_turns or (16 if use_tools else 4),
         allowed_tools=allow,
         setting_sources=[],
+        # No default system prompt of our own; only the caller's `system` is applied.
+        system_prompt=system or None,
+        cli_path=_CLI_PATH,  # None → the SDK falls back to its own CLI search
     )
-    # No default system prompt; applied only when the caller passes `system`.
-    if system:
-        opts_kwargs["system_prompt"] = system
-    if _CLI_PATH:
-        opts_kwargs["cli_path"] = _CLI_PATH
-    options = ClaudeAgentOptions(**opts_kwargs)
 
     text = ""
     events: list[dict] = []
