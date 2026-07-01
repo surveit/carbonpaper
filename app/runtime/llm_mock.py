@@ -17,7 +17,6 @@ Other llm_transform stages get a generic best-effort fallback.
 
 from __future__ import annotations
 
-import json
 import re
 from typing import Any
 
@@ -139,7 +138,6 @@ def mock_evidence_extraction(input_row: dict[str, Any]) -> list[dict[str, Any]]:
 def mock_benchmark_scoring(input_row: dict[str, Any]) -> dict[str, Any]:
     """For benchmark_scoring: produce a -2..+2 score from quote vs benchmark."""
     quote = input_row.get("quote", "") or ""
-    benchmark = input_row.get("benchmark_text", "") or ""
     kind = input_row.get("kind", "science_based")
 
     has_strong_support = bool(re.search(r"\b(strongly support|fully endorse|champion|commit to|will deliver|driven to|fight to extend|protect|defend)\b", quote, re.IGNORECASE))

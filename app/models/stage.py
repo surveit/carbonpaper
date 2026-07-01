@@ -25,7 +25,7 @@ class StageType(str, Enum):
     input_data = "input_data"
     llm_transform = "llm_transform"
     python_transform = "python_transform"
-    join = "join"
+    join = "join"  # type: ignore[assignment]  # member name shadows str.join; Enum handles it
     aggregate = "aggregate"
     human_review_queue = "human_review_queue"
     publish = "publish"
@@ -46,7 +46,7 @@ class FileFormat(str, Enum):
 class AggFormula(str, Enum):
     sum = "sum"
     mean = "mean"
-    count = "count"
+    count = "count"  # type: ignore[assignment]  # member name shadows str.count; Enum handles it
     min = "min"
     max = "max"
     first = "first"

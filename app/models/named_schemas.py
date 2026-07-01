@@ -55,7 +55,9 @@ class NamedSchema(TableSchema):
     name: str
     kind: SchemaKind
     title: str
-    columns: list[NamedColumn] = Field(default_factory=list)
+    # Narrows the base field's element type; Pydantic validates against
+    # NamedColumn here, but mypy sees an invariant-list override.
+    columns: list[NamedColumn] = Field(default_factory=list)  # type: ignore[assignment]
     description: Optional[str] = None
     source: Optional[SourceRef] = None
 
@@ -104,13 +106,13 @@ class SchemaLibrary(_Base):
 
 def parse_schema_library(schemas: list[dict[str, Any]]) -> SchemaLibrary:
     """Parse + validate the data model. Raises ValidationError if invalid."""
-    return SchemaLibrary(schemas=list(schemas))
+    return SchemaLibrary.model_validate({"schemas": list(schemas)})
 
 
 def validate_schema_library(schemas: list[dict[str, Any]]) -> list[str]:
     """Non-fatal: validate the data model, return issues ([] means valid)."""
     try:
-        SchemaLibrary(schemas=list(schemas))
+        SchemaLibrary.model_validate({"schemas": list(schemas)})
         return []
     except ValidationError as err:
         return format_errors(err)

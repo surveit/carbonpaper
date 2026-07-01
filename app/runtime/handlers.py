@@ -11,14 +11,12 @@ from __future__ import annotations
 import hashlib
 import importlib
 import json
-from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 import pandas as pd
 
-from .llm_mock import mock_llm_call
-from .llm import call_llm, call_llm_batch, backend_status
+from .llm import call_llm_batch, backend_status
 
 
 class HaltForReview(Exception):
@@ -343,7 +341,6 @@ def handle_human_review_queue(stage: dict[str, Any], inputs: dict[str, pd.DataFr
         queue_path = queue_dir / f"{sid}.parquet"
         # Persist a snapshot — everything needed for the reviewer UI plus
         # the content_hash so decisions can be recorded against it.
-        snapshot_cols = list(pending.columns)
         try:
             pending.to_parquet(queue_path, index=False)
         except Exception:

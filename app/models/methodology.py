@@ -62,14 +62,14 @@ class Methodology(_Base):
 
 def parse_methodology(stages: list[dict[str, Any]]) -> Methodology:
     """Parse + validate a list of stage dicts. Raises ValidationError if invalid."""
-    return Methodology(stages=list(stages))
+    return Methodology.model_validate({"stages": list(stages)})
 
 
 def validate_methodology(stages: list[dict[str, Any]]) -> list[str]:
     """Non-fatal: return human-readable issues ([] means valid). For the UI/compiler,
     which want to show problems rather than crash."""
     try:
-        Methodology(stages=list(stages))
+        Methodology.model_validate({"stages": list(stages)})
         return []
     except ValidationError as err:
         return format_errors(err)

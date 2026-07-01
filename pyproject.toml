@@ -1,0 +1,15 @@
+# Tool configuration only — the app is run from source (uvicorn app.main:app),
+# not installed as a package.
+#
+# Lint/typecheck scope: ruff respects .gitignore, so examples/ and saydo/
+# (generated + scratch content) are skipped via the ignore file, not here.
+
+[tool.ruff]
+target-version = "py312"
+
+[tool.mypy]
+python_version = "3.12"
+files = ["app"]
+# Third-party deps without type stubs (pandas, yaml, claude_agent_sdk). This only
+# skips missing-stub errors — our own code is still fully checked.
+ignore_missing_imports = true
