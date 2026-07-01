@@ -1,61 +1,41 @@
 """
-Real LLM backend via the Claude Code CLI (`claude -p`).
+LLM dispatch for `llm_transform` stages.
 
-Each call shells out to `claude -p --output-format json --model haiku
---max-turns 1`, piping the rendered prompt on stdin. The outer JSON is
-parsed; the inner `result` is parsed again as JSON if the prompt asked
-for JSON output. Falls back to llm_mock when the CLI isn't available or
-errors out.
+`call_llm` / `call_llm_batch` render a stage's prompt and route it to the active
+backend chosen by `options.get_llm_call_type()` — the Agent SDK (`llm_agent_sdk`),
+the `claude -p` subprocess (`call_llm_real`), or the opt-in offline mock
+(`llm_mock`). Backends never silently fall back to the mock: a missing or failed
+live backend raises rather than fabricating output.
 
-Batching: ThreadPoolExecutor with bounded workers. Default 4. Override
-via env CW_LLM_PARALLEL.
+Batching: ThreadPoolExecutor with bounded workers (default 4, override via
+CW_LLM_PARALLEL).
 """
 
 from __future__ import annotations
 
 import json
 import os
-import shutil
 import subprocess
-import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Any, Callable
+from typing import Any, Callable, TypedDict, cast
 
 from . import llm_mock
 from . import llm_agent_sdk
+from .options import (
+    CLAUDE_BIN,
+    DEFAULT_MODEL,
+    DEFAULT_PARALLEL,
+    DEFAULT_TIMEOUT_S,
+    LLMError,
+    get_llm_call_type,
+)
 
 
-CLAUDE_BIN = shutil.which("claude") or llm_agent_sdk._CLI_PATH
-DEFAULT_MODEL = os.environ.get("CW_LLM_MODEL", "haiku")
-DEFAULT_PARALLEL = int(os.environ.get("CW_LLM_PARALLEL", "4"))
-DEFAULT_TIMEOUT_S = int(os.environ.get("CW_LLM_TIMEOUT_S", "180"))
-
-
-def resolve_backend() -> str:
-    """Pick the active LLM backend.
-
-    CW_LLM_FORCE_MOCK=1 → 'mock'. CW_LLM_BACKEND ∈ {agent_sdk, cli, mock}
-    forces a choice (degrading gracefully if unavailable). Default 'auto'
-    prefers the Agent SDK, then the `claude -p` subprocess, then the mock."""
-    if os.environ.get("CW_LLM_FORCE_MOCK") == "1":
-        return "mock"
-    choice = os.environ.get("CW_LLM_BACKEND", "auto").lower()
-    if choice == "agent_sdk":
-        return "agent_sdk" if llm_agent_sdk.available() else ("cli" if CLAUDE_BIN else "mock")
-    if choice == "cli":
-        return "cli" if CLAUDE_BIN else "mock"
-    if choice == "mock":
-        return "mock"
-    # auto
-    if llm_agent_sdk.available():
-        return "agent_sdk"
-    if CLAUDE_BIN:
-        return "cli"
-    return "mock"
-
-
-class LLMError(Exception):
-    """Raised when a real-LLM call fails irrecoverably."""
+class LLMConfigDict(TypedDict, total=False):
+    """A stage's `llm:` handle block, as `call_llm` consumes it."""
+    prompt_template: str
+    model: str
+    tools: list[str]
 
 
 def _call_claude_subprocess(prompt: str, model: str = DEFAULT_MODEL,
@@ -167,47 +147,38 @@ def render_prompt(template: str, row: dict[str, Any]) -> str:
         )
 
 
-def call_llm(stage_id: str, llm_config: dict[str, Any], input_row: dict[str, Any],
+def call_llm(stage_id: str, llm_config: LLMConfigDict, input_row: dict[str, Any],
              *, use_real: bool | None = None, model: str | None = None) -> Any:
-    """Single-row LLM call. Decides between real (claude -p) and mock.
+    """Single-row LLM call, routed to the backend from `get_llm_call_type()`.
 
-    use_real default: True if the CLI is available, False otherwise.
-    Set CW_LLM_FORCE_MOCK=1 to force mock even when CLI is available."""
-    backend = "mock" if use_real is False else resolve_backend()
+    `use_real=False` (or CW_LLM_FORCE_MOCK=1) selects the offline mock — the only
+    way to reach it. A live backend that errors raises rather than degrading to
+    the mock, so a fabricated answer never masquerades as a real model reply."""
+    backend = "mock" if use_real is False else get_llm_call_type()
 
     if backend == "mock":
-        return llm_mock.mock_llm_call(stage_id, llm_config, input_row)
+        return llm_mock.mock_llm_call(stage_id, cast("dict[str, Any]", llm_config), input_row)
 
     template = llm_config.get("prompt_template", "")
     if not template:
-        # Without a template we can't ask anything coherent of the model.
-        return llm_mock.mock_llm_call(stage_id, llm_config, input_row)
+        raise LLMError(f"stage {stage_id}: llm_transform has no prompt_template")
 
     prompt = render_prompt(template, input_row)
     mdl = model or llm_config.get("model") or DEFAULT_MODEL
     # A stage may request web research tools (e.g. tools: [WebSearch, WebFetch]).
     # Only the agent SDK backend can honor them.
     tools = llm_config.get("tools")
-    try:
-        if backend == "agent_sdk":
-            if tools:
-                res = llm_agent_sdk.run_query(prompt, mdl, tools=tools)
-                return _parse_text_result(res["text"])
-            return _parse_text_result(llm_agent_sdk.call_agent_sdk(prompt, mdl))
-        return call_llm_real(prompt, model=mdl)  # cli subprocess
-    except Exception as exc:
-        # Surface in handler so caller can mark stage warning; for now
-        # degrade to mock with a marker.
-        sys.stderr.write(f"[llm] {backend} call failed for stage {stage_id}: {exc}\n")
-        result = llm_mock.mock_llm_call(stage_id, llm_config, input_row)
-        if isinstance(result, dict):
-            result["_llm_fallback"] = f"mock_after_{backend}_error"
-        return result
+    if backend == "agent_sdk":
+        if tools:
+            res = llm_agent_sdk.run_query(prompt, mdl, tools=tools)
+            return _parse_text_result(res["text"])
+        return _parse_text_result(llm_agent_sdk.call_agent_sdk(prompt, mdl))
+    return call_llm_real(prompt, model=mdl)  # cli subprocess
 
 
 def call_llm_batch(
     stage_id: str,
-    llm_config: dict[str, Any],
+    llm_config: LLMConfigDict,
     input_rows: list[dict[str, Any]],
     *,
     parallel: int = DEFAULT_PARALLEL,
@@ -234,9 +205,16 @@ def call_llm_batch(
 
 
 def backend_status() -> dict[str, Any]:
-    """For UI/diagnostics: report which backend is active."""
+    """For UI/diagnostics: report which backend is active (or why none is)."""
+    try:
+        backend: str | None = get_llm_call_type()
+        backend_error = None
+    except LLMError as exc:
+        backend = None
+        backend_error = str(exc)
     return {
-        "backend": resolve_backend(),
+        "backend": backend,
+        "backend_error": backend_error,
         "claude_cli": CLAUDE_BIN,
         "agent_sdk": llm_agent_sdk.status(),
         "model_default": DEFAULT_MODEL,
