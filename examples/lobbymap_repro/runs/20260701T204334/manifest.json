@@ -1,0 +1,98 @@
+{
+  "run_id": "20260701T204334",
+  "started_at": "2026-07-01T20:43:34",
+  "methodology": "lobbymap_repro",
+  "status": "ok",
+  "stages": [
+    {
+      "stage_id": "scoring_targets",
+      "type": "input_data",
+      "name": "Scoring targets (docs x cells, POC slice)",
+      "started_at": "2026-07-01T20:43:34",
+      "status": "ok",
+      "input_validation": [],
+      "output_validation": {
+        "stage_id": "scoring_targets",
+        "phase": "output",
+        "rows": 345,
+        "ok": true,
+        "issues": []
+      },
+      "elapsed_ms": 50,
+      "rows": 345,
+      "error": null,
+      "output_path": "outputs\\scoring_targets.parquet",
+      "finished_at": "2026-07-01T20:43:34"
+    },
+    {
+      "stage_id": "scored_evidence",
+      "type": "llm_transform",
+      "name": "Extract + score evidence per target document",
+      "started_at": "2026-07-01T20:43:34",
+      "status": "ok",
+      "input_validation": [
+        {
+          "stage_id": "scored_evidence",
+          "phase": "input:scoring_targets",
+          "rows": 345,
+          "ok": true,
+          "issues": [
+            {
+              "severity": "warning",
+              "column": null,
+              "message": "5 undeclared column(s) present (will be passed through): ['entity_kind', 'source_name', 'evidence_year', 'url', 'retrieved_at']"
+            }
+          ]
+        }
+      ],
+      "output_validation": {
+        "stage_id": "scored_evidence",
+        "phase": "output",
+        "rows": 345,
+        "ok": true,
+        "issues": []
+      },
+      "elapsed_ms": 921590,
+      "rows": 345,
+      "error": null,
+      "output_path": "outputs\\scored_evidence.parquet",
+      "finished_at": "2026-07-01T20:58:55"
+    },
+    {
+      "stage_id": "cell_score",
+      "type": "python_transform",
+      "name": "Aggregate scored evidence into matrix cells",
+      "started_at": "2026-07-01T20:58:55",
+      "status": "ok",
+      "input_validation": [
+        {
+          "stage_id": "cell_score",
+          "phase": "input:scored_evidence",
+          "rows": 345,
+          "ok": true,
+          "issues": [
+            {
+              "severity": "warning",
+              "column": null,
+              "message": "3 undeclared column(s) present (will be passed through): ['quote', 'confidence', 'rationale']"
+            }
+          ]
+        }
+      ],
+      "output_validation": {
+        "stage_id": "cell_score",
+        "phase": "output",
+        "rows": 26,
+        "ok": true,
+        "issues": []
+      },
+      "elapsed_ms": 65,
+      "rows": 26,
+      "error": null,
+      "output_path": "outputs\\cell_score.parquet",
+      "finished_at": "2026-07-01T20:58:55"
+    }
+  ],
+  "finished_at": "2026-07-01T20:58:55",
+  "queue_stats": {}
+}
