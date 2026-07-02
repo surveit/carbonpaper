@@ -69,6 +69,7 @@ def prepare_run(
     methodology_dir: Path,
     repo_root: Path,
     limits: dict[str, int] | None = None,
+    offsets: dict[str, int] | None = None,
 ) -> dict[str, Any]:
     """Create the run dir + id and write an initial `running` manifest (all
     stages pending) so a caller can redirect to the run page immediately and
@@ -77,9 +78,12 @@ def prepare_run(
 
     `limits` is a per-RUN row-cap override: {stage_id: N} truncates that
     stage's output to its first N rows for this run only, overriding any
-    static `limit:` in the stage YAML. Recorded in the manifest
-    (`limit_overrides`) so the cap is part of the run's provenance and
-    survives a halt/resume. Unknown stage ids fail loudly."""
+    static `limit:` in the stage YAML. `offsets` ({stage_id: M}) drops the
+    first M rows BEFORE the cap is applied — together they page through a
+    deterministic ordering (offset 5 + limit 3 = rows 6-8). Both are recorded
+    in the manifest (`limit_overrides` / `offset_overrides`) so the slice is
+    part of the run's provenance and survives a halt/resume. Unknown stage
+    ids fail loudly."""
     runs_dir = methodology_dir / "runs"
     run_id = datetime.now().strftime("%Y%m%dT%H%M%S")
     run_dir = runs_dir / run_id
@@ -90,12 +94,15 @@ def prepare_run(
     ordered = topological_sort(stages)
 
     limits = dict(limits or {})
-    unknown = set(limits) - {s["id"] for s in ordered}
-    if unknown:
-        raise ValueError(
-            f"--limit targets unknown stage id(s): {sorted(unknown)}; "
-            f"stages are {[s['id'] for s in ordered]}"
-        )
+    offsets = dict(offsets or {})
+    stage_ids = {s["id"] for s in ordered}
+    for flag, mapping in (("--limit", limits), ("--offset", offsets)):
+        unknown = set(mapping) - stage_ids
+        if unknown:
+            raise ValueError(
+                f"{flag} targets unknown stage id(s): {sorted(unknown)}; "
+                f"stages are {[s['id'] for s in ordered]}"
+            )
 
     ctx: dict[str, Any] = {
         "repo_root": repo_root,
@@ -103,12 +110,14 @@ def prepare_run(
         "methodology_dir": methodology_dir,
         "queue_stats": {},
         "limits": limits,
+        "offsets": offsets,
     }
     manifest: dict[str, Any] = {
         "run_id": run_id,
         "started_at": datetime.now().isoformat(timespec="seconds"),
         "methodology": methodology_dir.name,
         "limit_overrides": limits,
+        "offset_overrides": offsets,
         "status": "running",
         "stages": [
             {"stage_id": s["id"], "type": s["type"], "name": s.get("name", s["id"]),
@@ -136,9 +145,12 @@ def execute_run(
     methodology_dir: Path,
     repo_root: Path,
     limits: dict[str, int] | None = None,
+    offsets: dict[str, int] | None = None,
 ) -> dict[str, Any]:
     """Run the DAG once (synchronous). Returns the manifest dict."""
-    return run_prepared(prepare_run(methodology_dir, repo_root, limits=limits))
+    return run_prepared(
+        prepare_run(methodology_dir, repo_root, limits=limits, offsets=offsets)
+    )
 
 
 def _execute_stages(
@@ -249,11 +261,17 @@ def _execute_stages(
             if output is None:
                 output = pd.DataFrame()
 
-            # Generic row cap: truncate this stage's output to its first N
-            # rows (after the handler runs, in the handler's emitted order).
-            # Used to throttle the expensive LLM fan-out for a dry run. A
-            # per-run override (ctx["limits"], from --limit stage=N) wins
-            # over the stage YAML's static `limit:`.
+            # Generic row slicing, in the handler's emitted order. Offset
+            # (per-run only, from --offset stage=M) drops the first M rows;
+            # then the cap keeps the first N. A per-run cap (--limit stage=N)
+            # wins over the stage YAML's static `limit:`. Used to throttle /
+            # page the expensive LLM fan-out.
+            offset = (ctx.get("offsets") or {}).get(sid)
+            if isinstance(offset, int) and offset > 0 and len(output) > 0:
+                record.setdefault("notes", []).append(
+                    f"offset={offset}: dropped first {min(offset, len(output))} of {len(output)} row(s)"
+                )
+                output = output.iloc[offset:].reset_index(drop=True).copy()
             limit = (ctx.get("limits") or {}).get(sid, stage.get("limit"))
             if isinstance(limit, int) and limit >= 0 and len(output) > limit:
                 record.setdefault("notes", []).append(
@@ -378,9 +396,10 @@ def resume_run(methodology_dir: Path, run_id: str, repo_root: Path) -> dict[str,
         "run_dir": run_dir,
         "methodology_dir": methodology_dir,
         "queue_stats": manifest.get("queue_stats", {}),
-        # Re-apply the run's per-stage row caps so stages that resume after a
-        # halt honor the same limits the run started with.
+        # Re-apply the run's per-stage row slicing so stages that resume after
+        # a halt honor the same limits/offsets the run started with.
         "limits": manifest.get("limit_overrides") or {},
+        "offsets": manifest.get("offset_overrides") or {},
     }
 
     manifest["resumed_at"] = datetime.now().isoformat(timespec="seconds")
@@ -392,21 +411,23 @@ def main() -> int:
     args = sys.argv[1:]
     if not args:
         print("Usage: python -m app.runtime.runner <methodology_dir> "
-              "[--limit <stage_id>=<N> ...]")
+              "[--limit <stage_id>=<N> ...] [--offset <stage_id>=<M> ...]")
         return 1
     methodology_dir = Path(args[0]).resolve()
     limits: dict[str, int] = {}
+    offsets: dict[str, int] = {}
     i = 1
     while i < len(args):
-        if args[i] == "--limit" and i + 1 < len(args) and "=" in args[i + 1]:
+        if args[i] in ("--limit", "--offset") and i + 1 < len(args) and "=" in args[i + 1]:
             stage_id, _, n = args[i + 1].partition("=")
-            limits[stage_id] = int(n)
+            (limits if args[i] == "--limit" else offsets)[stage_id] = int(n)
             i += 2
         else:
             print(f"Unknown argument: {args[i]}")
             return 1
     repo_root = Path(__file__).resolve().parents[2]
-    manifest = execute_run(methodology_dir, repo_root, limits=limits or None)
+    manifest = execute_run(methodology_dir, repo_root,
+                           limits=limits or None, offsets=offsets or None)
     print(json.dumps(
         {"run_id": manifest["run_id"], "status": manifest["status"],
          "stages": [(s["stage_id"], s["status"], s["rows"]) for s in manifest["stages"]]},
