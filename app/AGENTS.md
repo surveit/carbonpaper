@@ -1,9 +1,11 @@
 # app — the FastAPI web app (DAG / run / review UI)
 
-`app/main.py` serves the methodology DAGs, their runs, and the review queue. It
-imports the Runner (`app.runtime`) and the contract (`app.dag_schema`). (The
-Compiler feature adds `/compile` pages — see the "Compiler" section appended in
-that PR.)
+The web app serves the methodology DAGs, their runs, and the review queue.
+`app/main.py` is a thin bootstrap: it creates the FastAPI app, mounts `/static`,
+and includes the routers in `app/web/routers/`. Those routers import the Runner
+(`app.runtime`) and the contract (`app.models`), and share the helpers in
+`app/web/` (`config`, `loading`, `diagrams`). (The Compiler feature adds
+`/compile` pages — see the "Compiler" section appended in that PR.)
 
 Run: `python -m uvicorn app.main:app --port 8765`.
 
@@ -23,7 +25,7 @@ Run: `python -m uvicorn app.main:app --port 8765`.
 
 ## Live run progress (no full-page reload)
 `POST /methodology/<m>/run` → `runner.prepare_run` (writes an initial `running`
-manifest) → executes in a **background thread** (`_run_in_background`) → redirects
+manifest) → executes in a **background thread** (`run_in_background`) → redirects
 immediately. `run_detail.html` polls `GET …/runs/<id>/status` every 2s and updates
 the status badge, counts, and the mermaid DAG *in place*; on the terminal
 transition it reloads once to render previews/artifacts. Terminal runs don't poll.
@@ -38,6 +40,10 @@ calls; for `publish`/`human_review_queue`/`input_data` it's refused (those handl
 have side effects).
 
 ## Files
-`main.py` (routes) · `templates/` (`run_detail.html`, `_run_stage_panel.html`,
-`_stage_executable.html`, `_stage_content.html`, + base/index/methodology/queue/…)
-· `static/style.css` · `runtime/preview.py` (scratch-run backend).
+`main.py` (app bootstrap — mounts static + includes routers) ·
+`web/routers/{methodology,runs,review}.py` (route handlers) ·
+`web/{config,loading,diagrams}.py` (paths+templates · fs reads & stage-dict
+helpers · mermaid/ER builders) · `templates/` (`run_detail.html`,
+`_run_stage_panel.html`, `_stage_executable.html`, `_stage_content.html`, +
+base/index/methodology/queue/…) · `static/style.css` · `runtime/preview.py`
+(scratch-run backend).

@@ -1,0 +1,251 @@
+"""Filesystem access for the web layer: read compiled stage YAML, run
+manifests, stage outputs, review decisions, and queue snapshots off disk, plus
+small pure helpers for the stage-dict shape they return."""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+from typing import Any
+
+import pandas as pd
+import yaml
+from fastapi import HTTPException
+
+from app.web.config import EXAMPLES_DIR, REPO_ROOT
+
+
+# ─── Methodologies & stages ──────────────────────────────────────────────────
+
+def list_methodologies() -> list[str]:
+    if not EXAMPLES_DIR.exists():
+        return []
+    return [
+        p.name
+        for p in sorted(EXAMPLES_DIR.iterdir())
+        if p.is_dir() and (p / "compiled").is_dir()
+    ]
+
+
+def load_stages(methodology: str) -> list[dict[str, Any]]:
+    compiled_dir = EXAMPLES_DIR / methodology / "compiled"
+    if not compiled_dir.is_dir():
+        raise HTTPException(status_code=404, detail=f"No compiled stages for {methodology}")
+    stages: list[dict[str, Any]] = []
+    for yaml_file in sorted(compiled_dir.glob("*.yaml")):
+        with yaml_file.open("r", encoding="utf-8") as f:
+            try:
+                data = yaml.safe_load(f) or {}
+            except yaml.YAMLError as exc:
+                data = {
+                    "id": yaml_file.stem,
+                    "name": f"[YAML ERROR] {yaml_file.name}",
+                    "type": "python_transform",
+                    "compiler_notes": [f"YAML parse error: {exc}"],
+                    "_error": True,
+                }
+        data["_filename"] = yaml_file.name
+        data["_order"] = yaml_file.stem.split("_", 1)[0]
+        stages.append(data)
+    return stages
+
+
+def find_stage(stages: list[dict[str, Any]], stage_id: str) -> dict[str, Any] | None:
+    """The stage dict with this id, or None."""
+    return next((s for s in stages if s.get("id") == stage_id), None)
+
+
+def get_input_ids(stage: dict[str, Any]) -> list[str]:
+    """v2 inputs are objects with id; older shapes might be plain strings."""
+    inputs = stage.get("inputs") or []
+    out = []
+    for inp in inputs:
+        if isinstance(inp, dict):
+            iid = inp.get("id")
+            if iid:
+                out.append(iid)
+        elif isinstance(inp, str):
+            out.append(inp)
+    return out
+
+
+# ─── Source & code reads ─────────────────────────────────────────────────────
+
+def read_prose_excerpt(stage: dict[str, Any], methodology: str) -> str | None:
+    src = stage.get("source") or {}
+    doc = src.get("doc")
+    if not doc:
+        return None
+    candidate = REPO_ROOT / doc
+    if not candidate.exists():
+        candidate = EXAMPLES_DIR / methodology / "stages" / Path(doc).name
+        if not candidate.exists():
+            return None
+    try:
+        return candidate.read_text(encoding="utf-8")
+    except OSError:
+        return None
+
+
+def read_module_code(module_path: str) -> str | None:
+    """Resolve module 'examples.lobbymap.code.foo' to a file path and read it."""
+    if not module_path:
+        return None
+    parts = module_path.split(".")
+    candidate = REPO_ROOT / Path(*parts).with_suffix(".py")
+    if not candidate.exists():
+        return None
+    try:
+        return candidate.read_text(encoding="utf-8")
+    except OSError:
+        return None
+
+
+def resolve_function_code(stage_def: dict[str, Any] | None) -> str | None:
+    """Python source for a stage's function handle: the module file for a module
+    ref, or the inline code string. None if the stage has neither."""
+    fn = (stage_def or {}).get("function") or {}
+    if fn.get("kind") == "module" and fn.get("module"):
+        return read_module_code(fn["module"])
+    if fn.get("kind") == "inline":
+        return fn.get("code")
+    return None
+
+
+# ─── Runs & manifests ────────────────────────────────────────────────────────
+
+def runs_dir(methodology: str) -> Path:
+    return EXAMPLES_DIR / methodology / "runs"
+
+
+def load_manifest(run_dir: Path) -> dict[str, Any]:
+    """A run's manifest.json as a dict, or 404 if the run doesn't exist."""
+    manifest_path = run_dir / "manifest.json"
+    if not manifest_path.exists():
+        raise HTTPException(status_code=404, detail="Run not found")
+    return json.loads(manifest_path.read_text(encoding="utf-8"))
+
+
+def list_runs(methodology: str) -> list[dict[str, Any]]:
+    rdir = runs_dir(methodology)
+    if not rdir.is_dir():
+        return []
+    entries = []
+    for run in sorted(rdir.iterdir(), reverse=True):
+        if not run.is_dir():
+            continue
+        manifest_path = run / "manifest.json"
+        if manifest_path.exists():
+            try:
+                manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            except json.JSONDecodeError:
+                manifest = {"run_id": run.name, "status": "corrupt"}
+            entries.append({
+                "run_id": run.name,
+                "status": manifest.get("status", "unknown"),
+                "started_at": manifest.get("started_at"),
+                "finished_at": manifest.get("finished_at"),
+                "stages_total": len(manifest.get("stages", [])),
+                "stages_ok": sum(1 for s in manifest.get("stages", []) if s.get("status") == "ok"),
+                "stages_error": sum(1 for s in manifest.get("stages", []) if s.get("status") == "error"),
+            })
+    return entries
+
+
+# ─── Tabular output previews ─────────────────────────────────────────────────
+
+def read_table(path: Path) -> pd.DataFrame:
+    """Read a stage output file (parquet or csv) into a DataFrame."""
+    return pd.read_parquet(path) if path.suffix == ".parquet" else pd.read_csv(path)
+
+
+def load_output_preview(run_dir: Path, rel_path: str | None) -> dict[str, Any] | None:
+    """Small JSON-able preview of a stage output: columns, total row count, and
+    the first 5 rows as strings. None if no path is given; {"error": ...} if the
+    file is missing on disk or can't be read."""
+    if not rel_path:
+        return None
+    path = run_dir / rel_path
+    if not path.exists():
+        return {"error": f"missing on disk: {rel_path}"}
+    try:
+        df = read_table(path)
+    except Exception as exc:  # noqa: BLE001
+        return {"error": str(exc)}
+    return {
+        "columns": list(df.columns),
+        "rows_total": len(df),
+        "preview": df.head(5).fillna("").astype(str).to_dict(orient="records"),
+    }
+
+
+# ─── Review decisions & queue snapshots ──────────────────────────────────────
+
+def decisions_path(methodology: str, stage_id: str) -> Path:
+    d = EXAMPLES_DIR / methodology / "decisions"
+    d.mkdir(parents=True, exist_ok=True)
+    return d / f"{stage_id}.parquet"
+
+
+def load_decisions_df(methodology: str, stage_id: str) -> pd.DataFrame:
+    p = decisions_path(methodology, stage_id)
+    if not p.exists():
+        return pd.DataFrame(
+            columns=["content_hash", "decision", "modified_score",
+                     "reviewer", "reviewed_at", "source_run_id"]
+        )
+    return pd.read_parquet(p)
+
+
+def queue_snapshot(methodology: str, run_id: str, stage_id: str) -> pd.DataFrame | None:
+    run_dir = runs_dir(methodology) / run_id
+    for ext in (".parquet", ".csv"):
+        p = run_dir / "queue" / f"{stage_id}{ext}"
+        if p.exists():
+            return read_table(p)
+    return None
+
+
+def display_cell(v: Any) -> Any:
+    """Scalar-safe cell formatting for the reviewer UI. pd.isna() raises on
+    list/array-valued cells (e.g. an evidence_urls JSON column), so handle
+    array-likes explicitly before the null check."""
+    if isinstance(v, (list, tuple)):
+        return ", ".join(str(x) for x in v) if len(v) else ""
+    if hasattr(v, "tolist") and not isinstance(v, str):  # numpy array from parquet
+        seq = v.tolist()
+        return ", ".join(str(x) for x in seq) if len(seq) else ""
+    try:
+        return "" if pd.isna(v) else v
+    except (ValueError, TypeError):
+        return v
+
+
+# ─── LLM prompt example ──────────────────────────────────────────────────────
+
+def build_llm_example(
+    stage_def: dict[str, Any], input_previews: list[dict[str, Any]]
+) -> dict[str, Any] | None:
+    """Render the prompt_template with the first row of the first usable input.
+
+    Returns {rendered, source_id} on success, {error} if no input or render
+    fails, or None if the stage isn't an LLM stage.
+    """
+    llm = (stage_def or {}).get("llm") or {}
+    template = llm.get("prompt_template")
+    if not template:
+        return None
+    for ip in input_previews:
+        preview = ip.get("preview") or {}
+        rows = preview.get("preview") or []
+        if not rows:
+            continue
+        try:
+            rendered = template.format(**rows[0])
+        except (KeyError, IndexError, ValueError) as exc:
+            return {
+                "source_id": ip["id"],
+                "error": f"could not render template: {type(exc).__name__}: {exc}",
+            }
+        return {"source_id": ip["id"], "rendered": rendered}
+    return {"error": "no input rows available in this run to render an example"}
