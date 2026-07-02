@@ -19,7 +19,7 @@ connector:
 
 output_schema:
   primary_key: [target_id]
-  estimated_rows: 20
+  estimated_rows: 350
   columns:
     - {name: target_id, type: str, nullable: false}
     - {name: entity_id, type: str, nullable: false}
@@ -33,3 +33,4 @@ output_schema:
     - {name: url, type: str, nullable: false}
     - {name: retrieved_at, type: str, nullable: false}
     - {name: doc_text, type: str, nullable: false}
+    - {name: context_kind, type: str, nullable: false, range: [source_document, im_extract]}

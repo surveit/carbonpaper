@@ -127,7 +127,38 @@ def main() -> None:
                 continue
             rows.append({**rec_base, "url": url, "retrieved_at": RETRIEVED_AT,
                          "doc_text": text[:60000]})
-    rows += calpers_targets()
+    for r in rows:
+        r["context_kind"] = "source_document"
+    # EVIDENCE-TIER targets: every gt evidence row with a usable verbatim extract.
+    # Scores THEIR extract (tests the rubric, not extraction) — no fetching needed.
+    n_skipped = 0
+    for line in (GT / "gt_scored_evidence.jsonl").read_text(encoding="utf-8").splitlines():
+        e = json.loads(line)
+        ext = e.get("source_extract") or ""
+        if len(ext) < 80:
+            n_skipped += 1
+            continue
+        eid = e.get("company_id") or e.get("influencer_id")
+        rows.append({
+            "target_id": "EV::" + e["evidence_id"],
+            "entity_id": eid, "entity_name": eid.split(":", 1)[1].replace("_", " ").title(),
+            "entity_kind": "influencer" if e.get("influencer_id") else "company",
+            "query_id": e["query_id"], "query_name": "",
+            "source_id": e["source_id"], "source_name": "",
+            "evidence_year": e.get("year"), "url": e.get("evidence_url") or "",
+            "retrieved_at": RETRIEVED_AT, "doc_text": ext[:60000],
+            "context_kind": "im_extract",
+        })
+    print(f"evidence-tier targets added (skipped {n_skipped} with no/short extract)")
+    # query names: take them from raw_cells so the prompt has the real query text
+    qnames = {}
+    for line in (GT / "raw_cells.jsonl").read_text(encoding="utf-8").splitlines():
+        c = json.loads(line)
+        if c.get("query_id") and c.get("query_name"):
+            qnames[c["query_id"]] = c["query_name"]
+    for r in rows:
+        if not r["query_name"]:
+            r["query_name"] = qnames.get(r["query_id"], r["query_id"])
     df = pd.DataFrame(rows)
     df.to_parquet(HERE / "scoring_targets.parquet", index=False)
     (HERE / "unfetched.jsonl").write_text(
