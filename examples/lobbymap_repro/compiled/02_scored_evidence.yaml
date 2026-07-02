@@ -40,13 +40,7 @@ llm:
       -1 weakly opposes
       -2 strongly opposes / actively undermines
     The score is alignment with the climate-policy-supportive pole, NOT a
-    normative judgment. Grade against InfluenceMap's SCIENCE-BASED BENCHMARKS
-    below (use whichever are relevant to this query): a position must meet the
-    science-based bar to score positive — supportive-sounding rhetoric that
-    falls short of it does not.
-
-    SCIENCE-BASED BENCHMARKS:
-    {benchmark_context} Beware quoted opposition: an entity quoting or
+    normative judgment. Beware quoted opposition: an entity quoting or
     criticizing an opposing position is NOT itself taking that position.
 
     TEXT ({evidence_year}; kind={context_kind} — either a full document or a verbatim excerpt InfluenceMap cited):
