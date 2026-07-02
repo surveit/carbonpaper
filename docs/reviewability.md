@@ -24,6 +24,27 @@ dossier: 14 claims · 12 SDK-sourced · 9 verified · 2 UNGROUNDED  ← review t
 
 Not a ledger to admire — a **gap report** to scrutinize.
 
+```mermaid
+flowchart LR
+    subgraph dossier["dossier — 14 claims"]
+        direction TB
+        subgraph trusted["SDK-sourced (12) — guarantee holds"]
+            direction LR
+            v["9 verified"]
+            r["3 retrieved"]
+        end
+        subgraph gap["UNGROUNDED (2)"]
+            u["no SourceRef, or<br/>failed the audit checks"]
+        end
+    end
+    human(("human<br/>reviewer")) ==>|"all attention here"| gap
+    human -.->|"nothing to review"| trusted
+    classDef ok fill:#e6f7e6,stroke:#2b8a3e,color:#1e5b2c;
+    classDef bad fill:#ffe3e3,stroke:#c92a2a,color:#7a1c1c;
+    class v,r,trusted ok;
+    class u,gap bad;
+```
+
 ---
 
 ## `Sourced[T]` — what is this, exactly?
@@ -78,6 +99,23 @@ is a ladder, and the auditor reports the distribution:
 verified`. High-stakes claims should require `verified`; everything below `retrieved`
 is the gap.
 
+```mermaid
+flowchart LR
+    subgraph gap["the gap — human review"]
+        direction LR
+        asserted["asserted<br/>model said it; no source"] -->|"attach a URL"| cited["cited<br/>URL attached, unchecked"]
+    end
+    subgraph trusted["trusted surface"]
+        direction LR
+        retrieved["retrieved<br/>bytes cached + hashed"] -->|"verify(): adversarial<br/>re-fetch, default-refuted"| verified["verified<br/>independent re-read<br/>confirms support"]
+    end
+    cited -->|"fetch(): cache + hash<br/>the raw bytes"| retrieved
+    classDef ok fill:#e6f7e6,stroke:#2b8a3e,color:#1e5b2c;
+    classDef bad fill:#ffe3e3,stroke:#c92a2a,color:#7a1c1c;
+    class asserted,cited bad;
+    class retrieved,verified ok;
+```
+
 ---
 
 ## How `Sourced[T]` interacts with the SDK
@@ -109,12 +147,29 @@ Three parts, and the guarantee is their *combination*:
    failing (a)–(c) — or any escape-hatch use — is `ungrounded`: the review queue.
    Coverage is the trust metric; `ungrounded` is where humans look.
 
-```
-agent (raw tools denied) ──uses──▶ journalism SDK ──mints──▶ Sourced[T] / Claim
-                                                                   │
-                              deliverable assembled from them      ▼
-                                            audit(deliverable) ─▶ coverage + ungrounded[]
-                                                                   └─ the review surface
+```mermaid
+flowchart TB
+    subgraph sandbox["agent sandbox — raw WebFetch / network Bash denied by the harness"]
+        agent["agent"]
+        deliv["deliverable — Claim#91;#93; assembled<br/>from Sourced values"]
+    end
+    subgraph sdk["journalism SDK — outside the sandbox"]
+        fetch["fetch(url) / read_pdf /<br/>extract / verify"]
+        store[("byte cache + append-only fetch log<br/>(url, content_hash, ts)<br/>agent cannot write here")]
+    end
+    agent -->|"the only sourcing path"| fetch
+    fetch -->|"caches + registers"| store
+    fetch -->|"mints"| sourced["Sourced#91;T#93; / Claim"]
+    sourced --> deliv
+    deliv --> audit["audit(deliverable)"]
+    store -.->|"independent re-derivation:<br/>recompute hash · log membership ·<br/>value entailed by bytes"| audit
+    audit --> cov["coverage"]
+    audit --> ung["ungrounded#91;#93;<br/>the review surface"]
+    ung --> human(("human"))
+    classDef ok fill:#e6f7e6,stroke:#2b8a3e,color:#1e5b2c;
+    classDef bad fill:#ffe3e3,stroke:#c92a2a,color:#7a1c1c;
+    class cov ok;
+    class ung bad;
 ```
 
 The point in one line: **the SDK turns "source everything" from a convention the agent
@@ -128,6 +183,23 @@ is reading the agent's own rubber stamp. So the guarantee is **not** "it's typed
 `Sourced`" — it's the auditor's **independent re-derivation** above: a forged ref fails
 the hash-recompute / log-membership / value-in-bytes checks. The agent may still
 *construct* the object; it gains nothing.
+
+```mermaid
+flowchart TB
+    claim["a claim in the deliverable"] --> q0{"has a SourceRef?"}
+    q0 -->|"no"| u0["ungrounded: asserted<br/>from the model's head"]
+    q0 -->|"yes"| qa{"(a) hash recomputed from the<br/>cache matches content_hash?"}
+    qa -->|"no"| ua["ungrounded:<br/>invented hash"]
+    qa -->|"yes"| qb{"(b) hash in the fetch log /<br/>signature verifies?"}
+    qb -->|"no"| ub["ungrounded: self-cached<br/>bytes or made-up URL"]
+    qb -->|"yes"| qc{"(c) value present in /<br/>entailed by the bytes?"}
+    qc -->|"no"| uc["ungrounded: real source,<br/>fabricated value"]
+    qc -->|"yes"| ok["grounded — trusted surface,<br/>no human attention"]
+    classDef good fill:#e6f7e6,stroke:#2b8a3e,color:#1e5b2c;
+    classDef bad fill:#ffe3e3,stroke:#c92a2a,color:#7a1c1c;
+    class u0,ua,ub,uc bad;
+    class ok good;
+```
 
 The whole thing rests on one **trust boundary — minting must live outside the agent's
 code-execution sandbox:**
