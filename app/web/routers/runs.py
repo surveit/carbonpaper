@@ -8,7 +8,7 @@ import threading
 import traceback
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 from app.runtime.preview import PREVIEWABLE_TYPES, PreviewError, run_stage_preview
@@ -22,7 +22,10 @@ from app.web.loading import (
     list_runs,
     load_manifest,
     load_output_preview,
+    load_output_table,
     load_stages,
+    manifest_stage,
+    read_output_df,
     resolve_function_code,
     runs_dir,
 )
@@ -171,6 +174,46 @@ async def run_stage_partial(
             "type_glyph": TYPE_GLYPH,
             "type_class": TYPE_CLASS,
         },
+    )
+
+
+@router.get(
+    "/methodology/{methodology}/runs/{run_id}/stage/{stage_id}/rows",
+    response_class=HTMLResponse,
+)
+async def run_stage_rows(
+    request: Request, methodology: str, run_id: str, stage_id: str
+):
+    """Full table of one stage's output, capped at MAX_TABLE_ROWS rendered rows.
+    The page links to the uncapped CSV download."""
+    run_dir = runs_dir(methodology) / run_id
+    stage_record = manifest_stage(run_dir, stage_id)
+    table = load_output_table(run_dir, stage_record.get("output_path"))
+    return templates.TemplateResponse(
+        request,
+        "run_stage_rows.html",
+        {
+            "methodology": methodology,
+            "run_id": run_id,
+            "stage_id": stage_id,
+            "stage": stage_record,
+            "output_path": stage_record.get("output_path"),
+            **table,
+        },
+    )
+
+
+@router.get("/methodology/{methodology}/runs/{run_id}/stage/{stage_id}/rows.csv")
+async def run_stage_rows_csv(methodology: str, run_id: str, stage_id: str):
+    """One stage's complete output as a CSV download (no row cap)."""
+    run_dir = runs_dir(methodology) / run_id
+    stage_record = manifest_stage(run_dir, stage_id)
+    df = read_output_df(run_dir, stage_record.get("output_path"))
+    filename = f"{methodology}__{run_id}__{stage_id}.csv"
+    return Response(
+        content=df.to_csv(index=False),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
 

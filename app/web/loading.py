@@ -154,9 +154,57 @@ def list_runs(methodology: str) -> list[dict[str, Any]]:
 
 # ─── Tabular output previews ─────────────────────────────────────────────────
 
+# Hard cap on rows rendered in the full-table view of a stage output. The CSV
+# download endpoint has no cap — it always serves the complete file.
+MAX_TABLE_ROWS = 5000
+
+
 def read_table(path: Path) -> pd.DataFrame:
     """Read a stage output file (parquet or csv) into a DataFrame."""
     return pd.read_parquet(path) if path.suffix == ".parquet" else pd.read_csv(path)
+
+
+def manifest_stage(run_dir: Path, stage_id: str) -> dict[str, Any]:
+    """The manifest record for one stage of a run; 404 if run or stage missing."""
+    manifest = load_manifest(run_dir)
+    stage_record = next(
+        (s for s in manifest.get("stages", []) if s.get("stage_id") == stage_id),
+        None,
+    )
+    if stage_record is None:
+        raise HTTPException(status_code=404, detail=f"No stage '{stage_id}' in run")
+    return stage_record
+
+
+def read_output_df(run_dir: Path, rel_path: str | None) -> pd.DataFrame:
+    """A stage output file as a DataFrame. 404 if the stage has no output, the
+    path escapes the run directory, or the file is missing on disk."""
+    if not rel_path:
+        raise HTTPException(status_code=404, detail="Stage has no output file")
+    path = (run_dir / rel_path).resolve()
+    if not str(path).startswith(str(run_dir.resolve())) or not path.exists():
+        raise HTTPException(
+            status_code=404, detail=f"Output file missing on disk: {rel_path}"
+        )
+    try:
+        return read_table(path)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(
+            status_code=500, detail=f"Could not read output file: {exc}"
+        ) from exc
+
+
+def load_output_table(run_dir: Path, rel_path: str | None) -> dict[str, Any]:
+    """Full (capped) table of a stage output: columns, total row count, up to
+    MAX_TABLE_ROWS rows as strings, and whether the render was capped."""
+    df = read_output_df(run_dir, rel_path)
+    rows = df.head(MAX_TABLE_ROWS).fillna("").astype(str).to_dict(orient="records")
+    return {
+        "columns": list(df.columns),
+        "rows": rows,
+        "rows_total": len(df),
+        "capped": len(df) > len(rows),
+    }
 
 
 def load_output_preview(run_dir: Path, rel_path: str | None) -> dict[str, Any] | None:
