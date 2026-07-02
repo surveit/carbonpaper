@@ -1,0 +1,14 @@
+{
+  "company_id": "C:california_public_employees_retirement_system_calpers",
+  "influencer_id": null,
+  "query_id": "Q2",
+  "source_id": "D2",
+  "status": "scored",
+  "score": 2,
+  "cell_score_mean": 2.0,
+  "evidence_ids": [
+    "C:california_public_employees_retirement_system_calpers::Q2::D2::GIS_2024",
+    "C:california_public_employees_retirement_system_calpers::Q2::D2::GIS_2022",
+    "C:california_public_employees_retirement_system_calpers::Q2::D2::GIS_2021"
+  ]
+}

@@ -1,0 +1,25 @@
+# Raw input corpus — the documents the pipeline reads. The only "input" kind in
+# lobbymap: everything else is either reference data (sourced) or computed.
+# Provenance: examples/lobbymap/RESEARCH.md
+---
+name: document
+title: Source document (raw corpus)
+kind: input
+description: |
+  One fetched document — a generic raw artifact (bytes from a URL via some
+  channel). It carries NO entity attribution: "this document expresses company X's
+  stance" is an analytical claim, not a property of the raw bytes, so that link is
+  made at the `evidence` stage, not here. InfluenceMap assesses ~30,000 evidence
+  items/year; documents are the substrate evidence is extracted from.
+source:
+  doc: examples/lobbymap/RESEARCH.md
+primary_key: [doc_id]
+estimated_rows: 5000
+columns:
+  - {name: doc_id, type: str, nullable: false}
+  - {name: source_id, type: str, nullable: false, references: data_source.source_id}
+  - {name: url, type: str, nullable: false}
+  - {name: title, type: str, nullable: true}
+  - {name: published_date, type: date, nullable: true}
+  - {name: retrieved_at, type: datetime, nullable: false}
+  - {name: raw_text, type: str, nullable: false}

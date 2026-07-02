@@ -1,0 +1,123 @@
+# Reference / dimension tables — the "missing intermediate databases".
+# These are NOT produced by the pipeline and are NOT raw scraped corpus: they are
+# data InfluenceMap built and curates, that we must source/scrape/reconstruct
+# before any DAG transform can run. The DAG-derived data-model view has no
+# category for these — surfacing that gap is the point of named schemas.
+# SCOPE: direct-engagement matrices. Companies and influencers (InfluenceMap's
+# term for industry associations) are SEPARATE universes — mirroring their CMS
+# (/company/... vs /influencer/...) — each scored by the same matrix pipeline.
+# The company<->influencer relationship EDGE (funding) stays cut until the
+# conduct-layer project; keeping the tables separate makes that edge structurally
+# company<->influencer (a same-kind link is simply unrepresentable — the type
+# safety we'd otherwise need a validator for).
+# Provenance for the whole file: examples/lobbymap/RESEARCH.md
+---
+name: query
+title: Policy query (the matrix rows)
+kind: reference
+description: |
+  A discrete climate-policy position a company can be scored on. The matrix has
+  ~16 queries x ~7 data sources = 96 scoring cells (FAQ). ~13 query rows were
+  directly observed on the OMV scorecard (Communication of Climate Science;
+  Alignment with IPCC; Supporting the Need for Regulations; Support of UN Climate
+  Process; Transparency on Legislation; Carbon Tax; Emissions Trading; Energy &
+  Resource Efficiency; Renewable Energy; Energy Transition & Zero Carbon Tech;
+  GHG Emission Regulation; Disclosure on Relationships; Land Use). The full
+  canonical catalog is TO CONFIRM — not enumerated here to avoid inventing rows.
+source:
+  doc: examples/lobbymap/RESEARCH.md
+  ref: "https://lobbymap.org/Methodology-Portal"
+primary_key: [query_id]
+estimated_rows: 16
+columns:
+  - {name: query_id, type: str, nullable: false, description: "Qn, e.g. Q1"}
+  - {name: name, type: str, nullable: false, description: "Short query title"}
+  - {name: theme, type: str, nullable: true, description: "Grouping (communication / positioning / specific policy)"}
+  - {name: benchmark_id, type: str, nullable: true, references: benchmark,
+     description: "The science-based benchmark defining +2/-2 for this query"}
+  - {name: description, type: str, nullable: true, description: "One-line position spectrum"}
+notes: |
+  Rows must be sourced from InfluenceMap, not authored. We have ~13 observed
+  names; the full ~16 and their canonical ids are an open item.
+---
+name: data_source
+title: Data source (the matrix columns)
+kind: reference
+description: |
+  The channel a piece of evidence came from. ~7 observed on the OMV scorecard:
+  Main Website, Corporate Media, CDP Responses, Government/Direct Consultation,
+  Media Reports, CEO Messaging, Financial Disclosures.
+source:
+  doc: examples/lobbymap/RESEARCH.md
+  ref: "https://lobbymap.org/company/OMV-9575d9222925fe611b993356d67f507c"
+primary_key: [source_id]
+estimated_rows: 7
+columns:
+  - {name: source_id, type: str, nullable: false, description: "Dn, e.g. D6"}
+  - {name: name, type: str, nullable: false}
+  - {name: kind, type: str, nullable: false, range: [self_reported, third_party],
+     description: "self_reported = website/CEO/CDP/financial disclosure; third_party = media"}
+---
+name: benchmark
+title: Science-based benchmark (the scoring rubric)
+kind: reference
+description: |
+  Per query, the externally-authoritative (IPCC/IEA-derived) definition of what
+  the +2 (Paris-aligned) and -2 (opposed) poles MEAN. This is the rubric the
+  -2..+2 scoring runs against. We do NOT have these values; they must be scraped
+  from InfluenceMap's Science-Based Benchmarks Database. Reproducing their cell
+  scores without this is confounded — agreement would measure our reconstructed
+  benchmark, not their methodology.
+source:
+  doc: examples/lobbymap/RESEARCH.md
+  ref: "https://lobbymap.org/Methodology-Portal"
+primary_key: [benchmark_id]
+estimated_rows: 16
+columns:
+  - {name: benchmark_id, type: str, nullable: false}
+  - {name: query_id, type: str, nullable: false, references: query.query_id}
+  - {name: paris_aligned_pole, type: str, nullable: false, description: "What a +2 position asserts"}
+  - {name: opposed_pole, type: str, nullable: false, description: "What a -2 position asserts"}
+  - {name: authority, type: str, nullable: true, description: "IPCC/IEA reference grounding the benchmark"}
+  - {name: source_url, type: str, nullable: true}
+notes: "Values are NOT to be invented. Empty until scraped from InfluenceMap."
+---
+name: company
+title: Scored company (entity)
+kind: reference
+description: |
+  The tracked corporate entities. v1 slice = oil & gas majors (Exxon, Chevron,
+  Shell, BP, TotalEnergies, OMV, Eni, Equinor, Repsol, ConocoPhillips, ...).
+source:
+  doc: examples/lobbymap/RESEARCH.md
+  ref: "https://lobbymap.org/LobbyMapScores"
+primary_key: [company_id]
+estimated_rows: 15
+columns:
+  - {name: company_id, type: str, nullable: false}
+  - {name: name, type: str, nullable: false}
+  - {name: sector, type: str, nullable: false, description: "v1: oil_and_gas"}
+  - {name: hq_country, type: str, nullable: true}
+  - {name: lobbymap_slug, type: str, nullable: true, description: "URL slug on lobbymap.org/company/, for scraping ground truth"}
+---
+name: influencer
+title: Scored influencer (industry association)
+kind: reference
+description: |
+  Industry associations — InfluenceMap's "influencers" — a SEPARATE universe from
+  companies (mirroring their CMS: /company/... vs /influencer/...). Each influencer
+  gets its own scoring matrix on the same queries, the same way a company does. v1
+  set = the trade bodies the oil & gas companies fund (API, IOGP, FuelsEurope,
+  Hydrogen Europe, Ipieca, Cefic, ...). The company<->influencer funding edge is
+  conduct-layer scope; when added it references company on one side and influencer
+  on the other, so it can ONLY be cross-kind by construction.
+source:
+  doc: examples/lobbymap/RESEARCH.md
+  ref: "https://lobbymap.org/influencer/American-Petroleum-Institute-API"
+primary_key: [influencer_id]
+estimated_rows: 40
+columns:
+  - {name: influencer_id, type: str, nullable: false}
+  - {name: name, type: str, nullable: false}
+  - {name: region, type: str, nullable: true}
+  - {name: lobbymap_slug, type: str, nullable: true, description: "URL slug on lobbymap.org/influencer/, for scraping ground truth"}

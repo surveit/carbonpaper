@@ -1,0 +1,32 @@
+# The EVAL data model — SEPARATE from the generation data model (examples/<name>/
+# schemas/) so eval concerns never leak into generation. Generation has no
+# knowledge that eval exists; eval depends on generation, one-directional.
+#
+# Consistency is BY CONSTRUCTION: ground truth is not redeclared, it is DERIVED
+# from the generation schema it grades — the mirrored columns ARE cell_score's
+# columns, so the ground-truth schema cannot drift from what we generate. The
+# only hand-authored part is the eval-only provenance column(s) added on top.
+#
+# Provenance: examples/lobbymap/RESEARCH.md
+---
+name: gt_cell_score
+evaluates: cell_score                       # the generation schema this grades
+mirror_columns: [company_id, influencer_id, query_id, source_id, status, score]
+join_on: [company_id, influencer_id, query_id, source_id]
+metrics:
+  - cell_construction_recall      # of THEIR scored cells, how many did we also build
+  - cell_construction_precision   # of OUR scored cells, how many are real (in theirs)
+  - cell_score_exact_agreement    # of co-present scored cells, identical -2..+2
+  - score_confusion_5x5           # full -2..+2 confusion matrix
+source:
+  doc: examples/lobbymap/RESEARCH.md
+  ref: "https://lobbymap.org/company/OMV-9575d9222925fe611b993356d67f507c"
+# eval-only columns layered on top of the mirrored generation columns:
+extra_columns:
+  - {name: evidence_url, type: str, nullable: true,
+     description: "Link to InfluenceMap's evidence item backing their score"}
+notes: |
+  The scraped ground-truth file populates [mirror_columns + extra_columns]. The
+  runtime builds the expected ground-truth schema by deriving it from cell_score
+  (see dag_schema.build_ground_truth_schema), so a change to cell_score's shape
+  propagates here automatically and a drift is a loud failure, not a silent skew.

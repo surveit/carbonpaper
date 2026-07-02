@@ -160,7 +160,9 @@ def _render_evidence(evidence: pd.DataFrame) -> str:
     blocks = []
     for _, e in evidence.iterrows():
         score = e.get("final_score")
-        score_str = "—" if pd.isna(score) else f"{score:+d}"
+        # final_score is a -2..+2 integer but pandas stores it as float once the
+        # column carries any NaN; `:+d` rejects floats, so coerce after the null check.
+        score_str = "—" if pd.isna(score) else f"{int(round(score)):+d}"
         blocks.append(
             f"<div class='evidence'>"
             f"<div><span class='score'>{score_str}</span> · "
