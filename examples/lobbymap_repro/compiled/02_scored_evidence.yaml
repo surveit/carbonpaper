@@ -1,0 +1,66 @@
+id: scored_evidence
+name: Extract + score evidence per target document
+type: llm_transform
+
+source:
+  doc: examples/lobbymap/RESEARCH.md
+
+inputs:
+  - id: scoring_targets
+    schema:
+      primary_key: [target_id]
+      columns:
+        - {name: target_id, type: str, nullable: false}
+        - {name: entity_id, type: str, nullable: false}
+        - {name: entity_name, type: str, nullable: false}
+        - {name: query_id, type: str, nullable: false}
+        - {name: query_name, type: str, nullable: false}
+        - {name: source_id, type: str, nullable: false}
+        - {name: doc_text, type: str, nullable: false}
+
+llm:
+  model: haiku
+  temperature: 0.0
+  response_format: json
+  max_retries: 3
+  prompt_template: |
+    You are reproducing InfluenceMap's LobbyMap evidence scoring.
+
+    ENTITY: {entity_name} — the document below is attributed to this entity
+    (it wrote, signed, or was quoted in it). Score the ENTITY's stance.
+
+    QUERY ({query_id}): {query_name}
+
+    Score on the LobbyMap -2..+2 scale:
+      +2 strongly SUPPORTS the Paris/IPCC-aligned pole of the query
+      +1 weakly supports
+       0 mixed / neutral / no clear position
+      -1 weakly opposes
+      -2 strongly opposes / actively undermines
+    The score is alignment with the climate-policy-supportive pole, NOT a
+    normative judgment. Beware quoted opposition: an entity quoting or
+    criticizing an opposing position is NOT itself taking that position.
+
+    DOCUMENT ({evidence_year}, via {source_name}):
+    """
+    {doc_text}
+    """
+
+    Decide whether this document takes a stance by this entity on this query.
+    Reply with ONLY this JSON:
+    {{"takes_stance": true, "quote": "<verbatim passage>", "score": 0, "confidence": 0.0, "rationale": "<one sentence>"}}
+    (takes_stance false + nulls if no stance.)
+
+output_schema:
+  primary_key: [target_id]
+  estimated_rows: 20
+  columns:
+    - {name: target_id, type: str, nullable: false}
+    - {name: entity_id, type: str, nullable: false}
+    - {name: query_id, type: str, nullable: false}
+    - {name: source_id, type: str, nullable: false}
+    - {name: takes_stance, type: bool, nullable: false}
+    - {name: quote, type: str, nullable: true}
+    - {name: score, type: int, nullable: true, range: [-2, 2]}
+    - {name: confidence, type: float, nullable: true, range: [0.0, 1.0]}
+    - {name: rationale, type: str, nullable: true}

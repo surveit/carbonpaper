@@ -1,0 +1,54 @@
+id: cell_score
+name: Aggregate scored evidence into matrix cells
+type: python_transform
+
+source:
+  doc: examples/lobbymap/RESEARCH.md
+
+inputs:
+  - id: scored_evidence
+    schema:
+      primary_key: [target_id]
+      columns:
+        - {name: target_id, type: str, nullable: false}
+        - {name: entity_id, type: str, nullable: false}
+        - {name: query_id, type: str, nullable: false}
+        - {name: source_id, type: str, nullable: false}
+        - {name: takes_stance, type: bool, nullable: false}
+        - {name: score, type: int, nullable: true}
+
+function:
+  kind: inline
+  code: |
+    import pandas as pd
+
+    def transform(scored: pd.DataFrame) -> pd.DataFrame:
+        stanced = scored[scored["takes_stance"] & scored["score"].notna()]
+        rows = []
+        for (eid, qid, sid), g in scored.groupby(["entity_id", "query_id", "source_id"]):
+            s = stanced[(stanced["entity_id"] == eid)
+                        & (stanced["query_id"] == qid)
+                        & (stanced["source_id"] == sid)]["score"]
+            if len(s):
+                mean = float(s.mean())
+                rows.append({"entity_id": eid, "query_id": qid, "source_id": sid,
+                             "status": "scored", "score": int(round(mean)),
+                             "cell_mean": round(mean, 3), "evidence_count": int(len(s))})
+            else:
+                rows.append({"entity_id": eid, "query_id": qid, "source_id": sid,
+                             "status": "NS", "score": None,
+                             "cell_mean": None, "evidence_count": 0})
+        return pd.DataFrame(rows)
+  requirements: [pandas]
+
+output_schema:
+  primary_key: [entity_id, query_id, source_id]
+  estimated_rows: 10
+  columns:
+    - {name: entity_id, type: str, nullable: false}
+    - {name: query_id, type: str, nullable: false}
+    - {name: source_id, type: str, nullable: false}
+    - {name: status, type: str, nullable: false, range: [scored, NA, NS]}
+    - {name: score, type: int, nullable: true, range: [-2, 2]}
+    - {name: cell_mean, type: float, nullable: true}
+    - {name: evidence_count, type: int, nullable: false}

@@ -1,0 +1,35 @@
+id: scoring_targets
+name: Scoring targets (docs x cells, POC slice)
+type: input_data
+
+source:
+  doc: examples/lobbymap/RESEARCH.md
+
+connector:
+  kind: file
+  params:
+    path: examples/lobbymap_repro/data/scoring_targets.parquet
+    format: parquet
+  refresh: ad_hoc
+  notes: |
+    Built by data/build_poc_corpus.py: small cells (<=2 evidence) from the
+    ingested LobbyMap ground truth, with each evidence item's source document
+    fetched from its ORIGINAL PUBLISHER (never lobbymap.org; lobbymap-hosted
+    copies are listed in data/unfetched.jsonl for manual download).
+
+output_schema:
+  primary_key: [target_id]
+  estimated_rows: 20
+  columns:
+    - {name: target_id, type: str, nullable: false}
+    - {name: entity_id, type: str, nullable: false}
+    - {name: entity_name, type: str, nullable: false}
+    - {name: entity_kind, type: str, nullable: false, range: [company, influencer]}
+    - {name: query_id, type: str, nullable: false}
+    - {name: query_name, type: str, nullable: false}
+    - {name: source_id, type: str, nullable: false}
+    - {name: source_name, type: str, nullable: true}
+    - {name: evidence_year, type: str, nullable: true}
+    - {name: url, type: str, nullable: false}
+    - {name: retrieved_at, type: str, nullable: false}
+    - {name: doc_text, type: str, nullable: false}
