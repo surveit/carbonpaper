@@ -58,6 +58,10 @@ class NamedSchema(TableSchema):
     columns: list[NamedColumn] = Field(default_factory=list)
     description: Optional[str] = None
     source: Optional[SourceRef] = None
+    # Exclusive arcs: "exactly one of these columns is non-null per row" — the XOR
+    # foreign key (e.g. a row scores a company XOR an influencer). Spec-level checks
+    # here; the exactly-one-set check on actual rows is runtime data validation.
+    exclusive_arcs: Optional[list[list[str]]] = None
 
     @field_validator("name")
     @classmethod
@@ -65,6 +69,23 @@ class NamedSchema(TableSchema):
         if not _SNAKE_RE.match(v):
             raise ValueError(f"name {v!r} should be snake_case")
         return v
+
+    @model_validator(mode="after")
+    def _arcs_well_formed(self) -> "NamedSchema":
+        col_by_name = {c.name: c for c in self.columns}
+        for arc in self.exclusive_arcs or []:
+            if len(arc) < 2:
+                raise ValueError(f"`{self.name}`: each exclusive_arc must list >= 2 columns")
+            for cname in arc:
+                col = col_by_name.get(cname)
+                if col is None:
+                    raise ValueError(
+                        f"`{self.name}`: exclusive_arc column `{cname}` is not declared")
+                if col.nullable is False:
+                    raise ValueError(
+                        f"`{self.name}`: exclusive_arc column `{cname}` must be nullable "
+                        f"(exactly one of the arc is set per row)")
+        return self
 
 
 def check_unique_schema_names(schemas: list[NamedSchema]) -> None:

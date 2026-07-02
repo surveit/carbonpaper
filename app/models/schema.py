@@ -57,6 +57,7 @@ class SourceRef(_Base):
     doc: Optional[str] = None
     section: Optional[str] = None
     lines: Optional[list[int]] = None
+    ref: Optional[str] = None  # external provenance URL (e.g. the page a schema mirrors)
 
 
 # ── Typed columns / schemas ──────────────────────────────────────────────────

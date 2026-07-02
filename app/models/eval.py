@@ -13,7 +13,7 @@ from typing import Any, Optional
 from pydantic import Field, ValidationError, model_validator
 
 from app.models.named_schemas import NamedColumn, NamedSchema, SchemaKind
-from app.models.schema import _Base, format_errors
+from app.models.schema import SourceRef, _Base, format_errors
 
 
 class EvalSpec(_Base):
@@ -24,6 +24,7 @@ class EvalSpec(_Base):
     mirror_columns: Optional[list[str]] = None      # generation columns the truth mirrors
     join_on: Optional[list[str]] = None
     extra_columns: list[NamedColumn] = Field(default_factory=list)
+    source: Optional[SourceRef] = None              # where the ground truth comes from
     notes: Optional[str] = None
 
     @model_validator(mode="after")
@@ -43,12 +44,17 @@ def build_ground_truth_schema(eval_spec: EvalSpec, gen: NamedSchema) -> NamedSch
     columns: list[NamedColumn] = [gen_cols[n] for n in mirror if n in gen_cols]
     columns += list(eval_spec.extra_columns)
     pk = [k for k in (gen.primary_key or []) if k in mirror] or None
+    # An exclusive arc carries over only if every column in it is mirrored, so the
+    # ground truth is bound by the same XOR constraint as what it grades.
+    arcs = [a for a in (gen.exclusive_arcs or []) if all(c in mirror for c in a)] or None
     return NamedSchema(
         name=eval_spec.name,
         kind=SchemaKind.ground_truth,
         title=gen.title,
         columns=columns,
         primary_key=pk,
+        exclusive_arcs=arcs,
+        source=eval_spec.source,
         notes=eval_spec.notes,
     )
 
