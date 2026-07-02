@@ -65,11 +65,21 @@ def _load_stages(methodology_dir: Path) -> list[dict[str, Any]]:
     return stages
 
 
-def prepare_run(methodology_dir: Path, repo_root: Path) -> dict[str, Any]:
+def prepare_run(
+    methodology_dir: Path,
+    repo_root: Path,
+    limits: dict[str, int] | None = None,
+) -> dict[str, Any]:
     """Create the run dir + id and write an initial `running` manifest (all
     stages pending) so a caller can redirect to the run page immediately and
     poll it while execution proceeds in the background. Returns a dict with the
-    run_id, run_dir, ctx, ordered stages and the manifest."""
+    run_id, run_dir, ctx, ordered stages and the manifest.
+
+    `limits` is a per-RUN row-cap override: {stage_id: N} truncates that
+    stage's output to its first N rows for this run only, overriding any
+    static `limit:` in the stage YAML. Recorded in the manifest
+    (`limit_overrides`) so the cap is part of the run's provenance and
+    survives a halt/resume. Unknown stage ids fail loudly."""
     runs_dir = methodology_dir / "runs"
     run_id = datetime.now().strftime("%Y%m%dT%H%M%S")
     run_dir = runs_dir / run_id
@@ -79,16 +89,26 @@ def prepare_run(methodology_dir: Path, repo_root: Path) -> dict[str, Any]:
     stages = _load_stages(methodology_dir)
     ordered = topological_sort(stages)
 
+    limits = dict(limits or {})
+    unknown = set(limits) - {s["id"] for s in ordered}
+    if unknown:
+        raise ValueError(
+            f"--limit targets unknown stage id(s): {sorted(unknown)}; "
+            f"stages are {[s['id'] for s in ordered]}"
+        )
+
     ctx: dict[str, Any] = {
         "repo_root": repo_root,
         "run_dir": run_dir,
         "methodology_dir": methodology_dir,
         "queue_stats": {},
+        "limits": limits,
     }
     manifest: dict[str, Any] = {
         "run_id": run_id,
         "started_at": datetime.now().isoformat(timespec="seconds"),
         "methodology": methodology_dir.name,
+        "limit_overrides": limits,
         "status": "running",
         "stages": [
             {"stage_id": s["id"], "type": s["type"], "name": s.get("name", s["id"]),
@@ -112,9 +132,13 @@ def run_prepared(prep: dict[str, Any]) -> dict[str, Any]:
                            prep["run_dir"], outputs_so_far={})
 
 
-def execute_run(methodology_dir: Path, repo_root: Path) -> dict[str, Any]:
+def execute_run(
+    methodology_dir: Path,
+    repo_root: Path,
+    limits: dict[str, int] | None = None,
+) -> dict[str, Any]:
     """Run the DAG once (synchronous). Returns the manifest dict."""
-    return run_prepared(prepare_run(methodology_dir, repo_root))
+    return run_prepared(prepare_run(methodology_dir, repo_root, limits=limits))
 
 
 def _execute_stages(
@@ -225,11 +249,12 @@ def _execute_stages(
             if output is None:
                 output = pd.DataFrame()
 
-            # Generic row cap. `limit:` on any stage truncates its output to
-            # the first N rows (after the handler runs, in the handler's
-            # emitted order). Used here to throttle the expensive Tier-2 LLM
-            # fan-out down to a handful of facilities for a demo/dry run.
-            limit = stage.get("limit")
+            # Generic row cap: truncate this stage's output to its first N
+            # rows (after the handler runs, in the handler's emitted order).
+            # Used to throttle the expensive LLM fan-out for a dry run. A
+            # per-run override (ctx["limits"], from --limit stage=N) wins
+            # over the stage YAML's static `limit:`.
+            limit = (ctx.get("limits") or {}).get(sid, stage.get("limit"))
             if isinstance(limit, int) and limit >= 0 and len(output) > limit:
                 record.setdefault("notes", []).append(
                     f"limit={limit}: truncated from {len(output)} to {limit} row(s)"
@@ -353,6 +378,9 @@ def resume_run(methodology_dir: Path, run_id: str, repo_root: Path) -> dict[str,
         "run_dir": run_dir,
         "methodology_dir": methodology_dir,
         "queue_stats": manifest.get("queue_stats", {}),
+        # Re-apply the run's per-stage row caps so stages that resume after a
+        # halt honor the same limits the run started with.
+        "limits": manifest.get("limit_overrides") or {},
     }
 
     manifest["resumed_at"] = datetime.now().isoformat(timespec="seconds")
@@ -361,12 +389,24 @@ def resume_run(methodology_dir: Path, run_id: str, repo_root: Path) -> dict[str,
 
 # CLI entrypoint for ad-hoc runs
 def main() -> int:
-    if len(sys.argv) < 2:
-        print("Usage: python -m app.runtime.runner <methodology_dir>")
+    args = sys.argv[1:]
+    if not args:
+        print("Usage: python -m app.runtime.runner <methodology_dir> "
+              "[--limit <stage_id>=<N> ...]")
         return 1
-    methodology_dir = Path(sys.argv[1]).resolve()
+    methodology_dir = Path(args[0]).resolve()
+    limits: dict[str, int] = {}
+    i = 1
+    while i < len(args):
+        if args[i] == "--limit" and i + 1 < len(args) and "=" in args[i + 1]:
+            stage_id, _, n = args[i + 1].partition("=")
+            limits[stage_id] = int(n)
+            i += 2
+        else:
+            print(f"Unknown argument: {args[i]}")
+            return 1
     repo_root = Path(__file__).resolve().parents[2]
-    manifest = execute_run(methodology_dir, repo_root)
+    manifest = execute_run(methodology_dir, repo_root, limits=limits or None)
     print(json.dumps(
         {"run_id": manifest["run_id"], "status": manifest["status"],
          "stages": [(s["stage_id"], s["status"], s["rows"]) for s in manifest["stages"]]},

@@ -1,16 +1,18 @@
 id: build_queries
 name: Build target search queries (deterministic)
 type: python_transform
-source: {doc: examples/palm_tier2/methodology_raw.md, section: "§2", lines: [5, 8]}
+source: {doc: examples/palm_tier2/methodology_raw.md, section: "Method §1", lines: [20, 26]}
 inputs:
-  - id: seeds
+  - id: select_for_enrichment
     schema:
       primary_key: [facility_id]
       columns:
         - {name: facility_id, type: str, nullable: false}
+        - {name: uml_id, type: str, nullable: false}
         - {name: name, type: str, nullable: false}
-        - {name: operator_pt, type: str, nullable: true}
+        - {name: owner, type: str, nullable: true, description: "operating company (PT) — becomes operator_pt downstream"}
         - {name: parent_group, type: str, nullable: true}
+        - {name: region, type: str, nullable: true, description: "province — becomes province downstream"}
 function: {kind: module, module: examples.palm_tier2.code.build_queries, function: transform, requirements: [pandas]}
 output_schema:
   primary_key: [facility_id]
@@ -18,10 +20,14 @@ output_schema:
     - {name: facility_id, type: str, nullable: false}
     - {name: uml_id, type: str, nullable: false}
     - {name: name, type: str, nullable: false}
-    - {name: operator_pt, type: str, nullable: true}
+    - {name: operator_pt, type: str, nullable: true, source: "renamed from owner (PalmWatch Group Name)"}
     - {name: parent_group, type: str, nullable: true}
-    - {name: province, type: str, nullable: true}
+    - {name: province, type: str, nullable: true, source: "renamed from region"}
     - {name: queries_json, type: json, nullable: false, source: "derived from identity"}
 compiler_notes:
   - "Mechanism, not judgment: keys on UML id, prefers rspo.org PDFs, CDM for biogas,
      press for PROPER — the query pattern all 3 research runs used."
+  - "Input is the Tier-1 facility universe (facilities spine + Trase cross-check,
+     ordered + capped by select_for_enrichment) instead of a hand-made seeds file.
+     Renames owner->operator_pt and region->province so the downstream locate
+     prompt is unchanged."

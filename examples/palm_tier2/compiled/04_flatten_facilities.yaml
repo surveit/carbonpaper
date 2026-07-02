@@ -1,0 +1,117 @@
+id: flatten_facilities
+name: Flatten nested FacilityRecord to the tabular substrate
+type: python_transform
+
+source:
+  doc: examples/palm_osint/methodology_raw.md
+  section: "§2"
+  lines: [22, 29]
+
+inputs:
+  - id: facilities_snapshot
+    schema:
+      primary_key: [facility_id]
+      columns:
+        - {name: facility_id, type: str, nullable: false}
+        - {name: name, type: str, nullable: false}
+        - {name: owner, type: str, nullable: true}
+        - {name: parent_group, type: str, nullable: true}
+        - {name: location, type: json, nullable: true}
+        - {name: nameplate_capacity, type: json, nullable: true}
+        - {name: contributing_sources, type: json, nullable: true}
+
+function:
+  kind: module
+  module: examples.palm_osint.code.flatten_facilities
+  function: transform
+  requirements: [pandas]
+
+output_schema:
+  primary_key: [facility_id]
+  estimated_rows: 2326
+  # `source:` on each column is the data provenance — it renders as a [badge]
+  # next to the description in the stage view. It names the column's ORIGIN
+  # dataset; the description names the nested path it was lifted from.
+  columns:
+    - {name: facility_id, type: str, nullable: false,
+       description: "stable synthetic id minted at resolution; `palm:<UML_ID>`",
+       source: "facilities.jsonl/facility_id (PalmWatch UML id)"}
+    - {name: uml_id, type: str, nullable: false,
+       description: "facility_id with the `palm:` prefix stripped — the cross-source join key to Trase",
+       source: "derived from facility_id"}
+    - {name: name, type: str, nullable: false,
+       description: "mill name",
+       source: "facilities.jsonl/name (PalmWatch 'Mill Name')"}
+    - {name: owner, type: str, nullable: true,
+       description: "operating company at last refresh",
+       source: "facilities.jsonl/owner (PalmWatch 'Group Name')"}
+    - {name: parent_group, type: str, nullable: true,
+       description: "ultimate corporate parent",
+       source: "facilities.jsonl/parent_group (PalmWatch 'Parent Company')"}
+    - {name: country, type: str, nullable: true,
+       description: "lifted from nested location.country",
+       source: "facilities.jsonl/location.country (PalmWatch)"}
+    - {name: region, type: str, nullable: true,
+       description: "lifted from nested location.region (province/state)",
+       source: "facilities.jsonl/location.region (PalmWatch)"}
+    - {name: lat, type: float, nullable: true,
+       description: "lifted from nested location.lat",
+       source: "facilities.jsonl/location.lat (PalmWatch)"}
+    - {name: lon, type: float, nullable: true,
+       description: "lifted from nested location.lon",
+       source: "facilities.jsonl/location.lon (PalmWatch)"}
+    - {name: capacity_value, type: float, nullable: true, range: [0.0, 1000.0],
+       description: "PROMOTED scalar from nested Quantity.value — the number validation can now range-check",
+       source: "facilities.jsonl/nameplate_capacity.value (Trase, IDN only)"}
+    - {name: capacity_unit, type: str, nullable: true,
+       description: "PROMOTED from Quantity.unit (e.g. tonnes_ffb_per_hour)",
+       source: "facilities.jsonl/nameplate_capacity.unit (Trase)"}
+    - {name: capacity_provenance, type: str, nullable: true, range: [structured, reported, document, osint],
+       description: "PROMOTED from Quantity.provenance — how the number was obtained",
+       source: "facilities.jsonl/nameplate_capacity.provenance (Trase)"}
+    - {name: capacity_source_url, type: str, nullable: true,
+       description: "PROMOTED from Quantity.source.url — the citable origin of the capacity number",
+       source: "facilities.jsonl/nameplate_capacity.source.url (Trase)"}
+    - {name: owner_source_url, type: str, nullable: true,
+       description: "PROMOTED from owner_source.url",
+       source: "facilities.jsonl/owner_source.url (PalmWatch)"}
+    - {name: has_capacity, type: int, nullable: false, range: [0, 1],
+       description: "1 if capacity_value is non-null — feeds the coverage aggregate",
+       source: "derived from capacity_value"}
+    - {name: n_sources, type: int, nullable: false, range: [0, 20],
+       description: "count of contributing_sources for this facility",
+       source: "derived from facilities.jsonl/contributing_sources"}
+    - {name: multi_source, type: bool, nullable: false,
+       description: "n_sources >= 2 (corroborated by PalmWatch AND Trase)",
+       source: "derived from n_sources"}
+    - {name: has_enrichment, type: bool, nullable: false,
+       description: "whether a Tier-2 FacilityEnrichment already exists",
+       source: "facilities.jsonl/has_enrichment"}
+    - {name: dedup_key, type: str, nullable: true,
+       description: "geocell|top-name-token from entity resolution",
+       source: "facilities.jsonl/dedup_key"}
+    - {name: first_seen, type: str, nullable: true, source: "facilities.jsonl/first_seen"}
+    - {name: last_refreshed, type: str, nullable: true, source: "facilities.jsonl/last_refreshed"}
+    - {name: aliases_json, type: json, nullable: true,
+       description: "list[str] kept as JSON — lossy-but-preserved (validation can't see inside)",
+       source: "facilities.jsonl/aliases"}
+    - {name: contributing_sources_json, type: json, nullable: true,
+       description: "list[SourceRef] kept as JSON — the multi-source provenance validation goes blind on (DA#3)",
+       source: "facilities.jsonl/contributing_sources"}
+    - {name: reported_emissions_json, type: json, nullable: true,
+       description: "list[EmissionsRecord] kept as JSON",
+       source: "facilities.jsonl/reported_emissions"}
+
+compiler_notes:
+  - "WHAT THIS NODE DOES: each input row is one nested facility DOCUMENT —
+     location{}, nameplate_capacity{value, source{url}}, and lists. prototype_one
+     passes flat tables between stages, so this turns each document into ONE flat
+     row: nested paths like nameplate_capacity.value become a plain column
+     (capacity_value). No rows are added or removed — 2326 in, 2326 out — it only
+     reshapes wide. See each column's [source] badge for where it came from."
+  - "Substrate decision (DA#3): FLATTEN. Scalar provenance (capacity value/unit/
+     source/provenance) is promoted to typed columns so validation can range-
+     check and null-check it. Variable-length lists stay JSON-encoded — the
+     runtime still can't validate inside them, but nothing is silently dropped."
+  - "contract-only: this is custom Python; the typed I/O is validated, the
+     internal flattening logic is not (DA#1)."

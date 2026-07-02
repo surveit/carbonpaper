@@ -1,0 +1,44 @@
+id: coverage
+name: Coverage statistics by country (aggregate)
+type: aggregate
+
+source:
+  doc: examples/palm_osint/methodology_raw.md
+  section: "§4"
+  lines: [35, 37]
+
+inputs:
+  - id: capacity_crosscheck
+    schema:
+      primary_key: [facility_id]
+      columns:
+        - {name: facility_id, type: str, nullable: false}
+        - {name: country, type: str, nullable: true}
+        - {name: has_capacity, type: int, nullable: false}
+        - {name: multi_source, type: bool, nullable: false}
+
+aggregate:
+  group_by: [country]
+  aggregations:
+    - {output_column: facility_count, formula: count}
+    - {output_column: pct_with_capacity, formula: mean, value_column: has_capacity}
+    - {output_column: pct_multi_source, formula: mean, value_column: multi_source}
+
+output_schema:
+  primary_key: [country]
+  estimated_rows: 33
+  columns:
+    - {name: country, type: str, nullable: true, source: "group key (PalmWatch location.country)"}
+    - {name: facility_count, type: int, nullable: false, range: [0, 5000],
+       description: "rows per country", source: "count over capacity_crosscheck"}
+    - {name: pct_with_capacity, type: float, nullable: true, range: [0.0, 1.0],
+       description: "fraction with a structured Trase capacity",
+       source: "mean of has_capacity"}
+    - {name: pct_multi_source, type: float, nullable: true, range: [0.0, 1.0],
+       description: "fraction corroborated by >1 source",
+       source: "mean of multi_source"}
+
+compiler_notes:
+  - "Mirrors food-bev-facility-osint coverage.json (pct_with_capacity,
+     pct_multi_source) but grouped by country rather than global, since the
+     aggregate node is a group-by. A global row would need a second stage."

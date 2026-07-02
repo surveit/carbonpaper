@@ -1,0 +1,48 @@
+id: trase_unique
+name: Trase mills deduplicated to one row per UML id
+type: python_transform
+
+source:
+  doc: examples/palm_osint/methodology_raw.md
+  section: "§3"
+  lines: [31, 33]
+
+inputs:
+  - id: trase_idn_mills
+    schema:
+      primary_key: [trase_code]
+      columns:
+        - {name: trase_code, type: str, nullable: false}
+        - {name: uml_id, type: str, nullable: true}
+        - {name: capacity_tonnes_ffb_hour, type: float, nullable: true}
+        - {name: active, type: str, nullable: true}
+
+function:
+  kind: inline
+  requirements: [pandas]
+  code: |
+    import pandas as pd
+    def transform(trase: pd.DataFrame) -> pd.DataFrame:
+        # Trase carries >1 record for some UML ids (e.g. a mill listed twice).
+        # Keep one row per uml_id so the downstream left-join can't fan a
+        # facility into duplicate rows. Drop null-uml rows (can't corroborate
+        # by the join key). Prefer the highest stated capacity when tied.
+        df = trase[trase["uml_id"].notna()].copy()
+        df = df.sort_values("capacity_tonnes_ffb_hour", ascending=False, na_position="last")
+        df = df.drop_duplicates(subset=["uml_id"], keep="first").reset_index(drop=True)
+        return df
+
+output_schema:
+  primary_key: [uml_id]
+  estimated_rows: 1400
+  columns:
+    - {name: uml_id, type: str, nullable: false}
+    - {name: trase_code, type: str, nullable: true}
+    - {name: capacity_tonnes_ffb_hour, type: float, nullable: true, range: [0.0, 1000.0]}
+    - {name: active, type: str, nullable: true}
+
+compiler_notes:
+  - "Added after validation caught a duplicated facility_id (PK) downstream:
+     one UML id appears on 2 Trase rows, so the left-join produced 2327 rows
+     from 2326 facilities. This is the validation primitive earning its keep —
+     a raw Prefect join task would have silently shipped the duplicate."
