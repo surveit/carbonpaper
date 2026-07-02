@@ -1,0 +1,64 @@
+id: adjudicate
+name: Reconcile fields across a facility's docs (LLM)
+type: llm_transform
+source: {doc: examples/palm_tier2/methodology_raw.md, section: "§9", lines: [42, 48]}
+inputs:
+  - id: collate
+    schema:
+      primary_key: [facility_id]
+      columns:
+        - {name: facility_id, type: str, nullable: false}
+        - {name: name, type: str, nullable: true}
+        - {name: n_docs, type: int, nullable: false}
+        - {name: docs_json, type: json, nullable: false}
+llm:
+  model: haiku
+  temperature: 0.0
+  response_format: json
+  prompt_template: |
+    You are the ADJUDICATOR. Reconcile the per-document extractions for ONE mill
+    into a single defensible field set. This is the judgment the deterministic steps
+    cannot do. Your job is accuracy, not completeness — a flagged conflict is a
+    better output than a smoothed-over wrong number.
+
+    Mill: {name}
+    Per-document extractions: {docs_json}
+
+    Rules (apply in order):
+      1. CAPACITY DISCREPANCIES — FLAG, NEVER AVERAGE. Mill capacity legitimately
+         differs across an announcement vs an ASA report vs a combined-cert figure
+         (e.g. Sungai Lilin: 100 vs 120 vs 160 t/h). Do NOT average or pick blindly.
+         Report the value from the MOST RECENT full audit (Public Summary) report,
+         and in `note` list every other capacity seen with its source + reason for
+         the spread. Set confidence to medium when sources disagree.
+      2. CDM "DESIGNED" vs "OPERATED" — a CDM PDD states an emission reduction the
+         project was DESIGNED to achieve; that is NOT proof it operated. If CERs
+         were issued, it operated; if zero CERs were issued (registered-not-operated,
+         e.g. Agrowiratama #6872), label the value "designed (registered, 0 CERs
+         issued — not confirmed operated)" in `note` and keep confidence <= medium.
+         Never present a designed figure as an achieved/operated one.
+      3. NAME COLLISIONS — reject docs about a different facility that merely shares
+         a name (e.g. a second "PT Agrowiratama" in W. Kalimantan is NOT this West
+         Sumatra mill). If a doc's province/operator/coordinates don't match this
+         mill, DROP it and note the rejection; do not merge its values.
+      4. GRADE primary vs press. Prefer primary (RSPO Public Summary / CB report /
+         CDM registry) over secondary press/registry. If ONLY press supports a value,
+         keep confidence <= medium and grade=press. State the grade for every field.
+      5. Drop a field if no document supports it. Never invent a value or URL, and
+         never carry a value from a rejected (collision/wrong-facility) document.
+
+    Return ONE JSON object only (no prose, no fences):
+    {{"reconciled_fields":[{{"field":"<name>","value":"<value>","unit":"<unit>",
+       "confidence":"high|medium|low","grade":"primary|press",
+       "source_url":"<the winning doc url>","note":"<why this value / how conflict resolved / rejections>"}}]}}
+output_schema:
+  primary_key: [facility_id]
+  columns:
+    - {name: facility_id, type: str, nullable: false}
+    - {name: name, type: str, nullable: true}
+    - {name: n_docs, type: int, nullable: false}
+    - {name: reconciled_fields, type: json, nullable: true, source: "LLM-reconciled"}
+compiler_notes:
+  - "JUDGMENT stage #3 — entity/figure reconciliation (the runs' 100-vs-120 and
+     designed-vs-operating calls). Could become a human_review_queue; left as LLM
+     for now (review framework deferred)."

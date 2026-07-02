@@ -1,0 +1,20 @@
+id: seeds
+name: Facility seeds (identity)
+type: input_data
+source: {doc: examples/palm_tier2/methodology_raw.md, section: "§1", lines: [1, 3]}
+connector:
+  kind: file
+  params: {path: examples/palm_tier2/data/seeds.jsonl, format: json}
+  refresh: manual
+output_schema:
+  primary_key: [facility_id]
+  estimated_rows: 5
+  columns:
+    - {name: facility_id, type: str, nullable: false}
+    - {name: uml_id, type: str, nullable: false, source: "PalmWatch UML id"}
+    - {name: name, type: str, nullable: false}
+    - {name: operator_pt, type: str, nullable: true}
+    - {name: parent_group, type: str, nullable: true}
+    - {name: province, type: str, nullable: true}
+    - {name: lat, type: float, nullable: true}
+    - {name: lon, type: float, nullable: true}

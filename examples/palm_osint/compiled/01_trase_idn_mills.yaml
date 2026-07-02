@@ -1,0 +1,54 @@
+id: trase_idn_mills
+name: Trase Indonesia mills (structured capacity source)
+type: input_data
+
+source:
+  doc: examples/palm_osint/methodology_raw.md
+  section: "§1"
+  lines: [16, 17]
+
+connector:
+  kind: file
+  params:
+    path: examples/palm_osint/data/trase_idn_mills__2026-06-10.geojson
+    format: geojson
+  refresh: monthly
+  notes: |
+    Committed dated snapshot standing in for the live Trase bulk GeoJSON
+    (https://resources.trase.earth/.../IDN_PO_mills_clean.geo.json). The only
+    structured nameplate-capacity source in the pipeline. `format: geojson`
+    flattens each Point feature's properties into a row.
+
+output_schema:
+  primary_key: [trase_code]
+  estimated_rows: 1452
+  # Every column is a GeoJSON feature property (or geometry coordinate). Origin:
+  # Trase / Stockholm Environment Institute, IDN_PO_mills_clean.geo.json,
+  # snapshot retrieved 2026-06-10. Indonesia only.
+  columns:
+    - {name: trase_code, type: str, nullable: false, description: "Trase within-source id (M-#####)",
+       source: "Trase GeoJSON: properties.trase_code"}
+    - {name: uml_id, type: str, nullable: true, description: "Universal Mill List id — the cross-source join key",
+       source: "Trase GeoJSON: properties.uml_id"}
+    - {name: mill_name, type: str, nullable: true, source: "Trase GeoJSON: properties.mill_name"}
+    - {name: group, type: str, nullable: true, source: "Trase GeoJSON: properties.group"}
+    - {name: company, type: str, nullable: true, source: "Trase GeoJSON: properties.company"}
+    - {name: capacity_tonnes_ffb_hour, type: float, nullable: true, range: [0.0, 1000.0],
+       description: "the ONLY structured nameplate capacity in the whole pipeline",
+       source: "Trase GeoJSON: properties.capacity_tonnes_ffb_hour"}
+    - {name: active, type: str, nullable: true, description: "operating status, e.g. 'Operating'",
+       source: "Trase GeoJSON: properties.active"}
+    - {name: province_name, type: str, nullable: true, source: "Trase GeoJSON: properties.province_name"}
+    - {name: kabupaten_name, type: str, nullable: true, source: "Trase GeoJSON: properties.kabupaten_name"}
+    - {name: lat, type: float, nullable: true, range: [-12.0, 8.0],
+       description: "Point geometry latitude (read by the geojson connector)",
+       source: "Trase GeoJSON: geometry.coordinates[1]"}
+    - {name: lon, type: float, nullable: true, range: [94.0, 142.0],
+       description: "Point geometry longitude",
+       source: "Trase GeoJSON: geometry.coordinates[0]"}
+
+compiler_notes:
+  - "GeoJSON is not one of the runtime's original file formats; a `format:
+     geojson` reader was added to the `file` connector (handlers._read_geojson).
+     This is a file-format lift, not the network `scrape`/`http` connector lift
+     that osint_integration_thinking.md §4 Step-4 still defers."

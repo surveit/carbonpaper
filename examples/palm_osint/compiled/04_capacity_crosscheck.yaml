@@ -1,0 +1,95 @@
+id: capacity_crosscheck
+name: Cross-check facilities against live Trase capacity (join)
+type: join
+
+source:
+  doc: examples/palm_osint/methodology_raw.md
+  section: "§3"
+  lines: [31, 33]
+
+inputs:
+  - id: flatten_facilities
+    schema:
+      primary_key: [facility_id]
+      columns:
+        - {name: facility_id, type: str, nullable: false}
+        - {name: uml_id, type: str, nullable: false}
+        - {name: name, type: str, nullable: false}
+        - {name: country, type: str, nullable: true}
+        - {name: capacity_value, type: float, nullable: true}
+        - {name: has_capacity, type: int, nullable: false}
+        - {name: multi_source, type: bool, nullable: false}
+  - id: trase_unique
+    schema:
+      primary_key: [uml_id]
+      columns:
+        - {name: uml_id, type: str, nullable: false}
+        - {name: capacity_tonnes_ffb_hour, type: float, nullable: true}
+        - {name: active, type: str, nullable: true}
+
+join:
+  type: left
+  keys:
+    - {left: uml_id, right: uml_id}
+  select:
+    - facility_id
+    - uml_id
+    - name
+    - owner
+    - parent_group
+    - country
+    - region
+    - lat
+    - lon
+    - capacity_value
+    - capacity_unit
+    - capacity_provenance
+    - capacity_source_url
+    - owner_source_url
+    - has_capacity
+    - n_sources
+    - multi_source
+    - has_enrichment
+    - dedup_key
+    - aliases_json
+    - contributing_sources_json
+    - reported_emissions_json
+    - capacity_tonnes_ffb_hour
+    - active
+
+output_schema:
+  primary_key: [facility_id]
+  estimated_rows: 2326
+  columns:
+    - {name: facility_id, type: str, nullable: false, source: "left: flatten_facilities"}
+    - {name: uml_id, type: str, nullable: false,
+       description: "the join key: matched between facility and Trase row",
+       source: "left: flatten_facilities"}
+    - {name: name, type: str, nullable: false, source: "left: flatten_facilities (PalmWatch)"}
+    - {name: country, type: str, nullable: true, source: "left: flatten_facilities (PalmWatch)"}
+    - {name: capacity_value, type: float, nullable: true,
+       description: "the ASSET's capacity (already merged into facilities.jsonl at resolution time)",
+       source: "left: flatten_facilities → Trase via facilities.jsonl"}
+    - {name: has_capacity, type: int, nullable: false, range: [0, 1], source: "left: flatten_facilities"}
+    - {name: multi_source, type: bool, nullable: false, source: "left: flatten_facilities"}
+    - {name: capacity_tonnes_ffb_hour, type: float, nullable: true,
+       description: "the LIVE Trase capacity pulled fresh this run, set beside the asset's value to corroborate it; null if no IDN/uml match",
+       source: "right: trase_unique (Trase GeoJSON, this run)"}
+    - {name: active, type: str, nullable: true,
+       description: "operating status from the live Trase row",
+       source: "right: trase_unique (Trase GeoJSON)"}
+
+compiler_notes:
+  - "WHAT THIS NODE DOES: a `join` glues two tables side-by-side on a shared key.
+     LEFT input = all 2326 facilities (the asset). RIGHT input = the live Trase
+     mills, one row per uml_id. Matching on uml_id, it sets the live Trase
+     capacity (capacity_tonnes_ffb_hour) NEXT TO the asset's stored capacity
+     (capacity_value) on the same row — a corroboration check. LEFT join =
+     keep every facility even when Trase has no match (non-Indonesian mills →
+     capacity_tonnes_ffb_hour is null). Row count stays 2326."
+  - "Two capacity columns by design: capacity_value is what the asset already
+     recorded (Trase value merged at resolution); capacity_tonnes_ffb_hour is
+     the live Trase number this run. Equal → corroborated. Different → the mill
+     changed or a refresh is needed — a story-lead signal."
+  - "`select:` is used to avoid lat/lon column collisions between the two
+     inputs (the join handler suffixes overlaps with _r)."

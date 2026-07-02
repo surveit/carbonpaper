@@ -1,0 +1,62 @@
+id: select_for_enrichment
+name: Select facilities for Tier-2 enrichment (limited dry run)
+type: python_transform
+
+source:
+  doc: examples/palm_osint/methodology_raw.md
+  section: "§5"
+  lines: [39, 44]
+
+# THE LIMIT. The runtime truncates this stage's output to the first N rows
+# (after the handler runs, in the order it emits). select_for_enrichment.py
+# orders Indonesian / capacity-bearing / multi-source facilities first so the
+# capped set is representative. Demo throttle, not an analytical filter.
+limit: 5
+
+inputs:
+  - id: capacity_crosscheck
+    schema:
+      primary_key: [facility_id]
+      columns:
+        - {name: facility_id, type: str, nullable: false}
+        - {name: name, type: str, nullable: false}
+        - {name: owner, type: str, nullable: true}
+        - {name: country, type: str, nullable: true}
+        - {name: capacity_value, type: float, nullable: true}
+        - {name: multi_source, type: bool, nullable: false}
+
+function:
+  kind: module
+  module: examples.palm_osint.code.select_for_enrichment
+  function: transform
+  requirements: [pandas]
+
+output_schema:
+  primary_key: [facility_id]
+  estimated_rows: 5
+  columns:
+    - {name: facility_id, type: str, nullable: false}
+    - {name: uml_id, type: str, nullable: false}
+    - {name: name, type: str, nullable: false}
+    - {name: owner, type: str, nullable: true}
+    - {name: parent_group, type: str, nullable: true}
+    - {name: country, type: str, nullable: true}
+    - {name: region, type: str, nullable: true}
+    - {name: lat, type: float, nullable: true}
+    - {name: lon, type: float, nullable: true}
+    - {name: capacity_value, type: float, nullable: true}
+    - {name: capacity_unit, type: str, nullable: true}
+    - {name: capacity_provenance, type: str, nullable: true}
+    - {name: capacity_source_url, type: str, nullable: true}
+    - {name: owner_source_url, type: str, nullable: true}
+    - {name: multi_source, type: bool, nullable: false}
+    - {name: capacity_summary, type: str, nullable: false, description: "prompt-ready capacity line (honest 'unknown' when null)"}
+
+compiler_notes:
+  - "PROVENANCE: every column passes through from flatten_facilities /
+     capacity_crosscheck unchanged (owner/location from PalmWatch, capacity from
+     Trase). Only capacity_summary is newly derived — a prompt-ready one-liner
+     for the LLM that says 'unknown' honestly when capacity_value is null."
+  - "limit:5 is applied by the runtime, not the function. Removing the line runs
+     the full set; in production the re-enrichment queue (changed/new
+     facilities) is the input instead of the whole asset."

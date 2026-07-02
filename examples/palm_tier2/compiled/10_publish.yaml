@@ -1,0 +1,22 @@
+id: publish_dossiers
+name: Publish reconciled facility dossiers
+type: publish
+source: {doc: examples/palm_tier2/methodology_raw.md, section: "§10", lines: [50, 52]}
+inputs:
+  - id: adjudicate
+    schema:
+      primary_key: [facility_id]
+      columns:
+        - {name: facility_id, type: str, nullable: false}
+        - {name: name, type: str, nullable: true}
+        - {name: n_docs, type: int, nullable: false}
+        - {name: reconciled_fields, type: json, nullable: true}
+publish: {format: html_report, destination: build/palm_tier2/, one_file_per: facility}
+function: {kind: module, module: examples.palm_tier2.code.publish_tier2, function: transform, requirements: [pandas]}
+output_schema:
+  primary_key: [output_path]
+  columns:
+    - {name: facility_id, type: str, nullable: false}
+    - {name: output_path, type: str, nullable: false}
+    - {name: rendered_at, type: datetime, nullable: false}
+    - {name: bytes, type: int, nullable: false}

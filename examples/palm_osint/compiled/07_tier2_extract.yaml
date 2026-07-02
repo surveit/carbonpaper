@@ -1,0 +1,95 @@
+id: tier2_extract
+name: Tier-2 on-site feature extraction (LLM)
+type: llm_transform
+
+source:
+  doc: examples/palm_osint/methodology_raw.md
+  section: "§6"
+  lines: [46, 50]
+
+inputs:
+  - id: select_for_enrichment
+    schema:
+      primary_key: [facility_id]
+      columns:
+        - {name: facility_id, type: str, nullable: false}
+        - {name: name, type: str, nullable: false}
+        - {name: owner, type: str, nullable: true}
+        - {name: parent_group, type: str, nullable: true}
+        - {name: country, type: str, nullable: true}
+        - {name: region, type: str, nullable: true}
+        - {name: capacity_summary, type: str, nullable: false}
+
+llm:
+  model: haiku
+  temperature: 0.0
+  response_format: json
+  max_retries: 1
+  # Web-research tools. With these, the agent SEARCHES for and READS real sources
+  # instead of answering blind from training data — which is why the tool-less
+  # version returned all 'unknown' for these obscure mills. Honored only by the
+  # agent_sdk backend. Trade-off: a run does real OSINT and is SLOW (minutes per
+  # facility); keep limit small. Remove this block (or CW_LLM_BACKEND=cli /
+  # CW_LLM_FORCE_MOCK=1) for a fast, unsourced dry run.
+  tools: [WebSearch, WebFetch]
+  prompt_template: |
+    You are an OSINT research assistant building an auditable asset on
+    palm-oil mills. For the mill below, propose candidate ON-SITE FEATURES
+    that a journalist could investigate.
+
+    Mill: {name}
+    Operator: {owner}   Parent group: {parent_group}
+    Location: {region}, {country}
+    Nameplate capacity: {capacity_summary}
+
+    Consider features such as: methane_capture_POME (biogas capture from palm
+    oil mill effluent), biomass_boiler_fiber_shell, effluent_treatment_ponds,
+    kernel_crushing_on_site, rspo_certification_status.
+
+    HARD RULES — this is the entire point of the asset:
+      - Do NOT fabricate. If you cannot cite a real, specific source URL that
+        documents the feature for THIS mill, set "asserted_present": "unknown"
+        and leave "evidence_urls": [].
+      - Never invent a URL, a certificate id, or a number.
+      - "asserted_present": "false" is allowed only as "no evidence of this
+        feature was found" (absence of evidence) — say so in the detail.
+
+    Return ONE JSON array only (no prose, no code fences). Each element:
+    {{
+      "feature": "<snake_case feature name>",
+      "asserted_present": "true" | "false" | "unknown",
+      "confidence": "high" | "medium" | "low",
+      "detail": "<one or two sentences; state what was/wasn't found>",
+      "evidence_urls": ["<real url>", ...]
+    }}
+
+output_schema:
+  primary_key: [facility_id, feature]
+  estimated_rows: 20
+  columns:
+    - {name: facility_id, type: str, nullable: false, source: "passthrough: select_for_enrichment"}
+    - {name: name, type: str, nullable: false, source: "passthrough (PalmWatch)"}
+    - {name: owner, type: str, nullable: true, source: "passthrough (PalmWatch)"}
+    - {name: country, type: str, nullable: true, source: "passthrough (PalmWatch)"}
+    - {name: capacity_summary, type: str, nullable: true, source: "passthrough (Trase)"}
+    - {name: feature, type: str, nullable: false,
+       description: "candidate on-site feature the model proposed",
+       source: "LLM-asserted (claude -p / honest mock)"}
+    - {name: asserted_present, type: str, nullable: false, range: ["true", "false", "unknown"],
+       description: "model's stance; 'unknown' is REQUIRED when no source can be cited",
+       source: "LLM-asserted — UNVERIFIED"}
+    - {name: confidence, type: str, nullable: true, range: [high, medium, low], source: "LLM-asserted"}
+    - {name: detail, type: str, nullable: true, source: "LLM-asserted"}
+    - {name: evidence_urls, type: json, nullable: true,
+       description: "URLs the model cited; empty when it had no real source (never invented)",
+       source: "LLM-asserted — checked next stage"}
+
+compiler_notes:
+  - "Backends: agent_sdk (default) with tools: → the agent web-searches and
+     reads sources, returning cited evidence_urls; without tools → blind
+     completion (mostly 'unknown' for obscure mills); mock (CW_LLM_FORCE_MOCK=1)
+     → honest offline stub. Verified: SUNGAI LILIN went from all-'unknown'
+     (tool-less) to 3/5 features with cited URLs (web research)."
+  - "Inspect or iterate on this stage's pulling with the REPL:
+     python -m examples.palm_osint.scripts.tier2_inspect --facility <id> --tools"
+  - "A list return from the LLM explodes to one row per candidate feature."

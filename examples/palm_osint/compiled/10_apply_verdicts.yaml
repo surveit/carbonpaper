@@ -1,0 +1,51 @@
+id: apply_verdicts
+name: Apply verification verdicts to reviewed claims
+type: python_transform
+
+source:
+  doc: examples/palm_osint/methodology_raw.md
+  section: "§9"
+  lines: [63, 67]
+
+inputs:
+  - id: enrichment_review
+    schema:
+      primary_key: [facility_id, feature]
+      columns:
+        - {name: facility_id, type: str, nullable: false}
+        - {name: feature, type: str, nullable: false}
+        - {name: asserted_present, type: str, nullable: false}
+        - {name: confidence, type: str, nullable: true}
+        - {name: detail, type: str, nullable: true}
+        - {name: evidence_urls, type: json, nullable: true}
+        - {name: supported, type: bool, nullable: true}
+        - {name: verdict_reason, type: str, nullable: true}
+
+function:
+  kind: module
+  module: examples.palm_osint.code.apply_verdicts
+  function: transform
+  requirements: [pandas]
+
+output_schema:
+  primary_key: [facility_id, feature]
+  estimated_rows: 20
+  columns:
+    - {name: facility_id, type: str, nullable: false, source: "passthrough: enrichment_review"}
+    - {name: feature, type: str, nullable: false, source: "passthrough (LLM extract)"}
+    - {name: asserted_present, type: str, nullable: false, range: ["true", "false", "unknown"], source: "passthrough (LLM extract)"}
+    - {name: supported, type: bool, nullable: false, source: "passthrough (LLM verify)"}
+    - {name: final_confidence, type: str, nullable: false, range: [high, medium, low],
+       description: "demoted to low when unverified",
+       source: "derived: verify verdict + human review"}
+    - {name: enrichment_status, type: str, nullable: false, range: [verified, documented_negative, unknown_gap],
+       description: "the publishable provenance grade: verified=source confirmed; documented_negative=no evidence found; unknown_gap=not retrieved",
+       source: "derived: extract + verify + review"}
+    - {name: detail, type: str, nullable: true, source: "passthrough (LLM extract)"}
+    - {name: evidence_urls, type: json, nullable: true, source: "passthrough (LLM extract)"}
+    - {name: verdict_reason, type: str, nullable: true, source: "passthrough (LLM verify)"}
+
+compiler_notes:
+  - "Faithful re-expression of enrichment_merge._apply_verdicts: drop refuted
+     positives, keep verified, keep documented negatives, flag unknown gaps. A
+     present=true with supported=false is dropped — never silently published."

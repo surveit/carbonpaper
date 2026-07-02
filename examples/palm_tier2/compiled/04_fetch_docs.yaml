@@ -1,0 +1,27 @@
+id: fetch_docs
+name: Download located docs to cache (deterministic)
+type: python_transform
+source: {doc: examples/palm_tier2/methodology_raw.md, section: "§4", lines: [18, 20]}
+inputs:
+  - id: locate
+    schema:
+      primary_key: [facility_id, url]
+      columns:
+        - {name: facility_id, type: str, nullable: false}
+        - {name: name, type: str, nullable: false}
+        - {name: doc_type, type: str, nullable: false}
+        - {name: url, type: str, nullable: false}
+function: {kind: module, module: examples.palm_tier2.code.fetch_docs, function: transform, requirements: [pandas]}
+output_schema:
+  primary_key: [facility_id, url]
+  columns:
+    - {name: facility_id, type: str, nullable: false}
+    - {name: name, type: str, nullable: false}
+    - {name: doc_type, type: str, nullable: false}
+    - {name: url, type: str, nullable: false}
+    - {name: local_path, type: str, nullable: true}
+    - {name: fetch_status, type: str, nullable: true, source: "ok:Nb | error:Type | no_url"}
+    - {name: content_type, type: str, nullable: true}
+compiler_notes:
+  - "Plain urllib (what the runs did in Bash) — no new connector kind needed. A 403/
+     timeout is recorded as data, not raised (CB portals 403, PROPER refuses)."

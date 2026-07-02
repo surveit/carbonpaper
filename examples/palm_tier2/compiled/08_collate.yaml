@@ -1,0 +1,25 @@
+id: collate
+name: Group a facility's docs (deterministic)
+type: python_transform
+source: {doc: examples/palm_tier2/methodology_raw.md, section: "§8", lines: [38, 40]}
+inputs:
+  - id: extract
+    schema:
+      primary_key: [facility_id, url]
+      columns:
+        - {name: facility_id, type: str, nullable: false}
+        - {name: name, type: str, nullable: false}
+        - {name: doc_type, type: str, nullable: false}
+        - {name: url, type: str, nullable: false}
+        - {name: fields, type: json, nullable: true}
+function: {kind: module, module: examples.palm_tier2.code.collate, function: transform, requirements: [pandas]}
+output_schema:
+  primary_key: [facility_id]
+  columns:
+    - {name: facility_id, type: str, nullable: false}
+    - {name: name, type: str, nullable: true}
+    - {name: n_docs, type: int, nullable: false}
+    - {name: docs_json, type: json, nullable: false, source: "all docs+fields for this facility"}
+compiler_notes:
+  - "Collapses per-doc rows to one row per facility so ADJUDICATE can reconcile
+     across documents in a single llm call (llm_transform runs row-by-row)."

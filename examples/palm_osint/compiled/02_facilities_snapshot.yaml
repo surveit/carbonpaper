@@ -1,0 +1,52 @@
+id: facilities_snapshot
+name: Resolved facilities spine (committed Tier-1 asset)
+type: input_data
+
+source:
+  doc: examples/palm_osint/methodology_raw.md
+  section: "§1"
+  lines: [18, 20]
+
+connector:
+  kind: file
+  params:
+    path: examples/palm_osint/data/facilities.jsonl
+    format: json
+  refresh: monthly
+  notes: |
+    The committed resolved Tier-1 asset (food-bev-facility-osint
+    data/palm/facilities.jsonl, 2,326 mills), standing in for the live
+    PalmWatch CSV fetch + prior entity-resolution. This is the plan's Step-4
+    fallback: the live PalmWatch origin is uncommitted and 522s, so a dated
+    snapshot feeds the `file` connector. Nested fields (location,
+    nameplate_capacity, *_source, contributing_sources) arrive as dict/list
+    cells and are flattened in the next stage.
+
+output_schema:
+  primary_key: [facility_id]
+  estimated_rows: 2326
+  # Origin: food-bev-facility-osint data/palm/facilities.jsonl, the resolved
+  # Tier-1 asset (2326 mills, 33 countries). Each record's fields carry their
+  # own SourceRef inside; the [source] badge below names the underlying dataset.
+  columns:
+    - {name: facility_id, type: str, nullable: false, description: "palm:<UML_ID>",
+       source: "resolution output (PalmWatch UML id)"}
+    - {name: name, type: str, nullable: false, source: "PalmWatch 'Mill Name'"}
+    - {name: owner, type: str, nullable: true, source: "PalmWatch 'Group Name'"}
+    - {name: parent_group, type: str, nullable: true, source: "PalmWatch 'Parent Company'"}
+    - {name: location, type: json, nullable: true,
+       description: "nested Location {country, region, lat, lon, location_source}",
+       source: "PalmWatch (country/region/lat/lon)"}
+    - {name: nameplate_capacity, type: json, nullable: true,
+       description: "nested Quantity {value, unit, source, provenance, as_of, basis} or null when unsourced",
+       source: "Trase capacity_tonnes_ffb_hour (IDN only)"}
+    - {name: contributing_sources, type: json, nullable: true,
+       description: "list[SourceRef] — every source that touched any field",
+       source: "PalmWatch + Trase SourceRefs"}
+    - {name: has_enrichment, type: bool, nullable: true, source: "set by Tier-2 merge"}
+
+compiler_notes:
+  - "validation.py treats `json`-typed columns as opaque (PY_TYPE_OF['json'] =
+     object): it can confirm the column exists but cannot see inside the nested
+     Quantity/SourceRef. This is exactly Devil's-Advocate #3 — and the reason
+     the next stage flattens the provenance that matters into scalar columns."

@@ -1,0 +1,68 @@
+id: tier2_verify
+name: Tier-2 adversarial verification (LLM)
+type: llm_transform
+
+source:
+  doc: examples/palm_osint/methodology_raw.md
+  section: "§7"
+  lines: [52, 55]
+
+inputs:
+  - id: tier2_extract
+    schema:
+      primary_key: [facility_id, feature]
+      columns:
+        - {name: facility_id, type: str, nullable: false}
+        - {name: name, type: str, nullable: false}
+        - {name: feature, type: str, nullable: false}
+        - {name: asserted_present, type: str, nullable: false}
+        - {name: confidence, type: str, nullable: true}
+        - {name: detail, type: str, nullable: true}
+        - {name: evidence_urls, type: json, nullable: true}
+
+llm:
+  model: haiku
+  temperature: 0.0
+  response_format: json
+  max_retries: 1
+  prompt_template: |
+    You are an adversarial fact-checker. Your job is to REFUTE the claim
+    below unless its cited evidence genuinely supports it for THIS mill now.
+
+    Mill: {name}
+    Claimed feature: {feature}
+    Asserted present: {asserted_present}
+    Stated detail: {detail}
+    Cited evidence URLs: {evidence_urls}
+
+    Default to NOT supported. A claim is "supported" ONLY if a cited URL is a
+    real, specific source that documents this feature for this mill. A claim
+    with no evidence URL is never supported. A "false" (absence-of-evidence)
+    claim is not "supported" either — there is nothing to verify.
+
+    Return ONE JSON object only (no prose, no code fences):
+    {{
+      "supported": true | false,
+      "verdict_reason": "<one sentence>"
+    }}
+
+output_schema:
+  primary_key: [facility_id, feature]
+  estimated_rows: 20
+  columns:
+    - {name: facility_id, type: str, nullable: false, source: "passthrough: tier2_extract"}
+    - {name: name, type: str, nullable: true, source: "passthrough (PalmWatch)"}
+    - {name: feature, type: str, nullable: false, source: "passthrough (LLM extract)"}
+    - {name: asserted_present, type: str, nullable: false, source: "passthrough (LLM extract)"}
+    - {name: confidence, type: str, nullable: true, source: "passthrough (LLM extract)"}
+    - {name: detail, type: str, nullable: true, source: "passthrough (LLM extract)"}
+    - {name: evidence_urls, type: json, nullable: true, source: "passthrough (LLM extract)"}
+    - {name: supported, type: bool, nullable: false,
+       description: "did a cited source actually support the claim? default false",
+       source: "LLM adversarial check (2nd pass)"}
+    - {name: verdict_reason, type: str, nullable: true, source: "LLM adversarial check"}
+
+compiler_notes:
+  - "Re-expresses food-bev-facility-osint's adversarial verify step: 'drop
+     unsupported, demote unchecked'. The drop/demote itself happens in
+     apply_verdicts (§9), gated by the human review (§8) in between."

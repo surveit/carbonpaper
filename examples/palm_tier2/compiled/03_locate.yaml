@@ -1,0 +1,95 @@
+id: locate
+name: Locate the authoritative, most-recent doc (LLM + web)
+type: llm_transform
+source: {doc: examples/palm_tier2/methodology_raw.md, section: "§3", lines: [10, 16]}
+inputs:
+  - id: build_queries
+    schema:
+      primary_key: [facility_id]
+      columns:
+        - {name: facility_id, type: str, nullable: false}
+        - {name: name, type: str, nullable: false}
+        - {name: operator_pt, type: str, nullable: true}
+        - {name: parent_group, type: str, nullable: true}
+        - {name: province, type: str, nullable: true}
+        - {name: queries_json, type: json, nullable: false}
+llm:
+  model: haiku
+  temperature: 0.0
+  response_format: json
+  tools: [WebSearch]
+  prompt_template: |
+    You are the LOCATOR for an OSINT pipeline. Use WebSearch (you may NOT fetch
+    full pages here) to find the RICH primary documents for this palm-oil mill.
+    Do not extract content yet — only locate. Find DIRECT PDF URLs.
+
+    Mill: {name}  ·  operator PT: {operator_pt}  ·  group: {parent_group}  ·  {province}
+    Suggested queries: {queries_json}
+
+    THE PRIZE — the full RSPO audit SERIES, NOT the public announcement.
+    The one-page RSPO "public announcement" / "p-c-announcement" / "public
+    consultation" page carries ~1 field (capacity) and is NOT what we want.
+    The rich documents (20–30 fields each: PalmGHG GHG table, POME methane-capture
+    split %, OER/KER, certificate no.+dates, planted/peat area, CPO/PK/FFB
+    production, supply base) are the full "Public Summary Report" PDFs for EACH
+    audit in the series: the INITIAL certification, ASA-1, ASA-2, ASA-3, ASA-4,
+    and the RECERTIFICATION. Find as many of these distinct audit-stage PDFs as
+    you can — they are 150–400 pages each.
+
+    Search ALL of these host families and return the DIRECT .pdf links (never an
+    HTML landing/announcement page):
+      1. rspo.org mirrors — these host many ASA/recert reports:
+         site:rspo.org/wp-content/uploads "{operator_pt}" "{name}"
+           ("Public Summary" OR "ASA" OR "recertification" OR "RC") filetype:pdf
+         Look for filenames like
+           <Operator>_<Mill>_..._ASA_3_Final.pdf / ..._Public_Summary_Report.pdf
+         (e.g. Cargill_Hindoli_..._Sungai_Lilin_Mill_..._ASA_3_Final.pdf).
+      2. Certification-body sites host the SAME reports directly (NO login needed
+         for the PDF assets) — search each:
+         - bsigroup.com  — pattern:
+             bsigroup.com/siteassets/pdf/en/about-us/rspo/rspo-public-summary-<operator>-<mill>-pom-asaN-approved.pdf
+             (e.g. ...pt-inti-indosawit-subur-buatan-I-pom-asa2-4-approved.pdf)
+         - controlunion.com / cucertifications, mutucertification.com (Mutuagung),
+           sucofindo.co.id / SICS, sgs.com
+         Query e.g.  site:bsigroup.com "{name}" RSPO public summary filetype:pdf
+      3. CDM / UNFCCC registry for biogas/methane mills (POME m³, biogas MW, FFB,
+         10-yr tCO2e schedule): cdm.unfccc.int — find the Project Design Document
+         (PDD) PDF and the project registry view. Query e.g.
+           "{name}" OR "{operator_pt}" POME methane biogas site:cdm.unfccc.int
+      4. The operator/group site (musimmas.com, asianagri.com, etc.) hosts full
+         recert PDFs under /wp-content/uploads/**.pdf — include those direct PDF
+         asset URLs even if the page seems to 504 (the fetcher retries).
+
+    Return ONE row per DISTINCT located document (return the whole series, not just
+    the newest — each audit stage carries different-year data). PREFER direct .pdf
+    URLs; only fall back to an HTML page if no PDF exists. Demote bare announcement
+    pages: set is_primary=false for any "/p-c-announcement/", "/public-consultation/",
+    "/public-announcement", or "RSPO-Public-Announcement-Template" URL.
+
+    Return ONE JSON array (no prose, no fences); one object per located document:
+    [{{"doc_type":"rspo_audit_pdf|rspo_certificate|cdm_pdd|cdm_registry|group_report|proper|press",
+       "url":"<real DIRECT url you found, prefer .pdf>","doc_date":"<YYYY or YYYY-MM-DD or unknown>",
+       "audit_stage":"<initial|ASA-1|ASA-2|ASA-3|ASA-4|recertification|unknown>",
+       "why":"<one line: why this is rich/authoritative>","is_primary":true}}]
+    If you genuinely find nothing, return [].
+output_schema:
+  primary_key: [facility_id, url]
+  columns:
+    - {name: facility_id, type: str, nullable: false}
+    - {name: name, type: str, nullable: false}
+    - {name: doc_type, type: str, nullable: false}
+    - {name: url, type: str, nullable: false}
+    - {name: doc_date, type: str, nullable: true}
+    - {name: audit_stage, type: str, nullable: true}
+    - {name: why, type: str, nullable: true}
+    - {name: is_primary, type: bool, nullable: true}
+compiler_notes:
+  - "JUDGMENT stage #1 (the 'connector needs an LLM'): which docs are authoritative
+     is not a fixed URL. A list return explodes to one row per doc — and here we
+     deliberately want the WHOLE audit series (initial+ASA-1..4+recert), not just
+     the newest, because each audit year carries different production/GHG values."
+  - "v0 targeted the thin RSPO public announcement (~1 field). v1 targets the full
+     Public Summary Report PDFs on rspo.org/wp-content/uploads + cert-body sites
+     (bsigroup, control union, mutu, sucofindo, sgs) + the CDM PDD/registry, and
+     demotes bare announcement pages to is_primary=false. See SOURCE_MAP.md."
+  - "v1 has no prior_finds memory input yet; add it to make is_new/most-recent real."

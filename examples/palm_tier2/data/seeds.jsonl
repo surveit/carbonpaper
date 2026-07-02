@@ -1,0 +1,3 @@
+{"facility_id": "palm:PO1000000054", "uml_id": "PO1000000054", "name": "BATANG KULIM", "operator_pt": "MUSIM MAS HOLDINGS PTE LTD", "parent_group": "MUSIM MAS", "province": "Riau", "lat": 0.08, "lon": 102.03}
+{"facility_id": "palm:PO1000000058", "uml_id": "PO1000000058", "name": "SUNGAI LILIN", "operator_pt": "HINDOLI", "parent_group": "CARGILL", "province": "Sumatera Selatan", "lat": -2.61, "lon": 104.13}
+{"facility_id": "palm:PO1000000095", "uml_id": "PO1000000095", "name": "BUKIT MARADJA", "operator_pt": "EASTERN SUMATERA INDONESIA", "parent_group": "SIPEF", "province": "Sumatera Utara", "lat": 3.01, "lon": 99.24}

@@ -1,0 +1,383 @@
+[
+  {
+    "facility_id": "palm:PO1000000054",
+    "name": "BATANG KULIM",
+    "n_docs": 10,
+    "reconciled_fields": [
+      {
+        "field": "nameplate_capacity",
+        "value": "60",
+        "unit": "MT/hr",
+        "confidence": "high",
+        "grade": "primary",
+        "source_url": "https://www.musimmas.com/wp-content/uploads/2024/08/2023-RSPO-Audit-Report-PT.-Musim-Mas-Batang-Kulim-POM.pdf",
+        "note": "From 2023 RSPO audit, section 1.6. No conflicting capacity figures in other mill-specific documents."
+      },
+      {
+        "field": "cpo_production",
+        "value": "52,228",
+        "unit": "MT",
+        "confidence": "high",
+        "grade": "primary",
+        "source_url": "https://www.musimmas.com/wp-content/uploads/2024/08/2023-RSPO-Audit-Report-PT.-Musim-Mas-Batang-Kulim-POM.pdf",
+        "note": "Actual production Aug'22–Jul'23 from 2023 audit. Rejected: 678,475 tonnes from 2023 ACOP is company-wide aggregate across 15 mills, not mill-specific."
+      },
+      {
+        "field": "ffb_processed",
+        "value": "237,992.05",
+        "unit": "MT",
+        "confidence": "high",
+        "grade": "primary",
+        "source_url": "https://www.musimmas.com/wp-content/uploads/2024/08/2023-RSPO-Audit-Report-PT.-Musim-Mas-Batang-Kulim-POM.pdf",
+        "note": "GHG cut-off period Jan–Dec 2022 from 2023 RSPO audit. Rejected: 183,308.90 MT and 38,331.60 MT are from Pasir Panjang POM (different mill, certificate RSPO 657192 vs CU-RSPO-819846), not Batang Kulim."
+      },
+      {
+        "field": "oer",
+        "value": "22.47",
+        "unit": "%",
+        "confidence": "high",
+        "grade": "primary",
+        "source_url": "https://www.musimmas.com/wp-content/uploads/2024/08/2023-RSPO-Audit-Report-PT.-Musim-Mas-Batang-Kulim-POM.pdf",
+        "note": "From 2023 audit. Rejected: 21.80% from Pasir Panjang POM audit (different mill)."
+      },
+      {
+        "field": "ker",
+        "value": "6.17",
+        "unit": "%",
+        "confidence": "high",
+        "grade": "primary",
+        "source_url": "https://www.musimmas.com/wp-content/uploads/2024/08/2023-RSPO-Audit-Report-PT.-Musim-Mas-Batang-Kulim-POM.pdf",
+        "note": "From 2023 audit. Rejected: 5.00% from Pasir Panjang POM audit (different mill)."
+      },
+      {
+        "field": "pome_treatment",
+        "value": "Biogas plant operation and Land application",
+        "unit": "",
+        "confidence": "high",
+        "grade": "primary",
+        "source_url": "https://www.musimmas.com/wp-content/uploads/2024/08/2023-RSPO-Audit-Report-PT.-Musim-Mas-Batang-Kulim-POM.pdf",
+        "note": "Most recent and detailed from 2023 audit; includes biogas-to-electricity generation. Historical note: 2020 journal cited 'anaerobic digestion' (general description); 2016 Pasir Panjang doc (different mill) mentioned land application + anaerobic pond treatment."
+      },
+      {
+        "field": "palmghg_net_tco2e_per_tcpo",
+        "value": "3.95",
+        "unit": "tCO2e/tCPO",
+        "confidence": "high",
+        "grade": "primary",
+        "source_url": "https://www.musimmas.com/wp-content/uploads/2024/08/2023-RSPO-Audit-Report-PT.-Musim-Mas-Batang-Kulim-POM.pdf",
+        "note": "Mill-specific from 2023 audit. Rejected: 3.33 tCO2e/tCPO from 2018 group report (older, lower precision); 2.66 tCO2e/tCPO from 2023 group report is company-wide average across all certified units, not mill-specific."
+      },
+      {
+        "field": "certificate_number",
+        "value": "CU-RSPO-819846",
+        "unit": "",
+        "confidence": "high",
+        "grade": "primary",
+        "source_url": "https://www.musimmas.com/wp-content/uploads/2024/08/2023-RSPO-Audit-Report-PT.-Musim-Mas-Batang-Kulim-POM.pdf",
+        "note": "Current certificate from 2023 audit. Rejected: RSPO 657192 is Pasir Panjang POM's certificate (different mill)."
+      },
+      {
+        "field": "certificate_dates",
+        "value": "06 January 2024 → 05 January 2029",
+        "unit": "",
+        "confidence": "high",
+        "grade": "primary",
+        "source_url": "https://www.musimmas.com/wp-content/uploads/2024/08/2023-RSPO-Audit-Report-PT.-Musim-Mas-Batang-Kulim-POM.pdf",
+        "note": "Current recertification cycle from 2023 audit. Historical: 2020 journal cited first certification date of '6 Jan 2009' (not current validity window)."
+      },
+      {
+        "field": "certification_body",
+        "value": "Control Union (Malaysia) Sdn. Bhd.",
+        "unit": "",
+        "confidence": "high",
+        "grade": "primary",
+        "source_url": "https://www.musimmas.com/wp-content/uploads/2024/08/2023-RSPO-Audit-Report-PT.-Musim-Mas-Batang-Kulim-POM.pdf",
+        "note": "From 2023 audit. Rejected: BSI Services Malaysia Sdn Bhd is certification body for Pasir Panjang POM (different mill)."
+      },
+      {
+        "field": "planted_area_ha",
+        "value": "18,291.99",
+        "unit": "ha",
+        "confidence": "high",
+        "grade": "primary",
+        "source_url": "https://www.musimmas.com/wp-content/uploads/2024/08/2023-RSPO-Audit-Report-PT.-Musim-Mas-Batang-Kulim-POM.pdf",
+        "note": "Total supply base (own estates + kas desa + KKPA) from 2023 audit, most comprehensive. Rejected: 134,626 ha from 2023 ACOP is company-wide aggregate (15 mills); 11,128.30 ha from 2020 journal is certified estate only (excludes smallholders)."
+      },
+      {
+        "field": "peat_area_ha",
+        "value": "5,495.17",
+        "unit": "ha",
+        "confidence": "high",
+        "grade": "primary",
+        "source_url": "https://www.musimmas.com/wp-content/uploads/2024/08/2023-RSPO-Audit-Report-PT.-Musim-Mas-Batang-Kulim-POM.pdf",
+        "note": "Estate 2: 737.12 ha + Estate 5: 4,758.05 ha from 2023 audit. No conflicting values in other mill-specific documents."
+      },
+      {
+        "field": "supply_base",
+        "value": "Own estates (I, II, V), Kas Desa (Tanjung Beringin, Betung, Talau), and KKPA (Merbau Sakti)",
+        "unit": "",
+        "confidence": "high",
+        "grade": "primary",
+        "source_url": "https://www.musimmas.com/wp-content/uploads/2024/08/2023-RSPO-Audit-Report-PT.-Musim-Mas-Batang-Kulim-POM.pdf",
+        "note": "Detailed breakdown from 2023 audit. Rejected: Pasir Panjang POM's supply base (six different estates: Pasir Panjang, Tunjuk Laut, Bukit Payung, etc.) from different mill."
+      },
+      {
+        "field": "supply_chain_model",
+        "value": "Identity Preserved (IP)",
+        "unit": "",
+        "confidence": "high",
+        "grade": "primary",
+        "source_url": "https://www.musimmas.com/wp-content/uploads/2024/08/2023-RSPO-Audit-Report-PT.-Musim-Mas-Batang-Kulim-POM.pdf",
+        "note": "Mill-specific from 2023 audit. Rejected: 'Identity Preserved, Segregated, Mass Balance' from 2023 group report is company-wide aggregate with volume splits (IP 77,913 t, SG 197,509 t, MB 0 t), not Batang Kulim-specific certification model."
+      },
+      {
+        "field": "methane_capture",
+        "value": "Methane capture systems for electricity generation (confirmed operating)",
+        "unit": "",
+        "confidence": "high",
+        "grade": "primary",
+        "source_url": "https://www.musimmas.com/wp-content/uploads/2024/08/2023-RSPO-Audit-Report-PT.-Musim-Mas-Batang-Kulim-POM.pdf",
+        "note": "Inferred from 2023 audit's POME treatment description ('Biogas plant operation') and 2018 ACOP mention of 'methane capture systems for electricity generation at palm oil mills'. Status confirmed operated (not CDM 'designed only') by inclusion in 2023 audit emissions calculations."
+      }
+    ]
+  },
+  {
+    "facility_id": "palm:PO1000000058",
+    "name": "SUNGAI LILIN",
+    "n_docs": 9,
+    "reconciled_fields": [
+      {
+        "field": "nameplate_capacity",
+        "value": "100",
+        "unit": "MT/hr",
+        "confidence": "high",
+        "grade": "primary",
+        "source_url": "https://rspo.org/wp-content/uploads/RSPO-Public-Announcement-Template-PRJ-898811-PT-Hindoli-Sungai-Lilin-2023-IDNrev3-02112023.pdf",
+        "note": "Mill-specific capacity from 2023 RSPO re-certification audit. The 160 MT/hr cited in 2014 Cargill ASA audit is explicitly noted as combined capacity for Sungai Lilin + Tanjung Dalam mills (not mill-specific); 100 MT/hr consistent in 2023 RSPO Indonesian & English versions and Cargill group report. Rejecting 160 per Rule 1."
+      },
+      {
+        "field": "cpo_production",
+        "value": "76717.47",
+        "unit": "MT",
+        "confidence": "medium",
+        "grade": "primary",
+        "source_url": "https://rspo.org/wp-content/uploads/RSPO-Public-Announcement-Template-PRJ-898811-PT-Hindoli-Sungai-Lilin-2023-IDNrev3-02112023.pdf",
+        "note": "Forecasted annual output from 2023 RSPO re-cert audit; year not specified in document. Confidence medium: value is estimate, not actual production. Historical actuals for reference: 84,013.11 MT (2016), 129,695.94 MT (2017 certified), 94,486 MT (FY 2009-2010). Different years not in conflict per Rule 1."
+      },
+      {
+        "field": "ffb_processed",
+        "value": "301213.63",
+        "unit": "MT",
+        "confidence": "medium",
+        "grade": "primary",
+        "source_url": "https://www.rspo.org/wp-content/uploads/RSPO-Public-Announcement-Template-PRJ-898811-PT-Hindoli-Sungai-Lilin-Mill-2023-ENGrev3-02112023.pdf",
+        "note": "Estimated annual FFB from all associated supply base per 2023 RSPO re-cert. Confidence medium: estimate status. Historical actuals: 425,615.67 MT (2016 actual), 576,426.38 MT (2017 certified), 425,308 MT (FY 2009-2010). Different years not in conflict per Rule 1."
+      },
+      {
+        "field": "palmghg_net_tco2e_per_tcpo",
+        "value": "947.86",
+        "unit": "kg CO2 eq / Ton CPO",
+        "confidence": "high",
+        "grade": "primary",
+        "source_url": "https://www.rspo.org/wp-content/uploads/Cargill_Hindoli_Report_Scheme_Smallholder_Sungai_Lilin_Mill_and_Tanjung_Dalam_Mill_ASA_3_Final.pdf",
+        "note": "Sungai Lilin Mill-specific carbon footprint for FY 2015–16; only supporting value found per Rule 5."
+      },
+      {
+        "field": "certificate_number",
+        "value": "ID24/00000013 SGS-ID-ISPO-0030",
+        "unit": "",
+        "confidence": "high",
+        "grade": "primary",
+        "source_url": "https://www.cargill.com/doc/1432248049046/sungai-lilin-mill-pdf.pdf",
+        "note": "Current active ISPO (Indonesian Sustainable Palm Oil) certification; most recent. Prior RSPO certifications: RSPO 00013 (certified 25 Feb 2014, Sucofindo/SICS), SPO 537874 (certified 25 Feb 2009, BSi Group Singapore). Different schemes & dates not in conflict per Rule 1."
+      },
+      {
+        "field": "certificate_dates",
+        "value": "5 December 2023 to 4 December 2028",
+        "unit": "",
+        "confidence": "high",
+        "grade": "primary",
+        "source_url": "https://www.cargill.com/doc/1432248049046/sungai-lilin-mill-pdf.pdf",
+        "note": "Current ISPO certification validity; certified since 5 December 2018, revision 15 January 2024. Prior RSPO cert dates: 25 February 2014 (RSPO 00013), 25 February 2009 (SPO 537874). Different schemes/dates per Rule 1."
+      },
+      {
+        "field": "certification_body",
+        "value": "PT SGS Indonesia",
+        "unit": "",
+        "confidence": "high",
+        "grade": "primary",
+        "source_url": "https://www.cargill.com/doc/1432248049046/sungai-lilin-mill-pdf.pdf",
+        "note": "Auditor for current ISPO certification (The Garden Centre 2nd Floor, Cilandak Commercial Estate, Jakarta). Prior auditors reflect different schemes/years: Control Union (Malaysia) Sdn Bhd (2023 RSPO re-cert), BSi Group Singapore Pte Ltd (2009 RSPO), PT Sucofindo/SICS (2014 RSPO)."
+      },
+      {
+        "field": "planted_area_ha",
+        "value": "8739.76",
+        "unit": "ha",
+        "confidence": "high",
+        "grade": "primary",
+        "source_url": "https://www.rspo.org/wp-content/uploads/RSPO-Public-Announcement-Template-PRJ-898811-PT-Hindoli-Sungai-Lilin-2023-IDNrev3-02112023.pdf",
+        "note": "Operational estate area per 2023 RSPO re-cert; excludes 10,200.43 ha lease area. Total supply base (6 estates + smallholder coops): 17,783.16 ha per Cargill 2023. Historical measurements differed by scope: 27,073 ha combined (2014), 17,594 ha smallholders-only (2010), 14,837 ha inti+plasma (planning report). Not conflicts; different scope per Rule 1."
+      },
+      {
+        "field": "supply_base",
+        "value": "3 company-owned estates (Sungai Pelepah, Sungai Tungkal, Sungai Nipah) + 1 KKPA + 10 smallholder cooperatives (SHM Certificates)",
+        "unit": "",
+        "confidence": "high",
+        "grade": "primary",
+        "source_url": "https://www.rspo.org/wp-content/uploads/RSPO-Public-Announcement-Template-PRJ-898811-PT-Hindoli-Sungai-Lilin-Mill-2023-ENGrev3-02112023.pdf",
+        "note": "Supply base per 2023 RSPO re-cert English version; consistent with Indonesian version. Historic smallholder KUD counts differ (21 KUDs in 2014 ASA, 14 KUDs in 2010 Public Summary); these reflect scheme evolution, not data conflicts per Rule 1. KUD Tani Maju (90 ha, 2013) is one constituent smallholder cooperative."
+      },
+      {
+        "field": "supply_chain_model",
+        "value": "Identity Preserved (IP)",
+        "unit": "",
+        "confidence": "high",
+        "grade": "primary",
+        "source_url": "https://www.rspo.org/wp-content/uploads/RSPO-Public-Announcement-Template-PRJ-898811-PT-Hindoli-Sungai-Lilin-Mill-2023-ENGrev3-02112023.pdf",
+        "note": "Identity Preserved model confirmed consistent across 2014 Cargill ASA report and 2023 RSPO re-cert documents (abbreviated 'IP' in 2023 announcements); FFB sourced exclusively from certified supply base per RSPO P&C."
+      }
+    ]
+  },
+  {
+    "facility_id": "palm:PO1000000095",
+    "name": "BUKIT MARADJA",
+    "n_docs": 12,
+    "reconciled_fields": [
+      {
+        "field": "nameplate_capacity",
+        "value": "30",
+        "unit": "MT/hr",
+        "confidence": "high",
+        "grade": "primary",
+        "source_url": "https://www.bsigroup.com/siteassets/pdf/en/about-us/rspo/rspo-pc-public-summary-report-pt-esi-bukit-maradja-pom-asa2-4.pdf",
+        "note": "Consistent across all sources (2017, 2024 audits, RAV). Most recent full audit: BSI ASA2-4 (Feb 2024)."
+      },
+      {
+        "field": "cpo_production",
+        "value": "26438.95",
+        "unit": "MT",
+        "confidence": "high",
+        "grade": "primary",
+        "source_url": "https://www.bsigroup.com/siteassets/pdf/en/about-us/rspo/rspo-pc-public-summary-report-pt-esi-bukit-maradja-pom-asa2-4.pdf",
+        "note": "Most recent actual operational data (May 2023–Feb 2024). Earlier periods: 22,958 MT (2016-17), 24,423 MT (cert period 2015-20). Production varies by year; this is the latest available."
+      },
+      {
+        "field": "ffb_processed",
+        "value": "111637.64",
+        "unit": "MT",
+        "confidence": "high",
+        "grade": "primary",
+        "source_url": "https://www.bsigroup.com/siteassets/pdf/en/about-us/rspo/rspo-pc-public-summary-report-pt-esi-bukit-maradja-pom-asa2-4.pdf",
+        "note": "Most recent actual (May 2023–Feb 2024). Earlier: 98,567 MT (2016-17), 103,926 MT (cert period 2015-20). Varies by year."
+      },
+      {
+        "field": "oer",
+        "value": "24.05",
+        "unit": "%",
+        "confidence": "high",
+        "grade": "primary",
+        "source_url": "https://www.bsigroup.com/siteassets/pdf/en/about-us/rspo/rspo-pc-public-summary-report-pt-esi-bukit-maradja-pom-asa2-4.pdf",
+        "note": "Most recent (Feb 2024 YTD). Earlier 2017 audit: 23.62%. Slight improvement over time."
+      },
+      {
+        "field": "ker",
+        "value": "5.26",
+        "unit": "%",
+        "confidence": "high",
+        "grade": "primary",
+        "source_url": "https://www.bsigroup.com/siteassets/pdf/en/about-us/rspo/rspo-pc-public-summary-report-pt-esi-bukit-maradja-pom-asa2-4.pdf",
+        "note": "Most recent (Feb 2024 YTD). Earlier 2017 audit: 5.6%."
+      },
+      {
+        "field": "pome_treatment",
+        "value": "Anaerobic digestion (100%) to methane capture (flaring)",
+        "unit": "",
+        "confidence": "medium",
+        "grade": "primary",
+        "source_url": "https://www.rspo.org/wp-content/uploads/Bukit_Maradja_POM_RSPO_PC_ASA1_2_Public_Summary_Report_PT_Eastern_Sumatra_Indonesia_19052017.pdf",
+        "note": "From 2017 ASA1-2 audit; no newer extraction available for this field. POME treatment may have changed; flagged for verification."
+      },
+      {
+        "field": "methane_capture",
+        "value": "100% flaring, 0% electricity generation",
+        "unit": "",
+        "confidence": "medium",
+        "grade": "primary",
+        "source_url": "https://www.rspo.org/wp-content/uploads/Bukit_Maradja_POM_RSPO_PC_ASA1_2_Public_Summary_Report_PT_Eastern_Sumatra_Indonesia_19052017.pdf",
+        "note": "From 2017 ASA1-2 audit; no newer extraction available. May have been updated; recommend re-check against Feb 2024 ASA2-4 full report."
+      },
+      {
+        "field": "palmghg_net_tco2e_per_tcpo",
+        "value": "0.31",
+        "unit": "tCO2e/tProduct",
+        "confidence": "high",
+        "grade": "primary",
+        "source_url": "https://www.bsigroup.com/siteassets/pdf/en/about-us/rspo/rspo-pc-public-summary-report-pt-esi-bukit-maradja-pom-asa2-4.pdf",
+        "note": "Most recent (2023 GHG inventory). Major improvement from 0.52 tCO2e/t in 2017, likely due to methane capture improvements or calculation methodology refinement."
+      },
+      {
+        "field": "certificate_number",
+        "value": "RSPO 632266",
+        "unit": "",
+        "confidence": "high",
+        "grade": "primary",
+        "source_url": "https://www.bsigroup.com/siteassets/pdf/en/about-us/rspo/rspo-pc-public-summary-report-pt-esi-bukit-maradja-pom-asa2-4.pdf",
+        "note": "Consistent cert number across all audit reports (2015, 2017, 2024). PO membership number 1-0021-05-000-00; PO ID RSPO_PO1000000095 also referenced in RAV announcement."
+      },
+      {
+        "field": "certificate_dates",
+        "value": "17/05/2020 → 16/05/2025",
+        "unit": "",
+        "confidence": "high",
+        "grade": "primary",
+        "source_url": "https://www.bsigroup.com/siteassets/pdf/en/about-us/rspo/rspo-pc-public-summary-report-pt-esi-bukit-maradja-pom-asa2-4.pdf",
+        "note": "Current cert term. Previous cert: 17/05/2015 → 16/05/2020 (from RSPO certificate doc). Renewed on schedule."
+      },
+      {
+        "field": "certification_body",
+        "value": "BSI Services Malaysia Sdn Bhd",
+        "unit": "",
+        "confidence": "high",
+        "grade": "primary",
+        "source_url": "https://www.bsigroup.com/siteassets/pdf/en/about-us/rspo/rspo-pc-public-summary-report-pt-esi-bukit-maradja-pom-asa2-4.pdf",
+        "note": "Consistent across all audits. ASI Accreditation Number ASI-ACC-067 (2024); ASI-ACC-19 (2017)."
+      },
+      {
+        "field": "planted_area_ha",
+        "value": "5103.74",
+        "unit": "ha",
+        "confidence": "high",
+        "grade": "primary",
+        "source_url": "https://www.bsigroup.com/siteassets/pdf/en/about-us/rspo/rspo-pc-public-summary-report-pt-esi-bukit-maradja-pom-asa2-4.pdf",
+        "note": "Most recent (Feb 2024 ASA2-4) total across Bukit Maradja, Kerasaan, Timbang Deli. Earlier: 5,207 ha (2017, Bukit Maradja+Kerasaan only); 5,540 ha (2015-20 cert, Bukit Maradja+Kerasaan); 6,622 ha (RAV, includes Bandar Pinang). Supply base expanded; use most recent certified area."
+      },
+      {
+        "field": "peat_area_ha",
+        "value": "0",
+        "unit": "ha",
+        "confidence": "high",
+        "grade": "primary",
+        "source_url": "https://www.bsigroup.com/siteassets/pdf/en/about-us/rspo/rspo-pc-public-summary-report-pt-esi-bukit-maradja-pom-asa2-4.pdf",
+        "note": "Consistent across all audits (2017, 2024). Feb 2024 report explicitly states soil survey found no peat areas."
+      },
+      {
+        "field": "supply_base",
+        "value": "Bukit Maradja Estate, Kerasaan Estate, Timbang Deli Estate",
+        "unit": "",
+        "confidence": "high",
+        "grade": "primary",
+        "source_url": "https://www.bsigroup.com/siteassets/pdf/en/about-us/rspo/rspo-pc-public-summary-report-pt-esi-bukit-maradja-pom-asa2-4.pdf",
+        "note": "Most recent (Feb 2024). Earlier: 2 estates (2015-2017); 4 estates including Bandar Pinang (RAV announcement). Supply base expanded over time; current cert covers 3 estates."
+      },
+      {
+        "field": "supply_chain_model",
+        "value": "Identity Preserved",
+        "unit": "",
+        "confidence": "high",
+        "grade": "primary",
+        "source_url": "https://www.bsigroup.com/siteassets/pdf/en/about-us/rspo/rspo-pc-public-summary-report-pt-esi-bukit-maradja-pom-asa2-4.pdf",
+        "note": "Consistent across all audit periods (2015–2024)."
+      }
+    ]
+  }
+]
