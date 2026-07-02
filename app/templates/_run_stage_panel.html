@@ -83,7 +83,9 @@
       <div class="preview-block input-preview" {% if loop.first %}data-primary="1"{% endif %}>
         <div class="preview-head">
           <a href="/methodology/{{ methodology }}/runs/{{ run_id }}#{{ ip.id }}"><code>{{ ip.id }}</code></a>
-          {% if ip.preview and ip.preview.preview %}{% set shown = ip.preview.preview | length %}<span class="muted">· {% if ip.preview.rows_total > shown %}first {{ shown }} of {% endif %}{{ "{:,}".format(ip.preview.rows_total) }} row{% if ip.preview.rows_total != 1 %}s{% endif %}</span>{% endif %}
+          {% if ip.preview and ip.preview.preview %}{% set shown = ip.preview.preview | length %}<span class="muted">· {% if ip.preview.rows_total > shown %}first {{ shown }} of {% endif %}{{ "{:,}".format(ip.preview.rows_total) }} row{% if ip.preview.rows_total != 1 %}s{% endif %}</span>
+          <span class="preview-actions">· <a href="/methodology/{{ methodology }}/runs/{{ run_id }}/stage/{{ ip.id }}/rows">view all rows</a>
+          · <a href="/methodology/{{ methodology }}/runs/{{ run_id }}/stage/{{ ip.id }}/rows.csv">⬇ CSV</a></span>{% endif %}
         </div>
         {% if ip.preview and ip.preview.preview %}
         {% set selectable = loop.first and previewable %}
@@ -131,7 +133,9 @@
   <div class="pane" data-pane="run-outputs" hidden>
     {% if preview and preview.preview %}
     <div class="preview-block">
-      <div class="preview-head">output data {% set shown = preview.preview | length %}<span class="muted">· {% if preview.rows_total > shown %}first {{ shown }} of {% endif %}{{ "{:,}".format(preview.rows_total) }} row{% if preview.rows_total != 1 %}s{% endif %}</span></div>
+      <div class="preview-head">output data {% set shown = preview.preview | length %}<span class="muted">· {% if preview.rows_total > shown %}first {{ shown }} of {% endif %}{{ "{:,}".format(preview.rows_total) }} row{% if preview.rows_total != 1 %}s{% endif %}</span>
+        <span class="preview-actions">· <a href="/methodology/{{ methodology }}/runs/{{ run_id }}/stage/{{ stage.stage_id }}/rows">view all rows</a>
+        · <a href="/methodology/{{ methodology }}/runs/{{ run_id }}/stage/{{ stage.stage_id }}/rows.csv">⬇ CSV</a></span></div>
       <div class="table-scroll"><table class="data-preview">
         <thead><tr>{% for c in preview.columns %}<th>{{ c }}</th>{% endfor %}</tr></thead>
         <tbody>{% for row in preview.preview %}<tr>{% for c in preview.columns %}{% set v = row[c] | string %}{% if v[:4] == 'http' %}<td class="cell-url"><a href="{{ v }}" target="_blank" rel="noopener">{{ v }}</a></td>{% else %}<td>{{ v | truncate(240) }}</td>{% endif %}{% endfor %}</tr>{% endfor %}</tbody>

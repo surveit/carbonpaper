@@ -976,3 +976,9 @@ table.data-preview.scratch th { background: #f3ecd0; }
 .rerun-bar { display: flex; align-items: center; gap: .8rem; margin: 0 0 1rem; flex-wrap: wrap; }
 .rerun-bar form { margin: 0; }
 .rerun-bar .muted { font-size: .85rem; }
+
+/* ── Full stage-output table page (/runs/{id}/stage/{id}/rows) ── */
+.rows-toolbar { display: flex; align-items: center; gap: .8rem; margin: 0 0 1rem; flex-wrap: wrap; }
+.table-scroll.rows-full { max-height: calc(100vh - 220px); }
+.table-scroll.rows-full thead th { position: sticky; top: 0; background: #f2f4f8; z-index: 1; }
+td.row-num, th.row-num { text-align: right; color: #98a1b3; font-variant-numeric: tabular-nums; }

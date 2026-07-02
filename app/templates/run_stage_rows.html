@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}{{ stage_id }} rows · {{ run_id }} · {{ methodology }}{% endblock %}
+
+{% block header_extra %}
+<a href="/methodology/{{ methodology }}/runs/{{ run_id }}" class="back-link">← run {{ run_id }}</a>
+{% endblock %}
+
+{% block content %}
+<div class="run-topbar">
+    <h1><code>{{ stage_id }}</code> output</h1>
+    <p class="stage-id">run <code>{{ run_id }}</code> · <code>{{ output_path }}</code> · {{ "{:,}".format(rows_total) }} row{% if rows_total != 1 %}s{% endif %}</p>
+</div>
+
+<div class="rows-toolbar">
+    {% if capped %}
+    <span class="alert warn">⚠ Showing first {{ "{:,}".format(rows | length) }} of {{ "{:,}".format(rows_total) }} rows — download the CSV for the complete data.</span>
+    {% endif %}
+    <a class="btn primary" href="/methodology/{{ methodology }}/runs/{{ run_id }}/stage/{{ stage_id }}/rows.csv">⬇ Download full CSV</a>
+</div>
+
+{% if rows %}
+<div class="table-scroll rows-full">
+<table class="data-preview">
+    <thead><tr><th class="row-num">#</th>{% for c in columns %}<th>{{ c }}</th>{% endfor %}</tr></thead>
+    <tbody>
+    {% for row in rows %}
+    <tr><td class="row-num muted">{{ loop.index }}</td>
+        {% for c in columns %}{% set v = row[c] | string %}{% if v[:4] == 'http' %}<td class="cell-url"><a href="{{ v }}" target="_blank" rel="noopener">{{ v }}</a></td>{% else %}<td>{{ v | truncate(240) }}</td>{% endif %}{% endfor %}
+    </tr>
+    {% endfor %}
+    </tbody>
+</table>
+</div>
+{% else %}
+<p class="muted"><em>Output file has no rows.</em></p>
+{% endif %}
+{% endblock %}
