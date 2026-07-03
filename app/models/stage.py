@@ -75,6 +75,23 @@ class PublishFormat(str, Enum):
     evidence_cards = "evidence_cards"
 
 
+class TransformGranularity(str, Enum):
+    """What a transform sees, and therefore whether its rows stay aligned 1:1.
+
+    row   — invoked per input row: one row in, one row out. Row identity is kept
+            by construction.
+    frame — sees the whole table (`f(df) -> df`) and may reshape it (group-by,
+            pivot, dedup, sort). Row identity is not recoverable.
+
+    This is only a meaningful *claim* on a `python_transform`, where the function
+    body is opaque — and it defaults to `frame` there, so a plain Python stage is
+    assumed to reshape unless it declares `row`. Every other stage type has a
+    granularity fixed by its type (see `Stage.is_grain_preserving`).
+    """
+    row = "row"
+    frame = "frame"
+
+
 # ── Executable-handle blocks (each self-validates) ───────────────────────────
 class Connector(_Base):
     """input_data handle."""
@@ -110,6 +127,10 @@ class PythonFunction(_Base):
     module: Optional[str] = None
     function: Optional[str] = None
     requirements: list[str] = Field(default_factory=list)
+    # Whether the body maps rows 1:1 (`row`) or reshapes the frame (`frame`).
+    # Defaults to `frame`: an opaque Python body is assumed to reshape unless it
+    # claims otherwise. Only `row` unlocks a declarative eval through this stage.
+    granularity: TransformGranularity = TransformGranularity.frame
 
     @model_validator(mode="after")
     def _kind_fields(self) -> "PythonFunction":
@@ -247,6 +268,32 @@ class Stage(_Base):
                 f"type `{self.type.value}` needs >= {spec['min_inputs']} input(s), got {len(self.inputs)}"
             )
         return self
+
+    @property
+    def is_grain_preserving(self) -> bool:
+        """Does one input row map to exactly one output row? This is the v1 eval
+        gate: a declarative (single-table, row-aligned) eval can only tap a node
+        reached through grain-preserving stages.
+
+        Fixed by stage type, except `python_transform`, whose function declares
+        its granularity (default `frame`):
+          - python_transform   → its function is `row`
+          - llm_transform      → yes (per-row 1:1 in v1; a fan-out LLM like
+                                 doc→pieces is out of scope until fan-out evals)
+          - input_data         → yes (originates the rows)
+          - human_review_queue → yes (keyed, edits in place)
+          - join (fan-out) / aggregate (fan-in) → NO; grain changes are deferred
+          - publish            → terminal, never a tap target
+        """
+        if self.type is StageType.python_transform:
+            return (self.function is not None
+                    and self.function.granularity is TransformGranularity.row)
+        return self.type in (
+            StageType.llm_transform,
+            StageType.input_data,
+            StageType.human_review_queue,
+            StageType.publish,
+        )
 
 
 def validate_stage(stage: dict[str, Any]) -> list[str]:

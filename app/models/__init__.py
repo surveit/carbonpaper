@@ -5,7 +5,8 @@ Split across modules:
   - stage.py         — node types, handle blocks, the Stage model
   - methodology.py   — the Methodology (DAG) model + cross-stage graph checks
   - named_schemas.py — the named data model (NamedSchema, SchemaLibrary)
-  - eval.py          — the eval overlay (EvalSpec + ground-truth derivation)
+  - table.py         — TableRef (a general on-disk table pointer)
+  - eval.py          — the eval contract (EvalConfig, EvalRun, scorability)
 
 Import from `app.models` (this aggregator) for the stable public surface.
 """
@@ -34,6 +35,7 @@ from app.models.stage import (
     ReviewConfig,
     Stage,
     StageType,
+    TransformGranularity,
     validate_stage,
 )
 from app.models.methodology import (
@@ -55,10 +57,15 @@ from app.models.named_schemas import (
     parse_schema_library,
     validate_schema_library,
 )
+from app.models.table import TableRef
 from app.models.eval import (
-    EvalSpec,
-    build_ground_truth_schema,
-    validate_eval_spec,
+    CodeScorer,
+    EvalConfig,
+    EvalRun,
+    EvalRunSettings,
+    ExpectedColumn,
+    StageOutputOverride,
+    resolve_eval_run_settings,
 )
 
 __all__ = [
@@ -67,11 +74,15 @@ __all__ = [
     "SourceRef", "Column", "TableSchema", "Connector", "LLMConfig",
     "PythonFunction", "JoinKey", "JoinConfig", "AggregationOp",
     "AggregateConfig", "QueueConfig", "PublishConfig", "ReviewConfig",
-    "Stage", "validate_stage",
+    "TransformGranularity", "Stage", "validate_stage",
     "Methodology", "parse_methodology", "validate_methodology",
     "check_unique_ids", "check_inputs_resolve", "detect_cycle",
     "SchemaKind", "NamedColumn", "NamedSchema", "SchemaLibrary",
     "parse_schema_library", "validate_schema_library",
     "check_unique_schema_names", "check_references_resolve", "parse_reference",
-    "EvalSpec", "build_ground_truth_schema", "validate_eval_spec",
+    # general
+    "TableRef",
+    # eval contract
+    "StageOutputOverride", "ExpectedColumn", "CodeScorer", "EvalConfig",
+    "EvalRunSettings", "resolve_eval_run_settings", "EvalRun",
 ]
