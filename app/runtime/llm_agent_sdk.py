@@ -17,10 +17,10 @@ offline mock.
 from __future__ import annotations
 
 import asyncio
-import concurrent.futures
 import os
-import shutil
-from pathlib import Path
+
+from app.llm_sdk import CLI_PATH as _CLI_PATH
+from app.llm_sdk import run_sync as _run_sync
 
 _TIMEOUT_S = int(os.environ.get("CW_LLM_TIMEOUT_S", "180"))
 
@@ -47,30 +47,6 @@ except Exception as exc:  # pragma: no cover - import guard
 # blocked (default permission mode + an allowlist), so the agent can't touch the
 # filesystem or run shell commands.
 RESEARCH_TOOLS = ["WebSearch", "WebFetch"]
-
-
-def _find_cli() -> str | None:
-    """Locate the Claude Code CLI. The SDK's own search misses the Windows
-    `.local/bin/claude.exe` (it probes `.local/bin/claude` without the
-    extension), so we look explicitly and hand the result to `cli_path`."""
-    found = shutil.which("claude")
-    if found:
-        return found
-    home = Path.home()
-    candidates = [
-        home / ".local" / "bin" / "claude.exe",
-        home / ".local" / "bin" / "claude",
-        home / "AppData" / "Roaming" / "npm" / "claude.cmd",
-        home / ".claude" / "local" / "claude",
-        home / ".npm-global" / "bin" / "claude",
-    ]
-    for c in candidates:
-        if c.exists() and c.is_file():
-            return str(c)
-    return None
-
-
-_CLI_PATH = _find_cli()
 
 
 def available() -> bool:
@@ -158,18 +134,6 @@ async def _aquery(
         if not text.strip():
             raise
     return text, events
-
-
-def _run_sync(coro):
-    """Run an async coroutine to completion from sync code. Safe inside the
-    ThreadPoolExecutor workers used by call_llm_batch (no running loop there);
-    if a loop *is* running on this thread, run on a fresh worker thread."""
-    try:
-        asyncio.get_running_loop()
-    except RuntimeError:
-        return asyncio.run(coro)
-    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
-        return ex.submit(lambda: asyncio.run(coro)).result()
 
 
 def call_agent_sdk(prompt: str, model: str) -> str:
