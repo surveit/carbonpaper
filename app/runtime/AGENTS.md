@@ -1,8 +1,10 @@
 # app/runtime — the Runner (DAG executor)
 
-Executes a methodology DAG and persists the result. Reads stage dicts directly and
-does not import the compiler or the web app. (It does not yet validate against the
-`app/models/` contract — that wiring is a TODO.)
+Executes a methodology DAG and persists the result. Does not import the compiler or
+the web app. Loads stages through `app/models/loader.py: load_methodology_stages`,
+which parses each compiled file into a `Stage` object and raises
+`MethodologyLoadError` if any stage or cross-stage check fails — an invalid DAG is
+refused before the runner does any work.
 
 ## Files
 - **`runner.py`** — the executor.

@@ -23,11 +23,18 @@ case: `validate_methodology(stages) -> list[str]` and `validate_stage(stage) -> 
 - Weighted aggregation formulas (`weighted_mean`/`weighted_sum`) — unused in the
   compiled DAGs (weighting is done inside `python_frame_function` modules).
 
-**Not done yet (next step):** the runtime (`runner.py`, `main.py`) still reads
-stage dicts directly and does not yet parse them through these models, so the
-stage-spec contract is still not *enforced at run time*. Wiring `parse_methodology`
-/ `validate_methodology` into the loader is the follow-up — kept separate because
-the real compiled DAGs may surface issues that need triage.
+**Enforced at load, via `app/models/loader.py`.** This is the only place that
+reads the on-disk compiled-stage YAML; everything past it speaks `Stage` objects,
+not dicts. Two entry points, both parsing each file through `Stage.model_validate`:
+- `load_methodology_stages` — strict, for the runner. Any invalid stage or
+  cross-stage issue raises `MethodologyLoadError`, and the runner refuses to
+  execute the DAG.
+- `load_compiled_dir` — tolerant, per-file, for the viewer. Each compiled file
+  gets a `CompiledStageFile` (parsed `Stage` or `None` + an issues list), and the
+  web UI renders any issues as a banner instead of crashing.
+
+`app/runtime/handlers.py`, `runner.py`, `preview.py`, and the web layer all consume
+the typed `Stage` objects this loader returns.
 
 ## Storage convention — `<object_type>/<object_id>.data` — DECIDED, NOT YET IMPLEMENTED
 
