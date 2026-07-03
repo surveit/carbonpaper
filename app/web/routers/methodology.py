@@ -7,7 +7,7 @@ import yaml
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, PlainTextResponse
 
-from app import node_review, versioning
+from app.services import node_review, versioning
 from app.web.config import EXAMPLES_DIR, templates
 from app.web.diagrams import TYPE_CLASS, TYPE_GLYPH, build_er_diagram, build_mermaid_graph
 from app.web.loading import (

@@ -3,15 +3,15 @@ versioning.py — immutable, committable snapshots of a methodology DAG.
 
 A "version" is a frozen copy of a methodology's authored artifacts — its
 `compiled/` stages and `schemas/` data model — taken at a point in time, plus a
-`version.json` recording who cut it, why, its parent, and the approval coverage
-AT cut time. Runs are pinned to a version and read its snapshot dir, so a run is
+`version.json` recording who created it, why, its parent, and the approval coverage
+AT creation time. Runs are pinned to a version and read its snapshot dir, so a run is
 reproducible against the exact DAG it executed, never "whatever the working copy
 happened to be".
 
 Layout:
     examples/<methodology>/versions/<version_id>/
-        compiled/<id>.yaml      # copy of the working compiled/ at cut time
-        schemas/<...>.yaml      # copy of the working schemas/ at cut time (if any)
+        compiled/<id>.yaml      # copy of the working compiled/ at creation time
+        schemas/<...>.yaml      # copy of the working schemas/ at creation time (if any)
         version.json            # {id, created_at, parent_version, message,
                                 #  reviewer, coverage}
 
@@ -23,7 +23,7 @@ copy" the runner reads from.
 (datetime.now().strftime('%Y%m%dT%H%M%S')) so versions and runs sort and read
 consistently.
 
-Dependency note: this module may import app.node_review (to freeze coverage) but
+Dependency note: this module may import app.services.node_review (to freeze coverage) but
 nothing from app.runtime or app.compiler. The stage loader here mirrors
 app/runtime/runner._load_stages so a version's stages load identically to the
 working copy's.
@@ -39,7 +39,7 @@ from typing import Any
 
 import yaml
 
-from app import node_review
+from app.services import node_review
 
 
 def versions_dir(methodology_dir: Path) -> Path:
@@ -110,7 +110,7 @@ def list_versions(methodology_dir: Path) -> list[dict[str, Any]]:
     return metas
 
 
-def cut_version(
+def create_version(
     methodology_dir: Path,
     *,
     message: str,
@@ -118,7 +118,7 @@ def cut_version(
     parent_version: str | None = None,
 ) -> dict[str, Any]:
     """Snapshot the working copy's compiled/ + schemas/ into a new
-    versions/<version_id>/ and write version.json with coverage frozen at cut
+    versions/<version_id>/ and write version.json with coverage frozen at creation
     time. Returns the version.json dict.
 
     Coverage is computed from the SNAPSHOT's stages against the live
@@ -130,14 +130,14 @@ def cut_version(
     compiled_src = methodology_dir / "compiled"
     if not compiled_src.is_dir():
         raise FileNotFoundError(
-            f"Cannot cut a version: no compiled/ DAG at {compiled_src}"
+            f"Cannot create a version: no compiled/ DAG at {compiled_src}"
         )
 
     version_id = datetime.now().strftime("%Y%m%dT%H%M%S")
     vdir = versions_dir(methodology_dir) / version_id
     if vdir.exists():
         raise FileExistsError(
-            f"Version dir already exists: {vdir} (two cuts within one second)"
+            f"Version dir already exists: {vdir} (two versions created within one second)"
         )
     vdir.mkdir(parents=True, exist_ok=False)
 
@@ -172,5 +172,5 @@ __all__ = [
     "list_versions",
     "load_version_meta",
     "load_version_stages",
-    "cut_version",
+    "create_version",
 ]

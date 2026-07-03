@@ -7,7 +7,7 @@ run.) It mirrors the queue's decide/partial patterns, lifted from data rows up t
 DAG node specs, and adds immutable version snapshots the runner pins runs to.
 
 State lives under examples/<methodology>/: `node_decisions.parquet` (approvals)
-and `versions/<id>/` (snapshots), managed by app.node_review + app.versioning.
+and `versions/<id>/` (snapshots), managed by app.services.node_review + app.services.versioning.
 """
 
 from __future__ import annotations
@@ -18,7 +18,7 @@ import yaml
 from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 
-from app import node_review, versioning
+from app.services import node_review, versioning
 from app.models import validate_stage
 from app.web.config import EXAMPLES_DIR, templates
 from app.web.diagrams import TYPE_CLASS, TYPE_GLYPH, build_mermaid_graph
@@ -206,10 +206,10 @@ async def node_edit(
 
 
 @router.post("/methodology/{methodology}/version")
-async def cut_version_route(methodology: str, message: str = Form(...)):
+async def create_version_route(methodology: str, message: str = Form(...)):
     """Snapshot the working copy's {compiled/, schemas/} into a new immutable
-    version + freeze approval coverage at cut time. The parent is the latest
-    existing version (None for the very first cut). The JS redirects to the
+    version + freeze approval coverage at creation time. The parent is the latest
+    existing version (None for the very first version). The JS redirects to the
     versions list on success."""
     methodology_dir = EXAMPLES_DIR / methodology
     if not methodology_dir.is_dir():
@@ -217,7 +217,7 @@ async def cut_version_route(methodology: str, message: str = Form(...)):
     existing = versioning.list_versions(methodology_dir)  # newest-first
     parent = existing[0]["id"] if existing else None
     try:
-        meta = versioning.cut_version(
+        meta = versioning.create_version(
             methodology_dir, message=message, reviewer="local", parent_version=parent
         )
     except FileNotFoundError as exc:

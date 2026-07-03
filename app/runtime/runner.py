@@ -25,7 +25,7 @@ from typing import Any
 import pandas as pd
 import yaml
 
-from app import versioning
+from app.services import versioning
 
 from .handlers import HANDLERS, HaltForReview
 from .validation import validate_dataframe
@@ -73,9 +73,9 @@ def _resolve_version_id(methodology_dir: Path, version_id: str | None) -> str:
     read the working copy.
 
     - If `version_id` is given, it must name an existing version; we fail loudly
-      otherwise rather than auto-cutting a *different* id under the caller's name.
+      otherwise rather than auto-creating a *different* id under the caller's name.
     - If `version_id` is None, pin to the latest existing version; and if none
-      exists yet, AUTO-CUT an implicit version ("auto-cut on run") and use it, so
+      exists yet, AUTO-CREATE an implicit version ("auto-created on run") and use it, so
       a first run on a never-versioned methodology still records a real snapshot
       it actually executed against.
     """
@@ -90,8 +90,8 @@ def _resolve_version_id(methodology_dir: Path, version_id: str | None) -> str:
     if existing:
         return existing[0]["id"]
 
-    meta = versioning.cut_version(
-        methodology_dir, message="auto-cut on run", reviewer="system"
+    meta = versioning.create_version(
+        methodology_dir, message="auto-created on run", reviewer="system"
     )
     return meta["id"]
 
@@ -107,7 +107,7 @@ def prepare_run(
     The run is PINNED to a DAG version: stages are loaded from the version's
     immutable snapshot (versioning.load_version_stages), never from the live
     `compiled/` working copy, so working-copy edits can never affect this run.
-    `version_id` resolution + auto-cut is documented on _resolve_version_id; the
+    `version_id` resolution + auto-create is documented on _resolve_version_id; the
     resolved id is recorded in the manifest as `dag_version`."""
     runs_dir = methodology_dir / "runs"
     run_id = datetime.now().strftime("%Y%m%dT%H%M%S")
@@ -157,7 +157,7 @@ def execute_run(
     methodology_dir: Path, repo_root: Path, version_id: str | None = None
 ) -> dict[str, Any]:
     """Run the DAG once (synchronous). Returns the manifest dict. `version_id`
-    pins the run to a DAG version (None -> latest existing, else auto-cut); see
+    pins the run to a DAG version (None -> latest existing, else auto-create); see
     prepare_run / _resolve_version_id."""
     return run_prepared(prepare_run(methodology_dir, repo_root, version_id))
 

@@ -13,7 +13,7 @@
         <a href="/methodology/{{ methodology }}/runs" class="btn">All runs</a>
     </div>
 </div>
-<p class="lede">Each version is an immutable snapshot of <code>compiled/</code> + <code>schemas/</code> with approval coverage frozen at cut time. Runs pin to a version and read its snapshot, so a run is reproducible against the exact workflow it executed.</p>
+<p class="lede">Each version is an immutable snapshot of <code>compiled/</code> + <code>schemas/</code> with approval coverage frozen at creation time. Runs pin to a version and read its snapshot, so a run is reproducible against the exact workflow it executed.</p>
 
 {% if versions %}
 <table class="stages">
@@ -50,6 +50,6 @@
     </tbody>
 </table>
 {% else %}
-<p><em>No versions yet. Click <strong>✂ Cut version</strong> on the workflow page to snapshot the current workflow. (A run on an unversioned methodology auto-cuts one.)</em></p>
+<p><em>No versions yet. Click <strong>Create version</strong> on the workflow page to snapshot the current workflow. (A run on an unversioned methodology auto-creates one.)</em></p>
 {% endif %}
 {% endblock %}

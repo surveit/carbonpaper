@@ -98,7 +98,7 @@ def node_content_hash(stage: dict[str, Any]) -> str:
 def node_decisions_path(methodology_dir: Path) -> Path:
     """examples/<methodology>/node_decisions.parquet — the single, version-
     independent store of node approvals. Keyed by (stage_id, content_hash) so an
-    unchanged node carries its approval across version cuts automatically."""
+    unchanged node carries its approval across versions automatically."""
     return Path(methodology_dir) / "node_decisions.parquet"
 
 

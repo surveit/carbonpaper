@@ -33,7 +33,7 @@
         <form action="/methodology/{{ methodology }}/run" method="post" style="display:inline;">
             <button type="submit" class="btn primary">▶ Run pipeline</button>
         </form>
-        <button type="button" class="btn" id="cut-version-btn">✂ Cut version</button>
+        <button type="button" class="btn" id="create-version-btn">Create version</button>
         <a href="/methodology/{{ methodology }}/versions" class="btn">Versions</a>
         <a href="/methodology/{{ methodology }}/data-model" class="btn">Data model</a>
         <a href="/methodology/{{ methodology }}/runs" class="btn">All runs</a>
@@ -191,25 +191,25 @@
   // graph. The poll runs on demand — the node panel calls _pollReviewStatus()
   // after a decision/edit so the node recolours live without a full reload.
 
-  // ── Cut version: snapshot {compiled,schemas} + freeze coverage. ──
-  const cutBtn = document.getElementById('cut-version-btn');
-  if (cutBtn) {
-    cutBtn.addEventListener('click', async function () {
-      const message = prompt('Describe this version (what changed / why cut now):', '');
+  // ── Create version: snapshot {compiled,schemas} + freeze coverage. ──
+  const createBtn = document.getElementById('create-version-btn');
+  if (createBtn) {
+    createBtn.addEventListener('click', async function () {
+      const message = prompt('Describe this version (what changed / why create it now):', '');
       if (message === null) return;  // cancelled
-      cutBtn.disabled = true;
-      const original = cutBtn.textContent;
-      cutBtn.textContent = 'Cutting…';
+      createBtn.disabled = true;
+      const original = createBtn.textContent;
+      createBtn.textContent = 'Creating…';
       try {
         const fd = new FormData();
         fd.append('message', message);
         const r = await fetch(`/methodology/${encodeURIComponent(METHODOLOGY)}/version`, { method: 'POST', body: fd });
-        if (!r.ok) { alert(`Cut failed: ${r.status} ${await r.text()}`); return; }
+        if (!r.ok) { alert(`Version creation failed: ${r.status} ${await r.text()}`); return; }
         // Land on the versions list so the new snapshot is visible.
         window.location.href = `/methodology/${encodeURIComponent(METHODOLOGY)}/versions`;
       } finally {
-        cutBtn.disabled = false;
-        cutBtn.textContent = original;
+        createBtn.disabled = false;
+        createBtn.textContent = original;
       }
     });
   }
