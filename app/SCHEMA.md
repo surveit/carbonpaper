@@ -19,10 +19,12 @@ This is the contract a compiled stage file must satisfy. Every stage is *executa
 
 ## Universal stage shape
 
+On disk each compiled stage is the JSON dump of the `Stage` model; the example below uses YAML notation for readability.
+
 ```yaml
 id: snake_case_id
 name: Human readable name
-type: <one of the seven>
+type: <one of the eight stage types above>
 
 source:
   doc: examples/<methodology>/stages/NN_<stage>.md
@@ -79,7 +81,7 @@ function:         # python_row_function / python_frame_function
 
 join:             # join only
   type: inner     # or left, right, outer
-  keys:           # NB: name is `keys`, not `on` — YAML treats `on` as a bool
+  keys:           # named `keys` rather than `on` (a name chosen when stages were authored in YAML, where bare `on` parses as a boolean)
     - {left: evidence_id, right: evidence_id}
 
 aggregate:        # aggregate only

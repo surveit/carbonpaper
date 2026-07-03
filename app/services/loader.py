@@ -52,7 +52,7 @@ def load_compiled_dir(compiled_dir: Path) -> list[CompiledStageFile]:
             entry.issues.append(f"JSON parse error: {exc}")
             continue
         if not data:
-            entry.issues.append("file is empty")
+            entry.issues.append("file contains no stage object")
             continue
         try:
             entry.stage = Stage.model_validate(data)
