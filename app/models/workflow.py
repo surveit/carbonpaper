@@ -1,5 +1,6 @@
 """Workflow contract: a workflow is a list of validated stages plus the
-cross-stage checks (unique ids, inputs resolve, acyclic).
+cross-stage checks (unique ids, inputs resolve, acyclic) and an edge-schema
+conformance check.
 
 This module owns ONLY cross-stage checks — the ones that need the whole stage
 list to decide. A single stage's own invariants (e.g. an llm_transform being
@@ -9,15 +10,18 @@ be answered from one stage alone, it does not belong in this file.
 The graph checks are plain functions so they can be tested on their own and read
 without wading through a validator. Each returns a list of human-readable issue
 strings ([] means it found nothing) — the whole batch is collected so one call
-surfaces every problem, not just the first.
+surfaces every problem, not just the first. `check_edge_schemas` is separate: it
+returns typed issue objects (not part of the fatal graph validation) and drives
+the workflow view's flagged edges.
 """
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any
 
 from pydantic import ValidationError, model_validator
 
-from app.models.schema import _Base, format_errors
+from app.models.schema import TableSchema, _Base, format_errors
 from app.models.stage import Stage
 
 
@@ -74,6 +78,85 @@ def graph_issues(stages: list[Stage]) -> list[str]:
     inputs, and a cycle. The single source of truth both the strict model
     validator and the non-fatal `validate_workflow` build on."""
     return check_unique_ids(stages) + check_inputs_resolve(stages) + detect_cycle(stages)
+
+
+@dataclass
+class EdgeSchemaIssue:
+    """One conformance problem on a workflow edge: the downstream stage's declared
+    input schema disagrees with (or cannot be checked against) the upstream stage's
+    declared output schema."""
+    upstream_id: str
+    stage_id: str
+    severity: str  # "error" | "warning"
+    problem: str
+
+
+def check_edge_schemas(stages: list[Stage]) -> list[EdgeSchemaIssue]:
+    """Conformance of each declared input schema against the upstream stage's
+    declared `output_schema` (the producer schema the runtime validates outputs
+    against).
+
+    A declared input schema may be a projection — a subset of the upstream's
+    columns, naming what the stage consumes — but on everything it declares it
+    must agree with the producer:
+
+      error   — a declared column disagrees on type; the copy claims
+                `nullable: false` where the upstream allows nulls; or the
+                primary keys differ (identity is never projected away).
+      warning — the copy declares a column the upstream does not produce
+                (even a nullable one); the copy loosens `nullable: false` to
+                `nullable: true`; or the upstream declares no `output_schema`
+                to check against.
+
+    An input declared as a bare id (no `schema:` block) is skipped; an input id
+    that resolves to no stage is `check_inputs_resolve`'s concern.
+    """
+    by_id = {s.id: s for s in stages}
+    out: list[EdgeSchemaIssue] = []
+    for s in stages:
+        for ref in s.inputs:
+            if ref.table_schema is None or ref.id not in by_id:
+                continue
+            out.extend(_edge_issues(ref.id, s.id, ref.table_schema,
+                                    by_id[ref.id].output_schema))
+    return out
+
+
+def _edge_issues(upstream_id: str, stage_id: str, in_schema: TableSchema,
+                 up_schema: TableSchema | None) -> list[EdgeSchemaIssue]:
+    def issue(severity: str, problem: str) -> EdgeSchemaIssue:
+        return EdgeSchemaIssue(upstream_id=upstream_id, stage_id=stage_id,
+                               severity=severity, problem=problem)
+
+    if up_schema is None or not up_schema.columns:
+        return [issue("warning",
+                      "upstream declares no output_schema to check the input copy against")]
+
+    in_cols = {c.name: c for c in in_schema.columns}
+    up_cols = {c.name: c for c in up_schema.columns}
+    out: list[EdgeSchemaIssue] = []
+    for name in sorted(set(in_cols) - set(up_cols)):
+        out.append(issue("warning", f"column `{name}` is not produced by `{upstream_id}`"))
+    for name in sorted(set(in_cols) & set(up_cols)):
+        in_col, up_col = in_cols[name], up_cols[name]
+        if in_col.type != up_col.type:
+            out.append(issue("error",
+                             f"column `{name}`: declared type `{in_col.type}` "
+                             f"but `{upstream_id}` produces `{up_col.type}`"))
+        if not in_col.nullable and up_col.nullable:
+            out.append(issue("error",
+                             f"column `{name}`: copy claims nullable: false "
+                             f"but `{upstream_id}` allows nulls"))
+        elif in_col.nullable and not up_col.nullable:
+            out.append(issue("warning",
+                             f"column `{name}`: copy allows nulls "
+                             f"but `{upstream_id}` guarantees non-null"))
+    in_pk = in_schema.primary_key or []
+    up_pk = up_schema.primary_key or []
+    if in_pk != up_pk:
+        out.append(issue("error",
+                         f"primary key {in_pk} but `{upstream_id}` declares {up_pk}"))
+    return out
 
 
 class Workflow(_Base):
