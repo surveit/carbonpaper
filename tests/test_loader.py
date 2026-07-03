@@ -65,3 +65,12 @@ def test_strict_load_catches_cross_stage_issues(tmp_path):
     with pytest.raises(MethodologyLoadError) as exc:
         load_methodology_stages(tmp_path)
     assert any("missing_upstream" in i for i in exc.value.issues)
+
+
+def test_strict_load_rejects_missing_or_empty_compiled_dir(tmp_path):
+    """A typo'd methodology path must fail loudly, not produce a valid 0-stage DAG."""
+    with pytest.raises(MethodologyLoadError, match="no compiled stage files"):
+        load_methodology_stages(tmp_path)  # no compiled/ dir at all
+    (tmp_path / "compiled").mkdir()
+    with pytest.raises(MethodologyLoadError, match="no compiled stage files"):
+        load_methodology_stages(tmp_path)  # compiled/ exists but is empty

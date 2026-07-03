@@ -65,6 +65,8 @@ def load_methodology_stages(methodology_dir: Path) -> list[Stage]:
     compiled_dir = methodology_dir / "compiled"
     entries = load_compiled_dir(compiled_dir)
     issues = [f"{e.filename}: {i}" for e in entries for i in e.issues]
+    if not entries:
+        issues.append(f"no compiled stage files found in {compiled_dir}")
     stages = [e.stage for e in entries if e.stage is not None]
     issues += validate_methodology_stages(stages)
     if issues:

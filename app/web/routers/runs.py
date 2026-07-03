@@ -11,6 +11,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
+from app.models.loader import MethodologyLoadError, load_methodology_stages
 from app.runtime.preview import PREVIEWABLE_TYPES, PreviewError, run_stage_preview
 from app.runtime.runner import prepare_run, resume_run, run_prepared
 from app.web.config import EXAMPLES_DIR, REPO_ROOT, templates
@@ -52,7 +53,11 @@ async def trigger_run(methodology: str):
         raise HTTPException(status_code=404, detail=f"No methodology '{methodology}'")
     # Set up the run (writes an initial `running` manifest), kick off execution
     # in a background thread, and redirect immediately. The run page polls.
-    prep = prepare_run(methodology_dir, REPO_ROOT)
+    try:
+        prep = prepare_run(methodology_dir, REPO_ROOT)
+    except MethodologyLoadError as exc:
+        return JSONResponse({"detail": "compiled DAG failed validation",
+                             "issues": exc.issues}, status_code=400)
     run_in_background(run_prepared, prep)
     return RedirectResponse(
         url=f"/methodology/{methodology}/runs/{prep['run_id']}",
@@ -297,6 +302,13 @@ async def resume_run_route(methodology: str, run_id: str):
     run_dir = runs_dir(methodology) / run_id
     if not (run_dir / "manifest.json").exists():
         raise HTTPException(status_code=404, detail="Run not found")
+    # Validate the compiled DAG synchronously so load errors surface as a 400
+    # here rather than being swallowed on the background thread below.
+    try:
+        load_methodology_stages(methodology_dir)
+    except MethodologyLoadError as exc:
+        return JSONResponse({"detail": "compiled DAG failed validation",
+                             "issues": exc.issues}, status_code=400)
     # Resume re-runs the queue stage + downstream (LLM-heavy) — do it in the
     # background and redirect immediately so the page can poll progress.
     run_in_background(resume_run, methodology_dir, run_id, REPO_ROOT)
