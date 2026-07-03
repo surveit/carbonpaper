@@ -9,11 +9,9 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-import yaml
 
-from app.models import Stage, validate_methodology_stages
-from app.models.schema import format_errors
-from pydantic import ValidationError
+from app.models import validate_methodology_stages
+from app.models.loader import load_compiled_dir
 
 EXAMPLES = Path(__file__).resolve().parents[1] / "examples"
 COMPILED_DIRS = sorted(p for p in EXAMPLES.glob("*/compiled") if p.is_dir())
@@ -21,11 +19,9 @@ COMPILED_DIRS = sorted(p for p in EXAMPLES.glob("*/compiled") if p.is_dir())
 
 @pytest.mark.parametrize("compiled_dir", COMPILED_DIRS, ids=lambda p: p.parent.name)
 def test_example_dag_satisfies_contract(compiled_dir: Path):
-    stages, issues = [], []
-    for f in sorted(compiled_dir.glob("*.yaml")):
-        try:
-            stages.append(Stage.model_validate(yaml.safe_load(f.read_text(encoding="utf-8"))))
-        except ValidationError as err:
-            issues += [f"{f.name}: {i}" for i in format_errors(err)]
+    entries = load_compiled_dir(compiled_dir)
+    issues = [f"{e.filename}: {i}" for e in entries for i in e.issues]
+    stages = [e.stage for e in entries if e.stage is not None]
     issues += validate_methodology_stages(stages)
+    assert stages, f"no compiled stages found in {compiled_dir}"
     assert not issues, "\n".join(issues)

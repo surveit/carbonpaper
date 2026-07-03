@@ -1,8 +1,8 @@
 """Canonical loader for a methodology's compiled stage files.
 
-One file per stage under `<methodology>/compiled/`. This module is the only
-place that reads the on-disk stage format; everything past it speaks Stage
-objects. Two entry points:
+One JSON file per stage under `<methodology>/compiled/`. This module is the
+only place that reads the on-disk stage format; everything past it speaks
+Stage objects. Two entry points:
 
   - load_compiled_dir: tolerant, per-file — for the viewer, which renders
     problems rather than crashing.
@@ -11,10 +11,10 @@ objects. Two entry points:
 """
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
 from pathlib import Path
 
-import yaml
 from pydantic import ValidationError
 
 from app.models.methodology import validate_methodology_stages
@@ -43,13 +43,13 @@ class MethodologyLoadError(Exception):
 
 def load_compiled_dir(compiled_dir: Path) -> list[CompiledStageFile]:
     entries: list[CompiledStageFile] = []
-    for f in sorted(compiled_dir.glob("*.yaml")):
+    for f in sorted(compiled_dir.glob("*.json")):
         entry = CompiledStageFile(filename=f.name)
         entries.append(entry)
         try:
-            data = yaml.safe_load(f.read_text(encoding="utf-8"))
-        except yaml.YAMLError as exc:
-            entry.issues.append(f"YAML parse error: {exc}")
+            data = json.loads(f.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as exc:
+            entry.issues.append(f"JSON parse error: {exc}")
             continue
         if not data:
             entry.issues.append("file is empty")

@@ -14,7 +14,6 @@ import json
 
 import pandas as pd
 import pytest
-import yaml
 
 from app.runtime.runner import execute_run
 
@@ -29,7 +28,7 @@ def _make_methodology(root):
         "connector": {"kind": "file", "params": {"path": "data/items.csv", "format": "csv"}},
         "limit": 2,
     }
-    (root / "compiled" / "01_load.yaml").write_text(yaml.safe_dump(stage), encoding="utf-8")
+    (root / "compiled" / "01_load.json").write_text(json.dumps(stage), encoding="utf-8")
 
 
 def test_limit_truncates_and_is_recorded(tmp_path):
@@ -153,7 +152,7 @@ def test_invalid_stage_rejected_before_run(tmp_path):
     (tmp_path / "compiled").mkdir(parents=True)
     bad = {"id": "load", "name": "Load", "type": "input_data",
            "connector": {"kind": "file", "params": {"format": "csv"}}}  # no path
-    (tmp_path / "compiled" / "01_load.yaml").write_text(yaml.safe_dump(bad), encoding="utf-8")
+    (tmp_path / "compiled" / "01_load.json").write_text(json.dumps(bad), encoding="utf-8")
 
     with pytest.raises(MethodologyLoadError) as exc:
         execute_run(tmp_path, repo_root=tmp_path)
