@@ -8,14 +8,16 @@ from typing import Any
 
 import pandas as pd
 
+from app.models import ConnectorKind, Stage
 
-def handle_input_data(stage: dict[str, Any], inputs: dict[str, pd.DataFrame], ctx: dict[str, Any]) -> pd.DataFrame:
-    connector = stage.get("connector", {})
-    kind = connector.get("kind")
-    params = connector.get("params", {})
 
-    if kind == "file":
-        path = ctx["repo_root"] / params["path"]
+def handle_input_data(stage: Stage, inputs: dict[str, pd.DataFrame], ctx: dict[str, Any]) -> pd.DataFrame:
+    connector = stage.connector
+    assert connector is not None  # Stage validation: input_data carries connector
+    params = connector.params
+
+    if connector.kind == ConnectorKind.file:
+        path = ctx["repo_root"] / params["path"]   # required by Connector validation
         fmt = params.get("format", "csv")
         if fmt == "csv":
             df = pd.read_csv(path)
@@ -40,22 +42,14 @@ def handle_input_data(stage: dict[str, Any], inputs: dict[str, pd.DataFrame], ct
 
         return df
 
-    if kind == "computed_static":
+    if connector.kind == ConnectorKind.computed_static:
         # Demo mode: read from the file param if provided
         path = params.get("file")
         if path:
             return pd.read_csv(ctx["repo_root"] / path)
         return pd.DataFrame()
 
-    if kind in {"scrape", "http", "api", "manual_upload", "sql"}:
-        # Production-only connectors. In the prototype we expect these stages
-        # to have been replaced with a `file` connector pointing to a sample.
-        raise NotImplementedError(
-            f"Connector kind '{kind}' is not implemented in the demo runtime. "
-            f"Stage '{stage['id']}' should use kind=file pointing to a local sample."
-        )
-
-    raise ValueError(f"Unknown connector kind: {kind}")
+    raise ValueError(f"Unknown connector kind: {connector.kind}")
 
 
 def _read_geojson(path: Path) -> pd.DataFrame:

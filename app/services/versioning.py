@@ -23,10 +23,10 @@ copy" the runner reads from.
 (datetime.now().strftime('%Y%m%dT%H%M%S')) so versions and runs sort and read
 consistently.
 
-Dependency note: this module may import app.services.node_review (to freeze coverage) but
-nothing from app.runtime or app.compiler. The stage loader here mirrors
-app/runtime/runner._load_stages so a version's stages load identically to the
-working copy's.
+Dependency note: this module may import app.services.node_review (to freeze coverage) and
+app.models, but nothing from app.runtime or app.compiler. Version snapshots are
+parsed through the same strict loader as the working copy (app.models.loader),
+so a version's stages load identically to the working copy's.
 """
 
 from __future__ import annotations
@@ -39,6 +39,8 @@ from typing import Any
 
 import yaml
 
+from app.models import Stage
+from app.models.loader import load_methodology_stages
 from app.services import node_review
 
 
@@ -48,11 +50,10 @@ def versions_dir(methodology_dir: Path) -> Path:
 
 
 def _load_stages_from(compiled_dir: Path) -> list[dict[str, Any]]:
-    """Load compiled stage YAMLs from a directory, sorted by filename. Mirrors
-    runner._load_stages exactly (same glob, same sort, same skip-empty) so a
-    snapshot's stages load identically to the working copy's. Does NOT inject the
-    loader bookkeeping keys (_filename/_order) — callers that need them add them;
-    the canonical hash ignores them regardless."""
+    """Load compiled stage YAMLs from a directory as raw dicts, sorted by
+    filename — used only to freeze approval coverage at version-creation time
+    (node_review speaks dicts). Runs load a version's stages through the strict
+    typed loader instead; see load_version_stages."""
     stages: list[dict[str, Any]] = []
     if not compiled_dir.is_dir():
         return stages
@@ -64,17 +65,20 @@ def _load_stages_from(compiled_dir: Path) -> list[dict[str, Any]]:
     return stages
 
 
-def load_version_stages(methodology_dir: Path, version_id: str) -> list[dict[str, Any]]:
-    """Load the compiled stages frozen in versions/<version_id>/compiled/. Fails
-    loudly if the version dir is missing rather than falling back to the working
-    copy (a run pinned to a version must read THAT version)."""
+def load_version_stages(methodology_dir: Path, version_id: str) -> list[Stage]:
+    """Load the compiled stages frozen in versions/<version_id>/compiled/ as
+    typed Stage objects, through the same strict loader the runner uses for a
+    working copy (app.models.loader) — an invalid snapshot raises
+    MethodologyLoadError rather than executing. Fails loudly if the version dir
+    is missing rather than falling back to the working copy (a run pinned to a
+    version must read THAT version)."""
     vdir = versions_dir(methodology_dir) / version_id
     if not vdir.is_dir():
         raise FileNotFoundError(
             f"No version '{version_id}' for methodology at {methodology_dir} "
             f"(expected {vdir})"
         )
-    return _load_stages_from(vdir / "compiled")
+    return load_methodology_stages(vdir)
 
 
 def load_version_meta(methodology_dir: Path, version_id: str) -> dict[str, Any]:

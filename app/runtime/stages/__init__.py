@@ -1,8 +1,14 @@
 """Stage handlers — one module per stage type (the two python-function grains
 share python_functions.py). `HANDLERS` maps stage type to handler; the runner
-dispatches on stage type."""
+dispatches on stage type. Handlers consume typed Stage objects."""
 
 from __future__ import annotations
+
+from typing import Any, Callable
+
+import pandas as pd
+
+from app.models import Stage
 
 from ._shared import HaltForReview
 from .aggregate import handle_aggregate
@@ -13,7 +19,7 @@ from .llm_transform import handle_llm_transform
 from .publish import handle_publish
 from .python_functions import handle_python_frame_function, handle_python_row_function
 
-HANDLERS = {
+HANDLERS: dict[str, Callable[[Stage, dict[str, pd.DataFrame], dict[str, Any]], pd.DataFrame | None]] = {
     "input_data": handle_input_data,
     "python_row_function": handle_python_row_function,
     "python_frame_function": handle_python_frame_function,

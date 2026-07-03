@@ -10,7 +10,9 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from pydantic import ValidationError
 
+from app.models import Stage
 from app.runtime.preview import PREVIEWABLE_TYPES, PreviewError, run_stage_preview
 from app.runtime.runner import prepare_run, resume_run, run_prepared
 from app.web.config import EXAMPLES_DIR, REPO_ROOT, templates
@@ -247,13 +249,26 @@ async def run_stage_scratch_preview(
             continue
 
     stages_static = load_stages(methodology)
-    stage_def = find_stage(stages_static, stage_id)
-    if stage_def is None:
+    stage_dict = find_stage(stages_static, stage_id)
+    if stage_dict is None:
         raise HTTPException(status_code=404, detail=f"No stage '{stage_id}'")
 
     output_by_id = {
         s.get("stage_id"): s.get("output_path") for s in manifest.get("stages", [])
     }
+
+    try:
+        # load_stages() carries loader-private `_filename`/`_order` keys for the
+        # diagram/template views; strip them before validating into the strict
+        # Stage contract that run_stage_preview's handlers require.
+        stage_def = Stage.model_validate(
+            {k: v for k, v in stage_dict.items() if not k.startswith("_")}
+        )
+    except ValidationError as exc:
+        return JSONResponse(
+            {"ok": False, "error": f"stage '{stage_id}' is not contract-valid: {exc}"},
+            status_code=400,
+        )
 
     try:
         result = run_stage_preview(

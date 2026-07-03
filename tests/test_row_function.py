@@ -4,14 +4,18 @@ from __future__ import annotations
 
 import pandas as pd
 import pytest
+from pydantic import ValidationError
 
+from app.models import Stage
 from app.runtime.stages import handle_python_row_function
 
 
 def _stage(code, inputs=("src",)):
-    return {"id": "t", "type": "python_row_function",
-            "inputs": [{"id": i} for i in inputs],
-            "function": {"kind": "inline", "code": code}}
+    return Stage.model_validate({
+        "id": "t", "name": "t", "type": "python_row_function",
+        "inputs": [{"id": i} for i in inputs],
+        "function": {"kind": "inline", "code": code},
+    })
 
 
 def test_row_function_maps_per_row():
@@ -45,7 +49,8 @@ def test_row_function_rejects_non_dict_return():
 
 
 def test_row_function_rejects_multiple_inputs():
-    df = pd.DataFrame({"x": [1]})
+    # python_row_function's max_inputs=1 is enforced by Stage validation itself
+    # (Stage._handle_for_type), so a 2-input stage can't even be constructed.
     code = "def transform(row):\n    return {'x': row['x']}\n"
-    with pytest.raises(ValueError):
-        handle_python_row_function(_stage(code, inputs=("a", "b")), {"a": df, "b": df}, {})
+    with pytest.raises(ValidationError):
+        _stage(code, inputs=("a", "b"))

@@ -29,8 +29,9 @@ from typing import Any
 
 import pandas as pd
 
+from app.models import Stage
+
 from .stages import HANDLERS
-from .runner import get_input_id
 
 
 # Stage types whose handlers are pure (no disk writes) and therefore safe to
@@ -56,15 +57,15 @@ def _read_output(path: Path) -> pd.DataFrame:
 
 
 def _load_upstream_inputs(
-    stage_def: dict[str, Any],
+    stage_def: Stage,
     run_dir: Path,
     output_by_id: dict[str, str | None],
 ) -> dict[str, pd.DataFrame]:
     """Load each declared upstream input's output dataframe from this run's
     on-disk outputs. Raises PreviewError if any upstream output is missing."""
     inputs: dict[str, pd.DataFrame] = {}
-    for inp in stage_def.get("inputs", []) or []:
-        iid = get_input_id(inp)
+    for ref in stage_def.inputs:
+        iid = ref.id
         rel = output_by_id.get(iid)
         if not rel:
             raise PreviewError(
@@ -82,7 +83,7 @@ def _load_upstream_inputs(
 
 def run_stage_preview(
     *,
-    stage_def: dict[str, Any],
+    stage_def: Stage,
     run_dir: Path,
     repo_root: Path,
     methodology_dir: Path,
@@ -100,7 +101,7 @@ def run_stage_preview(
     Returns a dict: {columns, rows_total, preview (records), input_rows,
     truncated_to}. Never writes to disk.
     """
-    stype = stage_def.get("type")
+    stype = stage_def.type
     if stype not in PREVIEWABLE_TYPES:
         raise PreviewError(
             f"stage type '{stype}' can't be previewed in memory "
@@ -112,10 +113,10 @@ def run_stage_preview(
 
     inputs = _load_upstream_inputs(stage_def, run_dir, output_by_id)
 
-    declared_inputs = stage_def.get("inputs", []) or []
+    declared_inputs = stage_def.inputs
     if not declared_inputs:
         raise PreviewError("stage has no declared inputs to subset")
-    first_id = get_input_id(declared_inputs[0])
+    first_id = declared_inputs[0].id
     base_df = inputs[first_id]
 
     # Subset the FIRST input to the chosen positional indices. Clamp to range,
