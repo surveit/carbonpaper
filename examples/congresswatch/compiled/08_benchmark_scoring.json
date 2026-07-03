@@ -1,0 +1,146 @@
+{
+  "id": "benchmark_scoring",
+  "type": "llm_transform",
+  "name": "Score each (evidence, benchmark) on the stance axis",
+  "source": {
+    "doc": "examples/congresswatch/methodology_raw.md",
+    "section": "§5",
+    "lines": [
+      80,
+      99
+    ]
+  },
+  "inputs": [
+    {
+      "id": "evidence_with_benchmarks",
+      "schema": {
+        "columns": [
+          {
+            "name": "evidence_id",
+            "type": "str",
+            "nullable": false
+          },
+          {
+            "name": "benchmark_id",
+            "type": "str",
+            "nullable": false
+          },
+          {
+            "name": "entity_id",
+            "type": "str",
+            "nullable": false
+          },
+          {
+            "name": "query_id",
+            "type": "str",
+            "nullable": false
+          },
+          {
+            "name": "quote",
+            "type": "str",
+            "nullable": false
+          },
+          {
+            "name": "stance_summary",
+            "type": "str",
+            "nullable": false
+          },
+          {
+            "name": "confidence",
+            "type": "float",
+            "nullable": false
+          },
+          {
+            "name": "benchmark_text",
+            "type": "str",
+            "nullable": false
+          },
+          {
+            "name": "published_at",
+            "type": "date",
+            "nullable": false
+          }
+        ],
+        "primary_key": [
+          "evidence_id",
+          "benchmark_id"
+        ]
+      }
+    }
+  ],
+  "output_schema": {
+    "columns": [
+      {
+        "name": "evidence_id",
+        "type": "str",
+        "nullable": false
+      },
+      {
+        "name": "benchmark_id",
+        "type": "str",
+        "nullable": false
+      },
+      {
+        "name": "entity_id",
+        "type": "str",
+        "nullable": false
+      },
+      {
+        "name": "query_id",
+        "type": "str",
+        "nullable": false
+      },
+      {
+        "name": "quote",
+        "type": "str",
+        "nullable": false
+      },
+      {
+        "name": "score",
+        "type": "int",
+        "nullable": false,
+        "range": [
+          -2,
+          2
+        ]
+      },
+      {
+        "name": "reasoning",
+        "type": "str",
+        "nullable": false
+      },
+      {
+        "name": "precedence_failure",
+        "type": "bool",
+        "nullable": false
+      },
+      {
+        "name": "published_at",
+        "type": "date",
+        "nullable": false
+      }
+    ],
+    "estimated_rows": 1500,
+    "primary_key": [
+      "evidence_id",
+      "benchmark_id"
+    ]
+  },
+  "llm": {
+    "prompt_template": "You are assigning a stance score on a -2 to +2 axis.\n\nThe benchmark describes the LEFT pole (+2) and RIGHT pole (-2) of the\nspectrum. The score reflects alignment with the LEFT pole. It is NOT a\njudgment of policy correctness.\n\nBenchmark: {benchmark_text}\n\nEvidence:\n> {quote}\n\nInitial AI stance label (for context): {stance_summary}\n\nReturn a JSON object:\n  {{\"score\": -2|-1|0|1|2,\n    \"reasoning\": \"one sentence\",\n    \"precedence_failure\": false}}\n\nSet precedence_failure=true ONLY if the evidence quote does not actually\nrelate to the benchmark — e.g., the query_id was mis-tagged upstream.\n",
+    "model": "claude-sonnet-4-6",
+    "temperature": 0.0,
+    "max_retries": 3,
+    "response_format": "json",
+    "rubric": {
+      "+2": "Strongly endorses the LEFT pole (active reform / pro-extension / pro-regulation direction).",
+      "+1": "Weakly supports the LEFT pole.",
+      "0": "Mixed, hedged, or unclear.",
+      "-1": "Weakly opposes (leans toward the RIGHT pole).",
+      "-2": "Strongly endorses the RIGHT pole."
+    }
+  },
+  "compiler_notes": [
+    "Mock LLM scores via regex on stance keywords. Real LLM call needed for production. The mock will not capture nuance like 'I support X but only if Y' which most domestic policy speech contains."
+  ]
+}

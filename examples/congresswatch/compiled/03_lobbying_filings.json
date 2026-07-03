@@ -1,0 +1,94 @@
+{
+  "id": "lobbying_filings",
+  "type": "input_data",
+  "name": "Lobbying disclosures (slice window, filtered by issue code)",
+  "source": {
+    "doc": "examples/congresswatch/methodology_raw.md",
+    "section": "§8",
+    "lines": [
+      82,
+      95
+    ]
+  },
+  "inputs": [],
+  "output_schema": {
+    "columns": [
+      {
+        "name": "filing_id",
+        "type": "str",
+        "nullable": false
+      },
+      {
+        "name": "filer_org",
+        "type": "str",
+        "nullable": false
+      },
+      {
+        "name": "client_name",
+        "type": "str",
+        "nullable": false
+      },
+      {
+        "name": "issue_codes",
+        "type": "str",
+        "nullable": false,
+        "description": "Semicolon-separated 3-letter LDA codes."
+      },
+      {
+        "name": "issues_text",
+        "type": "str",
+        "nullable": true,
+        "description": "Concatenated <specific_issues> descriptions."
+      },
+      {
+        "name": "income",
+        "type": "str",
+        "nullable": true,
+        "description": "Free-form income string; varies (number, range, blank)."
+      },
+      {
+        "name": "expenses",
+        "type": "str",
+        "nullable": true
+      },
+      {
+        "name": "report_year",
+        "type": "str",
+        "nullable": true
+      },
+      {
+        "name": "report_type",
+        "type": "str",
+        "nullable": true,
+        "description": "Q1, Q2, Q3, Q4, 1T, RR, etc."
+      },
+      {
+        "name": "lobbyists",
+        "type": "str",
+        "nullable": true,
+        "description": "Pipe-separated lobbyist names."
+      },
+      {
+        "name": "source_path",
+        "type": "str",
+        "nullable": true
+      }
+    ],
+    "estimated_rows": 5000,
+    "primary_key": [
+      "filing_id"
+    ]
+  },
+  "connector": {
+    "kind": "file",
+    "params": {
+      "path": "examples/congresswatch/data/lobbying_filings.csv",
+      "format": "csv"
+    },
+    "refresh": "per_slice",
+    "notes": "Built by build_slice.py from ~/Downloads/data/data/house/<year>_<quarter>_XML/.\nFiltered to filings whose <issueAreaCode> intersects the issue-code map\nfrom policy_queries.csv.\n"
+  },
+  "compiler_notes": [
+    "income/expenses are kept as strings because the underlying LDA XML allows ranges and 'less than $5,000' phrases. Numeric coercion happens in lobbying_by_query."
+  ]
+}

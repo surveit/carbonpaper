@@ -1,0 +1,179 @@
+{
+  "id": "evidence_with_benchmarks",
+  "type": "join",
+  "name": "Join evidence to applicable benchmarks",
+  "source": {
+    "doc": "examples/congresswatch/methodology_raw.md",
+    "section": "§5",
+    "lines": [
+      80,
+      99
+    ]
+  },
+  "inputs": [
+    {
+      "id": "evidence_extraction",
+      "schema": {
+        "columns": [
+          {
+            "name": "evidence_id",
+            "type": "str",
+            "nullable": false
+          },
+          {
+            "name": "doc_id",
+            "type": "str",
+            "nullable": false
+          },
+          {
+            "name": "entity_id",
+            "type": "str",
+            "nullable": false
+          },
+          {
+            "name": "query_id",
+            "type": "str",
+            "nullable": false
+          },
+          {
+            "name": "quote",
+            "type": "str",
+            "nullable": false
+          },
+          {
+            "name": "stance_summary",
+            "type": "str",
+            "nullable": false
+          },
+          {
+            "name": "confidence",
+            "type": "float",
+            "nullable": false
+          },
+          {
+            "name": "rationale",
+            "type": "str",
+            "nullable": true
+          },
+          {
+            "name": "published_at",
+            "type": "date",
+            "nullable": false
+          }
+        ],
+        "primary_key": [
+          "evidence_id"
+        ]
+      }
+    },
+    {
+      "id": "benchmark_library",
+      "schema": {
+        "columns": [
+          {
+            "name": "benchmark_id",
+            "type": "str",
+            "nullable": false
+          },
+          {
+            "name": "query_id",
+            "type": "str",
+            "nullable": false
+          },
+          {
+            "name": "kind",
+            "type": "str",
+            "nullable": false
+          },
+          {
+            "name": "scale_low",
+            "type": "int",
+            "nullable": false
+          },
+          {
+            "name": "scale_high",
+            "type": "int",
+            "nullable": false
+          },
+          {
+            "name": "benchmark_text",
+            "type": "str",
+            "nullable": false
+          },
+          {
+            "name": "source_citation",
+            "type": "str",
+            "nullable": true
+          }
+        ],
+        "primary_key": [
+          "benchmark_id"
+        ]
+      }
+    }
+  ],
+  "output_schema": {
+    "columns": [
+      {
+        "name": "evidence_id",
+        "type": "str",
+        "nullable": false
+      },
+      {
+        "name": "benchmark_id",
+        "type": "str",
+        "nullable": false
+      },
+      {
+        "name": "entity_id",
+        "type": "str",
+        "nullable": false
+      },
+      {
+        "name": "query_id",
+        "type": "str",
+        "nullable": false
+      },
+      {
+        "name": "quote",
+        "type": "str",
+        "nullable": false
+      },
+      {
+        "name": "stance_summary",
+        "type": "str",
+        "nullable": false
+      },
+      {
+        "name": "confidence",
+        "type": "float",
+        "nullable": false
+      },
+      {
+        "name": "benchmark_text",
+        "type": "str",
+        "nullable": false
+      },
+      {
+        "name": "published_at",
+        "type": "date",
+        "nullable": false
+      }
+    ],
+    "estimated_rows": 1500,
+    "primary_key": [
+      "evidence_id",
+      "benchmark_id"
+    ]
+  },
+  "join": {
+    "type": "inner",
+    "keys": [
+      {
+        "left": "query_id",
+        "right": "query_id"
+      }
+    ]
+  },
+  "compiler_notes": []
+}

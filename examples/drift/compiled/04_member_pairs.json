@@ -1,0 +1,204 @@
+{
+  "id": "member_pairs",
+  "type": "python_frame_function",
+  "name": "Per-member pairing of two windows",
+  "source": {
+    "doc": "examples/drift/methodology_raw.md",
+    "section": "§3",
+    "lines": [
+      26,
+      35
+    ]
+  },
+  "inputs": [
+    {
+      "id": "members_universe",
+      "schema": {
+        "columns": [
+          {
+            "name": "entity_id",
+            "type": "str",
+            "nullable": false
+          },
+          {
+            "name": "name",
+            "type": "str",
+            "nullable": false
+          },
+          {
+            "name": "party",
+            "type": "str",
+            "nullable": false
+          },
+          {
+            "name": "state",
+            "type": "str",
+            "nullable": false
+          },
+          {
+            "name": "chamber",
+            "type": "str",
+            "nullable": false
+          }
+        ],
+        "primary_key": [
+          "entity_id"
+        ]
+      }
+    },
+    {
+      "id": "press_window_early",
+      "schema": {
+        "columns": [
+          {
+            "name": "doc_id",
+            "type": "str",
+            "nullable": false
+          },
+          {
+            "name": "entity_id",
+            "type": "str",
+            "nullable": false
+          },
+          {
+            "name": "title",
+            "type": "str",
+            "nullable": true
+          },
+          {
+            "name": "body",
+            "type": "str",
+            "nullable": false
+          },
+          {
+            "name": "published_at",
+            "type": "date",
+            "nullable": false
+          },
+          {
+            "name": "url",
+            "type": "str",
+            "nullable": true
+          }
+        ],
+        "primary_key": [
+          "doc_id"
+        ]
+      }
+    },
+    {
+      "id": "press_window_recent",
+      "schema": {
+        "columns": [
+          {
+            "name": "doc_id",
+            "type": "str",
+            "nullable": false
+          },
+          {
+            "name": "entity_id",
+            "type": "str",
+            "nullable": false
+          },
+          {
+            "name": "title",
+            "type": "str",
+            "nullable": true
+          },
+          {
+            "name": "body",
+            "type": "str",
+            "nullable": false
+          },
+          {
+            "name": "published_at",
+            "type": "date",
+            "nullable": false
+          },
+          {
+            "name": "url",
+            "type": "str",
+            "nullable": true
+          }
+        ],
+        "primary_key": [
+          "doc_id"
+        ]
+      }
+    }
+  ],
+  "output_schema": {
+    "columns": [
+      {
+        "name": "entity_id",
+        "type": "str",
+        "nullable": false
+      },
+      {
+        "name": "name",
+        "type": "str",
+        "nullable": false
+      },
+      {
+        "name": "party",
+        "type": "str",
+        "nullable": false
+      },
+      {
+        "name": "state",
+        "type": "str",
+        "nullable": false
+      },
+      {
+        "name": "chamber",
+        "type": "str",
+        "nullable": false
+      },
+      {
+        "name": "early_block",
+        "type": "str",
+        "nullable": false,
+        "description": "Concatenated titles + truncated bodies for early window."
+      },
+      {
+        "name": "recent_block",
+        "type": "str",
+        "nullable": false
+      },
+      {
+        "name": "early_count",
+        "type": "int",
+        "nullable": false
+      },
+      {
+        "name": "recent_count",
+        "type": "int",
+        "nullable": false
+      },
+      {
+        "name": "early_url_map",
+        "type": "json",
+        "nullable": false,
+        "description": "Mapping of doc_id → url, used to cite quotes."
+      },
+      {
+        "name": "recent_url_map",
+        "type": "json",
+        "nullable": false
+      }
+    ],
+    "estimated_rows": 200,
+    "primary_key": [
+      "entity_id"
+    ]
+  },
+  "function": {
+    "kind": "module",
+    "module": "examples.drift.code.member_pairs",
+    "function": "transform",
+    "requirements": [
+      "pandas"
+    ]
+  },
+  "compiler_notes": []
+}

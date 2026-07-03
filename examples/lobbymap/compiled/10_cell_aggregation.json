@@ -1,0 +1,155 @@
+{
+  "id": "cell_aggregation",
+  "type": "python_frame_function",
+  "name": "Aggregate scored evidence into (entity × source × query) cells",
+  "source": {
+    "doc": "examples/lobbymap/stages/06_cell_aggregation.md",
+    "section": "§4.6 – §4.8",
+    "lines": [
+      338,
+      365
+    ]
+  },
+  "inputs": [
+    {
+      "id": "extreme_score_review",
+      "schema": {
+        "columns": [
+          {
+            "name": "evidence_id",
+            "type": "str",
+            "nullable": false
+          },
+          {
+            "name": "benchmark_id",
+            "type": "str",
+            "nullable": false
+          },
+          {
+            "name": "entity_id",
+            "type": "str",
+            "nullable": false
+          },
+          {
+            "name": "query_id",
+            "type": "str",
+            "nullable": false
+          },
+          {
+            "name": "final_score",
+            "type": "int",
+            "nullable": true,
+            "range": [
+              -2,
+              2
+            ]
+          }
+        ],
+        "primary_key": [
+          "evidence_id",
+          "benchmark_id"
+        ]
+      }
+    },
+    {
+      "id": "importance_tagging",
+      "schema": {
+        "columns": [
+          {
+            "name": "evidence_id",
+            "type": "str",
+            "nullable": false
+          },
+          {
+            "name": "source_class",
+            "type": "str",
+            "nullable": false
+          },
+          {
+            "name": "composite_weight",
+            "type": "float",
+            "nullable": false,
+            "range": [
+              0.0,
+              10.0
+            ]
+          },
+          {
+            "name": "published_at",
+            "type": "datetime",
+            "nullable": false
+          }
+        ],
+        "primary_key": [
+          "evidence_id"
+        ]
+      }
+    }
+  ],
+  "output_schema": {
+    "columns": [
+      {
+        "name": "entity_id",
+        "type": "str",
+        "nullable": false
+      },
+      {
+        "name": "source_class",
+        "type": "str",
+        "nullable": false
+      },
+      {
+        "name": "query_id",
+        "type": "str",
+        "nullable": false
+      },
+      {
+        "name": "cell_score",
+        "type": "float",
+        "nullable": true,
+        "range": [
+          -2.0,
+          2.0
+        ]
+      },
+      {
+        "name": "cell_intensity",
+        "type": "float",
+        "nullable": false,
+        "range": [
+          0.0,
+          100.0
+        ]
+      },
+      {
+        "name": "evidence_count",
+        "type": "int",
+        "nullable": false
+      },
+      {
+        "name": "latest_evidence_at",
+        "type": "datetime",
+        "nullable": false
+      }
+    ],
+    "estimated_rows": 70000,
+    "primary_key": [
+      "entity_id",
+      "source_class",
+      "query_id"
+    ]
+  },
+  "function": {
+    "kind": "module",
+    "module": "examples.lobbymap.code.cell_aggregation",
+    "function": "transform",
+    "requirements": [
+      "pandas"
+    ]
+  },
+  "compiler_notes": [
+    "Originally compiled as type=aggregate. Promoted to python_frame_function because the cell aggregation needs to JOIN reviewed scores with importance weights on evidence_id before grouping — a single aggregate node can't express that. The aggregation itself (weighted_mean, weighted_sum, count) is standard once the join is in hand.",
+    "Methodology line 354 names a 'weighted cell score' but does not give the closed form. Reconstructed as weighted mean over (importance × recency).",
+    "5-year hard cutoff (line 358) is enforced upstream by setting recency_weight=0 in importance_tagging for items older than 5 years."
+  ]
+}
