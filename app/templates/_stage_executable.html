@@ -8,7 +8,7 @@
 
 {% if stage.connector %}
 <section class="exec-block">
-    <h2>▶ Connector</h2>
+    <h2>⬆️ Connector</h2>
     <dl class="kv">
         <dt>kind</dt><dd><code>{{ stage.connector.kind }}</code></dd>
         <dt>refresh</dt><dd>{{ stage.connector.refresh }}</dd>
@@ -26,7 +26,7 @@
 
 {% if stage.llm %}
 <section class="exec-block">
-    <h2>✦ LLM call</h2>
+    <h2>✨ LLM call</h2>
     <dl class="kv">
         <dt>model</dt><dd><code>{{ stage.llm.model }}</code></dd>
         <dt>temperature</dt><dd>{{ stage.llm.temperature }}</dd>
@@ -64,7 +64,7 @@
 
 {% if stage.function %}
 <section class="exec-block">
-    <h2>λ Python function</h2>
+    <h2>🐍 Python function</h2>
     <dl class="kv">
         <dt>kind</dt><dd>{{ stage.function.kind }}</dd>
         {% if stage.function.module %}<dt>module</dt><dd><code>{{ stage.function.module }}</code></dd>{% endif %}
@@ -82,7 +82,7 @@
 
 {% if stage.join %}
 <section class="exec-block">
-    <h2>⋈ Join</h2>
+    <h2>🔗 Join</h2>
     <dl class="kv">
         <dt>type</dt><dd><code>{{ stage.join.type }}</code></dd>
     </dl>
@@ -104,7 +104,7 @@
 
 {% if stage.aggregate %}
 <section class="exec-block">
-    <h2>Σ Aggregate</h2>
+    <h2>📊 Aggregate</h2>
     <h3>group by</h3>
     <p>{% for g in stage.aggregate.group_by %}<code>{{ g }}</code>{% if not loop.last %}, {% endif %}{% endfor %}</p>
     <h3>aggregations</h3>
