@@ -16,7 +16,6 @@ from app.web.loading import (
     decisions_path,
     display_cell,
     find_stage,
-    get_input_ids,
     load_decisions_df,
     load_manifest,
     load_stages,
@@ -34,9 +33,9 @@ async def queue_page(request: Request, methodology: str, run_id: str, stage_id: 
     run_dir = runs_dir(methodology) / run_id
     manifest = load_manifest(run_dir)
 
-    stages = load_stages(methodology)
+    stages = load_stages(methodology).stages
     stage_def = find_stage(stages, stage_id)
-    if stage_def is None or stage_def.get("type") != "human_review_queue":
+    if stage_def is None or stage_def.type != "human_review_queue":
         raise HTTPException(status_code=404, detail=f"No queue stage '{stage_id}'")
 
     snapshot = queue_snapshot(methodology, run_id, stage_id)
@@ -56,16 +55,16 @@ async def queue_page(request: Request, methodology: str, run_id: str, stage_id: 
     # the thing the model actually judged (the quote, the benchmark) lives in the
     # scoring stage's INPUT, one stage upstream. Join it back + render the prompt.
     output_by_id = {s.get("stage_id"): s.get("output_path") for s in manifest.get("stages", [])}
-    scored_ids = get_input_ids(stage_def)
+    scored_ids = stage_def.input_ids
     scored_def = find_stage(stages, scored_ids[0]) if scored_ids else None
-    prompt_template = (scored_def.get("llm") or {}).get("prompt_template") if scored_def else None
+    prompt_template = scored_def.llm.prompt_template if scored_def and scored_def.llm else None
 
     input_lookup: dict[tuple, dict[str, Any]] = {}
     join_keys: list[str] = []
-    if scored_def and get_input_ids(scored_def):
-        scored_in_id = get_input_ids(scored_def)[0]
-        scored_in_decls = scored_def.get("inputs") or []
-        pk = ((scored_in_decls[0].get("schema") or {}).get("primary_key")) if scored_in_decls else None
+    if scored_def and scored_def.input_ids:
+        scored_in_id = scored_def.input_ids[0]
+        scored_in = scored_def.inputs[0] if scored_def.inputs else None
+        pk = scored_in.table_schema.primary_key if scored_in and scored_in.table_schema else None
         in_path = output_by_id.get(scored_in_id)
         in_df = None
         if in_path:

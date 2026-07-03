@@ -41,6 +41,19 @@
 </div>
 <p class="lede">{{ stages|length }} compiled stage{% if stages|length != 1 %}s{% endif %}. Click any node in the DAG (or any row in the table) to <strong>review</strong> that step — approve, reject, or edit its spec — in the right panel. Node colour = <em>belief</em> (do we trust how it's modeled). Click <strong>Run pipeline</strong> to execute end-to-end.</p>
 
+{% if load_issues %}
+<div class="load-issues">
+  <strong>{{ load_issues|length }} compiled file(s) failed validation and are not shown:</strong>
+  <ul>
+  {% for entry in load_issues %}
+    <li><code>{{ entry.filename }}</code>
+      <ul>{% for issue in entry.issues %}<li>{{ issue }}</li>{% endfor %}</ul>
+    </li>
+  {% endfor %}
+  </ul>
+</div>
+{% endif %}
+
 <div class="split-view">
     <div class="left-pane">
         <div class="legend">
@@ -76,7 +89,7 @@
             <tbody>
                 {% for s in stages %}
                 <tr>
-                    <td>{{ s._order }}</td>
+                    <td>{{ order[s.id] }}</td>
                     <td><a href="#" data-stage-link="{{ s.id }}"><code>{{ s.id }}</code></a></td>
                     <td><span class="type-tag {{ type_class.get(s.type, 'custom') }}">{{ type_glyph.get(s.type, '') }}</span></td>
                     <td>

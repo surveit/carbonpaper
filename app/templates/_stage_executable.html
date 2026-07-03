@@ -90,7 +90,7 @@
     <table class="join-keys">
         <thead><tr><th>left</th><th>right</th></tr></thead>
         <tbody>
-            {% for k in (stage.join['keys'] or stage.join['on'] or []) %}
+            {% for k in (stage.join.keys or stage.join.on or []) %}
             <tr><td><code>{{ k.left }}</code></td><td><code>{{ k.right }}</code></td></tr>
             {% endfor %}
         </tbody>
@@ -145,7 +145,7 @@
 <section class="exec-block">
     <h2>📤 Publish</h2>
     <dl class="kv">
-        {% for k, v in stage.publish.items() %}
+        {% for k, v in stage.publish.model_dump(exclude_none=True).items() %}
         <dt>{{ k }}</dt>
         <dd>
             {% if v is mapping or (v is sequence and v is not string) %}

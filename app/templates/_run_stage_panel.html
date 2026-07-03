@@ -57,7 +57,7 @@
       {% for inp in stage_def.inputs %}
       <div class="schema-card">
         <h4><a href="/methodology/{{ methodology }}/runs/{{ run_id }}#{{ inp.id }}"><code>{{ inp.id }}</code></a> schema</h4>
-        {{ schema_table(inp.schema) }}
+        {{ schema_table(inp.table_schema) }}
       </div>
       {% endfor %}
     {% else %}<p class="muted"><em>No declared inputs.</em></p>{% endif %}

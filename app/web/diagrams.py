@@ -4,9 +4,7 @@ with the templates. No I/O — stages in, diagram source out."""
 
 from __future__ import annotations
 
-from typing import Any
-
-from app.web.loading import get_input_ids
+from app.models import Stage
 
 
 # Stage-type → CSS class for DAG node + badges.
@@ -44,7 +42,7 @@ def _safe_mermaid_type(t: str) -> str:
     ) or "any"
 
 
-def build_er_diagram(stages: list[dict[str, Any]]) -> str:
+def build_er_diagram(stages: list[Stage]) -> str:
     """Mermaid erDiagram showing each stage's output_schema as an entity, with
     PK markers, FK markers (inferred from upstream PKs), and edges from upstream
     to downstream stages."""
@@ -53,29 +51,29 @@ def build_er_diagram(stages: list[dict[str, Any]]) -> str:
     # Index PK columns per stage so we can flag FKs.
     pk_owner: dict[str, str] = {}
     for s in stages:
-        schema = s.get("output_schema") or {}
-        for col in schema.get("primary_key") or []:
-            pk_owner.setdefault(col, s["id"])
+        schema = s.output_schema
+        for pk_col in (schema.primary_key if schema else None) or []:
+            pk_owner.setdefault(pk_col, s.id)
 
     # Entity definitions
     for s in stages:
-        schema = s.get("output_schema") or {}
-        cols = schema.get("columns") or []
+        schema = s.output_schema
+        cols = (schema.columns if schema else None) or []
         if not cols:
             continue
-        pk_set = set(schema.get("primary_key") or [])
-        lines.append(f"    {s['id']} {{")
+        pk_set = set((schema.primary_key if schema else None) or [])
+        lines.append(f"    {s.id} {{")
         for col in cols:
-            name = col.get("name", "")
+            name = col.name
             if not name:
                 continue
-            t = _safe_mermaid_type(col.get("type", "str"))
+            t = _safe_mermaid_type(col.type)
             marker = ""
             if name in pk_set:
                 marker = "PK"
-            elif name in pk_owner and pk_owner[name] != s["id"]:
+            elif name in pk_owner and pk_owner[name] != s.id:
                 marker = "FK"
-            label = col.get("description") or ""
+            label = col.description or ""
             comment = ""
             if label:
                 # mermaid erDiagram comment must be in quotes; cap length
@@ -90,11 +88,8 @@ def build_er_diagram(stages: list[dict[str, Any]]) -> str:
 
     # Relationship edges — one line per (upstream → downstream)
     for s in stages:
-        for inp in s.get("inputs") or []:
-            iid = inp.get("id") if isinstance(inp, dict) else inp
-            if not iid:
-                continue
-            lines.append(f"    {iid} ||--o{{ {s['id']} : feeds")
+        for iid in s.input_ids:
+            lines.append(f"    {iid} ||--o{{ {s.id} : feeds")
 
     return "\n".join(lines)
 
@@ -111,7 +106,7 @@ REVIEW_STROKE = {
 
 
 def build_mermaid_graph(
-    stages: list[dict[str, Any]],
+    stages: list[Stage],
     methodology: str,
     status_by_id: dict[str, str] | None = None,
     review_by_id: dict[str, str] | None = None,
@@ -145,14 +140,14 @@ def build_mermaid_graph(
     }
     lines = ["flowchart LR"]
     for s in stages:
-        sid = s.get("id", s["_filename"])
-        name = s.get("name", sid)
-        stype = s.get("type", "?")
+        sid = s.id
+        name = s.name
+        stype = s.type
         glyph = TYPE_GLYPH.get(stype, "")
         klass = TYPE_CLASS.get(stype, "custom")
-        notes_indicator = "⚠ " if s.get("compiler_notes") else ""
-        eval_indicator = "📊" if s.get("eval") else ""
-        review_indicator = "👤" if s.get("review") else ""
+        notes_indicator = "⚠ " if s.compiler_notes else ""
+        eval_indicator = "📊" if s.eval else ""
+        review_indicator = "👤" if s.review else ""
         small_line = f"{stype}".replace("_", " ")
         flags = " ".join(filter(None, [eval_indicator, review_indicator]))
         status = (status_by_id or {}).get(sid)
@@ -181,8 +176,8 @@ def build_mermaid_graph(
             stroke, width = stroke_spec
             lines.append(f"    style {sid} stroke:{stroke},stroke-width:{width}")
     for s in stages:
-        sid = s.get("id", s["_filename"])
-        for upstream in get_input_ids(s):
+        sid = s.id
+        for upstream in s.input_ids:
             lines.append(f"    {upstream} --> {sid}")
     lines += [
         "    classDef input fill:#e8f4f8,stroke:#3a8ca8,color:#000",

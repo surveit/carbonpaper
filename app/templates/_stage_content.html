@@ -34,7 +34,7 @@
     {% for inp in stage.inputs %}
     <div class="input-block">
         <h3><a href="#" data-stage-link="{{ inp.id }}"><code>{{ inp.id }}</code></a></h3>
-        {{ schema_table(inp.schema) }}
+        {{ schema_table(inp.table_schema) }}
     </div>
     {% endfor %}
 </section>
