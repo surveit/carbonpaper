@@ -76,9 +76,9 @@ def test_publish_config_is_typed():
     assert s.publish.format is m.PublishFormat.json
 
 
-def test_python_transform_inline_needs_code():
+def test_python_function_inline_needs_code():
     with pytest.raises(ValidationError):
-        m.Stage.model_validate(S(id="t", type="python_transform", inputs=[{"id": "a"}],
+        m.Stage.model_validate(S(id="t", type="python_frame_function", inputs=[{"id": "a"}],
                                  function={"kind": "inline"}))
 
 

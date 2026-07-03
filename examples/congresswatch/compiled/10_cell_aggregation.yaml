@@ -1,6 +1,6 @@
 id: cell_aggregation
 name: Per (member, query) cell score with recency weighting
-type: python_transform
+type: python_frame_function
 
 source:
   doc: examples/congresswatch/methodology_raw.md

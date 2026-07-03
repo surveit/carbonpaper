@@ -35,7 +35,6 @@ from app.models.stage import (
     ReviewConfig,
     Stage,
     StageType,
-    TransformGranularity,
     validate_stage,
 )
 from app.models.methodology import (
@@ -74,7 +73,7 @@ __all__ = [
     "SourceRef", "Column", "TableSchema", "Connector", "LLMConfig",
     "PythonFunction", "JoinKey", "JoinConfig", "AggregationOp",
     "AggregateConfig", "QueueConfig", "PublishConfig", "ReviewConfig",
-    "TransformGranularity", "Stage", "validate_stage",
+    "Stage", "validate_stage",
     "Methodology", "parse_methodology", "validate_methodology",
     "check_unique_ids", "check_inputs_resolve", "detect_cycle",
     "SchemaKind", "NamedColumn", "NamedSchema", "SchemaLibrary",

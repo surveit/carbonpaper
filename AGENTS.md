@@ -21,16 +21,17 @@ Three independent features operate on that artifact:
 | **Eval** *(planned)* | — | Checks a methodology reproduces ground truth (`examples/*/eval/`). |
 
 **The contract — `app/models/`.** Pydantic models are the single source of truth
-for the 7 node types (their executable handles, the column-type vocab, connector
+for the 8 node types (their executable handles, the column-type vocab, connector
 kinds, aggregation formulas). Constructing a model validates it;
 `validate_methodology(stages)` returns a non-fatal issue list and `parse_methodology`
 raises. The compiler (planned) will emit *to* these models. (The runtime does not yet
 parse stage dicts through them — wiring that in is the next step; see
 `docs/models-and-storage.md`.)
 
-## The 7 node types
-`input_data` · `llm_transform` · `python_transform` · `join` · `aggregate` ·
-`human_review_queue` · `publish`. Each stage YAML declares typed `inputs`, a typed
+## The 8 node types
+`input_data` · `llm_transform` · `python_row_function` · `python_frame_function` ·
+`join` · `aggregate` · `human_review_queue` · `publish`. Prefer `python_row_function`
+(runtime-enforced 1:1) over `python_frame_function` unless the logic needs the whole frame. Each stage YAML declares typed `inputs`, a typed
 `output_schema`, and one executable-handle block (`connector`/`llm`/`function`/
 `join`/`aggregate`/`queue`/`publish`). See `app/models/` for the contract.
 

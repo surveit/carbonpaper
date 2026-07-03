@@ -13,7 +13,8 @@ from app.web.loading import get_input_ids
 TYPE_CLASS = {
     "input_data": "input",
     "llm_transform": "llm",
-    "python_transform": "python",
+    "python_row_function": "python",
+    "python_frame_function": "python",
     "join": "join",
     "aggregate": "aggregate",
     "human_review_queue": "human",
@@ -21,11 +22,12 @@ TYPE_CLASS = {
 }
 
 TYPE_GLYPH = {
-    "input_data": "▶",
-    "llm_transform": "✦",
-    "python_transform": "λ",
-    "join": "⋈",
-    "aggregate": "Σ",
+    "input_data": "⬆️",
+    "llm_transform": "✨",
+    "python_row_function": "🔂",
+    "python_frame_function": "🧨",
+    "join": "🔗",
+    "aggregate": "📊",
     "human_review_queue": "👤",
     "publish": "📤",
 }

@@ -1,6 +1,6 @@
 id: cell_aggregation
 name: Aggregate scored evidence into (entity × source × query) cells
-type: python_transform
+type: python_frame_function
 
 source:
   doc: examples/lobbymap/stages/06_cell_aggregation.md
@@ -44,7 +44,7 @@ output_schema:
     - {name: latest_evidence_at, type: datetime, nullable: false}
 
 compiler_notes:
-  - "Originally compiled as type=aggregate. Promoted to python_transform because
+  - "Originally compiled as type=aggregate. Promoted to python_frame_function because
      the cell aggregation needs to JOIN reviewed scores with importance weights
      on evidence_id before grouping — a single aggregate node can't express
      that. The aggregation itself (weighted_mean, weighted_sum, count) is

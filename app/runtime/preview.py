@@ -14,8 +14,9 @@ stage types whose handlers have disk side-effects:
   - human_review_queue  → writes a queue snapshot + raises HaltForReview
   - publish             → writes artifacts to run_dir/artifacts
 
-Allowed types are the pure transforms: python_transform, llm_transform, join,
-aggregate. (input_data is also refused — it has no upstream rows to subset.)
+Allowed types are the pure transforms: python_row_function,
+python_frame_function, llm_transform, join, aggregate. (input_data is also
+refused — it has no upstream rows to subset.)
 
 This module imports and reuses the existing handlers; it does not change their
 behavior.
@@ -35,7 +36,8 @@ from .runner import get_input_id
 # Stage types whose handlers are pure (no disk writes) and therefore safe to
 # run as an ephemeral scratch preview.
 PREVIEWABLE_TYPES: set[str] = {
-    "python_transform",
+    "python_row_function",
+    "python_frame_function",
     "llm_transform",
     "join",
     "aggregate",

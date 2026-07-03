@@ -22,7 +22,7 @@ lobbying filings) and *only* extract per-entity evidence from the first.
 
 The prototype has no first-class concept of "document with no per-entity
 stance, but useful for context." I worked around it by making
-`lobbying_by_query` a separate `python_transform` that aggregates filings
+`lobbying_by_query` a separate `python_frame_function` that aggregates filings
 by query but never reaches per-member granularity. **The pipeline tree
 no longer fans into a single per-entity score; it has two parallel
 streams that meet at publish.**
@@ -109,7 +109,7 @@ making the badge meaningless.
 
 For each upstream stage, the downstream YAML re-declares the input's
 schema. Then the upstream YAML declares its output_schema. Then the
-python_transform sees the actual dataframe with potentially-different
+python_frame_function sees the actual dataframe with potentially-different
 dtypes after parquet round-trip. **Three places to keep in sync.** When
 I added `most_recent_evidence` to cell_aggregation's output, I had to
 update its declaration AND the publish stage's input declaration AND
