@@ -1,11 +1,10 @@
 """Methodology browsing: the DAG view, per-stage detail (full page + partial),
-the ER data-model view, and raw stage YAML."""
+the ER data-model view, and raw stage JSON."""
 
 from __future__ import annotations
 
-import yaml
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import HTMLResponse, PlainTextResponse
+from fastapi.responses import HTMLResponse, Response
 
 from app.services import node_review, versioning
 from app.web.config import EXAMPLES_DIR, templates
@@ -82,10 +81,7 @@ async def stage_view(request: Request, methodology: str, stage_id: str):
             "function_code": function_code,
             "type_class": TYPE_CLASS,
             "type_glyph": TYPE_GLYPH,
-            "raw_yaml": yaml.safe_dump(
-                stage.model_dump(by_alias=True, exclude_none=True),
-                sort_keys=False, allow_unicode=True,
-            ),
+            "raw_json": stage.model_dump_json(indent=2, by_alias=True, exclude_none=True),
         },
     )
 
@@ -126,21 +122,18 @@ async def stage_view_partial(request: Request, methodology: str, stage_id: str):
             "function_code": function_code,
             "type_class": TYPE_CLASS,
             "type_glyph": TYPE_GLYPH,
-            "raw_yaml": yaml.safe_dump(
-                stage.model_dump(by_alias=True, exclude_none=True),
-                sort_keys=False, allow_unicode=True,
-            ),
+            "raw_json": stage.model_dump_json(indent=2, by_alias=True, exclude_none=True),
         },
     )
 
 
-@router.get("/methodology/{methodology}/raw/{stage_id}", response_class=PlainTextResponse)
-async def stage_raw_yaml(methodology: str, stage_id: str):
-    stages = load_stages(methodology).stages
-    stage = find_stage(stages, stage_id)
+@router.get("/methodology/{methodology}/raw/{stage_id}")
+async def stage_raw(methodology: str, stage_id: str) -> Response:
+    listing = load_stages(methodology)
+    stage = find_stage(listing.stages, stage_id)
     if stage is None:
         raise HTTPException(status_code=404, detail=f"No stage '{stage_id}' in {methodology}")
-    return yaml.safe_dump(
-        stage.model_dump(by_alias=True, exclude_none=True),
-        sort_keys=False, allow_unicode=True,
+    return Response(
+        content=stage.model_dump_json(indent=2, by_alias=True, exclude_none=True),
+        media_type="application/json",
     )
