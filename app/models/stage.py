@@ -92,8 +92,13 @@ class Connector(_Base):
     notes: Optional[str] = None
 
     @model_validator(mode="after")
-    def _file_format(self) -> "Connector":
-        if self.kind is ConnectorKind.file:
+    def _params_for_kind(self) -> "Connector":
+        if self.kind == ConnectorKind.file:
+            path = (self.params or {}).get("path")
+            if not path or not isinstance(path, str):
+                raise ValueError(
+                    "connector kind=file requires params.path (repo-root-relative data file)"
+                )
             fmt = (self.params or {}).get("format")
             if fmt is not None and fmt not in {f.value for f in FileFormat}:
                 raise ValueError(f"unknown file format {fmt!r}")
@@ -123,9 +128,9 @@ class PythonFunction(_Base):
 
     @model_validator(mode="after")
     def _kind_fields(self) -> "PythonFunction":
-        if self.kind is FunctionKind.module and not self.module:
+        if self.kind == FunctionKind.module and not self.module:
             raise ValueError("function.kind=module needs `module`")
-        if self.kind is FunctionKind.inline and not self.code:
+        if self.kind == FunctionKind.inline and not self.code:
             raise ValueError("function.kind=inline needs `code`")
         return self
 
@@ -153,8 +158,15 @@ class AggregationOp(_Base):
     output_column: str
     formula: AggFormula
     value_column: Optional[str] = None
-    weight_column: Optional[str] = None
     where: Optional[str] = None
+
+    @model_validator(mode="after")
+    def _value_column_for_formula(self) -> "AggregationOp":
+        if self.formula != AggFormula.count_ and not self.value_column:
+            raise ValueError(
+                f"aggregation `{self.output_column}`: formula `{self.formula}` needs value_column"
+            )
+        return self
 
 
 class AggregateConfig(_Base):
@@ -192,18 +204,30 @@ class ReviewConfig(_Base):
     queue_name: Optional[str] = None
 
 
+class InputRef(_Base):
+    """One upstream dependency: the upstream stage id, plus (optionally) the
+    schema this stage expects that upstream's output to satisfy. The runner
+    validates the real dataframe against `table_schema` before the stage runs.
+    YAML spells the field `schema:`; the python name differs only because
+    pydantic reserves `schema` on BaseModel."""
+    id: str
+    table_schema: Optional[TableSchema] = Field(default=None, alias="schema")
+
+
 # ── Stage ────────────────────────────────────────────────────────────────────
-# type → which handle block it must carry, plus input arity.
-_TYPE_SPEC: dict[StageType, dict[str, Any]] = {
-    StageType.input_data:         {"handle": "connector", "requires_inputs": False, "min_inputs": 0},
-    StageType.llm_transform:        {"handle": "llm",       "requires_inputs": True,  "min_inputs": 1},
-    # A row function maps over ONE input's rows — more than one input is a join.
-    StageType.python_row_function:  {"handle": "function",  "requires_inputs": True,  "min_inputs": 1, "max_inputs": 1},
-    StageType.python_frame_function:{"handle": "function",  "requires_inputs": True,  "min_inputs": 1},
-    StageType.join_:                {"handle": "join",      "requires_inputs": True,  "min_inputs": 2},
-    StageType.aggregate:          {"handle": "aggregate", "requires_inputs": True,  "min_inputs": 1},
-    StageType.human_review_queue: {"handle": "queue",     "requires_inputs": True,  "min_inputs": 1},
-    StageType.publish:            {"handle": "publish",   "also_requires": ["function"], "requires_inputs": True, "min_inputs": 1},
+# type → which handle block it must carry, plus input arity. Keyed by the plain
+# value string, not the enum member: with `use_enum_values`, `self.type` is a
+# str at runtime, and str-enum members hash by *name* (StageType.join_ hashes
+# as "join_", not "join") — a member-keyed dict would silently miss the lookup.
+_TYPE_SPEC: dict[str, dict[str, Any]] = {
+    "input_data":            {"handle": "connector", "requires_inputs": False, "min_inputs": 0},
+    "llm_transform":         {"handle": "llm",       "requires_inputs": True,  "min_inputs": 1},
+    "python_row_function":   {"handle": "function",  "requires_inputs": True,  "min_inputs": 1, "max_inputs": 1},
+    "python_frame_function": {"handle": "function",  "requires_inputs": True,  "min_inputs": 1},
+    "join":                  {"handle": "join",      "requires_inputs": True,  "min_inputs": 2},
+    "aggregate":             {"handle": "aggregate", "requires_inputs": True,  "min_inputs": 1},
+    "human_review_queue":    {"handle": "queue",     "requires_inputs": True,  "min_inputs": 1},
+    "publish":               {"handle": "publish",   "also_requires": ["function"], "requires_inputs": True, "min_inputs": 1},
 }
 
 
@@ -214,7 +238,7 @@ class Stage(_Base):
     type: StageType
     name: str
     source: Optional[SourceRef] = None
-    inputs: list[str] = Field(default_factory=list)
+    inputs: list[InputRef] = Field(default_factory=list)
     output_schema: Optional[TableSchema] = None
 
     # executable handles (exactly one populated, per type)
@@ -230,13 +254,21 @@ class Stage(_Base):
     limit: Optional[int] = None
     compiler_notes: list[str] = Field(default_factory=list)
 
+    # Descriptive eval note rendered on the stage page (reference data, metrics).
+    # Display only — the executable eval contract is EvalConfig (app/models/eval.py).
+    eval: Optional[dict[str, Any]] = None
+
     @field_validator("inputs", mode="before")
     @classmethod
-    def _ids_only(cls, v: Any) -> Any:
-        """Accept inputs as [{id, schema}] or [id]; keep only the upstream id."""
+    def _bare_id_shorthand(cls, v: Any) -> Any:
+        """Accept `inputs: [upstream_id]` shorthand for `[{id: upstream_id}]`."""
         if not isinstance(v, list):
             return v
-        return [item.get("id") if isinstance(item, dict) else item for item in v]
+        return [{"id": item} if isinstance(item, str) else item for item in v]
+
+    @property
+    def input_ids(self) -> list[str]:
+        return [ref.id for ref in self.inputs]
 
     @field_validator("id")
     @classmethod
@@ -250,18 +282,18 @@ class Stage(_Base):
         spec = _TYPE_SPEC[self.type]
         handle = spec["handle"]
         if getattr(self, handle) is None:
-            raise ValueError(f"type `{self.type.value}` requires a `{handle}:` block")
+            raise ValueError(f"type `{self.type}` requires a `{handle}:` block")
         for extra in spec.get("also_requires", ()):
             if getattr(self, extra) is None:
-                raise ValueError(f"type `{self.type.value}` also requires a `{extra}:` block")
+                raise ValueError(f"type `{self.type}` also requires a `{extra}:` block")
         if spec["requires_inputs"] and len(self.inputs) < spec["min_inputs"]:
             raise ValueError(
-                f"type `{self.type.value}` needs >= {spec['min_inputs']} input(s), got {len(self.inputs)}"
+                f"type `{self.type}` needs >= {spec['min_inputs']} input(s), got {len(self.inputs)}"
             )
         max_inputs = spec.get("max_inputs")
         if max_inputs is not None and len(self.inputs) > max_inputs:
             raise ValueError(
-                f"type `{self.type.value}` takes <= {max_inputs} input(s), got {len(self.inputs)} "
+                f"type `{self.type}` takes <= {max_inputs} input(s), got {len(self.inputs)} "
                 f"(more than one input is a join, or use python_frame_function)"
             )
         return self

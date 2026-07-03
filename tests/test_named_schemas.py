@@ -12,7 +12,7 @@ def test_named_schema_valid():
         {"name": "company", "kind": "reference", "title": "Company",
          "columns": [{"name": "company_id", "type": "str"}], "primary_key": ["company_id"]}
     )
-    assert s.kind is m.SchemaKind.reference
+    assert s.kind == m.SchemaKind.reference
 
 
 def test_named_schema_bad_kind():

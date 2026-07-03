@@ -26,8 +26,8 @@ def test_methodology_clean():
 def test_methodology_duplicate_ids():
     with pytest.raises(ValidationError):
         m.parse_methodology([
-            S(id="a", type="input_data", connector={"kind": "file"}),
-            S(id="a", type="input_data", connector={"kind": "file"}),
+            S(id="a", type="input_data", connector={"kind": "file", "params": {"path": "d.csv"}}),
+            S(id="a", type="input_data", connector={"kind": "file", "params": {"path": "d.csv"}}),
         ])
 
 
@@ -61,7 +61,8 @@ def test_detect_cycle_raises_on_cycle():
 
 
 def test_detect_cycle_passes_when_acyclic():
-    a = Stage.model_validate(S(id="a", type="input_data", connector={"kind": "file"}))
+    a = Stage.model_validate(S(id="a", type="input_data",
+                               connector={"kind": "file", "params": {"path": "d.csv"}}))
     b = Stage.model_validate(S(id="b", type="llm_transform", inputs=[{"id": "a"}], llm={"prompt_template": "p"}))
     m.detect_cycle([a, b])  # no raise
 

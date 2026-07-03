@@ -24,6 +24,7 @@ from app.models.stage import (
     ConnectorKind,
     FileFormat,
     FunctionKind,
+    InputRef,
     JoinConfig,
     JoinKey,
     JoinType,
@@ -44,6 +45,7 @@ from app.models.methodology import (
     detect_cycle,
     parse_methodology,
     validate_methodology,
+    validate_methodology_stages,
 )
 from app.models.named_schemas import (
     NamedColumn,
@@ -73,8 +75,9 @@ __all__ = [
     "SourceRef", "Column", "TableSchema", "Connector", "LLMConfig",
     "PythonFunction", "JoinKey", "JoinConfig", "AggregationOp",
     "AggregateConfig", "QueueConfig", "PublishConfig", "ReviewConfig",
-    "Stage", "validate_stage",
+    "InputRef", "Stage", "validate_stage",
     "Methodology", "parse_methodology", "validate_methodology",
+    "validate_methodology_stages",
     "check_unique_ids", "check_inputs_resolve", "detect_cycle",
     "SchemaKind", "NamedColumn", "NamedSchema", "SchemaLibrary",
     "parse_schema_library", "validate_schema_library",

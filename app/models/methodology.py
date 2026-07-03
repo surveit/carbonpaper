@@ -24,13 +24,13 @@ def check_unique_ids(stages: list[Stage]) -> None:
 def check_inputs_resolve(stages: list[Stage]) -> None:
     ids = {s.id for s in stages}
     for s in stages:
-        for upstream in s.inputs:
+        for upstream in s.input_ids:
             if upstream not in ids:
                 raise ValueError(f"`{s.id}`: input `{upstream}` references no stage")
 
 
 def detect_cycle(stages: list[Stage]) -> None:
-    edges = {s.id: list(s.inputs) for s in stages}
+    edges = {s.id: list(s.input_ids) for s in stages}
     WHITE, GRAY, BLACK = 0, 1, 2
     color = {sid: WHITE for sid in edges}
 
@@ -73,3 +73,15 @@ def validate_methodology(stages: list[dict[str, Any]]) -> list[str]:
         return []
     except ValidationError as err:
         return format_errors(err)
+
+
+def validate_methodology_stages(stages: list[Stage]) -> list[str]:
+    """Cross-stage checks (unique ids, inputs resolve, acyclic) on
+    already-validated stages, as human-readable issue strings."""
+    issues: list[str] = []
+    for check in (check_unique_ids, check_inputs_resolve, detect_cycle):
+        try:
+            check(stages)
+        except ValueError as exc:
+            issues.append(str(exc))
+    return issues

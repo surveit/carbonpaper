@@ -13,6 +13,7 @@ inputs:
       primary_key: [evidence_id, benchmark_id]
       columns:
         - {name: evidence_id, type: str, nullable: false}
+        - {name: benchmark_id, type: str, nullable: false}
         - {name: entity_id, type: str, nullable: false}
         - {name: query_id, type: str, nullable: false}
         - {name: final_score, type: int, nullable: true, range: [-2, 2]}

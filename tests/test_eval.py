@@ -20,7 +20,8 @@ def S(**kw):
 
 
 def _file_input(id_):
-    return S(id=id_, type="input_data", connector={"kind": "file"})
+    return S(id=id_, type="input_data",
+             connector={"kind": "file", "params": {"path": f"{id_}.csv"}})
 
 
 def _py(id_, inputs, granularity="frame", **kw):
@@ -67,7 +68,8 @@ def test_join_and_aggregate_change_grain():
                                  join={"keys": [{"left": "k", "right": "k"}]}))
     agg = m.Stage.model_validate(S(id="agg", type="aggregate", inputs=[{"id": "a"}],
                                    aggregate={"group_by": ["g"],
-                                              "aggregations": [{"formula": "sum", "output_column": "t"}]}))
+                                              "aggregations": [{"formula": "sum", "output_column": "t",
+                                                                "value_column": "x"}]}))
     assert j.is_grain_preserving is False    # fan-out
     assert agg.is_grain_preserving is False  # fan-in
 
