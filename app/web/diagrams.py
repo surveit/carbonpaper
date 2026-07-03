@@ -24,8 +24,8 @@ TYPE_CLASS = {
 TYPE_GLYPH = {
     "input_data": "▶",
     "llm_transform": "✦",
-    "python_row_function": "λ",
-    "python_frame_function": "λ",
+    "python_row_function": "🔂",
+    "python_frame_function": "🧨",
     "join": "⋈",
     "aggregate": "Σ",
     "human_review_queue": "👤",
