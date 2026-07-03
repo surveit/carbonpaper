@@ -7,3 +7,4 @@ pyarrow>=15.0
 python-multipart>=0.0.9
 claude-agent-sdk>=0.2.10   # real LLM backend for llm_transform stages (needs the claude CLI installed)
 pydantic>=2                # DAG contract models (app/models.py)
+pydantic-ai-slim[anthropic]>=2.2  # interactive chat engine (app/chat): streaming, thinking, tools, message-history persistence

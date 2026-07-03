@@ -13,6 +13,9 @@ build/
 # Persisted compilation objects (file-backed, like examples/<m>/runs)
 compilations/
 
+# Chat session transcripts (file-backed, per app/chat/store.py)
+app/chat/_sessions/
+
 # Example methodology content + scratch pipelines. Generated run outputs land
 # here, and lint/typecheck skip these dirs (ruff respects .gitignore).
 # Already-tracked files under examples/ stay tracked; new files need `git add -f`.
