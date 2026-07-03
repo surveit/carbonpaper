@@ -38,7 +38,8 @@ does not import the compiler or the web app. (It does not yet validate against t
   - `input_data` connectors: `file` (csv/parquet/json/**geojson**), `computed_static`;
     `http`/`scrape`/`api`/`sql`/`manual_upload` raise `NotImplementedError` (use a
     committed snapshot via `file` instead). `_read_geojson` flattens a FeatureCollection.
-  - `python_transform` (`function: {kind: module|inline}`), `join`, `aggregate`,
+  - `python_row_function` / `python_frame_function` (`function: {kind: module|inline}`;
+    the row variant is mapped per input row by the runtime), `join`, `aggregate`,
     `llm_transform` (batched LLM calls), `human_review_queue` (filter → content-hash
     on `hash_columns`/upstream PK → apply prior decisions or `HaltForReview`),
     `publish` (runs a `function` module that writes artifacts).

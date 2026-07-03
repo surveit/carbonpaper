@@ -1,6 +1,6 @@
 id: lobbying_by_query
 name: Aggregate lobbying filings per policy query
-type: python_transform
+type: python_frame_function
 
 source:
   doc: examples/congresswatch/methodology_raw.md

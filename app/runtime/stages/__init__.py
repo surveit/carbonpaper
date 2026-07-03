@@ -1,5 +1,6 @@
-"""Stage handlers — one module per stage type. `HANDLERS` maps stage type to
-handler; the runner dispatches on stage type."""
+"""Stage handlers — one module per stage type (the two python-function grains
+share python_functions.py). `HANDLERS` maps stage type to handler; the runner
+dispatches on stage type."""
 
 from __future__ import annotations
 
@@ -10,11 +11,12 @@ from .input_data import handle_input_data
 from .join import handle_join
 from .llm_transform import handle_llm_transform
 from .publish import handle_publish
-from .python_transform import handle_python_transform
+from .python_functions import handle_python_frame_function, handle_python_row_function
 
 HANDLERS = {
     "input_data": handle_input_data,
-    "python_transform": handle_python_transform,
+    "python_row_function": handle_python_row_function,
+    "python_frame_function": handle_python_frame_function,
     "join": handle_join,
     "aggregate": handle_aggregate,
     "llm_transform": handle_llm_transform,
@@ -26,7 +28,8 @@ __all__ = [
     "HANDLERS",
     "HaltForReview",
     "handle_input_data",
-    "handle_python_transform",
+    "handle_python_row_function",
+    "handle_python_frame_function",
     "handle_join",
     "handle_aggregate",
     "handle_llm_transform",
