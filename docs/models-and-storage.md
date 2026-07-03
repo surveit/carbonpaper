@@ -21,7 +21,7 @@ case: `validate_methodology(stages) -> list[str]` and `validate_stage(stage) -> 
   (`http`/`scrape`/`api`/`manual_upload`/`sql`) were declared but never had a
   handler — add them back alongside a handler.
 - Weighted aggregation formulas (`weighted_mean`/`weighted_sum`) — unused in the
-  compiled DAGs (weighting is done inside `python_transform` modules).
+  compiled DAGs (weighting is done inside `python_frame_function` modules).
 
 **Not done yet (next step):** the runtime (`runner.py`, `main.py`) still reads
 stage dicts directly and does not yet parse them through these models, so the

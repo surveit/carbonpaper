@@ -40,7 +40,7 @@ def load_stages(methodology: str) -> list[dict[str, Any]]:
                 data = {
                     "id": yaml_file.stem,
                     "name": f"[YAML ERROR] {yaml_file.name}",
-                    "type": "python_transform",
+                    "type": "python_frame_function",
                     "compiler_notes": [f"YAML parse error: {exc}"],
                     "_error": True,
                 }

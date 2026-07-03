@@ -41,8 +41,8 @@ def test_methodology_dangling_input():
 def test_methodology_cycle():
     with pytest.raises(ValidationError):
         m.parse_methodology([
-            S(id="a", type="python_transform", inputs=[{"id": "b"}], function={"kind": "inline", "code": "x"}),
-            S(id="b", type="python_transform", inputs=[{"id": "a"}], function={"kind": "inline", "code": "x"}),
+            S(id="a", type="python_frame_function", inputs=[{"id": "b"}], function={"kind": "inline", "code": "x"}),
+            S(id="b", type="python_frame_function", inputs=[{"id": "a"}], function={"kind": "inline", "code": "x"}),
         ])
 
 
@@ -54,8 +54,8 @@ def test_check_inputs_resolve_raises_on_dangling():
 
 
 def test_detect_cycle_raises_on_cycle():
-    a = Stage.model_validate(S(id="a", type="python_transform", inputs=[{"id": "b"}], function={"kind": "inline", "code": "x"}))
-    b = Stage.model_validate(S(id="b", type="python_transform", inputs=[{"id": "a"}], function={"kind": "inline", "code": "x"}))
+    a = Stage.model_validate(S(id="a", type="python_frame_function", inputs=[{"id": "b"}], function={"kind": "inline", "code": "x"}))
+    b = Stage.model_validate(S(id="b", type="python_frame_function", inputs=[{"id": "a"}], function={"kind": "inline", "code": "x"}))
     with pytest.raises(ValueError):
         m.detect_cycle([a, b])
 
