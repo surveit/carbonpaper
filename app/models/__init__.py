@@ -68,6 +68,12 @@ from app.models.eval import (
     StageOutputOverride,
     resolve_eval_run_settings,
 )
+from app.models.loader import (
+    CompiledStageFile,
+    MethodologyLoadError,
+    load_compiled_dir,
+    load_methodology_stages,
+)
 
 __all__ = [
     "StageType", "ConnectorKind", "FileFormat", "AggFormula", "JoinType",
@@ -87,4 +93,7 @@ __all__ = [
     # eval contract
     "StageOutputOverride", "ExpectedColumn", "CodeScorer", "EvalConfig",
     "EvalRunSettings", "resolve_eval_run_settings", "EvalRun",
+    # loader
+    "CompiledStageFile", "MethodologyLoadError", "load_compiled_dir",
+    "load_methodology_stages",
 ]
