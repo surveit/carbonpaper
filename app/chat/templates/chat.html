@@ -23,6 +23,12 @@
     .tool { font-family:ui-monospace, monospace; font-size:12px; color:var(--tool);
             background:#eef8f3; border:1px solid #cfeadd; border-radius:6px; padding:3px 7px; margin:4px 0; display:inline-block; }
     .err { color:#c0392b; font-size:13px; }
+    .thinking-spinner { display:inline-flex; align-items:center; gap:5px; padding:6px 2px; }
+    .thinking-spinner .dot { width:6px; height:6px; border-radius:50%; background:var(--think); animation: tspin 1.2s infinite ease-in-out both; }
+    .thinking-spinner .dot:nth-child(2){ animation-delay:.15s; }
+    .thinking-spinner .dot:nth-child(3){ animation-delay:.3s; }
+    .thinking-spinner .sp-label { color:var(--muted); font-size:12px; font-style:italic; margin-left:2px; }
+    @keyframes tspin { 0%,80%,100%{ transform:scale(.6); opacity:.35 } 40%{ transform:scale(1); opacity:1 } }
     footer { position:fixed; bottom:0; left:0; right:0; background:#fff; border-top:1px solid var(--line); }
     .composer { max-width:760px; margin:0 auto; padding:10px 16px; display:flex; gap:8px; }
     #input { flex:1; font:inherit; padding:9px 11px; border:1px solid #ccc; border-radius:8px; }
@@ -90,10 +96,17 @@ function addUser(text) {
 function newAssistant() {
   const b = el("bubble assistant");
   b.appendChild(el("role", "assistant"));
+  // Spinner from bubble creation until the first content arrives, so the gap
+  // while the model thinks (esp. the block-level claude_cli backend) isn't blank.
+  const spinner = el("thinking-spinner",
+    '<span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="sp-label">thinking…</span>');
+  b.appendChild(spinner);
   let think = null, thinkText = null, body = null;
-  log.appendChild(b);
+  log.appendChild(b); scroll();
+  function stop() { if (spinner.parentNode) spinner.remove(); }
   return {
     thinking(t) {
+      stop();
       if (!think) {
         think = document.createElement("details"); think.className = "think"; think.open = true;
         const s = document.createElement("summary"); s.textContent = "💭 thinking"; think.appendChild(s);
@@ -103,12 +116,14 @@ function newAssistant() {
       thinkText.textContent += t; scroll();
     },
     text(t) {
+      stop();
       if (!body) { body = el("body"); b.appendChild(body); }
       body.textContent += t; scroll();
     },
-    tool(name, args) { const c = el("tool"); c.textContent = "🔧 " + name + "(" + (args||"") + ")"; b.appendChild(c); scroll(); },
-    toolResult(content) { const c = el("tool"); c.textContent = "↳ " + content; b.appendChild(c); scroll(); },
-    error(t) { const e = el("err"); e.textContent = "⚠ " + t; b.appendChild(e); scroll(); }
+    tool(name, args) { stop(); const c = el("tool"); c.textContent = "🔧 " + name + "(" + (args||"") + ")"; b.appendChild(c); scroll(); },
+    toolResult(content) { stop(); const c = el("tool"); c.textContent = "↳ " + content; b.appendChild(c); scroll(); },
+    error(t) { stop(); const e = el("err"); e.textContent = "⚠ " + t; b.appendChild(e); scroll(); },
+    stop
   };
 }
 
@@ -123,9 +138,9 @@ function connect(turnId, fromIndex) {
     else if (ev.kind === "tool_call") bubble.tool(ev.name, ev.args);
     else if (ev.kind === "tool_result") bubble.toolResult(ev.content);
     else if (ev.kind === "error") bubble.error(ev.text);
-    else if (ev.kind === "done") { es.close(); streaming = false; sendBtn.disabled = false; input.focus(); }
+    else if (ev.kind === "done") { bubble.stop(); es.close(); streaming = false; sendBtn.disabled = false; input.focus(); }
   };
-  es.onerror = () => { es.close(); streaming = false; sendBtn.disabled = false; };
+  es.onerror = () => { bubble.stop(); es.close(); streaming = false; sendBtn.disabled = false; };
 }
 
 async function send() {
