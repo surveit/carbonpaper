@@ -9,6 +9,7 @@ from __future__ import annotations
 import pytest
 
 from app.runtime import options, llm_agent_sdk
+from app.runtime.llm import call_llm
 
 
 def _set(monkeypatch, *, force_mock=False, backend=None, sdk_available=False, cli=None):
@@ -75,3 +76,10 @@ def test_auto_no_live_backend_raises(monkeypatch):
     _set(monkeypatch, backend=None, sdk_available=False, cli=None)
     with pytest.raises(options.LLMError):
         options.get_llm_call_type()
+
+
+def test_call_llm_takes_llm_config_model():
+    from app.models import LLMConfig
+    cfg = LLMConfig(prompt_template="score {name}")
+    result = call_llm("some_stage", cfg, {"name": "acme"})
+    assert result is not None

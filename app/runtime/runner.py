@@ -26,6 +26,7 @@ from typing import Any
 import pandas as pd
 import yaml
 
+from app.models import TableSchema
 from app.services import versioning
 
 from .stages import HANDLERS, HaltForReview
@@ -319,8 +320,9 @@ def _execute_stages(
                 _reject_duplicate_input_rows(df, iid, sid)
                 inputs_for_stage[iid] = df
                 if isinstance(inp_decl, dict):
+                    schema_dict = inp_decl.get("schema")
                     rep = validate_dataframe(
-                        df, inp_decl.get("schema"),
+                        df, TableSchema.model_validate(schema_dict) if schema_dict else None,
                         stage_id=sid, phase=f"input:{iid}",
                     )
                     record["input_validation"].append(rep.to_dict())
@@ -363,8 +365,9 @@ def _execute_stages(
                 )
                 output = output.head(limit).copy()
 
+            output_schema_dict = stage.get("output_schema")
             out_rep = validate_dataframe(
-                output, stage.get("output_schema"),
+                output, TableSchema.model_validate(output_schema_dict) if output_schema_dict else None,
                 stage_id=sid, phase="output",
             )
             record["output_validation"] = out_rep.to_dict()

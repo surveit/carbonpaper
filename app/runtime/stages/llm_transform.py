@@ -6,6 +6,8 @@ from typing import Any
 
 import pandas as pd
 
+from app.models import LLMConfig
+
 from ..llm import call_llm_batch, backend_status
 
 
@@ -23,7 +25,7 @@ def handle_llm_transform(stage: dict[str, Any], inputs: dict[str, pd.DataFrame],
     # str(k) is a no-op for real data (parquet/CSV column labels are strings);
     # it pins the key type down from pandas' Hashable.
     row_dicts = [{str(k): v for k, v in row.items()} for _, row in src.iterrows()]
-    results = call_llm_batch(stage["id"], llm, row_dicts)
+    results = call_llm_batch(stage["id"], LLMConfig.model_validate(llm), row_dicts)
 
     for row_dict, result in zip(row_dicts, results):
         if isinstance(result, list):

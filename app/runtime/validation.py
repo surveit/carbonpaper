@@ -20,6 +20,8 @@ from typing import Any
 
 import pandas as pd
 
+from app.models import Column, TableSchema
+
 
 # Map our type vocabulary to permissive pandas dtype checks.
 PY_TYPE_OF = {
@@ -67,7 +69,7 @@ class ValidationReport:
 
 def validate_dataframe(
     df: pd.DataFrame,
-    schema: dict[str, Any] | None,
+    schema: TableSchema | None,
     *,
     stage_id: str,
     phase: str,
@@ -77,25 +79,25 @@ def validate_dataframe(
         report.issues.append(Issue("warning", None, "No schema declared; skipping checks."))
         return report
 
-    columns = schema.get("columns") or []
-    declared_names = [c.get("name") for c in columns]
+    columns: list[Column] = list(schema.columns)
+    declared_names = [c.name for c in columns]
 
     # 1. Every declared column present
     for col in columns:
-        name = col.get("name")
+        name = col.name
         if name and name not in df.columns:
             report.issues.append(Issue("error", name, f"Missing column '{name}'"))
 
     # 2. Type / nullability / range — only check columns that exist
     for col in columns:
-        name = col.get("name")
+        name = col.name
         if name not in df.columns:
             continue
 
         series = df[name]
-        col_type = col.get("type", "str")
-        nullable = col.get("nullable", True)
-        col_range = col.get("range")
+        col_type = col.type
+        nullable = col.nullable
+        col_range = col.range
 
         # Nullability
         if not nullable:
@@ -140,7 +142,7 @@ def validate_dataframe(
                     )
 
     # 3. Primary key uniqueness
-    pk = schema.get("primary_key")
+    pk = schema.primary_key
     if pk and all(c in df.columns for c in pk):
         dupe = df.duplicated(subset=pk).sum()
         if dupe:
