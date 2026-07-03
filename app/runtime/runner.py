@@ -25,6 +25,8 @@ from typing import Any
 import pandas as pd
 import yaml
 
+from app import versioning
+
 from .handlers import HANDLERS, HaltForReview
 from .validation import validate_dataframe
 
@@ -65,18 +67,56 @@ def _load_stages(methodology_dir: Path) -> list[dict[str, Any]]:
     return stages
 
 
-def prepare_run(methodology_dir: Path, repo_root: Path) -> dict[str, Any]:
+def _resolve_version_id(methodology_dir: Path, version_id: str | None) -> str:
+    """Resolve the DAG version a run will be pinned to. Every run MUST carry a
+    real version id — we never blank it, never fabricate one, and never silently
+    read the working copy.
+
+    - If `version_id` is given, it must name an existing version; we fail loudly
+      otherwise rather than auto-cutting a *different* id under the caller's name.
+    - If `version_id` is None, pin to the latest existing version; and if none
+      exists yet, AUTO-CUT an implicit version ("auto-cut on run") and use it, so
+      a first run on a never-versioned methodology still records a real snapshot
+      it actually executed against.
+    """
+    if version_id is not None:
+        # Validate the requested version exists (load_version_meta fails loudly
+        # if its version.json is missing) — a caller asking for a specific id
+        # must not be silently redirected to some other snapshot.
+        versioning.load_version_meta(methodology_dir, version_id)
+        return version_id
+
+    existing = versioning.list_versions(methodology_dir)  # newest-first
+    if existing:
+        return existing[0]["id"]
+
+    meta = versioning.cut_version(
+        methodology_dir, message="auto-cut on run", reviewer="system"
+    )
+    return meta["id"]
+
+
+def prepare_run(
+    methodology_dir: Path, repo_root: Path, version_id: str | None = None
+) -> dict[str, Any]:
     """Create the run dir + id and write an initial `running` manifest (all
     stages pending) so a caller can redirect to the run page immediately and
     poll it while execution proceeds in the background. Returns a dict with the
-    run_id, run_dir, ctx, ordered stages and the manifest."""
+    run_id, run_dir, ctx, ordered stages and the manifest.
+
+    The run is PINNED to a DAG version: stages are loaded from the version's
+    immutable snapshot (versioning.load_version_stages), never from the live
+    `compiled/` working copy, so working-copy edits can never affect this run.
+    `version_id` resolution + auto-cut is documented on _resolve_version_id; the
+    resolved id is recorded in the manifest as `dag_version`."""
     runs_dir = methodology_dir / "runs"
     run_id = datetime.now().strftime("%Y%m%dT%H%M%S")
     run_dir = runs_dir / run_id
     (run_dir / "outputs").mkdir(parents=True, exist_ok=True)
     (run_dir / "artifacts").mkdir(parents=True, exist_ok=True)
 
-    stages = _load_stages(methodology_dir)
+    dag_version = _resolve_version_id(methodology_dir, version_id)
+    stages = versioning.load_version_stages(methodology_dir, dag_version)
     ordered = topological_sort(stages)
 
     ctx: dict[str, Any] = {
@@ -89,6 +129,7 @@ def prepare_run(methodology_dir: Path, repo_root: Path) -> dict[str, Any]:
         "run_id": run_id,
         "started_at": datetime.now().isoformat(timespec="seconds"),
         "methodology": methodology_dir.name,
+        "dag_version": dag_version,
         "status": "running",
         "stages": [
             {"stage_id": s["id"], "type": s["type"], "name": s.get("name", s["id"]),
@@ -112,9 +153,13 @@ def run_prepared(prep: dict[str, Any]) -> dict[str, Any]:
                            prep["run_dir"], outputs_so_far={})
 
 
-def execute_run(methodology_dir: Path, repo_root: Path) -> dict[str, Any]:
-    """Run the DAG once (synchronous). Returns the manifest dict."""
-    return run_prepared(prepare_run(methodology_dir, repo_root))
+def execute_run(
+    methodology_dir: Path, repo_root: Path, version_id: str | None = None
+) -> dict[str, Any]:
+    """Run the DAG once (synchronous). Returns the manifest dict. `version_id`
+    pins the run to a DAG version (None -> latest existing, else auto-cut); see
+    prepare_run / _resolve_version_id."""
+    return run_prepared(prepare_run(methodology_dir, repo_root, version_id))
 
 
 def _execute_stages(
@@ -326,7 +371,20 @@ def resume_run(methodology_dir: Path, run_id: str, repo_root: Path) -> dict[str,
         raise FileNotFoundError(f"No manifest at {manifest_path}")
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
 
-    stages = _load_stages(methodology_dir)
+    # Stay pinned to the SAME DAG snapshot the run started on. We read the
+    # version off the existing manifest and reload the version's stages — never
+    # the live working copy — so a resume can't silently execute a different DAG
+    # than the halted run did. A run that carries no dag_version is a pre-
+    # versioning (legacy) run we cannot safely resume under the version model;
+    # fail loudly rather than guessing which snapshot it meant.
+    dag_version = manifest.get("dag_version")
+    if not dag_version:
+        raise ValueError(
+            f"Run {run_id} of '{methodology_dir.name}' has no 'dag_version' in "
+            f"its manifest ({manifest_path}); cannot resume a versioned run "
+            f"without its pinned DAG version."
+        )
+    stages = versioning.load_version_stages(methodology_dir, dag_version)
     ordered = topological_sort(stages)
 
     # Reload outputs from disk for stages that completed successfully.
@@ -368,7 +426,8 @@ def main() -> int:
     repo_root = Path(__file__).resolve().parents[2]
     manifest = execute_run(methodology_dir, repo_root)
     print(json.dumps(
-        {"run_id": manifest["run_id"], "status": manifest["status"],
+        {"run_id": manifest["run_id"], "dag_version": manifest["dag_version"],
+         "status": manifest["status"],
          "stages": [(s["stage_id"], s["status"], s["rows"]) for s in manifest["stages"]]},
         indent=2,
     ))

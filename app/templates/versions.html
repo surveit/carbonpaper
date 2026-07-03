@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}{{ methodology }} · versions{% endblock %}
+
+{% block header_extra %}
+<a href="/methodology/{{ methodology }}" class="back-link">← {{ methodology }}</a>
+{% endblock %}
+
+{% block content %}
+<div class="methodology-header">
+    <h1>Versions of <code>{{ methodology }}</code></h1>
+    <div class="actions">
+        <a href="/methodology/{{ methodology }}/workflow" class="btn">← Workflow</a>
+        <a href="/methodology/{{ methodology }}/runs" class="btn">All runs</a>
+    </div>
+</div>
+<p class="lede">Each version is an immutable snapshot of <code>compiled/</code> + <code>schemas/</code> with approval coverage frozen at cut time. Runs pin to a version and read its snapshot, so a run is reproducible against the exact workflow it executed.</p>
+
+{% if versions %}
+<table class="stages">
+    <thead>
+        <tr><th>version</th><th>created</th><th>message</th><th>parent</th><th>coverage</th></tr>
+    </thead>
+    <tbody>
+        {% for v in versions %}
+        <tr>
+            <td><code>{{ v.id }}</code></td>
+            <td>{{ v.created_at }}</td>
+            <td>{{ v.message or '' }}{% if v.reviewer %} <span class="muted">— {{ v.reviewer }}</span>{% endif %}</td>
+            <td>{% if v.parent_version %}<code>{{ v.parent_version }}</code>{% else %}<span class="muted">—</span>{% endif %}</td>
+            <td>
+                {% set cov = v.coverage %}
+                {% if cov %}
+                <div class="coverage-cell">
+                    <span class="coverage-bar"><span class="coverage-fill" style="width: {{ cov.approved_pct }}%"></span></span>
+                    <span class="coverage-counts"><b>{{ cov.approved }}</b>/{{ cov.total }} approved</span>
+                </div>
+                {% if cov.edited_stale or cov.rejected or cov.unreviewed %}
+                <span class="coverage-breakdown muted">
+                    {% if cov.edited_stale %}{{ cov.edited_stale }} stale · {% endif %}
+                    {% if cov.rejected %}{{ cov.rejected }} rejected · {% endif %}
+                    {{ cov.unreviewed }} unreviewed
+                </span>
+                {% endif %}
+                {% else %}
+                <span class="muted">—</span>
+                {% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<p><em>No versions yet. Click <strong>✂ Cut version</strong> on the workflow page to snapshot the current workflow. (A run on an unversioned methodology auto-cuts one.)</em></p>
+{% endif %}
+{% endblock %}

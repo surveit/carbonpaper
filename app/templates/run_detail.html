@@ -30,6 +30,9 @@
 <div class="run-topbar">
     <h1>Run <code>{{ run_id }}</code></h1>
     <p class="stage-id">started <code>{{ manifest.started_at }}</code>{% if manifest.finished_at %} · finished <code>{{ manifest.finished_at }}</code>{% endif %}</p>
+    <p class="stage-id ran-against">ran against DAG version
+        {% if manifest.dag_version %}<a href="/methodology/{{ methodology }}/versions"><code>{{ manifest.dag_version }}</code></a>{% else %}<span class="muted">(unversioned)</span>{% endif %}
+    </p>
 </div>
 
 {# ── Progress: steps to-do / in-progress / complete. Warnings & errors are a
