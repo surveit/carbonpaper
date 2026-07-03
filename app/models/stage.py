@@ -1,7 +1,7 @@
 """Stage-level contract: the node types, their executable-handle blocks, and the
 Stage model. Constructing a model validates it.
 
-Models ignore unknown keys (compiled YAML carries fields we pass through) but are
+Models ignore unknown keys (compiled stage JSON carries fields we pass through) but are
 strict about the fields declared here.
 """
 from __future__ import annotations
@@ -34,7 +34,7 @@ class StageType(str, Enum):
     python_row_function = "python_row_function"
     python_frame_function = "python_frame_function"
     # Trailing underscore: a member literally named `join` would shadow
-    # str.join on every instance. The value — what YAML declares and
+    # str.join on every instance. The value — what a compiled stage declares and
     # StageType("join") looks up — is still "join".
     join_ = "join"
     aggregate = "aggregate"
@@ -208,8 +208,8 @@ class InputRef(_Base):
     """One upstream dependency: the upstream stage id, plus (optionally) the
     schema this stage expects that upstream's output to satisfy. The runner
     validates the real dataframe against `table_schema` before the stage runs.
-    YAML spells the field `schema:`; the python name differs only because
-    pydantic reserves `schema` on BaseModel."""
+    The compiled stage spells the field `schema:`; the python name differs only
+    because pydantic reserves `schema` on BaseModel."""
     id: str
     table_schema: Optional[TableSchema] = Field(default=None, alias="schema")
 

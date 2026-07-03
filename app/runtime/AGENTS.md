@@ -37,9 +37,9 @@ refused before the runner does any work.
     `resume_run(methodology_dir, run_id, repo_root)` reloads completed outputs and
     continues once decisions exist.
 - **`stages/`** — one handler per node type (`HANDLERS` dict), one module per stage type.
-  - `input_data` connectors: `file` (csv/parquet/json/**geojson**), `computed_static`;
-    `http`/`scrape`/`api`/`sql`/`manual_upload` raise `NotImplementedError` (use a
-    committed snapshot via `file` instead). `_read_geojson` flattens a FeatureCollection.
+  - `input_data` connectors: `file` (csv/parquet/json/**geojson**), `computed_static`
+    (only kinds the `ConnectorKind` contract allows — use a committed snapshot via
+    `file` for anything else). `_read_geojson` flattens a FeatureCollection.
   - `python_row_function` / `python_frame_function` (`function: {kind: module|inline}`;
     the row variant is mapped per input row by the runtime), `join`, `aggregate`,
     `llm_transform` (batched LLM calls), `human_review_queue` (filter → content-hash
