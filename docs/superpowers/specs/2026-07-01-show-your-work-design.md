@@ -1,252 +1,273 @@
 # Show your work: claim provenance traces
 
-**Status:** design approved in discussion 2026-07-01; implementation not started.
+**Status:** design in review; implementation not started. Revised 2026-07-02 after
+discussion: lineage is now runtime-tracked at execution time, replacing an earlier
+draft that reconstructed lineage from per-stage key declarations (that draft leaned on
+"join keys" as if it were a pipeline-wide enforced concept; it isn't — see §3).
 **Branch:** `syw-trace` (worktree `prototype_one_syw_wt`, off `palm-on-master`).
 
-## Problem
+Terms used throughout, defined once here:
 
-A published dossier (e.g. `examples/palm_tier2` → per-facility HTML) asserts claims —
-`cpo_production = 52,228 MT, high confidence, primary` — with a bare source link. A reader
-cannot see how that value survived the pipeline: what values competed with it, which
-document each came from, where the value entered the run, and which parts of the chain
-are mechanical joins versus model assertions. The run outputs already contain all of
-this (every stage's output table is persisted per run); nothing renders it.
+- **Run** — one execution of a compiled methodology DAG. The runtime persists every
+  stage's output table to `runs/<run_id>/outputs/<stage_id>.parquet`.
+- **Row** — a row of one of those persisted stage-output tables, identified for the
+  rest of this doc as `(stage_id, row ordinal within the persisted table)`.
+- **Payload** — a JSON-typed cell inside a row that itself contains a list of
+  finer-grained entries. Example, from the palm_tier2 pipeline
+  (`examples/palm_tier2`): the adjudicate stage's output has one row per facility,
+  and that row's `reconciled_fields` cell holds a list of per-field entries.
+- **Claim** — one published assertion a reader sees. In palm_tier2 that is one field
+  row of a facility dossier, e.g. "cpo_production = 52,228 MT, high confidence,
+  primary source". A claim lives *inside a payload* of a publish-stage input row —
+  it is finer-grained than any row.
+- **The LLM** — always spelled out; "model" is avoided in this doc because it also
+  means data model. `llm_transform` stages call an LLM once per input row.
+- **Hop** — one stage-to-parent step in a trace.
 
-## Decisions settled in discussion
+## 1. Problem
 
-1. **Audience: both, reader-facing first.** One trace record serves two renderers.
-   The author-facing view is a *display depth* over the same record, not a second data
-   shape. Deferred, but two constraints are taken now so it stays additive (§ trap-door
-   guards).
-2. **Rows-in / rows-out, no narrative layer.** For each stage on the claim's ancestral
-   path, show the stage's input rows and output rows filtered to the claim's keys,
-   verbatim. The pipeline has no formal "pick a row" operation at its LLM fan-ins, so
-   the renderer must not invent selection semantics ("chosen", "rejected") — an earlier
-   mockup did exactly that and was discarded for it. The transformation speaks for
-   itself: three candidate rows in, one reconciled row out.
-3. **Everything beyond raw rows must be mechanically derived** from stage declarations.
-   The exhaustive list of derived annotations is in § Derived annotations. Anything not
-   on that list does not appear in a trace.
+A published dossier asserts claims with a bare source link. A reader cannot see how a
+value survived the pipeline: what competed with it, which document each candidate came
+from, where each column of the final row was written, and which steps were mechanical
+versus LLM assertions. The run's persisted outputs contain the rows to answer this,
+but nothing records how rows connect across stages, and nothing renders the chain.
 
-## Core concepts
+## 2. Decisions settled in discussion (2026-07-01/02)
 
-### Trace declaration (per stage)
+1. **Audience: both, reader-facing first.** One trace record serves a reader-facing
+   renderer (built now) and an author-facing debugger (deferred; a deeper display over
+   the same record, not a second data shape).
+2. **Rows-in / rows-out, no narrative layer.** For each hop, show the stage's input
+   rows and output rows verbatim. LLM fan-in stages have no formal "pick a row"
+   operation, so the renderer must not invent selection semantics ("chosen",
+   "rejected") — an earlier mockup did exactly that and was discarded for it.
+3. **The runtime tracks lineage, not the tracer.** Lineage — which input rows produced
+   which output rows — is recorded by the runtime *while it executes each stage*,
+   from the execution structure it already controls. It is never reconstructed
+   afterwards from an understanding of what a transform does internally, and never
+   derived from values an LLM wrote (a URL string an LLM emitted is untrusted display
+   material, not lineage). This decision supersedes the first draft's key-declaration
+   walk.
 
-What the tracer needs to know about a stage, and where it comes from:
+## 3. What the runtime does today (inventory, no changes yet)
 
-| Piece | Source today |
+Verified against `app/runtime/handlers.py` on this branch, plus open PR #26
+(`python-row-frame-functions`), which this design assumes lands first:
+
+| Stage type | How the runtime executes it | Input→output row mapping visible to the runtime during execution? |
+|---|---|---|
+| `input_data` | reads a file into a table | trivially — each row originates here |
+| `python_row_function` (PR #26) | runtime maps the function over the single input's rows: one dict in, one dict out; the function never sees the whole table | yes — 1:1 by position, by construction |
+| `python_frame_function` (PR #26) | calls the function with whole input table(s); it may reshape freely (group, dedup, filter, explode) | **no — opaque.** The only stage type where the runtime cannot see the mapping |
+| `llm_transform` | runtime iterates input rows, one LLM call per row; a dict result becomes one output row, a list result becomes N output rows, each merged onto its input row's columns | yes — 1→N per input row, exact; the runtime also knows *which columns* the LLM wrote (the result dict's keys) vs carried from the input row |
+| `join` | runtime itself merges exactly two inputs on keys declared in the stage's `join:` config (the one place "join keys" is a formal, enforced concept — the handler raises without them) | yes — via the merge |
+| `aggregate` | runtime itself groups the input on the stage's declared `group_by` columns | yes — each output row ← its group's member rows |
+| `human_review_queue` | keyed edits in place, matched by content hash | yes — 1:1 |
+| `publish` | consumes input rows, writes artifacts | yes — row → artifact |
+
+**None of this is recorded anywhere.** The mapping exists transiently in handler
+local variables and is discarded. That is the gap this design fills. Note what is
+*absent* from the table: nothing pipeline-wide called a "join key" or "lineage key"
+exists today, and `schema.primary_key` declarations on stages are documentation-grade
+(validated, but nothing derives lineage from them).
+
+## 4. Lineage tracking (the new runtime capability — the core of this design)
+
+### 4.1 Recorded edges
+
+Each handler (or the runner wrapping handlers uniformly) records, for every output
+row, the input row(s) that produced it, per the table above. Persisted per run as
+`runs/<run_id>/lineage/<stage_id>.parquet`:
+
+| column | meaning |
 |---|---|
-| Stage type (`input_data`, `python_transform`, `llm_transform`, `join`, `aggregate`, `publish`) | compiled YAML `type:` |
-| DAG parents | compiled YAML `inputs[].id` |
-| Join keys per input/output | compiled YAML `schema.primary_key` — already declared on every palm_tier2 stage |
-| **Payload path** — where sub-row data lives inside a JSON column: (column, inner key) | **new declaration.** e.g. extract: rows live in column `fields`, inner key `field`. The eval block on `13_extract.yaml` already joins on `[facility_id, field]`, implying this path without stating it. Same shape as `scorable_path` on the eval branch (PR #18). |
-| Model-emitted reference columns — output columns that name an input row without being a join key (adjudicate's `source_url`) | **new declaration**, used only for display-level match annotation, never for filtering |
+| `out_row` | ordinal of the output row in this stage's persisted output |
+| `in_stage` | parent stage id |
+| `in_row` | ordinal of the input row in that parent's persisted output |
 
-**v1 packaging:** a `TRACE_DECLS` map in the tracer module, example-local to palm_tier2,
-holding only the two new pieces (payload paths, reference columns) plus anything the
-compiled YAML lacks. Structured so each entry reads like a future `Stage` field — the
-graduation into the contract is a follow-up to PR #18, not part of this work.
+One row per edge; a fan-in output row has many edges, a fan-out input row appears in
+many edges. For `llm_transform` stages the runtime additionally records
+`llm_columns/<stage_id>.json`: the list of output columns whose values the LLM wrote
+(the union of result-dict keys), versus columns carried from the input row. This is
+observed at execution time, not declared.
 
-### The walk
+Edges recorded this way are labeled `recorded` in the trace: the runtime witnessed
+the mapping.
 
-Input: a claim = (run dir, stage id, key values), e.g.
-(`runs/20260629T160736`, `adjudicate`, `{facility_id: palm:PO1000000054, field: cpo_production}`).
+### 4.2 Recovered edges (the frame-function fallback)
 
-For the claim stage and then each ancestor along DAG edges:
+`python_frame_function` stages are opaque, so nothing can be recorded. Rather than a
+hard hole, the tracer may attempt **recovery** after the fact: if the stage's declared
+output primary-key columns also exist on the input, and each output row's key values
+match exactly one input row, that mapping is emitted with label `recovered` — a
+weaker claim than `recorded`, and every recovered edge is mechanically verifiable
+(exact value equality on named columns). If recovery fails (key columns absent,
+ambiguous matches, key values not found upstream), the hop is flagged `untracked` and
+the trace says so plainly. Recovery is a display aid, never silently blended with
+recorded edges.
 
-1. **rows-out** = the stage's persisted output table, filtered to the current key
-   values — via the payload path when a key lives inside a JSON column (exploding
-   `reconciled_fields` / `fields` / `docs_json` to reach `field` grain).
-2. **rows-in** = for each DAG parent, that parent's output table filtered by the keys
-   both grains share (declared pks). Where the current keys don't exist at the parent's
-   grain (walking back past a fan-in), the key *values* for the parent filter are taken
-   from the key columns of the current rows-in set — e.g. the `url`s to follow back
-   through `fetch_docs` are the `url`s of the extract rows that matched the claim.
-3. Recurse until `input_data` stages (or a documented break — see corner cases).
+The lasting fix is re-typing: several palm_tier2 stages currently compiled as generic
+python transforms are structurally narrower — e.g. `collate` (one row per facility,
+packing that facility's per-document rows into a payload) is a group-by-and-pack, i.e.
+an `aggregate`, whose lineage would then be recorded, not recovered. Re-typing is
+follow-up work per stage, not part of this feature.
 
-The claim path in palm_tier2 (linear except one join):
+### 4.3 What lineage is *not* derived from
 
-```
-publish ← adjudicate ← collate ← extract ← grep_fields ← pdf_to_text
-        ← fetch_docs ← locate ← build_queries ← select_for_enrichment
-        ← capacity_crosscheck ← {flatten_facilities ← facilities_snapshot,
-                                 trase_unique ← trase_idn_mills}
-```
+- Not from `schema.primary_key` declarations (documentation-grade today).
+- Not from understanding transform internals (no per-stage "payload path" or "key
+  relationship" declarations — the first draft's mechanism, dropped).
+- Not from values an LLM wrote. Example of the excluded case: in palm_tier2, the
+  adjudicate stage's output carries a `source_url` column the LLM filled in to name
+  the document it drew each field's value from. That string is useful *display*
+  material (§6) but is never treated as lineage — the LLM could emit a URL matching
+  nothing, or matching the wrong row.
 
-(`coverage` is not an ancestor of `publish`; it never appears in a trace.)
+## 5. The trace: a walk over recorded edges
 
-Key-set evolution along that path (backward):
-`(facility_id, field)` → extract explodes to `(facility_id, url, field)` →
-`field` drops before extract (doc grain: `(facility_id, url)`) →
-`url` originates at locate (facility grain: `(facility_id)`) →
-`facility_id` originates at flatten_facilities / crosscheck (trase side keys by `uml_id`).
+A trace starts from a claim. The claim's *row* is found by construction at publish
+time (the publish stage is iterating that exact input row when it renders the claim);
+the claim's position *inside* the row's payload is view information (§6), not lineage.
 
-### Derived annotations (exhaustive)
+From that row, follow lineage edges backward, transitively, to `input_data` stages:
+the result is a per-claim subgraph of rows — every row in every stage that is an
+ancestor of the published row. Each hop of the rendered trace is: one stage, its
+ancestor rows in this subgraph ("rows-out"), and for each parent stage the ancestor
+rows there ("rows-in"), with edge labels (`recorded` / `recovered`) and hop flags.
 
-1. **Column origin badge.** The stage where a column first materializes determines its
-   badge: first materialized by an `llm_transform` → `model`; a declared join key →
-   `key`; otherwise `computed`. Note this badges *keys* too: `url` is a key whose
-   values were model-emitted at locate (see corner case C5).
-2. **Reference matches.** For declared model-emitted reference columns only: exact
-   string equality against input-row key columns. Rendered as "= row N" on match, and
-   as an explicit warning ("matches no input row") on no match. Never fuzzy, never
-   normalized, never used to filter.
-3. **Counts.** N rows in → M rows out per hop; "showing K of N" when display is capped.
+Because lineage is row-grained, the subgraph naturally *widens* at fan-ins: in
+palm_tier2, a facility's adjudicate row traces back through collate to all ~10 of the
+facility's per-document extract rows — not only the documents that mention the
+claim's field. Narrowing the display to the relevant payload entries is the view
+layer's job (§6); the lineage layer never filters.
 
-### Trace record
+## 6. The view layer (rendering; may read payloads, clearly demarcated)
 
-Raw JSON emitted next to the cooked HTML (one file per facility,
-`artifacts/palm_tier2/traces/<facility_id>.json`), containing every trace for that
-facility's claims. Sketch:
+The renderer consumes (a) the lineage subgraph, (b) the persisted stage outputs, and
+(c) the recorded LLM-column lists. On top of verbatim rows it adds only these derived
+annotations — this list is exhaustive; anything else is scope creep to be rejected:
 
-```json
-{
-  "run_id": "20260629T160736",
-  "facility_id": "palm:PO1000000054",
-  "claims": [
-    {
-      "claim_keys": {"field": "cpo_production"},
-      "hops": [
-        {
-          "stage": "adjudicate",
-          "stage_type": "llm_transform",
-          "rows_out": [ {"...": "verbatim row, payload exploded"} ],
-          "inputs": [
-            {
-              "stage": "collate",
-              "filter_keys": {"facility_id": "palm:PO1000000054", "field": "cpo_production"},
-              "rows_in": [ "..." ],
-              "elided_cells": []
-            }
-          ],
-          "matches": [ {"out_row": 0, "out_col": "source_url",
-                        "in_row": 0, "in_col": "url", "kind": "exact_string"} ],
-          "column_origins": {"value": "model", "url": "key", "note": "model"},
-          "flags": []
-        }
-      ]
-    }
-  ]
-}
-```
+1. **Column badges.** From recorded data only: a column an LLM wrote at this stage
+   (`llm_columns`), a column carried from the input row, a column originating at an
+   `input_data` stage.
+2. **Payload narrowing** (display refinement, lineage untouched): within rows-in/
+   rows-out, highlight or filter payload entries matching the claim — e.g. show, of a
+   document's extracted fields, the entry for the claim's field. Requires knowing
+   which payload column holds entries and which entry key names the field; this pair
+   is a *view* declaration, example-local, and its absence only means no narrowing.
+3. **Reference matching** (display only): for an LLM-written column that names
+   another row — the palm adjudicate `source_url` example above — annotate exact
+   string equality against rows-in ("equals row 1's `url`"), or the explicit warning
+   "matches no input row". Exact match only; never fuzzy, never normalized, never
+   lineage.
+4. **Counts.** N rows in → M rows out per hop; "showing K of N" when display caps.
 
-`elided_cells` marks any cell withheld for size (column, char count, pointer to the
-source parquet — the shape defined in C11); on the palm path this hits `doc_text` at
-the pdf_to_text hop. `flags` carries the corner-case markers defined below (`chain_broken`,
-`coarse_hop`, `unparseable_payload`, `pk_violation`, `no_matching_input`,
-`missing_output_file`). A hop with a non-empty `flags` list renders with a visible
-warning in both views.
+**Reader renderer (built now):** each dossier claim row expands to hop cards, newest
+hop first. Deterministic 1:1 hops collapsed by default; URLs shortened; huge cells
+elided per record markers. The HTML inlines what it renders (self-contained, no
+server); the complete trace record JSON sits alongside as the raw companion
+(`artifacts/palm_tier2/traces/<facility_id>.json`).
 
-### Renderers
+**Author renderer (deferred):** full depth over the same record — every hop expanded,
+elided cells resolved against the run dir. Guards taken now so it stays additive: the
+record keeps `(stage_id, row ordinal)` for every row so any hop re-joins to run
+outputs; the tracer is a standalone module with the publish stage as one caller.
 
-**Reader (build now).** Each claim row in the dossier HTML expands to the hop cards,
-newest hop first (adjudicate at top, seeds at bottom). Display-depth choices, all
-lossless against the JSON: deterministic 1:1 pass-through hops (fetch_docs,
-pdf_to_text) collapsed by default; URLs truncated to domain + tail; huge cells elided
-per the record's elision markers. The HTML stays self-contained: the rows it renders
-are inlined at publish time (no fetch, no server); the JSON file alongside is the
-complete record when the inlined view has capped or collapsed something.
+## 7. Corner cases and decided behavior
 
-**Author (deferred).** Same record, full depth: every hop expanded, elided cells
-resolvable against the run dir, per-stage row counts. Not built now.
-
-**Trap-door guards (taken now):** (a) the trace record keeps stage names + filter keys
-per hop so any hop can be re-joined to run outputs later; (b) the tracer is a
-standalone module, `examples/palm_tier2/code/trace.py` (example-local in v1, matching
-the `TRACE_DECLS` packaging decision), taking the declarations as data, with
-`publish_tier2.py` as one caller.
-
-## Corner cases and decided behavior
-
-- **C1 — fan-in output that references no input row** (adjudicator synthesizes a value
-  present in no candidate, or emits a URL matching nothing): rows-in/rows-out renders
-  it honestly by construction; the reference-match annotation shows the explicit
-  warning `no_matching_input`. This is a feature, not an error — it is the exact signal
-  a reader needs.
-- **C2 — empty rows-in at a hop** (0 input rows match the filter keys — e.g. a
-  reconciled field no extract row supports): render "0 rows in → 1 row out" loudly.
-  The walk cannot derive key values for earlier hops from an empty set, so the chain
-  ends there with flag `chain_broken`. Never silently continue with unfiltered tables.
-- **C3 — keys that don't exist at earlier grains** (`field` before extract, `url`
-  before locate): not an error — the declared key sets shrink, and filter *values* for
-  the parent come from the current rows-in (the recursive step of the walk). The trace
-  visibly widens: the extract hop shows 3 rows (this field), the fetch_docs hop shows
-  the 3 docs those rows came from, the locate hop shows all of the facility's docs.
-- **C4 — link key not materialized across a fan-out** (locate output does not record
-  which of `queries_json`'s queries produced each doc): the hop is traced at the
-  coarsest shared key (`facility_id`) and flagged `coarse_hop`. The renderer says so
-  ("query→doc linkage not recorded by the pipeline") rather than implying precision
-  that doesn't exist. Fixing it is a pipeline change, out of scope.
-- **C5 — model-emitted keys** (locate invents `url`, which every downstream stage
-  treats as a key): the column-origin badge marks `url` as model-originated at the
-  locate hop. Downstream of locate, joining on it is sound (deterministic stages carry
-  it verbatim); *at* locate it has no ancestry, and the trace shows it originating
-  there. WebSearch results behind it are not captured (v1 non-goal).
-- **C6 — malformed / null JSON payloads**: fail loudly per hop — flag
-  `unparseable_payload` with the raw cell preserved in the record; never coerce to `[]`
-  and render "no rows". (`publish_tier2.py::_coerce` today silently returns `[]` on
-  `JSONDecodeError`; the tracer must not reuse it, and that smell gets fixed when
-  publish is touched.)
-- **C7 — declared primary-key uniqueness violated** (two extract entries for the same
-  `(facility_id, url, field)`): show all rows, flag `pk_violation`. The trace is a
-  witness, not an enforcer.
-- **C8 — multi-parent hops** (capacity_crosscheck joins flatten_facilities +
-  trase_unique): `inputs` is a list; one rows-in table per parent, each with its own
-  filter keys (`facility_id` on one side, `uml_id` on the other, per declared pks).
-- **C9 — frame-grain python transforms on the path** (trase_unique dedups at frame
-  grain): traced by declared keys like any other hop — frame grain means row *identity*
-  is lost, not key traceability. Stages genuinely off the ancestral path (coverage)
-  never enter the walk.
+- **C1 — LLM-written reference matches nothing** (e.g. adjudicate emits a
+  `source_url` equal to no input row's `url`, or a value present in no candidate):
+  the view shows the explicit "matches no input row" warning. A feature, not an
+  error — it is the strongest red flag the trace can raise. Lineage is unaffected
+  (the row's ancestry is recorded regardless).
+- **C2 — claim's field supported by no upstream payload entry** (the adjudicator
+  invented a field): lineage still traces the row normally; payload narrowing (§6.2)
+  finds zero matching entries upstream and the view flags it. The first draft broke
+  the whole chain here; with row-grained lineage nothing breaks — the anomaly is
+  visible *and* the ancestry remains inspectable.
+- **C3 — output row with no recorded or recovered edges** (frame-function hole, or a
+  handler bug): hop flagged `untracked`; the trace ends there explicitly and says
+  why. Never silently continue by guessing.
+- **C4 — sub-row linkage that was never materialized**: lineage says *which input
+  row* produced an output row, not which part of it. Example: in palm_tier2, locate
+  is an `llm_transform` fanning one facility row out to ~10 document rows; recorded
+  lineage ties each document row to its facility row, but *which suggested query*
+  (an entry inside the facility row's `queries_json` payload) surfaced each document
+  was never output by the stage. The view states this ("query→document linkage not
+  recorded by the pipeline") rather than implying precision that doesn't exist.
+- **C5 — LLM-written values used as identifiers downstream** (locate's LLM writes
+  `url`; every later stage keys on it): downstream lineage is recorded execution
+  structure, so it is sound regardless; the column badge shows `url` was LLM-written
+  at locate, i.e. the identifier's *origin* is an LLM assertion. WebSearch results
+  behind it are not captured (non-goal).
+- **C6 — malformed / null payload where the view expects entries**: the view flags
+  `unparseable_payload` and preserves the raw cell; never coerce to "no entries".
+  (Existing smell, to fix when touched: `examples/palm_tier2/code/publish_tier2.py`
+  `_coerce` silently returns `[]` on `JSONDecodeError`.)
+- **C7 — duplicate rows where the stage schema declares uniqueness**: the trace is a
+  witness, not an enforcer — show all rows, flag `pk_violation`.
+- **C8 — multi-parent stages** (palm's `capacity_crosscheck` joins two parents):
+  edges carry `in_stage`, so a hop renders one rows-in table per parent. Recorded
+  via the join handler's own merge.
+- **C9 — frame-function stages on the path** (palm today: collate, trase_unique,
+  select_for_enrichment, flatten_facilities, and the fetch/parse/grep trio until
+  re-typed as row functions under PR #26): recovery per §4.2, else `untracked`.
+  This is the design's honest weak spot, and the pressure it creates — re-type
+  stages to structurally narrower types — is intended.
 - **C10 — large row sets at a hop**: the JSON record holds all rows (bounded by the
-  run itself); the reader renderer caps at K rows with an explicit "showing K of N —
-  full set in trace JSON". No silent truncation anywhere.
-- **C11 — huge cells** (`doc_text` runs to hundreds of KB): elided in the record with
-  an explicit marker (column, char count, pointer to the parquet) — never dropped
-  without a marker. The reader renderer shows the marker; the future author view
-  resolves it.
-- **C12 — partial runs / missing stage output files**: hop flagged
-  `missing_output_file`, chain ends there explicitly.
+  run); the reader view caps at K with explicit "showing K of N". No silent
+  truncation anywhere.
+- **C11 — huge cells** (palm's `doc_text` reaches hundreds of KB): elided in the
+  record with an explicit marker — column name, char count, pointer to the source
+  parquet — never dropped without a marker.
+- **C12 — partial runs / missing stage output or lineage files**: hop flagged
+  `missing_output_file`, trace ends there explicitly.
 - **C13 — value-format variance across sources** (`52,228` vs `678475.00`): rendered
-  verbatim. No normalization for display, no fuzzy matching for the match annotation.
-  If normalization is ever wanted it is a pipeline stage, visible as its own hop.
-- **C14 — empty upstream payloads that are legitimate** (`field_snippets_json = {}` on
-  most grep_fields rows in run 20260629T160736): shown as-is; an empty payload is data,
-  not an error. The reader view may collapse such hops by default (display depth only).
-- **C15 — facility-selection provenance** ("why is this facility in the report at
-  all"): a different claim type whose entry point is stages 01–07 rather than a
-  reconciled field. The same tracer handles it (the declarations cover those stages),
-  but no renderer entry point is built for it in v1.
+  verbatim; no display normalization; reference matching stays exact-string. If
+  normalization is ever wanted it is a pipeline stage, visible as its own hop.
+- **C14 — legitimately empty upstream payloads** (most `grep_fields` snippet cells
+  in the 2026-06-29 palm run are `{}`): empty is data, shown as-is; the reader view
+  may collapse such hops by default (display depth only).
+- **C15 — "why is this facility in the report at all"**: selection provenance is the
+  same row-lineage walk entered from a facility row instead of a claim; no reader
+  entry point in v1.
 
-## Relationship to PR #18 (eval data model)
+## 8. Relationship to open work
 
-- PR #18's `is_grain_preserving` is a binary veto ("declarative evals only tap nodes
-  reached through grain-preserving stages"). This design needs the *relationship*, not
-  the veto: per-stage key sets that extend/project across grain changes. The v1
-  `TRACE_DECLS` map is deliberately shaped as that generalization, as review input for
-  the contract; nothing here blocks on PR #18 landing.
-- The payload path is the same concept as PR #18's `scorable_path` (a path into nested
-  payloads where the meaningful rows live), and extract's existing eval block
-  (`join_on: [facility_id, field]`) is the third consumer of the idea. One declaration
-  should eventually serve all three (eval tap, eval join, trace).
+- **PR #26 (`python-row-frame-functions`) is the substrate.** Its row/frame split is
+  what makes most python stages' lineage recordable rather than recovered. Lineage
+  recording touches the same handlers, so the runtime part of this work should stack
+  on that branch, not on master directly.
+- **PR #18 (eval data model, merged)** introduced `is_grain_preserving` — a veto on
+  where declarative evals may tap. Runtime-recorded lineage is strictly stronger
+  information; a later follow-up could derive the veto (and more) from lineage
+  instead of stage-type claims. Nothing here blocks on that.
+- **This worktree's base (`palm-on-master`) is a local not-for-merge branch.** Fine
+  for prototyping the renderer against real palm runs; the runtime lineage changes
+  must be cut as a clean PR on top of PR #26's branch. Split decided at
+  implementation planning.
 
-## Testing
+## 9. Testing
 
-- Unit tests for the tracer against a committed fixture run (small synthetic outputs
-  dir; offline, no LLM — matches the existing force-mock test convention). One test per
-  corner case above that is constructible offline: C1, C2, C3, C6, C7, C8, C10, C11,
-  C12, C13, C14.
-- A smoke test that renders SYW HTML for the fixture and asserts the derived
-  annotations (badges, matches, counts) against hand-computed values.
-- The real run dir (`prototype_one_palm_wt/examples/palm_tier2/runs/…`) is gitignored
-  and machine-local; it is a manual acceptance check, not a test dependency.
+- Unit tests per handler: recorded edges match hand-computed expectations on small
+  fixtures (fan-out LLM with list results, join, aggregate, row function 1:1).
+  Offline, mock LLM backend, matching the existing test convention.
+- Recovery tests (§4.2): unambiguous match, ambiguous match (→ `untracked`), key
+  columns missing (→ `untracked`).
+- Corner-case tests constructible offline: C1, C2, C3, C6, C7, C8, C10, C11, C12, C13.
+- A render smoke test asserting the derived annotations (§6) against hand-computed
+  values for a fixture run.
+- Real palm runs (machine-local, gitignored) are manual acceptance checks only.
 
-## Non-goals (v1)
+## 10. Non-goals (v1)
 
-- Capturing LLM prompts/responses per row (runtime change; the author view wants it
-  later).
-- Span-level evidence (page/offset highlights inside PDFs) — an extract-stage
-  improvement.
-- Fuzzy or semantic matching of any kind in the renderer.
+- Capturing LLM prompts/responses per row (the author view will want it later;
+  runtime change, separate).
+- Span-level evidence (page/offset highlights inside source PDFs) — an extraction
+  improvement, independent.
+- Fuzzy or semantic matching anywhere in trace or view.
 - The author-facing viewer UI.
-- Fixing the locate query→doc linkage (C4) or the loose doc scoping found during
-  design (Pasir Panjang audit in Batang Kulim's doc set) — separate leads.
+- Re-typing palm stages (collate→aggregate etc.) beyond what the SYW path minimally
+  needs — each re-type is its own small change.
+- Fixing the loose document scoping found during design (a different mill's audit in
+  a facility's document set — separate lead, task chip filed).
