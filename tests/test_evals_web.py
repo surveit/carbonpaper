@@ -3,6 +3,7 @@
 nothing here touches examples/ or the repo's real methodologies."""
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
@@ -389,3 +390,164 @@ def test_stage_partial_omits_eval_panel_when_zero_evals(tmp_path, monkeypatch):
     assert r.status_code == 200
     assert "No eval covers this stage." not in r.text
     assert "Evals touching this stage" not in r.text
+
+
+# ── authoring form: GET new / edit ──────────────────────────────────────────
+def test_get_new_lists_stages_and_disables_schemaless(tmp_examples):
+    r = client.get(f"/methodology/{METHODOLOGY}/evals/new")
+    assert r.status_code == 200
+    assert "input_data" in r.text
+    assert "llm_transform" in r.text
+    assert "publish" in r.text
+    # publish has no output_schema in the fixture -- its <option> must be
+    # disabled, with a reason visible next to it.
+    assert re.search(
+        r'<option[^>]*value="publish"[^>]*disabled[^>]*>[^<]*\(no output schema\)',
+        r.text,
+    )
+
+
+def test_get_edit_unknown_id_404(tmp_examples):
+    r = client.get(f"/methodology/{METHODOLOGY}/evals/nope/edit")
+    assert r.status_code == 404
+
+
+def test_get_edit_prefills_existing_values(tmp_examples):
+    r = client.get(f"/methodology/{METHODOLOGY}/evals/valid-eval/edit")
+    assert r.status_code == 200
+    assert "Valid eval" in r.text
+    assert "doc_id" in r.text
+
+
+# ── stage-schema JSON ───────────────────────────────────────────────────────
+def test_stage_schema_json_for_schemaed_stage(tmp_examples):
+    r = client.get(f"/methodology/{METHODOLOGY}/evals/stage-schema/input_data.json")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["stage_id"] == "input_data"
+    names = {c["name"] for c in body["columns"]}
+    assert names == {"text", "doc_id"}
+
+
+def test_stage_schema_json_422_for_schemaless_stage(tmp_examples):
+    r = client.get(f"/methodology/{METHODOLOGY}/evals/stage-schema/publish.json")
+    assert r.status_code == 422
+    assert "declares no output schema" in r.json()["error"]
+
+
+def test_stage_schema_json_404_for_unknown_stage(tmp_examples):
+    r = client.get(f"/methodology/{METHODOLOGY}/evals/stage-schema/nope.json")
+    assert r.status_code == 404
+
+
+# ── inspect-table ────────────────────────────────────────────────────────────
+def test_inspect_table_upload_then_collision(tmp_examples):
+    csv_bytes = b"doc_id,text,expected_summary\nd9,hi there,hiya\n"
+    r = client.post(
+        f"/methodology/{METHODOLOGY}/evals/inspect-table",
+        files={"file": ("new_cases.csv", csv_bytes, "text/csv")},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert set(body["columns"]) == {"doc_id", "text", "expected_summary"}
+    assert body["path"] == f"examples/{METHODOLOGY}/eval_data/new_cases.csv"
+    assert (tmp_examples / "eval_data" / "new_cases.csv").is_file()
+
+    r2 = client.post(
+        f"/methodology/{METHODOLOGY}/evals/inspect-table",
+        files={"file": ("new_cases.csv", csv_bytes, "text/csv")},
+    )
+    assert r2.status_code == 409
+
+
+def test_inspect_table_by_path(tmp_examples):
+    # cases.csv already exists under eval_data/ from the fixture.
+    r = client.post(
+        f"/methodology/{METHODOLOGY}/evals/inspect-table",
+        data={"path": f"examples/{METHODOLOGY}/eval_data/cases.csv"},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert set(body["columns"]) == {"doc_id", "text", "expected_summary"}
+    assert body["path"] == f"examples/{METHODOLOGY}/eval_data/cases.csv"
+
+
+def test_inspect_table_by_path_404_when_missing(tmp_examples):
+    r = client.post(
+        f"/methodology/{METHODOLOGY}/evals/inspect-table",
+        data={"path": f"examples/{METHODOLOGY}/eval_data/does_not_exist.csv"},
+    )
+    assert r.status_code == 404
+
+
+# ── POST create / edit ──────────────────────────────────────────────────────
+def _valid_create_payload(table_path: str) -> dict:
+    return {
+        "id": "new-eval",
+        "name": "New eval",
+        "description": "",
+        "override_stage": "input_data",
+        "target_stage": "llm_transform",
+        "table_path": table_path,
+        "table_format": "csv",
+        "key": ["doc_id"],
+        "input_columns": ["text"],
+        "expected_actual": ["summary"],
+        "expected_dataset": ["expected_summary"],
+        "expected_metric": ["exact"],
+        "expected_tolerance": [""],
+    }
+
+
+def test_post_create_valid_redirects_and_saves(tmp_examples):
+    payload = _valid_create_payload(f"examples/{METHODOLOGY}/eval_data/cases.csv")
+    r = client.post(
+        f"/methodology/{METHODOLOGY}/evals/new",
+        data=payload,
+        follow_redirects=False,
+    )
+    assert r.status_code == 303
+    assert r.headers["location"] == f"/methodology/{METHODOLOGY}/evals/new-eval"
+
+    saved = tmp_examples / "eval_config" / "new-eval.yaml"
+    assert saved.is_file()
+
+    home = client.get(f"/methodology/{METHODOLOGY}/evals")
+    assert home.status_code == 200
+    assert "New eval" in home.text
+    assert "never run" in home.text
+
+
+def test_post_create_invalid_actual_column_rerenders_without_saving(tmp_examples):
+    payload = _valid_create_payload(f"examples/{METHODOLOGY}/eval_data/cases.csv")
+    payload["id"] = "bad-eval"
+    payload["expected_actual"] = ["not_a_real_column"]
+    r = client.post(
+        f"/methodology/{METHODOLOGY}/evals/new",
+        data=payload,
+        follow_redirects=False,
+    )
+    assert r.status_code == 200
+    assert "not_a_real_column" in r.text
+
+    saved = tmp_examples / "eval_config" / "bad-eval.yaml"
+    assert not saved.is_file()
+
+
+def test_post_edit_changes_description_only(tmp_examples):
+    payload = _valid_create_payload(f"examples/{METHODOLOGY}/eval_data/cases.csv")
+    payload["description"] = "updated description"
+    del payload["id"]  # edit posts back to the path eval_id; id can't change
+    r = client.post(
+        f"/methodology/{METHODOLOGY}/evals/valid-eval/edit",
+        data=payload,
+        follow_redirects=False,
+    )
+    assert r.status_code == 303
+
+    from app.services.eval_store import load_eval_config
+    reloaded = load_eval_config(tmp_examples, "valid-eval")
+    assert reloaded.id == "valid-eval"
+    assert reloaded.description == "updated description"
+    assert reloaded.override_stage == "input_data"
+    assert reloaded.target_stage == "llm_transform"

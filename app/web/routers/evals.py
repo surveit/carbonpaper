@@ -1,8 +1,8 @@
-"""Read-only eval pages: the evals home for a methodology, a config's detail
-page (pathway, compatibility problems, cases table, scoring rules, run
-history), and a single run's detail page. `build_eval_overlay` assembles the
-per-eval status/pathway summary shared by the evals home page and the
-methodology page's workflow-graph overlay."""
+"""Eval pages: the evals home for a methodology, a config's detail page
+(pathway, compatibility problems, cases table, scoring rules, run history), a
+single run's detail page, and the authoring form (create + edit).
+`build_eval_overlay` assembles the per-eval status/pathway summary shared by
+the evals home page and the methodology page's workflow-graph overlay."""
 
 from __future__ import annotations
 
@@ -10,9 +10,12 @@ from pathlib import Path
 from typing import Any, TypedDict
 
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from pydantic import ValidationError
+from starlette.datastructures import UploadFile
 
-from app.models import EvalRun, Stage
+from app.models import Column, EvalConfig, EvalRun, FileFormat, Stage, TableSchema
+from app.models.schema import format_errors
 from app.services.eval_compat import check_eval_compatibility
 from app.services.eval_store import (
     eval_status,
@@ -21,14 +24,38 @@ from app.services.eval_store import (
     list_eval_runs,
     load_eval_config,
     load_eval_run,
+    save_dataset_upload,
+    save_eval_config,
 )
-from app.services.table_check import read_table
+from app.services.table_check import read_table, table_columns, validate_table_file
 from app.web.config import EXAMPLES_DIR, REPO_ROOT, templates
 from app.web.loading import load_stages
 
 router = APIRouter()
 
 CASES_PREVIEW_ROWS = 50
+
+# Extension -> FileFormat, for inferring format from an uploaded or
+# path-referenced filename. Eval datasets support the same tabular formats
+# table_check.read_table does; geojson is deliberately excluded there too.
+_FORMAT_BY_EXTENSION = {
+    ".csv": FileFormat.csv, ".parquet": FileFormat.parquet, ".json": FileFormat.json,
+}
+
+
+class StageSchemaColumn(TypedDict):
+    name: str
+    type: str
+
+
+class StageSchemaResponse(TypedDict):
+    stage_id: str
+    columns: list[StageSchemaColumn]
+
+
+class InspectTableResponse(TypedDict):
+    columns: list[str]
+    path: str
 
 
 class EvalOverlayEntry(TypedDict):
@@ -139,6 +166,416 @@ async def evals_index(request: Request, methodology: str):
             "load_issues": listing.issues,
         },
     )
+
+
+def _stage_options(stages: list[Stage]) -> list[dict[str, Any]]:
+    """Stage picker options for the form: id, name, and whether the stage has
+    no output schema (that stage can't be an override or target -- selecting
+    one would leave the eval unable to derive required columns)."""
+    return [
+        {"id": s.id, "name": s.name, "schemaless": s.output_schema is None}
+        for s in stages
+    ]
+
+
+def _stage_columns(stage: Stage) -> list[StageSchemaColumn]:
+    if stage.output_schema is None:
+        return []
+    return [StageSchemaColumn(name=c.name, type=c.type) for c in stage.output_schema.columns]
+
+
+class EvalFormValues(TypedDict):
+    """Everything the form template needs to redisplay a submission (valid or
+    not) plus prefill an edit. `expected_rows` is the parallel-array data
+    zipped into per-row dicts for easy template iteration."""
+    id: str
+    name: str
+    description: str
+    override_stage: str
+    target_stage: str
+    table_path: str
+    table_format: str
+    key: list[str]
+    input_columns: list[str]
+    expected_rows: list[dict[str, str]]
+
+
+def _empty_expected_row() -> dict[str, str]:
+    return {"actual": "", "dataset": "", "metric": "exact", "tolerance": ""}
+
+
+def _values_from_config(config: EvalConfig) -> EvalFormValues:
+    return EvalFormValues(
+        id=config.id,
+        name=config.name,
+        description=config.description or "",
+        override_stage=config.override_stage,
+        target_stage=config.target_stage,
+        table_path=config.table.path,
+        table_format=config.table.format,
+        key=list(config.key),
+        input_columns=list(config.input_columns),
+        expected_rows=[
+            {
+                "actual": exp.actual,
+                "dataset": exp.expected,
+                "metric": exp.metric,
+                "tolerance": "" if exp.tolerance is None else str(exp.tolerance),
+            }
+            for exp in config.expected
+        ] or [_empty_expected_row()],
+    )
+
+
+def _blank_values() -> EvalFormValues:
+    return EvalFormValues(
+        id="", name="", description="", override_stage="", target_stage="",
+        table_path="", table_format="csv", key=[], input_columns=[],
+        expected_rows=[_empty_expected_row()],
+    )
+
+
+@router.get("/methodology/{methodology}/evals/new", response_class=HTMLResponse)
+async def eval_new_form(request: Request, methodology: str):
+    listing = load_stages(methodology)
+    return templates.TemplateResponse(
+        request,
+        "eval_form.html",
+        {
+            "methodology": methodology,
+            "mode": "create",
+            "eval_id": None,
+            "stages": _stage_options(listing.stages),
+            "values": _blank_values(),
+            "errors": [],
+        },
+    )
+
+
+@router.get("/methodology/{methodology}/evals/{eval_id}/edit", response_class=HTMLResponse)
+async def eval_edit_form(request: Request, methodology: str, eval_id: str):
+    methodology_dir = EXAMPLES_DIR / methodology
+    try:
+        config = load_eval_config(methodology_dir, eval_id)
+    except (FileNotFoundError, ValueError) as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    listing = load_stages(methodology)
+    return templates.TemplateResponse(
+        request,
+        "eval_form.html",
+        {
+            "methodology": methodology,
+            "mode": "edit",
+            "eval_id": eval_id,
+            "stages": _stage_options(listing.stages),
+            "values": _values_from_config(config),
+            "errors": [],
+        },
+    )
+
+
+def _derive_table_schema(
+    by_id: dict[str, Stage],
+    override_stage: str,
+    target_stage: str,
+    key: list[str],
+    input_columns: list[str],
+    expected_rows: list[dict[str, str]],
+    errors: list[str],
+) -> TableSchema:
+    """The user never authors the cases table's column types -- they're
+    sourced from the stages the eval binds to. `key` + `input_columns` come
+    from `override_stage`'s output schema; each expected row's dataset column
+    is typed by its `actual` column on `target_stage`'s output schema. A
+    column that can't be resolved to a type (unknown stage, no output_schema,
+    or the column isn't declared there) is skipped in the derived schema --
+    that gap is exactly what check_eval_compatibility reports -- but is also
+    recorded here as a form-level error so the user sees why."""
+    override = by_id.get(override_stage)
+    target = by_id.get(target_stage)
+
+    override_types: dict[str, str] = {}
+    if override is None:
+        errors.append(f"override stage `{override_stage}` does not exist in the methodology")
+    elif override.output_schema is None:
+        errors.append(f"override stage `{override_stage}` declares no output schema")
+    else:
+        override_types = {c.name: c.type for c in override.output_schema.columns}
+
+    target_types: dict[str, str] = {}
+    if target is None:
+        errors.append(f"target stage `{target_stage}` does not exist in the methodology")
+    elif target.output_schema is None:
+        errors.append(f"target stage `{target_stage}` declares no output schema")
+    else:
+        target_types = {c.name: c.type for c in target.output_schema.columns}
+
+    columns: dict[str, Column] = {}
+    for name in dict.fromkeys([*input_columns, *key]):  # de-dup, keep order
+        col_type = override_types.get(name)
+        if col_type is None:
+            errors.append(
+                f"column `{name}` is not on override stage `{override_stage}`'s output schema"
+            )
+            continue
+        columns[name] = Column(name=name, type=col_type)
+
+    for row in expected_rows:
+        actual = row["actual"]
+        dataset_name = row["dataset"]
+        if not actual or not dataset_name:
+            continue
+        col_type = target_types.get(actual)
+        if col_type is None:
+            errors.append(
+                f"expected column asserts on `{actual}`, which target `{target_stage}` does not emit"
+            )
+            continue
+        columns[dataset_name] = Column(name=dataset_name, type=col_type)
+
+    return TableSchema(columns=list(columns.values()))
+
+
+@router.get(
+    "/methodology/{methodology}/evals/stage-schema/{stage_id}.json",
+)
+async def stage_schema_json(methodology: str, stage_id: str) -> JSONResponse:
+    listing = load_stages(methodology)
+    stage = next((s for s in listing.stages if s.id == stage_id), None)
+    if stage is None:
+        raise HTTPException(status_code=404, detail=f"no stage `{stage_id}` in {methodology}")
+    if stage.output_schema is None:
+        return JSONResponse(
+            status_code=422,
+            content={"error": f"stage `{stage_id}` declares no output schema"},
+        )
+    body: StageSchemaResponse = StageSchemaResponse(
+        stage_id=stage_id, columns=_stage_columns(stage)
+    )
+    return JSONResponse(content=dict(body))
+
+
+def _resolve_table_format(filename: str) -> FileFormat:
+    ext = Path(filename).suffix.lower()
+    fmt = _FORMAT_BY_EXTENSION.get(ext)
+    if fmt is None:
+        raise ValueError(f"unrecognized table file extension `{ext}` in `{filename}`")
+    return fmt
+
+
+@router.post("/methodology/{methodology}/evals/inspect-table")
+async def inspect_table(request: Request, methodology: str) -> JSONResponse:
+    form = await request.form()
+    methodology_dir = EXAMPLES_DIR / methodology
+
+    upload = form.get("file")
+    if isinstance(upload, UploadFile):
+        content = await upload.read()
+        filename = upload.filename or ""
+        try:
+            fmt = _resolve_table_format(filename)
+        except ValueError as exc:
+            return JSONResponse(status_code=422, content={"error": str(exc)})
+        try:
+            saved_path = save_dataset_upload(methodology_dir, filename, content)
+        except FileExistsError as exc:
+            return JSONResponse(status_code=409, content={"error": str(exc)})
+        except ValueError as exc:
+            return JSONResponse(status_code=422, content={"error": str(exc)})
+        columns = table_columns(saved_path, fmt)
+        body: InspectTableResponse = InspectTableResponse(
+            columns=columns, path=saved_path.relative_to(REPO_ROOT).as_posix()
+        )
+        return JSONResponse(content=dict(body))
+
+    raw_path = form.get("path")
+    if isinstance(raw_path, str) and raw_path:
+        candidate = (EXAMPLES_DIR / methodology / raw_path).resolve()
+        if not candidate.is_file():
+            candidate = (REPO_ROOT / raw_path).resolve()
+        if not candidate.is_relative_to(REPO_ROOT.resolve()):
+            raise HTTPException(status_code=404, detail=f"path escapes the repo: {raw_path}")
+        if not candidate.is_file():
+            raise HTTPException(status_code=404, detail=f"no table file at {raw_path}")
+        try:
+            fmt = _resolve_table_format(candidate.name)
+        except ValueError as exc:
+            return JSONResponse(status_code=422, content={"error": str(exc)})
+        columns = table_columns(candidate, fmt)
+        body = InspectTableResponse(
+            columns=columns, path=candidate.relative_to(REPO_ROOT.resolve()).as_posix()
+        )
+        return JSONResponse(content=dict(body))
+
+    raise HTTPException(status_code=422, detail="inspect-table needs a `file` upload or a `path` field")
+
+
+async def _read_eval_form(request: Request) -> dict[str, Any]:
+    """Pull the eval-authoring fields out of a submitted form, as plain python
+    values (parallel arrays zipped into row dicts). No validation here -- the
+    handler validates via EvalConfig / table_check / eval_compat."""
+    form = await request.form()
+
+    def _str(key: str) -> str:
+        v = form.get(key, "")
+        return v if isinstance(v, str) else ""
+
+    actual = [v for v in form.getlist("expected_actual") if isinstance(v, str)]
+    dataset = [v for v in form.getlist("expected_dataset") if isinstance(v, str)]
+    metric = [v for v in form.getlist("expected_metric") if isinstance(v, str)]
+    tolerance = [v for v in form.getlist("expected_tolerance") if isinstance(v, str)]
+
+    n = max(len(actual), len(dataset), len(metric), len(tolerance))
+    expected_rows = []
+    for i in range(n):
+        row_actual = actual[i] if i < len(actual) else ""
+        row_dataset = dataset[i] if i < len(dataset) else ""
+        row_metric = metric[i] if i < len(metric) else "exact"
+        row_tolerance = tolerance[i] if i < len(tolerance) else ""
+        if not row_actual and not row_dataset:
+            continue  # drop fully-empty trailing rows
+        expected_rows.append({
+            "actual": row_actual,
+            "dataset": row_dataset,
+            "metric": row_metric or "exact",
+            "tolerance": row_tolerance,
+        })
+
+    return {
+        "id": _str("id"),
+        "name": _str("name"),
+        "description": _str("description"),
+        "override_stage": _str("override_stage"),
+        "target_stage": _str("target_stage"),
+        "table_path": _str("table_path") or _str("path"),
+        "table_format": _str("table_format") or "csv",
+        "key": [v for v in form.getlist("key") if isinstance(v, str)],
+        "input_columns": [v for v in form.getlist("input_columns") if isinstance(v, str)],
+        "expected_rows": expected_rows,
+    }
+
+
+async def _handle_eval_form_post(
+    request: Request, methodology: str, eval_id: str | None
+) -> HTMLResponse | RedirectResponse:
+    """Shared create/edit POST handler. `eval_id` is the path id for edit (the
+    posted id is ignored for edit -- it always saves under the same id);
+    `None` for create, where the posted id is used."""
+    fields = await _read_eval_form(request)
+    resolved_id = eval_id if eval_id is not None else fields["id"]
+
+    listing = load_stages(methodology)
+    by_id = {s.id: s for s in listing.stages}
+
+    errors: list[str] = []
+
+    table_schema = _derive_table_schema(
+        by_id,
+        fields["override_stage"],
+        fields["target_stage"],
+        fields["key"],
+        fields["input_columns"],
+        fields["expected_rows"],
+        errors,
+    )
+
+    config_dict = {
+        "id": resolved_id,
+        "methodology": methodology,
+        "name": fields["name"],
+        "description": fields["description"] or None,
+        "override_stage": fields["override_stage"],
+        "target_stage": fields["target_stage"],
+        "table": {
+            "path": fields["table_path"],
+            "format": fields["table_format"],
+            "table_schema": table_schema.model_dump(mode="json"),
+        },
+        "key": fields["key"],
+        "input_columns": fields["input_columns"],
+        "expected": [
+            {
+                "actual": row["actual"],
+                "expected": row["dataset"],
+                "metric": row["metric"],
+                "tolerance": float(row["tolerance"]) if row["tolerance"] else None,
+            }
+            for row in fields["expected_rows"]
+        ],
+    }
+
+    config: EvalConfig | None = None
+    try:
+        config = EvalConfig.model_validate(config_dict)
+    except ValidationError as exc:
+        errors.extend(format_errors(exc))
+
+    if config is not None:
+        table_path = REPO_ROOT / config.table.path
+        if not table_path.is_file():
+            errors.append(f"cases table not found: {config.table.path}")
+        else:
+            try:
+                validation_report = validate_table_file(
+                    table_path, config.table.format, config.table.table_schema
+                )
+            except (FileNotFoundError, ValueError) as exc:
+                errors.append(str(exc))
+            else:
+                errors.extend(
+                    issue.message for issue in validation_report.issues
+                    if issue.severity == "error"
+                )
+
+        compat = check_eval_compatibility(config, listing.stages)
+        errors.extend(compat.problems)
+
+    values = EvalFormValues(
+        id=resolved_id,
+        name=fields["name"],
+        description=fields["description"],
+        override_stage=fields["override_stage"],
+        target_stage=fields["target_stage"],
+        table_path=fields["table_path"],
+        table_format=fields["table_format"],
+        key=fields["key"],
+        input_columns=fields["input_columns"],
+        expected_rows=fields["expected_rows"] or [_empty_expected_row()],
+    )
+
+    if errors or config is None:
+        return templates.TemplateResponse(
+            request,
+            "eval_form.html",
+            {
+                "methodology": methodology,
+                "mode": "edit" if eval_id is not None else "create",
+                "eval_id": eval_id,
+                "stages": _stage_options(listing.stages),
+                "values": values,
+                "errors": errors,
+            },
+            status_code=200,
+        )
+
+    methodology_dir = EXAMPLES_DIR / methodology
+    save_eval_config(methodology_dir, config)
+    return RedirectResponse(
+        url=f"/methodology/{methodology}/evals/{config.id}", status_code=303
+    )
+
+
+@router.post("/methodology/{methodology}/evals/new", response_model=None)
+async def eval_create(request: Request, methodology: str) -> HTMLResponse | RedirectResponse:
+    return await _handle_eval_form_post(request, methodology, eval_id=None)
+
+
+@router.post("/methodology/{methodology}/evals/{eval_id}/edit", response_model=None)
+async def eval_edit_submit(
+    request: Request, methodology: str, eval_id: str
+) -> HTMLResponse | RedirectResponse:
+    return await _handle_eval_form_post(request, methodology, eval_id=eval_id)
 
 
 @router.get("/methodology/{methodology}/evals/{eval_id}", response_class=HTMLResponse)

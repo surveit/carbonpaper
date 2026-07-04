@@ -1,0 +1,234 @@
+{% extends "base.html" %}
+{% block title %}{% if mode == "create" %}New eval{% else %}Edit {{ values.name }}{% endif %} · {{ methodology }} evals{% endblock %}
+
+{% block header_extra %}
+{% if mode == "create" %}
+<a href="/methodology/{{ methodology }}/evals" class="back-link">← {{ methodology }} evals</a>
+{% else %}
+<a href="/methodology/{{ methodology }}/evals/{{ eval_id }}" class="back-link">← {{ values.name }}</a>
+{% endif %}
+{% endblock %}
+
+{% block content %}
+<h1>{% if mode == "create" %}New eval{% else %}Edit eval{% endif %}</h1>
+
+{% if errors %}
+<div class="load-issues">
+    <strong>{{ errors|length }} problem(s):</strong>
+    <ul>{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul>
+</div>
+{% endif %}
+
+<form method="post"
+      action="{% if mode == 'create' %}/methodology/{{ methodology }}/evals/new{% else %}/methodology/{{ methodology }}/evals/{{ eval_id }}/edit{% endif %}"
+      id="eval-form">
+
+    <p>
+        <label for="f-id">id</label><br>
+        {% if mode == "create" %}
+        <input type="text" id="f-id" name="id" value="{{ values.id }}" required>
+        {% else %}
+        <input type="text" id="f-id" value="{{ values.id }}" disabled>
+        {% endif %}
+    </p>
+
+    <p>
+        <label for="f-name">name</label><br>
+        <input type="text" id="f-name" name="name" value="{{ values.name }}" required>
+    </p>
+
+    <p>
+        <label for="f-description">description</label><br>
+        <textarea id="f-description" name="description">{{ values.description }}</textarea>
+    </p>
+
+    <p>
+        <label for="f-override-stage">override stage</label><br>
+        <select id="f-override-stage" name="override_stage" required>
+            <option value="">— select —</option>
+            {% for s in stages %}
+            <option value="{{ s.id }}"
+                {% if s.id == values.override_stage %}selected{% endif %}
+                {% if s.schemaless %}disabled{% endif %}>
+                {{ s.name }} ({{ s.id }}){% if s.schemaless %} (no output schema){% endif %}
+            </option>
+            {% endfor %}
+        </select>
+    </p>
+    <div id="override-required-columns"></div>
+
+    <p>
+        <label for="f-target-stage">target stage</label><br>
+        <select id="f-target-stage" name="target_stage" required>
+            <option value="">— select —</option>
+            {% for s in stages %}
+            <option value="{{ s.id }}"
+                {% if s.id == values.target_stage %}selected{% endif %}
+                {% if s.schemaless %}disabled{% endif %}>
+                {{ s.name }} ({{ s.id }}){% if s.schemaless %} (no output schema){% endif %}
+            </option>
+            {% endfor %}
+        </select>
+    </p>
+
+    <p>
+        <label for="f-key">key column(s)</label><br>
+        <select id="f-key" name="key" multiple>
+            {% for c in values.key %}<option value="{{ c }}" selected>{{ c }}</option>{% endfor %}
+        </select>
+    </p>
+
+    <p>
+        <label for="f-input-columns">input column(s)</label><br>
+        <select id="f-input-columns" name="input_columns" multiple>
+            {% for c in values.input_columns %}<option value="{{ c }}" selected>{{ c }}</option>{% endfor %}
+        </select>
+    </p>
+
+    <h2>Cases table</h2>
+    <p>
+        <label for="f-file">upload a file</label><br>
+        <input type="file" id="f-file" name="file" accept=".csv,.parquet,.json">
+    </p>
+    <p>
+        <label for="f-path">or an existing repo-relative path</label><br>
+        <input type="text" id="f-path" name="path_input" value="{{ values.table_path }}">
+    </p>
+    <input type="hidden" id="f-table-path" name="table_path" value="{{ values.table_path }}">
+
+    <p>
+        <label for="f-table-format">format</label><br>
+        <select id="f-table-format" name="table_format">
+            <option value="csv" {% if values.table_format == "csv" %}selected{% endif %}>csv</option>
+            <option value="parquet" {% if values.table_format == "parquet" %}selected{% endif %}>parquet</option>
+            <option value="json" {% if values.table_format == "json" %}selected{% endif %}>json</option>
+        </select>
+    </p>
+
+    <h2>Expected columns</h2>
+    <div id="expected-rows">
+        {% for row in values.expected_rows %}
+        <div class="expected-row">
+            <select name="expected_actual">
+                <option value="">— actual —</option>
+                {% if row.actual %}<option value="{{ row.actual }}" selected>{{ row.actual }}</option>{% endif %}
+            </select>
+            <select name="expected_dataset">
+                <option value="">— dataset column —</option>
+                {% if row.dataset %}<option value="{{ row.dataset }}" selected>{{ row.dataset }}</option>{% endif %}
+            </select>
+            <select name="expected_metric">
+                <option value="exact" {% if row.metric == "exact" %}selected{% endif %}>exact</option>
+                <option value="abs_tol" {% if row.metric == "abs_tol" %}selected{% endif %}>abs_tol</option>
+                <option value="sign" {% if row.metric == "sign" %}selected{% endif %}>sign</option>
+            </select>
+            <input type="number" name="expected_tolerance" value="{{ row.tolerance }}" step="any">
+            <button type="button" class="btn remove-expected-row">remove</button>
+        </div>
+        {% endfor %}
+    </div>
+    <button type="button" class="btn" id="add-expected-row">+ add expected column</button>
+
+    <p><button type="submit" class="btn primary">save</button></p>
+</form>
+
+{# Template row cloned by JS when adding an expected-column row. Kept outside
+   the form so it never submits on its own. #}
+<template id="expected-row-template">
+    <div class="expected-row">
+        <select name="expected_actual"><option value="">— actual —</option></select>
+        <select name="expected_dataset"><option value="">— dataset column —</option></select>
+        <select name="expected_metric">
+            <option value="exact">exact</option>
+            <option value="abs_tol">abs_tol</option>
+            <option value="sign">sign</option>
+        </select>
+        <input type="number" name="expected_tolerance" step="any">
+        <button type="button" class="btn remove-expected-row">remove</button>
+    </div>
+</template>
+
+<script>
+(function () {
+    "use strict";
+    const methodology = {{ methodology|tojson }};
+
+    function optionsHtml(columns, placeholder) {
+        let html = '<option value="">' + placeholder + '</option>';
+        for (const c of columns) {
+            html += '<option value="' + c.name + '">' + c.name + ' (' + c.type + ')</option>';
+        }
+        return html;
+    }
+
+    async function fetchStageSchema(stageId) {
+        const res = await fetch('/methodology/' + methodology + '/evals/stage-schema/' + stageId + '.json');
+        if (!res.ok) return null;
+        return res.json();
+    }
+
+    document.getElementById('f-override-stage').addEventListener('change', async function () {
+        const body = await fetchStageSchema(this.value);
+        const required = document.getElementById('override-required-columns');
+        const keySelect = document.getElementById('f-key');
+        const inputSelect = document.getElementById('f-input-columns');
+        if (!body) { required.textContent = ''; return; }
+        required.innerHTML = '<p class="lede">columns: ' +
+            body.columns.map(c => c.name + ' (' + c.type + ')').join(', ') + '</p>';
+        keySelect.innerHTML = optionsHtml(body.columns, '');
+        inputSelect.innerHTML = optionsHtml(body.columns, '');
+    });
+
+    document.getElementById('f-target-stage').addEventListener('change', async function () {
+        const body = await fetchStageSchema(this.value);
+        if (!body) return;
+        document.querySelectorAll('select[name="expected_actual"]').forEach(function (sel) {
+            sel.innerHTML = optionsHtml(body.columns, '— actual —');
+        });
+    });
+
+    async function inspectTable(formData) {
+        const res = await fetch('/methodology/' + methodology + '/evals/inspect-table', {
+            method: 'POST', body: formData,
+        });
+        if (!res.ok) return null;
+        return res.json();
+    }
+
+    function applyDatasetColumns(columns, path) {
+        document.getElementById('f-table-path').value = path;
+        document.querySelectorAll('select[name="expected_dataset"]').forEach(function (sel) {
+            sel.innerHTML = optionsHtml(columns.map(c => ({name: c, type: ''})), '— dataset column —');
+        });
+    }
+
+    document.getElementById('f-file').addEventListener('change', async function () {
+        if (!this.files.length) return;
+        const fd = new FormData();
+        fd.append('file', this.files[0]);
+        const body = await inspectTable(fd);
+        if (body) applyDatasetColumns(body.columns, body.path);
+    });
+
+    document.getElementById('f-path').addEventListener('blur', async function () {
+        if (!this.value) return;
+        const fd = new FormData();
+        fd.append('path', this.value);
+        const body = await inspectTable(fd);
+        if (body) applyDatasetColumns(body.columns, body.path);
+    });
+
+    document.getElementById('add-expected-row').addEventListener('click', function () {
+        const tmpl = document.getElementById('expected-row-template');
+        const clone = tmpl.content.cloneNode(true);
+        document.getElementById('expected-rows').appendChild(clone);
+    });
+
+    document.getElementById('expected-rows').addEventListener('click', function (evt) {
+        if (evt.target.classList.contains('remove-expected-row')) {
+            evt.target.closest('.expected-row').remove();
+        }
+    });
+})();
+</script>
+{% endblock %}
