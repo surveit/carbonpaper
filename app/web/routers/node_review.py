@@ -12,14 +12,18 @@ and `versions/<id>/` (snapshots), managed by app.services.node_review + app.serv
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import json
 
 from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 
 from app.services import node_review, versioning
+from app.services.loader import (
+    find_stage_file,
+    stage_to_json,
+    stage_to_spec_dict,
+    write_stage,
+)
 from app.models import Stage, validate_stage
 from app.web.config import EXAMPLES_DIR, templates
 from app.web.diagrams import TYPE_CLASS, TYPE_GLYPH, build_mermaid_graph
@@ -28,19 +32,11 @@ from app.web.loading import find_stage, load_stages, resolve_function_code
 router = APIRouter()
 
 
-def _spec_dict(stage: Stage) -> dict:
-    """The canonical spec dict node_review hashes — a typed Stage dumped back
-    to its on-disk mapping (aliases restored, unset optionals omitted).
-    mode="json" so the dict equals json.loads of the persisted file exactly:
-    both spellings of a spec hash identically."""
-    return stage.model_dump(mode="json", by_alias=True, exclude_none=True)
-
-
 def _review_by_id(stages: list[Stage], decisions) -> dict[str, str]:
     """belief state per stage id (approved / unreviewed / rejected / edited_stale),
     the map build_mermaid_graph colours strokes by."""
     return {
-        s.id: node_review.approval_state_for(_spec_dict(s), decisions)["state"]
+        s.id: node_review.approval_state_for(stage_to_spec_dict(s), decisions)["state"]
         for s in stages
     }
 
@@ -54,7 +50,7 @@ async def review_status(methodology: str):
     stages = load_stages(methodology).stages
     decisions = node_review.load_node_decisions(EXAMPLES_DIR / methodology)
     review_by_id = _review_by_id(stages, decisions)
-    coverage = node_review.coverage_for([_spec_dict(s) for s in stages], decisions)
+    coverage = node_review.coverage_for([stage_to_spec_dict(s) for s in stages], decisions)
     mermaid = build_mermaid_graph(stages, methodology, review_by_id=review_by_id)
     return JSONResponse({
         "review_by_id": review_by_id,
@@ -76,7 +72,7 @@ async def node_review_partial(request: Request, methodology: str, stage_id: str)
     if stage is None:
         raise HTTPException(status_code=404, detail=f"No stage '{stage_id}' in {methodology}")
     decisions = node_review.load_node_decisions(EXAMPLES_DIR / methodology)
-    review = node_review.approval_state_for(_spec_dict(stage), decisions)
+    review = node_review.approval_state_for(stage_to_spec_dict(stage), decisions)
     return templates.TemplateResponse(
         request,
         "_node_review.html",
@@ -84,7 +80,7 @@ async def node_review_partial(request: Request, methodology: str, stage_id: str)
             "methodology": methodology,
             "stage": stage,
             "review": review,
-            "raw_json": stage.model_dump_json(indent=2, by_alias=True, exclude_none=True),
+            "raw_json": stage_to_json(stage),
             "function_code": resolve_function_code(stage),
             "type_class": TYPE_CLASS,
             "type_glyph": TYPE_GLYPH,
@@ -128,7 +124,7 @@ async def node_decide(
     if stage is None:
         raise HTTPException(status_code=404, detail=f"No stage '{stage_id}' in {methodology}")
     decisions = node_review.load_node_decisions(methodology_dir)
-    state = node_review.approval_state_for(_spec_dict(stage), decisions)["state"]
+    state = node_review.approval_state_for(stage_to_spec_dict(stage), decisions)["state"]
     return JSONResponse({"ok": True, "state": state})
 
 
@@ -184,31 +180,19 @@ async def node_edit(
     # Guard: the target file must ALREADY exist. The edit endpoint revises an
     # existing node; it does not create new compiled files (that's the compiler's
     # job). Find the on-disk file for this stage id via the same loader convention.
-    compiled_dir = methodology_dir / "compiled"
-    target: Path | None = None
-    for json_file in sorted(compiled_dir.glob("*.json")):
-        try:
-            data = json.loads(json_file.read_text(encoding="utf-8")) or {}
-        except json.JSONDecodeError:
-            continue
-        if isinstance(data, dict) and data.get("id") == stage_id:
-            target = json_file
-            break
+    target = find_stage_file(methodology_dir / "compiled", stage_id)
     if target is None:
         raise HTTPException(
             status_code=404,
             detail=f"No existing compiled file for stage '{stage_id}' in {methodology}",
         )
 
-    # Write the VALIDATED stage's canonical dump (the same shape the compiler
-    # persists and every read path hashes), not the reviewer's raw text.
+    # Persist the VALIDATED stage in the canonical on-disk form (the same shape
+    # the compiler writes and every read path hashes), not the reviewer's raw text.
     validated = Stage.model_validate(stage)
-    target.write_text(
-        validated.model_dump_json(indent=2, by_alias=True, exclude_none=True),
-        encoding="utf-8",
-    )
+    write_stage(target, validated)
 
-    spec = _spec_dict(validated)
+    spec = stage_to_spec_dict(validated)
     new_hash = node_review.node_content_hash(spec)
     decisions = node_review.load_node_decisions(methodology_dir)
     state = node_review.approval_state_for(spec, decisions)["state"]

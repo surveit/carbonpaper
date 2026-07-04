@@ -7,6 +7,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, Response
 
 from app.services import node_review, versioning
+from app.services.loader import stage_to_json, stage_to_spec_dict
 from app.web.config import EXAMPLES_DIR, templates
 from app.web.diagrams import TYPE_CLASS, TYPE_GLYPH, build_er_diagram, build_mermaid_graph
 from app.web.loading import (
@@ -35,12 +36,11 @@ async def methodology_view(request: Request, methodology: str):
     stages = listing.stages
     # Node-review layer: colour the DAG by belief (approved/unreviewed/rejected/
     # edited_stale) on first paint, drive the coverage badge, and list versions.
-    # node_review speaks canonical spec dicts, so each typed Stage is dumped
-    # back to its spec dict for hashing (mode="json" matches json.loads of the
-    # persisted file exactly, so both spellings of a spec hash identically).
+    # node_review speaks canonical spec dicts (stage_to_spec_dict), which equal
+    # json.loads of the persisted file — so a node's hash is the same whether it
+    # came off disk or from a live Stage.
     decisions = node_review.load_node_decisions(EXAMPLES_DIR / methodology)
-    spec_dicts = [s.model_dump(mode="json", by_alias=True, exclude_none=True)
-                  for s in stages]
+    spec_dicts = [stage_to_spec_dict(s) for s in stages]
     review_by_id = {
         s.id: node_review.approval_state_for(spec, decisions)["state"]
         for s, spec in zip(stages, spec_dicts)
@@ -83,7 +83,7 @@ async def stage_view(request: Request, methodology: str, stage_id: str):
             "function_code": function_code,
             "type_class": TYPE_CLASS,
             "type_glyph": TYPE_GLYPH,
-            "raw_json": stage.model_dump_json(indent=2, by_alias=True, exclude_none=True),
+            "raw_json": stage_to_json(stage),
         },
     )
 
@@ -124,7 +124,7 @@ async def stage_view_partial(request: Request, methodology: str, stage_id: str):
             "function_code": function_code,
             "type_class": TYPE_CLASS,
             "type_glyph": TYPE_GLYPH,
-            "raw_json": stage.model_dump_json(indent=2, by_alias=True, exclude_none=True),
+            "raw_json": stage_to_json(stage),
         },
     )
 
@@ -136,6 +136,6 @@ async def stage_raw(methodology: str, stage_id: str) -> Response:
     if stage is None:
         raise HTTPException(status_code=404, detail=f"No stage '{stage_id}' in {methodology}")
     return Response(
-        content=stage.model_dump_json(indent=2, by_alias=True, exclude_none=True),
+        content=stage_to_json(stage),
         media_type="application/json",
     )
