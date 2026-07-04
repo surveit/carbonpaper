@@ -85,8 +85,7 @@ join:             # join only
 aggregate:        # aggregate only
   group_by: [entity_id, source_class, policy_query]
   aggregations:
-    - {output_column: cell_score, formula: weighted_mean,
-       value_column: score, weight_column: importance}
+    - {output_column: cell_score, formula: mean, value_column: score}
     - {output_column: evidence_count, formula: count}
 
 queue:            # human_review_queue only
@@ -152,12 +151,12 @@ computed_static — curated list with no automated fetch (e.g., the methodology'
 ## Aggregation formulas
 
 ```
-sum, mean, count, min, max, first, list      — standard
-weighted_mean       — requires value_column + weight_column
-weighted_sum        — requires value_column + weight_column
+sum, mean, count, min, max, first, list      — standard (all but count require value_column)
 ```
 
-Anything non-trivial belongs in a `python_frame_function`, not in an `aggregate`.
+Weighted aggregation is not part of this contract — do it inside a
+`python_frame_function` instead. Anything else non-trivial also belongs in a
+`python_frame_function`, not in an `aggregate`.
 
 ## Filling in details from prose
 

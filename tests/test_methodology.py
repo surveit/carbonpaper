@@ -26,8 +26,8 @@ def test_methodology_clean():
 def test_methodology_duplicate_ids():
     with pytest.raises(ValidationError):
         m.parse_methodology([
-            S(id="a", type="input_data", connector={"kind": "file"}),
-            S(id="a", type="input_data", connector={"kind": "file"}),
+            S(id="a", type="input_data", connector={"kind": "file", "params": {"path": "d.csv"}}),
+            S(id="a", type="input_data", connector={"kind": "file", "params": {"path": "d.csv"}}),
         ])
 
 
@@ -46,24 +46,28 @@ def test_methodology_cycle():
         ])
 
 
-# the graph checks are plain functions — test them directly (the point of the split)
-def test_check_inputs_resolve_raises_on_dangling():
-    s = Stage.model_validate(S(id="b", type="llm_transform", inputs=[{"id": "ghost"}], llm={"prompt_template": "p"}))
-    with pytest.raises(ValueError):
-        m.check_inputs_resolve([s])
+# the graph checks are plain functions — test them directly (the point of the split).
+# Each RETURNS its issues (all of them) rather than raising on the first.
+def test_check_inputs_resolve_reports_all_dangling():
+    s = Stage.model_validate(S(id="b", type="join",
+                               inputs=[{"id": "ghost1"}, {"id": "ghost2"}],
+                               join={"keys": [{"left": "x", "right": "y"}]}))
+    issues = m.check_inputs_resolve([s])
+    assert len(issues) == 2  # both dangling inputs, not just the first
+    assert all("references no stage" in i for i in issues)
 
 
-def test_detect_cycle_raises_on_cycle():
+def test_detect_cycle_reports_cycle():
     a = Stage.model_validate(S(id="a", type="python_frame_function", inputs=[{"id": "b"}], function={"kind": "inline", "code": "x"}))
     b = Stage.model_validate(S(id="b", type="python_frame_function", inputs=[{"id": "a"}], function={"kind": "inline", "code": "x"}))
-    with pytest.raises(ValueError):
-        m.detect_cycle([a, b])
+    assert m.detect_cycle([a, b])  # non-empty
 
 
-def test_detect_cycle_passes_when_acyclic():
-    a = Stage.model_validate(S(id="a", type="input_data", connector={"kind": "file"}))
+def test_detect_cycle_empty_when_acyclic():
+    a = Stage.model_validate(S(id="a", type="input_data",
+                               connector={"kind": "file", "params": {"path": "d.csv"}}))
     b = Stage.model_validate(S(id="b", type="llm_transform", inputs=[{"id": "a"}], llm={"prompt_template": "p"}))
-    m.detect_cycle([a, b])  # no raise
+    assert m.detect_cycle([a, b]) == []
 
 
 def test_validate_methodology_clean_is_empty():

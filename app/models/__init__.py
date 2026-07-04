@@ -24,6 +24,7 @@ from app.models.stage import (
     ConnectorKind,
     FileFormat,
     FunctionKind,
+    InputRef,
     JoinConfig,
     JoinKey,
     JoinType,
@@ -44,6 +45,7 @@ from app.models.methodology import (
     detect_cycle,
     parse_methodology,
     validate_methodology,
+    validate_methodology_stages,
 )
 from app.models.named_schemas import (
     NamedColumn,
@@ -66,6 +68,9 @@ from app.models.eval import (
     StageOutputOverride,
     resolve_eval_run_settings,
 )
+# NOTE: the compiled-stage loader lives in app.services.loader (it does
+# filesystem I/O, which is service work, not schema). Import it from there;
+# app.models stays a pure, side-effect-free schema package.
 
 __all__ = [
     "StageType", "ConnectorKind", "FileFormat", "AggFormula", "JoinType",
@@ -73,8 +78,9 @@ __all__ = [
     "SourceRef", "Column", "TableSchema", "Connector", "LLMConfig",
     "PythonFunction", "JoinKey", "JoinConfig", "AggregationOp",
     "AggregateConfig", "QueueConfig", "PublishConfig", "ReviewConfig",
-    "Stage", "validate_stage",
+    "InputRef", "Stage", "validate_stage",
     "Methodology", "parse_methodology", "validate_methodology",
+    "validate_methodology_stages",
     "check_unique_ids", "check_inputs_resolve", "detect_cycle",
     "SchemaKind", "NamedColumn", "NamedSchema", "SchemaLibrary",
     "parse_schema_library", "validate_schema_library",

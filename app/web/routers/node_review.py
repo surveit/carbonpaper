@@ -19,7 +19,7 @@ from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 
 from app.services import node_review, versioning
-from app.models import validate_stage
+from app.models import Stage, validate_stage
 from app.web.config import EXAMPLES_DIR, templates
 from app.web.diagrams import TYPE_CLASS, TYPE_GLYPH, build_mermaid_graph
 from app.web.loading import find_stage, load_stages, resolve_function_code
@@ -27,13 +27,18 @@ from app.web.loading import find_stage, load_stages, resolve_function_code
 router = APIRouter()
 
 
-def _review_by_id(stages: list[dict], decisions) -> dict[str, str]:
+def _spec_dict(stage: Stage) -> dict:
+    """The canonical spec dict node_review hashes — a typed Stage dumped back
+    to its on-disk mapping (aliases restored, unset optionals omitted)."""
+    return stage.model_dump(by_alias=True, exclude_none=True)
+
+
+def _review_by_id(stages: list[Stage], decisions) -> dict[str, str]:
     """belief state per stage id (approved / unreviewed / rejected / edited_stale),
     the map build_mermaid_graph colours strokes by."""
     return {
-        s["id"]: node_review.approval_state_for(s, decisions)["state"]
+        s.id: node_review.approval_state_for(_spec_dict(s), decisions)["state"]
         for s in stages
-        if s.get("id")
     }
 
 
@@ -43,10 +48,10 @@ async def review_status(methodology: str):
     freshly-built mermaid graph coloured by approval. Mirrors run_status — the page
     swaps `mermaid` in place after a decision/edit so the DAG recolours without a
     full reload."""
-    stages = load_stages(methodology)
+    stages = load_stages(methodology).stages
     decisions = node_review.load_node_decisions(EXAMPLES_DIR / methodology)
     review_by_id = _review_by_id(stages, decisions)
-    coverage = node_review.coverage_for(stages, decisions)
+    coverage = node_review.coverage_for([_spec_dict(s) for s in stages], decisions)
     mermaid = build_mermaid_graph(stages, methodology, review_by_id=review_by_id)
     return JSONResponse({
         "review_by_id": review_by_id,
@@ -63,12 +68,12 @@ async def node_review_partial(request: Request, methodology: str, stage_id: str)
     """Per-node REVIEW/EDIT panel (right side of the methodology split view). Mirrors
     stage_view_partial, but answers the node-review question (approve / reject / edit
     the spec) instead of showing the read-only stage detail."""
-    stages = load_stages(methodology)
+    stages = load_stages(methodology).stages
     stage = find_stage(stages, stage_id)
     if stage is None:
         raise HTTPException(status_code=404, detail=f"No stage '{stage_id}' in {methodology}")
     decisions = node_review.load_node_decisions(EXAMPLES_DIR / methodology)
-    review = node_review.approval_state_for(stage, decisions)
+    review = node_review.approval_state_for(_spec_dict(stage), decisions)
     return templates.TemplateResponse(
         request,
         "_node_review.html",
@@ -76,7 +81,7 @@ async def node_review_partial(request: Request, methodology: str, stage_id: str)
             "methodology": methodology,
             "stage": stage,
             "review": review,
-            "raw_yaml": yaml.safe_dump(stage, sort_keys=False, allow_unicode=True),
+            "raw_yaml": yaml.safe_dump(_spec_dict(stage), sort_keys=False, allow_unicode=True),
             "function_code": resolve_function_code(stage),
             "type_class": TYPE_CLASS,
             "type_glyph": TYPE_GLYPH,
@@ -115,12 +120,12 @@ async def node_decide(
     # spec — the same source of truth the DAG colours by — so the returned chip and
     # the DAG agree. (record_node_decision stores 'needs_changes' verbatim, which
     # approval_state_for reports as 'unreviewed' for colouring.)
-    stages = load_stages(methodology)
+    stages = load_stages(methodology).stages
     stage = find_stage(stages, stage_id)
     if stage is None:
         raise HTTPException(status_code=404, detail=f"No stage '{stage_id}' in {methodology}")
     decisions = node_review.load_node_decisions(methodology_dir)
-    state = node_review.approval_state_for(stage, decisions)["state"]
+    state = node_review.approval_state_for(_spec_dict(stage), decisions)["state"]
     return JSONResponse({"ok": True, "state": state})
 
 
@@ -196,9 +201,13 @@ async def node_edit(
     with target.open("w", encoding="utf-8") as f:
         yaml.safe_dump(stage, f, sort_keys=False, allow_unicode=True)
 
-    new_hash = node_review.node_content_hash(stage)
+    # Hash the PARSED stage's spec dict, not the raw posted mapping — the same
+    # convention every read path uses, so the returned hash matches what the
+    # DAG recolour poll will compute from the file we just wrote.
+    spec = _spec_dict(Stage.model_validate(stage))
+    new_hash = node_review.node_content_hash(spec)
     decisions = node_review.load_node_decisions(methodology_dir)
-    state = node_review.approval_state_for(stage, decisions)["state"]
+    state = node_review.approval_state_for(spec, decisions)["state"]
     return JSONResponse({"ok": True, "content_hash": new_hash, "state": state})
 
 

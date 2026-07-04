@@ -5,13 +5,15 @@ small pure helpers for the stage-dict shape they return."""
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import pandas as pd
-import yaml
 from fastapi import HTTPException
 
+from app.models import Stage
+from app.services.loader import CompiledStageFile, load_compiled_dir
 from app.web.config import EXAMPLES_DIR, REPO_ROOT
 
 
@@ -27,53 +29,43 @@ def list_methodologies() -> list[str]:
     ]
 
 
-def load_stages(methodology: str) -> list[dict[str, Any]]:
+@dataclass
+class StageListing:
+    """Compiled stages for the viewer. All-or-nothing: if every file is valid,
+    `stages` holds them and `issues` is empty; if ANY file is invalid, `stages`
+    is empty and `issues` names the broken files. `order` maps stage id →
+    filename order prefix (empty when there are issues)."""
+    stages: list[Stage]
+    issues: list[CompiledStageFile]
+    order: dict[str, str]
+
+
+def load_stages(methodology: str) -> StageListing:
     compiled_dir = EXAMPLES_DIR / methodology / "compiled"
     if not compiled_dir.is_dir():
         raise HTTPException(status_code=404, detail=f"No compiled stages for {methodology}")
-    stages: list[dict[str, Any]] = []
-    for yaml_file in sorted(compiled_dir.glob("*.yaml")):
-        with yaml_file.open("r", encoding="utf-8") as f:
-            try:
-                data = yaml.safe_load(f) or {}
-            except yaml.YAMLError as exc:
-                data = {
-                    "id": yaml_file.stem,
-                    "name": f"[YAML ERROR] {yaml_file.name}",
-                    "type": "python_frame_function",
-                    "compiler_notes": [f"YAML parse error: {exc}"],
-                    "_error": True,
-                }
-        data["_filename"] = yaml_file.name
-        data["_order"] = yaml_file.stem.split("_", 1)[0]
-        stages.append(data)
-    return stages
+    entries = load_compiled_dir(compiled_dir)
+    issues = [e for e in entries if e.issues]
+    if issues:
+        # One invalid file breaks the whole workflow — its edges no longer
+        # resolve, so the surviving stages form a DAG with holes. Rendering that
+        # is "unusable but lies." Return no stages, only the issues, so the
+        # viewer shows what's broken instead of a false graph.
+        return StageListing(stages=[], issues=issues, order={})
+    stages = [e.stage for e in entries if e.stage is not None]
+    order = {e.stage.id: e.filename.split("_", 1)[0]
+             for e in entries if e.stage is not None}
+    return StageListing(stages=stages, issues=[], order=order)
 
 
-def find_stage(stages: list[dict[str, Any]], stage_id: str) -> dict[str, Any] | None:
-    """The stage dict with this id, or None."""
-    return next((s for s in stages if s.get("id") == stage_id), None)
-
-
-def get_input_ids(stage: dict[str, Any]) -> list[str]:
-    """v2 inputs are objects with id; older shapes might be plain strings."""
-    inputs = stage.get("inputs") or []
-    out = []
-    for inp in inputs:
-        if isinstance(inp, dict):
-            iid = inp.get("id")
-            if iid:
-                out.append(iid)
-        elif isinstance(inp, str):
-            out.append(inp)
-    return out
+def find_stage(stages: list[Stage], stage_id: str) -> Stage | None:
+    return next((s for s in stages if s.id == stage_id), None)
 
 
 # ─── Source & code reads ─────────────────────────────────────────────────────
 
-def read_prose_excerpt(stage: dict[str, Any], methodology: str) -> str | None:
-    src = stage.get("source") or {}
-    doc = src.get("doc")
+def read_prose_excerpt(stage: Stage, methodology: str) -> str | None:
+    doc = stage.source.doc if stage.source else None
     if not doc:
         return None
     candidate = REPO_ROOT / doc
@@ -101,14 +93,14 @@ def read_module_code(module_path: str) -> str | None:
         return None
 
 
-def resolve_function_code(stage_def: dict[str, Any] | None) -> str | None:
+def resolve_function_code(stage_def: Stage | None) -> str | None:
     """Python source for a stage's function handle: the module file for a module
     ref, or the inline code string. None if the stage has neither."""
-    fn = (stage_def or {}).get("function") or {}
-    if fn.get("kind") == "module" and fn.get("module"):
-        return read_module_code(fn["module"])
-    if fn.get("kind") == "inline":
-        return fn.get("code")
+    fn = stage_def.function if stage_def else None
+    if fn and fn.kind == "module" and fn.module:
+        return read_module_code(fn.module)
+    if fn and fn.kind == "inline":
+        return fn.code
     return None
 
 
@@ -275,15 +267,14 @@ def display_cell(v: Any) -> Any:
 # ─── LLM prompt example ──────────────────────────────────────────────────────
 
 def build_llm_example(
-    stage_def: dict[str, Any], input_previews: list[dict[str, Any]]
+    stage_def: Stage | None, input_previews: list[dict[str, Any]]
 ) -> dict[str, Any] | None:
     """Render the prompt_template with the first row of the first usable input.
 
     Returns {rendered, source_id} on success, {error} if no input or render
     fails, or None if the stage isn't an LLM stage.
     """
-    llm = (stage_def or {}).get("llm") or {}
-    template = llm.get("prompt_template")
+    template = stage_def.llm.prompt_template if stage_def and stage_def.llm else None
     if not template:
         return None
     for ip in input_previews:

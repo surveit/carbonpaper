@@ -6,51 +6,43 @@ from typing import Any
 
 import pandas as pd
 
+from app.models import Stage
+
 from ._shared import _translate_where
 
 
-def handle_aggregate(stage: dict[str, Any], inputs: dict[str, pd.DataFrame], ctx: dict[str, Any]) -> pd.DataFrame:
-    agg_cfg = stage.get("aggregate", {})
-    inps = stage.get("inputs", [])
-    df = inputs[inps[0]["id"]]
-    group_by = agg_cfg.get("group_by", [])
-    aggs = agg_cfg.get("aggregations", [])
+def handle_aggregate(stage: Stage, inputs: dict[str, pd.DataFrame], ctx: dict[str, Any]) -> pd.DataFrame:
+    agg_cfg = stage.aggregate
+    assert agg_cfg is not None  # Stage validation: aggregate carries agg_cfg
+    df = inputs[stage.inputs[0].id]
+    group_by = agg_cfg.group_by
 
     rows = df.copy()
     # Apply per-aggregation `where` filters by computing each aggregation
     # separately then merging.
     results = None
-    for op in aggs:
-        out = op["output_column"]
-        formula = op["formula"]
-        value = op.get("value_column")
-        weight = op.get("weight_column")
-        where = op.get("where")
+    for op in agg_cfg.aggregations:
+        out = op.output_column
+        formula = op.formula
+        where = op.where
         slice_df = rows
         if where:
             slice_df = rows.query(_translate_where(where))
 
-        if formula in {"sum", "mean", "count", "min", "max"}:
-            if formula == "count":
-                series = slice_df.groupby(group_by, dropna=False).size().rename(out)
-            else:
-                series = slice_df.groupby(group_by, dropna=False)[value].agg(formula).rename(out)
-        elif formula == "weighted_mean":
-            slice_df = slice_df.dropna(subset=[value])
-            slice_df["_weighted"] = slice_df[value] * slice_df[weight]
-            num = slice_df.groupby(group_by, dropna=False)["_weighted"].sum()
-            den = slice_df.groupby(group_by, dropna=False)[weight].sum()
-            series = (num / den).rename(out)
-        elif formula == "weighted_sum":
-            series = slice_df.groupby(group_by, dropna=False).apply(
-                lambda g: (g[value] * g[weight]).sum() if value else g[weight].sum()
-            ).rename(out)
-        elif formula == "first":
-            series = slice_df.groupby(group_by, dropna=False)[value].first().rename(out)
-        elif formula == "list":
-            series = slice_df.groupby(group_by, dropna=False)[value].apply(list).rename(out)
+        if formula == "count":
+            series = slice_df.groupby(group_by, dropna=False).size().rename(out)
         else:
-            raise ValueError(f"Unknown aggregation formula: {formula}")
+            if op.value_column is None:
+                raise ValueError(f"aggregation `{out}`: formula `{formula}` needs value_column")
+            value = op.value_column
+            if formula in {"sum", "mean", "min", "max"}:
+                series = slice_df.groupby(group_by, dropna=False)[value].agg(formula).rename(out)
+            elif formula == "first":
+                series = slice_df.groupby(group_by, dropna=False)[value].first().rename(out)
+            elif formula == "list":
+                series = slice_df.groupby(group_by, dropna=False)[value].apply(list).rename(out)
+            else:
+                raise ValueError(f"Unknown aggregation formula: {formula}")
 
         partial = series.reset_index()
         results = partial if results is None else results.merge(partial, on=group_by, how="outer")

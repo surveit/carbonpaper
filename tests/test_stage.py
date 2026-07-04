@@ -49,7 +49,7 @@ def test_valid_input_data():
     s = m.Stage.model_validate(S(
         id="load", type="input_data",
         connector={"kind": "file", "params": {"path": "d.csv", "format": "csv"}}))
-    assert s.type is m.StageType.input_data
+    assert s.type == m.StageType.input_data
 
 
 def test_valid_llm_transform():
@@ -73,7 +73,7 @@ def test_publish_config_is_typed():
     s = m.Stage.model_validate(S(
         id="p", type="publish", inputs=[{"id": "a"}],
         publish={"format": "json"}, function={"kind": "inline", "code": "x"}))
-    assert s.publish.format is m.PublishFormat.json
+    assert s.publish.format == m.PublishFormat.json
 
 
 def test_python_function_inline_needs_code():
@@ -84,7 +84,8 @@ def test_python_function_inline_needs_code():
 
 def test_bad_id_snake_case():
     with pytest.raises(ValidationError):
-        m.Stage.model_validate(S(id="BadId", type="input_data", connector={"kind": "file"}))
+        m.Stage.model_validate(S(id="BadId", type="input_data",
+                                 connector={"kind": "file", "params": {"path": "d.csv"}}))
 
 
 def test_unknown_type_raises():
@@ -104,14 +105,15 @@ def test_name_is_required():
         m.Stage.model_validate({"id": "x", "type": "input_data", "connector": {"kind": "file"}})
 
 
-def test_inputs_normalized_to_ids():
+def test_input_ids_property():
     s = m.Stage.model_validate(S(id="j", type="join", inputs=[{"id": "a"}, {"id": "b"}],
                                  join={"keys": [{"left": "k", "right": "k"}]}))
-    assert s.inputs == ["a", "b"]
+    assert s.input_ids == ["a", "b"]
 
 
 def test_source_parses_as_sourceref():
-    s = m.Stage.model_validate(S(id="load", type="input_data", connector={"kind": "file"},
+    s = m.Stage.model_validate(S(id="load", type="input_data",
+                                 connector={"kind": "file", "params": {"path": "d.csv"}},
                                  source={"doc": "x.md", "section": "S1", "lines": [1, 2]}))
     assert s.source.doc == "x.md" and s.source.lines == [1, 2]
 
@@ -120,12 +122,6 @@ def test_queue_block_without_hash_columns_is_valid():
     # hash_columns optional; runner content-hashes on the upstream PK when absent
     s = m.Stage.model_validate(S(id="rev", type="human_review_queue", inputs=[{"id": "a"}], queue={}))
     assert s.queue is not None
-
-
-def test_eval_is_ignored_not_a_field():
-    s = m.Stage.model_validate(S(id="load", type="input_data", connector={"kind": "file"},
-                                 eval={"reference": "x"}))
-    assert not hasattr(s, "eval")
 
 
 # ── fixes folded into the model ──────────────────────────────────────────────
@@ -153,7 +149,9 @@ def test_aggregate_output_column_required():
 
 def test_aggregate_valid():
     m.Stage.model_validate(S(id="agg", type="aggregate", inputs=[{"id": "a"}],
-                             aggregate={"group_by": ["g"], "aggregations": [{"formula": "sum", "output_column": "total"}]}))
+                             aggregate={"group_by": ["g"],
+                                        "aggregations": [{"formula": "sum", "output_column": "total",
+                                                          "value_column": "x"}]}))
 
 
 # ── review cuts / enums ──────────────────────────────────────────────────────
@@ -183,7 +181,7 @@ def test_unknown_file_format_rejected():
 def test_model_enum_accepts_known():
     s = m.Stage.model_validate(S(id="e", type="llm_transform", inputs=[{"id": "a"}],
                                  llm={"prompt_template": "p", "model": "haiku"}))
-    assert s.llm.model is LLMModel.haiku
+    assert s.llm.model == LLMModel.haiku
 
 
 def test_model_enum_rejects_unknown():
@@ -194,5 +192,68 @@ def test_model_enum_rejects_unknown():
 
 # ── non-fatal helper ─────────────────────────────────────────────────────────
 def test_validate_stage_helper():
-    assert m.validate_stage(S(id="load", type="input_data", connector={"kind": "file"})) == []
+    assert m.validate_stage(S(id="load", type="input_data",
+                              connector={"kind": "file", "params": {"path": "d.csv"}})) == []
     assert m.validate_stage({"id": "BadId", "type": "input_data", "name": "x", "connector": {"kind": "file"}})
+
+
+# ── PR: typed stage contract ─────────────────────────────────────────────────
+def test_inputs_are_refs_with_schema():
+    s = m.Stage.model_validate(S(
+        id="x", type="llm_transform",
+        inputs=[{"id": "a", "schema": {"primary_key": ["k"],
+                                       "columns": [{"name": "k", "type": "str"}]}}],
+        llm={"prompt_template": "hi {k}"},
+    ))
+    assert s.input_ids == ["a"]
+    assert s.inputs[0].table_schema is not None
+    assert s.inputs[0].table_schema.primary_key == ["k"]
+
+
+def test_inputs_accept_bare_id_shorthand():
+    s = m.Stage.model_validate(S(
+        id="x", type="llm_transform", inputs=["a"],
+        llm={"prompt_template": "hi"},
+    ))
+    assert s.input_ids == ["a"]
+    assert s.inputs[0].table_schema is None
+
+
+def test_file_connector_requires_path():
+    with pytest.raises(ValidationError, match="params.path"):
+        m.Stage.model_validate(S(id="load", type="input_data",
+                                 connector={"kind": "file", "params": {"format": "csv"}}))
+
+
+def test_file_connector_rejects_unknown_format():
+    with pytest.raises(ValidationError, match="unknown file format"):
+        m.Stage.model_validate(S(id="load", type="input_data",
+                                 connector={"kind": "file",
+                                            "params": {"path": "d.csv", "format": "derived"}}))
+
+
+def test_unknown_keys_rejected():
+    with pytest.raises(ValidationError):
+        m.Stage.model_validate(S(id="rev", type="human_review_queue",
+                                 inputs=[{"id": "a"}],
+                                 queue={"hash_colums": ["x"]}))  # typo'd key must fail
+
+
+def test_enum_fields_are_plain_strings():
+    s = m.Stage.model_validate(S(id="load", type="input_data",
+                                 connector={"kind": "file", "params": {"path": "d.csv"}}))
+    assert s.type == "input_data" and isinstance(s.type, str)
+    assert s.connector is not None and isinstance(s.connector.kind, str)
+
+
+def test_aggregation_requires_value_column_except_count():
+    m.AggregationOp.model_validate({"output_column": "n", "formula": "count"})
+    with pytest.raises(ValidationError, match="value_column"):
+        m.AggregationOp.model_validate({"output_column": "t", "formula": "sum"})
+
+
+def test_stage_eval_block_is_kept():
+    s = m.Stage.model_validate(S(id="load", type="input_data",
+                                 connector={"kind": "file", "params": {"path": "d.csv"}},
+                                 eval={"metrics": ["recall"]}))
+    assert s.eval == {"metrics": ["recall"]}

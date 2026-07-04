@@ -24,7 +24,17 @@ from pydantic import (
 
 # ── Base ─────────────────────────────────────────────────────────────────────
 class _Base(BaseModel):
-    model_config = ConfigDict(extra="ignore")
+    """Contract base. Unknown keys are rejected — a typo'd field is an invalid
+    stage, not silently-ignored data. Enum-typed fields hold their plain string
+    value after validation (compare with `==`, never `is`; never call `.value`).
+    Defaults are validated like any other value, and fields can be populated by
+    python name or alias."""
+    model_config = ConfigDict(
+        extra="forbid",
+        use_enum_values=True,
+        validate_default=True,
+        populate_by_name=True,
+    )
 
 
 # ── Identifiers ──────────────────────────────────────────────────────────────

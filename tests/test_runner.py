@@ -143,3 +143,19 @@ def test_distinct_input_rows_pass(tmp_path):
     records = {r["stage_id"]: r for r in manifest["stages"]}
     assert records["consume"]["status"] == "ok"
     assert records["consume"]["rows"] == 2
+
+
+def test_invalid_stage_rejected_before_run(tmp_path):
+    """A contract-invalid stage must fail the run at load — no run dir, no
+    partial execution, no empty-dataframe fallback."""
+    from app.services.loader import MethodologyLoadError
+
+    (tmp_path / "compiled").mkdir(parents=True)
+    bad = {"id": "load", "name": "Load", "type": "input_data",
+           "connector": {"kind": "file", "params": {"format": "csv"}}}  # no path
+    (tmp_path / "compiled" / "01_load.yaml").write_text(yaml.safe_dump(bad), encoding="utf-8")
+
+    with pytest.raises(MethodologyLoadError) as exc:
+        execute_run(tmp_path, repo_root=tmp_path)
+    assert any("params.path" in i for i in exc.value.issues)
+    assert not (tmp_path / "runs").exists()  # nothing was created

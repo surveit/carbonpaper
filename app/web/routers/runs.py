@@ -11,6 +11,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
+from app.services.loader import MethodologyLoadError, load_methodology_stages
 from app.runtime.preview import PREVIEWABLE_TYPES, PreviewError, run_stage_preview
 from app.runtime.runner import prepare_run, resume_run, run_prepared
 from app.web.config import EXAMPLES_DIR, REPO_ROOT, templates
@@ -18,7 +19,6 @@ from app.web.diagrams import TYPE_CLASS, TYPE_GLYPH, build_mermaid_graph
 from app.web.loading import (
     build_llm_example,
     find_stage,
-    get_input_ids,
     list_runs,
     load_manifest,
     load_output_preview,
@@ -53,7 +53,11 @@ async def trigger_run(methodology: str):
         raise HTTPException(status_code=404, detail=f"No methodology '{methodology}'")
     # Set up the run (writes an initial `running` manifest), kick off execution
     # in a background thread, and redirect immediately. The run page polls.
-    prep = prepare_run(methodology_dir, REPO_ROOT)
+    try:
+        prep = prepare_run(methodology_dir, REPO_ROOT)
+    except MethodologyLoadError as exc:
+        return JSONResponse({"detail": "compiled DAG failed validation",
+                             "issues": exc.issues}, status_code=400)
     run_in_background(run_prepared, prep)
     return RedirectResponse(
         url=f"/methodology/{methodology}/runs/{prep['run_id']}",
@@ -78,7 +82,7 @@ async def run_status(methodology: str, run_id: str):
     manifest = load_manifest(runs_dir(methodology) / run_id)
     mstages = manifest.get("stages", [])
     status_by_id = {s["stage_id"]: s.get("status", "") for s in mstages}
-    mermaid = build_mermaid_graph(load_stages(methodology), methodology, status_by_id=status_by_id)
+    mermaid = build_mermaid_graph(load_stages(methodology).stages, methodology, status_by_id=status_by_id)
 
     def _count(st: str) -> int:
         return sum(1 for s in mstages if s.get("status") == st)
@@ -102,7 +106,7 @@ async def run_status(methodology: str, run_id: str):
 async def run_detail(request: Request, methodology: str, run_id: str):
     run_dir = runs_dir(methodology) / run_id
     manifest = load_manifest(run_dir)
-    stages = load_stages(methodology)
+    stages = load_stages(methodology).stages
     status_by_id = {s["stage_id"]: s.get("status", "") for s in manifest.get("stages", [])}
     mermaid = build_mermaid_graph(stages, methodology, status_by_id=status_by_id)
 
@@ -140,14 +144,14 @@ async def run_stage_partial(
     output_preview = load_output_preview(run_dir, stage_record.get("output_path"))
 
     # Build input previews from upstream stages' outputs in this run.
-    stages_static = load_stages(methodology)
+    stages_static = load_stages(methodology).stages
     stage_def = find_stage(stages_static, stage_id)
     output_by_id = {
         s.get("stage_id"): s.get("output_path") for s in manifest.get("stages", [])
     }
     input_previews: list[dict[str, Any]] = []
     if stage_def is not None:
-        for input_id in get_input_ids(stage_def):
+        for input_id in stage_def.input_ids:
             input_previews.append(
                 {
                     "id": input_id,
@@ -170,7 +174,7 @@ async def run_stage_partial(
             "input_previews": input_previews,
             "function_code": function_code,
             "llm_example": llm_example,
-            "previewable": (stage_def or {}).get("type") in PREVIEWABLE_TYPES,
+            "previewable": stage_def is not None and stage_def.type in PREVIEWABLE_TYPES,
             "type_glyph": TYPE_GLYPH,
             "type_class": TYPE_CLASS,
         },
@@ -246,7 +250,7 @@ async def run_stage_scratch_preview(
         except (TypeError, ValueError):
             continue
 
-    stages_static = load_stages(methodology)
+    stages_static = load_stages(methodology).stages
     stage_def = find_stage(stages_static, stage_id)
     if stage_def is None:
         raise HTTPException(status_code=404, detail=f"No stage '{stage_id}'")
@@ -298,6 +302,13 @@ async def resume_run_route(methodology: str, run_id: str):
     run_dir = runs_dir(methodology) / run_id
     if not (run_dir / "manifest.json").exists():
         raise HTTPException(status_code=404, detail="Run not found")
+    # Validate the compiled DAG synchronously so load errors surface as a 400
+    # here rather than being swallowed on the background thread below.
+    try:
+        load_methodology_stages(methodology_dir)
+    except MethodologyLoadError as exc:
+        return JSONResponse({"detail": "compiled DAG failed validation",
+                             "issues": exc.issues}, status_code=400)
     # Resume re-runs the queue stage + downstream (LLM-heavy) — do it in the
     # background and redirect immediately so the page can poll progress.
     run_in_background(resume_run, methodology_dir, run_id, REPO_ROOT)

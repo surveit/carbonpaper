@@ -178,7 +178,7 @@ def resolve_eval_run_settings(
             # don't traverse above it; its upstream doesn't run either.
         seen.add(node)
         frontier.append(node)
-        for upstream in by_id[node].inputs:
+        for upstream in by_id[node].input_ids:
             if upstream not in seen and upstream not in ov:
                 stack.append(upstream)
 

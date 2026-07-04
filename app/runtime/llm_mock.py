@@ -20,6 +20,8 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from app.models import LLMConfig
+
 
 # ─── Evidence extraction ─────────────────────────────────────────────────────
 
@@ -267,7 +269,7 @@ def _split_sentences(text: str) -> list[str]:
 
 # ─── Dispatcher ──────────────────────────────────────────────────────────────
 
-def mock_llm_call(stage_id: str, llm_config: dict[str, Any], input_row: dict[str, Any]) -> Any:
+def mock_llm_call(stage_id: str, llm_config: LLMConfig, input_row: dict[str, Any]) -> Any:
     """Return either a single output dict or a list of output dicts."""
     if stage_id == "evidence_extraction":
         return mock_evidence_extraction(input_row)
@@ -277,4 +279,4 @@ def mock_llm_call(stage_id: str, llm_config: dict[str, Any], input_row: dict[str
         return mock_tier2_extract(input_row)
     if stage_id == "tier2_verify":
         return mock_tier2_verify(input_row)
-    return mock_generic(llm_config.get("prompt_template", ""), input_row)
+    return mock_generic(llm_config.prompt_template, input_row)

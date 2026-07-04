@@ -24,9 +24,10 @@ Three independent features operate on that artifact:
 for the 8 node types (their executable handles, the column-type vocab, connector
 kinds, aggregation formulas). Constructing a model validates it;
 `validate_methodology(stages)` returns a non-fatal issue list and `parse_methodology`
-raises. The compiler (planned) will emit *to* these models. (The runtime does not yet
-parse stage dicts through them — wiring that in is the next step; see
-`docs/models-and-storage.md`.)
+raises. `app/models/loader.py` enforces the contract at load: the runner refuses to
+execute a DAG with an invalid stage (`MethodologyLoadError`), and the viewer renders
+per-file issues instead of crashing. The compiler (planned) will emit *to* these
+models. See `docs/models-and-storage.md`.
 
 ## The 8 node types
 `input_data` · `llm_transform` · `python_row_function` · `python_frame_function` ·

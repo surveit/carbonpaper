@@ -24,27 +24,27 @@ from pathlib import Path
 from typing import Any
 
 import pandas as pd
-import yaml
 
+from app.models import Stage
+from app.services.loader import MethodologyLoadError
 from app.services import versioning
 
 from .stages import HANDLERS, HaltForReview
 from .validation import validate_dataframe
 
 
-def topological_sort(stages: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    by_id = {s["id"]: s for s in stages}
+def topological_sort(stages: list[Stage]) -> list[Stage]:
+    by_id = {s.id: s for s in stages}
     visited: set[str] = set()
-    order: list[dict[str, Any]] = []
+    order: list[Stage] = []
 
     def visit(sid: str, path: list[str]) -> None:
         if sid in visited:
             return
         if sid in path:
             raise ValueError(f"Cycle detected: {' → '.join(path + [sid])}")
-        for inp in by_id.get(sid, {}).get("inputs", []) or []:
-            iid = inp.get("id") if isinstance(inp, dict) else inp
-            if iid and iid in by_id:
+        for iid in by_id[sid].input_ids:
+            if iid in by_id:
                 visit(iid, path + [sid])
         visited.add(sid)
         order.append(by_id[sid])
@@ -52,10 +52,6 @@ def topological_sort(stages: list[dict[str, Any]]) -> list[dict[str, Any]]:
     for sid in by_id:
         visit(sid, [])
     return order
-
-
-def get_input_id(inp: Any) -> str:
-    return inp["id"] if isinstance(inp, dict) else str(inp)
 
 
 def _duplicate_row_groups(df: pd.DataFrame) -> list[list[int]]:
@@ -93,16 +89,6 @@ def _reject_duplicate_input_rows(df: pd.DataFrame, input_id: str, stage_id: str)
         "in implicitly. If N draws per row are intended, add an explicit "
         "row_id/draw_id column upstream so the rows are distinct."
     )
-
-
-def _load_stages(methodology_dir: Path) -> list[dict[str, Any]]:
-    stages: list[dict[str, Any]] = []
-    for f in sorted((methodology_dir / "compiled").glob("*.yaml")):
-        with f.open("r", encoding="utf-8") as fh:
-            data = yaml.safe_load(fh)
-        if data:
-            stages.append(data)
-    return stages
 
 
 def _resolve_version_id(methodology_dir: Path, version_id: str | None) -> str:
@@ -159,27 +145,31 @@ def prepare_run(
     deterministic ordering (offset 5 + limit 3 = rows 6-8). Both are recorded
     in the manifest (`limit_overrides` / `offset_overrides`) so the slice is
     part of the run's provenance and survives a halt/resume. Unknown stage
-    ids fail loudly."""
-    runs_dir = methodology_dir / "runs"
-    run_id = datetime.now().strftime("%Y%m%dT%H%M%S")
-    run_dir = runs_dir / run_id
-    (run_dir / "outputs").mkdir(parents=True, exist_ok=True)
-    (run_dir / "artifacts").mkdir(parents=True, exist_ok=True)
+    ids fail loudly.
 
+    Raises MethodologyLoadError (from the version snapshot's strict load)
+    before the run dir is created, so an invalid DAG never leaves a run
+    behind."""
     dag_version = _resolve_version_id(methodology_dir, version_id)
     stages = versioning.load_version_stages(methodology_dir, dag_version)
     ordered = topological_sort(stages)
 
     limits = dict(limits or {})
     offsets = dict(offsets or {})
-    stage_ids = {s["id"] for s in ordered}
+    stage_ids = {s.id for s in ordered}
     for flag, mapping in (("--limit", limits), ("--offset", offsets)):
         unknown = set(mapping) - stage_ids
         if unknown:
             raise ValueError(
                 f"{flag} targets unknown stage id(s): {sorted(unknown)}; "
-                f"stages are {[s['id'] for s in ordered]}"
+                f"stages are {[s.id for s in ordered]}"
             )
+
+    runs_dir = methodology_dir / "runs"
+    run_id = datetime.now().strftime("%Y%m%dT%H%M%S")
+    run_dir = runs_dir / run_id
+    (run_dir / "outputs").mkdir(parents=True, exist_ok=True)
+    (run_dir / "artifacts").mkdir(parents=True, exist_ok=True)
 
     ctx: dict[str, Any] = {
         "repo_root": repo_root,
@@ -198,7 +188,7 @@ def prepare_run(
         "offset_overrides": offsets,
         "status": "running",
         "stages": [
-            {"stage_id": s["id"], "type": s["type"], "name": s.get("name", s["id"]),
+            {"stage_id": s.id, "type": s.type, "name": s.name,
              "status": "pending", "input_validation": [], "output_validation": None,
              "elapsed_ms": 0, "rows": 0, "error": None,
              "started_at": None, "finished_at": None}
@@ -237,7 +227,7 @@ def execute_run(
 
 
 def _execute_stages(
-    ordered: list[dict[str, Any]],
+    ordered: list[Stage],
     ctx: dict[str, Any],
     manifest: dict[str, Any],
     run_dir: Path,
@@ -259,9 +249,9 @@ def _execute_stages(
         r["stage_id"]: r for r in manifest.get("stages", [])
     }
 
-    def _pending_stub(s: dict[str, Any]) -> dict[str, Any]:
+    def _pending_stub(s: Stage) -> dict[str, Any]:
         return {
-            "stage_id": s["id"], "type": s["type"], "name": s.get("name", s["id"]),
+            "stage_id": s.id, "type": s.type, "name": s.name,
             "status": "pending", "input_validation": [], "output_validation": None,
             "elapsed_ms": 0, "rows": 0, "error": None,
             "started_at": None, "finished_at": None,
@@ -272,7 +262,7 @@ def _execute_stages(
         (stages light up as they start/finish) instead of the whole pipeline
         running silently and updating only at the very end."""
         m = dict(manifest)
-        m["stages"] = [records_by_id.get(s["id"]) or _pending_stub(s) for s in ordered]
+        m["stages"] = [records_by_id.get(s.id) or _pending_stub(s) for s in ordered]
         m["status"] = status
         m["queue_stats"] = ctx.get("queue_stats", {})
         m["updated_at"] = datetime.now().isoformat(timespec="seconds")
@@ -286,8 +276,8 @@ def _execute_stages(
     flush("running")  # initial: all stages pending
 
     for idx, stage in enumerate(ordered):
-        sid = stage["id"]
-        stype = stage["type"]
+        sid = stage.id
+        stype = stage.type
 
         # Skip stages already produced (resume path).
         if sid in outputs_so_far and records_by_id.get(sid, {}).get("status") in ("ok", "validation_warnings"):
@@ -296,7 +286,7 @@ def _execute_stages(
         record: dict[str, Any] = {
             "stage_id": sid,
             "type": stype,
-            "name": stage.get("name", sid),
+            "name": stage.name,
             "started_at": datetime.now().isoformat(timespec="seconds"),
             "status": "running",
             "input_validation": [],
@@ -311,17 +301,15 @@ def _execute_stages(
 
         try:
             inputs_for_stage: dict[str, pd.DataFrame] = {}
-            for inp_decl in stage.get("inputs", []) or []:
-                iid = get_input_id(inp_decl)
-                if iid not in outputs_so_far:
-                    raise RuntimeError(f"Upstream stage '{iid}' has no output yet")
-                df = outputs_so_far[iid]
-                _reject_duplicate_input_rows(df, iid, sid)
-                inputs_for_stage[iid] = df
-                if isinstance(inp_decl, dict):
+            for ref in stage.inputs:
+                if ref.id not in outputs_so_far:
+                    raise RuntimeError(f"Upstream stage '{ref.id}' has no output yet")
+                df = outputs_so_far[ref.id]
+                _reject_duplicate_input_rows(df, ref.id, sid)
+                inputs_for_stage[ref.id] = df
+                if ref.table_schema is not None:
                     rep = validate_dataframe(
-                        df, inp_decl.get("schema"),
-                        stage_id=sid, phase=f"input:{iid}",
+                        df, ref.table_schema, stage_id=sid, phase=f"input:{ref.id}",
                     )
                     record["input_validation"].append(rep.to_dict())
 
@@ -348,7 +336,7 @@ def _execute_stages(
             # Generic row slicing, in the handler's emitted order. Offset
             # (per-run only, from --offset stage=M) drops the first M rows;
             # then the cap keeps the first N. A per-run cap (--limit stage=N)
-            # wins over the stage YAML's static `limit:`. Used to throttle /
+            # wins over the stage's static `limit:`. Used to throttle /
             # page the expensive LLM fan-out.
             offset = (ctx.get("offsets") or {}).get(sid)
             if isinstance(offset, int) and offset > 0 and len(output) > 0:
@@ -356,7 +344,7 @@ def _execute_stages(
                     f"offset={offset}: dropped first {min(offset, len(output))} of {len(output)} row(s)"
                 )
                 output = output.iloc[offset:].reset_index(drop=True).copy()
-            limit = (ctx.get("limits") or {}).get(sid, stage.get("limit"))
+            limit = (ctx.get("limits") or {}).get(sid, stage.limit)
             if isinstance(limit, int) and limit >= 0 and len(output) > limit:
                 record.setdefault("notes", []).append(
                     f"limit={limit}: truncated from {len(output)} to {limit} row(s)"
@@ -364,8 +352,7 @@ def _execute_stages(
                 output = output.head(limit).copy()
 
             out_rep = validate_dataframe(
-                output, stage.get("output_schema"),
-                stage_id=sid, phase="output",
+                output, stage.output_schema, stage_id=sid, phase="output",
             )
             record["output_validation"] = out_rep.to_dict()
 
@@ -405,11 +392,11 @@ def _execute_stages(
     # them greyed out.
     if halted is not None:
         for stage in ordered[halt_at_index + 1:]:
-            sid = stage["id"]
+            sid = stage.id
             records_by_id[sid] = {
                 "stage_id": sid,
-                "type": stage["type"],
-                "name": stage.get("name", sid),
+                "type": stage.type,
+                "name": stage.name,
                 "status": "pending",
                 "input_validation": [],
                 "output_validation": None,
@@ -421,7 +408,7 @@ def _execute_stages(
             }
 
     # Emit stages in topological order so the manifest reads top-to-bottom.
-    manifest["stages"] = [records_by_id[s["id"]] for s in ordered if s["id"] in records_by_id]
+    manifest["stages"] = [records_by_id[s.id] for s in ordered if s.id in records_by_id]
     manifest["finished_at"] = datetime.now().isoformat(timespec="seconds")
     manifest["queue_stats"] = ctx.get("queue_stats", {})
 
@@ -523,8 +510,12 @@ def main() -> int:
             print(f"Unknown argument: {args[i]}")
             return 1
     repo_root = Path(__file__).resolve().parents[2]
-    manifest = execute_run(methodology_dir, repo_root,
-                           limits=limits or None, offsets=offsets or None)
+    try:
+        manifest = execute_run(methodology_dir, repo_root,
+                               limits=limits or None, offsets=offsets or None)
+    except MethodologyLoadError as exc:
+        print(exc)
+        return 1
     print(json.dumps(
         {"run_id": manifest["run_id"], "dag_version": manifest["dag_version"],
          "status": manifest["status"],

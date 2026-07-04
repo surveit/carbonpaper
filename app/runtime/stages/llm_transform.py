@@ -6,24 +6,24 @@ from typing import Any
 
 import pandas as pd
 
+from app.models import Stage
+
 from ..llm import call_llm_batch, backend_status
 
 
-def handle_llm_transform(stage: dict[str, Any], inputs: dict[str, pd.DataFrame], ctx: dict[str, Any]) -> pd.DataFrame:
-    llm = stage.get("llm", {})
-    inps = stage.get("inputs", [])
-    if not inps:
-        raise ValueError(f"llm_transform stage {stage['id']} has no inputs")
-    src = inputs[inps[0]["id"]]
+def handle_llm_transform(stage: Stage, inputs: dict[str, pd.DataFrame], ctx: dict[str, Any]) -> pd.DataFrame:
+    llm = stage.llm
+    assert llm is not None  # Stage validation: llm_transform carries llm
+    src = inputs[stage.inputs[0].id]
     out_rows = []
 
     # Record which backend handled this stage so the UI/manifest can label it.
-    ctx.setdefault("llm_backend", {})[stage["id"]] = backend_status()
+    ctx.setdefault("llm_backend", {})[stage.id] = backend_status()
 
     # str(k) is a no-op for real data (parquet/CSV column labels are strings);
     # it pins the key type down from pandas' Hashable.
     row_dicts = [{str(k): v for k, v in row.items()} for _, row in src.iterrows()]
-    results = call_llm_batch(stage["id"], llm, row_dicts)
+    results = call_llm_batch(stage.id, llm, row_dicts)
 
     for row_dict, result in zip(row_dicts, results):
         if isinstance(result, list):
@@ -40,7 +40,7 @@ def handle_llm_transform(stage: dict[str, Any], inputs: dict[str, pd.DataFrame],
     df = pd.DataFrame(out_rows)
     # Keep only columns declared in output_schema, preserving order, plus any
     # passthrough columns that schema declared with source: passthrough.
-    declared = [c["name"] for c in (stage.get("output_schema") or {}).get("columns", [])]
+    declared = [c.name for c in stage.output_schema.columns] if stage.output_schema else []
     if declared:
         keep = [c for c in declared if c in df.columns]
         # Also keep stable id columns commonly used downstream

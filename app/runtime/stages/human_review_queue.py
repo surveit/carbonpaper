@@ -8,6 +8,8 @@ from typing import Any
 
 import pandas as pd
 
+from app.models import Stage
+
 from ._shared import HaltForReview, _translate_where
 
 
@@ -19,18 +21,17 @@ def _content_hash(row: pd.Series, columns: list[str]) -> str:
     return hashlib.sha1("|".join(parts).encode("utf-8")).hexdigest()[:16]
 
 
-def _hash_columns_for(stage: dict[str, Any]) -> list[str]:
+def _hash_columns_for(stage: Stage) -> list[str]:
     """Columns to include in the content hash. Falls back to the upstream
     input's primary_key if `queue.hash_columns` isn't set."""
-    queue = stage.get("queue") or {}
-    cols = queue.get("hash_columns")
+    queue = stage.queue
+    cols = queue.hash_columns if queue else None
     if cols:
         return list(cols)
-    inputs = stage.get("inputs") or []
-    if inputs and isinstance(inputs[0], dict):
-        pk = (inputs[0].get("schema") or {}).get("primary_key") or []
-        if pk:
-            return list(pk)
+    if stage.inputs:
+        table_schema = stage.inputs[0].table_schema
+        if table_schema is not None and table_schema.primary_key:
+            return list(table_schema.primary_key)
     return []
 
 
@@ -51,7 +52,7 @@ def _load_decisions(ctx: dict[str, Any], stage_id: str) -> pd.DataFrame:
     return pd.read_parquet(p)
 
 
-def handle_human_review_queue(stage: dict[str, Any], inputs: dict[str, pd.DataFrame], ctx: dict[str, Any]) -> pd.DataFrame:
+def handle_human_review_queue(stage: Stage, inputs: dict[str, pd.DataFrame], ctx: dict[str, Any]) -> pd.DataFrame:
     """Real review-queue semantics:
 
     1. Apply the queue filter to upstream output → items needing review.
@@ -64,11 +65,11 @@ def handle_human_review_queue(stage: dict[str, Any], inputs: dict[str, pd.DataFr
     5. Otherwise return a dataframe with final_score populated (ai if
        approved, human override if modified; rejected rows dropped).
     """
-    sid = stage["id"]
-    inps = stage.get("inputs", [])
-    src = inputs[inps[0]["id"]].copy()
-    queue_cfg = stage.get("queue") or {}
-    flt = queue_cfg.get("filter")
+    sid = stage.id
+    queue_cfg = stage.queue
+    assert queue_cfg is not None  # Stage validation: human_review_queue carries queue_cfg
+    src = inputs[stage.inputs[0].id].copy()
+    flt = queue_cfg.filter
 
     # Partition rows: those subject to review vs. those passing through.
     if flt:
@@ -190,7 +191,7 @@ def handle_human_review_queue(stage: dict[str, Any], inputs: dict[str, pd.DataFr
 
     out = pd.concat([decided, passthrough], ignore_index=True, sort=False)
 
-    declared = [c["name"] for c in (stage.get("output_schema") or {}).get("columns", [])]
+    declared = [c.name for c in stage.output_schema.columns] if stage.output_schema else []
     if declared:
         keep = [c for c in declared if c in out.columns]
         for must_keep in ["entity_id", "evidence_id", "benchmark_id", "query_id", "quote"]:

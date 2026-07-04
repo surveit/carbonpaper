@@ -90,7 +90,7 @@
     <table class="join-keys">
         <thead><tr><th>left</th><th>right</th></tr></thead>
         <tbody>
-            {% for k in (stage.join['keys'] or stage.join['on'] or []) %}
+            {% for k in (stage.join.keys or stage.join.on or []) %}
             <tr><td><code>{{ k.left }}</code></td><td><code>{{ k.right }}</code></td></tr>
             {% endfor %}
         </tbody>
@@ -109,14 +109,13 @@
     <p>{% for g in stage.aggregate.group_by %}<code>{{ g }}</code>{% if not loop.last %}, {% endif %}{% endfor %}</p>
     <h3>aggregations</h3>
     <table class="aggs">
-        <thead><tr><th>output</th><th>formula</th><th>value</th><th>weight</th><th>where</th></tr></thead>
+        <thead><tr><th>output</th><th>formula</th><th>value</th><th>where</th></tr></thead>
         <tbody>
             {% for a in stage.aggregate.aggregations %}
             <tr>
                 <td><code>{{ a.output_column }}</code></td>
                 <td><code>{{ a.formula }}</code></td>
                 <td>{% if a.value_column %}<code>{{ a.value_column }}</code>{% else %}<span class="muted">—</span>{% endif %}</td>
-                <td>{% if a.weight_column %}<code>{{ a.weight_column }}</code>{% else %}<span class="muted">—</span>{% endif %}</td>
                 <td>{% if a.where %}<code>{{ a.where }}</code>{% else %}<span class="muted">—</span>{% endif %}</td>
             </tr>
             {% endfor %}
@@ -145,7 +144,7 @@
 <section class="exec-block">
     <h2>📤 Publish</h2>
     <dl class="kv">
-        {% for k, v in stage.publish.items() %}
+        {% for k, v in stage.publish.model_dump(exclude_none=True).items() %}
         <dt>{{ k }}</dt>
         <dd>
             {% if v is mapping or (v is sequence and v is not string) %}
