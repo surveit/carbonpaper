@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% block title %}{{ config.name }} · {{ methodology }} evals{% endblock %}
+
+{% block header_extra %}
+<a href="/methodology/{{ methodology }}/evals" class="back-link">← {{ methodology }} evals</a>
+{% endblock %}
+
+{% set badge_class = {"run succeeded": "ok", "stale": "warn", "never run": "pending", "run errored": "err", "broken": "err"} %}
+
+{% block content %}
+<h1>{{ config.name }} <span class="badge {{ badge_class.get(status, 'pending') }}">{{ status }}</span></h1>
+{% if config.description %}<p class="lede">{{ config.description }}</p>{% endif %}
+
+<h2>Pathway</h2>
+<ul>
+    <li><strong>overridden:</strong>
+        <span id="override-target"><code>{{ config.override_stage }}</code>{% for ov in config.reference_overrides %}, <code>{{ ov.stage_id }}</code>{% endfor %} → <code>{{ config.target_stage }}</code></span>
+    </li>
+    {% if executing %}
+    <li><strong>executing stages:</strong> {% for s in executing %}<code>{{ s }}</code>{% if not loop.last %}, {% endif %}{% endfor %}</li>
+    {% endif %}
+    <li><strong>target:</strong> <code>{{ config.target_stage }}</code></li>
+</ul>
+
+<h2>Compatibility</h2>
+{% if report.ok %}
+<p><span class="badge ok">ok</span> This eval fits the workflow as it stands now.</p>
+{% else %}
+<div class="load-issues">
+    <strong>{{ report.problems|length }} problem(s):</strong>
+    <ul>{% for p in report.problems %}<li>{{ p }}</li>{% endfor %}</ul>
+</div>
+{% endif %}
+
+<h2>Cases table</h2>
+<p class="lede"><code>{{ config.table.path }}</code> ({{ config.table.format }})</p>
+{% if cases_error %}
+<div class="load-issues">{{ cases_error }}</div>
+{% elif cases_columns %}
+{% if cases_capped %}<p class="lede">Showing the first {{ cases_cap }} rows.</p>{% endif %}
+<div class="table-scroll">
+<table class="table">
+    <thead><tr>{% for c in cases_columns %}<th>{{ c }}</th>{% endfor %}</tr></thead>
+    <tbody>
+        {% for row in cases_rows %}
+        <tr>{% for c in cases_columns %}<td>{{ row.get(c, '') }}</td>{% endfor %}</tr>
+        {% endfor %}
+    </tbody>
+</table>
+</div>
+{% endif %}
+
+<h2>Scoring rules</h2>
+<ul>
+    <li><strong>key:</strong> {% for k in config.key %}<code>{{ k }}</code>{% if not loop.last %}, {% endif %}{% endfor %}</li>
+    <li><strong>input columns:</strong> {% for c in config.input_columns %}<code>{{ c }}</code>{% if not loop.last %}, {% endif %}{% endfor %}</li>
+</ul>
+<table class="table">
+    <thead><tr><th>actual</th><th>expected</th><th>metric</th><th>tolerance</th></tr></thead>
+    <tbody>
+        {% for exp in config.expected %}
+        <tr>
+            <td><code>{{ exp.actual }}</code></td>
+            <td><code>{{ exp.expected }}</code></td>
+            <td>{{ exp.metric }}</td>
+            <td>{{ exp.tolerance if exp.tolerance is not none else '—' }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% if config.metrics %}
+<p><strong>rollup metrics:</strong> {% for m in config.metrics %}<code>{{ m }}</code>{% if not loop.last %}, {% endif %}{% endfor %}</p>
+{% endif %}
+{% if config.code %}
+<p><strong>code scorer:</strong> <code>{{ config.code.module }}.{{ config.code.function }}</code></p>
+{% endif %}
+
+<h2>Run history</h2>
+{% if runs_error %}
+<div class="load-issues">{{ runs_error }}</div>
+{% elif runs %}
+<table class="table">
+    <thead><tr><th>run id</th><th>started</th><th>version</th><th>status</th></tr></thead>
+    <tbody>
+        {% for r in runs %}
+        <tr>
+            <td><a href="/methodology/{{ methodology }}/evals/{{ config.id }}/runs/{{ r.id }}"><code>{{ r.id }}</code></a></td>
+            <td>{{ r.started_at or '—' }}</td>
+            <td><code>{{ r.methodology_version }}</code></td>
+            <td>{{ r.status }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<div class="empty-state">
+    <h2>Never run</h2>
+    <p>This eval has no recorded runs.</p>
+</div>
+{% endif %}
+{% endblock %}

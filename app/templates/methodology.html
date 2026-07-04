@@ -37,6 +37,7 @@
         <a href="/methodology/{{ methodology }}/versions" class="btn">Versions</a>
         <a href="/methodology/{{ methodology }}/data-model" class="btn">Data model</a>
         <a href="/methodology/{{ methodology }}/runs" class="btn">All runs</a>
+        <a href="/methodology/{{ methodology }}/evals" class="btn">Evals</a>
     </div>
 </div>
 <p class="lede">{{ stages|length }} compiled stage{% if stages|length != 1 %}s{% endif %}. Click any node in the DAG (or any row in the table) to <strong>review</strong> that step — approve, reject, or edit its spec — in the right panel. Node colour = <em>belief</em> (do we trust how it's modeled). Click <strong>Run pipeline</strong> to execute end-to-end.</p>

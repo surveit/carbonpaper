@@ -21,7 +21,7 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
 from app.web.config import STATIC_DIR
-from app.web.routers import methodology, node_review, review, runs
+from app.web.routers import evals, methodology, node_review, review, runs
 
 from app.chat.router import router as chat_router
 
@@ -32,6 +32,7 @@ app.include_router(methodology.router)
 app.include_router(runs.router)
 app.include_router(review.router)
 app.include_router(node_review.router)
+app.include_router(evals.router)
 
 # Interactive, multi-turn chat surface (streaming + persistence). Separate from
 # the llm_transform batch path; see app/chat.

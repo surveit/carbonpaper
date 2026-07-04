@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}{{ methodology }} evals{% endblock %}
+
+{% block header_extra %}
+<a href="/methodology/{{ methodology }}" class="back-link">← {{ methodology }}</a>
+{% endblock %}
+
+{% block content %}
+<h1>Evals for <code>{{ methodology }}</code></h1>
+<p class="lede">An eval checks whether one stage's output still matches expectations on a fixed set of cases. Status reflects both whether the eval still fits the workflow and whether its last run is current.</p>
+
+{% if load_issues %}
+<div class="load-issues">
+  <strong>{{ load_issues|length }} compiled file(s) failed validation; evals cannot be checked against the workflow:</strong>
+  <ul>
+  {% for entry in load_issues %}
+    <li><code>{{ entry.filename }}</code>
+      <ul>{% for issue in entry.issues %}<li>{{ issue }}</li>{% endfor %}</ul>
+    </li>
+  {% endfor %}
+  </ul>
+</div>
+{% endif %}
+
+{% set badge_class = {"run succeeded": "ok", "stale": "warn", "never run": "pending", "run errored": "err", "broken": "err"} %}
+
+{% if evals %}
+<table class="table">
+    <thead>
+        <tr><th>name</th><th>status</th><th></th></tr>
+    </thead>
+    <tbody>
+        {% for e in evals %}
+        <tr>
+            <td><a href="/methodology/{{ methodology }}/evals/{{ e.id }}">{{ e.name }}</a></td>
+            <td><span class="badge {{ badge_class.get(e.status, 'pending') }}">{{ e.status }}</span></td>
+            <td>
+                {% if e.issues %}
+                <div class="load-issues">
+                    <ul>{% for issue in e.issues %}<li>{{ issue }}</li>{% endfor %}</ul>
+                </div>
+                {% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<div class="empty-state">
+    <h2>No evals yet</h2>
+    <p>No eval configs are stored for this methodology.</p>
+</div>
+{% endif %}
+{% endblock %}
