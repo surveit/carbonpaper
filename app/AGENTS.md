@@ -3,7 +3,7 @@
 The web app serves the workflows, their runs, and the review queue.
 `app/main.py` is a thin bootstrap: it creates the FastAPI app, mounts `/static`,
 and includes the routers in `app/web/routers/`. Those routers import the Runner
-(`app.runtime`) and the contract (`app.models`), and share the helpers in
+(`app.runtime`) and the schemas (`app.models`), and share the helpers in
 `app/web/` (`config`, `loading`, `diagrams`). (The Compiler feature adds
 `/compile` pages — see the "Compiler" section appended in that PR.)
 

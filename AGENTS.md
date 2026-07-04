@@ -27,7 +27,7 @@ Three independent features operate on that artifact:
 | **Compiler** | `app/compiler/` | Distills prose into a *draft* workflow (LLM call + validate + re-ask on failure). Engine on master; the authoring UI is in the open PR stack. |
 | **Eval** *(model only)* | `app/models/eval.py` | Checks a workflow reproduces ground truth. `EvalConfig`/`EvalRun` exist as validated models; no runner integration yet. |
 
-**The schema layer — `app/models/`.** Pydantic models are the single source of
+**The schemas — `app/models/`.** Pydantic models are the single source of
 truth for the 8 stage types (their executable handles, the column-type vocab,
 connector kinds, aggregation formulas). Constructing a model validates it;
 `validate_workflow(stages)` returns a non-fatal issue list and `parse_workflow`
@@ -39,9 +39,9 @@ models. See `docs/models-and-storage.md`.
 ## The 8 stage types
 `input_data` · `llm_transform` · `python_row_function` · `python_frame_function` ·
 `join` · `aggregate` · `human_review_queue` · `publish`. Prefer `python_row_function`
-(runtime-enforced 1:1) over `python_frame_function` unless the logic needs the whole frame. Each compiled stage JSON declares typed `inputs`, a typed
+(runtime-enforced 1:1) over `python_frame_function` unless the logic needs the whole frame. Each compiled stage specification declares typed `inputs`, a typed
 `output_schema`, and one executable-handle block (`connector`/`llm`/`function`/
-`join`/`aggregate`/`queue`/`publish`). See `app/models/` for the definitions.
+`join`/`aggregate`/`queue`/`publish`). See `app/models/` for the schemas.
 
 ## Running it
 ```
@@ -83,6 +83,11 @@ examples/<name>/      project dirs (untracked runtime data: compiled/ + methodol
 - **Never fabricate.** A value that can't be sourced is `null`/`unknown`; the
   pipeline fails loudly or halts rather than inventing a number, URL, or citation.
   The LLM backends are opt-in and never silently fall back to a mock.
+- **Schemas are called schemas.** A stage's `output_schema`, an input `schema:`
+  block, a `TableSchema` — these are *schemas*, and that is the word, in code,
+  comments, docs, and PR prose. Don't dress them up as "contracts" ("stage
+  contract", "producer contract", "response contract"): the word adds no meaning
+  and splits one concept across two names.
 - **`human_review_queue` is how we handle asymmetrical risk.** Where a wrong
   automated result is expensive or irreversible, gate that step behind human
   sign-off: the runner halts, and decisions are content-hashed so they survive
