@@ -25,7 +25,7 @@ from typing import Any
 
 from pydantic import ValidationError
 
-from app.models.methodology import validate_methodology_stages
+from app.models.workflow import validate_workflow
 from app.models.schema import format_errors
 from app.models.stage import Stage
 
@@ -76,7 +76,7 @@ def load_methodology_stages(methodology_dir: Path) -> list[Stage]:
     if not entries:
         issues.append(f"no compiled stage files found in {compiled_dir}")
     stages = [e.stage for e in entries if e.stage is not None]
-    issues += validate_methodology_stages(stages)
+    issues += validate_workflow(stages)
     if issues:
         raise MethodologyLoadError(compiled_dir, issues)
     return stages

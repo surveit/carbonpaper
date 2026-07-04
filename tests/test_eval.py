@@ -155,7 +155,7 @@ def test_eval_run_embeds_settings_and_passed():
 # ── resolve_eval_run_settings on a synthetic DAG ─────────────────────────────
 def _chain():
     """a(input) → b(row) → c(frame) → d(row)."""
-    return m.parse_methodology([
+    return m.parse_workflow([
         _file_input("a"),
         _py("b", ["a"], granularity="row"),
         _py("c", ["b"], granularity="frame"),
@@ -183,7 +183,7 @@ def test_scorable_when_tapping_before_the_frame_stage():
 
 
 def test_join_changes_grain_so_not_scorable():
-    meth = m.parse_methodology([
+    meth = m.parse_workflow([
         _file_input("j1"), _file_input("j2"),
         S(id="jn", type="join", inputs=[{"id": "j1"}, {"id": "j2"}],
           join={"keys": [{"left": "k", "right": "k"}]}),

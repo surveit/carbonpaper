@@ -26,7 +26,7 @@ from typing import Annotated, Any, Iterable, Literal, Optional
 
 from pydantic import AfterValidator, Field, field_validator, model_validator
 
-from app.models.methodology import Methodology
+from app.models.workflow import Workflow
 from app.models.schema import _Base
 from app.models.table import TableRef
 
@@ -145,7 +145,7 @@ class EvalRunSettings(_Base):
 
 
 def resolve_eval_run_settings(
-    methodology: Methodology,
+    workflow: Workflow,
     overrides: Iterable[str],
     target: str,
 ) -> EvalRunSettings:
@@ -158,9 +158,9 @@ def resolve_eval_run_settings(
     (loudly) if `target` or any override names no stage, or if `target` is itself
     overridden — a misconfigured eval should fail at definition, not at score time.
     """
-    by_id = {s.id: s for s in methodology.stages}
+    by_id = {s.id: s for s in workflow.stages}
     if target not in by_id:
-        raise ValueError(f"target {target!r} is not a stage in the methodology")
+        raise ValueError(f"target {target!r} is not a stage in the workflow")
     ov = set(overrides)
     missing = ov - by_id.keys()
     if missing:
