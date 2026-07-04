@@ -18,7 +18,7 @@ import pandas as pd
 import pytest
 
 from app.runtime.runner import NoVersionToRunError, execute_run
-from app.services.loader import MethodologyLoadError
+from app.services.loader import WorkflowLoadError
 from app.services.versioning import create_version
 
 
@@ -173,7 +173,7 @@ def test_run_without_a_version_fails_loudly(tmp_path):
 
 def test_create_version_rejects_invalid_working_copy(tmp_path):
     """create_version strict-loads before it snapshots: an invalid working copy
-    raises MethodologyLoadError and writes NOTHING, so no invalid workflow can
+    raises WorkflowLoadError and writes NOTHING, so no invalid workflow can
     be immortalised as a version."""
     (tmp_path / "compiled").mkdir(parents=True)
     bad = {"id": "load", "name": "Load", "type": "input_data",
@@ -181,7 +181,7 @@ def test_create_version_rejects_invalid_working_copy(tmp_path):
     (tmp_path / "compiled" / "01_load.json").write_text(
         json.dumps(bad), encoding="utf-8")
 
-    with pytest.raises(MethodologyLoadError) as exc:
+    with pytest.raises(WorkflowLoadError) as exc:
         create_version(tmp_path, message="x", reviewer="test")
     assert any("params.path" in i for i in exc.value.issues)
     assert not (tmp_path / "versions").exists()  # snapshotted nothing
@@ -201,7 +201,7 @@ def test_invalid_workflow_never_becomes_a_version_and_run_never_pins_stale(tmp_p
         json.dumps(bad), encoding="utf-8")
 
     # You cannot make a version from it, and it writes nothing.
-    with pytest.raises(MethodologyLoadError):
+    with pytest.raises(WorkflowLoadError):
         create_version(tmp_path, message="x", reviewer="test")
     assert not (tmp_path / "versions").exists()
 

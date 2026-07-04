@@ -11,7 +11,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
-from app.services.loader import MethodologyLoadError, load_methodology_stages
+from app.services.loader import WorkflowLoadError, load_workflow
 from app.runtime.preview import PREVIEWABLE_TYPES, PreviewError, run_stage_preview
 from app.runtime.runner import (
     NoVersionToRunError,
@@ -62,7 +62,7 @@ async def trigger_run(methodology: str):
         prep = prepare_run(methodology_dir, REPO_ROOT)
     except NoVersionToRunError as exc:
         return JSONResponse({"detail": str(exc)}, status_code=400)
-    except MethodologyLoadError as exc:
+    except WorkflowLoadError as exc:
         return JSONResponse({"detail": "compiled DAG failed validation",
                              "issues": exc.issues}, status_code=400)
     run_in_background(run_prepared, prep)
@@ -312,8 +312,8 @@ async def resume_run_route(methodology: str, run_id: str):
     # Validate the compiled DAG synchronously so load errors surface as a 400
     # here rather than being swallowed on the background thread below.
     try:
-        load_methodology_stages(methodology_dir)
-    except MethodologyLoadError as exc:
+        load_workflow(methodology_dir)
+    except WorkflowLoadError as exc:
         return JSONResponse({"detail": "compiled DAG failed validation",
                              "issues": exc.issues}, status_code=400)
     # Resume re-runs the queue stage + downstream (LLM-heavy) — do it in the

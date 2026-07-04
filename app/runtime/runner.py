@@ -26,7 +26,7 @@ from typing import Any
 import pandas as pd
 
 from app.models import Stage
-from app.services.loader import MethodologyLoadError
+from app.services.loader import WorkflowLoadError
 from app.services import versioning
 
 from .stages import HANDLERS, HaltForReview
@@ -161,7 +161,7 @@ def prepare_run(
     part of the run's provenance and survives a halt/resume. Unknown stage
     ids fail loudly.
 
-    Raises NoVersionToRunError (no version exists) or MethodologyLoadError
+    Raises NoVersionToRunError (no version exists) or WorkflowLoadError
     (from the version snapshot's strict load) before the run dir is created, so
     a run with no version — or an invalid DAG — never leaves a run behind."""
     dag_version = _resolve_version_id(methodology_dir, version_id)
@@ -527,7 +527,7 @@ def main() -> int:
     try:
         manifest = execute_run(methodology_dir, repo_root,
                                limits=limits or None, offsets=offsets or None)
-    except (NoVersionToRunError, MethodologyLoadError) as exc:
+    except (NoVersionToRunError, WorkflowLoadError) as exc:
         print(exc)
         return 1
     print(json.dumps(

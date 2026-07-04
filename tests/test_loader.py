@@ -7,9 +7,9 @@ import json
 import pytest
 
 from app.services.loader import (
-    MethodologyLoadError,
+    WorkflowLoadError,
     load_compiled_dir,
-    load_methodology_stages,
+    load_workflow,
 )
 
 VALID = {
@@ -46,15 +46,15 @@ def test_tolerant_load_handles_unparseable_json(tmp_path):
 
 def test_strict_load_returns_stages(tmp_path):
     _write(tmp_path, "01_load.json", VALID)
-    [stage] = load_methodology_stages(tmp_path)
+    [stage] = load_workflow(tmp_path)
     assert stage.id == "load"
 
 
 def test_strict_load_raises_with_all_issues(tmp_path):
     _write(tmp_path, "01_load.json", VALID)
     _write(tmp_path, "02_bad.json", INVALID)
-    with pytest.raises(MethodologyLoadError) as exc:
-        load_methodology_stages(tmp_path)
+    with pytest.raises(WorkflowLoadError) as exc:
+        load_workflow(tmp_path)
     assert any("02_bad.json" in i for i in exc.value.issues)
 
 
@@ -63,15 +63,15 @@ def test_strict_load_catches_cross_stage_issues(tmp_path):
                 "inputs": [{"id": "missing_upstream"}],
                 "llm": {"prompt_template": "hi"}}
     _write(tmp_path, "01_x.json", dangling)
-    with pytest.raises(MethodologyLoadError) as exc:
-        load_methodology_stages(tmp_path)
+    with pytest.raises(WorkflowLoadError) as exc:
+        load_workflow(tmp_path)
     assert any("missing_upstream" in i for i in exc.value.issues)
 
 
 def test_strict_load_rejects_missing_or_empty_compiled_dir(tmp_path):
     """A typo'd methodology path must fail loudly, not produce a valid 0-stage DAG."""
-    with pytest.raises(MethodologyLoadError, match="no compiled stage files"):
-        load_methodology_stages(tmp_path)  # no compiled/ dir at all
+    with pytest.raises(WorkflowLoadError, match="no compiled stage files"):
+        load_workflow(tmp_path)  # no compiled/ dir at all
     (tmp_path / "compiled").mkdir()
-    with pytest.raises(MethodologyLoadError, match="no compiled stage files"):
-        load_methodology_stages(tmp_path)  # compiled/ exists but is empty
+    with pytest.raises(WorkflowLoadError, match="no compiled stage files"):
+        load_workflow(tmp_path)  # compiled/ exists but is empty

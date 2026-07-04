@@ -9,7 +9,7 @@ this file.
 Read:
   - load_compiled_dir: tolerant, per-file — for the viewer, which renders
     problems rather than crashing.
-  - load_methodology_stages: strict — for the runner, which refuses to execute
+  - load_workflow: strict — for the runner, which refuses to execute
     a DAG with any invalid stage or cross-stage issue.
 
 Serialize / save:
@@ -38,7 +38,7 @@ class CompiledStageFile:
     issues: list[str] = field(default_factory=list)
 
 
-class MethodologyLoadError(Exception):
+class WorkflowLoadError(Exception):
     """The compiled DAG failed validation; `issues` lists every problem found."""
 
     def __init__(self, compiled_dir: Path, issues: list[str]):
@@ -69,7 +69,7 @@ def load_compiled_dir(compiled_dir: Path) -> list[CompiledStageFile]:
     return entries
 
 
-def load_methodology_stages(methodology_dir: Path) -> list[Stage]:
+def load_workflow(methodology_dir: Path) -> list[Stage]:
     compiled_dir = methodology_dir / "compiled"
     entries = load_compiled_dir(compiled_dir)
     issues = [f"{e.filename}: {i}" for e in entries for i in e.issues]
@@ -78,7 +78,7 @@ def load_methodology_stages(methodology_dir: Path) -> list[Stage]:
     stages = [e.stage for e in entries if e.stage is not None]
     issues += validate_workflow(stages)
     if issues:
-        raise MethodologyLoadError(compiled_dir, issues)
+        raise WorkflowLoadError(compiled_dir, issues)
     return stages
 
 

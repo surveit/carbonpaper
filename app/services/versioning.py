@@ -40,7 +40,7 @@ from typing import Any
 from app.models import Stage
 from app.services.loader import (
     load_compiled_dir,
-    load_methodology_stages,
+    load_workflow,
     stage_to_spec_dict,
 )
 from app.services import node_review
@@ -65,7 +65,7 @@ def load_version_stages(methodology_dir: Path, version_id: str) -> list[Stage]:
     """Load the compiled stages frozen in versions/<version_id>/compiled/ as
     typed Stage objects, through the same strict loader the runner uses for a
     working copy (app.services.loader) — an invalid snapshot raises
-    MethodologyLoadError rather than executing. Fails loudly if the version dir
+    WorkflowLoadError rather than executing. Fails loudly if the version dir
     is missing rather than falling back to the working copy (a run pinned to a
     version must read THAT version)."""
     vdir = versions_dir(methodology_dir) / version_id
@@ -74,7 +74,7 @@ def load_version_stages(methodology_dir: Path, version_id: str) -> list[Stage]:
             f"No version '{version_id}' for methodology at {methodology_dir} "
             f"(expected {vdir})"
         )
-    return load_methodology_stages(vdir)
+    return load_workflow(vdir)
 
 
 def load_version_meta(methodology_dir: Path, version_id: str) -> dict[str, Any]:
@@ -128,7 +128,7 @@ def create_version(
     truthful, not an error).
 
     The working copy is strict-loaded first, through the same loader the runner
-    uses; if it is not a valid DAG this raises MethodologyLoadError and writes
+    uses; if it is not a valid DAG this raises WorkflowLoadError and writes
     nothing. Every version is therefore a loadable workflow, from this seam or
     any other."""
     methodology_dir = Path(methodology_dir)
@@ -139,11 +139,11 @@ def create_version(
         )
 
     # Validate BEFORE writing anything: a version is, by invariant, a loadable
-    # DAG. On failure load_methodology_stages raises MethodologyLoadError and we
+    # DAG. On failure load_workflow raises WorkflowLoadError and we
     # snapshot nothing — an invalid workflow can never be immortalised as a
     # version. (The run-path strict load then only guards on-disk corruption of
     # an already-valid snapshot.)
-    load_methodology_stages(methodology_dir)
+    load_workflow(methodology_dir)
 
     version_id = datetime.now().strftime("%Y%m%dT%H%M%S")
     vdir = versions_dir(methodology_dir) / version_id

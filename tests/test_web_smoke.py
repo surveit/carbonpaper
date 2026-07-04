@@ -79,10 +79,10 @@ def test_raw_stage_is_json():
 
 def test_trigger_run_returns_400_on_invalid_dag(monkeypatch):
     """The run route surfaces a load failure as a 400 with the issue list."""
-    from app.services.loader import MethodologyLoadError
+    from app.services.loader import WorkflowLoadError
 
     def _boom(methodology_dir, repo_root):
-        raise MethodologyLoadError(Path("compiled"), ["01_bad.json: params.path missing"])
+        raise WorkflowLoadError(Path("compiled"), ["01_bad.json: params.path missing"])
 
     monkeypatch.setattr(runs_router, "prepare_run", _boom)
     r = client.post("/methodology/demo/run")
