@@ -12,7 +12,10 @@ import shutil
 from pathlib import Path
 from typing import Any, Callable
 
+from app.compiler import compile_methodology as compile_prose_to_workflow, read_input
+from app.errors import RegenerateWithoutSnapshotError
 from app.services import stage_edit, versioning, workspace
+from app.services.compilation import write_methodology
 from app.services.loader import find_stage_file
 
 # read_section caps at this many collected lines; grep_doc at this many matches
@@ -121,6 +124,35 @@ def make_project_tools(name: str, *, examples_dir: Path) -> list[Callable[..., A
                     break
         return "\n".join(out)
 
+    def compile_workflow(doc_path: str, confirm_overwrite: bool = False) -> dict[str, Any]:
+        """Compile a source document (already on disk — pass its path) into this
+        project's workflow, writing every stage into compiled/ as unreviewed
+        (amber). This OVERWRITES the current compiled/. If any node carries review
+        work (approved/edited/rejected), pass confirm_overwrite=True; a version
+        snapshot is taken first so nothing is lost. If the compiler reports
+        validation issues, nothing is written and the issues are returned."""
+        summary = workspace.project_workflow_summary(project_dir)
+        has_review_work = any(s["review_state"] != "unreviewed" for s in summary["stages"])
+        if has_review_work:
+            if not confirm_overwrite:
+                raise RegenerateWithoutSnapshotError(
+                    f"'{name}' has reviewed stages; re-call with confirm_overwrite=True to snapshot and regenerate."
+                )
+            existing = versioning.list_versions(project_dir)
+            parent = existing[0]["id"] if existing else None
+            versioning.create_version(
+                project_dir,
+                message=f"pre-regenerate snapshot of {name}",
+                reviewer="agent",
+                parent_version=parent,
+            )
+        text = read_input(doc_path)
+        result = compile_prose_to_workflow(text, name)
+        if result["validation"]:
+            return {"ok": False, "issues": result["validation"]}
+        write_methodology(result, project_dir)
+        return {"ok": True, "stages": [stage["id"] for stage in result["stages"]]}
+
     return [
         list_projects,
         describe_workflow,
@@ -130,4 +162,5 @@ def make_project_tools(name: str, *, examples_dir: Path) -> list[Callable[..., A
         fetch_document,
         read_section,
         grep_doc,
+        compile_workflow,
     ]
