@@ -150,6 +150,10 @@ def make_project_tools(name: str, *, examples_dir: Path) -> list[Callable[..., A
         result = compile_prose_to_workflow(text, name)
         if result["validation"]:
             return {"ok": False, "issues": result["validation"]}
+        compiled_dir = project_dir / "compiled"
+        if compiled_dir.is_dir():
+            for stale in compiled_dir.glob("*.json"):
+                stale.unlink()
         write_methodology(result, project_dir)
         return {"ok": True, "stages": [stage["id"] for stage in result["stages"]]}
 

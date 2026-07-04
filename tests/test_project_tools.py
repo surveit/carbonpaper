@@ -292,3 +292,36 @@ def test_compile_workflow_validation_issues_writes_nothing(tmp_path: Path, monke
     assert out["issues"] == _INVALID_COMPILE_RESULT["validation"]
     assert (pdir / "compiled" / "01_load.json").read_text(encoding="utf-8") == before
     assert list((pdir / "compiled").glob("*.json")) == [pdir / "compiled" / "01_load.json"]
+
+
+def test_compile_workflow_regenerate_to_fewer_stages_drops_stale_files(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Seed a 2-stage project (load + score), both unreviewed so no confirm is
+    # needed, then regenerate to a 1-stage result (load only). The dropped
+    # "score" stage's compiled file must not survive the regenerate — leaving
+    # it on disk would mean it keeps running while the tool reports it gone.
+    pdir = _seed(tmp_path, "alpha")
+    (pdir / "compiled" / "02_score.json").write_text(
+        json.dumps(_stage("score", "Score rows", "llm_transform", inputs=["load"])),
+        encoding="utf-8",
+    )
+    _patch_compiler(monkeypatch, _FRESH_COMPILE_RESULT)  # load-only result
+    tools = project_tools.make_project_tools("alpha", examples_dir=tmp_path)
+
+    doc = tmp_path / "doc.md"
+    doc.write_text("prose", encoding="utf-8")
+    out = _tool(tools, "compile_workflow")(str(doc))
+
+    assert out == {"ok": True, "stages": ["load"]}
+
+    from app.services import loader
+
+    remaining = list((pdir / "compiled").glob("*.json"))
+    assert loader.find_stage_file(pdir / "compiled", "score") is None
+    assert len(remaining) == 1 and remaining[0].name.endswith("_load.json")
+
+    from app.services import workspace
+
+    summary = workspace.project_workflow_summary(pdir)
+    assert [s["id"] for s in summary["stages"]] == ["load"]
