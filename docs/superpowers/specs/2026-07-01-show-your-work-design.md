@@ -34,9 +34,9 @@ but nothing records how rows connect across stages, and nothing renders the chai
 
 ## 2. Decisions settled in discussion (2026-07-01/02)
 
-1. **Audience: both, reader-facing first.** One trace record serves a reader-facing
-   renderer (built now) and an author-facing debugger (deferred; a deeper display over
-   the same record, not a second data shape).
+1. **Audience: both, reader-facing first.** One tracer serves a reader-facing
+   renderer (built now) and an author-facing debugger (deferred; a deeper display
+   over the same computed trace, not a second data shape).
 2. **Rows-in / rows-out, no narrative layer.** For each hop, show the stage's input
    rows and output rows verbatim. LLM fan-in stages have no formal "pick a row"
    operation, so the renderer must not invent selection semantics ("chosen",
@@ -162,10 +162,12 @@ Three rules, in order of decision weight:
    row-grain.
 3. **The published dossier is a static client of the same tracer.** A reader of the
    HTML artifact has no server, so the publish stage calls the same trace function
-   the viewer route calls, inlines the (capped, elided) rendering per claim, and
-   writes the complete trace JSON alongside as the raw companion
-   (`artifacts/palm_tier2/traces/<facility_id>.json`). One tracer, two callers —
-   never a second lineage mechanism for the static case.
+   the viewer route calls and inlines the (capped, elided) rendering per claim. The
+   raw record behind every inlined trace is the run's lineage sidecars plus its
+   persisted outputs — no per-facility trace JSON is materialized; anything the
+   inlined view capped or elided is recomputable from the run directory and
+   browsable at the viewer route. One tracer, two callers — never a second lineage
+   mechanism for the static case.
 
 ### 6.2 Derived annotations
 
@@ -187,6 +189,12 @@ annotations — this list is exhaustive; anything else is scope creep to be reje
    "matches no input row". Exact match only; never fuzzy, never normalized, never
    lineage.
 4. **Counts.** N rows in → M rows out per hop; "showing K of N" when display caps.
+5. **Gap report (dossier header).** A per-dossier summary derived purely from the
+   flags and annotations above — "N claims · K fully traced · M with trace
+   warnings" — with the warned claims listed first. Adopted from the
+   reviewability-by-coverage design note (PR #6): review attention belongs on the
+   complement of the clean surface, so the dossier leads with the gap, not a
+   ledger.
 
 ### 6.3 The two renderings
 
@@ -196,9 +204,10 @@ default; URLs shortened; huge cells elided with markers, expandable since the se
 has the run dir. This is also where the deferred author-depth features (full column
 sets, every hop expanded) later attach — same route, deeper display.
 
-**Dossier view (static):** each claim row in the published HTML expands to the same
-hop cards, inlined at publish time per §6.1 rule 3, with the trace JSON companion
-carrying anything the inlined view capped or elided.
+**Dossier view (static):** the gap-report header (§6.2 item 5) at the top, then each
+claim row expanding to the same hop cards, inlined at publish time per §6.1 rule 3.
+The run's sidecar parquets and outputs are the raw companion for anything the
+inlined view capped or elided.
 
 ## 7. Corner cases and decided behavior
 
@@ -241,12 +250,13 @@ carrying anything the inlined view capped or elided.
   re-typed as row functions under PR #26): recovery per §4.2, else `untracked`.
   This is the design's honest weak spot, and the pressure it creates — re-type
   stages to structurally narrower types — is intended.
-- **C10 — large row sets at a hop**: the JSON record holds all rows (bounded by the
-  run); the reader view caps at K with explicit "showing K of N". No silent
-  truncation anywhere.
-- **C11 — huge cells** (palm's `doc_text` reaches hundreds of KB): elided in the
-  record with an explicit marker — column name, char count, pointer to the source
-  parquet — never dropped without a marker.
+- **C10 — large row sets at a hop**: the run's outputs and lineage sidecars hold
+  everything (bounded by the run itself); the inlined dossier view caps at K with an
+  explicit "showing K of N", and the viewer route can page. No silent truncation
+  anywhere.
+- **C11 — huge cells** (palm's `doc_text` reaches hundreds of KB): elided in any
+  rendered view with an explicit marker — column name, char count, pointer to the
+  source parquet — never dropped without a marker.
 - **C12 — partial runs / missing stage output or lineage files**: hop flagged
   `missing_output_file`, trace ends there explicitly.
 - **C13 — value-format variance across sources** (`52,228` vs `678475.00`): rendered
