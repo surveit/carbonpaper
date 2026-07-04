@@ -102,6 +102,18 @@ class SchemaLibrary(_Base):
         return self
 
 
+def validate_named_schema(schema: dict[str, Any]) -> list[str]:
+    """Non-fatal: validate ONE named schema dict ([] means valid). Checks the
+    single-schema shape (snake_case name, known kind, column/primary-key
+    consistency); cross-schema `references` resolution is a library-wide concern
+    checked by validate_schema_library."""
+    try:
+        NamedSchema.model_validate(schema)
+        return []
+    except ValidationError as err:
+        return format_errors(err)
+
+
 def parse_schema_library(schemas: list[dict[str, Any]]) -> SchemaLibrary:
     """Parse + validate the data model. Raises ValidationError if invalid."""
     return SchemaLibrary.model_validate({"schemas": list(schemas)})
