@@ -53,3 +53,32 @@ def test_read_stage_missing_fails_loud(tmp_path: Path) -> None:
     tools = project_tools.make_project_tools("alpha", examples_dir=tmp_path)
     with pytest.raises(ValueError, match="no stage 'nope'"):
         _tool(tools, "read_stage")("nope")
+
+
+def test_edit_stage_tool_writes_and_reports_state(tmp_path: Path) -> None:
+    pdir = _seed(tmp_path, "alpha")
+    tools = project_tools.make_project_tools("alpha", examples_dir=tmp_path)
+    out = _tool(tools, "edit_stage")(
+        "load", json.dumps(_stage("load", "Load rows v2", "input_data"))
+    )
+    assert out["ok"] is True and out["state"] == "unreviewed"
+    assert "Load rows v2" in (pdir / "compiled" / "01_load.json").read_text(encoding="utf-8")
+
+
+def test_edit_stage_tool_invalid_writes_nothing_and_reports_issues(tmp_path: Path) -> None:
+    pdir = _seed(tmp_path, "alpha")
+    before = (pdir / "compiled" / "01_load.json").read_text(encoding="utf-8")
+    tools = project_tools.make_project_tools("alpha", examples_dir=tmp_path)
+    out = _tool(tools, "edit_stage")(
+        "load", json.dumps({"id": "load", "name": "x", "type": "not_a_real_type"})
+    )
+    assert out["ok"] is False and out["issues"]
+    assert (pdir / "compiled" / "01_load.json").read_text(encoding="utf-8") == before
+
+
+def test_create_version_tool_snapshots_as_agent(tmp_path: Path) -> None:
+    _seed(tmp_path, "alpha")
+    tools = project_tools.make_project_tools("alpha", examples_dir=tmp_path)
+    out = _tool(tools, "create_version")("first snapshot")
+    assert out["reviewer"] == "agent"
+    assert (tmp_path / "alpha" / "versions" / out["id"] / "version.json").exists()
