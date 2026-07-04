@@ -25,22 +25,13 @@ from typing import Any
 
 import pandas as pd
 
+from app.errors import NoVersionToRunError
 from app.models import Stage
 from app.services.loader import WorkflowLoadError
 from app.services import versioning
 
 from .stages import HANDLERS, HaltForReview
 from .validation import validate_dataframe
-
-
-class NoVersionToRunError(Exception):
-    """A run was requested for a project that has no version to run.
-
-    Runs are read-only with respect to versions: a run targets an existing
-    version and never creates one. Version creation is an explicit act (the
-    "Create version" action). Raised when `version_id` is None and no version
-    exists yet — rather than fabricating a snapshot as a run side effect, which
-    would immortalise (and potentially poison) the working copy."""
 
 
 def topological_sort(stages: list[Stage]) -> list[Stage]:
