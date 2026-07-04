@@ -106,7 +106,9 @@ So unlike a container-keeps-its-name plan, here nearly everything moves: contain
 ## Coordination
 - `loader.py` is being moved `app/models/` → `app/services/` in the #30
   smaller-fixes pass; this refactor only *renames its symbols*, not its location.
-- The **version-lifecycle** change (`docs/version-lifecycle.md`) touches
-  `runner.py` / `versioning.py`; sequence to avoid churn collisions.
+- The **version-lifecycle** change (runs are read-only w.r.t. versions) is now
+  implemented in `runner.py` / `versioning.py`: it adds `NoVersionToRunError`
+  and makes `create_version` validate before snapshotting. The rename pass
+  should carry those symbols along.
 - Scale: ~500 raw occurrences, and this time most of them move. Do it as one
   dedicated pass with green tests between each numbered step above.

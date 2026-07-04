@@ -1,12 +1,14 @@
 """Integration: the runner's row slicing (static `limit:` + per-run
---limit/--offset overrides) with manifest persistence, and the
-duplicate-input-row check at every stage boundary.
+--limit/--offset overrides) with manifest persistence, the duplicate-input-row
+check at every stage boundary, and the version-lifecycle invariant that a run
+targets an existing version and never creates one.
 
-Builds small file-connector methodologies in a tmp dir, runs them, and checks
-that `limit:` truncated the output, that per-run --limit/--offset slice the
-output and are recorded as run provenance (not silent), that manifest.json
-landed on disk, and that a stage fed exact duplicate full-content rows fails
-loudly naming them.
+Builds small file-connector methodologies in a tmp dir, snapshots them into a
+version, runs them, and checks that `limit:` truncated the output, that per-run
+--limit/--offset slice the output and are recorded as run provenance (not
+silent), that manifest.json landed on disk, and that a stage fed exact duplicate
+full-content rows fails loudly naming them. Also checks that an unversioned or
+invalid working copy is refused loudly, writing nothing.
 """
 from __future__ import annotations
 
@@ -16,7 +18,16 @@ import pandas as pd
 import pytest
 import yaml
 
-from app.runtime.runner import execute_run
+from app.runtime.runner import NoVersionToRunError, execute_run
+from app.services.loader import MethodologyLoadError
+from app.services.versioning import create_version
+
+
+def _seed_version(root):
+    """Create the initial version a run targets. Runs no longer create versions,
+    so a test that builds a working copy must snapshot it into a version before
+    running against it."""
+    return create_version(root, message="test seed", reviewer="test")["id"]
 
 
 def _make_methodology(root):
@@ -34,6 +45,7 @@ def _make_methodology(root):
 
 def test_limit_truncates_and_is_recorded(tmp_path):
     _make_methodology(tmp_path)
+    _seed_version(tmp_path)
     manifest = execute_run(tmp_path, repo_root=tmp_path)
 
     assert manifest["status"] == "ok"
@@ -56,6 +68,7 @@ def test_per_run_limit_and_offset_slice_and_are_recorded(tmp_path):
     # the static one, and the offset drops rows BEFORE the cap is applied:
     # offset 1 drops row 0, then limit 3 keeps rows 1-3.
     _make_methodology(tmp_path)
+    _seed_version(tmp_path)
     manifest = execute_run(tmp_path, repo_root=tmp_path,
                            limits={"load": 3}, offsets={"load": 1})
 
@@ -82,6 +95,7 @@ def test_per_run_limit_and_offset_slice_and_are_recorded(tmp_path):
 
 def test_per_run_override_for_unknown_stage_id_fails_loudly(tmp_path):
     _make_methodology(tmp_path)
+    _seed_version(tmp_path)
     with pytest.raises(ValueError, match="unknown stage id"):
         execute_run(tmp_path, repo_root=tmp_path, limits={"nope": 3})
     with pytest.raises(ValueError, match="unknown stage id"):
@@ -119,6 +133,7 @@ def test_duplicate_input_rows_fail_the_stage(tmp_path):
         {"name": "b", "val": 2},
         {"name": "a", "val": 1},
     ])
+    _seed_version(tmp_path)
     manifest = execute_run(tmp_path, repo_root=tmp_path)
 
     records = {r["stage_id"]: r for r in manifest["stages"]}
@@ -138,6 +153,7 @@ def test_distinct_input_rows_pass(tmp_path):
         {"name": "a", "val": 1},
         {"name": "a", "val": 2},
     ])
+    _seed_version(tmp_path)
     manifest = execute_run(tmp_path, repo_root=tmp_path)
     assert manifest["status"] == "ok"
     records = {r["stage_id"]: r for r in manifest["stages"]}
@@ -145,17 +161,71 @@ def test_distinct_input_rows_pass(tmp_path):
     assert records["consume"]["rows"] == 2
 
 
-def test_invalid_stage_rejected_before_run(tmp_path):
-    """A contract-invalid stage must fail the run at load — no run dir, no
-    partial execution, no empty-dataframe fallback."""
-    from app.services.loader import MethodologyLoadError
+def test_run_without_a_version_fails_loudly(tmp_path):
+    """A run targets an existing version and never creates one: a valid but
+    unversioned working copy raises NoVersionToRunError and leaves nothing on
+    disk — no run dir, no fabricated version."""
+    _make_methodology(tmp_path)  # valid working copy, but no version created
+    with pytest.raises(NoVersionToRunError):
+        execute_run(tmp_path, repo_root=tmp_path)
+    assert not (tmp_path / "runs").exists()
+    assert not (tmp_path / "versions").exists()
 
+
+def test_create_version_rejects_invalid_working_copy(tmp_path):
+    """create_version strict-loads before it snapshots: an invalid working copy
+    raises MethodologyLoadError and writes NOTHING, so no invalid workflow can
+    be immortalised as a version."""
     (tmp_path / "compiled").mkdir(parents=True)
     bad = {"id": "load", "name": "Load", "type": "input_data",
            "connector": {"kind": "file", "params": {"format": "csv"}}}  # no path
-    (tmp_path / "compiled" / "01_load.yaml").write_text(yaml.safe_dump(bad), encoding="utf-8")
+    (tmp_path / "compiled" / "01_load.yaml").write_text(
+        yaml.safe_dump(bad), encoding="utf-8")
 
     with pytest.raises(MethodologyLoadError) as exc:
-        execute_run(tmp_path, repo_root=tmp_path)
+        create_version(tmp_path, message="x", reviewer="test")
     assert any("params.path" in i for i in exc.value.issues)
-    assert not (tmp_path / "runs").exists()  # nothing was created
+    assert not (tmp_path / "versions").exists()  # snapshotted nothing
+
+
+def test_invalid_workflow_never_becomes_a_version_and_run_never_pins_stale(tmp_path):
+    """Regression for the version-lifecycle bug: a run used to snapshot the
+    working copy as a version BEFORE validating it, so an invalid workflow got
+    immortalised as 'the latest' and every later default run reloaded that
+    poisoned snapshot and failed with a stale error. Now runs never create
+    versions and create_version validates first, so the bug is impossible."""
+    # Invalid working copy: file connector missing params.path.
+    (tmp_path / "compiled").mkdir(parents=True)
+    bad = {"id": "load", "name": "Load", "type": "input_data",
+           "connector": {"kind": "file", "params": {"format": "csv"}}}
+    (tmp_path / "compiled" / "01_load.yaml").write_text(
+        yaml.safe_dump(bad), encoding="utf-8")
+
+    # You cannot make a version from it, and it writes nothing.
+    with pytest.raises(MethodologyLoadError):
+        create_version(tmp_path, message="x", reviewer="test")
+    assert not (tmp_path / "versions").exists()
+
+    # A run refuses (no version) and does NOT auto-create one — nothing on disk.
+    with pytest.raises(NoVersionToRunError):
+        execute_run(tmp_path, repo_root=tmp_path)
+    assert not (tmp_path / "versions").exists()
+    assert not (tmp_path / "runs").exists()
+
+    # Fix the working copy. A run STILL refuses until a version is created
+    # explicitly — it never silently pins to a stale snapshot (there is none).
+    (tmp_path / "data").mkdir(parents=True)
+    pd.DataFrame({"name": ["a"], "val": [1]}).to_csv(
+        tmp_path / "data" / "items.csv", index=False)
+    good = {"id": "load", "name": "Load", "type": "input_data",
+            "connector": {"kind": "file",
+                          "params": {"path": "data/items.csv", "format": "csv"}}}
+    (tmp_path / "compiled" / "01_load.yaml").write_text(
+        yaml.safe_dump(good), encoding="utf-8")
+    with pytest.raises(NoVersionToRunError):
+        execute_run(tmp_path, repo_root=tmp_path)
+
+    # Explicit creation, then the run succeeds against that version.
+    _seed_version(tmp_path)
+    manifest = execute_run(tmp_path, repo_root=tmp_path)
+    assert manifest["status"] == "ok"

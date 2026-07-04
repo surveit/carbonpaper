@@ -1,0 +1,63 @@
+id: extreme_score_review
+name: Human review of extreme or low-confidence scores
+type: human_review_queue
+
+source:
+  doc: examples/congresswatch/methodology_raw.md
+  section: "§6"
+  lines: [102, 109]
+
+inputs:
+  - id: benchmark_scoring
+    schema:
+      primary_key: [evidence_id, benchmark_id]
+      columns:
+        - {name: evidence_id, type: str, nullable: false}
+        - {name: benchmark_id, type: str, nullable: false}
+        - {name: entity_id, type: str, nullable: false}
+        - {name: query_id, type: str, nullable: false}
+        - {name: quote, type: str, nullable: false}
+        - {name: score, type: int, nullable: false, range: [-2, 2]}
+        - {name: reasoning, type: str, nullable: false}
+        - {name: precedence_failure, type: bool, nullable: false}
+        - {name: published_at, type: date, nullable: false}
+
+queue:
+  reviewer_instructions: |
+    Read the quote and the model's score. Confirm or override.
+
+    Common reasons to override:
+      - Quote was taken out of context and the member's actual stance is
+        the opposite.
+      - The "+2 strong support" label was applied to a hedged statement
+        that should be +1.
+      - The quote talks about the issue but doesn't actually take a
+        position (downgrade to 0 or reject as precedence_failure).
+      - Press release was reprinting someone else's statement; the
+        member isn't taking that stance themselves.
+
+  routing: 1-of-1
+  conflict_resolution: single_reviewer
+  estimated_volume_per_week: 50
+  filter: "abs(score) == 2 OR precedence_failure == true"
+  hash_columns: [entity_id, query_id, quote]
+
+output_schema:
+  primary_key: [evidence_id, benchmark_id]
+  estimated_rows: 1500
+  columns:
+    - {name: evidence_id, type: str, nullable: false, source: passthrough}
+    - {name: benchmark_id, type: str, nullable: false, source: passthrough}
+    - {name: entity_id, type: str, nullable: false, source: passthrough}
+    - {name: query_id, type: str, nullable: false, source: passthrough}
+    - {name: ai_score, type: int, nullable: true, range: [-2, 2]}
+    - {name: human_score, type: int, nullable: true, range: [-2, 2]}
+    - {name: final_score, type: int, nullable: true, range: [-2, 2]}
+    - {name: reviewer_id, type: str, nullable: true}
+    - {name: reviewed_at, type: datetime, nullable: true}
+    - {name: review_notes, type: str, nullable: true}
+    - {name: published_at, type: date, nullable: false, source: passthrough}
+
+compiler_notes:
+  - "hash_columns intentionally include the quote so re-runs with slightly
+     different LLM output don't accidentally reuse decisions."

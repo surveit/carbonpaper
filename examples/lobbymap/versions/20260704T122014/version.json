@@ -1,0 +1,15 @@
+{
+  "id": "20260704T122014",
+  "created_at": "2026-07-04T12:20:14",
+  "parent_version": null,
+  "message": "Initial version: snapshot of the committed compiled/ workflow.",
+  "reviewer": "seed",
+  "coverage": {
+    "approved": 0,
+    "rejected": 0,
+    "edited_stale": 0,
+    "unreviewed": 14,
+    "total": 14,
+    "approved_pct": 0.0
+  }
+}

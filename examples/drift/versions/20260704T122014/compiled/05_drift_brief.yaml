@@ -1,0 +1,97 @@
+id: drift_brief
+name: Per-member drift detection (LLM)
+type: llm_transform
+
+source:
+  doc: examples/drift/methodology_raw.md
+  section: "§4"
+  lines: [37, 60]
+
+inputs:
+  - id: member_pairs
+    schema:
+      primary_key: [entity_id]
+      columns:
+        - {name: entity_id, type: str, nullable: false}
+        - {name: name, type: str, nullable: false}
+        - {name: party, type: str, nullable: false}
+        - {name: state, type: str, nullable: false}
+        - {name: chamber, type: str, nullable: false}
+        - {name: early_block, type: str, nullable: false}
+        - {name: recent_block, type: str, nullable: false}
+        - {name: early_count, type: int, nullable: false}
+        - {name: recent_count, type: int, nullable: false}
+
+llm:
+  model: haiku
+  temperature: 0.0
+  response_format: json
+  max_retries: 1
+  prompt_template: |
+    You are a journalist's research assistant. Compare a US Congress
+    member's press releases from two time windows and identify any
+    NARRATIVE DRIFT worth investigating.
+
+    DO NOT speculate beyond the supplied quotes. Only assert drift if
+    you can cite specific text from the early vs recent blocks. A
+    member who simply made different statements about different issues
+    is not drifting — drift requires either (a) a stance change on the
+    same topic, (b) a topic appearing/disappearing in their agenda, or
+    (c) a striking new or abandoned phrasing.
+
+    Member: {name} ({party}-{state}, {chamber})
+    Early window: {early_count} press releases
+    Recent window: {recent_count} press releases
+
+    === EARLY WINDOW PRESS RELEASES ===
+    {early_block}
+
+    === RECENT WINDOW PRESS RELEASES ===
+    {recent_block}
+
+    Return ONE JSON object only (no prose, no code fences):
+
+    {{
+      "notability_score": 0-10 integer,
+      "headline": "<one short line describing the drift, or 'no drift'>",
+      "topical_drift": [
+        {{"topic": "...", "direction": "added|dropped|intensified|diminished",
+          "explanation": "<one sentence>"}}
+      ],
+      "stance_drift": [
+        {{"topic": "...", "early_quote": "<verbatim>",
+          "recent_quote": "<verbatim>", "explanation": "<one sentence>"}}
+      ],
+      "new_talking_points": ["<phrase>", ...],
+      "abandoned_talking_points": ["<phrase>", ...],
+      "story_hypothesis": "<one paragraph; 'no meaningful drift' if score < 3>"
+    }}
+
+    Scoring guide:
+      0-2: no meaningful change
+      3-5: minor topical or vocabulary shift
+      6-8: clear stance change or major topical pivot on at least one issue
+      9-10: hard self-contradiction or pivot worth front-page investigation
+
+output_schema:
+  primary_key: [entity_id]
+  estimated_rows: 200
+  columns:
+    - {name: entity_id, type: str, nullable: false}
+    - {name: name, type: str, nullable: false}
+    - {name: party, type: str, nullable: false}
+    - {name: state, type: str, nullable: false}
+    - {name: chamber, type: str, nullable: false}
+    - {name: notability_score, type: int, nullable: true, range: [0, 10]}
+    - {name: headline, type: str, nullable: true}
+    - {name: topical_drift, type: json, nullable: true}
+    - {name: stance_drift, type: json, nullable: true}
+    - {name: new_talking_points, type: json, nullable: true}
+    - {name: abandoned_talking_points, type: json, nullable: true}
+    - {name: story_hypothesis, type: str, nullable: true}
+    - {name: early_url_map, type: json, nullable: true}
+    - {name: recent_url_map, type: json, nullable: true}
+
+compiler_notes:
+  - "Haiku is fast/cheap but accepts ~25K tokens of press content per
+     call without issue. If quality is poor, swap to sonnet."

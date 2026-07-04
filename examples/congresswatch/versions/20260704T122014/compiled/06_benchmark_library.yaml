@@ -1,0 +1,37 @@
+id: benchmark_library
+name: Stance benchmarks per query
+type: input_data
+
+source:
+  doc: examples/congresswatch/methodology_raw.md
+  section: "§5"
+  lines: [80, 99]
+
+connector:
+  kind: file
+  params:
+    path: examples/congresswatch/static/benchmark_library.csv
+    format: csv
+  refresh: manual
+  notes: |
+    Unlike LobbyMap (where IPCC supplies the benchmark), here each row is a
+    stipulated stance axis for one query. The runtime uses this to give the
+    LLM a consistent framing during scoring.
+
+output_schema:
+  primary_key: [benchmark_id]
+  estimated_rows: 20
+  columns:
+    - {name: benchmark_id, type: str, nullable: false}
+    - {name: query_id, type: str, nullable: false}
+    - {name: kind, type: str, nullable: false,
+       range: [stance_axis, expert_consensus]}
+    - {name: scale_low, type: int, nullable: false, range: [-2, 2]}
+    - {name: scale_high, type: int, nullable: false, range: [-2, 2]}
+    - {name: benchmark_text, type: str, nullable: false}
+    - {name: source_citation, type: str, nullable: true}
+
+compiler_notes:
+  - "kind='stance_axis' (not expert_consensus) makes explicit that the
+     scoring scale is a framing decision, not an objective benchmark.
+     Important for downstream interpretation."

@@ -1,0 +1,64 @@
+id: extreme_score_review
+name: Human review of extreme scores (|score|=2)
+type: human_review_queue
+
+source:
+  doc: examples/lobbymap/stages/04_benchmark_scoring.md
+  section: "§2.5 (operational discretion implied)"
+  lines: [220, 230]
+
+inputs:
+  - id: benchmark_scoring
+    schema:
+      primary_key: [evidence_id, benchmark_id]
+      columns:
+        - {name: evidence_id, type: str, nullable: false}
+        - {name: benchmark_id, type: str, nullable: false}
+        - {name: entity_id, type: str, nullable: false}
+        - {name: query_id, type: str, nullable: false}
+        - {name: score, type: int, nullable: true, range: [-2, 2]}
+        - {name: reasoning, type: str, nullable: false}
+        - {name: precedence_failure, type: bool, nullable: false}
+
+queue:
+  reviewer_instructions: |
+    Read the evidence quote and reasoning. Confirm or override the score.
+    The extreme tiers (-2, +2) require strong, unambiguous evidence per Table 6.
+    If the model used "supports" / "opposes" language but the quote actually
+    has hedges, downgrade to -1 / +1.
+
+    Rejection cases:
+      - Quote doesn't actually say what the reasoning claims.
+      - Score doesn't match the rubric tier description.
+      - Wrong benchmark applied (use precedence_failure for §4.4 violations).
+  routing: 2-of-2-disagreement-escalates
+  conflict_resolution: third_reviewer
+  estimated_volume_per_week: 600
+  filter: "abs(score) == 2 OR precedence_failure == true"
+
+output_schema:
+  primary_key: [evidence_id, benchmark_id]
+  estimated_rows: 18000
+  columns:
+    - {name: evidence_id, type: str, nullable: false, source: passthrough}
+    - {name: benchmark_id, type: str, nullable: false, source: passthrough}
+    - {name: entity_id, type: str, nullable: false, source: passthrough}
+    - {name: query_id, type: str, nullable: false, source: passthrough}
+    - {name: ai_score, type: int, nullable: true, range: [-2, 2],
+       description: "The model's original score (renamed from `score`)."}
+    - {name: human_score, type: int, nullable: true, range: [-2, 2]}
+    - {name: final_score, type: int, nullable: true, range: [-2, 2],
+       description: "human_score if reviewed; else ai_score."}
+    - {name: reviewer_id, type: str, nullable: true}
+    - {name: reviewed_at, type: datetime, nullable: true}
+    - {name: review_notes, type: str, nullable: true}
+
+compiler_notes:
+  - "Methodology doesn't formalize a review queue per se — InfluenceMap
+     operates a continuous QA process described loosely in §2.5 (line 220).
+     Encoding the asymmetric review pattern explicitly so the runtime can
+     surface it as a working queue UI for methodology authors who haven't
+     built one yet."
+  - "Estimated volume (600/week) derived from 30k evidence/year × ~10%
+     extreme-score rate ÷ 50 weeks. Real rate depends on the LLM's
+     willingness to commit to extremes; calibrate after first run."

@@ -33,6 +33,16 @@ from .stages import HANDLERS, HaltForReview
 from .validation import validate_dataframe
 
 
+class NoVersionToRunError(Exception):
+    """A run was requested for a methodology that has no version to run.
+
+    Runs are read-only with respect to versions: a run targets an existing
+    version and never creates one. Version creation is an explicit act (the
+    "Create version" action). Raised when `version_id` is None and no version
+    exists yet — rather than fabricating a snapshot as a run side effect, which
+    would immortalise (and potentially poison) the working copy."""
+
+
 def topological_sort(stages: list[Stage]) -> list[Stage]:
     by_id = {s.id: s for s in stages}
     visited: set[str] = set()
@@ -92,16 +102,17 @@ def _reject_duplicate_input_rows(df: pd.DataFrame, input_id: str, stage_id: str)
 
 
 def _resolve_version_id(methodology_dir: Path, version_id: str | None) -> str:
-    """Resolve the DAG version a run will be pinned to. Every run MUST carry a
-    real version id — we never blank it, never fabricate one, and never silently
-    read the working copy.
+    """Resolve the DAG version a run will be pinned to. Every run MUST target a
+    real, existing version — we never blank it, never fabricate one, never
+    silently read the working copy, and never CREATE one as a run side effect.
+    A run is read-only with respect to versions.
 
     - If `version_id` is given, it must name an existing version; we fail loudly
-      otherwise rather than auto-creating a *different* id under the caller's name.
-    - If `version_id` is None, pin to the latest existing version; and if none
-      exists yet, AUTO-CREATE an implicit version ("auto-created on run") and use it, so
-      a first run on a never-versioned methodology still records a real snapshot
-      it actually executed against.
+      otherwise rather than redirecting to some other snapshot.
+    - If `version_id` is None, pin to the latest existing version.
+    - If no version exists yet, raise NoVersionToRunError. A run will not
+      immortalise the working copy as a version (that is what let an invalid
+      working copy poison "the latest" and fail every subsequent run).
     """
     if version_id is not None:
         # Validate the requested version exists (load_version_meta fails loudly
@@ -114,10 +125,11 @@ def _resolve_version_id(methodology_dir: Path, version_id: str | None) -> str:
     if existing:
         return existing[0]["id"]
 
-    meta = versioning.create_version(
-        methodology_dir, message="auto-created on run", reviewer="system"
+    raise NoVersionToRunError(
+        f"No version to run for methodology '{methodology_dir.name}'. A run "
+        f"targets an existing version and never creates one — create a version "
+        f"first."
     )
-    return meta["id"]
 
 
 def prepare_run(
@@ -135,8 +147,10 @@ def prepare_run(
     The run is PINNED to a DAG version: stages are loaded from the version's
     immutable snapshot (versioning.load_version_stages), never from the live
     `compiled/` working copy, so working-copy edits can never affect this run.
-    `version_id` resolution + auto-create is documented on _resolve_version_id; the
-    resolved id is recorded in the manifest as `dag_version`.
+    `version_id` resolution is documented on _resolve_version_id (None -> the
+    latest existing version; a version-less methodology raises
+    NoVersionToRunError); the resolved id is recorded in the manifest as
+    `dag_version`.
 
     `limits` is a per-RUN row-cap override: {stage_id: N} truncates that
     stage's output to its first N rows for this run only, overriding any
@@ -147,9 +161,9 @@ def prepare_run(
     part of the run's provenance and survives a halt/resume. Unknown stage
     ids fail loudly.
 
-    Raises MethodologyLoadError (from the version snapshot's strict load)
-    before the run dir is created, so an invalid DAG never leaves a run
-    behind."""
+    Raises NoVersionToRunError (no version exists) or MethodologyLoadError
+    (from the version snapshot's strict load) before the run dir is created, so
+    a run with no version — or an invalid DAG — never leaves a run behind."""
     dag_version = _resolve_version_id(methodology_dir, version_id)
     stages = versioning.load_version_stages(methodology_dir, dag_version)
     ordered = topological_sort(stages)
@@ -217,9 +231,9 @@ def execute_run(
     offsets: dict[str, int] | None = None,
 ) -> dict[str, Any]:
     """Run the DAG once (synchronous). Returns the manifest dict. `version_id`
-    pins the run to a DAG version (None -> latest existing, else auto-create); see
-    prepare_run / _resolve_version_id. `limits`/`offsets` are per-run row
-    slicing overrides; see prepare_run."""
+    pins the run to a DAG version (None -> latest existing; none exists ->
+    NoVersionToRunError); see prepare_run / _resolve_version_id.
+    `limits`/`offsets` are per-run row slicing overrides; see prepare_run."""
     return run_prepared(
         prepare_run(methodology_dir, repo_root, version_id,
                     limits=limits, offsets=offsets)
@@ -513,7 +527,7 @@ def main() -> int:
     try:
         manifest = execute_run(methodology_dir, repo_root,
                                limits=limits or None, offsets=offsets or None)
-    except MethodologyLoadError as exc:
+    except (NoVersionToRunError, MethodologyLoadError) as exc:
         print(exc)
         return 1
     print(json.dumps(
