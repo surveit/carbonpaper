@@ -8,11 +8,18 @@ missing stage or column is a raised error, not an invented default."""
 
 from __future__ import annotations
 
+import shutil
 from pathlib import Path
 from typing import Any, Callable
 
 from app.services import stage_edit, versioning, workspace
 from app.services.loader import find_stage_file
+
+# read_section caps at this many collected lines; grep_doc at this many matches
+# — bounds the agent's context intake from a document that otherwise never
+# lands in context as full text (see module docstring: doc stays on disk).
+_MAX_SECTION_LINES = 400
+_MAX_GREP_MATCHES = 50
 
 
 def make_project_tools(name: str, *, examples_dir: Path) -> list[Callable[..., Any]]:
@@ -59,4 +66,68 @@ def make_project_tools(name: str, *, examples_dir: Path) -> list[Callable[..., A
             project_dir, message=message, reviewer="agent", parent_version=parent
         )
 
-    return [list_projects, describe_workflow, read_stage, edit_stage, create_version]
+    def fetch_document(src_path: str) -> dict[str, Any]:
+        """Copy a local source document into this project's source/ folder and
+        return a handle: its on-disk path plus a cheap outline (byte size, line
+        count, markdown headings) — never the body. Then read bounded slices with
+        read_section / grep_doc, or compile it with compile_workflow. Raises if the
+        path does not exist (it is not guessed or treated as a URL)."""
+        src = Path(src_path)
+        if not src.is_file():
+            raise ValueError(f"no document at '{src_path}' (fetch_document takes a local file path)")
+        source_dir = project_dir / "source"
+        source_dir.mkdir(parents=True, exist_ok=True)
+        dest = source_dir / src.name
+        shutil.copyfile(src, dest)
+        lines = dest.read_text(encoding="utf-8", errors="replace").splitlines()
+        headings = [ln for ln in lines if ln.lstrip().startswith("#")]
+        return {"path": str(dest), "bytes": dest.stat().st_size, "lines": len(lines), "headings": headings}
+
+    def read_section(doc_path: str, heading: str) -> str:
+        """Return the lines under the first heading containing `heading`, up to the
+        next heading of the same or higher level. Capped at 400 lines."""
+        lines = Path(doc_path).read_text(encoding="utf-8", errors="replace").splitlines()
+        start = next(
+            (
+                i
+                for i, ln in enumerate(lines)
+                if ln.lstrip().startswith("#") and heading.lower() in ln.lower()
+            ),
+            None,
+        )
+        if start is None:
+            raise ValueError(f"no heading matching '{heading}' in {doc_path}")
+        level = len(lines[start]) - len(lines[start].lstrip("#").lstrip())
+        collected = [lines[start]]
+        for ln in lines[start + 1 :]:
+            if ln.lstrip().startswith("#") and (len(ln) - len(ln.lstrip("#").lstrip())) <= level:
+                break
+            collected.append(ln)
+            if len(collected) >= _MAX_SECTION_LINES:
+                break
+        return "\n".join(collected)
+
+    def grep_doc(doc_path: str, query: str) -> str:
+        """Return up to 50 lines of the document matching `query` (case-insensitive),
+        each prefixed with its 1-based line number."""
+        needle = query.lower()
+        out: list[str] = []
+        for lineno, ln in enumerate(
+            Path(doc_path).read_text(encoding="utf-8", errors="replace").splitlines(), start=1
+        ):
+            if needle in ln.lower():
+                out.append(f"{lineno}: {ln}")
+                if len(out) >= _MAX_GREP_MATCHES:
+                    break
+        return "\n".join(out)
+
+    return [
+        list_projects,
+        describe_workflow,
+        read_stage,
+        edit_stage,
+        create_version,
+        fetch_document,
+        read_section,
+        grep_doc,
+    ]
