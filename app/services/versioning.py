@@ -9,15 +9,15 @@ reproducible against the exact DAG it executed, never "whatever the working copy
 happened to be".
 
 Layout:
-    examples/<methodology>/versions/<version_id>/
-        compiled/<id>.yaml      # copy of the working compiled/ at creation time
-        schemas/<...>.yaml      # copy of the working schemas/ at creation time (if any)
+    <methodology>/versions/<version_id>/
+        compiled/<id>.json      # copy of the working compiled/ at creation time
+        schemas/<...>           # copy of the working schemas/ at creation time (if any)
         version.json            # {id, created_at, parent_version, message,
                                 #  reviewer, coverage}
 
-`versions/` is a DURABLE reviewable artifact and is committable (not gitignored)
-— it is the record of what was believed and run, the git-model "one canonical
-copy" the runner reads from.
+`versions/` is a DURABLE on-disk record of what was believed and run — the
+"one canonical copy" the runner reads from. It lives under the methodology dir
+alongside `runs/` (both are per-methodology working data, not source).
 
 `version_id` uses the SAME timestamp scheme as run ids
 (datetime.now().strftime('%Y%m%dT%H%M%S')) so versions and runs sort and read
@@ -37,10 +37,12 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-import yaml
-
 from app.models import Stage
-from app.services.loader import load_methodology_stages
+from app.services.loader import (
+    load_compiled_dir,
+    load_methodology_stages,
+    stage_to_spec_dict,
+)
 from app.services import node_review
 
 
@@ -50,19 +52,13 @@ def versions_dir(methodology_dir: Path) -> Path:
 
 
 def _load_stages_from(compiled_dir: Path) -> list[dict[str, Any]]:
-    """Load compiled stage YAMLs from a directory as raw dicts, sorted by
-    filename — used only to freeze approval coverage at version-creation time
-    (node_review speaks dicts). Runs load a version's stages through the strict
-    typed loader instead; see load_version_stages."""
-    stages: list[dict[str, Any]] = []
-    if not compiled_dir.is_dir():
-        return stages
-    for f in sorted(compiled_dir.glob("*.yaml")):
-        with f.open("r", encoding="utf-8") as fh:
-            data = yaml.safe_load(fh)
-        if data:
-            stages.append(data)
-    return stages
+    """Compiled stages of a snapshot as canonical spec dicts, to freeze approval
+    coverage at version-creation time (node_review speaks dicts). Routes through
+    the shared loader so the on-disk format lives in exactly one place; runs
+    instead load a version's stages as typed Stages via load_version_stages."""
+    return [stage_to_spec_dict(entry.stage)
+            for entry in load_compiled_dir(compiled_dir)
+            if entry.stage is not None]
 
 
 def load_version_stages(methodology_dir: Path, version_id: str) -> list[Stage]:

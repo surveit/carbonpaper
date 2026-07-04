@@ -16,7 +16,6 @@ import json
 
 import pandas as pd
 import pytest
-import yaml
 
 from app.runtime.runner import NoVersionToRunError, execute_run
 from app.services.loader import MethodologyLoadError
@@ -40,7 +39,7 @@ def _make_methodology(root):
         "connector": {"kind": "file", "params": {"path": "data/items.csv", "format": "csv"}},
         "limit": 2,
     }
-    (root / "compiled" / "01_load.yaml").write_text(yaml.safe_dump(stage), encoding="utf-8")
+    (root / "compiled" / "01_load.json").write_text(json.dumps(stage), encoding="utf-8")
 
 
 def test_limit_truncates_and_is_recorded(tmp_path):
@@ -119,10 +118,10 @@ def _two_stage_methodology(root, rows: list[dict]):
         "function": {"kind": "inline",
                      "code": "def transform(df):\n    return df\n"},
     }
-    (root / "compiled" / "01_load.yaml").write_text(
-        yaml.safe_dump(load), encoding="utf-8")
-    (root / "compiled" / "02_consume.yaml").write_text(
-        yaml.safe_dump(consume), encoding="utf-8")
+    (root / "compiled" / "01_load.json").write_text(
+        json.dumps(load), encoding="utf-8")
+    (root / "compiled" / "02_consume.json").write_text(
+        json.dumps(consume), encoding="utf-8")
 
 
 def test_duplicate_input_rows_fail_the_stage(tmp_path):
@@ -179,8 +178,8 @@ def test_create_version_rejects_invalid_working_copy(tmp_path):
     (tmp_path / "compiled").mkdir(parents=True)
     bad = {"id": "load", "name": "Load", "type": "input_data",
            "connector": {"kind": "file", "params": {"format": "csv"}}}  # no path
-    (tmp_path / "compiled" / "01_load.yaml").write_text(
-        yaml.safe_dump(bad), encoding="utf-8")
+    (tmp_path / "compiled" / "01_load.json").write_text(
+        json.dumps(bad), encoding="utf-8")
 
     with pytest.raises(MethodologyLoadError) as exc:
         create_version(tmp_path, message="x", reviewer="test")
@@ -198,8 +197,8 @@ def test_invalid_workflow_never_becomes_a_version_and_run_never_pins_stale(tmp_p
     (tmp_path / "compiled").mkdir(parents=True)
     bad = {"id": "load", "name": "Load", "type": "input_data",
            "connector": {"kind": "file", "params": {"format": "csv"}}}
-    (tmp_path / "compiled" / "01_load.yaml").write_text(
-        yaml.safe_dump(bad), encoding="utf-8")
+    (tmp_path / "compiled" / "01_load.json").write_text(
+        json.dumps(bad), encoding="utf-8")
 
     # You cannot make a version from it, and it writes nothing.
     with pytest.raises(MethodologyLoadError):
@@ -220,8 +219,8 @@ def test_invalid_workflow_never_becomes_a_version_and_run_never_pins_stale(tmp_p
     good = {"id": "load", "name": "Load", "type": "input_data",
             "connector": {"kind": "file",
                           "params": {"path": "data/items.csv", "format": "csv"}}}
-    (tmp_path / "compiled" / "01_load.yaml").write_text(
-        yaml.safe_dump(good), encoding="utf-8")
+    (tmp_path / "compiled" / "01_load.json").write_text(
+        json.dumps(good), encoding="utf-8")
     with pytest.raises(NoVersionToRunError):
         execute_run(tmp_path, repo_root=tmp_path)
 
