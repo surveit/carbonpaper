@@ -54,10 +54,23 @@ mock; `CW_LLM_FORCE_MOCK=1` opts into the offline mock.
 app/models/           the node-type contract (Pydantic models)
 app/SCHEMA.md         prose schema spec (legacy — superseded by app/models/)
 app/runtime/          the Runner (executor, handlers, LLM backends, validation)  → app/runtime/AGENTS.md
-app/main.py           FastAPI web app (DAG / run / review-queue pages)           → app/AGENTS.md
+app/main.py           thin FastAPI bootstrap; routes live in app/web/routers/   → app/AGENTS.md
+app/web/              the web layer (routers, loading, diagrams, config)
+app/services/         web-independent workflow logic (node review, versioning)
+app/chat/             embeddable chat subsystem (PydanticAI; own backend env vars)
+app/llm/              shared LLM vocabulary (the model menu)
 app/templates/, app/static/   the web UI
+tests/                pytest suite (offline: conftest forces the LLM mock)
 examples/<name>/      DAG artifacts (compiled/ + methodology_raw.md + code/ + data/ + runs/)
 ```
+
+## Docs (`docs/`)
+- [docs/overview.md](docs/overview.md) — what this is and why; the examples.
+- [docs/architecture.md](docs/architecture.md) — the code map.
+- [docs/named-schemas.md](docs/named-schemas.md) — the named-schema data model + the eval model.
+- [docs/run-and-review-ui.md](docs/run-and-review-ui.md) — run page, review queue, node review + versioning.
+- [docs/RETHINK.md](docs/RETHINK.md) — the post-CongressWatch product critique (where this needs to go).
+- [docs/models-and-storage.md](docs/models-and-storage.md) — storage convention + the plan to wire loaders through app/models.
 
 ## Conventions (load-bearing, not stylistic)
 - **Never fabricate.** A value that can't be sourced is `null`/`unknown`; the
