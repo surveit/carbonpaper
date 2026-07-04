@@ -12,8 +12,9 @@ separate dirty-flag to keep in sync.
 Two reviews, deliberately distinct:
   - NODE review (this module) = "do we trust how this step is modeled?" — colors
     the DAG, does NOT halt a run.
-  - ROW review (app/runtime/handlers.py + app/main.py decisions store) = "is this
-    run's data right?" — the human_review_queue, which DOES halt a run.
+  - ROW review (app/runtime/stages/human_review_queue.py + app/main.py decisions
+    store) = "is this run's data right?" — the human_review_queue, which DOES
+    halt a run.
 
 Dependency rule (mirrors app/models' discipline): this module imports NOTHING
 from app.runtime or app.compiler. It is pure stdlib + yaml + pandas, so it stays
@@ -86,8 +87,8 @@ def node_content_hash(stage: dict[str, Any]) -> str:
     Hashes the LOADED dict, not file text: json.dumps with sort_keys=True makes
     key order irrelevant, the tight separators drop incidental whitespace, and
     default=str lets any non-JSON-native scalar (e.g. a date) serialize. Mirrors
-    handlers._content_hash (sha1 hexdigest, 16 chars) so the node store and the
-    row store share one hashing convention."""
+    app.runtime.stages.human_review_queue._content_hash (sha1 hexdigest, 16
+    chars) so the node store and the row store share one hashing convention."""
     canonical = canonical_node_spec(stage)
     payload = json.dumps(
         canonical, sort_keys=True, separators=(",", ":"), default=str

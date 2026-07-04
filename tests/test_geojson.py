@@ -1,10 +1,10 @@
-"""_read_geojson flattens a FeatureCollection into a DataFrame (handlers.py)."""
+"""_read_geojson flattens a FeatureCollection into a DataFrame (app/runtime/stages/input_data.py)."""
 from __future__ import annotations
 
 import json
 from pathlib import Path
 
-from app.runtime.handlers import _read_geojson
+from app.runtime.stages.input_data import _read_geojson
 
 
 def _write(tmp_path, obj) -> Path:

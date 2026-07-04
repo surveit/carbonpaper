@@ -34,7 +34,7 @@ does not import the compiler or the web app. (It does not yet validate against t
     runner stops, marks the run `awaiting_review`, and persists the pending queue.
     `resume_run(methodology_dir, run_id, repo_root)` reloads completed outputs and
     continues once decisions exist.
-- **`handlers.py`** — one handler per node type (`HANDLERS` dict).
+- **`stages/`** — one handler per node type (`HANDLERS` dict), one module per stage type.
   - `input_data` connectors: `file` (csv/parquet/json/**geojson**), `computed_static`;
     `http`/`scrape`/`api`/`sql`/`manual_upload` raise `NotImplementedError` (use a
     committed snapshot via `file` instead). `_read_geojson` flattens a FeatureCollection.
