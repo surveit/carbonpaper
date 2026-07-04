@@ -1,0 +1,209 @@
+{
+  "id": "benchmark_scoring",
+  "type": "llm_transform",
+  "name": "Score evidence against benchmark on the 5-point rubric",
+  "source": {
+    "doc": "examples/lobbymap/stages/04_benchmark_scoring.md",
+    "section": "§4.2 (Table 6)",
+    "lines": [
+      292,
+      310
+    ]
+  },
+  "inputs": [
+    {
+      "id": "evidence_with_benchmarks",
+      "schema": {
+        "columns": [
+          {
+            "name": "evidence_id",
+            "type": "str",
+            "nullable": false
+          },
+          {
+            "name": "entity_id",
+            "type": "str",
+            "nullable": false
+          },
+          {
+            "name": "query_id",
+            "type": "str",
+            "nullable": false
+          },
+          {
+            "name": "quote",
+            "type": "str",
+            "nullable": false
+          },
+          {
+            "name": "benchmark_id",
+            "type": "str",
+            "nullable": false
+          },
+          {
+            "name": "benchmark_text",
+            "type": "str",
+            "nullable": false
+          },
+          {
+            "name": "kind",
+            "type": "str",
+            "nullable": false
+          },
+          {
+            "name": "jurisdiction",
+            "type": "str",
+            "nullable": true
+          }
+        ],
+        "primary_key": [
+          "evidence_id",
+          "benchmark_id"
+        ]
+      }
+    }
+  ],
+  "output_schema": {
+    "columns": [
+      {
+        "name": "evidence_id",
+        "type": "str",
+        "nullable": false,
+        "source": "passthrough"
+      },
+      {
+        "name": "benchmark_id",
+        "type": "str",
+        "nullable": false,
+        "source": "passthrough"
+      },
+      {
+        "name": "entity_id",
+        "type": "str",
+        "nullable": false,
+        "source": "passthrough"
+      },
+      {
+        "name": "query_id",
+        "type": "str",
+        "nullable": false,
+        "source": "passthrough"
+      },
+      {
+        "name": "kind",
+        "type": "str",
+        "nullable": false,
+        "source": "passthrough"
+      },
+      {
+        "name": "score",
+        "type": "int",
+        "nullable": true,
+        "description": "Null when precedence_failure=true.",
+        "range": [
+          -2,
+          2
+        ]
+      },
+      {
+        "name": "reasoning",
+        "type": "str",
+        "nullable": false
+      },
+      {
+        "name": "precedence_failure",
+        "type": "bool",
+        "nullable": false
+      }
+    ],
+    "estimated_rows": 60000,
+    "primary_key": [
+      "evidence_id",
+      "benchmark_id"
+    ]
+  },
+  "llm": {
+    "prompt_template": "Score this piece of evidence against the benchmark on a 5-point scale.\n\nEvidence (verbatim quote from a {kind} source):\n\"{quote}\"\n\nBenchmark ({kind}):\n{benchmark_text}\n\nPolicy query: {query_id}{jurisdiction_clause}\n\nRubric (Table 6 of the LobbyMap methodology, applied verbatim):\n  +2  Strongly supporting\n        science_based:     \"Detailed position aligned with IPCC analysis.\"\n        government_policy: \"Strong support for the policy and/or advocacy\n                            that would strengthen the policy further.\"\n  +1  Supporting\n        science_based:     \"Broad alignment with IPCC analysis.\"\n        government_policy: \"General or high-level support for the policy.\"\n   0  No position / Mixed\n        science_based:     \"Unclear if position is aligned with IPCC analysis.\"\n        government_policy: \"Unclear if position is supportive of the policy.\"\n  -1  Not supporting\n        science_based:     \"Position appears misaligned with IPCC analysis.\"\n        government_policy: \"Unsupportive of the policy and/or supportive\n                            with caveats that would weaken the proposal.\"\n  -2  Opposing\n        science_based:     \"Position contradicts IPCC analysis.\"\n        government_policy: \"Opposes the policy.\"\n\nFor government_policy benchmarks: only apply if all four §4.4 conditions\nhold (specific clearly-communicated proposal from a mandated government\nbody; close to original policy intent; jurisdiction still in Paris;\nproposal not at odds with IPCC). If any condition fails, decline to\nscore against this benchmark and return precedence_failure: true.\n\nReturn JSON:\n  {{\"score\": -2|-1|0|1|2,\n    \"reasoning\": \"...one paragraph linking quote to rubric tier...\",\n    \"precedence_failure\": false}}\n",
+    "model": "claude-sonnet-4-6",
+    "temperature": 0.0,
+    "max_retries": 3,
+    "response_format": "json",
+    "rubric": {
+      "+2": {
+        "label": "Strongly supporting",
+        "science_based": "Detailed position that is aligned with IPCC analysis",
+        "government_policy": "Strong support for the policy and/or advocacy that would strengthen the policy further"
+      },
+      "+1": {
+        "label": "Supporting",
+        "science_based": "Broad alignment with IPCC analysis",
+        "government_policy": "General or high-level support for the policy"
+      },
+      "0": {
+        "label": "No position / Mixed position",
+        "science_based": "Unclear if position is aligned with IPCC analysis",
+        "government_policy": "Unclear if position is supportive of the policy"
+      },
+      "-1": {
+        "label": "Not supporting",
+        "science_based": "Position appears misaligned with IPCC analysis",
+        "government_policy": "Unsupportive of the policy and/or with major weakening caveats"
+      },
+      "-2": {
+        "label": "Opposing",
+        "science_based": "Position contradicts IPCC analysis",
+        "government_policy": "Opposes the policy"
+      }
+    }
+  },
+  "review": {
+    "when": "abs(score) >= 2",
+    "routing": "1-of-2-disagreement-escalates",
+    "rationale": "A false +2 launders weak supportive language as a leadership claim;\na false -2 misattributes opposition. Both are reputationally expensive.\nAll extreme scores get two reviewers; disagreement escalates to a third.\n"
+  },
+  "compiler_notes": [
+    "Rubric pulled verbatim from Table 6. The dual-column structure (science_ based + government_policy) is preserved so the prompt shows the LLM the exact tier descriptions for each benchmark kind.",
+    "§4.4 precedence rule (when government_policy can override science_based) is encoded inside the prompt rather than in upstream join logic, because three of the four conditions require reading the evidence text.",
+    "Multiple rows per evidence_id are normal — one per applicable benchmark. Downstream stages collapse this in cell aggregation."
+  ],
+  "eval": {
+    "reference": "examples/lobbymap/eval_data/scored_evidence_gold.csv",
+    "reference_schema": {
+      "primary_key": [
+        "evidence_id",
+        "benchmark_id"
+      ],
+      "columns": [
+        {
+          "name": "evidence_id",
+          "type": "str"
+        },
+        {
+          "name": "benchmark_id",
+          "type": "str"
+        },
+        {
+          "name": "human_score",
+          "type": "int",
+          "range": [
+            -2,
+            2
+          ]
+        }
+      ]
+    },
+    "join_on": [
+      "evidence_id",
+      "benchmark_id"
+    ],
+    "metrics": [
+      "exact_agreement_rate",
+      "off_by_one_rate",
+      "signed_direction_agreement",
+      "mean_absolute_error",
+      "confusion_matrix_5x5",
+      "extreme_score_precision"
+    ],
+    "notes": "Use prior LobbyMap-coded evidence as ground truth. Even a few hundred\nexamples per query is enough to detect calibration drift across model\nversions or prompt edits.\n"
+  }
+}

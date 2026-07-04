@@ -1,13 +1,13 @@
 """Methodology browsing: the DAG view, per-stage detail (full page + partial),
-the ER data-model view, and raw stage YAML."""
+the ER data-model view, and raw stage JSON."""
 
 from __future__ import annotations
 
-import yaml
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import HTMLResponse, PlainTextResponse
+from fastapi.responses import HTMLResponse, Response
 
 from app.services import node_review, versioning
+from app.services.loader import stage_to_json, stage_to_spec_dict
 from app.web.config import EXAMPLES_DIR, templates
 from app.web.diagrams import TYPE_CLASS, TYPE_GLYPH, build_er_diagram, build_mermaid_graph
 from app.web.loading import (
@@ -36,10 +36,11 @@ async def methodology_view(request: Request, methodology: str):
     stages = listing.stages
     # Node-review layer: colour the DAG by belief (approved/unreviewed/rejected/
     # edited_stale) on first paint, drive the coverage badge, and list versions.
-    # node_review speaks canonical spec dicts, so each typed Stage is dumped
-    # back to its spec dict for hashing.
+    # node_review speaks canonical spec dicts (stage_to_spec_dict), which equal
+    # json.loads of the persisted file — so a node's hash is the same whether it
+    # came off disk or from a live Stage.
     decisions = node_review.load_node_decisions(EXAMPLES_DIR / methodology)
-    spec_dicts = [s.model_dump(by_alias=True, exclude_none=True) for s in stages]
+    spec_dicts = [stage_to_spec_dict(s) for s in stages]
     review_by_id = {
         s.id: node_review.approval_state_for(spec, decisions)["state"]
         for s, spec in zip(stages, spec_dicts)
@@ -82,10 +83,7 @@ async def stage_view(request: Request, methodology: str, stage_id: str):
             "function_code": function_code,
             "type_class": TYPE_CLASS,
             "type_glyph": TYPE_GLYPH,
-            "raw_yaml": yaml.safe_dump(
-                stage.model_dump(by_alias=True, exclude_none=True),
-                sort_keys=False, allow_unicode=True,
-            ),
+            "raw_json": stage_to_json(stage),
         },
     )
 
@@ -126,21 +124,18 @@ async def stage_view_partial(request: Request, methodology: str, stage_id: str):
             "function_code": function_code,
             "type_class": TYPE_CLASS,
             "type_glyph": TYPE_GLYPH,
-            "raw_yaml": yaml.safe_dump(
-                stage.model_dump(by_alias=True, exclude_none=True),
-                sort_keys=False, allow_unicode=True,
-            ),
+            "raw_json": stage_to_json(stage),
         },
     )
 
 
-@router.get("/methodology/{methodology}/raw/{stage_id}", response_class=PlainTextResponse)
-async def stage_raw_yaml(methodology: str, stage_id: str):
-    stages = load_stages(methodology).stages
-    stage = find_stage(stages, stage_id)
+@router.get("/methodology/{methodology}/raw/{stage_id}")
+async def stage_raw(methodology: str, stage_id: str) -> Response:
+    listing = load_stages(methodology)
+    stage = find_stage(listing.stages, stage_id)
     if stage is None:
         raise HTTPException(status_code=404, detail=f"No stage '{stage_id}' in {methodology}")
-    return yaml.safe_dump(
-        stage.model_dump(by_alias=True, exclude_none=True),
-        sort_keys=False, allow_unicode=True,
+    return Response(
+        content=stage_to_json(stage),
+        media_type="application/json",
     )

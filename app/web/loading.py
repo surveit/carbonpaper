@@ -1,4 +1,4 @@
-"""Filesystem access for the web layer: read compiled stage YAML, run
+"""Filesystem access for the web layer: read compiled stage JSON, run
 manifests, stage outputs, review decisions, and queue snapshots off disk, plus
 small pure helpers for the stage-dict shape they return."""
 

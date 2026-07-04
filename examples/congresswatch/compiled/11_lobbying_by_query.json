@@ -1,0 +1,130 @@
+{
+  "id": "lobbying_by_query",
+  "type": "python_frame_function",
+  "name": "Aggregate lobbying filings per policy query",
+  "source": {
+    "doc": "examples/congresswatch/methodology_raw.md",
+    "section": "§8",
+    "lines": [
+      124,
+      137
+    ]
+  },
+  "inputs": [
+    {
+      "id": "lobbying_filings",
+      "schema": {
+        "columns": [
+          {
+            "name": "filing_id",
+            "type": "str",
+            "nullable": false
+          },
+          {
+            "name": "filer_org",
+            "type": "str",
+            "nullable": false
+          },
+          {
+            "name": "client_name",
+            "type": "str",
+            "nullable": false
+          },
+          {
+            "name": "issue_codes",
+            "type": "str",
+            "nullable": false
+          },
+          {
+            "name": "income",
+            "type": "str",
+            "nullable": true
+          },
+          {
+            "name": "expenses",
+            "type": "str",
+            "nullable": true
+          }
+        ],
+        "primary_key": [
+          "filing_id"
+        ]
+      }
+    },
+    {
+      "id": "policy_queries",
+      "schema": {
+        "columns": [
+          {
+            "name": "query_id",
+            "type": "str",
+            "nullable": false
+          },
+          {
+            "name": "title",
+            "type": "str",
+            "nullable": false
+          },
+          {
+            "name": "issue_codes",
+            "type": "str",
+            "nullable": false
+          }
+        ],
+        "primary_key": [
+          "query_id"
+        ]
+      }
+    }
+  ],
+  "output_schema": {
+    "columns": [
+      {
+        "name": "query_id",
+        "type": "str",
+        "nullable": false
+      },
+      {
+        "name": "title",
+        "type": "str",
+        "nullable": false
+      },
+      {
+        "name": "filing_count",
+        "type": "int",
+        "nullable": false
+      },
+      {
+        "name": "total_spend_usd",
+        "type": "float",
+        "nullable": true
+      },
+      {
+        "name": "top_clients_json",
+        "type": "json",
+        "nullable": false,
+        "description": "JSON list of {client, filing_count, total_spend}."
+      },
+      {
+        "name": "top_filers_json",
+        "type": "json",
+        "nullable": false
+      }
+    ],
+    "estimated_rows": 20,
+    "primary_key": [
+      "query_id"
+    ]
+  },
+  "function": {
+    "kind": "module",
+    "module": "examples.congresswatch.code.lobbying_by_query",
+    "function": "transform",
+    "requirements": [
+      "pandas"
+    ]
+  },
+  "compiler_notes": [
+    "Spend parsing is best-effort: LDA income strings are often ranges or 'less than $5,000'. Free-text amounts are dropped silently from the spend total; filing_count remains a clean signal."
+  ]
+}

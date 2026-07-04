@@ -1,0 +1,70 @@
+{
+  "id": "press_window_recent",
+  "type": "input_data",
+  "name": "Press releases — recent window",
+  "source": {
+    "doc": "examples/drift/methodology_raw.md",
+    "section": "§2",
+    "lines": [
+      19,
+      24
+    ]
+  },
+  "inputs": [],
+  "output_schema": {
+    "columns": [
+      {
+        "name": "doc_id",
+        "type": "str",
+        "nullable": false
+      },
+      {
+        "name": "entity_id",
+        "type": "str",
+        "nullable": false
+      },
+      {
+        "name": "window",
+        "type": "str",
+        "nullable": false,
+        "range": [
+          "early",
+          "recent"
+        ]
+      },
+      {
+        "name": "title",
+        "type": "str",
+        "nullable": true
+      },
+      {
+        "name": "body",
+        "type": "str",
+        "nullable": false
+      },
+      {
+        "name": "published_at",
+        "type": "date",
+        "nullable": false
+      },
+      {
+        "name": "url",
+        "type": "str",
+        "nullable": true
+      }
+    ],
+    "estimated_rows": 1500,
+    "primary_key": [
+      "doc_id"
+    ]
+  },
+  "connector": {
+    "kind": "file",
+    "params": {
+      "path": "examples/drift/data/press_window_recent.csv",
+      "format": "csv"
+    },
+    "refresh": "per_slice"
+  },
+  "compiler_notes": []
+}

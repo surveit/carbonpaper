@@ -1,0 +1,162 @@
+{
+  "id": "drift_brief",
+  "type": "llm_transform",
+  "name": "Per-member drift detection (LLM)",
+  "source": {
+    "doc": "examples/drift/methodology_raw.md",
+    "section": "§4",
+    "lines": [
+      37,
+      60
+    ]
+  },
+  "inputs": [
+    {
+      "id": "member_pairs",
+      "schema": {
+        "columns": [
+          {
+            "name": "entity_id",
+            "type": "str",
+            "nullable": false
+          },
+          {
+            "name": "name",
+            "type": "str",
+            "nullable": false
+          },
+          {
+            "name": "party",
+            "type": "str",
+            "nullable": false
+          },
+          {
+            "name": "state",
+            "type": "str",
+            "nullable": false
+          },
+          {
+            "name": "chamber",
+            "type": "str",
+            "nullable": false
+          },
+          {
+            "name": "early_block",
+            "type": "str",
+            "nullable": false
+          },
+          {
+            "name": "recent_block",
+            "type": "str",
+            "nullable": false
+          },
+          {
+            "name": "early_count",
+            "type": "int",
+            "nullable": false
+          },
+          {
+            "name": "recent_count",
+            "type": "int",
+            "nullable": false
+          }
+        ],
+        "primary_key": [
+          "entity_id"
+        ]
+      }
+    }
+  ],
+  "output_schema": {
+    "columns": [
+      {
+        "name": "entity_id",
+        "type": "str",
+        "nullable": false
+      },
+      {
+        "name": "name",
+        "type": "str",
+        "nullable": false
+      },
+      {
+        "name": "party",
+        "type": "str",
+        "nullable": false
+      },
+      {
+        "name": "state",
+        "type": "str",
+        "nullable": false
+      },
+      {
+        "name": "chamber",
+        "type": "str",
+        "nullable": false
+      },
+      {
+        "name": "notability_score",
+        "type": "int",
+        "nullable": true,
+        "range": [
+          0,
+          10
+        ]
+      },
+      {
+        "name": "headline",
+        "type": "str",
+        "nullable": true
+      },
+      {
+        "name": "topical_drift",
+        "type": "json",
+        "nullable": true
+      },
+      {
+        "name": "stance_drift",
+        "type": "json",
+        "nullable": true
+      },
+      {
+        "name": "new_talking_points",
+        "type": "json",
+        "nullable": true
+      },
+      {
+        "name": "abandoned_talking_points",
+        "type": "json",
+        "nullable": true
+      },
+      {
+        "name": "story_hypothesis",
+        "type": "str",
+        "nullable": true
+      },
+      {
+        "name": "early_url_map",
+        "type": "json",
+        "nullable": true
+      },
+      {
+        "name": "recent_url_map",
+        "type": "json",
+        "nullable": true
+      }
+    ],
+    "estimated_rows": 200,
+    "primary_key": [
+      "entity_id"
+    ]
+  },
+  "llm": {
+    "prompt_template": "You are a journalist's research assistant. Compare a US Congress\nmember's press releases from two time windows and identify any\nNARRATIVE DRIFT worth investigating.\n\nDO NOT speculate beyond the supplied quotes. Only assert drift if\nyou can cite specific text from the early vs recent blocks. A\nmember who simply made different statements about different issues\nis not drifting — drift requires either (a) a stance change on the\nsame topic, (b) a topic appearing/disappearing in their agenda, or\n(c) a striking new or abandoned phrasing.\n\nMember: {name} ({party}-{state}, {chamber})\nEarly window: {early_count} press releases\nRecent window: {recent_count} press releases\n\n=== EARLY WINDOW PRESS RELEASES ===\n{early_block}\n\n=== RECENT WINDOW PRESS RELEASES ===\n{recent_block}\n\nReturn ONE JSON object only (no prose, no code fences):\n\n{{\n  \"notability_score\": 0-10 integer,\n  \"headline\": \"<one short line describing the drift, or 'no drift'>\",\n  \"topical_drift\": [\n    {{\"topic\": \"...\", \"direction\": \"added|dropped|intensified|diminished\",\n      \"explanation\": \"<one sentence>\"}}\n  ],\n  \"stance_drift\": [\n    {{\"topic\": \"...\", \"early_quote\": \"<verbatim>\",\n      \"recent_quote\": \"<verbatim>\", \"explanation\": \"<one sentence>\"}}\n  ],\n  \"new_talking_points\": [\"<phrase>\", ...],\n  \"abandoned_talking_points\": [\"<phrase>\", ...],\n  \"story_hypothesis\": \"<one paragraph; 'no meaningful drift' if score < 3>\"\n}}\n\nScoring guide:\n  0-2: no meaningful change\n  3-5: minor topical or vocabulary shift\n  6-8: clear stance change or major topical pivot on at least one issue\n  9-10: hard self-contradiction or pivot worth front-page investigation\n",
+    "model": "haiku",
+    "temperature": 0.0,
+    "max_retries": 1,
+    "response_format": "json"
+  },
+  "compiler_notes": [
+    "Haiku is fast/cheap but accepts ~25K tokens of press content per call without issue. If quality is poor, swap to sonnet."
+  ]
+}

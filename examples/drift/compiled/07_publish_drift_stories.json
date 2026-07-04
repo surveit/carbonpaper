@@ -1,0 +1,158 @@
+{
+  "id": "publish_drift_stories",
+  "type": "publish",
+  "name": "Publish ranked drift story cards",
+  "source": {
+    "doc": "examples/drift/methodology_raw.md",
+    "section": "§6",
+    "lines": [
+      69,
+      79
+    ]
+  },
+  "inputs": [
+    {
+      "id": "drift_brief",
+      "schema": {
+        "columns": [
+          {
+            "name": "entity_id",
+            "type": "str",
+            "nullable": false
+          },
+          {
+            "name": "name",
+            "type": "str",
+            "nullable": false
+          },
+          {
+            "name": "party",
+            "type": "str",
+            "nullable": false
+          },
+          {
+            "name": "state",
+            "type": "str",
+            "nullable": false
+          },
+          {
+            "name": "chamber",
+            "type": "str",
+            "nullable": false
+          },
+          {
+            "name": "notability_score",
+            "type": "int",
+            "nullable": true
+          },
+          {
+            "name": "headline",
+            "type": "str",
+            "nullable": true
+          },
+          {
+            "name": "topical_drift",
+            "type": "json",
+            "nullable": true
+          },
+          {
+            "name": "stance_drift",
+            "type": "json",
+            "nullable": true
+          },
+          {
+            "name": "new_talking_points",
+            "type": "json",
+            "nullable": true
+          },
+          {
+            "name": "abandoned_talking_points",
+            "type": "json",
+            "nullable": true
+          },
+          {
+            "name": "story_hypothesis",
+            "type": "str",
+            "nullable": true
+          },
+          {
+            "name": "early_url_map",
+            "type": "json",
+            "nullable": true
+          },
+          {
+            "name": "recent_url_map",
+            "type": "json",
+            "nullable": true
+          }
+        ],
+        "primary_key": [
+          "entity_id"
+        ]
+      }
+    },
+    {
+      "id": "notability_rank",
+      "schema": {
+        "columns": [
+          {
+            "name": "rank",
+            "type": "int",
+            "nullable": false
+          },
+          {
+            "name": "entity_id",
+            "type": "str",
+            "nullable": false
+          }
+        ],
+        "primary_key": [
+          "rank"
+        ]
+      }
+    }
+  ],
+  "output_schema": {
+    "columns": [
+      {
+        "name": "entity_id",
+        "type": "str",
+        "nullable": false
+      },
+      {
+        "name": "output_path",
+        "type": "str",
+        "nullable": false
+      },
+      {
+        "name": "rendered_at",
+        "type": "datetime",
+        "nullable": false
+      },
+      {
+        "name": "bytes",
+        "type": "int",
+        "nullable": false
+      }
+    ],
+    "estimated_rows": 200,
+    "primary_key": [
+      "output_path"
+    ]
+  },
+  "function": {
+    "kind": "module",
+    "module": "examples.drift.code.publish_drift_stories",
+    "function": "transform",
+    "requirements": [
+      "pandas"
+    ]
+  },
+  "publish": {
+    "format": "html_report",
+    "destination": "build/drift_stories/",
+    "one_file_per": "story",
+    "cross_link": true
+  },
+  "compiler_notes": []
+}

@@ -1,0 +1,58 @@
+{
+  "id": "cell_weights",
+  "type": "input_data",
+  "name": "Sector × source × query weight table (config)",
+  "source": {
+    "doc": "examples/lobbymap/stages/07_org_score_intensity.md",
+    "section": "§4.7",
+    "lines": [
+      353,
+      365
+    ]
+  },
+  "inputs": [],
+  "output_schema": {
+    "columns": [
+      {
+        "name": "sector",
+        "type": "str",
+        "nullable": false
+      },
+      {
+        "name": "source_class",
+        "type": "str",
+        "nullable": false
+      },
+      {
+        "name": "query_id",
+        "type": "str",
+        "nullable": false
+      },
+      {
+        "name": "weight",
+        "type": "float",
+        "nullable": false,
+        "range": [
+          0.0,
+          10.0
+        ]
+      }
+    ],
+    "estimated_rows": 200,
+    "primary_key": [
+      "sector",
+      "source_class",
+      "query_id"
+    ]
+  },
+  "connector": {
+    "kind": "file",
+    "params": {
+      "path": "examples/lobbymap/static/cell_weights.csv",
+      "format": "csv"
+    },
+    "refresh": "ad_hoc",
+    "notes": "Methodology specifies sector-specific weighting (e.g., automotive weights\nQ11 higher) but does not publish the actual weight numbers. This is the\nmethodology authors' lever — change the file, re-run org_score, see effect.\n"
+  },
+  "compiler_notes": []
+}

@@ -1,0 +1,95 @@
+{
+  "id": "benchmark_library",
+  "type": "input_data",
+  "name": "IPCC + government-policy benchmark catalog",
+  "source": {
+    "doc": "examples/lobbymap/stages/04_benchmark_scoring.md",
+    "section": "§4.2, Table 5 (Appendix A)",
+    "lines": [
+      292,
+      330
+    ]
+  },
+  "inputs": [],
+  "output_schema": {
+    "columns": [
+      {
+        "name": "benchmark_id",
+        "type": "str",
+        "nullable": false
+      },
+      {
+        "name": "query_id",
+        "type": "str",
+        "nullable": false,
+        "range": [
+          "Q1",
+          "Q2",
+          "Q3",
+          "Q4",
+          "Q5",
+          "Q6",
+          "Q7",
+          "Q8",
+          "Q9",
+          "Q10",
+          "Q11",
+          "Q12",
+          "Q13"
+        ]
+      },
+      {
+        "name": "kind",
+        "type": "str",
+        "nullable": false,
+        "range": [
+          "science_based",
+          "government_policy"
+        ]
+      },
+      {
+        "name": "jurisdiction",
+        "type": "str",
+        "nullable": true,
+        "description": "Required for kind=government_policy; null for science_based."
+      },
+      {
+        "name": "benchmark_text",
+        "type": "str",
+        "nullable": false,
+        "description": "Verbatim distilled position. The text the LLM compares evidence against."
+      },
+      {
+        "name": "source_citation",
+        "type": "str",
+        "nullable": false,
+        "description": "e.g. 'IPCC AR6 WG3 Ch.6 §6.7.1' or 'EU Fit-for-55, COM/2021/550'."
+      },
+      {
+        "name": "precedence_rule",
+        "type": "str",
+        "nullable": false,
+        "description": "How the benchmark is selected at scoring time.",
+        "range": [
+          "default",
+          "government_policy_when_§4.4_conditions_met"
+        ]
+      }
+    ],
+    "estimated_rows": 200,
+    "primary_key": [
+      "benchmark_id"
+    ]
+  },
+  "connector": {
+    "kind": "file",
+    "params": {
+      "path": "examples/lobbymap/static/benchmark_library.csv",
+      "format": "csv"
+    },
+    "refresh": "ad_hoc"
+  },
+  "compiler_notes": [
+    "Treating benchmark authorship as out of scope for this DAG. The four §4.4 conditions for using a government-policy benchmark over a science- based one (line 318+) are encoded in the next stage's join logic, not here."
+  ]
+}

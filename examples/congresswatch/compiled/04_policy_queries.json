@@ -1,0 +1,62 @@
+{
+  "id": "policy_queries",
+  "type": "input_data",
+  "name": "Policy queries (topic catalog)",
+  "source": {
+    "doc": "examples/congresswatch/methodology_raw.md",
+    "section": "§3",
+    "lines": [
+      39,
+      56
+    ]
+  },
+  "inputs": [],
+  "output_schema": {
+    "columns": [
+      {
+        "name": "query_id",
+        "type": "str",
+        "nullable": false
+      },
+      {
+        "name": "title",
+        "type": "str",
+        "nullable": false
+      },
+      {
+        "name": "left_pole",
+        "type": "str",
+        "nullable": false,
+        "description": "Position description for +2 end of the scale."
+      },
+      {
+        "name": "right_pole",
+        "type": "str",
+        "nullable": false,
+        "description": "Position description for -2 end of the scale."
+      },
+      {
+        "name": "issue_codes",
+        "type": "str",
+        "nullable": false,
+        "description": "Semicolon-separated LDA issue codes mapped to this topic."
+      }
+    ],
+    "estimated_rows": 20,
+    "primary_key": [
+      "query_id"
+    ]
+  },
+  "connector": {
+    "kind": "file",
+    "params": {
+      "path": "examples/congresswatch/static/policy_queries.csv",
+      "format": "csv"
+    },
+    "refresh": "manual",
+    "notes": "Curated by the methodology author. Each row is a discrete policy issue\nwith a stipulated stance spectrum (left vs right pole) used as the\nscoring axis. Adding a topic is a row edit.\n"
+  },
+  "compiler_notes": [
+    "Stance direction is stipulated, not derived from an external authority. Reader must understand the scale is a framing choice, not a normative truth claim."
+  ]
+}

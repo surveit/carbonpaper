@@ -34,10 +34,13 @@ def test_data_model_page():
     assert client.get("/methodology/lobbymap/data-model").status_code == 200
 
 
-def test_raw_stage():
+def test_raw_stage_is_json():
+    import json
     r = client.get("/methodology/lobbymap/raw/evidence_extraction")
     assert r.status_code == 200
-    assert "evidence_extraction" in r.text
+    assert r.headers["content-type"].startswith("application/json")
+    payload = json.loads(r.text)
+    assert payload["id"] == "evidence_extraction"
 
 
 def test_trigger_run_returns_400_on_invalid_dag(monkeypatch):

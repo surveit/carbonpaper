@@ -1,0 +1,66 @@
+{
+  "id": "industry_associations",
+  "type": "input_data",
+  "name": "LobbyMap-tracked industry associations (curated)",
+  "source": {
+    "doc": "examples/lobbymap/stages/01_universe_selection.md",
+    "section": "§3.4",
+    "lines": [
+      273,
+      279
+    ]
+  },
+  "inputs": [],
+  "output_schema": {
+    "columns": [
+      {
+        "name": "association_id",
+        "type": "str",
+        "nullable": false
+      },
+      {
+        "name": "name",
+        "type": "str",
+        "nullable": false
+      },
+      {
+        "name": "jurisdiction",
+        "type": "str",
+        "nullable": false,
+        "description": "Country or 'international' / 'EU'."
+      },
+      {
+        "name": "sectors",
+        "type": "list[str]",
+        "nullable": false,
+        "description": "Sectors represented. From the methodology's sector list."
+      },
+      {
+        "name": "cross_sector_federation",
+        "type": "bool",
+        "nullable": false,
+        "description": "True for groups like US Chamber, BusinessEurope."
+      }
+    ],
+    "estimated_rows": 330,
+    "primary_key": [
+      "association_id"
+    ]
+  },
+  "connector": {
+    "kind": "file",
+    "params": {
+      "path": "examples/lobbymap/static/industry_associations.csv",
+      "format": "csv",
+      "list_columns": [
+        "sectors"
+      ]
+    },
+    "refresh": "ad_hoc",
+    "notes": "File is human-curated. New entries land via a methodology-author workflow\nthat is OUT OF SCOPE for this pipeline. The runtime treats the CSV as the\nsource of truth for who is tracked.\n"
+  },
+  "compiler_notes": [
+    "The Relative Ranking score (1–10, from a stakeholder survey per §4.9) is NOT carried here — it lives in a separate stage (relative_ranking_survey, not built in this MVP). Methodology blends the two in the relationship- graph stage downstream.",
+    "Curation methodology (how researchers add/remove associations) is itself methodology-author work outside this DAG."
+  ]
+}

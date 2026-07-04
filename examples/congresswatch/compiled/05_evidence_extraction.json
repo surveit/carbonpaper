@@ -1,0 +1,196 @@
+{
+  "id": "evidence_extraction",
+  "type": "llm_transform",
+  "name": "Extract stance evidence per press release × query",
+  "source": {
+    "doc": "examples/congresswatch/methodology_raw.md",
+    "section": "§4",
+    "lines": [
+      60,
+      78
+    ]
+  },
+  "inputs": [
+    {
+      "id": "press_corpus",
+      "schema": {
+        "columns": [
+          {
+            "name": "doc_id",
+            "type": "str",
+            "nullable": false
+          },
+          {
+            "name": "entity_id",
+            "type": "str",
+            "nullable": false
+          },
+          {
+            "name": "source_class",
+            "type": "str",
+            "nullable": false
+          },
+          {
+            "name": "title",
+            "type": "str",
+            "nullable": true
+          },
+          {
+            "name": "body",
+            "type": "str",
+            "nullable": false
+          },
+          {
+            "name": "published_at",
+            "type": "date",
+            "nullable": false
+          },
+          {
+            "name": "url",
+            "type": "str",
+            "nullable": true
+          }
+        ],
+        "primary_key": [
+          "doc_id"
+        ]
+      }
+    },
+    {
+      "id": "policy_queries",
+      "schema": {
+        "columns": [
+          {
+            "name": "query_id",
+            "type": "str",
+            "nullable": false
+          },
+          {
+            "name": "title",
+            "type": "str",
+            "nullable": false
+          },
+          {
+            "name": "left_pole",
+            "type": "str",
+            "nullable": false
+          },
+          {
+            "name": "right_pole",
+            "type": "str",
+            "nullable": false
+          },
+          {
+            "name": "issue_codes",
+            "type": "str",
+            "nullable": false
+          }
+        ],
+        "primary_key": [
+          "query_id"
+        ]
+      }
+    }
+  ],
+  "output_schema": {
+    "columns": [
+      {
+        "name": "evidence_id",
+        "type": "str",
+        "nullable": false,
+        "description": "Synthesized: <doc_id>::<query_id>::<n>"
+      },
+      {
+        "name": "doc_id",
+        "type": "str",
+        "nullable": false
+      },
+      {
+        "name": "entity_id",
+        "type": "str",
+        "nullable": false
+      },
+      {
+        "name": "query_id",
+        "type": "str",
+        "nullable": false
+      },
+      {
+        "name": "quote",
+        "type": "str",
+        "nullable": false
+      },
+      {
+        "name": "stance_summary",
+        "type": "str",
+        "nullable": false,
+        "range": [
+          "supports",
+          "opposes",
+          "mixed",
+          "unclear"
+        ]
+      },
+      {
+        "name": "confidence",
+        "type": "float",
+        "nullable": false,
+        "range": [
+          0.0,
+          1.0
+        ]
+      },
+      {
+        "name": "rationale",
+        "type": "str",
+        "nullable": true
+      },
+      {
+        "name": "published_at",
+        "type": "date",
+        "nullable": false
+      }
+    ],
+    "estimated_rows": 1500,
+    "primary_key": [
+      "evidence_id"
+    ]
+  },
+  "llm": {
+    "prompt_template": "You are extracting stance evidence from a US Congress member's press release.\n\nBelow is a press release and a catalog of policy queries with stance\nspectra (left_pole vs right_pole). Identify every distinct PIECE of\nevidence in the text where the member takes a stance on any query.\n\nSkip purely descriptive content, condolences, or unrelated topics. Skip\nstatements that mention an issue but don't take a position (e.g. \"we\ndiscussed healthcare today\" without a stance).\n\nMember entity_id: {entity_id}\nPublished: {published_at}\nTitle: {title}\nDocument body:\n---\n{body}\n---\n\nPolicy queries:\n{queries_block}\n\nReturn a JSON list, one object per evidence piece:\n  [{{\"query_id\": \"Q1_aca_premium_credits\",\n     \"quote\": \"...verbatim text from the body...\",\n     \"stance_summary\": \"supports / opposes / mixed / unclear\",\n     \"confidence\": 0.0-1.0,\n     \"rationale\": \"one sentence on why this counts\"}}]\n\nUse the EXACT query_id from the catalog. If no stances, return [].\n",
+    "model": "claude-sonnet-4-6",
+    "temperature": 0.0,
+    "max_retries": 3,
+    "response_format": "json"
+  },
+  "compiler_notes": [
+    "Mock LLM in the runtime will pattern-match keywords (ACA, premium tax credit, Medicare, etc.) and produce plausible evidence pieces. Real LLM call would do far better at distinguishing 'mentions' from 'takes a position on'."
+  ],
+  "eval": {
+    "reference": "examples/congresswatch/eval_data/labeled_evidence.csv",
+    "reference_schema": {
+      "columns": [
+        {
+          "name": "doc_id",
+          "type": "str"
+        },
+        {
+          "name": "query_id",
+          "type": "str"
+        },
+        {
+          "name": "human_label_present",
+          "type": "bool"
+        }
+      ]
+    },
+    "join_on": [
+      "doc_id",
+      "query_id"
+    ],
+    "metrics": [
+      "exact_agreement_rate"
+    ],
+    "notes": "Reference file not yet populated; intentional placeholder."
+  }
+}

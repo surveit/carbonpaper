@@ -2,10 +2,10 @@
 grain-preservation gate on Stage that governs it (app/models/stage.py)."""
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
-import yaml
 from pydantic import ValidationError
 
 from app import models as m
@@ -219,8 +219,8 @@ def _load_lobbymap() -> m.Methodology:
     if not compiled.is_dir():
         pytest.skip("lobbymap example not present")
     stages = []
-    for f in sorted(compiled.glob("*.yaml")):
-        data = yaml.safe_load(f.read_text(encoding="utf-8"))
+    for f in sorted(compiled.glob("*.json")):
+        data = json.loads(f.read_text(encoding="utf-8"))
         if data:
             stages.append(data)
     return m.parse_methodology(stages)

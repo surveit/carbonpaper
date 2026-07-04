@@ -10,8 +10,8 @@ happened to be".
 
 Layout:
     examples/<methodology>/versions/<version_id>/
-        compiled/<id>.yaml      # copy of the working compiled/ at creation time
-        schemas/<...>.yaml      # copy of the working schemas/ at creation time (if any)
+        compiled/<id>.json      # copy of the working compiled/ at creation time
+        schemas/<...>           # copy of the working schemas/ at creation time (if any)
         version.json            # {id, created_at, parent_version, message,
                                 #  reviewer, coverage}
 
@@ -37,8 +37,6 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-import yaml
-
 from app.models import Stage
 from app.services.loader import load_methodology_stages
 from app.services import node_review
@@ -50,16 +48,15 @@ def versions_dir(methodology_dir: Path) -> Path:
 
 
 def _load_stages_from(compiled_dir: Path) -> list[dict[str, Any]]:
-    """Load compiled stage YAMLs from a directory as raw dicts, sorted by
+    """Load compiled stage JSON files from a directory as raw dicts, sorted by
     filename — used only to freeze approval coverage at version-creation time
     (node_review speaks dicts). Runs load a version's stages through the strict
     typed loader instead; see load_version_stages."""
     stages: list[dict[str, Any]] = []
     if not compiled_dir.is_dir():
         return stages
-    for f in sorted(compiled_dir.glob("*.yaml")):
-        with f.open("r", encoding="utf-8") as fh:
-            data = yaml.safe_load(fh)
+    for f in sorted(compiled_dir.glob("*.json")):
+        data = json.loads(f.read_text(encoding="utf-8"))
         if data:
             stages.append(data)
     return stages

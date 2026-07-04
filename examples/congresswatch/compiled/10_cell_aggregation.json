@@ -1,0 +1,111 @@
+{
+  "id": "cell_aggregation",
+  "type": "python_frame_function",
+  "name": "Per (member, query) cell score with recency weighting",
+  "source": {
+    "doc": "examples/congresswatch/methodology_raw.md",
+    "section": "§7",
+    "lines": [
+      111,
+      122
+    ]
+  },
+  "inputs": [
+    {
+      "id": "extreme_score_review",
+      "schema": {
+        "columns": [
+          {
+            "name": "evidence_id",
+            "type": "str",
+            "nullable": false
+          },
+          {
+            "name": "benchmark_id",
+            "type": "str",
+            "nullable": false
+          },
+          {
+            "name": "entity_id",
+            "type": "str",
+            "nullable": false
+          },
+          {
+            "name": "query_id",
+            "type": "str",
+            "nullable": false
+          },
+          {
+            "name": "final_score",
+            "type": "int",
+            "nullable": true,
+            "range": [
+              -2,
+              2
+            ]
+          },
+          {
+            "name": "published_at",
+            "type": "date",
+            "nullable": false
+          }
+        ],
+        "primary_key": [
+          "evidence_id",
+          "benchmark_id"
+        ]
+      }
+    }
+  ],
+  "output_schema": {
+    "columns": [
+      {
+        "name": "entity_id",
+        "type": "str",
+        "nullable": false
+      },
+      {
+        "name": "query_id",
+        "type": "str",
+        "nullable": false
+      },
+      {
+        "name": "cell_score",
+        "type": "float",
+        "nullable": true,
+        "description": "Weighted mean of final_score; null if no evidence.",
+        "range": [
+          -2.0,
+          2.0
+        ]
+      },
+      {
+        "name": "evidence_count",
+        "type": "int",
+        "nullable": false
+      },
+      {
+        "name": "most_recent_evidence",
+        "type": "date",
+        "nullable": true
+      }
+    ],
+    "estimated_rows": 1500,
+    "primary_key": [
+      "entity_id",
+      "query_id"
+    ]
+  },
+  "function": {
+    "kind": "module",
+    "module": "examples.congresswatch.code.cell_aggregation",
+    "function": "transform",
+    "requirements": [
+      "pandas",
+      "numpy"
+    ]
+  },
+  "compiler_notes": [
+    "Recency weight: 1.0 at slice end, linear decay to 0.3 at 6 months prior. Hardcoded in the function; methodology §7 says 'linearly to 0.3 over 6 months' which is what's implemented."
+  ]
+}
