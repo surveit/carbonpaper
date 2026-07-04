@@ -1,5 +1,5 @@
 """
-Methodology DAG runner.
+Workflow runner.
 
 Topologically orders stages, runs each one through its type-specific handler,
 validates the input + output schema, and persists per-stage outputs as parquet
@@ -102,7 +102,7 @@ def _reject_duplicate_input_rows(df: pd.DataFrame, input_id: str, stage_id: str)
 
 
 def _resolve_version_id(project_dir: Path, version_id: str | None) -> str:
-    """Resolve the DAG version a run will be pinned to. Every run MUST target a
+    """Resolve the workflow version a run will be pinned to. Every run MUST target a
     real, existing version — we never blank it, never fabricate one, never
     silently read the working copy, and never CREATE one as a run side effect.
     A run is read-only with respect to versions.
@@ -144,13 +144,13 @@ def prepare_run(
     poll it while execution proceeds in the background. Returns a dict with the
     run_id, run_dir, ctx, ordered stages and the manifest.
 
-    The run is PINNED to a DAG version: stages are loaded from the version's
+    The run is PINNED to a workflow version: stages are loaded from the version's
     immutable snapshot (versioning.load_version_stages), never from the live
     `compiled/` working copy, so working-copy edits can never affect this run.
     `version_id` resolution is documented on _resolve_version_id (None -> the
     latest existing version; a version-less project raises
     NoVersionToRunError); the resolved id is recorded in the manifest as
-    `dag_version`.
+    `workflow_version`.
 
     `limits` is a per-RUN row-cap override: {stage_id: N} truncates that
     stage's output to its first N rows for this run only, overriding any
@@ -163,9 +163,9 @@ def prepare_run(
 
     Raises NoVersionToRunError (no version exists) or WorkflowLoadError
     (from the version snapshot's strict load) before the run dir is created, so
-    a run with no version — or an invalid DAG — never leaves a run behind."""
-    dag_version = _resolve_version_id(project_dir, version_id)
-    stages = versioning.load_version_stages(project_dir, dag_version)
+    a run with no version — or an invalid workflow — never leaves a run behind."""
+    workflow_version = _resolve_version_id(project_dir, version_id)
+    stages = versioning.load_version_stages(project_dir, workflow_version)
     ordered = topological_sort(stages)
 
     limits = dict(limits or {})
@@ -197,7 +197,7 @@ def prepare_run(
         "run_id": run_id,
         "started_at": datetime.now().isoformat(timespec="seconds"),
         "project": project_dir.name,
-        "dag_version": dag_version,
+        "workflow_version": workflow_version,
         "limit_overrides": limits,
         "offset_overrides": offsets,
         "status": "running",
@@ -230,8 +230,8 @@ def execute_run(
     limits: dict[str, int] | None = None,
     offsets: dict[str, int] | None = None,
 ) -> dict[str, Any]:
-    """Run the DAG once (synchronous). Returns the manifest dict. `version_id`
-    pins the run to a DAG version (None -> latest existing; none exists ->
+    """Run the workflow once (synchronous). Returns the manifest dict. `version_id`
+    pins the run to a workflow version (None -> latest existing; none exists ->
     NoVersionToRunError); see prepare_run / _resolve_version_id.
     `limits`/`offsets` are per-run row slicing overrides; see prepare_run."""
     return run_prepared(
@@ -402,7 +402,7 @@ def _execute_stages(
                 records_by_id[sid] = record
             flush("running")  # persist this stage's result for the live page
 
-    # If halted, mark remaining stages as pending so the DAG can render
+    # If halted, mark remaining stages as pending so the workflow can render
     # them greyed out.
     if halted is not None:
         for stage in ordered[halt_at_index + 1:]:
@@ -454,20 +454,20 @@ def resume_run(project_dir: Path, run_id: str, repo_root: Path) -> dict[str, Any
         raise FileNotFoundError(f"No manifest at {manifest_path}")
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
 
-    # Stay pinned to the SAME DAG snapshot the run started on. We read the
+    # Stay pinned to the SAME workflow snapshot the run started on. We read the
     # version off the existing manifest and reload the version's stages — never
-    # the live working copy — so a resume can't silently execute a different DAG
-    # than the halted run did. A run that carries no dag_version is a pre-
+    # the live working copy — so a resume can't silently execute a different workflow
+    # than the halted run did. A run that carries no workflow_version is a pre-
     # versioning (legacy) run we cannot safely resume under the version model;
     # fail loudly rather than guessing which snapshot it meant.
-    dag_version = manifest.get("dag_version")
-    if not dag_version:
+    workflow_version = manifest.get("workflow_version")
+    if not workflow_version:
         raise ValueError(
-            f"Run {run_id} of '{project_dir.name}' has no 'dag_version' in "
+            f"Run {run_id} of '{project_dir.name}' has no 'workflow_version' in "
             f"its manifest ({manifest_path}); cannot resume a versioned run "
-            f"without its pinned DAG version."
+            f"without its pinned workflow version."
         )
-    stages = versioning.load_version_stages(project_dir, dag_version)
+    stages = versioning.load_version_stages(project_dir, workflow_version)
     ordered = topological_sort(stages)
 
     # Reload outputs from disk for stages that completed successfully.
@@ -531,7 +531,7 @@ def main() -> int:
         print(exc)
         return 1
     print(json.dumps(
-        {"run_id": manifest["run_id"], "dag_version": manifest["dag_version"],
+        {"run_id": manifest["run_id"], "workflow_version": manifest["workflow_version"],
          "status": manifest["status"],
          "stages": [(s["stage_id"], s["status"], s["rows"]) for s in manifest["stages"]]},
         indent=2,

@@ -1,8 +1,8 @@
 """
-Methodology DAG visualization app (v2).
+Workflow visualization app (v2).
 
 Reads compiled stage JSON files for each project, renders an interactive
-DAG view plus per-stage detail pages that display the executable handle
+workflow view plus per-stage detail pages that display the executable handle
 (connector spec, prompt template, pandas function, join keys, aggregation
 rules, queue config, or publish target) along with typed input/output schemas
 and any eval/review configuration.
@@ -25,7 +25,7 @@ from app.web.routers import project, node_review, review, runs
 
 from app.chat.router import router as chat_router
 
-app = FastAPI(title="Methodology DAG")
+app = FastAPI(title="Workflow")
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 app.include_router(project.router)

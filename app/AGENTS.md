@@ -1,4 +1,4 @@
-# app — the FastAPI web app (DAG / run / review UI)
+# app — the FastAPI web app (workflow / run / review UI)
 
 The web app serves the workflows, their runs, and the review queue.
 `app/main.py` is a thin bootstrap: it creates the FastAPI app, mounts `/static`,
@@ -10,7 +10,7 @@ and includes the routers in `app/web/routers/`. Those routers import the Runner
 Run: `python -m uvicorn app.main:app --port 8765`.
 
 ## Pages / routes
-- `/` — project list. `/project/<m>` — the DAG (mermaid) + click-through stage detail.
+- `/` — project list. `/project/<m>` — the workflow (mermaid) + click-through stage detail.
 - `/project/<m>/data-model` — ER diagram of stage schemas.
 - `/project/<m>/runs`, `/project/<m>/runs/<id>` — run history + a run's detail.
 - `/project/<m>/runs/<id>/queue/<stage>` — the human-review queue UI (+ `/decide`, `/resume`).
@@ -27,7 +27,7 @@ Run: `python -m uvicorn app.main:app --port 8765`.
 `POST /project/<m>/run` → `runner.prepare_run` (writes an initial `running`
 manifest) → executes in a **background thread** (`run_in_background`) → redirects
 immediately. `run_detail.html` polls `GET …/runs/<id>/status` every 2s and updates
-the status badge, counts, and the mermaid DAG *in place*; on the terminal
+the status badge, counts, and the mermaid workflow *in place*; on the terminal
 transition it reloads once to render previews/artifacts. Terminal runs don't poll.
 
 ## Scratch in-memory re-run (ephemeral, nothing persisted)

@@ -10,7 +10,7 @@ Read:
   - load_compiled_dir: tolerant, per-file — for the viewer, which renders
     problems rather than crashing.
   - load_workflow: strict — for the runner, which refuses to execute
-    a DAG with any invalid stage or cross-stage issue.
+    a workflow with any invalid stage or cross-stage issue.
 
 Serialize / save:
   - stage_to_spec_dict / stage_to_json: the canonical data + text forms.
@@ -39,7 +39,7 @@ class CompiledStageFile:
 
 
 class WorkflowLoadError(Exception):
-    """The compiled DAG failed validation; `issues` lists every problem found."""
+    """The compiled workflow failed validation; `issues` lists every problem found."""
 
     def __init__(self, compiled_dir: Path, issues: list[str]):
         self.issues = issues

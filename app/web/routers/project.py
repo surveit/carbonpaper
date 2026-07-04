@@ -1,4 +1,4 @@
-"""Methodology browsing: the DAG view, per-stage detail (full page + partial),
+"""Methodology browsing: the workflow view, per-stage detail (full page + partial),
 the ER data-model view, and raw stage JSON."""
 
 from __future__ import annotations
@@ -34,7 +34,7 @@ async def index(request: Request):
 async def project_view(request: Request, project: str):
     listing = load_stages(project)
     stages = listing.stages
-    # Node-review layer: colour the DAG by belief (approved/unreviewed/rejected/
+    # Node-review layer: colour the workflow by belief (approved/unreviewed/rejected/
     # edited_stale) on first paint, drive the coverage badge, and list versions.
     # node_review speaks canonical spec dicts (stage_to_spec_dict), which equal
     # json.loads of the persisted file — so a node's hash is the same whether it

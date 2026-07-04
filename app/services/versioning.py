@@ -5,7 +5,7 @@ A "version" is a frozen copy of a project's authored artifacts — its
 `compiled/` stages and `schemas/` data model — taken at a point in time, plus a
 `version.json` recording who created it, why, its parent, and the approval coverage
 AT creation time. Runs are pinned to a version and read its snapshot dir, so a run is
-reproducible against the exact DAG it executed, never "whatever the working copy
+reproducible against the exact workflow it executed, never "whatever the working copy
 happened to be".
 
 Layout:
@@ -135,7 +135,7 @@ def create_version(
     compiled_src = project_dir / "compiled"
     if not compiled_src.is_dir():
         raise FileNotFoundError(
-            f"Cannot create a version: no compiled/ DAG at {compiled_src}"
+            f"Cannot create a version: no compiled/ workflow at {compiled_src}"
         )
 
     # Validate BEFORE writing anything: a version is, by invariant, a loadable

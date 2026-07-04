@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}{{ project }} · DAG{% endblock %}
+{% block title %}{{ project }} · workflow{% endblock %}
 
 {% block head_extra %}
 <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
@@ -25,7 +25,7 @@
     <div class="actions">
         {% if coverage is defined %}
         <span class="coverage-badge" id="coverage-badge"
-              title="DAG nodes a reviewer has approved (trusted). Edit a node and it drops to amber until re-approved.">
+              title="workflow nodes a reviewer has approved (trusted). Edit a node and it drops to amber until re-approved.">
             <b id="cov-approved">{{ coverage.approved }}</b>/<span id="cov-total">{{ coverage.total }}</span> approved
             <span class="coverage-bar"><span class="coverage-fill" id="cov-fill" style="width: {{ coverage.approved_pct }}%"></span></span>
         </span>
@@ -39,7 +39,7 @@
         <a href="/project/{{ project }}/runs" class="btn">All runs</a>
     </div>
 </div>
-<p class="lede">{{ stages|length }} compiled stage{% if stages|length != 1 %}s{% endif %}. Click any node in the DAG (or any row in the table) to <strong>review</strong> that step — approve, reject, or edit its spec — in the right panel. Node colour = <em>belief</em> (do we trust how it's modeled). Click <strong>Run pipeline</strong> to execute end-to-end.</p>
+<p class="lede">{{ stages|length }} compiled stage{% if stages|length != 1 %}s{% endif %}. Click any node in the workflow (or any row in the table) to <strong>review</strong> that step — approve, reject, or edit its spec — in the right panel. Node colour = <em>belief</em> (do we trust how it's modeled). Click <strong>Run pipeline</strong> to execute end-to-end.</p>
 
 {% if load_issues %}
 <div class="load-issues">
@@ -67,7 +67,7 @@
             <span class="badge human">👤 human_review_queue</span>
             <span class="badge publish">📤 publish</span>
         </div>
-        {# Belief legend — the DAG node STROKE encodes whether we trust the
+        {# Belief legend — the workflow node STROKE encodes whether we trust the
            node, distinct from its type (the fill + glyph in the label). #}
         <div class="legend belief-legend">
             <span class="legend-label">belief</span>
@@ -77,7 +77,7 @@
             <span class="belief-chip belief-stale">edited · stale</span>
         </div>
 
-        <div class="dag">
+        <div class="workflow">
             <pre class="mermaid">
 {{ mermaid }}
             </pre>
@@ -106,7 +106,7 @@
     <div class="right-pane" id="stage-panel">
         <div class="empty-state">
             <h2>Review a node</h2>
-            <p>Click any node in the DAG (or a row in the stage list) to approve, reject, or edit how that step is modeled.</p>
+            <p>Click any node in the workflow (or a row in the stage list) to approve, reject, or edit how that step is modeled.</p>
         </div>
     </div>
 </div>
@@ -170,14 +170,14 @@
   }
 
   // ── Belief recolouring: poll /review/status and swap the server-rendered
-  //    mermaid string in place (reuses run_detail.html's rerenderDag), then
+  //    mermaid string in place (reuses run_detail.html's rerenderWorkflow), then
   //    update the coverage badge. Called once on load, and on demand by the
   //    node panel after a decision/edit (window._pollReviewStatus). ──
   const statusUrl = `/project/${encodeURIComponent(PROJECT)}/review/status`;
   const mermaidEl = document.querySelector('pre.mermaid');
   const $ = id => document.getElementById(id);
 
-  function rerenderDag(src) {
+  function rerenderWorkflow(src) {
     if (!mermaidEl || !window.mermaid) return;
     mermaidEl.removeAttribute('data-processed');
     mermaidEl.textContent = src;
@@ -191,7 +191,7 @@
       if (!r.ok) return;
       d = await r.json();
     } catch (e) { return; }
-    if (d.mermaid) rerenderDag(d.mermaid);
+    if (d.mermaid) rerenderWorkflow(d.mermaid);
     const c = d.coverage;
     if (c) {
       if ($('cov-approved')) $('cov-approved').textContent = c.approved;

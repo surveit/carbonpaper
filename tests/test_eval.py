@@ -152,7 +152,7 @@ def test_eval_run_embeds_settings_and_passed():
     assert r.passed is True
 
 
-# ── resolve_eval_run_settings on a synthetic DAG ─────────────────────────────
+# ── resolve_eval_run_settings on a synthetic workflow ─────────────────────────────
 def _chain():
     """a(input) → b(row) → c(frame) → d(row)."""
     return m.parse_workflow([

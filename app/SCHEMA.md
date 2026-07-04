@@ -1,4 +1,4 @@
-# Methodology DAG Schema v2 — Executable Node Types
+# Workflow Schema v2 — Executable Node Types
 
 This is the contract a compiled stage file must satisfy. Every stage is *executable* in principle: it declares typed inputs, a typed output, and an executable handle (connector / prompt / function / join / aggregation / queue / publish). The compiler does not produce prose blobs dressed as structured data.
 

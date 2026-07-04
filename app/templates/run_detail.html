@@ -30,8 +30,8 @@
 <div class="run-topbar">
     <h1>Run <code>{{ run_id }}</code></h1>
     <p class="stage-id">started <code>{{ manifest.started_at }}</code>{% if manifest.finished_at %} · finished <code>{{ manifest.finished_at }}</code>{% endif %}</p>
-    <p class="stage-id ran-against">ran against DAG version
-        {% if manifest.dag_version %}<a href="/project/{{ project }}/versions"><code>{{ manifest.dag_version }}</code></a>{% else %}<span class="muted">(unversioned)</span>{% endif %}
+    <p class="stage-id ran-against">ran against workflow version
+        {% if manifest.workflow_version %}<a href="/project/{{ project }}/versions"><code>{{ manifest.workflow_version }}</code></a>{% else %}<span class="muted">(unversioned)</span>{% endif %}
     </p>
 </div>
 
@@ -72,17 +72,17 @@
 <p class="banner">📤 Published artifact: <a href="/project/{{ project }}/runs/{{ run_id }}/artifact/profiles/index.html">browse generated org profiles</a></p>
 {% endif %}
 
-{# ── The DAG is the main object: full width, on top. ── #}
-<div class="dag dag-full">
+{# ── The workflow is the main object: full width, on top. ── #}
+<div class="workflow workflow-full">
     <pre class="mermaid">
 {{ mermaid }}
     </pre>
 </div>
 <p class="lede">Click any node above to inspect that stage below. Border: <span class="lg lg-done">green</span> complete · <span class="lg lg-run">yellow</span> in progress · <span class="lg lg-err">red</span> error · <span class="lg lg-pend">grey</span> pending.</p>
 
-{# ── Stage detail panel, below the DAG, full width. ── #}
+{# ── Stage detail panel, below the workflow, full width. ── #}
 <div class="stage-panel-full" id="stage-panel">
-    <div class="empty-state"><h2>Select a stage</h2><p>Click any node in the DAG to load its run details.</p></div>
+    <div class="empty-state"><h2>Select a stage</h2><p>Click any node in the workflow to load its run details.</p></div>
 </div>
 
 <details class="raw-yaml"><summary>Raw manifest</summary><pre>{{ manifest | tojson(indent=2) }}</pre></details>
@@ -123,7 +123,7 @@
     const $ = id => document.getElementById(id);
     const show = (el, on) => { if (el) el.hidden = !on; };
 
-    function rerenderDag(src) {
+    function rerenderWorkflow(src) {
       if (!mermaidEl || !window.mermaid) return;
       mermaidEl.removeAttribute('data-processed'); mermaidEl.textContent = src;
       try { mermaid.run({ nodes: [mermaidEl] }); } catch (e) {}
@@ -142,7 +142,7 @@
       show($('al-awaiting'), c.awaiting); if ($('al-awaiting')) $('al-awaiting').innerHTML = `👤 <b>${c.awaiting}</b> awaiting review`;
 
       const sig = d.stages.map(s => s.status).join(',');
-      if (sig !== lastSig) { lastSig = sig; rerenderDag(d.mermaid); }
+      if (sig !== lastSig) { lastSig = sig; rerenderWorkflow(d.mermaid); }
       if (d.terminal) {
         if (timer) clearInterval(timer);
         show($('run-spinner'), false);

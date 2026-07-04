@@ -1,8 +1,8 @@
 {# ── Per-node REVIEW / EDIT panel (right side of the project split view) ──
-   Loaded as a partial via fetch() from project.html when a DAG node is
+   Loaded as a partial via fetch() from project.html when a workflow node is
    clicked. It answers the NODE-review question — "do we trust HOW this step is
    modeled" — which is deliberately distinct from the ROW-review queue ("is this
-   run's DATA right", which halts a run). Node review only colours the DAG.
+   run's DATA right", which halts a run). Node review only colours the workflow.
 
    Context this partial expects (passed by GET /project/{m}/node/{id}/review-partial):
      project  — str
@@ -111,7 +111,7 @@
   }
 
   // After any state-changing action, ask the project page to re-poll
-  // /review/status so the DAG node recolours live (the page exposes this hook).
+  // /review/status so the workflow node recolours live (the page exposes this hook).
   function refreshDag() {
     if (window._pollReviewStatus) window._pollReviewStatus();
   }

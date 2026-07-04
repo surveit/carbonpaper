@@ -1,4 +1,4 @@
-/* methodology DAG · v0.2 */
+/* workflow · v0.2 */
 
 :root {
     --bg: #fafaf8;
@@ -21,7 +21,7 @@
     --code-comment: #888;
     /* Belief (node-review) palette — kept identical to the per-node stroke in
        build_mermaid_graph (app/web/diagrams.py REVIEW_STROKE) so a legend chip
-       equals the colour the DAG node shows. approved→green, unreviewed→grey,
+       equals the colour the workflow node shows. approved→green, unreviewed→grey,
        rejected→red, stale→amber. */
     --belief-approved-bg: #e7f6e7;   --belief-approved-bd: #2a8a2a;
     --belief-unreviewed-bg: #eceff3; --belief-unreviewed-bd: #9aa3ad;
@@ -240,8 +240,8 @@ a { color: var(--accent); }
 .queue-card .raw-row { margin-top: 8px; font-size: 12px; }
 .queue-card .raw-row pre { background: #f5f5f5; padding: 8px; border-radius: 3px; max-height: 200px; overflow: auto; }
 
-/* DAG */
-.dag {
+/* workflow */
+.workflow {
     margin: 24px 0;
     padding: 24px;
     background: white;
@@ -497,7 +497,7 @@ details pre { margin-top: 6px; max-height: 480px; overflow: auto; }
 }
 .raw-yaml pre { max-height: 600px; overflow: auto; font-size: 12px; }
 
-/* Split view: DAG + stage detail panel */
+/* Split view: workflow + stage detail panel */
 .split-view {
     display: grid;
     grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
@@ -512,7 +512,7 @@ details pre { margin-top: 6px; max-height: 480px; overflow: auto; }
 .left-pane {
     min-width: 0;  /* allow children to shrink and avoid overflow */
 }
-.left-pane .dag {
+.left-pane .workflow {
     margin: 0 0 16px;
     padding: 14px;
 }
@@ -932,7 +932,7 @@ table.data-preview.scratch th { background: #f3ecd0; }
     font-weight: 600;
 }
 
-/* ── Run page redesign: progress framing, full-width DAG, nested-tab panel ── */
+/* ── Run page redesign: progress framing, full-width workflow, nested-tab panel ── */
 .run-topbar h1 { margin-bottom: .1rem; }
 .run-progress { display: flex; align-items: center; gap: 1rem; margin: 1rem 0 .4rem; flex-wrap: wrap; }
 .spinner { width: 18px; height: 18px; border: 3px solid #e3e3e0; border-top-color: var(--accent);
@@ -959,7 +959,7 @@ table.data-preview.scratch th { background: #f3ecd0; }
 .lede .lg { padding: 0 .25rem; border-radius: 3px; font-weight: 600; }
 .lg-done { color: #2a8a2a; } .lg-run { color: #b8860b; } .lg-err { color: #cc2a2a; } .lg-pend { color: #999; }
 
-.dag-full { width: 100%; margin: 1rem 0 .3rem; }
+.workflow-full { width: 100%; margin: 1rem 0 .3rem; }
 .stage-panel-full { margin-top: 1.2rem; border-top: 2px solid var(--border); padding-top: 1rem; min-height: 120px; }
 .stage-panel-full.loading { opacity: .5; }
 
@@ -999,7 +999,7 @@ table.data-preview.scratch th { background: #f3ecd0; }
 .table-scroll.rows-full thead th { position: sticky; top: 0; background: #f2f4f8; z-index: 1; }
 td.row-num, th.row-num { text-align: right; color: #98a1b3; font-variant-numeric: tabular-nums; }
 
-/* ═══ Node-review / DAG-versioning ("reviewable workflow") ══════════════════ */
+/* ═══ Node review / workflow versioning ══════════════════ */
 
 /* Belief chips — legend rows, the node-review state line, and (inline) hints. */
 .belief-chip {

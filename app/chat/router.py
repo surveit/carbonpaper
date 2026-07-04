@@ -48,7 +48,7 @@ def get_engine() -> ChatEngine | None:
         try:
             _engine = ChatEngine(
                 system_prompt=(
-                    "You are embedded in the methodology-DAG app. Be concise and "
+                    "You are embedded in the workflow app. Be concise and "
                     "cite the workspace's own data. Use tools to ground answers."
                 ),
                 tools=[_list_projects],

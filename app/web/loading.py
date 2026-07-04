@@ -48,7 +48,7 @@ def load_stages(project: str) -> StageListing:
     issues = [e for e in entries if e.issues]
     if issues:
         # One invalid file breaks the whole workflow — its edges no longer
-        # resolve, so the surviving stages form a DAG with holes. Rendering that
+        # resolve, so the surviving stages form a workflow with holes. Rendering that
         # is "unusable but lies." Return no stages, only the issues, so the
         # viewer shows what's broken instead of a false graph.
         return StageListing(stages=[], issues=issues, order={})
@@ -139,7 +139,7 @@ def list_runs(project: str) -> list[dict[str, Any]]:
                 "finished_at": manifest.get("finished_at"),
                 # None for legacy (pre-versioning) runs; the template renders
                 # "(unversioned)" — a displayed truth, not a fabricated id.
-                "dag_version": manifest.get("dag_version"),
+                "workflow_version": manifest.get("workflow_version"),
                 "stages_total": len(manifest.get("stages", [])),
                 "stages_ok": sum(1 for s in manifest.get("stages", []) if s.get("status") == "ok"),
                 "stages_error": sum(1 for s in manifest.get("stages", []) if s.get("status") == "error"),

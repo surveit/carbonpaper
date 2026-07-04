@@ -1,10 +1,10 @@
-"""Node-level review + DAG versioning: the "reviewable workflow" layer.
+"""Node-level review + workflow versioning: the "reviewable workflow" layer.
 
-NODE review = "do we trust HOW this step is modeled?" — colours the DAG by a
+NODE review = "do we trust HOW this step is modeled?" — colours the workflow by a
 content-hash approval state, and does NOT halt a run. (Distinct from the ROW
 review queue in `review.py`, which is "is this run's DATA right?" and DOES halt a
 run.) It mirrors the queue's decide/partial patterns, lifted from data rows up to
-DAG node specs, and adds immutable version snapshots the runner pins runs to.
+workflow node specs, and adds immutable version snapshots the runner pins runs to.
 
 State lives under examples/<project>/: `node_decisions.parquet` (approvals)
 and `versions/<id>/` (snapshots), managed by app.services.node_review + app.services.versioning.
@@ -45,7 +45,7 @@ def _review_by_id(stages: list[Stage], decisions) -> dict[str, str]:
 async def review_status(project: str):
     """Live poller for the project page: belief state per node, coverage, and a
     freshly-built mermaid graph coloured by approval. Mirrors run_status — the page
-    swaps `mermaid` in place after a decision/edit so the DAG recolours without a
+    swaps `mermaid` in place after a decision/edit so the workflow recolours without a
     full reload."""
     stages = load_stages(project).stages
     decisions = node_review.load_node_decisions(EXAMPLES_DIR / project)
@@ -116,8 +116,8 @@ async def node_decide(
     )
 
     # Recompute the state from the freshly-loaded store against the node's CURRENT
-    # spec — the same source of truth the DAG colours by — so the returned chip and
-    # the DAG agree. (record_node_decision stores 'needs_changes' verbatim, which
+    # spec — the same source of truth the workflow colours by — so the returned chip and
+    # the workflow agree. (record_node_decision stores 'needs_changes' verbatim, which
     # approval_state_for reports as 'unreviewed' for colouring.)
     stages = load_stages(project).stages
     stage = find_stage(stages, stage_id)

@@ -1,14 +1,14 @@
-# app/runtime — the Runner (DAG executor)
+# app/runtime — the Runner (workflow executor)
 
 Executes a workflow and persists the result. Does not import the compiler or
 the web app. Loads stages through `app/services/loader.py: load_workflow`,
 which parses each compiled file into a `Stage` object and raises
-`WorkflowLoadError` if any stage or cross-stage check fails — an invalid DAG is
+`WorkflowLoadError` if any stage or cross-stage check fails — an invalid workflow is
 refused before the runner does any work.
 
 ## Files
 - **`runner.py`** — the executor.
-  - `topological_sort` → `execute_run(project_dir, repo_root)` runs the DAG once.
+  - `topological_sort` → `execute_run(project_dir, repo_root)` runs the workflow once.
   - Per stage: validate declared inputs (`validation.py`), reject duplicate input
     rows (below), dispatch to the type's handler, validate the output, write
     `outputs/<stage>.parquet`, append a record to `manifest.json`.

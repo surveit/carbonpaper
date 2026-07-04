@@ -24,12 +24,12 @@
 <div class="project-header">
     <h1>{{ project }} · data model</h1>
     <div class="actions">
-        <a href="/project/{{ project }}" class="btn">DAG view</a>
+        <a href="/project/{{ project }}" class="btn">Workflow view</a>
     </div>
 </div>
 <p class="lede">Each stage produces a typed table. <strong>PK</strong> = primary key. <strong>FK</strong> = column matches an upstream table's primary key. Lines show stage-to-stage flow.</p>
 
-<div class="dag">
+<div class="workflow">
     <pre class="mermaid">
 {{ er_diagram }}
     </pre>

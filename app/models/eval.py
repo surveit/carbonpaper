@@ -81,7 +81,7 @@ class CodeScorer(_Base):
 # ── The eval config ──────────────────────────────────────────────────────────
 class EvalConfig(_Base):
     """The authored eval: one row-aligned table of cases plus how it plugs into
-    the DAG and how it's scored.
+    the workflow and how it's scored.
 
     Each row's `input_columns` are injected at `override_stage`; its `expected`
     columns are compared against `target_stage`'s output on the same row. The
@@ -193,7 +193,7 @@ class EvalRun(_Base):
     id: SlugId
     config: str
     project: str
-    # Which DAG version was scored — the stale tripwire. If the target's key or
+    # Which workflow version was scored — the stale tripwire. If the target's key or
     # domain moved since the config was authored, it's stale; don't re-score.
     workflow_version: str
     status: Literal["scored", "vetoed", "error"]

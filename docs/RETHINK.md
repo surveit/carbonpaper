@@ -13,7 +13,7 @@ files are pointers, not the prescription.
 
 **The prototype works very well as a methodology-maintenance tool, and
 poorly as a journalism-discovery tool.** Everything visible from the index
-page out — DAG, stage detail panels, prompt templates, validation reports,
+page out — workflow, stage detail panels, prompt templates, validation reports,
 queue cards — is built for the person who *authored* the methodology. The
 artifact a journalist actually wants to file from (the per-entity profile
 pages) sits at the very end of one click chain, contains no cross-cutting
@@ -33,7 +33,7 @@ output. The last two are about what the prototype assumes about its data.
 
 Right now the user journey is:
 
-> index → methodology → DAG → run → stage panel → (eventually) artifact
+> index → project → workflow → run → stage panel → (eventually) artifact
 
 A journalist visiting for the first time has to traverse four
 maintenance-y screens before they see a story-shaped output. By the time
@@ -56,7 +56,7 @@ Concretely:
 - Profile pages stay, but they're reached from a cell click in the
   scoreboard.
 
-The pipeline-maintenance UI (DAG, queue, stage panels) stays where it is,
+The pipeline-maintenance UI (workflow, queue, stage panels) stays where it is,
 but is reached via a "behind this run" link, not the main path. Two
 audiences, two doors. Same data.
 
@@ -135,7 +135,7 @@ person's framing.
 
 Three small changes would close this:
 
-- Add a `framing` field to the methodology root: `{authoritative,
+- Add a `framing` field to the project root: `{authoritative,
   stipulated, contested}`. Display prominently on every artifact.
 - Show the benchmark's `left_pole` / `right_pole` text on the
   profile page next to the score — not just the rubric tier label.
@@ -191,8 +191,8 @@ through any refactor:
 - **Methodology as YAML + prose + code + data, sitting in `examples/<name>/`.**
   Forking from LobbyMap to CongressWatch by copy-paste and edit worked
   with no surprises. The methodology-as-directory pattern is right.
-- **The DAG view, with run status colors and click-to-load detail.** A
-  journalist reviewing a methodology's *structure* (not their daily
+- **The workflow view, with run status colors and click-to-load detail.** A
+  journalist reviewing a workflow's *structure* (not their daily
   reporting view) finds this immediately useful — it's the right
   affordance for the right audience.
 

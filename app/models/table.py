@@ -1,6 +1,6 @@
 """Table references — a pointer to tabular data on disk plus its declared shape.
 
-This is a general concept, not an eval one: a compiler or the DAG author can mint
+This is a general concept, not an eval one: a compiler or the workflow author can mint
 a `TableRef` when wiring up input data, and evals reuse it to point at fixtures
 and expected-output tables. Kept in its own module so nothing has to import the
 eval contract to name a table.

@@ -63,7 +63,7 @@ async def trigger_run(project: str):
     except NoVersionToRunError as exc:
         return JSONResponse({"detail": str(exc)}, status_code=400)
     except WorkflowLoadError as exc:
-        return JSONResponse({"detail": "compiled DAG failed validation",
+        return JSONResponse({"detail": "compiled workflow failed validation",
                              "issues": exc.issues}, status_code=400)
     run_in_background(run_prepared, prep)
     return RedirectResponse(
@@ -309,12 +309,12 @@ async def resume_run_route(project: str, run_id: str):
     run_dir = runs_dir(project) / run_id
     if not (run_dir / "manifest.json").exists():
         raise HTTPException(status_code=404, detail="Run not found")
-    # Validate the compiled DAG synchronously so load errors surface as a 400
+    # Validate the compiled workflow synchronously so load errors surface as a 400
     # here rather than being swallowed on the background thread below.
     try:
         load_workflow(project_dir)
     except WorkflowLoadError as exc:
-        return JSONResponse({"detail": "compiled DAG failed validation",
+        return JSONResponse({"detail": "compiled workflow failed validation",
                              "issues": exc.issues}, status_code=400)
     # Resume re-runs the queue stage + downstream (LLM-heavy) — do it in the
     # background and redirect immediately so the page can poll progress.

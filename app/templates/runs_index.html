@@ -17,7 +17,7 @@
         <tr>
             <td><a href="/project/{{ project }}/runs/{{ r.run_id }}"><code>{{ r.run_id }}</code></a></td>
             <td>{{ r.started_at }}</td>
-            <td>{% if r.dag_version %}<code>{{ r.dag_version }}</code>{% else %}<span class="muted">(unversioned)</span>{% endif %}</td>
+            <td>{% if r.workflow_version %}<code>{{ r.workflow_version }}</code>{% else %}<span class="muted">(unversioned)</span>{% endif %}</td>
             <td><span class="run-status status-{{ r.status }}">{{ r.status }}</span></td>
             <td>
                 {{ r.stages_ok }}/{{ r.stages_total }} ok
