@@ -17,6 +17,7 @@ from app.services.eval_store import (
     list_eval_configs,
     list_eval_runs,
     load_eval_config,
+    load_eval_run,
     save_dataset_upload,
     save_eval_config,
 )
@@ -195,6 +196,55 @@ def test_list_eval_runs_sorts_by_started_at_then_id_when_missing(tmp_path: Path)
     # both have started_at=None -> "" -> tiebreak by id, newest-first means
     # sorted descending on (started_at or "", id)
     assert [r.id for r in runs] == ["run-b", "run-a"]
+
+
+# ── load_eval_run ─────────────────────────────────────────────────────────────
+def test_load_eval_run_reads_requested_run_only(tmp_path: Path):
+    run_dir = tmp_path / "eval_run"
+    run_dir.mkdir(parents=True)
+    wanted = _run(id="run-1")
+    (run_dir / "run-1.json").write_text(wanted.model_dump_json(), encoding="utf-8")
+
+    loaded = load_eval_run(tmp_path, "run-1")
+    assert loaded == wanted
+
+
+def test_load_eval_run_missing_raises_file_not_found_with_path(tmp_path: Path):
+    with pytest.raises(FileNotFoundError) as exc:
+        load_eval_run(tmp_path, "nope")
+    assert str(tmp_path / "eval_run" / "nope.json") in str(exc.value)
+
+
+def test_load_eval_run_malformed_raises_value_error_with_path(tmp_path: Path):
+    run_dir = tmp_path / "eval_run"
+    run_dir.mkdir(parents=True)
+    bad_path = run_dir / "broken.json"
+    bad_path.write_text("not json at all {", encoding="utf-8")
+    with pytest.raises(ValueError) as exc:
+        load_eval_run(tmp_path, "broken")
+    assert str(bad_path) in str(exc.value)
+
+
+def test_load_eval_run_ignores_sibling_corrupt_run(tmp_path: Path):
+    """The requested run loads fine even when another run file for the same
+    methodology dir is corrupt -- load_eval_run reads only the one file
+    named by run_id, unlike list_eval_runs which globs every eval_run/*.json."""
+    run_dir = tmp_path / "eval_run"
+    run_dir.mkdir(parents=True)
+    wanted = _run(id="run-good")
+    (run_dir / "run-good.json").write_text(wanted.model_dump_json(), encoding="utf-8")
+    (run_dir / "run-bad.json").write_text("not json at all {", encoding="utf-8")
+
+    loaded = load_eval_run(tmp_path, "run-good")
+    assert loaded == wanted
+
+
+@pytest.mark.parametrize("bad_id", [
+    "../escape", "sub/dir", "sub\\dir", "", "..", ".",
+])
+def test_load_eval_run_rejects_non_slugish_run_id(tmp_path: Path, bad_id):
+    with pytest.raises(ValueError):
+        load_eval_run(tmp_path, bad_id)
 
 
 # ── latest_version_id ─────────────────────────────────────────────────────────

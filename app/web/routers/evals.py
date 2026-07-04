@@ -18,6 +18,7 @@ from app.services.eval_store import (
     list_eval_configs,
     list_eval_runs,
     load_eval_config,
+    load_eval_run,
 )
 from app.services.table_check import read_table
 from app.web.config import EXAMPLES_DIR, REPO_ROOT, templates
@@ -138,14 +139,17 @@ async def eval_run_detail(request: Request, methodology: str, eval_id: str, run_
     except (FileNotFoundError, ValueError) as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
-    runs, runs_error = _list_eval_runs_safe(methodology_dir, config.id)
-    if runs_error is not None:
-        raise HTTPException(status_code=404, detail=runs_error)
-    run = next((r for r in runs if r.id == run_id), None)
-    if run is None:
+    try:
+        run = load_eval_run(methodology_dir, run_id)
+    except FileNotFoundError as exc:
         raise HTTPException(
-            status_code=404, detail=f"No run '{run_id}' for eval '{eval_id}'"
-        )
+            status_code=404, detail=f"no run {run_id!r} for this eval"
+        ) from exc
+    except ValueError as exc:
+        # The requested run file itself exists but can't be read -- distinct
+        # from "not found": say so explicitly rather than folding it into a
+        # 404, and don't let it be confused with some other run being broken.
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     return templates.TemplateResponse(
         request,

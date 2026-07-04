@@ -16,16 +16,16 @@ from app.runtime.validation import ValidationReport, validate_dataframe
 def read_table(path: Path, file_format: FileFormat) -> pd.DataFrame:
     if not path.is_file():
         raise FileNotFoundError(f"table file not found: {path}")
-    if file_format is FileFormat.csv:
+    if file_format == FileFormat.csv:
         try:
             return pd.read_csv(path)
         except pd.errors.EmptyDataError as err:
             raise ValueError(f"table file is empty: {path}") from err
-    if file_format is FileFormat.parquet:
+    if file_format == FileFormat.parquet:
         return pd.read_parquet(path)
-    if file_format is FileFormat.json:
+    if file_format == FileFormat.json:
         return pd.read_json(path, lines=True)
-    raise ValueError(f"unsupported eval table format: {file_format.value} ({path})")
+    raise ValueError(f"unsupported eval table format: {file_format} ({path})")
 
 
 def table_columns(path: Path, file_format: FileFormat) -> list[str]:

@@ -14,8 +14,13 @@
 <h2>Pathway</h2>
 <ul>
     <li><strong>overridden:</strong>
-        <span id="override-target"><code>{{ config.override_stage }}</code>{% for ov in config.reference_overrides %}, <code>{{ ov.stage_id }}</code>{% endfor %} → <code>{{ config.target_stage }}</code></span>
+        <span id="override-target"><code>{{ config.override_stage }}</code> → <code>{{ config.target_stage }}</code></span>
     </li>
+    {% if config.reference_overrides %}
+    <li><strong>reference overrides:</strong>
+        {% for ov in config.reference_overrides %}<code>{{ ov.stage_id }}</code>{% if not loop.last %}, {% endif %}{% endfor %}
+    </li>
+    {% endif %}
     {% if executing %}
     <li><strong>executing stages:</strong> {% for s in executing %}<code>{{ s }}</code>{% if not loop.last %}, {% endif %}{% endfor %}</li>
     {% endif %}

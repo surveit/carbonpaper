@@ -109,6 +109,31 @@ def save_eval_config(methodology_dir: Path, config: EvalConfig) -> Path:
     return path
 
 
+def load_eval_run(methodology_dir: Path, run_id: str) -> EvalRun:
+    """Load one run by id, reading only `eval_run/{run_id}.json` -- never the
+    whole `eval_run/` directory, so a corrupt sibling run file can't block
+    loading a run that is itself fine. Raises `FileNotFoundError` if the file
+    is absent, `ValueError` (naming the path) if it is unreadable JSON or
+    fails the EvalRun contract. `run_id` must be a bare slugish name (same
+    filename-safety check as dataset uploads), so it is safe to use directly
+    as a path component."""
+    if not _SLUG_RE.match(run_id):
+        raise ValueError(f"not a valid run id: {run_id!r}")
+    path = _eval_run_dir(methodology_dir) / f"{run_id}.json"
+    if not path.is_file():
+        raise FileNotFoundError(f"no eval run at {path}")
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"malformed eval run JSON at {path}: {exc}") from exc
+    try:
+        return EvalRun.model_validate(data)
+    except ValidationError as exc:
+        raise ValueError(
+            f"invalid eval run at {path}: {'; '.join(format_errors(exc))}"
+        ) from exc
+
+
 def list_eval_runs(methodology_dir: Path, config_id: str) -> list[EvalRun]:
     """All runs of `config_id`, newest-first by `(started_at or "", id)`. Runs
     are written elsewhere; this only reads `eval_run/*.json` (absent dir ->
@@ -178,6 +203,7 @@ __all__ = [
     "load_eval_config",
     "save_eval_config",
     "list_eval_runs",
+    "load_eval_run",
     "save_dataset_upload",
     "latest_version_id",
     "eval_status",

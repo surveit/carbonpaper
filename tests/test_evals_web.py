@@ -75,7 +75,9 @@ def _valid_config_yaml(meth_dir: Path) -> None:
         "override_stage": "input_data",
         "target_stage": "llm_transform",
         "table": {
-            "path": "eval_data/cases.csv",
+            # repo-root-relative, matching the input_data-stage convention --
+            # meth_dir is examples/tm under the fixture's tmp repo root.
+            "path": f"examples/{METHODOLOGY}/eval_data/cases.csv",
             "format": "csv",
             "table_schema": {"columns": [
                 {"name": "doc_id", "type": "str"},
@@ -93,6 +95,43 @@ def _valid_config_yaml(meth_dir: Path) -> None:
         yaml.safe_dump(config), encoding="utf-8")
 
 
+def _config_with_reference_override_yaml(meth_dir: Path) -> None:
+    """A second valid config, distinct from valid-eval, that also sets a
+    reference_overrides entry -- covers the pathway summary's separate
+    "reference overrides" label (as opposed to override_stage's "overridden")."""
+    config = {
+        "id": "ref-override-eval",
+        "methodology": METHODOLOGY,
+        "name": "Ref override eval",
+        "override_stage": "input_data",
+        "target_stage": "llm_transform",
+        "reference_overrides": [{
+            "stage_id": "publish",
+            "table": {
+                "path": f"examples/{METHODOLOGY}/eval_data/cases.csv",
+                "format": "csv",
+                "table_schema": {"columns": [{"name": "doc_id", "type": "str"}]},
+            },
+        }],
+        "table": {
+            "path": f"examples/{METHODOLOGY}/eval_data/cases.csv",
+            "format": "csv",
+            "table_schema": {"columns": [
+                {"name": "doc_id", "type": "str"},
+                {"name": "text", "type": "str"},
+                {"name": "expected_summary", "type": "str"},
+            ]},
+        },
+        "key": ["doc_id"],
+        "input_columns": ["text"],
+        "expected": [{"actual": "summary", "expected": "expected_summary"}],
+    }
+    config_dir = meth_dir / "eval_config"
+    config_dir.mkdir(parents=True, exist_ok=True)
+    (config_dir / "ref-override-eval.yaml").write_text(
+        yaml.safe_dump(config), encoding="utf-8")
+
+
 def _broken_config_yaml(meth_dir: Path) -> None:
     config = {
         "id": "broken-eval",
@@ -101,7 +140,7 @@ def _broken_config_yaml(meth_dir: Path) -> None:
         "override_stage": "input_data",
         "target_stage": "nonexistent_stage",
         "table": {
-            "path": "eval_data/cases.csv",
+            "path": f"examples/{METHODOLOGY}/eval_data/cases.csv",
             "format": "csv",
             "table_schema": {"columns": [{"name": "doc_id", "type": "str"}]},
         },
@@ -142,9 +181,14 @@ def tmp_examples(tmp_path, monkeypatch):
     meth_dir = _write_methodology(examples_root, METHODOLOGY)
     _valid_config_yaml(meth_dir)
     _broken_config_yaml(meth_dir)
+    _config_with_reference_override_yaml(meth_dir)
 
     monkeypatch.setattr(loading, "EXAMPLES_DIR", examples_root)
     monkeypatch.setattr(evals_router, "EXAMPLES_DIR", examples_root)
+    # config.table.path is repo-root-relative (same convention input_data
+    # stages use: repo_root / params["path"]) -- point REPO_ROOT at tmp_path
+    # so the fixture's "examples/tm/eval_data/cases.csv" resolves for real.
+    monkeypatch.setattr(evals_router, "REPO_ROOT", tmp_path)
     return meth_dir
 
 
@@ -167,6 +211,27 @@ def test_eval_detail_valid_config_page(tmp_examples):
     # cases-table columns rendered
     assert "expected_summary" in r.text
     assert "doc_id" in r.text
+    # cases-table ROWS actually rendered: a distinctive cell value from the
+    # fixture CSV that appears nowhere else on the page, proving the table
+    # file was found and read (not just that its schema columns were echoed).
+    assert "hello world" in r.text
+    assert "load-issues" not in r.text
+
+
+def test_eval_detail_pathway_splits_overridden_and_reference_overrides(tmp_examples):
+    r = client.get(f"/methodology/{METHODOLOGY}/evals/ref-override-eval")
+    assert r.status_code == 200
+    assert "overridden:" in r.text
+    assert "reference overrides:" in r.text
+    # the reference-override stage id appears under its own label, not
+    # folded into the "overridden" span alongside override_stage.
+    assert "<code>publish</code>" in r.text
+
+
+def test_eval_detail_no_reference_overrides_omits_that_label(tmp_examples):
+    r = client.get(f"/methodology/{METHODOLOGY}/evals/valid-eval")
+    assert r.status_code == 200
+    assert "reference overrides:" not in r.text
 
 
 def test_eval_detail_broken_config_shows_problems(tmp_examples):
@@ -193,6 +258,29 @@ def test_eval_run_detail_shows_status_and_metrics(tmp_examples):
 def test_eval_run_detail_unknown_run_404(tmp_examples):
     r = client.get(f"/methodology/{METHODOLOGY}/evals/valid-eval/runs/nope")
     assert r.status_code == 404
+
+
+def test_eval_run_detail_renders_when_sibling_run_is_corrupt(tmp_examples):
+    """A requested run must render even when some OTHER run file for the same
+    eval is corrupt -- the old behavior 404'd every run page in this
+    situation because it listed all runs to find the one requested."""
+    _write_run(tmp_examples, "run-1")
+    (tmp_examples / "eval_run" / "run-bad.json").write_text(
+        "not json at all {", encoding="utf-8")
+
+    r = client.get(f"/methodology/{METHODOLOGY}/evals/valid-eval/runs/run-1")
+    assert r.status_code == 200
+    assert "scored" in r.text
+    assert "exact_match_rate" in r.text
+
+
+def test_eval_run_detail_malformed_run_is_422_not_404(tmp_examples):
+    run_dir = tmp_examples / "eval_run"
+    run_dir.mkdir(parents=True, exist_ok=True)
+    (run_dir / "broken.json").write_text("not json at all {", encoding="utf-8")
+
+    r = client.get(f"/methodology/{METHODOLOGY}/evals/valid-eval/runs/broken")
+    assert r.status_code == 422
 
 
 # ── methodology page nav link ────────────────────────────────────────────────
