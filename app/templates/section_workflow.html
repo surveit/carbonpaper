@@ -1,11 +1,14 @@
 {% extends "project_shell.html" %}
 {#
-  WORKFLOW — the typed-stage pipeline (renamed from "DAG" in all visible copy):
-    · the mermaid graph (build_mermaid_graph with review_by_id belief colours)
-    · the per-node review split-view (reuses _node_review.html via the node-click panel)
-    · the versions list
-    · a "Build workflow" AI chat (GET /project/{name}/workflow/stream)
+  WORKFLOW — the typed-stage pipeline:
+    · the mermaid graph (build_mermaid_graph with review_by_id belief colours), full-width
+      on TOP in a zoomable/pannable/fullscreen diagram viewport
+    · the per-node review that DOCKS full-width BELOW the graph on node-click (reuses
+      _node_review.html via the node-click panel)
+    · the versions list (collapsed)
     · Run + Create-version controls
+  (The AI chat that authors the workflow is a separate surface, not embedded here — an
+  empty workflow offers an AI-starter that drives GET /project/{name}/workflow/stream.)
 
   LOCKED until state.data_model.state == "approved" (the SAME gate the SSE stream
   enforces). When locked we render a "do this first" panel, not the graph.
@@ -20,7 +23,7 @@
     versions    = versioning.list_versions(mdir)   (list; may be empty)
 
   Reused (unchanged) routes: node review /node/{id}/review-partial,/decide,/edit;
-  /review/status; create version POST /version; run POST /run.
+  /review/status; create version POST /version; run POST /run; author POST workflow/stream.
 #}
 {# The section key stays 'workflow' (internal); the VISIBLE tab title says Workflow. #}
 {% block title %}{{ state.meta.title or state.name }} · Workflow{% endblock %}
@@ -34,12 +37,14 @@
   };
   document.addEventListener("DOMContentLoaded", function () {
     mermaid.initialize({
-      startOnLoad: true, theme: "default",
-      flowchart: { curve: "basis", padding: 20, useMaxWidth: true },
+      startOnLoad: false, theme: "default",
+      flowchart: { curve: "basis", padding: 20, useMaxWidth: false },
       securityLevel: "loose"
     });
   });
 </script>
+<script src="/static/diagram_viewport.js"></script>
+<script src="/static/ai_starter.js"></script>
 {% endblock %}
 
 {% block section %}
@@ -49,7 +54,7 @@
   <div class="wf-head-title">
     <h1>Workflow</h1>
     <p class="lede">Typed stages wiring the <strong>approved</strong> schemas into a
-      pipeline. Click any node (or row) to <strong>review</strong> how that step is
+      pipeline. Click any node to <strong>review</strong> how that step is
       modeled. Node colour = <em>belief</em> (do we trust it). Run it end-to-end, or
       create an immutable version.</p>
   </div>
@@ -93,9 +98,9 @@
   </div>
 
 {% else %}
-  {# ── UNLOCKED: full workflow surface ── #}
-  <div class="split-view">
-    <div class="left-pane">
+  {# ── UNLOCKED: full workflow surface — graph on top, review docked below. ── #}
+  <div class="wf-stack">
+    <div class="wf-top">
       <div class="legend">
         <span class="legend-label">type</span>
         <span class="badge input">▶ input_data</span>
@@ -115,45 +120,56 @@
       </div>
 
       {% if stages and mermaid %}
-      <div class="dag wf-graph">
-        <pre class="mermaid">
+      <div class="diagram-block">
+        <div class="diagram-tools">
+          <button type="button" data-zoom="in" title="Zoom in">+</button>
+          <button type="button" data-zoom="out" title="Zoom out">−</button>
+          <button type="button" data-zoom="reset" title="Fit to width">reset</button>
+          <button type="button" class="diagram-fs" title="Fullscreen">⛶ fullscreen</button>
+          <span class="muted diagram-hint">drag to pan · ⌘/Ctrl-scroll to zoom · click a node to review · fullscreen to expand</span>
+        </div>
+        <div class="diagram-viewport">
+          <pre class="mermaid">
 {{ mermaid }}
-        </pre>
+          </pre>
+        </div>
       </div>
-
-      <h2>Stage list</h2>
-      <table class="stages compact">
-        <thead><tr><th>#</th><th>id</th><th>type</th><th></th></tr></thead>
-        <tbody>
-          {% for s in stages %}
-          <tr>
-            <td>{{ s._order }}</td>
-            <td><a href="#" data-stage-link="{{ s.id }}"><code>{{ s.id }}</code></a></td>
-            <td><span class="type-tag {{ type_class.get(s.type, 'custom') }}">{{ type_glyph.get(s.type, '') }}</span></td>
-            <td>
-              {% if s.compiler_notes %}<span class="signal warn" title="compiler notes">⚠</span>{% endif %}
-              {% if s.eval %}<span class="signal eval" title="eval">📊</span>{% endif %}
-              {% if s.review %}<span class="signal review" title="review">👤</span>{% endif %}
-            </td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
       {% else %}
-      {# Data model approved but no stages yet — the chat below authors them. #}
+      {# Data model approved but no stages yet — the AI-starter authors them. #}
       <div class="wf-empty-graph">
         <div class="empty-state wf-empty-state">
           <h2>No workflow yet</h2>
-          <p class="muted"><strong>Send</strong> to generate the pipeline that wires your
-            approved data model — the typed stages, ending in <code>publish</code>. Stages
-            appear here as they're persisted to
-            <code>examples/{{ state.name }}/compiled/</code>.</p>
+          <p class="muted">The workflow — the typed stages that wire your approved data
+            model into a pipeline, ending in <code>publish</code> — is authored by the AI
+            assistant and persisted to <code>examples/{{ state.name }}/compiled/</code>.</p>
+          <div class="ai-starter" data-ai-start data-ai-autostart
+               data-ai-endpoint="/project/{{ state.name }}/workflow/stream"
+               data-ai-verb="Building the workflow">
+            <button type="button" class="btn primary ai-start-btn">✦ Build workflow with AI</button>
+            <div class="ai-start-status" hidden>
+              <span class="ai-start-spin"></span> <span class="ai-start-msg"></span>
+            </div>
+            <pre class="ai-start-preview" hidden></pre>
+          </div>
         </div>
       </div>
       {% endif %}
+    </div>{# /.wf-top #}
 
-      {# ── Versions list ── #}
-      <h2>Versions</h2>
+    {% if stages and mermaid %}
+    {# ── Full-width stage detail — the node-review partial loads here on node-click. ── #}
+    <div class="wf-detail" id="wf-detail">
+      <div id="stage-panel">
+        <div class="empty-state wf-detail-empty"><p class="muted">Click a node in the graph above to
+          <strong>review</strong> how that step is modeled — its inputs, transform, and outputs,
+          with <strong>approve / reject</strong> at the top.</p></div>
+      </div>
+    </div>
+    {% endif %}
+
+    {# ── Versions (collapsed — navigation is the graph, not this list). ── #}
+    <details class="wf-versions">
+      <summary>Versions{% if versions %} · {{ versions|length }}{% endif %}</summary>
       {% if versions %}
       <table class="stages">
         <thead><tr><th>version</th><th>created</th><th>message</th><th>coverage</th></tr></thead>
@@ -180,37 +196,8 @@
       <p class="muted"><em>No versions yet. Click <strong>Create version</strong> above to
         snapshot the current workflow. (A run on an unversioned workflow auto-creates one.)</em></p>
       {% endif %}
-    </div>
-
-    <div class="right-pane wf-right" id="wf-right">
-      {# The build chat lives here; clicking a node swaps in the node-review panel. #}
-      <div id="stage-panel">
-        <div class="flow-side-head">
-          <span class="flow-side-title">AI · workflow</span>
-          <span class="chat-live-dot" id="chat-live" hidden>● streaming…</span>
-        </div>
-        <div class="chat-log" id="chat-log">
-          <div class="chat-msg system">{% if stages %}The workflow is built. Click a node
-            to <strong>review</strong> it, or steer with a message to re-author.{% else %}The
-            workflow build streams here. <strong>Send</strong> to author it, or add a
-            message to steer.{% endif %}</div>
-        </div>
-        <div class="chat-working" id="chat-working"><span class="spin"></span>
-          <span id="chat-working-label">Generating…</span></div>
-        <div class="chat-input-row">
-          <textarea id="chat-input" placeholder="Optional steer for the workflow… (Enter to send)"></textarea>
-          <button id="chat-send" type="button">Send</button>
-          <p class="chat-hint chat-input-hint">Leave blank to wire your approved data model, or add guidance.</p>
-        </div>
-
-        <h4 class="chat-cards-head">Stages emitted</h4>
-        <div id="chat-cards">
-          <p class="muted" id="chat-cards-empty">Stage cards appear here as the agent emits
-            them, each with its <code>models</code> validation inline.</p>
-        </div>
-      </div>
-    </div>
-  </div>
+    </details>
+  </div>{# /.wf-stack #}
 {% endif %}
 
 {% if not wf_locked %}
@@ -218,14 +205,33 @@
 (function () {
   // ════ Node-click → review panel. Clicking a node or stage row fetches its
   //      review/edit partial (_node_review.html) and swaps it into #stage-panel,
-  //      replacing the build chat. ════
+  //      docking it full-width below the graph. ════
   const METHODOLOGY = {{ state.name | tojson }};
   const panel = document.getElementById('stage-panel');
-  const wfRight = document.getElementById('wf-right');
+  const wfDetail = document.getElementById('wf-detail');
+
+  let activeStageId = null;
+  // Outline the reviewed node in the graph so the open panel and the graph agree on
+  // which stage is selected. Retries briefly if the svg hasn't rendered yet (deep-link
+  // on load races the async mermaid render).
+  function highlightGraphNode(stageId, _tries) {
+    const svg = document.querySelector('.diagram-viewport svg');
+    if (!svg) {
+      if (stageId && (_tries || 0) < 12) setTimeout(() => highlightGraphNode(stageId, (_tries || 0) + 1), 300);
+      return;
+    }
+    svg.querySelectorAll('g.node.wf-node-active').forEach(n => n.classList.remove('wf-node-active'));
+    if (!stageId) return;
+    const esc = (window.CSS && CSS.escape) ? CSS.escape(stageId) : stageId;
+    // mermaid renders each flowchart node as <g class="node …" id="flowchart-<id>-<n>">
+    let node = svg.querySelector('g.node[id^="flowchart-' + esc + '-"]');
+    if (!node) node = svg.querySelector('g.node[id*="' + esc + '"]');   // fallback across versions
+    if (node) node.classList.add('wf-node-active');
+  }
 
   async function loadStage(stageId) {
     if (!stageId || !panel) return;
-    if (wfRight) wfRight.classList.add('loading');
+    if (wfDetail) wfDetail.classList.add('loading');
     try {
       const r = await fetch(`/project/${encodeURIComponent(METHODOLOGY)}/node/${encodeURIComponent(stageId)}/review-partial`);
       if (!r.ok) {
@@ -241,12 +247,12 @@
         old.replaceWith(s);
       });
       if (location.hash !== `#${stageId}`) { history.replaceState(null, '', `#${stageId}`); }
-      document.querySelectorAll('table.stages tr').forEach(tr => tr.classList.remove('active'));
-      const link = document.querySelector(`[data-stage-link="${stageId}"]`);
-      if (link) { const row = link.closest('tr'); if (row) row.classList.add('active'); }
-      if (wfRight) wfRight.scrollTop = 0;
+      activeStageId = stageId;
+      highlightGraphNode(stageId);
+      // The detail sits below the (possibly tall) graph — bring it into view.
+      if (wfDetail) wfDetail.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     } finally {
-      if (wfRight) wfRight.classList.remove('loading');
+      if (wfDetail) wfDetail.classList.remove('loading');
     }
   }
   window._loadStage = loadStage;
@@ -270,11 +276,15 @@
   const mermaidEl = document.querySelector('pre.mermaid');
   const $ = id => document.getElementById(id);
 
-  function rerenderDag(src) {
+  function rerenderGraph(src) {
     if (!mermaidEl || !window.mermaid) return;
     mermaidEl.removeAttribute('data-processed');
     mermaidEl.textContent = src;
-    try { mermaid.run({ nodes: [mermaidEl] }); } catch (e) {}
+    try {
+      const refit = () => { const vp = mermaidEl.closest('.diagram-viewport'); if (vp && vp._refit) vp._refit(); highlightGraphNode(activeStageId); };
+      const p = mermaid.run({ nodes: [mermaidEl] });
+      if (p && p.then) p.then(refit); else refit();
+    } catch (e) {}
   }
 
   async function pollReviewStatus() {
@@ -284,7 +294,7 @@
       if (!r.ok) return;
       d = await r.json();
     } catch (e) { return; }
-    if (d.mermaid) rerenderDag(d.mermaid);
+    if (d.mermaid) rerenderGraph(d.mermaid);
     const c = d.coverage;
     if (c) {
       if ($('cov-approved')) $('cov-approved').textContent = c.approved;
@@ -315,151 +325,6 @@
       }
     });
   }
-})();
-</script>
-
-<script>
-(function () {
-  // ════ "Build workflow" chat — SSE GET /project/{name}/workflow/stream (phase=dag).
-  //      Streams stage cards into #chat-cards; on done, reloads to render the graph.
-  //      DOUBLE-SUBMIT GUARD: send disabled + "working…" until a terminal event. ════
-  const METHODOLOGY = {{ state.name | tojson }};
-  const WORKING_LABEL = 'Generating…';
-  const DONE_NOTE = 'Opening the workflow with the review / version / run UI. Refreshing…';
-
-  const log = document.getElementById('chat-log');
-  const cards = document.getElementById('chat-cards');
-  let cardsEmpty = document.getElementById('chat-cards-empty');
-  const input = document.getElementById('chat-input');
-  const sendBtn = document.getElementById('chat-send');
-  const liveDot = document.getElementById('chat-live');
-  const working = document.getElementById('chat-working');
-  const workingLabel = document.getElementById('chat-working-label');
-  let es = null;
-  let curAssistant = null;
-  let inFlight = false;
-  const history = [];
-
-  function escapeHtml(s) {
-    return String(s).replace(/[&<>"']/g, c => (
-      { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
-    ));
-  }
-  function scrollLog() { if (log) log.scrollTop = log.scrollHeight; }
-
-  function addBubble(role, text) {
-    if (!log) return null;
-    const div = document.createElement('div');
-    div.className = 'chat-msg ' + role;
-    div.textContent = text || '';
-    log.appendChild(div);
-    scrollLog();
-    return div;
-  }
-
-  function addCard(kind, obj, issues, path) {
-    if (!cards) return;
-    if (cardsEmpty) { cardsEmpty.remove(); cardsEmpty = null; }
-    const name = kind === 'schema'
-      ? ((obj && (obj.name || obj.title)) || '(unnamed schema)')
-      : ((obj && obj.id) || '(unnamed stage)');
-    const hasIssues = issues && issues.length;
-    const card = document.createElement('div');
-    card.className = 'emit-card ' + kind + (hasIssues ? ' has-issues' : '');
-    let html = '<div class="ec-head">'
-      + '<span class="ec-name">' + escapeHtml(name) + '</span>'
-      + '<span class="ec-kind">' + kind + '</span></div>';
-    if (hasIssues) {
-      html += '<ul class="ec-issues">'
-        + issues.map(i => '<li>' + escapeHtml(i) + '</li>').join('')
-        + '</ul>';
-    } else {
-      html += '<div class="ec-ok">✓ valid' + (path
-        ? ' · saved ' + escapeHtml(String(path).replace(/\\/g, '/').split('/').pop()) : '')
-        + '</div>';
-    }
-    html += '<details><summary>JSON</summary><pre>'
-      + escapeHtml(JSON.stringify(obj, null, 2)) + '</pre></details>';
-    card.innerHTML = html;
-    cards.appendChild(card);
-  }
-
-  function addDropCard(kind, obj, reason) {
-    if (!cards) return;
-    if (cardsEmpty) { cardsEmpty.remove(); cardsEmpty = null; }
-    const name = (obj && obj.id) || '(unnamed stage)';
-    const card = document.createElement('div');
-    card.className = 'emit-card ' + kind + ' dropped';
-    card.innerHTML = '<div class="ec-head">'
-      + '<span class="ec-name">' + escapeHtml(name) + '</span>'
-      + '<span class="ec-kind">' + kind + ' · dropped</span></div>'
-      + '<div class="ec-drop">⏸ ' + escapeHtml(reason || 'dropped by the phase gate') + '</div>';
-    cards.appendChild(card);
-  }
-
-  function setStreaming(on) {
-    inFlight = on;
-    if (liveDot) liveDot.hidden = !on;
-    if (working) working.classList.toggle('on', on);
-    if (sendBtn) sendBtn.disabled = on;
-    if (input) input.disabled = on;
-  }
-
-  function closeStream() { if (es) { es.close(); es = null; } }
-
-  function send() {
-    if (inFlight) return;
-    const message = (input && input.value || '').trim();
-    if (workingLabel) workingLabel.textContent = WORKING_LABEL;
-    if (message) { addBubble('user', message); history.push({ role: 'user', content: message }); }
-    if (input) input.value = '';
-    curAssistant = null;
-
-    const url = '/project/' + encodeURIComponent(METHODOLOGY)
-      + '/workflow/stream?message=' + encodeURIComponent(message);
-    es = new EventSource(url);
-    setStreaming(true);
-
-    es.onmessage = function (e) {
-      let ev;
-      try { ev = JSON.parse(e.data); } catch (err) { return; }
-      if (ev.type === 'assistant_delta') {
-        if (!curAssistant) { curAssistant = addBubble('assistant', ''); }
-        if (curAssistant) { curAssistant.textContent += ev.text; scrollLog(); }
-      } else if (ev.type === 'stage_emitted') {
-        addCard('stage', ev.stage, ev.issues, ev.path);
-      } else if (ev.type === 'schema_emitted') {
-        addCard('schema', ev.schema, ev.issues, ev.path);
-      } else if (ev.type === 'stage_dropped') {
-        addDropCard('stage', ev.stage, ev.reason);
-      } else if (ev.type === 'schema_dropped') {
-        addDropCard('schema', ev.schema, ev.reason);
-      } else if (ev.type === 'done' || ev.type === 'data_model_proposed') {
-        if (curAssistant) { history.push({ role: 'assistant', content: curAssistant.textContent }); }
-        const v = ev.validation || {};
-        const parts = [];
-        if (v.n_stages !== undefined) parts.push(v.n_stages + ' stage(s)');
-        if (v.n_schemas !== undefined) parts.push(v.n_schemas + ' schema(s)');
-        addBubble('system', 'Workflow built — ' + parts.join(', ') + '. ' + DONE_NOTE);
-        closeStream();
-        setStreaming(false);
-        setTimeout(() => location.reload(), 900);
-      } else if (ev.type === 'error') {
-        addBubble('error', '⚠ ' + ev.message);
-        closeStream();
-        setStreaming(false);
-      }
-    };
-
-    es.onerror = function () {
-      if (es && es.readyState === EventSource.CLOSED) { setStreaming(false); }
-    };
-  }
-
-  if (sendBtn) sendBtn.addEventListener('click', send);
-  if (input) input.addEventListener('keydown', function (e) {
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
-  });
 })();
 </script>
 {% endif %}

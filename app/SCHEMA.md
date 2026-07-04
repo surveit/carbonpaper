@@ -7,7 +7,7 @@ This is the contract a compiled stage file must satisfy. Every stage is *executa
 | Type | What it does | Executable handle |
 |---|---|---|
 | `input_data` | Declares a source dataset with a typed schema. | `connector:` block (file/computed_static) |
-| `llm_transform` | Row-by-row LLM call producing structured output. | `llm:` block (model + prompt template + rubric) |
+| `llm_transform` | Row-by-row LLM call producing structured output. | `llm:` block (model + prompt template) |
 | `python_row_function` | Python mapped **per input row** by the runtime — one row in, one row out. Single input. | `function:` block (inline code or module:fn ref) |
 | `python_frame_function` | Python over the whole upstream frame(s) — may reshape (group-by, pivot, dedup, multi-input merge). | `function:` block |
 | `join` | Combine two or more upstream dataframes on keys. | `join:` block (keys + type) |
@@ -66,9 +66,6 @@ llm:              # llm_transform only
   prompt_template: |
     Score this evidence... {evidence_text}
     ...
-  rubric:         # optional structured rubric the prompt references
-    "+2": ...
-    "-2": ...
 
 function:         # python_row_function / python_frame_function
   kind: inline    # or module
@@ -163,7 +160,7 @@ Prose translation rules:
 - **Lists of categories in prose become `range:` enums.** "Source classes: org_websites, corporate_media, CDP, ..." → `{type: str, range: [org_websites, corporate_media, CDP, ...]}`.
 - **Formulas in prose become inline pandas code.** Don't produce `formula: "0.5 * direct + 0.5 * indirect"` as a string — write the function. If the prose is underspecified, write a default function and add a compiler_note.
 - **"Methodology says X" sentences are not stage parameters.** They go into compiler_notes if they describe an ambiguity, or into the `description:` field of the relevant column/parameter if they're documentation.
-- **Rubrics with verbatim score descriptions stay verbatim.** Pull Table 6 (or equivalent) into the `llm.rubric:` field literally.
+- **Rubrics with verbatim score descriptions stay verbatim.** Pull Table 6 (or equivalent) into the `llm.prompt_template:` literally, so the model scores against the exact wording.
 
 ## Eval and review — when to add
 

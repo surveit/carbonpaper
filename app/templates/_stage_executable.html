@@ -53,12 +53,6 @@
         {% endif %}
     </details>
     {% endif %}
-    {% if stage.llm.rubric %}
-    <details>
-        <summary>Rubric ({{ stage.llm.rubric|length }} tier{% if stage.llm.rubric|length != 1 %}s{% endif %})</summary>
-        <pre class="yaml-block">{{ stage.llm.rubric | tojson(indent=2) }}</pre>
-    </details>
-    {% endif %}
 </section>
 {% endif %}
 

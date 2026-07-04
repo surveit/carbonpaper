@@ -1,35 +1,38 @@
 {% extends "project_shell.html" %}
 {#
-  DATA MODEL — named-schema cards by kind + ER diagram + the approval GATE + the AI
-  chat that authors/steers the model. Ported from compile_flow.html's step-2 body
-  (same render, same gate machinery), rehomed onto /project/{name}/... routes.
+  DATA MODEL — named-schema cards by kind + ER diagram + the approval GATE + the
+  staged-edits review. (The AI chat that authors/steers the model is a separate
+  surface, not embedded here; an empty data model offers an AI-starter that drives
+  GET /project/{name}/data-model/stream.) Rehomed onto /project/{name}/... routes.
 
   Context the route passes (Phase-1 FROZEN CONTRACT for this section):
     state       = project.project_state(mdir); section = "data_model"
-    schemas     = _load_schemas(mdir)                         (list of schema dicts)
-    er_diagram  = _build_schema_er_diagram(schemas) | None
-    issues      = validate_schema_library(schemas)            (list[str], may be empty)
+    schemas     = load_schemas(mdir)                         (list of schema dicts)
+    er_diagram  = build_schema_er_diagram(schemas) | None
+    issues      = validate_schema_library(schemas)           (list[str], may be empty)
     approval    = {state, current_hash, matched_decision} | None   (the gate; None iff no schemas)
-    schema_yaml = {schema_name: yaml_text}                    (per-schema edit seed)
+    schema_yaml = {schema_name: yaml_text}                   (per-schema edit seed)
     kind_order  = SCHEMA_KIND_ORDER
     kind_class  = SCHEMA_KIND_CLASS
     kind_glyph  = SCHEMA_KIND_GLYPH
 
-  Endpoints (rehomed): chat opener GET /project/{name}/data-model/stream
-  (seeds from the document server-side); approve POST .../data-model/approve;
-  per-schema edit POST .../schema/{name}/edit.
+  Endpoints (this section): approve POST .../data-model/approve; per-schema edit POST
+  .../schema/{name}/edit; staged edits GET/POST .../data-model/staged|stage/*. (The
+  authoring stream .../data-model/stream still exists but is driven from the AI-starter.)
 #}
 {% block section_head %}
 <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
 <script>
   document.addEventListener("DOMContentLoaded", function () {
     mermaid.initialize({
-      startOnLoad: true, theme: "default",
-      er: { useMaxWidth: true, layoutDirection: "LR", entityPadding: 12, fontSize: 12 },
+      startOnLoad: false, theme: "default",
+      er: { useMaxWidth: false, layoutDirection: "LR", entityPadding: 12, fontSize: 12 },
       securityLevel: "loose"
     });
   });
 </script>
+<script src="/static/diagram_viewport.js"></script>
+<script src="/static/ai_starter.js"></script>
 {% endblock %}
 
 {% block section %}
@@ -44,7 +47,7 @@
   <h1>Data model</h1>
   <p class="lede">Named schemas authored <strong>before</strong> the workflow. Each
     table declares a <strong>kind</strong> — where it sits in the pipeline. Approve the
-    whole data model to unlock the workflow. Use the chat to author or steer.</p>
+    whole data model to unlock the workflow.</p>
 </div>
 
 <div class="dm-flow-body">
@@ -74,6 +77,32 @@
       {% endif %}
     </div>
 
+    {# ── Staged edits — pending human review ───────────────────────────────── #}
+    {# The AI's edit-tools STAGE targeted schema changes here (they do NOT write     #}
+    {# files). This panel renders the staged-vs-disk diff; Save commits it (and the  #}
+    {# approval drops to stale), Discard throws it away. Hidden until something is    #}
+    {# staged — populated client-side from GET .../data-model/staged on load and     #}
+    {# refreshed live after each edit_staged SSE event. #}
+    <section class="dm-staged" id="dm-staged" hidden aria-live="polite">
+      <div class="dm-staged-head">
+        <h3 class="dm-staged-title">Staged edits — pending review
+          <span class="dm-staged-count" id="dm-staged-count"></span></h3>
+        <div class="dm-staged-actions">
+          <button type="button" class="btn primary" id="dm-stage-save">Save to data model</button>
+          <button type="button" class="btn" id="dm-stage-discard">Discard</button>
+        </div>
+      </div>
+      <p class="dm-staged-lede muted">The AI proposed these changes with its edit-tools —
+        they are <strong>not written to disk yet</strong>. Review, then <strong>Save</strong>
+        (writes the schema files; the data-model approval drops to stale until you re-approve)
+        or <strong>Discard</strong>.</p>
+      <p class="dm-staged-invalid" id="dm-staged-invalid" hidden>⚠ Some staged edits are
+        invalid (see the issues below). <strong>Save is blocked</strong> until they are fixed
+        (re-steer the AI) or discarded.</p>
+      <div id="dm-staged-body"></div>
+      <p class="se-msg" id="dm-staged-msg"></p>
+    </section>
+
     {# ── The current data model, rendered with the schema_library look ────── #}
     <div class="dm-render" id="dm-render">
       {% if schemas %}
@@ -88,10 +117,19 @@
         {% endif %}
 
         {% if er_diagram %}
-        <div class="dag dm-er">
-          <pre class="mermaid">
+        <div class="diagram-block">
+          <div class="diagram-tools">
+            <button type="button" data-zoom="in" title="Zoom in">+</button>
+            <button type="button" data-zoom="out" title="Zoom out">−</button>
+            <button type="button" data-zoom="reset" title="Fit to width">reset</button>
+            <button type="button" class="diagram-fs" title="Fullscreen">⛶ fullscreen</button>
+            <span class="muted diagram-hint">drag to pan · ⌘/Ctrl-scroll to zoom · fullscreen for the full picture</span>
+          </div>
+          <div class="diagram-viewport">
+            <pre class="mermaid">
 {{ er_diagram }}
-          </pre>
+            </pre>
+          </div>
         </div>
         {% endif %}
 
@@ -154,200 +192,28 @@
       {% else %}
         <div class="empty-state dm-empty-state" id="dm-empty">
           <h2>No data model yet</h2>
-          <p class="muted">Describe the tables you want (optional), then <strong>Send</strong>
-            — the AI proposes a data model from your document. Schemas appear here as they're
-            persisted to <code>examples/{{ state.name }}/schemas/</code>.</p>
+          <p class="muted">The data model — the named tables this workflow operates on —
+            is authored by the AI assistant, then persisted to
+            <code>examples/{{ state.name }}/schemas/</code> and reviewed here.</p>
+          <div class="ai-starter" data-ai-start data-ai-autostart
+               data-ai-endpoint="/project/{{ state.name }}/data-model/stream"
+               data-ai-verb="Authoring the data model">
+            <button type="button" class="btn primary ai-start-btn">✦ Generate data model with AI</button>
+            <div class="ai-start-status" hidden>
+              <span class="ai-start-spin"></span> <span class="ai-start-msg"></span>
+            </div>
+            <pre class="ai-start-preview" hidden></pre>
+          </div>
         </div>
       {% endif %}
     </div>
 
   </div>{# /.dm-flow-main #}
-
-  {# ════════════════ AI SIDEBAR ════════════════ #}
-  <aside class="flow-side">
-    <div class="flow-side-head">
-      <span class="flow-side-title">AI · data model</span>
-      <span class="chat-live-dot" id="chat-live" hidden>● streaming…</span>
-    </div>
-
-    <div class="chat-log" id="chat-log">
-      <div class="chat-msg system">No messages yet. <strong>Send</strong> to seed a data
-        model from the document, or type your own instruction first.</div>
-    </div>
-    <div class="chat-working" id="chat-working"><span class="spin"></span>
-      <span id="chat-working-label">Authoring…</span></div>
-    <div class="chat-input-row">
-      <textarea id="chat-input" placeholder="Steer the data model… (Enter to send, Shift+Enter for newline)"></textarea>
-      <button id="chat-send" type="button">Send</button>
-      <p class="chat-hint chat-input-hint">Leave blank to use your document, or add guidance.</p>
-    </div>
-    <p class="chat-hint">"split donors and recipients into two tables" · "add a benchmark
-      reference table" · "this column should be nullable". Re-send any time to steer.</p>
-
-    <h4 class="chat-cards-head">Emitted this session</h4>
-    <div id="chat-cards">
-      <p class="muted" id="chat-cards-empty">Schema cards appear here as the agent emits
-        them, each with its <code>models</code> validation inline. A stray stage block
-        is <em>dropped</em> (the gate) and shown amber.</p>
-    </div>
-  </aside>{# /.flow-side #}
 </div>{# /.dm-flow-body #}
 
 <script>
 (function () {
-  // ════ Sidebar chat / EventSource plumbing (moved from compile_flow.html;
-  //      rehomed onto /project/{name}/data-model/stream) ════════════════
-  //   assistant_delta  → append token text to the live assistant bubble
-  //   schema_emitted   → a validation card; schema_dropped → an amber "dropped (gate)" card
-  //   data_model_proposed → terminal: settle, then reload to re-render server-side
-  //   error            → a red bubble
-  // DOUBLE-SUBMIT GUARD: send disabled + "working…" shown until a terminal event.
-  const METHODOLOGY = {{ state.name | tojson }};
-  const WORKING_LABEL = 'Authoring…';
-  const DONE_NOTE = 'Review / edit, then approve to unlock the workflow. Refreshing…';
-
-  const log = document.getElementById('chat-log');
-  const cards = document.getElementById('chat-cards');
-  let cardsEmpty = document.getElementById('chat-cards-empty');
-  const input = document.getElementById('chat-input');
-  const sendBtn = document.getElementById('chat-send');
-  const liveDot = document.getElementById('chat-live');
-  const working = document.getElementById('chat-working');
-  const workingLabel = document.getElementById('chat-working-label');
-  let es = null;
-  let curAssistant = null;
-  let inFlight = false;
-  const history = [];
-
-  function escapeHtml(s) {
-    return String(s).replace(/[&<>"']/g, c => (
-      { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
-    ));
-  }
-  function scrollLog() { log.scrollTop = log.scrollHeight; }
-
-  function addBubble(role, text) {
-    const div = document.createElement('div');
-    div.className = 'chat-msg ' + role;
-    div.textContent = text || '';
-    log.appendChild(div);
-    scrollLog();
-    return div;
-  }
-
-  function addCard(kind, obj, issues, path) {
-    if (cardsEmpty) { cardsEmpty.remove(); cardsEmpty = null; }
-    const name = kind === 'schema'
-      ? ((obj && (obj.name || obj.title)) || '(unnamed schema)')
-      : ((obj && obj.id) || '(unnamed stage)');
-    const hasIssues = issues && issues.length;
-    const card = document.createElement('div');
-    card.className = 'emit-card ' + kind + (hasIssues ? ' has-issues' : '');
-    let html = '<div class="ec-head">'
-      + '<span class="ec-name">' + escapeHtml(name) + '</span>'
-      + '<span class="ec-kind">' + kind + '</span></div>';
-    if (hasIssues) {
-      html += '<ul class="ec-issues">'
-        + issues.map(i => '<li>' + escapeHtml(i) + '</li>').join('')
-        + '</ul>';
-    } else {
-      html += '<div class="ec-ok">✓ valid' + (path
-        ? ' · saved ' + escapeHtml(String(path).replace(/\\/g, '/').split('/').pop()) : '')
-        + '</div>';
-    }
-    html += '<details><summary>JSON</summary><pre>'
-      + escapeHtml(JSON.stringify(obj, null, 2)) + '</pre></details>';
-    card.innerHTML = html;
-    cards.appendChild(card);
-  }
-
-  // Dropped block (the gate firing): show it amber so the human sees the AI tried to
-  // run ahead and was held back — never silently swallowed.
-  function addDropCard(kind, obj, reason) {
-    if (cardsEmpty) { cardsEmpty.remove(); cardsEmpty = null; }
-    const name = kind === 'schema'
-      ? ((obj && (obj.name || obj.title)) || '(unnamed schema)')
-      : ((obj && obj.id) || '(unnamed stage)');
-    const card = document.createElement('div');
-    card.className = 'emit-card ' + kind + ' dropped';
-    card.innerHTML = '<div class="ec-head">'
-      + '<span class="ec-name">' + escapeHtml(name) + '</span>'
-      + '<span class="ec-kind">' + kind + ' · dropped</span></div>'
-      + '<div class="ec-drop">⏸ ' + escapeHtml(reason || 'dropped by the phase gate') + '</div>';
-    cards.appendChild(card);
-  }
-
-  function setStreaming(on) {
-    inFlight = on;
-    if (liveDot) liveDot.hidden = !on;
-    if (working) working.classList.toggle('on', on);
-    sendBtn.disabled = on;            // ← the guard: no second submit while in-flight
-    input.disabled = on;
-  }
-
-  function closeStream() { if (es) { es.close(); es = null; } }
-
-  function send() {
-    if (inFlight) return;             // belt-and-suspenders: ignore re-entry
-    const message = (input.value || '').trim();
-    if (workingLabel) workingLabel.textContent = WORKING_LABEL;
-    if (message) { addBubble('user', message); history.push({ role: 'user', content: message }); }
-    input.value = '';
-    curAssistant = null;
-
-    const url = '/project/' + encodeURIComponent(METHODOLOGY)
-      + '/data-model/stream?message=' + encodeURIComponent(message);
-    es = new EventSource(url);
-    setStreaming(true);
-
-    es.onmessage = function (e) {
-      let ev;
-      try { ev = JSON.parse(e.data); } catch (err) { return; }
-      if (ev.type === 'assistant_delta') {
-        if (!curAssistant) { curAssistant = addBubble('assistant', ''); }
-        curAssistant.textContent += ev.text;
-        scrollLog();
-      } else if (ev.type === 'schema_emitted') {
-        addCard('schema', ev.schema, ev.issues, ev.path);
-      } else if (ev.type === 'stage_emitted') {
-        addCard('stage', ev.stage, ev.issues, ev.path);
-      } else if (ev.type === 'schema_dropped') {
-        addDropCard('schema', ev.schema, ev.reason);
-      } else if (ev.type === 'stage_dropped') {
-        addDropCard('stage', ev.stage, ev.reason);
-      } else if (ev.type === 'data_model_proposed' || ev.type === 'done') {
-        if (curAssistant) { history.push({ role: 'assistant', content: curAssistant.textContent }); }
-        const v = ev.validation || {};
-        const parts = [];
-        if (v.n_schemas !== undefined) parts.push(v.n_schemas + ' schema(s)');
-        if (v.n_stages !== undefined) parts.push(v.n_stages + ' stage(s)');
-        addBubble('system', 'Data model proposed — ' + parts.join(', ') + '. ' + DONE_NOTE);
-        closeStream();
-        setStreaming(false);
-        // Reload so the server re-renders the schema cards + gate state.
-        setTimeout(() => location.reload(), 900);
-      } else if (ev.type === 'error') {
-        addBubble('error', '⚠ ' + ev.message);
-        closeStream();
-        setStreaming(false);
-      }
-    };
-
-    es.onerror = function () {
-      if (es && es.readyState === EventSource.CLOSED) { setStreaming(false); }
-    };
-  }
-
-  sendBtn.addEventListener('click', send);
-  input.addEventListener('keydown', function (e) {
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
-  });
-})();
-</script>
-
-<script>
-(function () {
-  // ════ The data-model gate: approve + per-schema edit (rehomed onto /project) ══
+  // ════ The data-model gate: approve + per-schema edit ══════════════════════════
   // Approve = record the schema-library content hash (one decision over the whole set).
   // Editing a schema changes the library hash, so an approved data model drops to
   // "edited · stale" and re-locks the workflow — the page reloads to reflect that.
@@ -425,6 +291,185 @@
     const save = ev.target.closest('[data-role="save-schema"]');
     if (save) { ev.preventDefault(); saveSchema(save.dataset.schemaName, save); }
   });
+})();
+</script>
+
+<script>
+(function () {
+  // ════ Staged data-model edits — the review panel ══════════════════════════════
+  // The AI's edit-tools STAGE targeted schema changes into data_model_staging.json
+  // (they never write files). This panel renders that staged-vs-disk diff and drives
+  // the two human decisions:
+  //   Save    → POST .../data-model/stage/save  (validate-then-write; approval drops
+  //             to stale; on success reload so cards clear + the gate re-locks)
+  //   Discard → POST .../data-model/stage/discard (throw the staged edits away; reload)
+  // refreshStagedPanel() is exposed on window so the authoring chat (a separate surface)
+  // can refresh the staged diff live after each edit-tool event; it also runs on load.
+  const METHODOLOGY = {{ state.name | tojson }};
+  const STAGED_URL   = '/project/' + encodeURIComponent(METHODOLOGY) + '/data-model/staged';
+  const SAVE_URL     = '/project/' + encodeURIComponent(METHODOLOGY) + '/data-model/stage/save';
+  const DISCARD_URL  = '/project/' + encodeURIComponent(METHODOLOGY) + '/data-model/stage/discard';
+
+  const panel     = document.getElementById('dm-staged');
+  const bodyEl    = document.getElementById('dm-staged-body');
+  const countEl   = document.getElementById('dm-staged-count');
+  const invalidEl = document.getElementById('dm-staged-invalid');
+  const msgEl     = document.getElementById('dm-staged-msg');
+  const saveBtn   = document.getElementById('dm-stage-save');
+  const discardBtn= document.getElementById('dm-stage-discard');
+  if (!panel) return;
+
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, c => (
+      { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+    ));
+  }
+  // Render a scalar diff value: null/undefined → an explicit em-dash marker (never a
+  // fabricated blank), objects → compact JSON, everything else → its string.
+  function val(v) {
+    if (v === null || v === undefined) return '<span class="muted">—</span>';
+    if (typeof v === 'object') return '<code>' + esc(JSON.stringify(v)) + '</code>';
+    return '<code>' + esc(String(v)) + '</code>';
+  }
+  // A single column's full dict as a compact "type · null? · references · desc" line,
+  // for the added/removed buckets (whole-node changes).
+  function colLine(c) {
+    const bits = [];
+    if (c.type !== undefined) bits.push('<span class="type-pill">' + esc(String(c.type)) + '</span>');
+    bits.push(c.nullable ? '<span class="muted">nullable</span>' : '<span class="strong">not null</span>');
+    if (c.references) bits.push('→ <code>' + esc(String(c.references)) + '</code>');
+    if (c.description) bits.push('<span class="muted">' + esc(String(c.description)) + '</span>');
+    return '<code>' + esc(String(c.name)) + '</code> ' + bits.join(' · ');
+  }
+
+  function renderSchemaDiff(d) {
+    const parts = [];
+    // Header: schema name + NEW badge + validity.
+    let head = '<div class="dsd-head"><code class="dsd-name">' + esc(String(d.schema)) + '</code>';
+    if (d.is_new) head += ' <span class="type-tag custom">NEW table</span>';
+    const nIssues = (d.issues || []).length;
+    if (nIssues) head += ' <span class="dsd-badge invalid">⚠ ' + nIssues + ' issue' + (nIssues !== 1 ? 's' : '') + '</span>';
+    head += '</div>';
+    parts.push(head);
+
+    // Validation issues (from validate_named_schema on the STAGED dict) — inline, so a
+    // human sees exactly why Save would refuse this schema.
+    if (nIssues) {
+      parts.push('<ul class="dsd-issues">'
+        + d.issues.map(i => '<li>' + esc(String(i)) + '</li>').join('') + '</ul>');
+    }
+
+    // Columns ADDED (whole-node adds).
+    (d.columns_added || []).forEach(c => {
+      parts.push('<div class="dsd-row add"><span class="dsd-op">+ column</span> ' + colLine(c) + '</div>');
+    });
+    // Columns REMOVED (whole-node removes).
+    (d.columns_removed || []).forEach(c => {
+      parts.push('<div class="dsd-row remove"><span class="dsd-op">− column</span> ' + colLine(c) + '</div>');
+    });
+    // Columns CHANGED (per-attribute before → after).
+    (d.columns_changed || []).forEach(cc => {
+      const keys = (cc.keys || []).map(k =>
+        '<div class="dsd-keychange"><code>' + esc(String(k.key)) + '</code>: '
+        + val(k.before) + ' <span class="dsd-arrow">→</span> ' + val(k.after) + '</div>'
+      ).join('');
+      parts.push('<div class="dsd-row change"><span class="dsd-op">~ column</span> <code>'
+        + esc(String(cc.name)) + '</code>' + keys + '</div>');
+    });
+    // Schema-level attribute changes (title/description/kind/primary_key/notes).
+    (d.attr_changes || []).forEach(a => {
+      parts.push('<div class="dsd-row change"><span class="dsd-op">~ schema</span> <code>'
+        + esc(String(a.key)) + '</code>: ' + val(a.before) + ' <span class="dsd-arrow">→</span> '
+        + val(a.after) + '</div>');
+    });
+
+    // No visible node/attr change but staged (e.g. a re-set to the same value) — say so
+    // rather than render an empty card.
+    const anyChange = (d.columns_added || []).length || (d.columns_removed || []).length
+      || (d.columns_changed || []).length || (d.attr_changes || []).length;
+    if (!anyChange && !d.is_new) {
+      parts.push('<div class="dsd-row muted">staged, but identical to the on-disk schema</div>');
+    }
+    return '<div class="dsd-schema' + (nIssues ? ' has-issues' : '') + '">' + parts.join('') + '</div>';
+  }
+
+  function render(payload) {
+    const diffs = (payload && payload.diffs) || { schemas: [], any_invalid: false, count: 0 };
+    const hasStaged = !!(payload && payload.has_staged);
+    if (!hasStaged || !diffs.schemas || diffs.schemas.length === 0) {
+      panel.hidden = true;
+      bodyEl.innerHTML = '';
+      return;
+    }
+    panel.hidden = false;
+    countEl.textContent = '(' + diffs.count + ' schema' + (diffs.count !== 1 ? 's' : '') + ')';
+    bodyEl.innerHTML = diffs.schemas.map(renderSchemaDiff).join('');
+    // Any invalid staged schema BLOCKS Save (mirrors apply_staged's refusal) — disable
+    // the button and show why, rather than let the human POST a Save that 400s.
+    const invalid = !!diffs.any_invalid;
+    invalidEl.hidden = !invalid;
+    saveBtn.disabled = invalid;
+    saveBtn.title = invalid ? 'Fix or discard the invalid staged edits before saving' : '';
+    if (!invalid && msgEl.classList.contains('err')) { msgEl.textContent = ''; msgEl.className = 'se-msg'; }
+  }
+
+  async function refreshStagedPanel() {
+    try {
+      const r = await fetch(STAGED_URL, { headers: { 'Accept': 'application/json' } });
+      if (!r.ok) return;
+      render(await r.json());
+    } catch (e) { /* leave the panel as-is on a transient fetch error */ }
+  }
+  window.refreshStagedPanel = refreshStagedPanel;
+
+  async function doSave() {
+    saveBtn.disabled = true;
+    msgEl.textContent = 'Saving…'; msgEl.className = 'se-msg';
+    try {
+      const r = await fetch(SAVE_URL, { method: 'POST' });
+      let d = null; try { d = await r.json(); } catch (e) {}
+      if (!r.ok || !d || !d.ok) {
+        // Refused (e.g. invalid staged schema → 400 with detail). Re-render the panel
+        // from the returned diffs so the issues + disabled Save reflect the refusal.
+        msgEl.textContent = '✗ Not saved — ' + ((d && d.detail) || (r.status + '')); msgEl.className = 'se-msg err';
+        if (d && d.diffs) render({ has_staged: true, diffs: d.diffs });
+        saveBtn.disabled = false;
+        return;
+      }
+      // Saved. The schema files were (re)written → the library hash changed → the
+      // data-model approval dropped to stale. Reload so the panel clears and the gate
+      // chip + workflow lock re-render server-side (state='' + d.state for the human).
+      msgEl.textContent = '✓ Saved — wrote ' + (d.schemas || []).length
+        + ' schema(s); data model is now "' + (d.state || '') + '". Refreshing…';
+      msgEl.className = 'se-msg ok';
+      setTimeout(() => window.location.reload(), 700);
+    } catch (e) {
+      msgEl.textContent = '✗ Save failed: ' + e; msgEl.className = 'se-msg err';
+      saveBtn.disabled = false;
+    }
+  }
+
+  async function doDiscard() {
+    if (!window.confirm('Discard all staged edits? The on-disk schemas are unchanged.')) return;
+    discardBtn.disabled = true;
+    msgEl.textContent = 'Discarding…'; msgEl.className = 'se-msg';
+    try {
+      const r = await fetch(DISCARD_URL, { method: 'POST' });
+      if (!r.ok) { msgEl.textContent = '✗ Discard failed: ' + r.status; msgEl.className = 'se-msg err'; discardBtn.disabled = false; return; }
+      // Store cleared; reload so the (now-empty) panel + unchanged data model re-render.
+      msgEl.textContent = '✓ Discarded. Refreshing…'; msgEl.className = 'se-msg ok';
+      setTimeout(() => window.location.reload(), 500);
+    } catch (e) {
+      msgEl.textContent = '✗ Discard failed: ' + e; msgEl.className = 'se-msg err'; discardBtn.disabled = false;
+    }
+  }
+
+  if (saveBtn) saveBtn.addEventListener('click', doSave);
+  if (discardBtn) discardBtn.addEventListener('click', doDiscard);
+
+  // Populate on load: a prior authoring turn may have left staged edits before this
+  // page render, so show them immediately (the panel stays hidden if none).
+  refreshStagedPanel();
 })();
 </script>
 {% endblock %}

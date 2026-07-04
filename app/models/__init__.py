@@ -120,7 +120,7 @@ NODE_TYPES: dict[str, dict[str, _Any]] = {
         "min_inputs": 1,
         "required": ["prompt_template"],
         "optional": ["model", "temperature", "response_format", "max_retries",
-                     "rubric", "tools"],
+                     "tools"],
     },
     "python_transform": {
         "summary": "Arbitrary Python over upstream dataframes.",

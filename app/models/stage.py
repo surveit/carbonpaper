@@ -112,7 +112,6 @@ class LLMConfig(_Base):
     temperature: float = 0.0
     max_retries: int = 3
     response_format: Literal["json", "text"] = "json"
-    rubric: Optional[dict[str, Any]] = None
     tools: Optional[list[str]] = None
 
 

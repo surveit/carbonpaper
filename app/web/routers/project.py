@@ -61,7 +61,7 @@ from fastapi.responses import (
     StreamingResponse,
 )
 
-from app import compiler
+from app import compiler, staging
 from app.models import validate_named_schema, validate_schema_library
 from app.services import node_review, project, versioning
 from app.services.loader import stage_to_json, stage_to_spec_dict
@@ -384,11 +384,23 @@ async def project_workflow(request: Request, project_name: str):
 # chat.jsonl + schemas/ + compiled/ co-locate under examples/<name>/.
 
 
-def _gated_sse(project_dir: Path, message: str, model: str, phase: str):
+def _gated_sse(
+    project_dir: Path,
+    message: str,
+    model: str,
+    phase: str,
+    *,
+    enable_edit_tools: bool = False,
+):
     """Wrap compiler.stream_compile_chat (an async generator) as Server-Sent Events.
     Each event dict becomes one `data: <json>` line the page's EventSource decodes.
     The generator yields its own terminal {data_model_proposed|done|error} event, so
-    the stream ends cleanly without inventing a sentinel."""
+    the stream ends cleanly without inventing a sentinel.
+
+    enable_edit_tools turns ON the in-process data-model EDIT-TOOLS. The data-model
+    stream passes True so the AI can STAGE targeted schema edits for human review; the
+    workflow stream leaves it False (edit-tools are data-model-only, and the compiler
+    ignores the flag outside the data-model phases anyway)."""
     async def _gen():
         async for event in compiler.stream_compile_chat(
             project_dir,
@@ -396,6 +408,7 @@ def _gated_sse(project_dir: Path, message: str, model: str, phase: str):
             history=None,
             model=model,
             phase=phase,
+            enable_edit_tools=enable_edit_tools,
         ):
             yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
     return _gen()
@@ -438,7 +451,13 @@ async def data_model_stream(project_name: str, message: str = ""):
         # path) — use whatever was typed rather than fabricate input.
         user_message = seed
     return StreamingResponse(
-        _gated_sse(pdir, user_message, _project_model(pdir), "data_model"),
+        _gated_sse(
+            pdir,
+            user_message,
+            _project_model(pdir),
+            "data_model",
+            enable_edit_tools=True,  # expose data-model edit-tools for staged edits
+        ),
         media_type="text/event-stream",
     )
 
@@ -568,6 +587,85 @@ async def edit_schema(project_name: str, schema_name: str, yaml_text: str = Form
     new_hash = node_review.schema_library_content_hash(schemas)
     state = node_review.data_model_state(pdir, schemas)["state"]
     return JSONResponse({"ok": True, "content_hash": new_hash, "state": state})
+
+
+# ─── Staged data-model edits ─────────────────────────────────────────────────
+# The data-model authoring stream exposes in-process EDIT-TOOLS (app/edit_tools.py)
+# that STAGE targeted schema changes into examples/<name>/data_model_staging.json for
+# human review — they never write schema files. These three routes drive the review:
+#   GET    .../data-model/staged        → the pending staged diffs (the panel reads this)
+#   POST   .../data-model/stage/save     → COMMIT staged edits to disk (validate-then-write)
+#   POST   .../data-model/stage/discard  → throw the staged edits away
+# All resolve the working copy via _project_dir (no traversal) exactly like the
+# per-schema edit route above.
+
+
+@router.get("/project/{project_name}/data-model/staged")
+async def data_model_staged(project_name: str):
+    """The pending STAGED data-model edits for this project. The data-model section's
+    "Staged edits — pending review" panel GETs this on load and re-fetches it after
+    each `edit_staged` SSE event to refresh live (no page reload until Save/Discard).
+
+    Returns {has_staged: bool, diffs: <staged_diffs>} — diffs is the SAME
+    staging.staged_diffs payload the apply step validates against, so what the panel
+    shows (including any per-schema validation issues via `any_invalid`) is exactly
+    what Save will refuse or commit."""
+    pdir = _project_dir(project_name)
+    return JSONResponse({
+        "has_staged": staging.has_staged_edits(pdir),
+        "diffs": staging.staged_diffs(pdir),
+    })
+
+
+@router.post("/project/{project_name}/data-model/stage/save")
+async def save_staged_data_model(project_name: str):
+    """COMMIT the staged data-model edits to disk (the human's Save). Delegates to
+    staging.apply_staged, which VALIDATES every staged schema first and RAISES
+    StagingError (writing NOTHING) if any is invalid — so an invalid staged edit is
+    refused with 400 + the issue list, never a partial/junk write (the cardinal
+    fail-loud rule, mirroring edit_schema).
+
+    On success the schema files are (re)written; because that changes the schema-library
+    content hash, a prior data-model approval AUTO-DROPS to edited_stale (see
+    node_review.data_model_state) — we return the fresh state so the client can re-lock
+    the gate without guessing. The staging store is cleared by apply_staged."""
+    pdir = _project_dir(project_name)
+
+    if not staging.has_staged_edits(pdir):
+        raise HTTPException(status_code=400, detail="No staged edits to save.")
+
+    try:
+        result = staging.apply_staged(pdir)
+    except staging.StagingError as exc:
+        # Invalid staged schema(s) — nothing was written, the store is preserved.
+        # Surface the issues so the panel can show why Save was refused.
+        diffs = staging.staged_diffs(pdir)
+        return JSONResponse(
+            {"ok": False, "detail": str(exc), "diffs": diffs},
+            status_code=400,
+        )
+
+    # Recompute the gate state from the NOW-updated on-disk schemas so the client can
+    # re-lock the workflow (writing the schemas changed the library hash → the prior
+    # approval, if any, dropped to edited_stale).
+    schemas = load_schemas(pdir)
+    state = node_review.data_model_state(pdir, schemas)["state"]
+    return JSONResponse({
+        "ok": True,
+        "written": result["written"],
+        "schemas": result["schemas"],
+        "state": state,
+    })
+
+
+@router.post("/project/{project_name}/data-model/stage/discard")
+async def discard_staged_data_model(project_name: str):
+    """Throw away ALL staged data-model edits (the human's Discard). Clears the staging
+    store (deletes examples/<name>/data_model_staging.json); the on-disk schemas are
+    untouched — a discard never writes. Idempotent: clearing an empty store is fine."""
+    pdir = _project_dir(project_name)
+    staging.clear_staging(pdir)
+    return JSONResponse({"ok": True})
 
 
 # ─── Read-only views the shell links into ────────────────────────────────────

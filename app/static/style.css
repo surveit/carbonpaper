@@ -1091,3 +1091,162 @@ td.row-num, th.row-num { text-align: right; color: #98a1b3; font-variant-numeric
 
 /* Run-detail: "ran against version" line. */
 .ran-against { margin-top: 2px; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Project-section styles used by the data-model + workflow section templates and
+   the node-review partial. (Section headers, the data-model gate + per-schema edit,
+   the locked/empty panels, the staged-edits review, and the big diagram viewport.)
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Section header (each section_*.html starts with one). */
+.sec-head { margin-bottom: 8px; }
+.sec-head h1 { margin-bottom: 6px; }
+
+/* Data-model layout: the schema column is full-width (the AI chat is a separate
+   surface, not docked here). */
+.dm-flow-body { display: block; }
+.dm-flow-main { min-width: 0; }
+
+/* The data-model gate: approval bar over the whole schema set. */
+.gate-bar { display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+    margin: 18px 0 6px; padding: 14px 16px; border: 1px solid var(--border);
+    border-radius: 8px; background: #f7f9fc; }
+.gate-bar .gate-state { display: flex; align-items: center; gap: 10px; }
+.gate-by { font-size: 12px; color: var(--muted); }
+.gate-stale-note { flex-basis: 100%; font-size: 12px; margin: 0; color: #7a4a00; }
+.approve-dm-btn.is-approved { background: #e8f8e8; color: #1f5a1f; border-color: #2a8a2a; }
+
+/* Data-model validity report + per-schema descriptions. */
+.validation-report { padding: 10px 14px; border-radius: 6px; margin: 10px 0 16px; font-size: 13px; }
+.validation-report.ok { background: #e8f8e8; border: 1px solid #3aa83a; color: #1f5a1f; }
+.validation-report.error { background: #fde8e8; border: 1px solid #f3b6b6; color: #802020; }
+.validation-report ul { margin: 6px 0 0; padding-left: 20px; }
+.schema-desc { font-size: 13px; color: #444; margin: 6px 0; }
+
+/* Per-schema edit textareas (mirror _node_review.html's .edit-textarea look). */
+.dm-schema-edit { margin-top: 8px; }
+.dm-schema-edit summary { cursor: pointer; color: var(--accent); font-size: 12px; }
+.schema-edit-textarea {
+    width: 100%; box-sizing: border-box; min-height: 200px; resize: vertical;
+    background: var(--code-deep); color: var(--code-fg);
+    border: 1px solid #333; border-radius: 5px; padding: 10px 12px; margin-top: 8px;
+    font-size: 12px; line-height: 1.5;
+    font-family: "SFMono-Regular", "Consolas", "Liberation Mono", Menlo, monospace;
+    white-space: pre; overflow: auto; tab-size: 2; }
+.schema-edit-textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+.se-actions { display: flex; align-items: center; gap: 12px; margin-top: 8px; }
+.se-msg { font-size: 13px; }
+.se-msg.ok { color: #1f5a1f; font-weight: 600; }
+.se-msg.err { color: #802020; font-weight: 600; }
+.se-issues { margin: 8px 0 0; padding: 10px 14px 10px 30px; list-style: disc;
+    background: #fde8e8; border: 1px solid #f3b6b6; border-radius: 5px; }
+.se-issues[hidden] { display: none; }
+.se-issues li { color: #802020; font-family: "SFMono-Regular", "Consolas", monospace; font-size: 12px; margin: 2px 0; }
+
+/* Workflow locked panel (data model not approved) + in-column empty states. */
+.wf-locked-panel { text-align: center; padding: 56px 24px 64px;
+    border: 1px dashed var(--border); border-radius: 10px; background: #fafafa; margin-top: 16px; }
+.wf-locked-glyph { font-size: 40px; line-height: 1; margin-bottom: 8px; }
+.wf-locked-panel h2 { margin: 0 0 8px; color: var(--fg); }
+.wf-locked-panel p { max-width: 540px; margin: 0 auto 18px; }
+.wf-empty-graph { margin: 14px 0; }
+/* In-column empty states (data model with no schemas / workflow with no stages). */
+.dm-empty-state, .wf-empty-state { text-align: center; padding: 40px 24px;
+    border: 1px dashed var(--border); border-radius: 10px; background: #fafafa; margin: 8px 0 4px; }
+.dm-empty-state h2, .wf-empty-state h2 { margin: 0 0 8px; color: var(--fg); }
+.dm-empty-state p, .wf-empty-state p { max-width: 520px; margin: 0 auto; }
+
+/* ── Staged data-model edits — the pending-review panel ──────────────────────── */
+.dm-staged { border: 1px solid var(--warn-border); border-left-width: 4px;
+    background: var(--warn-bg); border-radius: 8px; padding: 14px 16px; margin: 0 0 20px; }
+.dm-staged[hidden] { display: none; }
+.dm-staged-head { display: flex; justify-content: space-between; align-items: baseline;
+    gap: 12px; flex-wrap: wrap; }
+.dm-staged-title { margin: 0; font-size: 15px; color: #7a4a00; }
+.dm-staged-count { color: #996600; font-weight: 400; font-size: 13px; }
+.dm-staged-actions { display: flex; gap: 8px; }
+.dm-staged-lede { font-size: 12px; margin: 6px 0 10px; }
+.dm-staged-invalid { font-size: 13px; color: #802020; background: #fde8e8;
+    border: 1px solid #f3b6b6; border-radius: 6px; padding: 8px 12px; margin: 0 0 12px; }
+.dm-staged-invalid[hidden] { display: none; }
+/* One staged schema's diff card. */
+.dsd-schema { background: #fff; border: 1px solid var(--border); border-radius: 6px;
+    padding: 10px 12px; margin: 0 0 10px; }
+.dsd-schema.has-issues { border-color: #cc2a2a; }
+.dsd-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; margin-bottom: 4px; }
+.dsd-name { font-family: ui-monospace, monospace; font-weight: 600; font-size: 14px; }
+.dsd-badge.invalid { font-size: 11px; color: #cc2a2a; font-weight: 600; }
+.dsd-issues { margin: 4px 0 8px; padding-left: 20px; list-style: disc; }
+.dsd-issues li { color: #802020; font-family: ui-monospace, monospace; font-size: 12px; margin: 2px 0; }
+.dsd-row { font-size: 12px; padding: 3px 0; border-top: 1px solid #f0f0ed; }
+.dsd-row:first-of-type { border-top: none; }
+.dsd-op { display: inline-block; min-width: 66px; font-family: ui-monospace, monospace;
+    font-size: 11px; font-weight: 600; }
+.dsd-row.add .dsd-op { color: #1f5a1f; }
+.dsd-row.remove .dsd-op { color: #802020; }
+.dsd-row.change .dsd-op { color: #7a4a00; }
+.dsd-keychange { margin: 2px 0 2px 66px; font-size: 12px; }
+.dsd-arrow { color: var(--muted); }
+
+/* ── Big / expandable diagram viewport — shared by the data-model ER + workflow
+   graph. Scroll, zoom, drag-to-pan, fullscreen. The inner svg is sized in JS
+   (diagram_viewport.js); max-width:none defeats mermaid's useMaxWidth shrink so the
+   diagram is legible instead of tiny in a narrow column. ── */
+.diagram-block { margin: 14px 0; }
+.diagram-tools { display: flex; gap: .4rem; align-items: center; margin: .5rem 0; flex-wrap: wrap; }
+.diagram-tools button { font: inherit; font-size: 13px; padding: .25rem .6rem; cursor: pointer;
+    border: 1px solid var(--border); background: #f7f7f8; border-radius: 5px; color: #333; }
+.diagram-tools button:hover { background: #ececec; }
+.diagram-tools .diagram-hint { font-size: 12px; }
+.diagram-viewport { overflow: auto; max-height: 72vh; min-height: 260px; border: 1px solid var(--border);
+    border-radius: 8px; background: #fbfbfc; resize: vertical; cursor: grab; }
+.diagram-viewport.grabbing { cursor: grabbing; }
+.diagram-viewport:fullscreen { max-height: none; height: 100vh; width: 100vw; background: #fbfbfc; }
+.diagram-viewport .mermaid { margin: 0; padding: .5rem; }
+.diagram-viewport .mermaid svg { max-width: none !important; height: auto; }
+/* The node currently open in the review panel — outline it in the graph so the two
+   agree on the selection (distinct from the belief FILL colour). */
+.diagram-viewport svg g.node.wf-node-active > rect,
+.diagram-viewport svg g.node.wf-node-active > polygon,
+.diagram-viewport svg g.node.wf-node-active > circle,
+.diagram-viewport svg g.node.wf-node-active > path { stroke: #2f43c9 !important; stroke-width: 3px !important; }
+.diagram-viewport svg g.node.wf-node-active { filter: drop-shadow(0 0 4px rgba(47,67,201,.55)); }
+
+/* ── Workflow: graph on top, stage detail full-width below (master-detail layout). ── */
+.wf-top .diagram-viewport { max-height: 56vh; }        /* cap so the detail below stays reachable */
+.wf-detail { margin-top: 20px; border-top: 2px solid var(--border); padding-top: 18px; min-height: 120px; }
+.wf-detail.loading { opacity: .5; }
+.wf-detail-empty { text-align: center; padding: 24px 0; }
+.wf-versions { margin-top: 22px; }
+.wf-versions > summary { cursor: pointer; font-weight: 700; font-size: 12px; text-transform: uppercase;
+    letter-spacing: .4px; color: #666; padding: 8px 0; }
+
+/* Node-review, full-width: decision bar pinned on top, then Input/Transform/Output/Spec tabs. */
+.nr-bar { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;
+    background: #f7f8fb; border: 1px solid var(--border); border-radius: 10px; padding: 12px 16px; }
+.nr-bar-id { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.nr-bar-name { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; min-width: 0; }
+.nr-bar-name h2 { margin: 0; font-size: 18px; }
+.nr-bar-name code { font-size: 12px; color: #666; }
+.nr-bar-decide { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.nr-meta { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 10px 2px 0; font-size: 12px; color: #666; }
+.nr-meta .nr-hash { font-size: 11px; color: #999; }
+.nr-scope { font-style: italic; }
+.nr-stale-note { margin: 8px 2px 0; }
+.nr-tabs { margin-top: 16px; }
+.nr-panes { margin-top: 6px; }
+.nr-panes .schema-card { margin: 0 0 16px; }
+.nr-panes .schema-card h4 { margin: 0 0 8px; font-size: 13px; }
+.node-review-full .nr-edit-hint { margin: 0 0 10px; }
+
+/* "Start the AI assistant" — the minimal authoring trigger shown in empty sections
+   (button + spinner + live preview) — the authoring chat is a separate surface. */
+.ai-starter { margin-top: 18px; display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.ai-start-status { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: #555; }
+.ai-start-spin { width: 12px; height: 12px; border-radius: 50%; display: inline-block;
+    border: 2px solid #6a7bd0; border-top-color: transparent; animation: spin .7s linear infinite; }
+.ai-start-btn.ai-start-error { background: #fde8e8; border-color: #f3b6b6; color: #802020; }
+/* Live preview of the AI's streaming text — the visible sign it's actually running. */
+.ai-start-preview { width: 100%; max-width: 640px; max-height: 160px; overflow: auto; margin: 0;
+    text-align: left; white-space: pre-wrap; word-break: break-word; font-size: 12px; line-height: 1.5;
+    color: #444; background: #f7f8fb; border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; }

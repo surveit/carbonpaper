@@ -131,11 +131,40 @@ Only AFTER the schemas, {_stage_block_contract()}
   queue"), revise and RE-EMIT the affected schema or stage in a fresh fenced block."""
 
 
-def _data_model_system_prompt() -> str:
+def _edit_tools_guidance() -> str:
+    """The EDIT-vs-ADD guidance injected into the Phase-1 prompt WHEN the in-process
+    edit-tools are enabled. It draws the bright line the tools depend on: EDIT an
+    existing named schema by CALLING the tools (which STAGE the change for a human to
+    review — they do NOT write files); emit a fresh ```schema block ONLY to add a
+    brand-new table. Kept separate so it appears only when the tools actually exist —
+    telling the model to call tools that aren't loaded would be a fabrication."""
+    return """\
+# EDITING an existing table vs. ADDING a new one (IMPORTANT)
+You have EDIT TOOLS for the data model (tool names start with
+`mcp__methodology_edit__`). Use them to make TARGETED changes to a table that ALREADY
+exists — set a column's type, add / remove / rename a column, set a column or schema
+description, or set the primary key. These tools STAGE each change for the human to
+review and Save; they do NOT write files and they do NOT need re-approval by you.
+  - To CHANGE an existing table (e.g. "make revenue an int", "rename co_id to
+    company_id", "add a sector column to company"), CALL the matching edit tool. Do
+    NOT re-emit the whole schema as a ```schema block just to change one field — a
+    targeted tool call is the correct, reviewable edit.
+  - Emit a ```schema block ONLY to introduce a BRAND-NEW table that does not exist yet.
+  - If an edit tool reports an error (e.g. the schema or column does not exist), read
+    it and correct your call — never pretend the edit succeeded."""
+
+
+def _data_model_system_prompt(enable_edit_tools: bool = False) -> str:
     """Phase-1 (phase="data_model") system prompt: describe the DATA MODEL as
     named schemas, then STOP and wait for human approval. The model is told NOT to
     author any workflow stages — and the streamer enforces that too (any ```stage
-    block is dropped + flagged in this phase), so this is belt-and-suspenders."""
+    block is dropped + flagged in this phase), so this is belt-and-suspenders.
+
+    When enable_edit_tools is True, the EDIT-vs-ADD guidance is appended so the model
+    knows to use the staging edit-tools for changes to existing tables (and reserve
+    ```schema blocks for brand-new tables). The guidance is omitted when the tools are
+    not loaded, so the model is never told to call a tool that does not exist."""
+    edit_section = ("\n\n" + _edit_tools_guidance()) if enable_edit_tools else ""
     return f"""\
 You are an INTERACTIVE METHODOLOGY COMPILER working WITH a journalist in a live chat.
 This is PHASE 1 of a HUMAN-GATED build: your ONLY job right now is to describe the
@@ -148,11 +177,12 @@ two naming each table and why it exists) and put the real work in the fenced blo
 {_schema_block_contract()}
 
 # HARD STOP — do NOT build the workflow yet
-- Emit ONLY ```schema blocks this turn. Do NOT design, mention, or emit any workflow
-  stages or ```stage blocks — the pipeline wiring comes in a LATER phase, only after a
-  human approves this data model. If you emit a stage it will be DISCARDED.
+- Emit ONLY ```schema blocks this turn (or edit-tool calls, see below). Do NOT design,
+  mention, or emit any workflow stages or ```stage blocks — the pipeline wiring comes in
+  a LATER phase, only after a human approves this data model. If you emit a stage it will
+  be DISCARDED.
 - After you have emitted the schemas, write ONE short closing line telling the human the
-  data model is ready for their review and approval, then STOP. Do not continue.
+  data model is ready for their review and approval, then STOP. Do not continue.{edit_section}
 
 # Rules
 - One JSON object per ```schema fenced block. Valid JSON only inside fences (no comments,
@@ -332,6 +362,29 @@ def _delta_text(event: dict[str, Any]) -> str | None:
     return txt if isinstance(txt, str) and txt else None
 
 
+def _tool_result_text(content: Any) -> str:
+    """Flatten a ToolResultBlock.content into plain text. The SDK delivers it either
+    as a bare string or as a list of content blocks ({"type":"text","text":...} dicts
+    and/or objects with a `.text`); we concatenate the text parts. An empty/None
+    content yields "" — the caller decides how to present it (never fabricated)."""
+    if content is None:
+        return ""
+    if isinstance(content, str):
+        return content
+    parts: list[str] = []
+    if isinstance(content, list):
+        for item in content:
+            if isinstance(item, dict):
+                t = item.get("text")
+                if isinstance(t, str):
+                    parts.append(t)
+            else:
+                t = getattr(item, "text", None)
+                if isinstance(t, str):
+                    parts.append(t)
+    return "".join(parts)
+
+
 def _build_steer_prompt(user_message: str, history: list[dict[str, Any]] | None) -> str:
     """Send the user's instruction plus the prior conversation as context (the SDK
     session is created fresh per request, so we replay history into the prompt rather
@@ -363,6 +416,7 @@ async def stream_compile_chat(
     history: list[dict[str, Any]] | None = None,
     model: str = "sonnet",
     phase: str = "both",
+    enable_edit_tools: bool = False,
 ) -> AsyncIterator[dict[str, Any]]:
     """Drive ONE interactive compile-chat turn and yield typed event dicts as the
     model authors schemas and/or stages. An ASYNC GENERATOR meant to be consumed
@@ -378,6 +432,13 @@ async def stream_compile_chat(
     history : prior [{role, content}] turns, replayed into the prompt as context.
     model : Claude model alias (default 'sonnet').
     phase : "both" | "data_model" | "workflow" (default "both").
+    enable_edit_tools : when True AND phase in {"data_model","both"}, expose the
+        in-process MCP data-model EDIT-TOOLS (app/edit_tools.py) to the model. Those
+        tools STAGE targeted edits to existing named schemas into
+        base_dir/data_model_staging.json for human review (Save/Discard is a later
+        request) — they NEVER write schema files. A tool firing is surfaced as an
+        {"type":"edit_staged",...} event. Default False keeps the tool-less authoring
+        behavior (and back-compat callers) unchanged.
 
     Yields (one JSON-serialisable dict per event):
         {"type": "assistant_delta", "text": <str>}          live token text
@@ -385,6 +446,13 @@ async def stream_compile_chat(
         {"type": "stage_emitted",  "stage":  <dict>, "issues": [<str>], "path": <str>}
         {"type": "stage_dropped",  "stage":  <dict>, "reason": <str>}
         {"type": "schema_dropped", "schema": <dict>, "reason": <str>}
+        {"type": "edit_staged", "tool": <str>, "summary": <str>, "is_error": <bool>}
+                                   an EDIT-TOOL (mcp__methodology_edit__*) fired this
+                                   turn (only when enable_edit_tools). `tool` is the
+                                   short tool name; `summary` is the tool's text result
+                                   (a confirmation + one-line staged diff, or a loud
+                                   error message); `is_error` flags a refused edit. The
+                                   staged change lives in data_model_staging.json.
         {"type": "data_model_proposed",
          "validation": {"schema_library": [<str>], "n_schemas": <int>}}
                                    terminal event for phase="data_model"
@@ -417,6 +485,8 @@ async def stream_compile_chat(
             ClaudeSDKClient,
             StreamEvent,
             TextBlock,
+            ToolResultBlock,
+            ToolUseBlock,
         )
     except Exception as exc:  # noqa: BLE001 — SDK not importable → loud error, stop
         msg = f"claude_agent_sdk not importable: {exc!r}"
@@ -440,7 +510,10 @@ async def stream_compile_chat(
     # reached without a data model) — fail LOUDLY rather than let the model invent
     # tables. ──
     if phase == "data_model":
-        system_prompt = _data_model_system_prompt()
+        # The EDIT-vs-ADD guidance is included only when the edit-tools are actually
+        # loaded for this turn — otherwise we'd instruct the model to call tools that
+        # aren't present.
+        system_prompt = _data_model_system_prompt(enable_edit_tools=enable_edit_tools)
     elif phase == "workflow":
         approved_schemas, _ = _load_persisted(base)
         if not approved_schemas:
@@ -459,14 +532,34 @@ async def stream_compile_chat(
 
     _append_chat(base, {"role": "user", "content": user_message, "phase": phase})
 
-    options = ClaudeAgentOptions(
+    # ── EDIT-TOOLS seam ───────────────────────────────────────────────────────────
+    # Default: authoring is tool-less (allowed_tools=[]) — the model only emits fenced
+    # ```schema/```stage blocks. When enable_edit_tools is on for a data-model turn, we
+    # additionally expose the in-process MCP data-model edit-tools, which STAGE targeted
+    # edits to existing schemas for human review (they never write files). Only the
+    # data-model phases can edit the data model, so we gate on phase too; the staged
+    # edits land in base/data_model_staging.json.
+    mcp_servers: dict[str, Any] = {}
+    allowed_tools: list[str] = []
+    edit_tool_names: set[str] = set()
+    if enable_edit_tools and phase in ("data_model", "both"):
+        from app import edit_tools
+        server, tool_names = edit_tools.make_edit_tools_server(base)
+        mcp_servers = {edit_tools.MCP_SERVER_NAME: server}
+        allowed_tools = list(tool_names)     # in-process MCP tools must be allow-listed
+        edit_tool_names = set(tool_names)
+
+    opts_kwargs: dict[str, Any] = dict(
         model=model,
-        allowed_tools=[],                 # authoring only; no web/file tools
+        allowed_tools=allowed_tools,      # [] = tool-less; else the edit-tool names
         setting_sources=[],               # ignore inherited CLAUDE.md / settings
         system_prompt=system_prompt,
         include_partial_messages=True,    # → StreamEvent deltas for live display
         cli_path=CLI_PATH,
     )
+    if mcp_servers:
+        opts_kwargs["mcp_servers"] = mcp_servers
+    options = ClaudeAgentOptions(**opts_kwargs)
 
     prompt = _build_steer_prompt(user_message, history)
 
@@ -547,6 +640,38 @@ async def stream_compile_chat(
                                "issues": issues, "path": path})
         return events
 
+    # Maps an edit-tool's tool_use_id → its short name, recorded when the model FIRES
+    # the tool (a ToolUseBlock) so we can pair it with its later ToolResultBlock (which
+    # carries the staging confirmation / loud error text) and surface one edit_staged
+    # event per completed edit. Empty unless edit-tools are enabled + used.
+    pending_edit_tools: dict[str, str] = {}
+
+    def _edit_staged_events_from(content: Any) -> list[dict[str, Any]]:
+        """Scan a message's content for edit-tool activity and return edit_staged
+        events. ToolUseBlocks (on AssistantMessages) register the call; ToolResultBlocks
+        (on UserMessages) carry the result text and produce the event. Only tools in
+        edit_tool_names count, so an unrelated tool never spoofs an edit_staged."""
+        events: list[dict[str, Any]] = []
+        items = content if isinstance(content, list) else []
+        for block in items:
+            if isinstance(block, ToolUseBlock) and block.name in edit_tool_names:
+                # Short name for the UI (strip the mcp__methodology_edit__ route).
+                short = block.name.split("__")[-1]
+                pending_edit_tools[block.id] = short
+            elif isinstance(block, ToolResultBlock):
+                if block.tool_use_id not in pending_edit_tools:
+                    continue  # not one of our edit-tools
+                short = pending_edit_tools.pop(block.tool_use_id)
+                summary = _tool_result_text(block.content).strip()
+                is_error = bool(getattr(block, "is_error", False))
+                ev = {"type": "edit_staged", "tool": short,
+                      "summary": summary, "is_error": is_error}
+                _append_chat(base, {"role": "assistant", "event": "edit_staged",
+                                    "tool": short, "summary": summary,
+                                    "is_error": is_error})
+                events.append(ev)
+        return events
+
     try:
         async with ClaudeSDKClient(options=options) as client:
             await client.query(prompt)
@@ -563,10 +688,19 @@ async def stream_compile_chat(
                     for block in sdk_msg.content:
                         if isinstance(block, TextBlock):
                             assistant_text += block.text
+                    # An edit-tool CALL may ride on this assistant message; register it
+                    # (the event is emitted when its result arrives, below).
+                    for ev in _edit_staged_events_from(sdk_msg.content):
+                        yield ev
                     for ev in _drain_blocks():
                         yield ev
-                # Other message types (UserMessage tool echoes, ResultMessage) are not
-                # needed here — authoring is tool-less and single-voiced.
+                    continue
+                # (3) Tool RESULTS ride on the UserMessage echo — this is where an
+                # edit-tool's staged-confirmation / loud-error text arrives, so we emit
+                # the edit_staged event here. (When edit-tools are off, edit_tool_names
+                # is empty and this is a no-op — authoring stays single-voiced.)
+                for ev in _edit_staged_events_from(getattr(sdk_msg, "content", None)):
+                    yield ev
     except Exception as exc:  # noqa: BLE001 — SDK/transport failure → loud, then settle
         emitted_error = f"{type(exc).__name__}: {exc}"
         _append_chat(base, {"role": "system", "event": "error", "content": emitted_error})
