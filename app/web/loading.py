@@ -145,6 +145,9 @@ def list_runs(methodology: str) -> list[dict[str, Any]]:
                 "status": manifest.get("status", "unknown"),
                 "started_at": manifest.get("started_at"),
                 "finished_at": manifest.get("finished_at"),
+                # None for legacy (pre-versioning) runs; the template renders
+                # "(unversioned)" — a displayed truth, not a fabricated id.
+                "dag_version": manifest.get("dag_version"),
                 "stages_total": len(manifest.get("stages", [])),
                 "stages_ok": sum(1 for s in manifest.get("stages", []) if s.get("status") == "ok"),
                 "stages_error": sum(1 for s in manifest.get("stages", []) if s.get("status") == "error"),

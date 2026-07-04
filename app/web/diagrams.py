@@ -97,15 +97,33 @@ def build_er_diagram(stages: list[dict[str, Any]]) -> str:
     return "\n".join(lines)
 
 
+# Node-review BELIEF → stroke colour. Distinct from the type fill (classDef) and
+# from run status: this is "do we trust HOW this node is modeled". Kept identical
+# to the --belief-* palette in style.css so a legend chip equals the DAG stroke.
+REVIEW_STROKE = {
+    "approved": ("#2a8a2a", "3px"),       # trusted → green
+    "unreviewed": ("#9aa3ad", "1.5px"),   # not yet reviewed → grey
+    "rejected": ("#cc2a2a", "3px"),       # rejected → red
+    "edited_stale": ("#cc8a00", "3px"),   # approved then edited → amber
+}
+
+
 def build_mermaid_graph(
     stages: list[dict[str, Any]],
     methodology: str,
     status_by_id: dict[str, str] | None = None,
+    review_by_id: dict[str, str] | None = None,
 ) -> str:
     """Generate a Mermaid flowchart from stages.
 
     If status_by_id is given, each node gets a status glyph in its label and a
     coloured stroke override (green/amber/red/grey) layered over its type class.
+
+    If review_by_id is given (stage_id → belief state in {approved, unreviewed,
+    rejected, edited_stale}), each node's STROKE is coloured by belief instead —
+    the type fill is unchanged, so stroke encodes trust while fill encodes type.
+    When both are given, run status takes precedence (a live run's colour wins
+    over the standing belief). When both are None, behaves exactly as before.
     """
     status_glyph = {
         "ok": "✓",
@@ -148,8 +166,17 @@ def build_mermaid_graph(
         lines.append(
             f'    click {sid} call loadStage("{sid}") "Open stage"'
         )
+        # Stroke override: run status (if any) wins, else node-review belief.
+        # Colour = BELIEF/STATUS, layered over the type class's fill.
+        stroke_spec: tuple[str, str] | None = None
         if status and status in status_stroke:
-            stroke, width = status_stroke[status]
+            stroke_spec = status_stroke[status]
+        else:
+            belief = (review_by_id or {}).get(sid)
+            if belief and belief in REVIEW_STROKE:
+                stroke_spec = REVIEW_STROKE[belief]
+        if stroke_spec is not None:
+            stroke, width = stroke_spec
             lines.append(f"    style {sid} stroke:{stroke},stroke-width:{width}")
     for s in stages:
         sid = s.get("id", s["_filename"])

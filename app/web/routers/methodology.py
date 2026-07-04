@@ -7,7 +7,8 @@ import yaml
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, PlainTextResponse
 
-from app.web.config import templates
+from app.services import node_review, versioning
+from app.web.config import EXAMPLES_DIR, templates
 from app.web.diagrams import TYPE_CLASS, TYPE_GLYPH, build_er_diagram, build_mermaid_graph
 from app.web.loading import (
     find_stage,
@@ -33,7 +34,15 @@ async def index(request: Request):
 @router.get("/methodology/{methodology}", response_class=HTMLResponse)
 async def methodology_view(request: Request, methodology: str):
     stages = load_stages(methodology)
-    mermaid = build_mermaid_graph(stages, methodology)
+    # Node-review layer: colour the DAG by belief (approved/unreviewed/rejected/
+    # edited_stale) on first paint, drive the coverage badge, and list versions.
+    decisions = node_review.load_node_decisions(EXAMPLES_DIR / methodology)
+    review_by_id = {
+        s["id"]: node_review.approval_state_for(s, decisions)["state"]
+        for s in stages if s.get("id")
+    }
+    coverage = node_review.coverage_for(stages, decisions)
+    mermaid = build_mermaid_graph(stages, methodology, review_by_id=review_by_id)
     return templates.TemplateResponse(
         request,
         "methodology.html",
@@ -41,6 +50,8 @@ async def methodology_view(request: Request, methodology: str):
             "methodology": methodology,
             "stages": stages,
             "mermaid": mermaid,
+            "coverage": coverage,
+            "versions": versioning.list_versions(EXAMPLES_DIR / methodology),
             "type_class": TYPE_CLASS,
             "type_glyph": TYPE_GLYPH,
             "get_input_ids": get_input_ids,
