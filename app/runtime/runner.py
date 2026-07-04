@@ -140,7 +140,7 @@ def prepare_run(
 
     `limits` is a per-RUN row-cap override: {stage_id: N} truncates that
     stage's output to its first N rows for this run only, overriding any
-    static `limit:` in the stage YAML. `offsets` ({stage_id: M}) drops the
+    static `limit:` in the stage spec. `offsets` ({stage_id: M}) drops the
     first M rows BEFORE the cap is applied — together they page through a
     deterministic ordering (offset 5 + limit 3 = rows 6-8). Both are recorded
     in the manifest (`limit_overrides` / `offset_overrides`) so the slice is

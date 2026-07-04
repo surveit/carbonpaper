@@ -36,9 +36,11 @@ async def methodology_view(request: Request, methodology: str):
     # Node-review layer: colour the DAG by belief (approved/unreviewed/rejected/
     # edited_stale) on first paint, drive the coverage badge, and list versions.
     # node_review speaks canonical spec dicts, so each typed Stage is dumped
-    # back to its spec dict for hashing.
+    # back to its spec dict for hashing (mode="json" matches json.loads of the
+    # persisted file exactly, so both spellings of a spec hash identically).
     decisions = node_review.load_node_decisions(EXAMPLES_DIR / methodology)
-    spec_dicts = [s.model_dump(by_alias=True, exclude_none=True) for s in stages]
+    spec_dicts = [s.model_dump(mode="json", by_alias=True, exclude_none=True)
+                  for s in stages]
     review_by_id = {
         s.id: node_review.approval_state_for(spec, decisions)["state"]
         for s, spec in zip(stages, spec_dicts)

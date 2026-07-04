@@ -14,7 +14,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import yaml
+import json
+
 from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 
@@ -29,8 +30,10 @@ router = APIRouter()
 
 def _spec_dict(stage: Stage) -> dict:
     """The canonical spec dict node_review hashes — a typed Stage dumped back
-    to its on-disk mapping (aliases restored, unset optionals omitted)."""
-    return stage.model_dump(by_alias=True, exclude_none=True)
+    to its on-disk mapping (aliases restored, unset optionals omitted).
+    mode="json" so the dict equals json.loads of the persisted file exactly:
+    both spellings of a spec hash identically."""
+    return stage.model_dump(mode="json", by_alias=True, exclude_none=True)
 
 
 def _review_by_id(stages: list[Stage], decisions) -> dict[str, str]:
@@ -81,7 +84,7 @@ async def node_review_partial(request: Request, methodology: str, stage_id: str)
             "methodology": methodology,
             "stage": stage,
             "review": review,
-            "raw_yaml": yaml.safe_dump(_spec_dict(stage), sort_keys=False, allow_unicode=True),
+            "raw_json": stage.model_dump_json(indent=2, by_alias=True, exclude_none=True),
             "function_code": resolve_function_code(stage),
             "type_class": TYPE_CLASS,
             "type_glyph": TYPE_GLYPH,
@@ -133,10 +136,10 @@ async def node_decide(
 async def node_edit(
     methodology: str,
     stage_id: str,
-    yaml_text: str = Form(...),
+    spec_text: str = Form(...),
 ):
-    """The ONLY writer into compiled/. Parse the posted YAML, validate it with
-    validate_stage, and — only if it's clean — write it back to compiled/<id>.yaml.
+    """The ONLY writer into compiled/. Parse the posted JSON, validate it with
+    validate_stage, and — only if it's clean — write it back to compiled/<id>.json.
     On validation issues return 400 with the issue list and write NOTHING (fail
     loudly, never a silent partial write). Editing changes the spec's content hash,
     so an approved node auto-drops to edited_stale until re-approved; we return the
@@ -145,17 +148,17 @@ async def node_edit(
     if not methodology_dir.is_dir():
         raise HTTPException(status_code=404, detail=f"No methodology '{methodology}'")
 
-    # Parse the posted YAML. A parse error is the reviewer's, not ours — surface it
+    # Parse the posted JSON. A parse error is the reviewer's, not ours — surface it
     # as a validation issue (400), file untouched.
     try:
-        parsed = yaml.safe_load(yaml_text)
-    except yaml.YAMLError as exc:
+        parsed = json.loads(spec_text)
+    except json.JSONDecodeError as exc:
         return JSONResponse(
-            {"ok": False, "issues": [f"YAML parse error: {exc}"]}, status_code=400
+            {"ok": False, "issues": [f"JSON parse error: {exc}"]}, status_code=400
         )
     if not isinstance(parsed, dict):
         return JSONResponse(
-            {"ok": False, "issues": ["edited spec must be a YAML mapping (a single stage dict)"]},
+            {"ok": False, "issues": ["edited spec must be a JSON object (a single stage)"]},
             status_code=400,
         )
 
@@ -169,7 +172,7 @@ async def node_edit(
     if parsed_id != stage_id:
         return JSONResponse(
             {"ok": False,
-             "issues": [f"id in the edited YAML ('{parsed_id}') must equal the node id '{stage_id}'"]},
+             "issues": [f"id in the edited spec ('{parsed_id}') must equal the node id '{stage_id}'"]},
             status_code=400,
         )
 
@@ -183,14 +186,13 @@ async def node_edit(
     # job). Find the on-disk file for this stage id via the same loader convention.
     compiled_dir = methodology_dir / "compiled"
     target: Path | None = None
-    for yaml_file in sorted(compiled_dir.glob("*.yaml")):
+    for json_file in sorted(compiled_dir.glob("*.json")):
         try:
-            with yaml_file.open("r", encoding="utf-8") as f:
-                data = yaml.safe_load(f) or {}
-        except yaml.YAMLError:
+            data = json.loads(json_file.read_text(encoding="utf-8")) or {}
+        except json.JSONDecodeError:
             continue
-        if data.get("id") == stage_id:
-            target = yaml_file
+        if isinstance(data, dict) and data.get("id") == stage_id:
+            target = json_file
             break
     if target is None:
         raise HTTPException(
@@ -198,13 +200,15 @@ async def node_edit(
             detail=f"No existing compiled file for stage '{stage_id}' in {methodology}",
         )
 
-    with target.open("w", encoding="utf-8") as f:
-        yaml.safe_dump(stage, f, sort_keys=False, allow_unicode=True)
+    # Write the VALIDATED stage's canonical dump (the same shape the compiler
+    # persists and every read path hashes), not the reviewer's raw text.
+    validated = Stage.model_validate(stage)
+    target.write_text(
+        validated.model_dump_json(indent=2, by_alias=True, exclude_none=True),
+        encoding="utf-8",
+    )
 
-    # Hash the PARSED stage's spec dict, not the raw posted mapping — the same
-    # convention every read path uses, so the returned hash matches what the
-    # DAG recolour poll will compute from the file we just wrote.
-    spec = _spec_dict(Stage.model_validate(stage))
+    spec = _spec_dict(validated)
     new_hash = node_review.node_content_hash(spec)
     decisions = node_review.load_node_decisions(methodology_dir)
     state = node_review.approval_state_for(spec, decisions)["state"]
