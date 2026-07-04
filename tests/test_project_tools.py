@@ -1,10 +1,11 @@
 import json
 from pathlib import Path
-from typing import Callable
+from typing import Any, Callable
 
 import pytest
 
 from app.chat import project_tools
+from app.errors import RegenerateWithoutSnapshotError
 
 # Minimal valid handle block per stage type (app/models/stage.py:
 # Stage._handle_for_type requires exactly one, keyed by `type`). Mirrors
@@ -184,3 +185,110 @@ def test_grep_doc_caps_at_50_lines(tmp_path: Path) -> None:
     matches = _tool(tools, "grep_doc")(str(doc), "needle")
 
     assert len(matches.splitlines()) == 50
+
+
+# ─── compile_workflow (offline: monkeypatch the compiler, never call an LLM) ───
+
+_FRESH_COMPILE_RESULT: dict[str, Any] = {
+    "name": "alpha",
+    "stages": [_stage("load", "Load rows", "input_data")],
+    "methodology_raw": "# Methodology\ncompiled from doc",
+    "compiler_notes": [],
+    "validation": [],
+    "prompt": "prompt text",
+    "raw_llm": "raw llm text",
+}
+
+_INVALID_COMPILE_RESULT: dict[str, Any] = {
+    "name": "alpha",
+    "stages": [{"id": "load", "name": "Load rows", "type": "not_a_real_type"}],
+    "methodology_raw": "# Methodology\nbad draft",
+    "compiler_notes": [],
+    "validation": ["load: unknown stage type 'not_a_real_type'"],
+    "prompt": "prompt text",
+    "raw_llm": "raw llm text",
+}
+
+
+def _patch_compiler(monkeypatch: pytest.MonkeyPatch, result: dict[str, Any], doc_text: str = "prose") -> None:
+    monkeypatch.setattr(project_tools, "read_input", lambda path: doc_text)
+    monkeypatch.setattr(project_tools, "compile_prose_to_workflow", lambda text, name: result)
+
+
+def test_compile_workflow_fresh_project_writes_compiled_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    pdir = _seed(tmp_path, "alpha")
+    _patch_compiler(monkeypatch, _FRESH_COMPILE_RESULT)
+    tools = project_tools.make_project_tools("alpha", examples_dir=tmp_path)
+
+    doc = tmp_path / "doc.md"
+    doc.write_text("prose", encoding="utf-8")
+    out = _tool(tools, "compile_workflow")(str(doc))
+
+    assert out == {"ok": True, "stages": ["load"]}
+    written = json.loads((pdir / "compiled" / "01_load.json").read_text(encoding="utf-8"))
+    assert written["name"] == "Load rows"
+
+
+def test_compile_workflow_reviewed_work_without_confirm_raises(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    pdir = _seed(tmp_path, "alpha")
+    _patch_compiler(monkeypatch, _FRESH_COMPILE_RESULT)
+    tools = project_tools.make_project_tools("alpha", examples_dir=tmp_path)
+
+    # Approve the seeded "load" stage so review work exists.
+    from app.models import Stage
+    from app.services import loader, node_review
+
+    seeded = json.loads((pdir / "compiled" / "01_load.json").read_text(encoding="utf-8"))
+    current_hash = node_review.node_content_hash(loader.stage_to_spec_dict(Stage.model_validate(seeded)))
+    node_review.record_node_decision(pdir, stage_id="load", content_hash=current_hash, decision="approve", reviewer="human")
+
+    doc = tmp_path / "doc.md"
+    doc.write_text("prose", encoding="utf-8")
+    with pytest.raises(RegenerateWithoutSnapshotError):
+        _tool(tools, "compile_workflow")(str(doc))
+
+    # nothing overwritten, no version created
+    assert json.loads((pdir / "compiled" / "01_load.json").read_text(encoding="utf-8")) == seeded
+    assert not (pdir / "versions").exists()
+
+
+def test_compile_workflow_confirm_overwrite_snapshots_then_writes(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    pdir = _seed(tmp_path, "alpha")
+    _patch_compiler(monkeypatch, _FRESH_COMPILE_RESULT)
+    tools = project_tools.make_project_tools("alpha", examples_dir=tmp_path)
+
+    from app.models import Stage
+    from app.services import loader, node_review
+
+    seeded = json.loads((pdir / "compiled" / "01_load.json").read_text(encoding="utf-8"))
+    current_hash = node_review.node_content_hash(loader.stage_to_spec_dict(Stage.model_validate(seeded)))
+    node_review.record_node_decision(pdir, stage_id="load", content_hash=current_hash, decision="approve", reviewer="human")
+
+    doc = tmp_path / "doc.md"
+    doc.write_text("prose", encoding="utf-8")
+    out = _tool(tools, "compile_workflow")(str(doc), True)
+
+    assert out == {"ok": True, "stages": ["load"]}
+    versions = list((pdir / "versions").iterdir())
+    assert len(versions) == 1
+    snapshot_meta = json.loads((versions[0] / "version.json").read_text(encoding="utf-8"))
+    assert snapshot_meta["reviewer"] == "agent"
+    # the snapshot preserves the PRE-regenerate (approved) spec
+    snapshotted_stage = json.loads((versions[0] / "compiled" / "01_load.json").read_text(encoding="utf-8"))
+    assert snapshotted_stage == seeded
+
+
+def test_compile_workflow_validation_issues_writes_nothing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    pdir = _seed(tmp_path, "alpha")
+    before = (pdir / "compiled" / "01_load.json").read_text(encoding="utf-8")
+    _patch_compiler(monkeypatch, _INVALID_COMPILE_RESULT)
+    tools = project_tools.make_project_tools("alpha", examples_dir=tmp_path)
+
+    doc = tmp_path / "doc.md"
+    doc.write_text("prose", encoding="utf-8")
+    out = _tool(tools, "compile_workflow")(str(doc))
+
+    assert out["ok"] is False
+    assert out["issues"] == _INVALID_COMPILE_RESULT["validation"]
+    assert (pdir / "compiled" / "01_load.json").read_text(encoding="utf-8") == before
+    assert list((pdir / "compiled").glob("*.json")) == [pdir / "compiled" / "01_load.json"]
