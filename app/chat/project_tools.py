@@ -11,7 +11,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Callable
 
-from app.services import workspace
+from app.services import stage_edit, versioning, workspace
 from app.services.loader import find_stage_file
 
 
@@ -35,4 +35,28 @@ def make_project_tools(name: str, *, examples_dir: Path) -> list[Callable[..., A
             raise ValueError(f"no stage '{stage_id}' in project '{name}'")
         return target.read_text(encoding="utf-8")
 
-    return [list_projects, describe_workflow, read_stage]
+    def edit_stage(stage_id: str, spec_json: str) -> dict[str, Any]:
+        """Replace one stage's spec with `spec_json` (the full stage as JSON). The
+        spec is validated first; if invalid, nothing is written and the issues are
+        returned. A successful edit drops the node to 'edited_stale' (amber) for a
+        human to re-approve — you cannot approve it yourself. The `id` in the JSON
+        must equal `stage_id`."""
+        result = stage_edit.edit_stage_spec(project_dir, stage_id, spec_json)
+        return {
+            "ok": result.ok,
+            "issues": result.issues,
+            "content_hash": result.content_hash,
+            "state": result.state,
+        }
+
+    def create_version(message: str) -> dict[str, Any]:
+        """Snapshot the current compiled/ (+ schemas/ if present) as an immutable
+        version, freezing review coverage. Do this before regenerating from scratch
+        so prior work is never lost. Recorded with reviewer='agent'."""
+        existing = versioning.list_versions(project_dir)
+        parent = existing[0]["id"] if existing else None
+        return versioning.create_version(
+            project_dir, message=message, reviewer="agent", parent_version=parent
+        )
+
+    return [list_projects, describe_workflow, read_stage, edit_stage, create_version]
