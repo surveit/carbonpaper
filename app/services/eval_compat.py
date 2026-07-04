@@ -11,7 +11,8 @@ from dataclasses import dataclass, field
 from typing import Sequence
 
 from app.models import (EvalConfig, EvalRunSettings, Methodology, Stage,
-                        TableSchema, resolve_eval_run_settings)
+                        TableSchema, resolve_eval_run_settings,
+                        validate_methodology_stages)
 
 _NUMERIC_TYPES = {"int", "float"}
 
@@ -88,6 +89,24 @@ def check_eval_compatibility(config: EvalConfig,
             problems.append(f"key column `{k}` is not in the cases table")
         if target_types and k not in target_types:
             problems.append(f"key column `{k}` is not emitted by target `{target.id}`")
+
+    # A reference override on the target stage would make the target its own
+    # override, which has no coherent path to resolve — report it rather than
+    # letting it reach resolve_eval_run_settings.
+    target_collisions = [ov.stage_id for ov in config.reference_overrides
+                          if ov.stage_id == config.target_stage]
+    for sid in target_collisions:
+        problems.append(f"reference override `{sid}` cannot be the target stage")
+
+    # The stage list itself may have cross-stage problems (dangling input,
+    # duplicate id, cycle) that a per-file validator wouldn't catch.
+    structural_issues = validate_methodology_stages(list(stages))
+    if structural_issues:
+        problems.append("cannot verify the path: the workflow has structural "
+                        "problems: " + "; ".join(structural_issues))
+
+    if target_collisions or structural_issues:
+        return CompatibilityReport(ok=False, problems=problems, settings=None)
 
     # Condition 5: the path must preserve grain, unless a code scorer takes over.
     methodology = Methodology.model_validate(

@@ -207,3 +207,26 @@ def test_grain_blocking_stage_with_code_scorer_is_not_a_problem():
     report = check_eval_compatibility(config, [src, agg, tgt])
     assert report.ok is True
     assert report.problems == []
+
+
+def test_reference_override_stage_equals_target_stage():
+    # A reference override on the target stage would make resolve_eval_run_settings
+    # raise; check_eval_compatibility must catch this itself and report it instead.
+    config = _config(reference_overrides=[{"stage_id": "tgt", "table": _ref()}])
+    report = check_eval_compatibility(config, _stages())
+    assert report.ok is False
+    assert any("tgt" in p for p in report.problems)
+    assert report.settings is None
+
+
+def test_stages_list_has_a_structural_problem():
+    # A dangling input elsewhere in the stage list must not reach
+    # Methodology.model_validate uncaught — it should surface as a problem string.
+    src = _file_input("src", cols=["k", "v", "quote"])
+    tgt = _row("tgt", ["src"], output_schema={
+        "columns": [{"name": "k"}, {"name": "score", "type": "float"}]})
+    dangling = _row("dangling", ["missing_input"])
+    report = check_eval_compatibility(_config(), [src, tgt, dangling])
+    assert report.ok is False
+    assert any("structural problems" in p for p in report.problems)
+    assert report.settings is None
