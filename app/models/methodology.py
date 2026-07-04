@@ -2,7 +2,9 @@
 cross-stage checks (unique ids, inputs resolve, acyclic).
 
 The graph checks are plain functions so they can be tested on their own and read
-without wading through a validator.
+without wading through a validator. Each returns a list of human-readable issue
+strings ([] means it found nothing) — the whole batch is collected so one call
+surfaces every problem, not just the first.
 """
 from __future__ import annotations
 
@@ -14,31 +16,43 @@ from app.models.schema import _Base, format_errors
 from app.models.stage import Stage
 
 
-def check_unique_ids(stages: list[Stage]) -> None:
+def check_unique_ids(stages: list[Stage]) -> list[str]:
+    """One issue per stage id that appears more than once."""
     ids = [s.id for s in stages]
     dupes = sorted({i for i in ids if ids.count(i) > 1})
-    if dupes:
-        raise ValueError(f"duplicate stage id(s): {dupes}")
+    return [f"duplicate stage id `{d}`" for d in dupes]
 
 
-def check_inputs_resolve(stages: list[Stage]) -> None:
+def check_inputs_resolve(stages: list[Stage]) -> list[str]:
+    """One issue per input that names no existing stage — all of them, so a
+    reviewer fixes every dangling edge in one pass rather than one per re-run."""
     ids = {s.id for s in stages}
+    issues: list[str] = []
     for s in stages:
         for upstream in s.input_ids:
             if upstream not in ids:
-                raise ValueError(f"`{s.id}`: input `{upstream}` references no stage")
+                issues.append(f"`{s.id}`: input `{upstream}` references no stage")
+    return issues
 
 
-def detect_cycle(stages: list[Stage]) -> None:
+def detect_cycle(stages: list[Stage]) -> list[str]:
+    """A one-item list naming the first cycle found, or [] if acyclic. One cycle
+    is enough to reject the DAG; we don't enumerate them all."""
     edges = {s.id: list(s.input_ids) for s in stages}
     WHITE, GRAY, BLACK = 0, 1, 2
     color = {sid: WHITE for sid in edges}
+    found: list[str] = []
 
     def visit(node: str, path: list[str]) -> None:
+        if found:
+            return
         color[node] = GRAY
         for nxt in edges.get(node, []):
+            if found:
+                return
             if color.get(nxt) == GRAY:
-                raise ValueError(f"cycle detected: {' -> '.join(path + [node, nxt])}")
+                found.append(f"cycle detected: {' -> '.join(path + [node, nxt])}")
+                return
             if color.get(nxt) == WHITE:
                 visit(nxt, path + [node])
         color[node] = BLACK
@@ -46,6 +60,14 @@ def detect_cycle(stages: list[Stage]) -> None:
     for sid in edges:
         if color[sid] == WHITE:
             visit(sid, [])
+    return found
+
+
+def graph_issues(stages: list[Stage]) -> list[str]:
+    """Every cross-stage problem in the DAG: duplicate ids, dangling inputs, and
+    a cycle. The single source of truth both the strict model validator and the
+    non-fatal `validate_methodology_stages` build on."""
+    return check_unique_ids(stages) + check_inputs_resolve(stages) + detect_cycle(stages)
 
 
 class Methodology(_Base):
@@ -54,9 +76,9 @@ class Methodology(_Base):
 
     @model_validator(mode="after")
     def _validate_dag(self) -> "Methodology":
-        check_unique_ids(self.stages)
-        check_inputs_resolve(self.stages)
-        detect_cycle(self.stages)
+        issues = graph_issues(self.stages)
+        if issues:
+            raise ValueError("; ".join(issues))
         return self
 
 
@@ -77,11 +99,6 @@ def validate_methodology(stages: list[dict[str, Any]]) -> list[str]:
 
 def validate_methodology_stages(stages: list[Stage]) -> list[str]:
     """Cross-stage checks (unique ids, inputs resolve, acyclic) on
-    already-validated stages, as human-readable issue strings."""
-    issues: list[str] = []
-    for check in (check_unique_ids, check_inputs_resolve, detect_cycle):
-        try:
-            check(stages)
-        except ValueError as exc:
-            issues.append(str(exc))
-    return issues
+    already-validated stages, as human-readable issue strings — every problem,
+    not just the first."""
+    return graph_issues(stages)

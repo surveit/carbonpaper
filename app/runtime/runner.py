@@ -26,7 +26,7 @@ from typing import Any
 import pandas as pd
 
 from app.models import Stage
-from app.models.loader import MethodologyLoadError
+from app.services.loader import MethodologyLoadError
 from app.services import versioning
 
 from .stages import HANDLERS, HaltForReview

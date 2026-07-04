@@ -11,7 +11,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
-from app.models.loader import MethodologyLoadError, load_methodology_stages
+from app.services.loader import MethodologyLoadError, load_methodology_stages
 from app.runtime.preview import PREVIEWABLE_TYPES, PreviewError, run_stage_preview
 from app.runtime.runner import prepare_run, resume_run, run_prepared
 from app.web.config import EXAMPLES_DIR, REPO_ROOT, templates

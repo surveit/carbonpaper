@@ -43,7 +43,7 @@ def test_raw_stage():
 def test_trigger_run_returns_400_on_invalid_dag(monkeypatch):
     from pathlib import Path
 
-    from app.models.loader import MethodologyLoadError
+    from app.services.loader import MethodologyLoadError
     import app.web.routers.runs as runs_router
 
     def _boom(methodology_dir, repo_root):
@@ -58,7 +58,7 @@ def test_trigger_run_returns_400_on_invalid_dag(monkeypatch):
 def test_resume_returns_400_on_invalid_dag(monkeypatch, tmp_path):
     from pathlib import Path
 
-    from app.models.loader import MethodologyLoadError
+    from app.services.loader import MethodologyLoadError
     import app.web.routers.runs as runs_router
 
     def _boom(methodology_dir):

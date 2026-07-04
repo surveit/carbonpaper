@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 import yaml
 
-from app.models.loader import (
+from app.services.loader import (
     MethodologyLoadError,
     load_compiled_dir,
     load_methodology_stages,

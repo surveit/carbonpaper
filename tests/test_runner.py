@@ -148,7 +148,7 @@ def test_distinct_input_rows_pass(tmp_path):
 def test_invalid_stage_rejected_before_run(tmp_path):
     """A contract-invalid stage must fail the run at load — no run dir, no
     partial execution, no empty-dataframe fallback."""
-    from app.models.loader import MethodologyLoadError
+    from app.services.loader import MethodologyLoadError
 
     (tmp_path / "compiled").mkdir(parents=True)
     bad = {"id": "load", "name": "Load", "type": "input_data",

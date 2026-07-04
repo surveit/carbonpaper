@@ -13,7 +13,7 @@ import pandas as pd
 from fastapi import HTTPException
 
 from app.models import Stage
-from app.models.loader import CompiledStageFile, load_compiled_dir
+from app.services.loader import CompiledStageFile, load_compiled_dir
 from app.web.config import EXAMPLES_DIR, REPO_ROOT
 
 
@@ -31,9 +31,10 @@ def list_methodologies() -> list[str]:
 
 @dataclass
 class StageListing:
-    """Compiled stages for the viewer: the valid stages, the files that failed
-    validation (rendered as a banner, not a crash), and each stage's filename
-    order prefix for display."""
+    """Compiled stages for the viewer. All-or-nothing: if every file is valid,
+    `stages` holds them and `issues` is empty; if ANY file is invalid, `stages`
+    is empty and `issues` names the broken files. `order` maps stage id →
+    filename order prefix (empty when there are issues)."""
     stages: list[Stage]
     issues: list[CompiledStageFile]
     order: dict[str, str]
@@ -44,14 +45,17 @@ def load_stages(methodology: str) -> StageListing:
     if not compiled_dir.is_dir():
         raise HTTPException(status_code=404, detail=f"No compiled stages for {methodology}")
     entries = load_compiled_dir(compiled_dir)
+    issues = [e for e in entries if e.issues]
+    if issues:
+        # One invalid file breaks the whole workflow — its edges no longer
+        # resolve, so the surviving stages form a DAG with holes. Rendering that
+        # is "unusable but lies." Return no stages, only the issues, so the
+        # viewer shows what's broken instead of a false graph.
+        return StageListing(stages=[], issues=issues, order={})
     stages = [e.stage for e in entries if e.stage is not None]
     order = {e.stage.id: e.filename.split("_", 1)[0]
              for e in entries if e.stage is not None}
-    return StageListing(
-        stages=stages,
-        issues=[e for e in entries if e.issues],
-        order=order,
-    )
+    return StageListing(stages=stages, issues=[], order=order)
 
 
 def find_stage(stages: list[Stage], stage_id: str) -> Stage | None:

@@ -25,7 +25,7 @@ consistently.
 
 Dependency note: this module may import app.services.node_review (to freeze coverage) and
 app.models, but nothing from app.runtime or app.compiler. Version snapshots are
-parsed through the same strict loader as the working copy (app.models.loader),
+parsed through the same strict loader as the working copy (app.services.loader),
 so a version's stages load identically to the working copy's.
 """
 
@@ -40,7 +40,7 @@ from typing import Any
 import yaml
 
 from app.models import Stage
-from app.models.loader import load_methodology_stages
+from app.services.loader import load_methodology_stages
 from app.services import node_review
 
 
@@ -68,7 +68,7 @@ def _load_stages_from(compiled_dir: Path) -> list[dict[str, Any]]:
 def load_version_stages(methodology_dir: Path, version_id: str) -> list[Stage]:
     """Load the compiled stages frozen in versions/<version_id>/compiled/ as
     typed Stage objects, through the same strict loader the runner uses for a
-    working copy (app.models.loader) — an invalid snapshot raises
+    working copy (app.services.loader) — an invalid snapshot raises
     MethodologyLoadError rather than executing. Fails loudly if the version dir
     is missing rather than falling back to the working copy (a run pinned to a
     version must read THAT version)."""

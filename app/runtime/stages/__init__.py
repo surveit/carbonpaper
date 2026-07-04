@@ -19,7 +19,12 @@ from .llm_transform import handle_llm_transform
 from .publish import handle_publish
 from .python_functions import handle_python_frame_function, handle_python_row_function
 
-HANDLERS: dict[str, Callable[[Stage, dict[str, pd.DataFrame], dict[str, Any]], pd.DataFrame | None]] = {
+# A stage handler: given the stage spec, its inputs keyed by upstream id, and the
+# run context, produce the stage's output frame (or None for side-effect-only
+# stages like publish).
+StageHandler = Callable[[Stage, dict[str, pd.DataFrame], dict[str, Any]], pd.DataFrame | None]
+
+HANDLERS: dict[str, StageHandler] = {
     "input_data": handle_input_data,
     "python_row_function": handle_python_row_function,
     "python_frame_function": handle_python_frame_function,

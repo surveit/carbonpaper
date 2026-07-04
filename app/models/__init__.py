@@ -68,12 +68,9 @@ from app.models.eval import (
     StageOutputOverride,
     resolve_eval_run_settings,
 )
-from app.models.loader import (
-    CompiledStageFile,
-    MethodologyLoadError,
-    load_compiled_dir,
-    load_methodology_stages,
-)
+# NOTE: the compiled-stage loader lives in app.services.loader (it does
+# filesystem I/O, which is service work, not schema). Import it from there;
+# app.models stays a pure, side-effect-free schema package.
 
 __all__ = [
     "StageType", "ConnectorKind", "FileFormat", "AggFormula", "JoinType",
@@ -93,7 +90,4 @@ __all__ = [
     # eval contract
     "StageOutputOverride", "ExpectedColumn", "CodeScorer", "EvalConfig",
     "EvalRunSettings", "resolve_eval_run_settings", "EvalRun",
-    # loader
-    "CompiledStageFile", "MethodologyLoadError", "load_compiled_dir",
-    "load_methodology_stages",
 ]
