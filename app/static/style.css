@@ -1091,3 +1091,46 @@ td.row-num, th.row-num { text-align: right; color: #98a1b3; font-variant-numeric
 
 /* Run-detail: "ran against version" line. */
 .ran-against { margin-top: 2px; }
+
+/* Eval pathway popover on the methodology page. Rows are deliberately plain
+   list items -- typographic, not node-shaped -- so they read as a status
+   list rather than a miniature copy of the workflow graph. */
+.eval-popover { position: relative; display: inline-block; }
+.eval-popover-list {
+    list-style: none; margin: 4px 0 0; padding: 0;
+    position: absolute; z-index: 20; right: 0; min-width: 320px; max-width: 480px;
+    background: var(--bg, #fff); border: 1px solid var(--border); border-radius: 6px;
+    box-shadow: 0 4px 14px rgba(0,0,0,.12);
+}
+.eval-popover-row {
+    display: flex; align-items: center; gap: 8px; padding: 8px 12px;
+    border-bottom: 1px solid var(--border); cursor: pointer; font-size: .88rem;
+}
+.eval-popover-row:last-child { border-bottom: none; }
+.eval-popover-row:hover { background: var(--hover); }
+.eval-popover-name { font-weight: 600; }
+.eval-popover-row code { margin-left: auto; font-size: .8rem; color: #666; }
+
+/* Pathway pin: dim everything except the selected eval's overridden/executing/
+   target stages. Opacity is used for de-emphasis (rather than a stroke
+   colour) so it never collides with the node's belief-review stroke. */
+.eval-dim { opacity: .35; }
+.eval-overridden rect { stroke-dasharray: 5 4 !important; }
+.eval-target rect { stroke-width: 3px !important; }
+
+#eval-pathway-pill {
+    display: inline-flex; align-items: center; gap: 6px; margin: 0 0 1rem;
+    padding: .2rem .6rem; border-radius: 5px; font-size: .85rem;
+    background: var(--hover); border: 1px solid var(--border);
+}
+#eval-pathway-pill[hidden] { display: none; }
+.eval-pill-close {
+    border: none; background: none; cursor: pointer; font-size: .85rem;
+    color: inherit; padding: 0; line-height: 1;
+}
+
+/* Stage page: "Evals touching this stage" panel. */
+.eval-touch-list { list-style: none; margin: 0; padding: 0; }
+.eval-touch-list li { display: flex; align-items: center; gap: 8px; padding: 4px 0; }
+.eval-role { color: #666; font-size: .85rem; }
+.quiet-warning { color: #888; font-size: .9rem; }

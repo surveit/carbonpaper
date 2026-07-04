@@ -38,8 +38,34 @@
         <a href="/methodology/{{ methodology }}/data-model" class="btn">Data model</a>
         <a href="/methodology/{{ methodology }}/runs" class="btn">All runs</a>
         <a href="/methodology/{{ methodology }}/evals" class="btn">Evals</a>
+        <details class="eval-popover">
+            <summary class="btn">Evals ({{ eval_overlay|length }})</summary>
+            {% if eval_overlay %}
+            <ul class="eval-popover-list">
+                {% for e in eval_overlay %}
+                <li class="eval-popover-row" data-eval-id="{{ e.id }}">
+                    <span class="badge {{ {'run succeeded': 'ok', 'stale': 'warn', 'never run': 'pending', 'run errored': 'err', 'broken': 'err'}.get(e.status, 'pending') }}">{{ e.status }}</span>
+                    <span class="eval-popover-name">{{ e.name }}</span>
+                    <code>{{ e.overridden|join(', ') }} → {{ e.target }}</code>
+                    <a href="{{ e.url }}">view</a>
+                </li>
+                {% endfor %}
+            </ul>
+            {% else %}
+            <div class="empty-state">
+                <p>No evals yet</p>
+            </div>
+            {% endif %}
+        </details>
     </div>
 </div>
+
+{% if uncovered %}
+<div class="alert warn">{{ uncovered|length }} stage(s) have no eval coverage: {{ uncovered|join(', ') }}</div>
+{% endif %}
+
+<span id="eval-pathway-pill" hidden></span>
+<script type="application/json" id="eval-overlay-data">{{ eval_overlay | tojson }}</script>
 <p class="lede">{{ stages|length }} compiled stage{% if stages|length != 1 %}s{% endif %}. Click any node in the DAG (or any row in the table) to <strong>review</strong> that step — approve, reject, or edit its spec — in the right panel. Node colour = <em>belief</em> (do we trust how it's modeled). Click <strong>Run pipeline</strong> to execute end-to-end.</p>
 
 {% if load_issues %}
@@ -228,6 +254,77 @@
       }
     });
   }
+})();
+</script>
+
+<script>
+(function () {
+  // Eval pathway overlay: clicking a popover row pins that eval's pathway on
+  // the workflow graph (dim everything else) and shows a dismissable pill.
+  const dataEl = document.getElementById('eval-overlay-data');
+  const overlay = dataEl ? JSON.parse(dataEl.textContent) : [];
+  const pill = document.getElementById('eval-pathway-pill');
+
+  // Mermaid (observed here: mermaid@11, flowchart LR) renders each node's
+  // <g class="node"> with id="flowchart-<stageId>-<n>" where <n> is an
+  // internal sequence number. Also match a bare-id fallback in case a future
+  // mermaid version (or a differently configured graph) drops the prefix.
+  function nodeEl(stageId) {
+    const svg = document.querySelector('.dag svg');
+    if (!svg) return null;
+    return svg.querySelector(
+      `[id^="flowchart-${stageId}-"], [id="flowchart-${stageId}"], [id="${stageId}"]`
+    );
+  }
+
+  function clearPathway() {
+    document.querySelectorAll('.dag svg g.node').forEach(function (g) {
+      g.classList.remove('eval-dim', 'eval-overridden', 'eval-target');
+    });
+    if (pill) { pill.hidden = true; pill.textContent = ''; }
+  }
+
+  function showPathway(entry) {
+    const allNodes = document.querySelectorAll('.dag svg g.node');
+    allNodes.forEach(function (g) { g.classList.add('eval-dim'); });
+    const pathwayIds = entry.overridden.concat(entry.executing, entry.target ? [entry.target] : []);
+    pathwayIds.forEach(function (sid) {
+      const g = nodeEl(sid);
+      if (g) g.classList.remove('eval-dim');
+    });
+    entry.overridden.forEach(function (sid) {
+      const g = nodeEl(sid);
+      if (g) g.classList.add('eval-overridden');
+    });
+    if (entry.target) {
+      const g = nodeEl(entry.target);
+      if (g) g.classList.add('eval-target');
+    }
+    if (pill) {
+      pill.hidden = false;
+      pill.textContent = '';
+      const label = document.createTextNode('pathway: ' + entry.name + ' ');
+      const closeBtn = document.createElement('button');
+      closeBtn.type = 'button';
+      closeBtn.className = 'eval-pill-close';
+      closeBtn.textContent = '✕';
+      closeBtn.addEventListener('click', clearPathway);
+      pill.appendChild(label);
+      pill.appendChild(closeBtn);
+    }
+  }
+
+  const overlayById = {};
+  overlay.forEach(function (e) { overlayById[e.id] = e; });
+
+  document.querySelectorAll('.eval-popover-row').forEach(function (row) {
+    row.addEventListener('click', function (ev) {
+      // Let the "view" link navigate normally instead of pinning the pathway.
+      if (ev.target.closest('a')) return;
+      const entry = overlayById[row.getAttribute('data-eval-id')];
+      if (entry) showPathway(entry);
+    });
+  });
 })();
 </script>
 {% endblock %}

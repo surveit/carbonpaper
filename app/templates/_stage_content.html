@@ -45,6 +45,25 @@
     {{ schema_table(stage.output_schema) }}
 </section>
 
+{% if evals_exist %}
+<section class="eval-panel">
+    <h2>Evals touching this stage</h2>
+    {% if stage_evals %}
+    <ul class="eval-touch-list">
+        {% for e in stage_evals %}
+        <li>
+            <a href="{{ e.url }}">{{ e.name }}</a>
+            <span class="badge {{ {'run succeeded': 'ok', 'stale': 'warn', 'never run': 'pending', 'run errored': 'err', 'broken': 'err'}.get(e.status, 'pending') }}">{{ e.status }}</span>
+            <span class="eval-role">{{ e.role }}</span>
+        </li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <p class="quiet-warning">No eval covers this stage.</p>
+    {% endif %}
+</section>
+{% endif %}
+
 {% include "_stage_executable.html" %}
 
 {% if stage.eval %}

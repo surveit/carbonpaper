@@ -11,6 +11,7 @@ from fastapi.testclient import TestClient
 
 import app.web.loading as loading
 import app.web.routers.evals as evals_router
+import app.web.routers.methodology as methodology_router
 from app.main import app
 
 client = TestClient(app)
@@ -185,6 +186,7 @@ def tmp_examples(tmp_path, monkeypatch):
 
     monkeypatch.setattr(loading, "EXAMPLES_DIR", examples_root)
     monkeypatch.setattr(evals_router, "EXAMPLES_DIR", examples_root)
+    monkeypatch.setattr(methodology_router, "EXAMPLES_DIR", examples_root)
     # config.table.path is repo-root-relative (same convention input_data
     # stages use: repo_root / params["path"]) -- point REPO_ROOT at tmp_path
     # so the fixture's "examples/tm/eval_data/cases.csv" resolves for real.
@@ -288,3 +290,102 @@ def test_methodology_page_has_evals_link(tmp_examples):
     r = client.get(f"/methodology/{METHODOLOGY}")
     assert r.status_code == 200
     assert ">Evals<" in r.text
+
+
+# ── methodology page: eval pathway overlay ──────────────────────────────────
+def test_methodology_page_has_overlay_data_with_eval_id(tmp_examples):
+    r = client.get(f"/methodology/{METHODOLOGY}")
+    assert r.status_code == 200
+    assert 'id="eval-overlay-data"' in r.text
+    assert "valid-eval" in r.text
+
+
+def test_methodology_page_popover_shows_status(tmp_examples):
+    r = client.get(f"/methodology/{METHODOLOGY}")
+    assert r.status_code == 200
+    assert "eval-popover" in r.text
+    assert "never run" in r.text
+    assert "broken" in r.text
+
+
+def test_methodology_page_zero_evals_shows_no_evals_yet_and_no_warning(tmp_path, monkeypatch):
+    examples_root = tmp_path / "examples"
+    examples_root.mkdir()
+    _write_methodology(examples_root, METHODOLOGY)
+    monkeypatch.setattr(loading, "EXAMPLES_DIR", examples_root)
+    monkeypatch.setattr(evals_router, "EXAMPLES_DIR", examples_root)
+    monkeypatch.setattr(methodology_router, "EXAMPLES_DIR", examples_root)
+    monkeypatch.setattr(evals_router, "REPO_ROOT", tmp_path)
+
+    r = client.get(f"/methodology/{METHODOLOGY}")
+    assert r.status_code == 200
+    assert "No evals yet" in r.text
+    assert "have no eval coverage" not in r.text
+
+
+def test_methodology_page_uncovered_stage_names_it(tmp_path, monkeypatch):
+    """publish is not on any eval's pathway when only valid-eval exists (it
+    only covers input_data -> llm_transform), so the warning strip should name
+    it."""
+    examples_root = tmp_path / "examples"
+    examples_root.mkdir()
+    meth_dir = _write_methodology(examples_root, METHODOLOGY)
+    _valid_config_yaml(meth_dir)
+    monkeypatch.setattr(loading, "EXAMPLES_DIR", examples_root)
+    monkeypatch.setattr(evals_router, "EXAMPLES_DIR", examples_root)
+    monkeypatch.setattr(methodology_router, "EXAMPLES_DIR", examples_root)
+    monkeypatch.setattr(evals_router, "REPO_ROOT", tmp_path)
+
+    r = client.get(f"/methodology/{METHODOLOGY}")
+    assert r.status_code == 200
+    assert "have no eval coverage" in r.text
+    assert "publish" in r.text
+
+
+# ── stage partial: evals touching this stage ────────────────────────────────
+def test_stage_partial_shows_overridden_eval(tmp_examples):
+    r = client.get(f"/methodology/{METHODOLOGY}/stage/input_data/partial")
+    assert r.status_code == 200
+    assert "Valid eval" in r.text
+    assert "overridden" in r.text
+
+
+def test_stage_partial_shows_target_eval(tmp_examples):
+    r = client.get(f"/methodology/{METHODOLOGY}/stage/llm_transform/partial")
+    assert r.status_code == 200
+    assert "Valid eval" in r.text
+    assert "target" in r.text
+
+
+def test_stage_partial_no_coverage_warning_line(tmp_path, monkeypatch):
+    """publish has no coverage when only valid-eval exists (which only
+    touches input_data/llm_transform) -- the stage panel should show the
+    quiet one-line warning, not omit the section (evals DO exist for the
+    methodology, just not for this stage)."""
+    examples_root = tmp_path / "examples"
+    examples_root.mkdir()
+    meth_dir = _write_methodology(examples_root, METHODOLOGY)
+    _valid_config_yaml(meth_dir)
+    monkeypatch.setattr(loading, "EXAMPLES_DIR", examples_root)
+    monkeypatch.setattr(evals_router, "EXAMPLES_DIR", examples_root)
+    monkeypatch.setattr(methodology_router, "EXAMPLES_DIR", examples_root)
+    monkeypatch.setattr(evals_router, "REPO_ROOT", tmp_path)
+
+    r = client.get(f"/methodology/{METHODOLOGY}/stage/publish/partial")
+    assert r.status_code == 200
+    assert "No eval covers this stage." in r.text
+
+
+def test_stage_partial_omits_eval_panel_when_zero_evals(tmp_path, monkeypatch):
+    examples_root = tmp_path / "examples"
+    examples_root.mkdir()
+    _write_methodology(examples_root, METHODOLOGY)
+    monkeypatch.setattr(loading, "EXAMPLES_DIR", examples_root)
+    monkeypatch.setattr(evals_router, "EXAMPLES_DIR", examples_root)
+    monkeypatch.setattr(methodology_router, "EXAMPLES_DIR", examples_root)
+    monkeypatch.setattr(evals_router, "REPO_ROOT", tmp_path)
+
+    r = client.get(f"/methodology/{METHODOLOGY}/stage/publish/partial")
+    assert r.status_code == 200
+    assert "No eval covers this stage." not in r.text
+    assert "Evals touching this stage" not in r.text
