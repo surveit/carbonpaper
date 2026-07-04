@@ -90,7 +90,7 @@ def test_per_run_override_for_unknown_stage_id_fails_loudly(tmp_path):
 
 def _two_stage_methodology(root, rows: list[dict]):
     """input_data loading `rows` from CSV, feeding an identity
-    python_transform. Exercises the runner's per-stage input checks."""
+    python_frame_function. Exercises the runner's per-stage input checks."""
     (root / "compiled").mkdir(parents=True)
     (root / "data").mkdir(parents=True)
     pd.DataFrame(rows).to_csv(root / "data" / "items.csv", index=False)
@@ -100,7 +100,7 @@ def _two_stage_methodology(root, rows: list[dict]):
                       "params": {"path": "data/items.csv", "format": "csv"}},
     }
     consume = {
-        "id": "consume", "name": "Consume items", "type": "python_transform",
+        "id": "consume", "name": "Consume items", "type": "python_frame_function",
         "inputs": [{"id": "load"}],
         "function": {"kind": "inline",
                      "code": "def transform(df):\n    return df\n"},

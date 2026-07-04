@@ -38,7 +38,7 @@
 <h2>All schemas</h2>
 <p class="lede">The same information laid out as tables, grouped by stage type. Click a stage id to jump to its detail.</p>
 
-{% set type_order = ["input_data", "join", "python_transform", "aggregate", "llm_transform", "human_review_queue", "publish"] %}
+{% set type_order = ["input_data", "join", "python_row_function", "python_frame_function", "aggregate", "llm_transform", "human_review_queue", "publish"] %}
 {% for tname in type_order %}
     {% set group = stages | selectattr("type", "equalto", tname) | list %}
     {% if group %}

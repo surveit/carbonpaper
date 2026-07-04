@@ -1,6 +1,6 @@
 id: importance_tagging
 name: Tag evidence with importance + recency weight
-type: python_transform
+type: python_row_function
 
 source:
   doc: examples/lobbymap/stages/05_importance_tagging.md

@@ -2,19 +2,20 @@
 
 This is the contract a stage YAML must satisfy. Every stage is *executable* in principle: it declares typed inputs, a typed output, and an executable handle (connector / prompt / function / join / aggregation / queue / publish). The compiler does not produce prose blobs dressed as YAML.
 
-## The seven stage types
+## The eight stage types
 
 | Type | What it does | Executable handle |
 |---|---|---|
 | `input_data` | Declares a source dataset with a typed schema. | `connector:` block (file/http/scrape/api/manual_upload/sql) |
 | `llm_transform` | Row-by-row LLM call producing structured output. | `llm:` block (model + prompt template + rubric) |
-| `python_transform` | Arbitrary Python over upstream dataframes. | `function:` block (inline code or module:fn ref) |
+| `python_row_function` | Python mapped **per input row** by the runtime — one row in, one row out. Single input. | `function:` block (inline code or module:fn ref) |
+| `python_frame_function` | Python over the whole upstream frame(s) — may reshape (group-by, pivot, dedup, multi-input merge). | `function:` block |
 | `join` | Combine two or more upstream dataframes on keys. | `join:` block (keys + type) |
 | `aggregate` | Structured group-by aggregation. | `aggregate:` block (group_by + ops) |
 | `human_review_queue` | Pulls flagged rows from upstream, emits reviewed rows. | `queue:` block |
 | `publish` | Render final artifact (table, json, html, evidence cards). | `publish:` block |
 
-Anything that doesn't fit one of these structured types must be a `python_transform` with a compiler_note explaining why.
+**Strongly prefer `python_row_function`.** It receives one row (a dict) and returns one row (a dict); the runtime maps it, so its 1:1 grain is *guaranteed* (not merely claimed) and evals can score straight through it. Reach for `python_frame_function` only when the logic genuinely needs the whole frame — grouping, ranking, deduping, or merging more than one input — and say why in a compiler_note. Anything that doesn't fit a structured type is a `python_frame_function` (or a `python_row_function` if it's a pure per-row map) with a compiler_note explaining why.
 
 ## Universal stage shape
 
@@ -67,7 +68,7 @@ llm:              # llm_transform only
     "+2": ...
     "-2": ...
 
-function:         # python_transform only
+function:         # python_row_function / python_frame_function
   kind: inline    # or module
   code: |
     import pandas as pd
@@ -156,7 +157,7 @@ weighted_mean       — requires value_column + weight_column
 weighted_sum        — requires value_column + weight_column
 ```
 
-Anything non-trivial belongs in a `python_transform`, not in an `aggregate`.
+Anything non-trivial belongs in a `python_frame_function`, not in an `aggregate`.
 
 ## Filling in details from prose
 

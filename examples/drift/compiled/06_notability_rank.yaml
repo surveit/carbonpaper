@@ -1,6 +1,6 @@
 id: notability_rank
 name: Rank members by notability
-type: python_transform
+type: python_frame_function
 
 source:
   doc: examples/drift/methodology_raw.md

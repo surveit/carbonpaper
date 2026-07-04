@@ -23,12 +23,11 @@ def _file_input(id_):
     return S(id=id_, type="input_data", connector={"kind": "file"})
 
 
-def _py(id_, inputs, granularity=None, **kw):
-    fn = {"kind": "inline", "code": "x"}
-    if granularity is not None:
-        fn["granularity"] = granularity
-    return S(id=id_, type="python_transform", inputs=[{"id": i} for i in inputs],
-             function=fn, **kw)
+def _py(id_, inputs, granularity="frame", **kw):
+    """granularity 'row' -> python_row_function, else python_frame_function."""
+    type_ = "python_row_function" if granularity == "row" else "python_frame_function"
+    return S(id=id_, type=type_, inputs=[{"id": i} for i in inputs],
+             function={"kind": "inline", "code": "x"}, **kw)
 
 
 def _ref(path="x.csv", cols=("k",)):
@@ -36,16 +35,21 @@ def _ref(path="x.csv", cols=("k",)):
             "table_schema": {"columns": [{"name": c} for c in cols]}}
 
 
-# ── TransformGranularity + is_grain_preserving ───────────────────────────────
-def test_python_defaults_to_frame():
-    s = m.Stage.model_validate(_py("t", ["a"]))
-    assert s.function.granularity is m.TransformGranularity.frame
-    assert s.is_grain_preserving is False
+# ── is_grain_preserving (fixed by stage type) ────────────────────────────────
+def test_python_frame_function_not_grain_preserving():
+    assert m.Stage.model_validate(_py("t", ["a"])).is_grain_preserving is False
 
 
-def test_python_row_is_grain_preserving():
-    s = m.Stage.model_validate(_py("t", ["a"], granularity="row"))
-    assert s.is_grain_preserving is True
+def test_python_row_function_is_grain_preserving():
+    assert m.Stage.model_validate(_py("t", ["a"], granularity="row")).is_grain_preserving is True
+
+
+def test_python_row_function_rejects_multiple_inputs():
+    # a row function maps over one input's rows — two inputs is a join
+    with pytest.raises(ValidationError):
+        m.Stage.model_validate(S(id="t", type="python_row_function",
+                                 inputs=[{"id": "a"}, {"id": "b"}],
+                                 function={"kind": "inline", "code": "x"}))
 
 
 def test_llm_is_grain_preserving():

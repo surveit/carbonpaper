@@ -24,7 +24,15 @@ from app.models.schema import (
 class StageType(str, Enum):
     input_data = "input_data"
     llm_transform = "llm_transform"
-    python_transform = "python_transform"
+    # Two Python transforms, distinguished by how the runtime invokes them (which
+    # is what makes the grain guarantee real rather than a claim):
+    #   python_row_function   — runtime maps the function over the input's rows,
+    #                           one row in → one row out. It never sees the frame,
+    #                           so it *cannot* fan out / fan in. Prefer this.
+    #   python_frame_function — runtime hands it the whole frame(s); it may reshape
+    #                           (group-by, pivot, dedup, multi-input merge).
+    python_row_function = "python_row_function"
+    python_frame_function = "python_frame_function"
     # Trailing underscore: a member literally named `join` would shadow
     # str.join on every instance. The value — what YAML declares and
     # StageType("join") looks up — is still "join".
@@ -75,23 +83,6 @@ class PublishFormat(str, Enum):
     evidence_cards = "evidence_cards"
 
 
-class TransformGranularity(str, Enum):
-    """What a transform sees, and therefore whether its rows stay aligned 1:1.
-
-    row   — invoked per input row: one row in, one row out. Row identity is kept
-            by construction.
-    frame — sees the whole table (`f(df) -> df`) and may reshape it (group-by,
-            pivot, dedup, sort). Row identity is not recoverable.
-
-    This is only a meaningful *claim* on a `python_transform`, where the function
-    body is opaque — and it defaults to `frame` there, so a plain Python stage is
-    assumed to reshape unless it declares `row`. Every other stage type has a
-    granularity fixed by its type (see `Stage.is_grain_preserving`).
-    """
-    row = "row"
-    frame = "frame"
-
-
 # ── Executable-handle blocks (each self-validates) ───────────────────────────
 class Connector(_Base):
     """input_data handle."""
@@ -121,16 +112,14 @@ class LLMConfig(_Base):
 
 
 class PythonFunction(_Base):
-    """python_transform (and publish) handle."""
+    """Handle for python_row_function / python_frame_function (and publish). The
+    row-vs-frame distinction lives in the stage `type`, not here — the runtime
+    reads the type to decide whether to invoke this per row or per frame."""
     kind: FunctionKind
     code: Optional[str] = None
     module: Optional[str] = None
     function: Optional[str] = None
     requirements: list[str] = Field(default_factory=list)
-    # Whether the body maps rows 1:1 (`row`) or reshapes the frame (`frame`).
-    # Defaults to `frame`: an opaque Python body is assumed to reshape unless it
-    # claims otherwise. Only `row` unlocks a declarative eval through this stage.
-    granularity: TransformGranularity = TransformGranularity.frame
 
     @model_validator(mode="after")
     def _kind_fields(self) -> "PythonFunction":
@@ -207,9 +196,11 @@ class ReviewConfig(_Base):
 # type → which handle block it must carry, plus input arity.
 _TYPE_SPEC: dict[StageType, dict[str, Any]] = {
     StageType.input_data:         {"handle": "connector", "requires_inputs": False, "min_inputs": 0},
-    StageType.llm_transform:      {"handle": "llm",       "requires_inputs": True,  "min_inputs": 1},
-    StageType.python_transform:   {"handle": "function",  "requires_inputs": True,  "min_inputs": 1},
-    StageType.join_:              {"handle": "join",      "requires_inputs": True,  "min_inputs": 2},
+    StageType.llm_transform:        {"handle": "llm",       "requires_inputs": True,  "min_inputs": 1},
+    # A row function maps over ONE input's rows — more than one input is a join.
+    StageType.python_row_function:  {"handle": "function",  "requires_inputs": True,  "min_inputs": 1, "max_inputs": 1},
+    StageType.python_frame_function:{"handle": "function",  "requires_inputs": True,  "min_inputs": 1},
+    StageType.join_:                {"handle": "join",      "requires_inputs": True,  "min_inputs": 2},
     StageType.aggregate:          {"handle": "aggregate", "requires_inputs": True,  "min_inputs": 1},
     StageType.human_review_queue: {"handle": "queue",     "requires_inputs": True,  "min_inputs": 1},
     StageType.publish:            {"handle": "publish",   "also_requires": ["function"], "requires_inputs": True, "min_inputs": 1},
@@ -267,17 +258,21 @@ class Stage(_Base):
             raise ValueError(
                 f"type `{self.type.value}` needs >= {spec['min_inputs']} input(s), got {len(self.inputs)}"
             )
+        max_inputs = spec.get("max_inputs")
+        if max_inputs is not None and len(self.inputs) > max_inputs:
+            raise ValueError(
+                f"type `{self.type.value}` takes <= {max_inputs} input(s), got {len(self.inputs)} "
+                f"(more than one input is a join, or use python_frame_function)"
+            )
         return self
 
     @property
     def is_grain_preserving(self) -> bool:
         """Does one input row map to exactly one output row? This is the v1 eval
         gate: a declarative (single-table, row-aligned) eval can only tap a node
-        reached through grain-preserving stages.
-
-        Fixed by stage type, except `python_transform`, whose function declares
-        its granularity (default `frame`):
-          - python_transform   → its function is `row`
+        reached through grain-preserving stages. Fixed entirely by stage type:
+          - python_row_function → yes (runtime maps it per row — enforced 1:1)
+          - python_frame_function → NO (may reshape the frame)
           - llm_transform      → yes (per-row 1:1 in v1; a fan-out LLM like
                                  doc→pieces is out of scope until fan-out evals)
           - input_data         → yes (originates the rows)
@@ -285,10 +280,8 @@ class Stage(_Base):
           - join (fan-out) / aggregate (fan-in) → NO; grain changes are deferred
           - publish            → terminal, never a tap target
         """
-        if self.type is StageType.python_transform:
-            return (self.function is not None
-                    and self.function.granularity is TransformGranularity.row)
         return self.type in (
+            StageType.python_row_function,
             StageType.llm_transform,
             StageType.input_data,
             StageType.human_review_queue,

@@ -24,7 +24,7 @@ recent window (e.g., 2026-01). Both are scraped JSONL records keyed by
 
 ## §3 Per-member input pairing
 
-A python_transform builds one row per member containing:
+A python_frame_function builds one row per member containing:
 - member identity (name, party, state, chamber)
 - list of {title, body excerpt, date, url} for the early window (up to 30, sorted by date)
 - same for the recent window
@@ -56,7 +56,7 @@ quotes; only assert drift if you can cite specific evidence.
 
 ## §5 Notability ranking
 
-A python_transform sorts members by `notability_score` descending and
+A python_frame_function sorts members by `notability_score` descending and
 attaches metadata (party, chamber, total releases). Output is the
 ranked list, top-N selected for publish.
 
