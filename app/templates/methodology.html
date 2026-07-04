@@ -277,14 +277,19 @@
     );
   }
 
-  function clearPathway() {
+  function stripPathwayClasses() {
     document.querySelectorAll('.dag svg g.node').forEach(function (g) {
       g.classList.remove('eval-dim', 'eval-overridden', 'eval-target');
     });
+  }
+
+  function clearPathway() {
+    stripPathwayClasses();
     if (pill) { pill.hidden = true; pill.textContent = ''; }
   }
 
   function showPathway(entry) {
+    stripPathwayClasses();
     const allNodes = document.querySelectorAll('.dag svg g.node');
     allNodes.forEach(function (g) { g.classList.add('eval-dim'); });
     const pathwayIds = entry.overridden.concat(entry.executing, entry.target ? [entry.target] : []);
