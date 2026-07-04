@@ -143,6 +143,32 @@ layer's job (§6); the lineage layer never filters.
 
 ## 6. The view layer (rendering; may read payloads, clearly demarcated)
 
+### 6.1 How a user sees a trace
+
+Three rules, in order of decision weight:
+
+1. **Lineage is stored in sidecar files, never as columns on the data tables.**
+   `lineage/<stage_id>.parquet` sits next to `outputs/<stage_id>.parquet` in the run
+   directory; a stage's output table is byte-identical to what it would be without
+   this feature. (Burning edges onto tables wouldn't even fit — a fan-in output row
+   has many edges, i.e. lineage is a separate relation, not extra columns.)
+2. **Traces are computed on demand, keyed by `(run_id, stage_id, row ordinal)`.**
+   A trace is a cheap graph walk over the sidecars plus row lookups in persisted
+   outputs — nothing is precomputed or stored per trace. The primary surface is the
+   run viewer: the existing per-stage table views gain a per-row "show your work"
+   action at `run/<run_id>/<stage_id>/<row>`, rendering the hop cards of §5. A
+   claim's sub-row position (its field inside the payload) travels as a query
+   parameter and drives payload narrowing (§6.2, item 2) only — the walk itself is
+   row-grain.
+3. **The published dossier is a static client of the same tracer.** A reader of the
+   HTML artifact has no server, so the publish stage calls the same trace function
+   the viewer route calls, inlines the (capped, elided) rendering per claim, and
+   writes the complete trace JSON alongside as the raw companion
+   (`artifacts/palm_tier2/traces/<facility_id>.json`). One tracer, two callers —
+   never a second lineage mechanism for the static case.
+
+### 6.2 Derived annotations
+
 The renderer consumes (a) the lineage subgraph, (b) the persisted stage outputs, and
 (c) the recorded LLM-column lists. On top of verbatim rows it adds only these derived
 annotations — this list is exhaustive; anything else is scope creep to be rejected:
@@ -162,16 +188,17 @@ annotations — this list is exhaustive; anything else is scope creep to be reje
    lineage.
 4. **Counts.** N rows in → M rows out per hop; "showing K of N" when display caps.
 
-**Reader renderer (built now):** each dossier claim row expands to hop cards, newest
-hop first. Deterministic 1:1 hops collapsed by default; URLs shortened; huge cells
-elided per record markers. The HTML inlines what it renders (self-contained, no
-server); the complete trace record JSON sits alongside as the raw companion
-(`artifacts/palm_tier2/traces/<facility_id>.json`).
+### 6.3 The two renderings
 
-**Author renderer (deferred):** full depth over the same record — every hop expanded,
-elided cells resolved against the run dir. Guards taken now so it stays additive: the
-record keeps `(stage_id, row ordinal)` for every row so any hop re-joins to run
-outputs; the tracer is a standalone module with the publish stage as one caller.
+**Run-viewer view (primary surface):** hop cards at `run/<run_id>/<stage_id>/<row>`,
+newest hop first, computed on request per §6.1. Deterministic 1:1 hops collapsed by
+default; URLs shortened; huge cells elided with markers, expandable since the server
+has the run dir. This is also where the deferred author-depth features (full column
+sets, every hop expanded) later attach — same route, deeper display.
+
+**Dossier view (static):** each claim row in the published HTML expands to the same
+hop cards, inlined at publish time per §6.1 rule 3, with the trace JSON companion
+carrying anything the inlined view capped or elided.
 
 ## 7. Corner cases and decided behavior
 
