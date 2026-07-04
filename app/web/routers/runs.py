@@ -12,6 +12,7 @@ from fastapi import APIRouter, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 from app.services.loader import WorkflowLoadError, load_workflow
+from app.services.project import project_state
 from app.runtime.preview import PREVIEWABLE_TYPES, PreviewError, run_stage_preview
 from app.runtime.runner import (
     NoVersionToRunError,
@@ -74,10 +75,20 @@ async def trigger_run(project: str):
 
 @router.get("/project/{project}/runs", response_class=HTMLResponse)
 async def runs_index(request: Request, project: str):
+    """RUNS section of the project shell: the runs list, framed by the sidebar. Passes
+    the SAME project_state the other sections do (so the sidebar / next-action agree)
+    plus the manifest-backed run rows. 404 if the project dir doesn't exist."""
+    pdir = EXAMPLES_DIR / project
+    if not pdir.is_dir():
+        raise HTTPException(status_code=404, detail=f"No project '{project}'")
     return templates.TemplateResponse(
         request,
-        "runs_index.html",
-        {"project": project, "runs": list_runs(project)},
+        "section_runs.html",
+        {
+            "state": project_state(pdir),
+            "section": "runs",
+            "runs": list_runs(project),
+        },
     )
 
 

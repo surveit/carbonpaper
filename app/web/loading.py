@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 import pandas as pd
+import yaml
 from fastapi import HTTPException
 
 from app.models import Stage
@@ -19,14 +20,74 @@ from app.web.config import EXAMPLES_DIR, REPO_ROOT
 
 # ─── Projects & stages ──────────────────────────────────────────────────
 
-def list_projects() -> list[str]:
+def list_projects() -> list[dict[str, Any]]:
+    """One project card per dir under examples/ that has EITHER a workflow
+    (compiled/*.json) OR a data model (schemas/*.yaml). Returns the shape the home
+    dashboard renders: name, what's authored (has_workflow / has_schemas), and the
+    counts shown on the badge (stages, schema docs, runs). Sorted by name.
+
+    Every count is read off disk — a card never advertises a stage/schema/run that
+    isn't there. A dir with neither a workflow nor a data model is not a project yet
+    and is omitted (not shown as an empty card). A run counts only if it has a
+    manifest.json (mirrors list_runs), so the count is real runs, never inflated."""
     if not EXAMPLES_DIR.exists():
         return []
-    return [
-        p.name
-        for p in sorted(EXAMPLES_DIR.iterdir())
-        if p.is_dir() and (p / "compiled").is_dir()
-    ]
+    out: list[dict[str, Any]] = []
+    for p in sorted(EXAMPLES_DIR.iterdir()):
+        if not p.is_dir():
+            continue
+        compiled_dir = p / "compiled"
+        schemas_dir = p / "schemas"
+        n_stages = len(list(compiled_dir.glob("*.json"))) if compiled_dir.is_dir() else 0
+        has_workflow = n_stages > 0
+        has_schemas = schemas_dir.is_dir() and any(schemas_dir.glob("*.yaml"))
+        # A schemas/*.yaml may hold multiple docs — count the loaded docs, not files.
+        n_schemas = len(load_schemas(p)) if has_schemas else 0
+        rdir = p / "runs"
+        n_runs = (
+            sum(1 for r in rdir.iterdir() if r.is_dir() and (r / "manifest.json").exists())
+            if rdir.is_dir() else 0
+        )
+        if not (has_workflow or has_schemas):
+            continue
+        out.append({
+            "name": p.name,
+            "has_workflow": has_workflow,
+            "has_schemas": has_schemas,
+            "n_stages": n_stages,
+            "n_schemas": n_schemas,
+            "n_runs": n_runs,
+        })
+    return out
+
+
+def load_schemas(project_dir: Path) -> list[dict[str, Any]]:
+    """Load the named-schema data model from <project_dir>/schemas/*.yaml. Each file
+    may hold one or many schemas (multi-doc YAML). Returns [] if the project has no
+    data model yet. A YAML parse error surfaces as an _error schema rather than
+    dropping the file silently."""
+    schemas_dir = Path(project_dir) / "schemas"
+    if not schemas_dir.is_dir():
+        return []
+    schemas: list[dict[str, Any]] = []
+    for yaml_file in sorted(schemas_dir.glob("*.yaml")):
+        with yaml_file.open("r", encoding="utf-8") as f:
+            try:
+                for doc in yaml.safe_load_all(f):
+                    if not doc:
+                        continue
+                    doc["_filename"] = yaml_file.name
+                    schemas.append(doc)
+            except yaml.YAMLError as exc:
+                schemas.append({
+                    "name": yaml_file.stem,
+                    "title": f"[YAML ERROR] {yaml_file.name}",
+                    "kind": "reference",
+                    "notes": f"YAML parse error: {exc}",
+                    "_filename": yaml_file.name,
+                    "_error": True,
+                })
+    return schemas
 
 
 @dataclass
@@ -56,6 +117,16 @@ def load_stages(project: str) -> StageListing:
     order = {e.stage.id: e.filename.split("_", 1)[0]
              for e in entries if e.stage is not None}
     return StageListing(stages=stages, issues=[], order=order)
+
+
+def load_stages_or_empty(project: str) -> StageListing:
+    """Like load_stages, but returns an EMPTY listing instead of 404 when the project
+    has no compiled/ workflow yet. For the shell's workflow section, which renders the
+    locked/empty page (not an error) for a project that has no workflow authored."""
+    compiled_dir = EXAMPLES_DIR / project / "compiled"
+    if not compiled_dir.is_dir():
+        return StageListing(stages=[], issues=[], order={})
+    return load_stages(project)
 
 
 def find_stage(stages: list[Stage], stage_id: str) -> Stage | None:
