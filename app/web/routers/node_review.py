@@ -1,4 +1,4 @@
-"""Node-level review + workflow versioning: the "reviewable workflow" layer.
+"""Node-level review + workflow versioning: the "node review" layer.
 
 NODE review = "do we trust HOW this step is modeled?" — colours the workflow by a
 content-hash approval state, and does NOT halt a run. (Distinct from the ROW
