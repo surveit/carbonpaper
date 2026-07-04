@@ -14,6 +14,7 @@ Run output layout:
 
 from __future__ import annotations
 
+import hashlib
 import json
 import sys
 import time
@@ -57,6 +58,43 @@ def get_input_id(inp: Any) -> str:
     return inp["id"] if isinstance(inp, dict) else str(inp)
 
 
+def _duplicate_row_groups(df: pd.DataFrame) -> list[list[int]]:
+    """Groups of 0-based row positions whose FULL row content is identical.
+    Identity is a content hash over every column's string-rendered value —
+    the declared primary_key plays no part (it is optional and may
+    legitimately duplicate)."""
+    if df is None or len(df) == 0:
+        return []
+    groups: dict[str, list[int]] = {}
+    for pos, cells in enumerate(df.itertuples(index=False, name=None)):
+        # repr() (not str()) so cells of different types with the same face
+        # value ("1" vs 1) stay distinct, and NaN/None/lists all render.
+        rendered = "\x1f".join(repr(c) for c in cells)
+        digest = hashlib.sha1(rendered.encode("utf-8")).hexdigest()
+        groups.setdefault(digest, []).append(pos)
+    return [positions for positions in groups.values() if len(positions) > 1]
+
+
+def _reject_duplicate_input_rows(df: pd.DataFrame, input_id: str, stage_id: str) -> None:
+    """Fail the stage if an input dataframe contains exact duplicate
+    full-content rows. Duplicates at a stage boundary are ambiguous intent —
+    either an upstream bug, or sampling smuggled in implicitly. If N draws
+    per row are intended, the author adds an explicit row_id/draw_id column
+    upstream, making the rows distinct."""
+    dupes = _duplicate_row_groups(df)
+    if not dupes:
+        return
+    shown = "; ".join(f"rows {group}" for group in dupes[:5])
+    more = f" (+{len(dupes) - 5} more group(s))" if len(dupes) > 5 else ""
+    raise ValueError(
+        f"Input '{input_id}' to stage '{stage_id}' contains exact duplicate "
+        f"rows: {shown}{more} (0-based row numbers). Duplicates at a stage "
+        "boundary are ambiguous intent — an upstream bug, or sampling smuggled "
+        "in implicitly. If N draws per row are intended, add an explicit "
+        "row_id/draw_id column upstream so the rows are distinct."
+    )
+
+
 def _load_stages(methodology_dir: Path) -> list[dict[str, Any]]:
     stages: list[dict[str, Any]] = []
     for f in sorted((methodology_dir / "compiled").glob("*.yaml")):
@@ -97,7 +135,11 @@ def _resolve_version_id(methodology_dir: Path, version_id: str | None) -> str:
 
 
 def prepare_run(
-    methodology_dir: Path, repo_root: Path, version_id: str | None = None
+    methodology_dir: Path,
+    repo_root: Path,
+    version_id: str | None = None,
+    limits: dict[str, int] | None = None,
+    offsets: dict[str, int] | None = None,
 ) -> dict[str, Any]:
     """Create the run dir + id and write an initial `running` manifest (all
     stages pending) so a caller can redirect to the run page immediately and
@@ -108,7 +150,16 @@ def prepare_run(
     immutable snapshot (versioning.load_version_stages), never from the live
     `compiled/` working copy, so working-copy edits can never affect this run.
     `version_id` resolution + auto-create is documented on _resolve_version_id; the
-    resolved id is recorded in the manifest as `dag_version`."""
+    resolved id is recorded in the manifest as `dag_version`.
+
+    `limits` is a per-RUN row-cap override: {stage_id: N} truncates that
+    stage's output to its first N rows for this run only, overriding any
+    static `limit:` in the stage YAML. `offsets` ({stage_id: M}) drops the
+    first M rows BEFORE the cap is applied — together they page through a
+    deterministic ordering (offset 5 + limit 3 = rows 6-8). Both are recorded
+    in the manifest (`limit_overrides` / `offset_overrides`) so the slice is
+    part of the run's provenance and survives a halt/resume. Unknown stage
+    ids fail loudly."""
     runs_dir = methodology_dir / "runs"
     run_id = datetime.now().strftime("%Y%m%dT%H%M%S")
     run_dir = runs_dir / run_id
@@ -119,17 +170,32 @@ def prepare_run(
     stages = versioning.load_version_stages(methodology_dir, dag_version)
     ordered = topological_sort(stages)
 
+    limits = dict(limits or {})
+    offsets = dict(offsets or {})
+    stage_ids = {s["id"] for s in ordered}
+    for flag, mapping in (("--limit", limits), ("--offset", offsets)):
+        unknown = set(mapping) - stage_ids
+        if unknown:
+            raise ValueError(
+                f"{flag} targets unknown stage id(s): {sorted(unknown)}; "
+                f"stages are {[s['id'] for s in ordered]}"
+            )
+
     ctx: dict[str, Any] = {
         "repo_root": repo_root,
         "run_dir": run_dir,
         "methodology_dir": methodology_dir,
         "queue_stats": {},
+        "limits": limits,
+        "offsets": offsets,
     }
     manifest: dict[str, Any] = {
         "run_id": run_id,
         "started_at": datetime.now().isoformat(timespec="seconds"),
         "methodology": methodology_dir.name,
         "dag_version": dag_version,
+        "limit_overrides": limits,
+        "offset_overrides": offsets,
         "status": "running",
         "stages": [
             {"stage_id": s["id"], "type": s["type"], "name": s.get("name", s["id"]),
@@ -154,12 +220,20 @@ def run_prepared(prep: dict[str, Any]) -> dict[str, Any]:
 
 
 def execute_run(
-    methodology_dir: Path, repo_root: Path, version_id: str | None = None
+    methodology_dir: Path,
+    repo_root: Path,
+    version_id: str | None = None,
+    limits: dict[str, int] | None = None,
+    offsets: dict[str, int] | None = None,
 ) -> dict[str, Any]:
     """Run the DAG once (synchronous). Returns the manifest dict. `version_id`
     pins the run to a DAG version (None -> latest existing, else auto-create); see
-    prepare_run / _resolve_version_id."""
-    return run_prepared(prepare_run(methodology_dir, repo_root, version_id))
+    prepare_run / _resolve_version_id. `limits`/`offsets` are per-run row
+    slicing overrides; see prepare_run."""
+    return run_prepared(
+        prepare_run(methodology_dir, repo_root, version_id,
+                    limits=limits, offsets=offsets)
+    )
 
 
 def _execute_stages(
@@ -242,6 +316,7 @@ def _execute_stages(
                 if iid not in outputs_so_far:
                     raise RuntimeError(f"Upstream stage '{iid}' has no output yet")
                 df = outputs_so_far[iid]
+                _reject_duplicate_input_rows(df, iid, sid)
                 inputs_for_stage[iid] = df
                 if isinstance(inp_decl, dict):
                     rep = validate_dataframe(
@@ -270,11 +345,18 @@ def _execute_stages(
             if output is None:
                 output = pd.DataFrame()
 
-            # Generic row cap. `limit:` on any stage truncates its output to
-            # the first N rows (after the handler runs, in the handler's
-            # emitted order). Used here to throttle the expensive Tier-2 LLM
-            # fan-out down to a handful of facilities for a demo/dry run.
-            limit = stage.get("limit")
+            # Generic row slicing, in the handler's emitted order. Offset
+            # (per-run only, from --offset stage=M) drops the first M rows;
+            # then the cap keeps the first N. A per-run cap (--limit stage=N)
+            # wins over the stage YAML's static `limit:`. Used to throttle /
+            # page the expensive LLM fan-out.
+            offset = (ctx.get("offsets") or {}).get(sid)
+            if isinstance(offset, int) and offset > 0 and len(output) > 0:
+                record.setdefault("notes", []).append(
+                    f"offset={offset}: dropped first {min(offset, len(output))} of {len(output)} row(s)"
+                )
+                output = output.iloc[offset:].reset_index(drop=True).copy()
+            limit = (ctx.get("limits") or {}).get(sid, stage.get("limit"))
             if isinstance(limit, int) and limit >= 0 and len(output) > limit:
                 record.setdefault("notes", []).append(
                     f"limit={limit}: truncated from {len(output)} to {limit} row(s)"
@@ -411,6 +493,10 @@ def resume_run(methodology_dir: Path, run_id: str, repo_root: Path) -> dict[str,
         "run_dir": run_dir,
         "methodology_dir": methodology_dir,
         "queue_stats": manifest.get("queue_stats", {}),
+        # Re-apply the run's per-stage row slicing so stages that resume after
+        # a halt honor the same limits/offsets the run started with.
+        "limits": manifest.get("limit_overrides") or {},
+        "offsets": manifest.get("offset_overrides") or {},
     }
 
     manifest["resumed_at"] = datetime.now().isoformat(timespec="seconds")
@@ -419,12 +505,26 @@ def resume_run(methodology_dir: Path, run_id: str, repo_root: Path) -> dict[str,
 
 # CLI entrypoint for ad-hoc runs
 def main() -> int:
-    if len(sys.argv) < 2:
-        print("Usage: python -m app.runtime.runner <methodology_dir>")
+    args = sys.argv[1:]
+    if not args:
+        print("Usage: python -m app.runtime.runner <methodology_dir> "
+              "[--limit <stage_id>=<N> ...] [--offset <stage_id>=<M> ...]")
         return 1
-    methodology_dir = Path(sys.argv[1]).resolve()
+    methodology_dir = Path(args[0]).resolve()
+    limits: dict[str, int] = {}
+    offsets: dict[str, int] = {}
+    i = 1
+    while i < len(args):
+        if args[i] in ("--limit", "--offset") and i + 1 < len(args) and "=" in args[i + 1]:
+            stage_id, _, n = args[i + 1].partition("=")
+            (limits if args[i] == "--limit" else offsets)[stage_id] = int(n)
+            i += 2
+        else:
+            print(f"Unknown argument: {args[i]}")
+            return 1
     repo_root = Path(__file__).resolve().parents[2]
-    manifest = execute_run(methodology_dir, repo_root)
+    manifest = execute_run(methodology_dir, repo_root,
+                           limits=limits or None, offsets=offsets or None)
     print(json.dumps(
         {"run_id": manifest["run_id"], "dag_version": manifest["dag_version"],
          "status": manifest["status"],
