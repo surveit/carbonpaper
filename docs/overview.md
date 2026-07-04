@@ -19,50 +19,43 @@ Two load-bearing rules flow from that and appear throughout the code:
   `human_review_queue` stage halts the run; decisions are content-hashed so they
   survive re-runs and LLM non-determinism.
 
-## What a "methodology" is
+## The vocabulary (locked 2026-07-04; see [naming-refactor.md](naming-refactor.md))
 
-A **methodology** is a directed acyclic graph (DAG) of typed nodes — a data/OSINT
-pipeline expressed as a reviewable artifact instead of opaque generic code. Every
-edge is schema-validated; runs are persisted with a full manifest. The result is an
-AI-driven pipeline that is **testable and reviewable, not a black box**.
+- A **project** is the container: the folder `examples/<name>/` holding
+  everything below.
+- A **methodology** is the authored **prose** method (`methodology_raw.md`) —
+  the thing a journalist writes.
+- A **workflow** is the executable stage graph the methodology compiles into
+  (`compiled/<NN>_<stage_id>.json`, one file per stage) — a directed acyclic
+  graph of typed stages, every edge schema-validated.
 
-A methodology lives in a folder `examples/<name>/`:
-- `compiled/*.yaml` — the **DAG** (one file per stage).
-- `methodology_raw.md` (or `.txt`) — the prose the DAG was distilled from.
-- `code/` — python modules the `python_transform` and `publish` stages call.
-- `data/` — committed input snapshots.
-- `runs/<run_id>/` — persisted run outputs + `manifest.json`.
-- `decisions/` — content-hashed human-review decisions.
-- `versions/<version_id>/` — frozen snapshots of the compiled DAG (see
-  [run-and-review-ui.md](run-and-review-ui.md)).
+A project directory also holds `code/` (python modules stages call), `data/`
+(input snapshots), `runs/<run_id>/` (persisted outputs + `manifest.json`),
+`decisions/` (content-hashed review decisions), and `versions/<version_id>/`
+(frozen workflow snapshots). Project directories are **runtime data, not
+source** — `examples/` is untracked; the historic example projects (lobbymap,
+congresswatch, drift) live on disk and in git history.
 
-## The three features on the DAG artifact
+## The three features on the workflow artifact
 
 | Feature | Code | Status |
 |---|---|---|
-| **Runner** | `app/runtime/` | On master. Executes a DAG: validates I/O between stages, persists outputs + `manifest.json`, halts for human review, resumes. |
-| **Compiler** | — | *Not on master.* Distills prose or an unstructured transcript into a draft DAG; lives in the open PR stack. Don't look for `app/compiler` on master. |
+| **Runner** | `app/runtime/` | On master. Executes a workflow: typed `Stage` objects end-to-end, validates I/O between stages, persists outputs + `manifest.json`, halts for human review, resumes. |
+| **Compiler** | `app/compiler/` | Engine on master: prose → LLM → validated workflow, re-asking the LLM on schema-validation failure (`python -m app.compiler`; persistence in `app/services/compilation.py`). The authoring *UI* is in the open PR stack. |
 | **Eval** | `app/models/eval.py` | Data model only. `EvalConfig` (a row-aligned case table injected at one stage, compared at another) and the grain-preservation gate exist as validated models; no runner integration or committed eval configs yet. |
 
-## The examples
+## Where the product needs to go
 
-Three methodologies are committed as `examples/<name>/`, each a real end-to-end
-exercise rather than a toy:
-
-- **`lobbymap/`** — reproduces the shape of InfluenceMap's LobbyMap (scoring
-  corporate climate-policy engagement per (query × data source) cell against a
-  benchmark). The original domain the stage vocabulary was designed for.
-- **`congresswatch/`** — the same pipeline shape ported to US Congress press
-  releases + lobbying filings, built to stress-test the platform on a second
-  domain. Its findings memo is `examples/congresswatch/FINDINGS.md`, and the
-  resulting product critique is [RETHINK.md](RETHINK.md) — read that for where
-  the product needs to go (discovery views, not per-entity scorecards).
-- **`drift/`** — a geospatial example (GeoJSON inputs).
+[RETHINK.md](RETHINK.md) — written after running the pipeline shape on a second
+domain (US Congress + lobbying) — is the standing product critique: the platform
+serves the workflow *author* well and the journalist barely at all, because the
+journalism questions are cross-entity ("who's the outlier?") while the outputs
+are per-entity. Read it before adding operator-facing features.
 
 ## Where to go next
 
 - New to the code? → [architecture.md](architecture.md) (the code map).
 - Working on the data model / schemas? → [named-schemas.md](named-schemas.md).
 - Working on the run/review UI? → [run-and-review-ui.md](run-and-review-ui.md).
-- Product direction? → [RETHINK.md](RETHINK.md) (the post-CongressWatch critique).
-- Storage + model wiring plan? → [models-and-storage.md](models-and-storage.md).
+- Vocabulary and its rationale? → [naming-refactor.md](naming-refactor.md).
+- Storage convention? → [models-and-storage.md](models-and-storage.md).
