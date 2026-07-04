@@ -45,6 +45,7 @@ from app.models.workflow import (
     detect_cycle,
     parse_workflow,
     validate_workflow,
+    validate_workflow_draft,
 )
 from app.models.named_schemas import (
     NamedColumn,
@@ -174,7 +175,7 @@ __all__ = [
     "PythonFunction", "JoinKey", "JoinConfig", "AggregationOp",
     "AggregateConfig", "QueueConfig", "PublishConfig", "ReviewConfig",
     "InputRef", "Stage", "validate_stage",
-    "Workflow", "parse_workflow", "validate_workflow",
+    "Workflow", "parse_workflow", "validate_workflow", "validate_workflow_draft",
     "check_unique_ids", "check_inputs_resolve", "detect_cycle",
     "SchemaKind", "NamedColumn", "NamedSchema", "SchemaLibrary",
     "parse_schema_library", "validate_schema_library", "validate_named_schema",

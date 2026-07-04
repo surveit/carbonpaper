@@ -1,7 +1,7 @@
 """
 compilation.py — the COMPILATION-OBJECT lifecycle (a service).
 
-The compile MECHANISM (prose → draft DAG) lives in `app.compiler`. This service
+The compile MECHANISM (prose → draft workflow) lives in `app.compiler`. This service
 owns everything around persisting one compile as a first-class object on disk,
 so a web app can create it, poll it, list the index, and load a detail view —
 paralleling how `app.services.versioning` / `app.services.node_review` own their
@@ -10,11 +10,11 @@ object lifecycles, and how `app.runtime.runner` owns a RUN.
 A compilation lives at `<COMPILATIONS_ROOT>/<compilation_id>/` and holds:
   - manifest.json      — "what compiled, ok/invalid/error", polled while running
   - what_happened.json — the input excerpt + LLM prompt + raw response (audit)
-  - dag/               — the DAG output (compiled/NN_<id>.json + methodology_raw.md)
+  - workflow/               — the workflow output (compiled/NN_<id>.json + methodology_raw.md)
 
 Storage-root convention: compilations live under `COMPILATIONS_ROOT` (below). The
 web/CLI callers default to it; tests pass a tmp dir. This mirrors the runner
-deriving `methodology_dir / "runs"` by convention rather than threading a root
+deriving `project_dir / "runs"` by convention rather than threading a root
 literal through every signature.
 """
 
@@ -37,11 +37,11 @@ _INPUT_EXCERPT_CHARS = 4000
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# DAG output — compiled/NN_<id>.json + methodology_raw.md (+ audit json)
+# workflow output — compiled/NN_<id>.json + methodology_raw.md (+ audit json)
 # ─────────────────────────────────────────────────────────────────────────────
 
 def write_methodology(result: dict[str, Any], out_dir: str | Path) -> dict[str, Any]:
-    """Write the compiled DAG to a folder shaped like a methodology artifact:
+    """Write the compiled workflow to a folder shaped like a project artifact:
       <out_dir>/compiled/NN_<id>.json   (one per stage, in order)
       <out_dir>/methodology_raw.md
       <out_dir>/compiler_result.json    (raw alongside cooked: full result, audit)
@@ -148,7 +148,7 @@ def run_prepared_compilation(prep: dict[str, Any]) -> str:
     """Execute a compilation previously set up by prepare_compilation(). Suitable
     for running in a background thread — the manifest on disk is rewritten to its
     terminal state (ok | invalid | error) when done, and the what_happened.json +
-    DAG output are written alongside.
+    workflow output are written alongside.
 
     The compile itself can fail honestly (bad JSON from the model, an exception in
     parsing): in that case status is `error` and the manifest records the reason —
@@ -181,9 +181,9 @@ def run_prepared_compilation(prep: dict[str, Any]) -> str:
     stages = result["stages"]
     issues = result["validation"]
 
-    # ── DAG output: compiled/NN_<id>.json + methodology_raw.md (+ audit json) ──
-    dag_dir = comp_dir / "dag"
-    write_methodology(result, dag_dir)
+    # ── workflow output: compiled/NN_<id>.json + methodology_raw.md (+ audit json) ──
+    workflow_dir = comp_dir / "workflow"
+    write_methodology(result, workflow_dir)
 
     # ── what_happened.json: the input excerpt, the prompt sent, raw response ──
     what_happened = {
@@ -261,10 +261,10 @@ def load_compilation(
     compilation_id: str,
     compilations_root: str | Path = COMPILATIONS_ROOT,
 ) -> dict[str, Any]:
-    """Load a single compilation object (manifest + what_happened + DAG stages +
+    """Load a single compilation object (manifest + what_happened + workflow stages +
     methodology_raw.md) for the detail page. Raises FileNotFoundError if the
     manifest is missing. Tolerates a still-running / errored compile where the
-    what_happened + DAG files do not yet exist."""
+    what_happened + workflow files do not yet exist."""
     comp_dir = Path(compilations_root) / compilation_id
     manifest_path = comp_dir / "manifest.json"
     if not manifest_path.exists():
@@ -277,7 +277,7 @@ def load_compilation(
         what_happened = json.loads(wh_path.read_text(encoding="utf-8"))
 
     stages: list[dict[str, Any]] = []
-    compiled_dir = comp_dir / "dag" / "compiled"
+    compiled_dir = comp_dir / "workflow" / "compiled"
     if compiled_dir.is_dir():
         # Read the draft stages as raw dicts (not typed Stages): the detail view
         # renders whatever compiled, including invalid drafts the strict loader
@@ -291,7 +291,7 @@ def load_compilation(
             stages.append(data)
 
     methodology_raw = ""
-    raw_md_path = comp_dir / "dag" / "methodology_raw.md"
+    raw_md_path = comp_dir / "workflow" / "methodology_raw.md"
     if raw_md_path.exists():
         methodology_raw = raw_md_path.read_text(encoding="utf-8")
 

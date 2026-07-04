@@ -1,15 +1,15 @@
 """
-compiler.py — the COMPILE MECHANISM of the methodology-DAG platform.
+compiler.py — the COMPILE MECHANISM of the workflow platform.
 
 Job: take an UNSTRUCTURED input — a captured agent/tool transcript, working notes,
-or plain prose describing a research process — and DISTILL it into a *draft* DAG:
+or plain prose describing a research process — and DISTILL it into a *draft* workflow:
 a list of compiled stage dicts targeting `app.models`, plus a `methodology_raw.md`
 and `compiler_notes` recording ambiguities.
 
 The approach is deliberately thin: we do NOT pre-parse the input into a structured
 tool-call summary. We treat it as prose, hand it to the LLM with a system prompt
 that frames the models contract (see `app/compiler/prompt.py`), and ask the model
-to emit the DAG as JSON. The model recovers the pipeline; this module is just the
+to emit the workflow as JSON. The model recovers the pipeline; this module is just the
 mechanism around the one call: read → prompt → call → parse → validate.
 
 Pipeline:
@@ -17,9 +17,9 @@ Pipeline:
     compile_methodology(text, ..)  → build the prompt (compiler.prompt), call Claude
                                       (Agent SDK, no tools), parse JSON →
                                       {stages, methodology_raw, compiler_notes}
-    validate(stages)               → models.validate_methodology issues (self-check)
+    validate(stages)               → models.validate_workflow_draft issues (self-check)
 
-Persisting a compile as a first-class object (manifest / what-happened / DAG
+Persisting a compile as a first-class object (manifest / what-happened / workflow
 output on disk) is a SEPARATE concern owned by `app.services.compilation`.
 
 Dependency rule (critical, mirrors models' own): this module imports `app.models`,
@@ -229,7 +229,7 @@ def compile_methodology(
     timeout_s: int = 600,
     max_attempts: int = 3,
 ) -> dict[str, Any]:
-    """End-to-end: prompt Claude to distill the prose `input_text` into a DAG, parse
+    """End-to-end: prompt Claude to distill the prose `input_text` into a workflow, parse
     the JSON, validate, and return {name, stages, methodology_raw, compiler_notes,
     validation, prompt, raw_llm}. Does NOT write files (app.services.compilation does).
 
@@ -283,12 +283,12 @@ def compile_methodology(
         if best is None or len(issues) < len(best["validation"]):
             best = result
         if not issues:
-            break  # clean-validating DAG → done
+            break  # clean-validating workflow → done
 
         # Parsed fine but schema-invalid: feed the specific issues back and re-ask.
         bulleted = "\n".join(f"  - {i}" for i in issues)
         retry_note = (
-            "your previous DAG parsed but FAILED schema validation. Fix ALL of these "
+            "your previous workflow parsed but FAILED schema validation. Fix ALL of these "
             "issues and re-emit the COMPLETE JSON object, keeping everything that was "
             f"already correct:\n{bulleted}"
         )
@@ -303,5 +303,5 @@ def compile_methodology(
 
 def validate(stages: list[dict[str, Any]]) -> list[str]:
     """Self-check: run the generated stages through the schema's own validator.
-    [] means a clean-validating draft DAG."""
-    return models.validate_methodology(stages)
+    [] means a clean-validating draft workflow."""
+    return models.validate_workflow_draft(stages)

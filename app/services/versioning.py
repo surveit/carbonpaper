@@ -128,7 +128,7 @@ def create_version(
     truthful, not an error).
 
     The working copy is strict-loaded first, through the same loader the runner
-    uses; if it is not a valid DAG this raises WorkflowLoadError and writes
+    uses; if it is not a valid workflow this raises WorkflowLoadError and writes
     nothing. Every version is therefore a loadable workflow, from this seam or
     any other."""
     project_dir = Path(project_dir)
@@ -139,7 +139,7 @@ def create_version(
         )
 
     # Validate BEFORE writing anything: a version is, by invariant, a loadable
-    # DAG. On failure load_workflow raises WorkflowLoadError and we
+    # workflow. On failure load_workflow raises WorkflowLoadError and we
     # snapshot nothing — an invalid workflow can never be immortalised as a
     # version. (The run-path strict load then only guards on-disk corruption of
     # an already-valid snapshot.)

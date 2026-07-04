@@ -4,13 +4,13 @@
 <h1>Projects</h1>
 <p class="lede">Each project is a directory under <code>examples/</code> containing a compiled workflow.</p>
 
-{% if methodologies %}
+{% if projects %}
 <ul class="project-list">
-    {% for m in methodologies %}
+    {% for m in projects %}
     <li><a href="/project/{{ m }}">{{ m }}</a></li>
     {% endfor %}
 </ul>
 {% else %}
-<p><em>No methodologies found. Compile some stages into <code>examples/&lt;name&gt;/compiled/</code>.</em></p>
+<p><em>No projects found. Compile some stages into <code>examples/&lt;name&gt;/compiled/</code>.</em></p>
 {% endif %}
 {% endblock %}

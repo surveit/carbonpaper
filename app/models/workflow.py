@@ -10,9 +10,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import model_validator
+from pydantic import ValidationError, model_validator
 
-from app.models.schema import _Base
+from app.models.schema import _Base, format_errors
 from app.models.stage import Stage
 
 
@@ -93,3 +93,16 @@ def validate_workflow(stages: list[Stage]) -> list[str]:
     already-validated stages, as human-readable issue strings — every problem,
     not just the first."""
     return graph_issues(stages)
+
+
+def validate_workflow_draft(stages: list[dict[str, Any]]) -> list[str]:
+    """Non-fatal validation of DRAFT stage dicts (e.g. a compiler's LLM output):
+    parse + validate the whole list and return human-readable issues ([] means a
+    clean-validating draft). Unlike validate_workflow, which runs the graph checks
+    on already-parsed Stages, this also surfaces per-stage schema errors straight
+    from raw dicts, so a caller can show problems instead of crashing."""
+    try:
+        Workflow.model_validate({"stages": list(stages)})
+        return []
+    except ValidationError as err:
+        return format_errors(err)

@@ -1,4 +1,4 @@
-"""Methodology browsing: the workflow view, per-stage detail (full page + partial),
+"""Project browsing: the workflow view, per-stage detail (full page + partial),
 the ER data-model view, and raw stage JSON."""
 
 from __future__ import annotations
