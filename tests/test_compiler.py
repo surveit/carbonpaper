@@ -71,3 +71,50 @@ def test_retry_feeds_decoder_reason_into_next_prompt(monkeypatch):
     # The precise decoder reason is present; the broken output is not echoed back.
     assert "line" in retry_prompt and "column" in retry_prompt
     assert result["stages"] == [{"id": "s1", "type": "input_data"}]
+
+
+def test_retry_feeds_validation_issues_into_next_prompt(monkeypatch):
+    """First attempt parses but FAILS schema validation; second attempt validates.
+    The retry prompt must carry the specific validation issues, and the clean
+    result is returned."""
+    calls: list[str] = []
+    replies = iter([
+        '{"stages": [{"id": "s1", "type": "bad"}]}',         # parses, invalid schema
+        '{"stages": [{"id": "s1", "type": "input_data"}]}',  # parses + valid
+    ])
+
+    def fake_call_llm(prompt_text, model="sonnet", timeout_s=600):
+        calls.append(prompt_text)
+        return next(replies)
+
+    validations = iter([["stage 's1': unknown type 'bad'"], []])
+    monkeypatch.setattr(compiler, "call_llm", fake_call_llm)
+    monkeypatch.setattr(compiler, "validate", lambda stages: next(validations))
+
+    result = compiler.compile_methodology("some prose", "demo", max_attempts=3)
+
+    assert len(calls) == 2
+    retry_prompt = calls[1]
+    assert "# RETRY 2" in retry_prompt
+    assert "FAILED schema validation" in retry_prompt
+    assert "unknown type 'bad'" in retry_prompt  # the concrete issue is handed back
+    assert result["validation"] == []
+    assert result["stages"] == [{"id": "s1", "type": "input_data"}]
+
+
+def test_returns_least_invalid_result_when_never_clean(monkeypatch):
+    """When no attempt validates cleanly, return the fewest-issues candidate with
+    its issues surfaced — an invalid draft is reported, never raised or faked."""
+    replies = iter([
+        '{"stages": [{"id": "a"}]}',
+        '{"stages": [{"id": "a"}, {"id": "b"}]}',
+        '{"stages": [{"id": "a"}]}',
+    ])
+    issue_lists = iter([["i1", "i2"], ["i1"], ["i1", "i2"]])  # attempt 2 is least-invalid
+    monkeypatch.setattr(compiler, "call_llm", lambda *a, **k: next(replies))
+    monkeypatch.setattr(compiler, "validate", lambda stages: next(issue_lists))
+
+    result = compiler.compile_methodology("some prose", "demo", max_attempts=3)
+
+    assert result["validation"] == ["i1"]      # fewest-issues candidate kept
+    assert len(result["stages"]) == 2

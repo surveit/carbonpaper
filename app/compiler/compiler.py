@@ -198,6 +198,30 @@ def _extract_json_object(text: str) -> dict[str, Any]:
 # 4. TOP-LEVEL COMPILE
 # ─────────────────────────────────────────────────────────────────────────────
 
+def _assemble_result(
+    candidate: dict[str, Any],
+    name: str,
+    stages: list[dict[str, Any]],
+    issues: list[str],
+    prompt_text: str,
+    raw: str,
+) -> dict[str, Any]:
+    """Shape one parsed candidate into the compile result dict."""
+    methodology_raw = candidate.get("methodology_raw_md") or candidate.get("methodology_raw") or ""
+    compiler_notes = candidate.get("compiler_notes") or []
+    if isinstance(compiler_notes, str):
+        compiler_notes = [compiler_notes]
+    return {
+        "name": name,
+        "stages": stages,
+        "methodology_raw": methodology_raw,
+        "compiler_notes": compiler_notes,
+        "validation": issues,
+        "prompt": prompt_text,
+        "raw_llm": raw,
+    }
+
+
 def compile_methodology(
     input_text: str,
     name: str,
@@ -209,70 +233,72 @@ def compile_methodology(
     the JSON, validate, and return {name, stages, methodology_raw, compiler_notes,
     validation, prompt, raw_llm}. Does NOT write files (app.services.compilation does).
 
-    LLM JSON output is non-deterministic and the model occasionally emits a single
-    bracket/comma slip in a large object. Rather than risk-repairing malformed JSON
-    (which could silently corrupt structure), we RE-ASK up to `max_attempts` times.
-    Each attempt is a fresh, stateless call (no session): we re-send the base prompt
-    with a corrective nudge that names the PRECISE decoder reason the previous reply
-    failed on — we do NOT echo the previous (broken) output back, which would anchor
-    the model into re-emitting the same slip. If every attempt fails we raise loudly
-    with the last error — a messy result is never silently passed off as clean."""
+    LLM JSON output is non-deterministic. We RE-ASK up to `max_attempts` times on
+    three recoverable failures, each fed back into the next (fresh, stateless) prompt
+    as a corrective nudge:
+      - unparseable JSON        → the PRECISE json decoder reason (line/column)
+      - parsed but no `stages`  → which keys came back instead
+      - parsed but schema-INVALID → the specific `validate()` issue strings to fix
+    We never echo the model's raw broken output back (that anchors it into re-emitting
+    the same mistake); the nudge carries only the structured error, and for the
+    schema case the issues name the offending stages themselves.
+
+    Terminal behaviour: as soon as a candidate validates cleanly we return it. If no
+    attempt validates cleanly, we return the LEAST-invalid candidate we saw (fewest
+    validation issues), with those issues surfaced in `validation` — an invalid draft
+    is reported honestly, never silently passed off as clean. We only RAISE when no
+    attempt produced parseable JSON with a non-empty `stages` list at all."""
     base_prompt = build_compile_prompt(input_text, name)
 
-    obj: dict[str, Any] | None = None
-    raw = ""
-    prompt_text = base_prompt
-    last_err: str | None = None
+    best: dict[str, Any] | None = None   # fewest-issue parsed candidate seen so far
+    retry_note: str | None = None
     for attempt in range(1, max_attempts + 1):
         prompt_text = base_prompt
-        if attempt > 1 and last_err:
-            prompt_text = (
-                base_prompt
-                + f"\n\n# RETRY {attempt}: your previous reply could not be parsed as a "
-                f"single JSON object. Reason: {last_err}. Emit ONLY a single, "
-                "strictly-valid JSON object of the requested shape — check every "
-                "bracket/brace/comma. No prose, no code fences."
-            )
+        if attempt > 1 and retry_note:
+            prompt_text = base_prompt + f"\n\n# RETRY {attempt}: " + retry_note
         raw = call_llm(prompt_text, model=model, timeout_s=timeout_s)
+
         try:
             candidate = _extract_json_object(raw)
-            if isinstance(candidate.get("stages"), list) and candidate["stages"]:
-                obj = candidate
-                break
-            last_err = ("parsed JSON had no non-empty `stages` list; keys="
-                        + ",".join(sorted(candidate.keys())))
         except ValueError as exc:
-            last_err = str(exc).splitlines()[0]
+            retry_note = (
+                "your previous reply could not be parsed as a single JSON object. "
+                f"Reason: {str(exc).splitlines()[0]}. Emit ONLY a single, strictly-valid "
+                "JSON object of the requested shape — check every bracket/brace/comma. "
+                "No prose, no code fences."
+            )
+            continue
 
-    if obj is None:
+        stages = candidate.get("stages")
+        if not isinstance(stages, list) or not stages:
+            retry_note = (
+                "your previous reply parsed but had no non-empty `stages` list (keys="
+                + ",".join(sorted(candidate.keys()))
+                + "). Emit a single JSON object with a non-empty `stages` array as specified."
+            )
+            continue
+
+        issues = validate(stages)
+        result = _assemble_result(candidate, name, stages, issues, prompt_text, raw)
+        if best is None or len(issues) < len(best["validation"]):
+            best = result
+        if not issues:
+            break  # clean-validating DAG → done
+
+        # Parsed fine but schema-invalid: feed the specific issues back and re-ask.
+        bulleted = "\n".join(f"  - {i}" for i in issues)
+        retry_note = (
+            "your previous DAG parsed but FAILED schema validation. Fix ALL of these "
+            "issues and re-emit the COMPLETE JSON object, keeping everything that was "
+            f"already correct:\n{bulleted}"
+        )
+
+    if best is None:
         raise ValueError(
             f"LLM did not return valid JSON with a `stages` list after "
-            f"{max_attempts} attempt(s). Last error: {last_err}"
+            f"{max_attempts} attempt(s). Last error: {retry_note}"
         )
-
-    stages = obj.get("stages")
-    if not isinstance(stages, list) or not stages:
-        raise ValueError(
-            "LLM output had no non-empty `stages` list. Keys present: "
-            + ", ".join(sorted(obj.keys()))
-        )
-
-    methodology_raw = obj.get("methodology_raw_md") or obj.get("methodology_raw") or ""
-    compiler_notes = obj.get("compiler_notes") or []
-    if isinstance(compiler_notes, str):
-        compiler_notes = [compiler_notes]
-
-    issues = validate(stages)
-
-    return {
-        "name": name,
-        "stages": stages,
-        "methodology_raw": methodology_raw,
-        "compiler_notes": compiler_notes,
-        "validation": issues,
-        "prompt": prompt_text,
-        "raw_llm": raw,
-    }
+    return best
 
 
 def validate(stages: list[dict[str, Any]]) -> list[str]:
