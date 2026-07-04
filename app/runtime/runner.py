@@ -28,7 +28,7 @@ import yaml
 
 from app.services import versioning
 
-from .handlers import HANDLERS, HaltForReview
+from .stages import HANDLERS, HaltForReview
 from .validation import validate_dataframe
 
 

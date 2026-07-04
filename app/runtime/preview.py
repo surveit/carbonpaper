@@ -28,7 +28,7 @@ from typing import Any
 
 import pandas as pd
 
-from .handlers import HANDLERS
+from .stages import HANDLERS
 from .runner import get_input_id
 
 
