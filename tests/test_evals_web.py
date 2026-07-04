@@ -534,6 +534,40 @@ def test_post_create_invalid_actual_column_rerenders_without_saving(tmp_examples
     assert not saved.is_file()
 
 
+def test_post_create_non_numeric_tolerance_rerenders_without_saving(tmp_examples):
+    payload = _valid_create_payload(f"examples/{METHODOLOGY}/eval_data/cases.csv")
+    payload["id"] = "bad-tolerance-eval"
+    payload["expected_tolerance"] = ["not_a_number"]
+    r = client.post(
+        f"/methodology/{METHODOLOGY}/evals/new",
+        data=payload,
+        follow_redirects=False,
+    )
+    assert r.status_code == 200
+    assert "is not a number" in r.text
+
+    saved = tmp_examples / "eval_config" / "bad-tolerance-eval.yaml"
+    assert not saved.is_file()
+
+
+def test_post_create_existing_id_rejected_without_overwriting(tmp_examples):
+    config_path = tmp_examples / "eval_config" / "valid-eval.yaml"
+    original_bytes = config_path.read_bytes()
+
+    payload = _valid_create_payload(f"examples/{METHODOLOGY}/eval_data/cases.csv")
+    payload["id"] = "valid-eval"  # already exists from the fixture
+    payload["name"] = "Attempted clobber"
+    r = client.post(
+        f"/methodology/{METHODOLOGY}/evals/new",
+        data=payload,
+        follow_redirects=False,
+    )
+    assert r.status_code == 200
+    assert "already exists" in r.text
+
+    assert config_path.read_bytes() == original_bytes
+
+
 def test_post_edit_changes_description_only(tmp_examples):
     payload = _valid_create_payload(f"examples/{METHODOLOGY}/eval_data/cases.csv")
     payload["description"] = "updated description"

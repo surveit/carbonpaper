@@ -480,6 +480,21 @@ async def _handle_eval_form_post(
         errors,
     )
 
+    expected_dicts = []
+    for row in fields["expected_rows"]:
+        tolerance: float | None = None
+        if row["tolerance"]:
+            try:
+                tolerance = float(row["tolerance"])
+            except ValueError:
+                errors.append(f"tolerance '{row['tolerance']}' is not a number")
+        expected_dicts.append({
+            "actual": row["actual"],
+            "expected": row["dataset"],
+            "metric": row["metric"],
+            "tolerance": tolerance,
+        })
+
     config_dict = {
         "id": resolved_id,
         "methodology": methodology,
@@ -494,15 +509,7 @@ async def _handle_eval_form_post(
         },
         "key": fields["key"],
         "input_columns": fields["input_columns"],
-        "expected": [
-            {
-                "actual": row["actual"],
-                "expected": row["dataset"],
-                "metric": row["metric"],
-                "tolerance": float(row["tolerance"]) if row["tolerance"] else None,
-            }
-            for row in fields["expected_rows"]
-        ],
+        "expected": expected_dicts,
     }
 
     config: EvalConfig | None = None
@@ -530,6 +537,11 @@ async def _handle_eval_form_post(
 
         compat = check_eval_compatibility(config, listing.stages)
         errors.extend(compat.problems)
+
+        if eval_id is None:
+            existing_path = EXAMPLES_DIR / methodology / "eval_config" / f"{config.id}.yaml"
+            if existing_path.is_file():
+                errors.append(f"an eval with id '{config.id}' already exists")
 
     values = EvalFormValues(
         id=resolved_id,
