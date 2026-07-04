@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 
 from app.models import validate_methodology_stages
-from app.models.loader import load_compiled_dir
+from app.services.loader import load_compiled_dir
 
 EXAMPLES = Path(__file__).resolve().parents[1] / "examples"
 COMPILED_DIRS = sorted(p for p in EXAMPLES.glob("*/compiled") if p.is_dir())
