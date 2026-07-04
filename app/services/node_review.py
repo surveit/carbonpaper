@@ -29,7 +29,7 @@ whitespace / comment / key-reordering edits keep a node's approval, while any
 semantic change (a model, a temperature, a column name, a prompt) drops it.
 
 For that to hold, the canonical form must strip every bookkeeping key that is
-not part of the spec. The canonical loader (app.models.loader) parses files
+not part of the spec. The canonical loader (app.services.loader) parses files
 into typed Stage objects and injects nothing into the spec dict, so today the
 strip only matters for dicts arriving from elsewhere — e.g. a spec pasted into
 the node edit box that still carries keys an older loader injected:
