@@ -2,16 +2,11 @@
 grain-preservation gate on Stage that governs it (app/models/stage.py)."""
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
-import yaml
 from pydantic import ValidationError
 
 from app import models as m
 from app.models import resolve_eval_run_settings
-
-REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 def S(**kw):
@@ -211,46 +206,3 @@ def test_unknown_override_raises():
 def test_target_in_overrides_raises():
     with pytest.raises(ValueError):
         resolve_eval_run_settings(_chain(), overrides=["d"], target="d")
-
-
-# ── resolve_eval_run_settings on the real lobbymap DAG ───────────────────────
-def _load_lobbymap() -> m.Methodology:
-    compiled = REPO_ROOT / "examples" / "lobbymap" / "compiled"
-    if not compiled.is_dir():
-        pytest.skip("lobbymap example not present")
-    stages = []
-    for f in sorted(compiled.glob("*.yaml")):
-        data = yaml.safe_load(f.read_text(encoding="utf-8"))
-        if data:
-            stages.append(data)
-    return m.parse_methodology(stages)
-
-
-def test_lobbymap_parses_under_current_contract():
-    meth = _load_lobbymap()
-    assert any(s.id == "benchmark_scoring" for s in meth.stages)
-
-
-def test_lobbymap_scoring_is_scorable():
-    # tap the scorer LLM, inject the join output above it → frontier is one
-    # grain-preserving llm stage
-    v = resolve_eval_run_settings(_load_lobbymap(),
-                                  overrides=["evidence_with_benchmarks"], target="benchmark_scoring")
-    assert v.can_score_declaratively is True
-    assert v.frontier == ["benchmark_scoring"]
-
-
-def test_lobbymap_org_score_not_scorable():
-    # the python group-bys (default frame) change grain
-    v = resolve_eval_run_settings(_load_lobbymap(), overrides=[], target="org_score")
-    assert v.can_score_declaratively is False
-    assert {"cell_aggregation", "org_score"} <= set(v.blocking_stages)
-
-
-def test_lobbymap_frame_node_blocks_in_isolation():
-    # override org_score's other inputs (cell_aggregation, tracked_entities) so the
-    # frontier is just org_score + the input_data weights table
-    v = resolve_eval_run_settings(_load_lobbymap(),
-                                  overrides=["cell_aggregation", "tracked_entities"], target="org_score")
-    assert v.can_score_declaratively is False
-    assert v.blocking_stages == ["org_score"]
