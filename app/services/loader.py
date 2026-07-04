@@ -1,6 +1,6 @@
-"""Canonical load + save for a methodology's compiled stage files.
+"""Canonical load + save for a project's compiled stage files.
 
-One JSON file per stage under `<methodology>/compiled/`. This module is the ONE
+One JSON file per stage under `<project>/compiled/`. This module is the ONE
 place that knows the on-disk stage format — both directions. Everything past it
 speaks `Stage` objects; nothing else should call `model_dump_json` on a stage or
 glob `compiled/*.json`, so a format change (or the planned rename) touches only
@@ -69,8 +69,8 @@ def load_compiled_dir(compiled_dir: Path) -> list[CompiledStageFile]:
     return entries
 
 
-def load_workflow(methodology_dir: Path) -> list[Stage]:
-    compiled_dir = methodology_dir / "compiled"
+def load_workflow(project_dir: Path) -> list[Stage]:
+    compiled_dir = project_dir / "compiled"
     entries = load_compiled_dir(compiled_dir)
     issues = [f"{e.filename}: {i}" for e in entries for i in e.issues]
     if not entries:

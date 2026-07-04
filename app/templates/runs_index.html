@@ -1,12 +1,12 @@
 {% extends "base.html" %}
-{% block title %}{{ methodology }} runs{% endblock %}
+{% block title %}{{ project }} runs{% endblock %}
 
 {% block header_extra %}
-<a href="/methodology/{{ methodology }}" class="back-link">← {{ methodology }}</a>
+<a href="/project/{{ project }}" class="back-link">← {{ project }}</a>
 {% endblock %}
 
 {% block content %}
-<h1>Runs of <code>{{ methodology }}</code></h1>
+<h1>Runs of <code>{{ project }}</code></h1>
 {% if runs %}
 <table class="stages">
     <thead>
@@ -15,7 +15,7 @@
     <tbody>
         {% for r in runs %}
         <tr>
-            <td><a href="/methodology/{{ methodology }}/runs/{{ r.run_id }}"><code>{{ r.run_id }}</code></a></td>
+            <td><a href="/project/{{ project }}/runs/{{ r.run_id }}"><code>{{ r.run_id }}</code></a></td>
             <td>{{ r.started_at }}</td>
             <td>{% if r.dag_version %}<code>{{ r.dag_version }}</code>{% else %}<span class="muted">(unversioned)</span>{% endif %}</td>
             <td><span class="run-status status-{{ r.status }}">{{ r.status }}</span></td>
@@ -28,6 +28,6 @@
     </tbody>
 </table>
 {% else %}
-<p><em>No runs yet. Click "Run pipeline" on the methodology page.</em></p>
+<p><em>No runs yet. Click "Run pipeline" on the project page.</em></p>
 {% endif %}
 {% endblock %}

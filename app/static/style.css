@@ -105,9 +105,9 @@ a { color: var(--accent); }
 .muted { color: var(--muted); }
 .strong { color: var(--fg); font-weight: 500; }
 
-/* Methodology list */
-.methodology-list { list-style: none; padding: 0; }
-.methodology-list li {
+/* Project list */
+.project-list { list-style: none; padding: 0; }
+.project-list li {
     padding: 12px 16px;
     border: 1px solid var(--border);
     border-radius: 5px;
@@ -115,8 +115,8 @@ a { color: var(--accent); }
     background: white;
     transition: background 0.1s;
 }
-.methodology-list li:hover { background: var(--hover); }
-.methodology-list a { text-decoration: none; font-weight: 500; }
+.project-list li:hover { background: var(--hover); }
+.project-list a { text-decoration: none; font-weight: 500; }
 
 /* Legend */
 .legend {
@@ -600,8 +600,8 @@ table.stages.compact tr.active td a code {
     color: var(--muted);
 }
 
-/* Methodology header with action buttons */
-.methodology-header {
+/* Project header with action buttons */
+.project-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -1018,7 +1018,7 @@ td.row-num, th.row-num { text-align: right; color: #98a1b3; font-variant-numeric
 .belief-rejected   { background: var(--belief-rejected-bg);   color: #802020; border-color: var(--belief-rejected-bd); }
 .belief-stale      { background: var(--belief-stale-bg);      color: #7a4a00; border-color: var(--belief-stale-bd); }
 
-/* Legend label + the second (belief) legend row on the methodology page. */
+/* Legend label + the second (belief) legend row on the project page. */
 .legend-label {
     font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px;
     color: var(--muted); font-weight: 700; margin-right: 2px;
@@ -1042,7 +1042,7 @@ td.row-num, th.row-num { text-align: right; color: #98a1b3; font-variant-numeric
 .coverage-counts b { color: #1f5a1f; }
 .coverage-breakdown { display: block; font-size: 11px; margin-top: 3px; }
 
-/* ── Node-review / edit panel (right pane of the methodology split view) ── */
+/* ── Node-review / edit panel (right pane of the project split view) ── */
 .review-scope {
     font-size: 13px; margin: 0 0 16px; padding: 10px 14px;
     background: var(--review-bg); border-left: 3px solid var(--review-border);

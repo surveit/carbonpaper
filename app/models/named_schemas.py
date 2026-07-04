@@ -7,7 +7,7 @@ its columns) so the data model is a real graph rather than a PK-name-collision
 heuristic. A SchemaLibrary is the whole data model: it checks names are unique and
 every reference resolves.
 
-Like methodology.py, the cross-schema checks are plain functions so they can be
+Like workflow.py, the cross-schema checks are plain functions so they can be
 tested and read on their own.
 """
 from __future__ import annotations

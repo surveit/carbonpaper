@@ -3,7 +3,7 @@
 check at every stage boundary, and the version-lifecycle invariant that a run
 targets an existing version and never creates one.
 
-Builds small file-connector methodologies in a tmp dir, snapshots them into a
+Builds small file-connector projects in a tmp dir, snapshots them into a
 version, runs them, and checks that `limit:` truncated the output, that per-run
 --limit/--offset slice the output and are recorded as run provenance (not
 silent), that manifest.json landed on disk, and that a stage fed exact duplicate
@@ -29,7 +29,7 @@ def _seed_version(root):
     return create_version(root, message="test seed", reviewer="test")["id"]
 
 
-def _make_methodology(root):
+def _make_project(root):
     (root / "compiled").mkdir(parents=True)
     (root / "data").mkdir(parents=True)
     pd.DataFrame({"name": [f"row{i}" for i in range(5)], "val": list(range(5))}) \
@@ -43,7 +43,7 @@ def _make_methodology(root):
 
 
 def test_limit_truncates_and_is_recorded(tmp_path):
-    _make_methodology(tmp_path)
+    _make_project(tmp_path)
     _seed_version(tmp_path)
     manifest = execute_run(tmp_path, repo_root=tmp_path)
 
@@ -66,7 +66,7 @@ def test_per_run_limit_and_offset_slice_and_are_recorded(tmp_path):
     # 5 rows, static `limit: 2` in the stage YAML. The per-run cap wins over
     # the static one, and the offset drops rows BEFORE the cap is applied:
     # offset 1 drops row 0, then limit 3 keeps rows 1-3.
-    _make_methodology(tmp_path)
+    _make_project(tmp_path)
     _seed_version(tmp_path)
     manifest = execute_run(tmp_path, repo_root=tmp_path,
                            limits={"load": 3}, offsets={"load": 1})
@@ -93,7 +93,7 @@ def test_per_run_limit_and_offset_slice_and_are_recorded(tmp_path):
 
 
 def test_per_run_override_for_unknown_stage_id_fails_loudly(tmp_path):
-    _make_methodology(tmp_path)
+    _make_project(tmp_path)
     _seed_version(tmp_path)
     with pytest.raises(ValueError, match="unknown stage id"):
         execute_run(tmp_path, repo_root=tmp_path, limits={"nope": 3})
@@ -101,7 +101,7 @@ def test_per_run_override_for_unknown_stage_id_fails_loudly(tmp_path):
         execute_run(tmp_path, repo_root=tmp_path, offsets={"nope": 1})
 
 
-def _two_stage_methodology(root, rows: list[dict]):
+def _two_stage_project(root, rows: list[dict]):
     """input_data loading `rows` from CSV, feeding an identity
     python_frame_function. Exercises the runner's per-stage input checks."""
     (root / "compiled").mkdir(parents=True)
@@ -127,7 +127,7 @@ def _two_stage_methodology(root, rows: list[dict]):
 def test_duplicate_input_rows_fail_the_stage(tmp_path):
     # Rows 0 and 2 are identical across EVERY column. That the `name` values
     # collide is not the point — full-content duplication is.
-    _two_stage_methodology(tmp_path, [
+    _two_stage_project(tmp_path, [
         {"name": "a", "val": 1},
         {"name": "b", "val": 2},
         {"name": "a", "val": 1},
@@ -148,7 +148,7 @@ def test_duplicate_input_rows_fail_the_stage(tmp_path):
 def test_distinct_input_rows_pass(tmp_path):
     # Same values in `name` but distinct full rows — an explicit
     # distinguishing column is exactly the documented escape hatch.
-    _two_stage_methodology(tmp_path, [
+    _two_stage_project(tmp_path, [
         {"name": "a", "val": 1},
         {"name": "a", "val": 2},
     ])
@@ -164,7 +164,7 @@ def test_run_without_a_version_fails_loudly(tmp_path):
     """A run targets an existing version and never creates one: a valid but
     unversioned working copy raises NoVersionToRunError and leaves nothing on
     disk — no run dir, no fabricated version."""
-    _make_methodology(tmp_path)  # valid working copy, but no version created
+    _make_project(tmp_path)  # valid working copy, but no version created
     with pytest.raises(NoVersionToRunError):
         execute_run(tmp_path, repo_root=tmp_path)
     assert not (tmp_path / "runs").exists()

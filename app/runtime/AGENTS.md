@@ -1,6 +1,6 @@
 # app/runtime — the Runner (DAG executor)
 
-Executes a methodology DAG and persists the result. Does not import the compiler or
+Executes a workflow and persists the result. Does not import the compiler or
 the web app. Loads stages through `app/services/loader.py: load_workflow`,
 which parses each compiled file into a `Stage` object and raises
 `WorkflowLoadError` if any stage or cross-stage check fails — an invalid DAG is
@@ -8,7 +8,7 @@ refused before the runner does any work.
 
 ## Files
 - **`runner.py`** — the executor.
-  - `topological_sort` → `execute_run(methodology_dir, repo_root)` runs the DAG once.
+  - `topological_sort` → `execute_run(project_dir, repo_root)` runs the DAG once.
   - Per stage: validate declared inputs (`validation.py`), reject duplicate input
     rows (below), dispatch to the type's handler, validate the output, write
     `outputs/<stage>.parquet`, append a record to `manifest.json`.
@@ -34,7 +34,7 @@ refused before the runner does any work.
     re-applied on resume, and unknown stage ids fail loudly.
   - **Halt + resume:** a `human_review_queue` handler raises `HaltForReview`; the
     runner stops, marks the run `awaiting_review`, and persists the pending queue.
-    `resume_run(methodology_dir, run_id, repo_root)` reloads completed outputs and
+    `resume_run(project_dir, run_id, repo_root)` reloads completed outputs and
     continues once decisions exist.
 - **`stages/`** — one handler per node type (`HANDLERS` dict), one module per stage type.
   - `input_data` connectors: `file` (csv/parquet/json/**geojson**), `computed_static`

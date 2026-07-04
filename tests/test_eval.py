@@ -82,7 +82,7 @@ def test_tableref_schema_required():
 # ── EvalConfig (merged dataset + eval, one row-aligned table) ────────────────
 def _config(**over):
     base = {
-        "id": "scoring", "methodology": "lobbymap", "name": "n",
+        "id": "scoring", "project": "lobbymap", "name": "n",
         "override_stage": "evidence_with_benchmarks", "target_stage": "benchmark_scoring",
         "table": _ref(cols=["evidence_id", "benchmark_id", "quote", "expected_score"]),
         "key": ["evidence_id", "benchmark_id"],
@@ -143,8 +143,8 @@ def test_stage_output_override():
 # ── EvalRun embeds settings ──────────────────────────────────────────────────
 def test_eval_run_embeds_settings_and_passed():
     r = m.EvalRun.model_validate({
-        "id": "run-1", "config": "scoring", "methodology": "lobbymap",
-        "methodology_version": "abc123", "status": "scored",
+        "id": "run-1", "config": "scoring", "project": "lobbymap",
+        "workflow_version": "abc123", "status": "scored",
         "settings": {"can_score_declaratively": True,
                      "frontier": ["benchmark_scoring"], "blocking_stages": []},
         "passed": True, "metrics": {"mean_absolute_error": 0.33}})

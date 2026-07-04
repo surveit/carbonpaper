@@ -36,8 +36,8 @@ def _hash_columns_for(stage: Stage) -> list[str]:
 
 
 def _decisions_path(ctx: dict[str, Any], stage_id: str) -> Path:
-    methodology_dir: Path = ctx["methodology_dir"]
-    d = methodology_dir / "decisions"
+    project_dir: Path = ctx["project_dir"]
+    d = project_dir / "decisions"
     d.mkdir(parents=True, exist_ok=True)
     return d / f"{stage_id}.parquet"
 

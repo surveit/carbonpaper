@@ -27,7 +27,7 @@ name: Human readable name
 type: <one of the eight stage types above>
 
 source:
-  doc: examples/<methodology>/stages/NN_<stage>.md
+  doc: examples/<project>/stages/NN_<stage>.md
   section: "§N.M"
   lines: [start, end]
 
@@ -52,7 +52,7 @@ output_schema:
 connector:        # input_data only
   kind: file
   params:
-    path: examples/<methodology>/data/source.csv
+    path: examples/<project>/data/source.csv
     format: csv
   refresh: yearly
   notes: |
@@ -101,7 +101,7 @@ publish:          # publish only
   destination: build/
 
 eval:             # mostly llm_transform; required when claiming a quality measurement
-  reference: examples/<methodology>/eval_data/<file>.csv
+  reference: examples/<project>/eval_data/<file>.csv
   reference_schema:
     columns:
       - {name: id, type: str}
@@ -142,7 +142,7 @@ json             — opaque JSON blob (use sparingly)
 
 ```
 file            — local file. params: {path, format}
-computed_static — curated list with no automated fetch (e.g., the methodology's own benchmark library)
+computed_static — curated list with no automated fetch (e.g., the project's own benchmark library)
 ```
 
 ## Aggregation formulas

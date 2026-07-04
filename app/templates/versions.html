@@ -1,16 +1,16 @@
 {% extends "base.html" %}
-{% block title %}{{ methodology }} · versions{% endblock %}
+{% block title %}{{ project }} · versions{% endblock %}
 
 {% block header_extra %}
-<a href="/methodology/{{ methodology }}" class="back-link">← {{ methodology }}</a>
+<a href="/project/{{ project }}" class="back-link">← {{ project }}</a>
 {% endblock %}
 
 {% block content %}
-<div class="methodology-header">
-    <h1>Versions of <code>{{ methodology }}</code></h1>
+<div class="project-header">
+    <h1>Versions of <code>{{ project }}</code></h1>
     <div class="actions">
-        <a href="/methodology/{{ methodology }}/workflow" class="btn">← Workflow</a>
-        <a href="/methodology/{{ methodology }}/runs" class="btn">All runs</a>
+        <a href="/project/{{ project }}/workflow" class="btn">← Workflow</a>
+        <a href="/project/{{ project }}/runs" class="btn">All runs</a>
     </div>
 </div>
 <p class="lede">Each version is an immutable snapshot of <code>compiled/</code> + <code>schemas/</code> with approval coverage frozen at creation time. Runs pin to a version and read its snapshot, so a run is reproducible against the exact workflow it executed.</p>

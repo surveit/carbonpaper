@@ -1,6 +1,6 @@
 """Eval contract, as Pydantic models. Constructing a model validates it.
 
-An eval measures the *real* methodology pipeline, not a copy of it. The v1 shape
+An eval measures the *real* workflow, not a copy of it. The v1 shape
 (fan-out / fan-in are out of scope — those evals come later):
 
   - An **EvalConfig** is the authored spec. At its core is ONE row-aligned table:
@@ -12,7 +12,7 @@ An eval measures the *real* methodology pipeline, not a copy of it. The v1 shape
     (extra data a case needs loaded) and how to score (`expected` comparisons,
     rollup `metrics`, or a `code` scorer for the escape hatch).
   - A **StageOutputOverride** injects a whole table as some stage's output.
-  - An **EvalRun** is the result at a specific methodology version: its computed
+  - An **EvalRun** is the result at a specific workflow version: its computed
     `settings` (can it be scored automatically, and if not why), whether it
     `passed`, and the scorer's `metrics` / per-row result table.
 
@@ -91,7 +91,7 @@ class EvalConfig(_Base):
     per-column `expected` comparison when declarative scoring can't apply.
     """
     id: SlugId
-    methodology: str
+    project: str
     name: str
     description: Optional[str] = None
     # data + wiring
@@ -189,13 +189,13 @@ def resolve_eval_run_settings(
 
 # ── The run result ───────────────────────────────────────────────────────────
 class EvalRun(_Base):
-    """Result of running an EvalConfig against one methodology version."""
+    """Result of running an EvalConfig against one workflow version."""
     id: SlugId
     config: str
-    methodology: str
+    project: str
     # Which DAG version was scored — the stale tripwire. If the target's key or
     # domain moved since the config was authored, it's stale; don't re-score.
-    methodology_version: str
+    workflow_version: str
     status: Literal["scored", "vetoed", "error"]
     # How this run was scored (from resolve_eval_run_settings). `vetoed` = it
     # couldn't be scored declaratively and no code scorer was supplied.

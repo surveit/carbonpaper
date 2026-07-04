@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}{{ methodology }} · DAG{% endblock %}
+{% block title %}{{ project }} · DAG{% endblock %}
 
 {% block head_extra %}
 <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
@@ -20,8 +20,8 @@
 {% endblock %}
 
 {% block content %}
-<div class="methodology-header">
-    <h1>{{ methodology }}</h1>
+<div class="project-header">
+    <h1>{{ project }}</h1>
     <div class="actions">
         {% if coverage is defined %}
         <span class="coverage-badge" id="coverage-badge"
@@ -30,13 +30,13 @@
             <span class="coverage-bar"><span class="coverage-fill" id="cov-fill" style="width: {{ coverage.approved_pct }}%"></span></span>
         </span>
         {% endif %}
-        <form action="/methodology/{{ methodology }}/run" method="post" style="display:inline;">
+        <form action="/project/{{ project }}/run" method="post" style="display:inline;">
             <button type="submit" class="btn primary">▶ Run pipeline</button>
         </form>
         <button type="button" class="btn" id="create-version-btn">Create version</button>
-        <a href="/methodology/{{ methodology }}/versions" class="btn">Versions</a>
-        <a href="/methodology/{{ methodology }}/data-model" class="btn">Data model</a>
-        <a href="/methodology/{{ methodology }}/runs" class="btn">All runs</a>
+        <a href="/project/{{ project }}/versions" class="btn">Versions</a>
+        <a href="/project/{{ project }}/data-model" class="btn">Data model</a>
+        <a href="/project/{{ project }}/runs" class="btn">All runs</a>
     </div>
 </div>
 <p class="lede">{{ stages|length }} compiled stage{% if stages|length != 1 %}s{% endif %}. Click any node in the DAG (or any row in the table) to <strong>review</strong> that step — approve, reject, or edit its spec — in the right panel. Node colour = <em>belief</em> (do we trust how it's modeled). Click <strong>Run pipeline</strong> to execute end-to-end.</p>
@@ -113,7 +113,7 @@
 
 <script>
 (function () {
-  const METHODOLOGY = {{ methodology | tojson }};
+  const PROJECT = {{ project | tojson }};
   const panel = document.getElementById('stage-panel');
 
   async function loadStage(stageId) {
@@ -122,7 +122,7 @@
     try {
       // Clicking a node opens its REVIEW/EDIT panel (approve / reject / edit
       // spec) — the node-review surface, not the read-only stage detail.
-      const r = await fetch(`/methodology/${encodeURIComponent(METHODOLOGY)}/node/${encodeURIComponent(stageId)}/review-partial`);
+      const r = await fetch(`/project/${encodeURIComponent(PROJECT)}/node/${encodeURIComponent(stageId)}/review-partial`);
       if (!r.ok) {
         panel.innerHTML = `<div class="empty-state"><h2>Error</h2><p>${r.status} loading stage <code>${stageId}</code></p></div>`;
         return;
@@ -173,7 +173,7 @@
   //    mermaid string in place (reuses run_detail.html's rerenderDag), then
   //    update the coverage badge. Called once on load, and on demand by the
   //    node panel after a decision/edit (window._pollReviewStatus). ──
-  const statusUrl = `/methodology/${encodeURIComponent(METHODOLOGY)}/review/status`;
+  const statusUrl = `/project/${encodeURIComponent(PROJECT)}/review/status`;
   const mermaidEl = document.querySelector('pre.mermaid');
   const $ = id => document.getElementById(id);
 
@@ -217,10 +217,10 @@
       try {
         const fd = new FormData();
         fd.append('message', message);
-        const r = await fetch(`/methodology/${encodeURIComponent(METHODOLOGY)}/version`, { method: 'POST', body: fd });
+        const r = await fetch(`/project/${encodeURIComponent(PROJECT)}/version`, { method: 'POST', body: fd });
         if (!r.ok) { alert(`Version creation failed: ${r.status} ${await r.text()}`); return; }
         // Land on the versions list so the new snapshot is visible.
-        window.location.href = `/methodology/${encodeURIComponent(METHODOLOGY)}/versions`;
+        window.location.href = `/project/${encodeURIComponent(PROJECT)}/versions`;
       } finally {
         createBtn.disabled = false;
         createBtn.textContent = original;

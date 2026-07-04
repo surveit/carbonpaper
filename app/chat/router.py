@@ -1,7 +1,7 @@
 """FastAPI routes for the chat subsystem.
 
 Mounts a minimal chat UI + the streaming transport onto the existing app.
-The demo engine registers one real tool (`list_methodologies`, over the
+The demo engine registers one real tool (`list_projects`, over the
 workspace's own examples dir) to show "tools plugged in per context": a host
 builds a ChatEngine with the tools its embedding needs.
 """
@@ -32,8 +32,8 @@ _engine: ChatEngine | None = None
 _engine_error: str | None = None
 
 
-def _list_methodologies() -> list[str]:
-    """List the methodologies available in this workspace."""
+def _list_projects() -> list[str]:
+    """List the projects available in this workspace."""
     examples = REPO_ROOT / "examples"
     if not examples.exists():
         return []
@@ -51,7 +51,7 @@ def get_engine() -> ChatEngine | None:
                     "You are embedded in the methodology-DAG app. Be concise and "
                     "cite the workspace's own data. Use tools to ground answers."
                 ),
-                tools=[_list_methodologies],
+                tools=[_list_projects],
             )
         except ChatBackendError as exc:
             _engine_error = str(exc)

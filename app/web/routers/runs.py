@@ -51,15 +51,15 @@ def run_in_background(target, *args) -> None:
     threading.Thread(target=_wrapped, daemon=True).start()
 
 
-@router.post("/methodology/{methodology}/run")
-async def trigger_run(methodology: str):
-    methodology_dir = EXAMPLES_DIR / methodology
-    if not methodology_dir.is_dir():
-        raise HTTPException(status_code=404, detail=f"No methodology '{methodology}'")
+@router.post("/project/{project}/run")
+async def trigger_run(project: str):
+    project_dir = EXAMPLES_DIR / project
+    if not project_dir.is_dir():
+        raise HTTPException(status_code=404, detail=f"No project '{project}'")
     # Set up the run (writes an initial `running` manifest), kick off execution
     # in a background thread, and redirect immediately. The run page polls.
     try:
-        prep = prepare_run(methodology_dir, REPO_ROOT)
+        prep = prepare_run(project_dir, REPO_ROOT)
     except NoVersionToRunError as exc:
         return JSONResponse({"detail": str(exc)}, status_code=400)
     except WorkflowLoadError as exc:
@@ -67,29 +67,29 @@ async def trigger_run(methodology: str):
                              "issues": exc.issues}, status_code=400)
     run_in_background(run_prepared, prep)
     return RedirectResponse(
-        url=f"/methodology/{methodology}/runs/{prep['run_id']}",
+        url=f"/project/{project}/runs/{prep['run_id']}",
         status_code=303,
     )
 
 
-@router.get("/methodology/{methodology}/runs", response_class=HTMLResponse)
-async def runs_index(request: Request, methodology: str):
+@router.get("/project/{project}/runs", response_class=HTMLResponse)
+async def runs_index(request: Request, project: str):
     return templates.TemplateResponse(
         request,
         "runs_index.html",
-        {"methodology": methodology, "runs": list_runs(methodology)},
+        {"project": project, "runs": list_runs(project)},
     )
 
 
-@router.get("/methodology/{methodology}/runs/{run_id}/status")
-async def run_status(methodology: str, run_id: str):
+@router.get("/project/{project}/runs/{run_id}/status")
+async def run_status(project: str, run_id: str):
     """Lightweight JSON for the live poller: current status, per-stage statuses,
     counts, and a freshly-built mermaid graph. Lets the run page update progress
     in place (no full-page reload) so it stays clickable while running."""
-    manifest = load_manifest(runs_dir(methodology) / run_id)
+    manifest = load_manifest(runs_dir(project) / run_id)
     mstages = manifest.get("stages", [])
     status_by_id = {s["stage_id"]: s.get("status", "") for s in mstages}
-    mermaid = build_mermaid_graph(load_stages(methodology).stages, methodology, status_by_id=status_by_id)
+    mermaid = build_mermaid_graph(load_stages(project).stages, project, status_by_id=status_by_id)
 
     def _count(st: str) -> int:
         return sum(1 for s in mstages if s.get("status") == st)
@@ -109,19 +109,19 @@ async def run_status(methodology: str, run_id: str):
     })
 
 
-@router.get("/methodology/{methodology}/runs/{run_id}", response_class=HTMLResponse)
-async def run_detail(request: Request, methodology: str, run_id: str):
-    run_dir = runs_dir(methodology) / run_id
+@router.get("/project/{project}/runs/{run_id}", response_class=HTMLResponse)
+async def run_detail(request: Request, project: str, run_id: str):
+    run_dir = runs_dir(project) / run_id
     manifest = load_manifest(run_dir)
-    stages = load_stages(methodology).stages
+    stages = load_stages(project).stages
     status_by_id = {s["stage_id"]: s.get("status", "") for s in manifest.get("stages", [])}
-    mermaid = build_mermaid_graph(stages, methodology, status_by_id=status_by_id)
+    mermaid = build_mermaid_graph(stages, project, status_by_id=status_by_id)
 
     return templates.TemplateResponse(
         request,
         "run_detail.html",
         {
-            "methodology": methodology,
+            "project": project,
             "run_id": run_id,
             "manifest": manifest,
             "mermaid": mermaid,
@@ -132,14 +132,14 @@ async def run_detail(request: Request, methodology: str, run_id: str):
 
 
 @router.get(
-    "/methodology/{methodology}/runs/{run_id}/stage/{stage_id}/partial",
+    "/project/{project}/runs/{run_id}/stage/{stage_id}/partial",
     response_class=HTMLResponse,
 )
 async def run_stage_partial(
-    request: Request, methodology: str, run_id: str, stage_id: str
+    request: Request, project: str, run_id: str, stage_id: str
 ):
     """Per-run stage detail panel — status, validation, preview, error trace."""
-    run_dir = runs_dir(methodology) / run_id
+    run_dir = runs_dir(project) / run_id
     manifest = load_manifest(run_dir)
     stage_record = next(
         (s for s in manifest.get("stages", []) if s.get("stage_id") == stage_id),
@@ -151,7 +151,7 @@ async def run_stage_partial(
     output_preview = load_output_preview(run_dir, stage_record.get("output_path"))
 
     # Build input previews from upstream stages' outputs in this run.
-    stages_static = load_stages(methodology).stages
+    stages_static = load_stages(project).stages
     stage_def = find_stage(stages_static, stage_id)
     output_by_id = {
         s.get("stage_id"): s.get("output_path") for s in manifest.get("stages", [])
@@ -173,7 +173,7 @@ async def run_stage_partial(
         request,
         "_run_stage_panel.html",
         {
-            "methodology": methodology,
+            "project": project,
             "run_id": run_id,
             "stage": stage_record,
             "stage_def": stage_def,
@@ -189,22 +189,22 @@ async def run_stage_partial(
 
 
 @router.get(
-    "/methodology/{methodology}/runs/{run_id}/stage/{stage_id}/rows",
+    "/project/{project}/runs/{run_id}/stage/{stage_id}/rows",
     response_class=HTMLResponse,
 )
 async def run_stage_rows(
-    request: Request, methodology: str, run_id: str, stage_id: str
+    request: Request, project: str, run_id: str, stage_id: str
 ):
     """Full table of one stage's output, capped at MAX_TABLE_ROWS rendered rows.
     The page links to the uncapped CSV download."""
-    run_dir = runs_dir(methodology) / run_id
+    run_dir = runs_dir(project) / run_id
     stage_record = manifest_stage(run_dir, stage_id)
     table = load_output_table(run_dir, stage_record.get("output_path"))
     return templates.TemplateResponse(
         request,
         "run_stage_rows.html",
         {
-            "methodology": methodology,
+            "project": project,
             "run_id": run_id,
             "stage_id": stage_id,
             "stage": stage_record,
@@ -214,13 +214,13 @@ async def run_stage_rows(
     )
 
 
-@router.get("/methodology/{methodology}/runs/{run_id}/stage/{stage_id}/rows.csv")
-async def run_stage_rows_csv(methodology: str, run_id: str, stage_id: str):
+@router.get("/project/{project}/runs/{run_id}/stage/{stage_id}/rows.csv")
+async def run_stage_rows_csv(project: str, run_id: str, stage_id: str):
     """One stage's complete output as a CSV download (no row cap)."""
-    run_dir = runs_dir(methodology) / run_id
+    run_dir = runs_dir(project) / run_id
     stage_record = manifest_stage(run_dir, stage_id)
     df = read_output_df(run_dir, stage_record.get("output_path"))
-    filename = f"{methodology}__{run_id}__{stage_id}.csv"
+    filename = f"{project}__{run_id}__{stage_id}.csv"
     return Response(
         content=df.to_csv(index=False),
         media_type="text/csv; charset=utf-8",
@@ -228,9 +228,9 @@ async def run_stage_rows_csv(methodology: str, run_id: str, stage_id: str):
     )
 
 
-@router.post("/methodology/{methodology}/runs/{run_id}/stage/{stage_id}/preview")
+@router.post("/project/{project}/runs/{run_id}/stage/{stage_id}/preview")
 async def run_stage_scratch_preview(
-    request: Request, methodology: str, run_id: str, stage_id: str
+    request: Request, project: str, run_id: str, stage_id: str
 ):
     """SCRATCH in-memory re-run of one stage on a few selected input rows.
 
@@ -242,7 +242,7 @@ async def run_stage_scratch_preview(
     Body (JSON): {"indices": [int, ...]}  — positional row indices into the
     stage's first upstream input.
     """
-    run_dir = runs_dir(methodology) / run_id
+    run_dir = runs_dir(project) / run_id
     manifest = load_manifest(run_dir)
 
     try:
@@ -257,7 +257,7 @@ async def run_stage_scratch_preview(
         except (TypeError, ValueError):
             continue
 
-    stages_static = load_stages(methodology).stages
+    stages_static = load_stages(project).stages
     stage_def = find_stage(stages_static, stage_id)
     if stage_def is None:
         raise HTTPException(status_code=404, detail=f"No stage '{stage_id}'")
@@ -271,7 +271,7 @@ async def run_stage_scratch_preview(
             stage_def=stage_def,
             run_dir=run_dir,
             repo_root=REPO_ROOT,
-            methodology_dir=EXAMPLES_DIR / methodology,
+            project_dir=EXAMPLES_DIR / project,
             output_by_id=output_by_id,
             selected_indices=indices,
         )
@@ -287,39 +287,39 @@ async def run_stage_scratch_preview(
     return JSONResponse({"ok": True, **result})
 
 
-@router.get("/methodology/{methodology}/runs/{run_id}/artifact/{filename:path}", response_class=HTMLResponse)
-async def run_artifact(methodology: str, run_id: str, filename: str):
+@router.get("/project/{project}/runs/{run_id}/artifact/{filename:path}", response_class=HTMLResponse)
+async def run_artifact(project: str, run_id: str, filename: str):
     """Serve generated HTML artifacts (per-org profiles etc.) inline."""
-    run_dir = runs_dir(methodology) / run_id
+    run_dir = runs_dir(project) / run_id
     candidate = (run_dir / "artifacts" / filename).resolve()
     if not candidate.exists() or not str(candidate).startswith(str(run_dir.resolve())):
         raise HTTPException(status_code=404, detail="Artifact not found")
     return HTMLResponse(content=candidate.read_text(encoding="utf-8"))
 
 
-@router.post("/methodology/{methodology}/runs/{run_id}/resume")
-async def resume_run_route(methodology: str, run_id: str):
+@router.post("/project/{project}/runs/{run_id}/resume")
+async def resume_run_route(project: str, run_id: str):
     """Resume/continue a run from where it stopped, re-running any stage that is
     NOT already complete (so this serves BOTH: a halted run after its review
     decisions, AND an ERRORED run after the bug is fixed — it re-runs the failed
     stage + downstream and reuses completed upstream outputs)."""
-    methodology_dir = EXAMPLES_DIR / methodology
-    if not methodology_dir.is_dir():
-        raise HTTPException(status_code=404, detail=f"No methodology '{methodology}'")
-    run_dir = runs_dir(methodology) / run_id
+    project_dir = EXAMPLES_DIR / project
+    if not project_dir.is_dir():
+        raise HTTPException(status_code=404, detail=f"No project '{project}'")
+    run_dir = runs_dir(project) / run_id
     if not (run_dir / "manifest.json").exists():
         raise HTTPException(status_code=404, detail="Run not found")
     # Validate the compiled DAG synchronously so load errors surface as a 400
     # here rather than being swallowed on the background thread below.
     try:
-        load_workflow(methodology_dir)
+        load_workflow(project_dir)
     except WorkflowLoadError as exc:
         return JSONResponse({"detail": "compiled DAG failed validation",
                              "issues": exc.issues}, status_code=400)
     # Resume re-runs the queue stage + downstream (LLM-heavy) — do it in the
     # background and redirect immediately so the page can poll progress.
-    run_in_background(resume_run, methodology_dir, run_id, REPO_ROOT)
+    run_in_background(resume_run, project_dir, run_id, REPO_ROOT)
     return RedirectResponse(
-        url=f"/methodology/{methodology}/runs/{run_id}",
+        url=f"/project/{project}/runs/{run_id}",
         status_code=303,
     )

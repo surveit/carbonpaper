@@ -27,19 +27,19 @@ from app.web.loading import (
 router = APIRouter()
 
 
-@router.get("/methodology/{methodology}/runs/{run_id}/queue/{stage_id}", response_class=HTMLResponse)
-async def queue_page(request: Request, methodology: str, run_id: str, stage_id: str):
+@router.get("/project/{project}/runs/{run_id}/queue/{stage_id}", response_class=HTMLResponse)
+async def queue_page(request: Request, project: str, run_id: str, stage_id: str):
     """Reviewer UI for one queue stage in one run."""
-    run_dir = runs_dir(methodology) / run_id
+    run_dir = runs_dir(project) / run_id
     manifest = load_manifest(run_dir)
 
-    stages = load_stages(methodology).stages
+    stages = load_stages(project).stages
     stage_def = find_stage(stages, stage_id)
     if stage_def is None or stage_def.type != "human_review_queue":
         raise HTTPException(status_code=404, detail=f"No queue stage '{stage_id}'")
 
-    snapshot = queue_snapshot(methodology, run_id, stage_id)
-    decisions = load_decisions_df(methodology, stage_id)
+    snapshot = queue_snapshot(project, run_id, stage_id)
+    decisions = load_decisions_df(project, stage_id)
     decision_by_hash: dict[str, dict[str, Any]] = {}
     if len(decisions):
         for _, row in decisions.iterrows():
@@ -114,7 +114,7 @@ async def queue_page(request: Request, methodology: str, run_id: str, stage_id: 
         request,
         "queue.html",
         {
-            "methodology": methodology,
+            "project": project,
             "run_id": run_id,
             "stage_id": stage_id,
             "stage_def": stage_def,
@@ -127,9 +127,9 @@ async def queue_page(request: Request, methodology: str, run_id: str, stage_id: 
     )
 
 
-@router.post("/methodology/{methodology}/runs/{run_id}/queue/{stage_id}/decide")
+@router.post("/project/{project}/runs/{run_id}/queue/{stage_id}/decide")
 async def queue_decide(
-    methodology: str,
+    project: str,
     run_id: str,
     stage_id: str,
     content_hash: str = Form(...),
@@ -148,7 +148,7 @@ async def queue_decide(
         except ValueError:
             raise HTTPException(status_code=400, detail="modified_score must be numeric")
 
-    df = load_decisions_df(methodology, stage_id)
+    df = load_decisions_df(project, stage_id)
     df = df[df["content_hash"] != content_hash]  # upsert: drop prior row if any
     new_row = {
         "content_hash": content_hash,
@@ -159,5 +159,5 @@ async def queue_decide(
         "source_run_id": run_id,
     }
     df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
-    df.to_parquet(decisions_path(methodology, stage_id), index=False)
+    df.to_parquet(decisions_path(project, stage_id), index=False)
     return JSONResponse({"ok": True, "content_hash": content_hash, "decision": decision})

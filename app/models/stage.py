@@ -232,7 +232,7 @@ _TYPE_SPEC: dict[str, dict[str, Any]] = {
 
 
 class Stage(_Base):
-    """One node in the methodology DAG. Exactly one handle block is required,
+    """One node in the workflow. Exactly one handle block is required,
     selected by `type`."""
     id: str
     type: StageType

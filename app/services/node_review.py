@@ -1,5 +1,5 @@
 """
-node_review.py — node-level APPROVAL / BELIEF state for a methodology DAG.
+node_review.py — node-level APPROVAL / BELIEF state for a workflow.
 
 This lifts the existing row-decision pattern (a reviewer accepting/rejecting a
 flagged *data row*, keyed by a content hash) up one level: here a reviewer
@@ -98,24 +98,24 @@ def node_content_hash(stage: dict[str, Any]) -> str:
     return hashlib.sha1(payload.encode("utf-8")).hexdigest()[:16]
 
 
-def node_decisions_path(methodology_dir: Path) -> Path:
-    """examples/<methodology>/node_decisions.parquet — the single, version-
+def node_decisions_path(project_dir: Path) -> Path:
+    """examples/<project>/node_decisions.parquet — the single, version-
     independent store of node approvals. Keyed by (stage_id, content_hash) so an
     unchanged node carries its approval across versions automatically."""
-    return Path(methodology_dir) / "node_decisions.parquet"
+    return Path(project_dir) / "node_decisions.parquet"
 
 
-def load_node_decisions(methodology_dir: Path) -> pd.DataFrame:
+def load_node_decisions(project_dir: Path) -> pd.DataFrame:
     """Load the node-decision store, or an empty, correctly-typed frame when none
     exists yet (mirrors _load_decisions_df in app/main.py)."""
-    p = node_decisions_path(methodology_dir)
+    p = node_decisions_path(project_dir)
     if not p.exists():
         return pd.DataFrame(columns=NODE_DECISION_COLUMNS)
     return pd.read_parquet(p)
 
 
 def record_node_decision(
-    methodology_dir: Path,
+    project_dir: Path,
     *,
     stage_id: str,
     content_hash: str,
@@ -138,7 +138,7 @@ def record_node_decision(
     if reviewed_at is None:
         reviewed_at = datetime.now().isoformat(timespec="seconds")
 
-    df = load_node_decisions(methodology_dir)
+    df = load_node_decisions(project_dir)
     mask = (df["stage_id"] == stage_id) & (df["content_hash"] == content_hash)
     df = df[~mask]
     new_row = {
@@ -152,7 +152,7 @@ def record_node_decision(
     }
     df = pd.concat([df, pd.DataFrame([new_row], columns=NODE_DECISION_COLUMNS)],
                    ignore_index=True)
-    df.to_parquet(node_decisions_path(methodology_dir), index=False)
+    df.to_parquet(node_decisions_path(project_dir), index=False)
     return df
 
 
@@ -270,7 +270,7 @@ def schema_library_content_hash(schemas: list[dict[str, Any]]) -> str:
 
 
 def approve_schema_library(
-    methodology_dir: Path,
+    project_dir: Path,
     *,
     content_hash: str,
     reviewer: str = "local",
@@ -284,7 +284,7 @@ def approve_schema_library(
     changes the library hash, so this approval no longer matches the live hash and
     data_model_state() reports edited_stale (re-locking the DAG build)."""
     return record_node_decision(
-        methodology_dir,
+        project_dir,
         stage_id=SCHEMA_LIBRARY_STAGE_ID,
         content_hash=content_hash,
         decision=DECISION_APPROVE,
@@ -294,11 +294,11 @@ def approve_schema_library(
 
 
 def data_model_state(
-    methodology_dir: Path, schemas: list[dict[str, Any]]
+    project_dir: Path, schemas: list[dict[str, Any]]
 ) -> dict[str, Any]:
     """Approval state of the DATA MODEL as it currently sits on disk.
 
-    `schemas` are the LIVE schemas (loaded from methodology_dir/schemas by the
+    `schemas` are the LIVE schemas (loaded from project_dir/schemas by the
     caller). The CURRENT hash is computed from them via schema_library_content_hash
     — so editing any schema changes the hash, a prior approval no longer matches,
     and the state drops to edited_stale on its own (no dirty-flag to maintain).
@@ -315,7 +315,7 @@ def data_model_state(
     edited_stale}. The schema gate only ever records `approve`, so `rejected` does
     not arise here."""
     current_hash = schema_library_content_hash(schemas)
-    df = load_node_decisions(methodology_dir)
+    df = load_node_decisions(project_dir)
 
     if df is None or df.empty:
         return {"state": "unreviewed", "current_hash": current_hash}

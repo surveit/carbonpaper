@@ -17,9 +17,9 @@ from app.services.loader import CompiledStageFile, load_compiled_dir
 from app.web.config import EXAMPLES_DIR, REPO_ROOT
 
 
-# ─── Methodologies & stages ──────────────────────────────────────────────────
+# ─── Projects & stages ──────────────────────────────────────────────────
 
-def list_methodologies() -> list[str]:
+def list_projects() -> list[str]:
     if not EXAMPLES_DIR.exists():
         return []
     return [
@@ -40,10 +40,10 @@ class StageListing:
     order: dict[str, str]
 
 
-def load_stages(methodology: str) -> StageListing:
-    compiled_dir = EXAMPLES_DIR / methodology / "compiled"
+def load_stages(project: str) -> StageListing:
+    compiled_dir = EXAMPLES_DIR / project / "compiled"
     if not compiled_dir.is_dir():
-        raise HTTPException(status_code=404, detail=f"No compiled stages for {methodology}")
+        raise HTTPException(status_code=404, detail=f"No compiled stages for {project}")
     entries = load_compiled_dir(compiled_dir)
     issues = [e for e in entries if e.issues]
     if issues:
@@ -64,13 +64,13 @@ def find_stage(stages: list[Stage], stage_id: str) -> Stage | None:
 
 # ─── Source & code reads ─────────────────────────────────────────────────────
 
-def read_prose_excerpt(stage: Stage, methodology: str) -> str | None:
+def read_prose_excerpt(stage: Stage, project: str) -> str | None:
     doc = stage.source.doc if stage.source else None
     if not doc:
         return None
     candidate = REPO_ROOT / doc
     if not candidate.exists():
-        candidate = EXAMPLES_DIR / methodology / "stages" / Path(doc).name
+        candidate = EXAMPLES_DIR / project / "stages" / Path(doc).name
         if not candidate.exists():
             return None
     try:
@@ -106,8 +106,8 @@ def resolve_function_code(stage_def: Stage | None) -> str | None:
 
 # ─── Runs & manifests ────────────────────────────────────────────────────────
 
-def runs_dir(methodology: str) -> Path:
-    return EXAMPLES_DIR / methodology / "runs"
+def runs_dir(project: str) -> Path:
+    return EXAMPLES_DIR / project / "runs"
 
 
 def load_manifest(run_dir: Path) -> dict[str, Any]:
@@ -118,8 +118,8 @@ def load_manifest(run_dir: Path) -> dict[str, Any]:
     return json.loads(manifest_path.read_text(encoding="utf-8"))
 
 
-def list_runs(methodology: str) -> list[dict[str, Any]]:
-    rdir = runs_dir(methodology)
+def list_runs(project: str) -> list[dict[str, Any]]:
+    rdir = runs_dir(project)
     if not rdir.is_dir():
         return []
     entries = []
@@ -224,14 +224,14 @@ def load_output_preview(run_dir: Path, rel_path: str | None) -> dict[str, Any] |
 
 # ─── Review decisions & queue snapshots ──────────────────────────────────────
 
-def decisions_path(methodology: str, stage_id: str) -> Path:
-    d = EXAMPLES_DIR / methodology / "decisions"
+def decisions_path(project: str, stage_id: str) -> Path:
+    d = EXAMPLES_DIR / project / "decisions"
     d.mkdir(parents=True, exist_ok=True)
     return d / f"{stage_id}.parquet"
 
 
-def load_decisions_df(methodology: str, stage_id: str) -> pd.DataFrame:
-    p = decisions_path(methodology, stage_id)
+def load_decisions_df(project: str, stage_id: str) -> pd.DataFrame:
+    p = decisions_path(project, stage_id)
     if not p.exists():
         return pd.DataFrame(
             columns=["content_hash", "decision", "modified_score",
@@ -240,8 +240,8 @@ def load_decisions_df(methodology: str, stage_id: str) -> pd.DataFrame:
     return pd.read_parquet(p)
 
 
-def queue_snapshot(methodology: str, run_id: str, stage_id: str) -> pd.DataFrame | None:
-    run_dir = runs_dir(methodology) / run_id
+def queue_snapshot(project: str, run_id: str, stage_id: str) -> pd.DataFrame | None:
+    run_dir = runs_dir(project) / run_id
     for ext in (".parquet", ".csv"):
         p = run_dir / "queue" / f"{stage_id}{ext}"
         if p.exists():

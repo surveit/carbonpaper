@@ -6,7 +6,7 @@ validates the input + output schema, and persists per-stage outputs as parquet
 (plus a manifest.json summarising the run).
 
 Run output layout:
-    examples/<methodology>/runs/<run_id>/
+    examples/<project>/runs/<run_id>/
         manifest.json
         outputs/<stage_id>.parquet
         artifacts/<...>           # for publish stages
@@ -34,7 +34,7 @@ from .validation import validate_dataframe
 
 
 class NoVersionToRunError(Exception):
-    """A run was requested for a methodology that has no version to run.
+    """A run was requested for a project that has no version to run.
 
     Runs are read-only with respect to versions: a run targets an existing
     version and never creates one. Version creation is an explicit act (the
@@ -101,7 +101,7 @@ def _reject_duplicate_input_rows(df: pd.DataFrame, input_id: str, stage_id: str)
     )
 
 
-def _resolve_version_id(methodology_dir: Path, version_id: str | None) -> str:
+def _resolve_version_id(project_dir: Path, version_id: str | None) -> str:
     """Resolve the DAG version a run will be pinned to. Every run MUST target a
     real, existing version — we never blank it, never fabricate one, never
     silently read the working copy, and never CREATE one as a run side effect.
@@ -118,22 +118,22 @@ def _resolve_version_id(methodology_dir: Path, version_id: str | None) -> str:
         # Validate the requested version exists (load_version_meta fails loudly
         # if its version.json is missing) — a caller asking for a specific id
         # must not be silently redirected to some other snapshot.
-        versioning.load_version_meta(methodology_dir, version_id)
+        versioning.load_version_meta(project_dir, version_id)
         return version_id
 
-    existing = versioning.list_versions(methodology_dir)  # newest-first
+    existing = versioning.list_versions(project_dir)  # newest-first
     if existing:
         return existing[0]["id"]
 
     raise NoVersionToRunError(
-        f"No version to run for methodology '{methodology_dir.name}'. A run "
+        f"No version to run for project '{project_dir.name}'. A run "
         f"targets an existing version and never creates one — create a version "
         f"first."
     )
 
 
 def prepare_run(
-    methodology_dir: Path,
+    project_dir: Path,
     repo_root: Path,
     version_id: str | None = None,
     limits: dict[str, int] | None = None,
@@ -148,7 +148,7 @@ def prepare_run(
     immutable snapshot (versioning.load_version_stages), never from the live
     `compiled/` working copy, so working-copy edits can never affect this run.
     `version_id` resolution is documented on _resolve_version_id (None -> the
-    latest existing version; a version-less methodology raises
+    latest existing version; a version-less project raises
     NoVersionToRunError); the resolved id is recorded in the manifest as
     `dag_version`.
 
@@ -164,8 +164,8 @@ def prepare_run(
     Raises NoVersionToRunError (no version exists) or WorkflowLoadError
     (from the version snapshot's strict load) before the run dir is created, so
     a run with no version — or an invalid DAG — never leaves a run behind."""
-    dag_version = _resolve_version_id(methodology_dir, version_id)
-    stages = versioning.load_version_stages(methodology_dir, dag_version)
+    dag_version = _resolve_version_id(project_dir, version_id)
+    stages = versioning.load_version_stages(project_dir, dag_version)
     ordered = topological_sort(stages)
 
     limits = dict(limits or {})
@@ -179,7 +179,7 @@ def prepare_run(
                 f"stages are {[s.id for s in ordered]}"
             )
 
-    runs_dir = methodology_dir / "runs"
+    runs_dir = project_dir / "runs"
     run_id = datetime.now().strftime("%Y%m%dT%H%M%S")
     run_dir = runs_dir / run_id
     (run_dir / "outputs").mkdir(parents=True, exist_ok=True)
@@ -188,7 +188,7 @@ def prepare_run(
     ctx: dict[str, Any] = {
         "repo_root": repo_root,
         "run_dir": run_dir,
-        "methodology_dir": methodology_dir,
+        "project_dir": project_dir,
         "queue_stats": {},
         "limits": limits,
         "offsets": offsets,
@@ -196,7 +196,7 @@ def prepare_run(
     manifest: dict[str, Any] = {
         "run_id": run_id,
         "started_at": datetime.now().isoformat(timespec="seconds"),
-        "methodology": methodology_dir.name,
+        "project": project_dir.name,
         "dag_version": dag_version,
         "limit_overrides": limits,
         "offset_overrides": offsets,
@@ -224,7 +224,7 @@ def run_prepared(prep: dict[str, Any]) -> dict[str, Any]:
 
 
 def execute_run(
-    methodology_dir: Path,
+    project_dir: Path,
     repo_root: Path,
     version_id: str | None = None,
     limits: dict[str, int] | None = None,
@@ -235,7 +235,7 @@ def execute_run(
     NoVersionToRunError); see prepare_run / _resolve_version_id.
     `limits`/`offsets` are per-run row slicing overrides; see prepare_run."""
     return run_prepared(
-        prepare_run(methodology_dir, repo_root, version_id,
+        prepare_run(project_dir, repo_root, version_id,
                     limits=limits, offsets=offsets)
     )
 
@@ -444,11 +444,11 @@ def _execute_stages(
     return manifest
 
 
-def resume_run(methodology_dir: Path, run_id: str, repo_root: Path) -> dict[str, Any]:
+def resume_run(project_dir: Path, run_id: str, repo_root: Path) -> dict[str, Any]:
     """Resume a previously halted run. Loads existing outputs from disk,
     re-runs the halted queue stage (decisions now exist), continues
     downstream, updates the same manifest in place."""
-    run_dir = methodology_dir / "runs" / run_id
+    run_dir = project_dir / "runs" / run_id
     manifest_path = run_dir / "manifest.json"
     if not manifest_path.exists():
         raise FileNotFoundError(f"No manifest at {manifest_path}")
@@ -463,11 +463,11 @@ def resume_run(methodology_dir: Path, run_id: str, repo_root: Path) -> dict[str,
     dag_version = manifest.get("dag_version")
     if not dag_version:
         raise ValueError(
-            f"Run {run_id} of '{methodology_dir.name}' has no 'dag_version' in "
+            f"Run {run_id} of '{project_dir.name}' has no 'dag_version' in "
             f"its manifest ({manifest_path}); cannot resume a versioned run "
             f"without its pinned DAG version."
         )
-    stages = versioning.load_version_stages(methodology_dir, dag_version)
+    stages = versioning.load_version_stages(project_dir, dag_version)
     ordered = topological_sort(stages)
 
     # Reload outputs from disk for stages that completed successfully.
@@ -492,7 +492,7 @@ def resume_run(methodology_dir: Path, run_id: str, repo_root: Path) -> dict[str,
     ctx: dict[str, Any] = {
         "repo_root": repo_root,
         "run_dir": run_dir,
-        "methodology_dir": methodology_dir,
+        "project_dir": project_dir,
         "queue_stats": manifest.get("queue_stats", {}),
         # Re-apply the run's per-stage row slicing so stages that resume after
         # a halt honor the same limits/offsets the run started with.
@@ -508,10 +508,10 @@ def resume_run(methodology_dir: Path, run_id: str, repo_root: Path) -> dict[str,
 def main() -> int:
     args = sys.argv[1:]
     if not args:
-        print("Usage: python -m app.runtime.runner <methodology_dir> "
+        print("Usage: python -m app.runtime.runner <project_dir> "
               "[--limit <stage_id>=<N> ...] [--offset <stage_id>=<M> ...]")
         return 1
-    methodology_dir = Path(args[0]).resolve()
+    project_dir = Path(args[0]).resolve()
     limits: dict[str, int] = {}
     offsets: dict[str, int] = {}
     i = 1
@@ -525,7 +525,7 @@ def main() -> int:
             return 1
     repo_root = Path(__file__).resolve().parents[2]
     try:
-        manifest = execute_run(methodology_dir, repo_root,
+        manifest = execute_run(project_dir, repo_root,
                                limits=limits or None, offsets=offsets or None)
     except (NoVersionToRunError, WorkflowLoadError) as exc:
         print(exc)

@@ -1,5 +1,5 @@
 """Pure presentation helpers: build the Mermaid flowchart and ER diagram from a
-methodology's stages, plus the stage-type → CSS-class / glyph maps they share
+project's stages, plus the stage-type → CSS-class / glyph maps they share
 with the templates. No I/O — stages in, diagram source out."""
 
 from __future__ import annotations
@@ -107,7 +107,7 @@ REVIEW_STROKE = {
 
 def build_mermaid_graph(
     stages: list[Stage],
-    methodology: str,
+    project: str,
     status_by_id: dict[str, str] | None = None,
     review_by_id: dict[str, str] | None = None,
 ) -> str:
