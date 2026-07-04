@@ -1,0 +1,27 @@
+id: press_window_recent
+name: Press releases — recent window
+type: input_data
+
+source:
+  doc: examples/drift/methodology_raw.md
+  section: "§2"
+  lines: [19, 24]
+
+connector:
+  kind: file
+  params:
+    path: examples/drift/data/press_window_recent.csv
+    format: csv
+  refresh: per_slice
+
+output_schema:
+  primary_key: [doc_id]
+  estimated_rows: 1500
+  columns:
+    - {name: doc_id, type: str, nullable: false}
+    - {name: entity_id, type: str, nullable: false}
+    - {name: window, type: str, nullable: false, range: [early, recent]}
+    - {name: title, type: str, nullable: true}
+    - {name: body, type: str, nullable: false}
+    - {name: published_at, type: date, nullable: false}
+    - {name: url, type: str, nullable: true}

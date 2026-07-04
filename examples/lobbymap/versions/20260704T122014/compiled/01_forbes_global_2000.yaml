@@ -1,0 +1,45 @@
+id: forbes_global_2000
+name: Forbes Global 2000 (3-year average rank)
+type: input_data
+
+source:
+  doc: examples/lobbymap/stages/01_universe_selection.md
+  section: "§3.4"
+  lines: [263, 279]
+
+connector:
+  kind: file
+  params:
+    path: examples/lobbymap/data/forbes_global_2000_sample.csv
+    format: csv
+  refresh: yearly
+  notes: |
+    Production connector would scrape forbes.com/lists/global2000/ across the
+    last 3 published lists and average ranks. For the prototype this is a small
+    static sample (8 entities) so the runtime can execute end-to-end without
+    network calls.
+
+output_schema:
+  primary_key: [forbes_id]
+  estimated_rows: 2000
+  columns:
+    - {name: forbes_id, type: str, nullable: false,
+       description: "Stable id derived from Forbes URL slug."}
+    - {name: name, type: str, nullable: false}
+    - {name: rank_3y_avg, type: float, nullable: false, range: [1, 2500],
+       description: "Average across the last 3 published Forbes Global 2000 lists. Lower = larger."}
+    - {name: country, type: str, nullable: true}
+    - {name: industry, type: str, nullable: true,
+       description: "Forbes-assigned industry category."}
+    - {name: market_cap_usd_b, type: float, nullable: true}
+    - {name: revenue_usd_b, type: float, nullable: true}
+    - {name: forbes_url, type: str, nullable: true}
+
+compiler_notes:
+  - "Forbes does not currently publish a clean bulk download — the connector is
+     a scrape. A real deployment would add fallback to manual_upload if the page
+     structure changes."
+  - "Methodology says approx 50% of LobbyMap-tracked companies rank higher than
+     500 and approx 70% higher than 1000 (line 270). These are descriptive, not
+     hard cutoffs — applied as soft filters in the next stage (tracked_entities),
+     not here."

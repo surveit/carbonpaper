@@ -129,13 +129,25 @@ def create_version(
     node_decisions store, so the recorded coverage is exactly what was believed
     about these specs at this instant. schemas/ is copied if it exists; a
     methodology with no schema library still versions cleanly (the absence is
-    truthful, not an error)."""
+    truthful, not an error).
+
+    The working copy is strict-loaded first, through the same loader the runner
+    uses; if it is not a valid DAG this raises MethodologyLoadError and writes
+    nothing. Every version is therefore a loadable workflow, from this seam or
+    any other."""
     methodology_dir = Path(methodology_dir)
     compiled_src = methodology_dir / "compiled"
     if not compiled_src.is_dir():
         raise FileNotFoundError(
             f"Cannot create a version: no compiled/ DAG at {compiled_src}"
         )
+
+    # Validate BEFORE writing anything: a version is, by invariant, a loadable
+    # DAG. On failure load_methodology_stages raises MethodologyLoadError and we
+    # snapshot nothing — an invalid workflow can never be immortalised as a
+    # version. (The run-path strict load then only guards on-disk corruption of
+    # an already-valid snapshot.)
+    load_methodology_stages(methodology_dir)
 
     version_id = datetime.now().strftime("%Y%m%dT%H%M%S")
     vdir = versions_dir(methodology_dir) / version_id

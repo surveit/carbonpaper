@@ -1,0 +1,44 @@
+id: notability_rank
+name: Rank members by notability
+type: python_frame_function
+
+source:
+  doc: examples/drift/methodology_raw.md
+  section: "§5"
+  lines: [62, 67]
+
+inputs:
+  - id: drift_brief
+    schema:
+      primary_key: [entity_id]
+      columns:
+        - {name: entity_id, type: str, nullable: false}
+        - {name: name, type: str, nullable: false}
+        - {name: party, type: str, nullable: false}
+        - {name: notability_score, type: int, nullable: true, range: [0, 10]}
+        - {name: headline, type: str, nullable: true}
+        - {name: topical_drift, type: json, nullable: true}
+        - {name: stance_drift, type: json, nullable: true}
+        - {name: story_hypothesis, type: str, nullable: true}
+
+function:
+  kind: module
+  module: examples.drift.code.notability_rank
+  function: transform
+  requirements: [pandas]
+
+output_schema:
+  primary_key: [rank]
+  estimated_rows: 200
+  columns:
+    - {name: rank, type: int, nullable: false}
+    - {name: entity_id, type: str, nullable: false}
+    - {name: name, type: str, nullable: false}
+    - {name: party, type: str, nullable: false}
+    - {name: state, type: str, nullable: false}
+    - {name: chamber, type: str, nullable: false}
+    - {name: notability_score, type: int, nullable: true}
+    - {name: headline, type: str, nullable: true}
+    - {name: stance_drift_count, type: int, nullable: false}
+    - {name: topical_drift_count, type: int, nullable: false}
+    - {name: story_hypothesis, type: str, nullable: true}
