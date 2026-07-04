@@ -1,9 +1,9 @@
 """
 app.compiler — the prose → LLM → DAG authoring engine.
 
-Public surface (the compile MECHANISM):
-    read_input, compile_methodology, validate, call_llm  — from .compiler
-    SYSTEM_PROMPT, build_compile_prompt                  — from .prompt
+Public surface: `read_input` and `compile_methodology`. The LLM call, the
+validation pass, and the prompt builders are internal to the package — callers
+drive a compile through `compile_methodology`.
 
 Persisting a compile as a first-class object (manifest / what-happened / DAG on
 disk, plus the index/detail loaders) is a separate concern owned by
@@ -13,19 +13,6 @@ disk, plus the index/detail loaders) is a separate concern owned by
 
 from __future__ import annotations
 
-from app.compiler.compiler import (
-    call_llm,
-    compile_methodology,
-    read_input,
-    validate,
-)
-from app.compiler.prompt import SYSTEM_PROMPT, build_compile_prompt
+from app.compiler.compiler import compile_methodology, read_input
 
-__all__ = [
-    "read_input",
-    "compile_methodology",
-    "validate",
-    "call_llm",
-    "SYSTEM_PROMPT",
-    "build_compile_prompt",
-]
+__all__ = ["read_input", "compile_methodology"]
