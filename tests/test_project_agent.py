@@ -42,7 +42,6 @@ def test_get_project_agent_caches_per_name(tmp_path: Path, monkeypatch) -> None:
     # builds with no model override, so without this it would fall through to
     # backend auto-selection (CLI availability / API key), which varies by machine.
     monkeypatch.setenv("CW_CHAT_BACKEND", "dev")
-    monkeypatch.setattr(project_agent, "EXAMPLES_DIR", tmp_path)
     monkeypatch.setattr(project_agent, "_agents", {})
     first = project_agent.get_project_agent("alpha")
     second = project_agent.get_project_agent("alpha")
