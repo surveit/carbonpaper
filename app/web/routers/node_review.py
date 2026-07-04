@@ -12,19 +12,12 @@ and `versions/<id>/` (snapshots), managed by app.services.node_review + app.serv
 
 from __future__ import annotations
 
-import json
-
 from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 
-from app.services import node_review, versioning
-from app.services.loader import (
-    find_stage_file,
-    stage_to_json,
-    stage_to_spec_dict,
-    write_stage,
-)
-from app.models import Stage, validate_stage
+from app.services import node_review, stage_edit, versioning
+from app.services.loader import stage_to_json, stage_to_spec_dict
+from app.models import Stage
 from app.web.config import EXAMPLES_DIR, templates
 from app.web.diagrams import TYPE_CLASS, TYPE_GLYPH, build_mermaid_graph
 from app.web.loading import find_stage, load_stages, resolve_function_code
@@ -134,69 +127,25 @@ async def node_edit(
     stage_id: str,
     spec_text: str = Form(...),
 ):
-    """The ONLY writer into compiled/. Parse the posted JSON, validate it with
-    validate_stage, and — only if it's clean — write it back to compiled/<id>.json.
-    On validation issues return 400 with the issue list and write NOTHING (fail
-    loudly, never a silent partial write). Editing changes the spec's content hash,
-    so an approved node auto-drops to edited_stale until re-approved; we return the
-    new hash + state so the node flips live."""
+    """The ONLY writer into compiled/. Delegates the parse/validate/write core to
+    `stage_edit.edit_stage_spec` (shared with the editing agent's `edit_stage`
+    tool) and maps its result onto this route's HTTP contract: 400 with the issue
+    list and nothing written on any parse/validation problem (fail loudly, never a
+    silent partial write); 404 if the project or the stage's compiled file is
+    absent. Editing changes the spec's content hash, so an approved node
+    auto-drops to edited_stale until re-approved; we return the new hash + state
+    so the node flips live."""
     project_dir = EXAMPLES_DIR / project
     if not project_dir.is_dir():
         raise HTTPException(status_code=404, detail=f"No project '{project}'")
 
-    # Parse the posted JSON. A parse error is the reviewer's, not ours — surface it
-    # as a validation issue (400), file untouched.
     try:
-        parsed = json.loads(spec_text)
-    except json.JSONDecodeError as exc:
-        return JSONResponse(
-            {"ok": False, "issues": [f"JSON parse error: {exc}"]}, status_code=400
-        )
-    if not isinstance(parsed, dict):
-        return JSONResponse(
-            {"ok": False, "issues": ["edited spec must be a JSON object (a single stage)"]},
-            status_code=400,
-        )
-
-    # Strip loader-injected bookkeeping keys before validating/writing — they are
-    # not part of the spec (and the canonical hash ignores them anyway).
-    stage = {k: v for k, v in parsed.items() if k not in node_review.CANONICAL_IGNORE_KEYS}
-
-    # Guard: the parsed id must equal the path id (no renaming a node via edit, no
-    # writing one file's content under another's name).
-    parsed_id = stage.get("id")
-    if parsed_id != stage_id:
-        return JSONResponse(
-            {"ok": False,
-             "issues": [f"id in the edited spec ('{parsed_id}') must equal the node id '{stage_id}'"]},
-            status_code=400,
-        )
-
-    issues = validate_stage(stage)
-    if issues:
-        # Refused — the write never happens, the file is unchanged.
-        return JSONResponse({"ok": False, "issues": issues}, status_code=400)
-
-    # Guard: the target file must ALREADY exist. The edit endpoint revises an
-    # existing node; it does not create new compiled files (that's the compiler's
-    # job). Find the on-disk file for this stage id via the same loader convention.
-    target = find_stage_file(project_dir / "compiled", stage_id)
-    if target is None:
-        raise HTTPException(
-            status_code=404,
-            detail=f"No existing compiled file for stage '{stage_id}' in {project}",
-        )
-
-    # Persist the VALIDATED stage in the canonical on-disk form (the same shape
-    # the compiler writes and every read path hashes), not the reviewer's raw text.
-    validated = Stage.model_validate(stage)
-    write_stage(target, validated)
-
-    spec = stage_to_spec_dict(validated)
-    new_hash = node_review.node_content_hash(spec)
-    decisions = node_review.load_node_decisions(project_dir)
-    state = node_review.approval_state_for(spec, decisions)["state"]
-    return JSONResponse({"ok": True, "content_hash": new_hash, "state": state})
+        result = stage_edit.edit_stage_spec(project_dir, stage_id, spec_text)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    if not result.ok:
+        return JSONResponse({"ok": False, "issues": result.issues}, status_code=400)
+    return JSONResponse({"ok": True, "content_hash": result.content_hash, "state": result.state})
 
 
 # ─── Versioning ──────────────────────────────────────────────────────────────
