@@ -140,41 +140,53 @@ class ChatEngine:
 
     async def stream_turn(self, prompt: str, *, message_history, emit):
         """Run one turn. `emit` is called synchronously per UI event. Returns the
-        full message list (prior history + this turn) for persistence."""
+        full message list (prior history + this turn) for persistence.
+
+        An *event* is PydanticAI's unit of streaming progress, much smaller than
+        a message. While the model responds, each piece of the response (a text
+        block, a thinking block, a tool call) arrives as a PartStartEvent
+        followed by PartDeltaEvents carrying content fragments; while the agent
+        executes tools, each call and its return value arrive as
+        FunctionToolCall/ResultEvents. Events exist only to drive live UI —
+        the durable ModelRequest/ModelResponse *messages* are assembled by
+        PydanticAI once the turn completes, and that is what this returns."""
         async with self.agent.iter(prompt, message_history=message_history) as run:
             async for node in run:
                 if Agent.is_model_request_node(node):
                     async with node.stream(run.ctx) as stream:
-                        async for ev in stream:
-                            _emit_part_event(ev, emit)
+                        async for part_event in stream:
+                            _emit_part_event(part_event, emit)
                 elif Agent.is_call_tools_node(node):
-                    async with node.stream(run.ctx) as stream:
-                        async for ev in stream:
-                            _emit_tool_event(ev, emit)
-        return run.result.all_messages()
+                    async with node.stream(run.ctx) as tool_stream:
+                        async for tool_event in tool_stream:
+                            _emit_tool_event(tool_event, emit)
+        result = run.result
+        if result is None:
+            raise RuntimeError("Agent run produced no result (turn did not complete)")
+        return result.all_messages()
 
 
-def _emit_part_event(ev, emit) -> None:
-    if isinstance(ev, PartStartEvent):
-        part = ev.part
+def _emit_part_event(event, emit) -> None:
+    if isinstance(event, PartStartEvent):
+        part = event.part
         if isinstance(part, ThinkingPart) and part.content:
             emit({"kind": "thinking", "text": part.content})
         elif isinstance(part, TextPart) and part.content:
             emit({"kind": "text", "text": part.content})
-    elif isinstance(ev, PartDeltaEvent):
-        delta = ev.delta
+    elif isinstance(event, PartDeltaEvent):
+        delta = event.delta
         if isinstance(delta, ThinkingPartDelta) and delta.content_delta:
             emit({"kind": "thinking", "text": delta.content_delta})
         elif isinstance(delta, TextPartDelta) and delta.content_delta:
             emit({"kind": "text", "text": delta.content_delta})
 
 
-def _emit_tool_event(ev, emit) -> None:
-    if isinstance(ev, FunctionToolCallEvent):
-        emit({"kind": "tool_call", "name": ev.part.tool_name,
-              "args": ev.part.args_as_json_str()})
-    elif isinstance(ev, FunctionToolResultEvent):
-        emit({"kind": "tool_result", "content": _stringify(getattr(ev.part, "content", ""))})
+def _emit_tool_event(event, emit) -> None:
+    if isinstance(event, FunctionToolCallEvent):
+        emit({"kind": "tool_call", "name": event.part.tool_name,
+              "args": event.part.args_as_json_str()})
+    elif isinstance(event, FunctionToolResultEvent):
+        emit({"kind": "tool_result", "content": _stringify(getattr(event.part, "content", ""))})
 
 
 def _stringify(v) -> str:

@@ -61,7 +61,7 @@ def get_engine() -> ChatEngine | None:
 @router.get("/chat", response_class=HTMLResponse)
 async def chat_index(request: Request):
     return templates.TemplateResponse(request, "chat_index.html", {
-        "sessions": _store.list(),
+        "sessions": _store.list_sessions(),
         "backend": backend_label(),
     })
 
