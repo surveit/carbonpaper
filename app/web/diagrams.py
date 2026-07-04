@@ -1,5 +1,5 @@
 """Pure presentation helpers: build the Mermaid flowchart and ER diagram from a
-methodology's stages, plus the stage-type → CSS-class / glyph maps they share
+project's stages, plus the stage-type → CSS-class / glyph maps they share
 with the templates. No I/O — stages in, diagram source out."""
 
 from __future__ import annotations
@@ -7,7 +7,7 @@ from __future__ import annotations
 from app.models import Stage
 
 
-# Stage-type → CSS class for DAG node + badges.
+# Stage-type → CSS class for workflow node + badges.
 TYPE_CLASS = {
     "input_data": "input",
     "llm_transform": "llm",
@@ -96,7 +96,7 @@ def build_er_diagram(stages: list[Stage]) -> str:
 
 # Node-review BELIEF → stroke colour. Distinct from the type fill (classDef) and
 # from run status: this is "do we trust HOW this node is modeled". Kept identical
-# to the --belief-* palette in style.css so a legend chip equals the DAG stroke.
+# to the --belief-* palette in style.css so a legend chip equals the workflow stroke.
 REVIEW_STROKE = {
     "approved": ("#2a8a2a", "3px"),       # trusted → green
     "unreviewed": ("#9aa3ad", "1.5px"),   # not yet reviewed → grey
@@ -107,7 +107,7 @@ REVIEW_STROKE = {
 
 def build_mermaid_graph(
     stages: list[Stage],
-    methodology: str,
+    project: str,
     status_by_id: dict[str, str] | None = None,
     review_by_id: dict[str, str] | None = None,
 ) -> str:

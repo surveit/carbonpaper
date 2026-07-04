@@ -82,7 +82,7 @@ def test_tableref_schema_required():
 # ── EvalConfig (merged dataset + eval, one row-aligned table) ────────────────
 def _config(**over):
     base = {
-        "id": "scoring", "methodology": "lobbymap", "name": "n",
+        "id": "scoring", "project": "lobbymap", "name": "n",
         "override_stage": "evidence_with_benchmarks", "target_stage": "benchmark_scoring",
         "table": _ref(cols=["evidence_id", "benchmark_id", "quote", "expected_score"]),
         "key": ["evidence_id", "benchmark_id"],
@@ -143,8 +143,8 @@ def test_stage_output_override():
 # ── EvalRun embeds settings ──────────────────────────────────────────────────
 def test_eval_run_embeds_settings_and_passed():
     r = m.EvalRun.model_validate({
-        "id": "run-1", "config": "scoring", "methodology": "lobbymap",
-        "methodology_version": "abc123", "status": "scored",
+        "id": "run-1", "config": "scoring", "project": "lobbymap",
+        "workflow_version": "abc123", "status": "scored",
         "settings": {"can_score_declaratively": True,
                      "frontier": ["benchmark_scoring"], "blocking_stages": []},
         "passed": True, "metrics": {"mean_absolute_error": 0.33}})
@@ -152,10 +152,10 @@ def test_eval_run_embeds_settings_and_passed():
     assert r.passed is True
 
 
-# ── resolve_eval_run_settings on a synthetic DAG ─────────────────────────────
+# ── resolve_eval_run_settings on a synthetic workflow ─────────────────────────────
 def _chain():
     """a(input) → b(row) → c(frame) → d(row)."""
-    return m.parse_methodology([
+    return m.parse_workflow([
         _file_input("a"),
         _py("b", ["a"], granularity="row"),
         _py("c", ["b"], granularity="frame"),
@@ -183,7 +183,7 @@ def test_scorable_when_tapping_before_the_frame_stage():
 
 
 def test_join_changes_grain_so_not_scorable():
-    meth = m.parse_methodology([
+    meth = m.parse_workflow([
         _file_input("j1"), _file_input("j2"),
         S(id="jn", type="join", inputs=[{"id": "j1"}, {"id": "j2"}],
           join={"keys": [{"left": "k", "right": "k"}]}),

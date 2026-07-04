@@ -1,16 +1,16 @@
 {% extends "base.html" %}
-{% block title %}Methodologies{% endblock %}
+{% block title %}Projects{% endblock %}
 {% block content %}
-<h1>Methodologies</h1>
-<p class="lede">Each methodology is a directory under <code>examples/</code> containing a compiled DAG.</p>
+<h1>Projects</h1>
+<p class="lede">Each project is a directory under <code>examples/</code> containing a compiled workflow.</p>
 
-{% if methodologies %}
-<ul class="methodology-list">
-    {% for m in methodologies %}
-    <li><a href="/methodology/{{ m }}">{{ m }}</a></li>
+{% if projects %}
+<ul class="project-list">
+    {% for m in projects %}
+    <li><a href="/project/{{ m }}">{{ m }}</a></li>
     {% endfor %}
 </ul>
 {% else %}
-<p><em>No methodologies found. Compile some stages into <code>examples/&lt;name&gt;/compiled/</code>.</em></p>
+<p><em>No projects found. Compile some stages into <code>examples/&lt;name&gt;/compiled/</code>.</em></p>
 {% endif %}
 {% endblock %}

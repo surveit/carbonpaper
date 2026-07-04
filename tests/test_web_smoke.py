@@ -1,5 +1,5 @@
 """Route smoke tests: every page that renders stages must work on Stage objects
-(not dicts). Builds a small methodology in a tmp dir and points EXAMPLES_DIR at
+(not dicts). Builds a small project in a tmp dir and points EXAMPLES_DIR at
 it — no shipped example data required."""
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from fastapi.testclient import TestClient
 
 import app.web.config as web_config
 import app.web.loading as loading
-import app.web.routers.methodology as methodology_router
+import app.web.routers.project as project_router
 import app.web.routers.node_review as node_review_router
 import app.web.routers.runs as runs_router
 from app.main import app
@@ -32,14 +32,14 @@ _EXTRACT = {
 
 
 @pytest.fixture(autouse=True)
-def demo_methodology(tmp_path, monkeypatch):
-    """A two-stage methodology on disk, with EXAMPLES_DIR repointed at it in every
+def demo_project(tmp_path, monkeypatch):
+    """A two-stage project on disk, with EXAMPLES_DIR repointed at it in every
     module that captured the value by import."""
     compiled = tmp_path / "demo" / "compiled"
     compiled.mkdir(parents=True)
     (compiled / "01_load.json").write_text(json.dumps(_LOAD, indent=2), encoding="utf-8")
     (compiled / "02_extract.json").write_text(json.dumps(_EXTRACT, indent=2), encoding="utf-8")
-    for mod in (web_config, loading, methodology_router, node_review_router, runs_router):
+    for mod in (web_config, loading, project_router, node_review_router, runs_router):
         monkeypatch.setattr(mod, "EXAMPLES_DIR", tmp_path, raising=False)
     return tmp_path
 
@@ -48,29 +48,29 @@ def test_index():
     assert client.get("/").status_code == 200
 
 
-def test_methodology_dag_page():
-    r = client.get("/methodology/demo")
+def test_project_page():
+    r = client.get("/project/demo")
     assert r.status_code == 200
     assert "extract" in r.text
 
 
 def test_stage_detail_page():
-    r = client.get("/methodology/demo/stage/extract")
+    r = client.get("/project/demo/stage/extract")
     assert r.status_code == 200
     assert "Extract evidence pieces" in r.text           # stage name rendered
     assert "You are reading a document" in r.text          # prompt template rendered
 
 
 def test_stage_partial():
-    assert client.get("/methodology/demo/stage/extract/partial").status_code == 200
+    assert client.get("/project/demo/stage/extract/partial").status_code == 200
 
 
 def test_data_model_page():
-    assert client.get("/methodology/demo/data-model").status_code == 200
+    assert client.get("/project/demo/data-model").status_code == 200
 
 
 def test_raw_stage_is_json():
-    r = client.get("/methodology/demo/raw/extract")
+    r = client.get("/project/demo/raw/extract")
     assert r.status_code == 200
     assert r.headers["content-type"].startswith("application/json")
     payload = json.loads(r.text)
@@ -79,12 +79,12 @@ def test_raw_stage_is_json():
 
 def test_trigger_run_returns_400_on_invalid_dag(monkeypatch):
     """The run route surfaces a load failure as a 400 with the issue list."""
-    from app.services.loader import MethodologyLoadError
+    from app.services.loader import WorkflowLoadError
 
-    def _boom(methodology_dir, repo_root):
-        raise MethodologyLoadError(Path("compiled"), ["01_bad.json: params.path missing"])
+    def _boom(project_dir, repo_root):
+        raise WorkflowLoadError(Path("compiled"), ["01_bad.json: params.path missing"])
 
     monkeypatch.setattr(runs_router, "prepare_run", _boom)
-    r = client.post("/methodology/demo/run")
+    r = client.post("/project/demo/run")
     assert r.status_code == 400
     assert "01_bad.json: params.path missing" in r.json()["issues"]

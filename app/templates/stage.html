@@ -1,8 +1,8 @@
 {% extends "base.html" %}
-{% block title %}{{ stage.name }} · {{ methodology }}{% endblock %}
+{% block title %}{{ stage.name }} · {{ project }}{% endblock %}
 
 {% block header_extra %}
-<a href="/methodology/{{ methodology }}#{{ stage.id }}" class="back-link">← {{ methodology }}</a>
+<a href="/project/{{ project }}#{{ stage.id }}" class="back-link">← {{ project }}</a>
 {% endblock %}
 
 {% block content %}

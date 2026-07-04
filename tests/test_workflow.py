@@ -1,4 +1,4 @@
-"""Tests for app/models/methodology.py — the DAG model and its graph checks."""
+"""Tests for app/models/workflow.py — the Workflow model and its graph checks."""
 from __future__ import annotations
 
 import pytest
@@ -13,34 +13,34 @@ def S(**kw):
     return kw
 
 
-def test_methodology_clean():
-    meth = m.parse_methodology([
+def test_workflow_clean():
+    wf = m.parse_workflow([
         S(id="load", type="input_data",
           connector={"kind": "file", "params": {"path": "d.csv", "format": "csv"}}),
         S(id="extract", type="llm_transform", inputs=[{"id": "load"}],
           llm={"prompt_template": "do {x}"}),
     ])
-    assert [s.id for s in meth.stages] == ["load", "extract"]
+    assert [s.id for s in wf.stages] == ["load", "extract"]
 
 
-def test_methodology_duplicate_ids():
+def test_workflow_duplicate_ids():
     with pytest.raises(ValidationError):
-        m.parse_methodology([
+        m.parse_workflow([
             S(id="a", type="input_data", connector={"kind": "file", "params": {"path": "d.csv"}}),
             S(id="a", type="input_data", connector={"kind": "file", "params": {"path": "d.csv"}}),
         ])
 
 
-def test_methodology_dangling_input():
+def test_workflow_dangling_input():
     with pytest.raises(ValidationError):
-        m.parse_methodology([
+        m.parse_workflow([
             S(id="b", type="llm_transform", inputs=[{"id": "ghost"}], llm={"prompt_template": "p"}),
         ])
 
 
-def test_methodology_cycle():
+def test_workflow_cycle():
     with pytest.raises(ValidationError):
-        m.parse_methodology([
+        m.parse_workflow([
             S(id="a", type="python_frame_function", inputs=[{"id": "b"}], function={"kind": "inline", "code": "x"}),
             S(id="b", type="python_frame_function", inputs=[{"id": "a"}], function={"kind": "inline", "code": "x"}),
         ])
@@ -70,15 +70,19 @@ def test_detect_cycle_empty_when_acyclic():
     assert m.detect_cycle([a, b]) == []
 
 
-def test_validate_methodology_clean_is_empty():
-    assert m.validate_methodology([
-        S(id="load", type="input_data",
-          connector={"kind": "file", "params": {"path": "d.csv", "format": "csv"}}),
-    ]) == []
+# validate_workflow is the non-fatal aggregate entry: it runs every cross-stage
+# check on already-validated stages and returns all issues at once ([] means clean).
+def test_validate_workflow_clean_is_empty():
+    stages = [
+        Stage.model_validate(S(id="load", type="input_data",
+                               connector={"kind": "file", "params": {"path": "d.csv", "format": "csv"}})),
+    ]
+    assert m.validate_workflow(stages) == []
 
 
-def test_validate_methodology_reports_issues():
-    issues = m.validate_methodology([
-        S(id="j", type="join", inputs=[{"id": "a"}, {"id": "b"}], join={}),
-    ])
-    assert issues  # dangling inputs + join needs keys/on
+def test_validate_workflow_reports_issues():
+    s = Stage.model_validate(S(id="j", type="join",
+                               inputs=[{"id": "a"}, {"id": "b"}],
+                               join={"keys": [{"left": "x", "right": "y"}]}))
+    issues = m.validate_workflow([s])
+    assert issues  # both inputs dangle — reported, not raised

@@ -1,12 +1,12 @@
-"""Node-level review + DAG versioning: the "reviewable workflow" layer.
+"""Node-level review + workflow versioning: the "node review" layer.
 
-NODE review = "do we trust HOW this step is modeled?" — colours the DAG by a
+NODE review = "do we trust HOW this step is modeled?" — colours the workflow by a
 content-hash approval state, and does NOT halt a run. (Distinct from the ROW
 review queue in `review.py`, which is "is this run's DATA right?" and DOES halt a
 run.) It mirrors the queue's decide/partial patterns, lifted from data rows up to
-DAG node specs, and adds immutable version snapshots the runner pins runs to.
+workflow node specs, and adds immutable version snapshots the runner pins runs to.
 
-State lives under examples/<methodology>/: `node_decisions.parquet` (approvals)
+State lives under examples/<project>/: `node_decisions.parquet` (approvals)
 and `versions/<id>/` (snapshots), managed by app.services.node_review + app.services.versioning.
 """
 
@@ -41,17 +41,17 @@ def _review_by_id(stages: list[Stage], decisions) -> dict[str, str]:
     }
 
 
-@router.get("/methodology/{methodology}/review/status")
-async def review_status(methodology: str):
-    """Live poller for the methodology page: belief state per node, coverage, and a
+@router.get("/project/{project}/review/status")
+async def review_status(project: str):
+    """Live poller for the project page: belief state per node, coverage, and a
     freshly-built mermaid graph coloured by approval. Mirrors run_status — the page
-    swaps `mermaid` in place after a decision/edit so the DAG recolours without a
+    swaps `mermaid` in place after a decision/edit so the workflow recolours without a
     full reload."""
-    stages = load_stages(methodology).stages
-    decisions = node_review.load_node_decisions(EXAMPLES_DIR / methodology)
+    stages = load_stages(project).stages
+    decisions = node_review.load_node_decisions(EXAMPLES_DIR / project)
     review_by_id = _review_by_id(stages, decisions)
     coverage = node_review.coverage_for([stage_to_spec_dict(s) for s in stages], decisions)
-    mermaid = build_mermaid_graph(stages, methodology, review_by_id=review_by_id)
+    mermaid = build_mermaid_graph(stages, project, review_by_id=review_by_id)
     return JSONResponse({
         "review_by_id": review_by_id,
         "coverage": coverage,
@@ -60,24 +60,24 @@ async def review_status(methodology: str):
 
 
 @router.get(
-    "/methodology/{methodology}/node/{stage_id}/review-partial",
+    "/project/{project}/node/{stage_id}/review-partial",
     response_class=HTMLResponse,
 )
-async def node_review_partial(request: Request, methodology: str, stage_id: str):
-    """Per-node REVIEW/EDIT panel (right side of the methodology split view). Mirrors
+async def node_review_partial(request: Request, project: str, stage_id: str):
+    """Per-node REVIEW/EDIT panel (right side of the project split view). Mirrors
     stage_view_partial, but answers the node-review question (approve / reject / edit
     the spec) instead of showing the read-only stage detail."""
-    stages = load_stages(methodology).stages
+    stages = load_stages(project).stages
     stage = find_stage(stages, stage_id)
     if stage is None:
-        raise HTTPException(status_code=404, detail=f"No stage '{stage_id}' in {methodology}")
-    decisions = node_review.load_node_decisions(EXAMPLES_DIR / methodology)
+        raise HTTPException(status_code=404, detail=f"No stage '{stage_id}' in {project}")
+    decisions = node_review.load_node_decisions(EXAMPLES_DIR / project)
     review = node_review.approval_state_for(stage_to_spec_dict(stage), decisions)
     return templates.TemplateResponse(
         request,
         "_node_review.html",
         {
-            "methodology": methodology,
+            "project": project,
             "stage": stage,
             "review": review,
             "raw_json": stage_to_json(stage),
@@ -88,9 +88,9 @@ async def node_review_partial(request: Request, methodology: str, stage_id: str)
     )
 
 
-@router.post("/methodology/{methodology}/node/{stage_id}/decide")
+@router.post("/project/{project}/node/{stage_id}/decide")
 async def node_decide(
-    methodology: str,
+    project: str,
     stage_id: str,
     content_hash: str = Form(...),
     decision: str = Form(...),
@@ -102,12 +102,12 @@ async def node_decide(
     chip flips without a reload."""
     if decision not in ("approve", "reject", "needs_changes"):
         raise HTTPException(status_code=400, detail=f"unknown decision '{decision}'")
-    methodology_dir = EXAMPLES_DIR / methodology
-    if not methodology_dir.is_dir():
-        raise HTTPException(status_code=404, detail=f"No methodology '{methodology}'")
+    project_dir = EXAMPLES_DIR / project
+    if not project_dir.is_dir():
+        raise HTTPException(status_code=404, detail=f"No project '{project}'")
 
     node_review.record_node_decision(
-        methodology_dir,
+        project_dir,
         stage_id=stage_id,
         content_hash=content_hash,
         decision=decision,
@@ -116,21 +116,21 @@ async def node_decide(
     )
 
     # Recompute the state from the freshly-loaded store against the node's CURRENT
-    # spec — the same source of truth the DAG colours by — so the returned chip and
-    # the DAG agree. (record_node_decision stores 'needs_changes' verbatim, which
+    # spec — the same source of truth the workflow colours by — so the returned chip and
+    # the workflow agree. (record_node_decision stores 'needs_changes' verbatim, which
     # approval_state_for reports as 'unreviewed' for colouring.)
-    stages = load_stages(methodology).stages
+    stages = load_stages(project).stages
     stage = find_stage(stages, stage_id)
     if stage is None:
-        raise HTTPException(status_code=404, detail=f"No stage '{stage_id}' in {methodology}")
-    decisions = node_review.load_node_decisions(methodology_dir)
+        raise HTTPException(status_code=404, detail=f"No stage '{stage_id}' in {project}")
+    decisions = node_review.load_node_decisions(project_dir)
     state = node_review.approval_state_for(stage_to_spec_dict(stage), decisions)["state"]
     return JSONResponse({"ok": True, "state": state})
 
 
-@router.post("/methodology/{methodology}/node/{stage_id}/edit")
+@router.post("/project/{project}/node/{stage_id}/edit")
 async def node_edit(
-    methodology: str,
+    project: str,
     stage_id: str,
     spec_text: str = Form(...),
 ):
@@ -140,9 +140,9 @@ async def node_edit(
     loudly, never a silent partial write). Editing changes the spec's content hash,
     so an approved node auto-drops to edited_stale until re-approved; we return the
     new hash + state so the node flips live."""
-    methodology_dir = EXAMPLES_DIR / methodology
-    if not methodology_dir.is_dir():
-        raise HTTPException(status_code=404, detail=f"No methodology '{methodology}'")
+    project_dir = EXAMPLES_DIR / project
+    if not project_dir.is_dir():
+        raise HTTPException(status_code=404, detail=f"No project '{project}'")
 
     # Parse the posted JSON. A parse error is the reviewer's, not ours — surface it
     # as a validation issue (400), file untouched.
@@ -180,11 +180,11 @@ async def node_edit(
     # Guard: the target file must ALREADY exist. The edit endpoint revises an
     # existing node; it does not create new compiled files (that's the compiler's
     # job). Find the on-disk file for this stage id via the same loader convention.
-    target = find_stage_file(methodology_dir / "compiled", stage_id)
+    target = find_stage_file(project_dir / "compiled", stage_id)
     if target is None:
         raise HTTPException(
             status_code=404,
-            detail=f"No existing compiled file for stage '{stage_id}' in {methodology}",
+            detail=f"No existing compiled file for stage '{stage_id}' in {project}",
         )
 
     # Persist the VALIDATED stage in the canonical on-disk form (the same shape
@@ -194,7 +194,7 @@ async def node_edit(
 
     spec = stage_to_spec_dict(validated)
     new_hash = node_review.node_content_hash(spec)
-    decisions = node_review.load_node_decisions(methodology_dir)
+    decisions = node_review.load_node_decisions(project_dir)
     state = node_review.approval_state_for(spec, decisions)["state"]
     return JSONResponse({"ok": True, "content_hash": new_hash, "state": state})
 
@@ -202,37 +202,37 @@ async def node_edit(
 # ─── Versioning ──────────────────────────────────────────────────────────────
 
 
-@router.post("/methodology/{methodology}/version")
-async def create_version_route(methodology: str, message: str = Form(...)):
+@router.post("/project/{project}/version")
+async def create_version_route(project: str, message: str = Form(...)):
     """Snapshot the working copy's {compiled/, schemas/} into a new immutable
     version + freeze approval coverage at creation time. The parent is the latest
     existing version (None for the very first version). The JS redirects to the
     versions list on success."""
-    methodology_dir = EXAMPLES_DIR / methodology
-    if not methodology_dir.is_dir():
-        raise HTTPException(status_code=404, detail=f"No methodology '{methodology}'")
-    existing = versioning.list_versions(methodology_dir)  # newest-first
+    project_dir = EXAMPLES_DIR / project
+    if not project_dir.is_dir():
+        raise HTTPException(status_code=404, detail=f"No project '{project}'")
+    existing = versioning.list_versions(project_dir)  # newest-first
     parent = existing[0]["id"] if existing else None
     try:
         meta = versioning.create_version(
-            methodology_dir, message=message, reviewer="local", parent_version=parent
+            project_dir, message=message, reviewer="local", parent_version=parent
         )
     except FileNotFoundError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return JSONResponse({"ok": True, "version": meta})
 
 
-@router.get("/methodology/{methodology}/versions", response_class=HTMLResponse)
-async def versions_index(request: Request, methodology: str):
-    """List every version of a methodology, newest-first, with frozen coverage."""
-    methodology_dir = EXAMPLES_DIR / methodology
-    if not methodology_dir.is_dir():
-        raise HTTPException(status_code=404, detail=f"No methodology '{methodology}'")
+@router.get("/project/{project}/versions", response_class=HTMLResponse)
+async def versions_index(request: Request, project: str):
+    """List every version of a project, newest-first, with frozen coverage."""
+    project_dir = EXAMPLES_DIR / project
+    if not project_dir.is_dir():
+        raise HTTPException(status_code=404, detail=f"No project '{project}'")
     return templates.TemplateResponse(
         request,
         "versions.html",
         {
-            "methodology": methodology,
-            "versions": versioning.list_versions(methodology_dir),
+            "project": project,
+            "versions": versioning.list_versions(project_dir),
         },
     )

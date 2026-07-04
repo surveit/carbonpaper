@@ -1,4 +1,4 @@
-"""DAG-level contract: a methodology is a list of validated stages plus the
+"""Workflow contract: a workflow is a list of validated stages plus the
 cross-stage checks (unique ids, inputs resolve, acyclic).
 
 The graph checks are plain functions so they can be tested on their own and read
@@ -37,7 +37,8 @@ def check_inputs_resolve(stages: list[Stage]) -> list[str]:
 
 def detect_cycle(stages: list[Stage]) -> list[str]:
     """A one-item list naming the first cycle found, or [] if acyclic. One cycle
-    is enough to reject the DAG; we don't enumerate them all."""
+    is enough to reject the workflow; we don't enumerate them all. The stage graph
+    must stay acyclic — a cycle means the runner could never order the stages."""
     edges = {s.id: list(s.input_ids) for s in stages}
     WHITE, GRAY, BLACK = 0, 1, 2
     color = {sid: WHITE for sid in edges}
@@ -64,41 +65,44 @@ def detect_cycle(stages: list[Stage]) -> list[str]:
 
 
 def graph_issues(stages: list[Stage]) -> list[str]:
-    """Every cross-stage problem in the DAG: duplicate ids, dangling inputs, and
-    a cycle. The single source of truth both the strict model validator and the
-    non-fatal `validate_methodology_stages` build on."""
+    """Every cross-stage problem in the workflow graph: duplicate ids, dangling
+    inputs, and a cycle. The single source of truth both the strict model
+    validator and the non-fatal `validate_workflow` build on."""
     return check_unique_ids(stages) + check_inputs_resolve(stages) + detect_cycle(stages)
 
 
-class Methodology(_Base):
-    """A whole DAG: validated stages with unique ids, resolvable inputs, acyclic."""
+class Workflow(_Base):
+    """A whole workflow: validated stages with unique ids, resolvable inputs, acyclic."""
     stages: list[Stage]
 
     @model_validator(mode="after")
-    def _validate_dag(self) -> "Methodology":
+    def _validate_graph(self) -> "Workflow":
         issues = graph_issues(self.stages)
         if issues:
             raise ValueError("; ".join(issues))
         return self
 
 
-def parse_methodology(stages: list[dict[str, Any]]) -> Methodology:
+def parse_workflow(stages: list[dict[str, Any]]) -> Workflow:
     """Parse + validate a list of stage dicts. Raises ValidationError if invalid."""
-    return Methodology.model_validate({"stages": list(stages)})
+    return Workflow.model_validate({"stages": list(stages)})
 
 
-def validate_methodology(stages: list[dict[str, Any]]) -> list[str]:
-    """Non-fatal: return human-readable issues ([] means valid). For the UI/compiler,
-    which want to show problems rather than crash."""
-    try:
-        Methodology.model_validate({"stages": list(stages)})
-        return []
-    except ValidationError as err:
-        return format_errors(err)
-
-
-def validate_methodology_stages(stages: list[Stage]) -> list[str]:
+def validate_workflow(stages: list[Stage]) -> list[str]:
     """Cross-stage checks (unique ids, inputs resolve, acyclic) on
     already-validated stages, as human-readable issue strings — every problem,
     not just the first."""
     return graph_issues(stages)
+
+
+def validate_workflow_draft(stages: list[dict[str, Any]]) -> list[str]:
+    """Non-fatal validation of DRAFT stage dicts (e.g. a compiler's LLM output):
+    parse + validate the whole list and return human-readable issues ([] means a
+    clean-validating draft). Unlike validate_workflow, which runs the graph checks
+    on already-parsed Stages, this also surfaces per-stage schema errors straight
+    from raw dicts, so a caller can show problems instead of crashing."""
+    try:
+        Workflow.model_validate({"stages": list(stages)})
+        return []
+    except ValidationError as err:
+        return format_errors(err)

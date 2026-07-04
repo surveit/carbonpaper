@@ -1,6 +1,6 @@
 """Eval contract, as Pydantic models. Constructing a model validates it.
 
-An eval measures the *real* methodology pipeline, not a copy of it. The v1 shape
+An eval measures the *real* workflow, not a copy of it. The v1 shape
 (fan-out / fan-in are out of scope — those evals come later):
 
   - An **EvalConfig** is the authored spec. At its core is ONE row-aligned table:
@@ -12,7 +12,7 @@ An eval measures the *real* methodology pipeline, not a copy of it. The v1 shape
     (extra data a case needs loaded) and how to score (`expected` comparisons,
     rollup `metrics`, or a `code` scorer for the escape hatch).
   - A **StageOutputOverride** injects a whole table as some stage's output.
-  - An **EvalRun** is the result at a specific methodology version: its computed
+  - An **EvalRun** is the result at a specific workflow version: its computed
     `settings` (can it be scored automatically, and if not why), whether it
     `passed`, and the scorer's `metrics` / per-row result table.
 
@@ -26,7 +26,7 @@ from typing import Annotated, Any, Iterable, Literal, Optional
 
 from pydantic import AfterValidator, Field, field_validator, model_validator
 
-from app.models.methodology import Methodology
+from app.models.workflow import Workflow
 from app.models.schema import _Base
 from app.models.table import TableRef
 
@@ -81,7 +81,7 @@ class CodeScorer(_Base):
 # ── The eval config ──────────────────────────────────────────────────────────
 class EvalConfig(_Base):
     """The authored eval: one row-aligned table of cases plus how it plugs into
-    the DAG and how it's scored.
+    the workflow and how it's scored.
 
     Each row's `input_columns` are injected at `override_stage`; its `expected`
     columns are compared against `target_stage`'s output on the same row. The
@@ -91,7 +91,7 @@ class EvalConfig(_Base):
     per-column `expected` comparison when declarative scoring can't apply.
     """
     id: SlugId
-    methodology: str
+    project: str
     name: str
     description: Optional[str] = None
     # data + wiring
@@ -145,7 +145,7 @@ class EvalRunSettings(_Base):
 
 
 def resolve_eval_run_settings(
-    methodology: Methodology,
+    workflow: Workflow,
     overrides: Iterable[str],
     target: str,
 ) -> EvalRunSettings:
@@ -158,9 +158,9 @@ def resolve_eval_run_settings(
     (loudly) if `target` or any override names no stage, or if `target` is itself
     overridden — a misconfigured eval should fail at definition, not at score time.
     """
-    by_id = {s.id: s for s in methodology.stages}
+    by_id = {s.id: s for s in workflow.stages}
     if target not in by_id:
-        raise ValueError(f"target {target!r} is not a stage in the methodology")
+        raise ValueError(f"target {target!r} is not a stage in the workflow")
     ov = set(overrides)
     missing = ov - by_id.keys()
     if missing:
@@ -189,13 +189,13 @@ def resolve_eval_run_settings(
 
 # ── The run result ───────────────────────────────────────────────────────────
 class EvalRun(_Base):
-    """Result of running an EvalConfig against one methodology version."""
+    """Result of running an EvalConfig against one workflow version."""
     id: SlugId
     config: str
-    methodology: str
-    # Which DAG version was scored — the stale tripwire. If the target's key or
+    project: str
+    # Which workflow version was scored — the stale tripwire. If the target's key or
     # domain moved since the config was authored, it's stale; don't re-score.
-    methodology_version: str
+    workflow_version: str
     status: Literal["scored", "vetoed", "error"]
     # How this run was scored (from resolve_eval_run_settings). `vetoed` = it
     # couldn't be scored declaratively and no code scorer was supplied.

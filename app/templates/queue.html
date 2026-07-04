@@ -2,7 +2,7 @@
 {% block title %}Review queue · {{ stage_id }} · {{ run_id }}{% endblock %}
 
 {% block header_extra %}
-<a href="/methodology/{{ methodology }}/runs/{{ run_id }}" class="back-link">← Run {{ run_id }}</a>
+<a href="/project/{{ project }}/runs/{{ run_id }}" class="back-link">← Run {{ run_id }}</a>
 {% endblock %}
 
 {% block content %}
@@ -16,7 +16,7 @@
     <div class="bar"><div class="fill" style="width: {{ (100 * reviewed_count / total) | round if total else 0 }}%"></div></div>
     <p><strong>{{ reviewed_count }}</strong> of <strong>{{ total }}</strong> reviewed</p>
     {% if all_reviewed %}
-    <form action="/methodology/{{ methodology }}/runs/{{ run_id }}/resume" method="post" style="display:inline">
+    <form action="/project/{{ project }}/runs/{{ run_id }}/resume" method="post" style="display:inline">
         <button type="submit" class="btn primary">▶ Resume run</button>
     </form>
     {% endif %}
@@ -103,10 +103,10 @@
 
 <script>
 (function () {
-  const METHODOLOGY = {{ methodology | tojson }};
+  const PROJECT = {{ project | tojson }};
   const RUN_ID = {{ run_id | tojson }};
   const STAGE_ID = {{ stage_id | tojson }};
-  const DECIDE_URL = `/methodology/${METHODOLOGY}/runs/${RUN_ID}/queue/${STAGE_ID}/decide`;
+  const DECIDE_URL = `/project/${PROJECT}/runs/${RUN_ID}/queue/${STAGE_ID}/decide`;
 
   async function submitDecision(card, decision, modifiedScore) {
     const fd = new FormData();

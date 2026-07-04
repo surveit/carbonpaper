@@ -1,11 +1,11 @@
-{# ── Per-node REVIEW / EDIT panel (right side of the methodology split view) ──
-   Loaded as a partial via fetch() from methodology.html when a DAG node is
+{# ── Per-node REVIEW / EDIT panel (right side of the project split view) ──
+   Loaded as a partial via fetch() from project.html when a workflow node is
    clicked. It answers the NODE-review question — "do we trust HOW this step is
    modeled" — which is deliberately distinct from the ROW-review queue ("is this
-   run's DATA right", which halts a run). Node review only colours the DAG.
+   run's DATA right", which halts a run). Node review only colours the workflow.
 
-   Context this partial expects (passed by GET /methodology/{m}/node/{id}/review-partial):
-     methodology  — str
+   Context this partial expects (passed by GET /project/{m}/node/{id}/review-partial):
+     project  — str
      stage        — the loaded stage dict (must include .id, .type, .name)
      review       — approval_state_for(stage, df):
                       {state, current_hash, matched_decision}
@@ -31,7 +31,7 @@
 <p class="review-scope">
     <strong>Node review</strong> — do we trust <em>how this step is modeled?</em>
     Your decision colours the workflow; it does <em>not</em> halt a run.
-    <span class="muted">(That's <a href="/methodology/{{ methodology }}/runs">row review</a> in a run's queue — "is this run's <em>data</em> right?".)</span>
+    <span class="muted">(That's <a href="/project/{{ project }}/runs">row review</a> in a run's queue — "is this run's <em>data</em> right?".)</span>
 </p>
 
 <div class="node-review" id="node-review-panel" data-stage-id="{{ stage.id }}">
@@ -81,14 +81,14 @@
 <script>
 (function () {
   // This partial is injected via innerHTML and its <script> re-executed by the
-  // methodology page's loadStage (which re-creates panel scripts). Scope to the
+  // project page's loadStage (which re-creates panel scripts). Scope to the
   // freshly-inserted panel.
   const panel = document.getElementById('node-review-panel');
   if (!panel) return;
-  const METHODOLOGY = {{ methodology | tojson }};
+  const PROJECT = {{ project | tojson }};
   const STAGE_ID = panel.dataset.stageId;
-  const DECIDE_URL = `/methodology/${encodeURIComponent(METHODOLOGY)}/node/${encodeURIComponent(STAGE_ID)}/decide`;
-  const EDIT_URL = `/methodology/${encodeURIComponent(METHODOLOGY)}/node/${encodeURIComponent(STAGE_ID)}/edit`;
+  const DECIDE_URL = `/project/${encodeURIComponent(PROJECT)}/node/${encodeURIComponent(STAGE_ID)}/decide`;
+  const EDIT_URL = `/project/${encodeURIComponent(PROJECT)}/node/${encodeURIComponent(STAGE_ID)}/edit`;
 
   const chip = panel.querySelector('[data-role="state-chip"]');
   const hashEl = panel.querySelector('[data-role="hash"]');
@@ -110,8 +110,8 @@
     });
   }
 
-  // After any state-changing action, ask the methodology page to re-poll
-  // /review/status so the DAG node recolours live (the page exposes this hook).
+  // After any state-changing action, ask the project page to re-poll
+  // /review/status so the workflow node recolours live (the page exposes this hook).
   function refreshDag() {
     if (window._pollReviewStatus) window._pollReviewStatus();
   }

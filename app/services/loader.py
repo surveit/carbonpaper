@@ -1,6 +1,6 @@
-"""Canonical load + save for a methodology's compiled stage files.
+"""Canonical load + save for a project's compiled stage files.
 
-One JSON file per stage under `<methodology>/compiled/`. This module is the ONE
+One JSON file per stage under `<project>/compiled/`. This module is the ONE
 place that knows the on-disk stage format — both directions. Everything past it
 speaks `Stage` objects; nothing else should call `model_dump_json` on a stage or
 glob `compiled/*.json`, so a format change (or the planned rename) touches only
@@ -9,8 +9,8 @@ this file.
 Read:
   - load_compiled_dir: tolerant, per-file — for the viewer, which renders
     problems rather than crashing.
-  - load_methodology_stages: strict — for the runner, which refuses to execute
-    a DAG with any invalid stage or cross-stage issue.
+  - load_workflow: strict — for the runner, which refuses to execute
+    a workflow with any invalid stage or cross-stage issue.
 
 Serialize / save:
   - stage_to_spec_dict / stage_to_json: the canonical data + text forms.
@@ -25,7 +25,7 @@ from typing import Any
 
 from pydantic import ValidationError
 
-from app.models.methodology import validate_methodology_stages
+from app.models.workflow import validate_workflow
 from app.models.schema import format_errors
 from app.models.stage import Stage
 
@@ -38,8 +38,8 @@ class CompiledStageFile:
     issues: list[str] = field(default_factory=list)
 
 
-class MethodologyLoadError(Exception):
-    """The compiled DAG failed validation; `issues` lists every problem found."""
+class WorkflowLoadError(Exception):
+    """The compiled workflow failed validation; `issues` lists every problem found."""
 
     def __init__(self, compiled_dir: Path, issues: list[str]):
         self.issues = issues
@@ -69,16 +69,16 @@ def load_compiled_dir(compiled_dir: Path) -> list[CompiledStageFile]:
     return entries
 
 
-def load_methodology_stages(methodology_dir: Path) -> list[Stage]:
-    compiled_dir = methodology_dir / "compiled"
+def load_workflow(project_dir: Path) -> list[Stage]:
+    compiled_dir = project_dir / "compiled"
     entries = load_compiled_dir(compiled_dir)
     issues = [f"{e.filename}: {i}" for e in entries for i in e.issues]
     if not entries:
         issues.append(f"no compiled stage files found in {compiled_dir}")
     stages = [e.stage for e in entries if e.stage is not None]
-    issues += validate_methodology_stages(stages)
+    issues += validate_workflow(stages)
     if issues:
-        raise MethodologyLoadError(compiled_dir, issues)
+        raise WorkflowLoadError(compiled_dir, issues)
     return stages
 
 

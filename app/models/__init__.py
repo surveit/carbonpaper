@@ -1,9 +1,9 @@
-"""The methodology DAG contract, as Pydantic models.
+"""The workflow contract, as Pydantic models.
 
 Split across modules:
   - schema.py        — model base + the Column/TableSchema primitives
   - stage.py         — node types, handle blocks, the Stage model
-  - methodology.py   — the Methodology (DAG) model + cross-stage graph checks
+  - workflow.py      — the Workflow model + cross-stage graph checks
   - named_schemas.py — the named data model (NamedSchema, SchemaLibrary)
   - table.py         — TableRef (a general on-disk table pointer)
   - eval.py          — the eval contract (EvalConfig, EvalRun, scorability)
@@ -38,14 +38,14 @@ from app.models.stage import (
     StageType,
     validate_stage,
 )
-from app.models.methodology import (
-    Methodology,
+from app.models.workflow import (
+    Workflow,
     check_inputs_resolve,
     check_unique_ids,
     detect_cycle,
-    parse_methodology,
-    validate_methodology,
-    validate_methodology_stages,
+    parse_workflow,
+    validate_workflow,
+    validate_workflow_draft,
 )
 from app.models.named_schemas import (
     NamedColumn,
@@ -175,8 +175,7 @@ __all__ = [
     "PythonFunction", "JoinKey", "JoinConfig", "AggregationOp",
     "AggregateConfig", "QueueConfig", "PublishConfig", "ReviewConfig",
     "InputRef", "Stage", "validate_stage",
-    "Methodology", "parse_methodology", "validate_methodology",
-    "validate_methodology_stages",
+    "Workflow", "parse_workflow", "validate_workflow", "validate_workflow_draft",
     "check_unique_ids", "check_inputs_resolve", "detect_cycle",
     "SchemaKind", "NamedColumn", "NamedSchema", "SchemaLibrary",
     "parse_schema_library", "validate_schema_library", "validate_named_schema",

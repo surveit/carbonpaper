@@ -1,6 +1,6 @@
-# app — the FastAPI web app (DAG / run / review UI)
+# app — the FastAPI web app (workflow / run / review UI)
 
-The web app serves the methodology DAGs, their runs, and the review queue.
+The web app serves the workflows, their runs, and the review queue.
 `app/main.py` is a thin bootstrap: it creates the FastAPI app, mounts `/static`,
 and includes the routers in `app/web/routers/`. Those routers import the Runner
 (`app.runtime`) and the contract (`app.models`), and share the helpers in
@@ -10,10 +10,10 @@ and includes the routers in `app/web/routers/`. Those routers import the Runner
 Run: `python -m uvicorn app.main:app --port 8765`.
 
 ## Pages / routes
-- `/` — methodology list. `/methodology/<m>` — the DAG (mermaid) + click-through stage detail.
-- `/methodology/<m>/data-model` — ER diagram of stage schemas.
-- `/methodology/<m>/runs`, `/methodology/<m>/runs/<id>` — run history + a run's detail.
-- `/methodology/<m>/runs/<id>/queue/<stage>` — the human-review queue UI (+ `/decide`, `/resume`).
+- `/` — project list. `/project/<m>` — the workflow (mermaid) + click-through stage detail.
+- `/project/<m>/data-model` — ER diagram of stage schemas.
+- `/project/<m>/runs`, `/project/<m>/runs/<id>` — run history + a run's detail.
+- `/project/<m>/runs/<id>/queue/<stage>` — the human-review queue UI (+ `/decide`, `/resume`).
 
 ## The node / stage panel — 3 tiers, left → right
 `run_stage_partial` → `_run_stage_panel.html` renders **Inputs │ Transform │ Outputs**:
@@ -24,10 +24,10 @@ Run: `python -m uvicorn app.main:app --port 8765`.
 - URL-valued cells render as full clickable links (`cell-url`), never truncated.
 
 ## Live run progress (no full-page reload)
-`POST /methodology/<m>/run` → `runner.prepare_run` (writes an initial `running`
+`POST /project/<m>/run` → `runner.prepare_run` (writes an initial `running`
 manifest) → executes in a **background thread** (`run_in_background`) → redirects
 immediately. `run_detail.html` polls `GET …/runs/<id>/status` every 2s and updates
-the status badge, counts, and the mermaid DAG *in place*; on the terminal
+the status badge, counts, and the mermaid workflow *in place*; on the terminal
 transition it reloads once to render previews/artifacts. Terminal runs don't poll.
 
 ## Scratch in-memory re-run (ephemeral, nothing persisted)
@@ -41,9 +41,9 @@ have side effects).
 
 ## Files
 `main.py` (app bootstrap — mounts static + includes routers) ·
-`web/routers/{methodology,runs,review}.py` (route handlers) ·
+`web/routers/{project,runs,review}.py` (route handlers) ·
 `web/{config,loading,diagrams}.py` (paths+templates · fs reads & stage-dict
 helpers · mermaid/ER builders) · `templates/` (`run_detail.html`,
 `_run_stage_panel.html`, `_stage_executable.html`, `_stage_content.html`, +
-base/index/methodology/queue/…) · `static/style.css` · `runtime/preview.py`
+base/index/project/queue/…) · `static/style.css` · `runtime/preview.py`
 (scratch-run backend).

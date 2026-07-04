@@ -1,6 +1,6 @@
 """Schema primitives — the model base and the anonymous Column / TableSchema.
 
-The pieces both the DAG (`stage.py`) and the named data model (`named_schemas.py`)
+The pieces both the workflow (`stage.py`) and the named data model (`named_schemas.py`)
 build on: the model base, the column-type vocabulary, `Column`, `TableSchema` (an
 anonymous schema that can be declared inline), the `SourceRef` provenance handle,
 and the error formatter. They live *below* both modules — `stage.py` and

@@ -1,8 +1,8 @@
 {% extends "base.html" %}
-{% block title %}{{ stage_id }} rows · {{ run_id }} · {{ methodology }}{% endblock %}
+{% block title %}{{ stage_id }} rows · {{ run_id }} · {{ project }}{% endblock %}
 
 {% block header_extra %}
-<a href="/methodology/{{ methodology }}/runs/{{ run_id }}" class="back-link">← run {{ run_id }}</a>
+<a href="/project/{{ project }}/runs/{{ run_id }}" class="back-link">← run {{ run_id }}</a>
 {% endblock %}
 
 {% block content %}
@@ -15,7 +15,7 @@
     {% if capped %}
     <span class="alert warn">⚠ Showing first {{ "{:,}".format(rows | length) }} of {{ "{:,}".format(rows_total) }} rows — download the CSV for the complete data.</span>
     {% endif %}
-    <a class="btn primary" href="/methodology/{{ methodology }}/runs/{{ run_id }}/stage/{{ stage_id }}/rows.csv">⬇ Download full CSV</a>
+    <a class="btn primary" href="/project/{{ project }}/runs/{{ run_id }}/stage/{{ stage_id }}/rows.csv">⬇ Download full CSV</a>
 </div>
 
 {% if rows %}

@@ -3,7 +3,7 @@ prompt.py — the COMPILER's system prompt + prompt builder.
 
 The compiler's whole job is one LLM call: hand the model an UNSTRUCTURED account
 of a research process (a captured agent/tool transcript, a set of notes, or plain
-prose) and ask it to emit a structured methodology DAG that validates against
+prose) and ask it to emit a structured workflow that validates against
 `app/models`. This module owns *how we ask* — kept separate from
 `app/compiler.py` (which owns the mechanism: call, parse, validate, persist).
 
@@ -26,7 +26,7 @@ SYSTEM_PROMPT = (
     "You are a METHODOLOGY COMPILER. You read an UNSTRUCTURED account of one "
     "research process — it may be a captured agent/tool transcript, a set of "
     "notes, or plain prose describing how an investigation was carried out — and "
-    "you DISTILL it into a reusable, structured methodology DAG of typed stages "
+    "you DISTILL it into a reusable, structured workflow of typed stages "
     "targeting app/models.\n\n"
     "You have NO tools and NO web access: work only from the text the user gives "
     "you. Put the LLM (llm_transform) only at the FEW genuine judgment points; "
@@ -122,14 +122,14 @@ def build_compile_prompt(input_text: str, name: str) -> str:
     example = json.dumps(_EXAMPLE_STAGE, indent=2)
 
     return f"""\
-You are distilling ONE research process into a reusable methodology DAG that would
+You are distilling ONE research process into a reusable workflow that would
 reproduce this CLASS of research deterministically — with the LLM sitting at only
 the FEW genuine judgment points and everything else as deterministic mechanism.
 
 Subject / out-name: "{name}"
 
 # The output contract (target: app/models)
-Emit a methodology as a list of STAGE dicts. Each stage validates against this
+Emit a workflow as a list of STAGE dicts. Each stage validates against this
 contract:
 
 {contract}
@@ -168,7 +168,7 @@ type — most steps are deterministic mechanism, a FEW are genuine judgment:
 - Rendering the final output → **publish**.
 
 Keep llm_transform stages to the few real judgment points; make the rest
-deterministic. Wire `inputs` so the DAG is connected and acyclic: every input id
+deterministic. Wire `inputs` so the workflow is connected and acyclic: every input id
 must be the id of an upstream stage. Keep every id snake_case.
 
 # Output format — RAW JSON ONLY, no prose, no markdown fences:

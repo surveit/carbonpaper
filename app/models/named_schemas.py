@@ -1,4 +1,4 @@
-"""Named schemas — the data model, authored before the DAG.
+"""Named schemas — the data model, authored before the workflow.
 
 A NamedSchema is a TableSchema (the anonymous, inline schema a stage can make up
 on the fly) promoted to a first-class, addressable artifact: it adds a `name`, a
@@ -7,7 +7,7 @@ its columns) so the data model is a real graph rather than a PK-name-collision
 heuristic. A SchemaLibrary is the whole data model: it checks names are unique and
 every reference resolves.
 
-Like methodology.py, the cross-schema checks are plain functions so they can be
+Like workflow.py, the cross-schema checks are plain functions so they can be
 tested and read on their own.
 """
 from __future__ import annotations
@@ -30,7 +30,7 @@ from app.models.schema import (
 class SchemaKind(str, Enum):
     reference = "reference"        # source, don't compute (dimension / lookup / benchmark)
     input = "input"                # raw data fetched into the pipeline
-    computed = "computed"          # produced by a DAG stage
+    computed = "computed"          # produced by a workflow stage
     ground_truth = "ground_truth"  # external truth used only by eval
 
 

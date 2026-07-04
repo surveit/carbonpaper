@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% from "_schema_table.html" import schema_table %}
-{% block title %}{{ methodology }} · data model{% endblock %}
+{% block title %}{{ project }} · data model{% endblock %}
 
 {% block head_extra %}
 <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
@@ -17,19 +17,19 @@
 {% endblock %}
 
 {% block header_extra %}
-<a href="/methodology/{{ methodology }}" class="back-link">← {{ methodology }}</a>
+<a href="/project/{{ project }}" class="back-link">← {{ project }}</a>
 {% endblock %}
 
 {% block content %}
-<div class="methodology-header">
-    <h1>{{ methodology }} · data model</h1>
+<div class="project-header">
+    <h1>{{ project }} · data model</h1>
     <div class="actions">
-        <a href="/methodology/{{ methodology }}" class="btn">DAG view</a>
+        <a href="/project/{{ project }}" class="btn">Workflow view</a>
     </div>
 </div>
 <p class="lede">Each stage produces a typed table. <strong>PK</strong> = primary key. <strong>FK</strong> = column matches an upstream table's primary key. Lines show stage-to-stage flow.</p>
 
-<div class="dag">
+<div class="workflow">
     <pre class="mermaid">
 {{ er_diagram }}
     </pre>
@@ -49,7 +49,7 @@
     {% for s in group %}
     <details class="dm-table" open>
         <summary>
-            <a href="/methodology/{{ methodology }}#{{ s.id }}"><code>{{ s.id }}</code></a>
+            <a href="/project/{{ project }}#{{ s.id }}"><code>{{ s.id }}</code></a>
             <span class="muted">— {{ s.name }}</span>
             {% if s.output_schema and s.output_schema.estimated_rows %}<span class="dm-rows">est {{ "{:,}".format(s.output_schema.estimated_rows) }} rows</span>{% endif %}
         </summary>

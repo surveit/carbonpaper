@@ -2,7 +2,7 @@
 CLI for the compiler: `python -m app.compiler <input> <out_name> [--out DIR] [--model M]`.
 
 Orchestrates the compile MECHANISM (`app.compiler.compile_methodology`) and the
-DAG-writing step of the compilation service (`app.services.compilation`).
+workflow-writing step of the compilation service (`app.services.compilation`).
 """
 
 from __future__ import annotations
@@ -46,11 +46,11 @@ def _cli(argv: list[str]) -> int:
 
     issues = result["validation"]
     if issues:
-        print(f"\n[compiler] validate_methodology: {len(issues)} ISSUE(S):")
+        print(f"\n[compiler] validate_workflow_draft: {len(issues)} ISSUE(S):")
         for iss in issues:
             print(f"  - {iss}")
     else:
-        print("\n[compiler] validate_methodology: CLEAN ✓ (0 issues)")
+        print("\n[compiler] validate_workflow_draft: CLEAN ✓ (0 issues)")
 
     manifest = write_methodology(result, out_dir)
     print(f"\n[compiler] wrote {len(manifest['stage_files'])} stage files to {out_dir}/compiled/")
