@@ -145,13 +145,16 @@ class ChatEngine:
             async for node in run:
                 if Agent.is_model_request_node(node):
                     async with node.stream(run.ctx) as stream:
-                        async for ev in stream:
-                            _emit_part_event(ev, emit)
+                        async for part_ev in stream:
+                            _emit_part_event(part_ev, emit)
                 elif Agent.is_call_tools_node(node):
-                    async with node.stream(run.ctx) as stream:
-                        async for ev in stream:
-                            _emit_tool_event(ev, emit)
-        return run.result.all_messages()
+                    async with node.stream(run.ctx) as tool_stream:
+                        async for tool_ev in tool_stream:
+                            _emit_tool_event(tool_ev, emit)
+        result = run.result
+        if result is None:
+            raise RuntimeError("Agent run produced no result (turn did not complete)")
+        return result.all_messages()
 
 
 def _emit_part_event(ev, emit) -> None:

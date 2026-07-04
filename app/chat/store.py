@@ -87,7 +87,7 @@ class SessionStore:
         data["pending_user"] = text
         self._write(sid, data)
 
-    def list(self) -> list[dict]:
+    def list_sessions(self) -> list[dict]:
         out = []
         for p in sorted(self.root.glob("*.json"), reverse=True):
             try:
