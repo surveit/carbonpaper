@@ -7,16 +7,29 @@ does not import the compiler or the web app. (It does not yet validate against t
 ## Files
 - **`runner.py`** — the executor.
   - `topological_sort` → `execute_run(methodology_dir, repo_root)` runs the DAG once.
-  - Per stage: validate declared inputs (`validation.py`), dispatch to the type's
-    handler, validate the output, write `outputs/<stage>.parquet`, append a record
-    to `manifest.json`.
+  - Per stage: validate declared inputs (`validation.py`), reject duplicate input
+    rows (below), dispatch to the type's handler, validate the output, write
+    `outputs/<stage>.parquet`, append a record to `manifest.json`.
+  - **Duplicate-input throw (every stage type):** before dispatching the handler,
+    the runner fails the stage if any input dataframe contains exact duplicate
+    full-content rows — the error names the input id and the 0-based duplicate
+    row numbers. Identity is a content hash over the whole row; the declared
+    `primary_key` plays no part (it is optional and may legitimately duplicate).
+    Rationale: duplicates at a stage boundary are ambiguous intent — an upstream
+    bug, or sampling smuggled in implicitly. If N draws per row are intended, the
+    author adds an explicit row_id/draw_id column upstream, making rows distinct.
   - **Incremental manifest:** the manifest is flushed after every stage (status
     `running` → terminal), so the web UI can show live progress and a run can be
     executed in a background thread. `prepare_run` (writes the initial manifest +
     returns the run context) / `run_prepared` support that background path.
-  - **Generic `limit:`** — any stage may carry a top-level `limit: N`; the runner
-    truncates that stage's output to the first N rows (used to throttle the
-    expensive LLM fan-out for a dry run).
+  - **Row slicing (`limit:` + per-run `--limit`/`--offset`):** any stage may carry
+    a top-level `limit: N`; the runner truncates that stage's output to the first
+    N rows (used to throttle the expensive LLM fan-out for a dry run). Per RUN,
+    `--limit <stage_id>=<N>` overrides the static cap and `--offset <stage_id>=<M>`
+    drops the first M rows before the cap applies (offset 5 + limit 3 = rows 6-8) —
+    both also as `limits=`/`offsets=` kwargs on `prepare_run`/`execute_run`. The
+    overrides are recorded in the manifest (`limit_overrides`/`offset_overrides`),
+    re-applied on resume, and unknown stage ids fail loudly.
   - **Halt + resume:** a `human_review_queue` handler raises `HaltForReview`; the
     runner stops, marks the run `awaiting_review`, and persists the pending queue.
     `resume_run(methodology_dir, run_id, repo_root)` reloads completed outputs and
