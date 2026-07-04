@@ -17,7 +17,7 @@ Two reviews, deliberately distinct:
     halt a run.
 
 Dependency rule (mirrors app/models' discipline): this module imports NOTHING
-from app.runtime or app.compiler. It is pure stdlib + yaml + pandas, so it stays
+from app.runtime or app.compiler. It is pure stdlib + pandas, so it stays
 a trustworthy, side-effect-light interface that both the routes layer and the
 versioning layer can lean on.
 
@@ -28,15 +28,17 @@ The content hash is computed over the LOADED stage dict, never the file text, so
 whitespace / comment / key-reordering edits keep a node's approval, while any
 semantic change (a model, a temperature, a column name, a prompt) drops it.
 
-For that to hold, the canonical form must strip every key the *loader* injects
-that is not part of the spec. Today the loader (app/main.py load_stages and
-app/runtime/runner._load_stages) injects exactly:
+For that to hold, the canonical form must strip every bookkeeping key that is
+not part of the spec. The canonical loader (app.services.loader) parses files
+into typed Stage objects and injects nothing into the spec dict, so today the
+strip only matters for dicts arriving from elsewhere — e.g. a spec pasted into
+the node edit box that still carries keys an older loader injected:
 
-    _filename  — the source YAML file name
+    _filename  — the source file name
     _order     — the numeric filename prefix
     _error     — set when a stage failed to parse
 
-These are listed in CANONICAL_IGNORE_KEYS below. **If a future loader injects a
+These are listed in CANONICAL_IGNORE_KEYS below. **If a loader ever injects a
 new bookkeeping key, it MUST be added to CANONICAL_IGNORE_KEYS** — otherwise that
 key leaks into the hash and a cosmetic reload silently invalidates every prior
 approval. This set is the single point of truth for that contract.

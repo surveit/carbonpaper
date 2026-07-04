@@ -10,7 +10,7 @@
      review       — approval_state_for(stage, df):
                       {state, current_hash, matched_decision}
                       state ∈ {approved, unreviewed, rejected, edited_stale}
-     raw_yaml     — str: yaml.safe_dump(stage) text to seed the editor
+     raw_json     — str: the stage's canonical JSON dump, seeds the editor
      type_class   — TYPE_CLASS map (for the type tag)
      type_glyph   — TYPE_GLYPH map
 #}
@@ -62,11 +62,11 @@
     {# ── Editable stage spec. The edit endpoint is the ONLY writer into compiled/;
           it validates with validate_stage and refuses (400) on issues. ── #}
     <div class="nr-edit">
-        <h3>Stage spec (YAML)</h3>
-        <p class="nr-edit-hint muted">Editing a knob changes the spec's content hash, so an approved node drops to <span class="belief-chip belief-stale inline">edited · stale</span> until re-approved. Save validates first — invalid YAML is refused, the file untouched.</p>
-        <textarea class="edit-textarea" data-role="yaml" spellcheck="false">{{ raw_yaml }}</textarea>
+        <h3>Stage spec (JSON)</h3>
+        <p class="nr-edit-hint muted">Editing a knob changes the spec's content hash, so an approved node drops to <span class="belief-chip belief-stale inline">edited · stale</span> until re-approved. Save validates first — an invalid spec is refused, the file untouched.</p>
+        <textarea class="edit-textarea" data-role="spec" spellcheck="false">{{ raw_json }}</textarea>
         <div class="nr-edit-actions">
-            <button type="button" class="btn primary" data-role="save-yaml">Save spec</button>
+            <button type="button" class="btn primary" data-role="save-spec">Save spec</button>
             <span class="nr-edit-msg" data-role="edit-msg"></span>
         </div>
         <ul class="nr-issues" data-role="issues" hidden></ul>
@@ -74,8 +74,8 @@
 </div>
 
 <details class="raw-yaml">
-    <summary>Raw YAML (as loaded)</summary>
-    <pre>{{ raw_yaml }}</pre>
+    <summary>Raw JSON (as loaded)</summary>
+    <pre>{{ raw_json }}</pre>
 </details>
 
 <script>
@@ -93,7 +93,7 @@
   const chip = panel.querySelector('[data-role="state-chip"]');
   const hashEl = panel.querySelector('[data-role="hash"]');
   const noteInput = panel.querySelector('[data-role="note"]');
-  const yamlEl = panel.querySelector('[data-role="yaml"]');
+  const specEl = panel.querySelector('[data-role="spec"]');
   const editMsg = panel.querySelector('[data-role="edit-msg"]');
   const issuesEl = panel.querySelector('[data-role="issues"]');
 
@@ -134,14 +134,14 @@
   }
 
   // ── Save edited spec — POST edit; on 400 render validate_stage issues. ──
-  async function saveYaml(btn) {
-    if (!yamlEl) return;
+  async function saveSpec(btn) {
+    if (!specEl) return;
     btn.disabled = true;
     if (editMsg) { editMsg.textContent = 'Saving…'; editMsg.className = 'nr-edit-msg'; }
     if (issuesEl) { issuesEl.hidden = true; issuesEl.innerHTML = ''; }
     try {
       const fd = new FormData();
-      fd.append('yaml_text', yamlEl.value);
+      fd.append('spec_text', specEl.value);
       const r = await fetch(EDIT_URL, { method: 'POST', body: fd });
       let d = null;
       try { d = await r.json(); } catch (e) {}
@@ -171,8 +171,8 @@
   panel.addEventListener('click', function (ev) {
     const dec = ev.target.closest('[data-decision]');
     if (dec) { submitDecision(dec.dataset.decision); return; }
-    const save = ev.target.closest('[data-role="save-yaml"]');
-    if (save) { saveYaml(save); return; }
+    const save = ev.target.closest('[data-role="save-spec"]');
+    if (save) { saveSpec(save); return; }
   });
 })();
 </script>

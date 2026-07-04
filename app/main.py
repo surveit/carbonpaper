@@ -1,7 +1,7 @@
 """
 Methodology DAG visualization app (v2).
 
-Reads compiled stage YAML files for each methodology, renders an interactive
+Reads compiled stage JSON files for each methodology, renders an interactive
 DAG view plus per-stage detail pages that display the executable handle
 (connector spec, prompt template, pandas function, join keys, aggregation
 rules, queue config, or publish target) along with typed input/output schemas

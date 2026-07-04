@@ -10,7 +10,7 @@ object lifecycles, and how `app.runtime.runner` owns a RUN.
 A compilation lives at `<COMPILATIONS_ROOT>/<compilation_id>/` and holds:
   - manifest.json      — "what compiled, ok/invalid/error", polled while running
   - what_happened.json — the input excerpt + LLM prompt + raw response (audit)
-  - dag/               — the DAG output (compiled/NN_<id>.yaml + methodology_raw.md)
+  - dag/               — the DAG output (compiled/NN_<id>.json + methodology_raw.md)
 
 Storage-root convention: compilations live under `COMPILATIONS_ROOT` (below). The
 web/CLI callers default to it; tests pass a tmp dir. This mirrors the runner
@@ -26,8 +26,6 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-import yaml
-
 from app.compiler import compile_methodology, read_input
 
 # The default root every compilation object hangs off. Callers may override
@@ -39,15 +37,20 @@ _INPUT_EXCERPT_CHARS = 4000
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# DAG output — compiled/NN_<id>.yaml + methodology_raw.md (+ audit json)
+# DAG output — compiled/NN_<id>.json + methodology_raw.md (+ audit json)
 # ─────────────────────────────────────────────────────────────────────────────
 
 def write_methodology(result: dict[str, Any], out_dir: str | Path) -> dict[str, Any]:
-    """Write the compiled DAG to a folder shaped like an examples/<name>/ artifact:
-      <out_dir>/compiled/NN_<id>.yaml   (one per stage, in order)
+    """Write the compiled DAG to a folder shaped like a methodology artifact:
+      <out_dir>/compiled/NN_<id>.json   (one per stage, in order)
       <out_dir>/methodology_raw.md
       <out_dir>/compiler_result.json    (raw alongside cooked: full result, audit)
-    Returns a manifest of written paths."""
+    Returns a manifest of written paths.
+
+    Stages are written as JSON — the on-disk format the loader
+    (app.services.loader) reads. The compiler emits raw draft dicts (which may
+    be invalid; the manifest records that), so they are dumped as-is rather than
+    round-tripped through the typed Stage model."""
     out_dir = Path(out_dir)
     compiled = out_dir / "compiled"
     compiled.mkdir(parents=True, exist_ok=True)
@@ -55,10 +58,11 @@ def write_methodology(result: dict[str, Any], out_dir: str | Path) -> dict[str, 
     written: list[str] = []
     for i, stage in enumerate(result["stages"], start=1):
         sid = stage.get("id") or f"stage{i}"
-        fname = f"{i:02d}_{sid}.yaml"
+        fname = f"{i:02d}_{sid}.json"
         fpath = compiled / fname
-        with fpath.open("w", encoding="utf-8") as f:
-            yaml.safe_dump(stage, f, sort_keys=False, allow_unicode=True, width=100)
+        fpath.write_text(
+            json.dumps(stage, indent=2, ensure_ascii=False), encoding="utf-8"
+        )
         written.append(str(fpath))
 
     raw_md = out_dir / "methodology_raw.md"
@@ -177,7 +181,7 @@ def run_prepared_compilation(prep: dict[str, Any]) -> str:
     stages = result["stages"]
     issues = result["validation"]
 
-    # ── DAG output: compiled/NN_<id>.yaml + methodology_raw.md (+ audit json) ──
+    # ── DAG output: compiled/NN_<id>.json + methodology_raw.md (+ audit json) ──
     dag_dir = comp_dir / "dag"
     write_methodology(result, dag_dir)
 
@@ -275,13 +279,15 @@ def load_compilation(
     stages: list[dict[str, Any]] = []
     compiled_dir = comp_dir / "dag" / "compiled"
     if compiled_dir.is_dir():
-        for yaml_file in sorted(compiled_dir.glob("*.yaml")):
-            with yaml_file.open("r", encoding="utf-8") as f:
-                data = yaml.safe_load(f) or {}
+        # Read the draft stages as raw dicts (not typed Stages): the detail view
+        # renders whatever compiled, including invalid drafts the strict loader
+        # would reject.
+        for stage_file in sorted(compiled_dir.glob("*.json")):
+            data = json.loads(stage_file.read_text(encoding="utf-8")) or {}
             # build_mermaid_graph needs a fallback _filename; the run loader sets
             # these too. Keep id-bearing stages renderable.
-            data["_filename"] = yaml_file.name
-            data["_order"] = yaml_file.stem.split("_", 1)[0]
+            data["_filename"] = stage_file.name
+            data["_order"] = stage_file.stem.split("_", 1)[0]
             stages.append(data)
 
     methodology_raw = ""

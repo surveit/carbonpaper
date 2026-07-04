@@ -9,8 +9,10 @@ pipeline is *testable and reviewable*, not a black box.
 ## The core idea: a DAG artifact + three features on top of it
 
 The unit of everything is a **DAG artifact**: a folder `examples/<name>/` with
-`compiled/*.yaml` (one file per stage) and `methodology_raw.md` (the prose it was
-compiled from). Runs land in `examples/<name>/runs/<run_id>/`.
+`compiled/<NN>_<stage_id>.json` (one file per stage, the JSON dump of the
+validated `Stage` model; the `NN_` prefix orders the stage list in the UI) and
+`methodology_raw.md` (the prose it was compiled from). Runs land in
+`examples/<name>/runs/<run_id>/`.
 
 Three independent features operate on that artifact:
 
@@ -32,13 +34,13 @@ models. See `docs/models-and-storage.md`.
 ## The 8 node types
 `input_data` · `llm_transform` · `python_row_function` · `python_frame_function` ·
 `join` · `aggregate` · `human_review_queue` · `publish`. Prefer `python_row_function`
-(runtime-enforced 1:1) over `python_frame_function` unless the logic needs the whole frame. Each stage YAML declares typed `inputs`, a typed
+(runtime-enforced 1:1) over `python_frame_function` unless the logic needs the whole frame. Each compiled stage JSON declares typed `inputs`, a typed
 `output_schema`, and one executable-handle block (`connector`/`llm`/`function`/
 `join`/`aggregate`/`queue`/`publish`). See `app/models/` for the contract.
 
 ## Running it
 ```
-pip install -r requirements.txt          # fastapi, pandas, pyarrow, pyyaml, claude-agent-sdk, ...
+pip install -r requirements.txt          # fastapi, pandas, pyarrow, claude-agent-sdk, ...
 python -m uvicorn app.main:app --port 8765   # web UI: DAG view, runs, review queue
 python -m app.runtime.runner examples/<name> # run a methodology from the CLI
 ```

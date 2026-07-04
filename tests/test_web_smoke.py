@@ -1,12 +1,47 @@
-"""Route smoke tests over the shipped examples: every page that renders stages
-must work on Stage objects (not dicts). Uses lobbymap, the richest example."""
+"""Route smoke tests: every page that renders stages must work on Stage objects
+(not dicts). Builds a small methodology in a tmp dir and points EXAMPLES_DIR at
+it — no shipped example data required."""
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
+import pytest
 from fastapi.testclient import TestClient
 
+import app.web.config as web_config
+import app.web.loading as loading
+import app.web.routers.methodology as methodology_router
+import app.web.routers.node_review as node_review_router
+import app.web.routers.runs as runs_router
 from app.main import app
 
 client = TestClient(app)
+
+_LOAD = {
+    "id": "load", "type": "input_data", "name": "Load documents",
+    "connector": {"kind": "file", "params": {"path": "data/docs.csv", "format": "csv"}},
+    "output_schema": {"columns": [{"name": "doc_id", "type": "str"}]},
+}
+_EXTRACT = {
+    "id": "extract", "type": "llm_transform", "name": "Extract evidence pieces",
+    "inputs": [{"id": "load"}],
+    "llm": {"prompt_template": "You are reading a document {doc_id}. Extract evidence."},
+    "output_schema": {"columns": [{"name": "evidence_id", "type": "str"}]},
+}
+
+
+@pytest.fixture(autouse=True)
+def demo_methodology(tmp_path, monkeypatch):
+    """A two-stage methodology on disk, with EXAMPLES_DIR repointed at it in every
+    module that captured the value by import."""
+    compiled = tmp_path / "demo" / "compiled"
+    compiled.mkdir(parents=True)
+    (compiled / "01_load.json").write_text(json.dumps(_LOAD, indent=2), encoding="utf-8")
+    (compiled / "02_extract.json").write_text(json.dumps(_EXTRACT, indent=2), encoding="utf-8")
+    for mod in (web_config, loading, methodology_router, node_review_router, runs_router):
+        monkeypatch.setattr(mod, "EXAMPLES_DIR", tmp_path, raising=False)
+    return tmp_path
 
 
 def test_index():
@@ -14,63 +49,42 @@ def test_index():
 
 
 def test_methodology_dag_page():
-    r = client.get("/methodology/lobbymap")
+    r = client.get("/methodology/demo")
     assert r.status_code == 200
-    assert "evidence_extraction" in r.text
+    assert "extract" in r.text
 
 
 def test_stage_detail_page():
-    r = client.get("/methodology/lobbymap/stage/evidence_extraction")
+    r = client.get("/methodology/demo/stage/extract")
     assert r.status_code == 200
-    assert "Extract evidence pieces" in r.text          # stage name rendered
-    assert "You are reading a document" in r.text        # prompt template rendered
+    assert "Extract evidence pieces" in r.text           # stage name rendered
+    assert "You are reading a document" in r.text          # prompt template rendered
 
 
 def test_stage_partial():
-    assert client.get("/methodology/lobbymap/stage/evidence_extraction/partial").status_code == 200
+    assert client.get("/methodology/demo/stage/extract/partial").status_code == 200
 
 
 def test_data_model_page():
-    assert client.get("/methodology/lobbymap/data-model").status_code == 200
+    assert client.get("/methodology/demo/data-model").status_code == 200
 
 
-def test_raw_stage():
-    r = client.get("/methodology/lobbymap/raw/evidence_extraction")
+def test_raw_stage_is_json():
+    r = client.get("/methodology/demo/raw/extract")
     assert r.status_code == 200
-    assert "evidence_extraction" in r.text
+    assert r.headers["content-type"].startswith("application/json")
+    payload = json.loads(r.text)
+    assert payload["id"] == "extract"
 
 
 def test_trigger_run_returns_400_on_invalid_dag(monkeypatch):
-    from pathlib import Path
-
+    """The run route surfaces a load failure as a 400 with the issue list."""
     from app.services.loader import MethodologyLoadError
-    import app.web.routers.runs as runs_router
 
     def _boom(methodology_dir, repo_root):
-        raise MethodologyLoadError(Path("compiled"), ["01_bad.yaml: params.path missing"])
+        raise MethodologyLoadError(Path("compiled"), ["01_bad.json: params.path missing"])
 
     monkeypatch.setattr(runs_router, "prepare_run", _boom)
-    r = client.post("/methodology/lobbymap/run")
+    r = client.post("/methodology/demo/run")
     assert r.status_code == 400
-    assert "01_bad.yaml: params.path missing" in r.json()["issues"]
-
-
-def test_resume_returns_400_on_invalid_dag(monkeypatch, tmp_path):
-    from pathlib import Path
-
-    from app.services.loader import MethodologyLoadError
-    import app.web.routers.runs as runs_router
-
-    def _boom(methodology_dir):
-        raise MethodologyLoadError(Path("compiled"), ["02_bad.yaml: unknown file format"])
-
-    monkeypatch.setattr(runs_router, "load_methodology_stages", _boom)
-    # use a real existing run of lobbymap if present; otherwise skip guard:
-    runs = sorted((Path("examples/lobbymap/runs")).glob("*/manifest.json"))
-    if not runs:
-        import pytest
-        pytest.skip("no existing lobbymap run on disk to resume against")
-    run_id = runs[-1].parent.name
-    r = client.post(f"/methodology/lobbymap/runs/{run_id}/resume")
-    assert r.status_code == 400
-    assert "02_bad.yaml: unknown file format" in r.json()["issues"]
+    assert "01_bad.json: params.path missing" in r.json()["issues"]

@@ -1,12 +1,12 @@
 # Methodology DAG Schema v2 — Executable Node Types
 
-This is the contract a stage YAML must satisfy. Every stage is *executable* in principle: it declares typed inputs, a typed output, and an executable handle (connector / prompt / function / join / aggregation / queue / publish). The compiler does not produce prose blobs dressed as YAML.
+This is the contract a compiled stage file must satisfy. Every stage is *executable* in principle: it declares typed inputs, a typed output, and an executable handle (connector / prompt / function / join / aggregation / queue / publish). The compiler does not produce prose blobs dressed as structured data.
 
 ## The eight stage types
 
 | Type | What it does | Executable handle |
 |---|---|---|
-| `input_data` | Declares a source dataset with a typed schema. | `connector:` block (file/http/scrape/api/manual_upload/sql) |
+| `input_data` | Declares a source dataset with a typed schema. | `connector:` block (file/computed_static) |
 | `llm_transform` | Row-by-row LLM call producing structured output. | `llm:` block (model + prompt template + rubric) |
 | `python_row_function` | Python mapped **per input row** by the runtime — one row in, one row out. Single input. | `function:` block (inline code or module:fn ref) |
 | `python_frame_function` | Python over the whole upstream frame(s) — may reshape (group-by, pivot, dedup, multi-input merge). | `function:` block |
@@ -19,10 +19,12 @@ This is the contract a stage YAML must satisfy. Every stage is *executable* in p
 
 ## Universal stage shape
 
+On disk each compiled stage is the JSON dump of the `Stage` model; the example below uses YAML notation for readability.
+
 ```yaml
 id: snake_case_id
 name: Human readable name
-type: <one of the seven>
+type: <one of the eight stage types above>
 
 source:
   doc: examples/<methodology>/stages/NN_<stage>.md
@@ -48,10 +50,10 @@ output_schema:
 # ONE of the executable-handle blocks below, matching the stage type:
 
 connector:        # input_data only
-  kind: scrape
+  kind: file
   params:
-    url: https://example.com/data
-    parser: html_table
+    path: examples/<methodology>/data/source.csv
+    format: csv
   refresh: yearly
   notes: |
     ...
@@ -79,7 +81,7 @@ function:         # python_row_function / python_frame_function
 
 join:             # join only
   type: inner     # or left, right, outer
-  keys:           # NB: name is `keys`, not `on` — YAML treats `on` as a bool
+  keys:           # named `keys` rather than `on` (a name chosen when stages were authored in YAML, where bare `on` parses as a boolean)
     - {left: evidence_id, right: evidence_id}
 
 aggregate:        # aggregate only
@@ -140,11 +142,6 @@ json             — opaque JSON blob (use sparingly)
 
 ```
 file            — local file. params: {path, format}
-http            — HTTP fetch. params: {url, method, headers}
-scrape          — webpage scrape. params: {url, parser}
-api             — third-party API. params: {provider, endpoint, auth_ref}
-manual_upload   — user provides a file at runtime. params: {accept, description}
-sql             — DB query. params: {connection_ref, query}
 computed_static — curated list with no automated fetch (e.g., the methodology's own benchmark library)
 ```
 
