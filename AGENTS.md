@@ -49,20 +49,68 @@ installed `claude` CLI. Backend is selectable: `CW_LLM_BACKEND=agent_sdk|cli|moc
 (default `auto` → agent_sdk, else the CLI). It never silently falls back to the
 mock; `CW_LLM_FORCE_MOCK=1` opts into the offline mock.
 
+## Module organization: subsystems over a shared core
+
+`app/` is organized by **what the software does**, not by framework layer. A
+top-level package under `app/` is exactly one of two kinds:
+
+- A **subsystem** — a feature with its own lifecycle that owns its internals,
+  *including its own routes and templates if it has a UI* (`web`, `compiler`,
+  `runtime`, `chat`). Subsystems do not import each other.
+- **Shared core** — code that two or more subsystems depend on (`models`,
+  `services`, `llm`). The core imports nothing back from any subsystem.
+
+Dependencies point one way, always toward the core:
+
+```
+subsystems:   web    compiler    runtime    chat
+                \        \          |        /
+                 ▼        ▼         ▼       ▼
+shared core:      services      llm      models
+                              (models imports nothing from app at all)
+```
+
+**Where does a new module go?** Answer the first question that fits:
+
+- Only declares/validates data shapes, opens no files, imports no other `app`
+  package → `app/models/` (core). Typed shapes live here; the code that *builds*
+  them from disk does not.
+- Reads or writes the on-disk project store under `examples/<name>/` (loading,
+  compilation records, node review, versioning, project status) → `app/services/`
+  (core).
+- Low-level LLM / `claude` CLI plumbing shared by more than one subsystem →
+  `app/llm/` (core).
+- One feature's own engine or its UI → that subsystem's package.
+
+A generic name like "services" is a standing invitation to dump unrelated code
+there — before adding to it, confirm the module really operates on the project
+store; if it's plumbing for one feature, it belongs in that feature's package.
+
 ## Repo layout
 ```
-app/models/           the node-type contract (Pydantic models)
-app/SCHEMA.md         prose schema spec (legacy — superseded by app/models/)
+── shared core ──
+app/models/           typed node/stage models (Pydantic); imports nothing from app
+app/services/         the on-disk project store: loader, compilation, node_review, versioning
+app/llm/              shared LLM / claude-CLI vocabulary (the model menu; + llm_sdk, see below)
+── subsystems ──
 app/runtime/          the Runner (executor, handlers, LLM backends, validation)  → app/runtime/AGENTS.md
-app/main.py           thin FastAPI bootstrap; routes live in app/web/routers/   → app/AGENTS.md
+app/compiler/         prose → LLM → DAG authoring engine (python -m app.compiler)
 app/web/              the web layer (routers, loading, diagrams, config)
-app/services/         web-independent workflow logic (node review, versioning)
 app/chat/             embeddable chat subsystem (PydanticAI; own backend env vars)
-app/llm/              shared LLM vocabulary (the model menu)
-app/templates/, app/static/   the web UI
+app/main.py           thin FastAPI bootstrap; mounts app/web/routers/ + app/chat  → app/AGENTS.md
+app/templates/, app/static/   web UI assets
+── other ──
+app/SCHEMA.md         prose schema spec (legacy — superseded by app/models/)
 tests/                pytest suite (offline: conftest forces the LLM mock)
 examples/<name>/      DAG artifacts (compiled/ + methodology_raw.md + code/ + data/ + runs/)
 ```
+
+**Known deviations from the rule (to converge, not yet done):**
+- `app/templates/` and `app/static/` sit at the `app/` root but are the `web`
+  subsystem's assets; they belong under `app/web/` (as `app/chat/` already nests
+  its own templates). Deferred because moving them rewrites every template path.
+- LLM plumbing is split between `app/llm/options.py` and the loose module
+  `app/llm_sdk.py`; the latter should fold into `app/llm/` (e.g. `app/llm/sdk.py`).
 
 ## Docs (`docs/`)
 - [docs/overview.md](docs/overview.md) — what this is and why; the examples.
