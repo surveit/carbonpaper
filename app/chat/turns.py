@@ -37,12 +37,12 @@ class Turn:
             w.set()
 
     async def wait(self) -> None:
-        ev = asyncio.Event()
-        self._waiters.append(ev)
+        waiter = asyncio.Event()
+        self._waiters.append(waiter)
         try:
-            await ev.wait()
+            await waiter.wait()
         finally:
-            self._waiters.remove(ev)
+            self._waiters.remove(waiter)
 
 
 class TurnManager:

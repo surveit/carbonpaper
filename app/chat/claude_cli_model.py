@@ -104,15 +104,15 @@ class _ClaudeCLIStreamedResponse(StreamedResponse):
             if isinstance(msg, cas.AssistantMessage):
                 for block in msg.content:
                     if isinstance(block, cas.ThinkingBlock):
-                        for ev in self._parts_manager.handle_thinking_delta(
+                        for event in self._parts_manager.handle_thinking_delta(
                             vendor_part_id="thinking", content=getattr(block, "thinking", "")
                         ):
-                            yield ev
+                            yield event
                     elif isinstance(block, cas.TextBlock):
-                        for ev in self._parts_manager.handle_text_delta(
+                        for event in self._parts_manager.handle_text_delta(
                             vendor_part_id="content", content=block.text
                         ):
-                            yield ev
+                            yield event
 
     async def close_stream(self) -> None:
         # The CLI subprocess ends with the query generator; nothing to tear down.
