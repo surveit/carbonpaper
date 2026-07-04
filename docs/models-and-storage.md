@@ -23,7 +23,7 @@ case: `validate_methodology(stages) -> list[str]` and `validate_stage(stage) -> 
 - Weighted aggregation formulas (`weighted_mean`/`weighted_sum`) — unused in the
   compiled DAGs (weighting is done inside `python_frame_function` modules).
 
-**Enforced at load, via `app/models/loader.py`.** This is the only place that
+**Enforced at load, via `app/services/loader.py`.** This is the only place that
 reads the on-disk compiled-stage YAML; everything past it speaks `Stage` objects,
 not dicts. Two entry points, both parsing each file through `Stage.model_validate`:
 - `load_methodology_stages` — strict, for the runner. Any invalid stage or

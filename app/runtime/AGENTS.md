@@ -1,7 +1,7 @@
 # app/runtime — the Runner (DAG executor)
 
 Executes a methodology DAG and persists the result. Does not import the compiler or
-the web app. Loads stages through `app/models/loader.py: load_methodology_stages`,
+the web app. Loads stages through `app/services/loader.py: load_methodology_stages`,
 which parses each compiled file into a `Stage` object and raises
 `MethodologyLoadError` if any stage or cross-stage check fails — an invalid DAG is
 refused before the runner does any work.
