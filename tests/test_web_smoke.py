@@ -54,6 +54,12 @@ def test_project_page():
     assert "extract" in r.text
 
 
+def test_project_page_links_to_its_editing_chat():
+    r = client.get("/project/demo")
+    assert r.status_code == 200
+    assert '<form method="post" action="/chat/project/demo/sessions"' in r.text
+
+
 def test_stage_detail_page():
     r = client.get("/project/demo/stage/extract")
     assert r.status_code == 200

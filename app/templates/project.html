@@ -37,6 +37,9 @@
         <a href="/project/{{ project }}/versions" class="btn">Versions</a>
         <a href="/project/{{ project }}/data-model" class="btn">Data model</a>
         <a href="/project/{{ project }}/runs" class="btn">All runs</a>
+        <form method="post" action="/chat/project/{{ project }}/sessions" style="display:inline">
+            <button type="submit" class="btn" title="Open a chat to edit this project">✏️ Edit with agent</button>
+        </form>
     </div>
 </div>
 <p class="lede">{{ stages|length }} compiled stage{% if stages|length != 1 %}s{% endif %}. Click any node in the workflow (or any row in the table) to <strong>review</strong> that step — approve, reject, or edit its spec — in the right panel. Node colour = <em>belief</em> (do we trust how it's modeled). Click <strong>Run pipeline</strong> to execute end-to-end.</p>
