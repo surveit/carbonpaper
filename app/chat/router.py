@@ -16,6 +16,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Stre
 from fastapi.templating import Jinja2Templates
 
 from .engine import ChatBackendError, ChatEngine, backend_label
+from .project_agent import get_project_agent
 from .store import SessionStore
 from .turns import TurnManager
 
@@ -72,20 +73,42 @@ async def new_session():
     return RedirectResponse(url=f"/chat/{sid}", status_code=303)
 
 
+@router.post("/chat/project/{name}/sessions")
+async def new_project_session(name: str):
+    """Open a chat session bound to one project's editing agent. The session
+    records its project in `context`, so the shared /chat/{sid} page (below)
+    renders a composer that posts to this project's message route rather than
+    the generic demo one."""
+    sid = _store.create(title=f"Editing: {name}", context={"project": name})
+    return RedirectResponse(url=f"/chat/{sid}", status_code=303)
+
+
 @router.get("/chat/{sid}", response_class=HTMLResponse)
 async def chat_page(request: Request, sid: str):
     if not _store.exists(sid):
         raise HTTPException(status_code=404, detail="Session not found")
-    get_engine()  # warm; also populates _engine_error for the banner
     data = _store.load(sid)
+    project = data.get("context", {}).get("project")
+    if project:
+        # A missing backend (e.g. no API key / no CLI) surfaces as a banner,
+        # same as the demo engine below — never a raw 500 on this page.
+        try:
+            get_project_agent(project)  # warm
+            backend_error = None
+        except ChatBackendError as exc:
+            backend_error = str(exc)
+    else:
+        get_engine()  # warm; also populates _engine_error for the banner
+        backend_error = _engine_error
     return templates.TemplateResponse(request, "chat.html", {
         "session_id": sid,
+        "project": project,
         "title": data.get("title"),
         "history": _store.history_view(sid),
         "pending_user": data.get("pending_user"),
         "active_turn": data.get("active_turn"),
         "backend": backend_label(),
-        "backend_error": _engine_error,
+        "backend_error": backend_error,
     })
 
 
@@ -100,6 +123,25 @@ async def post_message(sid: str, request: Request):
     engine = get_engine()
     if engine is None:
         return JSONResponse({"ok": False, "error": _engine_error}, status_code=400)
+    _store.set_pending_user(sid, text)
+    turn_id = _turns.start(engine=engine, store=_store, session_id=sid, prompt=text)
+    return JSONResponse({"ok": True, "turn_id": turn_id})
+
+
+@router.post("/chat/{sid}/project/{name}/message")
+async def post_project_message(sid: str, name: str, request: Request):
+    """Send a message on a project-scoped session: the turn runs on `name`'s
+    editing agent (bound tools + system prompt), not the generic demo engine."""
+    if not _store.exists(sid):
+        raise HTTPException(status_code=404, detail="Session not found")
+    body = await request.json()
+    text = (body or {}).get("text", "").strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="empty message")
+    try:
+        engine = get_project_agent(name)
+    except ChatBackendError as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
     _store.set_pending_user(sid, text)
     turn_id = _turns.start(engine=engine, store=_store, session_id=sid, prompt=text)
     return JSONResponse({"ok": True, "turn_id": turn_id})

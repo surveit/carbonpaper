@@ -76,7 +76,11 @@
 
 <script>
 const SID = {{ session_id | tojson }};
+const PROJECT = {{ project | tojson }};
 const ACTIVE_TURN = {{ active_turn | tojson }};
+const MESSAGE_URL = PROJECT
+  ? `/chat/${SID}/project/${encodeURIComponent(PROJECT)}/message`
+  : `/chat/${SID}/message`;
 const log = document.getElementById("log");
 const input = document.getElementById("input");
 const sendBtn = document.getElementById("send");
@@ -148,7 +152,7 @@ async function send() {
   if (!text || streaming) return;
   input.value = "";
   addUser(text);
-  const r = await fetch(`/chat/${SID}/message`, {
+  const r = await fetch(MESSAGE_URL, {
     method: "POST", headers: {"Content-Type": "application/json"},
     body: JSON.stringify({text})
   });
