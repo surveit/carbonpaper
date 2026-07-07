@@ -120,6 +120,16 @@ class SdkAgentEngine:
                             {"type": "tool_result", "content": content}
                         )
             elif isinstance(msg, ResultMessage):
+                # A turn can end in-band with an error (permission denial on a
+                # tool, max_turns exhausted) without query() raising. Surface it
+                # loudly rather than ending on a silent, empty answer.
+                if getattr(msg, "is_error", False):
+                    detail = (
+                        getattr(msg, "result", None)
+                        or getattr(msg, "subtype", "")
+                        or "run ended with error"
+                    )
+                    emit({"kind": "error", "text": f"agent run failed: {detail}"})
                 break
         return [
             {"role": "user", "parts": [{"type": "text", "text": prompt}]},

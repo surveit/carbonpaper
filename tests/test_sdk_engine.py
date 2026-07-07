@@ -79,3 +79,34 @@ def test_stream_turn_maps_blocks_to_normalized_events(monkeypatch: Any) -> None:
     ]
     assert transcript[0]["role"] == "user"
     assert any(p.get("type") == "tool_call" for m in transcript for p in m["parts"])
+
+
+def test_stream_turn_surfaces_in_band_result_error(monkeypatch: Any) -> None:
+    """A ResultMessage with is_error=True (permission denial, max_turns) must
+    emit an error event, not end on a silent 'done'."""
+
+    class _ErrResult:
+        is_error = True
+        result = "permission denied for mcp__project__edit_stage"
+        subtype = "error"
+
+    async def fake_query(*, prompt: str, options: Any) -> Any:
+        yield _Asst([_Text("Trying.")])
+        yield _ErrResult()
+
+    monkeypatch.setattr(se, "query", fake_query)
+    monkeypatch.setattr(se, "AssistantMessage", _Asst)
+    monkeypatch.setattr(se, "UserMessage", _User)
+    monkeypatch.setattr(se, "ResultMessage", _ErrResult)
+    monkeypatch.setattr(se, "TextBlock", _Text)
+    monkeypatch.setattr(se, "ToolUseBlock", _Tool)
+    monkeypatch.setattr(se, "ToolResultBlock", _Result)
+    monkeypatch.setattr(se, "ThinkingBlock", type("Nope", (), {}))
+
+    events: list[dict[str, Any]] = []
+    engine = se.SdkAgentEngine(system_prompt="sp", mcp_server=object(), allowed_tools=[])
+    asyncio.run(engine.stream_turn("edit", message_history=[], emit=events.append))
+
+    errors = [e for e in events if e["kind"] == "error"]
+    assert len(errors) == 1
+    assert "permission denied" in errors[0]["text"]
