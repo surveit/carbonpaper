@@ -8,7 +8,7 @@
   {% block section %} the section templates fill.
 
   Context every section route passes (the Phase-1 FROZEN CONTRACT, verbatim):
-    state    = project.project_state(mdir)   — the full status snapshot
+    state    = project_view.shell_state(mdir)  — the status snapshot + next_action CTA
     section  = one of {overview, document, data_model, workflow, runs}
 
   The sidebar reads ONLY from `state`. The single source of truth for the WORKFLOW

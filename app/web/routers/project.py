@@ -84,6 +84,7 @@ from app.web.loading import (
     read_prose_excerpt,
     resolve_function_code,
 )
+from app.web.project_view import shell_state
 
 router = APIRouter()
 
@@ -250,7 +251,7 @@ async def new_project_submit(
 # ─── Unified PROJECT sections ────────────────────────────────────────────────
 # One project (examples/<name>/) is framed by a left-sidebar shell (project_shell)
 # with five sections — Overview / Document / Data model / Workflow / Runs. Each
-# section route passes the SAME status snapshot (project.project_state) plus its
+# section route passes the SAME status snapshot (project_view.shell_state) plus its
 # section name and the section-specific extras the matching section_*.html needs. The
 # shell reads ONLY from `state`; the workflow lock is the single source of truth
 # state.data_model.state == "approved" (the SAME gate the SSE stream uses).
@@ -265,7 +266,7 @@ async def project_overview(request: Request, project_name: str):
     return templates.TemplateResponse(
         request,
         "section_overview.html",
-        {"state": project.project_state(pdir), "section": "overview"},
+        {"state": shell_state(pdir), "section": "overview"},
     )
 
 
@@ -276,7 +277,7 @@ async def project_document(request: Request, project_name: str):
     when the project has no document, and the template shows an empty state. The path
     line is state.document_path (absolute, truthful)."""
     pdir = _project_dir(project_name)
-    state = project.project_state(pdir)
+    state = shell_state(pdir)
     document = ""
     if state["document_path"]:
         try:
@@ -305,7 +306,7 @@ async def project_data_model(request: Request, project_name: str):
         request,
         "section_data_model.html",
         {
-            "state": project.project_state(pdir),
+            "state": shell_state(pdir),
             "section": "data_model",
             "schemas": schemas,
             "er_diagram": build_schema_er_diagram(schemas) if schemas else None,
@@ -366,7 +367,7 @@ async def project_workflow(request: Request, project_name: str):
         request,
         "section_workflow.html",
         {
-            "state": project.project_state(pdir),
+            "state": shell_state(pdir),
             "section": "workflow",
             "stages": stages,
             "mermaid": mermaid,

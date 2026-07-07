@@ -15,8 +15,9 @@ Two functions are the public surface:
                           source). Reads examples/<name>/project.json when present;
                           for LEGACY projects with none, degrades TRUTHFULLY — never
                           invents a model or a creation date.
-  - project_state(pdir) : the status object the Overview + shell render, including
-                          the `next_action` ladder ("what to do next").
+  - project_state(pdir) : the status object the Overview + shell render (document /
+                          data model / workflow / versions / runs). The "what to do
+                          next" CTA is added on top by the web layer, not here.
 """
 
 from __future__ import annotations
@@ -190,7 +191,7 @@ def write_project_meta(pdir: Path, **fields: Any) -> dict[str, Any]:
     return record
 
 
-# ─── The status snapshot + next-action ladder ─────────────────────────────────
+# ─── The status snapshot ──────────────────────────────────────────────────────
 
 
 def project_state(pdir: Path) -> dict[str, Any]:
@@ -204,7 +205,6 @@ def project_state(pdir: Path) -> dict[str, Any]:
         workflow:   {present, n_stages, coverage|None},
         versions:   n,
         runs:       {n, awaiting_review, latest_status},
-        next_action:{key, label, href},
       }
 
     Every field is read off disk truthfully:
@@ -215,15 +215,8 @@ def project_state(pdir: Path) -> dict[str, Any]:
         (approved/total/…); None — not a zero object — when there is no workflow.
       - runs comes from _runs_summary (manifest-backed runs only).
 
-    next_action is the "what to do next" ladder, evaluated top-down (first match
-    wins). hrefs are section paths under /project/<name> (the unified routes):
-      1. no data model            → author it     (/project/<id>/data_model)
-      2. data model not approved   → approve it     (/project/<id>/data_model)
-      3. no workflow              → build the workflow (/project/<id>/workflow)
-      4. workflow approved<total   → review the workflow (/project/<id>/workflow)
-      5. workflow approved, 0 runs → run it          (/project/<id>/workflow)
-      6. runs awaiting_review>0    → review the run   (/project/<id>/runs)
-      7. otherwise                → view runs        (/project/<id>/runs)
+    The shell's "what to do next" CTA is NOT here: its label + section href are a
+    UI/routing concern the web layer adds (app.web.project_view.shell_state).
     """
     pdir = Path(pdir)
     name = pdir.name
@@ -260,8 +253,6 @@ def project_state(pdir: Path) -> dict[str, Any]:
     n_versions = len(versioning.list_versions(pdir))
     runs = _runs_summary(pdir)
 
-    next_action = _next_action(name, data_model, workflow, runs)
-
     return {
         "name": name,
         "meta": meta,
@@ -272,69 +263,6 @@ def project_state(pdir: Path) -> dict[str, Any]:
         "workflow": workflow,
         "versions": n_versions,
         "runs": runs,
-        "next_action": next_action,
-    }
-
-
-def _next_action(
-    name: str,
-    data_model: dict[str, Any],
-    workflow: dict[str, Any],
-    runs: dict[str, Any],
-) -> dict[str, str]:
-    """The 'what to do next' rung for this project — first match wins (see the ladder
-    in project_state's docstring). Returns {key, label, href}; href is a section path
-    under /project/<name> in the unified route map."""
-    base = f"/project/{name}"
-
-    # 1. No data model → author it.
-    if not data_model["present"]:
-        return {
-            "key": "author_data_model",
-            "label": "Author the data model",
-            "href": f"{base}/data_model",
-        }
-    # 2. Data model present but not approved → approve it.
-    if data_model["state"] != "approved":
-        return {
-            "key": "approve_data_model",
-            "label": "Approve the data model",
-            "href": f"{base}/data_model",
-        }
-    # 3. Data model approved, no workflow → build the workflow.
-    if not workflow["present"]:
-        return {
-            "key": "build_workflow",
-            "label": "Build the workflow",
-            "href": f"{base}/workflow",
-        }
-    # 4. Workflow present but not fully approved → review the workflow.
-    cov = workflow["coverage"] or {}
-    if cov.get("approved", 0) < cov.get("total", 0):
-        return {
-            "key": "review_workflow",
-            "label": "Review the workflow",
-            "href": f"{base}/workflow",
-        }
-    # 5. Workflow fully approved but never run → run it (the run button is on /workflow).
-    if runs["n"] == 0:
-        return {
-            "key": "run_workflow",
-            "label": "Run the workflow",
-            "href": f"{base}/workflow",
-        }
-    # 6. A run is halted awaiting review → review the run.
-    if runs["awaiting_review"] > 0:
-        return {
-            "key": "review_run",
-            "label": "Review the run",
-            "href": f"{base}/runs",
-        }
-    # 7. Nothing outstanding → view runs.
-    return {
-        "key": "view_runs",
-        "label": "View runs",
-        "href": f"{base}/runs",
     }
 
 

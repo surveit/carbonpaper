@@ -12,7 +12,6 @@ from fastapi import APIRouter, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 from app.services.loader import WorkflowLoadError, load_workflow
-from app.services.project import project_state
 from app.runtime.preview import PREVIEWABLE_TYPES, PreviewError, run_stage_preview
 from app.runtime.runner import (
     NoVersionToRunError,
@@ -35,6 +34,7 @@ from app.web.loading import (
     resolve_function_code,
     runs_dir,
 )
+from app.web.project_view import shell_state
 
 router = APIRouter()
 
@@ -85,7 +85,7 @@ async def runs_index(request: Request, project: str):
         request,
         "section_runs.html",
         {
-            "state": project_state(pdir),
+            "state": shell_state(pdir),
             "section": "runs",
             "runs": list_runs(project),
         },
