@@ -9,9 +9,10 @@ non-private way to reach a handler (used by tests to invoke a tool without a
 CLI subprocess)."""
 from __future__ import annotations
 
+import inspect
 import json
 from pathlib import Path
-from typing import Any, Callable
+from typing import Annotated, Any, Callable
 
 from claude_agent_sdk import (
     McpSdkServerConfig,
@@ -22,19 +23,49 @@ from claude_agent_sdk import (
 
 from app.chat.project_tools import make_project_tools
 
-# Exact input schemas, keyed by tool __name__ (see the plan's signature table,
-# verified against app/chat/project_tools.py::make_project_tools). Empty dict =
-# no parameters.
+# Input schemas keyed by tool __name__, verified against
+# app/chat/project_tools.py::make_project_tools. Each parameter carries an
+# `Annotated[type, "description"]` so the model knows what to pass — the SDK
+# turns these into the JSON Schema the CLI sees. Empty dict = no parameters.
 TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
     "list_projects": {},
     "describe_workflow": {},
-    "read_stage": {"stage_id": str},
-    "edit_stage": {"stage_id": str, "spec_json": str},
-    "create_version": {"message": str},
-    "fetch_document": {"src_path": str},
-    "read_section": {"doc_path": str, "heading": str},
-    "grep_doc": {"doc_path": str, "query": str},
-    "compile_workflow": {"doc_path": str, "confirm_overwrite": bool},
+    "read_stage": {
+        "stage_id": Annotated[str, "The stage's id, as shown by describe_workflow."],
+    },
+    "edit_stage": {
+        "stage_id": Annotated[str, "The id of the stage to replace."],
+        "spec_json": Annotated[
+            str,
+            "The COMPLETE stage as a JSON object encoded as a string — the same "
+            "shape read_stage returns: id, name, type, the type's handle block "
+            "(e.g. connector / llm / function), output_schema, and inputs. Call "
+            "read_stage first, modify that JSON, and pass the whole object back. "
+            "The 'id' field must equal stage_id.",
+        ],
+    },
+    "create_version": {
+        "message": Annotated[str, "A short note describing this snapshot."],
+    },
+    "fetch_document": {
+        "src_path": Annotated[str, "Path to a LOCAL file on disk (not a URL)."],
+    },
+    "read_section": {
+        "doc_path": Annotated[str, "On-disk document path returned by fetch_document."],
+        "heading": Annotated[str, "Text to match against a markdown heading; returns that section."],
+    },
+    "grep_doc": {
+        "doc_path": Annotated[str, "On-disk document path returned by fetch_document."],
+        "query": Annotated[str, "Case-insensitive substring to find; returns matching numbered lines."],
+    },
+    "compile_workflow": {
+        "doc_path": Annotated[str, "On-disk source document path (from fetch_document) to compile."],
+        "confirm_overwrite": Annotated[
+            bool,
+            "Set true to snapshot-and-overwrite when the workflow already has "
+            "reviewed stages; omit or false otherwise.",
+        ],
+    },
 }
 
 
@@ -74,7 +105,10 @@ def _wrap(fn: Callable[..., Any]) -> SdkMcpTool[Any]:
                 "is_error": True,
             }
 
-    description = (fn.__doc__ or name).strip().split("\n")[0]
+    # The full docstring is the model-facing description — it carries the usage
+    # guidance (read before edit, pass the full stage JSON, id must match). Using
+    # only the first line dropped exactly what the model needs.
+    description = inspect.getdoc(fn) or name
     return tool(name, description, schema)(handler)
 
 
