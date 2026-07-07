@@ -1,5 +1,15 @@
 # Runtime lineage substrate — Implementation Plan
 
+> **⚠️ DEFERRED (2026-07-07) — this plan is not the active v1.** SYW v1 pivoted to
+> **row-preserving positional tracing**, which needs no recording and no sidecars:
+> for a chain of row-preserving stages (`input_data`, `python_row_function`,
+> `llm_transform` once [#29](https://github.com/surveit/data_workflow/pull/29) makes
+> it strictly 1:1 *and* order-preserving), output row *i* traces to input row *i* by
+> position. This whole recorded-edge substrate is only needed to trace **across
+> row-reshaping stages** (fan-in/out, `join`, `aggregate`, `python_frame_function`)
+> and is captured as [issue #58](https://github.com/surveit/data_workflow/issues/58).
+> The tasks below remain the worked-out design for that deferred work.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Make the runtime record, for every stage it executes, which input row(s) produced each output row — persisted as per-run sidecar files next to the existing stage outputs — so a later tracer and view can reconstruct a claim's provenance without guessing.

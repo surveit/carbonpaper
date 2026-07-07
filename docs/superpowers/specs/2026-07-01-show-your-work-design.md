@@ -78,6 +78,19 @@ exists today, and `schema.primary_key` declarations on stages are documentation-
 
 ## 4. Lineage tracking (the new runtime capability — the core of this design)
 
+> **Scope revision (2026-07-07): v1 does NOT record edges.** A chain of
+> row-preserving stages (`input_data`, `python_row_function`, and `llm_transform`
+> once PR #29 makes it strictly 1:1 and order-preserving) is traceable by **row
+> ordinal alone** — output row *i* ← input row *i* at every hop, by position, with
+> nothing recorded. So v1's tracer (§5) walks positionally and column-origin (§6.2
+> item 1) comes from the compiled schemas (`output_schema.subtract(input_schema)`),
+> not from a runtime `llm_columns` file. The recorded-edge substrate below (§4.1–4.2)
+> is needed only to trace **across row-reshaping stages** (fan-in/out, `join`,
+> `aggregate`, `python_frame_function`); it is deferred to
+> [issue #58](https://github.com/surveit/data_workflow/issues/58). At any reshaping
+> stage the v1 tracer stops and points there. §4.3 (lineage is never derived from
+> LLM-written values) still holds in v1.
+
 ### 4.1 Recorded edges
 
 Each handler (or the runner wrapping handlers uniformly) records, for every output
