@@ -45,13 +45,17 @@ def make_project_tools(name: str, *, examples_dir: Path) -> list[Callable[..., A
             raise ValueError(f"no stage '{stage_id}' in project '{name}'")
         return target.read_text(encoding="utf-8")
 
-    def edit_stage(stage_id: str, spec_json: str) -> dict[str, Any]:
-        """Replace one stage's spec with `spec_json` (the full stage as JSON). The
-        spec is validated first; if invalid, nothing is written and the issues are
-        returned. A successful edit drops the node to 'edited_stale' (amber) for a
-        human to re-approve — you cannot approve it yourself. The `id` in the JSON
-        must equal `stage_id`."""
-        result = stage_edit.edit_stage_spec(project_dir, stage_id, spec_json)
+    def edit_stage(stage_id: str, changes_json: str) -> dict[str, Any]:
+        """Change specific fields of one stage. `changes_json` is a JSON object of
+        ONLY the fields to change (a JSON Merge Patch): {"limit": 100} sets limit;
+        {"llm": {"model": "opus"}} changes only llm.model and leaves the rest of the
+        llm block intact; {"name": null} deletes a field. Fields you do not mention
+        are preserved exactly — so you never alter anything you were not asked to.
+        The result is validated first; if invalid, nothing is written and the issues
+        are returned. A successful edit drops the node to 'edited_stale' (amber) for a
+        human to re-approve — you cannot approve it yourself. You cannot change a
+        stage's id this way."""
+        result = stage_edit.patch_stage_spec(project_dir, stage_id, changes_json)
         return {
             "ok": result.ok,
             "issues": result.issues,

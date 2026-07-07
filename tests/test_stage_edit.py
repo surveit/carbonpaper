@@ -61,3 +61,57 @@ def test_missing_stage_file_raises(tmp_path: Path) -> None:
     valid_ghost = {"id": "ghost", "name": "x", "type": "input_data", "connector": {"kind": "computed_static"}}
     with pytest.raises(FileNotFoundError):
         stage_edit.edit_stage_spec(pdir, "ghost", json.dumps(valid_ghost))
+
+
+def _score(pdir: Path) -> dict:
+    return json.loads((pdir / "compiled" / "02_score.json").read_text(encoding="utf-8"))
+
+
+def test_patch_changes_only_named_field_and_preserves_the_rest(tmp_path: Path) -> None:
+    pdir = _seed(tmp_path)
+    result = stage_edit.patch_stage_spec(pdir, "score", json.dumps({"limit": 100}))
+    assert result.ok is True
+    after = _score(pdir)
+    assert after["limit"] == 100
+    # everything not named in the patch is preserved verbatim — the fidelity guarantee
+    assert after["name"] == "Score rows"
+    assert after["llm"]["model"] == "claude-sonnet-4-6"
+    assert after["llm"]["prompt_template"] == "score {row}"
+
+
+def test_patch_deep_merges_nested_object(tmp_path: Path) -> None:
+    pdir = _seed(tmp_path)
+    result = stage_edit.patch_stage_spec(pdir, "score", json.dumps({"llm": {"model": "opus"}}))
+    assert result.ok is True
+    after = _score(pdir)
+    assert after["llm"]["model"] == "opus"
+    # the sibling key inside llm is NOT dropped (deep merge, not whole-object replace)
+    assert after["llm"]["prompt_template"] == "score {row}"
+
+
+def test_patch_null_deletes_a_field(tmp_path: Path) -> None:
+    pdir = _seed(tmp_path)
+    stage_edit.patch_stage_spec(pdir, "score", json.dumps({"limit": 100}))
+    result = stage_edit.patch_stage_spec(pdir, "score", json.dumps({"limit": None}))
+    assert result.ok is True
+    assert "limit" not in _score(pdir)
+
+
+def test_patch_invalid_result_writes_nothing(tmp_path: Path) -> None:
+    pdir = _seed(tmp_path)
+    before = (pdir / "compiled" / "02_score.json").read_text(encoding="utf-8")
+    result = stage_edit.patch_stage_spec(pdir, "score", json.dumps({"type": "not_a_real_type"}))
+    assert result.ok is False and result.issues
+    assert (pdir / "compiled" / "02_score.json").read_text(encoding="utf-8") == before
+
+
+def test_patch_cannot_change_id(tmp_path: Path) -> None:
+    pdir = _seed(tmp_path)
+    result = stage_edit.patch_stage_spec(pdir, "score", json.dumps({"id": "renamed"}))
+    assert result.ok is False and any("must equal" in i for i in result.issues)
+
+
+def test_patch_missing_stage_raises(tmp_path: Path) -> None:
+    pdir = _seed(tmp_path)
+    with pytest.raises(FileNotFoundError):
+        stage_edit.patch_stage_spec(pdir, "ghost", json.dumps({"limit": 1}))

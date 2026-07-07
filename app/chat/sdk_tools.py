@@ -34,14 +34,14 @@ TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
         "stage_id": Annotated[str, "The stage's id, as shown by describe_workflow."],
     },
     "edit_stage": {
-        "stage_id": Annotated[str, "The id of the stage to replace."],
-        "spec_json": Annotated[
+        "stage_id": Annotated[str, "The id of the stage to change."],
+        "changes_json": Annotated[
             str,
-            "The COMPLETE stage as a JSON object encoded as a string — the same "
-            "shape read_stage returns: id, name, type, the type's handle block "
-            "(e.g. connector / llm / function), output_schema, and inputs. Call "
-            "read_stage first, modify that JSON, and pass the whole object back. "
-            "The 'id' field must equal stage_id.",
+            "A JSON object (encoded as a string) of ONLY the fields to change — a "
+            "JSON Merge Patch. Fields you omit are preserved verbatim; a null value "
+            "deletes a field. Nested objects merge (they are not replaced whole). "
+            'Examples: {"limit": 100} sets limit; {"llm": {"model": "opus"}} '
+            "changes only llm.model. You cannot change a stage's id this way.",
         ],
     },
     "create_version": {
