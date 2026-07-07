@@ -1,26 +1,28 @@
 # Run & review UI
 
-The screens a methodology *operator* (vs. its author) uses: watching a run,
-reviewing flagged rows, and approving/versioning the DAG itself. Code:
+The screens a workflow *operator* (vs. its author) uses: watching a run,
+reviewing flagged rows, and approving/versioning the workflow itself. Code:
 `app/web/routers/{runs,review,node_review}.py` + `app/templates/`
 (`run_detail.html`, `_run_stage_panel.html`, `queue.html`, `_node_review.html`,
-`versions.html`) + `app/static/style.css`.
+`versions.html`) + `app/static/style.css`. All routes live under
+`/project/{project}/…`.
 
 ## Run detail page (`run_detail.html`)
 
-`GET /methodology/{m}/runs/{run_id}`.
+`GET /project/{p}/runs/{run_id}`.
 
 - **Progress framing** (not error-counting): the header shows *complete /
   in-progress / to-do* with a bar, a spinner while active, and an overall status.
   Warnings/errors/awaiting live in a **separate alert strip** that only appears
   when there's something to report.
-- **The DAG is the main object**: full width, on top; the stage detail panel
-  sits below it. Per-state borders via `build_mermaid_graph` status strokes:
-  green=complete, yellow=in-progress, red=error, grey=pending, blue=awaiting
-  review.
+- **The workflow graph is the main object**: full width, on top; the stage
+  detail panel sits below it. Per-state borders via `build_mermaid_graph` status
+  strokes: green=complete, yellow=in-progress, red=error, grey=pending,
+  blue=awaiting review.
 - **Live polling**: while the manifest says `running`, JS polls
-  `GET …/runs/{id}/status` every 2s and updates progress + re-renders the DAG in
-  place, then reloads once on the terminal transition. Terminal runs don't poll.
+  `GET …/runs/{id}/status` every 2s and updates progress + re-renders the graph
+  in place, then reloads once on the terminal transition. Terminal runs don't
+  poll.
 - **Re-run failed stages**: on an errored run a button POSTs to `/resume`.
   Resume re-runs any non-complete stage (error + downstream) and **reuses
   completed upstream outputs** — no re-running finished stages, no new LLM calls
@@ -42,7 +44,7 @@ after injection — without that, the panel's JS (tabs + scratch tool) is dead.
 
 ## Review queue (`queue.html`)
 
-`GET /methodology/{m}/runs/{run_id}/queue/{stage_id}`.
+`GET /project/{p}/runs/{run_id}/queue/{stage_id}`.
 
 The key principle: **a reviewer must see the model INPUT, not just its output.**
 The queue snapshot only holds the scoring stage's *output* (score + reasoning +
@@ -51,28 +53,30 @@ back from the queue stage → the scoring `llm_transform` stage → that stage's
 input, loads the input's run output, joins each flagged row by primary key, and
 **re-renders the actual prompt**. The card leads with *the scored text + the
 exact prompt the model received*, then the model's output. If the input can't be
-recovered it says so loudly ("reviewing blind") rather than hiding it.
+recovered it says so loudly ("reviewing blind") rather than hiding it. (Known
+gap: when no primary key is declared, the join falls back to guessed keys —
+issue #49.)
 
 Decisions are content-hashed (`decisions/<stage>.parquet`) so they survive
 re-runs and LLM non-determinism. When all items are decided, a **Resume run**
 button appears.
 
-## Node review + DAG versioning (`_node_review.html`, `versions.html`)
+## Node review + workflow versioning (`_node_review.html`, `versions.html`)
 
-Reviewing the *methodology itself*, node by node — distinct from reviewing a
+Reviewing the *workflow itself*, stage by stage — distinct from reviewing a
 run's flagged rows.
 
-- Each stage carries an approval state (`GET /methodology/{m}/review/status`,
+- Each stage carries an approval state (`GET /project/{p}/review/status`,
   `POST …/node/{stage_id}/decide`). A decision is hashed over the stage's
-  **loaded YAML content** (minus loader bookkeeping keys), so editing a node
+  **loaded content** (minus loader bookkeeping keys), so editing a node
   invalidates its approval and approvals survive file reordering. The invariant
   and its trap live in `app/services/node_review.py`'s docstring — read it
-  before touching any stage loader.
+  before touching the loader.
 - `POST …/node/{stage_id}/edit` is the **only** code path that writes to
   `compiled/`.
-- `POST /methodology/{m}/version` freezes `compiled/` into
-  `versions/<version_id>/` with approval coverage recorded;
-  `GET /methodology/{m}/versions` lists the frozen versions.
+- `POST /project/{p}/version` freezes `compiled/` into `versions/<version_id>/`
+  with approval coverage recorded; `GET /project/{p}/versions` lists the frozen
+  versions.
 
 ## Where to confirm visually
 
