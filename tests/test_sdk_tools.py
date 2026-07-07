@@ -1,0 +1,77 @@
+"""Task 1: the 9 project tools wrapped as an in-process claude_agent_sdk MCP
+server. These tests reach the wrapped `SdkMcpTool` handlers directly (no CLI
+subprocess) to prove the adapter forwards results and surfaces errors loudly.
+
+The example workspace (`examples/`) is gitignored and absent in a fresh
+worktree, so — like tests/test_project_tools.py — we seed a project into
+tmp_path instead of depending on a checked-in `examples/congresswatch`.
+"""
+from __future__ import annotations
+
+import asyncio
+import json
+from pathlib import Path
+from typing import Any
+
+from claude_agent_sdk import SdkMcpTool
+
+from app.chat.sdk_tools import TOOL_SCHEMAS, build_project_mcp_server
+
+
+def _call(tool: SdkMcpTool[Any], args: dict[str, Any]) -> dict[str, Any]:
+    """Drive one tool handler to completion without a CLI subprocess."""
+
+    async def _run() -> dict[str, Any]:
+        return await tool.handler(args)
+
+    return asyncio.run(_run())
+
+
+def _seed(examples: Path, name: str) -> Path:
+    """Write one minimal, valid stage so read_stage/describe_workflow have real
+    on-disk state (mirrors tests/test_project_tools.py::_seed)."""
+    compiled = examples / name / "compiled"
+    compiled.mkdir(parents=True, exist_ok=True)
+    stage = {
+        "id": "load",
+        "name": "Load rows",
+        "type": "input_data",
+        "connector": {"kind": "computed_static"},
+    }
+    (compiled / "01_load.json").write_text(json.dumps(stage), encoding="utf-8")
+    return examples / name
+
+
+def test_allowed_names_cover_all_nine_tools(tmp_path: Path) -> None:
+    _seed(tmp_path, "congresswatch")
+    _server, allowed, _tools = build_project_mcp_server(
+        "congresswatch", examples_dir=tmp_path
+    )
+    assert set(allowed) == {f"mcp__project__{n}" for n in TOOL_SCHEMAS}
+    assert len(allowed) == 9
+
+
+def test_read_stage_handler_returns_text_content(tmp_path: Path) -> None:
+    pdir = _seed(tmp_path, "congresswatch")
+    _server, _allowed, tools = build_project_mcp_server(
+        "congresswatch", examples_dir=tmp_path
+    )
+    tool = next(t for t in tools if t.name == "read_stage")  # SdkMcpTool
+
+    from app.services.workspace import project_workflow_summary
+
+    stage_id = project_workflow_summary(pdir)["stages"][0]["id"]
+    out = _call(tool, {"stage_id": stage_id})
+    assert out["content"][0]["type"] == "text"
+    assert stage_id in out["content"][0]["text"]
+
+
+def test_handler_surfaces_tool_error_not_fabricated_value(tmp_path: Path) -> None:
+    _seed(tmp_path, "congresswatch")
+    _server, _allowed, tools = build_project_mcp_server(
+        "congresswatch", examples_dir=tmp_path
+    )
+    tool = next(t for t in tools if t.name == "read_stage")
+    out = _call(tool, {"stage_id": "no_such_stage"})
+    assert out.get("is_error") is True
+    assert "no_such_stage" in out["content"][0]["text"]
