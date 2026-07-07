@@ -1,6 +1,6 @@
 # Workflow Schema v2 — Executable Node Types
 
-This is the contract a compiled stage file must satisfy. Every stage is *executable* in principle: it declares typed inputs, a typed output, and an executable handle (connector / prompt / function / join / aggregation / queue / publish). The compiler does not produce prose blobs dressed as structured data.
+This is the schema a compiled stage specification must satisfy. Every stage is *executable* in principle: it declares typed inputs, a typed output, and an executable handle (connector / prompt / function / join / aggregation / queue / publish). The compiler does not produce prose blobs dressed as structured data.
 
 ## The eight stage types
 
@@ -151,7 +151,7 @@ computed_static — curated list with no automated fetch (e.g., the project's ow
 sum, mean, count, min, max, first, list      — standard (all but count require value_column)
 ```
 
-Weighted aggregation is not part of this contract — do it inside a
+Weighted aggregation is not part of this schema — do it inside a
 `python_frame_function` instead. Anything else non-trivial also belongs in a
 `python_frame_function`, not in an `aggregate`.
 
