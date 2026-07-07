@@ -65,15 +65,32 @@ class SessionStore:
     def load(self, sid: str) -> dict:
         return self._read(sid)
 
+    @staticmethod
+    def _is_project(doc: dict) -> bool:
+        """A project (SDK) session persists neutral {role, parts} transcripts;
+        a demo session persists PydanticAI messages."""
+        return bool((doc.get("context") or {}).get("project"))
+
     def load_messages(self, sid: str) -> list[ModelMessage]:
-        raw = self._read(sid).get("messages") or []
+        doc = self._read(sid)
+        # Project sessions are stateless per turn: the SDK engine ignores
+        # message_history and the tools read durable on-disk project state, so
+        # nothing is fed back into the next turn.
+        if self._is_project(doc):
+            return []
+        raw = doc.get("messages") or []
         if not raw:
             return []
         return list(ModelMessagesTypeAdapter.validate_python(raw))
 
     def save_messages(self, sid: str, messages) -> None:
         data = self._read(sid)
-        data["messages"] = to_jsonable_python(messages)
+        if self._is_project(data):
+            # `messages` is already the neutral {role, parts} transcript from the
+            # SDK engine; it is plain JSON, so persist it verbatim.
+            data["messages"] = messages
+        else:
+            data["messages"] = to_jsonable_python(messages)
         data["pending_user"] = None
         self._write(sid, data)
 
@@ -103,6 +120,8 @@ class SessionStore:
 
     def history_view(self, sid: str) -> list[dict]:
         """Stored messages rendered as simple bubbles for the template."""
+        if self._is_project(self._read(sid)):
+            return _summarize_neutral(self._read(sid).get("messages") or [])
         return summarize(self.load_messages(sid))
 
 
@@ -118,6 +137,32 @@ def summarize(messages) -> list[dict]:
             text = "".join(p.content for p in m.parts if isinstance(p, TextPart))
             tools = [{"name": p.tool_name, "args": p.args_as_json_str()}
                      for p in m.parts if isinstance(p, ToolCallPart)]
+            bubbles.append({"role": "assistant", "thinking": thinking,
+                            "text": text, "tools": tools})
+    return bubbles
+
+
+def _summarize_neutral(messages: list[dict]) -> list[dict]:
+    """Render a project session's neutral transcript (``{role, parts}`` with
+    part types ``text|thinking|tool_call|tool_result``) into the same bubble
+    dicts ``summarize`` produces, so ``chat.html`` renders them identically.
+
+    The template's history loop only reads ``role``, ``text``, ``thinking`` and
+    ``tools[].name/.args`` — matching the demo, tool results have no history
+    slot and are not rendered on reload.
+    """
+    bubbles: list[dict] = []
+    for message in messages:
+        role = message.get("role")
+        parts = message.get("parts") or []
+        if role == "user":
+            text = "".join(p.get("text", "") for p in parts if p.get("type") == "text")
+            bubbles.append({"role": "user", "text": text})
+        elif role == "assistant":
+            thinking = "".join(p.get("text", "") for p in parts if p.get("type") == "thinking")
+            text = "".join(p.get("text", "") for p in parts if p.get("type") == "text")
+            tools = [{"name": p.get("name", ""), "args": p.get("args", "")}
+                     for p in parts if p.get("type") == "tool_call"]
             bubbles.append({"role": "assistant", "thinking": thinking,
                             "text": text, "tools": tools})
     return bubbles
