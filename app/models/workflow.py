@@ -17,7 +17,7 @@ the workflow view's flagged edges.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import ValidationError, model_validator
 
@@ -80,15 +80,25 @@ def graph_issues(stages: list[Stage]) -> list[str]:
     return check_unique_ids(stages) + check_inputs_resolve(stages) + detect_cycle(stages)
 
 
+Severity = Literal["error", "warning"]
+
+
 @dataclass
-class EdgeSchemaIssue:
-    """One conformance problem on a workflow edge: the downstream stage's declared
-    input schema disagrees with (or cannot be checked against) the upstream stage's
+class WorkflowValidationIssue:
+    """A problem found validating a workflow at author/save time. Distinct from a
+    runtime data-validation failure (`app/runtime/validation.py`'s `Issue`), which
+    judges a produced dataframe — this judges the workflow definition itself."""
+    severity: Severity
+    problem: str
+
+
+@dataclass
+class EdgeSchemaIssue(WorkflowValidationIssue):
+    """A WorkflowValidationIssue on one edge: the downstream stage's declared input
+    schema disagrees with (or cannot be checked against) the upstream stage's
     declared output schema."""
     upstream_id: str
     stage_id: str
-    severity: str  # "error" | "warning"
-    problem: str
 
 
 def check_edge_schemas(stages: list[Stage]) -> list[EdgeSchemaIssue]:
@@ -124,7 +134,7 @@ def check_edge_schemas(stages: list[Stage]) -> list[EdgeSchemaIssue]:
 
 def _edge_issues(upstream_id: str, stage_id: str, in_schema: TableSchema,
                  up_schema: TableSchema | None) -> list[EdgeSchemaIssue]:
-    def issue(severity: str, problem: str) -> EdgeSchemaIssue:
+    def issue(severity: Severity, problem: str) -> EdgeSchemaIssue:
         return EdgeSchemaIssue(upstream_id=upstream_id, stage_id=stage_id,
                                severity=severity, problem=problem)
 

@@ -7,7 +7,11 @@ from __future__ import annotations
 from typing import Any
 
 from app.models.stage import Stage
-from app.models.workflow import check_edge_schemas
+from app.models.workflow import (
+    EdgeSchemaIssue,
+    WorkflowValidationIssue,
+    check_edge_schemas,
+)
 
 
 def up_stage(sid: str = "up", out_cols: list[dict[str, Any]] | None = None,
@@ -115,3 +119,13 @@ def test_bare_id_inputs_and_unresolved_upstreams_are_skipped():
         {"id": "nowhere", "schema": {"columns": [{"name": "x"}]}},
     ])
     assert check_edge_schemas([UP, d]) == []
+
+
+def test_edge_issue_is_a_workflow_validation_issue():
+    d = down({"primary_key": ["k"], "columns": [
+        {"name": "k", "type": "str", "nullable": False},
+        {"name": "ghost", "type": "str", "nullable": True},
+    ]})
+    [i] = check_edge_schemas([UP, d])
+    assert isinstance(i, EdgeSchemaIssue)
+    assert isinstance(i, WorkflowValidationIssue)
