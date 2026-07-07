@@ -17,23 +17,11 @@ Two functions are the public surface:
                           invents a model or a creation date.
   - project_state(pdir) : the status object the Overview + shell render, including
                           the `next_action` ladder ("what to do next").
-
-Dependency rule (mirrors node_review / versioning): this module imports only
-stdlib (json) and the trustworthy interface helpers (node_review, versioning,
-app.web.loading). It imports NOTHING from app.main / app.runtime / app.compiler, so
-it sits below the routes layer and can be leaned on by both routes and templates.
-
-CARDINAL RULE — never fabricate. Every count here is read off disk (schemas,
-compiled stages, versions, runs); when a fact is unknown (a legacy project's
-model, a project with no runs) the field is None / 0 / a truthful "none" state, NOT
-a placeholder. coverage is None (not a zero-coverage object) when there is no
-workflow to cover — the absence is reported, not papered over.
 """
 
 from __future__ import annotations
 
 import json
-from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -46,6 +34,11 @@ from app.web.loading import load_schemas
 # create flow writes document.md; legacy/imported projects may carry
 # methodology_raw.md or the older methodology_raw.txt. Probe in that order and
 # report the first that exists (a truthful path, never a fabricated one).
+#
+# LEGACY: probing a fixed candidate list is a migration accommodation. The intended
+# direction is for project.json to record the document's path explicitly, so a
+# project references a real file rather than inferring it by filename — at which
+# point this probe (and _DOCUMENT_CANDIDATES) can be retired.
 _DOCUMENT_CANDIDATES = ("document.md", "methodology_raw.md", "methodology_raw.txt")
 
 
@@ -141,9 +134,9 @@ def project_meta(pdir: Path) -> dict[str, Any]:
     TRUTHFULLY rather than fabricate:
       - name       : the directory name (always known).
       - title      : project.json's title, else None (no invented prose title).
-      - created_at : project.json's value, else the earliest RUN id (the oldest
-                     thing we can prove happened), else the directory mtime. Never a
-                     made-up date.
+      - created_at : project.json's value, else None. The create flow always writes
+                     it, so a None here means a legacy project that predates it —
+                     reported as unknown, never an inferred date.
       - model      : project.json's value, else None — "unknown". We do NOT guess a
                      default model; a wrong provenance is worse than an honest gap.
       - source     : project.json's value, else None.
@@ -163,42 +156,16 @@ def project_meta(pdir: Path) -> dict[str, Any]:
         except (json.JSONDecodeError, OSError):
             raw = {}
 
-    created_at = raw.get("created_at")
-    if not created_at:
-        created_at = _earliest_run_id(pdir) or _dir_mtime_iso(pdir)
-
     return {
         "name": raw.get("name") or name,
         "title": raw.get("title"),
-        "created_at": created_at,
+        # project.json's value, else None — the create flow always sets it; a None is
+        # an honest "unknown" for a legacy project, never an inferred date.
+        "created_at": raw.get("created_at"),
         # model is None ("unknown") for legacy — never a fabricated default.
         "model": raw.get("model"),
         "source": raw.get("source"),
     }
-
-
-def _earliest_run_id(pdir: Path) -> str | None:
-    """Oldest run id (the earliest thing we can prove this project did), or None.
-    Run ids are strftime timestamps, so the lexical MIN is chronologically first;
-    only dirs with a manifest count as real runs (mirrors _runs_summary)."""
-    runs_dir = pdir / "runs"
-    if not runs_dir.is_dir():
-        return None
-    ids = [
-        r.name for r in runs_dir.iterdir()
-        if r.is_dir() and (r / "manifest.json").exists()
-    ]
-    return min(ids) if ids else None
-
-
-def _dir_mtime_iso(pdir: Path) -> str | None:
-    """Directory mtime as an ISO-8601 string (seconds), or None if it can't be
-    stat'd. The last-resort created_at when there is neither a project.json date nor
-    a run to date the project from."""
-    try:
-        return datetime.fromtimestamp(pdir.stat().st_mtime).isoformat(timespec="seconds")
-    except OSError:
-        return None
 
 
 def write_project_meta(pdir: Path, **fields: Any) -> dict[str, Any]:
