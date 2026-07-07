@@ -44,58 +44,6 @@ def _safe_mermaid_type(t: str) -> str:
     ) or "any"
 
 
-def build_er_diagram(stages: list[Stage]) -> str:
-    """Mermaid erDiagram showing each stage's output_schema as an entity, with
-    PK markers, FK markers (inferred from upstream PKs), and edges from upstream
-    to downstream stages."""
-    lines = ["erDiagram"]
-
-    # Index PK columns per stage so we can flag FKs.
-    pk_owner: dict[str, str] = {}
-    for s in stages:
-        schema = s.output_schema
-        for pk_col in (schema.primary_key if schema else None) or []:
-            pk_owner.setdefault(pk_col, s.id)
-
-    # Entity definitions
-    for s in stages:
-        schema = s.output_schema
-        cols = (schema.columns if schema else None) or []
-        if not cols:
-            continue
-        pk_set = set((schema.primary_key if schema else None) or [])
-        lines.append(f"    {s.id} {{")
-        for col in cols:
-            name = col.name
-            if not name:
-                continue
-            t = _safe_mermaid_type(col.type)
-            marker = ""
-            if name in pk_set:
-                marker = "PK"
-            elif name in pk_owner and pk_owner[name] != s.id:
-                marker = "FK"
-            label = col.description or ""
-            comment = ""
-            if label:
-                # mermaid erDiagram comment must be in quotes; cap length
-                short = label.replace('"', "'")[:48]
-                comment = f' "{short}"'
-            line = f"        {t} {name}"
-            if marker:
-                line += f" {marker}"
-            line += comment
-            lines.append(line)
-        lines.append("    }")
-
-    # Relationship edges — one line per (upstream → downstream)
-    for s in stages:
-        for iid in s.input_ids:
-            lines.append(f"    {iid} ||--o{{ {s.id} : feeds")
-
-    return "\n".join(lines)
-
-
 # ─── Named-schema data model (the ER view of schemas/, not stages) ────────────
 # Schema-kind → CSS class / glyph, shared with the data-model section template.
 SCHEMA_KIND_CLASS = {

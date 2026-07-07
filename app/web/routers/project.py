@@ -1,5 +1,5 @@
 """
-project.py (router) — the PROJECT SHELL + gated authoring + the read-only views.
+project.py (router) — the PROJECT SHELL + gated authoring.
 
 A project is one directory under examples/<name>/ framed by a left-sidebar shell
 (Overview · Document · Data model · Workflow · Runs). This router owns:
@@ -20,20 +20,15 @@ A project is one directory under examples/<name>/ framed by a left-sidebar shell
     POST /project/{project}/data-model/approve   — record the schema-library approval (gate)
     POST /project/{project}/schema/{name}/edit   — the only writer into schemas/
 
-  Read-only views the shell links into (stage detail + the stages-derived ER model)
-    GET  /project/{project}/stage/{stage_id}          — full-page stage detail
-    GET  /project/{project}/stage/{stage_id}/partial  — stage detail body (split-view swap)
-    GET  /project/{project}/data-model                — ER diagram derived from the stages
-    GET  /project/{project}/raw/{stage_id}            — one stage as raw JSON
-
 The Runs section page (GET /project/{project}/runs) is served by app.web.routers.runs
-so it stays next to the run lifecycle it renders.
+so it stays next to the run lifecycle it renders. Per-stage detail is served inline by
+the workflow section (node review at /project/{project}/node/{id}/review-partial, in
+app.web.routers.node_review), so this router carries no standalone stage-detail view.
 
 Route order matters: the literal /project/new is declared on THIS router BEFORE the
 /project/{project} section routes, so "new" is matched as a literal, never captured as
 a project name. The two-word section paths (/data_model, /workflow, /document) never
-collide with a stage id (which lives under /stage/{id}). The stages-derived ER lives at
-/data-model (hyphen); the schema-cards + gate section lives at /data_model (underscore).
+collide with a project name.
 
 Reuse rule: reuses P1's node_review (belief + schema-library gate) + versioning, P2's
 compiler (compile_methodology), and the shared web helpers (diagrams, loading,
@@ -54,12 +49,11 @@ from fastapi.responses import (
     HTMLResponse,
     JSONResponse,
     RedirectResponse,
-    Response,
 )
 
 from app.models import validate_named_schema, validate_schema_library
 from app.services import node_review, project, versioning
-from app.services.loader import stage_to_json, stage_to_spec_dict
+from app.services.loader import stage_to_spec_dict
 from app.web.config import EXAMPLES_DIR, templates
 from app.web.diagrams import (
     SCHEMA_KIND_CLASS,
@@ -67,18 +61,13 @@ from app.web.diagrams import (
     SCHEMA_KIND_ORDER,
     TYPE_CLASS,
     TYPE_GLYPH,
-    build_er_diagram,
     build_mermaid_graph,
     build_schema_er_diagram,
 )
 from app.web.loading import (
-    find_stage,
     list_projects,
     load_schemas,
-    load_stages,
     load_stages_or_empty,
-    read_prose_excerpt,
-    resolve_function_code,
 )
 from app.web.project_view import shell_state
 
@@ -473,89 +462,3 @@ async def edit_schema(project_name: str, schema_name: str, json_text: str = Form
     new_hash = node_review.schema_library_content_hash(schemas)
     state = node_review.data_model_state(pdir, schemas)["state"]
     return JSONResponse({"ok": True, "content_hash": new_hash, "state": state})
-
-
-# ─── Read-only views the shell links into ────────────────────────────────────
-# Per-stage detail (full page + split-view partial), the stages-derived ER data model,
-# and one stage as raw JSON. These render already-validated Stage objects loaded via
-# the strict loader (load_stages), so an invalid workflow surfaces its issues rather
-# than a false graph.
-
-
-@router.get("/project/{project_name}/stage/{stage_id}", response_class=HTMLResponse)
-async def stage_view(request: Request, project_name: str, stage_id: str):
-    listing = load_stages(project_name)
-    stage = find_stage(listing.stages, stage_id)
-    if stage is None:
-        raise HTTPException(status_code=404, detail=f"No stage '{stage_id}' in {project_name}")
-    prose = read_prose_excerpt(stage, project_name)
-    function_code = resolve_function_code(stage)
-
-    return templates.TemplateResponse(
-        request,
-        "stage.html",
-        {
-            "project": project_name,
-            "stage": stage,
-            "prose_excerpt": prose,
-            "function_code": function_code,
-            "type_class": TYPE_CLASS,
-            "type_glyph": TYPE_GLYPH,
-            "raw_json": stage_to_json(stage),
-        },
-    )
-
-
-@router.get("/project/{project_name}/data-model", response_class=HTMLResponse)
-async def data_model_view(request: Request, project_name: str):
-    """The stages-derived ER model (each stage's output_schema as an entity), distinct
-    from the named-schema data-model SECTION at /project/{name}/data_model."""
-    stages = load_stages(project_name).stages
-    er = build_er_diagram(stages)
-    return templates.TemplateResponse(
-        request,
-        "data_model.html",
-        {
-            "project": project_name,
-            "stages": stages,
-            "er_diagram": er,
-            "type_class": TYPE_CLASS,
-            "type_glyph": TYPE_GLYPH,
-        },
-    )
-
-
-@router.get("/project/{project_name}/stage/{stage_id}/partial", response_class=HTMLResponse)
-async def stage_view_partial(request: Request, project_name: str, stage_id: str):
-    """Stage detail content only — no <html> wrapper. Used by the split-view JS swap."""
-    listing = load_stages(project_name)
-    stage = find_stage(listing.stages, stage_id)
-    if stage is None:
-        raise HTTPException(status_code=404, detail=f"No stage '{stage_id}' in {project_name}")
-    prose = read_prose_excerpt(stage, project_name)
-    function_code = resolve_function_code(stage)
-    return templates.TemplateResponse(
-        request,
-        "_stage_content.html",
-        {
-            "project": project_name,
-            "stage": stage,
-            "prose_excerpt": prose,
-            "function_code": function_code,
-            "type_class": TYPE_CLASS,
-            "type_glyph": TYPE_GLYPH,
-            "raw_json": stage_to_json(stage),
-        },
-    )
-
-
-@router.get("/project/{project_name}/raw/{stage_id}")
-async def stage_raw(project_name: str, stage_id: str) -> Response:
-    listing = load_stages(project_name)
-    stage = find_stage(listing.stages, stage_id)
-    if stage is None:
-        raise HTTPException(status_code=404, detail=f"No stage '{stage_id}' in {project_name}")
-    return Response(
-        content=stage_to_json(stage),
-        media_type="application/json",
-    )
