@@ -30,6 +30,7 @@ from claude_agent_sdk import (
 # PATH on Windows); reuse llm_agent_sdk's resolution so this engine and the
 # runtime backend agree on which CLI to spawn.
 from app.runtime.llm_agent_sdk import _CLI_PATH
+from app.chat.sdk_tools import TOOL_LABELS
 
 CLI_MODEL = os.environ.get("CW_CHAT_CLI_MODEL", "sonnet")
 
@@ -60,21 +61,21 @@ class SdkAgentEngine:
         mcp_server: Any,
         allowed_tools: list[str],
         model: str = CLI_MODEL,
-        max_turns: int = 8,
     ) -> None:
         self._system_prompt = system_prompt
         self._mcp_server = mcp_server
         self._allowed_tools = allowed_tools
         self._model = model
-        self._max_turns = max_turns
 
     def _options(self) -> ClaudeAgentOptions:
+        # No max_turns cap: the editing agent should keep working (read → edit →
+        # version → compile) until the task is done, not stop mid-way. The SDK
+        # default is None (uncapped), so we simply do not set it.
         kw: dict[str, Any] = dict(
             model=self._model,
             system_prompt=self._system_prompt,
             mcp_servers={"project": self._mcp_server},
             allowed_tools=self._allowed_tools,
-            max_turns=self._max_turns,
             setting_sources=[],
         )
         if _CLI_PATH is not None:
@@ -104,10 +105,23 @@ class SdkAgentEngine:
                         assistant_parts.append({"type": "text", "text": block.text})
                     elif isinstance(block, ToolUseBlock):
                         args = json.dumps(block.input, default=str)
-                        emit({"kind": "tool_call", "name": block.name, "args": args})
-                        assistant_parts.append(
-                            {"type": "tool_call", "name": block.name, "args": args}
-                        )
+                        # The CLI calls tools by their namespaced name
+                        # (e.g. "mcp__project__read_stage"); the friendly label
+                        # is keyed by the bare tool name.
+                        bare = block.name.rsplit("__", 1)[-1]
+                        label = TOOL_LABELS.get(bare, bare)
+                        emit({
+                            "kind": "tool_call",
+                            "name": bare,
+                            "args": args,
+                            "label": label,
+                        })
+                        assistant_parts.append({
+                            "type": "tool_call",
+                            "name": bare,
+                            "args": args,
+                            "label": label,
+                        })
             elif isinstance(msg, UserMessage):
                 # UserMessage.content may be a bare str (a plain user turn) or a
                 # list of blocks (tool results). We only surface tool results.

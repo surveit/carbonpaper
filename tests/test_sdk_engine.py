@@ -78,7 +78,10 @@ def test_stream_turn_maps_blocks_to_normalized_events(monkeypatch: Any) -> None:
         ("text", "Done."),
     ]
     assert transcript[0]["role"] == "user"
-    assert any(p.get("type") == "tool_call" for m in transcript for p in m["parts"])
+    tool_parts = [p for m in transcript for p in m["parts"] if p.get("type") == "tool_call"]
+    assert tool_parts and tool_parts[0]["label"] == "Editing a stage"
+    tool_call_ev = next(e for e in events if e["kind"] == "tool_call")
+    assert tool_call_ev["label"] == "Editing a stage"
 
 
 def test_stream_turn_surfaces_in_band_result_error(monkeypatch: Any) -> None:

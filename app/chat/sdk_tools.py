@@ -38,6 +38,24 @@ TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
 }
 
 
+# Present-tense labels shown in the chat while a tool runs (e.g. "Reading the
+# workflow…"), keyed by the bare tool name. The full args/result stay available
+# behind a click-to-expand disclosure in the UI. "ToolSearch" is the CLI's own
+# built-in that loads a deferred MCP tool's schema before first use.
+TOOL_LABELS: dict[str, str] = {
+    "list_projects": "Listing projects",
+    "describe_workflow": "Reading the workflow",
+    "read_stage": "Reading a stage",
+    "edit_stage": "Editing a stage",
+    "create_version": "Snapshotting a version",
+    "fetch_document": "Opening the source document",
+    "read_section": "Reading a document section",
+    "grep_doc": "Searching the document",
+    "compile_workflow": "Compiling the workflow",
+    "ToolSearch": "Looking up a tool",
+}
+
+
 def _as_content(value: object) -> dict[str, Any]:
     text = value if isinstance(value, str) else json.dumps(value, default=str, indent=2)
     return {"content": [{"type": "text", "text": text}]}

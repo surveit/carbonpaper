@@ -161,7 +161,8 @@ def _summarize_neutral(messages: list[dict]) -> list[dict]:
         elif role == "assistant":
             thinking = "".join(p.get("text", "") for p in parts if p.get("type") == "thinking")
             text = "".join(p.get("text", "") for p in parts if p.get("type") == "text")
-            tools = [{"name": p.get("name", ""), "args": p.get("args", "")}
+            tools = [{"name": p.get("name", ""), "args": p.get("args", ""),
+                      "label": p.get("label") or p.get("name", "")}
                      for p in parts if p.get("type") == "tool_call"]
             bubbles.append({"role": "assistant", "thinking": thinking,
                             "text": text, "tools": tools})

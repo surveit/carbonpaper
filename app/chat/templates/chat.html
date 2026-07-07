@@ -22,6 +22,16 @@
     details.think .think-text { font-style:italic; color:#4b4670; font-size:13px; padding:0 10px 8px 10px; white-space:pre-wrap; }
     .tool { font-family:ui-monospace, monospace; font-size:12px; color:var(--tool);
             background:#eef8f3; border:1px solid #cfeadd; border-radius:6px; padding:3px 7px; margin:4px 0; display:inline-block; }
+    details.tool-call { margin:4px 0; }
+    details.tool-call > summary { cursor:pointer; list-style:none; color:var(--tool); font-size:12px;
+            background:#eef8f3; border:1px solid #cfeadd; border-radius:6px; padding:3px 9px; display:inline-block; user-select:none; }
+    details.tool-call > summary::-webkit-details-marker { display:none; }
+    details.tool-call > summary::before { content:"▸ "; color:var(--muted); }
+    details.tool-call[open] > summary::before { content:"▾ "; }
+    .tool-json { font-family:ui-monospace, monospace; font-size:11px; color:#2b4a40;
+            background:#f6faf8; border:1px solid #cfeadd; border-radius:6px; padding:6px 9px; margin:4px 0 0;
+            white-space:pre-wrap; overflow-x:auto; }
+    .tool-json-label { font-size:10px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); margin:6px 0 1px; }
     .err { color:#c0392b; font-size:13px; }
     .thinking-spinner { display:inline-flex; align-items:center; gap:5px; padding:6px 2px; }
     .thinking-spinner .dot { width:6px; height:6px; border-radius:50%; background:var(--think); animation: tspin 1.2s infinite ease-in-out both; }
@@ -59,7 +69,7 @@
           {% if b.thinking %}
             <details class="think"><summary>💭 thinking</summary><div class="think-text">{{ b.thinking }}</div></details>
           {% endif %}
-          {% for t in b.tools %}<div class="tool">🔧 {{ t.name }}({{ t.args }})</div>{% endfor %}
+          {% for t in b.tools %}<details class="tool-call"><summary>🔧 {{ t.label or t.name }}</summary><pre class="tool-json">{{ t.args }}</pre></details>{% endfor %}
           <div class="body">{{ b.text }}</div>
         </div>
       {% endif %}
@@ -88,6 +98,8 @@ let streaming = false;
 
 function el(cls, html) { const d = document.createElement("div"); d.className = cls; if (html !== undefined) d.innerHTML = html; return d; }
 function scroll() { window.scrollTo(0, document.body.scrollHeight); }
+function fmtJson(s) { try { return JSON.stringify(JSON.parse(s), null, 2); } catch (e) { return s || ""; } }
+function toolPre(text) { const p = document.createElement("pre"); p.className = "tool-json"; p.textContent = fmtJson(text); return p; }
 
 function addUser(text) {
   const b = el("bubble user");
@@ -106,6 +118,7 @@ function newAssistant() {
     '<span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="sp-label">thinking…</span>');
   b.appendChild(spinner);
   let think = null, thinkText = null, body = null;
+  const pendingTools = [];  // tool_call disclosures awaiting their tool_result (FIFO)
   log.appendChild(b); scroll();
   function stop() { if (spinner.parentNode) spinner.remove(); }
   return {
@@ -124,8 +137,26 @@ function newAssistant() {
       if (!body) { body = el("body"); b.appendChild(body); }
       body.textContent += t; scroll();
     },
-    tool(name, args) { stop(); const c = el("tool"); c.textContent = "🔧 " + name + "(" + (args||"") + ")"; b.appendChild(c); scroll(); },
-    toolResult(content) { stop(); const c = el("tool"); c.textContent = "↳ " + content; b.appendChild(c); scroll(); },
+    tool(name, args, label) {
+      stop();
+      const d = document.createElement("details"); d.className = "tool-call";
+      const sum = document.createElement("summary"); sum.textContent = "🔧 " + (label || name); d.appendChild(sum);
+      d.appendChild(toolPre(args));
+      b.appendChild(d); pendingTools.push(d); scroll();
+    },
+    toolResult(content) {
+      stop();
+      const d = pendingTools.shift();
+      if (d) {
+        const lbl = el("tool-json-label"); lbl.textContent = "result"; d.appendChild(lbl);
+        d.appendChild(toolPre(content));
+      } else {  // result with no matching call (shouldn't happen) — show standalone
+        const d2 = document.createElement("details"); d2.className = "tool-call";
+        const sum = document.createElement("summary"); sum.textContent = "↳ result"; d2.appendChild(sum);
+        d2.appendChild(toolPre(content)); b.appendChild(d2);
+      }
+      scroll();
+    },
     error(t) { stop(); const e = el("err"); e.textContent = "⚠ " + t; b.appendChild(e); scroll(); },
     stop
   };
@@ -139,7 +170,7 @@ function connect(turnId, fromIndex) {
     const ev = JSON.parse(m.data);
     if (ev.kind === "thinking") bubble.thinking(ev.text);
     else if (ev.kind === "text") bubble.text(ev.text);
-    else if (ev.kind === "tool_call") bubble.tool(ev.name, ev.args);
+    else if (ev.kind === "tool_call") bubble.tool(ev.name, ev.args, ev.label);
     else if (ev.kind === "tool_result") bubble.toolResult(ev.content);
     else if (ev.kind === "error") bubble.error(ev.text);
     else if (ev.kind === "done") { bubble.stop(); es.close(); streaming = false; sendBtn.disabled = false; input.focus(); }
