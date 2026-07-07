@@ -9,6 +9,8 @@
 <h1>Evals for <code>{{ methodology }}</code></h1>
 <p class="lede">An eval checks whether one stage's output still matches expectations on a fixed set of cases. Status reflects both whether the eval still fits the workflow and whether its last run is current.</p>
 
+<p><a href="/methodology/{{ methodology }}/evals/new" class="btn primary">+ New eval</a></p>
+
 {% if load_issues %}
 <div class="load-issues">
   <strong>{{ load_issues|length }} compiled file(s) failed validation; evals cannot be checked against the workflow:</strong>
@@ -49,6 +51,7 @@
 <div class="empty-state">
     <h2>No evals yet</h2>
     <p>No eval configs are stored for this methodology.</p>
+    <p><a href="/methodology/{{ methodology }}/evals/new" class="btn primary">+ New eval</a></p>
 </div>
 {% endif %}
 {% endblock %}
