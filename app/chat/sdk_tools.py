@@ -44,6 +44,15 @@ TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
             "changes only llm.model. You cannot change a stage's id this way.",
         ],
     },
+    "add_stage": {
+        "stage_json": Annotated[
+            str,
+            "The complete NEW stage as a JSON object (encoded as a string): id "
+            "(new and unique), name, type, the type's handle block (connector / "
+            "llm / function / ...), output_schema, and inputs. Every id in inputs "
+            "must already be a stage in this workflow, or it is rejected.",
+        ],
+    },
     "create_version": {
         "message": Annotated[str, "A short note describing this snapshot."],
     },
@@ -78,6 +87,7 @@ TOOL_LABELS: dict[str, str] = {
     "describe_workflow": "Reading the workflow",
     "read_stage": "Reading a stage",
     "edit_stage": "Editing a stage",
+    "add_stage": "Adding a stage",
     "create_version": "Snapshotting a version",
     "fetch_document": "Opening the source document",
     "read_section": "Reading a document section",

@@ -115,3 +115,44 @@ def test_patch_missing_stage_raises(tmp_path: Path) -> None:
     pdir = _seed(tmp_path)
     with pytest.raises(FileNotFoundError):
         stage_edit.patch_stage_spec(pdir, "ghost", json.dumps({"limit": 1}))
+
+
+def _seed_load(tmp_path: Path) -> Path:
+    compiled = tmp_path / "beta" / "compiled"
+    compiled.mkdir(parents=True, exist_ok=True)
+    (compiled / "01_load.json").write_text(
+        json.dumps({"id": "load", "name": "Load", "type": "input_data",
+                    "connector": {"kind": "computed_static"}}),
+        encoding="utf-8",
+    )
+    return tmp_path / "beta"
+
+
+def test_add_stage_creates_new_stage_referencing_existing_input(tmp_path: Path) -> None:
+    pdir = _seed_load(tmp_path)
+    new = {"id": "score", "name": "Score", "type": "llm_transform",
+           "inputs": [{"id": "load"}],
+           "llm": {"model": "claude-sonnet-4-6", "prompt_template": "score {row}"}}
+    result = stage_edit.add_stage_spec(pdir, json.dumps(new))
+    assert result.ok is True and result.state == "unreviewed"
+    assert any(p.name.endswith("_score.json") for p in (pdir / "compiled").glob("*.json"))
+
+
+def test_add_stage_rejects_dangling_input(tmp_path: Path) -> None:
+    pdir = _seed_load(tmp_path)
+    new = {"id": "score", "name": "Score", "type": "llm_transform",
+           "inputs": [{"id": "does_not_exist"}],
+           "llm": {"model": "claude-sonnet-4-6", "prompt_template": "score {row}"}}
+    result = stage_edit.add_stage_spec(pdir, json.dumps(new))
+    assert result.ok is False
+    assert any("does_not_exist" in i for i in result.issues)
+    # nothing written for the rejected stage
+    assert not any(p.name.endswith("_score.json") for p in (pdir / "compiled").glob("*.json"))
+
+
+def test_add_stage_rejects_duplicate_id(tmp_path: Path) -> None:
+    pdir = _seed_load(tmp_path)
+    dup = {"id": "load", "name": "Load again", "type": "input_data",
+           "connector": {"kind": "computed_static"}}
+    result = stage_edit.add_stage_spec(pdir, json.dumps(dup))
+    assert result.ok is False and any("already exists" in i for i in result.issues)

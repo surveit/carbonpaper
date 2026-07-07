@@ -42,13 +42,13 @@ def _seed(examples: Path, name: str) -> Path:
     return examples / name
 
 
-def test_allowed_names_cover_all_nine_tools(tmp_path: Path) -> None:
+def test_allowed_names_cover_every_tool(tmp_path: Path) -> None:
     _seed(tmp_path, "congresswatch")
     _server, allowed, _tools = build_project_mcp_server(
         "congresswatch", examples_dir=tmp_path
     )
     assert set(allowed) == {f"mcp__project__{n}" for n in TOOL_SCHEMAS}
-    assert len(allowed) == 9
+    assert len(allowed) == 10
 
 
 def test_read_stage_handler_returns_text_content(tmp_path: Path) -> None:

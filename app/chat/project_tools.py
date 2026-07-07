@@ -63,6 +63,22 @@ def make_project_tools(name: str, *, examples_dir: Path) -> list[Callable[..., A
             "state": result.state,
         }
 
+    def add_stage(stage_json: str) -> dict[str, Any]:
+        """Create a NEW stage in this project's workflow. `stage_json` is a full
+        stage as JSON: id (new and unique — use edit_stage to change an existing
+        one), name, type, the type's handle block (e.g. connector / llm / function),
+        output_schema, and inputs. Every id listed in `inputs` must ALREADY be a
+        stage in this workflow — a dangling input is rejected. Validated first; if
+        invalid, nothing is written and the issues are returned. The new node lands
+        'unreviewed' (amber) for a human to approve."""
+        result = stage_edit.add_stage_spec(project_dir, stage_json)
+        return {
+            "ok": result.ok,
+            "issues": result.issues,
+            "content_hash": result.content_hash,
+            "state": result.state,
+        }
+
     def create_version(message: str) -> dict[str, Any]:
         """Snapshot the current compiled/ (+ schemas/ if present) as an immutable
         version, freezing review coverage. Do this before regenerating from scratch
@@ -166,6 +182,7 @@ def make_project_tools(name: str, *, examples_dir: Path) -> list[Callable[..., A
         describe_workflow,
         read_stage,
         edit_stage,
+        add_stage,
         create_version,
         fetch_document,
         read_section,

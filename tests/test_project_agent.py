@@ -17,6 +17,7 @@ _EXPECTED_TOOL_NAMES = {
     "describe_workflow",
     "read_stage",
     "edit_stage",
+    "add_stage",
     "create_version",
     "fetch_document",
     "read_section",
