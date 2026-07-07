@@ -30,6 +30,7 @@ from app.chat.project_tools import make_project_tools
 TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
     "list_projects": {},
     "describe_workflow": {},
+    "describe_stage_types": {},
     "read_stage": {
         "stage_id": Annotated[str, "The stage's id, as shown by describe_workflow."],
     },
@@ -85,6 +86,7 @@ TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
 TOOL_LABELS: dict[str, str] = {
     "list_projects": "Listing projects",
     "describe_workflow": "Reading the workflow",
+    "describe_stage_types": "Reading the stage-type catalog",
     "read_stage": "Reading a stage",
     "edit_stage": "Editing a stage",
     "add_stage": "Adding a stage",

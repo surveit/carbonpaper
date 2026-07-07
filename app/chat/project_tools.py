@@ -14,6 +14,7 @@ from typing import Any, Callable
 
 from app.compiler import compile_methodology as compile_prose_to_workflow, read_input
 from app.errors import RegenerateWithoutSnapshotError
+from app.models import NODE_TYPES
 from app.services import stage_edit, versioning, workspace
 from app.services.compilation import write_methodology
 from app.services.loader import find_stage_file
@@ -37,6 +38,14 @@ def make_project_tools(name: str, *, examples_dir: Path) -> list[Callable[..., A
         input ids, and review state. Read this before editing so you know the
         current shape. Does not return full stage specs — use read_stage for one."""
         return workspace.project_workflow_summary(project_dir)
+
+    def describe_stage_types() -> dict[str, Any]:
+        """Return the catalog of stage types and each one's handle-block contract:
+        which handle field it uses (connector / llm / function / join / aggregate /
+        queue / publish), that handle's required and optional keys, and whether the
+        stage needs upstream inputs. Call this before add_stage to build a valid
+        stage of a type not already in the workflow."""
+        return dict(NODE_TYPES)
 
     def read_stage(stage_id: str) -> str:
         """Return the on-disk JSON of one stage. Read a stage before editing it."""
@@ -68,9 +77,11 @@ def make_project_tools(name: str, *, examples_dir: Path) -> list[Callable[..., A
         stage as JSON: id (new and unique — use edit_stage to change an existing
         one), name, type, the type's handle block (e.g. connector / llm / function),
         output_schema, and inputs. Every id listed in `inputs` must ALREADY be a
-        stage in this workflow — a dangling input is rejected. Validated first; if
-        invalid, nothing is written and the issues are returned. The new node lands
-        'unreviewed' (amber) for a human to approve."""
+        stage in this workflow — a dangling input is rejected. If you are unsure of
+        the type or its handle block, call describe_stage_types first (and read_stage
+        on a similar existing stage for the output_schema / inputs shape). Validated
+        first; if invalid, nothing is written and the issues are returned. The new
+        node lands 'unreviewed' (amber) for a human to approve."""
         result = stage_edit.add_stage_spec(project_dir, stage_json)
         return {
             "ok": result.ok,
@@ -180,6 +191,7 @@ def make_project_tools(name: str, *, examples_dir: Path) -> list[Callable[..., A
     return [
         list_projects,
         describe_workflow,
+        describe_stage_types,
         read_stage,
         edit_stage,
         add_stage,

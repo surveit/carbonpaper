@@ -15,6 +15,7 @@ from app.chat.project_tools import make_project_tools
 _EXPECTED_TOOL_NAMES = {
     "list_projects",
     "describe_workflow",
+    "describe_stage_types",
     "read_stage",
     "edit_stage",
     "add_stage",
