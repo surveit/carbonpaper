@@ -19,7 +19,7 @@ Two functions are the public surface:
                           the `next_action` ladder ("what to do next").
 
 Dependency rule (mirrors node_review / versioning): this module imports only
-stdlib + yaml and the trustworthy interface helpers (node_review, versioning,
+stdlib (json) and the trustworthy interface helpers (node_review, versioning,
 app.web.loading). It imports NOTHING from app.main / app.runtime / app.compiler, so
 it sits below the routes layer and can be leaned on by both routes and templates.
 

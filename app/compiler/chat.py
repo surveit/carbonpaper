@@ -19,7 +19,7 @@ Two-phase, human-gated pipeline (`phase` selects which):
   - "both"       : schemas THEN stages in one turn (no gate); ends with "done".
 
 Persistence matches the project on-disk layout the rest of the app reads: schemas
-land in <base>/schemas/NN_<name>.yaml, stages in <base>/compiled/NN_<id>.json (the
+land in <base>/schemas/NN_<name>.json, stages in <base>/compiled/NN_<id>.json (the
 JSON format `app.services.loader` globs), and the steering transcript in
 <base>/chat.jsonl (raw alongside cooked).
 
@@ -40,8 +40,6 @@ from collections.abc import AsyncIterator
 from datetime import datetime
 from pathlib import Path
 from typing import Any
-
-import yaml
 
 from app import models
 from app.compiler.prompt import _node_type_contract
@@ -252,21 +250,20 @@ def _next_seq(dir_path: Path, suffix: str) -> int:
 
 
 def _persist_schema(base: Path, schema: dict[str, Any]) -> str:
-    """Write one named schema to <base>/schemas/NN_<name>.yaml (the format
+    """Write one named schema to <base>/schemas/NN_<name>.json (the format
     `load_schemas` and the schema-edit writer read). If a file for this schema
     `name` already exists (the model re-emitted it after steering), overwrite that
     file in place rather than pile up duplicates. Returns the file path."""
     schemas_dir = base / "schemas"
     schemas_dir.mkdir(parents=True, exist_ok=True)
     name = schema.get("name") or "schema"
-    existing = sorted(schemas_dir.glob(f"*_{name}.yaml"))
+    existing = sorted(schemas_dir.glob(f"*_{name}.json"))
     if existing:
         fpath = existing[0]
     else:
-        seq = _next_seq(schemas_dir, ".yaml")
-        fpath = schemas_dir / f"{seq:02d}_{name}.yaml"
-    with fpath.open("w", encoding="utf-8") as f:
-        yaml.safe_dump(schema, f, sort_keys=False, allow_unicode=True, width=100)
+        seq = _next_seq(schemas_dir, ".json")
+        fpath = schemas_dir / f"{seq:02d}_{name}.json"
+    fpath.write_text(json.dumps(schema, indent=2, ensure_ascii=False), encoding="utf-8")
     return str(fpath)
 
 
@@ -289,15 +286,14 @@ def _persist_stage(base: Path, stage: dict[str, Any]) -> str:
 
 def _load_persisted(base: Path) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Re-read every persisted schema + stage from <base>/{schemas,compiled} (in NN
-    order) so we can validate the whole library + workflow at end of turn. Schemas
-    are YAML (schemas/*.yaml); stages are JSON (compiled/*.json), matching the two
-    persist writers above."""
+    order) so we can validate the whole library + workflow at end of turn. Schemas and
+    stages are both JSON (schemas/*.json, compiled/*.json), matching the two persist
+    writers above."""
     schemas: list[dict[str, Any]] = []
     schemas_dir = base / "schemas"
     if schemas_dir.is_dir():
-        for yaml_file in sorted(schemas_dir.glob("*.yaml")):
-            with yaml_file.open("r", encoding="utf-8") as f:
-                data = yaml.safe_load(f) or {}
+        for schema_file in sorted(schemas_dir.glob("*.json")):
+            data = json.loads(schema_file.read_text(encoding="utf-8")) or {}
             schemas.append(data)
     stages: list[dict[str, Any]] = []
     compiled_dir = base / "compiled"

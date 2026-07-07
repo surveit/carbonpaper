@@ -10,7 +10,6 @@ from pathlib import Path
 from typing import Any
 
 import pandas as pd
-import yaml
 from fastapi import HTTPException
 
 from app.models import Stage
@@ -22,7 +21,7 @@ from app.web.config import EXAMPLES_DIR, REPO_ROOT
 
 def list_projects() -> list[dict[str, Any]]:
     """One project card per dir under examples/ that has EITHER a workflow
-    (compiled/*.json) OR a data model (schemas/*.yaml). Returns the shape the home
+    (compiled/*.json) OR a data model (schemas/*.json). Returns the shape the home
     dashboard renders: name, what's authored (has_workflow / has_schemas), and the
     counts shown on the badge (stages, schema docs, runs). Sorted by name.
 
@@ -40,8 +39,7 @@ def list_projects() -> list[dict[str, Any]]:
         schemas_dir = p / "schemas"
         n_stages = len(list(compiled_dir.glob("*.json"))) if compiled_dir.is_dir() else 0
         has_workflow = n_stages > 0
-        has_schemas = schemas_dir.is_dir() and any(schemas_dir.glob("*.yaml"))
-        # A schemas/*.yaml may hold multiple docs — count the loaded docs, not files.
+        has_schemas = schemas_dir.is_dir() and any(schemas_dir.glob("*.json"))
         n_schemas = len(load_schemas(p)) if has_schemas else 0
         rdir = p / "runs"
         n_runs = (
@@ -62,31 +60,31 @@ def list_projects() -> list[dict[str, Any]]:
 
 
 def load_schemas(project_dir: Path) -> list[dict[str, Any]]:
-    """Load the named-schema data model from <project_dir>/schemas/*.yaml. Each file
-    may hold one or many schemas (multi-doc YAML). Returns [] if the project has no
-    data model yet. A YAML parse error surfaces as an _error schema rather than
+    """Load the named-schema data model from <project_dir>/schemas/*.json — one schema
+    object per file (the shape the schema writer emits). Returns [] if the project has
+    no data model yet. A JSON parse error surfaces as an _error schema rather than
     dropping the file silently."""
     schemas_dir = Path(project_dir) / "schemas"
     if not schemas_dir.is_dir():
         return []
     schemas: list[dict[str, Any]] = []
-    for yaml_file in sorted(schemas_dir.glob("*.yaml")):
-        with yaml_file.open("r", encoding="utf-8") as f:
-            try:
-                for doc in yaml.safe_load_all(f):
-                    if not doc:
-                        continue
-                    doc["_filename"] = yaml_file.name
-                    schemas.append(doc)
-            except yaml.YAMLError as exc:
-                schemas.append({
-                    "name": yaml_file.stem,
-                    "title": f"[YAML ERROR] {yaml_file.name}",
-                    "kind": "reference",
-                    "notes": f"YAML parse error: {exc}",
-                    "_filename": yaml_file.name,
-                    "_error": True,
-                })
+    for schema_file in sorted(schemas_dir.glob("*.json")):
+        try:
+            doc = json.loads(schema_file.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as exc:
+            schemas.append({
+                "name": schema_file.stem,
+                "title": f"[JSON ERROR] {schema_file.name}",
+                "kind": "reference",
+                "notes": f"JSON parse error: {exc}",
+                "_filename": schema_file.name,
+                "_error": True,
+            })
+            continue
+        if not doc:
+            continue
+        doc["_filename"] = schema_file.name
+        schemas.append(doc)
     return schemas
 
 

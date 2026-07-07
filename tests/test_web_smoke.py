@@ -7,7 +7,6 @@ import json
 from pathlib import Path
 
 import pytest
-import yaml
 from fastapi.testclient import TestClient
 
 import app.web.config as web_config
@@ -51,8 +50,8 @@ def demo_project(tmp_path, monkeypatch):
     (compiled / "02_extract.json").write_text(json.dumps(_EXTRACT, indent=2), encoding="utf-8")
     schemas = demo / "schemas"
     schemas.mkdir()
-    (schemas / "01_documents.yaml").write_text(
-        yaml.safe_dump(_SCHEMA, sort_keys=False), encoding="utf-8"
+    (schemas / "01_documents.json").write_text(
+        json.dumps(_SCHEMA, indent=2), encoding="utf-8"
     )
     for mod in (web_config, loading, project_router, node_review_router, runs_router):
         monkeypatch.setattr(mod, "EXAMPLES_DIR", tmp_path, raising=False)

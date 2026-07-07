@@ -10,7 +10,7 @@
     er_diagram  = _build_schema_er_diagram(schemas) | None
     issues      = validate_schema_library(schemas)            (list[str], may be empty)
     approval    = {state, current_hash, matched_decision} | None   (the gate; None iff no schemas)
-    schema_yaml = {schema_name: yaml_text}                    (per-schema edit seed)
+    schema_json = {schema_name: json_text}                    (per-schema edit seed)
     kind_order  = SCHEMA_KIND_ORDER
     kind_class  = SCHEMA_KIND_CLASS
     kind_glyph  = SCHEMA_KIND_GLYPH
@@ -137,9 +137,9 @@
 
             {# ── Edit this schema (mirror _node_review.html save) ─────────── #}
             <details class="dm-schema-edit">
-              <summary>Edit <code>{{ sch.name }}</code> (YAML)</summary>
-              <textarea class="schema-edit-textarea" data-role="schema-yaml"
-                        data-schema-name="{{ sch.name }}" spellcheck="false">{{ schema_yaml.get(sch.name, '') if schema_yaml else '' }}</textarea>
+              <summary>Edit <code>{{ sch.name }}</code> (JSON)</summary>
+              <textarea class="schema-edit-textarea" data-role="schema-json"
+                        data-schema-name="{{ sch.name }}" spellcheck="false">{{ schema_json.get(sch.name, '') if schema_json else '' }}</textarea>
               <div class="se-actions">
                 <button type="button" class="btn primary" data-role="save-schema"
                         data-schema-name="{{ sch.name }}">Save schema</button>
@@ -377,7 +377,7 @@
     });
   }
 
-  // ── Save an edited schema — POST yaml_text; on 400 render validate_named_schema
+  // ── Save an edited schema — POST json_text; on 400 render validate_named_schema
   //    issues (file untouched); on ok the library hash changed so approval drops.
   //    Reload to recompute the gate state + re-render the data model. ──
   function bySchema(role, name) {
@@ -385,7 +385,7 @@
   }
 
   async function saveSchema(name, btn) {
-    const ta = bySchema('schema-yaml', name);
+    const ta = bySchema('schema-json', name);
     const msg = bySchema('se-msg', name);
     const issuesEl = bySchema('se-issues', name);
     if (!ta) return;
@@ -394,7 +394,7 @@
     if (issuesEl) { issuesEl.hidden = true; issuesEl.innerHTML = ''; }
     try {
       const fd = new FormData();
-      fd.append('yaml_text', ta.value);
+      fd.append('json_text', ta.value);
       const url = '/project/' + encodeURIComponent(METHODOLOGY)
         + '/schema/' + encodeURIComponent(name) + '/edit';
       const r = await fetch(url, { method: 'POST', body: fd });

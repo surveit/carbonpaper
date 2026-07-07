@@ -51,7 +51,6 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-import yaml
 from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import (
     HTMLResponse,
@@ -137,8 +136,8 @@ def _schema_library_approval(
     }
 
 
-def _schema_yaml_map(schemas: list[dict[str, Any]]) -> dict[str, str]:
-    """name → YAML text for the per-schema edit textareas. Bookkeeping keys
+def _schema_json_map(schemas: list[dict[str, Any]]) -> dict[str, str]:
+    """name → JSON text for the per-schema edit textareas. Bookkeeping keys
     (_filename/_error) injected by the loader are stripped so the editable text is
     the spec only (and round-trips through the schema-edit writer cleanly)."""
     out: dict[str, str] = {}
@@ -147,7 +146,7 @@ def _schema_yaml_map(schemas: list[dict[str, Any]]) -> dict[str, str]:
         if not name:
             continue
         spec = {k: v for k, v in s.items() if k not in node_review.CANONICAL_IGNORE_KEYS}
-        out[name] = yaml.safe_dump(spec, sort_keys=False, allow_unicode=True, width=100)
+        out[name] = json.dumps(spec, indent=2, ensure_ascii=False)
     return out
 
 
@@ -297,7 +296,7 @@ async def project_document(request: Request, project_name: str):
 async def project_data_model(request: Request, project_name: str):
     """DATA MODEL — named-schema cards by kind + ER diagram + the approval GATE + the
     per-schema edit + the authoring chat. Reuses the gated-flow render machinery
-    (_schema_library_approval / _schema_yaml_map). The chat/approve/edit actions POST
+    (_schema_library_approval / _schema_json_map). The chat/approve/edit actions POST
     to the /project/{name}/data-model/... routes below."""
     pdir = _project_dir(project_name)
     schemas = load_schemas(pdir)
@@ -312,7 +311,7 @@ async def project_data_model(request: Request, project_name: str):
             "er_diagram": build_schema_er_diagram(schemas) if schemas else None,
             "issues": validate_schema_library(schemas) if schemas else [],
             "approval": approval,
-            "schema_yaml": _schema_yaml_map(schemas),
+            "schema_json": _schema_json_map(schemas),
             "kind_order": SCHEMA_KIND_ORDER,
             "kind_class": SCHEMA_KIND_CLASS,
             "kind_glyph": SCHEMA_KIND_GLYPH,
@@ -503,8 +502,8 @@ async def approve_data_model(project_name: str, content_hash: str = Form(...)):
 
 
 @router.post("/project/{project_name}/schema/{schema_name}/edit")
-async def edit_schema(project_name: str, schema_name: str, yaml_text: str = Form(...)):
-    """The ONLY writer into examples/<name>/schemas/. Parse the posted YAML, validate
+async def edit_schema(project_name: str, schema_name: str, json_text: str = Form(...)):
+    """The ONLY writer into examples/<name>/schemas/. Parse the posted JSON, validate
     it with validate_named_schema, and — only if clean — write it back to the schema's
     file. On validation issues return 400 with the issue list and write NOTHING (fail
     loudly, never a silent partial write). Editing changes the library hash, so a prior
@@ -513,12 +512,12 @@ async def edit_schema(project_name: str, schema_name: str, yaml_text: str = Form
 
     # Parse — a parse error is the reviewer's, surfaced as a 400 issue, file untouched.
     try:
-        parsed = yaml.safe_load(yaml_text)
-    except yaml.YAMLError as exc:
-        return JSONResponse({"ok": False, "issues": [f"YAML parse error: {exc}"]}, status_code=400)
+        parsed = json.loads(json_text)
+    except json.JSONDecodeError as exc:
+        return JSONResponse({"ok": False, "issues": [f"JSON parse error: {exc}"]}, status_code=400)
     if not isinstance(parsed, dict):
         return JSONResponse(
-            {"ok": False, "issues": ["edited schema must be a YAML mapping (a single schema dict)"]},
+            {"ok": False, "issues": ["edited schema must be a JSON object (a single schema dict)"]},
             status_code=400,
         )
 
@@ -531,7 +530,7 @@ async def edit_schema(project_name: str, schema_name: str, yaml_text: str = Form
     if parsed_name != schema_name:
         return JSONResponse(
             {"ok": False,
-             "issues": [f"name in the edited YAML ('{parsed_name}') must equal the schema name '{schema_name}'"]},
+             "issues": [f"name in the edited JSON ('{parsed_name}') must equal the schema name '{schema_name}'"]},
             status_code=400,
         )
 
@@ -544,16 +543,13 @@ async def edit_schema(project_name: str, schema_name: str, yaml_text: str = Form
     # that's the compiler's job). Find it via the same loader convention.
     schemas_dir = pdir / "schemas"
     target: Path | None = None
-    for yaml_file in sorted(schemas_dir.glob("*.yaml")):
+    for schema_file in sorted(schemas_dir.glob("*.json")):
         try:
-            with yaml_file.open("r", encoding="utf-8") as f:
-                for doc in yaml.safe_load_all(f):
-                    if doc and doc.get("name") == schema_name:
-                        target = yaml_file
-                        break
-        except yaml.YAMLError:
+            doc = json.loads(schema_file.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
             continue
-        if target is not None:
+        if isinstance(doc, dict) and doc.get("name") == schema_name:
+            target = schema_file
             break
     if target is None:
         raise HTTPException(
@@ -561,8 +557,7 @@ async def edit_schema(project_name: str, schema_name: str, yaml_text: str = Form
             detail=f"No existing schema file for '{schema_name}' in examples/{project_name}/schemas/",
         )
 
-    with target.open("w", encoding="utf-8") as f:
-        yaml.safe_dump(schema, f, sort_keys=False, allow_unicode=True, width=100)
+    target.write_text(json.dumps(schema, indent=2, ensure_ascii=False), encoding="utf-8")
 
     schemas = load_schemas(pdir)
     new_hash = node_review.schema_library_content_hash(schemas)
