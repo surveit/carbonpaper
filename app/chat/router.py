@@ -10,15 +10,21 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 
+from app.runtime.llm_agent_sdk import available as sdk_available
+
 from .engine import ChatBackendError, ChatEngine, backend_label
-from .project_agent import get_project_agent
+from .project_agent import get_project_agent, get_project_sdk_engine
 from .store import SessionStore
 from .turns import TurnManager
+
+if TYPE_CHECKING:
+    from .sdk_engine import SdkAgentEngine
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 TEMPLATES_DIR = Path(__file__).resolve().parent / "templates"
@@ -92,8 +98,14 @@ async def chat_page(request: Request, sid: str):
     if project:
         # A missing backend (e.g. no API key / no CLI) surfaces as a banner,
         # same as the demo engine below — never a raw 500 on this page.
+        # Prefer the subscription SDK engine (Claude CLI) when available; it needs
+        # no API key and can never raise ChatBackendError. Otherwise warm the
+        # PydanticAI (API-key) agent, whose missing backend becomes the banner.
         try:
-            get_project_agent(project)  # warm
+            if sdk_available():
+                get_project_sdk_engine(project)  # warm
+            else:
+                get_project_agent(project)  # warm
             backend_error = None
         except ChatBackendError as exc:
             backend_error = str(exc)
@@ -138,8 +150,15 @@ async def post_project_message(sid: str, name: str, request: Request):
     text = (body or {}).get("text", "").strip()
     if not text:
         raise HTTPException(status_code=400, detail="empty message")
+    # Prefer the subscription SDK engine (Claude CLI, no API key) when available;
+    # fall back to the PydanticAI (API-key) agent otherwise. Both satisfy
+    # stream_turn, so TurnManager.start is unchanged.
     try:
-        engine = get_project_agent(name)
+        engine: ChatEngine | SdkAgentEngine
+        if sdk_available():
+            engine = get_project_sdk_engine(name)
+        else:
+            engine = get_project_agent(name)
     except ChatBackendError as exc:
         return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
     _store.set_pending_user(sid, text)

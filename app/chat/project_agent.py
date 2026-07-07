@@ -6,11 +6,14 @@ prompt are project-specific."""
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from app.chat.engine import ChatEngine
 from app.chat.project_tools import make_project_tools
 from app.web.config import EXAMPLES_DIR
+
+if TYPE_CHECKING:
+    from app.chat.sdk_engine import SdkAgentEngine
 
 SYSTEM_PROMPT_TEMPLATE = (
     "You help a journalist author and refine the project '{name}' — a workflow of "
@@ -41,3 +44,28 @@ def get_project_agent(name: str) -> ChatEngine:
     if name not in _agents:
         _agents[name] = build_project_agent(name)
     return _agents[name]
+
+
+_sdk_engines: dict[str, "SdkAgentEngine"] = {}
+
+
+def get_project_sdk_engine(name: str) -> "SdkAgentEngine":
+    """Cached subscription (Claude CLI) editing engine for `name`.
+
+    Wraps the same 9 project tools as an in-process SDK-MCP server and drives
+    claude_agent_sdk.query() directly, so the subscription backend (no API key)
+    can run the tool loop. Reuses SYSTEM_PROMPT_TEMPLATE so the agent's behavior
+    matches the PydanticAI project agent. Construction is lazy w.r.t. the
+    filesystem: make_project_tools only binds `EXAMPLES_DIR / name` into tool
+    closures, so building the engine never reads the project directory."""
+    from app.chat.sdk_engine import SdkAgentEngine
+    from app.chat.sdk_tools import build_project_mcp_server
+
+    if name not in _sdk_engines:
+        server, allowed, _tools = build_project_mcp_server(name, examples_dir=EXAMPLES_DIR)
+        _sdk_engines[name] = SdkAgentEngine(
+            system_prompt=SYSTEM_PROMPT_TEMPLATE.format(name=name),
+            mcp_server=server,
+            allowed_tools=allowed,
+        )
+    return _sdk_engines[name]
