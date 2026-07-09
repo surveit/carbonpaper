@@ -102,14 +102,6 @@ def check_eval_compatibility(config: EvalConfig,
                 problems.append(f"`{exp.actual}` is `{got}` on target "
                                 f"`{target.id}` but metric abs_tol needs a numeric")
 
-    dataset_cols = ({c.name for c in config.table.table_schema.columns}
-                    if config.table is not None else None)
-    for k in config.key:
-        if dataset_cols is not None and k not in dataset_cols:
-            problems.append(f"key column `{k}` is not in the cases table")
-        if target_types and k not in target_types:
-            problems.append(f"key column `{k}` is not emitted by target `{target.id}`")
-
     # A reference override on the target stage would make the target its own
     # override, which has no coherent path to resolve — report it rather than
     # letting it reach resolve_eval_run_settings.

@@ -4,14 +4,19 @@ An eval measures the *real* methodology pipeline, not a copy of it. The v1 shape
 (fan-out / fan-in are out of scope — those evals come later):
 
   - An **EvalConfig** is the authored spec. What defines it is the checks: the
-    `expected` columns compared against `target_stage`'s output, keyed by `key`,
-    with `input_columns` injected as `override_stage`'s output. An optional
-    row-aligned cases `table` supplies the rows for those columns; it's the data,
+    `expected` columns compared against `target_stage`'s output. An optional
+    row-aligned cases `table` supplies the data for those checks; it's the data,
     not the definition, so a config can exist with no `table` yet (attach it
-    later). When a table is present, input and expected are 1:1 by construction —
-    which is only well-defined when the override→target path preserves grain (no
-    fan-out / fan-in). The config also carries any `reference_overrides` (extra
-    data a case needs loaded) and how to score (`expected` comparisons, rollup
+    later). When a table is present, its columns are exactly `override_stage`'s
+    output columns (injected as that stage's whole output) plus each check's
+    expected-answer column. (Not yet built: the scorer that runs this table
+    through the pathway and grades it is expected to align each target output
+    row back to the case that produced it by row-level lineage — an id stamped
+    on each injected case row and carried through to the target — rather than
+    by a shared data column or row position; that alignment is only
+    well-defined when the override→target path preserves grain, no fan-out /
+    fan-in.) The config also carries any `reference_overrides` (extra data a
+    case needs loaded) and how to score (`expected` comparisons, rollup
     `metrics`, or a `code` scorer for the escape hatch).
   - A **StageOutputOverride** injects a whole table as some stage's output.
   - An **EvalRun** is the result at a specific methodology version: its computed
@@ -82,15 +87,18 @@ class CodeScorer(_Base):
 
 # ── The eval config ──────────────────────────────────────────────────────────
 class EvalConfig(_Base):
-    """The authored eval: one row-aligned table of cases plus how it plugs into
-    the DAG and how it's scored.
+    """The authored eval: defined by its checks, plus how they plug into the
+    methodology's stages and how they're scored.
 
-    Each row's `input_columns` are injected at `override_stage`; its `expected`
-    columns are compared against `target_stage`'s output on the same row. The
-    single table makes input and expected 1:1 — valid only when the
-    override→target path is grain-preserving (see `resolve_eval_run_settings`).
-    `reference_overrides` inject extra data at other stages; `code` overrides the
-    per-column `expected` comparison when declarative scoring can't apply.
+    An optional cases `table` supplies the rows the checks run against: its
+    columns are `override_stage`'s output columns (injected as that stage's
+    whole output) plus each check's expected-answer column. Each `expected`
+    check compares a `target_stage`'s output column against the matching
+    column in the cases table. Row alignment between the injected cases and
+    the target's output is only well-defined when the override→target path is
+    grain-preserving (see `resolve_eval_run_settings`). `reference_overrides`
+    inject extra data at other stages; `code` overrides the per-column
+    `expected` comparison when declarative scoring can't apply.
     """
     id: SlugId
     methodology: str
@@ -100,15 +108,13 @@ class EvalConfig(_Base):
     override_stage: str
     target_stage: str
     table: Optional[TableRef] = None
-    key: list[str]
-    input_columns: list[str]
     expected: list[ExpectedColumn]
     # context + scoring
     reference_overrides: list[StageOutputOverride] = Field(default_factory=list)
     metrics: list[str] = Field(default_factory=list)
     code: Optional[CodeScorer] = None
 
-    @field_validator("key", "input_columns", "expected")
+    @field_validator("expected")
     @classmethod
     def _nonempty(cls, v: list) -> list:
         if not v:

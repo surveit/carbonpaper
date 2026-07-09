@@ -53,8 +53,6 @@ def _config(**over):
         "id": "scoring", "methodology": "lobbymap", "name": "n",
         "override_stage": "src", "target_stage": "tgt",
         "table": _ref(cols=["k", "v", "quote", "expected_score"]),
-        "key": ["k"],
-        "input_columns": ["quote"],
         "expected": [{"actual": "score", "expected": "expected_score",
                       "metric": "abs_tol", "tolerance": 1}],
     }
@@ -113,7 +111,7 @@ def test_override_stage_has_no_output_schema():
     assert any("declares no output schema" in p for p in report.problems)
 
 
-def test_dataset_input_columns_missing_a_column_of_override_schema():
+def test_cases_table_missing_a_column_of_override_schema():
     # override's schema declares `extra_col`, which the cases table lacks.
     src = _file_input("src", cols=["k", "v", "quote", "extra_col"])
     tgt = _row("tgt", ["src"], output_schema={
@@ -171,19 +169,6 @@ def test_abs_tol_metric_on_str_typed_target_column():
     report = check_eval_compatibility(config, [src, tgt])
     assert report.ok is False
     assert any("numeric" in p for p in report.problems)
-
-
-def test_key_column_absent_from_dataset_and_target_schema():
-    src = _file_input("src", cols=["k", "v", "quote"])
-    tgt = _row("tgt", ["src"], output_schema={
-        "columns": [{"name": "score", "type": "float"}]})  # no `k`
-    config = _config(table=_ref(cols=["v", "quote", "expected_score"]))  # no `k`
-    report = check_eval_compatibility(config, [src, tgt])
-    assert report.ok is False
-    dataset_problems = [p for p in report.problems if "not in the cases table" in p]
-    target_problems = [p for p in report.problems if "not emitted by target" in p]
-    assert len(dataset_problems) == 1 and "k" in dataset_problems[0]
-    assert len(target_problems) == 1 and "k" in target_problems[0]
 
 
 def test_grain_blocking_stage_without_code_scorer():

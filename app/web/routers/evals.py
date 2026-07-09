@@ -215,8 +215,6 @@ class EvalFormValues(TypedDict):
     target_stage: str
     table_path: str
     table_format: str
-    key: list[str]
-    input_columns: list[str]
     expected_rows: list[dict[str, str]]
 
 
@@ -233,8 +231,6 @@ def _values_from_config(config: EvalConfig) -> EvalFormValues:
         target_stage=config.target_stage,
         table_path=config.table.path if config.table is not None else "",
         table_format=config.table.format if config.table is not None else "csv",
-        key=list(config.key),
-        input_columns=list(config.input_columns),
         expected_rows=[
             {
                 "actual": exp.actual,
@@ -250,7 +246,7 @@ def _values_from_config(config: EvalConfig) -> EvalFormValues:
 def _blank_values() -> EvalFormValues:
     return EvalFormValues(
         id="", name="", description="", override_stage="", target_stage="",
-        table_path="", table_format="csv", key=[], input_columns=[],
+        table_path="", table_format="csv",
         expected_rows=[_empty_expected_row()],
     )
 
@@ -303,29 +299,30 @@ def _derive_table_schema(
     by_id: dict[str, Stage],
     override_stage: str,
     target_stage: str,
-    key: list[str],
-    input_columns: list[str],
     expected_rows: list[dict[str, str]],
     errors: list[str],
 ) -> TableSchema:
     """The user never authors the cases table's column types -- they're
-    sourced from the stages the eval binds to. `key` + `input_columns` come
-    from `override_stage`'s output schema; each expected row's dataset column
-    is typed by its `actual` column on `target_stage`'s output schema. A
-    column that can't be resolved to a type (unknown stage, no output_schema,
-    or the column isn't declared there) is skipped in the derived schema --
-    that gap is exactly what check_eval_compatibility reports -- but is also
-    recorded here as a form-level error so the user sees why."""
+    sourced from the stages the eval binds to. The injected columns are
+    `override_stage`'s entire output schema (an eval replaces that stage's
+    whole output, so there's no meaningful subset); each expected row's
+    dataset column is typed by its `actual` column on `target_stage`'s output
+    schema. A column that can't be resolved to a type (unknown stage, no
+    output_schema, or the column isn't declared there) is skipped in the
+    derived schema -- that gap is exactly what check_eval_compatibility
+    reports -- but is also recorded here as a form-level error so the user
+    sees why."""
     override = by_id.get(override_stage)
     target = by_id.get(target_stage)
 
-    override_types: dict[str, str] = {}
+    columns: dict[str, Column] = {}
     if override is None:
         errors.append(f"override stage `{override_stage}` does not exist in the methodology")
     elif override.output_schema is None:
         errors.append(f"override stage `{override_stage}` declares no output schema")
     else:
-        override_types = {c.name: c.type for c in override.output_schema.columns}
+        for col in override.output_schema.columns:
+            columns[col.name] = Column(name=col.name, type=col.type)
 
     target_types: dict[str, str] = {}
     if target is None:
@@ -334,16 +331,6 @@ def _derive_table_schema(
         errors.append(f"target stage `{target_stage}` declares no output schema")
     else:
         target_types = {c.name: c.type for c in target.output_schema.columns}
-
-    columns: dict[str, Column] = {}
-    for name in dict.fromkeys([*input_columns, *key]):  # de-dup, keep order
-        col_type = override_types.get(name)
-        if col_type is None:
-            errors.append(
-                f"column `{name}` is not on override stage `{override_stage}`'s output schema"
-            )
-            continue
-        columns[name] = Column(name=name, type=col_type)
 
     for row in expected_rows:
         actual = row["actual"]
@@ -474,8 +461,6 @@ async def _read_eval_form(request: Request) -> dict[str, Any]:
         "target_stage": _str("target_stage"),
         "table_path": _str("table_path") or _str("path"),
         "table_format": _str("table_format") or "csv",
-        "key": [v for v in form.getlist("key") if isinstance(v, str)],
-        "input_columns": [v for v in form.getlist("input_columns") if isinstance(v, str)],
         "expected_rows": expected_rows,
     }
 
@@ -498,8 +483,6 @@ async def _handle_eval_form_post(
         by_id,
         fields["override_stage"],
         fields["target_stage"],
-        fields["key"],
-        fields["input_columns"],
         fields["expected_rows"],
         errors,
     )
@@ -527,8 +510,6 @@ async def _handle_eval_form_post(
         "description": fields["description"] or None,
         "override_stage": fields["override_stage"],
         "target_stage": fields["target_stage"],
-        "key": fields["key"],
-        "input_columns": fields["input_columns"],
         "expected": expected_dicts,
     }
     if has_file:
@@ -578,8 +559,6 @@ async def _handle_eval_form_post(
         target_stage=fields["target_stage"],
         table_path=fields["table_path"],
         table_format=fields["table_format"],
-        key=fields["key"],
-        input_columns=fields["input_columns"],
         expected_rows=fields["expected_rows"] or [_empty_expected_row()],
     )
 
@@ -712,7 +691,6 @@ async def eval_attach_cases(
 
     schema = _derive_table_schema(
         by_id, config.override_stage, config.target_stage,
-        list(config.key), list(config.input_columns),
         [{"actual": e.actual, "dataset": e.expected} for e in config.expected],
         errors,
     )

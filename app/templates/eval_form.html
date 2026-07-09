@@ -74,20 +74,6 @@
     <input type="hidden" id="f-target" name="target_stage" value="{{ values.target_stage }}">
     <div id="override-required-columns"></div>
 
-    <p>
-        <label for="f-key">key column(s)</label><br>
-        <select id="f-key" name="key" multiple>
-            {% for c in values.key %}<option value="{{ c }}" selected>{{ c }}</option>{% endfor %}
-        </select>
-    </p>
-
-    <p>
-        <label for="f-input-columns">input column(s)</label><br>
-        <select id="f-input-columns" name="input_columns" multiple>
-            {% for c in values.input_columns %}<option value="{{ c }}" selected>{{ c }}</option>{% endfor %}
-        </select>
-    </p>
-
     <h2>Cases table</h2>
     <p>
         <label for="f-file">upload a file</label><br>
@@ -174,13 +160,9 @@
     async function onOverridePicked(stageId) {
         const body = await fetchStageSchema(stageId);
         const required = document.getElementById('override-required-columns');
-        const keySelect = document.getElementById('f-key');
-        const inputSelect = document.getElementById('f-input-columns');
         if (!body) { required.textContent = ''; return; }
-        required.innerHTML = '<p class="lede">columns: ' +
+        required.innerHTML = '<p class="lede">injected columns (this stage\'s full output): ' +
             body.columns.map(c => c.name + ' (' + c.type + ')').join(', ') + '</p>';
-        keySelect.innerHTML = optionsHtml(body.columns, '');
-        inputSelect.innerHTML = optionsHtml(body.columns, '');
     }
 
     async function onTargetPicked(stageId) {

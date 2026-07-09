@@ -73,10 +73,6 @@
 {% endif %}
 
 <h2>Scoring rules</h2>
-<ul>
-    <li><strong>key:</strong> {% for k in config.key %}<code>{{ k }}</code>{% if not loop.last %}, {% endif %}{% endfor %}</li>
-    <li><strong>input columns:</strong> {% for c in config.input_columns %}<code>{{ c }}</code>{% if not loop.last %}, {% endif %}{% endfor %}</li>
-</ul>
 <table class="table">
     <thead><tr><th>actual</th><th>expected</th><th>metric</th><th>tolerance</th></tr></thead>
     <tbody>

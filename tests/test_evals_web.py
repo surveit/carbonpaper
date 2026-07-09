@@ -86,8 +86,6 @@ def _valid_config_yaml(meth_dir: Path) -> None:
                 {"name": "expected_summary", "type": "str"},
             ]},
         },
-        "key": ["doc_id"],
-        "input_columns": ["text"],
         "expected": [{"actual": "summary", "expected": "expected_summary"}],
     }
     config_dir = meth_dir / "eval_config"
@@ -123,8 +121,6 @@ def _config_with_reference_override_yaml(meth_dir: Path) -> None:
                 {"name": "expected_summary", "type": "str"},
             ]},
         },
-        "key": ["doc_id"],
-        "input_columns": ["text"],
         "expected": [{"actual": "summary", "expected": "expected_summary"}],
     }
     config_dir = meth_dir / "eval_config"
@@ -145,8 +141,6 @@ def _broken_config_yaml(meth_dir: Path) -> None:
             "format": "csv",
             "table_schema": {"columns": [{"name": "doc_id", "type": "str"}]},
         },
-        "key": ["doc_id"],
-        "input_columns": ["doc_id"],
         "expected": [{"actual": "x", "expected": "doc_id"}],
     }
     config_dir = meth_dir / "eval_config"
@@ -254,8 +248,6 @@ def test_eval_detail_dataless_shows_attach(tmp_examples):
         "name": "Dataless eval",
         "override_stage": "input_data",
         "target_stage": "llm_transform",
-        "key": ["doc_id"],
-        "input_columns": ["text"],
         "expected": [{"actual": "summary", "expected": "expected_summary"}],
     }
     config_dir = tmp_examples / "eval_config"
@@ -436,7 +428,10 @@ def test_get_edit_prefills_existing_values(tmp_examples):
     r = client.get(f"/methodology/{METHODOLOGY}/evals/valid-eval/edit")
     assert r.status_code == 200
     assert "Valid eval" in r.text
-    assert "doc_id" in r.text
+    assert "input_data" in r.text
+    assert "llm_transform" in r.text
+    assert "cases.csv" in r.text
+    assert "expected_summary" in r.text
 
 
 # ── stage-schema JSON ───────────────────────────────────────────────────────
@@ -510,8 +505,6 @@ def _valid_create_payload(table_path: str) -> dict:
         "target_stage": "llm_transform",
         "table_path": table_path,
         "table_format": "csv",
-        "key": ["doc_id"],
-        "input_columns": ["text"],
         "expected_actual": ["summary"],
         "expected_dataset": ["expected_summary"],
         "expected_metric": ["exact"],
@@ -666,8 +659,6 @@ def _dataless_config_yaml(meth_dir: Path, eval_id: str = "dataless-eval") -> Non
         "name": "Dataless eval",
         "override_stage": "input_data",
         "target_stage": "llm_transform",
-        "key": ["doc_id"],
-        "input_columns": ["text"],
         "expected": [{"actual": "summary", "expected": "expected_summary"}],
     }
     config_dir = meth_dir / "eval_config"
@@ -679,9 +670,9 @@ def _dataless_config_yaml(meth_dir: Path, eval_id: str = "dataless-eval") -> Non
 def test_attach_cases_to_dataless_eval(tmp_examples):
     _dataless_config_yaml(tmp_examples)
 
-    # Derived schema: doc_id + text (input_data's output schema, via key +
-    # input_columns) and expected_summary (llm_transform's `summary` column,
-    # via the expected row's dataset name).
+    # Derived schema: doc_id + text (input_data's whole output schema,
+    # injected) and expected_summary (llm_transform's `summary` column, via
+    # the expected row's dataset name).
     csv_bytes = b"doc_id,text,expected_summary\nd1,hello world,hi\n"
     r = client.post(
         f"/methodology/{METHODOLOGY}/evals/dataless-eval/attach-cases",

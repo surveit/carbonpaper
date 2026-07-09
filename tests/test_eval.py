@@ -90,8 +90,6 @@ def _config(**over):
         "id": "scoring", "methodology": "lobbymap", "name": "n",
         "override_stage": "evidence_with_benchmarks", "target_stage": "benchmark_scoring",
         "table": _ref(cols=["evidence_id", "benchmark_id", "quote", "expected_score"]),
-        "key": ["evidence_id", "benchmark_id"],
-        "input_columns": ["quote"],
         "expected": [{"actual": "score", "expected": "expected_score",
                       "metric": "abs_tol", "tolerance": 1}],
     }
@@ -117,10 +115,9 @@ def test_eval_config_override_equals_target():
         m.EvalConfig.model_validate(_config(target_stage="evidence_with_benchmarks"))
 
 
-@pytest.mark.parametrize("field", ["key", "input_columns", "expected"])
-def test_eval_config_nonempty(field):
+def test_eval_config_nonempty_expected():
     with pytest.raises(ValidationError):
-        m.EvalConfig.model_validate(_config(**{field: []}))
+        m.EvalConfig.model_validate(_config(expected=[]))
 
 
 def test_eval_config_duplicate_reference_override():
@@ -199,22 +196,36 @@ def test_join_changes_grain_so_not_scorable():
 
 # ── EvalConfig.table optional ────────────────────────────────────────────────
 def test_eval_config_table_optional():
-    # A config with no cases file is valid: key/input_columns/expected still required.
+    # A config with no cases file is valid: expected is still required.
     cfg = m.EvalConfig.model_validate({
         "id": "e1", "methodology": "m", "name": "E1",
         "override_stage": "a", "target_stage": "b",
-        "key": ["doc_id"], "input_columns": ["x"],
         "expected": [{"actual": "score", "expected": "expected_score", "metric": "exact"}],
     })
     assert cfg.table is None
 
 
-def test_eval_config_still_requires_nonempty_key():
+def test_eval_config_no_key_or_input_columns_fields():
+    # `key` and `input_columns` are not part of the contract: alignment is by
+    # lineage (computed at run time), and the injected columns are derived
+    # from override_stage's output schema, not authored.
+    cfg = m.EvalConfig.model_validate({
+        "id": "e1", "methodology": "m", "name": "E1",
+        "override_stage": "a", "target_stage": "b",
+        "expected": [{"actual": "score", "expected": "expected_score", "metric": "exact"}],
+    })
+    assert not hasattr(cfg, "key")
+    assert not hasattr(cfg, "input_columns")
+
+
+def test_eval_config_rejects_stray_key_field():
+    # extra="forbid" (app/models/schema.py _Base) means a leftover `key`
+    # value from an old config is a validation error, not silently-dropped data.
     with pytest.raises(ValidationError):
         m.EvalConfig.model_validate({
             "id": "e1", "methodology": "m", "name": "E1",
             "override_stage": "a", "target_stage": "b",
-            "key": [], "input_columns": ["x"],
+            "key": ["doc_id"],
             "expected": [{"actual": "score", "expected": "expected_score", "metric": "exact"}],
         })
 
