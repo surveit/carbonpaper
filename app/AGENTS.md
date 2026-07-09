@@ -10,8 +10,9 @@ and includes the routers in `app/web/routers/`. Those routers import the Runner
 Run: `python -m uvicorn app.main:app --port 8765`.
 
 ## Pages / routes
-- `/` — project list. `/project/<m>` — the workflow (mermaid) + click-through stage detail.
-- `/project/<m>/data-model` — ER diagram of stage schemas.
+- `/` — project list. `/project/<m>` — the project shell (Overview · Document · Data
+  model · Workflow · Runs); the Workflow section carries the mermaid graph + inline
+  click-through node review (`/project/<m>/node/<id>/review-partial`).
 - `/project/<m>/runs`, `/project/<m>/runs/<id>` — run history + a run's detail.
 - `/project/<m>/runs/<id>/queue/<stage>` — the human-review queue UI (+ `/decide`, `/resume`).
 
@@ -44,6 +45,6 @@ have side effects).
 `web/routers/{project,runs,review}.py` (route handlers) ·
 `web/{config,loading,diagrams}.py` (paths+templates · fs reads & stage-dict
 helpers · mermaid/ER builders) · `templates/` (`run_detail.html`,
-`_run_stage_panel.html`, `_stage_executable.html`, `_stage_content.html`, +
-base/index/project/queue/…) · `static/style.css` · `runtime/preview.py`
+`_run_stage_panel.html`, `_stage_executable.html`, the `section_*.html` shell
+bodies, + base/index/queue/…) · `static/style.css` · `runtime/preview.py`
 (scratch-run backend).

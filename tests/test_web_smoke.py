@@ -91,29 +91,6 @@ def test_workflow_section_renders_the_graph():
     assert "extract" in r.text                              # a stage id in the graph
 
 
-def test_stage_detail_page():
-    r = client.get("/project/demo/stage/extract")
-    assert r.status_code == 200
-    assert "Extract evidence pieces" in r.text           # stage name rendered
-    assert "You are reading a document" in r.text          # prompt template rendered
-
-
-def test_stage_partial():
-    assert client.get("/project/demo/stage/extract/partial").status_code == 200
-
-
-def test_data_model_page():
-    assert client.get("/project/demo/data-model").status_code == 200
-
-
-def test_raw_stage_is_json():
-    r = client.get("/project/demo/raw/extract")
-    assert r.status_code == 200
-    assert r.headers["content-type"].startswith("application/json")
-    payload = json.loads(r.text)
-    assert payload["id"] == "extract"
-
-
 def test_trigger_run_returns_400_on_invalid_dag(monkeypatch):
     """The run route surfaces a load failure as a 400 with the issue list."""
     from app.services.loader import WorkflowLoadError

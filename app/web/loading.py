@@ -133,21 +133,6 @@ def find_stage(stages: list[Stage], stage_id: str) -> Stage | None:
 
 # ─── Source & code reads ─────────────────────────────────────────────────────
 
-def read_prose_excerpt(stage: Stage, project: str) -> str | None:
-    doc = stage.source.doc if stage.source else None
-    if not doc:
-        return None
-    candidate = REPO_ROOT / doc
-    if not candidate.exists():
-        candidate = EXAMPLES_DIR / project / "stages" / Path(doc).name
-        if not candidate.exists():
-            return None
-    try:
-        return candidate.read_text(encoding="utf-8")
-    except OSError:
-        return None
-
-
 def read_module_code(module_path: str) -> str | None:
     """Resolve module 'examples.lobbymap.code.foo' to a file path and read it."""
     if not module_path:
