@@ -11,7 +11,7 @@ depending on `stage.py`.
 from __future__ import annotations
 
 import re
-from typing import Any, Optional, Sequence
+from typing import Optional, Sequence
 
 from pydantic import (
     BaseModel,
@@ -75,7 +75,10 @@ class Column(_Base):
     type: str = "str"
     nullable: bool = True
     description: Optional[str] = None
-    range: Optional[list[Any]] = None
+    # A range is either a numeric [lo, hi] bound (numbers, or an "inf"-bearing
+    # sentinel string — see validate_dataframe) or an enum of allowed string
+    # values; never arbitrary JSON, so this is precise, not `Any`.
+    range: Optional[list[str | int | float]] = None
     source: Optional[str] = None
 
     @field_validator("type")

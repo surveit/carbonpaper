@@ -7,9 +7,9 @@ strict about the fields declared here.
 from __future__ import annotations
 
 from enum import Enum
-from typing import Any, Literal, Optional
+from typing import Literal, Optional, TypedDict
 
-from pydantic import Field, ValidationError, field_validator, model_validator
+from pydantic import Field, JsonValue, ValidationError, field_validator, model_validator
 
 from app.llm.options import LLMModel
 from app.models.schema import (
@@ -87,7 +87,10 @@ class PublishFormat(str, Enum):
 class Connector(_Base):
     """input_data handle."""
     kind: ConnectorKind
-    params: dict[str, Any] = Field(default_factory=dict)
+    # Connector params vary by kind (file: path/format/list_columns/parse_dates;
+    # computed_static: file; other emit-only kinds carry their own shape) — a
+    # genuinely open JSON object, not a fixed contract, so JsonValue (not Any).
+    params: dict[str, JsonValue] = Field(default_factory=dict)
     refresh: str = "ad_hoc"
     notes: Optional[str] = None
 
@@ -112,7 +115,9 @@ class LLMConfig(_Base):
     temperature: float = 0.0
     max_retries: int = 3
     response_format: Literal["json", "text"] = "json"
-    rubric: Optional[dict[str, Any]] = None
+    # A free-form scoring rubric handed to the model verbatim; its shape is
+    # author-defined per stage, so JsonValue (arbitrary JSON), not Any.
+    rubric: Optional[dict[str, JsonValue]] = None
     tools: Optional[list[str]] = None
 
 
@@ -215,11 +220,21 @@ class InputRef(_Base):
 
 
 # ── Stage ────────────────────────────────────────────────────────────────────
+class _TypeSpec(TypedDict, total=False):
+    """One `_TYPE_SPEC` entry: which handle block a stage type requires, its
+    input arity, and (for `publish`) any extra required block."""
+    handle: str
+    requires_inputs: bool
+    min_inputs: int
+    max_inputs: int
+    also_requires: list[str]
+
+
 # type → which handle block it must carry, plus input arity. Keyed by the plain
 # value string, not the enum member: with `use_enum_values`, `self.type` is a
 # str at runtime, and str-enum members hash by *name* (StageType.join_ hashes
 # as "join_", not "join") — a member-keyed dict would silently miss the lookup.
-_TYPE_SPEC: dict[str, dict[str, Any]] = {
+_TYPE_SPEC: dict[str, _TypeSpec] = {
     "input_data":            {"handle": "connector", "requires_inputs": False, "min_inputs": 0},
     "llm_transform":         {"handle": "llm",       "requires_inputs": True,  "min_inputs": 1},
     "python_row_function":   {"handle": "function",  "requires_inputs": True,  "min_inputs": 1, "max_inputs": 1},
@@ -256,12 +271,16 @@ class Stage(_Base):
 
     # Descriptive eval note rendered on the stage page (reference data, metrics).
     # Display only — the executable eval contract is EvalConfig (app/models/eval.py).
-    eval: Optional[dict[str, Any]] = None
+    # Author-defined shape (arbitrary JSON), not Any.
+    eval: Optional[dict[str, JsonValue]] = None
 
     @field_validator("inputs", mode="before")
     @classmethod
-    def _bare_id_shorthand(cls, v: Any) -> Any:
-        """Accept `inputs: [upstream_id]` shorthand for `[{id: upstream_id}]`."""
+    def _bare_id_shorthand(cls, v: object) -> object:
+        """Accept `inputs: [upstream_id]` shorthand for `[{id: upstream_id}]`.
+        Runs before pydantic's own coercion, so the incoming value is
+        genuinely unknown (raw JSON from a compiled-stage file or the compiler's
+        LLM output) — `object`, narrowed by the isinstance checks below."""
         if not isinstance(v, list):
             return v
         return [{"id": item} if isinstance(item, str) else item for item in v]
@@ -321,7 +340,7 @@ class Stage(_Base):
         )
 
 
-def validate_stage(stage: dict[str, Any]) -> list[str]:
+def validate_stage(stage: dict[str, JsonValue]) -> list[str]:
     """Non-fatal structural validation of one stage dict ([] means valid)."""
     try:
         Stage.model_validate(stage)

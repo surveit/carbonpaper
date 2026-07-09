@@ -49,9 +49,10 @@ from __future__ import annotations
 import hashlib
 import json
 from pathlib import Path
-from typing import Any
+from typing import TypedDict
 
 import pandas as pd
+from pydantic import JsonValue
 
 # Loader-injected bookkeeping keys that are NOT part of the stage spec and must
 # be excluded from the canonical form before hashing. See the module docstring:
@@ -73,7 +74,33 @@ DECISION_APPROVE = "approve"
 DECISION_REJECT = "reject"
 
 
-def canonical_node_spec(stage: dict[str, Any]) -> dict[str, Any]:
+class ApprovalState(TypedDict):
+    """Return shape of approval_state_for(): the node's approval state, the
+    hash it was computed from, and the decision row (if any) that produced
+    that state."""
+    state: str
+    current_hash: str
+    matched_decision: dict[str, object] | None
+
+
+class CoverageDict(TypedDict):
+    """Return shape of coverage_for(): approval counts over a set of stages."""
+    approved: int
+    rejected: int
+    edited_stale: int
+    unreviewed: int
+    total: int
+    approved_pct: float
+
+
+class DataModelState(TypedDict):
+    """Return shape of data_model_state(): the schema library's approval
+    state and the hash it was computed from."""
+    state: str
+    current_hash: str
+
+
+def canonical_node_spec(stage: dict[str, JsonValue]) -> dict[str, JsonValue]:
     """Return the stage dict stripped of loader-injected bookkeeping keys
     (CANONICAL_IGNORE_KEYS), so two loads of the same spec — regardless of which
     file/whitespace/comment they came from — produce an identical mapping.
@@ -83,7 +110,7 @@ def canonical_node_spec(stage: dict[str, Any]) -> dict[str, Any]:
     return {k: v for k, v in stage.items() if k not in CANONICAL_IGNORE_KEYS}
 
 
-def node_content_hash(stage: dict[str, Any]) -> str:
+def node_content_hash(stage: dict[str, JsonValue]) -> str:
     """Stable sha1 (first 16 hex chars) of the canonical stage spec.
 
     Hashes the LOADED dict, not file text: json.dumps with sort_keys=True makes
@@ -156,18 +183,18 @@ def record_node_decision(
     return df
 
 
-def _latest_decision_row(rows: pd.DataFrame) -> dict[str, Any] | None:
+def _latest_decision_row(rows: pd.DataFrame) -> dict[str, object] | None:
     """Most-recent decision row by reviewed_at (ISO strings sort lexically, so a
     plain max is correct). Returns None for an empty frame."""
     if rows.empty:
         return None
     idx = rows["reviewed_at"].astype(str).idxmax()
     # Column labels are Hashable; this store's are all strings — coerce at the
-    # boundary so the returned mapping honors the dict[str, Any] contract.
+    # boundary so the returned mapping honors the dict[str, object] contract.
     return {str(k): v for k, v in rows.loc[idx].to_dict().items()}
 
 
-def approval_state_for(stage: dict[str, Any], df: pd.DataFrame) -> dict[str, Any]:
+def approval_state_for(stage: dict[str, JsonValue], df: pd.DataFrame) -> ApprovalState:
     """Compute the approval state of one stage against the decision store.
 
     state ∈ {approved, rejected, unreviewed, edited_stale}:
@@ -213,7 +240,7 @@ def approval_state_for(stage: dict[str, Any], df: pd.DataFrame) -> dict[str, Any
             "matched_decision": None}
 
 
-def coverage_for(stages: list[dict[str, Any]], df: pd.DataFrame) -> dict[str, Any]:
+def coverage_for(stages: list[dict[str, JsonValue]], df: pd.DataFrame) -> CoverageDict:
     """Aggregate approval coverage over a list of stages.
 
     Returns {approved, rejected, edited_stale, unreviewed, total, approved_pct}.
@@ -253,7 +280,7 @@ def coverage_for(stages: list[dict[str, Any]], df: pd.DataFrame) -> dict[str, An
 SCHEMA_LIBRARY_STAGE_ID = "_schema_library"
 
 
-def schema_library_content_hash(schemas: list[dict[str, Any]]) -> str:
+def schema_library_content_hash(schemas: list[dict[str, JsonValue]]) -> str:
     """Stable hash identifying a whole DATA MODEL (set of named schemas) as one
     unit, so an approval can be keyed to the exact library that was approved.
 
@@ -263,9 +290,12 @@ def schema_library_content_hash(schemas: list[dict[str, Any]]) -> str:
     across the whole approval layer. Reindenting / reordering keys inside a schema
     leaves the hash unchanged (json.dumps sort_keys); a column/name/type change
     flips it, which is what drops the approval to edited_stale."""
-    ordered = sorted(
-        schemas, key=lambda s: s.get("name") or "" if isinstance(s, dict) else ""
-    )
+    # New list (not just sorted() on the input) so its element type can widen
+    # from dict[str, JsonValue] to JsonValue for the dict literal below — lists
+    # are invariant, so passing the sorted list straight through wouldn't typecheck.
+    ordered: list[JsonValue] = [
+        s for s in sorted(schemas, key=lambda s: str(s.get("name") or ""))
+    ]
     return node_content_hash({"_type": "schema_library", "schemas": ordered})
 
 
@@ -294,8 +324,8 @@ def approve_schema_library(
 
 
 def data_model_state(
-    project_dir: Path, schemas: list[dict[str, Any]]
-) -> dict[str, Any]:
+    project_dir: Path, schemas: list[dict[str, JsonValue]]
+) -> DataModelState:
     """Approval state of the DATA MODEL as it currently sits on disk.
 
     `schemas` are the LIVE schemas (loaded from project_dir/schemas by the

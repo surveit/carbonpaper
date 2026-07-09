@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import threading
 import traceback
-from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
@@ -18,6 +17,7 @@ from app.runtime.runner import prepare_run, resume_run, run_prepared
 from app.web.config import EXAMPLES_DIR, REPO_ROOT, templates
 from app.web.diagrams import TYPE_CLASS, TYPE_GLYPH, build_mermaid_graph
 from app.web.loading import (
+    InputPreviewEntry,
     build_llm_example,
     find_stage,
     list_runs,
@@ -152,7 +152,7 @@ async def run_stage_partial(
     output_by_id = {
         s.get("stage_id"): s.get("output_path") for s in manifest.get("stages", [])
     }
-    input_previews: list[dict[str, Any]] = []
+    input_previews: list[InputPreviewEntry] = []
     if stage_def is not None:
         for input_id in stage_def.input_ids:
             input_previews.append(

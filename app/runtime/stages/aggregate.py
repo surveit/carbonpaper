@@ -2,16 +2,15 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 import pandas as pd
 
 from app.models import Stage
+from app.runtime.context import RunContext
 
 from ._shared import _translate_where
 
 
-def handle_aggregate(stage: Stage, inputs: dict[str, pd.DataFrame], ctx: dict[str, Any]) -> pd.DataFrame:
+def handle_aggregate(stage: Stage, inputs: dict[str, pd.DataFrame], ctx: RunContext) -> pd.DataFrame:
     agg_cfg = stage.aggregate
     assert agg_cfg is not None  # Stage validation: aggregate carries agg_cfg
     df = inputs[stage.inputs[0].id]

@@ -79,7 +79,7 @@ from app.models.eval import (
 # and what `app/compiler.py` reads to name kinds. They are DERIVED from the enums
 # where the two agree, so they can't drift; where the emit-vocabulary is broader
 # than what the runtime executes, it is spelled out (see CONNECTOR_KINDS).
-from typing import Any as _Any
+from typing import TypedDict as _TypedDict
 
 # Scalar column-type vocabulary, re-exported from schema.py (its single
 # definition). `list[<type>]` / dict / json are handled by is_valid_column_type.
@@ -100,11 +100,23 @@ CONNECTOR_KINDS: set[str] = {
 }
 
 # ── The seven node types and their handle-block contract ─────────────────────
+class _NodeTypeSpec(_TypedDict, total=False):
+    """One NODE_TYPES entry: what prompt._node_type_contract() renders to the
+    LLM for one node type."""
+    summary: str
+    handle: str
+    requires_inputs: bool
+    min_inputs: int
+    required: list[str]
+    optional: list[str]
+    also_requires: list[str]
+
+
 # prompt._node_type_contract() iterates this to render the contract to the LLM:
 # type -> {summary, handle, required, optional, min_inputs, requires_inputs,
 # also_requires?}. The Stage model does not expose this rendering shape, so the
 # spec is kept here as plain data purely for prompt rendering.
-NODE_TYPES: dict[str, dict[str, _Any]] = {
+NODE_TYPES: dict[str, _NodeTypeSpec] = {
     "input_data": {
         "summary": "Declares a source dataset with a typed schema.",
         "handle": "connector",

@@ -21,7 +21,6 @@ import time
 import traceback
 from datetime import datetime
 from pathlib import Path
-from typing import Any
 
 import pandas as pd
 
@@ -30,6 +29,7 @@ from app.models import Stage
 from app.services.loader import WorkflowLoadError
 from app.services import versioning
 
+from .context import RunContext, RunManifest, RunPrep, StageRecord
 from .stages import HANDLERS, HaltForReview
 from .validation import validate_dataframe
 
@@ -129,7 +129,7 @@ def prepare_run(
     version_id: str | None = None,
     limits: dict[str, int] | None = None,
     offsets: dict[str, int] | None = None,
-) -> dict[str, Any]:
+) -> RunPrep:
     """Create the run dir + id and write an initial `running` manifest (all
     stages pending) so a caller can redirect to the run page immediately and
     poll it while execution proceeds in the background. Returns a dict with the
@@ -176,7 +176,7 @@ def prepare_run(
     (run_dir / "outputs").mkdir(parents=True, exist_ok=True)
     (run_dir / "artifacts").mkdir(parents=True, exist_ok=True)
 
-    ctx: dict[str, Any] = {
+    ctx: RunContext = {
         "repo_root": repo_root,
         "run_dir": run_dir,
         "project_dir": project_dir,
@@ -184,7 +184,7 @@ def prepare_run(
         "limits": limits,
         "offsets": offsets,
     }
-    manifest: dict[str, Any] = {
+    manifest: RunManifest = {
         "run_id": run_id,
         "started_at": datetime.now().isoformat(timespec="seconds"),
         "project": project_dir.name,
@@ -207,7 +207,7 @@ def prepare_run(
             "ordered": ordered, "manifest": manifest}
 
 
-def run_prepared(prep: dict[str, Any]) -> dict[str, Any]:
+def run_prepared(prep: RunPrep) -> RunManifest:
     """Execute a run previously set up by prepare_run(). Suitable for running in
     a background thread (the manifest is updated on disk as stages complete)."""
     return _execute_stages(prep["ordered"], prep["ctx"], prep["manifest"],
@@ -220,7 +220,7 @@ def execute_run(
     version_id: str | None = None,
     limits: dict[str, int] | None = None,
     offsets: dict[str, int] | None = None,
-) -> dict[str, Any]:
+) -> RunManifest:
     """Run the workflow once (synchronous). Returns the manifest dict. `version_id`
     pins the run to a workflow version (None -> latest existing; none exists ->
     NoVersionToRunError); see prepare_run / _resolve_version_id.
@@ -233,11 +233,11 @@ def execute_run(
 
 def _execute_stages(
     ordered: list[Stage],
-    ctx: dict[str, Any],
-    manifest: dict[str, Any],
+    ctx: RunContext,
+    manifest: RunManifest,
     run_dir: Path,
     outputs_so_far: dict[str, pd.DataFrame],
-) -> dict[str, Any]:
+) -> RunManifest:
     """Execute ordered stages, honoring HaltForReview.
 
     Stages whose ids are already in `outputs_so_far` are skipped (their
@@ -250,11 +250,11 @@ def _execute_stages(
 
     # Carry over any existing records (from a previously halted manifest
     # we're resuming). Build an index for upsert behavior.
-    records_by_id: dict[str, dict[str, Any]] = {
+    records_by_id: dict[str, StageRecord] = {
         r["stage_id"]: r for r in manifest.get("stages", [])
     }
 
-    def _pending_stub(s: Stage) -> dict[str, Any]:
+    def _pending_stub(s: Stage) -> StageRecord:
         return {
             "stage_id": s.id, "type": s.type, "name": s.name,
             "status": "pending", "input_validation": [], "output_validation": None,
@@ -285,10 +285,11 @@ def _execute_stages(
         stype = stage.type
 
         # Skip stages already produced (resume path).
-        if sid in outputs_so_far and records_by_id.get(sid, {}).get("status") in ("ok", "validation_warnings"):
+        prior = records_by_id.get(sid)
+        if sid in outputs_so_far and prior is not None and prior.get("status") in ("ok", "validation_warnings"):
             continue
 
-        record: dict[str, Any] = {
+        record: StageRecord = {
             "stage_id": sid,
             "type": stype,
             "name": stage.name,
@@ -435,7 +436,7 @@ def _execute_stages(
     return manifest
 
 
-def resume_run(project_dir: Path, run_id: str, repo_root: Path) -> dict[str, Any]:
+def resume_run(project_dir: Path, run_id: str, repo_root: Path) -> RunManifest:
     """Resume a previously halted run. Loads existing outputs from disk,
     re-runs the halted queue stage (decisions now exist), continues
     downstream, updates the same manifest in place."""
@@ -443,7 +444,7 @@ def resume_run(project_dir: Path, run_id: str, repo_root: Path) -> dict[str, Any
     manifest_path = run_dir / "manifest.json"
     if not manifest_path.exists():
         raise FileNotFoundError(f"No manifest at {manifest_path}")
-    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest: RunManifest = json.loads(manifest_path.read_text(encoding="utf-8"))
 
     # Stay pinned to the SAME workflow snapshot the run started on. We read the
     # version off the existing manifest and reload the version's stages — never
@@ -480,7 +481,7 @@ def resume_run(project_dir: Path, run_id: str, repo_root: Path) -> dict[str, Any
         except Exception:
             pass
 
-    ctx: dict[str, Any] = {
+    ctx: RunContext = {
         "repo_root": repo_root,
         "run_dir": run_dir,
         "project_dir": project_dir,

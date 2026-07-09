@@ -13,14 +13,16 @@ from __future__ import annotations
 
 import asyncio
 import uuid
-from typing import Any
 
 
 class Turn:
     def __init__(self, turn_id: str, session_id: str):
         self.id = turn_id
         self.session_id = session_id
-        self.events: list[dict[str, Any]] = []
+        # UI events emitted by app.chat.engine._emit_part_event /
+        # _emit_tool_event: {"kind": ..., "text"/"name"/"args"/"content": ...} —
+        # every value is str (see engine.py's emit(...) call sites).
+        self.events: list[dict[str, str]] = []
         self.done = False
         self._waiters: list[asyncio.Event] = []
 

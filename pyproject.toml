@@ -12,3 +12,32 @@ python_version = "3.12"
 files = ["app"]
 # No ignore_missing_imports: pandas-stubs is installed via requirements-dev.txt,
 # and the other deps ship their own types.
+# Ban explicit `Any` in annotations (issue #62): precise types where a shape is
+# known; a scoped `# type: ignore[misc]` or `object` only where a value is
+# genuinely dynamic (e.g. arbitrary JSON payloads).
+disallow_any_explicit = true
+
+# app.models defines every pydantic BaseModel subclass in the repo (verified:
+# `grep -rn '\bAny\b' app/models/*.py` turns up zero real usages — only
+# comments explaining why JsonValue/TypedDict were used INSTEAD of Any).
+# disallow_any_explicit has a confirmed mypy+pydantic false positive: even a
+# bare `class Foo(BaseModel): pass` (no fields, no Any anywhere in the file)
+# is flagged "Explicit Any is not allowed" AT THE CLASS LINE, because
+# BaseModel's own inherited `__init__(self, **data: Any)` is attributed to
+# every subclass statement. Reproduced independent of this repo (mypy 1.13
+# through 2.1, with and without the pydantic mypy plugin) — it is not
+# something more precise types in OUR code can fix. Scoped disable, not a
+# blanket ignore: only this one error code, only in the one package that
+# defines BaseModel subclasses.
+[[tool.mypy.overrides]]
+module = "app.models.*"
+disable_error_code = ["explicit-any"]
+
+# Same false positive, same fix, for the one module that subclasses
+# pydantic_ai's Model / StreamedResponse (`class Foo(Model): pass` alone is
+# enough to reproduce it — confirmed independent of this repo). No real Any
+# in this file either (`grep -n '\bAny\b' app/chat/claude_cli_model.py` is
+# empty).
+[[tool.mypy.overrides]]
+module = "app.chat.claude_cli_model"
+disable_error_code = ["explicit-any"]

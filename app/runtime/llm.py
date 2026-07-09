@@ -17,7 +17,9 @@ import json
 import os
 import subprocess
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Any, Callable
+from typing import Callable, TypedDict
+
+from pydantic import JsonValue
 
 from app.models import LLMConfig
 
@@ -34,7 +36,7 @@ from .options import (
 
 
 def _call_claude_subprocess(prompt: str, model: str = DEFAULT_MODEL,
-                            timeout_s: int = DEFAULT_TIMEOUT_S) -> dict[str, Any]:
+                            timeout_s: int = DEFAULT_TIMEOUT_S) -> dict[str, JsonValue]:
     """Invoke `claude -p` with the given prompt; return parsed outer JSON.
 
     Raises LLMError on subprocess failure or invalid JSON envelope."""
@@ -64,11 +66,11 @@ def _call_claude_subprocess(prompt: str, model: str = DEFAULT_MODEL,
     except json.JSONDecodeError as exc:
         raise LLMError(f"claude -p emitted invalid JSON envelope: {exc}") from exc
     if envelope.get("is_error"):
-        raise LLMError(f"claude -p reported error: {envelope.get('result', '')[:300]}")
+        raise LLMError(f"claude -p reported error: {str(envelope.get('result', ''))[:300]}")
     return envelope
 
 
-def _parse_text_result(raw: Any) -> Any:
+def _parse_text_result(raw: JsonValue) -> JsonValue:
     """Parse a model's raw text reply. For JSON-typed prompts we strip any
     markdown code fences and re-parse; for free-text we return the string
     unchanged. Shared by the subprocess and Agent SDK backends."""
@@ -93,12 +95,12 @@ def _parse_text_result(raw: Any) -> Any:
         return extracted if extracted is not None else raw
 
 
-def _extract_last_json(s: str) -> Any:
+def _extract_last_json(s: str) -> JsonValue | None:
     """Return the last syntactically-complete JSON value embedded in `s`, or
     None. Lets us recover the final answer when the agent prefixes it with
     research narration."""
     decoder = json.JSONDecoder()
-    best = None
+    best: JsonValue | None = None
     i, n = 0, len(s)
     while i < n:
         if s[i] in "[{":
@@ -112,12 +114,12 @@ def _extract_last_json(s: str) -> Any:
     return best
 
 
-def _parse_inner_result(envelope: dict[str, Any]) -> Any:
+def _parse_inner_result(envelope: dict[str, JsonValue]) -> JsonValue:
     """The model's reply is in envelope['result'] (subprocess path)."""
     return _parse_text_result(envelope.get("result", ""))
 
 
-def call_llm_real(prompt: str, model: str = DEFAULT_MODEL) -> Any:
+def call_llm_real(prompt: str, model: str = DEFAULT_MODEL) -> JsonValue:
     """High-level: send prompt to claude -p, return parsed result."""
     envelope = _call_claude_subprocess(prompt, model=model)
     return _parse_inner_result(envelope)
@@ -125,10 +127,10 @@ def call_llm_real(prompt: str, model: str = DEFAULT_MODEL) -> Any:
 
 # ─── Dispatcher used by handle_llm_transform ─────────────────────────────────
 
-def render_prompt(template: str, row: dict[str, Any]) -> str:
+def render_prompt(template: str, row: dict[str, object]) -> str:
     """Render the prompt template safely. Missing placeholders are left
     as-is so we can still call the LLM rather than KeyError out."""
-    class _Defaults(dict[str, Any]):
+    class _Defaults(dict[str, object]):
         def __missing__(self, key: str) -> str:
             return "{" + key + "}"
     try:
@@ -142,8 +144,8 @@ def render_prompt(template: str, row: dict[str, Any]) -> str:
         )
 
 
-def call_llm(stage_id: str, llm_config: LLMConfig, input_row: dict[str, Any],
-             *, use_real: bool | None = None, model: str | None = None) -> Any:
+def call_llm(stage_id: str, llm_config: LLMConfig, input_row: dict[str, object],
+             *, use_real: bool | None = None, model: str | None = None) -> object:
     """Single-row LLM call, routed to the backend from `get_llm_call_type()`.
 
     `use_real=False` (or CW_LLM_FORCE_MOCK=1) selects the offline mock — the only
@@ -174,13 +176,13 @@ def call_llm(stage_id: str, llm_config: LLMConfig, input_row: dict[str, Any],
 def call_llm_batch(
     stage_id: str,
     llm_config: LLMConfig,
-    input_rows: list[dict[str, Any]],
+    input_rows: list[dict[str, object]],
     *,
     parallel: int = DEFAULT_PARALLEL,
     progress_cb: Callable[[int, int], None] | None = None,
-) -> list[Any]:
+) -> list[object]:
     """Run call_llm over a batch with bounded parallelism. Preserves order."""
-    results: list[Any] = [None] * len(input_rows)
+    results: list[object] = [None] * len(input_rows)
     done = 0
     with ThreadPoolExecutor(max_workers=parallel) as pool:
         futures = {
@@ -199,7 +201,17 @@ def call_llm_batch(
     return results
 
 
-def backend_status() -> dict[str, Any]:
+class BackendStatus(TypedDict):
+    backend: str | None
+    backend_error: str | None
+    claude_cli: str | None
+    agent_sdk: dict[str, object]
+    model_default: str
+    parallel_default: int
+    force_mock: bool
+
+
+def backend_status() -> BackendStatus:
     """For UI/diagnostics: report which backend is active (or why none is)."""
     try:
         backend: str | None = get_llm_call_type()

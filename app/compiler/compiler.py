@@ -35,11 +35,29 @@ import json
 import os
 import re
 from pathlib import Path
-from typing import Any
+from typing import TypedDict
+
+from pydantic import JsonValue
 
 from app import models
 from app.compiler.prompt import SYSTEM_PROMPT, build_compile_prompt
 from app.llm_sdk import CLI_PATH, run_sync
+
+# One raw, unvalidated draft stage dict as the LLM emitted it — may be invalid
+# (validate() reports issues rather than raising); arbitrary JSON, not Any.
+RawStage = dict[str, JsonValue]
+
+
+class CompileResult(TypedDict):
+    """What compile_methodology() returns: the draft workflow plus everything
+    needed to audit the compile (app.services.compilation persists this)."""
+    name: str
+    stages: list[RawStage]
+    methodology_raw: str
+    compiler_notes: list[str]
+    validation: list[str]
+    prompt: str
+    raw_llm: str
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -88,7 +106,7 @@ async def _aquery(prompt_text: str, model: str, timeout_s: int) -> str:
         query,
     )
 
-    opts_kwargs: dict[str, Any] = dict(
+    opts_kwargs: dict = dict(
         model=model,
         max_turns=1,
         allowed_tools=[],          # no tools → single completion turn
@@ -123,7 +141,7 @@ def call_llm(prompt_text: str, model: str = "sonnet", timeout_s: int = 600) -> s
 # 3. JSON PARSING of the model output
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _extract_json_object(text: str) -> dict[str, Any]:
+def _extract_json_object(text: str) -> dict[str, JsonValue]:
     """Parse the model's reply into a dict. Tries straight json.loads first, then
     strips ```json fences, then locates the first balanced {...} block. Raises
     ValueError loudly on failure — never returns a fake stub. The error's first
@@ -199,22 +217,25 @@ def _extract_json_object(text: str) -> dict[str, Any]:
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _assemble_result(
-    candidate: dict[str, Any],
+    candidate: dict[str, JsonValue],
     name: str,
-    stages: list[dict[str, Any]],
+    stages: list[RawStage],
     issues: list[str],
     prompt_text: str,
     raw: str,
-) -> dict[str, Any]:
+) -> CompileResult:
     """Shape one parsed candidate into the compile result dict."""
     methodology_raw = candidate.get("methodology_raw_md") or candidate.get("methodology_raw") or ""
-    compiler_notes = candidate.get("compiler_notes") or []
-    if isinstance(compiler_notes, str):
-        compiler_notes = [compiler_notes]
+    compiler_notes_raw = candidate.get("compiler_notes") or []
+    compiler_notes: list[str] = (
+        [compiler_notes_raw] if isinstance(compiler_notes_raw, str)
+        else [str(n) for n in compiler_notes_raw] if isinstance(compiler_notes_raw, list)
+        else []
+    )
     return {
         "name": name,
         "stages": stages,
-        "methodology_raw": methodology_raw,
+        "methodology_raw": str(methodology_raw),
         "compiler_notes": compiler_notes,
         "validation": issues,
         "prompt": prompt_text,
@@ -228,7 +249,7 @@ def compile_methodology(
     model: str = "sonnet",
     timeout_s: int = 600,
     max_attempts: int = 3,
-) -> dict[str, Any]:
+) -> CompileResult:
     """End-to-end: prompt Claude to distill the prose `input_text` into a workflow, parse
     the JSON, validate, and return {name, stages, methodology_raw, compiler_notes,
     validation, prompt, raw_llm}. Does NOT write files (app.services.compilation does).
@@ -250,7 +271,7 @@ def compile_methodology(
     attempt produced parseable JSON with a non-empty `stages` list at all."""
     base_prompt = build_compile_prompt(input_text, name)
 
-    best: dict[str, Any] | None = None   # fewest-issue parsed candidate seen so far
+    best: CompileResult | None = None   # fewest-issue parsed candidate seen so far
     retry_note: str | None = None
     for attempt in range(1, max_attempts + 1):
         prompt_text = base_prompt
@@ -269,14 +290,18 @@ def compile_methodology(
             )
             continue
 
-        stages = candidate.get("stages")
-        if not isinstance(stages, list) or not stages:
+        stages_raw = candidate.get("stages")
+        if (
+            not isinstance(stages_raw, list) or not stages_raw
+            or not all(isinstance(s, dict) for s in stages_raw)
+        ):
             retry_note = (
                 "your previous reply parsed but had no non-empty `stages` list (keys="
                 + ",".join(sorted(candidate.keys()))
                 + "). Emit a single JSON object with a non-empty `stages` array as specified."
             )
             continue
+        stages: list[RawStage] = [s for s in stages_raw if isinstance(s, dict)]
 
         issues = validate(stages)
         result = _assemble_result(candidate, name, stages, issues, prompt_text, raw)
@@ -301,7 +326,7 @@ def compile_methodology(
     return best
 
 
-def validate(stages: list[dict[str, Any]]) -> list[str]:
+def validate(stages: list[RawStage]) -> list[str]:
     """Self-check: run the generated stages through the schema's own validator.
     [] means a clean-validating draft workflow."""
     return models.validate_workflow_draft(stages)

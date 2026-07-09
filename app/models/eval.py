@@ -22,9 +22,9 @@ types (see [[contract_pydantic_and_storage]]).
 from __future__ import annotations
 
 import re
-from typing import Annotated, Any, Iterable, Literal, Optional
+from typing import Annotated, Iterable, Literal, Optional
 
-from pydantic import AfterValidator, Field, field_validator, model_validator
+from pydantic import AfterValidator, Field, JsonValue, field_validator, model_validator
 
 from app.models.workflow import Workflow
 from app.models.schema import _Base
@@ -203,7 +203,9 @@ class EvalRun(_Base):
     # Overall outcome and score outputs — the scorer decides both, and writes
     # per-row success/failure into the result table at `result_ref`.
     passed: Optional[bool] = None
-    metrics: dict[str, Any] = Field(default_factory=dict)
+    # Scorer-defined rollup metrics (a code scorer decides its own keys/shape);
+    # arbitrary JSON, not Any.
+    metrics: dict[str, JsonValue] = Field(default_factory=dict)
     result_ref: Optional[str] = None
     started_at: Optional[str] = None
     finished_at: Optional[str] = None

@@ -3,16 +3,16 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
 
 import pandas as pd
 
 from app.models import Stage
+from app.runtime.context import RunContext
 
 from .python_functions import _load_python_function
 
 
-def handle_publish(stage: Stage, inputs: dict[str, pd.DataFrame], ctx: dict[str, Any]) -> pd.DataFrame:
+def handle_publish(stage: Stage, inputs: dict[str, pd.DataFrame], ctx: RunContext) -> pd.DataFrame:
     """Publish stages have a function: block. Run the function and capture its
     output dataframe (paths to artifacts)."""
     publish_cfg = stage.publish
@@ -23,4 +23,10 @@ def handle_publish(stage: Stage, inputs: dict[str, pd.DataFrame], ctx: dict[str,
 
     fn = _load_python_function(stage)
     args = [inputs[ref.id] for ref in stage.inputs]
-    return fn(*args, output_dir=output_dir)
+    result = fn(*args, output_dir=output_dir)
+    if not isinstance(result, pd.DataFrame):
+        raise ValueError(
+            f"publish stage {stage.id}: function must return a DataFrame, "
+            f"got {type(result).__name__}"
+        )
+    return result

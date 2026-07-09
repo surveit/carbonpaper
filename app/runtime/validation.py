@@ -16,11 +16,25 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TypedDict
 
 import pandas as pd
 
 from app.models import Column, TableSchema
+
+
+class IssueDict(TypedDict):
+    severity: str
+    column: str | None
+    message: str
+
+
+class ValidationReportDict(TypedDict):
+    stage_id: str
+    phase: str
+    rows: int
+    ok: bool
+    issues: list[IssueDict]
 
 
 # Map our type vocabulary to permissive pandas dtype checks.
@@ -54,7 +68,7 @@ class ValidationReport:
     def ok(self) -> bool:
         return not any(i.severity == "error" for i in self.issues)
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> ValidationReportDict:
         return {
             "stage_id": self.stage_id,
             "phase": self.phase,

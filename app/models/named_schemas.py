@@ -13,9 +13,9 @@ tested and read on their own.
 from __future__ import annotations
 
 from enum import Enum
-from typing import Any, Optional
+from typing import Optional
 
-from pydantic import Field, ValidationError, field_validator, model_validator
+from pydantic import Field, JsonValue, ValidationError, field_validator, model_validator
 
 from app.models.schema import (
     Column,
@@ -102,7 +102,7 @@ class SchemaLibrary(_Base):
         return self
 
 
-def validate_named_schema(schema: dict[str, Any]) -> list[str]:
+def validate_named_schema(schema: dict[str, JsonValue]) -> list[str]:
     """Non-fatal: validate ONE named schema dict ([] means valid). Checks the
     single-schema shape (snake_case name, known kind, column/primary-key
     consistency); cross-schema `references` resolution is a library-wide concern
@@ -114,12 +114,12 @@ def validate_named_schema(schema: dict[str, Any]) -> list[str]:
         return format_errors(err)
 
 
-def parse_schema_library(schemas: list[dict[str, Any]]) -> SchemaLibrary:
+def parse_schema_library(schemas: list[dict[str, JsonValue]]) -> SchemaLibrary:
     """Parse + validate the data model. Raises ValidationError if invalid."""
     return SchemaLibrary.model_validate({"schemas": list(schemas)})
 
 
-def validate_schema_library(schemas: list[dict[str, Any]]) -> list[str]:
+def validate_schema_library(schemas: list[dict[str, JsonValue]]) -> list[str]:
     """Non-fatal: validate the data model, return issues ([] means valid)."""
     try:
         SchemaLibrary.model_validate({"schemas": list(schemas)})

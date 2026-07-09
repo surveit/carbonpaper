@@ -4,19 +4,23 @@ from __future__ import annotations
 
 import hashlib
 from pathlib import Path
-from typing import Any
 
 import pandas as pd
 
 from app.models import Stage
+from app.runtime.context import RunContext
 
 from ._shared import HaltForReview, _translate_where
 
 
-def _content_hash(row: pd.Series, columns: list[str]) -> str:
+def _content_hash(row: pd.Series, columns: list[str]) -> str:  # type: ignore[explicit-any]
     """Stable hash of the listed column values for one row. Used to match
     queue items across re-runs so prior human decisions can be reapplied
-    even when upstream non-determinism shuffles primary keys."""
+    even when upstream non-determinism shuffles primary keys.
+
+    (pandas-stubs' Series[S1] defaults S1 to Any when unparametrized, and a row
+    spanning an upstream frame's columns is genuinely heterogeneous — no single
+    dtype describes it; a pandas-stubs limitation, not our own Any usage.)"""
     parts = [str(row.get(c, "")) for c in columns]
     return hashlib.sha1("|".join(parts).encode("utf-8")).hexdigest()[:16]
 
@@ -35,14 +39,14 @@ def _hash_columns_for(stage: Stage) -> list[str]:
     return []
 
 
-def _decisions_path(ctx: dict[str, Any], stage_id: str) -> Path:
-    project_dir: Path = ctx["project_dir"]
+def _decisions_path(ctx: RunContext, stage_id: str) -> Path:
+    project_dir = ctx["project_dir"]
     d = project_dir / "decisions"
     d.mkdir(parents=True, exist_ok=True)
     return d / f"{stage_id}.parquet"
 
 
-def _load_decisions(ctx: dict[str, Any], stage_id: str) -> pd.DataFrame:
+def _load_decisions(ctx: RunContext, stage_id: str) -> pd.DataFrame:
     p = _decisions_path(ctx, stage_id)
     if not p.exists():
         return pd.DataFrame(
@@ -52,7 +56,7 @@ def _load_decisions(ctx: dict[str, Any], stage_id: str) -> pd.DataFrame:
     return pd.read_parquet(p)
 
 
-def handle_human_review_queue(stage: Stage, inputs: dict[str, pd.DataFrame], ctx: dict[str, Any]) -> pd.DataFrame:
+def handle_human_review_queue(stage: Stage, inputs: dict[str, pd.DataFrame], ctx: RunContext) -> pd.DataFrame:
     """Real review-queue semantics:
 
     1. Apply the queue filter to upstream output → items needing review.
@@ -151,7 +155,8 @@ def handle_human_review_queue(stage: Stage, inputs: dict[str, pd.DataFrame], ctx
         )
 
     # All items have decisions — apply them and emit the output frame.
-    def _apply(row: pd.Series) -> pd.Series:
+    # (Same pandas-stubs Series[S1]-defaults-to-Any limitation as _content_hash.)
+    def _apply(row: pd.Series) -> pd.Series:  # type: ignore[explicit-any]
         ai = row.get("score")
         decision = row.get("decision")
         if decision == "modify":

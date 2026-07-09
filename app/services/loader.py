@@ -21,9 +21,8 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
 
-from pydantic import ValidationError
+from pydantic import JsonValue, ValidationError
 
 from app.models.workflow import validate_workflow
 from app.models.schema import format_errors
@@ -84,7 +83,7 @@ def load_workflow(project_dir: Path) -> list[Stage]:
 
 # ─── Serialize & save ────────────────────────────────────────────────────────
 
-def stage_to_spec_dict(stage: Stage) -> dict[str, Any]:
+def stage_to_spec_dict(stage: Stage) -> dict[str, JsonValue]:
     """The canonical dict form of a stage: field aliases restored (`schema`, not
     `table_schema`), unset optionals dropped, enums/nested models JSON-normalised.
     This is the ONE definition of 'a stage as data' — the on-disk JSON is a dump

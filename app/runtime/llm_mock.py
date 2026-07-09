@@ -18,9 +18,54 @@ Other llm_transform stages get a generic best-effort fallback.
 from __future__ import annotations
 
 import re
-from typing import Any
+from typing import TypedDict
 
 from app.models import LLMConfig
+
+
+class EvidenceItem(TypedDict):
+    query_id: str
+    quote: str
+    stance_summary: str
+    confidence: float
+    rationale: str
+    char_offset_start: int
+    char_offset_end: int
+
+
+class BenchmarkScore(TypedDict):
+    score: int
+    reasoning: str
+    precedence_failure: bool
+
+
+class Tier2Feature(TypedDict):
+    feature: str
+    asserted_present: str
+    confidence: str
+    detail: str
+    evidence_urls: list[str]
+
+
+class Tier2Verdict(TypedDict):
+    supported: bool
+    verdict_reason: str
+
+
+class GenericMockResult(TypedDict):
+    _mock: bool
+    _prompt_truncated: str
+    _inputs_truncated: dict[str, str]
+
+
+# What one mock_llm_call() dispatch can return — a fixed set of shapes the
+# caller (app.runtime.llm.call_llm / app.runtime.stages.llm_transform)
+# distinguishes at runtime via isinstance(result, list) / isinstance(result,
+# dict), same as it always has; typing it precisely here (rather than Any)
+# still lets mypy check each mock function's own body.
+MockResult = (
+    list[EvidenceItem] | BenchmarkScore | list[Tier2Feature] | Tier2Verdict | GenericMockResult
+)
 
 
 # ─── Evidence extraction ─────────────────────────────────────────────────────
@@ -88,7 +133,7 @@ HEDGE_HINTS = re.compile(
 )
 
 
-def mock_evidence_extraction(input_row: dict[str, Any]) -> list[dict[str, Any]]:
+def mock_evidence_extraction(input_row: dict[str, object]) -> list[EvidenceItem]:
     """For evidence_extraction: extract policy-relevant snippets.
 
     Switches between LobbyMap (climate) and CongressWatch (healthcare)
@@ -104,9 +149,9 @@ def mock_evidence_extraction(input_row: dict[str, Any]) -> list[dict[str, Any]]:
         oppose_hints = OPPOSITION_HINTS
         support_hints = SUPPORT_HINTS
 
-    body = input_row.get("body", "") or ""
+    body = str(input_row.get("body") or "")
     sentences = _split_sentences(body)
-    out: list[dict[str, Any]] = []
+    out: list[EvidenceItem] = []
     seen_queries = set()
     for idx, sent in enumerate(sentences):
         for pattern, query_id, default_stance in table:
@@ -137,9 +182,9 @@ def mock_evidence_extraction(input_row: dict[str, Any]) -> list[dict[str, Any]]:
 
 # ─── Benchmark scoring ───────────────────────────────────────────────────────
 
-def mock_benchmark_scoring(input_row: dict[str, Any]) -> dict[str, Any]:
+def mock_benchmark_scoring(input_row: dict[str, object]) -> BenchmarkScore:
     """For benchmark_scoring: produce a -2..+2 score from quote vs benchmark."""
-    quote = input_row.get("quote", "") or ""
+    quote = str(input_row.get("quote") or "")
     kind = input_row.get("kind", "science_based")
 
     has_strong_support = bool(re.search(r"\b(strongly support|fully endorse|champion|commit to|will deliver|driven to|fight to extend|protect|defend)\b", quote, re.IGNORECASE))
@@ -211,10 +256,10 @@ _PALM_FEATURES = [
 ]
 
 
-def mock_tier2_extract(input_row: dict[str, Any]) -> list[dict[str, Any]]:
+def mock_tier2_extract(input_row: dict[str, object]) -> list[Tier2Feature]:
     """Emit candidate on-site features for one facility. Truthful defaults
     only: present ∈ {false, unknown}, low confidence, empty evidence_urls."""
-    out: list[dict[str, Any]] = []
+    out: list[Tier2Feature] = []
     for feature, present, detail in _PALM_FEATURES:
         out.append({
             "feature": feature,
@@ -226,7 +271,7 @@ def mock_tier2_extract(input_row: dict[str, Any]) -> list[dict[str, Any]]:
     return out
 
 
-def mock_tier2_verify(input_row: dict[str, Any]) -> dict[str, Any]:
+def mock_tier2_verify(input_row: dict[str, object]) -> Tier2Verdict:
     """Adversarial verification. Default = refuted. The mock cannot fetch the
     cited sources, and an extract with no evidence_urls cannot be supported,
     so every claim is (honestly) marked unsupported and will be demoted."""
@@ -247,7 +292,7 @@ def mock_tier2_verify(input_row: dict[str, Any]) -> dict[str, Any]:
 
 # ─── Generic fallback ────────────────────────────────────────────────────────
 
-def mock_generic(prompt_template: str, input_row: dict[str, Any]) -> dict[str, Any]:
+def mock_generic(prompt_template: str, input_row: dict[str, object]) -> GenericMockResult:
     """For any llm_transform we don't have a specialised mock for."""
     return {
         "_mock": True,
@@ -269,7 +314,7 @@ def _split_sentences(text: str) -> list[str]:
 
 # ─── Dispatcher ──────────────────────────────────────────────────────────────
 
-def mock_llm_call(stage_id: str, llm_config: LLMConfig, input_row: dict[str, Any]) -> Any:
+def mock_llm_call(stage_id: str, llm_config: LLMConfig, input_row: dict[str, object]) -> MockResult:
     """Return either a single output dict or a list of output dicts."""
     if stage_id == "evidence_extraction":
         return mock_evidence_extraction(input_row)

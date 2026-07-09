@@ -24,9 +24,12 @@ import json
 import traceback
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import TypedDict
+
+from pydantic import JsonValue
 
 from app.compiler import compile_methodology, read_input
+from app.compiler.compiler import CompileResult, RawStage
 
 # The default root every compilation object hangs off. Callers may override
 # (tests, alternate layouts); the convention lives here, defined once.
@@ -36,11 +39,80 @@ COMPILATIONS_ROOT = Path("compilations")
 _INPUT_EXCERPT_CHARS = 4000
 
 
+class WriteMethodologyResult(TypedDict):
+    out_dir: str
+    stage_files: list[str]
+    methodology_raw: str
+    audit: str
+
+
+class StageSummary(TypedDict):
+    id: str
+    type: str
+
+
+class CompilationManifest(TypedDict, total=False):
+    """compilations/<id>/manifest.json — polled while a compile runs, then
+    rewritten to its terminal state (ok | invalid | error)."""
+    compilation_id: str
+    created_at: str
+    name: str
+    input: str
+    input_kind: str
+    model: str
+    status: str
+    n_stages: int
+    validation_issues: list[str]
+    stage_summary: list[StageSummary]
+    error: str | None
+    finished_at: str
+
+
+class CompilationPrep(TypedDict):
+    """The bundle prepare_compilation() hands to run_prepared_compilation()."""
+    compilation_id: str
+    comp_dir: Path
+    input_path: str
+    name: str
+    model: str
+
+
+class WhatHappened(TypedDict):
+    input: str
+    input_chars: int
+    input_excerpt: str
+    input_truncated_in_excerpt: bool
+    prompt: str
+    raw_llm_response: str
+    compiler_notes: list[str]
+
+
+class CompilationSummary(TypedDict):
+    """One row of list_compilations() — the compact index-page shape."""
+    compilation_id: str
+    created_at: str | None
+    name: str | None
+    input: str | None
+    model: str | None
+    status: str
+    n_stages: int
+    n_validation_issues: int
+
+
+class CompilationDetail(TypedDict):
+    """load_compilation()'s return: everything the detail page renders."""
+    manifest: CompilationManifest
+    what_happened: WhatHappened | None
+    stages: list[RawStage]
+    methodology_raw: str
+    error_text: str | None
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # workflow output — compiled/NN_<id>.json + methodology_raw.md (+ audit json)
 # ─────────────────────────────────────────────────────────────────────────────
 
-def write_methodology(result: dict[str, Any], out_dir: str | Path) -> dict[str, Any]:
+def write_methodology(result: CompileResult, out_dir: str | Path) -> WriteMethodologyResult:
     """Write the compiled workflow to a folder shaped like a project artifact:
       <out_dir>/compiled/NN_<id>.json   (one per stage, in order)
       <out_dir>/methodology_raw.md
@@ -66,15 +138,18 @@ def write_methodology(result: dict[str, Any], out_dir: str | Path) -> dict[str, 
         written.append(str(fpath))
 
     raw_md = out_dir / "methodology_raw.md"
-    raw_md.write_text(result.get("methodology_raw") or "", encoding="utf-8")
+    raw_md.write_text(result["methodology_raw"] or "", encoding="utf-8")
 
     # Raw-alongside-cooked: persist the full result (minus the bulky prompt echo)
-    # so the compile is auditable and re-sliceable.
-    audit = {
-        "name": result.get("name"),
-        "compiler_notes": result.get("compiler_notes"),
-        "validation": result.get("validation"),
-        "stages": result.get("stages"),
+    # so the compile is auditable and re-sliceable. Values are rebuilt as new
+    # lists (not the result's own list[str]/list[RawStage] objects) so their
+    # element type can widen to JsonValue — lists are invariant, so passing the
+    # original lists straight through wouldn't typecheck.
+    audit: dict[str, JsonValue] = {
+        "name": result["name"],
+        "compiler_notes": [n for n in result["compiler_notes"]],
+        "validation": [v for v in result["validation"]],
+        "stages": [s for s in result["stages"]],
     }
     audit_path = out_dir / "compiler_result.json"
     audit_path.write_text(json.dumps(audit, indent=2, ensure_ascii=False), encoding="utf-8")
@@ -91,11 +166,13 @@ def write_methodology(result: dict[str, Any], out_dir: str | Path) -> dict[str, 
 # Compilation object — persist a compile as a first-class object (parallels a RUN)
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _stage_summary(stages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _stage_summary(stages: list[RawStage]) -> list[StageSummary]:
     """Compact [{id, type}] list for the manifest (parallels a run's stage list)."""
-    out: list[dict[str, Any]] = []
+    out: list[StageSummary] = []
     for i, s in enumerate(stages, start=1):
-        out.append({"id": s.get("id") or f"stage{i}", "type": s.get("type", "?")})
+        sid = s.get("id") or f"stage{i}"
+        stype = s.get("type", "?") or "?"
+        out.append({"id": str(sid), "type": str(stype)})
     return out
 
 
@@ -104,7 +181,7 @@ def prepare_compilation(
     name: str,
     model: str = "sonnet",
     compilations_root: str | Path = COMPILATIONS_ROOT,
-) -> dict[str, Any]:
+) -> CompilationPrep:
     """Create the compilation dir + id and write an initial `running` manifest so
     a caller can redirect to the compilation page immediately and poll it while
     the (multi-minute) compile proceeds in the background. Mirrors runner.prepare_run.
@@ -119,7 +196,7 @@ def prepare_compilation(
     # A display hint only — every input is compiled as prose regardless.
     input_kind = "transcript" if input_path.suffix == ".jsonl" else "prose"
 
-    manifest = {
+    manifest: CompilationManifest = {
         "compilation_id": compilation_id,
         "created_at": datetime.now().isoformat(timespec="seconds"),
         "name": name,
@@ -144,7 +221,7 @@ def prepare_compilation(
     }
 
 
-def run_prepared_compilation(prep: dict[str, Any]) -> str:
+def run_prepared_compilation(prep: CompilationPrep) -> str:
     """Execute a compilation previously set up by prepare_compilation(). Suitable
     for running in a background thread — the manifest on disk is rewritten to its
     terminal state (ok | invalid | error) when done, and the what_happened.json +
@@ -162,7 +239,9 @@ def run_prepared_compilation(prep: dict[str, Any]) -> str:
     name: str = prep["name"]
     model: str = prep["model"]
 
-    manifest = json.loads((comp_dir / "manifest.json").read_text(encoding="utf-8"))
+    manifest: CompilationManifest = json.loads(
+        (comp_dir / "manifest.json").read_text(encoding="utf-8")
+    )
 
     try:
         input_text = read_input(input_path)
@@ -186,14 +265,14 @@ def run_prepared_compilation(prep: dict[str, Any]) -> str:
     write_methodology(result, workflow_dir)
 
     # ── what_happened.json: the input excerpt, the prompt sent, raw response ──
-    what_happened = {
+    what_happened: WhatHappened = {
         "input": input_path,
         "input_chars": len(input_text),
         "input_excerpt": input_text[:_INPUT_EXCERPT_CHARS],
         "input_truncated_in_excerpt": len(input_text) > _INPUT_EXCERPT_CHARS,
-        "prompt": result.get("prompt"),
-        "raw_llm_response": result.get("raw_llm"),
-        "compiler_notes": result.get("compiler_notes"),
+        "prompt": result["prompt"],
+        "raw_llm_response": result["raw_llm"],
+        "compiler_notes": result["compiler_notes"],
     }
     (comp_dir / "what_happened.json").write_text(
         json.dumps(what_happened, ensure_ascii=False, indent=2), encoding="utf-8"
@@ -227,19 +306,20 @@ def run_compilation(
 
 def list_compilations(
     compilations_root: str | Path = COMPILATIONS_ROOT,
-) -> list[dict[str, Any]]:
+) -> list[CompilationSummary]:
     """Read every compilation manifest under compilations_root, newest first, for
     the index page (parallels runner._list_runs)."""
     compilations_root = Path(compilations_root)
     if not compilations_root.is_dir():
         return []
-    out: list[dict[str, Any]] = []
+    out: list[CompilationSummary] = []
     for comp in sorted(compilations_root.iterdir(), reverse=True):
         if not comp.is_dir():
             continue
         manifest_path = comp / "manifest.json"
         if not manifest_path.exists():
             continue
+        m: CompilationManifest
         try:
             m = json.loads(manifest_path.read_text(encoding="utf-8"))
         except json.JSONDecodeError:
@@ -260,7 +340,7 @@ def list_compilations(
 def load_compilation(
     compilation_id: str,
     compilations_root: str | Path = COMPILATIONS_ROOT,
-) -> dict[str, Any]:
+) -> CompilationDetail:
     """Load a single compilation object (manifest + what_happened + workflow stages +
     methodology_raw.md) for the detail page. Raises FileNotFoundError if the
     manifest is missing. Tolerates a still-running / errored compile where the
@@ -269,21 +349,21 @@ def load_compilation(
     manifest_path = comp_dir / "manifest.json"
     if not manifest_path.exists():
         raise FileNotFoundError(f"No compilation '{compilation_id}'")
-    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest: CompilationManifest = json.loads(manifest_path.read_text(encoding="utf-8"))
 
-    what_happened: dict[str, Any] | None = None
+    what_happened: WhatHappened | None = None
     wh_path = comp_dir / "what_happened.json"
     if wh_path.exists():
         what_happened = json.loads(wh_path.read_text(encoding="utf-8"))
 
-    stages: list[dict[str, Any]] = []
+    stages: list[RawStage] = []
     compiled_dir = comp_dir / "workflow" / "compiled"
     if compiled_dir.is_dir():
         # Read the draft stages as raw dicts (not typed Stages): the detail view
         # renders whatever compiled, including invalid drafts the strict loader
         # would reject.
         for stage_file in sorted(compiled_dir.glob("*.json")):
-            data = json.loads(stage_file.read_text(encoding="utf-8")) or {}
+            data: RawStage = json.loads(stage_file.read_text(encoding="utf-8")) or {}
             # build_mermaid_graph needs a fallback _filename; the run loader sets
             # these too. Keep id-bearing stages renderable.
             data["_filename"] = stage_file.name
