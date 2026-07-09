@@ -59,6 +59,12 @@
 <section class="attach-cases">
     <h2>Cases</h2>
     <p>No cases file is attached yet. This eval can't run until it has one.</p>
+    {% if attach_errors %}
+    <div class="load-issues">
+        <strong>{{ attach_errors|length }} problem(s):</strong>
+        <ul>{% for e in attach_errors %}<li>{{ e }}</li>{% endfor %}</ul>
+    </div>
+    {% endif %}
     <form method="post" action="/methodology/{{ methodology }}/evals/{{ config.id }}/attach-cases" enctype="multipart/form-data">
         <input type="file" name="file" accept=".csv,.parquet,.json" required>
         <button type="submit" class="btn primary">Attach cases</button>

@@ -607,3 +607,65 @@ def test_post_edit_changes_description_only(tmp_examples):
     assert reloaded.description == "updated description"
     assert reloaded.override_stage == "input_data"
     assert reloaded.target_stage == "llm_transform"
+
+
+# ── attach-cases (dataless eval) ─────────────────────────────────────────────
+def _dataless_config_yaml(meth_dir: Path, eval_id: str = "dataless-eval") -> None:
+    config = {
+        "id": eval_id,
+        "methodology": METHODOLOGY,
+        "name": "Dataless eval",
+        "override_stage": "input_data",
+        "target_stage": "llm_transform",
+        "key": ["doc_id"],
+        "input_columns": ["text"],
+        "expected": [{"actual": "summary", "expected": "expected_summary"}],
+    }
+    config_dir = meth_dir / "eval_config"
+    config_dir.mkdir(parents=True, exist_ok=True)
+    (config_dir / f"{eval_id}.yaml").write_text(
+        yaml.safe_dump(config), encoding="utf-8")
+
+
+def test_attach_cases_to_dataless_eval(tmp_examples):
+    _dataless_config_yaml(tmp_examples)
+
+    # Derived schema: doc_id + text (input_data's output schema, via key +
+    # input_columns) and expected_summary (llm_transform's `summary` column,
+    # via the expected row's dataset name).
+    csv_bytes = b"doc_id,text,expected_summary\nd1,hello world,hi\n"
+    r = client.post(
+        f"/methodology/{METHODOLOGY}/evals/dataless-eval/attach-cases",
+        files={"file": ("dataless_cases.csv", csv_bytes, "text/csv")},
+        follow_redirects=False,
+    )
+    assert r.status_code == 303
+    assert r.headers["location"] == f"/methodology/{METHODOLOGY}/evals/dataless-eval"
+
+    from app.services.eval_store import load_eval_config
+    reloaded = load_eval_config(tmp_examples, "dataless-eval")
+    assert reloaded.table is not None
+    assert "eval_data/" in reloaded.table.path
+
+    detail = client.get(f"/methodology/{METHODOLOGY}/evals/dataless-eval")
+    assert detail.status_code == 200
+    assert "<th>doc_id</th>" in detail.text
+    assert "no cases yet" not in detail.text
+
+
+def test_attach_cases_rejects_mismatched_file(tmp_examples):
+    _dataless_config_yaml(tmp_examples, eval_id="dataless-eval-2")
+
+    # Missing the required `expected_summary` column.
+    csv_bytes = b"doc_id,text\nd1,hello world\n"
+    r = client.post(
+        f"/methodology/{METHODOLOGY}/evals/dataless-eval-2/attach-cases",
+        files={"file": ("mismatched_cases.csv", csv_bytes, "text/csv")},
+        follow_redirects=False,
+    )
+    assert r.status_code == 200
+    assert "expected_summary" in r.text
+
+    from app.services.eval_store import load_eval_config
+    reloaded = load_eval_config(tmp_examples, "dataless-eval-2")
+    assert reloaded.table is None

@@ -14,7 +14,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from pydantic import ValidationError
 from starlette.datastructures import UploadFile
 
-from app.models import Column, EvalConfig, EvalRun, FileFormat, Stage, TableSchema
+from app.models import Column, EvalConfig, EvalRun, FileFormat, Stage, TableRef, TableSchema
 from app.models.schema import format_errors
 from app.services.eval_compat import check_eval_compatibility
 from app.services.eval_store import (
@@ -593,14 +593,18 @@ async def eval_edit_submit(
     return await _handle_eval_form_post(request, methodology, eval_id=eval_id)
 
 
-@router.get("/methodology/{methodology}/evals/{eval_id}", response_class=HTMLResponse)
-async def eval_detail(request: Request, methodology: str, eval_id: str):
-    methodology_dir = EXAMPLES_DIR / methodology
-    try:
-        config = load_eval_config(methodology_dir, eval_id)
-    except (FileNotFoundError, ValueError) as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-
+def _render_detail(
+    request: Request,
+    methodology: str,
+    methodology_dir: Path,
+    config: EvalConfig,
+    *,
+    attach_errors: list[str] | None = None,
+) -> HTMLResponse:
+    """Build the eval detail page for a loaded config. `attach_errors` carries
+    problems from a just-submitted attach-cases upload (empty list when there
+    are none, e.g. a normal GET of the page) so the template can show them
+    alongside the attach-cases form without disturbing any other section."""
     listing = load_stages(methodology)
     report = check_eval_compatibility(config, listing.stages)
     runs, runs_error = _list_eval_runs_safe(methodology_dir, config.id)
@@ -643,8 +647,73 @@ async def eval_detail(request: Request, methodology: str, eval_id: str):
             "cases_capped": cases_capped,
             "cases_cap": CASES_PREVIEW_ROWS,
             "has_cases": config.table is not None,
+            "attach_errors": attach_errors or [],
         },
     )
+
+
+@router.post("/methodology/{methodology}/evals/{eval_id}/attach-cases", response_model=None)
+async def eval_attach_cases(
+    request: Request, methodology: str, eval_id: str
+) -> HTMLResponse | RedirectResponse:
+    """Attach a cases file to a config that was saved with `table=None` (Task
+    3 lets an eval be authored without one). Reuses the same
+    upload/derive/validate sequence `_handle_eval_form_post` runs for the
+    authoring form's table field."""
+    methodology_dir = EXAMPLES_DIR / methodology
+    try:
+        config = load_eval_config(methodology_dir, eval_id)
+    except (FileNotFoundError, ValueError) as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    listing = load_stages(methodology)
+    by_id = {s.id: s for s in listing.stages}
+    errors: list[str] = []
+
+    form = await request.form()
+    upload = form.get("file")
+    if not isinstance(upload, UploadFile):
+        raise HTTPException(status_code=422, detail="attach-cases needs a `file` upload")
+    content = await upload.read()
+    filename = upload.filename or ""
+    try:
+        fmt = _resolve_table_format(filename)
+        saved = save_dataset_upload(methodology_dir, filename, content)
+    except ValueError as exc:
+        errors.append(str(exc))
+    except FileExistsError as exc:
+        errors.append(str(exc))
+
+    schema = _derive_table_schema(
+        by_id, config.override_stage, config.target_stage,
+        list(config.key), list(config.input_columns),
+        [{"actual": e.actual, "dataset": e.expected} for e in config.expected],
+        errors,
+    )
+    if not errors:
+        report = validate_table_file(saved, fmt, schema)
+        errors.extend(i.message for i in report.issues if i.severity == "error")
+
+    if errors:
+        return _render_detail(request, methodology, methodology_dir, config, attach_errors=errors)
+
+    config = config.model_copy(update={"table": TableRef(
+        path=saved.relative_to(REPO_ROOT).as_posix(), format=fmt,
+        table_schema=schema)})
+    save_eval_config(methodology_dir, config)
+    return RedirectResponse(
+        url=f"/methodology/{methodology}/evals/{config.id}", status_code=303)
+
+
+@router.get("/methodology/{methodology}/evals/{eval_id}", response_class=HTMLResponse)
+async def eval_detail(request: Request, methodology: str, eval_id: str):
+    methodology_dir = EXAMPLES_DIR / methodology
+    try:
+        config = load_eval_config(methodology_dir, eval_id)
+    except (FileNotFoundError, ValueError) as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    return _render_detail(request, methodology, methodology_dir, config)
 
 
 @router.get(
