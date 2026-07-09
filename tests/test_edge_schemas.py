@@ -98,6 +98,20 @@ def test_copy_looser_nullability_is_a_warning():
     assert i.severity == "warning" and "non-null" in i.problem
 
 
+def test_narrower_enum_is_an_error():
+    # The copy claims a narrower categorical vocabulary than the producer
+    # guarantees — a spec disagreement beyond type/nullable, caught because the
+    # comparison is delegated to the schema layer's full column-spec check.
+    up = up_stage(out_cols=[
+        {"name": "k", "type": "str", "nullable": False, "enum": ["A", "B", "C"]},
+    ], out_pk=["k"])
+    d = down({"primary_key": ["k"], "columns": [
+        {"name": "k", "type": "str", "nullable": False, "enum": ["A", "B"]},
+    ]})
+    [i] = check_edge_schemas([up, d])
+    assert i.severity == "error" and "enum" in i.problem
+
+
 def test_pk_mismatch_is_an_error():
     d = down({"primary_key": [],
               "columns": [{"name": "k", "type": "str", "nullable": False}]})

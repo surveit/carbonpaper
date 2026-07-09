@@ -110,9 +110,11 @@ def check_edge_schemas(stages: list[Stage]) -> list[EdgeSchemaIssue]:
     columns, naming what the stage consumes — but on everything it declares it
     must agree with the producer:
 
-      error   — a declared column disagrees on type; the copy claims
-                `nullable: false` where the upstream allows nulls; or the
-                primary keys differ (identity is never projected away).
+      error   — a declared column disagrees with the producer on any spec field
+                except a nullable-loosening (type, enum, range, nested `fields`,
+                ...); the copy claims `nullable: false` where the upstream allows
+                nulls; or the primary keys differ (identity is never projected
+                away).
       warning — the copy declares a column the upstream does not produce
                 (even a nullable one); the copy loosens `nullable: false` to
                 `nullable: true`; or the upstream declares no `output_schema`
@@ -149,18 +151,28 @@ def _edge_issues(upstream_id: str, stage_id: str, in_schema: TableSchema,
         out.append(issue("warning", f"column `{name}` is not produced by `{upstream_id}`"))
     for name in sorted(set(in_cols) & set(up_cols)):
         in_col, up_col = in_cols[name], up_cols[name]
-        if in_col.type != up_col.type:
+        # Delegate the column-spec comparison to the schema layer; grade the
+        # fields it reports. Nullability is directional (tightening over-promises,
+        # loosening is merely lossy); every other spec disagreement is an error.
+        diffs = up_col.spec_differences(in_col)
+        if "nullable" in diffs:
+            if not in_col.nullable:
+                out.append(issue("error",
+                                 f"column `{name}`: copy claims nullable: false "
+                                 f"but `{upstream_id}` allows nulls"))
+            else:
+                out.append(issue("warning",
+                                 f"column `{name}`: copy allows nulls "
+                                 f"but `{upstream_id}` guarantees non-null"))
+        if "type" in diffs:
             out.append(issue("error",
                              f"column `{name}`: declared type `{in_col.type}` "
                              f"but `{upstream_id}` produces `{up_col.type}`"))
-        if not in_col.nullable and up_col.nullable:
+        rest = [d for d in diffs if d not in ("nullable", "type")]
+        if rest:
             out.append(issue("error",
-                             f"column `{name}`: copy claims nullable: false "
-                             f"but `{upstream_id}` allows nulls"))
-        elif in_col.nullable and not up_col.nullable:
-            out.append(issue("warning",
-                             f"column `{name}`: copy allows nulls "
-                             f"but `{upstream_id}` guarantees non-null"))
+                             f"column `{name}`: declared {', '.join(rest)} "
+                             f"disagrees with `{upstream_id}`'s output"))
     in_pk = in_schema.primary_key or []
     up_pk = up_schema.primary_key or []
     if in_pk != up_pk:

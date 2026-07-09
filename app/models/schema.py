@@ -158,6 +158,14 @@ class Column(_Base):
             )
         return self
 
+    def spec_differences(self, other: "Column") -> list[str]:
+        """The spec fields on which this column and `other` disagree (empty ⇒
+        same spec): every Column field except identity (`name`) and prose
+        (`description`, `source`), compared recursively into nested `fields`.
+        The canonical column-agreement check — `is_subset_of`, `subtract`, and
+        the workflow edge-schema check all read column agreement through this."""
+        return _column_spec_differences(self, other)
+
 
 Column.model_rebuild()
 
