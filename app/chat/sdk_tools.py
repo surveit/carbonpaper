@@ -111,7 +111,7 @@ def _wrap(fn: Callable[..., Any]) -> SdkMcpTool[Any]:
     async def handler(args: dict[str, Any]) -> dict[str, Any]:
         try:
             return _as_content(fn(**args))
-        except Exception as exc:  # surface loudly to the model, never a default
+        except Exception as exc:  # noqa: BLE001 — tool boundary: any tool failure is surfaced to the model as an error, never swallowed or faked
             return {
                 "content": [{"type": "text", "text": f"ERROR: {exc}"}],
                 "is_error": True,

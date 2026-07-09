@@ -5,10 +5,25 @@ import pytest
 
 from app.services import loader, node_review, stage_edit
 
+# A strictly-1:1 llm_transform (app/models/stage.py): its input and output
+# schemas share a primary_key and the output is additive (keeps every input
+# column, adds at least one).
+_IN_SCHEMA = {
+    "primary_key": ["doc_id"],
+    "columns": [{"name": "doc_id", "type": "str", "nullable": False}],
+}
+_OUT_SCHEMA = {
+    "primary_key": ["doc_id"],
+    "columns": [
+        {"name": "doc_id", "type": "str", "nullable": False},
+        {"name": "score", "type": "float", "nullable": False},
+    ],
+}
 _VALID = {
     "id": "score", "name": "Score rows", "type": "llm_transform",
-    "inputs": [{"id": "load"}],
+    "inputs": [{"id": "load", "schema": _IN_SCHEMA}],
     "llm": {"model": "claude-sonnet-4-6", "prompt_template": "score {row}"},
+    "output_schema": _OUT_SCHEMA,
 }
 
 
@@ -131,8 +146,9 @@ def _seed_load(tmp_path: Path) -> Path:
 def test_add_stage_creates_new_stage_referencing_existing_input(tmp_path: Path) -> None:
     pdir = _seed_load(tmp_path)
     new = {"id": "score", "name": "Score", "type": "llm_transform",
-           "inputs": [{"id": "load"}],
-           "llm": {"model": "claude-sonnet-4-6", "prompt_template": "score {row}"}}
+           "inputs": [{"id": "load", "schema": _IN_SCHEMA}],
+           "llm": {"model": "claude-sonnet-4-6", "prompt_template": "score {row}"},
+           "output_schema": _OUT_SCHEMA}
     result = stage_edit.add_stage_spec(pdir, json.dumps(new))
     assert result.ok is True and result.state == "unreviewed"
     assert any(p.name.endswith("_score.json") for p in (pdir / "compiled").glob("*.json"))
@@ -140,9 +156,12 @@ def test_add_stage_creates_new_stage_referencing_existing_input(tmp_path: Path) 
 
 def test_add_stage_rejects_dangling_input(tmp_path: Path) -> None:
     pdir = _seed_load(tmp_path)
+    # otherwise-valid stage, but its input references a stage that doesn't exist —
+    # so validation passes and the referential check is what rejects it
     new = {"id": "score", "name": "Score", "type": "llm_transform",
-           "inputs": [{"id": "does_not_exist"}],
-           "llm": {"model": "claude-sonnet-4-6", "prompt_template": "score {row}"}}
+           "inputs": [{"id": "does_not_exist", "schema": _IN_SCHEMA}],
+           "llm": {"model": "claude-sonnet-4-6", "prompt_template": "score {row}"},
+           "output_schema": _OUT_SCHEMA}
     result = stage_edit.add_stage_spec(pdir, json.dumps(new))
     assert result.ok is False
     assert any("does_not_exist" in i for i in result.issues)
