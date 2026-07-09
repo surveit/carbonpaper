@@ -79,7 +79,7 @@ def test_publish_also_requires_function():
 def test_publish_config_is_typed():
     s = m.Stage.model_validate(S(
         id="p", type="publish", inputs=[{"id": "a"}],
-        publish={"format": "json"}, function={"kind": "inline", "code": "x"}))
+        publish={"format": "json"}, function={"kind": "inline", "code": "def transform(row): return row"}))
     assert s.publish.format == m.PublishFormat.json
 
 
@@ -87,6 +87,25 @@ def test_python_function_inline_needs_code():
     with pytest.raises(ValidationError):
         m.Stage.model_validate(S(id="t", type="python_frame_function", inputs=[{"id": "a"}],
                                  function={"kind": "inline"}))
+
+
+def test_python_function_inline_code_must_compile():
+    # a bare body with a top-level `return` does not compile — the exact error the
+    # runtime hits when it exec()s the code, now caught at validation time.
+    with pytest.raises(ValidationError):
+        m.Stage.model_validate(S(id="t", type="python_row_function", inputs=[{"id": "a"}],
+                                 function={"kind": "inline", "code": "row['x'] = 1\nreturn row"}))
+
+
+def test_python_function_inline_code_must_define_transform():
+    with pytest.raises(ValidationError):
+        m.Stage.model_validate(S(id="t", type="python_row_function", inputs=[{"id": "a"}],
+                                 function={"kind": "inline", "code": "x = 1"}))
+
+
+def test_python_function_inline_valid_transform_ok():
+    m.Stage.model_validate(S(id="t", type="python_row_function", inputs=[{"id": "a"}],
+                             function={"kind": "inline", "code": "def transform(row): return row"}))
 
 
 def test_bad_id_snake_case():
@@ -215,7 +234,7 @@ def test_inputs_are_refs_with_schema():
         id="x", type="python_frame_function",
         inputs=[{"id": "a", "schema": {"primary_key": ["k"],
                                        "columns": [{"name": "k", "type": "str"}]}}],
-        function={"kind": "inline", "code": "pass"},
+        function={"kind": "inline", "code": "def transform(row): return row"},
     ))
     assert s.input_ids == ["a"]
     assert s.inputs[0].table_schema is not None
@@ -225,7 +244,7 @@ def test_inputs_are_refs_with_schema():
 def test_inputs_accept_bare_id_shorthand():
     s = m.Stage.model_validate(S(
         id="x", type="python_frame_function", inputs=["a"],
-        function={"kind": "inline", "code": "pass"},
+        function={"kind": "inline", "code": "def transform(row): return row"},
     ))
     assert s.input_ids == ["a"]
     assert s.inputs[0].table_schema is None

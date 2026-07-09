@@ -6,6 +6,7 @@ strict about the fields declared here.
 """
 from __future__ import annotations
 
+import ast
 from enum import Enum
 from typing import Any, Literal, Optional
 
@@ -116,6 +117,19 @@ class LLMConfig(_Base):
     tools: Optional[list[str]] = None
 
 
+def _binds_name(tree: ast.Module, name: str) -> bool:
+    """True if a top-level def or assignment in `tree` binds `name` — i.e. what
+    `exec`ing the code would expose for the runtime to look up and call."""
+    for node in tree.body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == name:
+            return True
+        if isinstance(node, ast.Assign) and any(
+            isinstance(t, ast.Name) and t.id == name for t in node.targets
+        ):
+            return True
+    return False
+
+
 class PythonFunction(_Base):
     """Handle for python_row_function / python_frame_function (and publish). The
     row-vs-frame distinction lives in the stage `type`, not here — the runtime
@@ -132,6 +146,32 @@ class PythonFunction(_Base):
             raise ValueError("function.kind=module needs `module`")
         if self.kind == FunctionKind.inline and not self.code:
             raise ValueError("function.kind=inline needs `code`")
+        return self
+
+    @model_validator(mode="after")
+    def _inline_code_is_runnable(self) -> "PythonFunction":
+        """Inline code must parse and define the function the runtime calls
+        (`transform` by default). Enforced here — a single stage's invariant — so
+        broken code (e.g. a bare body with a top-level `return`) is rejected at
+        write time instead of raising only when the runner exec()s it."""
+        if self.kind != FunctionKind.inline or not self.code:
+            return self
+        try:
+            tree = ast.parse(self.code)
+            # compile() (like the runtime's exec) also catches a top-level `return`,
+            # which ast.parse alone does not on 3.12.
+            compile(self.code, "<inline function>", "exec")
+        except SyntaxError as exc:
+            raise ValueError(
+                f"inline function code does not compile: {exc.msg} (line {exc.lineno}). "
+                "Define a function, e.g. `def transform(row): ...; return row`."
+            )
+        wanted = self.function or "transform"
+        if not (_binds_name(tree, wanted) or _binds_name(tree, "transform")):
+            raise ValueError(
+                f"inline function code must define `def {wanted}(...)` at the top level — "
+                f"the runtime calls {wanted}(row) per row and expects a dict back"
+            )
         return self
 
 

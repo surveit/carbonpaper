@@ -18,7 +18,7 @@ def test_workflow_clean():
         S(id="load", type="input_data",
           connector={"kind": "file", "params": {"path": "d.csv", "format": "csv"}}),
         S(id="extract", type="python_frame_function", inputs=[{"id": "load"}],
-          function={"kind": "inline", "code": "x"}),
+          function={"kind": "inline", "code": "def transform(row): return row"}),
     ])
     assert [s.id for s in wf.stages] == ["load", "extract"]
 
@@ -35,15 +35,15 @@ def test_workflow_dangling_input():
     with pytest.raises(ValidationError):
         m.parse_workflow([
             S(id="b", type="python_frame_function", inputs=[{"id": "ghost"}],
-              function={"kind": "inline", "code": "x"}),
+              function={"kind": "inline", "code": "def transform(row): return row"}),
         ])
 
 
 def test_workflow_cycle():
     with pytest.raises(ValidationError):
         m.parse_workflow([
-            S(id="a", type="python_frame_function", inputs=[{"id": "b"}], function={"kind": "inline", "code": "x"}),
-            S(id="b", type="python_frame_function", inputs=[{"id": "a"}], function={"kind": "inline", "code": "x"}),
+            S(id="a", type="python_frame_function", inputs=[{"id": "b"}], function={"kind": "inline", "code": "def transform(row): return row"}),
+            S(id="b", type="python_frame_function", inputs=[{"id": "a"}], function={"kind": "inline", "code": "def transform(row): return row"}),
         ])
 
 
@@ -59,15 +59,15 @@ def test_check_inputs_resolve_reports_all_dangling():
 
 
 def test_detect_cycle_reports_cycle():
-    a = Stage.model_validate(S(id="a", type="python_frame_function", inputs=[{"id": "b"}], function={"kind": "inline", "code": "x"}))
-    b = Stage.model_validate(S(id="b", type="python_frame_function", inputs=[{"id": "a"}], function={"kind": "inline", "code": "x"}))
+    a = Stage.model_validate(S(id="a", type="python_frame_function", inputs=[{"id": "b"}], function={"kind": "inline", "code": "def transform(row): return row"}))
+    b = Stage.model_validate(S(id="b", type="python_frame_function", inputs=[{"id": "a"}], function={"kind": "inline", "code": "def transform(row): return row"}))
     assert m.detect_cycle([a, b])  # non-empty
 
 
 def test_detect_cycle_empty_when_acyclic():
     a = Stage.model_validate(S(id="a", type="input_data",
                                connector={"kind": "file", "params": {"path": "d.csv"}}))
-    b = Stage.model_validate(S(id="b", type="python_frame_function", inputs=[{"id": "a"}], function={"kind": "inline", "code": "x"}))
+    b = Stage.model_validate(S(id="b", type="python_frame_function", inputs=[{"id": "a"}], function={"kind": "inline", "code": "def transform(row): return row"}))
     assert m.detect_cycle([a, b]) == []
 
 

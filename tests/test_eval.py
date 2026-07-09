@@ -23,7 +23,7 @@ def _py(id_, inputs, granularity="frame", **kw):
     """granularity 'row' -> python_row_function, else python_frame_function."""
     type_ = "python_row_function" if granularity == "row" else "python_frame_function"
     return S(id=id_, type=type_, inputs=[{"id": i} for i in inputs],
-             function={"kind": "inline", "code": "x"}, **kw)
+             function={"kind": "inline", "code": "def transform(row): return row"}, **kw)
 
 
 def _ref(path="x.csv", cols=("k",)):
@@ -45,7 +45,7 @@ def test_python_row_function_rejects_multiple_inputs():
     with pytest.raises(ValidationError):
         m.Stage.model_validate(S(id="t", type="python_row_function",
                                  inputs=[{"id": "a"}, {"id": "b"}],
-                                 function={"kind": "inline", "code": "x"}))
+                                 function={"kind": "inline", "code": "def transform(row): return row"}))
 
 
 def test_llm_is_grain_preserving():
