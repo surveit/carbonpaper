@@ -44,6 +44,18 @@ def test_nodes_are_chronological_source_first_claim_last():
     assert view["nodes"][-1]["role"] == "claim"
 
 
+def test_nodes_and_edges_carry_step_numbers():
+    view = build_trace_view(_trace(), _stages())
+    assert [n["step"] for n in view["nodes"]] == [1, 2]  # 1-based, chronological
+    assert (view["edges"][0]["from_step"], view["edges"][0]["to_step"]) == (1, 2)
+
+
+def test_python_node_shows_full_inline_code_not_a_reference():
+    view = build_trace_view(_trace(), _stages())
+    detail = view["nodes"][-1]["transform"]["detail"]
+    assert detail == "def f(row):\n    return row"  # the whole function, verbatim
+
+
 def test_node_carries_transform_detail_from_compiled_stage():
     view = build_trace_view(_trace(), _stages())
     enrich = view["nodes"][-1]

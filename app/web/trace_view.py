@@ -17,6 +17,7 @@ from typing import Any
 
 from app.models import Stage
 from app.models.stage import StageType
+from app.web.loading import resolve_function_code
 
 
 def _transform_of(stage: Stage | None) -> dict[str, Any]:
@@ -33,12 +34,9 @@ def _transform_of(stage: Stage | None) -> dict[str, Any]:
         src = path or (stage.source.doc if stage.source else None)
         return {"kind": "source", "detail": src or "originates the rows"}
     if stage_type in (StageType.python_row_function.value, StageType.python_frame_function.value):
-        fn = stage.function
-        if fn and str(fn.kind) == "inline":
-            return {"kind": "python", "detail": fn.code}
-        if fn and str(fn.kind) == "module":
-            return {"kind": "python", "detail": f"{fn.module}.{fn.function or 'transform'}"}
-        return {"kind": "python", "detail": None}
+        # Full source: the whole module file for a module ref, the inline code
+        # for an inline ref — never a partial snippet or a bare reference.
+        return {"kind": "python", "detail": resolve_function_code(stage)}
     if stage_type == StageType.llm_transform.value:
         return {"kind": "llm", "detail": stage.llm.prompt_template if stage.llm else None}
     if stage_type == StageType.join_.value:
@@ -73,6 +71,7 @@ def build_trace_view(trace: dict[str, Any], stages: dict[str, Stage]) -> dict[st
         else:
             role = "step"
         nodes.append({
+            "step": i + 1,  # 1-based, chronological — so the story can say "step 4"
             "stage_id": hop["stage_id"],
             "stage_type": hop["stage_type"],
             "origin": hop["origin"],
@@ -84,7 +83,7 @@ def build_trace_view(trace: dict[str, Any], stages: dict[str, Stage]) -> dict[st
 
     edges = [
         {"from": chrono[i]["stage_id"], "to": chrono[i + 1]["stage_id"],
-         "data_row": chrono[i]["row"]}
+         "from_step": i + 1, "to_step": i + 2, "data_row": chrono[i]["row"]}
         for i in range(len(chrono) - 1)
     ]
 

@@ -29,11 +29,17 @@ ROW_PRESERVING: frozenset[str] = frozenset({"input_data", "python_row_function"}
 # Why a stage could not be crossed, and the issue that tracks lifting the stop.
 STOP_MESSAGES: dict[str, str] = {
     "origin": "input_data stage — the rows originate here",
-    "llm_transform": "llm_transform is 1:1 only once PR #29 lands (issue #61)",
-    "reshaping": "stage reshapes rows (fan-in/out) — row lineage is issue #58",
+    "llm_transform": (
+        "tracing across an llm_transform is not supported yet (it becomes 1:1 "
+        "with PR #29) — issue #61"
+    ),
+    "reshaping": (
+        "tracing across a stage that reshapes rows (a join, aggregate, or frame "
+        "function) is not supported yet — issue #58"
+    ),
     "rowcount_mismatch": (
-        "row counts differ across this hop, so position is not trustworthy — "
-        "row lineage is issue #58"
+        "this stage's row count differs from its input, so per-row position "
+        "can't be trusted — tracing across it is not supported yet (issue #58)"
     ),
     "missing_output": "this stage's output file is missing from the run",
     "missing_parent": "the parent named in the manifest is not in the run",

@@ -49,17 +49,39 @@ def test_stop_at_reshaping_stage_points_at_issue_58(tmp_path):
 
 
 def test_rowcount_mismatch_on_preserving_stage_stops_defensively(tmp_path):
-    # 'enrich' declares python_row_function but emits fewer rows than its parent.
-    seeds = pd.DataFrame({"facility_id": ["a", "b", "c"]})
-    enrich = pd.DataFrame({"facility_id": ["a", "b"], "score": [1, 2]})
+    # The point-5 scenario: a row-preserving stage whose PERSISTED output has
+    # fewer rows than its input (a row errored out, or --limit sliced it), so
+    # output row i no longer positionally equals input row i. The walk must
+    # refuse to guess — stop at this hop, don't map to the wrong parent row.
+    seeds = pd.DataFrame({"facility_id": ["a", "b", "c"]})          # N = 3
+    enrich = pd.DataFrame({"facility_id": ["a", "b"], "score": [1, 2]})  # M = 2 < N
     run_dir = write_run(tmp_path, [
         {"id": "seeds", "type": "input_data", "parents": [], "df": seeds},
         {"id": "enrich", "type": "python_row_function", "parents": ["seeds"], "df": enrich},
     ])
     trace = trace_row(run_dir, "enrich", 0)
-    assert [h.stage_id for h in trace.hops] == ["enrich"]
-    assert trace.terminal.kind == "rowcount_mismatch"
+    assert [h.stage_id for h in trace.hops] == ["enrich"]           # enrich shown
+    assert trace.terminal.kind == "rowcount_mismatch"              # but not crossed
     assert "#58" in trace.terminal.message
+
+
+def test_mismatch_deeper_in_chain_stops_at_the_right_hop(tmp_path):
+    # A(3) -> B(3) -> C(3) is clean; but B actually emitted 2 rows (drop), so the
+    # break is at B<-A. The walk should cross C<-B (3==3... here counts differ),
+    # proving the guard fires exactly at the hop where counts diverge.
+    a = pd.DataFrame({"k": ["a", "b", "c"]})                        # 3
+    b = pd.DataFrame({"k": ["a", "b"], "x": [1, 2]})               # 2  (dropped one)
+    c = pd.DataFrame({"k": ["a", "b"], "x": [1, 2], "y": [9, 8]})  # 2
+    run_dir = write_run(tmp_path, [
+        {"id": "a", "type": "input_data", "parents": [], "df": a},
+        {"id": "b", "type": "python_row_function", "parents": ["a"], "df": b},
+        {"id": "c", "type": "python_row_function", "parents": ["b"], "df": c},
+    ])
+    trace = trace_row(run_dir, "c", 0)
+    # C<-B is fine (2==2); B<-A breaks (2!=3) — so the chain reaches b then stops.
+    assert [h.stage_id for h in trace.hops] == ["c", "b"]
+    assert trace.terminal.kind == "rowcount_mismatch"
+    assert trace.terminal.stage_id == "b"
 
 
 def test_row_out_of_range_raises(tmp_path):

@@ -20,8 +20,23 @@ from app.web.config import EXAMPLES_DIR
 
 RUN_ID = "20260708T120000"
 
-_ADD_REGION = "def transform(row):\n    row['region'] = REGION_BY_MILL[row['facility_id']]\n    return row"
-_SCORE = "def transform(row):\n    row['risk_score'] = round(peat_pressure(row['region']), 2)\n    return row"
+# Self-contained: everything the function references is defined inside it, so
+# what the trace view shows IS the whole runnable function (point of the demo).
+_ADD_REGION = (
+    "def transform(row):\n"
+    "    region_by_mill = {\n"
+    "        'MILL-001': 'Riau', 'MILL-002': 'Riau', 'MILL-003': 'West Kalimantan',\n"
+    "    }\n"
+    "    row['region'] = region_by_mill.get(row['facility_id'], 'unknown')\n"
+    "    return row\n"
+)
+_SCORE = (
+    "def transform(row):\n"
+    "    peat_pressure = {'Riau': 0.7, 'West Kalimantan': 0.9, 'unknown': 0.0}\n"
+    "    base = peat_pressure.get(row['region'], 0.0)\n"
+    "    row['risk_score'] = round(base * 0.6 + 0.1, 2)\n"
+    "    return row\n"
+)
 
 COMPILED = [
     ("01_load_mills", {
@@ -81,13 +96,23 @@ def _write(run_dir: Path, stages: list[dict]) -> None:
     (run_dir / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
 
 
+def _apply(code: str, df: pd.DataFrame) -> pd.DataFrame:
+    """Run an inline `transform(row)` over df's rows — so the seeded data is
+    exactly what the displayed function produces (no drift between code shown
+    and data shown)."""
+    ns: dict = {}
+    exec(code, ns)  # noqa: S102 — trusted demo code defined in this file
+    transform = ns["transform"]
+    return pd.DataFrame([transform(dict(r)) for r in df.to_dict("records")])
+
+
 def main() -> None:
     mills = pd.DataFrame({
         "facility_id": ["MILL-001", "MILL-002", "MILL-003"],
         "name": ["Example Mill A", "Example Mill B", "Example Mill C"],
     })
-    with_region = mills.assign(region=["Riau", "Riau", "West Kalimantan"])
-    scored = with_region.assign(risk_score=[0.12, 0.47, 0.83])
+    with_region = _apply(_ADD_REGION, mills)
+    scored = _apply(_SCORE, with_region)
 
     project_dir = EXAMPLES_DIR / "_syw_demo"
     _write_compiled(project_dir)

@@ -246,7 +246,9 @@ async def run_stage_row_trace(project: str, run_id: str, stage_id: str, row: int
 
 
 _TRACE_VIEW_HTML = r"""<!doctype html><html><head><meta charset="utf-8">
-<title>show your work · __TITLE__</title><style>
+<title>show your work · __TITLE__</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<style>
 body{font-family:-apple-system,Segoe UI,Arial,sans-serif;max-width:940px;margin:22px auto;padding:0 20px;color:#1a1a1a}
 h1{font-size:19px;margin:0 0 2px}.sub{color:#888;font-size:13px;margin-bottom:14px}
 .toggle{display:inline-flex;border:1px solid #ddd;border-radius:8px;overflow:hidden;margin-bottom:16px}
@@ -257,28 +259,28 @@ h1{font-size:19px;margin:0 0 2px}.sub{color:#888;font-size:13px;margin-bottom:14
 .panel h4{margin:0 0 2px;font-size:13px}.panel .hint{color:#999;font-size:12px;margin:0 0 8px}
 .panel table{width:100%;border-collapse:collapse;font-size:12px}.panel td,.panel th{padding:3px 6px;border-bottom:1px solid #eee;text-align:left;vertical-align:top}
 .panel th{color:#777;font-weight:500}.panel pre{margin:0;font-family:ui-monospace,Consolas,monospace;font-size:12px;white-space:pre-wrap}
-.story{font-size:15px;line-height:2.15}
+.story{font-size:15px;line-height:1.9}
+.step{margin:2px 0}.stepno{display:inline-block;min-width:52px;color:#888;font-size:12px;font-weight:500}
 .chip{border-radius:6px;padding:1px 7px;font-size:12.5px;cursor:pointer;border:1px solid transparent;white-space:nowrap}
 .chip.data{background:#eef4ff;color:#1a3a72;border-color:#cfe0ff}.chip.fn{background:#eaf7ea;color:#1f5a1f;border-color:#cfeccf}
 .node-name{font-weight:600}.src-tag,.claim-tag{font-size:10.5px;border-radius:5px;padding:0 5px;margin-left:3px}
 .src-tag{background:#f0f0ed;color:#666}.claim-tag{background:#e8f8e8;color:#1f5a1f}
-.trunc{background:#fff4e6;color:#7a4a00;border-radius:8px;padding:6px 10px;font-size:12.5px;margin-bottom:10px}
-.graph{display:flex;flex-wrap:wrap;align-items:center;gap:4px}
-.gnode{border:1px solid #ccc;border-radius:9px;padding:7px 11px;cursor:pointer;background:#fff;min-width:74px}
-.gnode.claim{border-color:#1f5a1f;background:#f2fbf2}.gnode.source{background:#f6f6f3}
-.gnode .gt{font-weight:600;font-size:13px}.gnode .gm{color:#888;font-size:11px}
-.gedge{display:flex;flex-direction:column;align-items:center;cursor:pointer;color:#1a3a72;font-size:11px;padding:0 2px}
-.gedge .lbl{background:#eef4ff;border-radius:5px;padding:0 5px}
+.trunc{background:#fff4e6;color:#7a4a00;border-radius:8px;padding:8px 12px;font-size:13px;margin-bottom:12px}
+.mermaid{background:#fff}
+.nograph{color:#888;font-size:13px}
 .hidden{display:none}
 </style></head><body>
 <h1>Show your work</h1><div class="sub" id="sub"></div>
 <div class="toggle"><button id="b-story" class="on">Story</button><button id="b-graph">Graph</button></div>
-<div class="grid"><div><div id="story" class="story"></div><div id="graph" class="graph hidden"></div></div>
-<div class="panel" id="panel"><h4>Hover a chip or node</h4><p class="hint">Data shows the rows on that edge; function shows the code or prompt.</p></div></div>
+<div class="grid"><div>
+  <div id="story" class="story"></div>
+  <div id="graph" class="hidden"><pre class="mermaid" id="mmd">__MERMAID__</pre><div id="nograph" class="nograph hidden">Graph needs the compiled workflow, which isn't available for this run.</div></div>
+</div>
+<div class="panel" id="panel"><h4>Hover a chip or node</h4><p class="hint">Data shows the rows on that edge; function shows the full code or prompt.</p></div></div>
 <script>
 const V = __PAYLOAD__;
 const esc = s => String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
-document.getElementById('sub').textContent = `run ${V.run_id} · ${V.start_stage} row ${V.start_row} · reads left to right`;
+document.getElementById('sub').textContent = `run ${V.run_id} · ${V.start_stage} row ${V.start_row} · reads top to bottom, step 1 first`;
 function rowTable(row){
   const rows = Object.entries(row).map(([k,v]) => `<tr><th>${esc(k)}</th><td>${esc(v)}</td></tr>`).join('');
   return `<table>${rows}</table>`;
@@ -288,8 +290,8 @@ function showTransform(node){
   const t = node.transform;
   if(t.detail == null){ setPanel(node.stage_id, `${node.stage_type} · no detail available`, ''); return; }
   const body = (t.kind==='python'||t.kind==='llm') ? `<pre>${esc(t.detail)}</pre>` : `<div>${esc(t.detail)}</div>`;
-  const hint = {python:'python function', llm:'LLM prompt', join:'join keys', source:'source'}[t.kind] || t.kind;
-  setPanel(node.stage_id, `${node.stage_type} · ${hint}`, body);
+  const hint = {python:'full python function', llm:'full LLM prompt', join:'join keys', source:'source'}[t.kind] || t.kind;
+  setPanel(`step ${node.step} · ${node.stage_id}`, `${node.stage_type} · ${hint}`, body);
 }
 function setPanel(title, hint, body){
   document.getElementById('panel').innerHTML = `<h4>${esc(title)}</h4><p class="hint">${esc(hint)}</p>${body}`;
@@ -301,7 +303,13 @@ function verb(node){
   if(k==='join') return `join`;
   return `<span class="node-name">${esc(node.stage_id)}</span>`;
 }
-// ---- Story ----
+function predsOf(step){
+  const from = V.edges.filter(e => e.to_step === step).map(e => e.from_step);
+  if(!from.length) return '';
+  if(from.length === 1) return ` using step ${from[0]}'s output`;
+  return ` joining steps ${from.join(' and ')}`;
+}
+// ---- Story (numbered) ----
 const story = document.getElementById('story');
 let html = '';
 if(V.upstream.truncated){ html += `<div class="trunc">⋯ upstream not traced — ${esc(V.upstream.message)}</div>`; }
@@ -309,44 +317,41 @@ V.nodes.forEach((n, i) => {
   const dataChip = ` <span class="chip data" data-i="${i}" data-kind="data">${Object.keys(n.row).length} cols ▾</span>`;
   const fnChip = (n.transform.detail!=null && n.transform.kind!=='source')
     ? ` <span class="chip fn" data-i="${i}" data-kind="fn">${n.transform.kind==='llm'?'prompt':n.transform.kind==='join'?'keys':'function'} ▾</span>` : '';
-  if(i===0){
+  let sentence;
+  if(i===0 && !V.upstream.truncated){
     const tag = n.role==='source' ? '<span class="src-tag">source</span>' : '';
-    html += `Load <span class="node-name">${esc(n.stage_id)}</span>${tag}${dataChip}.`;
+    sentence = `load <span class="node-name">${esc(n.stage_id)}</span>${tag}${dataChip}.`;
   } else {
     const adds = n.columns_new.length ? ` adding <code>${n.columns_new.map(esc).join('</code>, <code>')}</code>` : '';
     const claimTag = n.role==='claim' ? ' <span class="claim-tag">published claim</span>' : '';
-    html += `<br>→ ${verb(n)}${fnChip} to get <span class="node-name">${esc(n.stage_id)}</span>${claimTag}${dataChip}${adds}.`;
+    sentence = `${verb(n)}${fnChip}${predsOf(n.step)} to get <span class="node-name">${esc(n.stage_id)}</span>${claimTag}${dataChip}${adds}.`;
   }
+  html += `<div class="step"><span class="stepno">step ${n.step}</span>${sentence}</div>`;
 });
 story.innerHTML = html;
 story.querySelectorAll('.chip').forEach(c => {
   const n = V.nodes[+c.dataset.i];
-  const act = () => c.dataset.kind==='data' ? showData(n.stage_id, n.row) : showTransform(n);
+  const act = () => c.dataset.kind==='data' ? showData(`step ${n.step} · ${n.stage_id}`, n.row) : showTransform(n);
   c.addEventListener('mouseenter', act); c.addEventListener('click', act);
 });
-// ---- Graph ----
-const graph = document.getElementById('graph');
-V.nodes.forEach((n, i) => {
-  const box = document.createElement('div');
-  box.className = 'gnode ' + (n.role==='claim'?'claim':n.role==='source'?'source':'');
-  box.innerHTML = `<div class="gt">${esc(n.stage_id)}</div><div class="gm">${esc(n.stage_type)}</div>`;
-  box.addEventListener('mouseenter', () => showTransform(n));
-  box.addEventListener('click', () => showTransform(n));
-  graph.appendChild(box);
-  if(i < V.nodes.length-1){
-    const e = V.edges[i];
-    const edge = document.createElement('div');
-    edge.className = 'gedge';
-    edge.innerHTML = `<span>→</span><span class="lbl">data ▾</span>`;
-    const showEdge = () => showData(`${e.from} → ${e.to}`, e.data_row);
-    edge.addEventListener('mouseenter', showEdge); edge.addEventListener('click', showEdge);
-    graph.appendChild(edge);
-  }
-});
+// ---- Graph (reuses the central mermaid workflow component + its click convention) ----
+const byStage = Object.fromEntries(V.nodes.map(n => [n.stage_id, n]));
+window.loadStage = sid => { if(byStage[sid]) showTransform(byStage[sid]); };
+const mmd = document.getElementById('mmd');
+const hasGraph = mmd.textContent.trim().length > 0;
+if(!hasGraph){ mmd.classList.add('hidden'); document.getElementById('nograph').classList.remove('hidden'); }
+mermaid.initialize({ startOnLoad:false, theme:"default", flowchart:{curve:"basis", padding:20, useMaxWidth:true}, securityLevel:"loose" });
+let graphRendered = false;
+async function renderGraph(){
+  if(graphRendered || !hasGraph) return;
+  graphRendered = true;
+  await mermaid.run({ nodes:[mmd] });
+}
 // ---- Toggle ----
+const story_ = document.getElementById('story'), graph = document.getElementById('graph');
 const bStory = document.getElementById('b-story'), bGraph = document.getElementById('b-graph');
-bStory.onclick = () => { story.classList.remove('hidden'); graph.classList.add('hidden'); bStory.classList.add('on'); bGraph.classList.remove('on'); };
-bGraph.onclick = () => { graph.classList.remove('hidden'); story.classList.add('hidden'); bGraph.classList.add('on'); bStory.classList.remove('on'); };
+bStory.onclick = () => { story_.classList.remove('hidden'); graph.classList.add('hidden'); bStory.classList.add('on'); bGraph.classList.remove('on'); };
+bGraph.onclick = () => { graph.classList.remove('hidden'); story_.classList.add('hidden'); bGraph.classList.add('on'); bStory.classList.remove('on'); renderGraph(); };
 </script></body></html>"""
 
 
@@ -361,14 +366,19 @@ def _stages_by_id_safe(project: str) -> dict[str, Any]:
     return {s.id: s for s in listing.stages}
 
 
-def _render_trace_html(view: dict[str, Any]) -> str:
-    """A self-contained show-your-work page: a story view (chronological
-    derivation, data and function one hover away) with a graph toggle, driven
-    by the embedded view-model. Read-only."""
+def _render_trace_html(view: dict[str, Any], mermaid: str) -> str:
+    """A self-contained show-your-work page: a numbered story view
+    (chronological, data and function one hover away) with a graph toggle that
+    reuses the central mermaid workflow. Read-only."""
     # Embed the payload; neutralize any "</script" so it can't close the tag.
     payload = json.dumps(view).replace("</", "<\\/")
     title = html.escape(f"{view['start_stage']} · row {view['start_row']}")
-    return _TRACE_VIEW_HTML.replace("__TITLE__", title).replace("__PAYLOAD__", payload)
+    return (
+        _TRACE_VIEW_HTML
+        .replace("__TITLE__", title)
+        .replace("__MERMAID__", html.escape(mermaid))
+        .replace("__PAYLOAD__", payload)
+    )
 
 
 @router.get(
@@ -387,8 +397,12 @@ async def run_stage_row_trace_view(project: str, run_id: str, stage_id: str, row
         if "not in run" in detail:
             raise HTTPException(status_code=404, detail=detail) from exc
         raise HTTPException(status_code=400, detail=detail) from exc
-    view = build_trace_view(trace_to_dict(trace), _stages_by_id_safe(project))
-    return HTMLResponse(_render_trace_html(view))
+    stages_by_id = _stages_by_id_safe(project)
+    view = build_trace_view(trace_to_dict(trace), stages_by_id)
+    ordered = [stages_by_id[n["stage_id"]] for n in view["nodes"]
+               if n["stage_id"] in stages_by_id]
+    mermaid = build_mermaid_graph(ordered, project) if len(ordered) == len(view["nodes"]) else ""
+    return HTMLResponse(_render_trace_html(view, mermaid))
 
 
 @router.post("/project/{project}/runs/{run_id}/stage/{stage_id}/preview")
