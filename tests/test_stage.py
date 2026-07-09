@@ -16,12 +16,15 @@ def S(**kw):
 
 # ── column types ─────────────────────────────────────────────────────────────
 @pytest.mark.parametrize("t", ["str", "int", "float", "bool", "datetime", "date",
-                                "dict", "json", "list[str]", "list[list[int]]"])
+                                "json", "list[str]", "list[list[int]]"])
 def test_column_type_valid(t):
-    assert m.Column.model_validate({"name": "c", "type": t}).type == t
+    kw = {"name": "c", "type": t}
+    if t == "json":
+        kw["value_type"] = "str"  # a json column must declare fields or value_type
+    assert m.Column.model_validate(kw).type == t
 
 
-@pytest.mark.parametrize("t", ["weird", "List[str]", "list[]", "int32", "array"])
+@pytest.mark.parametrize("t", ["weird", "List[str]", "list[]", "int32", "array", "dict"])
 def test_column_type_invalid(t):
     with pytest.raises(ValidationError):
         m.Column.model_validate({"name": "c", "type": t})

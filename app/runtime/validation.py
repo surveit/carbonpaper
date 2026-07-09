@@ -127,13 +127,13 @@ def validate_dataframe(
                 except TypeError:
                     pass  # mixed types — the type check below will catch it
 
-        # Range as enum (categorical strings)
-        if col_range and col_type == "str":
+        # Enum (categorical strings): values must be in the declared vocabulary
+        if col.enum and col_type == "str":
             non_null = series.dropna()
-            allowed = set(str(v) for v in col_range)
             if len(non_null):
+                allowed = set(col.enum)
                 bad = (~non_null.astype(str).isin(allowed)).sum()
-                if bad and len(col_range) <= 50:
+                if bad:
                     report.issues.append(
                         Issue(
                             "warning", name,

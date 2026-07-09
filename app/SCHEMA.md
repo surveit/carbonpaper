@@ -131,12 +131,17 @@ bool             — boolean
 datetime         — ISO datetime
 date             — ISO date (no time)
 list[str]        — list of strings
-list[<type>]     — generic list
-dict             — arbitrary key-value
-json             — opaque JSON blob (use sparingly)
+list[<type>]     — generic list, including list[json]
+json             — a JSON object, its shape declared by `fields` or `value_type`
 ```
 
-`nullable: true` means the column may be missing/null. `range: [low, high]` for numerics; `range: [enum1, enum2, ...]` for categorical strings.
+`nullable: true` means the column may be missing/null. `range: [low, high]` constrains numeric (int/float) columns only. A categorical string vocabulary is declared with `enum: [val1, val2, ...]`, not `range`.
+
+A `json` or `list[json]` column declares its shape recursively with exactly one of:
+- `fields: [...]` — a list of Column-shaped entries describing one object's keys (a field may itself be `json`, so shapes nest); `list[json]` means an array of such objects.
+- `value_type: <scalar type>` — an open map: an object with arbitrary string keys whose values are all this scalar type (e.g. `value_type: str` for a `doc_id → url` lookup whose keys can't be enumerated up front).
+
+`Column.fields`/`Column.value_type` are declarative only in `app/models/schema.py` today: they describe the expected shape and are rendered into `TableSchema.to_prompt()`, but nothing in this module validates an actual reply against them (see `docs/llm-transform-output-spec.md` for the reply-shape design; validating a reply against it is a later LLM-layer concern).
 
 ## Connector kinds (for `input_data`)
 
@@ -160,7 +165,7 @@ Weighted aggregation is not part of this schema — do it inside a
 Prose translation rules:
 
 - **Numbers in prose become `range:` constraints in schemas.** "Importance score 0–10" → `{type: int, range: [0, 10]}`.
-- **Lists of categories in prose become `range:` enums.** "Source classes: org_websites, corporate_media, CDP, ..." → `{type: str, range: [org_websites, corporate_media, CDP, ...]}`.
+- **Lists of categories in prose become `enum:` constraints.** "Source classes: org_websites, corporate_media, CDP, ..." → `{type: str, enum: [org_websites, corporate_media, CDP, ...]}`.
 - **Formulas in prose become inline pandas code.** Don't produce `formula: "0.5 * direct + 0.5 * indirect"` as a string — write the function. If the prose is underspecified, write a default function and add a compiler_note.
 - **"Methodology says X" sentences are not stage parameters.** They go into compiler_notes if they describe an ambiguity, or into the `description:` field of the relevant column/parameter if they're documentation.
 - **Rubrics with verbatim score descriptions stay verbatim.** Pull Table 6 (or equivalent) into the `llm.rubric:` field literally.
