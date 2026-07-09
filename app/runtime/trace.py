@@ -122,3 +122,79 @@ def _new_columns(child: pd.DataFrame, parent: pd.DataFrame | None) -> list[str]:
         return [str(c) for c in child.columns]
     parent_cols = {str(c) for c in parent.columns}
     return [str(c) for c in child.columns if str(c) not in parent_cols]
+
+
+def trace_row(run_dir: Path, stage_id: str, row_ordinal: int) -> Trace:
+    """Trace one row's ancestry backward through row-preserving stages.
+
+    Returns a `Trace` whose `hops` run newest-first from `(stage_id,
+    row_ordinal)` to either an `input_data` origin or the first stage that
+    cannot be crossed (`terminal`). Raises `ValueError` for an unknown stage or
+    an out-of-range row — those are caller bugs, not traceable states.
+    """
+    run_dir = Path(run_dir)
+    manifest = _load_manifest(run_dir)
+    by_id = _stages_by_id(manifest)
+    if stage_id not in by_id:
+        raise ValueError(f"stage {stage_id!r} not in run {run_dir.name}")
+
+    hops: list[Hop] = []
+    sid, r = stage_id, row_ordinal
+    terminal: StopReason | None = None
+
+    while terminal is None:
+        record = by_id[sid]
+        stage_type = record.get("type", "")
+        df = _read_output(run_dir, record)
+        if df is None:
+            terminal = StopReason("missing_output", sid, STOP_MESSAGES["missing_output"])
+            break
+        if r < 0 or r >= len(df):
+            raise ValueError(
+                f"row {r} out of range for stage {sid!r} ({len(df)} rows)"
+            )
+
+        parents = _parents(record)
+        parent_df = None
+        if len(parents) == 1 and parents[0] in by_id:
+            parent_df = _read_output(run_dir, by_id[parents[0]])
+
+        hops.append(Hop(
+            stage_id=sid,
+            stage_type=stage_type,
+            row_ordinal=r,
+            row=_row_dict(df, r),
+            columns_new=_new_columns(df, parent_df),
+            origin=_origin(stage_type),
+        ))
+
+        # Can we cross into the parent, keeping the same ordinal?
+        if stage_type == "input_data":
+            terminal = StopReason("origin", sid, STOP_MESSAGES["origin"])
+        elif not parents:
+            terminal = StopReason("no_parent_edge", sid, STOP_MESSAGES["no_parent_edge"])
+        elif stage_type not in ROW_PRESERVING:
+            kind = "llm_transform" if stage_type == "llm_transform" else "reshaping"
+            terminal = StopReason(kind, sid, STOP_MESSAGES[kind])
+        elif len(parents) != 1:
+            # A row-preserving stage has exactly one input; more means the
+            # manifest is mislabeled — treat as reshaping, don't guess a parent.
+            terminal = StopReason("reshaping", sid, STOP_MESSAGES["reshaping"])
+        else:
+            parent_id = parents[0]
+            if parent_id not in by_id:
+                terminal = StopReason("missing_parent", sid, STOP_MESSAGES["missing_parent"])
+            elif parent_df is None:
+                terminal = StopReason("missing_output", parent_id, STOP_MESSAGES["missing_output"])
+            elif len(parent_df) != len(df):
+                terminal = StopReason("rowcount_mismatch", sid, STOP_MESSAGES["rowcount_mismatch"])
+            else:
+                sid, r = parent_id, r  # same ordinal — the whole point
+
+    return Trace(
+        run_id=manifest.get("run_id", run_dir.name),
+        start_stage=stage_id,
+        start_row=row_ordinal,
+        hops=hops,
+        terminal=terminal,
+    )
