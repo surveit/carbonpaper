@@ -86,3 +86,67 @@ def test_validate_workflow_reports_issues():
                                join={"keys": [{"left": "x", "right": "y"}]}))
     issues = m.validate_workflow([s])
     assert issues  # both inputs dangle — reported, not raised
+
+
+# ── llm_transform 1:1 eligibility (checked at save time, not in the handler) ──
+def _llm_1to1(**over):
+    """A valid strictly-1:1 llm_transform: input {id(pk), text} → output adds score."""
+    base = dict(
+        id="score", type="llm_transform", inputs=[{
+            "id": "load",
+            "schema": {"columns": [{"name": "id", "type": "str"},
+                                   {"name": "text", "type": "str"}],
+                       "primary_key": ["id"]},
+        }],
+        output_schema={"columns": [{"name": "id", "type": "str"},
+                                   {"name": "text", "type": "str"},
+                                   {"name": "score", "type": "int"}],
+                       "primary_key": ["id"]},
+        llm={"prompt_template": "score {text}"},
+    )
+    base.update(over)
+    return Stage.model_validate(S(**base))
+
+
+def test_llm_transform_valid_1to1_no_issues():
+    assert m.check_llm_transform_one_to_one([_llm_1to1()]) == []
+
+
+def test_llm_transform_pk_mismatch_reported():
+    stage = _llm_1to1(output_schema={
+        "columns": [{"name": "id", "type": "str"}, {"name": "text", "type": "str"},
+                    {"name": "score", "type": "int"}],
+        "primary_key": ["text"]})
+    assert any("primary_key" in i for i in m.check_llm_transform_one_to_one([stage]))
+
+
+def test_llm_transform_drops_input_column_reported():
+    stage = _llm_1to1(output_schema={
+        "columns": [{"name": "id", "type": "str"}, {"name": "score", "type": "int"}],
+        "primary_key": ["id"]})  # dropped `text`
+    issues = m.check_llm_transform_one_to_one([stage])
+    assert any("text" in i and "additive" in i for i in issues), issues
+
+
+def test_llm_transform_modifies_column_schema_reported():
+    stage = _llm_1to1(output_schema={
+        "columns": [{"name": "id", "type": "str"}, {"name": "text", "type": "int"},
+                    {"name": "score", "type": "int"}],
+        "primary_key": ["id"]})  # `text` str -> int
+    issues = m.check_llm_transform_one_to_one([stage])
+    assert any("text" in i and "modif" in i for i in issues), issues
+
+
+def test_llm_transform_adds_nothing_reported():
+    stage = _llm_1to1(output_schema={
+        "columns": [{"name": "id", "type": "str"}, {"name": "text", "type": "str"}],
+        "primary_key": ["id"]})  # adds no new column
+    assert any("adds no columns" in i for i in m.check_llm_transform_one_to_one([stage]))
+
+
+def test_validate_workflow_includes_llm_transform_check():
+    """load_workflow → validate_workflow must surface an ineligible llm_transform."""
+    bad = _llm_1to1(output_schema={
+        "columns": [{"name": "id", "type": "str"}, {"name": "text", "type": "str"}],
+        "primary_key": ["id"]})
+    assert any("adds no columns" in i for i in m.validate_workflow([bad]))

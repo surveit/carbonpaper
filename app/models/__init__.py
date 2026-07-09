@@ -41,6 +41,7 @@ from app.models.stage import (
 from app.models.workflow import (
     Workflow,
     check_inputs_resolve,
+    check_llm_transform_one_to_one,
     check_unique_ids,
     detect_cycle,
     parse_workflow,
@@ -177,6 +178,7 @@ __all__ = [
     "InputRef", "Stage", "validate_stage",
     "Workflow", "parse_workflow", "validate_workflow", "validate_workflow_draft",
     "check_unique_ids", "check_inputs_resolve", "detect_cycle",
+    "check_llm_transform_one_to_one",
     "SchemaKind", "NamedColumn", "NamedSchema", "SchemaLibrary",
     "parse_schema_library", "validate_schema_library", "validate_named_schema",
     "check_unique_schema_names", "check_references_resolve", "parse_reference",

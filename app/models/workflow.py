@@ -12,8 +12,8 @@ from typing import Any
 
 from pydantic import ValidationError, model_validator
 
-from app.models.schema import _Base, format_errors
-from app.models.stage import Stage
+from app.models.schema import _Base, _column_spec_differences, format_errors
+from app.models.stage import Stage, StageType
 
 
 def check_unique_ids(stages: list[Stage]) -> list[str]:
@@ -71,6 +71,72 @@ def graph_issues(stages: list[Stage]) -> list[str]:
     return check_unique_ids(stages) + check_inputs_resolve(stages) + detect_cycle(stages)
 
 
+def check_llm_transform_one_to_one(stages: list[Stage]) -> list[str]:
+    """One issue per llm_transform stage that is not strictly 1:1 on its declared
+    schemas. An llm_transform maps one input row to one output row, so it must
+    declare exactly one input whose schema and the stage's output_schema both
+    name the same primary key, keep every input column unchanged (a transform
+    never rewrites an existing column's schema), and add at least one new column.
+
+    Enforcing this here — at save time — means the reply spec the runtime derives
+    (`output_schema.subtract(input_schema)`) is exactly the new columns and can
+    never throw mid-run, and an ineligible stage is rejected before any run
+    rather than during one."""
+    issues: list[str] = []
+    for s in stages:
+        if s.type != StageType.llm_transform:
+            continue
+        if len(s.inputs) != 1:
+            issues.append(
+                f"`{s.id}`: llm_transform must have exactly one input, has {len(s.inputs)}"
+            )
+            continue
+        input_schema = s.inputs[0].table_schema
+        output_schema = s.output_schema
+        if input_schema is None:
+            issues.append(f"`{s.id}`: llm_transform's input declares no schema (1:1 needs a primary_key)")
+            continue
+        if output_schema is None:
+            issues.append(f"`{s.id}`: llm_transform declares no output_schema (1:1 needs a primary_key)")
+            continue
+
+        input_pk, output_pk = input_schema.primary_key, output_schema.primary_key
+        if not input_pk:
+            issues.append(f"`{s.id}`: llm_transform's input schema declares no primary_key")
+        if not output_pk:
+            issues.append(f"`{s.id}`: llm_transform's output_schema declares no primary_key")
+        if input_pk and output_pk and set(input_pk) != set(output_pk):
+            issues.append(
+                f"`{s.id}`: input primary_key {input_pk} != output primary_key "
+                f"{output_pk} (llm_transform is strictly 1:1)"
+            )
+
+        output_by_name = {c.name: c for c in output_schema.columns}
+        for col in input_schema.columns:
+            out_col = output_by_name.get(col.name)
+            if out_col is None:
+                issues.append(
+                    f"`{s.id}`: output_schema drops input column `{col.name}` "
+                    "(a transform is additive: output ⊇ input)"
+                )
+                continue
+            diffs = _column_spec_differences(col, out_col)
+            if diffs:
+                issues.append(
+                    f"`{s.id}`: column `{col.name}` changes schema on "
+                    f"{', '.join(diffs)} between input and output; a transform "
+                    "must not modify a column's schema"
+                )
+
+        input_names = {c.name for c in input_schema.columns}
+        if not any(c.name not in input_names for c in output_schema.columns):
+            issues.append(
+                f"`{s.id}`: output_schema adds no columns beyond the input; an "
+                "llm_transform that adds nothing is a schema bug"
+            )
+    return issues
+
+
 class Workflow(_Base):
     """A whole workflow: validated stages with unique ids, resolvable inputs, acyclic."""
     stages: list[Stage]
@@ -89,10 +155,12 @@ def parse_workflow(stages: list[dict[str, Any]]) -> Workflow:
 
 
 def validate_workflow(stages: list[Stage]) -> list[str]:
-    """Cross-stage checks (unique ids, inputs resolve, acyclic) on
-    already-validated stages, as human-readable issue strings — every problem,
-    not just the first."""
-    return graph_issues(stages)
+    """Whole-workflow checks on already-validated stages, as human-readable issue
+    strings — every problem, not just the first: the cross-stage graph checks
+    (unique ids, inputs resolve, acyclic) plus per-stage semantic invariants
+    (llm_transform is strictly 1:1). This is the seam `load_workflow` (and hence
+    `create_version`) enforces, so an invalid workflow is never versioned or run."""
+    return graph_issues(stages) + check_llm_transform_one_to_one(stages)
 
 
 def validate_workflow_draft(stages: list[dict[str, Any]]) -> list[str]:
