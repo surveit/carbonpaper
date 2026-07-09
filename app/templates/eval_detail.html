@@ -5,7 +5,7 @@
 <a href="/methodology/{{ methodology }}/evals" class="back-link">← {{ methodology }} evals</a>
 {% endblock %}
 
-{% set badge_class = {"run succeeded": "ok", "stale": "warn", "never run": "pending", "run errored": "err", "broken": "err"} %}
+{% set badge_class = {"run succeeded": "ok", "stale": "warn", "never run": "pending", "no cases yet": "pending", "run errored": "err", "broken": "err"} %}
 
 {% block content %}
 <h1>{{ config.name }} <span class="badge {{ badge_class.get(status, 'pending') }}">{{ status }}</span></h1>
@@ -37,6 +37,7 @@
 </div>
 {% endif %}
 
+{% if has_cases %}
 <h2>Cases table</h2>
 <p class="lede"><code>{{ config.table.path }}</code> ({{ config.table.format }})</p>
 {% if cases_error %}
@@ -53,6 +54,16 @@
     </tbody>
 </table>
 </div>
+{% endif %}
+{% else %}
+<section class="attach-cases">
+    <h2>Cases</h2>
+    <p>No cases file is attached yet. This eval can't run until it has one.</p>
+    <form method="post" action="/methodology/{{ methodology }}/evals/{{ config.id }}/attach-cases" enctype="multipart/form-data">
+        <input type="file" name="file" accept=".csv,.parquet,.json" required>
+        <button type="submit" class="btn primary">Attach cases</button>
+    </form>
+</section>
 {% endif %}
 
 <h2>Scoring rules</h2>

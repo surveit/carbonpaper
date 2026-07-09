@@ -109,7 +109,9 @@ def _eval_overlay_with_issues(
         config = entry.config
         report = check_eval_compatibility(config, stages)
         runs, runs_error = _list_eval_runs_safe(methodology_dir, config.id)
-        status = "broken" if runs_error else eval_status(report, runs, latest_version)
+        status = ("broken" if runs_error else
+                  eval_status(report, runs, latest_version,
+                              has_cases=config.table is not None))
         executing = report.settings.frontier if report.settings is not None else []
         overridden = [config.override_stage,
                       *(ov.stage_id for ov in config.reference_overrides)]
@@ -603,7 +605,9 @@ async def eval_detail(request: Request, methodology: str, eval_id: str):
     report = check_eval_compatibility(config, listing.stages)
     runs, runs_error = _list_eval_runs_safe(methodology_dir, config.id)
     latest_version = latest_version_id(methodology_dir)
-    status = "broken" if runs_error else eval_status(report, runs, latest_version)
+    status = ("broken" if runs_error else
+              eval_status(report, runs, latest_version,
+                          has_cases=config.table is not None))
 
     executing = report.settings.frontier if report.settings is not None else []
 
@@ -638,6 +642,7 @@ async def eval_detail(request: Request, methodology: str, eval_id: str):
             "cases_error": cases_error,
             "cases_capped": cases_capped,
             "cases_cap": CASES_PREVIEW_ROWS,
+            "has_cases": config.table is not None,
         },
     )
 

@@ -53,7 +53,7 @@
         {% for e in stage_evals %}
         <li>
             <a href="{{ e.url }}">{{ e.name }}</a>
-            <span class="badge {{ {'run succeeded': 'ok', 'stale': 'warn', 'never run': 'pending', 'run errored': 'err', 'broken': 'err'}.get(e.status, 'pending') }}">{{ e.status }}</span>
+            <span class="badge {{ {'run succeeded': 'ok', 'stale': 'warn', 'never run': 'pending', 'no cases yet': 'pending', 'run errored': 'err', 'broken': 'err'}.get(e.status, 'pending') }}">{{ e.status }}</span>
             <span class="eval-role">{{ e.role }}</span>
         </li>
         {% endfor %}

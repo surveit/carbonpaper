@@ -248,6 +248,29 @@ def test_eval_detail_unknown_id_404(tmp_examples):
     assert r.status_code == 404
 
 
+def test_eval_detail_dataless_shows_attach(tmp_examples):
+    config = {
+        "id": "dataless-eval",
+        "methodology": METHODOLOGY,
+        "name": "Dataless eval",
+        "override_stage": "input_data",
+        "target_stage": "llm_transform",
+        "key": ["doc_id"],
+        "input_columns": ["text"],
+        "expected": [{"actual": "summary", "expected": "expected_summary"}],
+    }
+    config_dir = tmp_examples / "eval_config"
+    config_dir.mkdir(parents=True, exist_ok=True)
+    (config_dir / "dataless-eval.yaml").write_text(
+        yaml.safe_dump(config), encoding="utf-8")
+
+    r = client.get(f"/methodology/{METHODOLOGY}/evals/dataless-eval")
+    assert r.status_code == 200
+    assert "attach cases" in r.text.lower()
+    assert "<th>doc_id</th>" not in r.text
+    assert "no cases yet" in r.text
+
+
 # ── eval_run_detail (run page) ───────────────────────────────────────────────
 def test_eval_run_detail_shows_status_and_metrics(tmp_examples):
     _write_run(tmp_examples, "run-1")

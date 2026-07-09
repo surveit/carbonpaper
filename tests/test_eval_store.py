@@ -272,32 +272,48 @@ def _report(ok=True, settings=None):
 
 def test_eval_status_broken_even_with_runs():
     runs = [_run(status="scored", methodology_version="v1")]
-    assert eval_status(_report(ok=False), runs, latest_version="v1") == "broken"
+    assert eval_status(_report(ok=False), runs, latest_version="v1",
+                       has_cases=True) == "broken"
+
+
+def test_eval_status_no_cases_yet():
+    assert eval_status(_report(ok=True), [], latest_version=None,
+                       has_cases=False) == "no cases yet"
+
+
+def test_eval_status_broken_beats_no_cases():
+    assert eval_status(_report(ok=False), [], latest_version=None,
+                       has_cases=False) == "broken"
 
 
 def test_eval_status_never_run():
-    assert eval_status(_report(ok=True), [], latest_version="v1") == "never run"
+    assert eval_status(_report(ok=True), [], latest_version="v1",
+                       has_cases=True) == "never run"
 
 
 def test_eval_status_stale_when_no_latest_version():
     runs = [_run(status="scored", methodology_version="v1")]
-    assert eval_status(_report(ok=True), runs, latest_version=None) == "stale"
+    assert eval_status(_report(ok=True), runs, latest_version=None,
+                       has_cases=True) == "stale"
 
 
 def test_eval_status_stale_when_version_mismatch():
     runs = [_run(status="scored", methodology_version="v1")]
-    assert eval_status(_report(ok=True), runs, latest_version="v2") == "stale"
+    assert eval_status(_report(ok=True), runs, latest_version="v2",
+                       has_cases=True) == "stale"
 
 
 @pytest.mark.parametrize("status", ["error", "vetoed"])
 def test_eval_status_run_errored(status):
     runs = [_run(status=status, methodology_version="v1")]
-    assert eval_status(_report(ok=True), runs, latest_version="v1") == "run errored"
+    assert eval_status(_report(ok=True), runs, latest_version="v1",
+                       has_cases=True) == "run errored"
 
 
 def test_eval_status_run_succeeded():
     runs = [_run(status="scored", methodology_version="v1")]
-    assert eval_status(_report(ok=True), runs, latest_version="v1") == "run succeeded"
+    assert eval_status(_report(ok=True), runs, latest_version="v1",
+                       has_cases=True) == "run succeeded"
 
 
 def test_eval_config_entry_is_dataclass_shape():

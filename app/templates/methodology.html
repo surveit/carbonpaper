@@ -44,7 +44,7 @@
             <ul class="eval-popover-list">
                 {% for e in eval_overlay %}
                 <li class="eval-popover-row" data-eval-id="{{ e.id }}">
-                    <span class="badge {{ {'run succeeded': 'ok', 'stale': 'warn', 'never run': 'pending', 'run errored': 'err', 'broken': 'err'}.get(e.status, 'pending') }}">{{ e.status }}</span>
+                    <span class="badge {{ {'run succeeded': 'ok', 'stale': 'warn', 'never run': 'pending', 'no cases yet': 'pending', 'run errored': 'err', 'broken': 'err'}.get(e.status, 'pending') }}">{{ e.status }}</span>
                     <span class="eval-popover-name">{{ e.name }}</span>
                     <code>{{ e.overridden|join(', ') }} → {{ e.target }}</code>
                     <a href="{{ e.url }}">view</a>
