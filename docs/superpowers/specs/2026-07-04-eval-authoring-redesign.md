@@ -57,6 +57,25 @@ not define the eval.
 A config with `table = None` is a complete, valid definition with no data yet.
 The cases file is attached later (see "Attaching cases").
 
+## Model change: remove `EvalRun.passed`
+
+`EvalRun.passed: Optional[bool]` is removed. There is no computed overall verdict
+for a run: whether a methodology is good enough is a human's judgment made while
+reviewing the methodology, not a bool the runner stores. A run therefore records
+only its per-row result table and rollup `metrics`; "does this eval look good" is
+read off those by a person.
+
+The settled per-row rule (which the future runner implements — the runner itself
+stays out of scope here): **a case row passes iff all of its checks match.** This
+is deliberately simple and will likely need refining once real evals exist, but
+it is enough to define the result table.
+
+Touch points: drop the field and its docstring line in `app/models/eval.py`;
+remove the "scorer judgment: passed/failed" line from `eval_run.html`; drop
+`passed` from the two `EvalRun` fixtures in `tests/test_eval.py` and
+`tests/test_evals_web.py`. `eval_status` does not reference `passed`, so the
+status vocabulary is unaffected.
+
 ## Compatibility change: reachability, and tolerating no file
 
 Two edits to `check_eval_compatibility(config, stages)` in
