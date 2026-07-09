@@ -14,13 +14,11 @@ A project is one directory under examples/<name>/ framed by a left-sidebar shell
     GET  /project/{project}/data_model           — Data model + ER + the approval GATE
     GET  /project/{project}/workflow             — Workflow (belief graph + node review)
 
-  Gated authoring (paste doc → data model → approve gate → workflow)
+  Create + data-model gate
     GET  /project/new                            — the paste-doc create form
     POST /project/new                            — create examples/<name>/ + project.json
-    GET  /project/{project}/data-model/stream    — SSE Phase 1 (schemas, STOPS)
     POST /project/{project}/data-model/approve   — record the schema-library approval (gate)
     POST /project/{project}/schema/{name}/edit   — the only writer into schemas/
-    GET  /project/{project}/workflow/stream      — SSE Phase 2 (stages; 409 unless approved)
 
   Read-only views the shell links into (stage detail + the stages-derived ER model)
     GET  /project/{project}/stage/{stage_id}          — full-page stage detail
@@ -38,8 +36,8 @@ collide with a stage id (which lives under /stage/{id}). The stages-derived ER l
 /data-model (hyphen); the schema-cards + gate section lives at /data_model (underscore).
 
 Reuse rule: reuses P1's node_review (belief + schema-library gate) + versioning, P2's
-compiler (compile_methodology / stream_compile_chat), and the shared web helpers
-(diagrams, loading, config). The app.models package is the only contract.
+compiler (compile_methodology), and the shared web helpers (diagrams, loading,
+config). The app.models package is the only contract.
 """
 
 from __future__ import annotations
@@ -57,10 +55,8 @@ from fastapi.responses import (
     JSONResponse,
     RedirectResponse,
     Response,
-    StreamingResponse,
 )
 
-from app import compiler
 from app.models import validate_named_schema, validate_schema_library
 from app.services import node_review, project, versioning
 from app.services.loader import stage_to_json, stage_to_spec_dict
@@ -379,97 +375,10 @@ async def project_workflow(request: Request, project_name: str):
     )
 
 
-# ─── Gated authoring streams + gate (keyed on the PROJECT) ───────────────────
-# The two-phase, human-gated authoring actions. The project dir IS the session:
-# chat.jsonl + schemas/ + compiled/ co-locate under examples/<name>/.
-
-
-def _gated_sse(project_dir: Path, message: str, model: str, phase: str):
-    """Wrap compiler.stream_compile_chat (an async generator) as Server-Sent Events.
-    Each event dict becomes one `data: <json>` line the page's EventSource decodes.
-    The generator yields its own terminal {data_model_proposed|done|error} event, so
-    the stream ends cleanly without inventing a sentinel."""
-    async def _gen():
-        async for event in compiler.stream_compile_chat(
-            project_dir,
-            user_message=message,
-            history=None,
-            model=model,
-            phase=phase,
-        ):
-            yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
-    return _gen()
-
-
-def _project_model(project_dir: Path) -> str:
-    """The model to author with: the project's recorded model, else 'sonnet'. A legacy
-    project has no project.json (model is None) — fall back to the quality default
-    rather than fail, since authoring is interactive (the human can steer)."""
-    return project.project_meta(project_dir).model or "sonnet"
-
-
-@router.get("/project/{project_name}/data-model/stream")
-async def data_model_stream(project_name: str, message: str = ""):
-    """SSE — Phase 1: stream the DATA MODEL (named schemas) into
-    examples/<name>/schemas/ and STOP (the model must not author the workflow; stray
-    stage blocks are dropped + surfaced by stream_compile_chat). The browser
-    EventSource can only GET, so the journalist's message arrives as the `message`
-    query param.
-
-    Seed Phase 1 from the project's source document (document.md / methodology_raw.*).
-    The browser opener sends an empty `message` ("read the document"); a typed message
-    is steering. Either way the document is the source of record the model authors from
-    — fed in HERE (stream_compile_chat is input-agnostic and never reads the document)."""
-    pdir = _project_dir(project_name)
-    doc_path = project._document_path(pdir)
-    document = doc_path.read_text(encoding="utf-8").strip() if doc_path else ""
-    seed = message.strip()
-    if document and seed:
-        user_message = f"# Methodology document\n{document}\n\n# Instruction\n{seed}"
-    elif document:
-        user_message = (
-            "Author the DATA MODEL — the named schemas (the tables this methodology "
-            "operates on) — for the methodology described in the document below. "
-            "Describe each table briefly, then emit it. Do NOT design the workflow yet.\n\n"
-            f"# Methodology document\n{document}"
-        )
-    else:
-        # No document on disk (creation requires a non-empty doc, so this is a defect
-        # path) — use whatever was typed rather than fabricate input.
-        user_message = seed
-    return StreamingResponse(
-        _gated_sse(pdir, user_message, _project_model(pdir), "data_model"),
-        media_type="text/event-stream",
-    )
-
-
-@router.get("/project/{project_name}/workflow/stream")
-async def workflow_stream(project_name: str, message: str = ""):
-    """SSE — Phase 2: stream the WORKFLOW STAGES wiring the APPROVED data model into
-    examples/<name>/compiled/. The DATA-MODEL GATE is enforced HERE, at the HTTP layer:
-    Phase 2 streaming is refused with 409 unless the live schema library is in the
-    `approved` state. (stream_compile_chat(phase='workflow') additionally fails loudly
-    if no schemas exist at all, but that only catches an EMPTY data model — schemas
-    authored in Phase 1 but not yet approved would otherwise slip through, so the
-    approval check is the actual gate.) Editing a schema after approval drops the state
-    to `edited_stale`, which re-locks this route until re-approval."""
-    pdir = _project_dir(project_name)
-
-    schemas = load_schemas(pdir)
-    state = node_review.data_model_state(pdir, schemas)["state"]
-    if state != "approved":
-        raise HTTPException(
-            status_code=409,
-            detail=(
-                f"Data-model gate: cannot build the workflow while the data model is "
-                f"'{state}'. Approve the data model first before streaming the workflow."
-            ),
-        )
-
-    return StreamingResponse(
-        _gated_sse(pdir, message, _project_model(pdir), "workflow"),
-        media_type="text/event-stream",
-    )
+# ─── Data-model gate + schema edit (keyed on the PROJECT) ────────────────────
+# Human review actions on an existing data model: approve the whole schema library
+# (the gate that unlocks the workflow view) and edit a single schema — both key off
+# the project dir under examples/<name>/.
 
 
 @router.post("/project/{project_name}/data-model/approve")
