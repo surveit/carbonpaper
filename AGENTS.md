@@ -56,8 +56,7 @@ requested backend that isn't available raises rather than falling back.
 
 ## Repo layout
 ```
-app/models/           the stage-type schemas (Pydantic models)
-app/SCHEMA.md         prose schema spec (legacy — superseded by app/models/)
+app/models/           the stage-type schemas (Pydantic models) — the schema spec
 app/runtime/          the Runner (executor, stages/, LLM backends, validation)  → app/runtime/AGENTS.md
 app/compiler/         prose → LLM → workflow authoring engine (python -m app.compiler)
 app/main.py           thin FastAPI bootstrap; routes live in app/web/routers/   → app/AGENTS.md
