@@ -276,7 +276,7 @@ h1{font-size:19px;margin:0 0 2px}.sub{color:#888;font-size:13px;margin-bottom:14
   <div id="story" class="story"></div>
   <div id="graph" class="hidden"><pre class="mermaid" id="mmd">__MERMAID__</pre><div id="nograph" class="nograph hidden">Graph needs the compiled workflow, which isn't available for this run.</div></div>
 </div>
-<div class="panel" id="panel"><h4>Hover a chip or node</h4><p class="hint">Data shows the rows on that edge; function shows the full code or prompt.</p></div></div>
+<div class="panel" id="panel"><h4>Hover a chip, or click a graph node</h4><p class="hint">In the story, chips reveal the rows or the full code. In the graph, a node shows what it did and the rows it produced.</p></div></div>
 <script>
 const V = __PAYLOAD__;
 const esc = s => String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
@@ -335,8 +335,20 @@ story.querySelectorAll('.chip').forEach(c => {
   c.addEventListener('mouseenter', act); c.addEventListener('click', act);
 });
 // ---- Graph (reuses the central mermaid workflow component + its click convention) ----
+// Mermaid edges aren't clickable, so a node click reveals BOTH what the stage
+// did and the rows it produced (the data that flows on its outgoing edge).
 const byStage = Object.fromEntries(V.nodes.map(n => [n.stage_id, n]));
-window.loadStage = sid => { if(byStage[sid]) showTransform(byStage[sid]); };
+function showNodeFull(node){
+  const t = node.transform;
+  const hintMap = {python:'full python function', llm:'full LLM prompt', join:'join keys', source:'source'};
+  const detail = (t.detail==null) ? '<p class="hint">no detail available</p>'
+    : (t.kind==='python'||t.kind==='llm') ? `<pre>${esc(t.detail)}</pre>` : `<div>${esc(t.detail)}</div>`;
+  document.getElementById('panel').innerHTML =
+    `<h4>step ${node.step} · ${esc(node.stage_id)}</h4>`
+    + `<p class="hint">${esc(node.stage_type)} · ${hintMap[t.kind]||t.kind}</p>${detail}`
+    + `<h4 style="margin-top:14px">rows produced here</h4>${rowTable(node.row)}`;
+}
+window.loadStage = sid => { if(byStage[sid]) showNodeFull(byStage[sid]); };
 const mmd = document.getElementById('mmd');
 const hasGraph = mmd.textContent.trim().length > 0;
 if(!hasGraph){ mmd.classList.add('hidden'); document.getElementById('nograph').classList.remove('hidden'); }
