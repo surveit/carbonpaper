@@ -465,6 +465,50 @@ async def _read_eval_form(request: Request) -> dict[str, Any]:
     }
 
 
+class CasesSchemaColumn(TypedDict):
+    name: str
+    type: str
+    role: str
+
+
+class CasesSchemaResponse(TypedDict):
+    ok: bool
+    problems: list[str]
+    columns: list[CasesSchemaColumn]
+
+
+@router.post("/methodology/{methodology}/evals/cases-schema")
+async def cases_schema_json(request: Request, methodology: str) -> JSONResponse:
+    """Derive the required cases-file schema from the eval-authoring form's
+    current fields (same fields `_handle_eval_form_post` reads), before the
+    config is saved -- lets the form preview the schema and offer a template
+    download while the user is still picking override/target/expected
+    columns. `_derive_table_schema` is the single source of truth for the
+    derivation; this endpoint only tags each returned column with the role
+    the form displays it under."""
+    fields = await _read_eval_form(request)
+    listing = load_stages(methodology)
+    by_id = {s.id: s for s in listing.stages}
+
+    problems: list[str] = []
+    schema = _derive_table_schema(
+        by_id, fields["override_stage"], fields["target_stage"],
+        fields["expected_rows"], problems,
+    )
+    expected_names = {row["dataset"] for row in fields["expected_rows"] if row["dataset"]}
+    columns: list[CasesSchemaColumn] = [
+        CasesSchemaColumn(
+            name=col.name, type=col.type,
+            role="expected" if col.name in expected_names else "injected",
+        )
+        for col in schema.columns
+    ]
+    body: CasesSchemaResponse = CasesSchemaResponse(
+        ok=not problems, problems=problems, columns=columns,
+    )
+    return JSONResponse(content=dict(body))
+
+
 async def _handle_eval_form_post(
     request: Request, methodology: str, eval_id: str | None
 ) -> HTMLResponse | RedirectResponse:
@@ -620,6 +664,12 @@ def _render_detail(
 
     executing = report.settings.frontier if report.settings is not None else []
 
+    cases_schema_payload = {
+        "override_stage": config.override_stage,
+        "target_stage": config.target_stage,
+        "expected": [{"actual": e.actual, "dataset": e.expected} for e in config.expected],
+    }
+
     cases_columns: list[str] = []
     cases_rows: list[dict[str, Any]] = []
     cases_error: str | None = None
@@ -653,6 +703,7 @@ def _render_detail(
             "cases_cap": CASES_PREVIEW_ROWS,
             "has_cases": config.table is not None,
             "attach_errors": attach_errors or [],
+            "cases_schema_payload": cases_schema_payload,
         },
     )
 

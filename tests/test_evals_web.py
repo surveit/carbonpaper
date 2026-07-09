@@ -693,6 +693,81 @@ def test_attach_cases_to_dataless_eval(tmp_examples):
     assert "no cases yet" not in detail.text
 
 
+# ── cases-schema (derive-schema endpoint + template download support) ──────
+def test_cases_schema_valid_override_and_target(tmp_examples):
+    r = client.post(
+        f"/methodology/{METHODOLOGY}/evals/cases-schema",
+        data={
+            "override_stage": "input_data",
+            "target_stage": "llm_transform",
+            "expected_actual": ["summary"],
+            "expected_dataset": ["expected_summary"],
+        },
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["ok"] is True
+    assert body["problems"] == []
+    by_name = {c["name"]: c for c in body["columns"]}
+    # input_data's whole output schema is injected.
+    assert by_name["text"] == {"name": "text", "type": "str", "role": "injected"}
+    assert by_name["doc_id"] == {"name": "doc_id", "type": "str", "role": "injected"}
+    # the expected row's dataset column, typed from llm_transform's `summary`.
+    assert by_name["expected_summary"] == {
+        "name": "expected_summary", "type": "str", "role": "expected",
+    }
+
+
+def test_cases_schema_override_with_no_output_schema_reports_problem(tmp_examples):
+    r = client.post(
+        f"/methodology/{METHODOLOGY}/evals/cases-schema",
+        data={
+            "override_stage": "publish",  # schemaless stage in the fixture
+            "target_stage": "llm_transform",
+            "expected_actual": [""],
+            "expected_dataset": [""],
+        },
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["ok"] is False
+    assert any("publish" in p and "declares no output schema" in p for p in body["problems"])
+    # no fabricated injected columns for the schemaless override.
+    assert not any(c["role"] == "injected" for c in body["columns"])
+
+
+def test_cases_schema_bad_actual_column_reports_problem(tmp_examples):
+    r = client.post(
+        f"/methodology/{METHODOLOGY}/evals/cases-schema",
+        data={
+            "override_stage": "input_data",
+            "target_stage": "llm_transform",
+            "expected_actual": ["not_a_real_column"],
+            "expected_dataset": ["expected_x"],
+        },
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["ok"] is False
+    assert any("not_a_real_column" in p for p in body["problems"])
+    assert not any(c["name"] == "expected_x" for c in body["columns"])
+
+
+def test_eval_form_expected_dataset_is_text_input_not_select(tmp_examples):
+    r = client.get(f"/methodology/{METHODOLOGY}/evals/new")
+    assert r.status_code == 200
+    assert 'input type="text" name="expected_dataset"' in r.text
+    assert 'select name="expected_dataset"' not in r.text
+
+
+def test_eval_detail_dataless_renders_cases_schema_and_template_download(tmp_examples):
+    _dataless_config_yaml(tmp_examples, eval_id="dataless-schema-eval")
+    r = client.get(f"/methodology/{METHODOLOGY}/evals/dataless-schema-eval")
+    assert r.status_code == 200
+    assert 'id="cases-schema-container"' in r.text
+    assert 'id="download-template-btn"' in r.text
+
+
 def test_attach_cases_rejects_mismatched_file(tmp_examples):
     _dataless_config_yaml(tmp_examples, eval_id="dataless-eval-2")
 

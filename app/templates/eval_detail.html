@@ -59,6 +59,11 @@
 <section class="attach-cases">
     <h2>Cases</h2>
     <p>No cases file is attached yet. This eval can't run until it has one.</p>
+
+    <h3>Required cases-file schema</h3>
+    <div id="cases-schema-container"><p class="lede">Loading…</p></div>
+    <p><button type="button" class="btn" id="download-template-btn" disabled>Download template</button></p>
+
     {% if attach_errors %}
     <div class="load-issues">
         <strong>{{ attach_errors|length }} problem(s):</strong>
@@ -70,6 +75,29 @@
         <button type="submit" class="btn primary">Attach cases</button>
     </form>
 </section>
+
+<script id="cases-schema-config" type="application/json">{{ cases_schema_payload | tojson }}</script>
+<script src="/static/js/cases_schema.js"></script>
+<script>
+(function () {
+    "use strict";
+    const methodology = {{ methodology|tojson }};
+    const payload = JSON.parse(document.getElementById("cases-schema-config").textContent);
+    const params = new URLSearchParams();
+    params.append("override_stage", payload.override_stage);
+    params.append("target_stage", payload.target_stage);
+    payload.expected.forEach(function (e) {
+        params.append("expected_actual", e.actual);
+        params.append("expected_dataset", e.dataset);
+    });
+    const container = document.getElementById("cases-schema-container");
+    const downloadBtn = document.getElementById("download-template-btn");
+    CasesSchema.wireDownloadButton(downloadBtn);
+    CasesSchema.fetch(methodology, params).then(function (body) {
+        CasesSchema.render(body, container, downloadBtn);
+    });
+})();
+</script>
 {% endif %}
 
 <h2>Scoring rules</h2>
