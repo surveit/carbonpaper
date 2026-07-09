@@ -198,3 +198,28 @@ def trace_row(run_dir: Path, stage_id: str, row_ordinal: int) -> Trace:
         hops=hops,
         terminal=terminal,
     )
+
+
+def trace_to_dict(trace: Trace) -> dict[str, Any]:
+    """Flatten a Trace to a JSON-able nested dict for the API and templates."""
+    return {
+        "run_id": trace.run_id,
+        "start_stage": trace.start_stage,
+        "start_row": trace.start_row,
+        "hops": [
+            {
+                "stage_id": hop.stage_id,
+                "stage_type": hop.stage_type,
+                "row_ordinal": hop.row_ordinal,
+                "row": hop.row,
+                "columns_new": hop.columns_new,
+                "origin": hop.origin,
+            }
+            for hop in trace.hops
+        ],
+        "terminal": {
+            "kind": trace.terminal.kind,
+            "stage_id": trace.terminal.stage_id,
+            "message": trace.terminal.message,
+        },
+    }
