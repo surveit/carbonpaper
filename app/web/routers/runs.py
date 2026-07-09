@@ -4,6 +4,7 @@ resume."""
 
 from __future__ import annotations
 
+import html
 import threading
 import traceback
 from typing import Any
@@ -240,6 +241,72 @@ async def run_stage_row_trace(project: str, run_id: str, stage_id: str, row: int
             raise HTTPException(status_code=404, detail=detail) from exc
         raise HTTPException(status_code=400, detail=detail) from exc
     return JSONResponse(trace_to_dict(trace))
+
+
+_ORIGIN_LABEL = {"source": "source", "computed": "computed", "llm": "LLM-written", "other": "—"}
+
+
+def _render_trace_html(trace: dict[str, Any]) -> str:
+    """A compact, self-contained show-your-work page: one card per hop, newest
+    first, each showing the row's cells with the columns new at that stage
+    badged, then the terminal reason. Read-only; no JS."""
+    cards = []
+    for hop in trace["hops"]:
+        new = set(hop["columns_new"])
+        cells = "".join(
+            f'<tr><td class="k">{html.escape(str(k))}'
+            + (' <span class="badge">new here</span>' if k in new else "")
+            + f'</td><td>{html.escape(str(v))}</td></tr>'
+            for k, v in hop["row"].items()
+        )
+        cards.append(
+            f'<section class="hop"><header><span class="sid">{html.escape(hop["stage_id"])}</span>'
+            f'<span class="meta">{html.escape(hop["stage_type"])} · row {hop["row_ordinal"]}'
+            f' · {_ORIGIN_LABEL.get(hop["origin"], hop["origin"])}</span></header>'
+            f'<table>{cells}</table></section>'
+        )
+    term = trace["terminal"]
+    tone = "ok" if term["kind"] == "origin" else "stop"
+    cards.append(
+        f'<section class="term {tone}"><strong>trace ends: {html.escape(term["kind"])}</strong>'
+        f'<div>{html.escape(term["message"])}</div></section>'
+    )
+    style = (
+        "body{font-family:-apple-system,Segoe UI,Arial,sans-serif;max-width:760px;margin:24px auto;"
+        "padding:0 20px;color:#1a1a1a}h1{font-size:18px}.sub{color:#888;font-size:13px;margin-bottom:18px}"
+        ".hop{border:1px solid #e5e5e5;border-radius:10px;padding:10px 14px;margin:10px 0}"
+        ".hop header{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px}"
+        ".sid{font-weight:600}.meta{color:#888;font-size:12px}"
+        "table{width:100%;border-collapse:collapse;font-size:13px}td{padding:3px 6px;border-bottom:1px solid #f2f2f2;vertical-align:top}"
+        ".k{color:#555;width:38%}.badge{background:#e8f0ff;color:#1a3a72;border-radius:8px;padding:0 6px;font-size:11px}"
+        ".term{border-radius:10px;padding:10px 14px;margin:10px 0;font-size:13px}"
+        ".term.ok{background:#e8f8e8;color:#1f5a1f}.term.stop{background:#fff4e6;color:#7a4a00}"
+    )
+    return (
+        f"<!doctype html><meta charset=utf-8><title>show your work · {html.escape(trace['start_stage'])}</title>"
+        f"<style>{style}</style><h1>Show your work</h1>"
+        f"<div class=sub>run {html.escape(trace['run_id'])} · {html.escape(trace['start_stage'])}"
+        f" row {trace['start_row']} · newest hop first</div>" + "".join(cards)
+    )
+
+
+@router.get(
+    "/project/{project}/runs/{run_id}/stage/{stage_id}/row/{row}/trace/view",
+    response_class=HTMLResponse,
+)
+async def run_stage_row_trace_view(project: str, run_id: str, stage_id: str, row: int):
+    """The row's show-your-work as a read-only HTML page (same trace as the JSON
+    endpoint, rendered as hop cards)."""
+    run_dir = runs_dir(project) / run_id
+    load_manifest(run_dir)
+    try:
+        trace = trace_row(run_dir, stage_id, row)
+    except ValueError as exc:
+        detail = str(exc)
+        if "not in run" in detail:
+            raise HTTPException(status_code=404, detail=detail) from exc
+        raise HTTPException(status_code=400, detail=detail) from exc
+    return HTMLResponse(_render_trace_html(trace_to_dict(trace)))
 
 
 @router.post("/project/{project}/runs/{run_id}/stage/{stage_id}/preview")
