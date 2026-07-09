@@ -230,3 +230,41 @@ def test_stages_list_has_a_structural_problem():
     assert report.ok is False
     assert any("structural problems" in p for p in report.problems)
     assert report.settings is None
+
+
+def test_target_not_reachable_from_override_is_broken():
+    # Two independent branches off the same input: override feeds "a",
+    # target is "b", neither downstream of the other.
+    src = _file_input("src", cols=["k", "v", "quote"])
+    branch_a = _row("a", ["src"], output_schema={
+        "columns": [{"name": "k"}, {"name": "score", "type": "float"}]})
+    branch_b = _row("b", ["src"], output_schema={
+        "columns": [{"name": "k"}, {"name": "score", "type": "float"}]})
+    config = _config(override_stage="a", target_stage="b")
+    report = check_eval_compatibility(config, [src, branch_a, branch_b])
+    assert report.ok is False
+    assert any("is not reachable from override" in p for p in report.problems)
+
+
+def test_reachable_pathway_ok():
+    report = check_eval_compatibility(_config(), _stages())
+    assert report.ok is True
+    assert report.problems == []
+
+
+def test_table_none_does_not_crash_and_skips_file_checks():
+    config = _config(table=None)
+    report = check_eval_compatibility(config, _stages())
+    assert report.ok is True
+    assert report.settings is not None
+    assert not any("cases table" in p for p in report.problems)
+    assert not any("not in the cases table" in p for p in report.problems)
+
+
+def test_table_none_still_catches_target_assertion_error():
+    config = _config(table=None, expected=[
+        {"actual": "not_emitted", "expected": "expected_score",
+         "metric": "abs_tol", "tolerance": 1}])
+    report = check_eval_compatibility(config, _stages())
+    assert report.ok is False
+    assert any("not_emitted" in p for p in report.problems)
