@@ -274,6 +274,31 @@ def test_spec_column_fields_derived_from_model():
     assert set(sch._SPEC_COLUMN_FIELDS) == set(m.Column.model_fields) - prose
 
 
+# ── TableSchema.is_subset_of ─────────────────────────────────────────────────
+def test_is_subset_of_true_when_present_and_identical():
+    a = _ts(columns=[{"name": "id", "type": "str"}])
+    b = _ts(columns=[{"name": "id", "type": "str"}, {"name": "score", "type": "int"}])
+    assert a.is_subset_of(b) is True
+
+
+def test_is_subset_of_false_when_column_absent():
+    a = _ts(columns=[{"name": "id", "type": "str"}, {"name": "gone", "type": "str"}])
+    b = _ts(columns=[{"name": "id", "type": "str"}])
+    assert a.is_subset_of(b) is False
+
+
+def test_is_subset_of_false_when_spec_differs():
+    a = _ts(columns=[{"name": "id", "type": "str"}])
+    b = _ts(columns=[{"name": "id", "type": "int"}])
+    assert a.is_subset_of(b) is False
+
+
+def test_is_subset_of_ignores_prose():
+    a = _ts(columns=[{"name": "id", "type": "str", "description": "producer"}])
+    b = _ts(columns=[{"name": "id", "type": "str", "description": "consumer"}])
+    assert a.is_subset_of(b) is True
+
+
 # ── TableSchema.to_prompt ────────────────────────────────────────────────────
 def test_to_prompt_header_and_footer():
     ts = _ts(columns=[{"name": "id", "type": "str", "nullable": False}])

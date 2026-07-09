@@ -310,47 +310,41 @@ class TableSchema(_Base):
         """The columns of `self` whose names are not in `other`, as a schema
         describing a reply object (no primary key or table-level metadata).
 
-        A column present in both must be spec-identical — every Column spec
-        field (`type`, `nullable`, `range`, `enum`, `fields`, `value_type`, and
-        any future capability), compared recursively via
-        `_column_spec_differences`; only prose (`description`/`source`) may
-        differ, since it legitimately differs between a producer's declaration
-        and a consumer's copy — otherwise this raises ValueError naming the
-        column and the differing fields."""
-        other_by_name = {c.name: c for c in other.columns}
-        remaining: list[Column] = []
-        for c in self.columns:
-            shared = other_by_name.get(c.name)
-            if shared is None:
-                remaining.append(c)
-                continue
-            differences = _column_spec_differences(c, shared)
-            if differences:
-                raise ValueError(
-                    f"column {c.name!r} differs between schemas on "
-                    f"{', '.join(differences)}: {shared!r} vs {c!r}"
-                )
-        return TableSchema(columns=remaining, primary_key=None)
-
-    def columns_missing_from(self, other: "TableSchema") -> list[str]:
-        """Names of this schema's columns that `other` either lacks or declares
-        with a different spec — every Column spec field compared recursively via
-        `_column_spec_differences`, prose (`description`/`source`) aside. Empty
-        exactly when this schema is a spec-preserving subset of `other`."""
-        other_by_name = {c.name: c for c in other.columns}
-        return [
-            c.name
-            for c in self.columns
-            if (match := other_by_name.get(c.name)) is None
-            or _column_spec_differences(c, match)
-        ]
+        Requires `other` to be a spec-preserving subset of `self`
+        (`other.is_subset_of(self)`): every column of `other` present in `self`
+        with an identical spec — every Column spec field compared recursively,
+        only prose (`description`/`source`) may differ. Otherwise the two schemas
+        disagree and the difference is ill-defined, so this raises ValueError
+        naming the offending column(s) and the differing fields."""
+        self_by_name = {c.name: c for c in self.columns}
+        if not other.is_subset_of(self):
+            problems = [
+                f"{c.name!r} differs on {', '.join(_column_spec_differences(c, self_by_name[c.name]))}"
+                if c.name in self_by_name
+                else f"{c.name!r} is absent from the minuend"
+                for c in other.columns
+                if c.name not in self_by_name or _column_spec_differences(c, self_by_name[c.name])
+            ]
+            raise ValueError(f"cannot subtract: {'; '.join(problems)}")
+        other_names = {c.name for c in other.columns}
+        return TableSchema(
+            columns=[c for c in self.columns if c.name not in other_names],
+            primary_key=None,
+        )
 
     def is_subset_of(self, other: "TableSchema") -> bool:
         """True exactly when every column here also appears in `other` with an
-        identical spec (prose aside) — the boolean form of
-        `columns_missing_from`. An llm_transform's output must keep its input as
-        such a subset (see `Stage`'s 1:1 validator)."""
-        return not self.columns_missing_from(other)
+        identical spec — every Column spec field compared recursively via
+        `_column_spec_differences`, prose (`description`/`source`) aside. I.e.
+        this schema is a spec-preserving subset of `other`. Called by `subtract`
+        (the subtrahend must be a subset of the minuend) and by `Stage`'s 1:1
+        validator (a transform's input must be a subset of its output)."""
+        other_by_name = {c.name: c for c in other.columns}
+        return all(
+            (match := other_by_name.get(c.name)) is not None
+            and not _column_spec_differences(c, match)
+            for c in self.columns
+        )
 
     def to_prompt(self) -> str:
         """Render this schema as instructions for an LLM reply: one line per

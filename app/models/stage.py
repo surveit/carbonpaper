@@ -338,11 +338,12 @@ class Stage(_Base):
                 f"input primary_key {input_pk} != output primary_key {output_pk}"
             )
 
-        changed = input_schema.columns_missing_from(output_schema)
-        if changed:
+        if not input_schema.is_subset_of(output_schema):
             issues.append(
                 "output must keep every input column unchanged (a transform is "
-                f"additive: output ⊇ input); offending column(s): {', '.join(changed)}"
+                f"additive: output ⊇ input); input columns "
+                f"{[c.name for c in input_schema.columns]} vs output columns "
+                f"{[c.name for c in output_schema.columns]}"
             )
 
         input_names = {c.name for c in input_schema.columns}
