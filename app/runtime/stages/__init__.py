@@ -4,11 +4,12 @@ dispatches on stage type. Handlers consume typed Stage objects."""
 
 from __future__ import annotations
 
-from typing import Any, Callable
+from typing import Callable
 
 import pandas as pd
 
 from app.models import Stage
+from app.runtime.context import RunContext
 
 from ._shared import HaltForReview
 from .aggregate import handle_aggregate
@@ -22,7 +23,7 @@ from .python_functions import handle_python_frame_function, handle_python_row_fu
 # A stage handler: given the stage spec, its inputs keyed by upstream id, and the
 # run context, produce the stage's output frame (or None for side-effect-only
 # stages like publish).
-StageHandler = Callable[[Stage, dict[str, pd.DataFrame], dict[str, Any]], pd.DataFrame | None]
+StageHandler = Callable[[Stage, dict[str, pd.DataFrame], RunContext], pd.DataFrame | None]
 
 HANDLERS: dict[str, StageHandler] = {
     "input_data": handle_input_data,

@@ -2,16 +2,15 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 import pandas as pd
 
 from app.models import Stage
+from app.runtime.context import RunContext
 
 from ..llm import call_llm_batch, backend_status
 
 
-def handle_llm_transform(stage: Stage, inputs: dict[str, pd.DataFrame], ctx: dict[str, Any]) -> pd.DataFrame:
+def handle_llm_transform(stage: Stage, inputs: dict[str, pd.DataFrame], ctx: RunContext) -> pd.DataFrame:
     llm = stage.llm
     assert llm is not None  # Stage validation: llm_transform carries llm
     src = inputs[stage.inputs[0].id]
@@ -52,6 +51,6 @@ def handle_llm_transform(stage: Stage, inputs: dict[str, pd.DataFrame], ctx: dic
     return df
 
 
-def _evidence_id_for(row: dict[str, Any], idx: int) -> str:
+def _evidence_id_for(row: dict[str, object], idx: int) -> str:
     base = row.get("doc_id") or row.get("evidence_id") or "anon"
     return f"{base}#{idx}"

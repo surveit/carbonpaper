@@ -4,7 +4,6 @@ the model input so the score is reviewable) and persist reviewer decisions."""
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
 
 import pandas as pd
 from fastapi import APIRouter, Form, HTTPException, Request
@@ -40,7 +39,7 @@ async def queue_page(request: Request, project: str, run_id: str, stage_id: str)
 
     snapshot = queue_snapshot(project, run_id, stage_id)
     decisions = load_decisions_df(project, stage_id)
-    decision_by_hash: dict[str, dict[str, Any]] = {}
+    decision_by_hash: dict[str, dict[str, object]] = {}
     if len(decisions):
         for _, row in decisions.iterrows():
             decision_by_hash[row["content_hash"]] = {
@@ -59,7 +58,7 @@ async def queue_page(request: Request, project: str, run_id: str, stage_id: str)
     scored_def = find_stage(stages, scored_ids[0]) if scored_ids else None
     prompt_template = scored_def.llm.prompt_template if scored_def and scored_def.llm else None
 
-    input_lookup: dict[tuple, dict[str, Any]] = {}
+    input_lookup: dict[tuple[str, ...], dict[str, object]] = {}
     join_keys: list[str] = []
     if scored_def and scored_def.input_ids:
         scored_in_id = scored_def.input_ids[0]
@@ -83,7 +82,7 @@ async def queue_page(request: Request, project: str, run_id: str, stage_id: str)
                     key = tuple(str(r[k]) for k in join_keys)
                     input_lookup[key] = {str(k): display_cell(v) for k, v in r.items()}
 
-    items: list[dict[str, Any]] = []
+    items: list[dict[str, object]] = []
     if snapshot is not None:
         for _, row in snapshot.iterrows():
             h = row["content_hash"]

@@ -8,9 +8,7 @@ surfaces every problem, not just the first.
 """
 from __future__ import annotations
 
-from typing import Any
-
-from pydantic import ValidationError, model_validator
+from pydantic import JsonValue, ValidationError, model_validator
 
 from app.models.schema import _Base, format_errors
 from app.models.stage import Stage
@@ -83,7 +81,7 @@ class Workflow(_Base):
         return self
 
 
-def parse_workflow(stages: list[dict[str, Any]]) -> Workflow:
+def parse_workflow(stages: list[dict[str, JsonValue]]) -> Workflow:
     """Parse + validate a list of stage dicts. Raises ValidationError if invalid."""
     return Workflow.model_validate({"stages": list(stages)})
 
@@ -95,7 +93,7 @@ def validate_workflow(stages: list[Stage]) -> list[str]:
     return graph_issues(stages)
 
 
-def validate_workflow_draft(stages: list[dict[str, Any]]) -> list[str]:
+def validate_workflow_draft(stages: list[dict[str, JsonValue]]) -> list[str]:
     """Non-fatal validation of DRAFT stage dicts (e.g. a compiler's LLM output):
     parse + validate the whole list and return human-readable issues ([] means a
     clean-validating draft). Unlike validate_workflow, which runs the graph checks

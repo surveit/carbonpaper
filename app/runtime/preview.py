@@ -25,13 +25,25 @@ behavior.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import TypedDict
 
 import pandas as pd
 
 from app.models import Stage
+from app.runtime.context import RunContext
 
 from .stages import HANDLERS
+
+
+class PreviewResult(TypedDict):
+    """What run_stage_preview() returns: the previewed stage's output, capped
+    to the selected rows. `preview` rows are already stringified for display
+    (fillna("").astype(str)), so their values are always str, not object."""
+    columns: list[str]
+    rows_total: int
+    input_rows: int
+    selected_indices: list[int]
+    preview: list[dict[str, str]]
 
 
 # Stage types whose handlers are pure (no disk writes) and therefore safe to
@@ -89,7 +101,7 @@ def run_stage_preview(
     project_dir: Path,
     output_by_id: dict[str, str | None],
     selected_indices: list[int],
-) -> dict[str, Any]:
+) -> PreviewResult:
     """Run `stage_def`'s handler on the chosen rows of its FIRST upstream input,
     entirely in memory, and return the output as records.
 
@@ -137,7 +149,7 @@ def run_stage_preview(
     # Ephemeral context. We pass the real run_dir/project_dir for read-only
     # path resolution, but a pure handler (python/llm/join/aggregate) never
     # writes — and we never call the runner, so no manifest/output is touched.
-    ctx: dict[str, Any] = {
+    ctx: RunContext = {
         "repo_root": repo_root,
         "run_dir": run_dir,
         "project_dir": project_dir,
@@ -150,10 +162,14 @@ def run_stage_preview(
         output = pd.DataFrame()
 
     safe = output.fillna("").astype(str)
+    preview: list[dict[str, str]] = [
+        {str(k): v for k, v in row.items()}
+        for row in safe.to_dict(orient="records")
+    ]
     return {
-        "columns": list(output.columns),
+        "columns": [str(c) for c in output.columns],
         "rows_total": int(len(output)),
         "input_rows": len(valid),
         "selected_indices": valid,
-        "preview": safe.to_dict(orient="records"),
+        "preview": preview,
     }

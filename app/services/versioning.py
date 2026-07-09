@@ -35,7 +35,9 @@ import json
 import shutil
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import TypedDict
+
+from pydantic import JsonValue
 
 from app.models import Stage
 from app.services.loader import (
@@ -44,6 +46,17 @@ from app.services.loader import (
     stage_to_spec_dict,
 )
 from app.services import node_review
+from app.services.node_review import CoverageDict
+
+
+class VersionMeta(TypedDict):
+    """versions/<id>/version.json — one immutable snapshot's provenance."""
+    id: str
+    created_at: str
+    parent_version: str | None
+    message: str
+    reviewer: str
+    coverage: CoverageDict
 
 
 def versions_dir(project_dir: Path) -> Path:
@@ -51,7 +64,7 @@ def versions_dir(project_dir: Path) -> Path:
     return Path(project_dir) / "versions"
 
 
-def _load_stages_from(compiled_dir: Path) -> list[dict[str, Any]]:
+def _load_stages_from(compiled_dir: Path) -> list[dict[str, JsonValue]]:
     """Compiled stages of a snapshot as canonical spec dicts, to freeze approval
     coverage at version-creation time (node_review speaks dicts). Routes through
     the shared loader so the on-disk format lives in exactly one place; runs
@@ -77,7 +90,7 @@ def load_version_stages(project_dir: Path, version_id: str) -> list[Stage]:
     return load_workflow(vdir)
 
 
-def load_version_meta(project_dir: Path, version_id: str) -> dict[str, Any]:
+def load_version_meta(project_dir: Path, version_id: str) -> VersionMeta:
     """Read versions/<version_id>/version.json. Fails loudly if absent."""
     meta_path = versions_dir(project_dir) / version_id / "version.json"
     if not meta_path.exists():
@@ -85,14 +98,14 @@ def load_version_meta(project_dir: Path, version_id: str) -> dict[str, Any]:
     return json.loads(meta_path.read_text(encoding="utf-8"))
 
 
-def list_versions(project_dir: Path) -> list[dict[str, Any]]:
+def list_versions(project_dir: Path) -> list[VersionMeta]:
     """All versions for a project, NEWEST-FIRST, each as its parsed
     version.json. Skips any directory lacking a readable version.json rather than
     fabricating metadata for it (a half-written snapshot is simply not listed)."""
     vroot = versions_dir(project_dir)
     if not vroot.is_dir():
         return []
-    metas: list[dict[str, Any]] = []
+    metas: list[VersionMeta] = []
     for d in vroot.iterdir():
         if not d.is_dir():
             continue
@@ -116,7 +129,7 @@ def create_version(
     message: str,
     reviewer: str,
     parent_version: str | None = None,
-) -> dict[str, Any]:
+) -> VersionMeta:
     """Snapshot the working copy's compiled/ + schemas/ into a new
     versions/<version_id>/ and write version.json with coverage frozen at creation
     time. Returns the version.json dict.
@@ -165,7 +178,7 @@ def create_version(
     decisions = node_review.load_node_decisions(project_dir)
     coverage = node_review.coverage_for(stages, decisions)
 
-    meta: dict[str, Any] = {
+    meta: VersionMeta = {
         "id": version_id,
         "created_at": datetime.now().isoformat(timespec="seconds"),
         "parent_version": parent_version,

@@ -7,14 +7,57 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import TypedDict
 
 import pandas as pd
 from fastapi import HTTPException
 
 from app.models import Stage
+from app.runtime.context import RunManifest, StageRecord
 from app.services.loader import CompiledStageFile, load_compiled_dir
 from app.web.config import EXAMPLES_DIR, REPO_ROOT
+
+
+class RunsIndexEntry(TypedDict):
+    """One row of list_runs() — the compact runs-index shape."""
+    run_id: str
+    status: str
+    started_at: str | None
+    finished_at: str | None
+    workflow_version: str | None
+    stages_total: int
+    stages_ok: int
+    stages_error: int
+
+
+class OutputTable(TypedDict):
+    """load_output_table()'s return: a capped, display-ready table."""
+    columns: list[str]
+    rows: list[dict[str, str]]
+    rows_total: int
+    capped: bool
+
+
+class OutputPreview(TypedDict, total=False):
+    """load_output_preview()'s return: either an error, or a small preview."""
+    error: str
+    columns: list[str]
+    rows_total: int
+    preview: list[dict[str, str]]
+
+
+class InputPreviewEntry(TypedDict):
+    """One entry of the `input_previews` list the run-stage panel builds and
+    build_llm_example() reads back."""
+    id: str
+    preview: OutputPreview | None
+
+
+class LLMExampleResult(TypedDict, total=False):
+    """build_llm_example()'s return: a rendered example, or why there isn't one."""
+    source_id: str
+    rendered: str
+    error: str
 
 
 # ─── Projects & stages ──────────────────────────────────────────────────
@@ -110,7 +153,7 @@ def runs_dir(project: str) -> Path:
     return EXAMPLES_DIR / project / "runs"
 
 
-def load_manifest(run_dir: Path) -> dict[str, Any]:
+def load_manifest(run_dir: Path) -> RunManifest:
     """A run's manifest.json as a dict, or 404 if the run doesn't exist."""
     manifest_path = run_dir / "manifest.json"
     if not manifest_path.exists():
@@ -118,16 +161,17 @@ def load_manifest(run_dir: Path) -> dict[str, Any]:
     return json.loads(manifest_path.read_text(encoding="utf-8"))
 
 
-def list_runs(project: str) -> list[dict[str, Any]]:
+def list_runs(project: str) -> list[RunsIndexEntry]:
     rdir = runs_dir(project)
     if not rdir.is_dir():
         return []
-    entries = []
+    entries: list[RunsIndexEntry] = []
     for run in sorted(rdir.iterdir(), reverse=True):
         if not run.is_dir():
             continue
         manifest_path = run / "manifest.json"
         if manifest_path.exists():
+            manifest: RunManifest
             try:
                 manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
             except json.JSONDecodeError:
@@ -159,7 +203,7 @@ def read_table(path: Path) -> pd.DataFrame:
     return pd.read_parquet(path) if path.suffix == ".parquet" else pd.read_csv(path)
 
 
-def manifest_stage(run_dir: Path, stage_id: str) -> dict[str, Any]:
+def manifest_stage(run_dir: Path, stage_id: str) -> StageRecord:
     """The manifest record for one stage of a run; 404 if run or stage missing."""
     manifest = load_manifest(run_dir)
     stage_record = next(
@@ -189,20 +233,23 @@ def read_output_df(run_dir: Path, rel_path: str | None) -> pd.DataFrame:
         ) from exc
 
 
-def load_output_table(run_dir: Path, rel_path: str | None) -> dict[str, Any]:
+def load_output_table(run_dir: Path, rel_path: str | None) -> OutputTable:
     """Full (capped) table of a stage output: columns, total row count, up to
     MAX_TABLE_ROWS rows as strings, and whether the render was capped."""
     df = read_output_df(run_dir, rel_path)
-    rows = df.head(MAX_TABLE_ROWS).fillna("").astype(str).to_dict(orient="records")
+    rows: list[dict[str, str]] = [
+        {str(k): v for k, v in r.items()}
+        for r in df.head(MAX_TABLE_ROWS).fillna("").astype(str).to_dict(orient="records")
+    ]
     return {
-        "columns": list(df.columns),
+        "columns": [str(c) for c in df.columns],
         "rows": rows,
         "rows_total": len(df),
         "capped": len(df) > len(rows),
     }
 
 
-def load_output_preview(run_dir: Path, rel_path: str | None) -> dict[str, Any] | None:
+def load_output_preview(run_dir: Path, rel_path: str | None) -> OutputPreview | None:
     """Small JSON-able preview of a stage output: columns, total row count, and
     the first 5 rows as strings. None if no path is given; {"error": ...} if the
     file is missing on disk or can't be read."""
@@ -215,10 +262,14 @@ def load_output_preview(run_dir: Path, rel_path: str | None) -> dict[str, Any] |
         df = read_table(path)
     except Exception as exc:  # noqa: BLE001
         return {"error": str(exc)}
+    preview: list[dict[str, str]] = [
+        {str(k): v for k, v in r.items()}
+        for r in df.head(5).fillna("").astype(str).to_dict(orient="records")
+    ]
     return {
-        "columns": list(df.columns),
+        "columns": [str(c) for c in df.columns],
         "rows_total": len(df),
-        "preview": df.head(5).fillna("").astype(str).to_dict(orient="records"),
+        "preview": preview,
     }
 
 
@@ -249,26 +300,28 @@ def queue_snapshot(project: str, run_id: str, stage_id: str) -> pd.DataFrame | N
     return None
 
 
-def display_cell(v: Any) -> Any:
+def display_cell(v: object) -> object:
     """Scalar-safe cell formatting for the reviewer UI. pd.isna() raises on
     list/array-valued cells (e.g. an evidence_urls JSON column), so handle
-    array-likes explicitly before the null check."""
+    array-likes explicitly before the null check. `v` is one raw pandas cell —
+    genuinely dynamic (any dtype a parquet/CSV column can hold)."""
     if isinstance(v, (list, tuple)):
         return ", ".join(str(x) for x in v) if len(v) else ""
     if hasattr(v, "tolist") and not isinstance(v, str):  # numpy array from parquet
         seq = v.tolist()
         return ", ".join(str(x) for x in seq) if len(seq) else ""
-    try:
-        return "" if pd.isna(v) else v
-    except (ValueError, TypeError):
-        return v
+    # NaN/None check without pd.isna: its overloads don't cover `object`, and a
+    # plain cell here is genuinely one of several scalar kinds.
+    if v is None or (isinstance(v, float) and v != v):
+        return ""
+    return v
 
 
 # ─── LLM prompt example ──────────────────────────────────────────────────────
 
 def build_llm_example(
-    stage_def: Stage | None, input_previews: list[dict[str, Any]]
-) -> dict[str, Any] | None:
+    stage_def: Stage | None, input_previews: list[InputPreviewEntry]
+) -> LLMExampleResult | None:
     """Render the prompt_template with the first row of the first usable input.
 
     Returns {rendered, source_id} on success, {error} if no input or render

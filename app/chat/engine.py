@@ -123,7 +123,13 @@ class ChatEngine:
     """A generic chat agent. Construct one per embedding context, passing that
     context's system prompt and tools."""
 
-    def __init__(
+    # PydanticAI tools are arbitrary-signature callables collected into one
+    # list by design (mirrors pydantic_ai.tools.ToolFuncEither, which is itself
+    # `Callable[..., Any]` upstream — a tool's real params are host-defined per
+    # embedding and PydanticAI inspects them at registration time, not through
+    # this annotation). mypy attributes the resulting explicit-any to this
+    # `def` line rather than the `tools` parameter itself.
+    def __init__(  # type: ignore[explicit-any]
         self,
         *,
         system_prompt: str,
