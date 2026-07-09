@@ -191,11 +191,16 @@ def handle_human_review_queue(stage: Stage, inputs: dict[str, pd.DataFrame], ctx
 
     out = pd.concat([decided, passthrough], ignore_index=True, sort=False)
 
+    # Output columns = output_schema, period, plus anything the stage spec
+    # explicitly names in `queue.passthrough_columns`. No runtime-side keep
+    # list of methodology-specific column names — declare what you need.
+    # Anything else is dropped, and the drop is recorded on ctx (not silent).
     declared = [c.name for c in stage.output_schema.columns] if stage.output_schema else []
     if declared:
-        keep = [c for c in declared if c in out.columns]
-        for must_keep in ["entity_id", "evidence_id", "benchmark_id", "query_id", "quote"]:
-            if must_keep in out.columns and must_keep not in keep:
-                keep.append(must_keep)
+        extra_cols = [c for c in (queue_cfg.passthrough_columns or []) if c not in declared]
+        keep = [c for c in declared + extra_cols if c in out.columns]
+        dropped = [c for c in out.columns if c not in keep]
+        if dropped:
+            ctx.setdefault("dropped_columns", {})[sid] = dropped
         out = out[keep]
     return out

@@ -114,6 +114,14 @@ class LLMConfig(_Base):
     response_format: Literal["json", "text"] = "json"
     rubric: Optional[dict[str, Any]] = None
     tools: Optional[list[str]] = None
+    # Columns the LLM (or the row it was given) may produce/carry that aren't
+    # declared in output_schema but should still flow downstream — e.g. stable
+    # id columns a particular methodology relies on. The runtime keeps ONLY
+    # output_schema columns plus these; anything else the LLM returns is
+    # dropped (and the drop is recorded, not silent). Methodology-specific
+    # column names belong here, in the stage spec, never hardcoded in the
+    # runtime.
+    passthrough_columns: Optional[list[str]] = None
 
 
 class PythonFunction(_Base):
@@ -185,6 +193,9 @@ class QueueConfig(_Base):
     routing: Optional[str] = None
     conflict_resolution: Optional[str] = None
     estimated_volume_per_week: Optional[int] = None
+    # See LLMConfig.passthrough_columns: same idea for the queue's output —
+    # columns to keep alongside output_schema that aren't declared in it.
+    passthrough_columns: Optional[list[str]] = None
 
 
 class PublishConfig(_Base):
