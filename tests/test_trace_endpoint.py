@@ -46,15 +46,16 @@ def test_trace_endpoint_400_for_out_of_range_row(tmp_path, monkeypatch):
     assert resp.status_code == 400
 
 
-def test_trace_view_renders_html_hop_cards(tmp_path, monkeypatch):
+def test_trace_view_renders_story_and_graph(tmp_path, monkeypatch):
     client = _project_run(tmp_path, monkeypatch)
     resp = client.get("/project/proj/runs/R1/stage/enrich/row/0/trace/view")
     assert resp.status_code == 200
     assert "text/html" in resp.headers["content-type"]
     body = resp.text
-    assert "enrich" in body and "seeds" in body      # both hops present
-    assert "score" in body                            # a new-at-stage column
-    assert "originate" in body                        # terminal message text
+    assert "Story" in body and "Graph" in body        # the two-view toggle
+    assert "enrich" in body and "seeds" in body        # both stages, in the payload
+    assert "score" in body                             # a new-at-stage column
+    assert "reads left to right" in body               # chronological framing
 
 
 def test_trace_view_404_for_unknown_stage(tmp_path, monkeypatch):

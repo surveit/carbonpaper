@@ -1,0 +1,102 @@
+"""View-model for show-your-work: fold a linear trace (from
+`app.runtime.trace`) plus the compiled stages into the chronological
+story/graph payload the template renders.
+
+Two separations the design rests on:
+  - a stage is a *transform* (a verb — the code it ran, the prompt it asked,
+    the keys it joined on), taken from the compiled `Stage`;
+  - an edge is *data* (the rows that flowed), taken from the run outputs the
+    tracer already read.
+
+The payload is a graph (`nodes` + `edges`) even though v1 traces a single
+chain, so real fan-in (issue #58) slots in without reshaping this contract.
+"""
+from __future__ import annotations
+
+from typing import Any
+
+from app.models import Stage
+from app.models.stage import StageType
+
+
+def _transform_of(stage: Stage | None) -> dict[str, Any]:
+    """What the stage did, for the node-detail panel: a `kind` the template
+    styles on and a `detail` blob (code / prompt / keys / source). `unknown`
+    when the compiled stage is absent (the tracer needs only the run dir; the
+    compiled DAG may not be loadable)."""
+    if stage is None:
+        return {"kind": "unknown", "detail": None}
+    # _Base sets use_enum_values, so stage.type is a plain str; compare by value.
+    stage_type = str(stage.type)
+    if stage_type == StageType.input_data.value:
+        path = stage.connector.params.get("path") if stage.connector else None
+        src = path or (stage.source.doc if stage.source else None)
+        return {"kind": "source", "detail": src or "originates the rows"}
+    if stage_type in (StageType.python_row_function.value, StageType.python_frame_function.value):
+        fn = stage.function
+        if fn and str(fn.kind) == "inline":
+            return {"kind": "python", "detail": fn.code}
+        if fn and str(fn.kind) == "module":
+            return {"kind": "python", "detail": f"{fn.module}.{fn.function or 'transform'}"}
+        return {"kind": "python", "detail": None}
+    if stage_type == StageType.llm_transform.value:
+        return {"kind": "llm", "detail": stage.llm.prompt_template if stage.llm else None}
+    if stage_type == StageType.join_.value:
+        pairs = (stage.join.keys or stage.join.on) if stage.join else None
+        detail = ", ".join(f"{k.left}={k.right}" for k in pairs) if pairs else None
+        return {"kind": "join", "detail": detail}
+    return {"kind": stage_type, "detail": None}
+
+
+def build_trace_view(trace: dict[str, Any], stages: dict[str, Stage]) -> dict[str, Any]:
+    """Turn `trace` (the dict from `trace_to_dict`) into the render payload.
+
+    Nodes run chronologically (source/stop first, claim last). Each node
+    carries its row, the columns new at that stage, and its transform detail.
+    Edges connect consecutive nodes carrying the earlier node's row (the data
+    that flowed forward). `upstream` records whether the walk stopped short of
+    an origin and why (the terminal reason, folded onto the earliest node
+    rather than shown as its own step).
+    """
+    chrono = list(reversed(trace["hops"]))
+    terminal = trace["terminal"]
+    truncated = terminal["kind"] != "origin"
+
+    nodes: list[dict[str, Any]] = []
+    for i, hop in enumerate(chrono):
+        is_claim = i == len(chrono) - 1
+        is_first = i == 0
+        if is_claim:
+            role = "claim"
+        elif is_first and not truncated:
+            role = "source"
+        else:
+            role = "step"
+        nodes.append({
+            "stage_id": hop["stage_id"],
+            "stage_type": hop["stage_type"],
+            "origin": hop["origin"],
+            "role": role,
+            "columns_new": hop["columns_new"],
+            "row": hop["row"],
+            "transform": _transform_of(stages.get(hop["stage_id"])),
+        })
+
+    edges = [
+        {"from": chrono[i]["stage_id"], "to": chrono[i + 1]["stage_id"],
+         "data_row": chrono[i]["row"]}
+        for i in range(len(chrono) - 1)
+    ]
+
+    return {
+        "run_id": trace["run_id"],
+        "start_stage": trace["start_stage"],
+        "start_row": trace["start_row"],
+        "nodes": nodes,
+        "edges": edges,
+        "upstream": {
+            "truncated": truncated,
+            "at_stage": terminal["stage_id"],
+            "message": terminal["message"],
+        },
+    }

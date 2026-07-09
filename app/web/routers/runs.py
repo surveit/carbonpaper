@@ -5,6 +5,7 @@ resume."""
 from __future__ import annotations
 
 import html
+import json
 import threading
 import traceback
 from typing import Any
@@ -17,6 +18,7 @@ from app.services.loader import WorkflowLoadError, load_workflow
 from app.runtime.preview import PREVIEWABLE_TYPES, PreviewError, run_stage_preview
 from app.runtime.runner import prepare_run, resume_run, run_prepared
 from app.runtime.trace import trace_row, trace_to_dict
+from app.web.trace_view import build_trace_view
 from app.web.config import EXAMPLES_DIR, REPO_ROOT, templates
 from app.web.diagrams import TYPE_CLASS, TYPE_GLYPH, build_mermaid_graph
 from app.web.loading import (
@@ -243,51 +245,130 @@ async def run_stage_row_trace(project: str, run_id: str, stage_id: str, row: int
     return JSONResponse(trace_to_dict(trace))
 
 
-_ORIGIN_LABEL = {"source": "source", "computed": "computed", "llm": "LLM-written", "other": "—"}
+_TRACE_VIEW_HTML = r"""<!doctype html><html><head><meta charset="utf-8">
+<title>show your work · __TITLE__</title><style>
+body{font-family:-apple-system,Segoe UI,Arial,sans-serif;max-width:940px;margin:22px auto;padding:0 20px;color:#1a1a1a}
+h1{font-size:19px;margin:0 0 2px}.sub{color:#888;font-size:13px;margin-bottom:14px}
+.toggle{display:inline-flex;border:1px solid #ddd;border-radius:8px;overflow:hidden;margin-bottom:16px}
+.toggle button{border:0;background:#fff;padding:5px 14px;font-size:13px;cursor:pointer;color:#555}
+.toggle button.on{background:#1a3a72;color:#fff}
+.grid{display:grid;grid-template-columns:1fr 300px;gap:18px;align-items:start}
+.panel{position:sticky;top:10px;border:1px solid #e5e5e5;border-radius:12px;padding:12px 14px;min-height:180px;background:#fafafa}
+.panel h4{margin:0 0 2px;font-size:13px}.panel .hint{color:#999;font-size:12px;margin:0 0 8px}
+.panel table{width:100%;border-collapse:collapse;font-size:12px}.panel td,.panel th{padding:3px 6px;border-bottom:1px solid #eee;text-align:left;vertical-align:top}
+.panel th{color:#777;font-weight:500}.panel pre{margin:0;font-family:ui-monospace,Consolas,monospace;font-size:12px;white-space:pre-wrap}
+.story{font-size:15px;line-height:2.15}
+.chip{border-radius:6px;padding:1px 7px;font-size:12.5px;cursor:pointer;border:1px solid transparent;white-space:nowrap}
+.chip.data{background:#eef4ff;color:#1a3a72;border-color:#cfe0ff}.chip.fn{background:#eaf7ea;color:#1f5a1f;border-color:#cfeccf}
+.node-name{font-weight:600}.src-tag,.claim-tag{font-size:10.5px;border-radius:5px;padding:0 5px;margin-left:3px}
+.src-tag{background:#f0f0ed;color:#666}.claim-tag{background:#e8f8e8;color:#1f5a1f}
+.trunc{background:#fff4e6;color:#7a4a00;border-radius:8px;padding:6px 10px;font-size:12.5px;margin-bottom:10px}
+.graph{display:flex;flex-wrap:wrap;align-items:center;gap:4px}
+.gnode{border:1px solid #ccc;border-radius:9px;padding:7px 11px;cursor:pointer;background:#fff;min-width:74px}
+.gnode.claim{border-color:#1f5a1f;background:#f2fbf2}.gnode.source{background:#f6f6f3}
+.gnode .gt{font-weight:600;font-size:13px}.gnode .gm{color:#888;font-size:11px}
+.gedge{display:flex;flex-direction:column;align-items:center;cursor:pointer;color:#1a3a72;font-size:11px;padding:0 2px}
+.gedge .lbl{background:#eef4ff;border-radius:5px;padding:0 5px}
+.hidden{display:none}
+</style></head><body>
+<h1>Show your work</h1><div class="sub" id="sub"></div>
+<div class="toggle"><button id="b-story" class="on">Story</button><button id="b-graph">Graph</button></div>
+<div class="grid"><div><div id="story" class="story"></div><div id="graph" class="graph hidden"></div></div>
+<div class="panel" id="panel"><h4>Hover a chip or node</h4><p class="hint">Data shows the rows on that edge; function shows the code or prompt.</p></div></div>
+<script>
+const V = __PAYLOAD__;
+const esc = s => String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+document.getElementById('sub').textContent = `run ${V.run_id} · ${V.start_stage} row ${V.start_row} · reads left to right`;
+function rowTable(row){
+  const rows = Object.entries(row).map(([k,v]) => `<tr><th>${esc(k)}</th><td>${esc(v)}</td></tr>`).join('');
+  return `<table>${rows}</table>`;
+}
+function showData(title, row){ setPanel(title, 'the rows on this edge', rowTable(row)); }
+function showTransform(node){
+  const t = node.transform;
+  if(t.detail == null){ setPanel(node.stage_id, `${node.stage_type} · no detail available`, ''); return; }
+  const body = (t.kind==='python'||t.kind==='llm') ? `<pre>${esc(t.detail)}</pre>` : `<div>${esc(t.detail)}</div>`;
+  const hint = {python:'python function', llm:'LLM prompt', join:'join keys', source:'source'}[t.kind] || t.kind;
+  setPanel(node.stage_id, `${node.stage_type} · ${hint}`, body);
+}
+function setPanel(title, hint, body){
+  document.getElementById('panel').innerHTML = `<h4>${esc(title)}</h4><p class="hint">${esc(hint)}</p>${body}`;
+}
+function verb(node){
+  const k = node.transform.kind;
+  if(k==='python') return `run python <span class="node-name">${esc(node.stage_id)}()</span>`;
+  if(k==='llm') return `ask the LLM in <span class="node-name">${esc(node.stage_id)}</span>`;
+  if(k==='join') return `join`;
+  return `<span class="node-name">${esc(node.stage_id)}</span>`;
+}
+// ---- Story ----
+const story = document.getElementById('story');
+let html = '';
+if(V.upstream.truncated){ html += `<div class="trunc">⋯ upstream not traced — ${esc(V.upstream.message)}</div>`; }
+V.nodes.forEach((n, i) => {
+  const dataChip = ` <span class="chip data" data-i="${i}" data-kind="data">${Object.keys(n.row).length} cols ▾</span>`;
+  const fnChip = (n.transform.detail!=null && n.transform.kind!=='source')
+    ? ` <span class="chip fn" data-i="${i}" data-kind="fn">${n.transform.kind==='llm'?'prompt':n.transform.kind==='join'?'keys':'function'} ▾</span>` : '';
+  if(i===0){
+    const tag = n.role==='source' ? '<span class="src-tag">source</span>' : '';
+    html += `Load <span class="node-name">${esc(n.stage_id)}</span>${tag}${dataChip}.`;
+  } else {
+    const adds = n.columns_new.length ? ` adding <code>${n.columns_new.map(esc).join('</code>, <code>')}</code>` : '';
+    const claimTag = n.role==='claim' ? ' <span class="claim-tag">published claim</span>' : '';
+    html += `<br>→ ${verb(n)}${fnChip} to get <span class="node-name">${esc(n.stage_id)}</span>${claimTag}${dataChip}${adds}.`;
+  }
+});
+story.innerHTML = html;
+story.querySelectorAll('.chip').forEach(c => {
+  const n = V.nodes[+c.dataset.i];
+  const act = () => c.dataset.kind==='data' ? showData(n.stage_id, n.row) : showTransform(n);
+  c.addEventListener('mouseenter', act); c.addEventListener('click', act);
+});
+// ---- Graph ----
+const graph = document.getElementById('graph');
+V.nodes.forEach((n, i) => {
+  const box = document.createElement('div');
+  box.className = 'gnode ' + (n.role==='claim'?'claim':n.role==='source'?'source':'');
+  box.innerHTML = `<div class="gt">${esc(n.stage_id)}</div><div class="gm">${esc(n.stage_type)}</div>`;
+  box.addEventListener('mouseenter', () => showTransform(n));
+  box.addEventListener('click', () => showTransform(n));
+  graph.appendChild(box);
+  if(i < V.nodes.length-1){
+    const e = V.edges[i];
+    const edge = document.createElement('div');
+    edge.className = 'gedge';
+    edge.innerHTML = `<span>→</span><span class="lbl">data ▾</span>`;
+    const showEdge = () => showData(`${e.from} → ${e.to}`, e.data_row);
+    edge.addEventListener('mouseenter', showEdge); edge.addEventListener('click', showEdge);
+    graph.appendChild(edge);
+  }
+});
+// ---- Toggle ----
+const bStory = document.getElementById('b-story'), bGraph = document.getElementById('b-graph');
+bStory.onclick = () => { story.classList.remove('hidden'); graph.classList.add('hidden'); bStory.classList.add('on'); bGraph.classList.remove('on'); };
+bGraph.onclick = () => { graph.classList.remove('hidden'); story.classList.add('hidden'); bGraph.classList.add('on'); bStory.classList.remove('on'); };
+</script></body></html>"""
 
 
-def _render_trace_html(trace: dict[str, Any]) -> str:
-    """A compact, self-contained show-your-work page: one card per hop, newest
-    first, each showing the row's cells with the columns new at that stage
-    badged, then the terminal reason. Read-only; no JS."""
-    cards = []
-    for hop in trace["hops"]:
-        new = set(hop["columns_new"])
-        cells = "".join(
-            f'<tr><td class="k">{html.escape(str(k))}'
-            + (' <span class="badge">new here</span>' if k in new else "")
-            + f'</td><td>{html.escape(str(v))}</td></tr>'
-            for k, v in hop["row"].items()
-        )
-        cards.append(
-            f'<section class="hop"><header><span class="sid">{html.escape(hop["stage_id"])}</span>'
-            f'<span class="meta">{html.escape(hop["stage_type"])} · row {hop["row_ordinal"]}'
-            f' · {_ORIGIN_LABEL.get(hop["origin"], hop["origin"])}</span></header>'
-            f'<table>{cells}</table></section>'
-        )
-    term = trace["terminal"]
-    tone = "ok" if term["kind"] == "origin" else "stop"
-    cards.append(
-        f'<section class="term {tone}"><strong>trace ends: {html.escape(term["kind"])}</strong>'
-        f'<div>{html.escape(term["message"])}</div></section>'
-    )
-    style = (
-        "body{font-family:-apple-system,Segoe UI,Arial,sans-serif;max-width:760px;margin:24px auto;"
-        "padding:0 20px;color:#1a1a1a}h1{font-size:18px}.sub{color:#888;font-size:13px;margin-bottom:18px}"
-        ".hop{border:1px solid #e5e5e5;border-radius:10px;padding:10px 14px;margin:10px 0}"
-        ".hop header{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px}"
-        ".sid{font-weight:600}.meta{color:#888;font-size:12px}"
-        "table{width:100%;border-collapse:collapse;font-size:13px}td{padding:3px 6px;border-bottom:1px solid #f2f2f2;vertical-align:top}"
-        ".k{color:#555;width:38%}.badge{background:#e8f0ff;color:#1a3a72;border-radius:8px;padding:0 6px;font-size:11px}"
-        ".term{border-radius:10px;padding:10px 14px;margin:10px 0;font-size:13px}"
-        ".term.ok{background:#e8f8e8;color:#1f5a1f}.term.stop{background:#fff4e6;color:#7a4a00}"
-    )
-    return (
-        f"<!doctype html><meta charset=utf-8><title>show your work · {html.escape(trace['start_stage'])}</title>"
-        f"<style>{style}</style><h1>Show your work</h1>"
-        f"<div class=sub>run {html.escape(trace['run_id'])} · {html.escape(trace['start_stage'])}"
-        f" row {trace['start_row']} · newest hop first</div>" + "".join(cards)
-    )
+def _stages_by_id_safe(project: str) -> dict[str, Any]:
+    """Compiled stages keyed by id for node-detail, or {} if they can't be
+    loaded — the trace still renders (transform detail shows as unknown), since
+    the tracer itself needs only the run directory."""
+    try:
+        listing = load_stages(project)
+    except HTTPException:
+        return {}
+    return {s.id: s for s in listing.stages}
+
+
+def _render_trace_html(view: dict[str, Any]) -> str:
+    """A self-contained show-your-work page: a story view (chronological
+    derivation, data and function one hover away) with a graph toggle, driven
+    by the embedded view-model. Read-only."""
+    # Embed the payload; neutralize any "</script" so it can't close the tag.
+    payload = json.dumps(view).replace("</", "<\\/")
+    title = html.escape(f"{view['start_stage']} · row {view['start_row']}")
+    return _TRACE_VIEW_HTML.replace("__TITLE__", title).replace("__PAYLOAD__", payload)
 
 
 @router.get(
@@ -295,8 +376,8 @@ def _render_trace_html(trace: dict[str, Any]) -> str:
     response_class=HTMLResponse,
 )
 async def run_stage_row_trace_view(project: str, run_id: str, stage_id: str, row: int):
-    """The row's show-your-work as a read-only HTML page (same trace as the JSON
-    endpoint, rendered as hop cards)."""
+    """The row's show-your-work as a read-only HTML page: story view (default)
+    with a graph toggle, same trace as the JSON endpoint."""
     run_dir = runs_dir(project) / run_id
     load_manifest(run_dir)
     try:
@@ -306,7 +387,8 @@ async def run_stage_row_trace_view(project: str, run_id: str, stage_id: str, row
         if "not in run" in detail:
             raise HTTPException(status_code=404, detail=detail) from exc
         raise HTTPException(status_code=400, detail=detail) from exc
-    return HTMLResponse(_render_trace_html(trace_to_dict(trace)))
+    view = build_trace_view(trace_to_dict(trace), _stages_by_id_safe(project))
+    return HTMLResponse(_render_trace_html(view))
 
 
 @router.post("/project/{project}/runs/{run_id}/stage/{stage_id}/preview")
