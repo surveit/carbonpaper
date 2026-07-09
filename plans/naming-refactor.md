@@ -1,7 +1,14 @@
 # Naming refactor: project / methodology / workflow (retire DAG)
 
-**Status:** Vocabulary APPROVED (2026-07-04). Ready to execute as a focused
-refactor in its own pass/agent. This is the "giant" one — ~500 sites.
+> **`/plans` scratch cache — historical, not authoritative.** This refactor has
+> **already merged** (the codebase uses `project` / `methodology` / `workflow`
+> and `app/models/workflow.py` throughout). Kept here only as the record of why
+> those names were chosen and where "DAG" went — do not follow the execution
+> checklist below as a live plan, and do not cite this file for how the code
+> works today. For that, read `docs/architecture.md` or the code itself.
+
+**Status:** MERGED. Vocabulary was APPROVED 2026-07-04 and executed as a
+focused refactor. This is the "giant" one — ~500 sites.
 
 ---
 
@@ -88,27 +95,21 @@ So unlike a container-keeps-its-name plan, here nearly everything moves: contain
   takes a project dir → `load_workflow(project_dir)`. Keep the arg named
   `project_dir`.
 
-## Execution order
+## Execution order (as planned — completed; kept for the historical trail)
 1. Model sense: `methodology.py` → `workflow.py`; `Methodology` → `Workflow`;
-   validators/`parse_*`; `__init__` exports. Tests.
-2. Loader (now in `app/services/` after the #30 pass): `load_methodology_stages`
-   → `load_workflow`, `MethodologyLoadError` → `WorkflowLoadError`; update
-   importers. Tests.
+   validators/`parse_*`; `__init__` exports.
+2. Loader: `load_methodology_stages` → `load_workflow`, `MethodologyLoadError`
+   → `WorkflowLoadError`; update importers.
 3. Container sense → `project`: `methodology_dir`, routes, `list_methodologies`,
-   `EXAMPLES_DIR` var, UI labels. Tests.
+   `EXAMPLES_DIR` var, UI labels.
 4. `DAG` → `workflow` sweep across `app/**`, `docs/**`, templates. Keep acyclic
    notes.
-5. Prose doc → `methodology` (rename the Document surface where it exists).
+5. Prose doc → `methodology` (the Document surface, where it exists).
 6. "reviewable workflow" → "node review".
-7. Verify: `grep -riIn '\bDAG\b' app docs templates` empty; container-sense
-   `methodology` gone (only prose-doc sense survives); pytest + ruff + mypy green.
+7. Verify: no bare `DAG`; container-sense `methodology` gone (only prose-doc
+   sense survives); pytest + ruff + mypy green.
 
-## Coordination
-- `loader.py` is being moved `app/models/` → `app/services/` in the #30
-  smaller-fixes pass; this refactor only *renames its symbols*, not its location.
-- The **version-lifecycle** change (runs are read-only w.r.t. versions) is now
-  implemented in `runner.py` / `versioning.py`: it adds `NoVersionToRunError`
-  and makes `create_version` validate before snapshotting. The rename pass
-  should carry those symbols along.
-- Scale: ~500 raw occurrences, and this time most of them move. Do it as one
-  dedicated pass with green tests between each numbered step above.
+(The loader-relocation and version-lifecycle coordination notes that used to
+live here described in-flight work on other passes; that work has since landed
+— see `docs/architecture.md` for the current shape of `app/services/loader.py`
+and `app/services/versioning.py`.)
