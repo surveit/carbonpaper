@@ -49,10 +49,10 @@ pip install -r requirements.txt          # fastapi, pandas, pyarrow, claude-agen
 python -m uvicorn app.main:app --port 8765   # web UI: workflow view, runs, review queue
 python -m app.runtime.runner examples/<name> # run a project's workflow from the CLI
 ```
-LLM stages run through the Claude Agent SDK (`claude_agent_sdk`), which drives the
-installed `claude` CLI. Backend is selectable: `CW_LLM_BACKEND=agent_sdk|cli|mock`
-(default `auto` → agent_sdk, else the CLI). It never silently falls back to the
-mock; `CW_LLM_FORCE_MOCK=1` opts into the offline mock.
+LLM stages (`llm_transform`) call the model directly via `app.runtime.agent`, one
+conversation per row. Backend is selectable: `CW_LLM_BACKEND=auto|cli|agent_sdk|anthropic`
+(default `auto` → the claude CLI bridge; `anthropic` needs `ANTHROPIC_API_KEY`). A
+requested backend that isn't available raises rather than falling back.
 
 ## Repo layout
 ```
@@ -82,7 +82,8 @@ examples/<name>/      project dirs (untracked runtime data: compiled/ + methodol
 ## Conventions (load-bearing, not stylistic)
 - **Never fabricate.** A value that can't be sourced is `null`/`unknown`; the
   pipeline fails loudly or halts rather than inventing a number, URL, or citation.
-  The LLM backends are opt-in and never silently fall back to a mock.
+  A requested LLM backend that isn't available raises rather than silently
+  substituting another.
 - **Schemas are called schemas.** A stage's `output_schema`, an input `schema:`
   block, a `TableSchema` — these are *schemas*, and that is the word, in code,
   comments, docs, and PR prose. Don't dress them up as "contracts" ("stage
@@ -92,3 +93,6 @@ examples/<name>/      project dirs (untracked runtime data: compiled/ + methodol
   automated result is expensive or irreversible, gate that step behind human
   sign-off: the runner halts, and decisions are content-hashed so they survive
   re-runs.
+- **Never `except Exception` or bare `except`.** Catch specific exception types —
+  swallowing all errors hides bugs and breaks fail-loudly. Enforced by Ruff
+  `BLE001`.

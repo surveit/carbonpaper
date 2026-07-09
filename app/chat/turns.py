@@ -15,6 +15,11 @@ import asyncio
 import uuid
 from typing import Any
 
+import httpx
+from pydantic_ai.exceptions import AgentRunError
+
+from .engine import ChatBackendError
+
 
 class Turn:
     def __init__(self, turn_id: str, session_id: str):
@@ -68,7 +73,14 @@ class TurnManager:
                 prompt, message_history=history, emit=turn.emit
             )
             store.save_messages(session_id, messages)
-        except Exception as exc:  # surface, never swallow
+        except (ChatBackendError, AgentRunError, httpx.HTTPError, OSError) as exc:
+            # Expected failure modes of a model turn — backend unavailable
+            # (ChatBackendError), any pydantic-ai model/API error (AgentRunError),
+            # a network error (httpx), or a socket/subprocess error (OSError) —
+            # reach the client as an error event. A genuine bug (KeyError,
+            # ValueError, …) is NOT caught here: it propagates and surfaces
+            # loudly rather than masquerading as a handled model failure. The
+            # `finally` still emits `done`, so the client is never left hanging.
             turn.emit({"kind": "error", "text": f"{type(exc).__name__}: {exc}"})
         finally:
             store.set_active_turn(session_id, None)
