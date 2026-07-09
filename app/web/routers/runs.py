@@ -15,6 +15,7 @@ from app.errors import NoVersionToRunError
 from app.services.loader import WorkflowLoadError, load_workflow
 from app.runtime.preview import PREVIEWABLE_TYPES, PreviewError, run_stage_preview
 from app.runtime.runner import prepare_run, resume_run, run_prepared
+from app.runtime.trace import trace_row, trace_to_dict
 from app.web.config import EXAMPLES_DIR, REPO_ROOT, templates
 from app.web.diagrams import TYPE_CLASS, TYPE_GLYPH, build_mermaid_graph
 from app.web.loading import (
@@ -222,6 +223,23 @@ async def run_stage_rows_csv(project: str, run_id: str, stage_id: str):
         media_type="text/csv; charset=utf-8",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+@router.get("/project/{project}/runs/{run_id}/stage/{stage_id}/row/{row}/trace")
+async def run_stage_row_trace(project: str, run_id: str, stage_id: str, row: int):
+    """Show-your-work for one output row: its ancestry through row-preserving
+    stages, as JSON. 404 if the run/stage is absent, 400 if the row ordinal is
+    out of range."""
+    run_dir = runs_dir(project) / run_id
+    load_manifest(run_dir)  # 404s if the run doesn't exist
+    try:
+        trace = trace_row(run_dir, stage_id, row)
+    except ValueError as exc:
+        detail = str(exc)
+        if "not in run" in detail:
+            raise HTTPException(status_code=404, detail=detail) from exc
+        raise HTTPException(status_code=400, detail=detail) from exc
+    return JSONResponse(trace_to_dict(trace))
 
 
 @router.post("/project/{project}/runs/{run_id}/stage/{stage_id}/preview")
