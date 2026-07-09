@@ -30,6 +30,13 @@ _VALID = {
 def _seed(tmp_path: Path) -> Path:
     compiled = tmp_path / "alpha" / "compiled"
     compiled.mkdir(parents=True, exist_ok=True)
+    # `load` must exist so score's input resolves: the write gate validates the
+    # whole resulting workflow (graph included), not just the one edited stage.
+    (compiled / "01_load.json").write_text(
+        json.dumps({"id": "load", "name": "Load", "type": "input_data",
+                    "connector": {"kind": "computed_static"}}),
+        encoding="utf-8",
+    )
     (compiled / "02_score.json").write_text(json.dumps(_VALID), encoding="utf-8")
     return tmp_path / "alpha"
 
@@ -130,6 +137,19 @@ def test_patch_missing_stage_raises(tmp_path: Path) -> None:
     pdir = _seed(tmp_path)
     with pytest.raises(FileNotFoundError):
         stage_edit.patch_stage_spec(pdir, "ghost", json.dumps({"limit": 1}))
+
+
+def test_edit_that_breaks_the_workflow_graph_is_rejected(tmp_path: Path) -> None:
+    # Repoint score's input at a stage that doesn't exist. The stage is valid on
+    # its own, but the resulting WORKFLOW is not — so the write is refused.
+    pdir = _seed(tmp_path)
+    before = (pdir / "compiled" / "02_score.json").read_text(encoding="utf-8")
+    result = stage_edit.patch_stage_spec(
+        pdir, "score", json.dumps({"inputs": [{"id": "ghost", "schema": _IN_SCHEMA}]})
+    )
+    assert result.ok is False
+    assert any("ghost" in i for i in result.issues)
+    assert (pdir / "compiled" / "02_score.json").read_text(encoding="utf-8") == before
 
 
 def _seed_load(tmp_path: Path) -> Path:

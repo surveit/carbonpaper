@@ -210,6 +210,23 @@ _INVALID_COMPILE_RESULT: dict[str, Any] = {
 }
 
 
+# Compiler self-reports clean (validation: []), but a stage fails Stage/graph
+# validation the compiler didn't run — an llm_transform with no 1:1 schemas. The
+# write gate must catch it before anything is written.
+_UNSOUND_COMPILE_RESULT: dict[str, Any] = {
+    "name": "alpha",
+    "stages": [
+        _stage("load", "Load rows", "input_data"),
+        _stage("score", "Score", "llm_transform", ["load"]),  # no schemas → not 1:1
+    ],
+    "methodology_raw": "# Methodology\ndraft",
+    "compiler_notes": [],
+    "validation": [],
+    "prompt": "prompt text",
+    "raw_llm": "raw llm text",
+}
+
+
 def _patch_compiler(monkeypatch: pytest.MonkeyPatch, result: dict[str, Any], doc_text: str = "prose") -> None:
     monkeypatch.setattr(project_tools, "read_input", lambda path: doc_text)
     monkeypatch.setattr(project_tools, "compile_prose_to_workflow", lambda text, name: result)
@@ -227,6 +244,23 @@ def test_compile_workflow_fresh_project_writes_compiled_dir(tmp_path: Path, monk
     assert out == {"ok": True, "stages": ["load"]}
     written = json.loads((pdir / "compiled" / "01_load.json").read_text(encoding="utf-8"))
     assert written["name"] == "Load rows"
+
+
+def test_compile_workflow_rejects_unsound_draft_the_compiler_missed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    pdir = _seed(tmp_path, "alpha")
+    before = sorted(p.name for p in (pdir / "compiled").glob("*.json"))
+    _patch_compiler(monkeypatch, _UNSOUND_COMPILE_RESULT)
+    tools = project_tools.make_project_tools("alpha", examples_dir=tmp_path)
+
+    doc = tmp_path / "doc.md"
+    doc.write_text("prose", encoding="utf-8")
+    out = _tool(tools, "compile_workflow")(str(doc))
+
+    assert out["ok"] is False and out["issues"]
+    # nothing cleared or written — the existing compiled/ is untouched
+    assert sorted(p.name for p in (pdir / "compiled").glob("*.json")) == before
 
 
 def test_compile_workflow_reviewed_work_without_confirm_raises(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

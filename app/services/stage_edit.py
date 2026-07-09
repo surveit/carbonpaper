@@ -13,7 +13,8 @@ import json
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from app.models import Stage, validate_stage
+from app.models import Stage
+from app.models.workflow import validate_workflow_draft
 from app.services import node_review
 from app.services.loader import (
     find_stage_file,
@@ -71,13 +72,13 @@ def _write_validated(project_dir: Path, stage_id: str, stage: dict) -> EditStage
             issues=[f"the stage id must equal '{stage_id}' (got '{parsed_id}')"],
         )
 
-    issues = validate_stage(stage)
-    if issues:
-        return EditStageResult(ok=False, issues=issues)
-
     target = find_stage_file(project_dir / "compiled", stage_id)
     if target is None:
         raise FileNotFoundError(f"no existing compiled file for stage '{stage_id}' in {project_dir.name}")
+
+    issues = _workflow_issues_after(project_dir, stage, replacing=stage_id)
+    if issues:
+        return EditStageResult(ok=False, issues=issues)
 
     validated = Stage.model_validate(stage)
     write_stage(target, validated)
@@ -105,17 +106,20 @@ def _next_index(compiled_dir: Path) -> int:
     return (max(indices) + 1) if indices else 1
 
 
-def _missing_input_refs(compiled_dir: Path, stage: dict) -> list[str]:
-    """Input ids referenced by `stage` that are not themselves stages in the
-    workflow — a dangling edge. Referential integrity the per-stage `validate_stage`
-    can't check (it sees one stage in isolation)."""
-    existing = {c.stage.id for c in load_compiled_dir(compiled_dir) if c.stage is not None}
-    referenced = [
-        ref
-        for inp in (stage.get("inputs") or [])
-        if isinstance(inp, dict) and isinstance((ref := inp.get("id")), str)
+def _workflow_issues_after(project_dir: Path, candidate: dict, *, replacing: str | None) -> list[str]:
+    """Every issue — per-stage OR cross-stage graph — the workflow would have if
+    `candidate` were written: added (replacing=None) or replacing the stage
+    `replacing`. Validates the whole resulting stage set through
+    `validate_workflow_draft`, the same gate `load_workflow` enforces, so no agent
+    write can leave `load_stages`/`load_workflow` unable to parse the project.
+    Subsumes per-stage validation and the dangling-input (inputs-resolve) check."""
+    drop = {replacing, candidate.get("id")}
+    others = [
+        stage_to_spec_dict(c.stage)
+        for c in load_compiled_dir(project_dir / "compiled")
+        if c.stage is not None and c.stage.id not in drop
     ]
-    return [ref for ref in referenced if ref not in existing]
+    return validate_workflow_draft([*others, candidate])
 
 
 def edit_stage_spec(project_dir: Path, stage_id: str, spec_text: str) -> EditStageResult:
@@ -175,19 +179,9 @@ def add_stage_spec(project_dir: Path, spec_text: str) -> EditStageResult:
             issues=[f"stage '{stage_id}' already exists — use edit_stage to change it"],
         )
 
-    issues = validate_stage(stage)
+    issues = _workflow_issues_after(project_dir, stage, replacing=None)
     if issues:
         return EditStageResult(ok=False, issues=issues)
-
-    missing = _missing_input_refs(compiled_dir, stage)
-    if missing:
-        return EditStageResult(
-            ok=False,
-            issues=[
-                f"input '{ref}' is not a stage in this workflow — add it first or fix the reference"
-                for ref in missing
-            ],
-        )
 
     validated = Stage.model_validate(stage)
     target = compiled_dir / f"{_next_index(compiled_dir):02d}_{stage_id}.json"

@@ -15,6 +15,7 @@ from typing import Any, Callable
 from app.compiler import compile_methodology as compile_prose_to_workflow, read_input
 from app.errors import RegenerateWithoutSnapshotError
 from app.models import NODE_TYPES
+from app.models.workflow import validate_workflow_draft
 from app.services import stage_edit, versioning, workspace
 from app.services.compilation import write_methodology
 from app.services.loader import find_stage_file
@@ -181,6 +182,12 @@ def make_project_tools(name: str, *, examples_dir: Path) -> list[Callable[..., A
         result = compile_prose_to_workflow(text, name)
         if result["validation"]:
             return {"ok": False, "issues": result["validation"]}
+        # The compiler writes raw dicts; hold it to the same stage + graph
+        # validation every other write obeys, so a compile can never persist a
+        # workflow that then fails to load.
+        draft_issues = validate_workflow_draft(result["stages"])
+        if draft_issues:
+            return {"ok": False, "issues": draft_issues}
         compiled_dir = project_dir / "compiled"
         if compiled_dir.is_dir():
             for stale in compiled_dir.glob("*.json"):
