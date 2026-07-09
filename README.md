@@ -1,6 +1,6 @@
-# prototype_one — reviewable AI methodology DAGs
+# prototype_one — reviewable AI workflows
 
-Run data/OSINT pipelines as **DAGs of typed, schema-validated nodes** with
+Run data/OSINT pipelines as **workflows of typed, schema-validated stages** with
 human-review gates and fully persisted runs — so an AI-driven pipeline is
 *testable and reviewable*, not a black box.
 
@@ -11,5 +11,5 @@ human-review gates and fully persisted runs — so an AI-driven pipeline is
 ```
 pip install -r requirements.txt
 python -m uvicorn app.main:app --port 8765     # web UI
-python -m app.runtime.runner examples/<name>   # run a methodology from the CLI
+python -m app.runtime.runner examples/<name>   # run a project's workflow from the CLI
 ```

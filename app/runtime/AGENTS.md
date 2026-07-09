@@ -2,7 +2,7 @@
 
 Executes a workflow and persists the result. Does not import the compiler or
 the web app. Loads stages through `app/services/loader.py: load_workflow`,
-which parses each compiled file into a `Stage` object and raises
+which parses each compiled stage specification into a `Stage` object and raises
 `WorkflowLoadError` if any stage or cross-stage check fails — an invalid workflow is
 refused before the runner does any work.
 
@@ -38,7 +38,7 @@ refused before the runner does any work.
     continues once decisions exist.
 - **`stages/`** — one handler per node type (`HANDLERS` dict), one module per stage type.
   - `input_data` connectors: `file` (csv/parquet/json/**geojson**), `computed_static`
-    (only kinds the `ConnectorKind` contract allows — use a committed snapshot via
+    (only kinds the `ConnectorKind` schema allows — use a committed snapshot via
     `file` for anything else). `_read_geojson` flattens a FeatureCollection.
   - `python_row_function` / `python_frame_function` (`function: {kind: module|inline}`;
     the row variant is mapped per input row by the runtime), `join`, `aggregate`,
@@ -65,7 +65,7 @@ refused before the runner does any work.
     that never asserts a feature or invents a URL).
 - **`validation.py`** — DATA validation of a dataframe against an `output_schema`
   (present columns, types, ranges, nullability, PK uniqueness). Distinct from the
-  STAGE-SPEC contract in `app/models/`.
+  stage schemas in `app/models/`.
 
 ## Run / debug
 ```

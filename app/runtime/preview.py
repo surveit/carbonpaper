@@ -28,6 +28,7 @@ from pathlib import Path
 from typing import Any
 
 import pandas as pd
+import pyarrow
 
 from app.models import Stage
 
@@ -76,7 +77,7 @@ def _load_upstream_inputs(
             raise PreviewError(f"upstream output for '{iid}' missing on disk: {rel}")
         try:
             inputs[iid] = _read_output(path)
-        except Exception as exc:  # noqa: BLE001
+        except (OSError, ValueError, pyarrow.lib.ArrowException) as exc:
             raise PreviewError(f"could not read upstream '{iid}': {exc}") from exc
     return inputs
 

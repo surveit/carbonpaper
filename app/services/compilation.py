@@ -167,7 +167,7 @@ def run_prepared_compilation(prep: dict[str, Any]) -> str:
     try:
         input_text = read_input(input_path)
         result = compile_methodology(input_text, name, model=model)
-    except Exception as exc:  # the compile failed — record it honestly, don't fake
+    except Exception as exc:  # noqa: BLE001 — supervisor boundary: any compile failure is recorded honestly, never faked
         manifest["status"] = "error"
         manifest["error"] = f"{type(exc).__name__}: {exc}"
         manifest["finished_at"] = datetime.now().isoformat(timespec="seconds")

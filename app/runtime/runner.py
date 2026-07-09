@@ -24,23 +24,15 @@ from pathlib import Path
 from typing import Any
 
 import pandas as pd
+import pyarrow.lib as pa_lib
 
+from app.errors import NoVersionToRunError
 from app.models import Stage
 from app.services.loader import WorkflowLoadError
 from app.services import versioning
 
 from .stages import HANDLERS, HaltForReview
 from .validation import validate_dataframe
-
-
-class NoVersionToRunError(Exception):
-    """A run was requested for a project that has no version to run.
-
-    Runs are read-only with respect to versions: a run targets an existing
-    version and never creates one. Version creation is an explicit act (the
-    "Create version" action). Raised when `version_id` is None and no version
-    exists yet — rather than fabricating a snapshot as a run side effect, which
-    would immortalise (and potentially poison) the working copy."""
 
 
 def topological_sort(stages: list[Stage]) -> list[Stage]:
@@ -284,7 +276,7 @@ def _execute_stages(
             (run_dir / "manifest.json").write_text(
                 json.dumps(m, indent=2, default=str), encoding="utf-8"
             )
-        except Exception:
+        except OSError:
             pass
 
     flush("running")  # initial: all stages pending
@@ -373,7 +365,13 @@ def _execute_stages(
             output_path = run_dir / "outputs" / f"{sid}.parquet"
             try:
                 output.to_parquet(output_path, index=False)
-            except Exception as exc:
+            except (pa_lib.ArrowException, ValueError, TypeError) as exc:
+                # A column whose dtype/shape parquet can't represent (mixed-type
+                # object columns, nested Python values) falls back to CSV, which
+                # stringifies them, rather than losing the stage output; the
+                # fallback is recorded, never silent. A disk/OS error is NOT
+                # caught: it would fail identically for CSV, so it propagates to
+                # the per-stage handler below and lands in the manifest.
                 output_path = run_dir / "outputs" / f"{sid}.csv"
                 output.to_csv(output_path, index=False)
                 record.setdefault("notes", []).append(
@@ -387,7 +385,10 @@ def _execute_stages(
             record["rows"] = int(len(output))
             record["output_path"] = str(output_path.relative_to(run_dir))
 
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 — the runner's contract is
+            # to record ANY stage failure (a handler can raise ValueError,
+            # RuntimeError, a pandas/pyarrow error, etc.) in the manifest and
+            # continue/halt rather than crash the whole run.
             record["status"] = "error"
             record["error"] = {
                 "type": type(exc).__name__,
@@ -486,7 +487,9 @@ def resume_run(project_dir: Path, run_id: str, repo_root: Path) -> dict[str, Any
                 outputs_so_far[record["stage_id"]] = pd.read_parquet(path)
             else:
                 outputs_so_far[record["stage_id"]] = pd.read_csv(path)
-        except Exception:
+        except (pa_lib.ArrowException, pd.errors.ParserError, OSError, ValueError):
+            # A prior output file that's missing/corrupt/unreadable is
+            # treated as not-yet-produced; the stage simply re-runs.
             pass
 
     ctx: dict[str, Any] = {
