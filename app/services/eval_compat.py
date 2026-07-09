@@ -58,22 +58,6 @@ def check_eval_compatibility(config: EvalConfig,
     if missing:
         return CompatibilityReport(ok=False, problems=problems, settings=None)
 
-    # Condition 1b: the target must be reachable from the override, else the
-    # override injects into a branch that never feeds the target and the eval
-    # is inert. Reference overrides are exempt (they inject side data).
-    descendants: set[str] = set()
-    stack = [config.override_stage]
-    while stack:
-        node = stack.pop()
-        for s in stages:
-            if node in s.input_ids and s.id not in descendants:
-                descendants.add(s.id)
-                stack.append(s.id)
-    if config.target_stage not in descendants:
-        problems.append(
-            f"target `{config.target_stage}` is not reachable from override "
-            f"`{config.override_stage}`; the override would not affect it")
-
     # Condition 2: every injected table is a valid stand-in. The cases table is
     # only checkable once it exists; a dataless config skips this and is scored
     # for everything else (its file is validated when attached).
