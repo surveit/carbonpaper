@@ -332,6 +332,26 @@ class TableSchema(_Base):
                 )
         return TableSchema(columns=remaining, primary_key=None)
 
+    def columns_missing_from(self, other: "TableSchema") -> list[str]:
+        """Names of this schema's columns that `other` either lacks or declares
+        with a different spec — every Column spec field compared recursively via
+        `_column_spec_differences`, prose (`description`/`source`) aside. Empty
+        exactly when this schema is a spec-preserving subset of `other`."""
+        other_by_name = {c.name: c for c in other.columns}
+        return [
+            c.name
+            for c in self.columns
+            if (match := other_by_name.get(c.name)) is None
+            or _column_spec_differences(c, match)
+        ]
+
+    def is_subset_of(self, other: "TableSchema") -> bool:
+        """True exactly when every column here also appears in `other` with an
+        identical spec (prose aside) — the boolean form of
+        `columns_missing_from`. An llm_transform's output must keep its input as
+        such a subset (see `Stage`'s 1:1 validator)."""
+        return not self.columns_missing_from(other)
+
     def to_prompt(self) -> str:
         """Render this schema as instructions for an LLM reply: one line per
         column stating its type, required/nullable wording, enum, range, and

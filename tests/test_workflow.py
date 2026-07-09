@@ -17,8 +17,8 @@ def test_workflow_clean():
     wf = m.parse_workflow([
         S(id="load", type="input_data",
           connector={"kind": "file", "params": {"path": "d.csv", "format": "csv"}}),
-        S(id="extract", type="llm_transform", inputs=[{"id": "load"}],
-          llm={"prompt_template": "do {x}"}),
+        S(id="extract", type="python_frame_function", inputs=[{"id": "load"}],
+          function={"kind": "inline", "code": "x"}),
     ])
     assert [s.id for s in wf.stages] == ["load", "extract"]
 
@@ -34,7 +34,8 @@ def test_workflow_duplicate_ids():
 def test_workflow_dangling_input():
     with pytest.raises(ValidationError):
         m.parse_workflow([
-            S(id="b", type="llm_transform", inputs=[{"id": "ghost"}], llm={"prompt_template": "p"}),
+            S(id="b", type="python_frame_function", inputs=[{"id": "ghost"}],
+              function={"kind": "inline", "code": "x"}),
         ])
 
 
@@ -66,7 +67,7 @@ def test_detect_cycle_reports_cycle():
 def test_detect_cycle_empty_when_acyclic():
     a = Stage.model_validate(S(id="a", type="input_data",
                                connector={"kind": "file", "params": {"path": "d.csv"}}))
-    b = Stage.model_validate(S(id="b", type="llm_transform", inputs=[{"id": "a"}], llm={"prompt_template": "p"}))
+    b = Stage.model_validate(S(id="b", type="python_frame_function", inputs=[{"id": "a"}], function={"kind": "inline", "code": "x"}))
     assert m.detect_cycle([a, b]) == []
 
 
@@ -88,9 +89,11 @@ def test_validate_workflow_reports_issues():
     assert issues  # both inputs dangle — reported, not raised
 
 
-# ── llm_transform 1:1 eligibility (checked at save time, not in the handler) ──
-def _llm_1to1(**over):
-    """A valid strictly-1:1 llm_transform: input {id(pk), text} → output adds score."""
+# ── llm_transform 1:1 eligibility (enforced by Stage construction, not here) ──
+# The invariant lives on the Stage model, so an ineligible stage fails to
+# construct — these assert the rejection at model_validate / parse_workflow.
+def _llm_1to1_dict(**over):
+    """Dict for a valid strictly-1:1 llm_transform: input {id(pk), text} → output adds score."""
     base = dict(
         id="score", type="llm_transform", inputs=[{
             "id": "load",
@@ -105,48 +108,47 @@ def _llm_1to1(**over):
         llm={"prompt_template": "score {text}"},
     )
     base.update(over)
-    return Stage.model_validate(S(**base))
+    return S(**base)
 
 
-def test_llm_transform_valid_1to1_no_issues():
-    assert m.check_llm_transform_one_to_one([_llm_1to1()]) == []
+def test_llm_transform_valid_1to1_constructs():
+    assert Stage.model_validate(_llm_1to1_dict()).id == "score"
 
 
-def test_llm_transform_pk_mismatch_reported():
-    stage = _llm_1to1(output_schema={
-        "columns": [{"name": "id", "type": "str"}, {"name": "text", "type": "str"},
-                    {"name": "score", "type": "int"}],
-        "primary_key": ["text"]})
-    assert any("primary_key" in i for i in m.check_llm_transform_one_to_one([stage]))
+def test_llm_transform_pk_mismatch_rejected():
+    with pytest.raises(ValidationError, match="primary_key"):
+        Stage.model_validate(_llm_1to1_dict(output_schema={
+            "columns": [{"name": "id", "type": "str"}, {"name": "text", "type": "str"},
+                        {"name": "score", "type": "int"}],
+            "primary_key": ["text"]}))
 
 
-def test_llm_transform_drops_input_column_reported():
-    stage = _llm_1to1(output_schema={
-        "columns": [{"name": "id", "type": "str"}, {"name": "score", "type": "int"}],
-        "primary_key": ["id"]})  # dropped `text`
-    issues = m.check_llm_transform_one_to_one([stage])
-    assert any("text" in i and "additive" in i for i in issues), issues
+def test_llm_transform_drops_input_column_rejected():
+    with pytest.raises(ValidationError, match="text"):
+        Stage.model_validate(_llm_1to1_dict(output_schema={
+            "columns": [{"name": "id", "type": "str"}, {"name": "score", "type": "int"}],
+            "primary_key": ["id"]}))  # dropped `text`
 
 
-def test_llm_transform_modifies_column_schema_reported():
-    stage = _llm_1to1(output_schema={
-        "columns": [{"name": "id", "type": "str"}, {"name": "text", "type": "int"},
-                    {"name": "score", "type": "int"}],
-        "primary_key": ["id"]})  # `text` str -> int
-    issues = m.check_llm_transform_one_to_one([stage])
-    assert any("text" in i and "modif" in i for i in issues), issues
+def test_llm_transform_modifies_column_schema_rejected():
+    with pytest.raises(ValidationError, match="text"):
+        Stage.model_validate(_llm_1to1_dict(output_schema={
+            "columns": [{"name": "id", "type": "str"}, {"name": "text", "type": "int"},
+                        {"name": "score", "type": "int"}],
+            "primary_key": ["id"]}))  # `text` str -> int
 
 
-def test_llm_transform_adds_nothing_reported():
-    stage = _llm_1to1(output_schema={
-        "columns": [{"name": "id", "type": "str"}, {"name": "text", "type": "str"}],
-        "primary_key": ["id"]})  # adds no new column
-    assert any("adds no columns" in i for i in m.check_llm_transform_one_to_one([stage]))
+def test_llm_transform_adds_nothing_rejected():
+    with pytest.raises(ValidationError, match="adds no columns"):
+        Stage.model_validate(_llm_1to1_dict(output_schema={
+            "columns": [{"name": "id", "type": "str"}, {"name": "text", "type": "str"}],
+            "primary_key": ["id"]}))  # adds no new column
 
 
-def test_validate_workflow_includes_llm_transform_check():
-    """load_workflow → validate_workflow must surface an ineligible llm_transform."""
-    bad = _llm_1to1(output_schema={
+def test_parse_workflow_rejects_ineligible_llm_transform():
+    """The load seam (parse_workflow → Stage construction) rejects a non-1:1 stage."""
+    bad = _llm_1to1_dict(output_schema={
         "columns": [{"name": "id", "type": "str"}, {"name": "text", "type": "str"}],
         "primary_key": ["id"]})
-    assert any("adds no columns" in i for i in m.validate_workflow([bad]))
+    with pytest.raises(ValidationError, match="adds no columns"):
+        m.parse_workflow([bad])

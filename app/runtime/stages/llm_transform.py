@@ -4,8 +4,8 @@ Runs the stage's prompt over each input row via the LLM layer
 (`llm.call_llm_batch`) and assembles the declared output columns. The columns
 `output_schema` adds beyond the input schema are the reply spec: rendered by
 `TableSchema.to_prompt` and appended to the prompt so the model is told exactly
-which keys to return. The strictly-1:1 shape is enforced at save time
-(`check_llm_transform_one_to_one`), not in this handler."""
+which keys to return. The strictly-1:1 shape is enforced by `Stage` validation
+(construction time), not in this handler."""
 
 from __future__ import annotations
 
@@ -27,14 +27,14 @@ def handle_llm_transform(stage: Stage, inputs: dict[str, pd.DataFrame], ctx: dic
     # Append the derived reply spec (output_schema − input_schema) to the prompt
     # so the model is told exactly which keys to return. This is the only thing
     # llm_transform adds over a plain LLM call; the call machinery is untouched.
-    # Save-time validation (check_llm_transform_one_to_one) guarantees both
-    # schemas and the 1:1 shape, so subtract never throws here.
     input_schema = stage.inputs[0].table_schema
-    if stage.output_schema is not None and input_schema is not None:
-        reply_spec = stage.output_schema.subtract(input_schema)
-        llm = llm.model_copy(
-            update={"prompt_template": f"{llm.prompt_template}\n\n{reply_spec.to_prompt()}"}
-        )
+    # Stage validation guarantees an llm_transform is 1:1 (both schemas present,
+    # output ⊇ input), so subtract never throws here.
+    assert stage.output_schema is not None and input_schema is not None
+    reply_spec = stage.output_schema.subtract(input_schema)
+    llm = llm.model_copy(
+        update={"prompt_template": f"{llm.prompt_template}\n\n{reply_spec.to_prompt()}"}
+    )
 
     # Record which backend handled this stage so the UI/manifest can label it.
     ctx.setdefault("llm_backend", {})[stage.id] = backend_status()

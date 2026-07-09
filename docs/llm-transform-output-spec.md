@@ -56,15 +56,16 @@ separate concern that belongs to the LLM layer, planned for a later PR (see Stat
 
 This describes what the code does today, not an aspiration:
 
-- **Rule 1 is enforced at save time, not in the handler.**
-  `check_llm_transform_one_to_one` (in `app/models/workflow.py`, run by
-  `validate_workflow` — and hence `load_workflow`, so both `create_version` and
-  the runner enforce it) rejects any `llm_transform` whose *declared* schemas
-  aren't 1:1: exactly one input, the input schema and `output_schema` naming the
-  same primary key, the output keeping every input column unchanged (a transform
-  never rewrites a column's schema), and adding at least one new column. Because
-  that holds, `TableSchema.subtract` (`output_schema − input_schema`) is exactly
-  the reply columns and can never throw when the runtime derives it.
+- **Rule 1 is enforced by `Stage` construction, not in the handler.** The
+  `Stage` model's 1:1 validator (`app/models/stage.py`) rejects any
+  `llm_transform` whose *declared* schemas aren't 1:1: exactly one input, the
+  input schema and `output_schema` naming the same primary key, the output
+  keeping every input column unchanged (a transform never rewrites a column's
+  schema — checked via `TableSchema.is_subset_of`), and adding at least one new
+  column. Because a stage carries its own contract, an ineligible stage can't be
+  built — so it can't be loaded, versioned, or run — and `TableSchema.subtract`
+  (`output_schema − input_schema`) is exactly the reply columns and can never
+  throw when the runtime derives it.
 - **The reply spec goes into the prompt; the call machinery is unchanged.**
   `handle_llm_transform` appends `subtract(...).to_prompt()` to the stage's
   prompt and runs it through the shared LLM layer (`llm.call_llm_batch`) — the
