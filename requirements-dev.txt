@@ -7,3 +7,4 @@ httpx>=0.27              # fastapi.testclient (starlette TestClient) transport
 ruff==0.15.20
 mypy==2.1.0
 pandas-stubs==3.0.3.260530
+import-linter==2.13

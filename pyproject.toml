@@ -12,3 +12,31 @@ python_version = "3.12"
 files = ["app"]
 # No ignore_missing_imports: pandas-stubs is installed via requirements-dev.txt,
 # and the other deps ship their own types.
+
+[tool.importlinter]
+root_package = "app"
+
+# Keeps the status/review helpers below the routes layer (AGENTS.md
+# Conventions): routes/templates depend on them, not the reverse, so the
+# import graph stays acyclic and they stay unit-testable without the
+# runtime/compiler stack.
+#
+# app.services.project is deliberately NOT listed yet: it doesn't exist on
+# master (it lands with PR #35, still open as of this writing) and
+# import-linter errors on a missing source module rather than just failing
+# the contract, which would break this exact CI job. Add it to
+# source_modules below once PR #35 merges. Other app/services/ modules
+# (e.g. compilation.py, which wraps the compiler) are intentionally not
+# bound by this contract.
+[[tool.importlinter.contracts]]
+name = "services helpers stay below the routes layer"
+type = "forbidden"
+source_modules = [
+    "app.services.node_review",
+    "app.services.versioning",
+]
+forbidden_modules = [
+    "app.main",
+    "app.runtime",
+    "app.compiler",
+]
