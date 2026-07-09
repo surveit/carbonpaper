@@ -266,15 +266,22 @@
   const pill = document.getElementById('eval-pathway-pill');
 
   // Mermaid (observed here: mermaid@11, flowchart LR) renders each node's
-  // <g class="node"> with id="flowchart-<stageId>-<n>" where <n> is an
-  // internal sequence number. Also match a bare-id fallback in case a future
-  // mermaid version (or a differently configured graph) drops the prefix.
+  // <g class="node"> with id="mermaid-<diagramInstanceId>-flowchart-<stageId>-<n>"
+  // where <n> is an internal sequence number. A stage id can itself be a
+  // hyphen-prefix of another stage id (e.g. "score" vs "score-2"), so parse
+  // the id into its stage-id component and compare exactly rather than
+  // prefix- or substring-matching.
+  function stageIdForNode(id) {
+    const m = /flowchart-(.+)-\d+$/.exec(id);
+    if (m) return m[1];
+    return id.replace(/^.*flowchart-/, '');
+  }
+
   function nodeEl(stageId) {
-    const svg = document.querySelector('.dag svg');
-    if (!svg) return null;
-    return svg.querySelector(
-      `[id^="flowchart-${stageId}-"], [id="flowchart-${stageId}"], [id="${stageId}"]`
-    );
+    for (const el of document.querySelectorAll('.dag svg g.node')) {
+      if (stageIdForNode(el.id) === stageId) return el;
+    }
+    return null;
   }
 
   function stripPathwayClasses() {

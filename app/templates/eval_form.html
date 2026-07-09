@@ -237,28 +237,27 @@
     // ── Graph-select override/target ──
     // Observed here (mermaid@11, flowchart LR): each node's <g class="node">
     // gets id="mermaid-<diagramInstanceId>-flowchart-<stageId>-<n>" -- the
-    // svg's own generated id is prefixed onto "flowchart-<stageId>-<n>", not
-    // just the bare "flowchart-<stageId>-<n>" form. Match the
-    // "flowchart-<stageId>-<n>" segment anywhere in the id (substring, not
-    // prefix) so this is resilient to that wrapping id changing.
+    // svg's own generated id is prefixed onto "flowchart-<stageId>-<n>". A
+    // stage id can itself be a hyphen-prefix of another stage id (e.g.
+    // "score" vs "score-2"), so lookups must parse the id into its stage-id
+    // component and compare exactly rather than substring-matching.
     const DESCENDANTS = {{ descendants_map | tojson }};
     const overrideInput = document.getElementById('f-override');
     const targetInput = document.getElementById('f-target');
     const overrideLabel = document.getElementById('pick-override-label');
     const targetLabel = document.getElementById('pick-target-label');
 
-    function nodeEl(stageId) {
-        const svg = document.querySelector('#eval-pick-dag svg');
-        if (!svg) return null;
-        return svg.querySelector(
-            `[id*="flowchart-${stageId}-"], [id$="flowchart-${stageId}"], [id="${stageId}"]`
-        );
-    }
-
     function stageIdForNode(g) {
         const m = /flowchart-(.+)-\d+$/.exec(g.id);
         if (m) return m[1];
         return g.id.replace(/^.*flowchart-/, '');
+    }
+
+    function nodeEl(stageId) {
+        for (const el of document.querySelectorAll('.dag svg g.node')) {
+            if (stageIdForNode(el) === stageId) return el;
+        }
+        return null;
     }
 
     function stripPickClasses() {
