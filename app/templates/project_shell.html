@@ -1,0 +1,124 @@
+{% extends "base.html" %}
+{#
+  project_shell.html — the LEFT-SIDEBAR PROJECT SHELL.
+
+  Frames ONE project (a directory under examples/<name>/) with a fixed
+  left sidebar = project name + 5 nav items (Overview / Document / Data model /
+  Workflow / Runs), each carrying a small status glyph derived from `state`, plus a
+  {% block section %} the section templates fill.
+
+  Context every section route passes (the Phase-1 FROZEN CONTRACT, verbatim):
+    state    = project_view.shell_state(mdir)  — the status snapshot + next_action CTA
+    section  = one of {overview, document, data_model, workflow, runs}
+
+  The sidebar reads ONLY from `state`. The single source of truth for the WORKFLOW
+  lock is state.data_model.state == "approved" — the SAME gate the SSE workflow
+  stream enforces; the nav lock and the stream agree by construction.
+
+  CARDINAL RULE: nothing here fabricates. Glyphs reflect the truthful on-disk state
+  (none/unreviewed/approved/…); a "no workflow yet" project shows ○, not a fake ✓.
+#}
+{% block title %}{{ state.meta.title or state.name }} · {{ section|replace('_',' ')|capitalize }}{% endblock %}
+
+{% block head_extra %}
+  {{ super() }}
+  {% block section_head %}{% endblock %}
+{% endblock %}
+
+{% block header_extra %}
+<a href="/" class="back-link">← projects</a>
+{% endblock %}
+
+{% block content %}
+{# ── Derive the 5 nav items from `state` (load-bearing: 5 items, this order,
+      each = status-glyph + locked flag for workflow only). ─────────────────── #}
+{% set base = "/project/" ~ state.name %}
+{% set wf_locked = (state.data_model.state != "approved") %}
+
+{# data-model glyph by gate state #}
+{% set dm_glyph_map = {
+     'approved':     ('✓', 'glyph-ok'),
+     'edited_stale': ('⚠', 'glyph-warn'),
+     'rejected':     ('✗', 'glyph-bad'),
+     'unreviewed':   ('●', 'glyph-todo'),
+     'none':         ('○', 'glyph-none'),
+   } %}
+{% set dm_glyph = dm_glyph_map.get(state.data_model.state, ('○', 'glyph-none')) %}
+
+{# workflow glyph: locked first, else by coverage (✓ fully approved / ⚠ partial / ○ none) #}
+{% if wf_locked %}
+  {% set wf_glyph = ('🔒', 'glyph-locked') %}
+{% elif not state.workflow.present %}
+  {% set wf_glyph = ('○', 'glyph-none') %}
+{% elif state.workflow.coverage and state.workflow.coverage.total > 0
+        and state.workflow.coverage.approved == state.workflow.coverage.total %}
+  {% set wf_glyph = ('✓', 'glyph-ok') %}
+{% else %}
+  {% set wf_glyph = ('⚠', 'glyph-warn') %}
+{% endif %}
+
+{# runs glyph: human waiting > 0 wins, else by latest status, else none #}
+{% if state.runs.awaiting_review > 0 %}
+  {% set runs_glyph = ('👤', 'glyph-review') %}
+{% elif state.runs.n == 0 %}
+  {% set runs_glyph = ('○', 'glyph-none') %}
+{% elif state.runs.latest_status in ('ok',) %}
+  {% set runs_glyph = ('✓', 'glyph-ok') %}
+{% elif state.runs.latest_status in ('error', 'errors') %}
+  {% set runs_glyph = ('✗', 'glyph-bad') %}
+{% else %}
+  {% set runs_glyph = ('●', 'glyph-todo') %}
+{% endif %}
+
+{% set nav_items = [
+     {'key': 'overview',   'label': 'Overview',   'href': base,                 'glyph': '◆',          'glyph_class': 'glyph-home', 'locked': false},
+     {'key': 'document',   'label': 'Document',   'href': base ~ '/document',    'glyph': ('●' if state.has_document else '○'), 'glyph_class': ('glyph-ok' if state.has_document else 'glyph-none'), 'locked': false},
+     {'key': 'data_model', 'label': 'Data model', 'href': base ~ '/data_model',  'glyph': dm_glyph[0],  'glyph_class': dm_glyph[1],  'locked': false},
+     {'key': 'workflow',   'label': 'Workflow',   'href': base ~ '/workflow',    'glyph': wf_glyph[0],  'glyph_class': wf_glyph[1],  'locked': wf_locked},
+     {'key': 'runs',       'label': 'Runs',       'href': base ~ '/runs',        'glyph': runs_glyph[0],'glyph_class': runs_glyph[1],'locked': false},
+   ] %}
+
+<div class="app-shell">
+  <aside class="app-side">
+    <a class="app-side-brand" href="{{ base }}" title="{{ state.meta.title or state.name }}">
+      <span class="app-side-kicker">project</span>
+      <span class="app-side-name">{{ state.meta.title or state.name }}</span>
+      {% if state.meta.title %}<span class="app-side-slug"><code>{{ state.name }}</code></span>{% endif %}
+    </a>
+
+    <nav class="app-side-nav">
+      {% for item in nav_items %}
+        {% if item.locked %}
+          {# Locked items are non-links (the workflow gate). Still mark the current
+             section so the sidebar highlights where you are even while locked. #}
+          <span class="app-nav-item locked {% if item.key == section %}current{% endif %}" tabindex="0"
+                {% if item.key == section %}aria-current="page"{% endif %}
+                title="Approve the data model first to unlock the workflow">
+            <span class="app-nav-glyph {{ item.glyph_class }}">{{ item.glyph }}</span>
+            <span class="app-nav-label">{{ item.label }}</span>
+          </span>
+        {% else %}
+          <a class="app-nav-item {% if item.key == section %}current{% endif %}"
+             href="{{ item.href }}"
+             {% if item.key == section %}aria-current="page"{% endif %}>
+            <span class="app-nav-glyph {{ item.glyph_class }}">{{ item.glyph }}</span>
+            <span class="app-nav-label">{{ item.label }}</span>
+          </a>
+        {% endif %}
+      {% endfor %}
+    </nav>
+
+    {# A compact "do this next" pointer that's always visible, mirroring the CTA. #}
+    {% if state.next_action %}
+    <a class="app-side-next" href="{{ state.next_action.href }}">
+      <span class="app-side-next-kicker">Next</span>
+      <span class="app-side-next-label">{{ state.next_action.label }} →</span>
+    </a>
+    {% endif %}
+  </aside>
+
+  <div class="app-main">
+    {% block section %}{% endblock %}
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,466 @@
+{% extends "project_shell.html" %}
+{#
+  WORKFLOW — the typed-stage pipeline (renamed from "DAG" in all visible copy):
+    · the mermaid graph (build_mermaid_graph with review_by_id belief colours)
+    · the per-node review split-view (reuses _node_review.html via the node-click panel)
+    · the versions list
+    · a "Build workflow" AI chat (GET /project/{name}/workflow/stream)
+    · Run + Create-version controls
+
+  LOCKED until state.data_model.state == "approved" (the SAME gate the SSE stream
+  enforces). When locked we render a "do this first" panel, not the graph.
+
+  Context the route passes (for the unlocked workflow section):
+    state       = project.project_state(mdir); section = "workflow"
+    stages      = the compiled/ stages (list of dicts; [] when none)
+    mermaid     = build_mermaid_graph(stages, state.name, review_by_id=...) | None
+    coverage    = node_review.coverage_for(stages, decisions) | None
+    type_class  = TYPE_CLASS
+    type_glyph  = TYPE_GLYPH
+    versions    = versioning.list_versions(mdir)   (list; may be empty)
+
+  Reused (unchanged) routes: node review /node/{id}/review-partial,/decide,/edit;
+  /review/status; create version POST /version; run POST /run.
+#}
+{# The section key stays 'workflow' (internal); the VISIBLE tab title says Workflow. #}
+{% block title %}{{ state.meta.title or state.name }} · Workflow{% endblock %}
+
+{% block section_head %}
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<script>
+  // Mermaid click handler: route node clicks to window.loadStage() (the review panel).
+  window.loadStage = function (stageId) {
+    if (window._loadStage) { window._loadStage(stageId); }
+  };
+  document.addEventListener("DOMContentLoaded", function () {
+    mermaid.initialize({
+      startOnLoad: true, theme: "default",
+      flowchart: { curve: "basis", padding: 20, useMaxWidth: true },
+      securityLevel: "loose"
+    });
+  });
+</script>
+{% endblock %}
+
+{% block section %}
+{% set wf_locked = (state.data_model.state != "approved") %}
+
+<div class="sec-head wf-head">
+  <div class="wf-head-title">
+    <h1>Workflow</h1>
+    <p class="lede">Typed stages wiring the <strong>approved</strong> schemas into a
+      pipeline. Click any node (or row) to <strong>review</strong> how that step is
+      modeled. Node colour = <em>belief</em> (do we trust it). Run it end-to-end, or
+      create an immutable version.</p>
+  </div>
+  {% if not wf_locked %}
+  <div class="actions wf-actions">
+    {% if coverage %}
+    <span class="coverage-badge" id="coverage-badge"
+          title="Workflow nodes a reviewer has approved (trusted). Edit a node and it drops to amber until re-approved.">
+      <b id="cov-approved">{{ coverage.approved }}</b>/<span id="cov-total">{{ coverage.total }}</span> approved
+      <span class="coverage-bar"><span class="coverage-fill" id="cov-fill" style="width: {{ coverage.approved_pct }}%"></span></span>
+    </span>
+    {% endif %}
+    {% if stages %}
+    <form action="/project/{{ state.name }}/run" method="post" style="display:inline;">
+      <button type="submit" class="btn primary">▶ Run workflow</button>
+    </form>
+    <button type="button" class="btn" id="create-version-btn">Create version</button>
+    {% endif %}
+    <a href="/project/{{ state.name }}/runs" class="btn">All runs</a>
+  </div>
+  {% endif %}
+</div>
+
+{% if wf_locked %}
+  {# ── LOCKED: the data model is not approved, so the workflow is unavailable. ── #}
+  <div class="wf-locked-panel">
+    <div class="wf-locked-glyph">🔒</div>
+    <h2>Workflow locked</h2>
+    <p class="muted">The workflow is built on the <strong>approved</strong> data model.
+      Approve the data model first
+      {% if state.data_model.state == 'edited_stale' %}
+        — a schema changed after approval, so the data model is now
+        <span class="belief-chip belief-stale inline">edited · stale</span>. Re-approve to unlock.
+      {% elif state.data_model.state == 'none' %}
+        — there are no schemas authored yet.
+      {% else %}
+        (currently <span class="belief-chip belief-{{ state.data_model.state }} inline">{{ state.data_model.state|replace('_',' ') }}</span>).
+      {% endif %}
+    </p>
+    <a class="btn primary" href="/project/{{ state.name }}/data_model">Go to the data model →</a>
+  </div>
+
+{% else %}
+  {# ── UNLOCKED: full workflow surface ── #}
+  <div class="split-view">
+    <div class="left-pane">
+      <div class="legend">
+        <span class="legend-label">type</span>
+        <span class="badge input">▶ input_data</span>
+        <span class="badge llm">✦ llm_transform</span>
+        <span class="badge python">λ python_transform</span>
+        <span class="badge join">⋈ join</span>
+        <span class="badge aggregate">Σ aggregate</span>
+        <span class="badge human">👤 human_review_queue</span>
+        <span class="badge publish">📤 publish</span>
+      </div>
+      <div class="legend belief-legend">
+        <span class="legend-label">belief</span>
+        <span class="belief-chip belief-approved">approved</span>
+        <span class="belief-chip belief-unreviewed">unreviewed</span>
+        <span class="belief-chip belief-rejected">rejected</span>
+        <span class="belief-chip belief-stale">edited · stale</span>
+      </div>
+
+      {% if stages and mermaid %}
+      <div class="dag wf-graph">
+        <pre class="mermaid">
+{{ mermaid }}
+        </pre>
+      </div>
+
+      <h2>Stage list</h2>
+      <table class="stages compact">
+        <thead><tr><th>#</th><th>id</th><th>type</th><th></th></tr></thead>
+        <tbody>
+          {% for s in stages %}
+          <tr>
+            <td>{{ s._order }}</td>
+            <td><a href="#" data-stage-link="{{ s.id }}"><code>{{ s.id }}</code></a></td>
+            <td><span class="type-tag {{ type_class.get(s.type, 'custom') }}">{{ type_glyph.get(s.type, '') }}</span></td>
+            <td>
+              {% if s.compiler_notes %}<span class="signal warn" title="compiler notes">⚠</span>{% endif %}
+              {% if s.eval %}<span class="signal eval" title="eval">📊</span>{% endif %}
+              {% if s.review %}<span class="signal review" title="review">👤</span>{% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      {# Data model approved but no stages yet — the chat below authors them. #}
+      <div class="wf-empty-graph">
+        <div class="empty-state wf-empty-state">
+          <h2>No workflow yet</h2>
+          <p class="muted"><strong>Send</strong> to generate the pipeline that wires your
+            approved data model — the typed stages, ending in <code>publish</code>. Stages
+            appear here as they're persisted to
+            <code>examples/{{ state.name }}/compiled/</code>.</p>
+        </div>
+      </div>
+      {% endif %}
+
+      {# ── Versions list ── #}
+      <h2>Versions</h2>
+      {% if versions %}
+      <table class="stages">
+        <thead><tr><th>version</th><th>created</th><th>message</th><th>coverage</th></tr></thead>
+        <tbody>
+          {% for v in versions %}
+          <tr>
+            <td><code>{{ v.id }}</code></td>
+            <td>{{ v.created_at }}</td>
+            <td>{{ v.message or '' }}{% if v.reviewer %} <span class="muted">— {{ v.reviewer }}</span>{% endif %}</td>
+            <td>
+              {% set cov = v.coverage %}
+              {% if cov %}
+              <div class="coverage-cell">
+                <span class="coverage-bar"><span class="coverage-fill" style="width: {{ cov.approved_pct }}%"></span></span>
+                <span class="coverage-counts"><b>{{ cov.approved }}</b>/{{ cov.total }}</span>
+              </div>
+              {% else %}<span class="muted">—</span>{% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p class="muted"><em>No versions yet. Click <strong>Create version</strong> above to
+        snapshot the current workflow. (A run on an unversioned workflow auto-creates one.)</em></p>
+      {% endif %}
+    </div>
+
+    <div class="right-pane wf-right" id="wf-right">
+      {# The build chat lives here; clicking a node swaps in the node-review panel. #}
+      <div id="stage-panel">
+        <div class="flow-side-head">
+          <span class="flow-side-title">AI · workflow</span>
+          <span class="chat-live-dot" id="chat-live" hidden>● streaming…</span>
+        </div>
+        <div class="chat-log" id="chat-log">
+          <div class="chat-msg system">{% if stages %}The workflow is built. Click a node
+            to <strong>review</strong> it, or steer with a message to re-author.{% else %}The
+            workflow build streams here. <strong>Send</strong> to author it, or add a
+            message to steer.{% endif %}</div>
+        </div>
+        <div class="chat-working" id="chat-working"><span class="spin"></span>
+          <span id="chat-working-label">Generating…</span></div>
+        <div class="chat-input-row">
+          <textarea id="chat-input" placeholder="Optional steer for the workflow… (Enter to send)"></textarea>
+          <button id="chat-send" type="button">Send</button>
+          <p class="chat-hint chat-input-hint">Leave blank to wire your approved data model, or add guidance.</p>
+        </div>
+
+        <h4 class="chat-cards-head">Stages emitted</h4>
+        <div id="chat-cards">
+          <p class="muted" id="chat-cards-empty">Stage cards appear here as the agent emits
+            them, each with its <code>models</code> validation inline.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+{% endif %}
+
+{% if not wf_locked %}
+<script>
+(function () {
+  // ════ Node-click → review panel. Clicking a node or stage row fetches its
+  //      review/edit partial (_node_review.html) and swaps it into #stage-panel,
+  //      replacing the build chat. ════
+  const METHODOLOGY = {{ state.name | tojson }};
+  const panel = document.getElementById('stage-panel');
+  const wfRight = document.getElementById('wf-right');
+
+  async function loadStage(stageId) {
+    if (!stageId || !panel) return;
+    if (wfRight) wfRight.classList.add('loading');
+    try {
+      const r = await fetch(`/project/${encodeURIComponent(METHODOLOGY)}/node/${encodeURIComponent(stageId)}/review-partial`);
+      if (!r.ok) {
+        panel.innerHTML = `<div class="empty-state"><h2>Error</h2><p>${r.status} loading stage <code>${stageId}</code></p></div>`;
+        return;
+      }
+      panel.innerHTML = await r.text();
+      // innerHTML does not execute <script> tags — re-create them so the panel's
+      // decision/edit JS runs (same trick run_detail.html uses for its stage panel).
+      panel.querySelectorAll('script').forEach(old => {
+        const s = document.createElement('script');
+        if (old.src) s.src = old.src; else s.textContent = old.textContent;
+        old.replaceWith(s);
+      });
+      if (location.hash !== `#${stageId}`) { history.replaceState(null, '', `#${stageId}`); }
+      document.querySelectorAll('table.stages tr').forEach(tr => tr.classList.remove('active'));
+      const link = document.querySelector(`[data-stage-link="${stageId}"]`);
+      if (link) { const row = link.closest('tr'); if (row) row.classList.add('active'); }
+      if (wfRight) wfRight.scrollTop = 0;
+    } finally {
+      if (wfRight) wfRight.classList.remove('loading');
+    }
+  }
+  window._loadStage = loadStage;
+
+  document.addEventListener('click', function (ev) {
+    const a = ev.target.closest('[data-stage-link]');
+    if (!a) return;
+    ev.preventDefault();
+    loadStage(a.getAttribute('data-stage-link'));
+  });
+
+  if (location.hash) {
+    const sid = decodeURIComponent(location.hash.slice(1));
+    loadStage(sid);
+  }
+
+  // ── Belief recolouring: poll /review/status and swap the server-rendered mermaid
+  //    string in place, then update the coverage badge. Called on demand by the node
+  //    panel after a decision/edit (window._pollReviewStatus). ──
+  const statusUrl = `/project/${encodeURIComponent(METHODOLOGY)}/review/status`;
+  const mermaidEl = document.querySelector('pre.mermaid');
+  const $ = id => document.getElementById(id);
+
+  function rerenderDag(src) {
+    if (!mermaidEl || !window.mermaid) return;
+    mermaidEl.removeAttribute('data-processed');
+    mermaidEl.textContent = src;
+    try { mermaid.run({ nodes: [mermaidEl] }); } catch (e) {}
+  }
+
+  async function pollReviewStatus() {
+    let d;
+    try {
+      const r = await fetch(statusUrl, { cache: 'no-store' });
+      if (!r.ok) return;
+      d = await r.json();
+    } catch (e) { return; }
+    if (d.mermaid) rerenderDag(d.mermaid);
+    const c = d.coverage;
+    if (c) {
+      if ($('cov-approved')) $('cov-approved').textContent = c.approved;
+      if ($('cov-total')) $('cov-total').textContent = c.total;
+      if ($('cov-fill')) $('cov-fill').style.width = (c.approved_pct || 0) + '%';
+    }
+  }
+  window._pollReviewStatus = pollReviewStatus;
+
+  // ── Create version: snapshot {compiled,schemas} + freeze coverage. ──
+  const createBtn = document.getElementById('create-version-btn');
+  if (createBtn) {
+    createBtn.addEventListener('click', async function () {
+      const message = prompt('Describe this version (what changed / why create it now):', '');
+      if (message === null) return;  // cancelled
+      createBtn.disabled = true;
+      const original = createBtn.textContent;
+      createBtn.textContent = 'Creating…';
+      try {
+        const fd = new FormData();
+        fd.append('message', message);
+        const r = await fetch(`/project/${encodeURIComponent(METHODOLOGY)}/version`, { method: 'POST', body: fd });
+        if (!r.ok) { alert(`Version creation failed: ${r.status} ${await r.text()}`); return; }
+        window.location.reload();
+      } finally {
+        createBtn.disabled = false;
+        createBtn.textContent = original;
+      }
+    });
+  }
+})();
+</script>
+
+<script>
+(function () {
+  // ════ "Build workflow" chat — SSE GET /project/{name}/workflow/stream (phase=dag).
+  //      Streams stage cards into #chat-cards; on done, reloads to render the graph.
+  //      DOUBLE-SUBMIT GUARD: send disabled + "working…" until a terminal event. ════
+  const METHODOLOGY = {{ state.name | tojson }};
+  const WORKING_LABEL = 'Generating…';
+  const DONE_NOTE = 'Opening the workflow with the review / version / run UI. Refreshing…';
+
+  const log = document.getElementById('chat-log');
+  const cards = document.getElementById('chat-cards');
+  let cardsEmpty = document.getElementById('chat-cards-empty');
+  const input = document.getElementById('chat-input');
+  const sendBtn = document.getElementById('chat-send');
+  const liveDot = document.getElementById('chat-live');
+  const working = document.getElementById('chat-working');
+  const workingLabel = document.getElementById('chat-working-label');
+  let es = null;
+  let curAssistant = null;
+  let inFlight = false;
+  const history = [];
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => (
+      { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+    ));
+  }
+  function scrollLog() { if (log) log.scrollTop = log.scrollHeight; }
+
+  function addBubble(role, text) {
+    if (!log) return null;
+    const div = document.createElement('div');
+    div.className = 'chat-msg ' + role;
+    div.textContent = text || '';
+    log.appendChild(div);
+    scrollLog();
+    return div;
+  }
+
+  function addCard(kind, obj, issues, path) {
+    if (!cards) return;
+    if (cardsEmpty) { cardsEmpty.remove(); cardsEmpty = null; }
+    const name = kind === 'schema'
+      ? ((obj && (obj.name || obj.title)) || '(unnamed schema)')
+      : ((obj && obj.id) || '(unnamed stage)');
+    const hasIssues = issues && issues.length;
+    const card = document.createElement('div');
+    card.className = 'emit-card ' + kind + (hasIssues ? ' has-issues' : '');
+    let html = '<div class="ec-head">'
+      + '<span class="ec-name">' + escapeHtml(name) + '</span>'
+      + '<span class="ec-kind">' + kind + '</span></div>';
+    if (hasIssues) {
+      html += '<ul class="ec-issues">'
+        + issues.map(i => '<li>' + escapeHtml(i) + '</li>').join('')
+        + '</ul>';
+    } else {
+      html += '<div class="ec-ok">✓ valid' + (path
+        ? ' · saved ' + escapeHtml(String(path).replace(/\\/g, '/').split('/').pop()) : '')
+        + '</div>';
+    }
+    html += '<details><summary>JSON</summary><pre>'
+      + escapeHtml(JSON.stringify(obj, null, 2)) + '</pre></details>';
+    card.innerHTML = html;
+    cards.appendChild(card);
+  }
+
+  function addDropCard(kind, obj, reason) {
+    if (!cards) return;
+    if (cardsEmpty) { cardsEmpty.remove(); cardsEmpty = null; }
+    const name = (obj && obj.id) || '(unnamed stage)';
+    const card = document.createElement('div');
+    card.className = 'emit-card ' + kind + ' dropped';
+    card.innerHTML = '<div class="ec-head">'
+      + '<span class="ec-name">' + escapeHtml(name) + '</span>'
+      + '<span class="ec-kind">' + kind + ' · dropped</span></div>'
+      + '<div class="ec-drop">⏸ ' + escapeHtml(reason || 'dropped by the phase gate') + '</div>';
+    cards.appendChild(card);
+  }
+
+  function setStreaming(on) {
+    inFlight = on;
+    if (liveDot) liveDot.hidden = !on;
+    if (working) working.classList.toggle('on', on);
+    if (sendBtn) sendBtn.disabled = on;
+    if (input) input.disabled = on;
+  }
+
+  function closeStream() { if (es) { es.close(); es = null; } }
+
+  function send() {
+    if (inFlight) return;
+    const message = (input && input.value || '').trim();
+    if (workingLabel) workingLabel.textContent = WORKING_LABEL;
+    if (message) { addBubble('user', message); history.push({ role: 'user', content: message }); }
+    if (input) input.value = '';
+    curAssistant = null;
+
+    const url = '/project/' + encodeURIComponent(METHODOLOGY)
+      + '/workflow/stream?message=' + encodeURIComponent(message);
+    es = new EventSource(url);
+    setStreaming(true);
+
+    es.onmessage = function (e) {
+      let ev;
+      try { ev = JSON.parse(e.data); } catch (err) { return; }
+      if (ev.type === 'assistant_delta') {
+        if (!curAssistant) { curAssistant = addBubble('assistant', ''); }
+        if (curAssistant) { curAssistant.textContent += ev.text; scrollLog(); }
+      } else if (ev.type === 'stage_emitted') {
+        addCard('stage', ev.stage, ev.issues, ev.path);
+      } else if (ev.type === 'schema_emitted') {
+        addCard('schema', ev.schema, ev.issues, ev.path);
+      } else if (ev.type === 'stage_dropped') {
+        addDropCard('stage', ev.stage, ev.reason);
+      } else if (ev.type === 'schema_dropped') {
+        addDropCard('schema', ev.schema, ev.reason);
+      } else if (ev.type === 'done' || ev.type === 'data_model_proposed') {
+        if (curAssistant) { history.push({ role: 'assistant', content: curAssistant.textContent }); }
+        const v = ev.validation || {};
+        const parts = [];
+        if (v.n_stages !== undefined) parts.push(v.n_stages + ' stage(s)');
+        if (v.n_schemas !== undefined) parts.push(v.n_schemas + ' schema(s)');
+        addBubble('system', 'Workflow built — ' + parts.join(', ') + '. ' + DONE_NOTE);
+        closeStream();
+        setStreaming(false);
+        setTimeout(() => location.reload(), 900);
+      } else if (ev.type === 'error') {
+        addBubble('error', '⚠ ' + ev.message);
+        closeStream();
+        setStreaming(false);
+      }
+    };
+
+    es.onerror = function () {
+      if (es && es.readyState === EventSource.CLOSED) { setStreaming(false); }
+    };
+  }
+
+  if (sendBtn) sendBtn.addEventListener('click', send);
+  if (input) input.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
+  });
+})();
+</script>
+{% endif %}
+{% endblock %}

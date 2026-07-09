@@ -92,6 +92,12 @@ examples/<name>/      project dirs (untracked runtime data: compiled/ + methodol
   automated result is expensive or irreversible, gate that step behind human
   sign-off: the runner halts, and decisions are content-hashed so they survive
   re-runs.
+- **The status/review helpers stay below the routes layer.**
+  `app/services/{project,node_review,versioning}` must not import `app.main`,
+  `app.runtime`, or `app.compiler` — routes and templates depend on them, not the
+  reverse, so the import graph stays acyclic and they stay unit-testable without the
+  runtime/compiler stack. (Other `app/services/` modules — e.g. `compilation.py`,
+  which wraps the compiler — are not bound by this.) Not lint-enforced yet: #63.
 - **Never `except Exception` or bare `except`.** Catch specific exception types —
   swallowing all errors hides bugs and breaks fail-loudly. Enforced by Ruff
   `BLE001`.

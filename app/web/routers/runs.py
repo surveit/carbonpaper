@@ -30,6 +30,7 @@ from app.web.loading import (
     resolve_function_code,
     runs_dir,
 )
+from app.web.project_view import shell_state
 
 router = APIRouter()
 
@@ -70,10 +71,20 @@ async def trigger_run(project: str):
 
 @router.get("/project/{project}/runs", response_class=HTMLResponse)
 async def runs_index(request: Request, project: str):
+    """RUNS section of the project shell: the runs list, framed by the sidebar. Passes
+    the SAME project_state the other sections do (so the sidebar / next-action agree)
+    plus the manifest-backed run rows. 404 if the project dir doesn't exist."""
+    pdir = EXAMPLES_DIR / project
+    if not pdir.is_dir():
+        raise HTTPException(status_code=404, detail=f"No project '{project}'")
     return templates.TemplateResponse(
         request,
-        "runs_index.html",
-        {"project": project, "runs": list_runs(project)},
+        "section_runs.html",
+        {
+            "state": shell_state(pdir),
+            "section": "runs",
+            "runs": list_runs(project),
+        },
     )
 
 
