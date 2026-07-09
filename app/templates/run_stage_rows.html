@@ -25,7 +25,7 @@
     <tbody>
     {% for row in rows %}
     <tr><td class="row-num muted">{{ loop.index }}</td>
-        <td class="syw-cell"><a href="/project/{{ project }}/runs/{{ run_id }}/stage/{{ stage_id }}/row/{{ loop.index0 }}/trace/view" target="_blank" rel="noopener" title="show your work — trace this row's provenance">⚡ show your work</a></td>
+        <td class="syw-cell"><a href="/project/{{ project }}/runs/{{ run_id }}/stage/{{ stage_id }}/row/{{ loop.index0 }}/trace/view" target="_blank" rel="noopener" title="trace this row's provenance back through the pipeline">View lineage</a></td>
         {% for c in columns %}{% set v = row[c] | string %}{% if v[:4] == 'http' %}<td class="cell-url"><a href="{{ v }}" target="_blank" rel="noopener">{{ v }}</a></td>{% else %}<td>{{ v | truncate(240) }}</td>{% endif %}{% endfor %}
     </tr>
     {% endfor %}

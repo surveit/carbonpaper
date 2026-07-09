@@ -246,7 +246,7 @@ async def run_stage_row_trace(project: str, run_id: str, stage_id: str, row: int
 
 
 _TRACE_VIEW_HTML = r"""<!doctype html><html><head><meta charset="utf-8">
-<title>show your work · __TITLE__</title>
+<title>lineage · __TITLE__</title>
 <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
 <style>
 body{font-family:-apple-system,Segoe UI,Arial,sans-serif;max-width:940px;margin:22px auto;padding:0 20px;color:#1a1a1a}
@@ -270,7 +270,7 @@ h1{font-size:19px;margin:0 0 2px}.sub{color:#888;font-size:13px;margin-bottom:14
 .nograph{color:#888;font-size:13px}
 .hidden{display:none}
 </style></head><body>
-<h1>Show your work</h1><div class="sub" id="sub"></div>
+<h1>Lineage</h1><div class="sub" id="sub"></div>
 <div class="toggle"><button id="b-story" class="on">Story</button><button id="b-graph">Graph</button></div>
 <div class="grid"><div>
   <div id="story" class="story"></div>

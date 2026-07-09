@@ -83,8 +83,8 @@ def test_rows_page_links_each_row_to_its_trace(examples_dir, client):
     _write_run(examples_dir, _df(3))
     r = client.get(f"/project/{PROJ}/runs/{RUN}/stage/{STAGE}/rows")
     assert r.status_code == 200
-    # every rendered row has a 0-indexed "show your work" trace link
-    assert "show your work" in r.text
+    # every rendered row has a 0-indexed "View lineage" trace link
+    assert "View lineage" in r.text
     for i in range(3):
         assert f"/stage/{STAGE}/row/{i}/trace/view" in r.text
 
