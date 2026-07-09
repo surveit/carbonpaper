@@ -88,7 +88,6 @@
     params.append("target_stage", payload.target_stage);
     payload.expected.forEach(function (e) {
         params.append("expected_actual", e.actual);
-        params.append("expected_dataset", e.dataset);
     });
     const container = document.getElementById("cases-schema-container");
     const downloadBtn = document.getElementById("download-template-btn");
@@ -102,12 +101,11 @@
 
 <h2>Scoring rules</h2>
 <table class="table">
-    <thead><tr><th>actual</th><th>expected</th><th>metric</th><th>tolerance</th></tr></thead>
+    <thead><tr><th>target column</th><th>metric</th><th>tolerance</th></tr></thead>
     <tbody>
         {% for exp in config.expected %}
         <tr>
             <td><code>{{ exp.actual }}</code></td>
-            <td><code>{{ exp.expected }}</code></td>
             <td>{{ exp.metric }}</td>
             <td>{{ exp.tolerance if exp.tolerance is not none else '—' }}</td>
         </tr>

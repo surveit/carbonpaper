@@ -80,6 +80,15 @@ h3 {
     margin: 0.8rem 0;
 }
 
+.cases-warnings {
+    border: 1px solid var(--warn-border);
+    background: var(--warn-bg);
+    color: #7a4a00;
+    border-radius: 6px;
+    padding: 0.6rem 1rem;
+    margin: 0.8rem 0;
+}
+
 code {
     background: var(--code-bg);
     padding: 1px 5px;

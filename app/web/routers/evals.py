@@ -14,8 +14,9 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from pydantic import ValidationError
 from starlette.datastructures import UploadFile
 
-from app.models import Column, EvalConfig, EvalRun, FileFormat, Stage, TableRef, TableSchema
+from app.models import EvalConfig, EvalRun, FileFormat, Stage, TableRef, TableSchema
 from app.models.schema import format_errors
+from app.services.cases_columns import derive_cases_columns
 from app.services.eval_compat import check_eval_compatibility
 from app.services.eval_store import (
     eval_status,
@@ -219,7 +220,7 @@ class EvalFormValues(TypedDict):
 
 
 def _empty_expected_row() -> dict[str, str]:
-    return {"actual": "", "dataset": "", "metric": "exact", "tolerance": ""}
+    return {"actual": "", "metric": "exact", "tolerance": ""}
 
 
 def _values_from_config(config: EvalConfig) -> EvalFormValues:
@@ -234,7 +235,6 @@ def _values_from_config(config: EvalConfig) -> EvalFormValues:
         expected_rows=[
             {
                 "actual": exp.actual,
-                "dataset": exp.expected,
                 "metric": exp.metric,
                 "tolerance": "" if exp.tolerance is None else str(exp.tolerance),
             }
@@ -302,50 +302,19 @@ def _derive_table_schema(
     expected_rows: list[dict[str, str]],
     errors: list[str],
 ) -> TableSchema:
-    """The user never authors the cases table's column types -- they're
-    sourced from the stages the eval binds to. The injected columns are
-    `override_stage`'s entire output schema (an eval replaces that stage's
-    whole output, so there's no meaningful subset); each expected row's
-    dataset column is typed by its `actual` column on `target_stage`'s output
-    schema. A column that can't be resolved to a type (unknown stage, no
-    output_schema, or the column isn't declared there) is skipped in the
-    derived schema -- that gap is exactly what check_eval_compatibility
-    reports -- but is also recorded here as a form-level error so the user
-    sees why."""
+    """The user never authors the cases table's column types or its answer
+    columns' names -- both are sourced from the stages the eval binds to, via
+    `derive_cases_columns` (the single source of truth also used by
+    `check_eval_compatibility` and the `cases-schema` endpoint). Any problem
+    the derivation hits (unknown stage, no output_schema, a check asserting
+    on a column the target doesn't emit) is appended to `errors` as a
+    form-level error so the user sees why."""
     override = by_id.get(override_stage)
     target = by_id.get(target_stage)
-
-    columns: dict[str, Column] = {}
-    if override is None:
-        errors.append(f"override stage `{override_stage}` does not exist in the methodology")
-    elif override.output_schema is None:
-        errors.append(f"override stage `{override_stage}` declares no output schema")
-    else:
-        for col in override.output_schema.columns:
-            columns[col.name] = Column(name=col.name, type=col.type)
-
-    target_types: dict[str, str] = {}
-    if target is None:
-        errors.append(f"target stage `{target_stage}` does not exist in the methodology")
-    elif target.output_schema is None:
-        errors.append(f"target stage `{target_stage}` declares no output schema")
-    else:
-        target_types = {c.name: c.type for c in target.output_schema.columns}
-
-    for row in expected_rows:
-        actual = row["actual"]
-        dataset_name = row["dataset"]
-        if not actual or not dataset_name:
-            continue
-        col_type = target_types.get(actual)
-        if col_type is None:
-            errors.append(
-                f"expected column asserts on `{actual}`, which target `{target_stage}` does not emit"
-            )
-            continue
-        columns[dataset_name] = Column(name=dataset_name, type=col_type)
-
-    return TableSchema(columns=list(columns.values()))
+    actuals = [row["actual"] for row in expected_rows]
+    derived = derive_cases_columns(override, target, actuals)
+    errors.extend(derived.problems)
+    return TableSchema(columns=derived.columns)
 
 
 @router.get(
@@ -433,22 +402,19 @@ async def _read_eval_form(request: Request) -> dict[str, Any]:
         return v if isinstance(v, str) else ""
 
     actual = [v for v in form.getlist("expected_actual") if isinstance(v, str)]
-    dataset = [v for v in form.getlist("expected_dataset") if isinstance(v, str)]
     metric = [v for v in form.getlist("expected_metric") if isinstance(v, str)]
     tolerance = [v for v in form.getlist("expected_tolerance") if isinstance(v, str)]
 
-    n = max(len(actual), len(dataset), len(metric), len(tolerance))
+    n = max(len(actual), len(metric), len(tolerance))
     expected_rows = []
     for i in range(n):
         row_actual = actual[i] if i < len(actual) else ""
-        row_dataset = dataset[i] if i < len(dataset) else ""
         row_metric = metric[i] if i < len(metric) else "exact"
         row_tolerance = tolerance[i] if i < len(tolerance) else ""
-        if not row_actual and not row_dataset:
-            continue  # drop fully-empty trailing rows
+        if not row_actual:
+            continue  # drop rows with no target column picked
         expected_rows.append({
             "actual": row_actual,
-            "dataset": row_dataset,
             "metric": row_metric or "exact",
             "tolerance": row_tolerance,
         })
@@ -474,6 +440,7 @@ class CasesSchemaColumn(TypedDict):
 class CasesSchemaResponse(TypedDict):
     ok: bool
     problems: list[str]
+    warnings: list[str]
     columns: list[CasesSchemaColumn]
 
 
@@ -483,28 +450,29 @@ async def cases_schema_json(request: Request, methodology: str) -> JSONResponse:
     current fields (same fields `_handle_eval_form_post` reads), before the
     config is saved -- lets the form preview the schema and offer a template
     download while the user is still picking override/target/expected
-    columns. `_derive_table_schema` is the single source of truth for the
-    derivation; this endpoint only tags each returned column with the role
-    the form displays it under."""
+    columns. `derive_cases_columns` is the single source of truth for the
+    derivation; this endpoint tags each returned column with the role the
+    form displays it under and surfaces any name-clash warning."""
     fields = await _read_eval_form(request)
     listing = load_stages(methodology)
     by_id = {s.id: s for s in listing.stages}
 
-    problems: list[str] = []
-    schema = _derive_table_schema(
-        by_id, fields["override_stage"], fields["target_stage"],
-        fields["expected_rows"], problems,
-    )
-    expected_names = {row["dataset"] for row in fields["expected_rows"] if row["dataset"]}
+    override = by_id.get(fields["override_stage"])
+    target = by_id.get(fields["target_stage"])
+    actuals = [row["actual"] for row in fields["expected_rows"]]
+    derived = derive_cases_columns(override, target, actuals)
+
+    injected_names = {c.name for c in derived.injected}
     columns: list[CasesSchemaColumn] = [
         CasesSchemaColumn(
             name=col.name, type=col.type,
-            role="expected" if col.name in expected_names else "injected",
+            role="injected" if col.name in injected_names else "expected",
         )
-        for col in schema.columns
+        for col in derived.columns
     ]
     body: CasesSchemaResponse = CasesSchemaResponse(
-        ok=not problems, problems=problems, columns=columns,
+        ok=not derived.problems, problems=derived.problems,
+        warnings=derived.warnings, columns=columns,
     )
     return JSONResponse(content=dict(body))
 
@@ -541,7 +509,6 @@ async def _handle_eval_form_post(
                 errors.append(f"tolerance '{row['tolerance']}' is not a number")
         expected_dicts.append({
             "actual": row["actual"],
-            "expected": row["dataset"],
             "metric": row["metric"],
             "tolerance": tolerance,
         })
@@ -667,7 +634,7 @@ def _render_detail(
     cases_schema_payload = {
         "override_stage": config.override_stage,
         "target_stage": config.target_stage,
-        "expected": [{"actual": e.actual, "dataset": e.expected} for e in config.expected],
+        "expected": [{"actual": e.actual} for e in config.expected],
     }
 
     cases_columns: list[str] = []
@@ -742,7 +709,7 @@ async def eval_attach_cases(
 
     schema = _derive_table_schema(
         by_id, config.override_stage, config.target_stage,
-        [{"actual": e.actual, "dataset": e.expected} for e in config.expected],
+        [{"actual": e.actual} for e in config.expected],
         errors,
     )
     if not errors:

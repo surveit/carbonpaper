@@ -75,7 +75,6 @@
     <div id="override-required-columns"></div>
 
     <h2>Expected columns</h2>
-    <datalist id="dataset-cols"></datalist>
     <div id="expected-rows">
         {% for row in values.expected_rows %}
         <div class="expected-row">
@@ -83,7 +82,6 @@
                 <option value="">— actual —</option>
                 {% if row.actual %}<option value="{{ row.actual }}" selected>{{ row.actual }}</option>{% endif %}
             </select>
-            <input type="text" name="expected_dataset" list="dataset-cols" value="{{ row.dataset }}" placeholder="answer column">
             <select name="expected_metric">
                 <option value="exact" {% if row.metric == "exact" %}selected{% endif %}>exact</option>
                 <option value="abs_tol" {% if row.metric == "abs_tol" %}selected{% endif %}>abs_tol</option>
@@ -97,7 +95,7 @@
     <button type="button" class="btn" id="add-expected-row">+ add expected column</button>
 
     <h2>Cases file</h2>
-    <p class="lede">The cases file your override/target/expected picks require -- injected input columns plus one column per check holding the correct answer.</p>
+    <p class="lede">The cases file your override/target/expected picks require -- injected input columns plus one answer column per check, named after the target column it grades (renamed only if that name clashes with an injected input).</p>
     <div id="cases-schema-container"><p class="lede">Pick override/target and add expected columns to see the required cases-file schema.</p></div>
     <p><button type="button" class="btn" id="download-template-btn" disabled>Download template</button></p>
 
@@ -129,7 +127,6 @@
 <template id="expected-row-template">
     <div class="expected-row">
         <select name="expected_actual"><option value="">— actual —</option></select>
-        <input type="text" name="expected_dataset" list="dataset-cols" placeholder="answer column">
         <select name="expected_metric">
             <option value="exact">exact</option>
             <option value="abs_tol">abs_tol</option>
@@ -184,10 +181,8 @@
         return res.json();
     }
 
-    function applyDatasetColumns(columns, path) {
+    function applyInspectedPath(path) {
         document.getElementById('f-table-path').value = path;
-        const datalist = document.getElementById('dataset-cols');
-        datalist.innerHTML = columns.map(c => '<option value="' + CasesSchema.escapeHtml(c) + '"></option>').join('');
     }
 
     // ── Cases-file schema preview + template download ──
@@ -201,7 +196,6 @@
         params.append('target_stage', targetInput.value);
         document.querySelectorAll('#expected-rows .expected-row').forEach(function (row) {
             params.append('expected_actual', row.querySelector('[name="expected_actual"]').value);
-            params.append('expected_dataset', row.querySelector('[name="expected_dataset"]').value);
         });
         return params;
     }
@@ -216,7 +210,7 @@
         const fd = new FormData();
         fd.append('file', this.files[0]);
         const body = await inspectTable(fd);
-        if (body) applyDatasetColumns(body.columns, body.path);
+        if (body) applyInspectedPath(body.path);
     });
 
     document.getElementById('f-path').addEventListener('blur', async function () {
@@ -224,7 +218,7 @@
         const fd = new FormData();
         fd.append('path', this.value);
         const body = await inspectTable(fd);
-        if (body) applyDatasetColumns(body.columns, body.path);
+        if (body) applyInspectedPath(body.path);
     });
 
     document.getElementById('add-expected-row').addEventListener('click', function () {

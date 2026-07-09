@@ -65,7 +65,7 @@ def _cases_csv(meth_dir: Path) -> Path:
     data_dir = meth_dir / "eval_data"
     data_dir.mkdir(parents=True, exist_ok=True)
     path = data_dir / "cases.csv"
-    path.write_text("doc_id,text,expected_summary\nd1,hello world,hi\n", encoding="utf-8")
+    path.write_text("doc_id,text,summary\nd1,hello world,hi\n", encoding="utf-8")
     return path
 
 
@@ -85,10 +85,10 @@ def _valid_config_yaml(meth_dir: Path) -> None:
             "table_schema": {"columns": [
                 {"name": "doc_id", "type": "str"},
                 {"name": "text", "type": "str"},
-                {"name": "expected_summary", "type": "str"},
+                {"name": "summary", "type": "str"},
             ]},
         },
-        "expected": [{"actual": "summary", "expected": "expected_summary"}],
+        "expected": [{"actual": "summary"}],
     }
     config_dir = meth_dir / "eval_config"
     config_dir.mkdir(parents=True, exist_ok=True)
@@ -120,10 +120,10 @@ def _config_with_reference_override_yaml(meth_dir: Path) -> None:
             "table_schema": {"columns": [
                 {"name": "doc_id", "type": "str"},
                 {"name": "text", "type": "str"},
-                {"name": "expected_summary", "type": "str"},
+                {"name": "summary", "type": "str"},
             ]},
         },
-        "expected": [{"actual": "summary", "expected": "expected_summary"}],
+        "expected": [{"actual": "summary"}],
     }
     config_dir = meth_dir / "eval_config"
     config_dir.mkdir(parents=True, exist_ok=True)
@@ -143,7 +143,7 @@ def _broken_config_yaml(meth_dir: Path) -> None:
             "format": "csv",
             "table_schema": {"columns": [{"name": "doc_id", "type": "str"}]},
         },
-        "expected": [{"actual": "x", "expected": "doc_id"}],
+        "expected": [{"actual": "x"}],
     }
     config_dir = meth_dir / "eval_config"
     config_dir.mkdir(parents=True, exist_ok=True)
@@ -206,7 +206,7 @@ def test_eval_detail_valid_config_page(tmp_examples):
     assert "input_data" in r.text
     assert "llm_transform" in r.text
     # cases-table columns rendered
-    assert "expected_summary" in r.text
+    assert "<th>summary</th>" in r.text
     assert "doc_id" in r.text
     # cases-table ROWS actually rendered: a distinctive cell value from the
     # fixture CSV that appears nowhere else on the page, proving the table
@@ -250,7 +250,7 @@ def test_eval_detail_dataless_shows_attach(tmp_examples):
         "name": "Dataless eval",
         "override_stage": "input_data",
         "target_stage": "llm_transform",
-        "expected": [{"actual": "summary", "expected": "expected_summary"}],
+        "expected": [{"actual": "summary"}],
     }
     config_dir = tmp_examples / "eval_config"
     config_dir.mkdir(parents=True, exist_ok=True)
@@ -433,7 +433,7 @@ def test_get_edit_prefills_existing_values(tmp_examples):
     assert "input_data" in r.text
     assert "llm_transform" in r.text
     assert "cases.csv" in r.text
-    assert "expected_summary" in r.text
+    assert 'value="summary" selected' in r.text
 
 
 # ── stage-schema JSON ───────────────────────────────────────────────────────
@@ -485,7 +485,7 @@ def test_inspect_table_by_path(tmp_examples):
     )
     assert r.status_code == 200
     body = r.json()
-    assert set(body["columns"]) == {"doc_id", "text", "expected_summary"}
+    assert set(body["columns"]) == {"doc_id", "text", "summary"}
     assert body["path"] == f"examples/{METHODOLOGY}/eval_data/cases.csv"
 
 
@@ -508,7 +508,6 @@ def _valid_create_payload(table_path: str) -> dict:
         "table_path": table_path,
         "table_format": "csv",
         "expected_actual": ["summary"],
-        "expected_dataset": ["expected_summary"],
         "expected_metric": ["exact"],
         "expected_tolerance": [""],
     }
@@ -661,7 +660,7 @@ def _dataless_config_yaml(meth_dir: Path, eval_id: str = "dataless-eval") -> Non
         "name": "Dataless eval",
         "override_stage": "input_data",
         "target_stage": "llm_transform",
-        "expected": [{"actual": "summary", "expected": "expected_summary"}],
+        "expected": [{"actual": "summary"}],
     }
     config_dir = meth_dir / "eval_config"
     config_dir.mkdir(parents=True, exist_ok=True)
@@ -673,9 +672,10 @@ def test_attach_cases_to_dataless_eval(tmp_examples):
     _dataless_config_yaml(tmp_examples)
 
     # Derived schema: doc_id + text (input_data's whole output schema,
-    # injected) and expected_summary (llm_transform's `summary` column, via
-    # the expected row's dataset name).
-    csv_bytes = b"doc_id,text,expected_summary\nd1,hello world,hi\n"
+    # injected) and summary (llm_transform's `summary` column -- the check's
+    # target column, named after itself since it doesn't clash with an
+    # injected column).
+    csv_bytes = b"doc_id,text,summary\nd1,hello world,hi\n"
     r = client.post(
         f"/methodology/{METHODOLOGY}/evals/dataless-eval/attach-cases",
         files={"file": ("dataless_cases.csv", csv_bytes, "text/csv")},
@@ -703,20 +703,21 @@ def test_cases_schema_valid_override_and_target(tmp_examples):
             "override_stage": "input_data",
             "target_stage": "llm_transform",
             "expected_actual": ["summary"],
-            "expected_dataset": ["expected_summary"],
         },
     )
     assert r.status_code == 200
     body = r.json()
     assert body["ok"] is True
     assert body["problems"] == []
+    assert body["warnings"] == []
     by_name = {c["name"]: c for c in body["columns"]}
     # input_data's whole output schema is injected.
     assert by_name["text"] == {"name": "text", "type": "str", "role": "injected"}
     assert by_name["doc_id"] == {"name": "doc_id", "type": "str", "role": "injected"}
-    # the expected row's dataset column, typed from llm_transform's `summary`.
-    assert by_name["expected_summary"] == {
-        "name": "expected_summary", "type": "str", "role": "expected",
+    # the answer column is named after the checked target column -- no clash
+    # with an injected column here, so no `output.` prefix.
+    assert by_name["summary"] == {
+        "name": "summary", "type": "str", "role": "expected",
     }
 
 
@@ -727,7 +728,6 @@ def test_cases_schema_override_with_no_output_schema_reports_problem(tmp_example
             "override_stage": "publish",  # schemaless stage in the fixture
             "target_stage": "llm_transform",
             "expected_actual": [""],
-            "expected_dataset": [""],
         },
     )
     assert r.status_code == 200
@@ -745,14 +745,42 @@ def test_cases_schema_bad_actual_column_reports_problem(tmp_examples):
             "override_stage": "input_data",
             "target_stage": "llm_transform",
             "expected_actual": ["not_a_real_column"],
-            "expected_dataset": ["expected_x"],
         },
     )
     assert r.status_code == 200
     body = r.json()
     assert body["ok"] is False
     assert any("not_a_real_column" in p for p in body["problems"])
-    assert not any(c["name"] == "expected_x" for c in body["columns"])
+    # no fabricated answer column for a check that doesn't resolve to a type.
+    assert not any(c["name"] == "not_a_real_column" for c in body["columns"])
+
+
+def test_cases_schema_clash_renames_and_warns(tmp_examples):
+    # llm_transform's output_schema declares `doc_id` (passed through from
+    # input_data) alongside `summary`. A check on `doc_id` therefore names
+    # the same column as one of input_data's own output columns: the cases
+    # file can't hold two `doc_id` columns, so the injected input and the
+    # answer are disambiguated.
+    r = client.post(
+        f"/methodology/{METHODOLOGY}/evals/cases-schema",
+        data={
+            "override_stage": "input_data",
+            "target_stage": "llm_transform",
+            "expected_actual": ["doc_id"],
+        },
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["ok"] is True
+    assert body["problems"] == []
+    by_name = {c["name"]: c for c in body["columns"]}
+    assert by_name["override.doc_id"] == {"name": "override.doc_id", "type": "str", "role": "injected"}
+    assert by_name["output.doc_id"] == {"name": "output.doc_id", "type": "str", "role": "expected"}
+    assert "text" in by_name  # the non-clashing injected column keeps its plain name
+    assert "doc_id" not in by_name  # the bare name is never emitted -- it's always disambiguated
+    assert body["warnings"]
+    assert any("doc_id" in w and "override.doc_id" in w and "output.doc_id" in w
+               for w in body["warnings"])
 
 
 def test_cases_schema_empty_post_reports_problems_not_500(tmp_examples):
@@ -771,11 +799,14 @@ def test_cases_schema_empty_post_reports_problems_not_500(tmp_examples):
     assert body["columns"] == []
 
 
-def test_eval_form_expected_dataset_is_text_input_not_select(tmp_examples):
+def test_eval_form_has_no_answer_column_input(tmp_examples):
+    # A check row is target-column picker + metric + tolerance -- there is
+    # nothing left to author for the answer column's name (it's derived).
     r = client.get(f"/methodology/{METHODOLOGY}/evals/new")
     assert r.status_code == 200
-    assert 'input type="text" name="expected_dataset"' in r.text
-    assert 'select name="expected_dataset"' not in r.text
+    assert 'name="expected_dataset"' not in r.text
+    assert 'placeholder="answer column"' not in r.text.lower()
+    assert 'id="dataset-cols"' not in r.text
 
 
 def test_eval_detail_dataless_renders_cases_schema_and_template_download(tmp_examples):
@@ -787,8 +818,8 @@ def test_eval_detail_dataless_renders_cases_schema_and_template_download(tmp_exa
 
     # The embedded config payload the page's inline script POSTs to
     # cases-schema on load must actually carry this config's override/target
-    # stages and expected actual/dataset pairs -- not just render a
-    # container with the right id.
+    # stages and expected actual columns -- not just render a container with
+    # the right id.
     m = re.search(
         r'<script id="cases-schema-config" type="application/json">(.*?)</script>',
         r.text, re.DOTALL,
@@ -797,13 +828,14 @@ def test_eval_detail_dataless_renders_cases_schema_and_template_download(tmp_exa
     payload = json.loads(m.group(1))
     assert payload["override_stage"] == "input_data"
     assert payload["target_stage"] == "llm_transform"
-    assert payload["expected"] == [{"actual": "summary", "dataset": "expected_summary"}]
+    assert payload["expected"] == [{"actual": "summary"}]
 
 
 def test_attach_cases_rejects_mismatched_file(tmp_examples):
     _dataless_config_yaml(tmp_examples, eval_id="dataless-eval-2")
 
-    # Missing the required `expected_summary` column.
+    # Missing the required `summary` column (the check's target column,
+    # which is also the cases file's answer column here).
     csv_bytes = b"doc_id,text\nd1,hello world\n"
     r = client.post(
         f"/methodology/{METHODOLOGY}/evals/dataless-eval-2/attach-cases",
@@ -811,7 +843,7 @@ def test_attach_cases_rejects_mismatched_file(tmp_examples):
         follow_redirects=False,
     )
     assert r.status_code == 200
-    assert "expected_summary" in r.text
+    assert "summary" in r.text
 
     from app.services.eval_store import load_eval_config
     reloaded = load_eval_config(tmp_examples, "dataless-eval-2")

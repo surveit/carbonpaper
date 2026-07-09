@@ -33,29 +33,39 @@
             downloadBtn.dataset.columns = "[]";
             return;
         }
+
+        let html = "";
         if (body.problems && body.problems.length) {
-            containerEl.innerHTML = "<div class=\"load-issues\"><strong>" + body.problems.length +
+            html += "<div class=\"load-issues\"><strong>" + body.problems.length +
                 " problem(s):</strong><ul>" +
                 body.problems.map(function (p) { return "<li>" + escapeHtml(p) + "</li>"; }).join("") +
                 "</ul></div>";
-        } else if (!body.columns.length) {
-            containerEl.innerHTML = "<p class=\"lede\">Pick override/target and add expected columns to see the required cases-file schema.</p>";
-        } else {
-            const injected = body.columns.filter(function (c) { return c.role === "injected"; });
-            const expected = body.columns.filter(function (c) { return c.role === "expected"; });
-            let html = "";
-            if (injected.length) {
-                html += "<p class=\"lede\"><strong>injected inputs:</strong> " +
-                    injected.map(function (c) { return escapeHtml(c.name) + " (" + escapeHtml(c.type) + ")"; }).join(", ") +
-                    "</p>";
-            }
-            if (expected.length) {
-                html += "<p class=\"lede\"><strong>expected answers:</strong> " +
-                    expected.map(function (c) { return escapeHtml(c.name) + " (" + escapeHtml(c.type) + ")"; }).join(", ") +
-                    "</p>";
-            }
-            containerEl.innerHTML = html;
         }
+        if (body.warnings && body.warnings.length) {
+            html += "<div class=\"cases-warnings\"><strong>" + body.warnings.length +
+                " warning(s):</strong><ul>" +
+                body.warnings.map(function (w) { return "<li>" + escapeHtml(w) + "</li>"; }).join("") +
+                "</ul></div>";
+        }
+        if (!(body.problems && body.problems.length)) {
+            if (!body.columns.length) {
+                html += "<p class=\"lede\">Pick override/target and add expected columns to see the required cases-file schema.</p>";
+            } else {
+                const injected = body.columns.filter(function (c) { return c.role === "injected"; });
+                const expected = body.columns.filter(function (c) { return c.role === "expected"; });
+                if (injected.length) {
+                    html += "<p class=\"lede\"><strong>injected inputs:</strong> " +
+                        injected.map(function (c) { return escapeHtml(c.name) + " (" + escapeHtml(c.type) + ")"; }).join(", ") +
+                        "</p>";
+                }
+                if (expected.length) {
+                    html += "<p class=\"lede\"><strong>expected answers:</strong> " +
+                        expected.map(function (c) { return escapeHtml(c.name) + " (" + escapeHtml(c.type) + ")"; }).join(", ") +
+                        "</p>";
+                }
+            }
+        }
+        containerEl.innerHTML = html;
         downloadBtn.disabled = !(body.ok && body.columns.length);
         downloadBtn.dataset.columns = JSON.stringify(body.columns.map(function (c) { return c.name; }));
     }

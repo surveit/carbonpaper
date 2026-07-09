@@ -3,13 +3,15 @@
 An eval measures the *real* methodology pipeline, not a copy of it. The v1 shape
 (fan-out / fan-in are out of scope — those evals come later):
 
-  - An **EvalConfig** is the authored spec. What defines it is the checks: the
-    `expected` columns compared against `target_stage`'s output. An optional
-    row-aligned cases `table` supplies the data for those checks; it's the data,
-    not the definition, so a config can exist with no `table` yet (attach it
-    later). When a table is present, its columns are exactly `override_stage`'s
-    output columns (injected as that stage's whole output) plus each check's
-    expected-answer column. (Not yet built: the scorer that runs this table
+  - An **EvalConfig** is the authored spec. What defines it is the checks: each
+    names a `target_stage` output column to grade (`ExpectedColumn.actual`). An
+    optional row-aligned cases `table` supplies the data for those checks; it's
+    the data, not the definition, so a config can exist with no `table` yet
+    (attach it later). When a table is present, its columns are exactly
+    `override_stage`'s output columns (injected as that stage's whole output)
+    plus one answer column per check, named after the check's target column
+    (disambiguated on a name clash -- see `app.services.cases_columns`).
+    (Not yet built: the scorer that runs this table
     through the pathway and grades it is expected to align each target output
     row back to the case that produced it by row-level lineage — an id stamped
     on each injected case row and carried through to the target — rather than
@@ -62,11 +64,12 @@ class StageOutputOverride(_Base):
 
 # ── The comparison ───────────────────────────────────────────────────────────
 class ExpectedColumn(_Base):
-    """One asserted output column: compare the target's `actual` column to the
-    dataset's `expected` column. Names legitimately differ (the node emits
-    `score`, the dataset column is `expected_score`)."""
+    """One check: which `target_stage` output column to grade, and how. The
+    cases file's answer column for this check is not authored here -- it is
+    named after `actual` (the same name), unless `actual` collides with one
+    of the override stage's own output column names, in which case it is
+    disambiguated (see `app.services.cases_columns.derive_cases_columns`)."""
     actual: str
-    expected: str
     metric: Literal["exact", "abs_tol", "sign"] = "exact"
     tolerance: Optional[float] = None
 
@@ -92,13 +95,13 @@ class EvalConfig(_Base):
 
     An optional cases `table` supplies the rows the checks run against: its
     columns are `override_stage`'s output columns (injected as that stage's
-    whole output) plus each check's expected-answer column. Each `expected`
-    check compares a `target_stage`'s output column against the matching
-    column in the cases table. Row alignment between the injected cases and
-    the target's output is only well-defined when the override→target path is
-    grain-preserving (see `resolve_eval_run_settings`). `reference_overrides`
-    inject extra data at other stages; `code` overrides the per-column
-    `expected` comparison when declarative scoring can't apply.
+    whole output) plus one answer column per check, named after the check's
+    target column (`ExpectedColumn.actual`). Each check compares that answer
+    column to the matching `target_stage` output column. Row alignment between
+    the injected cases and the target's output is only well-defined when the
+    override→target path is grain-preserving (see `resolve_eval_run_settings`).
+    `reference_overrides` inject extra data at other stages; `code` overrides
+    the per-column comparison when declarative scoring can't apply.
     """
     id: SlugId
     methodology: str

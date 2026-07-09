@@ -3,6 +3,7 @@ stages it names, as they are right now."""
 from __future__ import annotations
 
 from app import models as m
+from app.services.cases_columns import derive_cases_columns
 from app.services.eval_compat import CompatibilityReport, check_eval_compatibility
 
 
@@ -52,9 +53,8 @@ def _config(**over):
     base = {
         "id": "scoring", "methodology": "lobbymap", "name": "n",
         "override_stage": "src", "target_stage": "tgt",
-        "table": _ref(cols=["k", "v", "quote", "expected_score"]),
-        "expected": [{"actual": "score", "expected": "expected_score",
-                      "metric": "abs_tol", "tolerance": 1}],
+        "table": _ref(cols=["k", "v", "quote", "score"]),
+        "expected": [{"actual": "score", "metric": "abs_tol", "tolerance": 1}],
     }
     base.update(over)
     return m.EvalConfig.model_validate(base)
@@ -154,8 +154,7 @@ def test_reference_override_missing_a_column_of_its_stage_schema():
 
 
 def test_expected_actual_not_in_target_schema():
-    config = _config(expected=[{"actual": "not_emitted", "expected": "expected_score",
-                                "metric": "abs_tol", "tolerance": 1}])
+    config = _config(expected=[{"actual": "not_emitted", "metric": "abs_tol", "tolerance": 1}])
     report = check_eval_compatibility(config, _stages())
     assert report.ok is False
     assert any("not_emitted" in p for p in report.problems)
@@ -248,8 +247,83 @@ def test_table_none_does_not_crash_and_skips_file_checks():
 
 def test_table_none_still_catches_target_assertion_error():
     config = _config(table=None, expected=[
-        {"actual": "not_emitted", "expected": "expected_score",
-         "metric": "abs_tol", "tolerance": 1}])
+        {"actual": "not_emitted", "metric": "abs_tol", "tolerance": 1}])
     report = check_eval_compatibility(config, _stages())
     assert report.ok is False
     assert any("not_emitted" in p for p in report.problems)
+
+
+# ── override coverage is clash-aware (derive_cases_columns) ─────────────────
+def test_coverage_check_rejects_bare_name_on_a_clashing_column():
+    # override's own output includes `v`; a check also grades `v` on the
+    # target -- the clash means the cases table must carry `override.v`, not
+    # a bare `v`.
+    src = _file_input("src", cols=["k", "v", "quote"])
+    tgt = _row("tgt", ["src"], output_schema={
+        "columns": [{"name": "k"}, {"name": "v", "type": "str"},
+                    {"name": "score", "type": "float"}]})
+    config = _config(
+        expected=[{"actual": "score", "metric": "abs_tol", "tolerance": 1},
+                 {"actual": "v", "metric": "exact"}],
+        table=_ref(cols=["k", "v", "quote", "score"]))
+    report = check_eval_compatibility(config, [src, tgt])
+    assert report.ok is False
+    assert any("override.v" in p for p in report.problems)
+
+
+def test_coverage_check_accepts_clash_aware_injected_name():
+    src = _file_input("src", cols=["k", "v", "quote"])
+    tgt = _row("tgt", ["src"], output_schema={
+        "columns": [{"name": "k"}, {"name": "v", "type": "str"},
+                    {"name": "score", "type": "float"}]})
+    config = _config(
+        expected=[{"actual": "score", "metric": "abs_tol", "tolerance": 1},
+                 {"actual": "v", "metric": "exact"}],
+        table=_ref(cols=["k", "override.v", "quote", "score"]))
+    report = check_eval_compatibility(config, [src, tgt])
+    assert report.ok is True
+    assert report.problems == []
+
+
+# ── derive_cases_columns (the shared derivation itself) ──────────────────────
+def test_derive_cases_columns_no_clash_answer_named_after_target():
+    override = _file_input("src", cols=["k", "v"])
+    target = _row("tgt", ["src"], output_schema={
+        "columns": [{"name": "k"}, {"name": "score", "type": "float"}]})
+    derived = derive_cases_columns(override, target, ["score"])
+    assert derived.problems == []
+    assert derived.warnings == []
+    names = [c.name for c in derived.columns]
+    assert set(names) == {"k", "v", "score"}
+    assert len(names) == len(set(names))  # never a duplicate column name
+    score_col = next(c for c in derived.columns if c.name == "score")
+    assert score_col.type == "float"
+
+
+def test_derive_cases_columns_clash_renames_with_warning():
+    override = _file_input("src", cols=["k", "score"])
+    target = _row("tgt", ["src"], output_schema={
+        "columns": [{"name": "k"}, {"name": "score", "type": "float"}]})
+    derived = derive_cases_columns(override, target, ["score"])
+    assert derived.problems == []
+    names = [c.name for c in derived.columns]
+    assert set(names) == {"k", "override.score", "output.score"}
+    assert len(names) == len(set(names))  # never a duplicate column name
+    assert len(derived.warnings) == 1
+    assert "override.score" in derived.warnings[0]
+    assert "output.score" in derived.warnings[0]
+
+
+def test_derive_cases_columns_check_actual_not_on_target_is_reported_not_fabricated():
+    override = _file_input("src", cols=["k"])
+    target = _row("tgt", ["src"], output_schema={"columns": [{"name": "k"}]})
+    derived = derive_cases_columns(override, target, ["not_emitted"])
+    assert any("not_emitted" in p for p in derived.check_problems)
+    assert not any(c.name == "not_emitted" for c in derived.columns)
+
+
+def test_derive_cases_columns_missing_stages_reported_separately():
+    derived = derive_cases_columns(None, None, ["score"])
+    assert derived.override_problems
+    assert derived.target_problems
+    assert derived.columns == []

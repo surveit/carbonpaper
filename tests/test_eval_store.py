@@ -33,8 +33,7 @@ def _config(**over):
         "id": "scoring", "methodology": "lobbymap", "name": "n",
         "override_stage": "evidence_with_benchmarks", "target_stage": "benchmark_scoring",
         "table": _ref(cols=["evidence_id", "benchmark_id", "quote", "expected_score"]),
-        "expected": [{"actual": "score", "expected": "expected_score",
-                      "metric": "abs_tol", "tolerance": 1}],
+        "expected": [{"actual": "score", "metric": "abs_tol", "tolerance": 1}],
     }
     base.update(over)
     return EvalConfig.model_validate(base)

@@ -10,9 +10,10 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Sequence
 
-from app.models import (EvalConfig, EvalRunSettings, Methodology, Stage,
+from app.models import (Column, EvalConfig, EvalRunSettings, Methodology, Stage,
                         TableSchema, resolve_eval_run_settings,
                         validate_methodology_stages)
+from app.services.cases_columns import derive_cases_columns
 
 _NUMERIC_TYPES = {"int", "float"}
 
@@ -24,24 +25,31 @@ class CompatibilityReport:
     settings: EvalRunSettings | None = None
 
 
+def _columns_covered(injected: TableSchema, required: Sequence[Column],
+                     stage_id: str, label: str) -> list[str]:
+    """Every column in `required` must be present in `injected` with the same
+    type. `stage_id` names the stage `required` came from, for the message."""
+    injected_types = {c.name: c.type for c in injected.columns}
+    problems: list[str] = []
+    for col in required:
+        got = injected_types.get(col.name)
+        if got is None:
+            problems.append(
+                f"{label}: injected table lacks column `{col.name}` "
+                f"required by stage `{stage_id}`")
+        elif got != col.type:
+            problems.append(
+                f"{label}: column `{col.name}` is `{got}` in the injected table "
+                f"but `{col.type}` on stage `{stage_id}`")
+    return problems
+
+
 def _coverage_problems(injected: TableSchema, stage: Stage, label: str) -> list[str]:
     """The injected table stands in for `stage`'s output: every column the stage
     declares must be present in the injected schema with the same type."""
     if stage.output_schema is None:
         return [f"cannot verify {label}: stage `{stage.id}` declares no output schema"]
-    injected_types = {c.name: c.type for c in injected.columns}
-    problems: list[str] = []
-    for col in stage.output_schema.columns:
-        got = injected_types.get(col.name)
-        if got is None:
-            problems.append(
-                f"{label}: injected table lacks column `{col.name}` "
-                f"required by stage `{stage.id}`")
-        elif got != col.type:
-            problems.append(
-                f"{label}: column `{col.name}` is `{got}` in the injected table "
-                f"but `{col.type}` on stage `{stage.id}`")
-    return problems
+    return _columns_covered(injected, stage.output_schema.columns, stage.id, label)
 
 
 def check_eval_compatibility(config: EvalConfig,
@@ -76,10 +84,19 @@ def check_eval_compatibility(config: EvalConfig,
 
     # Condition 2: every injected table is a valid stand-in. The cases table is
     # only checkable once it exists; a dataless config skips this and is scored
-    # for everything else (its file is validated when attached).
+    # for everything else (its file is validated when attached). The override
+    # stage's coverage is clash-aware: a check whose target column name
+    # collides with one of the override's own output columns expects the
+    # injected input at `override.<name>`, not the plain name -- the same
+    # renaming `derive_cases_columns` applies when it builds the cases-file
+    # schema the form and template use.
     if config.table is not None:
-        problems += _coverage_problems(
-            config.table.table_schema, by_id[config.override_stage], "cases table")
+        check_actuals = [exp.actual for exp in config.expected]
+        derived = derive_cases_columns(
+            by_id[config.override_stage], by_id[config.target_stage], check_actuals)
+        problems += derived.override_problems
+        problems += _columns_covered(
+            config.table.table_schema, derived.injected, config.override_stage, "cases table")
     for ov in config.reference_overrides:
         problems += _coverage_problems(
             ov.table.table_schema, by_id[ov.stage_id],
