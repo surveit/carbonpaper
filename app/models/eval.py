@@ -3,14 +3,16 @@
 An eval measures the *real* methodology pipeline, not a copy of it. The v1 shape
 (fan-out / fan-in are out of scope — those evals come later):
 
-  - An **EvalConfig** is the authored spec. At its core is ONE row-aligned table:
-    each row is a case whose `input_columns` are injected as `override_stage`'s
-    output, and whose `expected` columns are compared against `target_stage`'s
-    output on the same row. Because it's a single table, input and expected are
-    1:1 by construction — which is only well-defined when the override→target path
-    preserves grain (no fan-out / fan-in). It also carries any `reference_overrides`
-    (extra data a case needs loaded) and how to score (`expected` comparisons,
-    rollup `metrics`, or a `code` scorer for the escape hatch).
+  - An **EvalConfig** is the authored spec. What defines it is the checks: the
+    `expected` columns compared against `target_stage`'s output, keyed by `key`,
+    with `input_columns` injected as `override_stage`'s output. An optional
+    row-aligned cases `table` supplies the rows for those columns; it's the data,
+    not the definition, so a config can exist with no `table` yet (attach it
+    later). When a table is present, input and expected are 1:1 by construction —
+    which is only well-defined when the override→target path preserves grain (no
+    fan-out / fan-in). The config also carries any `reference_overrides` (extra
+    data a case needs loaded) and how to score (`expected` comparisons, rollup
+    `metrics`, or a `code` scorer for the escape hatch).
   - A **StageOutputOverride** injects a whole table as some stage's output.
   - An **EvalRun** is the result at a specific methodology version: its computed
     `settings` (can it be scored automatically, and if not why), and the scorer's
