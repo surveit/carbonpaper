@@ -74,7 +74,33 @@
     <input type="hidden" id="f-target" name="target_stage" value="{{ values.target_stage }}">
     <div id="override-required-columns"></div>
 
-    <h2>Cases table</h2>
+    <h2>Expected columns</h2>
+    <datalist id="dataset-cols"></datalist>
+    <div id="expected-rows">
+        {% for row in values.expected_rows %}
+        <div class="expected-row">
+            <select name="expected_actual">
+                <option value="">— actual —</option>
+                {% if row.actual %}<option value="{{ row.actual }}" selected>{{ row.actual }}</option>{% endif %}
+            </select>
+            <input type="text" name="expected_dataset" list="dataset-cols" value="{{ row.dataset }}" placeholder="answer column">
+            <select name="expected_metric">
+                <option value="exact" {% if row.metric == "exact" %}selected{% endif %}>exact</option>
+                <option value="abs_tol" {% if row.metric == "abs_tol" %}selected{% endif %}>abs_tol</option>
+                <option value="sign" {% if row.metric == "sign" %}selected{% endif %}>sign</option>
+            </select>
+            <input type="number" name="expected_tolerance" value="{{ row.tolerance }}" step="any">
+            <button type="button" class="btn remove-expected-row">remove</button>
+        </div>
+        {% endfor %}
+    </div>
+    <button type="button" class="btn" id="add-expected-row">+ add expected column</button>
+
+    <h2>Cases file</h2>
+    <p class="lede">The cases file your override/target/expected picks require -- injected input columns plus one column per check holding the correct answer.</p>
+    <div id="cases-schema-container"><p class="lede">Pick override/target and add expected columns to see the required cases-file schema.</p></div>
+    <p><button type="button" class="btn" id="download-template-btn" disabled>Download template</button></p>
+
     <p>
         <label for="f-file">upload a file</label><br>
         <input type="file" id="f-file" name="file" accept=".csv,.parquet,.json">
@@ -95,33 +121,6 @@
         </select>
     </p>
 
-    <h2>Expected columns</h2>
-    <datalist id="dataset-cols"></datalist>
-    <div id="expected-rows">
-        {% for row in values.expected_rows %}
-        <div class="expected-row">
-            <select name="expected_actual">
-                <option value="">— actual —</option>
-                {% if row.actual %}<option value="{{ row.actual }}" selected>{{ row.actual }}</option>{% endif %}
-            </select>
-            <input type="text" name="expected_dataset" list="dataset-cols" value="{{ row.dataset }}" placeholder="dataset column">
-            <select name="expected_metric">
-                <option value="exact" {% if row.metric == "exact" %}selected{% endif %}>exact</option>
-                <option value="abs_tol" {% if row.metric == "abs_tol" %}selected{% endif %}>abs_tol</option>
-                <option value="sign" {% if row.metric == "sign" %}selected{% endif %}>sign</option>
-            </select>
-            <input type="number" name="expected_tolerance" value="{{ row.tolerance }}" step="any">
-            <button type="button" class="btn remove-expected-row">remove</button>
-        </div>
-        {% endfor %}
-    </div>
-    <button type="button" class="btn" id="add-expected-row">+ add expected column</button>
-
-    <h2>Cases file schema</h2>
-    <p class="lede">The cases file your override/target/expected picks require -- injected input columns plus one column per check holding the correct answer.</p>
-    <div id="cases-schema-container"><p class="lede">Pick override/target and add expected columns to see the required cases-file schema.</p></div>
-    <p><button type="button" class="btn" id="download-template-btn" disabled>Download template</button></p>
-
     <p><button type="submit" class="btn primary">save</button></p>
 </form>
 
@@ -130,13 +129,13 @@
 <template id="expected-row-template">
     <div class="expected-row">
         <select name="expected_actual"><option value="">— actual —</option></select>
-        <input type="text" name="expected_dataset" list="dataset-cols" placeholder="dataset column">
+        <input type="text" name="expected_dataset" list="dataset-cols" placeholder="answer column">
         <select name="expected_metric">
             <option value="exact">exact</option>
             <option value="abs_tol">abs_tol</option>
             <option value="sign">sign</option>
         </select>
-        <input type="number" name="expected_tolerance" step="any">
+        <input type="number" name="expected_tolerance" step="any" hidden>
         <button type="button" class="btn remove-expected-row">remove</button>
     </div>
 </template>
@@ -231,12 +230,33 @@
     document.getElementById('add-expected-row').addEventListener('click', function () {
         const tmpl = document.getElementById('expected-row-template');
         const clone = tmpl.content.cloneNode(true);
-        document.getElementById('expected-rows').appendChild(clone);
+        const rowsContainer = document.getElementById('expected-rows');
+        rowsContainer.appendChild(clone);
+        updateToleranceVisibility(rowsContainer.lastElementChild);
         refreshCasesSchema();
     });
 
     document.getElementById('expected-rows').addEventListener('input', refreshCasesSchema);
     document.getElementById('expected-rows').addEventListener('change', refreshCasesSchema);
+
+    // Tolerance only means anything for the abs_tol metric -- exact and sign
+    // ignore it. Hide the input for the other metrics, and clear it so a
+    // leftover value from a prior abs_tol pick never submits.
+    function updateToleranceVisibility(row) {
+        const metricSelect = row.querySelector('[name="expected_metric"]');
+        const toleranceInput = row.querySelector('[name="expected_tolerance"]');
+        const showTolerance = metricSelect.value === 'abs_tol';
+        toleranceInput.hidden = !showTolerance;
+        if (!showTolerance) toleranceInput.value = '';
+    }
+
+    document.querySelectorAll('#expected-rows .expected-row').forEach(updateToleranceVisibility);
+
+    document.getElementById('expected-rows').addEventListener('change', function (evt) {
+        if (evt.target.name === 'expected_metric') {
+            updateToleranceVisibility(evt.target.closest('.expected-row'));
+        }
+    });
 
     document.getElementById('expected-rows').addEventListener('click', function (evt) {
         if (evt.target.classList.contains('remove-expected-row')) {
