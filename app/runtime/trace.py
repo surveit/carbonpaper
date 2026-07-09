@@ -93,3 +93,32 @@ def _origin(stage_type: str) -> str:
         "python_row_function": "computed",
         "llm_transform": "llm",
     }.get(stage_type, "other")
+
+
+def _read_output(run_dir: Path, stage_record: dict[str, Any]) -> pd.DataFrame | None:
+    rel = stage_record.get("output_path")
+    if not rel:
+        return None
+    path = Path(run_dir) / rel
+    if not path.exists():
+        return None
+    return pd.read_parquet(path) if path.suffix == ".parquet" else pd.read_csv(path)
+
+
+def _scalar(value: Any) -> Any:
+    # Parquet list/array cells arrive as numpy arrays; make them plain lists so
+    # the row is JSON-able. Leave everything else (including strings) untouched.
+    if hasattr(value, "tolist") and not isinstance(value, str):
+        return value.tolist()
+    return value
+
+
+def _row_dict(df: pd.DataFrame, r: int) -> dict[str, Any]:
+    return {str(k): _scalar(v) for k, v in df.iloc[r].items()}
+
+
+def _new_columns(child: pd.DataFrame, parent: pd.DataFrame | None) -> list[str]:
+    if parent is None:
+        return [str(c) for c in child.columns]
+    parent_cols = {str(c) for c in parent.columns}
+    return [str(c) for c in child.columns if str(c) not in parent_cols]
