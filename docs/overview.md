@@ -19,7 +19,7 @@ Two load-bearing rules flow from that and appear throughout the code:
   `human_review_queue` stage halts the run; decisions are content-hashed so they
   survive re-runs and LLM non-determinism.
 
-## The vocabulary (locked 2026-07-04; see [naming-refactor.md](naming-refactor.md))
+## The vocabulary (locked 2026-07-04; see [/plans/naming-refactor.md](../plans/naming-refactor.md))
 
 - A **project** is the container: the folder `examples/<name>/` holding
   everything below.
@@ -46,16 +46,18 @@ congresswatch, drift) live on disk and in git history.
 
 ## Where the product needs to go
 
-[RETHINK.md](RETHINK.md) — written after running the pipeline shape on a second
-domain (US Congress + lobbying) — is the standing product critique: the platform
-serves the workflow *author* well and the journalist barely at all, because the
-journalism questions are cross-entity ("who's the outlier?") while the outputs
-are per-entity. Read it before adding operator-facing features.
+[/plans/RETHINK.md](../plans/RETHINK.md) — written after running the pipeline
+shape on a second domain (US Congress + lobbying) — is the standing product
+critique: the platform serves the workflow *author* well and the journalist
+barely at all, because the journalism questions are cross-entity ("who's the
+outlier?") while the outputs are per-entity. Read it before adding
+operator-facing features. It's a `/plans` scratch note, not a spec — don't cite
+it for how the code works today.
 
 ## Where to go next
 
 - New to the code? → [architecture.md](architecture.md) (the code map).
 - Working on the data model / schemas? → [named-schemas.md](named-schemas.md).
 - Working on the run/review UI? → [run-and-review-ui.md](run-and-review-ui.md).
-- Vocabulary and its rationale? → [naming-refactor.md](naming-refactor.md).
+- Vocabulary and its rationale (historical)? → [/plans/naming-refactor.md](../plans/naming-refactor.md).
 - Storage convention? → [models-and-storage.md](models-and-storage.md).

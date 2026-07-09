@@ -1,5 +1,11 @@
 # Rethink: how the prototype should work given what it's for
 
+> **`/plans` scratch cache — not authoritative.** This is a product-critique
+> memo, not a spec of current behavior — some recommendations below are acted
+> on, some aren't, and this file isn't updated to track which. Never cite it
+> for how the code works today; for that, read the code or `docs/`. Treat it
+> as one person's standing argument for where the product should go next.
+
 Written 2026-05-21 after applying the LobbyMap-shaped pipeline to a new
 domain (US Congress + lobbying), running it end-to-end on a real slice, and
 reviewing the experience as a journalist would.

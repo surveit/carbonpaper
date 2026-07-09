@@ -5,9 +5,45 @@ files under `examples/<name>/` (untracked runtime data — see
 [overview.md](overview.md) for the project directory layout). As of this
 writing the app is ~6k lines of Python across six packages.
 
-Vocabulary used below (locked; see [naming-refactor.md](naming-refactor.md)):
+Vocabulary used below (locked; see [/plans/naming-refactor.md](../plans/naming-refactor.md),
+kept for historical context — the refactor it describes has already merged):
 **project** = the container directory · **methodology** = the authored prose ·
 **workflow** = the compiled, executable stage graph.
+
+This file is the canonical code map: the one place that says what lives where
+and where new code should go. `AGENTS.md` (root and per-subsystem) are short
+indexes that point here — if you find prose describing the architecture
+anywhere else, it's stale; fix it or delete it rather than letting a second
+copy drift.
+
+## Where should this go? (placement rules)
+
+A quick lookup for "I'm adding X, where does it live":
+
+- **An object's own invariants** (a stage's fields are internally consistent —
+  e.g. a `join` needs ≥2 inputs, a `Column`'s type is one of the allowed
+  scalars) → a **pydantic validator on the model itself**, in `app/models/`
+  (`field_validator`/`model_validator` in `models/stage.py`, `models/schema.py`,
+  etc.). Constructing the model *is* the check; don't write a second function
+  elsewhere that re-validates what the model already guarantees.
+- **Cross-stage / graph-level checks** (unique stage ids, every input resolves
+  to a real upstream stage, the graph is acyclic) → `app/models/workflow.py`
+  (`validate_workflow` / `parse_workflow`). These need the whole stage list,
+  not just one stage, so they can't live on `Stage` itself.
+- **Runtime dataframe conformance** (does the actual pandas output produced by
+  a run match the declared `output_schema` — columns present, types, ranges,
+  nullability, PK uniqueness) → `app/runtime/validation.py`. This is data
+  validation, checked while executing a run; distinct from the spec-level
+  checks above, which run at load/compile time before any data exists.
+- **A new page or route** → `app/web/routers/`, documented in `app/AGENTS.md`.
+- **A new stage-execution handler** → `app/runtime/stages/`, documented in
+  `app/runtime/AGENTS.md`.
+- **Web-independent workflow logic** (loading, compilation persistence, node
+  review, versioning) that both the CLI and the web app need → `app/services/`.
+- **Planning, design rumination, or a write-up of not-yet-merged work** →
+  `/plans/`, never `docs/`. `docs/` is for describing the system as it exists
+  today; `/plans` is an explicitly non-authoritative scratch cache (see root
+  `AGENTS.md`).
 
 ## `app/models/` — the schema layer (Pydantic)
 
