@@ -138,9 +138,12 @@ class ChatEngine:
             toolsets=toolsets or [],
         )
 
-    async def stream_turn(self, prompt: str, *, message_history, emit):
-        """Run one turn. `emit` is called synchronously per UI event. Returns the
-        full message list (prior history + this turn) for persistence.
+    async def stream_turn(self, prompt: str, *, message_history, emit, resume=None):
+        """Run one turn. `emit` is called synchronously per UI event. Returns
+        ``(messages, None)`` — the full message list (prior history + this turn)
+        for persistence, and no resume token (this backend's memory is the
+        replayed message_history, so `resume` is accepted for the shared engine
+        contract but unused).
 
         An *event* is PydanticAI's unit of streaming progress, much smaller than
         a message. While the model responds, each piece of the response (a text
@@ -163,7 +166,7 @@ class ChatEngine:
         result = run.result
         if result is None:
             raise RuntimeError("Agent run produced no result (turn did not complete)")
-        return result.all_messages()
+        return result.all_messages(), None
 
 
 def _emit_part_event(event, emit) -> None:

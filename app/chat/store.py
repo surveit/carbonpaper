@@ -73,9 +73,10 @@ class SessionStore:
 
     def load_messages(self, sid: str) -> list[ModelMessage]:
         doc = self._read(sid)
-        # Project sessions are stateless per turn: the SDK engine ignores
-        # message_history and the tools read durable on-disk project state, so
-        # nothing is fed back into the next turn.
+        # Project sessions carry no PydanticAI message_history: the SDK engine's
+        # cross-turn memory comes from resuming the CLI session (see
+        # resume_token), not from replaying messages, and the tools read durable
+        # on-disk project state.
         if self._is_project(doc):
             return []
         raw = doc.get("messages") or []
@@ -97,6 +98,17 @@ class SessionStore:
     def set_active_turn(self, sid: str, turn_id: str | None) -> None:
         data = self._read(sid)
         data["active_turn"] = turn_id
+        self._write(sid, data)
+
+    def resume_token(self, sid: str) -> str | None:
+        """The CLI session id to resume for this chat session's next turn, or None
+        on the first turn. Used only by the SDK engine to carry conversation
+        memory across turns."""
+        return self._read(sid).get("sdk_session_id")
+
+    def set_resume_token(self, sid: str, token: str) -> None:
+        data = self._read(sid)
+        data["sdk_session_id"] = token
         self._write(sid, data)
 
     def set_pending_user(self, sid: str, text: str | None) -> None:

@@ -41,6 +41,7 @@ class _User:
 
 class _Done:
     is_error = False
+    session_id = "sess-xyz"
 
 
 def test_stream_turn_maps_blocks_to_normalized_events(monkeypatch: Any) -> None:
@@ -66,9 +67,10 @@ def test_stream_turn_maps_blocks_to_normalized_events(monkeypatch: Any) -> None:
         mcp_server=object(),
         allowed_tools=["mcp__project__edit_stage"],
     )
-    transcript = asyncio.run(
+    transcript, session_id = asyncio.run(
         engine.stream_turn("edit score", message_history=[], emit=events.append)
     )
+    assert session_id == "sess-xyz"  # captured from ResultMessage, for resume
 
     kinds = [(e["kind"], e.get("name") or e.get("text") or e.get("content")) for e in events]
     assert kinds == [
@@ -113,3 +115,30 @@ def test_stream_turn_surfaces_in_band_result_error(monkeypatch: Any) -> None:
     errors = [e for e in events if e["kind"] == "error"]
     assert len(errors) == 1
     assert "permission denied" in errors[0]["text"]
+
+
+def test_stream_turn_passes_resume_into_options(monkeypatch: Any) -> None:
+    """A resume token flows into ClaudeAgentOptions so the CLI continues the
+    prior conversation."""
+    captured: dict[str, Any] = {}
+
+    async def fake_query(*, prompt: str, options: Any) -> Any:
+        captured["resume"] = options.resume
+        yield _Asst([_Text("hi")])
+        yield _Done()
+
+    monkeypatch.setattr(se, "query", fake_query)
+    monkeypatch.setattr(se, "AssistantMessage", _Asst)
+    monkeypatch.setattr(se, "UserMessage", _User)
+    monkeypatch.setattr(se, "ResultMessage", _Done)
+    monkeypatch.setattr(se, "TextBlock", _Text)
+    monkeypatch.setattr(se, "ToolUseBlock", _Tool)
+    monkeypatch.setattr(se, "ToolResultBlock", _Result)
+    monkeypatch.setattr(se, "ThinkingBlock", type("Nope", (), {}))
+
+    engine = se.SdkAgentEngine(system_prompt="sp", mcp_server=object(), allowed_tools=[])
+    _transcript, session_id = asyncio.run(
+        engine.stream_turn("hi", message_history=[], emit=lambda e: None, resume="prev-session")
+    )
+    assert captured["resume"] == "prev-session"
+    assert session_id == "sess-xyz"

@@ -3,10 +3,11 @@ subprocess via claude_agent_sdk.query() so the subscription backend (no API key)
 can run the in-process MCP tools; maps the block stream onto the same normalized
 events the FE already renders (thinking/text/tool_call/tool_result).
 
-Stateless per turn: message_history is accepted (for the TurnManager contract)
-but not fed back into query() — each turn is a fresh query. The editing loop
-still works across turns because the tools read and write durable on-disk
-project state; cross-turn LLM memory is an explicit follow-up.
+Cross-turn memory: each turn returns the CLI session id, which TurnManager
+persists and passes back as `resume` next turn, so the model sees the whole
+conversation (tool calls included) without us replaying it. message_history is
+accepted for the TurnManager contract but unused — the CLI session, not a
+replayed transcript, carries the memory.
 """
 from __future__ import annotations
 
@@ -67,10 +68,12 @@ class SdkAgentEngine:
         self._allowed_tools = allowed_tools
         self._model = model
 
-    def _options(self) -> ClaudeAgentOptions:
+    def _options(self, resume: str | None) -> ClaudeAgentOptions:
         # No max_turns cap: the editing agent should keep working (read → edit →
         # version → compile) until the task is done, not stop mid-way. The SDK
         # default is None (uncapped), so we simply do not set it.
+        # `resume` continues a prior CLI session so the model sees the whole
+        # conversation (the first turn passes None and starts a fresh session).
         kw: dict[str, Any] = dict(
             model=self._model,
             system_prompt=self._system_prompt,
@@ -78,6 +81,8 @@ class SdkAgentEngine:
             allowed_tools=self._allowed_tools,
             setting_sources=[],
         )
+        if resume:
+            kw["resume"] = resume
         if _CLI_PATH is not None:
             kw["cli_path"] = _CLI_PATH
         return ClaudeAgentOptions(**kw)
@@ -88,12 +93,16 @@ class SdkAgentEngine:
         *,
         message_history: Any,
         emit: Callable[[dict[str, Any]], None],
-    ) -> list[dict[str, Any]]:
-        # message_history is intentionally unused: stateless per turn (see module
-        # docstring). It is kept to satisfy the TurnManager contract.
+        resume: str | None = None,
+    ) -> tuple[list[dict[str, Any]], str | None]:
+        # message_history is unused: cross-turn memory comes from resuming the CLI
+        # session (the `resume` id), not from replaying messages. The tools read
+        # durable on-disk project state. Returns (transcript, session_id) — the
+        # session_id is persisted so the next turn resumes this conversation.
         del message_history
         assistant_parts: list[dict[str, Any]] = []
-        async for msg in query(prompt=prompt, options=self._options()):
+        session_id: str | None = None
+        async for msg in query(prompt=prompt, options=self._options(resume)):
             if isinstance(msg, AssistantMessage):
                 for block in msg.content:
                     if isinstance(block, ThinkingBlock):
@@ -134,6 +143,10 @@ class SdkAgentEngine:
                             {"type": "tool_result", "content": content}
                         )
             elif isinstance(msg, ResultMessage):
+                # ResultMessage is terminal; let the generator exhaust naturally
+                # (do NOT break — breaking aclose()s a still-running generator).
+                # Capture the session id to resume next turn (conversation memory).
+                session_id = getattr(msg, "session_id", None)
                 # A turn can end in-band with an error (permission denial on a
                 # tool, max_turns exhausted) without query() raising. Surface it
                 # loudly rather than ending on a silent, empty answer.
@@ -144,8 +157,8 @@ class SdkAgentEngine:
                         or "run ended with error"
                     )
                     emit({"kind": "error", "text": f"agent run failed: {detail}"})
-                break
-        return [
+        transcript = [
             {"role": "user", "parts": [{"type": "text", "text": prompt}]},
             {"role": "assistant", "parts": assistant_parts},
         ]
+        return transcript, session_id

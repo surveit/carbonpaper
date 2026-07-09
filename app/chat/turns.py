@@ -69,10 +69,15 @@ class TurnManager:
 
     async def _run(self, turn, engine, store, session_id, prompt, history) -> None:
         try:
-            messages = await engine.stream_turn(
-                prompt, message_history=history, emit=turn.emit
+            resume = store.resume_token(session_id)
+            messages, resume_token = await engine.stream_turn(
+                prompt, message_history=history, emit=turn.emit, resume=resume
             )
             store.save_messages(session_id, messages)
+            if resume_token:
+                # Carry the CLI session forward so the next turn resumes this
+                # conversation (the demo backend returns None — nothing to carry).
+                store.set_resume_token(session_id, resume_token)
         except (ChatBackendError, AgentRunError, httpx.HTTPError, OSError) as exc:
             # Expected failure modes of a model turn — backend unavailable
             # (ChatBackendError), any pydantic-ai model/API error (AgentRunError),
