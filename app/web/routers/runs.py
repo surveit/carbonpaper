@@ -27,6 +27,7 @@ from app.web.loading import (
     list_runs,
     load_manifest,
     load_output_preview,
+    load_output_row,
     load_output_table,
     load_stages,
     manifest_stage,
@@ -136,9 +137,15 @@ async def run_detail(request: Request, project: str, run_id: str):
     response_class=HTMLResponse,
 )
 async def run_stage_partial(
-    request: Request, project: str, run_id: str, stage_id: str
+    request: Request, project: str, run_id: str, stage_id: str, row: int | None = None
 ):
-    """Per-run stage detail panel — status, validation, preview, error trace."""
+    """Per-run stage detail panel — status, validation, preview, error trace.
+
+    With `?row=N`, the panel is *trimmed to one row*: the output preview shows
+    only row N and each input preview shows its row N (positional — the lineage
+    graph only links row-preserving nodes, where input row == output row). This
+    is what the lineage view loads when a stage node is clicked.
+    """
     run_dir = runs_dir(project) / run_id
     manifest = load_manifest(run_dir)
     stage_record = next(
@@ -148,7 +155,10 @@ async def run_stage_partial(
     if stage_record is None:
         raise HTTPException(status_code=404, detail=f"No stage '{stage_id}' in run")
 
-    output_preview = load_output_preview(run_dir, stage_record.get("output_path"))
+    def _out(path: str | None) -> dict[str, Any] | None:
+        return load_output_row(run_dir, path, row) if row is not None else load_output_preview(run_dir, path)
+
+    output_preview = _out(stage_record.get("output_path"))
 
     # Build input previews from upstream stages' outputs in this run.
     stages_static = load_stages(project).stages
@@ -160,10 +170,7 @@ async def run_stage_partial(
     if stage_def is not None:
         for input_id in stage_def.input_ids:
             input_previews.append(
-                {
-                    "id": input_id,
-                    "preview": load_output_preview(run_dir, output_by_id.get(input_id)),
-                }
+                {"id": input_id, "preview": _out(output_by_id.get(input_id))}
             )
 
     function_code = resolve_function_code(stage_def)
@@ -184,6 +191,7 @@ async def run_stage_partial(
             "previewable": stage_def is not None and stage_def.type in PREVIEWABLE_TYPES,
             "type_glyph": TYPE_GLYPH,
             "type_class": TYPE_CLASS,
+            "scoped_row": row,
         },
     )
 
@@ -247,61 +255,43 @@ async def run_stage_row_trace(project: str, run_id: str, stage_id: str, row: int
 
 _TRACE_VIEW_HTML = r"""<!doctype html><html><head><meta charset="utf-8">
 <title>lineage · __TITLE__</title>
+<link rel="stylesheet" href="/static/style.css">
 <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
 <style>
-body{font-family:-apple-system,Segoe UI,Arial,sans-serif;max-width:940px;margin:22px auto;padding:0 20px;color:#1a1a1a}
-h1{font-size:19px;margin:0 0 2px}.sub{color:#888;font-size:13px;margin-bottom:14px}
-.toggle{display:inline-flex;border:1px solid #ddd;border-radius:8px;overflow:hidden;margin-bottom:16px}
+.lin-wrap{max-width:1100px;margin:18px auto;padding:0 20px}
+.lin-sub{color:#888;font-size:13px;margin-bottom:8px}
+.toggle{display:inline-flex;border:1px solid #ddd;border-radius:8px;overflow:hidden;margin:4px 0 14px}
 .toggle button{border:0;background:#fff;padding:5px 14px;font-size:13px;cursor:pointer;color:#555}
 .toggle button.on{background:#1a3a72;color:#fff}
-.grid{display:grid;grid-template-columns:1fr 300px;gap:18px;align-items:start}
-.panel{position:sticky;top:10px;border:1px solid #e5e5e5;border-radius:12px;padding:12px 14px;min-height:180px;background:#fafafa}
-.panel h4{margin:0 0 2px;font-size:13px}.panel .hint{color:#999;font-size:12px;margin:0 0 8px}
-.panel table{width:100%;border-collapse:collapse;font-size:12px}.panel td,.panel th{padding:3px 6px;border-bottom:1px solid #eee;text-align:left;vertical-align:top}
-.panel th{color:#777;font-weight:500}.panel pre{margin:0;font-family:ui-monospace,Consolas,monospace;font-size:12px;white-space:pre-wrap}
-.story{font-size:15px;line-height:1.9}
-.step{margin:2px 0}.stepno{display:inline-block;min-width:52px;color:#888;font-size:12px;font-weight:500}
-.chip{border-radius:6px;padding:1px 7px;font-size:12.5px;cursor:pointer;border:1px solid transparent;white-space:nowrap}
-.chip.data{background:#eef4ff;color:#1a3a72;border-color:#cfe0ff}.chip.fn{background:#eaf7ea;color:#1f5a1f;border-color:#cfeccf}
-.node-name{font-weight:600}.src-tag,.claim-tag{font-size:10.5px;border-radius:5px;padding:0 5px;margin-left:3px}
-.src-tag{background:#f0f0ed;color:#666}.claim-tag{background:#e8f8e8;color:#1f5a1f}
+.story{font-size:15px;line-height:1.95}
+.step{margin:2px 0}.stepno{display:inline-block;min-width:56px;color:#888;font-size:12px;font-weight:500}
+.stage-link{font-weight:600;cursor:pointer;color:#1a3a72;text-decoration:underline;text-underline-offset:2px}
+.claim-tag{font-size:10.5px;border-radius:5px;padding:0 5px;margin-left:3px;background:#e8f8e8;color:#1f5a1f}
+.src-tag{font-size:10.5px;border-radius:5px;padding:0 5px;margin-left:3px;background:#f0f0ed;color:#666}
 .trunc{background:#fff4e6;color:#7a4a00;border-radius:8px;padding:8px 12px;font-size:13px;margin-bottom:12px}
-.mermaid{background:#fff}
-.nograph{color:#888;font-size:13px}
+.mermaid{background:#fff}.nograph{color:#888;font-size:13px}
+.lin-panel{margin-top:18px;border-top:1px solid #eee;padding-top:14px}
+.lin-empty{color:#888;font-size:14px;padding:8px 0}
 .hidden{display:none}
 </style></head><body>
-<h1>Lineage</h1><div class="sub" id="sub"></div>
+<div class="lin-wrap">
+<h1>Lineage</h1><div class="lin-sub" id="sub"></div>
 <div class="toggle"><button id="b-story" class="on">Story</button><button id="b-graph">Graph</button></div>
-<div class="grid"><div>
-  <div id="story" class="story"></div>
-  <div id="graph" class="hidden"><pre class="mermaid" id="mmd">__MERMAID__</pre><div id="nograph" class="nograph hidden">Graph needs the compiled workflow, which isn't available for this run.</div></div>
+<div id="story" class="story"></div>
+<div id="graph" class="hidden"><pre class="mermaid" id="mmd">__MERMAID__</pre><div id="nograph" class="nograph hidden">Graph needs the compiled workflow, which isn't available for this run.</div></div>
+<div class="lin-panel" id="stage-panel"><div class="lin-empty">Click a step or a graph node to inspect that stage — its inputs, transform and output, trimmed to this row.</div></div>
 </div>
-<div class="panel" id="panel"><h4>Hover a chip, or click a graph node</h4><p class="hint">In the story, chips reveal the rows or the full code. In the graph, a node shows what it did and the rows it produced.</p></div></div>
 <script>
-const V = __PAYLOAD__;
+const V = __PAYLOAD__, PROJECT = __PROJECT__;
 const esc = s => String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
 document.getElementById('sub').textContent = `run ${V.run_id} · ${V.start_stage} row ${V.start_row} · reads top to bottom, step 1 first`;
-function rowTable(row){
-  const rows = Object.entries(row).map(([k,v]) => `<tr><th>${esc(k)}</th><td>${esc(v)}</td></tr>`).join('');
-  return `<table>${rows}</table>`;
-}
-function showData(title, row){ setPanel(title, 'the rows on this edge', rowTable(row)); }
-function showTransform(node){
-  const t = node.transform;
-  if(t.detail == null){ setPanel(node.stage_id, `${node.stage_type} · no detail available`, ''); return; }
-  const body = (t.kind==='python'||t.kind==='llm') ? `<pre>${esc(t.detail)}</pre>` : `<div>${esc(t.detail)}</div>`;
-  const hint = {python:'full python function', llm:'full LLM prompt', join:'join keys', source:'source'}[t.kind] || t.kind;
-  setPanel(`step ${node.step} · ${node.stage_id}`, `${node.stage_type} · ${hint}`, body);
-}
-function setPanel(title, hint, body){
-  document.getElementById('panel').innerHTML = `<h4>${esc(title)}</h4><p class="hint">${esc(hint)}</p>${body}`;
-}
+const byStage = Object.fromEntries(V.nodes.map(n => [n.stage_id, n]));
 function verb(node){
   const k = node.transform.kind;
-  if(k==='python') return `run python <span class="node-name">${esc(node.stage_id)}()</span>`;
-  if(k==='llm') return `ask the LLM in <span class="node-name">${esc(node.stage_id)}</span>`;
-  if(k==='join') return `join`;
-  return `<span class="node-name">${esc(node.stage_id)}</span>`;
+  if(k==='python') return 'run a python function';
+  if(k==='llm') return 'ask the LLM';
+  if(k==='join') return 'join';
+  return 'transform';
 }
 function predsOf(step){
   const from = V.edges.filter(e => e.to_step === step).map(e => e.from_step);
@@ -309,61 +299,51 @@ function predsOf(step){
   if(from.length === 1) return ` using step ${from[0]}'s output`;
   return ` joining steps ${from.join(' and ')}`;
 }
-// ---- Story (numbered) ----
-const story = document.getElementById('story');
+function link(n){ return `<span class="stage-link" data-stage="${esc(n.stage_id)}">${esc(n.stage_id)}</span>`; }
+// ---- Story (numbered; stage names load the row-trimmed stage panel) ----
 let html = '';
 if(V.upstream.truncated){ html += `<div class="trunc">⋯ upstream not traced — ${esc(V.upstream.message)}</div>`; }
 V.nodes.forEach((n, i) => {
-  const dataChip = ` <span class="chip data" data-i="${i}" data-kind="data">${Object.keys(n.row).length} cols ▾</span>`;
-  const fnChip = (n.transform.detail!=null && n.transform.kind!=='source')
-    ? ` <span class="chip fn" data-i="${i}" data-kind="fn">${n.transform.kind==='llm'?'prompt':n.transform.kind==='join'?'keys':'function'} ▾</span>` : '';
   let sentence;
   if(i===0 && !V.upstream.truncated){
-    const tag = n.role==='source' ? '<span class="src-tag">source</span>' : '';
-    sentence = `load <span class="node-name">${esc(n.stage_id)}</span>${tag}${dataChip}.`;
+    sentence = `load ${link(n)} <span class="src-tag">source</span>.`;
   } else {
     const adds = n.columns_new.length ? ` adding <code>${n.columns_new.map(esc).join('</code>, <code>')}</code>` : '';
     const claimTag = n.role==='claim' ? ' <span class="claim-tag">published claim</span>' : '';
-    sentence = `${verb(n)}${fnChip}${predsOf(n.step)} to get <span class="node-name">${esc(n.stage_id)}</span>${claimTag}${dataChip}${adds}.`;
+    sentence = `${verb(n)}${predsOf(n.step)} to get ${link(n)}${claimTag}${adds}.`;
   }
   html += `<div class="step"><span class="stepno">step ${n.step}</span>${sentence}</div>`;
 });
-story.innerHTML = html;
-story.querySelectorAll('.chip').forEach(c => {
-  const n = V.nodes[+c.dataset.i];
-  const act = () => c.dataset.kind==='data' ? showData(`step ${n.step} · ${n.stage_id}`, n.row) : showTransform(n);
-  c.addEventListener('mouseenter', act); c.addEventListener('click', act);
-});
-// ---- Graph (reuses the central mermaid workflow component + its click convention) ----
-// Mermaid edges aren't clickable, so a node click reveals BOTH what the stage
-// did and the rows it produced (the data that flows on its outgoing edge).
-const byStage = Object.fromEntries(V.nodes.map(n => [n.stage_id, n]));
-function showNodeFull(node){
-  const t = node.transform;
-  const hintMap = {python:'full python function', llm:'full LLM prompt', join:'join keys', source:'source'};
-  const detail = (t.detail==null) ? '<p class="hint">no detail available</p>'
-    : (t.kind==='python'||t.kind==='llm') ? `<pre>${esc(t.detail)}</pre>` : `<div>${esc(t.detail)}</div>`;
-  document.getElementById('panel').innerHTML =
-    `<h4>step ${node.step} · ${esc(node.stage_id)}</h4>`
-    + `<p class="hint">${esc(node.stage_type)} · ${hintMap[t.kind]||t.kind}</p>${detail}`
-    + `<h4 style="margin-top:14px">rows produced here</h4>${rowTable(node.row)}`;
+document.getElementById('story').innerHTML = html;
+// ---- The row-trimmed stage panel (the SAME _run_stage_panel.html as run-detail) ----
+async function loadStage(stageId){
+  const n = byStage[stageId];
+  if(!n) return;
+  const panel = document.getElementById('stage-panel');
+  panel.innerHTML = '<div class="lin-empty">loading…</div>';
+  try {
+    const r = await fetch(`/project/${encodeURIComponent(PROJECT)}/runs/${encodeURIComponent(V.run_id)}/stage/${encodeURIComponent(stageId)}/partial?row=${n.row_ordinal}`);
+    if(!r.ok){ panel.innerHTML = `<div class="lin-empty">could not load ${esc(stageId)} (${r.status})</div>`; return; }
+    panel.innerHTML = await r.text();
+    // innerHTML doesn't run <script>; re-create them so the panel's tabs work.
+    panel.querySelectorAll('script').forEach(old => { const s = document.createElement('script'); if(old.src) s.src = old.src; else s.textContent = old.textContent; old.replaceWith(s); });
+    panel.scrollIntoView({ behavior:'smooth', block:'start' });
+  } catch(e){ panel.innerHTML = `<div class="lin-empty">error: ${esc(e)}</div>`; }
 }
-window.loadStage = sid => { if(byStage[sid]) showNodeFull(byStage[sid]); };
+window.loadStage = loadStage;  // mermaid nodes call this too (build_mermaid_graph click convention)
+document.getElementById('story').addEventListener('click', e => { const el = e.target.closest('.stage-link'); if(el) loadStage(el.dataset.stage); });
+// ---- Graph (reuses the central mermaid workflow component) ----
 const mmd = document.getElementById('mmd');
 const hasGraph = mmd.textContent.trim().length > 0;
 if(!hasGraph){ mmd.classList.add('hidden'); document.getElementById('nograph').classList.remove('hidden'); }
 mermaid.initialize({ startOnLoad:false, theme:"default", flowchart:{curve:"basis", padding:20, useMaxWidth:true}, securityLevel:"loose" });
 let graphRendered = false;
-async function renderGraph(){
-  if(graphRendered || !hasGraph) return;
-  graphRendered = true;
-  await mermaid.run({ nodes:[mmd] });
-}
+async function renderGraph(){ if(graphRendered || !hasGraph) return; graphRendered = true; await mermaid.run({ nodes:[mmd] }); }
 // ---- Toggle ----
-const story_ = document.getElementById('story'), graph = document.getElementById('graph');
+const story = document.getElementById('story'), graph = document.getElementById('graph');
 const bStory = document.getElementById('b-story'), bGraph = document.getElementById('b-graph');
-bStory.onclick = () => { story_.classList.remove('hidden'); graph.classList.add('hidden'); bStory.classList.add('on'); bGraph.classList.remove('on'); };
-bGraph.onclick = () => { graph.classList.remove('hidden'); story_.classList.add('hidden'); bGraph.classList.add('on'); bStory.classList.remove('on'); renderGraph(); };
+bStory.onclick = () => { story.classList.remove('hidden'); graph.classList.add('hidden'); bStory.classList.add('on'); bGraph.classList.remove('on'); };
+bGraph.onclick = () => { graph.classList.remove('hidden'); story.classList.add('hidden'); bGraph.classList.add('on'); bStory.classList.remove('on'); renderGraph(); };
 </script></body></html>"""
 
 
@@ -378,10 +358,9 @@ def _stages_by_id_safe(project: str) -> dict[str, Any]:
     return {s.id: s for s in listing.stages}
 
 
-def _render_trace_html(view: dict[str, Any], mermaid: str) -> str:
-    """A self-contained show-your-work page: a numbered story view
-    (chronological, data and function one hover away) with a graph toggle that
-    reuses the central mermaid workflow. Read-only."""
+def _render_trace_html(view: dict[str, Any], mermaid: str, project: str) -> str:
+    """The lineage page: a numbered story and a graph toggle on top; clicking a
+    stage loads the shared row-trimmed stage panel below. Read-only."""
     # Embed the payload; neutralize any "</script" so it can't close the tag.
     payload = json.dumps(view).replace("</", "<\\/")
     title = html.escape(f"{view['start_stage']} · row {view['start_row']}")
@@ -389,6 +368,7 @@ def _render_trace_html(view: dict[str, Any], mermaid: str) -> str:
         _TRACE_VIEW_HTML
         .replace("__TITLE__", title)
         .replace("__MERMAID__", html.escape(mermaid))
+        .replace("__PROJECT__", json.dumps(project))
         .replace("__PAYLOAD__", payload)
     )
 
@@ -414,7 +394,7 @@ async def run_stage_row_trace_view(project: str, run_id: str, stage_id: str, row
     ordered = [stages_by_id[n["stage_id"]] for n in view["nodes"]
                if n["stage_id"] in stages_by_id]
     mermaid = build_mermaid_graph(ordered, project) if len(ordered) == len(view["nodes"]) else ""
-    return HTMLResponse(_render_trace_html(view, mermaid))
+    return HTMLResponse(_render_trace_html(view, mermaid, project))
 
 
 @router.post("/project/{project}/runs/{run_id}/stage/{stage_id}/preview")

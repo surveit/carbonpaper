@@ -202,6 +202,31 @@ def load_output_table(run_dir: Path, rel_path: str | None) -> dict[str, Any]:
     }
 
 
+def load_output_row(run_dir: Path, rel_path: str | None, row: int) -> dict[str, Any] | None:
+    """Preview shape (columns, rows_total, preview) holding just row `row` of a
+    stage output — the row-scoped variant of `load_output_preview`, used by the
+    lineage-trimmed stage panel. None if no path; {"error": ...} if unreadable;
+    an empty `preview` with `out_of_range` when the ordinal is past the end."""
+    if not rel_path:
+        return None
+    path = run_dir / rel_path
+    if not path.exists():
+        return {"error": f"missing on disk: {rel_path}"}
+    try:
+        df = read_table(path)
+    except Exception as exc:  # noqa: BLE001
+        return {"error": str(exc)}
+    if row < 0 or row >= len(df):
+        return {"columns": list(df.columns), "rows_total": len(df),
+                "preview": [], "row_index": row, "out_of_range": True}
+    return {
+        "columns": list(df.columns),
+        "rows_total": len(df),
+        "preview": df.iloc[[row]].fillna("").astype(str).to_dict(orient="records"),
+        "row_index": row,
+    }
+
+
 def load_output_preview(run_dir: Path, rel_path: str | None) -> dict[str, Any] | None:
     """Small JSON-able preview of a stage output: columns, total row count, and
     the first 5 rows as strings. None if no path is given; {"error": ...} if the

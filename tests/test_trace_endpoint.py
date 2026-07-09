@@ -54,7 +54,8 @@ def test_trace_view_renders_story_and_graph(tmp_path, monkeypatch):
     body = resp.text
     assert "Story" in body and "Graph" in body        # the two-view toggle
     assert "mermaid" in body                            # reuses the central graph
-    assert "rows produced here" in body                 # graph node reveals its data
+    assert "stage-panel" in body                        # loads the shared stage panel
+    assert "/partial?row=" in body                      # trimmed to the traced row
     assert "enrich" in body and "seeds" in body        # both stages, in the payload
     assert "score" in body                             # a new-at-stage column
     assert '"step": 1' in body and '"step": 2' in body  # numbered steps in payload

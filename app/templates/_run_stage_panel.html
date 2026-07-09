@@ -10,7 +10,7 @@
 <div class="stage-header">
     <span class="type-tag {{ type_class.get(stage.type, 'custom') }}">{{ type_glyph.get(stage.type, '') }} {{ stage.type }}</span>
     <span class="run-status status-{{ stage.status }}">{{ stage.status }}</span>
-    <h2><code>{{ stage.stage_id }}</code></h2>
+    <h2><code>{{ stage.stage_id }}</code>{% if scoped_row is not none %} <span class="row-scope">lineage · row {{ scoped_row }}</span>{% endif %}</h2>
     <p class="stage-id">{{ stage.name }}</p>
     <p class="muted">{{ stage.elapsed_ms }} ms · {{ "{:,}".format(stage.rows or 0) }} row{% if (stage.rows or 0) != 1 %}s{% endif %}
         {% if stage.finished_at %} · finished <code>{{ stage.finished_at }}</code>{% endif %}</p>
@@ -138,7 +138,7 @@
         · <a href="/project/{{ project }}/runs/{{ run_id }}/stage/{{ stage.stage_id }}/rows.csv">⬇ CSV</a></span></div>
       <div class="table-scroll"><table class="data-preview">
         <thead><tr><th class="syw-col">lineage</th>{% for c in preview.columns %}<th>{{ c }}</th>{% endfor %}</tr></thead>
-        <tbody>{% for row in preview.preview %}<tr><td class="syw-cell"><a href="/project/{{ project }}/runs/{{ run_id }}/stage/{{ stage.stage_id }}/row/{{ loop.index0 }}/trace/view" target="_blank" rel="noopener" title="trace this row's provenance back through the pipeline">View lineage</a></td>{% for c in preview.columns %}{% set v = row[c] | string %}{% if v[:4] == 'http' %}<td class="cell-url"><a href="{{ v }}" target="_blank" rel="noopener">{{ v }}</a></td>{% else %}<td>{{ v | truncate(240) }}</td>{% endif %}{% endfor %}</tr>{% endfor %}</tbody>
+        <tbody>{% for row in preview.preview %}{% set ridx = scoped_row if scoped_row is not none else loop.index0 %}<tr><td class="syw-cell"><a href="/project/{{ project }}/runs/{{ run_id }}/stage/{{ stage.stage_id }}/row/{{ ridx }}/trace/view" target="_blank" rel="noopener" title="trace this row's provenance back through the pipeline">View lineage</a></td>{% for c in preview.columns %}{% set v = row[c] | string %}{% if v[:4] == 'http' %}<td class="cell-url"><a href="{{ v }}" target="_blank" rel="noopener">{{ v }}</a></td>{% else %}<td>{{ v | truncate(240) }}</td>{% endif %}{% endfor %}</tr>{% endfor %}</tbody>
       </table></div>
     </div>
     {% elif preview and preview.error %}<p class="muted"><em>output preview unavailable: {{ preview.error }}</em></p>

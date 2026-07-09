@@ -73,6 +73,7 @@ def build_trace_view(trace: dict[str, Any], stages: dict[str, Stage]) -> dict[st
         nodes.append({
             "step": i + 1,  # 1-based, chronological — so the story can say "step 4"
             "stage_id": hop["stage_id"],
+            "row_ordinal": hop["row_ordinal"],  # for loading the row-trimmed panel
             "stage_type": hop["stage_type"],
             "origin": hop["origin"],
             "role": role,
