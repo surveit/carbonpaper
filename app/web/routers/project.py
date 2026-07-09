@@ -279,9 +279,9 @@ async def project_document(request: Request, project_name: str):
     pdir = _project_dir(project_name)
     state = shell_state(pdir)
     document = ""
-    if state["document_path"]:
+    if state.document_path:
         try:
-            document = Path(state["document_path"]).read_text(encoding="utf-8")
+            document = Path(state.document_path).read_text(encoding="utf-8")
         except OSError:
             # The path came from project_state probing the disk; if it vanished
             # between snapshot and read, show the empty state rather than 500.
@@ -405,7 +405,7 @@ def _project_model(project_dir: Path) -> str:
     """The model to author with: the project's recorded model, else 'sonnet'. A legacy
     project has no project.json (model is None) — fall back to the quality default
     rather than fail, since authoring is interactive (the human can steer)."""
-    return project.project_meta(project_dir).get("model") or "sonnet"
+    return project.project_meta(project_dir).model or "sonnet"
 
 
 @router.get("/project/{project_name}/data-model/stream")
