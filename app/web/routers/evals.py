@@ -29,6 +29,7 @@ from app.services.eval_store import (
 )
 from app.services.table_check import read_table, table_columns, validate_table_file
 from app.web.config import EXAMPLES_DIR, REPO_ROOT, templates
+from app.web.diagrams import build_mermaid_graph
 from app.web.loading import load_stages
 
 router = APIRouter()
@@ -170,6 +171,23 @@ async def evals_index(request: Request, methodology: str):
     )
 
 
+def _descendants_map(stages: list[Stage]) -> dict[str, list[str]]:
+    """stage id -> the stage ids reachable downstream of it, for the authoring
+    graph's reachability dimming (a target must be reachable from the override)."""
+    out: dict[str, list[str]] = {}
+    for start in stages:
+        seen: set[str] = set()
+        stack = [start.id]
+        while stack:
+            node = stack.pop()
+            for s in stages:
+                if node in s.input_ids and s.id not in seen:
+                    seen.add(s.id)
+                    stack.append(s.id)
+        out[start.id] = sorted(seen)
+    return out
+
+
 def _stage_options(stages: list[Stage]) -> list[dict[str, Any]]:
     """Stage picker options for the form: id, name, and whether the stage has
     no output schema (that stage can't be an override or target -- selecting
@@ -248,6 +266,8 @@ async def eval_new_form(request: Request, methodology: str):
             "mode": "create",
             "eval_id": None,
             "stages": _stage_options(listing.stages),
+            "mermaid": build_mermaid_graph(listing.stages, methodology),
+            "descendants_map": _descendants_map(listing.stages),
             "values": _blank_values(),
             "errors": [],
         },
@@ -271,6 +291,8 @@ async def eval_edit_form(request: Request, methodology: str, eval_id: str):
             "mode": "edit",
             "eval_id": eval_id,
             "stages": _stage_options(listing.stages),
+            "mermaid": build_mermaid_graph(listing.stages, methodology),
+            "descendants_map": _descendants_map(listing.stages),
             "values": _values_from_config(config),
             "errors": [],
         },
@@ -497,22 +519,24 @@ async def _handle_eval_form_post(
             "tolerance": tolerance,
         })
 
-    config_dict = {
+    has_file = bool(fields["table_path"])
+    config_dict: dict[str, Any] = {
         "id": resolved_id,
         "methodology": methodology,
         "name": fields["name"],
         "description": fields["description"] or None,
         "override_stage": fields["override_stage"],
         "target_stage": fields["target_stage"],
-        "table": {
-            "path": fields["table_path"],
-            "format": fields["table_format"],
-            "table_schema": table_schema.model_dump(mode="json"),
-        },
         "key": fields["key"],
         "input_columns": fields["input_columns"],
         "expected": expected_dicts,
     }
+    if has_file:
+        config_dict["table"] = {
+            "path": fields["table_path"],
+            "format": fields["table_format"],
+            "table_schema": table_schema.model_dump(mode="json"),
+        }
 
     config: EvalConfig | None = None
     try:
@@ -568,6 +592,8 @@ async def _handle_eval_form_post(
                 "mode": "edit" if eval_id is not None else "create",
                 "eval_id": eval_id,
                 "stages": _stage_options(listing.stages),
+                "mermaid": build_mermaid_graph(listing.stages, methodology),
+                "descendants_map": _descendants_map(listing.stages),
                 "values": values,
                 "errors": errors,
             },

@@ -3,7 +3,6 @@
 nothing here touches examples/ or the repo's real methodologies."""
 from __future__ import annotations
 
-import re
 from pathlib import Path
 
 import pytest
@@ -416,17 +415,16 @@ def test_stage_partial_omits_eval_panel_when_zero_evals(tmp_path, monkeypatch):
 
 # ── authoring form: GET new / edit ──────────────────────────────────────────
 def test_get_new_lists_stages_and_disables_schemaless(tmp_examples):
+    # Stage picking is now graph-based (click a node in the workflow graph),
+    # not a <select> of stage names -- every stage still appears as a node in
+    # the embedded mermaid source, including a schemaless one (`publish`);
+    # picking a schemaless override/target is caught server-side by
+    # _derive_table_schema, not by disabling anything client-side here.
     r = client.get(f"/methodology/{METHODOLOGY}/evals/new")
     assert r.status_code == 200
     assert "input_data" in r.text
     assert "llm_transform" in r.text
     assert "publish" in r.text
-    # publish has no output_schema in the fixture -- its <option> must be
-    # disabled, with a reason visible next to it.
-    assert re.search(
-        r'<option[^>]*value="publish"[^>]*disabled[^>]*>[^<]*\(no output schema\)',
-        r.text,
-    )
 
 
 def test_get_edit_unknown_id_404(tmp_examples):
@@ -607,6 +605,57 @@ def test_post_edit_changes_description_only(tmp_examples):
     assert reloaded.description == "updated description"
     assert reloaded.override_stage == "input_data"
     assert reloaded.target_stage == "llm_transform"
+
+
+# ── graph-select authoring + optional-file POST ─────────────────────────────
+def test_create_dataless_eval_via_form(tmp_examples):
+    payload = _valid_create_payload("")
+    payload["id"] = "dataless-form-eval"
+    r = client.post(
+        f"/methodology/{METHODOLOGY}/evals/new",
+        data=payload,
+        follow_redirects=False,
+    )
+    assert r.status_code == 303
+    assert r.headers["location"] == f"/methodology/{METHODOLOGY}/evals/dataless-form-eval"
+
+    from app.services.eval_store import load_eval_config
+    reloaded = load_eval_config(tmp_examples, "dataless-form-eval")
+    assert reloaded.table is None
+
+    detail = client.get(f"/methodology/{METHODOLOGY}/evals/dataless-form-eval")
+    assert detail.status_code == 200
+    assert "no cases yet" in detail.text
+
+
+def test_new_form_embeds_descendants_map(tmp_examples):
+    r = client.get(f"/methodology/{METHODOLOGY}/evals/new")
+    assert r.status_code == 200
+    assert "descendants_map" in r.text.lower() or "DESCENDANTS" in r.text
+    assert 'class="dag"' in r.text
+    assert '<select name="override_stage"' not in r.text
+    assert '<select id="f-override-stage" name="override_stage"' not in r.text
+
+
+def test_create_unreachable_pathway_rejected(tmp_examples):
+    # input_data and publish are not on a shared override->target path in the
+    # fixture's 3-stage line (input_data -> llm_transform -> publish) when
+    # picked out of order: override=publish, target=input_data is upstream,
+    # not downstream, so publish's descendants don't include input_data.
+    payload = _valid_create_payload("")
+    payload["id"] = "unreachable-eval"
+    payload["override_stage"] = "publish"
+    payload["target_stage"] = "input_data"
+    r = client.post(
+        f"/methodology/{METHODOLOGY}/evals/new",
+        data=payload,
+        follow_redirects=False,
+    )
+    assert r.status_code == 200
+    assert "is not reachable from override" in r.text
+
+    saved = tmp_examples / "eval_config" / "unreachable-eval.yaml"
+    assert not saved.is_file()
 
 
 # ── attach-cases (dataless eval) ─────────────────────────────────────────────

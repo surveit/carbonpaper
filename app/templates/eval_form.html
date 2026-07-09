@@ -1,6 +1,20 @@
 {% extends "base.html" %}
 {% block title %}{% if mode == "create" %}New eval{% else %}Edit {{ values.name }}{% endif %} · {{ methodology }} evals{% endblock %}
 
+{% block head_extra %}
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    mermaid.initialize({
+      startOnLoad: true,
+      theme: "default",
+      flowchart: { curve: "basis", padding: 20, useMaxWidth: true },
+      securityLevel: "loose"
+    });
+  });
+</script>
+{% endblock %}
+
 {% block header_extra %}
 {% if mode == "create" %}
 <a href="/methodology/{{ methodology }}/evals" class="back-link">← {{ methodology }} evals</a>
@@ -42,34 +56,23 @@
         <textarea id="f-description" name="description">{{ values.description }}</textarea>
     </p>
 
-    <p>
-        <label for="f-override-stage">override stage</label><br>
-        <select id="f-override-stage" name="override_stage" required>
-            <option value="">— select —</option>
-            {% for s in stages %}
-            <option value="{{ s.id }}"
-                {% if s.id == values.override_stage %}selected{% endif %}
-                {% if s.schemaless %}disabled{% endif %}>
-                {{ s.name }} ({{ s.id }}){% if s.schemaless %} (no output schema){% endif %}
-            </option>
-            {% endfor %}
-        </select>
-    </p>
-    <div id="override-required-columns"></div>
+    <h2>Pick override and target on the workflow</h2>
+    <p class="lede">Click a node to set it as the <strong>override</strong> stage (where the eval injects the cases table). Nodes not reachable from it dim out. Click a non-dimmed node to set it as the <strong>target</strong> stage (what the eval checks). <button type="button" class="btn" id="clear-picks">clear</button></p>
+
+    <div class="dag" id="eval-pick-dag">
+        <pre class="mermaid">
+{{ mermaid }}
+        </pre>
+    </div>
 
     <p>
-        <label for="f-target-stage">target stage</label><br>
-        <select id="f-target-stage" name="target_stage" required>
-            <option value="">— select —</option>
-            {% for s in stages %}
-            <option value="{{ s.id }}"
-                {% if s.id == values.target_stage %}selected{% endif %}
-                {% if s.schemaless %}disabled{% endif %}>
-                {{ s.name }} ({{ s.id }}){% if s.schemaless %} (no output schema){% endif %}
-            </option>
-            {% endfor %}
-        </select>
+        <strong>override:</strong> <span id="pick-override-label">{{ values.override_stage or "— none —" }}</span>
+        &nbsp;&nbsp;
+        <strong>target:</strong> <span id="pick-target-label">{{ values.target_stage or "— none —" }}</span>
     </p>
+    <input type="hidden" id="f-override" name="override_stage" value="{{ values.override_stage }}">
+    <input type="hidden" id="f-target" name="target_stage" value="{{ values.target_stage }}">
+    <div id="override-required-columns"></div>
 
     <p>
         <label for="f-key">key column(s)</label><br>
@@ -89,6 +92,7 @@
     <p>
         <label for="f-file">upload a file</label><br>
         <input type="file" id="f-file" name="file" accept=".csv,.parquet,.json">
+        <br><span class="lede">Optional — you can attach cases later.</span>
     </p>
     <p>
         <label for="f-path">or an existing repo-relative path</label><br>
@@ -167,8 +171,8 @@
         return res.json();
     }
 
-    document.getElementById('f-override-stage').addEventListener('change', async function () {
-        const body = await fetchStageSchema(this.value);
+    async function onOverridePicked(stageId) {
+        const body = await fetchStageSchema(stageId);
         const required = document.getElementById('override-required-columns');
         const keySelect = document.getElementById('f-key');
         const inputSelect = document.getElementById('f-input-columns');
@@ -177,15 +181,15 @@
             body.columns.map(c => c.name + ' (' + c.type + ')').join(', ') + '</p>';
         keySelect.innerHTML = optionsHtml(body.columns, '');
         inputSelect.innerHTML = optionsHtml(body.columns, '');
-    });
+    }
 
-    document.getElementById('f-target-stage').addEventListener('change', async function () {
-        const body = await fetchStageSchema(this.value);
+    async function onTargetPicked(stageId) {
+        const body = await fetchStageSchema(stageId);
         if (!body) return;
         document.querySelectorAll('select[name="expected_actual"]').forEach(function (sel) {
             sel.innerHTML = optionsHtml(body.columns, '— actual —');
         });
-    });
+    }
 
     async function inspectTable(formData) {
         const res = await fetch('/methodology/' + methodology + '/evals/inspect-table', {
@@ -229,6 +233,129 @@
             evt.target.closest('.expected-row').remove();
         }
     });
+
+    // ── Graph-select override/target ──
+    // Observed here (mermaid@11, flowchart LR): each node's <g class="node">
+    // gets id="mermaid-<diagramInstanceId>-flowchart-<stageId>-<n>" -- the
+    // svg's own generated id is prefixed onto "flowchart-<stageId>-<n>", not
+    // just the bare "flowchart-<stageId>-<n>" form. Match the
+    // "flowchart-<stageId>-<n>" segment anywhere in the id (substring, not
+    // prefix) so this is resilient to that wrapping id changing.
+    const DESCENDANTS = {{ descendants_map | tojson }};
+    const overrideInput = document.getElementById('f-override');
+    const targetInput = document.getElementById('f-target');
+    const overrideLabel = document.getElementById('pick-override-label');
+    const targetLabel = document.getElementById('pick-target-label');
+
+    function nodeEl(stageId) {
+        const svg = document.querySelector('#eval-pick-dag svg');
+        if (!svg) return null;
+        return svg.querySelector(
+            `[id*="flowchart-${stageId}-"], [id$="flowchart-${stageId}"], [id="${stageId}"]`
+        );
+    }
+
+    function stageIdForNode(g) {
+        const m = /flowchart-(.+)-\d+$/.exec(g.id);
+        if (m) return m[1];
+        return g.id.replace(/^.*flowchart-/, '');
+    }
+
+    function stripPickClasses() {
+        document.querySelectorAll('#eval-pick-dag svg g.node').forEach(function (g) {
+            g.classList.remove('eval-dim', 'eval-overridden', 'eval-target');
+        });
+    }
+
+    function clearPicks() {
+        stripPickClasses();
+        overrideInput.value = '';
+        targetInput.value = '';
+        overrideLabel.textContent = '— none —';
+        targetLabel.textContent = '— none —';
+    }
+
+    function pickOverride(stageId) {
+        stripPickClasses();
+        overrideInput.value = stageId;
+        targetInput.value = '';
+        overrideLabel.textContent = stageId;
+        targetLabel.textContent = '— none —';
+        const reachable = new Set(DESCENDANTS[stageId] || []);
+        document.querySelectorAll('#eval-pick-dag svg g.node').forEach(function (g) {
+            const sid = stageIdForNode(g);
+            if (sid !== stageId && !reachable.has(sid)) {
+                g.classList.add('eval-dim');
+            }
+        });
+        const g = nodeEl(stageId);
+        if (g) g.classList.add('eval-overridden');
+        onOverridePicked(stageId);
+    }
+
+    function pickTarget(stageId) {
+        const reachable = new Set(DESCENDANTS[overrideInput.value] || []);
+        if (!reachable.has(stageId)) return;  // dimmed node -- not selectable as target
+        document.querySelectorAll('#eval-pick-dag svg g.node.eval-target').forEach(function (g) {
+            g.classList.remove('eval-target');
+        });
+        targetInput.value = stageId;
+        targetLabel.textContent = stageId;
+        const g = nodeEl(stageId);
+        if (g) g.classList.add('eval-target');
+        onTargetPicked(stageId);
+    }
+
+    function onDagClick(stageId) {
+        if (!stageId) return;
+        if (!overrideInput.value) {
+            pickOverride(stageId);
+        } else if (stageId === overrideInput.value) {
+            return;  // re-clicking the override does nothing -- use "clear" to restart
+        } else {
+            pickTarget(stageId);
+        }
+    }
+
+    // Mermaid's `click <id> call ...` directive expects a global function --
+    // reuse the same name methodology.html wires up, scoped to this page.
+    window.loadStage = onDagClick;
+
+    document.getElementById('clear-picks').addEventListener('click', clearPicks);
+
+    // Prefill (edit mode, or a re-rendered create with values already
+    // posted): once mermaid has drawn the SVG, restore selection classes.
+    function prefillFromValues() {
+        const ov = overrideInput.value;
+        const tg = targetInput.value;
+        if (ov) {
+            const reachable = new Set(DESCENDANTS[ov] || []);
+            document.querySelectorAll('#eval-pick-dag svg g.node').forEach(function (g) {
+                const sid = stageIdForNode(g);
+                if (sid !== ov && !reachable.has(sid)) g.classList.add('eval-dim');
+            });
+            const g = nodeEl(ov);
+            if (g) g.classList.add('eval-overridden');
+        }
+        if (tg) {
+            const g = nodeEl(tg);
+            if (g) g.classList.add('eval-target');
+        }
+    }
+    // mermaid draws asynchronously; poll briefly for the SVG rather than
+    // assuming a fixed delay.
+    if (overrideInput.value || targetInput.value) {
+        let attempts = 0;
+        const timer = setInterval(function () {
+            attempts += 1;
+            if (document.querySelector('#eval-pick-dag svg')) {
+                clearInterval(timer);
+                prefillFromValues();
+            } else if (attempts > 40) {
+                clearInterval(timer);
+            }
+        }, 100);
+    }
 })();
 </script>
 {% endblock %}
