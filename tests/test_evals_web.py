@@ -3,6 +3,8 @@
 nothing here touches examples/ or the repo's real methodologies."""
 from __future__ import annotations
 
+import json
+import re
 from pathlib import Path
 
 import pytest
@@ -753,6 +755,22 @@ def test_cases_schema_bad_actual_column_reports_problem(tmp_examples):
     assert not any(c["name"] == "expected_x" for c in body["columns"])
 
 
+def test_cases_schema_empty_post_reports_problems_not_500(tmp_examples):
+    """A completely empty submission (no override_stage/target_stage/expected
+    fields at all) must not 500 -- it should report the missing picks as
+    problems and derive nothing, the same shape a partially-filled form
+    produces."""
+    r = client.post(
+        f"/methodology/{METHODOLOGY}/evals/cases-schema",
+        data={},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["ok"] is False
+    assert body["problems"]
+    assert body["columns"] == []
+
+
 def test_eval_form_expected_dataset_is_text_input_not_select(tmp_examples):
     r = client.get(f"/methodology/{METHODOLOGY}/evals/new")
     assert r.status_code == 200
@@ -766,6 +784,20 @@ def test_eval_detail_dataless_renders_cases_schema_and_template_download(tmp_exa
     assert r.status_code == 200
     assert 'id="cases-schema-container"' in r.text
     assert 'id="download-template-btn"' in r.text
+
+    # The embedded config payload the page's inline script POSTs to
+    # cases-schema on load must actually carry this config's override/target
+    # stages and expected actual/dataset pairs -- not just render a
+    # container with the right id.
+    m = re.search(
+        r'<script id="cases-schema-config" type="application/json">(.*?)</script>',
+        r.text, re.DOTALL,
+    )
+    assert m is not None
+    payload = json.loads(m.group(1))
+    assert payload["override_stage"] == "input_data"
+    assert payload["target_stage"] == "llm_transform"
+    assert payload["expected"] == [{"actual": "summary", "dataset": "expected_summary"}]
 
 
 def test_attach_cases_rejects_mismatched_file(tmp_examples):

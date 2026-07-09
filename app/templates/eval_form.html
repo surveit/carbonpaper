@@ -188,7 +188,7 @@
     function applyDatasetColumns(columns, path) {
         document.getElementById('f-table-path').value = path;
         const datalist = document.getElementById('dataset-cols');
-        datalist.innerHTML = columns.map(c => '<option value="' + c + '"></option>').join('');
+        datalist.innerHTML = columns.map(c => '<option value="' + CasesSchema.escapeHtml(c) + '"></option>').join('');
     }
 
     // ── Cases-file schema preview + template download ──

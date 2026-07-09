@@ -9,10 +9,15 @@
     "use strict";
 
     async function fetchCasesSchema(methodology, params) {
-        const res = await fetch("/methodology/" + methodology + "/evals/cases-schema", {
-            method: "POST", body: params,
-        });
-        return res.json();
+        try {
+            const res = await fetch("/methodology/" + methodology + "/evals/cases-schema", {
+                method: "POST", body: params,
+            });
+            if (!res.ok) return null;
+            return await res.json();
+        } catch (err) {
+            return null;
+        }
     }
 
     function escapeHtml(text) {
@@ -22,6 +27,12 @@
     }
 
     function renderCasesSchema(body, containerEl, downloadBtn) {
+        if (!body) {
+            containerEl.innerHTML = "<p class=\"lede\">could not load the required schema.</p>";
+            downloadBtn.disabled = true;
+            downloadBtn.dataset.columns = "[]";
+            return;
+        }
         if (body.problems && body.problems.length) {
             containerEl.innerHTML = "<div class=\"load-issues\"><strong>" + body.problems.length +
                 " problem(s):</strong><ul>" +
@@ -49,10 +60,20 @@
         downloadBtn.dataset.columns = JSON.stringify(body.columns.map(function (c) { return c.name; }));
     }
 
+    // RFC4180 field quoting: a field containing a comma, double-quote, or
+    // newline is wrapped in double quotes with internal quotes doubled;
+    // plain names are left bare.
+    function csvField(name) {
+        if (/[",\n]/.test(name)) {
+            return "\"" + name.replace(/"/g, "\"\"") + "\"";
+        }
+        return name;
+    }
+
     function downloadTemplate(downloadBtn) {
         const names = JSON.parse(downloadBtn.dataset.columns || "[]");
         if (!names.length) return;
-        const csv = names.join(",") + "\n";
+        const csv = names.map(csvField).join(",") + "\n";
         const blob = new Blob([csv], {type: "text/csv"});
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
@@ -82,5 +103,6 @@
         render: renderCasesSchema,
         wireDownloadButton: wireDownloadButton,
         debounce: debounce,
+        escapeHtml: escapeHtml,
     };
 })(window);
