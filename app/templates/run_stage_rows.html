@@ -21,10 +21,11 @@
 {% if rows %}
 <div class="table-scroll rows-full">
 <table class="data-preview">
-    <thead><tr><th class="row-num">#</th>{% for c in columns %}<th>{{ c }}</th>{% endfor %}</tr></thead>
+    <thead><tr><th class="row-num">#</th><th class="syw-col">trace</th>{% for c in columns %}<th>{{ c }}</th>{% endfor %}</tr></thead>
     <tbody>
     {% for row in rows %}
     <tr><td class="row-num muted">{{ loop.index }}</td>
+        <td class="syw-cell"><a href="/project/{{ project }}/runs/{{ run_id }}/stage/{{ stage_id }}/row/{{ loop.index0 }}/trace/view" target="_blank" rel="noopener" title="show your work — trace this row's provenance">⚡ show your work</a></td>
         {% for c in columns %}{% set v = row[c] | string %}{% if v[:4] == 'http' %}<td class="cell-url"><a href="{{ v }}" target="_blank" rel="noopener">{{ v }}</a></td>{% else %}<td>{{ v | truncate(240) }}</td>{% endif %}{% endfor %}
     </tr>
     {% endfor %}
