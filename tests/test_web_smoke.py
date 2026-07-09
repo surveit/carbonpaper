@@ -25,9 +25,12 @@ _LOAD = {
 }
 _EXTRACT = {
     "id": "extract", "type": "llm_transform", "name": "Extract evidence pieces",
-    "inputs": [{"id": "load"}],
+    "inputs": [{"id": "load", "schema": {"columns": [{"name": "doc_id", "type": "str"}],
+                                         "primary_key": ["doc_id"]}}],
     "llm": {"prompt_template": "You are reading a document {doc_id}. Extract evidence."},
-    "output_schema": {"columns": [{"name": "evidence_id", "type": "str"}]},
+    "output_schema": {"columns": [{"name": "doc_id", "type": "str"},
+                                  {"name": "evidence_id", "type": "str"}],
+                      "primary_key": ["doc_id"]},
 }
 
 

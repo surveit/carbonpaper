@@ -91,10 +91,10 @@ SCHEMA_KINDS: set[str] = {k.value for k in SchemaKind}
 JOIN_TYPES: set[str] = {j.value for j in JoinType}
 
 # The connector kinds the compiler may EMIT and the prompt advertises to the LLM
-# — the seven documented in app/SCHEMA.md. This is deliberately broader than the
-# ConnectorKind enum, which lists only the kinds the runtime executes today
-# (file, computed_static); a stage using any other kind is a valid draft but not
-# yet runnable.
+# (the seven listed below). This is deliberately broader than the ConnectorKind
+# enum, which lists only the kinds the runtime executes today (file,
+# computed_static); a stage using any other kind is a valid draft but not yet
+# runnable.
 CONNECTOR_KINDS: set[str] = {
     "file", "http", "scrape", "api", "manual_upload", "sql", "computed_static",
 }

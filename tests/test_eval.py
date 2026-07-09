@@ -49,8 +49,13 @@ def test_python_row_function_rejects_multiple_inputs():
 
 
 def test_llm_is_grain_preserving():
-    s = m.Stage.model_validate(S(id="e", type="llm_transform", inputs=[{"id": "a"}],
-                                 llm={"prompt_template": "p"}))
+    s = m.Stage.model_validate(S(
+        id="e", type="llm_transform",
+        inputs=[{"id": "a", "schema": {"columns": [{"name": "id", "type": "str"}],
+                                       "primary_key": ["id"]}}],
+        output_schema={"columns": [{"name": "id", "type": "str"}, {"name": "out", "type": "str"}],
+                       "primary_key": ["id"]},
+        llm={"prompt_template": "p"}))
     assert s.is_grain_preserving is True
 
 

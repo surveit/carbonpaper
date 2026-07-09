@@ -1,6 +1,11 @@
 """Workflow contract: a workflow is a list of validated stages plus the
 cross-stage checks (unique ids, inputs resolve, acyclic).
 
+This module owns ONLY cross-stage checks — the ones that need the whole stage
+list to decide. A single stage's own invariants (e.g. an llm_transform being
+strictly 1:1) live on the `Stage` model as validators, not here; if a check can
+be answered from one stage alone, it does not belong in this file.
+
 The graph checks are plain functions so they can be tested on their own and read
 without wading through a validator. Each returns a list of human-readable issue
 strings ([] means it found nothing) — the whole batch is collected so one call
@@ -89,9 +94,13 @@ def parse_workflow(stages: list[dict[str, Any]]) -> Workflow:
 
 
 def validate_workflow(stages: list[Stage]) -> list[str]:
-    """Cross-stage checks (unique ids, inputs resolve, acyclic) on
-    already-validated stages, as human-readable issue strings — every problem,
-    not just the first."""
+    """Cross-stage checks on already-parsed stages, as human-readable issue
+    strings — every problem, not just the first: unique ids, inputs resolve,
+    acyclic. Per-stage invariants (e.g. llm_transform being strictly 1:1) are
+    already enforced by `Stage` construction, so any `list[Stage]` reaching here
+    is stage-valid; this is the remaining, whole-graph seam `load_workflow` (and
+    hence `create_version`) enforces, so an invalid workflow is never versioned
+    or run."""
     return graph_issues(stages)
 
 

@@ -36,7 +36,6 @@ What lives where:
   `resolve_eval_run_settings` (the grain-preservation gate). See
   [named-schemas.md](named-schemas.md#the-eval-data-model).
 - `models/table.py` — `TableRef`, a pointer to a stored table.
-- `app/SCHEMA.md` is the legacy prose spec (superseded by `app/models/`).
 
 **Loading is canonical and strict.** Compiled stages persist as JSON
 (`compiled/<NN>_<stage_id>.json`, the dump of a validated `Stage`), and

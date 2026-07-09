@@ -133,8 +133,9 @@ def render_prompt(template: str, row: dict[str, Any]) -> str:
             return "{" + key + "}"
     try:
         return template.format_map(_Defaults(row))
-    except Exception:
-        # last-ditch: append a JSON dump of the row so the model has access
+    except (ValueError, IndexError, KeyError):
+        # last-ditch: a malformed template (bad or positional placeholder) still
+        # calls the LLM — append a JSON dump of the row so the model has access
         return template + "\n\n[row data]:\n" + json.dumps(
             {k: (str(v)[:1000] if not isinstance(v, (int, float, bool, type(None))) else v)
              for k, v in row.items()},
@@ -191,7 +192,9 @@ def call_llm_batch(
             idx = futures[fut]
             try:
                 results[idx] = fut.result()
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001 — batch supervisor: any per-row
+                # backend failure (network, subprocess, parse, …) is recorded as
+                # _error so one row can't abort the batch; surfaced, not swallowed.
                 results[idx] = {"_error": str(exc)}
             done += 1
             if progress_cb:
