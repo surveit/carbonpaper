@@ -167,7 +167,6 @@ def _write_run(meth_dir: Path, run_id: str, **over) -> None:
         "status": "scored",
         "settings": {"can_score_declaratively": True,
                      "frontier": ["llm_transform"], "blocking_stages": []},
-        "passed": True,
         "metrics": {"exact_match_rate": 1.0},
         "started_at": "2026-01-01T00:00:00",
     }

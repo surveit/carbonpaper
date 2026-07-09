@@ -13,8 +13,8 @@ An eval measures the *real* methodology pipeline, not a copy of it. The v1 shape
     rollup `metrics`, or a `code` scorer for the escape hatch).
   - A **StageOutputOverride** injects a whole table as some stage's output.
   - An **EvalRun** is the result at a specific methodology version: its computed
-    `settings` (can it be scored automatically, and if not why), whether it
-    `passed`, and the scorer's `metrics` / per-row result table.
+    `settings` (can it be scored automatically, and if not why), and the scorer's
+    `metrics` / per-row result table.
 
 Storage: eval objects live under their own `eval_config/` and `eval_run/` object
 types (see [[contract_pydantic_and_storage]]).
@@ -97,7 +97,7 @@ class EvalConfig(_Base):
     # data + wiring
     override_stage: str
     target_stage: str
-    table: TableRef
+    table: Optional[TableRef] = None
     key: list[str]
     input_columns: list[str]
     expected: list[ExpectedColumn]
@@ -193,16 +193,17 @@ class EvalRun(_Base):
     id: SlugId
     config: str
     methodology: str
-    # Which DAG version was scored — the stale tripwire. If the target's key or
+    # Which methodology version was scored — the stale tripwire. If the target's key or
     # domain moved since the config was authored, it's stale; don't re-score.
     methodology_version: str
     status: Literal["scored", "vetoed", "error"]
     # How this run was scored (from resolve_eval_run_settings). `vetoed` = it
     # couldn't be scored declaratively and no code scorer was supplied.
     settings: EvalRunSettings
-    # Overall outcome and score outputs — the scorer decides both, and writes
-    # per-row success/failure into the result table at `result_ref`.
-    passed: Optional[bool] = None
+    # Score outputs — the scorer writes rollup metrics and a per-row result
+    # table at `result_ref`. There is no overall pass/fail: a case row passes
+    # iff all its checks match, and whether the eval looks good is a human's
+    # methodology-review judgment, not a stored bool.
     metrics: dict[str, Any] = Field(default_factory=dict)
     result_ref: Optional[str] = None
     started_at: Optional[str] = None

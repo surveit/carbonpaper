@@ -211,8 +211,8 @@ def _values_from_config(config: EvalConfig) -> EvalFormValues:
         description=config.description or "",
         override_stage=config.override_stage,
         target_stage=config.target_stage,
-        table_path=config.table.path,
-        table_format=config.table.format,
+        table_path=config.table.path if config.table is not None else "",
+        table_format=config.table.format if config.table is not None else "csv",
         key=list(config.key),
         input_columns=list(config.input_columns),
         expected_rows=[
@@ -519,21 +519,22 @@ async def _handle_eval_form_post(
         errors.extend(format_errors(exc))
 
     if config is not None:
-        table_path = REPO_ROOT / config.table.path
-        if not table_path.is_file():
-            errors.append(f"cases table not found: {config.table.path}")
-        else:
-            try:
-                validation_report = validate_table_file(
-                    table_path, config.table.format, config.table.table_schema
-                )
-            except (FileNotFoundError, ValueError) as exc:
-                errors.append(str(exc))
+        if config.table is not None:
+            table_path = REPO_ROOT / config.table.path
+            if not table_path.is_file():
+                errors.append(f"cases table not found: {config.table.path}")
             else:
-                errors.extend(
-                    issue.message for issue in validation_report.issues
-                    if issue.severity == "error"
-                )
+                try:
+                    validation_report = validate_table_file(
+                        table_path, config.table.format, config.table.table_schema
+                    )
+                except (FileNotFoundError, ValueError) as exc:
+                    errors.append(str(exc))
+                else:
+                    errors.extend(
+                        issue.message for issue in validation_report.issues
+                        if issue.severity == "error"
+                    )
 
         compat = check_eval_compatibility(config, listing.stages)
         errors.extend(compat.problems)
@@ -606,18 +607,20 @@ async def eval_detail(request: Request, methodology: str, eval_id: str):
 
     executing = report.settings.frontier if report.settings is not None else []
 
-    cases_columns = [c.name for c in config.table.table_schema.columns]
+    cases_columns: list[str] = []
     cases_rows: list[dict[str, Any]] = []
     cases_error: str | None = None
     cases_capped = False
-    table_path = (REPO_ROOT / config.table.path)
-    try:
-        df = read_table(table_path, config.table.format)
-        cases_capped = len(df) > CASES_PREVIEW_ROWS
-        preview = df.head(CASES_PREVIEW_ROWS).fillna("").astype(str).to_dict(orient="records")
-        cases_rows = [{str(k): v for k, v in row.items()} for row in preview]
-    except (FileNotFoundError, ValueError) as exc:
-        cases_error = str(exc)
+    if config.table is not None:
+        cases_columns = [c.name for c in config.table.table_schema.columns]
+        table_path = (REPO_ROOT / config.table.path)
+        try:
+            df = read_table(table_path, config.table.format)
+            cases_capped = len(df) > CASES_PREVIEW_ROWS
+            preview = df.head(CASES_PREVIEW_ROWS).fillna("").astype(str).to_dict(orient="records")
+            cases_rows = [{str(k): v for k, v in row.items()} for row in preview]
+        except (FileNotFoundError, ValueError) as exc:
+            cases_error = str(exc)
 
     return templates.TemplateResponse(
         request,

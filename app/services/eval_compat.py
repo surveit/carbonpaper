@@ -58,9 +58,28 @@ def check_eval_compatibility(config: EvalConfig,
     if missing:
         return CompatibilityReport(ok=False, problems=problems, settings=None)
 
-    # Condition 2: every injected table is a valid stand-in.
-    problems += _coverage_problems(
-        config.table.table_schema, by_id[config.override_stage], "cases table")
+    # Condition 1b: the target must be reachable from the override, else the
+    # override injects into a branch that never feeds the target and the eval
+    # is inert. Reference overrides are exempt (they inject side data).
+    descendants: set[str] = set()
+    stack = [config.override_stage]
+    while stack:
+        node = stack.pop()
+        for s in stages:
+            if node in s.input_ids and s.id not in descendants:
+                descendants.add(s.id)
+                stack.append(s.id)
+    if config.target_stage not in descendants:
+        problems.append(
+            f"target `{config.target_stage}` is not reachable from override "
+            f"`{config.override_stage}`; the override would not affect it")
+
+    # Condition 2: every injected table is a valid stand-in. The cases table is
+    # only checkable once it exists; a dataless config skips this and is scored
+    # for everything else (its file is validated when attached).
+    if config.table is not None:
+        problems += _coverage_problems(
+            config.table.table_schema, by_id[config.override_stage], "cases table")
     for ov in config.reference_overrides:
         problems += _coverage_problems(
             ov.table.table_schema, by_id[ov.stage_id],
@@ -83,9 +102,10 @@ def check_eval_compatibility(config: EvalConfig,
                 problems.append(f"`{exp.actual}` is `{got}` on target "
                                 f"`{target.id}` but metric abs_tol needs a numeric")
 
-    dataset_cols = {c.name for c in config.table.table_schema.columns}
+    dataset_cols = ({c.name for c in config.table.table_schema.columns}
+                    if config.table is not None else None)
     for k in config.key:
-        if k not in dataset_cols:
+        if dataset_cols is not None and k not in dataset_cols:
             problems.append(f"key column `{k}` is not in the cases table")
         if target_types and k not in target_types:
             problems.append(f"key column `{k}` is not emitted by target `{target.id}`")

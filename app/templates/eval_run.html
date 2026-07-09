@@ -14,9 +14,6 @@
     <li><strong>methodology version:</strong> <code>{{ run.methodology_version }}</code></li>
     <li><strong>started:</strong> {{ run.started_at or '—' }}</li>
     <li><strong>finished:</strong> {{ run.finished_at or '—' }}</li>
-    {% if run.passed is not none %}
-    <li><strong>scorer judgment:</strong> {{ "passed" if run.passed else "failed" }}</li>
-    {% endif %}
 </ul>
 
 <h2>Executing stages</h2>

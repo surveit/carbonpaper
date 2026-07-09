@@ -146,15 +146,14 @@ def test_stage_output_override():
 
 
 # ── EvalRun embeds settings ──────────────────────────────────────────────────
-def test_eval_run_embeds_settings_and_passed():
+def test_eval_run_embeds_settings():
     r = m.EvalRun.model_validate({
         "id": "run-1", "config": "scoring", "methodology": "lobbymap",
         "methodology_version": "abc123", "status": "scored",
         "settings": {"can_score_declaratively": True,
                      "frontier": ["benchmark_scoring"], "blocking_stages": []},
-        "passed": True, "metrics": {"mean_absolute_error": 0.33}})
+        "metrics": {"mean_absolute_error": 0.33}})
     assert r.settings.can_score_declaratively is True
-    assert r.passed is True
 
 
 # ── resolve_eval_run_settings on a synthetic DAG ─────────────────────────────
@@ -196,6 +195,38 @@ def test_join_changes_grain_so_not_scorable():
     v = resolve_eval_run_settings(meth, overrides=[], target="jn")
     assert v.can_score_declaratively is False
     assert v.blocking_stages == ["jn"]
+
+
+# ── EvalConfig.table optional ────────────────────────────────────────────────
+def test_eval_config_table_optional():
+    # A config with no cases file is valid: key/input_columns/expected still required.
+    cfg = m.EvalConfig.model_validate({
+        "id": "e1", "methodology": "m", "name": "E1",
+        "override_stage": "a", "target_stage": "b",
+        "key": ["doc_id"], "input_columns": ["x"],
+        "expected": [{"actual": "score", "expected": "expected_score", "metric": "exact"}],
+    })
+    assert cfg.table is None
+
+
+def test_eval_config_still_requires_nonempty_key():
+    with pytest.raises(ValidationError):
+        m.EvalConfig.model_validate({
+            "id": "e1", "methodology": "m", "name": "E1",
+            "override_stage": "a", "target_stage": "b",
+            "key": [], "input_columns": ["x"],
+            "expected": [{"actual": "score", "expected": "expected_score", "metric": "exact"}],
+        })
+
+
+def test_eval_run_has_no_passed_field():
+    run = m.EvalRun.model_validate({
+        "id": "r1", "config": "e1", "methodology": "m",
+        "methodology_version": "v1", "status": "scored",
+        "settings": {"can_score_declaratively": True, "frontier": ["b"], "blocking_stages": []},
+        "metrics": {"match_rate": 1.0},
+    })
+    assert not hasattr(run, "passed")
 
 
 def test_unknown_target_raises():
