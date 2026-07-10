@@ -307,6 +307,7 @@ _TRACE_VIEW_HTML = r"""<!doctype html><html><head><meta charset="utf-8">
 .trunc{background:#fff4e6;color:#7a4a00;border-radius:8px;padding:8px 12px;font-size:13px;margin-bottom:12px}
 .mermaid{background:#fff}.nograph{color:#888;font-size:13px}
 .lin-note{color:#888;font-size:12.5px;margin-bottom:14px}
+.lin-panel .lin-disc{margin:10px 0}
 .lin-panel summary.disclosure{cursor:pointer;font-weight:500;padding:4px 0}
 .lin-panel{margin-top:18px;border-top:1px solid #eee;padding-top:14px}
 .lin-empty{color:#888;font-size:14px;padding:8px 0}
