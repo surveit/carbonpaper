@@ -8,26 +8,18 @@ act across projects; `get_current_project` returns the project the session was
 opened on (call it first, then pass its value as `project_id`). Each tool calls a
 service directly — no HTTP.
 
-`build_project_mcp_server` wraps those callables as an in-process
-claude_agent_sdk MCP server, so the subscription CLI (which runs its own agent
-loop in a subprocess) can call them; the tools themselves are unchanged.
+The callables are wrapped as an in-process claude_agent_sdk MCP server by the
+generic `app.agent.registry.build_mcp_server`, using `TOOL_SCHEMAS` (input
+schemas) and `TOOL_LABELS` (display labels) below; the tools themselves are
+unchanged.
 
 Every write tool validates before it writes and never fabricates a value: a
 missing stage or column is a raised error, not an invented default."""
 
 from __future__ import annotations
 
-import inspect
-import json
 from pathlib import Path
 from typing import Annotated, Any, Callable
-
-from claude_agent_sdk import (
-    McpSdkServerConfig,
-    SdkMcpTool,
-    create_sdk_mcp_server,
-    tool,
-)
 
 from app.compiler import compile_methodology as compile_prose_to_workflow
 from app.errors import RegenerateWithoutSnapshotError
@@ -213,46 +205,3 @@ TOOL_LABELS: dict[str, str] = {
     "compile_workflow": "Rebuilding the workflow from scratch",
     "ToolSearch": "Looking up a tool",
 }
-
-
-def _as_content(value: object) -> dict[str, Any]:
-    text = value if isinstance(value, str) else json.dumps(value, default=str, indent=2)
-    return {"content": [{"type": "text", "text": text}]}
-
-
-def _wrap(fn: Callable[..., Any]) -> SdkMcpTool[Any]:
-    name = fn.__name__
-    schema = TOOL_SCHEMAS[name]
-
-    async def handler(args: dict[str, Any]) -> dict[str, Any]:
-        try:
-            return _as_content(fn(**args))
-        except Exception as exc:  # noqa: BLE001 — tool boundary: any tool failure is surfaced to the model as an error, never swallowed or faked
-            return {
-                "content": [{"type": "text", "text": f"ERROR: {exc}"}],
-                "is_error": True,
-            }
-
-    # The full docstring is the model-facing description — it carries the usage
-    # guidance (read before edit, pass the full stage JSON, id must match). Using
-    # only the first line dropped exactly what the model needs.
-    description = inspect.getdoc(fn) or name
-    return tool(name, description, schema)(handler)
-
-
-def build_project_mcp_server(
-    name: str, *, examples_dir: Path
-) -> tuple[McpSdkServerConfig, list[str], list[SdkMcpTool[Any]]]:
-    """Wrap the project tools as an in-process SDK-MCP server.
-
-    Returns `(server, allowed_tool_names, wrapped_tools)`:
-    - `server` goes into `ClaudeAgentOptions.mcp_servers`;
-    - each allowed name is `f"mcp__project__{fn.__name__}"`;
-    - `wrapped_tools` is the `SdkMcpTool` list (the server dict exposes no public
-      accessor for it) so callers can invoke a handler directly.
-    """
-    callables = make_project_tools(name, examples_dir=examples_dir)
-    wrapped = [_wrap(fn) for fn in callables]
-    server = create_sdk_mcp_server("project", tools=wrapped)
-    allowed = [f"mcp__project__{fn.__name__}" for fn in callables]
-    return server, allowed, wrapped

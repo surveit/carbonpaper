@@ -1,13 +1,17 @@
-"""SDK-native chat engine for the project editing agent. Drives the Claude CLI
-subprocess via claude_agent_sdk.query() so the subscription backend (no API key)
-can run the in-process MCP tools; maps the block stream onto the same normalized
-events the FE already renders (thinking/text/tool_call/tool_result).
+"""SDK-native chat engine. Drives the Claude CLI subprocess via
+claude_agent_sdk.query() so the subscription backend (no API key) can run
+in-process MCP tools; maps the block stream onto the normalized events the FE
+already renders (thinking/text/tool_call/tool_result).
 
-Cross-turn memory: each turn returns the CLI session id, which TurnManager
+Cross-turn memory: each turn returns the CLI session id, which the turn manager
 persists and passes back as `resume` next turn, so the model sees the whole
 conversation (tool calls included) without us replaying it. message_history is
-accepted for the TurnManager contract but unused — the CLI session, not a
+accepted for the turn-manager contract but unused — the CLI session, not a
 replayed transcript, carries the memory.
+
+Generic: the engine knows nothing about any specific agent. Its system prompt,
+tool labels, allowed tools and mounted MCP server are all supplied by the caller
+(see app.agent.registry.build_engine).
 """
 from __future__ import annotations
 
@@ -31,9 +35,13 @@ from claude_agent_sdk import (
 # PATH on Windows); reuse llm_agent_sdk's resolution so this engine and the
 # runtime backend agree on which CLI to spawn.
 from app.runtime.llm_agent_sdk import _CLI_PATH
-from app.compiler.agent.tools import TOOL_LABELS
 
 CLI_MODEL = os.environ.get("CW_CHAT_CLI_MODEL", "sonnet")
+
+# The in-process MCP server name the tools are mounted under. The CLI addresses a
+# tool as f"mcp__{MCP_SERVER_NAME}__{tool_name}". Kept here (not in registry) so
+# this module and the registry's server-builder agree without a circular import.
+MCP_SERVER_NAME = "tools"
 
 
 def _stringify(content: Any) -> str:
@@ -52,8 +60,8 @@ def _stringify(content: Any) -> str:
 class ClaudeAgentSdkEngine:
     """Drives claude_agent_sdk.query() and maps its block stream onto the
     normalized `stream_turn(prompt, *, message_history, emit, resume)` contract the
-    turn manager drives, so the subscription CLI can run its own tool loop over our
-    in-process MCP server."""
+    turn manager drives, so the subscription CLI can run its own tool loop over the
+    caller-supplied in-process MCP server."""
 
     def __init__(
         self,
@@ -61,23 +69,26 @@ class ClaudeAgentSdkEngine:
         system_prompt: str,
         mcp_server: Any,
         allowed_tools: list[str],
+        tool_labels: dict[str, str] | None = None,
         model: str = CLI_MODEL,
     ) -> None:
         self._system_prompt = system_prompt
         self._mcp_server = mcp_server
         self._allowed_tools = allowed_tools
+        # Present-tense labels shown in the chat while a tool runs, keyed by the
+        # bare tool name; an unlabelled tool falls back to its bare name.
+        self._tool_labels = tool_labels or {}
         self._model = model
 
     def _options(self, resume: str | None) -> ClaudeAgentOptions:
-        # No max_turns cap: the editing agent should keep working (read → edit →
-        # version → compile) until the task is done, not stop mid-way. The SDK
-        # default is None (uncapped), so we simply do not set it.
-        # `resume` continues a prior CLI session so the model sees the whole
+        # No max_turns cap: the agent should keep working until the task is done,
+        # not stop mid-way. The SDK default is None (uncapped), so we simply do not
+        # set it. `resume` continues a prior CLI session so the model sees the whole
         # conversation (the first turn passes None and starts a fresh session).
         kw: dict[str, Any] = dict(
             model=self._model,
             system_prompt=self._system_prompt,
-            mcp_servers={"project": self._mcp_server},
+            mcp_servers={MCP_SERVER_NAME: self._mcp_server},
             allowed_tools=self._allowed_tools,
             setting_sources=[],
         )
@@ -97,8 +108,8 @@ class ClaudeAgentSdkEngine:
     ) -> tuple[list[dict[str, Any]], str | None]:
         # message_history is unused: cross-turn memory comes from resuming the CLI
         # session (the `resume` id), not from replaying messages. The tools read
-        # durable on-disk project state. Returns (transcript, session_id) — the
-        # session_id is persisted so the next turn resumes this conversation.
+        # durable on-disk state. Returns (transcript, session_id) — the session_id
+        # is persisted so the next turn resumes this conversation.
         del message_history
         assistant_parts: list[dict[str, Any]] = []
         session_id: str | None = None
@@ -115,10 +126,10 @@ class ClaudeAgentSdkEngine:
                     elif isinstance(block, ToolUseBlock):
                         args = json.dumps(block.input, default=str)
                         # The CLI calls tools by their namespaced name
-                        # (e.g. "mcp__project__read_stage"); the friendly label
-                        # is keyed by the bare tool name.
+                        # (e.g. "mcp__tools__read_stage"); the friendly label is
+                        # keyed by the bare tool name.
                         bare = block.name.rsplit("__", 1)[-1]
-                        label = TOOL_LABELS.get(bare, bare)
+                        label = self._tool_labels.get(bare, bare)
                         emit({
                             "kind": "tool_call",
                             "name": bare,

@@ -24,14 +24,17 @@ def get_project_sdk_engine(name: str) -> "ClaudeAgentSdkEngine":
     can run the tool loop. Construction is lazy w.r.t. the filesystem:
     make_project_tools only binds `EXAMPLES_DIR / name` into tool closures, so
     building the engine never reads the project directory."""
+    from app.agent.registry import build_mcp_server
     from app.agent.sdk_engine import ClaudeAgentSdkEngine
-    from app.compiler.agent.tools import build_project_mcp_server
+    from app.compiler.agent.tools import TOOL_LABELS, TOOL_SCHEMAS, make_project_tools
 
     if name not in _sdk_engines:
-        server, allowed, _tools = build_project_mcp_server(name, examples_dir=EXAMPLES_DIR)
+        tools = make_project_tools(name, examples_dir=EXAMPLES_DIR)
+        server, allowed, _wrapped = build_mcp_server(tools, TOOL_SCHEMAS)
         _sdk_engines[name] = ClaudeAgentSdkEngine(
             system_prompt=_system_prompt(name),
             mcp_server=server,
             allowed_tools=allowed,
+            tool_labels=TOOL_LABELS,
         )
     return _sdk_engines[name]

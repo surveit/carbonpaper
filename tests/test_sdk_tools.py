@@ -15,7 +15,12 @@ from typing import Any
 
 from claude_agent_sdk import SdkMcpTool
 
-from app.compiler.agent.tools import TOOL_SCHEMAS, build_project_mcp_server
+from app.agent.registry import build_mcp_server
+from app.compiler.agent.tools import TOOL_SCHEMAS, make_project_tools
+
+
+def _build(name: str, examples_dir: Path) -> tuple[Any, list[str], list[SdkMcpTool[Any]]]:
+    return build_mcp_server(make_project_tools(name, examples_dir=examples_dir), TOOL_SCHEMAS)
 
 
 def _call(tool: SdkMcpTool[Any], args: dict[str, Any]) -> dict[str, Any]:
@@ -44,18 +49,14 @@ def _seed(examples: Path, name: str) -> Path:
 
 def test_allowed_names_cover_every_tool(tmp_path: Path) -> None:
     _seed(tmp_path, "congresswatch")
-    _server, allowed, _tools = build_project_mcp_server(
-        "congresswatch", examples_dir=tmp_path
-    )
-    assert set(allowed) == {f"mcp__project__{n}" for n in TOOL_SCHEMAS}
+    _server, allowed, _tools = _build("congresswatch", tmp_path)
+    assert set(allowed) == {f"mcp__tools__{n}" for n in TOOL_SCHEMAS}
     assert len(allowed) == 7
 
 
 def test_read_stage_handler_returns_text_content(tmp_path: Path) -> None:
     pdir = _seed(tmp_path, "congresswatch")
-    _server, _allowed, tools = build_project_mcp_server(
-        "congresswatch", examples_dir=tmp_path
-    )
+    _server, _allowed, tools = _build("congresswatch", tmp_path)
     tool = next(t for t in tools if t.name == "read_stage")  # SdkMcpTool
 
     from app.services.workspace import project_workflow_summary
@@ -68,9 +69,7 @@ def test_read_stage_handler_returns_text_content(tmp_path: Path) -> None:
 
 def test_handler_surfaces_tool_error_not_fabricated_value(tmp_path: Path) -> None:
     _seed(tmp_path, "congresswatch")
-    _server, _allowed, tools = build_project_mcp_server(
-        "congresswatch", examples_dir=tmp_path
-    )
+    _server, _allowed, tools = _build("congresswatch", tmp_path)
     tool = next(t for t in tools if t.name == "read_stage")
     out = _call(tool, {"project_id": "congresswatch", "stage_id": "no_such_stage"})
     assert out.get("is_error") is True

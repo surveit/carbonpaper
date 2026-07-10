@@ -65,7 +65,8 @@ def test_stream_turn_maps_blocks_to_normalized_events(monkeypatch: Any) -> None:
     engine = se.ClaudeAgentSdkEngine(
         system_prompt="sp",
         mcp_server=object(),
-        allowed_tools=["mcp__project__edit_stage"],
+        allowed_tools=["mcp__tools__edit_stage"],
+        tool_labels={"edit_stage": "Editing a stage"},
     )
     transcript, session_id = asyncio.run(
         engine.stream_turn("edit score", message_history=[], emit=events.append)
