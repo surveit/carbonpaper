@@ -24,7 +24,7 @@ from app.services.loader import (
     stage_to_spec_dict,
     write_stage,
 )
-from app.models import Stage, validate_stage
+from app.models import Stage, parse_stage, validate_stage
 from app.web.config import EXAMPLES_DIR, templates
 from app.web.diagrams import TYPE_CLASS, TYPE_GLYPH, build_mermaid_graph
 from app.web.loading import find_stage, load_stages, resolve_function_code
@@ -189,7 +189,7 @@ async def node_edit(
 
     # Persist the VALIDATED stage in the canonical on-disk form (the same shape
     # the compiler writes and every read path hashes), not the reviewer's raw text.
-    validated = Stage.model_validate(stage)
+    validated = parse_stage(stage)
     write_stage(target, validated)
 
     spec = stage_to_spec_dict(validated)

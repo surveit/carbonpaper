@@ -5,11 +5,15 @@ import pytest
 from pydantic import ValidationError
 
 from app import models as m
-from app.models import Stage
+from app.models import parse_stage
 
 
 def S(**kw):
     kw.setdefault("name", kw.get("id", "x"))
+    # Table-producing types now REQUIRE output_schema (issue #51); inject a
+    # trivial one unless the test declares its own. `publish` has none.
+    if kw.get("type") not in (None, "publish") and "output_schema" not in kw:
+        kw["output_schema"] = {"columns": [{"name": "id", "type": "str"}]}
     return kw
 
 
@@ -50,7 +54,7 @@ def test_workflow_cycle():
 # the graph checks are plain functions — test them directly (the point of the split).
 # Each RETURNS its issues (all of them) rather than raising on the first.
 def test_check_inputs_resolve_reports_all_dangling():
-    s = Stage.model_validate(S(id="b", type="join",
+    s = parse_stage(S(id="b", type="join",
                                inputs=[{"id": "ghost1"}, {"id": "ghost2"}],
                                join={"keys": [{"left": "x", "right": "y"}]}))
     issues = m.check_inputs_resolve([s])
@@ -59,15 +63,15 @@ def test_check_inputs_resolve_reports_all_dangling():
 
 
 def test_detect_cycle_reports_cycle():
-    a = Stage.model_validate(S(id="a", type="python_frame_function", inputs=[{"id": "b"}], function={"kind": "inline", "code": "x"}))
-    b = Stage.model_validate(S(id="b", type="python_frame_function", inputs=[{"id": "a"}], function={"kind": "inline", "code": "x"}))
+    a = parse_stage(S(id="a", type="python_frame_function", inputs=[{"id": "b"}], function={"kind": "inline", "code": "x"}))
+    b = parse_stage(S(id="b", type="python_frame_function", inputs=[{"id": "a"}], function={"kind": "inline", "code": "x"}))
     assert m.detect_cycle([a, b])  # non-empty
 
 
 def test_detect_cycle_empty_when_acyclic():
-    a = Stage.model_validate(S(id="a", type="input_data",
+    a = parse_stage(S(id="a", type="input_data",
                                connector={"kind": "file", "params": {"path": "d.csv"}}))
-    b = Stage.model_validate(S(id="b", type="python_frame_function", inputs=[{"id": "a"}], function={"kind": "inline", "code": "x"}))
+    b = parse_stage(S(id="b", type="python_frame_function", inputs=[{"id": "a"}], function={"kind": "inline", "code": "x"}))
     assert m.detect_cycle([a, b]) == []
 
 
@@ -75,14 +79,14 @@ def test_detect_cycle_empty_when_acyclic():
 # check on already-validated stages and returns all issues at once ([] means clean).
 def test_validate_workflow_clean_is_empty():
     stages = [
-        Stage.model_validate(S(id="load", type="input_data",
+        parse_stage(S(id="load", type="input_data",
                                connector={"kind": "file", "params": {"path": "d.csv", "format": "csv"}})),
     ]
     assert m.validate_workflow(stages) == []
 
 
 def test_validate_workflow_reports_issues():
-    s = Stage.model_validate(S(id="j", type="join",
+    s = parse_stage(S(id="j", type="join",
                                inputs=[{"id": "a"}, {"id": "b"}],
                                join={"keys": [{"left": "x", "right": "y"}]}))
     issues = m.validate_workflow([s])
@@ -112,12 +116,12 @@ def _llm_1to1_dict(**over):
 
 
 def test_llm_transform_valid_1to1_constructs():
-    assert Stage.model_validate(_llm_1to1_dict()).id == "score"
+    assert parse_stage(_llm_1to1_dict()).id == "score"
 
 
 def test_llm_transform_pk_mismatch_rejected():
     with pytest.raises(ValidationError, match="primary_key"):
-        Stage.model_validate(_llm_1to1_dict(output_schema={
+        parse_stage(_llm_1to1_dict(output_schema={
             "columns": [{"name": "id", "type": "str"}, {"name": "text", "type": "str"},
                         {"name": "score", "type": "int"}],
             "primary_key": ["text"]}))
@@ -125,14 +129,14 @@ def test_llm_transform_pk_mismatch_rejected():
 
 def test_llm_transform_drops_input_column_rejected():
     with pytest.raises(ValidationError, match="text"):
-        Stage.model_validate(_llm_1to1_dict(output_schema={
+        parse_stage(_llm_1to1_dict(output_schema={
             "columns": [{"name": "id", "type": "str"}, {"name": "score", "type": "int"}],
             "primary_key": ["id"]}))  # dropped `text`
 
 
 def test_llm_transform_modifies_column_schema_rejected():
     with pytest.raises(ValidationError, match="text"):
-        Stage.model_validate(_llm_1to1_dict(output_schema={
+        parse_stage(_llm_1to1_dict(output_schema={
             "columns": [{"name": "id", "type": "str"}, {"name": "text", "type": "int"},
                         {"name": "score", "type": "int"}],
             "primary_key": ["id"]}))  # `text` str -> int
@@ -140,7 +144,7 @@ def test_llm_transform_modifies_column_schema_rejected():
 
 def test_llm_transform_adds_nothing_rejected():
     with pytest.raises(ValidationError, match="adds no columns"):
-        Stage.model_validate(_llm_1to1_dict(output_schema={
+        parse_stage(_llm_1to1_dict(output_schema={
             "columns": [{"name": "id", "type": "str"}, {"name": "text", "type": "str"}],
             "primary_key": ["id"]}))  # adds no new column
 

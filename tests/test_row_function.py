@@ -6,15 +6,16 @@ import pandas as pd
 import pytest
 from pydantic import ValidationError
 
-from app.models import Stage
+from app.models import parse_stage
 from app.runtime.stages import handle_python_row_function
 
 
 def _stage(code, inputs=("src",)):
-    return Stage.model_validate({
+    return parse_stage({
         "id": "t", "name": "t", "type": "python_row_function",
         "inputs": [{"id": i} for i in inputs],
         "function": {"kind": "inline", "code": code},
+        "output_schema": {"columns": [{"name": "x", "type": "int"}]},
     })
 
 

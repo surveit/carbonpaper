@@ -150,7 +150,9 @@ def read_module_code(module_path: str) -> str | None:
 def resolve_function_code(stage_def: Stage | None) -> str | None:
     """Python source for a stage's function handle: the module file for a module
     ref, or the inline code string. None if the stage has neither."""
-    fn = stage_def.function if stage_def else None
+    # Only some stage types (the python functions + publish) carry a `function`
+    # block, so read it off the discriminated union defensively.
+    fn = getattr(stage_def, "function", None) if stage_def else None
     if fn and fn.kind == "module" and fn.module:
         return read_module_code(fn.module)
     if fn and fn.kind == "inline":
@@ -328,7 +330,8 @@ def build_llm_example(
     Returns {rendered, source_id} on success, {error} if no input or render
     fails, or None if the stage isn't an LLM stage.
     """
-    template = stage_def.llm.prompt_template if stage_def and stage_def.llm else None
+    llm = getattr(stage_def, "llm", None) if stage_def else None
+    template = llm.prompt_template if llm else None
     if not template:
         return None
     for ip in input_previews:

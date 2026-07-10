@@ -357,8 +357,12 @@ def _execute_stages(
                 )
                 output = output.head(limit).copy()
 
+            # publish stages produce artifacts, not a table, so they carry no
+            # output_schema (it's absent from the model, not just None) — getattr
+            # yields None and validate_dataframe records the usual "no schema"
+            # note. Every other type declares output_schema (required).
             out_rep = validate_dataframe(
-                output, stage.output_schema, stage_id=sid, phase="output",
+                output, getattr(stage, "output_schema", None), stage_id=sid, phase="output",
             )
             record["output_validation"] = out_rep.to_dict()
 

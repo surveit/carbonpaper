@@ -38,6 +38,8 @@ def _make_project(root):
     stage = {
         "id": "load", "name": "Load items", "type": "input_data",
         "connector": {"kind": "file", "params": {"path": "data/items.csv", "format": "csv"}},
+        "output_schema": {"columns": [{"name": "name", "type": "str"},
+                                      {"name": "val", "type": "int"}]},
         "limit": 2,
     }
     (root / "compiled" / "01_load.json").write_text(json.dumps(stage), encoding="utf-8")
@@ -112,12 +114,16 @@ def _two_stage_project(root, rows: list[dict]):
         "id": "load", "name": "Load items", "type": "input_data",
         "connector": {"kind": "file",
                       "params": {"path": "data/items.csv", "format": "csv"}},
+        "output_schema": {"columns": [{"name": "name", "type": "str"},
+                                      {"name": "val", "type": "int"}]},
     }
     consume = {
         "id": "consume", "name": "Consume items", "type": "python_frame_function",
         "inputs": [{"id": "load"}],
         "function": {"kind": "inline",
                      "code": "def transform(df):\n    return df\n"},
+        "output_schema": {"columns": [{"name": "name", "type": "str"},
+                                      {"name": "val", "type": "int"}]},
     }
     (root / "compiled" / "01_load.json").write_text(
         json.dumps(load), encoding="utf-8")
@@ -219,7 +225,9 @@ def test_invalid_workflow_never_becomes_a_version_and_run_never_pins_stale(tmp_p
         tmp_path / "data" / "items.csv", index=False)
     good = {"id": "load", "name": "Load", "type": "input_data",
             "connector": {"kind": "file",
-                          "params": {"path": "data/items.csv", "format": "csv"}}}
+                          "params": {"path": "data/items.csv", "format": "csv"}},
+            "output_schema": {"columns": [{"name": "name", "type": "str"},
+                                          {"name": "val", "type": "int"}]}}
     (tmp_path / "compiled" / "01_load.json").write_text(
         json.dumps(good), encoding="utf-8")
     with pytest.raises(NoVersionToRunError):

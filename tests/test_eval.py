@@ -11,6 +11,10 @@ from app.models import resolve_eval_run_settings
 
 def S(**kw):
     kw.setdefault("name", kw.get("id", "x"))
+    # Table-producing types now REQUIRE output_schema (issue #51); inject a
+    # trivial one unless the test declares its own. `publish` has none.
+    if kw.get("type") not in (None, "publish") and "output_schema" not in kw:
+        kw["output_schema"] = {"columns": [{"name": "id", "type": "str"}]}
     return kw
 
 
@@ -33,23 +37,23 @@ def _ref(path="x.csv", cols=("k",)):
 
 # ── is_grain_preserving (fixed by stage type) ────────────────────────────────
 def test_python_frame_function_not_grain_preserving():
-    assert m.Stage.model_validate(_py("t", ["a"])).is_grain_preserving is False
+    assert m.parse_stage(_py("t", ["a"])).is_grain_preserving is False
 
 
 def test_python_row_function_is_grain_preserving():
-    assert m.Stage.model_validate(_py("t", ["a"], granularity="row")).is_grain_preserving is True
+    assert m.parse_stage(_py("t", ["a"], granularity="row")).is_grain_preserving is True
 
 
 def test_python_row_function_rejects_multiple_inputs():
     # a row function maps over one input's rows — two inputs is a join
     with pytest.raises(ValidationError):
-        m.Stage.model_validate(S(id="t", type="python_row_function",
+        m.parse_stage(S(id="t", type="python_row_function",
                                  inputs=[{"id": "a"}, {"id": "b"}],
                                  function={"kind": "inline", "code": "x"}))
 
 
 def test_llm_is_grain_preserving():
-    s = m.Stage.model_validate(S(
+    s = m.parse_stage(S(
         id="e", type="llm_transform",
         inputs=[{"id": "a", "schema": {"columns": [{"name": "id", "type": "str"}],
                                        "primary_key": ["id"]}}],
@@ -60,13 +64,13 @@ def test_llm_is_grain_preserving():
 
 
 def test_input_data_is_grain_preserving():
-    assert m.Stage.model_validate(_file_input("load")).is_grain_preserving is True
+    assert m.parse_stage(_file_input("load")).is_grain_preserving is True
 
 
 def test_join_and_aggregate_change_grain():
-    j = m.Stage.model_validate(S(id="j", type="join", inputs=[{"id": "a"}, {"id": "b"}],
+    j = m.parse_stage(S(id="j", type="join", inputs=[{"id": "a"}, {"id": "b"}],
                                  join={"keys": [{"left": "k", "right": "k"}]}))
-    agg = m.Stage.model_validate(S(id="agg", type="aggregate", inputs=[{"id": "a"}],
+    agg = m.parse_stage(S(id="agg", type="aggregate", inputs=[{"id": "a"}],
                                    aggregate={"group_by": ["g"],
                                               "aggregations": [{"formula": "sum", "output_column": "t",
                                                                 "value_column": "x"}]}))

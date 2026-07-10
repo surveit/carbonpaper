@@ -27,7 +27,7 @@ from pydantic import ValidationError
 
 from app.models.workflow import validate_workflow
 from app.models.schema import format_errors
-from app.models.stage import Stage
+from app.models.stage import Stage, parse_stage
 
 
 @dataclass
@@ -63,7 +63,7 @@ def load_compiled_dir(compiled_dir: Path) -> list[CompiledStageFile]:
             entry.issues.append("file contains no stage object")
             continue
         try:
-            entry.stage = Stage.model_validate(data)
+            entry.stage = parse_stage(data)
         except ValidationError as err:
             entry.issues.extend(format_errors(err))
     return entries

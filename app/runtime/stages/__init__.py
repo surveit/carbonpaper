@@ -8,8 +8,6 @@ from typing import Any, Callable
 
 import pandas as pd
 
-from app.models import Stage
-
 from ._shared import HaltForReview
 from .aggregate import handle_aggregate
 from .human_review_queue import handle_human_review_queue
@@ -21,8 +19,11 @@ from .python_functions import handle_python_frame_function, handle_python_row_fu
 
 # A stage handler: given the stage spec, its inputs keyed by upstream id, and the
 # run context, produce the stage's output frame (or None for side-effect-only
-# stages like publish).
-StageHandler = Callable[[Stage, dict[str, pd.DataFrame], dict[str, Any]], pd.DataFrame | None]
+# stages like publish). Each handler is typed to its own per-type Stage model
+# (`InputDataStage`, `LlmTransformStage`, …); the stage param here is `Any`
+# because HANDLERS erases the per-type distinction — the runner dispatches by the
+# `type` string and pydantic has already guaranteed the matching model.
+StageHandler = Callable[[Any, dict[str, pd.DataFrame], dict[str, Any]], pd.DataFrame | None]
 
 HANDLERS: dict[str, StageHandler] = {
     "input_data": handle_input_data,

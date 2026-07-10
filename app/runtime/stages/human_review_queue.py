@@ -9,7 +9,7 @@ from typing import Any
 import pandas as pd
 import pyarrow.lib as pa_lib
 
-from app.models import Stage
+from app.models import HumanReviewQueueStage
 
 from ._shared import HaltForReview, _translate_where
 
@@ -22,11 +22,10 @@ def _content_hash(row: pd.Series, columns: list[str]) -> str:
     return hashlib.sha1("|".join(parts).encode("utf-8")).hexdigest()[:16]
 
 
-def _hash_columns_for(stage: Stage) -> list[str]:
+def _hash_columns_for(stage: HumanReviewQueueStage) -> list[str]:
     """Columns to include in the content hash. Falls back to the upstream
     input's primary_key if `queue.hash_columns` isn't set."""
-    queue = stage.queue
-    cols = queue.hash_columns if queue else None
+    cols = stage.queue.hash_columns
     if cols:
         return list(cols)
     if stage.inputs:
@@ -53,7 +52,7 @@ def _load_decisions(ctx: dict[str, Any], stage_id: str) -> pd.DataFrame:
     return pd.read_parquet(p)
 
 
-def handle_human_review_queue(stage: Stage, inputs: dict[str, pd.DataFrame], ctx: dict[str, Any]) -> pd.DataFrame:
+def handle_human_review_queue(stage: HumanReviewQueueStage, inputs: dict[str, pd.DataFrame], ctx: dict[str, Any]) -> pd.DataFrame:
     """Real review-queue semantics:
 
     1. Apply the queue filter to upstream output → items needing review.
@@ -68,7 +67,6 @@ def handle_human_review_queue(stage: Stage, inputs: dict[str, pd.DataFrame], ctx
     """
     sid = stage.id
     queue_cfg = stage.queue
-    assert queue_cfg is not None  # Stage validation: human_review_queue carries queue_cfg
     src = inputs[stage.inputs[0].id].copy()
     flt = queue_cfg.filter
 

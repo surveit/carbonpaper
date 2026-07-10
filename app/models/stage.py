@@ -1,15 +1,28 @@
 """Stage-level contract: the node types, their executable-handle blocks, and the
-Stage model. Constructing a model validates it.
+per-type Stage models combined into a discriminated union.
 
-Models ignore unknown keys (compiled stage JSON carries fields we pass through) but are
-strict about the fields declared here.
-"""
+A stage is one of eight per-type models — `InputDataStage`, `LlmTransformStage`,
+`PythonRowFunctionStage`, `PythonFrameFunctionStage`, `JoinStage`,
+`AggregateStage`, `HumanReviewQueueStage`, `PublishStage` — combined via
+`Stage = Annotated[Union[...], Field(discriminator="type")]`. Discriminating on
+`type` means each model carries exactly its own handle block (so the old
+"exactly one handle field per type" table is structural, not a validator) and
+declares an `output_schema` only where it produces a table. Every
+table-producing type REQUIRES `output_schema`; `publish` (which writes artifacts,
+not a table) has no such field at all. See issue #51.
+
+Constructing a model validates it. Use `parse_stage(data)` to validate a raw
+dict into the right per-type model; `validate_stage(data)` is the non-fatal
+variant returning issue strings.
+
+Models ignore nothing — unknown keys are rejected (a typo'd field is an invalid
+stage, not silently-ignored data)."""
 from __future__ import annotations
 
 from enum import Enum
-from typing import Any, Literal, Optional
+from typing import Annotated, Any, ClassVar, Literal, Optional, Union
 
-from pydantic import Field, ValidationError, field_validator, model_validator
+from pydantic import Field, TypeAdapter, ValidationError, field_validator, model_validator
 
 from app.llm.options import LLMModel
 from app.models.schema import (
@@ -214,41 +227,34 @@ class InputRef(_Base):
     table_schema: Optional[TableSchema] = Field(default=None, alias="schema")
 
 
-# ── Stage ────────────────────────────────────────────────────────────────────
-# type → which handle block it must carry, plus input arity. Keyed by the plain
-# value string, not the enum member: with `use_enum_values`, `self.type` is a
-# str at runtime, and str-enum members hash by *name* (StageType.join_ hashes
-# as "join_", not "join") — a member-keyed dict would silently miss the lookup.
-_TYPE_SPEC: dict[str, dict[str, Any]] = {
-    "input_data":            {"handle": "connector", "requires_inputs": False, "min_inputs": 0},
-    "llm_transform":         {"handle": "llm",       "requires_inputs": True,  "min_inputs": 1},
-    "python_row_function":   {"handle": "function",  "requires_inputs": True,  "min_inputs": 1, "max_inputs": 1},
-    "python_frame_function": {"handle": "function",  "requires_inputs": True,  "min_inputs": 1},
-    "join":                  {"handle": "join",      "requires_inputs": True,  "min_inputs": 2},
-    "aggregate":             {"handle": "aggregate", "requires_inputs": True,  "min_inputs": 1},
-    "human_review_queue":    {"handle": "queue",     "requires_inputs": True,  "min_inputs": 1},
-    "publish":               {"handle": "publish",   "also_requires": ["function"], "requires_inputs": True, "min_inputs": 1},
-}
+# ── Stage: a discriminated union of per-type models ──────────────────────────
+# The old single `Stage` model carried every handle field as Optional plus a
+# `_TYPE_SPEC` table + validator to enforce "exactly the right handle for this
+# type" and "output_schema present". Splitting into per-type models makes both
+# structural: each model declares exactly its own handle block, and only
+# table-producing types declare `output_schema` (required). `publish` writes
+# artifacts, not a table, so it has no `output_schema` field at all. Parse errors
+# now name the actually-missing field per type. See issue #51.
+class StageBase(_Base):
+    """Fields and behaviour common to every stage type. Never instantiated
+    directly — a stage is always one of the concrete per-type subclasses,
+    combined into the `Stage` discriminated union. The `type` discriminator and
+    the handle block (`connector`/`llm`/`function`/…) live on the subclasses;
+    `output_schema` lives on the table-producing ones."""
 
+    # Per-type input arity, read by the shared `_check_input_arity` validator.
+    # Subclasses override; the base defaults to "no inputs required, no cap".
+    MIN_INPUTS: ClassVar[int] = 0
+    MAX_INPUTS: ClassVar[Optional[int]] = None
 
-class Stage(_Base):
-    """One node in the workflow. Exactly one handle block is required,
-    selected by `type`."""
     id: str
-    type: StageType
+    # Narrowed to a `Literal[...]` on each subclass — that Literal is the union
+    # discriminator. Declared here (as the widened `str`) so shared helpers like
+    # `is_grain_preserving` can read `self.type`.
+    type: str
     name: str
     source: Optional[SourceRef] = None
     inputs: list[InputRef] = Field(default_factory=list)
-    output_schema: Optional[TableSchema] = None
-
-    # executable handles (exactly one populated, per type)
-    connector: Optional[Connector] = None
-    llm: Optional[LLMConfig] = None
-    function: Optional[PythonFunction] = None
-    join: Optional[JoinConfig] = None
-    aggregate: Optional[AggregateConfig] = None
-    queue: Optional[QueueConfig] = None
-    publish: Optional[PublishConfig] = None
 
     review: Optional[ReviewConfig] = None
     limit: Optional[int] = None
@@ -266,10 +272,6 @@ class Stage(_Base):
             return v
         return [{"id": item} if isinstance(item, str) else item for item in v]
 
-    @property
-    def input_ids(self) -> list[str]:
-        return [ref.id for ref in self.inputs]
-
     @field_validator("id")
     @classmethod
     def _snake_case(cls, v: str) -> str:
@@ -278,28 +280,63 @@ class Stage(_Base):
         return v
 
     @model_validator(mode="after")
-    def _handle_for_type(self) -> "Stage":
-        spec = _TYPE_SPEC[self.type]
-        handle = spec["handle"]
-        if getattr(self, handle) is None:
-            raise ValueError(f"type `{self.type}` requires a `{handle}:` block")
-        for extra in spec.get("also_requires", ()):
-            if getattr(self, extra) is None:
-                raise ValueError(f"type `{self.type}` also requires a `{extra}:` block")
-        if spec["requires_inputs"] and len(self.inputs) < spec["min_inputs"]:
+    def _check_input_arity(self) -> "StageBase":
+        n = len(self.inputs)
+        if n < self.MIN_INPUTS:
             raise ValueError(
-                f"type `{self.type}` needs >= {spec['min_inputs']} input(s), got {len(self.inputs)}"
+                f"type `{self.type}` needs >= {self.MIN_INPUTS} input(s), got {n}"
             )
-        max_inputs = spec.get("max_inputs")
-        if max_inputs is not None and len(self.inputs) > max_inputs:
+        if self.MAX_INPUTS is not None and n > self.MAX_INPUTS:
             raise ValueError(
-                f"type `{self.type}` takes <= {max_inputs} input(s), got {len(self.inputs)} "
+                f"type `{self.type}` takes <= {self.MAX_INPUTS} input(s), got {n} "
                 f"(more than one input is a join, or use python_frame_function)"
             )
         return self
 
+    @property
+    def input_ids(self) -> list[str]:
+        return [ref.id for ref in self.inputs]
+
+    @property
+    def is_grain_preserving(self) -> bool:
+        """Does one input row map to exactly one output row? This is the v1 eval
+        gate: a declarative (single-table, row-aligned) eval can only tap a node
+        reached through grain-preserving stages. Fixed entirely by stage type:
+          - python_row_function → yes (runtime maps it per row — enforced 1:1)
+          - python_frame_function → NO (may reshape the frame)
+          - llm_transform      → yes (per-row 1:1 in v1; a fan-out LLM like
+                                 doc→pieces is out of scope until fan-out evals)
+          - input_data         → yes (originates the rows)
+          - human_review_queue → yes (keyed, edits in place)
+          - join (fan-out) / aggregate (fan-in) → NO; grain changes are deferred
+          - publish            → terminal, never a tap target
+        """
+        return self.type in (
+            StageType.python_row_function,
+            StageType.llm_transform,
+            StageType.input_data,
+            StageType.human_review_queue,
+            StageType.publish,
+        )
+
+
+class InputDataStage(StageBase):
+    """Declares a source dataset with a typed schema."""
+    type: Literal["input_data"] = "input_data"
+    connector: Connector
+    output_schema: TableSchema
+
+
+class LlmTransformStage(StageBase):
+    """Row-by-row LLM call producing structured output. Strictly 1:1."""
+    MIN_INPUTS: ClassVar[int] = 1
+
+    type: Literal["llm_transform"] = "llm_transform"
+    llm: LLMConfig
+    output_schema: TableSchema
+
     @model_validator(mode="after")
-    def _llm_transform_one_to_one(self) -> "Stage":
+    def _llm_transform_one_to_one(self) -> "LlmTransformStage":
         """An llm_transform maps one input row to one output row, so on its
         DECLARED schemas alone it must: take exactly one input; declare a
         primary_key on both that input's schema and its output_schema, naming
@@ -311,19 +348,15 @@ class Stage(_Base):
         added columns and can never throw mid-run. Cross-stage checks (unique
         ids, inputs resolve, acyclic) live in `workflow.graph_issues`; a single
         stage's invariants live on the stage."""
-        if self.type != StageType.llm_transform:
-            return self
-
         if len(self.inputs) != 1:
             raise ValueError(
                 f"llm_transform must have exactly one input, has {len(self.inputs)}"
             )
         input_schema = self.inputs[0].table_schema
         output_schema = self.output_schema
-        if input_schema is None or output_schema is None:
-            missing = "input schema" if input_schema is None else "output_schema"
+        if input_schema is None:
             raise ValueError(
-                f"llm_transform declares no {missing}; a 1:1 stage needs a "
+                "llm_transform declares no input schema; a 1:1 stage needs a "
                 "primary_key on both its input and output schemas"
             )
 
@@ -354,33 +387,95 @@ class Stage(_Base):
             raise ValueError("llm_transform not strictly 1:1: " + "; ".join(issues))
         return self
 
-    @property
-    def is_grain_preserving(self) -> bool:
-        """Does one input row map to exactly one output row? This is the v1 eval
-        gate: a declarative (single-table, row-aligned) eval can only tap a node
-        reached through grain-preserving stages. Fixed entirely by stage type:
-          - python_row_function → yes (runtime maps it per row — enforced 1:1)
-          - python_frame_function → NO (may reshape the frame)
-          - llm_transform      → yes (per-row 1:1 in v1; a fan-out LLM like
-                                 doc→pieces is out of scope until fan-out evals)
-          - input_data         → yes (originates the rows)
-          - human_review_queue → yes (keyed, edits in place)
-          - join (fan-out) / aggregate (fan-in) → NO; grain changes are deferred
-          - publish            → terminal, never a tap target
-        """
-        return self.type in (
-            StageType.python_row_function,
-            StageType.llm_transform,
-            StageType.input_data,
-            StageType.human_review_queue,
-            StageType.publish,
-        )
+
+class PythonRowFunctionStage(StageBase):
+    """Per-row Python transform (runtime maps it row-by-row: enforced 1:1)."""
+    MIN_INPUTS: ClassVar[int] = 1
+    MAX_INPUTS: ClassVar[Optional[int]] = 1
+
+    type: Literal["python_row_function"] = "python_row_function"
+    function: PythonFunction
+    output_schema: TableSchema
+
+
+class PythonFrameFunctionStage(StageBase):
+    """Whole-frame Python transform (may reshape the frame(s))."""
+    MIN_INPUTS: ClassVar[int] = 1
+
+    type: Literal["python_frame_function"] = "python_frame_function"
+    function: PythonFunction
+    output_schema: TableSchema
+
+
+class JoinStage(StageBase):
+    """Combine two or more upstream dataframes on keys."""
+    MIN_INPUTS: ClassVar[int] = 2
+
+    type: Literal["join"] = "join"
+    join: JoinConfig
+    output_schema: TableSchema
+
+
+class AggregateStage(StageBase):
+    """Structured group-by aggregation."""
+    MIN_INPUTS: ClassVar[int] = 1
+
+    type: Literal["aggregate"] = "aggregate"
+    aggregate: AggregateConfig
+    output_schema: TableSchema
+
+
+class HumanReviewQueueStage(StageBase):
+    """Pulls flagged rows for human decision; halts the run."""
+    MIN_INPUTS: ClassVar[int] = 1
+
+    type: Literal["human_review_queue"] = "human_review_queue"
+    queue: QueueConfig
+    output_schema: TableSchema
+
+
+class PublishStage(StageBase):
+    """Render a final artifact (html, json, csv, cards). Writes artifacts, not a
+    table — so, unlike every other type, it declares NO `output_schema`."""
+    MIN_INPUTS: ClassVar[int] = 1
+
+    type: Literal["publish"] = "publish"
+    publish: PublishConfig
+    function: PythonFunction
+
+
+# Order is for readability only; discrimination is by the `type` literal.
+AnyStage = Union[
+    InputDataStage,
+    LlmTransformStage,
+    PythonRowFunctionStage,
+    PythonFrameFunctionStage,
+    JoinStage,
+    AggregateStage,
+    HumanReviewQueueStage,
+    PublishStage,
+]
+
+# THE public "a stage is one of these" type. Use it in annotations (`stage: Stage`,
+# `list[Stage]`) and as a pydantic field type — it discriminates on `type`. For
+# an isinstance check use `StageBase` (the common base every member subclasses);
+# to validate a raw dict use `parse_stage` (`Stage` is an alias, not a class, so
+# it has no `.model_validate`).
+Stage = Annotated[AnyStage, Field(discriminator="type")]
+
+_STAGE_ADAPTER: TypeAdapter[AnyStage] = TypeAdapter(Stage)
+
+
+def parse_stage(data: Any) -> AnyStage:
+    """Validate a raw stage dict into its per-type model, discriminating on
+    `type`. Raises ValidationError if invalid."""
+    return _STAGE_ADAPTER.validate_python(data)
 
 
 def validate_stage(stage: dict[str, Any]) -> list[str]:
     """Non-fatal structural validation of one stage dict ([] means valid)."""
     try:
-        Stage.model_validate(stage)
+        parse_stage(stage)
         return []
     except ValidationError as err:
         return format_errors(err)

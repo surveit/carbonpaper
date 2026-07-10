@@ -57,7 +57,9 @@ async def queue_page(request: Request, project: str, run_id: str, stage_id: str)
     output_by_id = {s.get("stage_id"): s.get("output_path") for s in manifest.get("stages", [])}
     scored_ids = stage_def.input_ids
     scored_def = find_stage(stages, scored_ids[0]) if scored_ids else None
-    prompt_template = scored_def.llm.prompt_template if scored_def and scored_def.llm else None
+    # Only llm_transform stages carry an `llm` block; read it off the union defensively.
+    scored_llm = getattr(scored_def, "llm", None) if scored_def else None
+    prompt_template = scored_llm.prompt_template if scored_llm else None
 
     input_lookup: dict[tuple, dict[str, Any]] = {}
     join_keys: list[str] = []

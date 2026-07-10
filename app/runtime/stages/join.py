@@ -6,12 +6,11 @@ from typing import Any, Literal
 
 import pandas as pd
 
-from app.models import JoinType, Stage
+from app.models import JoinStage, JoinType
 
 
-def handle_join(stage: Stage, inputs: dict[str, pd.DataFrame], ctx: dict[str, Any]) -> pd.DataFrame:
+def handle_join(stage: JoinStage, inputs: dict[str, pd.DataFrame], ctx: dict[str, Any]) -> pd.DataFrame:
     join_cfg = stage.join
-    assert join_cfg is not None  # Stage validation: join carries join_cfg
     left = inputs[stage.inputs[0].id]
     right = inputs[stage.inputs[1].id]
     keys = join_cfg.keys or join_cfg.on or []

@@ -6,14 +6,13 @@ from typing import Any
 
 import pandas as pd
 
-from app.models import Stage
+from app.models import AggregateStage
 
 from ._shared import _translate_where
 
 
-def handle_aggregate(stage: Stage, inputs: dict[str, pd.DataFrame], ctx: dict[str, Any]) -> pd.DataFrame:
+def handle_aggregate(stage: AggregateStage, inputs: dict[str, pd.DataFrame], ctx: dict[str, Any]) -> pd.DataFrame:
     agg_cfg = stage.aggregate
-    assert agg_cfg is not None  # Stage validation: aggregate carries agg_cfg
     df = inputs[stage.inputs[0].id]
     group_by = agg_cfg.group_by
 

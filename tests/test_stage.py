@@ -9,8 +9,14 @@ from app.llm import LLMModel
 
 
 def S(**kw):
-    """Stage dict with a default name (name is required)."""
+    """Stage dict with a default name (name is required). Every table-producing
+    type now REQUIRES an output_schema (issue #51); inject a trivial one unless
+    the test declares its own, so these dicts keep exercising the thing they
+    actually test (handle blocks, ids, inputs) rather than tripping on a missing
+    schema. `publish` has no output_schema field, so it's left alone."""
     kw.setdefault("name", kw.get("id", "x"))
+    if kw.get("type") not in (None, "publish") and "output_schema" not in kw:
+        kw["output_schema"] = {"columns": [{"name": "id", "type": "str"}]}
     return kw
 
 
@@ -49,14 +55,14 @@ def test_table_schema_ok():
 
 # ── per-type stage contract ──────────────────────────────────────────────────
 def test_valid_input_data():
-    s = m.Stage.model_validate(S(
+    s = m.parse_stage(S(
         id="load", type="input_data",
         connector={"kind": "file", "params": {"path": "d.csv", "format": "csv"}}))
     assert s.type == m.StageType.input_data
 
 
 def test_valid_llm_transform():
-    s = m.Stage.model_validate(S(
+    s = m.parse_stage(S(
         id="extract", type="llm_transform",
         inputs=[{"id": "load", "schema": {"columns": [{"name": "id", "type": "str"}],
                                           "primary_key": ["id"]}}],
@@ -68,16 +74,16 @@ def test_valid_llm_transform():
 
 def test_missing_handle_block_raises():
     with pytest.raises(ValidationError):
-        m.Stage.model_validate(S(id="x", type="llm_transform", inputs=[{"id": "a"}]))
+        m.parse_stage(S(id="x", type="llm_transform", inputs=[{"id": "a"}]))
 
 
 def test_publish_also_requires_function():
     with pytest.raises(ValidationError):
-        m.Stage.model_validate(S(id="p", type="publish", inputs=[{"id": "a"}], publish={"format": "json"}))
+        m.parse_stage(S(id="p", type="publish", inputs=[{"id": "a"}], publish={"format": "json"}))
 
 
 def test_publish_config_is_typed():
-    s = m.Stage.model_validate(S(
+    s = m.parse_stage(S(
         id="p", type="publish", inputs=[{"id": "a"}],
         publish={"format": "json"}, function={"kind": "inline", "code": "x"}))
     assert s.publish.format == m.PublishFormat.json
@@ -85,41 +91,41 @@ def test_publish_config_is_typed():
 
 def test_python_function_inline_needs_code():
     with pytest.raises(ValidationError):
-        m.Stage.model_validate(S(id="t", type="python_frame_function", inputs=[{"id": "a"}],
+        m.parse_stage(S(id="t", type="python_frame_function", inputs=[{"id": "a"}],
                                  function={"kind": "inline"}))
 
 
 def test_bad_id_snake_case():
     with pytest.raises(ValidationError):
-        m.Stage.model_validate(S(id="BadId", type="input_data",
+        m.parse_stage(S(id="BadId", type="input_data",
                                  connector={"kind": "file", "params": {"path": "d.csv"}}))
 
 
 def test_unknown_type_raises():
     with pytest.raises(ValidationError):
-        m.Stage.model_validate(S(id="x", type="frobnicate"))
+        m.parse_stage(S(id="x", type="frobnicate"))
 
 
 def test_join_min_inputs():
     with pytest.raises(ValidationError):
-        m.Stage.model_validate(S(id="j", type="join", inputs=[{"id": "a"}],
+        m.parse_stage(S(id="j", type="join", inputs=[{"id": "a"}],
                                  join={"keys": [{"left": "k", "right": "k"}]}))
 
 
 # ── tightened fields ─────────────────────────────────────────────────────────
 def test_name_is_required():
     with pytest.raises(ValidationError):
-        m.Stage.model_validate({"id": "x", "type": "input_data", "connector": {"kind": "file"}})
+        m.parse_stage({"id": "x", "type": "input_data", "connector": {"kind": "file"}})
 
 
 def test_input_ids_property():
-    s = m.Stage.model_validate(S(id="j", type="join", inputs=[{"id": "a"}, {"id": "b"}],
+    s = m.parse_stage(S(id="j", type="join", inputs=[{"id": "a"}, {"id": "b"}],
                                  join={"keys": [{"left": "k", "right": "k"}]}))
     assert s.input_ids == ["a", "b"]
 
 
 def test_source_parses_as_sourceref():
-    s = m.Stage.model_validate(S(id="load", type="input_data",
+    s = m.parse_stage(S(id="load", type="input_data",
                                  connector={"kind": "file", "params": {"path": "d.csv"}},
                                  source={"doc": "x.md", "section": "S1", "lines": [1, 2]}))
     assert s.source.doc == "x.md" and s.source.lines == [1, 2]
@@ -127,35 +133,35 @@ def test_source_parses_as_sourceref():
 
 def test_queue_block_without_hash_columns_is_valid():
     # hash_columns optional; runner content-hashes on the upstream PK when absent
-    s = m.Stage.model_validate(S(id="rev", type="human_review_queue", inputs=[{"id": "a"}], queue={}))
+    s = m.parse_stage(S(id="rev", type="human_review_queue", inputs=[{"id": "a"}], queue={}))
     assert s.queue is not None
 
 
 # ── fixes folded into the model ──────────────────────────────────────────────
 def test_join_accepts_on():
-    m.Stage.model_validate(S(id="j", type="join", inputs=[{"id": "a"}, {"id": "b"}],
+    m.parse_stage(S(id="j", type="join", inputs=[{"id": "a"}, {"id": "b"}],
                              join={"on": [{"left": "k", "right": "k"}]}))
 
 
 def test_join_accepts_keys():
-    m.Stage.model_validate(S(id="j", type="join", inputs=[{"id": "a"}, {"id": "b"}],
+    m.parse_stage(S(id="j", type="join", inputs=[{"id": "a"}, {"id": "b"}],
                              join={"keys": [{"left": "k", "right": "k"}]}))
 
 
 def test_join_neither_raises():
     with pytest.raises(ValidationError):
-        m.Stage.model_validate(S(id="j", type="join", inputs=[{"id": "a"}, {"id": "b"}],
+        m.parse_stage(S(id="j", type="join", inputs=[{"id": "a"}, {"id": "b"}],
                                  join={"type": "inner"}))
 
 
 def test_aggregate_output_column_required():
     with pytest.raises(ValidationError):
-        m.Stage.model_validate(S(id="agg", type="aggregate", inputs=[{"id": "a"}],
+        m.parse_stage(S(id="agg", type="aggregate", inputs=[{"id": "a"}],
                                  aggregate={"group_by": ["g"], "aggregations": [{"formula": "sum", "value_column": "x"}]}))
 
 
 def test_aggregate_valid():
-    m.Stage.model_validate(S(id="agg", type="aggregate", inputs=[{"id": "a"}],
+    m.parse_stage(S(id="agg", type="aggregate", inputs=[{"id": "a"}],
                              aggregate={"group_by": ["g"],
                                         "aggregations": [{"formula": "sum", "output_column": "total",
                                                           "value_column": "x"}]}))
@@ -186,7 +192,7 @@ def test_unknown_file_format_rejected():
 
 
 def test_model_enum_accepts_known():
-    s = m.Stage.model_validate(S(
+    s = m.parse_stage(S(
         id="e", type="llm_transform",
         inputs=[{"id": "a", "schema": {"columns": [{"name": "id", "type": "str"}],
                                        "primary_key": ["id"]}}],
@@ -198,7 +204,7 @@ def test_model_enum_accepts_known():
 
 def test_model_enum_rejects_unknown():
     with pytest.raises(ValidationError):
-        m.Stage.model_validate(S(id="e", type="llm_transform", inputs=[{"id": "a"}],
+        m.parse_stage(S(id="e", type="llm_transform", inputs=[{"id": "a"}],
                                  llm={"prompt_template": "p", "model": "gpt-9"}))
 
 
@@ -211,7 +217,7 @@ def test_validate_stage_helper():
 
 # ── PR: typed stage contract ─────────────────────────────────────────────────
 def test_inputs_are_refs_with_schema():
-    s = m.Stage.model_validate(S(
+    s = m.parse_stage(S(
         id="x", type="python_frame_function",
         inputs=[{"id": "a", "schema": {"primary_key": ["k"],
                                        "columns": [{"name": "k", "type": "str"}]}}],
@@ -223,7 +229,7 @@ def test_inputs_are_refs_with_schema():
 
 
 def test_inputs_accept_bare_id_shorthand():
-    s = m.Stage.model_validate(S(
+    s = m.parse_stage(S(
         id="x", type="python_frame_function", inputs=["a"],
         function={"kind": "inline", "code": "pass"},
     ))
@@ -233,26 +239,26 @@ def test_inputs_accept_bare_id_shorthand():
 
 def test_file_connector_requires_path():
     with pytest.raises(ValidationError, match="params.path"):
-        m.Stage.model_validate(S(id="load", type="input_data",
+        m.parse_stage(S(id="load", type="input_data",
                                  connector={"kind": "file", "params": {"format": "csv"}}))
 
 
 def test_file_connector_rejects_unknown_format():
     with pytest.raises(ValidationError, match="unknown file format"):
-        m.Stage.model_validate(S(id="load", type="input_data",
+        m.parse_stage(S(id="load", type="input_data",
                                  connector={"kind": "file",
                                             "params": {"path": "d.csv", "format": "derived"}}))
 
 
 def test_unknown_keys_rejected():
     with pytest.raises(ValidationError):
-        m.Stage.model_validate(S(id="rev", type="human_review_queue",
+        m.parse_stage(S(id="rev", type="human_review_queue",
                                  inputs=[{"id": "a"}],
                                  queue={"hash_colums": ["x"]}))  # typo'd key must fail
 
 
 def test_enum_fields_are_plain_strings():
-    s = m.Stage.model_validate(S(id="load", type="input_data",
+    s = m.parse_stage(S(id="load", type="input_data",
                                  connector={"kind": "file", "params": {"path": "d.csv"}}))
     assert s.type == "input_data" and isinstance(s.type, str)
     assert s.connector is not None and isinstance(s.connector.kind, str)
@@ -265,7 +271,73 @@ def test_aggregation_requires_value_column_except_count():
 
 
 def test_stage_eval_block_is_kept():
-    s = m.Stage.model_validate(S(id="load", type="input_data",
+    s = m.parse_stage(S(id="load", type="input_data",
                                  connector={"kind": "file", "params": {"path": "d.csv"}},
                                  eval={"metrics": ["recall"]}))
     assert s.eval == {"metrics": ["recall"]}
+
+
+# ── issue #51: discriminated union + required output_schema ───────────────────
+# One representative minimal dict per table-producing type WITHOUT output_schema.
+# (`S()` would inject one, so these are built raw to assert the requirement.)
+_TABLE_PRODUCING_WITHOUT_SCHEMA = {
+    "input_data": {"id": "s", "name": "s", "type": "input_data",
+                   "connector": {"kind": "file", "params": {"path": "d.csv"}}},
+    "python_row_function": {"id": "s", "name": "s", "type": "python_row_function",
+                            "inputs": [{"id": "a"}],
+                            "function": {"kind": "inline", "code": "pass"}},
+    "python_frame_function": {"id": "s", "name": "s", "type": "python_frame_function",
+                              "inputs": [{"id": "a"}],
+                              "function": {"kind": "inline", "code": "pass"}},
+    "join": {"id": "s", "name": "s", "type": "join", "inputs": [{"id": "a"}, {"id": "b"}],
+             "join": {"keys": [{"left": "k", "right": "k"}]}},
+    "aggregate": {"id": "s", "name": "s", "type": "aggregate", "inputs": [{"id": "a"}],
+                  "aggregate": {"group_by": ["g"],
+                                "aggregations": [{"output_column": "n", "formula": "count"}]}},
+    "human_review_queue": {"id": "s", "name": "s", "type": "human_review_queue",
+                           "inputs": [{"id": "a"}], "queue": {}},
+}
+
+
+@pytest.mark.parametrize("stage_type", sorted(_TABLE_PRODUCING_WITHOUT_SCHEMA))
+def test_table_producing_type_requires_output_schema(stage_type):
+    """A table-producing stage that omits output_schema fails to parse, and the
+    error names the missing field (per-type, via the discriminated union) — no
+    more silently running unchecked with a scroll-past warning (issue #51)."""
+    with pytest.raises(ValidationError, match="output_schema"):
+        m.parse_stage(_TABLE_PRODUCING_WITHOUT_SCHEMA[stage_type])
+
+
+def test_publish_needs_no_output_schema():
+    """publish writes artifacts, not a table — it parses fine without one."""
+    s = m.parse_stage({"id": "p", "name": "p", "type": "publish", "inputs": [{"id": "a"}],
+                       "publish": {"format": "json"},
+                       "function": {"kind": "inline", "code": "x"}})
+    assert isinstance(s, m.PublishStage)
+    assert not hasattr(s, "output_schema")
+
+
+def test_publish_rejects_an_output_schema():
+    """...and it has no output_schema field at all, so declaring one is a typo."""
+    with pytest.raises(ValidationError):
+        m.parse_stage({"id": "p", "name": "p", "type": "publish", "inputs": [{"id": "a"}],
+                       "publish": {"format": "json"},
+                       "function": {"kind": "inline", "code": "x"},
+                       "output_schema": {"columns": [{"name": "id", "type": "str"}]}})
+
+
+def test_parse_stage_returns_the_per_type_model():
+    """The discriminated union parses each dict into its concrete per-type model."""
+    s = m.parse_stage(S(id="j", type="join", inputs=[{"id": "a"}, {"id": "b"}],
+                        join={"keys": [{"left": "k", "right": "k"}]}))
+    assert isinstance(s, m.JoinStage)
+    assert isinstance(s, m.StageBase)
+
+
+def test_missing_handle_block_names_the_field():
+    """Parse errors name the actually-missing handle field per type, not a
+    generic 'requires a X block' message."""
+    with pytest.raises(ValidationError, match="llm"):
+        m.parse_stage({"id": "x", "name": "x", "type": "llm_transform",
+                       "inputs": [{"id": "a"}],
+                       "output_schema": {"columns": [{"name": "id", "type": "str"}]}})

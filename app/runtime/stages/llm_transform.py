@@ -13,14 +13,13 @@ from typing import Any
 
 import pandas as pd
 
-from app.models import Stage
+from app.models import LlmTransformStage
 
 from ..llm import call_llm_batch, backend_status
 
 
-def handle_llm_transform(stage: Stage, inputs: dict[str, pd.DataFrame], ctx: dict[str, Any]) -> pd.DataFrame:
+def handle_llm_transform(stage: LlmTransformStage, inputs: dict[str, pd.DataFrame], ctx: dict[str, Any]) -> pd.DataFrame:
     llm = stage.llm
-    assert llm is not None  # Stage validation: llm_transform carries llm
     src = inputs[stage.inputs[0].id]
     out_rows = []
 
@@ -28,9 +27,10 @@ def handle_llm_transform(stage: Stage, inputs: dict[str, pd.DataFrame], ctx: dic
     # so the model is told exactly which keys to return. This is the only thing
     # llm_transform adds over a plain LLM call; the call machinery is untouched.
     input_schema = stage.inputs[0].table_schema
-    # Stage validation guarantees an llm_transform is 1:1 (both schemas present,
-    # output ⊇ input), so subtract never throws here.
-    assert stage.output_schema is not None and input_schema is not None
+    # Stage validation guarantees an llm_transform is 1:1 (output_schema required
+    # and present, input schema present, output ⊇ input), so subtract never
+    # throws here.
+    assert input_schema is not None
     reply_spec = stage.output_schema.subtract(input_schema)
     llm = llm.model_copy(
         update={"prompt_template": f"{llm.prompt_template}\n\n{reply_spec.to_prompt()}"}

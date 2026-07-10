@@ -17,14 +17,21 @@ lists; `parse_*` raise. **Dependency rule (deliberate): it imports nothing from
 the runtime or the web layer.** Keep it pure.
 
 What lives where:
-- `models/stage.py` — the **8 stage types** (`input_data`, `llm_transform`,
-  `python_row_function`, `python_frame_function`, `join`, `aggregate`,
-  `human_review_queue`, `publish`), the executable-handle block each requires
-  (`connector`/`llm`/`function`/`join`/`aggregate`/`queue`/`publish`), and
-  `Stage.is_grain_preserving` (whether a stage keeps a 1:1 row correspondence —
-  the eval gate depends on it). Prefer `python_row_function` (the runtime maps
-  it row-by-row, so it *cannot* fan out/in) over `python_frame_function` unless
-  the logic needs the whole frame.
+- `models/stage.py` — the **8 stage types** as per-type models
+  (`InputDataStage`, `LlmTransformStage`, `PythonRowFunctionStage`,
+  `PythonFrameFunctionStage`, `JoinStage`, `AggregateStage`,
+  `HumanReviewQueueStage`, `PublishStage`) combined into a **discriminated union**
+  `Stage = Annotated[Union[...], Field(discriminator="type")]`. Each model carries
+  exactly its own executable-handle block
+  (`connector`/`llm`/`function`/`join`/`aggregate`/`queue`/`publish`) — so
+  "exactly one handle per type" is structural, not a validator — and every
+  table-producing type REQUIRES `output_schema`; `publish` (which writes
+  artifacts, not a table) has no such field. `Stage` is a type alias, not a class:
+  validate a raw dict with `parse_stage(data)` (not `Stage.model_validate`), and
+  use `StageBase` for `isinstance`. `StageBase.is_grain_preserving` tells whether
+  a stage keeps a 1:1 row correspondence — the eval gate depends on it. Prefer
+  `python_row_function` (the runtime maps it row-by-row, so it *cannot* fan
+  out/in) over `python_frame_function` unless the logic needs the whole frame.
 - `models/schema.py` — primitives: `Column`, `TableSchema`, the column-type
   vocabulary (`SCALAR_COLUMN_TYPES`).
 - `models/workflow.py` — the graph-level checks: unique ids, inputs resolve,
@@ -46,9 +53,10 @@ instead of a graph with holes. Typed `Stage` objects flow end-to-end.
 
 Distinct from RUNTIME DATA validation (`app/runtime/validation.py`), which
 checks actual dataframes against a schema at run time. `app/models/` checks the
-*spec*. Note: `Stage.output_schema` is optional (legitimately so for `publish`);
-a table-producing stage that omits it runs with only a warning — issue #51
-tracks resolving this via a discriminated union.
+*spec*. `output_schema` is required on every table-producing stage type and
+absent on `publish` (structurally, via the discriminated `Stage` union — issue
+#51); a table-producing stage that omits it now fails to parse with a per-type
+error, rather than running unchecked with only a warning.
 
 ## `app/runtime/` — the Runner
 

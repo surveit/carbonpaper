@@ -8,17 +8,24 @@ dict or the whole frame — and they share the function loader.
 from __future__ import annotations
 
 import importlib
-from typing import Any, Callable
+from typing import Any, Callable, Protocol
 
 import pandas as pd
 
-from app.models import FunctionKind, Stage
+from app.models import FunctionKind, PythonFrameFunctionStage, PythonFunction, PythonRowFunctionStage
 
 
-def _load_python_function(stage: Stage) -> Callable[..., Any]:
+class _FunctionCarrier(Protocol):
+    """The stage shape `_load_python_function` needs: an id plus a function
+    block. The three stage types that carry a `function:` — both python
+    functions and publish — satisfy it structurally."""
+    id: str
+    function: PythonFunction
+
+
+def _load_python_function(stage: _FunctionCarrier) -> Callable[..., Any]:
     """Resolve the callable for a stage carrying a function: block."""
     fn_spec = stage.function
-    assert fn_spec is not None  # Stage validation: these types carry function
     fn_name = fn_spec.function or "transform"
     if fn_spec.kind == FunctionKind.module:
         if not fn_spec.module:
@@ -35,7 +42,7 @@ def _load_python_function(stage: Stage) -> Callable[..., Any]:
     raise ValueError(f"Unknown function kind for stage {stage.id}: {fn_spec.kind}")
 
 
-def handle_python_frame_function(stage: Stage, inputs: dict[str, pd.DataFrame], ctx: dict[str, Any]) -> pd.DataFrame:
+def handle_python_frame_function(stage: PythonFrameFunctionStage, inputs: dict[str, pd.DataFrame], ctx: dict[str, Any]) -> pd.DataFrame:
     """Whole-frame transform: the function sees the full input frame(s) and may
     reshape them (group-by, pivot, dedup, multi-input merge)."""
     fn = _load_python_function(stage)
@@ -44,7 +51,7 @@ def handle_python_frame_function(stage: Stage, inputs: dict[str, pd.DataFrame], 
     return fn(*args)
 
 
-def handle_python_row_function(stage: Stage, inputs: dict[str, pd.DataFrame], ctx: dict[str, Any]) -> pd.DataFrame:
+def handle_python_row_function(stage: PythonRowFunctionStage, inputs: dict[str, pd.DataFrame], ctx: dict[str, Any]) -> pd.DataFrame:
     """Per-row transform: the runtime maps the function over the single input's
     rows — one dict in, one dict out. The function never sees the frame, so it
     *cannot* fan out or fan in. This is what makes `is_grain_preserving` true by

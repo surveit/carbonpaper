@@ -15,6 +15,7 @@ from app.services.loader import (
 VALID = {
     "id": "load", "name": "Load", "type": "input_data",
     "connector": {"kind": "file", "params": {"path": "data/items.csv", "format": "csv"}},
+    "output_schema": {"columns": [{"name": "id", "type": "str"}]},
 }
 INVALID = {  # file connector without params.path
     "id": "bad", "name": "Bad", "type": "input_data",
@@ -61,7 +62,8 @@ def test_strict_load_raises_with_all_issues(tmp_path):
 def test_strict_load_catches_cross_stage_issues(tmp_path):
     dangling = {"id": "x", "name": "X", "type": "python_frame_function",
                 "inputs": [{"id": "missing_upstream"}],
-                "function": {"kind": "inline", "code": "pass"}}
+                "function": {"kind": "inline", "code": "pass"},
+                "output_schema": {"columns": [{"name": "id", "type": "str"}]}}
     _write(tmp_path, "01_x.json", dangling)
     with pytest.raises(WorkflowLoadError) as exc:
         load_workflow(tmp_path)

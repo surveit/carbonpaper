@@ -8,12 +8,11 @@ from typing import Any
 
 import pandas as pd
 
-from app.models import ConnectorKind, Stage
+from app.models import ConnectorKind, InputDataStage
 
 
-def handle_input_data(stage: Stage, inputs: dict[str, pd.DataFrame], ctx: dict[str, Any]) -> pd.DataFrame:
+def handle_input_data(stage: InputDataStage, inputs: dict[str, pd.DataFrame], ctx: dict[str, Any]) -> pd.DataFrame:
     connector = stage.connector
-    assert connector is not None  # Stage validation: input_data carries connector
     params = connector.params
 
     if connector.kind == ConnectorKind.file:
