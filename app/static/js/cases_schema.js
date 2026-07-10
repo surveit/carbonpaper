@@ -48,7 +48,7 @@
                 "</ul></div>";
         }
         if (!(body.problems && body.problems.length)) {
-            if (body.table_html) {
+            if (body.table_html && body.table_html.trim()) {
                 html += body.table_html;
             } else {
                 html += "<p class=\"lede\">Pick override/target and add expected columns to see the required cases-file schema.</p>";
