@@ -110,7 +110,7 @@
 
     {# Reach the chat-driven editing agent for this project. Posting opens a new
        session bound to this project's editing agent, which redirects to the chat. #}
-    <form class="app-side-agent" method="post" action="/chat/project/{{ state.name }}/sessions">
+    <form class="app-side-agent" method="post" action="/project/{{ state.name }}/edit-agent">
       <button type="submit" class="app-side-agent-btn">✎ Edit with agent</button>
     </form>
 

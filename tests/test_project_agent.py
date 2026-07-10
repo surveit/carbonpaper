@@ -1,13 +1,11 @@
-"""Tests for the per-project editing agent builder.
+"""Tests for the editing agent's tool factory.
 
-Asserts the agent's tools are built and correctly bound by checking the tool
-factory's output (stable, our own names). The SDK engine builder is covered by
+Asserts the agent's tools are built and correctly named by checking the tool
+factory's output (stable, our own names). The engine wiring is covered by
 tests/test_project_chat_sdk.py."""
 from __future__ import annotations
 
-from pathlib import Path
-
-from app.compiler.agent.tools import make_project_tools
+from app.compiler.agent.tools import EditingContext, make_editing_tools
 
 _EXPECTED_TOOL_NAMES = {
     "list_projects",
@@ -20,6 +18,6 @@ _EXPECTED_TOOL_NAMES = {
 }
 
 
-def test_project_tools_factory_yields_expected_tool_names(tmp_path: Path) -> None:
-    tools = make_project_tools("alpha", examples_dir=tmp_path)
+def test_editing_tools_factory_yields_expected_tool_names() -> None:
+    tools = make_editing_tools(EditingContext(project_id="alpha"))
     assert {tool.__name__ for tool in tools} == _EXPECTED_TOOL_NAMES

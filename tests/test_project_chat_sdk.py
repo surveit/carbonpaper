@@ -1,18 +1,18 @@
-"""Tests for mounting the subscription SDK engine on project chat sessions.
+"""Tests for building the editing agent's engine through the registry.
 
-`get_project_sdk_engine(name)` builds one ClaudeAgentSdkEngine per project and caches
-it. Construction must be lazy w.r.t. the filesystem (the tool closures only bind
-`examples_dir / name`; nothing is read at build time), so this test constructs
-an engine for a project without seeding a project directory on disk.
+Importing app.compiler.agent.config registers the "editing" agent; build_engine
+then validates the opaque context against EditingContext, builds that project's
+tools, wraps them, and returns a ClaudeAgentSdkEngine. Construction is lazy w.r.t.
+the filesystem (the tools only bind the project name), so this constructs an
+engine for a project without seeding a project directory on disk.
 """
 from __future__ import annotations
 
+import app.compiler.agent.config  # noqa: F401 — registers the "editing" agent
+from app.agent.registry import build_engine
 from app.agent.sdk_engine import ClaudeAgentSdkEngine
-from app.compiler.agent.config import get_project_sdk_engine
 
 
-def test_project_sdk_engine_is_cached_and_correct_type() -> None:
-    a = get_project_sdk_engine("congresswatch")
-    b = get_project_sdk_engine("congresswatch")
-    assert a is b
-    assert isinstance(a, ClaudeAgentSdkEngine)
+def test_build_editing_engine_returns_correct_type() -> None:
+    engine = build_engine("editing", {"project_id": "congresswatch"})
+    assert isinstance(engine, ClaudeAgentSdkEngine)

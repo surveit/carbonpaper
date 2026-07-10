@@ -4,8 +4,9 @@ from typing import Any, Callable
 
 import pytest
 
-from app.compiler.agent import tools as project_tools
+from app.compiler.agent.tools import EditingContext, make_editing_tools
 from app.errors import RegenerateWithoutSnapshotError
+from app.services import project as project_service
 
 # Minimal valid handle block per stage type (app/models/stage.py:
 # Stage._handle_for_type requires exactly one, keyed by `type`). Mirrors
@@ -15,6 +16,19 @@ _HANDLE_BY_TYPE: dict[str, dict] = {
     "input_data": {"connector": {"kind": "computed_static"}},
     "llm_transform": {"llm": {"model": "claude-sonnet-4-6", "prompt_template": "score {row}"}},
 }
+
+
+@pytest.fixture(autouse=True)
+def examples_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Point the name-based service surface at a tmp examples root, so the tools —
+    which resolve names against project_service.EXAMPLES_DIR internally — read and
+    write there rather than the real workspace."""
+    monkeypatch.setattr(project_service, "EXAMPLES_DIR", tmp_path)
+    return tmp_path
+
+
+def _tools(name: str) -> list[Callable]:
+    return make_editing_tools(EditingContext(project_id=name))
 
 
 def _stage(sid: str, name: str, stype: str, inputs: list[str] | None = None) -> dict:
@@ -41,25 +55,25 @@ def _tool(tools: list[Callable], fn_name: str) -> Callable:
     raise AssertionError(f"tool {fn_name!r} not registered")
 
 
-def test_read_tools_report_workspace(tmp_path: Path) -> None:
-    _seed(tmp_path, "alpha")
-    tools = project_tools.make_project_tools("alpha", examples_dir=tmp_path)
+def test_read_tools_report_workspace(examples_root: Path) -> None:
+    _seed(examples_root, "alpha")
+    tools = _tools("alpha")
     assert _tool(tools, "list_projects")() == ["alpha"]
     assert _tool(tools, "get_current_project")() == "alpha"
     assert _tool(tools, "describe_workflow")("alpha")["name"] == "alpha"
     assert '"id": "load"' in _tool(tools, "read_stage")("alpha", "load")
 
 
-def test_read_stage_missing_fails_loud(tmp_path: Path) -> None:
-    _seed(tmp_path, "alpha")
-    tools = project_tools.make_project_tools("alpha", examples_dir=tmp_path)
+def test_read_stage_missing_fails_loud(examples_root: Path) -> None:
+    _seed(examples_root, "alpha")
+    tools = _tools("alpha")
     with pytest.raises(ValueError, match="no stage 'nope'"):
         _tool(tools, "read_stage")("alpha", "nope")
 
 
-def test_edit_stage_tool_writes_and_reports_ok(tmp_path: Path) -> None:
-    pdir = _seed(tmp_path, "alpha")
-    tools = project_tools.make_project_tools("alpha", examples_dir=tmp_path)
+def test_edit_stage_tool_writes_and_reports_ok(examples_root: Path) -> None:
+    pdir = _seed(examples_root, "alpha")
+    tools = _tools("alpha")
     out = _tool(tools, "edit_stage")(
         "alpha", "load", json.dumps(_stage("load", "Load rows v2", "input_data"))
     )
@@ -69,10 +83,10 @@ def test_edit_stage_tool_writes_and_reports_ok(tmp_path: Path) -> None:
     assert "Load rows v2" in (pdir / "compiled" / "01_load.json").read_text(encoding="utf-8")
 
 
-def test_edit_stage_tool_invalid_writes_nothing_and_reports_issues(tmp_path: Path) -> None:
-    pdir = _seed(tmp_path, "alpha")
+def test_edit_stage_tool_invalid_writes_nothing_and_reports_issues(examples_root: Path) -> None:
+    pdir = _seed(examples_root, "alpha")
     before = (pdir / "compiled" / "01_load.json").read_text(encoding="utf-8")
-    tools = project_tools.make_project_tools("alpha", examples_dir=tmp_path)
+    tools = _tools("alpha")
     out = _tool(tools, "edit_stage")(
         "alpha", "load", json.dumps({"id": "load", "name": "x", "type": "not_a_real_type"})
     )
@@ -121,13 +135,13 @@ _UNSOUND_COMPILE_RESULT: dict[str, Any] = {
 
 
 def _patch_compiler(monkeypatch: pytest.MonkeyPatch, result: dict[str, Any]) -> None:
-    monkeypatch.setattr(project_tools, "compile_prose_to_workflow", lambda text, name: result)
+    monkeypatch.setattr(project_service, "compile_prose_to_workflow", lambda text, name: result)
 
 
-def test_compile_workflow_fresh_project_writes_compiled_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    pdir = _seed(tmp_path, "alpha")
+def test_compile_workflow_fresh_project_writes_compiled_dir(examples_root: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    pdir = _seed(examples_root, "alpha")
     _patch_compiler(monkeypatch, _FRESH_COMPILE_RESULT)
-    tools = project_tools.make_project_tools("alpha", examples_dir=tmp_path)
+    tools = _tools("alpha")
 
     out = _tool(tools, "compile_workflow")("alpha", "the conversation so far")
 
@@ -137,12 +151,12 @@ def test_compile_workflow_fresh_project_writes_compiled_dir(tmp_path: Path, monk
 
 
 def test_compile_workflow_rejects_unsound_draft_the_compiler_missed(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    examples_root: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    pdir = _seed(tmp_path, "alpha")
+    pdir = _seed(examples_root, "alpha")
     before = sorted(p.name for p in (pdir / "compiled").glob("*.json"))
     _patch_compiler(monkeypatch, _UNSOUND_COMPILE_RESULT)
-    tools = project_tools.make_project_tools("alpha", examples_dir=tmp_path)
+    tools = _tools("alpha")
 
     out = _tool(tools, "compile_workflow")("alpha", "the conversation so far")
 
@@ -151,10 +165,10 @@ def test_compile_workflow_rejects_unsound_draft_the_compiler_missed(
     assert sorted(p.name for p in (pdir / "compiled").glob("*.json")) == before
 
 
-def test_compile_workflow_reviewed_work_without_confirm_raises(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    pdir = _seed(tmp_path, "alpha")
+def test_compile_workflow_reviewed_work_without_confirm_raises(examples_root: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    pdir = _seed(examples_root, "alpha")
     _patch_compiler(monkeypatch, _FRESH_COMPILE_RESULT)
-    tools = project_tools.make_project_tools("alpha", examples_dir=tmp_path)
+    tools = _tools("alpha")
 
     # Approve the seeded "load" stage so review work exists.
     from app.models import Stage
@@ -172,10 +186,10 @@ def test_compile_workflow_reviewed_work_without_confirm_raises(tmp_path: Path, m
     assert not (pdir / "versions").exists()
 
 
-def test_compile_workflow_confirm_overwrite_snapshots_then_writes(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    pdir = _seed(tmp_path, "alpha")
+def test_compile_workflow_confirm_overwrite_snapshots_then_writes(examples_root: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    pdir = _seed(examples_root, "alpha")
     _patch_compiler(monkeypatch, _FRESH_COMPILE_RESULT)
-    tools = project_tools.make_project_tools("alpha", examples_dir=tmp_path)
+    tools = _tools("alpha")
 
     from app.models import Stage
     from app.services import loader, node_review
@@ -196,11 +210,11 @@ def test_compile_workflow_confirm_overwrite_snapshots_then_writes(tmp_path: Path
     assert snapshotted_stage == seeded
 
 
-def test_compile_workflow_validation_issues_writes_nothing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    pdir = _seed(tmp_path, "alpha")
+def test_compile_workflow_validation_issues_writes_nothing(examples_root: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    pdir = _seed(examples_root, "alpha")
     before = (pdir / "compiled" / "01_load.json").read_text(encoding="utf-8")
     _patch_compiler(monkeypatch, _INVALID_COMPILE_RESULT)
-    tools = project_tools.make_project_tools("alpha", examples_dir=tmp_path)
+    tools = _tools("alpha")
 
     out = _tool(tools, "compile_workflow")("alpha", "the conversation so far")
 
@@ -211,19 +225,19 @@ def test_compile_workflow_validation_issues_writes_nothing(tmp_path: Path, monke
 
 
 def test_compile_workflow_regenerate_to_fewer_stages_drops_stale_files(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    examples_root: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     # Seed a 2-stage project (load + score), both unreviewed so no confirm is
     # needed, then regenerate to a 1-stage result (load only). The dropped
     # "score" stage's compiled file must not survive the regenerate — leaving
     # it on disk would mean it keeps running while the tool reports it gone.
-    pdir = _seed(tmp_path, "alpha")
+    pdir = _seed(examples_root, "alpha")
     (pdir / "compiled" / "02_score.json").write_text(
         json.dumps(_stage("score", "Score rows", "llm_transform", inputs=["load"])),
         encoding="utf-8",
     )
     _patch_compiler(monkeypatch, _FRESH_COMPILE_RESULT)  # load-only result
-    tools = project_tools.make_project_tools("alpha", examples_dir=tmp_path)
+    tools = _tools("alpha")
 
     out = _tool(tools, "compile_workflow")("alpha", "the conversation so far")
 
@@ -241,8 +255,8 @@ def test_compile_workflow_regenerate_to_fewer_stages_drops_stale_files(
     assert [s["id"] for s in summary["stages"]] == ["load"]
 
 
-def test_project_id_cannot_escape_the_workspace(tmp_path: Path) -> None:
-    _seed(tmp_path, "alpha")
-    tools = project_tools.make_project_tools("alpha", examples_dir=tmp_path)
+def test_project_id_cannot_escape_the_workspace(examples_root: Path) -> None:
+    _seed(examples_root, "alpha")
+    tools = _tools("alpha")
     with pytest.raises(ValueError, match="invalid project id"):
         _tool(tools, "describe_workflow")("../outside")

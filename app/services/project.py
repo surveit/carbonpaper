@@ -28,7 +28,14 @@ from typing import Any
 
 from pydantic import BaseModel
 
-from app.services import node_review, versioning
+from app.compiler import compile_methodology as compile_prose_to_workflow
+from app.errors import RegenerateWithoutSnapshotError
+from app.models.workflow import validate_workflow_draft
+from app.services import node_review, stage_edit, versioning, workspace
+from app.services.compilation import regenerate_workflow
+from app.services.loader import load_compiled_dir, stage_to_json
+from app.services.stage_edit import EditStageResult
+from app.web.config import EXAMPLES_DIR
 from app.web.loading import load_schemas
 
 
@@ -347,6 +354,96 @@ def project_state(pdir: Path) -> ProjectState:
     )
 
 
+# ─── Editing-agent service surface (name-based) ───────────────────────────────
+# Thin wrappers the editing agent's tools call. Each takes a project NAME, resolves
+# EXAMPLES_DIR/<name> internally, and returns in-memory objects (never a Path) via
+# the loader/services — so the agent tools never build a filesystem path. The name
+# comes from the model, so it is validated to stay inside the workspace.
+
+
+def _editing_project_dir(name: str, examples_dir: Path | None = None) -> Path:
+    """Resolve a project NAME to its working-copy directory under the examples root,
+    refusing a name that would escape it (the name comes from the model, so a
+    `../…` value must not read or write outside the workspace)."""
+    root = Path(examples_dir if examples_dir is not None else EXAMPLES_DIR).resolve()
+    candidate = (root / name).resolve()
+    if not candidate.is_relative_to(root):
+        raise ValueError(f"invalid project id '{name}'")
+    return candidate
+
+
+def list_projects(examples_dir: Path | None = None) -> list[str]:
+    """The names of every authored project in the workspace."""
+    return workspace.list_project_names(Path(examples_dir) if examples_dir is not None else EXAMPLES_DIR)
+
+
+def describe_workflow(name: str, examples_dir: Path | None = None) -> dict[str, Any]:
+    """A compact summary of one project's workflow (stage ids/types/inputs/review
+    state), read through the tolerant loader."""
+    return workspace.project_workflow_summary(_editing_project_dir(name, examples_dir))
+
+
+def read_stage(name: str, stage_id: str, examples_dir: Path | None = None) -> str:
+    """The canonical JSON of one stage in a project's workflow. Raises ValueError if
+    the stage is not in the workflow."""
+    project_dir = _editing_project_dir(name, examples_dir)
+    stages = {c.stage.id: c.stage
+              for c in load_compiled_dir(project_dir / "compiled") if c.stage is not None}
+    stage = stages.get(stage_id)
+    if stage is None:
+        raise ValueError(f"no stage '{stage_id}' in project '{name}'")
+    return stage_to_json(stage)
+
+
+def edit_stage(name: str, stage_id: str, changes_json: str, examples_dir: Path | None = None) -> EditStageResult:
+    """Apply a JSON Merge Patch to one stage of a project's workflow (validated
+    before it writes; nothing written on failure)."""
+    return stage_edit.patch_stage_spec(_editing_project_dir(name, examples_dir), stage_id, changes_json)
+
+
+def add_stage(name: str, stage_json: str, examples_dir: Path | None = None) -> EditStageResult:
+    """Add a new stage to a project's workflow (validated before it writes; nothing
+    written on failure)."""
+    return stage_edit.add_stage_spec(_editing_project_dir(name, examples_dir), stage_json)
+
+
+def regenerate_workflow_from_conversation(
+    name: str,
+    conversation: str,
+    confirm_overwrite: bool = False,
+    examples_dir: Path | None = None,
+) -> dict[str, Any]:
+    """Rebuild a project's ENTIRE workflow from `conversation` — a full reset. If any
+    node carries review work, raise RegenerateWithoutSnapshotError unless
+    confirm_overwrite is set (in which case a version snapshot is taken first). The
+    compiled draft is held to the same stage + graph validation every write obeys;
+    an invalid result is returned, not written."""
+    project_dir = _editing_project_dir(name, examples_dir)
+    summary = workspace.project_workflow_summary(project_dir)
+    has_review_work = any(s["review_state"] != "unreviewed" for s in summary["stages"])
+    if has_review_work:
+        if not confirm_overwrite:
+            raise RegenerateWithoutSnapshotError(
+                f"'{name}' has reviewed stages; re-call with confirm_overwrite=True to snapshot and regenerate."
+            )
+        existing = versioning.list_versions(project_dir)
+        parent = existing[0]["id"] if existing else None
+        versioning.create_version(
+            project_dir,
+            message=f"pre-regenerate snapshot of {name}",
+            reviewer="agent",
+            parent_version=parent,
+        )
+    result = compile_prose_to_workflow(conversation, name)
+    if result["validation"]:
+        return {"ok": False, "issues": result["validation"]}
+    draft_issues = validate_workflow_draft(result["stages"])
+    if draft_issues:
+        return {"ok": False, "issues": draft_issues}
+    regenerate_workflow(result, project_dir)
+    return {"ok": True, "stages": [stage["id"] for stage in result["stages"]]}
+
+
 __all__ = [
     "Coverage",
     "DataModelStatus",
@@ -357,4 +454,10 @@ __all__ = [
     "project_meta",
     "write_project_meta",
     "project_state",
+    "list_projects",
+    "describe_workflow",
+    "read_stage",
+    "edit_stage",
+    "add_stage",
+    "regenerate_workflow_from_conversation",
 ]

@@ -1,24 +1,25 @@
-"""The editing agent's system prompt: a template naming the project it edits, plus
-a rendered catalog of the stage types it can build (so it can author a valid stage
-without a lookup tool)."""
+"""The editing agent's system prompt: a fixed instruction plus a rendered catalog
+of the stage types it can build (so it can author a valid stage without a lookup
+tool). The agent learns which project it edits at runtime via get_current_project,
+so the prompt names no specific project."""
 
 from __future__ import annotations
 
 from app.models import NODE_TYPES
 
-SYSTEM_PROMPT_TEMPLATE = (
-    "You help a journalist author and refine the project '{name}' — a workflow of "
-    "typed stages. Call get_current_project FIRST and pass its value as the "
-    "`project_id` argument to every other tool. Read before you edit "
-    "(describe_workflow, read_stage). Prefer "
-    "small, targeted changes: edit_stage and add_stage. Every edit is validated and "
-    "lands as UNREVIEWED (amber) for a human to approve — you cannot approve nodes, "
-    "and you have no way to save a version (that is the human's action). "
-    "compile_workflow REBUILDS the entire workflow from the conversation so far (a "
-    "full reset): use it only when the user explicitly asks to rebuild from scratch, "
-    "warn them first that it replaces everything and takes a few minutes, and pass "
-    "confirm_overwrite=True if any node carries review work (it snapshots first). "
-    "Never invent a column, source, model, or value — if you lack it, ask."
+_SYSTEM_PROMPT = (
+    "You help a journalist author and refine a project — a workflow of typed "
+    "stages. Call get_current_project FIRST and pass its value as the `project_id` "
+    "argument to every other tool. Read before you edit (describe_workflow, "
+    "read_stage). Prefer small, targeted changes: edit_stage and add_stage. Every "
+    "edit is validated and lands as UNREVIEWED (amber) for a human to approve — you "
+    "cannot approve nodes, and you have no way to save a version (that is the "
+    "human's action). compile_workflow REBUILDS the entire workflow from the "
+    "conversation so far (a full reset): use it only when the user explicitly asks "
+    "to rebuild from scratch, warn them first that it replaces everything and takes "
+    "a few minutes, and pass confirm_overwrite=True if any node carries review work "
+    "(it snapshots first). Never invent a column, source, model, or value — if you "
+    "lack it, ask."
 )
 
 
@@ -34,8 +35,4 @@ def _stage_type_catalog() -> str:
     return "\n".join(lines)
 
 
-_STAGE_TYPE_CATALOG = _stage_type_catalog()
-
-
-def _system_prompt(name: str) -> str:
-    return SYSTEM_PROMPT_TEMPLATE.format(name=name) + "\n\n" + _STAGE_TYPE_CATALOG
+EDITING_SYSTEM_PROMPT = _SYSTEM_PROMPT + "\n\n" + _stage_type_catalog()

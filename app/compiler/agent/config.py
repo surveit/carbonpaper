@@ -1,40 +1,39 @@
-"""Builder for the per-project editing agent: a ClaudeAgentSdkEngine (subscription
-CLI, no API key) bound to one project's tools + a system prompt naming it. One
-instance per project, cached. Reuses the chat spine (turns.py + store.py + the
-FE) verbatim; only the tools + prompt are project-specific."""
+"""Wire the editing agent into the generic agent registry.
+
+Builds the `AgentConfig` (system prompt + stage-type catalog, the tools' input
+schemas and display labels, and the EditingContext its opaque context validates
+against) and registers it under the id "editing" with its tool factory. Importing
+this module is what makes `app.agent.registry.build_engine("editing", …)` work;
+app.main imports it at startup."""
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import Any, Callable
 
-from app.compiler.agent.prompt import _system_prompt
-from app.web.config import EXAMPLES_DIR
+from pydantic import BaseModel
 
-if TYPE_CHECKING:
-    from app.agent.sdk_engine import ClaudeAgentSdkEngine
+from app.agent.registry import AgentConfig, register
+from app.compiler.agent.prompt import EDITING_SYSTEM_PROMPT
+from app.compiler.agent.tools import (
+    TOOL_LABELS,
+    TOOL_SCHEMAS,
+    EditingContext,
+    make_editing_tools,
+)
 
-_sdk_engines: dict[str, "ClaudeAgentSdkEngine"] = {}
+CONFIG = AgentConfig(
+    system_prompt=EDITING_SYSTEM_PROMPT,
+    tool_schemas=TOOL_SCHEMAS,
+    tool_labels=TOOL_LABELS,
+    context_schema=EditingContext,
+)
 
 
-def get_project_sdk_engine(name: str) -> "ClaudeAgentSdkEngine":
-    """Cached subscription (Claude CLI) editing engine for `name`.
+def _build_editing_tools(context: BaseModel) -> list[Callable[..., Any]]:
+    # build_engine hands the context back as the base type; it is an EditingContext
+    # because that is CONFIG.context_schema and build_engine validates against it.
+    assert isinstance(context, EditingContext)
+    return make_editing_tools(context)
 
-    Wraps the project's tools as an in-process SDK-MCP server and drives
-    claude_agent_sdk.query() directly, so the subscription backend (no API key)
-    can run the tool loop. Construction is lazy w.r.t. the filesystem:
-    make_project_tools only binds `EXAMPLES_DIR / name` into tool closures, so
-    building the engine never reads the project directory."""
-    from app.agent.registry import build_mcp_server
-    from app.agent.sdk_engine import ClaudeAgentSdkEngine
-    from app.compiler.agent.tools import TOOL_LABELS, TOOL_SCHEMAS, make_project_tools
 
-    if name not in _sdk_engines:
-        tools = make_project_tools(name, examples_dir=EXAMPLES_DIR)
-        server, allowed, _wrapped = build_mcp_server(tools, TOOL_SCHEMAS)
-        _sdk_engines[name] = ClaudeAgentSdkEngine(
-            system_prompt=_system_prompt(name),
-            mcp_server=server,
-            allowed_tools=allowed,
-            tool_labels=TOOL_LABELS,
-        )
-    return _sdk_engines[name]
+register("editing", CONFIG, _build_editing_tools)
