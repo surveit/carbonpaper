@@ -373,12 +373,20 @@ async function loadStage(stageId, target){
 window.loadStage = sid => loadStage(sid, 'output');  // mermaid nodes (build_mermaid_graph click convention)
 document.getElementById('story').addEventListener('click', e => { const el = e.target.closest('[data-stage]'); if(el) loadStage(el.dataset.stage, el.dataset.disc); });
 // ---- Graph (reuses the central mermaid workflow component) ----
+// mermaid loads from a CDN; if that's blocked, degrade gracefully — the story
+// and panel must keep working, so guard every mermaid reference.
+const mermaidOK = (typeof mermaid !== 'undefined');
 const mmd = document.getElementById('mmd');
-const hasGraph = mmd.textContent.trim().length > 0;
-if(!hasGraph){ mmd.classList.add('hidden'); document.getElementById('nograph').classList.remove('hidden'); }
-mermaid.initialize({ startOnLoad:false, theme:"default", flowchart:{curve:"basis", padding:20, useMaxWidth:true}, securityLevel:"loose" });
+const hasGraph = mermaidOK && mmd.textContent.trim().length > 0;
+if(!hasGraph){
+  mmd.classList.add('hidden');
+  const ng = document.getElementById('nograph');
+  if(!mermaidOK) ng.textContent = "The graph library couldn't load (CDN blocked). The story and panel still work.";
+  ng.classList.remove('hidden');
+}
+if(mermaidOK){ mermaid.initialize({ startOnLoad:false, theme:"default", flowchart:{curve:"basis", padding:20, useMaxWidth:true}, securityLevel:"loose" }); }
 let graphRendered = false;
-async function renderGraph(){ if(graphRendered || !hasGraph) return; graphRendered = true; await mermaid.run({ nodes:[mmd] }); }
+async function renderGraph(){ if(graphRendered || !hasGraph) return; graphRendered = true; try { await mermaid.run({ nodes:[mmd] }); } catch(e){ graphRendered = false; } }
 // ---- Toggle ----
 const story = document.getElementById('story'), graph = document.getElementById('graph');
 const bStory = document.getElementById('b-story'), bGraph = document.getElementById('b-graph');
