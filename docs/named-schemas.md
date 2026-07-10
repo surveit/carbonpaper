@@ -48,10 +48,12 @@ no knowledge that eval exists; eval depends on generation, one-directional.
 The contract, in `app/models/eval.py` (see its module docstring — it's the
 authoritative description):
 
-- An **`EvalConfig`** is the authored spec. Its core is ONE row-aligned table of
-  cases: each row's `input_columns` are injected as `override_stage`'s output,
-  and its `expected` columns are compared against `target_stage`'s output on the
-  same row. Because it is a single table, input and expected are 1:1 **by
+- An **`EvalConfig`** is the authored spec. Its core is ONE row-aligned
+  eval-dataset table: each row's columns are `override_stage`'s output
+  (injected as that stage's whole output), plus one expected-output column
+  per check (`expected_outputs`, each an `ExpectedOutput.output_column`)
+  compared against `target_stage`'s output on the same row. Because it is a
+  single table, injected input and expected output are 1:1 **by
   construction**.
 - That 1:1 alignment is only well-defined when every stage on the
   override→target path preserves grain (no fan-out/fan-in).
@@ -62,9 +64,11 @@ authoritative description):
   non-scorable and the settings say why.
 - **`StageOutputOverride`** injects a whole table as some stage's output,
   cutting that stage and everything upstream out of the run —
-  `reference_overrides` use this to supply extra data a case needs.
+  `reference_overrides` use this to supply extra data an eval-dataset row
+  needs.
 - An **`EvalRun`** records the result at a specific workflow version: resolved
-  settings, pass/fail, metrics, per-row results.
+  settings, metrics, per-row results (no overall pass/fail — see the model
+  docstring).
 - Escape hatch: a `code` scorer replaces the declarative per-column comparison
   when it can't express the grading.
 

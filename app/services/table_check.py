@@ -1,8 +1,10 @@
 """Read a tabular file and check it against a declared TableSchema.
 
-Thin seam over pandas + validate_dataframe so the eval form (and later, input
-stages) validate actual bytes, not just declared shapes. Fails loudly: a
-missing or unreadable file is an exception, never an empty frame."""
+Thin seam over pandas + validate_dataframe so the eval form validates actual
+bytes, not just declared shapes. `read_table` is also the reader
+`app.runtime.stages.input_data` calls for its file connector, so an
+eval-dataset file and a workflow's own input data are read one way. Fails
+loudly: a missing or unreadable file is an exception, never an empty frame."""
 from __future__ import annotations
 
 from pathlib import Path

@@ -84,13 +84,13 @@ def test_tableref_schema_required():
         m.TableRef.model_validate({"path": "x.csv", "format": "csv"})
 
 
-# ── EvalConfig (defined by its checks; cases table is optional data) ─────────
+# ── EvalConfig (defined by its checks; eval-dataset table is optional data) ──
 def _config(**over):
     base = {
         "id": "scoring", "project": "lobbymap", "name": "n",
         "override_stage": "evidence_with_benchmarks", "target_stage": "benchmark_scoring",
         "table": _ref(cols=["evidence_id", "benchmark_id", "quote", "expected_score"]),
-        "expected": [{"actual": "score", "metric": "abs_tol", "tolerance": 1}],
+        "expected_outputs": [{"output_column": "score", "metric": "abs_tol", "tolerance": 1}],
     }
     base.update(over)
     return base
@@ -101,7 +101,7 @@ def test_eval_config_valid():
         reference_overrides=[{"stage_id": "benchmark_library", "table": _ref()}],
         metrics=["mean_absolute_error"]))
     assert c.target_stage == "benchmark_scoring"
-    assert c.expected[0].actual == "score"
+    assert c.expected_outputs[0].output_column == "score"
 
 
 def test_eval_config_bad_id():
@@ -114,17 +114,17 @@ def test_eval_config_override_equals_target():
         m.EvalConfig.model_validate(_config(target_stage="evidence_with_benchmarks"))
 
 
-def test_eval_config_nonempty_expected():
+def test_eval_config_nonempty_expected_outputs():
     with pytest.raises(ValidationError):
-        m.EvalConfig.model_validate(_config(expected=[]))
+        m.EvalConfig.model_validate(_config(expected_outputs=[]))
 
 
 def test_eval_config_table_optional():
-    # A config with no cases file is valid: expected is still required.
+    # A config with no eval-dataset file is valid: expected_outputs is still required.
     cfg = m.EvalConfig.model_validate({
         "id": "e1", "project": "lobbymap", "name": "E1",
         "override_stage": "a", "target_stage": "b",
-        "expected": [{"actual": "score", "metric": "exact"}],
+        "expected_outputs": [{"output_column": "score", "metric": "exact"}],
     })
     assert cfg.table is None
 
@@ -135,7 +135,7 @@ def test_eval_config_no_key_or_input_columns_fields():
     cfg = m.EvalConfig.model_validate({
         "id": "e1", "project": "lobbymap", "name": "E1",
         "override_stage": "a", "target_stage": "b",
-        "expected": [{"actual": "score", "metric": "exact"}],
+        "expected_outputs": [{"output_column": "score", "metric": "exact"}],
     })
     assert not hasattr(cfg, "key")
     assert not hasattr(cfg, "input_columns")
@@ -149,7 +149,7 @@ def test_eval_config_rejects_stray_key_field():
             "id": "e1", "project": "lobbymap", "name": "E1",
             "override_stage": "a", "target_stage": "b",
             "key": ["doc_id"],
-            "expected": [{"actual": "score", "metric": "exact"}],
+            "expected_outputs": [{"output_column": "score", "metric": "exact"}],
         })
 
 
@@ -165,22 +165,22 @@ def test_eval_config_code_scorer():
     assert c.code.function == "score"
 
 
-def test_expected_column_abs_tol_needs_tolerance():
+def test_expected_output_abs_tol_needs_tolerance():
     with pytest.raises(ValidationError):
-        m.ExpectedColumn.model_validate({"actual": "a", "metric": "abs_tol"})
+        m.ExpectedOutput.model_validate({"output_column": "a", "metric": "abs_tol"})
 
 
-def test_expected_column_valid_with_no_expected_field():
-    c = m.ExpectedColumn.model_validate({"actual": "a"})
-    assert c.actual == "a"
+def test_expected_output_valid_with_no_expected_field():
+    c = m.ExpectedOutput.model_validate({"output_column": "a"})
+    assert c.output_column == "a"
     assert not hasattr(c, "expected")
 
 
-def test_expected_column_rejects_stray_expected_field():
+def test_expected_output_rejects_stray_expected_field():
     # extra="forbid" (app/models/schema.py _Base): a leftover `expected` value
     # from an old config is a validation error, not silently-dropped data.
     with pytest.raises(ValidationError):
-        m.ExpectedColumn.model_validate({"actual": "a", "expected": "b"})
+        m.ExpectedOutput.model_validate({"output_column": "a", "expected": "b"})
 
 
 def test_stage_output_override():

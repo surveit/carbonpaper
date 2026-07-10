@@ -8,7 +8,8 @@ from typing import Any
 
 import pandas as pd
 
-from app.models import ConnectorKind, Stage
+from app.models import ConnectorKind, FileFormat, Stage
+from app.services.table_check import read_table
 
 
 def handle_input_data(stage: Stage, inputs: dict[str, pd.DataFrame], ctx: dict[str, Any]) -> pd.DataFrame:
@@ -19,16 +20,10 @@ def handle_input_data(stage: Stage, inputs: dict[str, pd.DataFrame], ctx: dict[s
     if connector.kind == ConnectorKind.file:
         path = ctx["repo_root"] / params["path"]   # required by Connector validation
         fmt = params.get("format", "csv")
-        if fmt == "csv":
-            df = pd.read_csv(path)
-        elif fmt == "parquet":
-            df = pd.read_parquet(path)
-        elif fmt == "json":
-            df = pd.read_json(path, lines=True)
-        elif fmt == "geojson":
-            df = _read_geojson(path)
-        else:
-            raise ValueError(f"Unsupported file format: {fmt}")
+        # geojson isn't a tabular format `read_table` understands (it's a
+        # feature collection, flattened below); every other declared format
+        # is read the same way an eval-dataset file is.
+        df = _read_geojson(path) if fmt == "geojson" else read_table(path, FileFormat(fmt))
 
         # Optional list-column splitting (e.g., "[a, b]" → ["a", "b"])
         for col in params.get("list_columns", []):

@@ -33,7 +33,7 @@ def _config(**over):
         "id": "scoring", "project": "lobbymap", "name": "n",
         "override_stage": "evidence_with_benchmarks", "target_stage": "benchmark_scoring",
         "table": _ref(cols=["evidence_id", "benchmark_id", "quote", "expected_score"]),
-        "expected": [{"actual": "score", "metric": "abs_tol", "tolerance": 1}],
+        "expected_outputs": [{"output_column": "score", "metric": "abs_tol", "tolerance": 1}],
     }
     base.update(over)
     return EvalConfig.model_validate(base)
@@ -142,17 +142,17 @@ def test_list_eval_configs_empty_dir_returns_empty(tmp_path: Path):
 
 # ── save_dataset_upload immutability ──────────────────────────────────────────
 def test_save_dataset_upload_writes_file(tmp_path: Path):
-    path = save_dataset_upload(tmp_path, "cases.csv", b"a,b\n1,2\n")
-    assert path == tmp_path / "eval_data" / "cases.csv"
+    path = save_dataset_upload(tmp_path, "eval_dataset.csv", b"a,b\n1,2\n")
+    assert path == tmp_path / "eval_data" / "eval_dataset.csv"
     assert path.read_bytes() == b"a,b\n1,2\n"
 
 
 def test_save_dataset_upload_raises_file_exists_on_same_name(tmp_path: Path):
-    save_dataset_upload(tmp_path, "cases.csv", b"a,b\n1,2\n")
+    save_dataset_upload(tmp_path, "eval_dataset.csv", b"a,b\n1,2\n")
     with pytest.raises(FileExistsError):
-        save_dataset_upload(tmp_path, "cases.csv", b"different content")
+        save_dataset_upload(tmp_path, "eval_dataset.csv", b"different content")
     # original content untouched
-    assert (tmp_path / "eval_data" / "cases.csv").read_bytes() == b"a,b\n1,2\n"
+    assert (tmp_path / "eval_data" / "eval_dataset.csv").read_bytes() == b"a,b\n1,2\n"
 
 
 @pytest.mark.parametrize("bad_name", [
@@ -270,47 +270,47 @@ def _report(ok=True, settings=None):
 def test_eval_status_broken_even_with_runs():
     runs = [_run(status="scored", workflow_version="v1")]
     assert eval_status(_report(ok=False), runs, latest_version="v1",
-                       has_cases=True) == "broken"
+                       has_eval_dataset=True) == "broken"
 
 
-def test_eval_status_no_cases_yet():
+def test_eval_status_no_eval_dataset_yet():
     assert eval_status(_report(ok=True), [], latest_version=None,
-                       has_cases=False) == "no cases yet"
+                       has_eval_dataset=False) == "no eval dataset yet"
 
 
-def test_eval_status_broken_beats_no_cases():
+def test_eval_status_broken_beats_no_eval_dataset():
     assert eval_status(_report(ok=False), [], latest_version=None,
-                       has_cases=False) == "broken"
+                       has_eval_dataset=False) == "broken"
 
 
 def test_eval_status_never_run():
     assert eval_status(_report(ok=True), [], latest_version="v1",
-                       has_cases=True) == "never run"
+                       has_eval_dataset=True) == "never run"
 
 
 def test_eval_status_stale_when_no_latest_version():
     runs = [_run(status="scored", workflow_version="v1")]
     assert eval_status(_report(ok=True), runs, latest_version=None,
-                       has_cases=True) == "stale"
+                       has_eval_dataset=True) == "stale"
 
 
 def test_eval_status_stale_when_version_mismatch():
     runs = [_run(status="scored", workflow_version="v1")]
     assert eval_status(_report(ok=True), runs, latest_version="v2",
-                       has_cases=True) == "stale"
+                       has_eval_dataset=True) == "stale"
 
 
 @pytest.mark.parametrize("status", ["error", "vetoed"])
 def test_eval_status_run_errored(status):
     runs = [_run(status=status, workflow_version="v1")]
     assert eval_status(_report(ok=True), runs, latest_version="v1",
-                       has_cases=True) == "run errored"
+                       has_eval_dataset=True) == "run errored"
 
 
 def test_eval_status_run_succeeded():
     runs = [_run(status="scored", workflow_version="v1")]
     assert eval_status(_report(ok=True), runs, latest_version="v1",
-                       has_cases=True) == "run succeeded"
+                       has_eval_dataset=True) == "run succeeded"
 
 
 def test_eval_config_entry_is_dataclass_shape():

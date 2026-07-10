@@ -3,7 +3,7 @@ the stages it names, as they are right now."""
 from __future__ import annotations
 
 from app import models as m
-from app.services.cases_columns import derive_cases_columns
+from app.services.eval_dataset_columns import derive_eval_dataset_columns, get_injected_columns
 from app.services.eval_compatibility import CompatibilityReport, check_eval_compatibility
 
 
@@ -54,7 +54,7 @@ def _config(**over):
         "id": "scoring", "project": "lobbymap", "name": "n",
         "override_stage": "src", "target_stage": "tgt",
         "table": _ref(cols=["k", "v", "quote", "score"]),
-        "expected": [{"actual": "score", "metric": "abs_tol", "tolerance": 1}],
+        "expected_outputs": [{"output_column": "score", "metric": "abs_tol", "tolerance": 1}],
     }
     base.update(over)
     return m.EvalConfig.model_validate(base)
@@ -111,8 +111,8 @@ def test_override_stage_has_no_output_schema():
     assert any("declares no output schema" in p for p in report.problems)
 
 
-def test_cases_table_missing_a_column_of_override_schema():
-    # override's schema declares `extra_col`, which the cases table lacks.
+def test_eval_dataset_table_missing_a_column_of_override_schema():
+    # override's schema declares `extra_col`, which the eval-dataset table lacks.
     src = _file_input("src", cols=["k", "v", "quote", "extra_col"])
     tgt = _row("tgt", ["src"], output_schema={
         "columns": [{"name": "k"}, {"name": "score", "type": "float"}]})
@@ -153,8 +153,9 @@ def test_reference_override_missing_a_column_of_its_stage_schema():
     assert any("ref_stage" in p and "extra" in p for p in report.problems)
 
 
-def test_expected_actual_not_in_target_schema():
-    config = _config(expected=[{"actual": "not_emitted", "metric": "abs_tol", "tolerance": 1}])
+def test_expected_output_column_not_in_target_schema():
+    config = _config(expected_outputs=[
+        {"output_column": "not_emitted", "metric": "abs_tol", "tolerance": 1}])
     report = check_eval_compatibility(config, _stages())
     assert report.ok is False
     assert any("not_emitted" in p for p in report.problems)
@@ -241,89 +242,86 @@ def test_table_none_does_not_crash_and_skips_file_checks():
     report = check_eval_compatibility(config, _stages())
     assert report.ok is True
     assert report.settings is not None
-    assert not any("cases table" in p for p in report.problems)
-    assert not any("not in the cases table" in p for p in report.problems)
+    assert not any("eval-dataset table" in p for p in report.problems)
+    assert not any("not in the eval-dataset table" in p for p in report.problems)
 
 
 def test_table_none_still_catches_target_assertion_error():
-    config = _config(table=None, expected=[
-        {"actual": "not_emitted", "metric": "abs_tol", "tolerance": 1}])
+    config = _config(table=None, expected_outputs=[
+        {"output_column": "not_emitted", "metric": "abs_tol", "tolerance": 1}])
     report = check_eval_compatibility(config, _stages())
     assert report.ok is False
     assert any("not_emitted" in p for p in report.problems)
 
 
-# ── override coverage is clash-aware (derive_cases_columns) ─────────────────
-def test_coverage_check_rejects_bare_name_on_a_clashing_column():
+# ── override coverage is conflict-aware (derive_eval_dataset_columns) ────────
+def test_coverage_check_rejects_bare_name_on_a_conflicting_column():
     # override's own output includes `v`; a check also grades `v` on the
-    # target -- the clash means the cases table must carry `override.v`, not
-    # a bare `v`.
+    # target -- the conflict means the eval-dataset table must carry
+    # `override.v`, not a bare `v`.
     src = _file_input("src", cols=["k", "v", "quote"])
     tgt = _row("tgt", ["src"], output_schema={
         "columns": [{"name": "k"}, {"name": "v", "type": "str"},
                     {"name": "score", "type": "float"}]})
     config = _config(
-        expected=[{"actual": "score", "metric": "abs_tol", "tolerance": 1},
-                 {"actual": "v", "metric": "exact"}],
+        expected_outputs=[{"output_column": "score", "metric": "abs_tol", "tolerance": 1},
+                          {"output_column": "v", "metric": "exact"}],
         table=_ref(cols=["k", "v", "quote", "score"]))
     report = check_eval_compatibility(config, [src, tgt])
     assert report.ok is False
     assert any("override.v" in p for p in report.problems)
 
 
-def test_coverage_check_accepts_clash_aware_injected_name():
+def test_coverage_check_accepts_conflict_aware_injected_name():
     src = _file_input("src", cols=["k", "v", "quote"])
     tgt = _row("tgt", ["src"], output_schema={
         "columns": [{"name": "k"}, {"name": "v", "type": "str"},
                     {"name": "score", "type": "float"}]})
     config = _config(
-        expected=[{"actual": "score", "metric": "abs_tol", "tolerance": 1},
-                 {"actual": "v", "metric": "exact"}],
+        expected_outputs=[{"output_column": "score", "metric": "abs_tol", "tolerance": 1},
+                          {"output_column": "v", "metric": "exact"}],
         table=_ref(cols=["k", "override.v", "quote", "score"]))
     report = check_eval_compatibility(config, [src, tgt])
     assert report.ok is True
     assert report.problems == []
 
 
-# ── derive_cases_columns (the shared derivation itself) ──────────────────────
-def test_derive_cases_columns_no_clash_answer_named_after_target():
+# ── derive_eval_dataset_columns / get_injected_columns (the shared derivation) ─
+def test_derive_eval_dataset_columns_no_conflict_named_after_target():
     override = _file_input("src", cols=["k", "v"])
     target = _row("tgt", ["src"], output_schema={
         "columns": [{"name": "k"}, {"name": "score", "type": "float"}]})
-    derived = derive_cases_columns(override, target, ["score"])
-    assert derived.problems == []
-    assert derived.warnings == []
-    names = [c.name for c in derived.columns]
+    schema = derive_eval_dataset_columns(override, target, ["score"])
+    names = [c.name for c in schema.columns]
     assert set(names) == {"k", "v", "score"}
     assert len(names) == len(set(names))  # never a duplicate column name
-    score_col = next(c for c in derived.columns if c.name == "score")
+    score_col = next(c for c in schema.columns if c.name == "score")
     assert score_col.type == "float"
 
 
-def test_derive_cases_columns_clash_renames_with_warning():
+def test_derive_eval_dataset_columns_conflict_renames_both_sides():
     override = _file_input("src", cols=["k", "score"])
     target = _row("tgt", ["src"], output_schema={
         "columns": [{"name": "k"}, {"name": "score", "type": "float"}]})
-    derived = derive_cases_columns(override, target, ["score"])
-    assert derived.problems == []
-    names = [c.name for c in derived.columns]
+    schema = derive_eval_dataset_columns(override, target, ["score"])
+    names = [c.name for c in schema.columns]
     assert set(names) == {"k", "override.score", "output.score"}
     assert len(names) == len(set(names))  # never a duplicate column name
-    assert len(derived.warnings) == 1
-    assert "override.score" in derived.warnings[0]
-    assert "output.score" in derived.warnings[0]
 
 
-def test_derive_cases_columns_check_actual_not_on_target_is_reported_not_fabricated():
+def test_derive_eval_dataset_columns_check_output_column_not_on_target_is_skipped():
+    # An unresolvable check column is silently skipped here -- reported
+    # separately, against the target's declared output, by
+    # check_eval_compatibility's own target-assertion check.
     override = _file_input("src", cols=["k"])
     target = _row("tgt", ["src"], output_schema={"columns": [{"name": "k"}]})
-    derived = derive_cases_columns(override, target, ["not_emitted"])
-    assert any("not_emitted" in p for p in derived.other_problems)
-    assert not any(c.name == "not_emitted" for c in derived.columns)
+    schema = derive_eval_dataset_columns(override, target, ["not_emitted"])
+    assert not any(c.name == "not_emitted" for c in schema.columns)
 
 
-def test_derive_cases_columns_missing_stages_reported_separately():
-    derived = derive_cases_columns(None, None, ["score"])
-    assert derived.override_problems
-    assert derived.other_problems
-    assert derived.columns == []
+def test_get_injected_columns_is_the_override_side_of_the_derivation():
+    override = _file_input("src", cols=["k", "score"])
+    target = _row("tgt", ["src"], output_schema={
+        "columns": [{"name": "k"}, {"name": "score", "type": "float"}]})
+    injected = get_injected_columns(override, target, ["score"])
+    assert {c.name for c in injected} == {"k", "override.score"}

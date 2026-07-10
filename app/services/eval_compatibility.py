@@ -12,7 +12,7 @@ from typing import Sequence
 
 from app.models import (EvalConfig, EvalRunSettings, Stage, TableSchema,
                         Workflow, resolve_eval_run_settings, validate_workflow)
-from app.services.cases_columns import derive_cases_columns
+from app.services.eval_dataset_columns import get_injected_columns
 
 _NUMERIC_TYPES = {"int", "float"}
 
@@ -40,14 +40,20 @@ def check_eval_compatibility(config: EvalConfig,
     if missing:
         return CompatibilityReport(ok=False, problems=missing, settings=None)
 
+    # Condition 4 + the structural check both leave the override→target path
+    # unresolvable, so `settings` can't even be attempted when either fires.
+    no_reference_override_on_target = _check_no_reference_override_on_target(config)
+    structure_problems = _check_workflow_structure(stages)
+    blocked = bool(no_reference_override_on_target) or bool(structure_problems)
+
     problems = (
         _check_target_reachable(config, stages)
-        + _check_cases_cover_override(config, by_id)
+        + _check_eval_dataset_covers_override(config, by_id)
         + _check_reference_overrides_cover_stages(config, by_id)
         + _check_target_emits_checked_columns(config, by_id)
+        + no_reference_override_on_target
+        + structure_problems
     )
-    gate_problems, blocked = _check_structural_gate(config, stages)
-    problems += gate_problems
     if blocked:
         return CompatibilityReport(ok=False, problems=problems, settings=None)
 
@@ -79,6 +85,10 @@ def _check_target_reachable(config: EvalConfig, stages: Sequence[Stage]) -> list
 
 
 def _find_descendants(stage_id: str, stages: Sequence[Stage]) -> set[str]:
+    """Every stage reachable downstream of `stage_id`. Bounded regardless of
+    a cycle in `stages`: `descendants` is a visited set checked BEFORE a node
+    is pushed, so each stage id is pushed at most once and the walk always
+    terminates."""
     descendants: set[str] = set()
     stack = [stage_id]
     while stack:
@@ -91,26 +101,28 @@ def _find_descendants(stage_id: str, stages: Sequence[Stage]) -> set[str]:
 
 
 # ── Condition 2: every injected table is a valid stand-in ────────────────────
-def _check_cases_cover_override(config: EvalConfig, by_id: dict[str, Stage]) -> list[str]:
-    """The cases table, if attached, must be a valid stand-in for the
-    override stage's output: every column `derive_cases_columns` says the
-    file must carry (clash-renamed) has to spec-match a column already in
-    it. A dataless config skips this — its file is validated when attached."""
+def _check_eval_dataset_covers_override(config: EvalConfig, by_id: dict[str, Stage]) -> list[str]:
+    """The eval-dataset table, if attached, must be a valid stand-in for the
+    override stage's output: every column `get_injected_columns` says the
+    file must carry (deconflicted) has to spec-match a column already in it.
+    A dataless config skips this — its file is validated when attached."""
     if config.table is None:
         return []
-    check_actuals = [exp.actual for exp in config.expected]
-    derived = derive_cases_columns(
-        by_id[config.override_stage], by_id[config.target_stage], check_actuals)
-    required = TableSchema(columns=derived.injected)
-    return derived.override_problems + _check_columns_covered(
-        required, config.table.table_schema, config.override_stage, "cases table")
+    override = by_id[config.override_stage]
+    if override.output_schema is None:
+        return [f"override stage `{override.id}` declares no output schema"]
+    check_output_columns = [expected_output.output_column for expected_output in config.expected_outputs]
+    required = TableSchema(columns=get_injected_columns(
+        override, by_id[config.target_stage], check_output_columns))
+    return _check_columns_covered(
+        required, config.table.table_schema, config.override_stage, "eval-dataset table")
 
 
 def _check_reference_overrides_cover_stages(config: EvalConfig,
                                             by_id: dict[str, Stage]) -> list[str]:
     """Each reference override's injected table must be a valid stand-in for
-    the stage it overrides — same coverage requirement as the cases table,
-    applied per reference override."""
+    the stage it overrides — same coverage requirement as the eval-dataset
+    table, applied per reference override."""
     problems: list[str] = []
     for ov in config.reference_overrides:
         stage = by_id[ov.stage_id]
@@ -127,29 +139,29 @@ def _check_reference_overrides_cover_stages(config: EvalConfig,
 def _check_columns_covered(required: TableSchema, provided: TableSchema,
                            stage_id: str, label: str) -> list[str]:
     """Every column `required` has that `provided` doesn't spec-match, via
-    `TableSchema.missing_from` — absent by name or differing on type,
-    nullability, or another spec field (prose aside)."""
+    `TableSchema.subtract(strict=False)` — absent by name or differing on
+    type, nullability, or another spec field (prose aside)."""
     return [f"{label}: injected table lacks (or mismatches) column `{col.name}` "
            f"required by stage `{stage_id}`"
-           for col in required.missing_from(provided)]
+           for col in required.subtract(provided, strict=False).columns]
 
 
 # ── Conditions 3 + 3b: the target's declared output covers the checks ────────
 def _check_target_emits_checked_columns(config: EvalConfig,
                                         by_id: dict[str, Stage]) -> list[str]:
-    """Every check's `actual` column must exist on the target's declared
+    """Every check's `output_column` must exist on the target's declared
     output, and an abs_tol check needs that column to be numeric."""
     target = by_id[config.target_stage]
     if target.output_schema is None:
         return [f"cannot verify assertions: target `{target.id}` declares no output schema"]
     problems: list[str] = []
-    for exp in config.expected:
-        col = target.output_schema.column(exp.actual)
+    for expected_output in config.expected_outputs:
+        col = target.output_schema.column_for_name(expected_output.output_column)
         if col is None:
-            problems.append(f"expected column asserts on `{exp.actual}`, "
+            problems.append(f"expected output asserts on `{expected_output.output_column}`, "
                             f"which target `{target.id}` does not emit")
-        elif exp.metric == "abs_tol" and col.type not in _NUMERIC_TYPES:
-            problems.append(f"`{exp.actual}` is `{col.type}` on target "
+        elif expected_output.metric == "abs_tol" and col.type not in _NUMERIC_TYPES:
+            problems.append(f"`{expected_output.output_column}` is `{col.type}` on target "
                             f"`{target.id}` but metric abs_tol needs a numeric")
     return problems
 
@@ -172,16 +184,6 @@ def _check_workflow_structure(stages: Sequence[Stage]) -> list[str]:
         return []
     return ["cannot verify the path: the workflow has structural problems: "
            + "; ".join(issues)]
-
-
-def _check_structural_gate(config: EvalConfig,
-                           stages: Sequence[Stage]) -> tuple[list[str], bool]:
-    """Condition 4 + structural combined, with whether either blocks going
-    further: both leave the path unresolvable, so `settings` can't even be
-    attempted."""
-    problems = (_check_no_reference_override_on_target(config)
-               + _check_workflow_structure(stages))
-    return problems, bool(problems)
 
 
 # ── Condition 5: the path must preserve grain (or fall back to a code scorer) ─

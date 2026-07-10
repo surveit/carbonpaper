@@ -306,7 +306,7 @@ class TableSchema(_Base):
                 raise ValueError(f"primary_key {k!r} is not a declared column")
         return self
 
-    def column(self, name: str) -> Optional[Column]:
+    def column_for_name(self, name: str) -> Optional[Column]:
         """The column named `name`, or `None` if this schema declares no such
         column."""
         for c in self.columns:
@@ -314,18 +314,22 @@ class TableSchema(_Base):
                 return c
         return None
 
-    def subtract(self, other: "TableSchema") -> "TableSchema":
-        """The columns of `self` whose names are not in `other`, as a schema
+    def subtract(self, other: "TableSchema", strict: bool = True) -> "TableSchema":
+        """The columns of `self` that `other` does not spec-match: absent from
+        `other` by name, or present but differing on a spec field per
+        `_column_spec_differences` (prose aside). The result is a schema
         describing a reply object (no primary key or table-level metadata).
 
-        Requires `other` to be a spec-preserving subset of `self`
-        (`other.is_subset_of(self)`): every column of `other` present in `self`
-        with an identical spec — every Column spec field compared recursively,
-        only prose (`description`/`source`) may differ. Otherwise the two schemas
+        `strict=True` (the default) additionally requires `other` to be a
+        spec-preserving subset of `self` (`other.is_subset_of(self)`): every
+        column of `other` present in `self` with an identical spec, only prose
+        (`description`/`source`) may differ. Otherwise the two schemas
         disagree and the difference is ill-defined, so this raises ValueError
-        naming the offending column(s) and the differing fields."""
+        naming the offending column(s) and the differing fields. `strict=False`
+        skips that requirement and just returns the columns `other` doesn't
+        cover."""
         self_by_name = {c.name: c for c in self.columns}
-        if not other.is_subset_of(self):
+        if strict and not other.is_subset_of(self):
             problems = [
                 f"{c.name!r} differs on {', '.join(_column_spec_differences(c, self_by_name[c.name]))}"
                 if c.name in self_by_name
@@ -334,34 +338,25 @@ class TableSchema(_Base):
                 if c.name not in self_by_name or _column_spec_differences(c, self_by_name[c.name])
             ]
             raise ValueError(f"cannot subtract: {'; '.join(problems)}")
-        other_names = {c.name for c in other.columns}
+        other_by_name = {c.name: c for c in other.columns}
         return TableSchema(
-            columns=[c for c in self.columns if c.name not in other_names],
+            columns=[
+                c for c in self.columns
+                if (match := other_by_name.get(c.name)) is None
+                or _column_spec_differences(c, match)
+            ],
             primary_key=None,
         )
-
-    def missing_from(self, other: "TableSchema") -> list[Column]:
-        """The columns of `self` that `other` does not spec-match: absent from
-        `other` by name, or present but differing on a spec field per
-        `_column_spec_differences` (prose aside). Empty exactly when `self` is
-        a spec-preserving subset of `other` — the single comparison behind
-        `is_subset_of`."""
-        other_by_name = {c.name: c for c in other.columns}
-        return [
-            c
-            for c in self.columns
-            if (match := other_by_name.get(c.name)) is None
-            or _column_spec_differences(c, match)
-        ]
 
     def is_subset_of(self, other: "TableSchema") -> bool:
         """True exactly when every column here also appears in `other` with an
         identical spec — every Column spec field compared recursively via
         `_column_spec_differences`, prose (`description`/`source`) aside. I.e.
         this schema is a spec-preserving subset of `other`. Called by `subtract`
-        (the subtrahend must be a subset of the minuend) and by `Stage`'s 1:1
-        validator (a transform's input must be a subset of its output)."""
-        return not self.missing_from(other)
+        (the subtrahend must be a subset of the minuend when `strict=True`) and
+        by `Stage`'s 1:1 validator (a transform's input must be a subset of its
+        output)."""
+        return not self.subtract(other, strict=False).columns
 
     def to_prompt(self) -> str:
         """Render this schema as instructions for an LLM reply: one line per

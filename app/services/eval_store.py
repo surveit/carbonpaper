@@ -146,16 +146,16 @@ def latest_version_id(project_dir: Path) -> str | None:
 
 
 def eval_status(report: CompatibilityReport, runs: list[EvalRun],
-                latest_version: str | None, *, has_cases: bool) -> str:
+                latest_version: str | None, *, has_eval_dataset: bool) -> str:
     """One word for "what do we currently know about this eval". Ordered by
-    alarm: incompatible beats everything; a config with no cases file can't run
-    yet; a result only counts as current when its run pinned the version the
-    project is at now. "run succeeded" means the run produced a result — the
-    metrics say whether the result is good."""
+    alarm: incompatible beats everything; a config with no eval-dataset file
+    can't run yet; a result only counts as current when its run pinned the
+    version the project is at now. "run succeeded" means the run produced a
+    result — the metrics say whether the result is good."""
     if not report.ok:
         return "broken"
-    if not has_cases:
-        return "no cases yet"
+    if not has_eval_dataset:
+        return "no eval dataset yet"
     if not runs:
         return "never run"
     latest = runs[0]
