@@ -239,3 +239,10 @@ def test_compile_workflow_regenerate_to_fewer_stages_drops_stale_files(
 
     summary = workspace.project_workflow_summary(pdir)
     assert [s["id"] for s in summary["stages"]] == ["load"]
+
+
+def test_project_id_cannot_escape_the_workspace(tmp_path: Path) -> None:
+    _seed(tmp_path, "alpha")
+    tools = project_tools.make_project_tools("alpha", examples_dir=tmp_path)
+    with pytest.raises(ValueError, match="invalid project id"):
+        _tool(tools, "describe_workflow")("../outside")

@@ -39,7 +39,12 @@ from app.services.loader import load_compiled_dir, stage_to_json
 
 def make_project_tools(current_project: str, *, examples_dir: Path) -> list[Callable[..., Any]]:
     def _project_dir(project_id: str) -> Path:
-        return examples_dir / project_id
+        # project_id comes from the model — keep it inside the workspace so a
+        # `../…` value can't read or write outside examples_dir.
+        candidate = (examples_dir / project_id).resolve()
+        if not candidate.is_relative_to(examples_dir.resolve()):
+            raise ValueError(f"invalid project id '{project_id}'")
+        return candidate
 
     def list_projects() -> list[str]:
         """List the names of every authored project in the workspace."""
