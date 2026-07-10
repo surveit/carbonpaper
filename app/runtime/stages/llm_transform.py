@@ -15,7 +15,8 @@ import pandas as pd
 
 from app.models import Stage
 
-from ..llm import call_llm_batch, backend_status
+from ..llm import ROW_ERROR_KEY, call_llm_batch, backend_status
+from ._row_isolation import error_outcome, ok_outcome, record_row_outcomes
 
 
 def handle_llm_transform(stage: Stage, inputs: dict[str, pd.DataFrame], ctx: dict[str, Any]) -> pd.DataFrame:
@@ -44,17 +45,32 @@ def handle_llm_transform(stage: Stage, inputs: dict[str, pd.DataFrame], ctx: dic
     row_dicts = [{str(k): v for k, v in row.items()} for _, row in src.iterrows()]
     results = call_llm_batch(stage.id, llm, row_dicts)
 
-    for row_dict, result in zip(row_dicts, results):
+    # Per-row error isolation: a row whose backend call failed comes back from
+    # call_llm_batch as {ROW_ERROR_KEY: <message>}. Route it into the shadow
+    # (recorded 1:1 by input position, persisted by the runner) and drop it from
+    # the user-facing output rather than emitting a half-formed, schema-breaking
+    # row. Successful rows are unchanged.
+    outcomes: list[dict[str, Any]] = []
+    for i, (row_dict, result) in enumerate(zip(row_dicts, results)):
+        if isinstance(result, dict) and set(result.keys()) == {ROW_ERROR_KEY}:
+            outcomes.append(error_outcome(i, str(result[ROW_ERROR_KEY]), error_type="LLMError"))
+            continue
+        produced = 0
         if isinstance(result, list):
             for idx, item in enumerate(result):
                 merged = {**row_dict, **(item if isinstance(item, dict) else {"_value": item})}
                 merged["evidence_id"] = _evidence_id_for(row_dict, idx)
                 out_rows.append(merged)
+                produced += 1
         elif isinstance(result, dict):
             merged = {**row_dict, **result}
             out_rows.append(merged)
+            produced = 1
         else:
             out_rows.append({**row_dict, "_raw": str(result)})
+            produced = 1
+        outcomes.append(ok_outcome(i, output_rows=produced))
+    record_row_outcomes(ctx, stage.id, outcomes)
 
     df = pd.DataFrame(out_rows)
     # Keep only columns declared in output_schema, preserving order, plus any

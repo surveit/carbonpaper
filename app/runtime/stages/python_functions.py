@@ -14,6 +14,8 @@ import pandas as pd
 
 from app.models import FunctionKind, Stage
 
+from ._row_isolation import map_rows_isolated, record_row_outcomes
+
 
 def _load_python_function(stage: Stage) -> Callable[..., Any]:
     """Resolve the callable for a stage carrying a function: block."""
@@ -56,13 +58,23 @@ def handle_python_row_function(stage: Stage, inputs: dict[str, pd.DataFrame], ct
         )
     fn = _load_python_function(stage)
     src = inputs[declared[0].id]
-    out_rows: list[dict[str, Any]] = []
-    for record in src.to_dict("records"):
-        result = fn(record)
+
+    def _require_dict(_i: int, _record: dict[str, Any], result: Any) -> None:
+        # The runtime's own post-condition on the authored function's return
+        # value. A non-dict return is a systemic authoring bug (the same function
+        # returns the same wrong type for every row), so it fails the whole stage
+        # loudly rather than being isolated per row.
         if not isinstance(result, dict):
             raise ValueError(
                 f"python_row_function stage {stage.id}: function must return a dict per row, "
                 f"got {type(result).__name__}"
             )
-        out_rows.append(result)
+
+    # Per-row error isolation: a row whose function body RAISES is dropped from
+    # the user-facing output and recorded 1:1 in the shadow (persisted by the
+    # runner) rather than aborting the whole stage. Successful rows stay 1:1.
+    out_rows, outcomes = map_rows_isolated(
+        src.to_dict("records"), fn, post=_require_dict
+    )
+    record_row_outcomes(ctx, stage.id, outcomes)
     return pd.DataFrame(out_rows)

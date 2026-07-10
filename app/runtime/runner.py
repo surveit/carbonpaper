@@ -232,6 +232,73 @@ def execute_run(
     )
 
 
+def _apply_row_isolation(
+    record: dict[str, Any], ctx: dict[str, Any], sid: str, run_dir: Path
+) -> None:
+    """Fold a per-row handler's isolated-row outcomes into this stage's manifest
+    record and persist the runtime-internal error shadow next to outputs/.
+
+    A per-row handler (python_row_function / llm_transform) stashes, on
+    ctx["row_errors"][sid], one outcome per INPUT row (see stages/_row_isolation).
+    Rows that raised are already absent from the user-facing `output`; here we:
+      - write the errored rows to run_dir/errors/<sid>.jsonl (1:1 with input by
+        `input_row`), a sibling of outputs/ — nothing is silently dropped;
+      - record the error count on the stage so the run surfaces it loudly;
+      - if EVERY input row failed, mark the stage `error` (an all-rows failure is
+        indistinguishable from a systemic bug and must fail loudly, not pass with
+        an empty table); otherwise mark it `row_errors` (partial success).
+    A stage with no isolated failures is left untouched."""
+    outcomes = (ctx.get("row_errors") or {}).pop(sid, None)
+    if not outcomes:
+        return
+    errored = [o for o in outcomes if o.get("status") == "error"]
+    n_input = len(outcomes)
+    record["input_rows"] = n_input
+    record["row_errors"] = len(errored)
+    if not errored:
+        return
+
+    # Persist the shadow. A failure to write it must not lose the good output, so
+    # OSError is caught and noted (the count still lands in the manifest) rather
+    # than propagating into the whole-stage error path.
+    rel_path: str | None = None
+    try:
+        errors_dir = run_dir / "errors"
+        errors_dir.mkdir(parents=True, exist_ok=True)
+        shadow_path = errors_dir / f"{sid}.jsonl"
+        with shadow_path.open("w", encoding="utf-8") as fh:
+            for o in errored:
+                fh.write(json.dumps(o, default=str) + "\n")
+        rel_path = str(shadow_path.relative_to(run_dir))
+        record["row_errors_path"] = rel_path
+    except OSError as exc:
+        record.setdefault("notes", []).append(
+            f"could not persist row-error shadow: {exc}"
+        )
+
+    first = errored[0].get("error") or {}
+    where = f" (see {rel_path})" if rel_path else ""
+    if len(errored) == n_input:
+        # Every row failed — treat as whole-stage failure so it is unmistakably
+        # loud. The user-facing output is already empty.
+        record["status"] = "error"
+        record["error"] = {
+            "type": "AllRowsErrored",
+            "message": (
+                f"all {n_input} input row(s) failed per-row isolation{where}; "
+                f"first: {first.get('type', 'RowError')}: {first.get('message', '')}"
+            ),
+            "traceback": None,
+        }
+    else:
+        # Partial success: keep the good rows, surface the error count loudly.
+        record["status"] = "row_errors"
+        record.setdefault("notes", []).append(
+            f"{len(errored)} of {n_input} row(s) errored and were isolated"
+            f"{where}; user-facing output has the {n_input - len(errored)} good row(s)"
+        )
+
+
 def _execute_stages(
     ordered: list[Stage],
     ctx: dict[str, Any],
@@ -285,8 +352,13 @@ def _execute_stages(
         sid = stage.id
         stype = stage.type
 
-        # Skip stages already produced (resume path).
-        if sid in outputs_so_far and records_by_id.get(sid, {}).get("status") in ("ok", "validation_warnings"):
+        # Skip stages already produced (resume path). `row_errors` counts as
+        # produced: the stage wrote a valid user-facing output and its error
+        # shadow; re-running it on resume would recompute (and, for llm_transform,
+        # re-pay for) a stage that already completed.
+        if sid in outputs_so_far and records_by_id.get(sid, {}).get("status") in (
+            "ok", "validation_warnings", "row_errors"
+        ):
             continue
 
         record: dict[str, Any] = {
@@ -385,6 +457,14 @@ def _execute_stages(
             record["rows"] = int(len(output))
             record["output_path"] = str(output_path.relative_to(run_dir))
 
+            # Per-row error isolation (python_row_function / llm_transform): a
+            # per-row handler may have isolated individual rows that raised —
+            # dropping them from `output` (kept schema-conforming, user-facing)
+            # while recording each, 1:1 with its input position, on the ctx. We
+            # persist that shadow next to outputs/ and fold the error count into
+            # this stage's record so the failure is loud, not silent.
+            _apply_row_isolation(record, ctx, sid, run_dir)
+
         except Exception as exc:  # noqa: BLE001 — the runner's contract is
             # to record ANY stage failure (a handler can raise ValueError,
             # RuntimeError, a pandas/pyarrow error, etc.) in the manifest and
@@ -427,13 +507,23 @@ def _execute_stages(
     manifest["finished_at"] = datetime.now().isoformat(timespec="seconds")
     manifest["queue_stats"] = ctx.get("queue_stats", {})
 
+    # Total isolated per-row errors across the run — a loud, run-level count so
+    # partial-failure runs are visible at a glance, not buried in per-stage records.
+    manifest["row_errors_total"] = sum(
+        int(s.get("row_errors") or 0) for s in manifest["stages"]
+    )
+
     if halted is not None:
         manifest["status"] = "awaiting_review"
         manifest["halted_at"] = halted.stage_id
     else:
+        # A `row_errors` stage (some rows isolated) makes the run "errors" too:
+        # the run continues to completion, but a non-zero error count keeps it
+        # loud rather than silently reporting success.
         manifest["status"] = (
             "ok" if all(s["status"] == "ok" for s in manifest["stages"])
-            else "errors" if any(s["status"] == "error" for s in manifest["stages"])
+            else "errors"
+            if any(s["status"] in ("error", "row_errors") for s in manifest["stages"])
             else "warnings"
         )
         manifest.pop("halted_at", None)
@@ -474,7 +564,7 @@ def resume_run(project_dir: Path, run_id: str, repo_root: Path) -> dict[str, Any
     # Reload outputs from disk for stages that completed successfully.
     outputs_so_far: dict[str, pd.DataFrame] = {}
     for record in manifest.get("stages", []):
-        if record.get("status") not in ("ok", "validation_warnings"):
+        if record.get("status") not in ("ok", "validation_warnings", "row_errors"):
             continue
         op = record.get("output_path")
         if not op:
