@@ -48,7 +48,7 @@ def test_allowed_names_cover_every_tool(tmp_path: Path) -> None:
         "congresswatch", examples_dir=tmp_path
     )
     assert set(allowed) == {f"mcp__project__{n}" for n in TOOL_SCHEMAS}
-    assert len(allowed) == 11
+    assert len(allowed) == 8
 
 
 def test_read_stage_handler_returns_text_content(tmp_path: Path) -> None:

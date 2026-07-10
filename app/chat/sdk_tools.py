@@ -57,19 +57,13 @@ TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
     "create_version": {
         "message": Annotated[str, "A short note describing this snapshot."],
     },
-    "fetch_document": {
-        "src_path": Annotated[str, "Path to a LOCAL file on disk (not a URL)."],
-    },
-    "read_section": {
-        "doc_path": Annotated[str, "On-disk document path returned by fetch_document."],
-        "heading": Annotated[str, "Text to match against a markdown heading; returns that section."],
-    },
-    "grep_doc": {
-        "doc_path": Annotated[str, "On-disk document path returned by fetch_document."],
-        "query": Annotated[str, "Case-insensitive substring to find; returns matching numbered lines."],
-    },
     "compile_workflow": {
-        "doc_path": Annotated[str, "On-disk source document path (from fetch_document) to compile."],
+        "conversation": Annotated[
+            str,
+            "The whole conversation so far, passed VERBATIM (do not summarise). The "
+            "compiler regenerates the entire workflow from it — a full reset, so "
+            "only use it when the user explicitly asks to rebuild from scratch.",
+        ],
         "confirm_overwrite": Annotated[
             bool,
             "Set true to snapshot-and-overwrite when the workflow already has "
@@ -91,10 +85,7 @@ TOOL_LABELS: dict[str, str] = {
     "edit_stage": "Editing a stage",
     "add_stage": "Adding a stage",
     "create_version": "Snapshotting a version",
-    "fetch_document": "Opening the source document",
-    "read_section": "Reading a document section",
-    "grep_doc": "Searching the document",
-    "compile_workflow": "Compiling the workflow",
+    "compile_workflow": "Rebuilding the workflow from scratch",
     "ToolSearch": "Looking up a tool",
 }
 

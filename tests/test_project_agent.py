@@ -20,9 +20,6 @@ _EXPECTED_TOOL_NAMES = {
     "edit_stage",
     "add_stage",
     "create_version",
-    "fetch_document",
-    "read_section",
-    "grep_doc",
     "compile_workflow",
 }
 
