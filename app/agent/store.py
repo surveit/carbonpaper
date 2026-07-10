@@ -39,12 +39,22 @@ class SessionStore:
     def _write(self, sid: str, data: dict) -> None:
         self._path(sid).write_text(json.dumps(data, indent=2), encoding="utf-8")
 
-    def create(self, *, title: str | None = None, context: dict | None = None) -> str:
+    def create(
+        self,
+        *,
+        title: str | None = None,
+        agent_id: str | None = None,
+        context: dict | None = None,
+    ) -> str:
+        """Create a session bound to `agent_id` (which agent answers) carrying an
+        opaque `context` (what that agent needs to bind its tools). Both are read
+        back by the message route to build the engine for each turn."""
         sid = uuid.uuid4().hex[:12]
         self._write(sid, {
             "session_id": sid,
             "created_at": _now(),
             "title": title or "New chat",
+            "agent_id": agent_id,
             "context": context or {},
             "messages": [],
             "active_turn": None,

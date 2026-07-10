@@ -1,8 +1,10 @@
-"""FastAPI routes for the chat subsystem.
+"""FastAPI routes for the chat subsystem — a generic, agent-agnostic surface.
 
-Mounts a minimal chat UI + the streaming transport onto the existing app. Every
-session is bound to a project's editing agent: the subscription SDK engine
-(Claude CLI) runs the in-process MCP tools for that project.
+Every session is bound to a registered agent by an `agent_id` and carries an
+opaque `context` (whatever that agent needs to bind its tools). A message turn
+looks the pair back up, builds the engine via the registry, and streams it. The
+routes know nothing about any specific agent; a concrete agent registers itself
+(see app.agent.registry) and a host route creates the session with its context.
 """
 from __future__ import annotations
 
@@ -16,9 +18,9 @@ from fastapi.templating import Jinja2Templates
 
 from app.runtime.llm_agent_sdk import available as sdk_available
 
-from app.compiler.agent.config import get_project_sdk_engine
+from app.agent.registry import build_engine
+from app.agent.sdk_engine import CLI_MODEL
 
-from .sdk_engine import CLI_MODEL
 from .store import SessionStore
 from .turns import TurnManager
 
@@ -29,6 +31,13 @@ router = APIRouter()
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 _store = SessionStore(SESSIONS_DIR)
 _turns = TurnManager()
+
+
+def create_agent_session(agent_id: str, context: dict, *, title: str | None = None) -> str:
+    """Create a chat session bound to `agent_id` carrying `context`, and return its
+    id. The shared entry point a host route (e.g. an 'Edit with agent' button)
+    calls to open a session it then redirects the browser to."""
+    return _store.create(title=title or f"Agent: {agent_id}", agent_id=agent_id, context=context)
 
 
 def _backend_label() -> str:
@@ -42,7 +51,7 @@ def _backend_error() -> str | None:
         return None
     return (
         "The Claude CLI / Agent SDK isn't available. Install it and run "
-        "`claude login` so the editing agent can run."
+        "`claude login` so the agent can run."
     )
 
 
@@ -54,12 +63,14 @@ async def chat_index(request: Request):
     })
 
 
-@router.post("/chat/project/{name}/sessions")
-async def new_project_session(name: str):
-    """Open a chat session bound to one project's editing agent. The session
-    records its project in `context`, so the shared /chat/{sid} page renders a
-    composer that posts to this project's message route."""
-    sid = _store.create(title=f"Editing: {name}", context={"project": name})
+@router.post("/chat/agent/{agent_id}/sessions")
+async def new_agent_session(agent_id: str, request: Request):
+    """Open a chat session bound to `agent_id`. The body carries the opaque
+    `context` (and optional `title`) as JSON. Redirects to the chat page."""
+    body = await request.json()
+    context = (body or {}).get("context") or {}
+    title = (body or {}).get("title")
+    sid = create_agent_session(agent_id, context, title=title)
     return RedirectResponse(url=f"/chat/{sid}", status_code=303)
 
 
@@ -68,10 +79,8 @@ async def chat_page(request: Request, sid: str):
     if not _store.exists(sid):
         raise HTTPException(status_code=404, detail="Session not found")
     data = _store.load(sid)
-    project = data.get("context", {}).get("project")
     return templates.TemplateResponse(request, "chat.html", {
         "session_id": sid,
-        "project": project,
         "title": data.get("title"),
         "history": _store.history_view(sid),
         "pending_user": data.get("pending_user"),
@@ -81,17 +90,21 @@ async def chat_page(request: Request, sid: str):
     })
 
 
-@router.post("/chat/{sid}/project/{name}/message")
-async def post_project_message(sid: str, name: str, request: Request):
-    """Send a message on a project-scoped session: the turn runs on `name`'s
-    editing agent (bound tools + system prompt) via the subscription SDK engine."""
+@router.post("/chat/{sid}/message")
+async def post_message(sid: str, request: Request):
+    """Send a message: the turn runs on the session's bound agent (its agent_id +
+    context, looked up and handed to the registry to build the engine)."""
     if not _store.exists(sid):
         raise HTTPException(status_code=404, detail="Session not found")
     body = await request.json()
     text = (body or {}).get("text", "").strip()
     if not text:
         raise HTTPException(status_code=400, detail="empty message")
-    engine = get_project_sdk_engine(name)
+    data = _store.load(sid)
+    agent_id = data.get("agent_id")
+    if not agent_id:
+        raise HTTPException(status_code=400, detail="session has no bound agent")
+    engine = build_engine(agent_id, data.get("context") or {})
     _store.set_pending_user(sid, text)
     turn_id = _turns.start(engine=engine, store=_store, session_id=sid, prompt=text)
     return JSONResponse({"ok": True, "turn_id": turn_id})

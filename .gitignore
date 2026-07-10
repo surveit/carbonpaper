@@ -14,7 +14,7 @@ build/
 compilations/
 
 # Chat session transcripts (file-backed, per app/chat/store.py)
-app/chat/_sessions/
+app/agent/_sessions/
 
 # Example methodology content + scratch pipelines. Generated run outputs land
 # here, and lint/typecheck skip these dirs (ruff respects .gitignore).
