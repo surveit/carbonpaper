@@ -104,10 +104,13 @@ def make_editing_tools(ctx: EditingContext) -> list[Callable[..., Any]]:
 
 # ── tool input schemas + display labels ──────────────────────────────────────
 # Input schemas keyed by tool __name__, verified against make_editing_tools above.
-# Each parameter carries an `Annotated[type, "description"]` so the model knows
-# what to pass — the SDK turns these into the JSON Schema the CLI sees. Empty
-# dict = no parameters.
-TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
+# Each parameter maps to its type annotation — a plain type like `str` or an
+# `Annotated[type, "description"]` the SDK turns into the JSON Schema the CLI sees.
+# Empty dict = no parameters. The value type is `object`, not `Any`: the entries are
+# opaque type-annotation objects we never introspect, so `object` types them
+# honestly without letting `Any` leak past the schema.
+ToolInputSchema = dict[str, object]
+TOOL_SCHEMAS: dict[str, ToolInputSchema] = {
     "list_projects": {},
     "get_current_project": {},
     "describe_workflow": {

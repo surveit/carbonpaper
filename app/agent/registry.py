@@ -31,7 +31,7 @@ class AgentConfig(BaseModel):
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
     system_prompt: str
-    tool_schemas: dict[str, dict[str, Any]]
+    tool_schemas: dict[str, dict[str, object]]
     tool_labels: dict[str, str]
     model: str = "sonnet"
     context_schema: type[BaseModel]
@@ -77,7 +77,7 @@ def build_engine(agent_id: str, context: dict[str, Any]) -> ClaudeAgentSdkEngine
 
 def build_mcp_server(
     tools: list[Callable[..., Any]],
-    tool_schemas: dict[str, dict[str, Any]],
+    tool_schemas: dict[str, dict[str, object]],
 ) -> tuple[McpSdkServerConfig, list[str], list[SdkMcpTool[Any]]]:
     """Wrap tool callables as an in-process SDK-MCP server.
 
@@ -93,7 +93,7 @@ def build_mcp_server(
     return server, allowed, wrapped
 
 
-def _wrap(fn: Callable[..., Any], schema: dict[str, Any]) -> SdkMcpTool[Any]:
+def _wrap(fn: Callable[..., Any], schema: dict[str, object]) -> SdkMcpTool[Any]:
     async def handler(args: dict[str, Any]) -> dict[str, Any]:
         try:
             return _as_content(fn(**args))
