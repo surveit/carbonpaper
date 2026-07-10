@@ -1,6 +1,7 @@
-{# Minimal stage view for the lineage page: just the transform (the shared
-   _stage_executable.html), the output schema, and the output — trimmed to one
-   row. No status / validation / scratch / tabs. Reuses the run-stage-panel CSS.
+{# Minimal stage view for the lineage page — data first. The output row leads;
+   the transform and output schema sit behind disclosures below it. Reuses the
+   shared _stage_executable.html + schema_table; no status / validation /
+   scratch / tabs.
 
    Context: stage (manifest record), stage_def (compiled Stage | None),
    function_code, preview (row-scoped output), scoped_row, type_glyph, type_class. #}
@@ -13,15 +14,7 @@
     <p class="stage-id">{{ stage.name }}</p>
   </div>
 
-  {% if stage_def %}
-    {% with stage = stage_def %}{% include "_stage_executable.html" %}{% endwith %}
-    {% if stage_def.output_schema %}
-    <section class="exec-block"><h2>Output schema</h2>{{ schema_table(stage_def.output_schema) }}</section>
-    {% endif %}
-  {% else %}
-    <p class="muted"><em>No compiled stage definition available.</em></p>
-  {% endif %}
-
+  {# ── Data first ── #}
   <section class="exec-block">
     <h2>Output · row {{ scoped_row }}</h2>
     {% if preview and preview.preview %}
@@ -35,4 +28,16 @@
     {% elif preview and preview.error %}<p class="muted"><em>output unavailable: {{ preview.error }}</em></p>
     {% else %}<p class="muted"><em>no output for this stage.</em></p>{% endif %}
   </section>
+
+  {# ── Transform + schema, behind disclosures ── #}
+  {% if stage_def %}
+    <details class="exec-block"><summary class="disclosure">Transform</summary>
+      {% with stage = stage_def %}{% include "_stage_executable.html" %}{% endwith %}
+    </details>
+    {% if stage_def.output_schema %}
+    <details class="exec-block"><summary class="disclosure">Output schema</summary>{{ schema_table(stage_def.output_schema) }}</details>
+    {% endif %}
+  {% else %}
+    <p class="muted"><em>No compiled stage definition available.</em></p>
+  {% endif %}
 </div>

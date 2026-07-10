@@ -305,6 +305,14 @@ _TRACE_VIEW_HTML = r"""<!doctype html><html><head><meta charset="utf-8">
 .src-tag{font-size:10.5px;border-radius:5px;padding:0 5px;margin-left:3px;background:#f0f0ed;color:#666}
 .trunc{background:#fff4e6;color:#7a4a00;border-radius:8px;padding:8px 12px;font-size:13px;margin-bottom:12px}
 .mermaid{background:#fff}.nograph{color:#888;font-size:13px}
+.rowpeek{display:inline-block;vertical-align:middle}
+.rowpeek>summary{display:inline;cursor:pointer;color:#1a3a72;font-size:12px;list-style:none}
+.rowpeek>summary::after{content:" ▾";color:#888}
+.rowpeek[open]>summary::after{content:" ▴"}
+.rowpeek table{border-collapse:collapse;font-size:12px;margin:4px 0 2px 56px}
+.rowpeek th,.rowpeek td{padding:2px 8px;border-bottom:1px solid #eee;text-align:left}
+.rowpeek th{color:#777;font-weight:500}
+.lin-panel summary.disclosure{cursor:pointer;font-weight:500;padding:4px 0}
 .lin-panel{margin-top:18px;border-top:1px solid #eee;padding-top:14px}
 .lin-empty{color:#888;font-size:14px;padding:8px 0}
 .hidden{display:none}
@@ -335,19 +343,23 @@ function predsOf(step){
   if(from.length === 1) return ` using step ${from[0]}'s output`;
   return ` joining steps ${from.join(' and ')}`;
 }
-// ---- Story (numbered; stage names load the row-trimmed stage panel) ----
+function rowPeek(n){
+  const cells = Object.entries(n.row).map(([k,v]) => `<tr><th>${esc(k)}</th><td>${esc(v)}</td></tr>`).join('');
+  const cols = Object.keys(n.row).length;
+  return `<details class="rowpeek"><summary>${cols} column${cols===1?'':'s'}</summary><table>${cells}</table></details>`;
+}
+// ---- Story (numbered; stage names load the row-trimmed panel, ▾ peeks the row) ----
 let html = '';
 if(V.upstream.truncated){ html += `<div class="trunc">⋯ upstream not traced — ${esc(V.upstream.message)}</div>`; }
 V.nodes.forEach((n, i) => {
   let sentence;
   if(i===0 && !V.upstream.truncated){
-    sentence = `load ${link(n.stage_id, n.stage_id)} <span class="src-tag">source</span>.`;
+    sentence = `load ${link(n.stage_id, n.stage_id)} <span class="src-tag">source</span>`;
   } else {
-    const adds = n.columns_new.length ? ` adding <code>${n.columns_new.map(esc).join('</code>, <code>')}</code>` : '';
     const claimTag = n.role==='claim' ? ' <span class="claim-tag">published claim</span>' : '';
-    sentence = `${verb(n)}${predsOf(n.step)} to get ${link(n.stage_id, n.stage_id)}${claimTag}${adds}.`;
+    sentence = `${verb(n)}${predsOf(n.step)} to get ${link(n.stage_id, n.stage_id)}${claimTag}`;
   }
-  html += `<div class="step"><span class="stepno">step ${n.step}</span>${sentence}</div>`;
+  html += `<div class="step"><span class="stepno">step ${n.step}</span>${sentence} ${rowPeek(n)}</div>`;
 });
 document.getElementById('story').innerHTML = html;
 // ---- The row-trimmed stage panel (the SAME _run_stage_panel.html as run-detail) ----
