@@ -163,9 +163,17 @@ class Column(_Base):
         """The spec fields on which this column and `other` disagree (empty ⇒
         same spec): every Column field except identity (`name`) and prose
         (`description`, `source`), compared recursively into nested `fields`.
-        The canonical column-agreement check — `is_subset_of`, `subtract`, and
-        the workflow edge-schema check all read column agreement through this."""
-        return _column_spec_differences(self, other)
+        Prose never counts, at any nesting level. The canonical column-agreement
+        check — `is_subset_of`, `subtract`, and the workflow edge-schema check
+        all read column agreement through this."""
+        diffs: list[str] = []
+        for field_name in _SPEC_COLUMN_FIELDS:
+            if field_name == "fields":
+                if not _fields_spec_equal(self.fields, other.fields):
+                    diffs.append("fields")
+            elif getattr(self, field_name) != getattr(other, field_name):
+                diffs.append(field_name)
+        return diffs
 
 
 Column.model_rebuild()
@@ -183,23 +191,9 @@ _SPEC_COLUMN_FIELDS: tuple[str, ...] = tuple(
 )
 
 
-def _column_spec_differences(a: Column, b: Column) -> list[str]:
-    """Spec fields on which `a` and `b` differ (empty ⇒ same spec). Prose never
-    counts, at any nesting level; `fields` recurses, so a nested prose-only
-    difference is likewise ignored."""
-    diffs: list[str] = []
-    for field_name in _SPEC_COLUMN_FIELDS:
-        if field_name == "fields":
-            if not _fields_spec_equal(a.fields, b.fields):
-                diffs.append("fields")
-        elif getattr(a, field_name) != getattr(b, field_name):
-            diffs.append(field_name)
-    return diffs
-
-
 def _fields_spec_equal(a: Optional[list[Column]], b: Optional[list[Column]]) -> bool:
     """Whether two nested-object `fields` lists describe the same shape by spec,
-    matching sub-columns by name and comparing each with `_column_spec_differences`."""
+    matching sub-columns by name and comparing each with `Column.spec_differences`."""
     if a is None or b is None:
         return a is None and b is None
     a_by_name = {c.name: c for c in a}
@@ -207,7 +201,7 @@ def _fields_spec_equal(a: Optional[list[Column]], b: Optional[list[Column]]) -> 
     if a_by_name.keys() != b_by_name.keys():
         return False
     return all(
-        not _column_spec_differences(a_by_name[name], b_by_name[name])
+        not a_by_name[name].spec_differences(b_by_name[name])
         for name in a_by_name
     )
 
@@ -342,11 +336,11 @@ class TableSchema(_Base):
         self_by_name = {c.name: c for c in self.columns}
         if not other.is_subset_of(self):
             problems = [
-                f"{c.name!r} differs on {', '.join(_column_spec_differences(c, self_by_name[c.name]))}"
+                f"{c.name!r} differs on {', '.join(c.spec_differences(self_by_name[c.name]))}"
                 if c.name in self_by_name
                 else f"{c.name!r} is absent from the minuend"
                 for c in other.columns
-                if c.name not in self_by_name or _column_spec_differences(c, self_by_name[c.name])
+                if c.name not in self_by_name or c.spec_differences(self_by_name[c.name])
             ]
             raise ValueError(f"cannot subtract: {'; '.join(problems)}")
         other_names = {c.name for c in other.columns}
@@ -358,14 +352,14 @@ class TableSchema(_Base):
     def is_subset_of(self, other: "TableSchema") -> bool:
         """True exactly when every column here also appears in `other` with an
         identical spec — every Column spec field compared recursively via
-        `_column_spec_differences`, prose (`description`/`source`) aside. I.e.
+        `Column.spec_differences`, prose (`description`/`source`) aside. I.e.
         this schema is a spec-preserving subset of `other`. Called by `subtract`
         (the subtrahend must be a subset of the minuend) and by `Stage`'s 1:1
         validator (a transform's input must be a subset of its output)."""
         other_by_name = {c.name: c for c in other.columns}
         return all(
             (match := other_by_name.get(c.name)) is not None
-            and not _column_spec_differences(c, match)
+            and not c.spec_differences(match)
             for c in self.columns
         )
 
