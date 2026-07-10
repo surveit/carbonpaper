@@ -25,7 +25,7 @@ def _row(id_, inputs, output_schema=None, **kw):
     return m.Stage.model_validate(S(
         id=id_, type="python_row_function",
         inputs=[{"id": i} for i in inputs],
-        function={"kind": "inline", "code": "x"},
+        function={"kind": "inline", "code": "def transform(row): return row"},
         output_schema=output_schema, **kw))
 
 
@@ -33,7 +33,7 @@ def _frame(id_, inputs, output_schema=None, **kw):
     return m.Stage.model_validate(S(
         id=id_, type="python_frame_function",
         inputs=[{"id": i} for i in inputs],
-        function={"kind": "inline", "code": "x"},
+        function={"kind": "inline", "code": "def transform(row): return row"},
         output_schema=output_schema, **kw))
 
 
