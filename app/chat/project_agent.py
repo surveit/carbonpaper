@@ -18,7 +18,9 @@ if TYPE_CHECKING:
 
 SYSTEM_PROMPT_TEMPLATE = (
     "You help a journalist author and refine the project '{name}' — a workflow of "
-    "typed stages. Read before you edit (describe_workflow, read_stage). Prefer "
+    "typed stages. Call get_current_project FIRST and pass its value as the "
+    "`project_id` argument to every other tool. Read before you edit "
+    "(describe_workflow, read_stage). Prefer "
     "small, targeted changes: edit_stage and add_stage. Every edit is validated and "
     "lands as UNREVIEWED (amber) for a human to approve — you cannot approve nodes, "
     "and you have no way to save a version (that is the human's action). "

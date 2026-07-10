@@ -29,11 +29,16 @@ from app.chat.project_tools import make_project_tools
 # turns these into the JSON Schema the CLI sees. Empty dict = no parameters.
 TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
     "list_projects": {},
-    "describe_workflow": {},
+    "get_current_project": {},
+    "describe_workflow": {
+        "project_id": Annotated[str, "The project id (call get_current_project first)."],
+    },
     "read_stage": {
+        "project_id": Annotated[str, "The project id (call get_current_project first)."],
         "stage_id": Annotated[str, "The stage's id, as shown by describe_workflow."],
     },
     "edit_stage": {
+        "project_id": Annotated[str, "The project id (call get_current_project first)."],
         "stage_id": Annotated[str, "The id of the stage to change."],
         "changes_json": Annotated[
             str,
@@ -45,6 +50,7 @@ TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
         ],
     },
     "add_stage": {
+        "project_id": Annotated[str, "The project id (call get_current_project first)."],
         "stage_json": Annotated[
             str,
             "The complete NEW stage as a JSON object (encoded as a string): id "
@@ -54,6 +60,7 @@ TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
         ],
     },
     "compile_workflow": {
+        "project_id": Annotated[str, "The project id (call get_current_project first)."],
         "conversation": Annotated[
             str,
             "The whole conversation so far, passed VERBATIM (do not summarise). The "
@@ -75,6 +82,7 @@ TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
 # built-in that loads a deferred MCP tool's schema before first use.
 TOOL_LABELS: dict[str, str] = {
     "list_projects": "Listing projects",
+    "get_current_project": "Checking the current project",
     "describe_workflow": "Reading the workflow",
     "read_stage": "Reading a stage",
     "edit_stage": "Editing a stage",

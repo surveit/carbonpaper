@@ -1,4 +1,4 @@
-"""Task 1: the 9 project tools wrapped as an in-process claude_agent_sdk MCP
+"""The 7 project tools wrapped as an in-process claude_agent_sdk MCP
 server. These tests reach the wrapped `SdkMcpTool` handlers directly (no CLI
 subprocess) to prove the adapter forwards results and surfaces errors loudly.
 
@@ -48,7 +48,7 @@ def test_allowed_names_cover_every_tool(tmp_path: Path) -> None:
         "congresswatch", examples_dir=tmp_path
     )
     assert set(allowed) == {f"mcp__project__{n}" for n in TOOL_SCHEMAS}
-    assert len(allowed) == 6
+    assert len(allowed) == 7
 
 
 def test_read_stage_handler_returns_text_content(tmp_path: Path) -> None:
@@ -61,7 +61,7 @@ def test_read_stage_handler_returns_text_content(tmp_path: Path) -> None:
     from app.services.workspace import project_workflow_summary
 
     stage_id = project_workflow_summary(pdir)["stages"][0]["id"]
-    out = _call(tool, {"stage_id": stage_id})
+    out = _call(tool, {"project_id": "congresswatch", "stage_id": stage_id})
     assert out["content"][0]["type"] == "text"
     assert stage_id in out["content"][0]["text"]
 
@@ -72,6 +72,6 @@ def test_handler_surfaces_tool_error_not_fabricated_value(tmp_path: Path) -> Non
         "congresswatch", examples_dir=tmp_path
     )
     tool = next(t for t in tools if t.name == "read_stage")
-    out = _call(tool, {"stage_id": "no_such_stage"})
+    out = _call(tool, {"project_id": "congresswatch", "stage_id": "no_such_stage"})
     assert out.get("is_error") is True
     assert "no_such_stage" in out["content"][0]["text"]

@@ -45,22 +45,23 @@ def test_read_tools_report_workspace(tmp_path: Path) -> None:
     _seed(tmp_path, "alpha")
     tools = project_tools.make_project_tools("alpha", examples_dir=tmp_path)
     assert _tool(tools, "list_projects")() == ["alpha"]
-    assert _tool(tools, "describe_workflow")()["name"] == "alpha"
-    assert '"id": "load"' in _tool(tools, "read_stage")("load")
+    assert _tool(tools, "get_current_project")() == "alpha"
+    assert _tool(tools, "describe_workflow")("alpha")["name"] == "alpha"
+    assert '"id": "load"' in _tool(tools, "read_stage")("alpha", "load")
 
 
 def test_read_stage_missing_fails_loud(tmp_path: Path) -> None:
     _seed(tmp_path, "alpha")
     tools = project_tools.make_project_tools("alpha", examples_dir=tmp_path)
     with pytest.raises(ValueError, match="no stage 'nope'"):
-        _tool(tools, "read_stage")("nope")
+        _tool(tools, "read_stage")("alpha", "nope")
 
 
 def test_edit_stage_tool_writes_and_reports_state(tmp_path: Path) -> None:
     pdir = _seed(tmp_path, "alpha")
     tools = project_tools.make_project_tools("alpha", examples_dir=tmp_path)
     out = _tool(tools, "edit_stage")(
-        "load", json.dumps(_stage("load", "Load rows v2", "input_data"))
+        "alpha", "load", json.dumps(_stage("load", "Load rows v2", "input_data"))
     )
     assert out["ok"] is True and out["state"] == "unreviewed"
     assert "Load rows v2" in (pdir / "compiled" / "01_load.json").read_text(encoding="utf-8")
@@ -71,7 +72,7 @@ def test_edit_stage_tool_invalid_writes_nothing_and_reports_issues(tmp_path: Pat
     before = (pdir / "compiled" / "01_load.json").read_text(encoding="utf-8")
     tools = project_tools.make_project_tools("alpha", examples_dir=tmp_path)
     out = _tool(tools, "edit_stage")(
-        "load", json.dumps({"id": "load", "name": "x", "type": "not_a_real_type"})
+        "alpha", "load", json.dumps({"id": "load", "name": "x", "type": "not_a_real_type"})
     )
     assert out["ok"] is False and out["issues"]
     assert (pdir / "compiled" / "01_load.json").read_text(encoding="utf-8") == before
@@ -126,7 +127,7 @@ def test_compile_workflow_fresh_project_writes_compiled_dir(tmp_path: Path, monk
     _patch_compiler(monkeypatch, _FRESH_COMPILE_RESULT)
     tools = project_tools.make_project_tools("alpha", examples_dir=tmp_path)
 
-    out = _tool(tools, "compile_workflow")("the conversation so far")
+    out = _tool(tools, "compile_workflow")("alpha", "the conversation so far")
 
     assert out == {"ok": True, "stages": ["load"]}
     written = json.loads((pdir / "compiled" / "01_load.json").read_text(encoding="utf-8"))
@@ -141,7 +142,7 @@ def test_compile_workflow_rejects_unsound_draft_the_compiler_missed(
     _patch_compiler(monkeypatch, _UNSOUND_COMPILE_RESULT)
     tools = project_tools.make_project_tools("alpha", examples_dir=tmp_path)
 
-    out = _tool(tools, "compile_workflow")("the conversation so far")
+    out = _tool(tools, "compile_workflow")("alpha", "the conversation so far")
 
     assert out["ok"] is False and out["issues"]
     # nothing cleared or written — the existing compiled/ is untouched
@@ -162,7 +163,7 @@ def test_compile_workflow_reviewed_work_without_confirm_raises(tmp_path: Path, m
     node_review.record_node_decision(pdir, stage_id="load", content_hash=current_hash, decision="approve", reviewer="human")
 
     with pytest.raises(RegenerateWithoutSnapshotError):
-        _tool(tools, "compile_workflow")("the conversation so far")
+        _tool(tools, "compile_workflow")("alpha", "the conversation so far")
 
     # nothing overwritten, no version created
     assert json.loads((pdir / "compiled" / "01_load.json").read_text(encoding="utf-8")) == seeded
@@ -181,7 +182,7 @@ def test_compile_workflow_confirm_overwrite_snapshots_then_writes(tmp_path: Path
     current_hash = node_review.node_content_hash(loader.stage_to_spec_dict(Stage.model_validate(seeded)))
     node_review.record_node_decision(pdir, stage_id="load", content_hash=current_hash, decision="approve", reviewer="human")
 
-    out = _tool(tools, "compile_workflow")("the conversation so far", True)
+    out = _tool(tools, "compile_workflow")("alpha", "the conversation so far", True)
 
     assert out == {"ok": True, "stages": ["load"]}
     versions = list((pdir / "versions").iterdir())
@@ -199,7 +200,7 @@ def test_compile_workflow_validation_issues_writes_nothing(tmp_path: Path, monke
     _patch_compiler(monkeypatch, _INVALID_COMPILE_RESULT)
     tools = project_tools.make_project_tools("alpha", examples_dir=tmp_path)
 
-    out = _tool(tools, "compile_workflow")("the conversation so far")
+    out = _tool(tools, "compile_workflow")("alpha", "the conversation so far")
 
     assert out["ok"] is False
     assert out["issues"] == _INVALID_COMPILE_RESULT["validation"]
@@ -222,7 +223,7 @@ def test_compile_workflow_regenerate_to_fewer_stages_drops_stale_files(
     _patch_compiler(monkeypatch, _FRESH_COMPILE_RESULT)  # load-only result
     tools = project_tools.make_project_tools("alpha", examples_dir=tmp_path)
 
-    out = _tool(tools, "compile_workflow")("the conversation so far")
+    out = _tool(tools, "compile_workflow")("alpha", "the conversation so far")
 
     assert out == {"ok": True, "stages": ["load"]}
 
