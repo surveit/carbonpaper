@@ -1,6 +1,7 @@
 """Tests for the schema capabilities in app/models/schema.py: Column.enum, the
 recursive json/list[json] shape (Column.fields / Column.value_type),
-TableSchema.subtract, and TableSchema.to_prompt."""
+TableSchema.subtract, TableSchema.missing_from / is_subset_of, and
+TableSchema.to_prompt."""
 from __future__ import annotations
 
 import pytest
@@ -297,6 +298,36 @@ def test_is_subset_of_ignores_prose():
     a = _ts(columns=[{"name": "id", "type": "str", "description": "producer"}])
     b = _ts(columns=[{"name": "id", "type": "str", "description": "consumer"}])
     assert a.is_subset_of(b) is True
+
+
+# ── TableSchema.missing_from ────────────────────────────────────────────────
+def test_missing_from_empty_when_subset():
+    a = _ts(columns=[{"name": "id", "type": "str"}])
+    b = _ts(columns=[{"name": "id", "type": "str"}, {"name": "score", "type": "int"}])
+    assert a.missing_from(b) == []
+    assert a.is_subset_of(b) is True
+
+
+def test_missing_from_lists_absent_column():
+    a = _ts(columns=[{"name": "id", "type": "str"}, {"name": "gone", "type": "str"}])
+    b = _ts(columns=[{"name": "id", "type": "str"}])
+    missing = a.missing_from(b)
+    assert [c.name for c in missing] == ["gone"]
+    assert a.is_subset_of(b) is False
+
+
+def test_missing_from_lists_column_with_differing_spec():
+    a = _ts(columns=[{"name": "id", "type": "str"}])
+    b = _ts(columns=[{"name": "id", "type": "int"}])
+    missing = a.missing_from(b)
+    assert [c.name for c in missing] == ["id"]
+    assert a.is_subset_of(b) is False
+
+
+def test_missing_from_ignores_prose_differences():
+    a = _ts(columns=[{"name": "id", "type": "str", "description": "producer"}])
+    b = _ts(columns=[{"name": "id", "type": "str", "description": "consumer"}])
+    assert a.missing_from(b) == []
 
 
 # ── TableSchema.to_prompt ────────────────────────────────────────────────────

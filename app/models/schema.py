@@ -332,6 +332,20 @@ class TableSchema(_Base):
             primary_key=None,
         )
 
+    def missing_from(self, other: "TableSchema") -> list[Column]:
+        """The columns of `self` that `other` does not spec-match: absent from
+        `other` by name, or present but differing on a spec field per
+        `_column_spec_differences` (prose aside). Empty exactly when `self` is
+        a spec-preserving subset of `other` — the single comparison behind
+        `is_subset_of`."""
+        other_by_name = {c.name: c for c in other.columns}
+        return [
+            c
+            for c in self.columns
+            if (match := other_by_name.get(c.name)) is None
+            or _column_spec_differences(c, match)
+        ]
+
     def is_subset_of(self, other: "TableSchema") -> bool:
         """True exactly when every column here also appears in `other` with an
         identical spec — every Column spec field compared recursively via
@@ -339,12 +353,7 @@ class TableSchema(_Base):
         this schema is a spec-preserving subset of `other`. Called by `subtract`
         (the subtrahend must be a subset of the minuend) and by `Stage`'s 1:1
         validator (a transform's input must be a subset of its output)."""
-        other_by_name = {c.name: c for c in other.columns}
-        return all(
-            (match := other_by_name.get(c.name)) is not None
-            and not _column_spec_differences(c, match)
-            for c in self.columns
-        )
+        return not self.missing_from(other)
 
     def to_prompt(self) -> str:
         """Render this schema as instructions for an LLM reply: one line per
