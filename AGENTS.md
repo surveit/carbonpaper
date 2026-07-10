@@ -60,11 +60,10 @@ app/models/           the stage-type schemas (Pydantic models) — the schema sp
 app/runtime/          the Runner (executor, stages/, LLM backends, validation)  → app/runtime/AGENTS.md
 app/compiler/         prose → LLM → workflow authoring engine (python -m app.compiler)
 app/main.py           thin FastAPI bootstrap; routes live in app/web/routers/   → app/AGENTS.md
-app/web/              the web layer (routers, loading, diagrams, config)
+app/web/              the web layer (routers, loading, diagrams, config, templates/, static/)
 app/services/         web-independent workflow logic (loader, compilation, node review, versioning)
-app/chat/             embeddable chat subsystem (PydanticAI; own backend env vars)
+app/chat/             embeddable chat subsystem (PydanticAI; own backend env vars, own templates/)
 app/llm/              shared LLM vocabulary (the model menu)
-app/templates/, app/static/   the web UI
 tests/                pytest suite (offline: conftest forces the LLM mock)
 examples/<name>/      project dirs (untracked runtime data: compiled/ + methodology_raw.md + code/ + data/ + runs/)
 ```
