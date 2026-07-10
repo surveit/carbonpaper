@@ -93,7 +93,7 @@ def test_stream_turn_surfaces_in_band_result_error(monkeypatch: Any) -> None:
 
     class _ErrResult:
         is_error = True
-        result = "permission denied for mcp__project__edit_stage"
+        result = "permission denied for mcp__tools__edit_stage"
         subtype = "error"
 
     async def fake_query(*, prompt: str, options: Any) -> Any:
