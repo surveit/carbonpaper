@@ -74,16 +74,3 @@ def test_chat_page_for_a_project_session_names_the_project_for_the_composer(monk
     page = client.get(f"/chat/{sid}")
     assert page.status_code == 200
     assert 'const PROJECT = "alpha";' in page.text
-
-
-def test_chat_page_for_the_generic_demo_session_is_unchanged(monkeypatch) -> None:
-    """A session created via the pre-existing /chat/sessions flow (no project
-    context) renders no project name for its composer — this feature is a pure
-    addition, not a behavior change for the demo chat."""
-    monkeypatch.setenv("CW_CHAT_BACKEND", "dev")
-    sid_resp = client.post("/chat/sessions", follow_redirects=False)
-    sid = sid_resp.headers["location"].rsplit("/", 1)[-1]
-
-    page = client.get(f"/chat/{sid}")
-    assert page.status_code == 200
-    assert "const PROJECT = null;" in page.text

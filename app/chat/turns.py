@@ -15,10 +15,7 @@ import asyncio
 import uuid
 from typing import Any
 
-import httpx
-from pydantic_ai.exceptions import AgentRunError
-
-from .engine import ChatBackendError
+from claude_agent_sdk import ClaudeSDKError
 
 
 class Turn:
@@ -78,14 +75,14 @@ class TurnManager:
                 # Carry the CLI session forward so the next turn resumes this
                 # conversation (the demo backend returns None — nothing to carry).
                 store.set_resume_token(session_id, resume_token)
-        except (ChatBackendError, AgentRunError, httpx.HTTPError, OSError) as exc:
-            # Expected failure modes of a model turn — backend unavailable
-            # (ChatBackendError), any pydantic-ai model/API error (AgentRunError),
-            # a network error (httpx), or a socket/subprocess error (OSError) —
-            # reach the client as an error event. A genuine bug (KeyError,
-            # ValueError, …) is NOT caught here: it propagates and surfaces
-            # loudly rather than masquerading as a handled model failure. The
-            # `finally` still emits `done`, so the client is never left hanging.
+        except (ClaudeSDKError, OSError) as exc:
+            # Expected failure modes of a model turn — a Claude Agent SDK error
+            # (CLI not found, connection dropped, process failure) or a
+            # socket/subprocess error (OSError) — reach the client as an error
+            # event. A genuine bug (KeyError, ValueError, …) is NOT caught here:
+            # it propagates and surfaces loudly rather than masquerading as a
+            # handled model failure. The `finally` still emits `done`, so the
+            # client is never left hanging.
             turn.emit({"kind": "error", "text": f"{type(exc).__name__}: {exc}"})
         finally:
             store.set_active_turn(session_id, None)

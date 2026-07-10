@@ -1,9 +1,10 @@
 """File-based chat session store (axis-1 persistence).
 
 One JSON file per session under the sessions dir, holding session metadata plus
-the PydanticAI message history serialised with ``to_jsonable_python``; reload
-validates it back to typed messages via ``ModelMessagesTypeAdapter``. The
-transcript lives here, in the app's own files, not in a vendor session store.
+one engine-agnostic transcript: a list of ``{role, parts}`` messages (part types
+``text|thinking|tool_call|tool_result``) plus the resume token that carries the
+agent's cross-turn memory. The transcript lives here, in the app's own files, not
+in a vendor session store.
 
 Single-machine, filesystem-backed. In-flight turns live in memory (see
 app.chat.turns); surviving a server restart mid-turn is out of scope.
@@ -14,18 +15,7 @@ import json
 import uuid
 from datetime import datetime
 from pathlib import Path
-
-from pydantic_ai.messages import (
-    ModelMessage,
-    ModelMessagesTypeAdapter,
-    ModelRequest,
-    ModelResponse,
-    TextPart,
-    ThinkingPart,
-    ToolCallPart,
-    UserPromptPart,
-)
-from pydantic_core import to_jsonable_python
+from typing import Any
 
 
 def _now() -> str:
@@ -65,33 +55,18 @@ class SessionStore:
     def load(self, sid: str) -> dict:
         return self._read(sid)
 
-    @staticmethod
-    def _is_project(doc: dict) -> bool:
-        """A project (SDK) session persists neutral {role, parts} transcripts;
-        a demo session persists PydanticAI messages."""
-        return bool((doc.get("context") or {}).get("project"))
+    def load_messages(self, sid: str) -> list[dict[str, Any]]:
+        """Always empty: the agent's cross-turn memory comes from resuming the CLI
+        session (see resume_token), not from replaying a transcript. Kept so the
+        turn manager can pass a uniform ``message_history`` the engine ignores."""
+        del sid
+        return []
 
-    def load_messages(self, sid: str) -> list[ModelMessage]:
-        doc = self._read(sid)
-        # Project sessions carry no PydanticAI message_history: the SDK engine's
-        # cross-turn memory comes from resuming the CLI session (see
-        # resume_token), not from replaying messages, and the tools read durable
-        # on-disk project state.
-        if self._is_project(doc):
-            return []
-        raw = doc.get("messages") or []
-        if not raw:
-            return []
-        return list(ModelMessagesTypeAdapter.validate_python(raw))
-
-    def save_messages(self, sid: str, messages) -> None:
+    def save_messages(self, sid: str, messages: list[dict[str, Any]]) -> None:
+        """Persist the engine's neutral ``{role, parts}`` transcript verbatim — it
+        is already plain JSON."""
         data = self._read(sid)
-        if self._is_project(data):
-            # `messages` is already the neutral {role, parts} transcript from the
-            # SDK engine; it is plain JSON, so persist it verbatim.
-            data["messages"] = messages
-        else:
-            data["messages"] = to_jsonable_python(messages)
+        data["messages"] = messages
         data["pending_user"] = None
         self._write(sid, data)
 
@@ -102,8 +77,7 @@ class SessionStore:
 
     def resume_token(self, sid: str) -> str | None:
         """The CLI session id to resume for this chat session's next turn, or None
-        on the first turn. Used only by the SDK engine to carry conversation
-        memory across turns."""
+        on the first turn. Carries conversation memory across turns."""
         return self._read(sid).get("sdk_session_id")
 
     def set_resume_token(self, sid: str, token: str) -> None:
@@ -131,37 +105,18 @@ class SessionStore:
         return out
 
     def history_view(self, sid: str) -> list[dict]:
-        """Stored messages rendered as simple bubbles for the template."""
-        if self._is_project(self._read(sid)):
-            return _render_history_bubbles(self._read(sid).get("messages") or [])
-        return summarize(self.load_messages(sid))
-
-
-def summarize(messages) -> list[dict]:
-    bubbles: list[dict] = []
-    for m in messages:
-        if isinstance(m, ModelRequest):
-            for p in m.parts:
-                if isinstance(p, UserPromptPart):
-                    bubbles.append({"role": "user", "text": _content_str(p.content)})
-        elif isinstance(m, ModelResponse):
-            thinking = "".join(p.content for p in m.parts if isinstance(p, ThinkingPart))
-            text = "".join(p.content for p in m.parts if isinstance(p, TextPart))
-            tools = [{"name": p.tool_name, "args": p.args_as_json_str()}
-                     for p in m.parts if isinstance(p, ToolCallPart)]
-            bubbles.append({"role": "assistant", "thinking": thinking,
-                            "text": text, "tools": tools})
-    return bubbles
+        """The stored transcript rendered as simple bubbles for the template."""
+        return _render_history_bubbles(self._read(sid).get("messages") or [])
 
 
 def _render_history_bubbles(messages: list[dict]) -> list[dict]:
-    """Render a project session's neutral transcript (``{role, parts}`` with
-    part types ``text|thinking|tool_call|tool_result``) into the same bubble
-    dicts ``summarize`` produces, so ``chat.html`` renders them identically.
+    """Render a session's neutral transcript (``{role, parts}`` with part types
+    ``text|thinking|tool_call|tool_result``) into bubble dicts ``chat.html``
+    renders.
 
     The template's history loop only reads ``role``, ``text``, ``thinking`` and
-    ``tools[].name/.args`` — matching the demo, tool results have no history
-    slot and are not rendered on reload.
+    ``tools[].name/.args`` — tool results have no history slot and are not
+    rendered on reload.
     """
     bubbles: list[dict] = []
     for message in messages:
@@ -179,11 +134,3 @@ def _render_history_bubbles(messages: list[dict]) -> list[dict]:
             bubbles.append({"role": "assistant", "thinking": thinking,
                             "text": text, "tools": tools})
     return bubbles
-
-
-def _content_str(content) -> str:
-    if isinstance(content, str):
-        return content
-    if isinstance(content, (list, tuple)):
-        return " ".join(c if isinstance(c, str) else str(c) for c in content)
-    return str(content)

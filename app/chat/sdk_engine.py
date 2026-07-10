@@ -50,9 +50,9 @@ def _stringify(content: Any) -> str:
 
 
 class ClaudeAgentSdkEngine:
-    """Satisfies the same `stream_turn(prompt, *, message_history, emit)` contract
-    as ChatEngine, but drives claude_agent_sdk.query() directly instead of
-    PydanticAI, so the subscription CLI can run its own tool loop over our
+    """Drives claude_agent_sdk.query() and maps its block stream onto the
+    normalized `stream_turn(prompt, *, message_history, emit, resume)` contract the
+    turn manager drives, so the subscription CLI can run its own tool loop over our
     in-process MCP server."""
 
     def __init__(
