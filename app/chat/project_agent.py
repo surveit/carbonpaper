@@ -14,7 +14,7 @@ from app.models import NODE_TYPES
 from app.web.config import EXAMPLES_DIR
 
 if TYPE_CHECKING:
-    from app.chat.sdk_engine import SdkAgentEngine
+    from app.chat.sdk_engine import ClaudeAgentSdkEngine
 
 SYSTEM_PROMPT_TEMPLATE = (
     "You help a journalist author and refine the project '{name}' — a workflow of "
@@ -71,10 +71,10 @@ def get_project_agent(name: str) -> ChatEngine:
     return _agents[name]
 
 
-_sdk_engines: dict[str, "SdkAgentEngine"] = {}
+_sdk_engines: dict[str, "ClaudeAgentSdkEngine"] = {}
 
 
-def get_project_sdk_engine(name: str) -> "SdkAgentEngine":
+def get_project_sdk_engine(name: str) -> "ClaudeAgentSdkEngine":
     """Cached subscription (Claude CLI) editing engine for `name`.
 
     Wraps the project's tools as an in-process SDK-MCP server and drives
@@ -83,12 +83,12 @@ def get_project_sdk_engine(name: str) -> "SdkAgentEngine":
     matches the PydanticAI project agent. Construction is lazy w.r.t. the
     filesystem: make_project_tools only binds `EXAMPLES_DIR / name` into tool
     closures, so building the engine never reads the project directory."""
-    from app.chat.sdk_engine import SdkAgentEngine
+    from app.chat.sdk_engine import ClaudeAgentSdkEngine
     from app.chat.sdk_tools import build_project_mcp_server
 
     if name not in _sdk_engines:
         server, allowed, _tools = build_project_mcp_server(name, examples_dir=EXAMPLES_DIR)
-        _sdk_engines[name] = SdkAgentEngine(
+        _sdk_engines[name] = ClaudeAgentSdkEngine(
             system_prompt=_system_prompt(name),
             mcp_server=server,
             allowed_tools=allowed,

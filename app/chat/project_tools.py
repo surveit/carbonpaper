@@ -62,12 +62,7 @@ def make_project_tools(current_project: str, *, examples_dir: Path) -> list[Call
         human to re-approve — you cannot approve it yourself. You cannot change a
         stage's id this way."""
         result = stage_edit.patch_stage_spec(_project_dir(project_id), stage_id, changes_json)
-        return {
-            "ok": result.ok,
-            "issues": result.issues,
-            "content_hash": result.content_hash,
-            "state": result.state,
-        }
+        return {"ok": result.ok, "issues": result.issues}
 
     def add_stage(project_id: str, stage_json: str) -> dict[str, Any]:
         """Create a NEW stage in a project's workflow. `stage_json` is a full
@@ -80,12 +75,7 @@ def make_project_tools(current_project: str, *, examples_dir: Path) -> list[Call
         first; if invalid, nothing is written and the issues are returned. The new
         node lands 'unreviewed' (amber) for a human to approve."""
         result = stage_edit.add_stage_spec(_project_dir(project_id), stage_json)
-        return {
-            "ok": result.ok,
-            "issues": result.issues,
-            "content_hash": result.content_hash,
-            "state": result.state,
-        }
+        return {"ok": result.ok, "issues": result.issues}
 
     def compile_workflow(
         project_id: str, conversation: str, confirm_overwrite: bool = False

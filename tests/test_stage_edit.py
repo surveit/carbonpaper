@@ -41,13 +41,12 @@ def _seed(tmp_path: Path) -> Path:
     return tmp_path / "alpha"
 
 
-def test_valid_edit_writes_and_returns_hash_and_state(tmp_path: Path) -> None:
+def test_valid_edit_writes(tmp_path: Path) -> None:
     pdir = _seed(tmp_path)
     edited = json.dumps({**_VALID, "name": "Score every row"})
     result = stage_edit.edit_stage_spec(pdir, "score", edited)
-    assert result.ok is True
-    assert result.state == "unreviewed"
-    assert result.content_hash
+    # The writer reports only success; it no longer computes the review colour.
+    assert result.ok is True and not result.issues
     assert "Score every row" in (pdir / "compiled" / "02_score.json").read_text(encoding="utf-8")
 
 
@@ -73,7 +72,13 @@ def test_edit_after_approval_drops_to_edited_stale(tmp_path: Path) -> None:
     node_review.record_node_decision(pdir, stage_id="score", content_hash=original_hash,
                                      decision="approve", reviewer="human")
     result = stage_edit.edit_stage_spec(pdir, "score", json.dumps({**_VALID, "name": "Score rows v2"}))
-    assert result.ok is True and result.state == "edited_stale"
+    assert result.ok is True
+    # The writer no longer reports colour; re-derive it the way the review layer
+    # (and the node-edit route) does — the approved node still drops to amber.
+    edited = json.loads((pdir / "compiled" / "02_score.json").read_text(encoding="utf-8"))
+    spec = loader.stage_to_spec_dict(Stage.model_validate(edited))
+    decisions = node_review.load_node_decisions(pdir)
+    assert node_review.approval_state_for(spec, decisions)["state"] == "edited_stale"
 
 
 def test_missing_stage_file_raises(tmp_path: Path) -> None:
@@ -170,7 +175,7 @@ def test_add_stage_creates_new_stage_referencing_existing_input(tmp_path: Path) 
            "llm": {"model": "claude-sonnet-4-6", "prompt_template": "score {row}"},
            "output_schema": _OUT_SCHEMA}
     result = stage_edit.add_stage_spec(pdir, json.dumps(new))
-    assert result.ok is True and result.state == "unreviewed"
+    assert result.ok is True and not result.issues
     # a new stage is named by its id (no NN_ prefix; file order is irrelevant)
     assert (pdir / "compiled" / "score.json").exists()
 

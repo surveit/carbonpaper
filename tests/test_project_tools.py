@@ -57,13 +57,15 @@ def test_read_stage_missing_fails_loud(tmp_path: Path) -> None:
         _tool(tools, "read_stage")("alpha", "nope")
 
 
-def test_edit_stage_tool_writes_and_reports_state(tmp_path: Path) -> None:
+def test_edit_stage_tool_writes_and_reports_ok(tmp_path: Path) -> None:
     pdir = _seed(tmp_path, "alpha")
     tools = project_tools.make_project_tools("alpha", examples_dir=tmp_path)
     out = _tool(tools, "edit_stage")(
         "alpha", "load", json.dumps(_stage("load", "Load rows v2", "input_data"))
     )
-    assert out["ok"] is True and out["state"] == "unreviewed"
+    # The tool reports only ok + issues; the node's review colour is derived by the
+    # review layer, not returned by the writer.
+    assert out["ok"] is True and out == {"ok": True, "issues": []}
     assert "Load rows v2" in (pdir / "compiled" / "01_load.json").read_text(encoding="utf-8")
 
 

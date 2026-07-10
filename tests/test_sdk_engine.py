@@ -1,4 +1,4 @@
-"""Task 2: SdkAgentEngine drives claude_agent_sdk.query() and maps its block
+"""Task 2: ClaudeAgentSdkEngine drives claude_agent_sdk.query() and maps its block
 stream onto the normalized events the FE renders (thinking/text/tool_call/
 tool_result). query() is mocked here — no CLI subprocess is spawned.
 
@@ -62,7 +62,7 @@ def test_stream_turn_maps_blocks_to_normalized_events(monkeypatch: Any) -> None:
     monkeypatch.setattr(se, "ThinkingBlock", type("Nope", (), {}))
 
     events: list[dict[str, Any]] = []
-    engine = se.SdkAgentEngine(
+    engine = se.ClaudeAgentSdkEngine(
         system_prompt="sp",
         mcp_server=object(),
         allowed_tools=["mcp__project__edit_stage"],
@@ -109,7 +109,7 @@ def test_stream_turn_surfaces_in_band_result_error(monkeypatch: Any) -> None:
     monkeypatch.setattr(se, "ThinkingBlock", type("Nope", (), {}))
 
     events: list[dict[str, Any]] = []
-    engine = se.SdkAgentEngine(system_prompt="sp", mcp_server=object(), allowed_tools=[])
+    engine = se.ClaudeAgentSdkEngine(system_prompt="sp", mcp_server=object(), allowed_tools=[])
     asyncio.run(engine.stream_turn("edit", message_history=[], emit=events.append))
 
     errors = [e for e in events if e["kind"] == "error"]
@@ -136,7 +136,7 @@ def test_stream_turn_passes_resume_into_options(monkeypatch: Any) -> None:
     monkeypatch.setattr(se, "ToolResultBlock", _Result)
     monkeypatch.setattr(se, "ThinkingBlock", type("Nope", (), {}))
 
-    engine = se.SdkAgentEngine(system_prompt="sp", mcp_server=object(), allowed_tools=[])
+    engine = se.ClaudeAgentSdkEngine(system_prompt="sp", mcp_server=object(), allowed_tools=[])
     _transcript, session_id = asyncio.run(
         engine.stream_turn("hi", message_history=[], emit=lambda e: None, resume="prev-session")
     )

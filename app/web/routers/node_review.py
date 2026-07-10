@@ -145,7 +145,17 @@ async def node_edit(
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     if not result.ok:
         return JSONResponse({"ok": False, "issues": result.issues}, status_code=400)
-    return JSONResponse({"ok": True, "content_hash": result.content_hash, "state": result.state})
+    # The writer reports only success; re-derive the node's colour here from the
+    # freshly-written stage, the same way review_status colours the workflow, so
+    # the caller can flip the node live without a full reload.
+    stage = find_stage(load_stages(project).stages, stage_id)
+    if stage is None:
+        raise HTTPException(status_code=404, detail=f"No stage '{stage_id}' in {project}")
+    spec = stage_to_spec_dict(stage)
+    content_hash = node_review.node_content_hash(spec)
+    decisions = node_review.load_node_decisions(project_dir)
+    state = node_review.approval_state_for(spec, decisions)["state"]
+    return JSONResponse({"ok": True, "content_hash": content_hash, "state": state})
 
 
 # ─── Versioning ──────────────────────────────────────────────────────────────

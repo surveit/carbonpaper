@@ -133,7 +133,7 @@ class SessionStore:
     def history_view(self, sid: str) -> list[dict]:
         """Stored messages rendered as simple bubbles for the template."""
         if self._is_project(self._read(sid)):
-            return _summarize_neutral(self._read(sid).get("messages") or [])
+            return _render_history_bubbles(self._read(sid).get("messages") or [])
         return summarize(self.load_messages(sid))
 
 
@@ -154,7 +154,7 @@ def summarize(messages) -> list[dict]:
     return bubbles
 
 
-def _summarize_neutral(messages: list[dict]) -> list[dict]:
+def _render_history_bubbles(messages: list[dict]) -> list[dict]:
     """Render a project session's neutral transcript (``{role, parts}`` with
     part types ``text|thinking|tool_call|tool_result``) into the same bubble
     dicts ``summarize`` produces, so ``chat.html`` renders them identically.

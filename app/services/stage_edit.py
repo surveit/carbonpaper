@@ -29,8 +29,6 @@ from app.services.loader import (
 class EditStageResult:
     ok: bool
     issues: list[str] = field(default_factory=list)
-    content_hash: str | None = None
-    state: str | None = None
 
 
 def _merge_patch(target: object, patch: object) -> object:
@@ -59,22 +57,15 @@ def _current_specs(project_dir: Path) -> dict[str, dict]:
     }
 
 
-def _result_for(project_dir: Path, stage: Stage) -> EditStageResult:
-    """The canonical hash + review-state for a just-written stage, read from the
-    same review decisions the DAG colours off — so the caller can reflect the new
-    node colour without a reload."""
-    spec = stage_to_spec_dict(stage)
-    content_hash = node_review.node_content_hash(spec)
-    decisions = node_review.load_node_decisions(project_dir)
-    state = node_review.approval_state_for(spec, decisions)["state"]
-    return EditStageResult(ok=True, content_hash=content_hash, state=state)
-
-
 def _apply(project_dir: Path, specs: dict[str, dict], stage_id: str, candidate: dict) -> EditStageResult:
     """Apply ``candidate`` as stage ``stage_id`` to the in-memory workflow ``specs``,
     validate the whole resulting workflow (per-stage AND graph, via the same
     `validate_workflow_draft` the loader enforces), and only if clean persist the
-    one stage through the loader. Returns issues and writes nothing otherwise."""
+    one stage through the loader. Returns issues and writes nothing otherwise.
+
+    The writer reports only whether the write succeeded; it does not compute the
+    node's review colour (content hash / approval state). A caller that needs the
+    new colour re-derives it from the freshly-written stage."""
     candidate = {k: v for k, v in candidate.items() if k not in node_review.CANONICAL_IGNORE_KEYS}
     if candidate.get("id") != stage_id:
         return EditStageResult(
@@ -87,14 +78,14 @@ def _apply(project_dir: Path, specs: dict[str, dict], stage_id: str, candidate: 
     if issues:
         return EditStageResult(ok=False, issues=issues)
 
-    validated = Stage.model_validate(candidate)
+    validated_stage = Stage.model_validate(candidate)
     # Overwrite the stage's existing file if it has one; a new stage is named by
     # its id (file order is irrelevant — the workflow order is the input_ids DAG).
     target = find_stage_file(project_dir / "compiled", stage_id) or (
         project_dir / "compiled" / f"{stage_id}.json"
     )
-    write_stage(target, validated)
-    return _result_for(project_dir, validated)
+    write_stage(target, validated_stage)
+    return EditStageResult(ok=True)
 
 
 def edit_stage_spec(project_dir: Path, stage_id: str, spec_text: str) -> EditStageResult:

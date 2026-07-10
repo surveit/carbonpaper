@@ -24,7 +24,7 @@ from .store import SessionStore
 from .turns import TurnManager
 
 if TYPE_CHECKING:
-    from .sdk_engine import SdkAgentEngine
+    from .sdk_engine import ClaudeAgentSdkEngine
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 TEMPLATES_DIR = Path(__file__).resolve().parent / "templates"
@@ -154,7 +154,7 @@ async def post_project_message(sid: str, name: str, request: Request):
     # fall back to the PydanticAI (API-key) agent otherwise. Both satisfy
     # stream_turn, so TurnManager.start is unchanged.
     try:
-        engine: ChatEngine | SdkAgentEngine
+        engine: ChatEngine | ClaudeAgentSdkEngine
         if sdk_available():
             engine = get_project_sdk_engine(name)
         else:

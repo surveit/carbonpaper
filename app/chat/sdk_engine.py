@@ -49,7 +49,7 @@ def _stringify(content: Any) -> str:
     return str(content)
 
 
-class SdkAgentEngine:
+class ClaudeAgentSdkEngine:
     """Satisfies the same `stream_turn(prompt, *, message_history, emit)` contract
     as ChatEngine, but drives claude_agent_sdk.query() directly instead of
     PydanticAI, so the subscription CLI can run its own tool loop over our
