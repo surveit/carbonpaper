@@ -356,7 +356,7 @@ V.nodes.forEach((n, i) => {
 });
 document.getElementById('story').innerHTML = html;
 // ---- The row-trimmed stage panel (the SAME _run_stage_panel.html as run-detail) ----
-async function loadStage(stageId, target){
+async function openStage(stageId, target){
   const n = byStage[stageId];
   if(!n) return;
   const panel = document.getElementById('stage-panel');
@@ -370,8 +370,10 @@ async function loadStage(stageId, target){
     panel.scrollIntoView({ behavior:'smooth', block:'start' });
   } catch(e){ panel.innerHTML = `<div class="lin-empty">error: ${esc(e)}</div>`; }
 }
-window.loadStage = sid => loadStage(sid, 'output');  // mermaid nodes (build_mermaid_graph click convention)
-document.getElementById('story').addEventListener('click', e => { const el = e.target.closest('[data-stage]'); if(el) loadStage(el.dataset.stage, el.dataset.disc); });
+// mermaid's node click calls window.loadStage(sid); keep it distinct from
+// openStage so this global can't shadow-recurse into itself.
+window.loadStage = sid => openStage(sid, 'output');
+document.getElementById('story').addEventListener('click', e => { const el = e.target.closest('[data-stage]'); if(el) openStage(el.dataset.stage, el.dataset.disc); });
 // ---- Graph (reuses the central mermaid workflow component) ----
 // mermaid loads from a CDN; if that's blocked, degrade gracefully — the story
 // and panel must keep working, so guard every mermaid reference.
