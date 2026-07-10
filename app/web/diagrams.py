@@ -176,6 +176,7 @@ def build_mermaid_graph(
         "ok": "✓",
         "running": "⟳",
         "validation_warnings": "⚠",
+        "row_errors": "⚠",             # some rows isolated; good rows kept
         "error": "✗",
         "awaiting_review": "👤",
         "pending": "…",
@@ -184,6 +185,7 @@ def build_mermaid_graph(
         "ok": ("#2a8a2a", "3px"),                 # complete → green
         "running": ("#e0a800", "3px"),            # in progress → yellow
         "validation_warnings": ("#cc8a00", "3px"),
+        "row_errors": ("#cc6a00", "3px"),         # partial: per-row errors isolated
         "error": ("#cc2a2a", "3px"),              # errored → red
         "awaiting_review": ("#2a6ac8", "4px"),
         "pending": ("#cfcfcf", "1px"),

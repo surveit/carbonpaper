@@ -12,6 +12,19 @@ refused before the runner does any work.
   - Per stage: validate declared inputs (`validation.py`), reject duplicate input
     rows (below), dispatch to the type's handler, validate the output, write
     `outputs/<stage>.parquet`, append a record to `manifest.json`.
+  - **Per-row error isolation (`stages/_row_isolation.py`):** the per-row handlers
+    (`python_row_function`, `llm_transform`) don't lose the whole stage to one
+    bad row. A row whose function body / LLM call raises is dropped from the
+    schema-conforming, user-facing `outputs/<stage>.parquet` (successful rows
+    only) but recorded — 1:1 with its input position — in a runtime-internal
+    shadow the runner writes to `errors/<stage>.jsonl` (a sibling of `outputs/`,
+    mirroring the `llm/` transcript pattern). Nothing is silently dropped: the
+    stage record carries `row_errors`/`input_rows`, the run carries a non-zero
+    `row_errors_total` and a loud `errors` status, and the stage status is
+    `row_errors` (partial) — or `error` if EVERY row failed (a systemic bug must
+    stay whole-stage-loud, not pass with an empty table). Whole-frame handlers
+    (`python_frame_function`, `join`, `aggregate`) reshape the frame, so a failure
+    there is genuinely whole-stage and keeps the runner's existing error path.
   - **Duplicate-input throw (every stage type):** before dispatching the handler,
     the runner fails the stage if any input dataframe contains exact duplicate
     full-content rows — the error names the input id and the 0-based duplicate

@@ -32,6 +32,13 @@ from .options import (
     get_llm_call_type,
 )
 
+# Sentinel key `call_llm_batch` stamps on a per-row result when that row's
+# backend call failed: `{ROW_ERROR_KEY: <message>}`. The batch supervisor
+# records it (rather than aborting the whole batch); `handle_llm_transform`
+# reads it back to route that input row into per-row error isolation instead of
+# polluting the user-facing output with a half-formed row.
+ROW_ERROR_KEY = "_error"
+
 
 def _call_claude_subprocess(prompt: str, model: str = DEFAULT_MODEL,
                             timeout_s: int = DEFAULT_TIMEOUT_S) -> dict[str, Any]:
@@ -194,8 +201,9 @@ def call_llm_batch(
                 results[idx] = fut.result()
             except Exception as exc:  # noqa: BLE001 — batch supervisor: any per-row
                 # backend failure (network, subprocess, parse, …) is recorded as
-                # _error so one row can't abort the batch; surfaced, not swallowed.
-                results[idx] = {"_error": str(exc)}
+                # ROW_ERROR_KEY so one row can't abort the batch; surfaced, not
+                # swallowed — handle_llm_transform routes it into per-row isolation.
+                results[idx] = {ROW_ERROR_KEY: str(exc)}
             done += 1
             if progress_cb:
                 progress_cb(done, len(input_rows))

@@ -161,6 +161,105 @@ def test_distinct_input_rows_pass(tmp_path):
     assert records["consume"]["rows"] == 2
 
 
+def _row_isolation_project(root, code):
+    """input_data(csv) feeding a python_row_function whose inline `code` is the
+    per-row transform. 4 rows: val = [0, 1, 2, 3]."""
+    (root / "compiled").mkdir(parents=True)
+    (root / "data").mkdir(parents=True)
+    pd.DataFrame({"name": [f"r{i}" for i in range(4)], "val": [0, 1, 2, 3]}) \
+        .to_csv(root / "data" / "items.csv", index=False)
+    load = {
+        "id": "load", "name": "Load", "type": "input_data",
+        "connector": {"kind": "file",
+                      "params": {"path": "data/items.csv", "format": "csv"}},
+    }
+    xform = {
+        "id": "xform", "name": "Transform", "type": "python_row_function",
+        "inputs": [{"id": "load"}],
+        "function": {"kind": "inline", "code": code},
+    }
+    (root / "compiled" / "01_load.json").write_text(json.dumps(load), encoding="utf-8")
+    (root / "compiled" / "02_xform.json").write_text(json.dumps(xform), encoding="utf-8")
+
+
+def test_one_bad_row_is_isolated_not_whole_stage(tmp_path):
+    # Row with val==0 divides by zero; the other three must still land in the
+    # user-facing output, and the failure is recorded durably (never dropped).
+    _row_isolation_project(
+        tmp_path,
+        "def transform(row):\n    return {'name': row['name'], 'd': 100 // int(row['val'])}\n",
+    )
+    _seed_version(tmp_path)
+    manifest = execute_run(tmp_path, repo_root=tmp_path)
+
+    # The run completes (not halted, not crashed) but is loudly non-ok.
+    assert manifest["status"] == "errors"
+    assert manifest["row_errors_total"] == 1
+
+    recs = {r["stage_id"]: r for r in manifest["stages"]}
+    x = recs["xform"]
+    assert x["status"] == "row_errors"     # partial success, not whole-stage error
+    assert x["input_rows"] == 4
+    assert x["row_errors"] == 1
+    assert x["rows"] == 3                   # user-facing output missing only the bad row
+
+    run_dir = tmp_path / "runs" / manifest["run_id"]
+
+    # User-facing output: schema-conforming, good rows only, in input order.
+    out = pd.read_parquet(run_dir / "outputs" / "xform.parquet")
+    assert len(out) == 3
+    assert list(out["name"]) == ["r1", "r2", "r3"]   # r0 (val 0) dropped
+    assert "d" in out.columns and "_error" not in out.columns  # schema not polluted
+
+    # Runtime-internal shadow: 1:1-by-position record of the failure, next to
+    # outputs/, so nothing is silently dropped and positional tracing still works.
+    shadow = run_dir / x["row_errors_path"]
+    assert shadow == run_dir / "errors" / "xform.jsonl"
+    lines = [json.loads(ln) for ln in shadow.read_text(encoding="utf-8").splitlines()]
+    assert len(lines) == 1
+    assert lines[0]["input_row"] == 0
+    assert lines[0]["status"] == "error"
+    assert lines[0]["error"]["type"] == "ZeroDivisionError"
+
+
+def test_all_rows_erroring_fails_the_whole_stage_loudly(tmp_path):
+    # If EVERY row fails, that is indistinguishable from a systemic bug: the
+    # stage is marked `error` (not a silent empty pass).
+    _row_isolation_project(
+        tmp_path, "def transform(row):\n    raise RuntimeError('boom')\n"
+    )
+    _seed_version(tmp_path)
+    manifest = execute_run(tmp_path, repo_root=tmp_path)
+
+    assert manifest["status"] == "errors"
+    x = {r["stage_id"]: r for r in manifest["stages"]}["xform"]
+    assert x["status"] == "error"
+    assert x["row_errors"] == 4 and x["input_rows"] == 4
+    assert x["error"]["type"] == "AllRowsErrored"
+    # The shadow still holds all four errored rows.
+    lines = (tmp_path / "runs" / manifest["run_id"] / x["row_errors_path"]) \
+        .read_text(encoding="utf-8").splitlines()
+    assert len(lines) == 4
+
+
+def test_clean_run_writes_no_error_shadow(tmp_path):
+    _row_isolation_project(
+        tmp_path,
+        "def transform(row):\n    return {'name': row['name'], 'd': int(row['val'])}\n",
+    )
+    _seed_version(tmp_path)
+    manifest = execute_run(tmp_path, repo_root=tmp_path)
+
+    assert manifest["status"] == "ok"
+    assert manifest["row_errors_total"] == 0
+    x = {r["stage_id"]: r for r in manifest["stages"]}["xform"]
+    assert x["status"] == "ok"
+    assert x.get("row_errors", 0) == 0
+    assert "row_errors_path" not in x
+    run_dir = tmp_path / "runs" / manifest["run_id"]
+    assert not (run_dir / "errors").exists()   # no shadow dir for a clean run
+
+
 def test_run_without_a_version_fails_loudly(tmp_path):
     """A run targets an existing version and never creates one: a valid but
     unversioned working copy raises NoVersionToRunError and leaves nothing on

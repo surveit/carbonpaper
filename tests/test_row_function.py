@@ -54,3 +54,58 @@ def test_row_function_rejects_multiple_inputs():
     code = "def transform(row):\n    return {'x': row['x']}\n"
     with pytest.raises(ValidationError):
         _stage(code, inputs=("a", "b"))
+
+
+# ── Per-row error isolation (issue #71) ──────────────────────────────────────
+
+def test_row_function_isolates_a_raising_row():
+    # Row x==2 divides by zero; the other rows must survive and the failure is
+    # recorded 1:1 on ctx (the runtime-internal shadow), never silently dropped.
+    df = pd.DataFrame({"x": [1, 2, 3]})
+    code = (
+        "def transform(row):\n"
+        "    return {'x': row['x'], 'y': 10 // (row['x'] - 2)}\n"
+    )
+    ctx: dict = {}
+    out = handle_python_row_function(_stage(code), {"src": df}, ctx)
+
+    # User-facing output has only the good rows, in order — one row short.
+    assert list(out["x"]) == [1, 3]
+    # The shadow is 1:1 with the 3 input rows.
+    outcomes = ctx["row_errors"]["t"]
+    assert [o["status"] for o in outcomes] == ["ok", "error", "ok"]
+    err = outcomes[1]
+    assert err["input_row"] == 1
+    assert err["output_rows"] == 0
+    assert err["error"]["type"] == "ZeroDivisionError"
+    assert outcomes[0]["output_rows"] == 1
+
+
+def test_row_function_all_rows_raise_leaves_empty_output_and_full_shadow():
+    df = pd.DataFrame({"x": [1, 2]})
+    code = "def transform(row):\n    raise RuntimeError('boom')\n"
+    ctx: dict = {}
+    out = handle_python_row_function(_stage(code), {"src": df}, ctx)
+    assert len(out) == 0
+    outcomes = ctx["row_errors"]["t"]
+    assert [o["status"] for o in outcomes] == ["error", "error"]
+    assert all(o["error"]["type"] == "RuntimeError" for o in outcomes)
+
+
+def test_row_function_non_dict_return_still_fails_whole_stage():
+    # A non-dict return is a systemic authoring bug (recurs for every row), so it
+    # stays a whole-stage raise rather than being isolated per row.
+    df = pd.DataFrame({"x": [1, 2]})
+    with pytest.raises(ValueError, match="must return a dict"):
+        handle_python_row_function(
+            _stage("def transform(row):\n    return row['x']\n"), {"src": df}, {}
+        )
+
+
+def test_row_function_no_errors_records_all_ok():
+    df = pd.DataFrame({"x": [1, 2]})
+    code = "def transform(row):\n    return {'x': row['x']}\n"
+    ctx: dict = {}
+    handle_python_row_function(_stage(code), {"src": df}, ctx)
+    outcomes = ctx["row_errors"]["t"]
+    assert all(o["status"] == "ok" for o in outcomes)
