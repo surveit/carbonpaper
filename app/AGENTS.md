@@ -44,7 +44,7 @@ have side effects).
 `main.py` (app bootstrap — mounts static + includes routers) ·
 `web/routers/{project,runs,review}.py` (route handlers) ·
 `web/{config,loading,diagrams}.py` (paths+templates · fs reads & stage-dict
-helpers · mermaid/ER builders) · `templates/` (`run_detail.html`,
+helpers · mermaid/ER builders) · `web/templates/` (`run_detail.html`,
 `_run_stage_panel.html`, `_stage_executable.html`, the `section_*.html` shell
-bodies, + base/index/queue/…) · `static/style.css` · `runtime/preview.py`
+bodies, + base/index/queue/…) · `web/static/style.css` · `runtime/preview.py`
 (scratch-run backend).
