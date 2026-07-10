@@ -94,15 +94,15 @@ def edit_stage_spec(project_dir: Path, stage_id: str, spec_text: str) -> EditSta
     issues (and writes nothing) on any parse/validation problem. Raises
     FileNotFoundError if `stage_id` is not a stage in this workflow."""
     try:
-        parsed = json.loads(spec_text)
+        spec = json.loads(spec_text)
     except json.JSONDecodeError as exc:
         return EditStageResult(ok=False, issues=[f"JSON parse error: {exc}"])
-    if not isinstance(parsed, dict):
+    if not isinstance(spec, dict):
         return EditStageResult(ok=False, issues=["edited spec must be a JSON object (a single stage)"])
     specs = _current_specs(project_dir)
     if stage_id not in specs:
         raise FileNotFoundError(f"no stage '{stage_id}' in {project_dir.name}")
-    return _apply(project_dir, specs, stage_id, parsed)
+    return _apply(project_dir, specs, stage_id, spec)
 
 
 def patch_stage_spec(project_dir: Path, stage_id: str, patch_text: str) -> EditStageResult:
@@ -132,12 +132,12 @@ def add_stage_spec(project_dir: Path, spec_text: str) -> EditStageResult:
     validated — a dangling input (or any per-stage / graph problem) is rejected,
     not written. The new stage lands as a fresh unreviewed (amber) node."""
     try:
-        parsed = json.loads(spec_text)
+        spec = json.loads(spec_text)
     except json.JSONDecodeError as exc:
         return EditStageResult(ok=False, issues=[f"JSON parse error: {exc}"])
-    if not isinstance(parsed, dict):
+    if not isinstance(spec, dict):
         return EditStageResult(ok=False, issues=["new stage must be a JSON object (a single stage)"])
-    stage_id = parsed.get("id")
+    stage_id = spec.get("id")
     if not isinstance(stage_id, str) or not stage_id:
         return EditStageResult(ok=False, issues=["new stage must have a non-empty string 'id'"])
     specs = _current_specs(project_dir)
@@ -146,4 +146,4 @@ def add_stage_spec(project_dir: Path, spec_text: str) -> EditStageResult:
             ok=False,
             issues=[f"stage '{stage_id}' already exists — use edit_stage to change it"],
         )
-    return _apply(project_dir, specs, stage_id, parsed)
+    return _apply(project_dir, specs, stage_id, spec)
