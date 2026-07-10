@@ -215,8 +215,8 @@ class EvalRun(_Base):
     # couldn't be scored declaratively and no code scorer was supplied.
     settings: EvalRunSettings
     # Score outputs — the scorer writes rollup metrics and a per-row result
-    # table at `result_ref`. There is no overall pass/fail: a case row passes
-    # iff all its checks match, and whether the eval looks good is a human
+    # table at `result_ref`. There is no overall pass/fail: an eval-dataset row
+    # passes iff all its checks match, and whether the eval looks good is a human
     # review judgment, not a stored bool.
     metrics: dict[str, Any] = Field(default_factory=dict)
     result_ref: Optional[str] = None

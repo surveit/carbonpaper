@@ -2,7 +2,7 @@
 
 Two related pieces of `app/models/`: the named-schema data model (author tables
 first, wire the workflow over them) and the eval model (grade a workflow against
-a case table). Both exist on master as **validated Pydantic models**; neither is
+an eval-dataset table). Both exist on master as **validated Pydantic models**; neither is
 yet consumed by the runtime, and no committed example exercises them end-to-end.
 This doc describes the models as they are.
 
