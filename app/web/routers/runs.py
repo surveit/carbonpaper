@@ -137,15 +137,9 @@ async def run_detail(request: Request, project: str, run_id: str):
     response_class=HTMLResponse,
 )
 async def run_stage_partial(
-    request: Request, project: str, run_id: str, stage_id: str, row: int | None = None
+    request: Request, project: str, run_id: str, stage_id: str
 ):
-    """Per-run stage detail panel — status, validation, preview, error trace.
-
-    With `?row=N`, the panel is *trimmed to one row*: the output preview shows
-    only row N and each input preview shows its row N (positional — the lineage
-    graph only links row-preserving nodes, where input row == output row). This
-    is what the lineage view loads when a stage node is clicked.
-    """
+    """Per-run stage detail panel — status, validation, preview, error trace."""
     run_dir = runs_dir(project) / run_id
     manifest = load_manifest(run_dir)
     stage_record = next(
@@ -155,10 +149,7 @@ async def run_stage_partial(
     if stage_record is None:
         raise HTTPException(status_code=404, detail=f"No stage '{stage_id}' in run")
 
-    def _out(path: str | None) -> dict[str, Any] | None:
-        return load_output_row(run_dir, path, row) if row is not None else load_output_preview(run_dir, path)
-
-    output_preview = _out(stage_record.get("output_path"))
+    output_preview = load_output_preview(run_dir, stage_record.get("output_path"))
 
     # Build input previews from upstream stages' outputs in this run.
     stages_static = load_stages(project).stages
@@ -170,7 +161,10 @@ async def run_stage_partial(
     if stage_def is not None:
         for input_id in stage_def.input_ids:
             input_previews.append(
-                {"id": input_id, "preview": _out(output_by_id.get(input_id))}
+                {
+                    "id": input_id,
+                    "preview": load_output_preview(run_dir, output_by_id.get(input_id)),
+                }
             )
 
     function_code = resolve_function_code(stage_def)
@@ -191,7 +185,6 @@ async def run_stage_partial(
             "previewable": stage_def is not None and stage_def.type in PREVIEWABLE_TYPES,
             "type_glyph": TYPE_GLYPH,
             "type_class": TYPE_CLASS,
-            "scoped_row": row,
         },
     )
 
@@ -233,6 +226,48 @@ async def run_stage_rows_csv(project: str, run_id: str, stage_id: str):
         content=df.to_csv(index=False),
         media_type="text/csv; charset=utf-8",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get(
+    "/project/{project}/runs/{run_id}/stage/{stage_id}/lineage_panel",
+    response_class=HTMLResponse,
+)
+async def run_stage_lineage_panel(
+    request: Request, project: str, run_id: str, stage_id: str, row: int
+):
+    """Minimal stage view for the lineage page: the transform, the output
+    schema, and the output trimmed to `row`. Reuses `_stage_executable.html`
+    and `schema_table` — not the whole run-detail panel."""
+    run_dir = runs_dir(project) / run_id
+    manifest = load_manifest(run_dir)
+    stage_record = next(
+        (s for s in manifest.get("stages", []) if s.get("stage_id") == stage_id),
+        None,
+    )
+    if stage_record is None:
+        raise HTTPException(status_code=404, detail=f"No stage '{stage_id}' in run")
+    # Transform detail needs the compiled stage; if it's unavailable the output
+    # table still renders (stage_def None → the template says so).
+    try:
+        stages = load_stages(project).stages
+    except HTTPException:
+        stages = []
+    stage_def = find_stage(stages, stage_id)
+    return templates.TemplateResponse(
+        request,
+        "_lineage_stage.html",
+        {
+            "project": project,
+            "run_id": run_id,
+            "stage": stage_record,
+            "stage_def": stage_def,
+            "function_code": resolve_function_code(stage_def),
+            "preview": load_output_row(run_dir, stage_record.get("output_path"), row),
+            "scoped_row": row,
+            "type_glyph": TYPE_GLYPH,
+            "type_class": TYPE_CLASS,
+        },
     )
 
 
@@ -286,12 +321,13 @@ const V = __PAYLOAD__, PROJECT = __PROJECT__;
 const esc = s => String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
 document.getElementById('sub').textContent = `run ${V.run_id} · ${V.start_stage} row ${V.start_row} · reads top to bottom, step 1 first`;
 const byStage = Object.fromEntries(V.nodes.map(n => [n.stage_id, n]));
-function verb(node){
-  const k = node.transform.kind;
-  if(k==='python') return 'run a python function';
-  if(k==='llm') return 'ask the LLM';
+function link(sid, label){ return `<span class="stage-link" data-stage="${esc(sid)}">${esc(label)}</span>`; }
+function verb(n){
+  const k = n.transform.kind, sid = n.stage_id;
+  if(k==='python') return `run python ${link(sid, sid + '()')}`;
+  if(k==='llm') return `ask the LLM in ${link(sid, sid)}`;
   if(k==='join') return 'join';
-  return 'transform';
+  return link(sid, sid);
 }
 function predsOf(step){
   const from = V.edges.filter(e => e.to_step === step).map(e => e.from_step);
@@ -299,18 +335,17 @@ function predsOf(step){
   if(from.length === 1) return ` using step ${from[0]}'s output`;
   return ` joining steps ${from.join(' and ')}`;
 }
-function link(n){ return `<span class="stage-link" data-stage="${esc(n.stage_id)}">${esc(n.stage_id)}</span>`; }
 // ---- Story (numbered; stage names load the row-trimmed stage panel) ----
 let html = '';
 if(V.upstream.truncated){ html += `<div class="trunc">⋯ upstream not traced — ${esc(V.upstream.message)}</div>`; }
 V.nodes.forEach((n, i) => {
   let sentence;
   if(i===0 && !V.upstream.truncated){
-    sentence = `load ${link(n)} <span class="src-tag">source</span>.`;
+    sentence = `load ${link(n.stage_id, n.stage_id)} <span class="src-tag">source</span>.`;
   } else {
     const adds = n.columns_new.length ? ` adding <code>${n.columns_new.map(esc).join('</code>, <code>')}</code>` : '';
     const claimTag = n.role==='claim' ? ' <span class="claim-tag">published claim</span>' : '';
-    sentence = `${verb(n)}${predsOf(n.step)} to get ${link(n)}${claimTag}${adds}.`;
+    sentence = `${verb(n)}${predsOf(n.step)} to get ${link(n.stage_id, n.stage_id)}${claimTag}${adds}.`;
   }
   html += `<div class="step"><span class="stepno">step ${n.step}</span>${sentence}</div>`;
 });
@@ -322,7 +357,7 @@ async function loadStage(stageId){
   const panel = document.getElementById('stage-panel');
   panel.innerHTML = '<div class="lin-empty">loading…</div>';
   try {
-    const r = await fetch(`/project/${encodeURIComponent(PROJECT)}/runs/${encodeURIComponent(V.run_id)}/stage/${encodeURIComponent(stageId)}/partial?row=${n.row_ordinal}`);
+    const r = await fetch(`/project/${encodeURIComponent(PROJECT)}/runs/${encodeURIComponent(V.run_id)}/stage/${encodeURIComponent(stageId)}/lineage_panel?row=${n.row_ordinal}`);
     if(!r.ok){ panel.innerHTML = `<div class="lin-empty">could not load ${esc(stageId)} (${r.status})</div>`; return; }
     panel.innerHTML = await r.text();
     // innerHTML doesn't run <script>; re-create them so the panel's tabs work.

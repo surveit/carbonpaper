@@ -55,7 +55,7 @@ def test_trace_view_renders_story_and_graph(tmp_path, monkeypatch):
     assert "Story" in body and "Graph" in body        # the two-view toggle
     assert "mermaid" in body                            # reuses the central graph
     assert "stage-panel" in body                        # loads the shared stage panel
-    assert "/partial?row=" in body                      # trimmed to the traced row
+    assert "/lineage_panel?row=" in body                # trimmed to the traced row
     assert "enrich" in body and "seeds" in body        # both stages, in the payload
     assert "score" in body                             # a new-at-stage column
     assert '"step": 1' in body and '"step": 2' in body  # numbered steps in payload
@@ -65,6 +65,16 @@ def test_trace_view_404_for_unknown_stage(tmp_path, monkeypatch):
     client = _project_run(tmp_path, monkeypatch)
     resp = client.get("/project/proj/runs/R1/stage/nope/row/0/trace/view")
     assert resp.status_code == 404
+
+
+def test_lineage_panel_is_trimmed_to_the_row(tmp_path, monkeypatch):
+    client = _project_run(tmp_path, monkeypatch)  # enrich rows: a/A, b/B (+score)
+    resp = client.get("/project/proj/runs/R1/stage/enrich/lineage_panel?row=1")
+    assert resp.status_code == 200
+    body = resp.text
+    assert "row 1" in body                    # scoped badge
+    assert ">b<" in body or "b</td>" in body  # row 1's data (facility_id b)
+    assert "A" not in body.split("Output")[-1]  # row 0's data not in the output table
 
 
 def test_trace_view_says_not_supported_for_reshaping_stage(tmp_path, monkeypatch):
