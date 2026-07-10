@@ -17,11 +17,11 @@ the workflow view's flagged edges.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Any
 
 from pydantic import ValidationError, model_validator
 
-from app.models.schema import TableSchema, _Base, format_errors
+from app.models.schema import Severity, TableSchema, _Base, format_errors
 from app.models.stage import Stage
 
 
@@ -80,9 +80,6 @@ def graph_issues(stages: list[Stage]) -> list[str]:
     return check_unique_ids(stages) + check_inputs_resolve(stages) + detect_cycle(stages)
 
 
-Severity = Literal["error", "warning"]
-
-
 @dataclass
 class WorkflowValidationIssue:
     """A problem found validating a workflow at author/save time. Distinct from a
@@ -103,25 +100,15 @@ class EdgeSchemaIssue(WorkflowValidationIssue):
 
 def check_edge_schemas(stages: list[Stage]) -> list[EdgeSchemaIssue]:
     """Conformance of each declared input schema against the upstream stage's
-    declared `output_schema` (the producer schema the runtime validates outputs
-    against).
+    declared `output_schema`, tagged with the edge it belongs to.
 
-    A declared input schema may be a projection — a subset of the upstream's
-    columns, naming what the stage consumes — but on everything it declares it
-    must agree with the producer:
-
-      error   — a declared column disagrees with the producer on any spec field
-                except a nullable-loosening (type, enum, range, nested `fields`,
-                ...); the copy claims `nullable: false` where the upstream allows
-                nulls; or the primary keys differ (identity is never projected
-                away).
-      warning — the copy declares a column the upstream does not produce
-                (even a nullable one); the copy loosens `nullable: false` to
-                `nullable: true`; or the upstream declares no `output_schema`
-                to check against.
-
-    An input declared as a bare id (no `schema:` block) is skipped; an input id
-    that resolves to no stage is `check_inputs_resolve`'s concern.
+    The comparison and its error/warning grading are `TableSchema.conformance_issues`
+    (a declared input copy may be a projection of the upstream's columns, but must
+    agree on everything it declares). This walks the edges, delegates that check,
+    and adds one edge-specific case: an upstream with no `output_schema` to check
+    against is a warning. An input declared as a bare id (no `schema:` block) is
+    skipped; an input id that resolves to no stage is `check_inputs_resolve`'s
+    concern.
     """
     by_id = {s.id: s for s in stages}
     out: list[EdgeSchemaIssue] = []
@@ -136,49 +123,19 @@ def check_edge_schemas(stages: list[Stage]) -> list[EdgeSchemaIssue]:
 
 def _edge_issues(upstream_id: str, stage_id: str, in_schema: TableSchema,
                  up_schema: TableSchema | None) -> list[EdgeSchemaIssue]:
-    def issue(severity: Severity, problem: str) -> EdgeSchemaIssue:
+    """The conformance of `in_schema` (the downstream copy) against `up_schema`
+    (the upstream `output_schema`), as edge-tagged issues. The comparison and its
+    grading live on `TableSchema.conformance_issues`; this only supplies the edge
+    identity and the case where the upstream declares no schema to check against."""
+    def edge(severity: Severity, problem: str) -> EdgeSchemaIssue:
         return EdgeSchemaIssue(upstream_id=upstream_id, stage_id=stage_id,
                                severity=severity, problem=problem)
 
     if up_schema is None or not up_schema.columns:
-        return [issue("warning",
-                      "upstream declares no output_schema to check the input copy against")]
-
-    in_cols = {c.name: c for c in in_schema.columns}
-    up_cols = {c.name: c for c in up_schema.columns}
-    out: list[EdgeSchemaIssue] = []
-    for name in sorted(set(in_cols) - set(up_cols)):
-        out.append(issue("warning", f"column `{name}` is not produced by `{upstream_id}`"))
-    for name in sorted(set(in_cols) & set(up_cols)):
-        in_col, up_col = in_cols[name], up_cols[name]
-        # Delegate the column-spec comparison to the schema layer; grade the
-        # fields it reports. Nullability is directional (tightening over-promises,
-        # loosening is merely lossy); every other spec disagreement is an error.
-        diffs = up_col.spec_differences(in_col)
-        if "nullable" in diffs:
-            if not in_col.nullable:
-                out.append(issue("error",
-                                 f"column `{name}`: copy claims nullable: false "
-                                 f"but `{upstream_id}` allows nulls"))
-            else:
-                out.append(issue("warning",
-                                 f"column `{name}`: copy allows nulls "
-                                 f"but `{upstream_id}` guarantees non-null"))
-        if "type" in diffs:
-            out.append(issue("error",
-                             f"column `{name}`: declared type `{in_col.type}` "
-                             f"but `{upstream_id}` produces `{up_col.type}`"))
-        rest = [d for d in diffs if d not in ("nullable", "type")]
-        if rest:
-            out.append(issue("error",
-                             f"column `{name}`: declared {', '.join(rest)} "
-                             f"disagrees with `{upstream_id}`'s output"))
-    in_pk = in_schema.primary_key or []
-    up_pk = up_schema.primary_key or []
-    if in_pk != up_pk:
-        out.append(issue("error",
-                         f"primary key {in_pk} but `{upstream_id}` declares {up_pk}"))
-    return out
+        return [edge("warning",
+                     "upstream declares no output_schema to check the input copy against")]
+    return [edge(issue.severity, issue.problem)
+            for issue in in_schema.conformance_issues(up_schema)]
 
 
 class Workflow(_Base):

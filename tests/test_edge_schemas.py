@@ -1,7 +1,7 @@
-"""Edge schema conformance: each declared input schema must agree with the
-upstream stage's declared output_schema on everything it declares. A copy may
-be a projection (a subset of the upstream's columns); it may not contradict
-the producer."""
+"""Edge-schema check: walk the workflow's edges, delegate each declared input
+copy vs its upstream `output_schema` to `TableSchema.conformance_issues`, and tag
+each result with the edge identity. The graded conformance semantics themselves
+(type/nullable/enum/pk grading) are tested in test_schema_capabilities.py."""
 from __future__ import annotations
 
 from typing import Any
@@ -46,77 +46,23 @@ def down(schema: dict[str, Any]) -> Stage:
     return down_stage(inputs=[{"id": "up", "schema": schema}])
 
 
-def test_projection_subset_is_clean():
-    d = down({"primary_key": ["k"],
-              "columns": [{"name": "k", "type": "str", "nullable": False}]})
-    assert check_edge_schemas([UP, d]) == []
-
-
-def test_full_copy_is_clean():
-    d = down({"primary_key": ["k"], "columns": [
-        {"name": "k", "type": "str", "nullable": False},
-        {"name": "v", "type": "float", "nullable": True},
-    ]})
-    assert check_edge_schemas([UP, d]) == []
-
-
-def test_phantom_column_is_a_warning_even_if_nullable():
+def test_issue_is_tagged_with_the_edge_identity():
     d = down({"primary_key": ["k"], "columns": [
         {"name": "k", "type": "str", "nullable": False},
         {"name": "ghost", "type": "str", "nullable": True},
     ]})
     [i] = check_edge_schemas([UP, d])
-    assert i.severity == "warning"
-    assert "ghost" in i.problem
     assert (i.upstream_id, i.stage_id) == ("up", "down")
+    assert i.severity == "warning" and "ghost" in i.problem
 
 
-def test_type_mismatch_is_an_error():
+def test_grading_passes_through_both_error_and_warning():
     d = down({"primary_key": ["k"], "columns": [
         {"name": "k", "type": "str", "nullable": False},
-        {"name": "v", "type": "str"},
+        {"name": "v", "type": "str"},        # type mismatch -> error
+        {"name": "ghost", "type": "str"},    # not produced upstream -> warning
     ]})
-    [i] = check_edge_schemas([UP, d])
-    assert i.severity == "error" and "`v`" in i.problem
-
-
-def test_copy_stricter_nullability_is_an_error():
-    d = down({"primary_key": ["k"], "columns": [
-        {"name": "k", "type": "str", "nullable": False},
-        {"name": "v", "type": "float", "nullable": False},
-    ]})
-    [i] = check_edge_schemas([UP, d])
-    assert i.severity == "error" and "nullable" in i.problem
-
-
-def test_copy_looser_nullability_is_a_warning():
-    up = up_stage(out_cols=[{"name": "k", "type": "str", "nullable": False}],
-                  out_pk=["k"])
-    d = down({"primary_key": ["k"],
-              "columns": [{"name": "k", "type": "str", "nullable": True}]})
-    [i] = check_edge_schemas([up, d])
-    assert i.severity == "warning" and "non-null" in i.problem
-
-
-def test_narrower_enum_is_an_error():
-    # The copy claims a narrower categorical vocabulary than the producer
-    # guarantees — a spec disagreement beyond type/nullable, caught because the
-    # comparison is delegated to the schema layer's full column-spec check.
-    up = up_stage(out_cols=[
-        {"name": "k", "type": "str", "nullable": False, "enum": ["A", "B", "C"]},
-    ], out_pk=["k"])
-    d = down({"primary_key": ["k"], "columns": [
-        {"name": "k", "type": "str", "nullable": False, "enum": ["A", "B"]},
-    ]})
-    [i] = check_edge_schemas([up, d])
-    assert i.severity == "error" and "enum" in i.problem
-
-
-def test_pk_mismatch_is_an_error():
-    d = down({"primary_key": [],
-              "columns": [{"name": "k", "type": "str", "nullable": False}]})
-    [i] = check_edge_schemas([UP, d])
-    assert i.severity == "error" and "primary key" in i.problem
+    assert sorted(i.severity for i in check_edge_schemas([UP, d])) == ["error", "warning"]
 
 
 def test_upstream_without_output_schema_is_a_warning():

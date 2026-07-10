@@ -11,7 +11,8 @@ depending on `stage.py`.
 from __future__ import annotations
 
 import re
-from typing import Any, Optional, Sequence
+from dataclasses import dataclass
+from typing import Any, Literal, Optional, Sequence
 
 from pydantic import (
     BaseModel,
@@ -211,6 +212,20 @@ def _fields_spec_equal(a: Optional[list[Column]], b: Optional[list[Column]]) -> 
     )
 
 
+# ── Schema conformance (a declared consumer copy vs its producer) ────────────
+Severity = Literal["error", "warning"]
+
+
+@dataclass
+class SchemaConformanceIssue:
+    """One way a declared consumer schema fails to fully conform to a producer
+    schema, graded by severity. Pure schema-level vocabulary — no notion of which
+    stages or edge it came from; a caller that has that context (the workflow
+    edge check) wraps these to attach it."""
+    severity: Severity
+    problem: str
+
+
 # ── Column type wording (shared by to_prompt) ───────────────────────────────
 _SCALAR_TYPE_WORDING: dict[str, str] = {
     "str": "string",
@@ -353,6 +368,58 @@ class TableSchema(_Base):
             and not _column_spec_differences(c, match)
             for c in self.columns
         )
+
+    def conformance_issues(self, producer: "TableSchema") -> list[SchemaConformanceIssue]:
+        """Whether this schema — read as a consumer's declared copy of `producer`'s
+        output — is satisfiable by `producer`, as a graded list of the ways it is
+        not (empty ⇒ fully conformant).
+
+        A consumer copy may be a projection: it need not declare every producer
+        column. But on everything it does declare it must agree with the producer:
+
+          error   — a declared column disagrees on any spec field except a
+                    nullable-loosening (type, enum, range, nested `fields`, ...);
+                    the copy claims `nullable: false` where the producer allows
+                    nulls; or the primary keys differ.
+          warning — the copy declares a column the producer does not produce; or
+                    it loosens `nullable: false` to `nullable: true` (safe but
+                    lossy).
+
+        Whether an issue blocks is the caller's policy; this only grades them."""
+        consumer_cols = {c.name: c for c in self.columns}
+        producer_cols = {c.name: c for c in producer.columns}
+        issues: list[SchemaConformanceIssue] = []
+        for name in sorted(set(consumer_cols) - set(producer_cols)):
+            issues.append(SchemaConformanceIssue(
+                "warning", f"column `{name}` is not produced by the producer"))
+        for name in sorted(set(consumer_cols) & set(producer_cols)):
+            consumer_col, producer_col = consumer_cols[name], producer_cols[name]
+            diffs = consumer_col.spec_differences(producer_col)
+            if "nullable" in diffs:
+                if not consumer_col.nullable:
+                    issues.append(SchemaConformanceIssue(
+                        "error", f"column `{name}`: declares nullable: false "
+                        "but the producer allows nulls"))
+                else:
+                    issues.append(SchemaConformanceIssue(
+                        "warning", f"column `{name}`: allows nulls "
+                        "but the producer guarantees non-null"))
+            if "type" in diffs:
+                issues.append(SchemaConformanceIssue(
+                    "error", f"column `{name}`: declared type `{consumer_col.type}` "
+                    f"but the producer declares `{producer_col.type}`"))
+            rest = [d for d in diffs if d not in ("nullable", "type")]
+            if rest:
+                issues.append(SchemaConformanceIssue(
+                    "error", f"column `{name}`: declared {', '.join(rest)} "
+                    "disagrees with the producer"))
+        consumer_pk = self.primary_key or []
+        producer_pk = producer.primary_key or []
+        if consumer_pk != producer_pk:
+            issues.append(SchemaConformanceIssue(
+                "error", f"primary key {consumer_pk} "
+                f"but the producer declares {producer_pk}"))
+        return issues
 
     def to_prompt(self) -> str:
         """Render this schema as instructions for an LLM reply: one line per
