@@ -15,5 +15,12 @@ select = ["E4", "E7", "E9", "F", "BLE"]
 [tool.mypy]
 python_version = "3.12"
 files = ["app"]
-# No ignore_missing_imports: pandas-stubs is installed via requirements-dev.txt,
-# and the other deps ship their own types.
+# No blanket ignore_missing_imports: pandas-stubs is installed via
+# requirements-dev.txt, and the other deps ship their own types.
+
+# pyarrow is the exception: its compiled `pyarrow.lib` extension ships no
+# py.typed marker, so mypy can't analyze `import pyarrow` under CI (a locally
+# installed marker masks this). Scope the exemption to pyarrow only.
+[[tool.mypy.overrides]]
+module = ["pyarrow", "pyarrow.*"]
+ignore_missing_imports = true
