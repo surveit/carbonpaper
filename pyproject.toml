@@ -15,5 +15,13 @@ select = ["E4", "E7", "E9", "F", "BLE"]
 [tool.mypy]
 python_version = "3.12"
 files = ["app"]
-# No ignore_missing_imports: pandas-stubs is installed via requirements-dev.txt,
-# and the other deps ship their own types.
+# No blanket ignore_missing_imports: pandas-stubs is installed via
+# requirements-dev.txt, and the remaining deps ship their own types. pyarrow is
+# the one exception (see override) — it is unpinned and has no mypy-usable types.
+
+[[tool.mypy.overrides]]
+# pyarrow ships no official stubs, and as of pyarrow 25.0 mypy reports it as
+# untyped (missing py.typed marker) where 24.0 did not. Since `pyarrow>=15.0` is
+# unpinned, treat it as untyped so a version bump can't break the typecheck.
+module = ["pyarrow.*"]
+ignore_missing_imports = true
