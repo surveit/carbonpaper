@@ -52,6 +52,7 @@ from fastapi.responses import (
 )
 
 from app.models import validate_named_schema, validate_schema_library
+from app.models.workflow import check_edge_schemas
 from app.services import node_review, project, versioning
 from app.services.loader import stage_to_spec_dict
 from app.web.config import EXAMPLES_DIR, templates
@@ -334,6 +335,9 @@ async def project_workflow(request: Request, project_name: str):
         }
         coverage = node_review.coverage_for(specs, decisions)
         stages = list(listing.stages)
+        # Edge-schema conformance needs typed Stages (declared input schemas vs
+        # upstream output_schema); only run it when the workflow validates.
+        edge_issues = check_edge_schemas(listing.stages)
     else:
         # No valid workflow. Fall back to raw draft dicts so a broken/partial workflow
         # still renders its graph with the holes visible; drafts read as unreviewed.
@@ -344,8 +348,10 @@ async def project_workflow(request: Request, project_name: str):
         }
         coverage = node_review.coverage_for(draft, decisions) if draft else None
         stages = draft
+        edge_issues = []
     mermaid = (
-        build_mermaid_graph(stages, project_name, review_by_id=review_by_id)
+        build_mermaid_graph(stages, project_name, review_by_id=review_by_id,
+                            edge_issues=edge_issues)
         if stages else None
     )
     return templates.TemplateResponse(
@@ -357,6 +363,7 @@ async def project_workflow(request: Request, project_name: str):
             "stages": stages,
             "mermaid": mermaid,
             "coverage": coverage,
+            "edge_issues": edge_issues,
             "type_class": TYPE_CLASS,
             "type_glyph": TYPE_GLYPH,
             "versions": versioning.list_versions(pdir),

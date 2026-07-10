@@ -7,6 +7,7 @@ from __future__ import annotations
 from typing import Any
 
 from app.models import Stage
+from app.models.workflow import EdgeSchemaIssue
 
 
 # Stage-type → CSS class for workflow node + badges.
@@ -160,6 +161,7 @@ def build_mermaid_graph(
     project: str,
     status_by_id: dict[str, str] | None = None,
     review_by_id: dict[str, str] | None = None,
+    edge_issues: list[EdgeSchemaIssue] | None = None,
 ) -> str:
     """Generate a Mermaid flowchart from stages (typed Stages or raw draft dicts).
 
@@ -171,7 +173,17 @@ def build_mermaid_graph(
     the type fill is unchanged, so stroke encodes trust while fill encodes type.
     When both are given, run status takes precedence (a live run's colour wins
     over the standing belief). When both are None, behaves exactly as before.
+
+    edge_issues (from `check_edge_schemas`) flags edges: an edge named by any
+    issue is drawn with a "⚠ schema" label and a red/amber stroke — red if any
+    of its issues is an error, else amber.
     """
+    # Worst severity per edge: an error anywhere on the edge wins over a warning.
+    edge_severity: dict[tuple[str, str], str] = {}
+    for edge_issue in edge_issues or []:
+        key = (edge_issue.upstream_id, edge_issue.stage_id)
+        if edge_issue.severity == "error" or key not in edge_severity:
+            edge_severity[key] = edge_issue.severity
     status_glyph = {
         "ok": "✓",
         "running": "⟳",
@@ -226,10 +238,22 @@ def build_mermaid_graph(
         if stroke_spec is not None:
             stroke, width = stroke_spec
             lines.append(f"    style {sid} stroke:{stroke},stroke-width:{width}")
+    edge_stroke = {"error": "#cc2a2a", "warning": "#cc8a00"}
+    link_styles: list[str] = []
+    link_index = 0
     for n in nodes:
         sid = n["id"]
         for upstream in n["input_ids"]:
-            lines.append(f"    {upstream} --> {sid}")
+            sev = edge_severity.get((upstream, sid))
+            if sev in edge_stroke:
+                lines.append(f'    {upstream} -->|"⚠ schema"| {sid}')
+                link_styles.append(
+                    f"    linkStyle {link_index} stroke:{edge_stroke[sev]},stroke-width:2.5px"
+                )
+            else:
+                lines.append(f"    {upstream} --> {sid}")
+            link_index += 1
+    lines += link_styles
     lines += [
         "    classDef input fill:#e8f4f8,stroke:#3a8ca8,color:#000",
         "    classDef llm fill:#fff4e6,stroke:#cc7a00,color:#000",

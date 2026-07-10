@@ -121,6 +121,17 @@
         </pre>
       </div>
 
+      {% if edge_issues %}
+      <div class="edge-issues">
+        <strong>Edge schema check — declared input schemas vs upstream output schemas:</strong>
+        <ul>
+        {% for i in edge_issues %}
+          <li class="{{ i.severity }}"><code>{{ i.upstream_id }} → {{ i.stage_id }}</code> — {{ i.severity }}: {{ i.problem }}</li>
+        {% endfor %}
+        </ul>
+      </div>
+      {% endif %}
+
       <h2>Stage list</h2>
       <table class="stages compact">
         <thead><tr><th>#</th><th>id</th><th>type</th><th></th></tr></thead>
