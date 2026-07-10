@@ -1,5 +1,5 @@
 """
-llm_sdk.py — low-level Claude Code CLI discovery + event-loop plumbing.
+app/llm/sdk.py — low-level Claude Code CLI discovery + event-loop plumbing.
 
 Shared by the runtime LLM backend (`app.runtime.llm_agent_sdk`) and the
 authoring compiler (`app.compiler`). Neither of those imports the other; both

@@ -63,7 +63,7 @@ app/main.py           thin FastAPI bootstrap; routes live in app/web/routers/   
 app/web/              the web layer (routers, loading, diagrams, config)
 app/services/         web-independent workflow logic (loader, compilation, node review, versioning)
 app/chat/             embeddable chat subsystem (PydanticAI; own backend env vars)
-app/llm/              shared LLM vocabulary (the model menu)
+app/llm/              shared LLM/claude-CLI plumbing (the model menu; CLI discovery + sync-drive)
 app/templates/, app/static/   the web UI
 tests/                pytest suite (offline: conftest forces the LLM mock)
 examples/<name>/      project dirs (untracked runtime data: compiled/ + methodology_raw.md + code/ + data/ + runs/)

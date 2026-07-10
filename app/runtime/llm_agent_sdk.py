@@ -19,8 +19,8 @@ from __future__ import annotations
 import asyncio
 import os
 
-from app.llm_sdk import CLI_PATH as _CLI_PATH
-from app.llm_sdk import run_sync as _run_sync
+from app.llm.sdk import CLI_PATH as _CLI_PATH
+from app.llm.sdk import run_sync as _run_sync
 
 _TIMEOUT_S = int(os.environ.get("CW_LLM_TIMEOUT_S", "180"))
 

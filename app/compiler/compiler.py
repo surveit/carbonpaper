@@ -23,9 +23,9 @@ Persisting a compile as a first-class object (manifest / what-happened / workflo
 output on disk) is a SEPARATE concern owned by `app.services.compilation`.
 
 Dependency rule (critical, mirrors models' own): this module imports `app.models`,
-`app.compiler.prompt`, and the shared `app.llm_sdk` (CLI discovery + sync-drive) +
+`app.compiler.prompt`, and the shared `app.llm.sdk` (CLI discovery + sync-drive) +
 `claude_agent_sdk`. It MUST NOT import `app.runtime.*` — the runner stays ignorant
-of the compiler; they meet only at the schema and share `app.llm_sdk`.
+of the compiler; they meet only at the schema and share `app.llm.sdk`.
 """
 
 from __future__ import annotations
@@ -39,7 +39,7 @@ from typing import Any
 
 from app import models
 from app.compiler.prompt import SYSTEM_PROMPT, build_compile_prompt
-from app.llm_sdk import CLI_PATH, run_sync
+from app.llm.sdk import CLI_PATH, run_sync
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -61,7 +61,7 @@ def read_input(path: str | Path) -> str:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 2. LLM CALL — Agent SDK, no tools (CLI discovery + sync-drive from app.llm_sdk)
+# 2. LLM CALL — Agent SDK, no tools (CLI discovery + sync-drive from app.llm.sdk)
 # ─────────────────────────────────────────────────────────────────────────────
 
 # Running the authoring server from INSIDE a Claude Code session leaks that session's
