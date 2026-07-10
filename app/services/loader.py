@@ -9,8 +9,10 @@ this file.
 Read:
   - load_compiled_dir: tolerant, per-file — for the viewer, which renders
     problems rather than crashing.
-  - load_workflow: strict — for the runner, which refuses to execute
-    a workflow with any invalid stage or cross-stage issue.
+  - load_workflow_object: strict — the whole workflow as one in-memory
+    `Workflow` object; raises on any invalid stage or cross-stage issue.
+  - load_workflow: strict — the same, returning just the `list[Stage]` for
+    callers that want the stages (the runner, the version snapshotter).
 
 Serialize / save:
   - stage_to_spec_dict / stage_to_json: the canonical data + text forms.
@@ -25,7 +27,7 @@ from typing import Any
 
 from pydantic import ValidationError
 
-from app.models.workflow import validate_workflow
+from app.models.workflow import Workflow, validate_workflow
 from app.models.schema import format_errors
 from app.models.stage import Stage
 
@@ -69,7 +71,13 @@ def load_compiled_dir(compiled_dir: Path) -> list[CompiledStageFile]:
     return entries
 
 
-def load_workflow(project_dir: Path) -> list[Stage]:
+def load_workflow_object(project_dir: Path) -> Workflow:
+    """Strict load of a project's compiled workflow as one in-memory `Workflow`
+    object: parse every stage, collect ALL issues (per-file schema errors and
+    cross-stage graph problems), and raise WorkflowLoadError if the dir is empty or
+    anything is invalid — so the runner and version snapshotter refuse to execute or
+    freeze an unloadable workflow. The single strict entry point; `load_workflow`
+    (the list accessor) delegates here."""
     compiled_dir = project_dir / "compiled"
     entries = load_compiled_dir(compiled_dir)
     issues = [f"{e.filename}: {i}" for e in entries for i in e.issues]
@@ -79,7 +87,13 @@ def load_workflow(project_dir: Path) -> list[Stage]:
     issues += validate_workflow(stages)
     if issues:
         raise WorkflowLoadError(compiled_dir, issues)
-    return stages
+    return Workflow(stages=stages)
+
+
+def load_workflow(project_dir: Path) -> list[Stage]:
+    """The workflow's validated stages, for callers that want the list (the runner,
+    the version snapshotter). Strict — delegates to `load_workflow_object`."""
+    return load_workflow_object(project_dir).stages
 
 
 # ─── Serialize & save ────────────────────────────────────────────────────────

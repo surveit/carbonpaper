@@ -82,6 +82,14 @@ def test_project_page():
     assert "Status" in r.text                               # the status-tiles heading
 
 
+def test_project_page_has_edit_with_agent_control():
+    """The project shell (every section) offers an 'Edit with agent' control that
+    opens a chat session bound to this project's editing agent."""
+    r = client.get("/project/demo")
+    assert r.status_code == 200
+    assert 'action="/project/demo/edit-agent"' in r.text
+
+
 def test_workflow_section_renders_the_graph():
     """GET /project/{name}/workflow renders the belief-coloured stage graph. With a
     compiled workflow present, the mermaid source names the stages even before the

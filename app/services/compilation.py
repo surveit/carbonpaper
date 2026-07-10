@@ -87,6 +87,19 @@ def write_methodology(result: dict[str, Any], out_dir: str | Path) -> dict[str, 
     }
 
 
+def regenerate_workflow(result: dict[str, Any], project_dir: str | Path) -> dict[str, Any]:
+    """Replace a project's whole compiled/ workflow with `result`'s stages: remove
+    stale stage files a shrinking recompile would otherwise leave behind, then
+    write the new set. The full-reset counterpart to write_methodology's plain
+    write; the disk manipulation lives here in the compile-writer service, not in
+    the caller."""
+    compiled = Path(project_dir) / "compiled"
+    if compiled.is_dir():
+        for stale in compiled.glob("*.json"):
+            stale.unlink()
+    return write_methodology(result, project_dir)
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Compilation object — persist a compile as a first-class object (parallels a RUN)
 # ─────────────────────────────────────────────────────────────────────────────

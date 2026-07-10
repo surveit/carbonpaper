@@ -1,9 +1,10 @@
-"""FastAPI routes for the chat subsystem.
+"""FastAPI routes for the chat subsystem — a generic, agent-agnostic surface.
 
-Mounts a minimal chat UI + the streaming transport onto the existing app.
-The demo engine registers one real tool (`list_projects`, over the
-workspace's own examples dir) to show "tools plugged in per context": a host
-builds a ChatEngine with the tools its embedding needs.
+Every session is bound to a registered agent by an `agent_id` and carries an
+opaque `context` (whatever that agent needs to bind its tools). A message turn
+looks the pair back up, builds the engine via the registry, and streams it. The
+routes know nothing about any specific agent; a concrete agent registers itself
+(see app.agent.registry) and a host route creates the session with its context.
 """
 from __future__ import annotations
 
@@ -15,11 +16,14 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 
-from .engine import ChatBackendError, ChatEngine, backend_label
+from app.runtime.llm_agent_sdk import available as sdk_available
+
+from app.agent.registry import build_engine
+from app.agent.sdk_engine import CLI_MODEL
+
 from .store import SessionStore
 from .turns import TurnManager
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
 TEMPLATES_DIR = Path(__file__).resolve().parent / "templates"
 SESSIONS_DIR = Path(os.environ.get("CW_CHAT_SESSIONS_DIR", str(Path(__file__).resolve().parent / "_sessions")))
 
@@ -28,47 +32,45 @@ templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 _store = SessionStore(SESSIONS_DIR)
 _turns = TurnManager()
 
-_engine: ChatEngine | None = None
-_engine_error: str | None = None
+
+def create_agent_session(agent_id: str, context: dict, *, title: str | None = None) -> str:
+    """Create a chat session bound to `agent_id` carrying `context`, and return its
+    id. The shared entry point a host route (e.g. an 'Edit with agent' button)
+    calls to open a session it then redirects the browser to."""
+    return _store.create(title=title or f"Agent: {agent_id}", agent_id=agent_id, context=context)
 
 
-def _list_projects() -> list[str]:
-    """List the projects available in this workspace."""
-    examples = REPO_ROOT / "examples"
-    if not examples.exists():
-        return []
-    return [p.name for p in sorted(examples.iterdir()) if (p / "compiled").is_dir()]
+def _backend_label() -> str:
+    if sdk_available():
+        return f"claude-cli:{CLI_MODEL} (subscription)"
+    return "claude-cli (unavailable)"
 
 
-def get_engine() -> ChatEngine | None:
-    """Build the demo engine lazily. A missing backend (e.g. no API key) is
-    surfaced as an error, not silently mocked."""
-    global _engine, _engine_error
-    if _engine is None and _engine_error is None:
-        try:
-            _engine = ChatEngine(
-                system_prompt=(
-                    "You are embedded in the workflow app. Be concise and "
-                    "cite the workspace's own data. Use tools to ground answers."
-                ),
-                tools=[_list_projects],
-            )
-        except ChatBackendError as exc:
-            _engine_error = str(exc)
-    return _engine
+def _backend_error() -> str | None:
+    if sdk_available():
+        return None
+    return (
+        "The Claude CLI / Agent SDK isn't available. Install it and run "
+        "`claude login` so the agent can run."
+    )
 
 
 @router.get("/chat", response_class=HTMLResponse)
 async def chat_index(request: Request):
     return templates.TemplateResponse(request, "chat_index.html", {
         "sessions": _store.list_sessions(),
-        "backend": backend_label(),
+        "backend": _backend_label(),
     })
 
 
-@router.post("/chat/sessions")
-async def new_session():
-    sid = _store.create()
+@router.post("/chat/agent/{agent_id}/sessions")
+async def new_agent_session(agent_id: str, request: Request):
+    """Open a chat session bound to `agent_id`. The body carries the opaque
+    `context` (and optional `title`) as JSON. Redirects to the chat page."""
+    body = await request.json()
+    context = (body or {}).get("context") or {}
+    title = (body or {}).get("title")
+    sid = create_agent_session(agent_id, context, title=title)
     return RedirectResponse(url=f"/chat/{sid}", status_code=303)
 
 
@@ -76,7 +78,6 @@ async def new_session():
 async def chat_page(request: Request, sid: str):
     if not _store.exists(sid):
         raise HTTPException(status_code=404, detail="Session not found")
-    get_engine()  # warm; also populates _engine_error for the banner
     data = _store.load(sid)
     return templates.TemplateResponse(request, "chat.html", {
         "session_id": sid,
@@ -84,22 +85,26 @@ async def chat_page(request: Request, sid: str):
         "history": _store.history_view(sid),
         "pending_user": data.get("pending_user"),
         "active_turn": data.get("active_turn"),
-        "backend": backend_label(),
-        "backend_error": _engine_error,
+        "backend": _backend_label(),
+        "backend_error": _backend_error(),
     })
 
 
 @router.post("/chat/{sid}/message")
 async def post_message(sid: str, request: Request):
+    """Send a message: the turn runs on the session's bound agent (its agent_id +
+    context, looked up and handed to the registry to build the engine)."""
     if not _store.exists(sid):
         raise HTTPException(status_code=404, detail="Session not found")
     body = await request.json()
     text = (body or {}).get("text", "").strip()
     if not text:
         raise HTTPException(status_code=400, detail="empty message")
-    engine = get_engine()
-    if engine is None:
-        return JSONResponse({"ok": False, "error": _engine_error}, status_code=400)
+    data = _store.load(sid)
+    agent_id = data.get("agent_id")
+    if not agent_id:
+        raise HTTPException(status_code=400, detail="session has no bound agent")
+    engine = build_engine(agent_id, data.get("context") or {})
     _store.set_pending_user(sid, text)
     turn_id = _turns.start(engine=engine, store=_store, session_id=sid, prompt=text)
     return JSONResponse({"ok": True, "turn_id": turn_id})

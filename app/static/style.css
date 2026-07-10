@@ -1431,6 +1431,26 @@ td.row-num, th.row-num { text-align: right; color: #98a1b3; font-variant-numeric
     margin-top: 2px;
 }
 
+.app-side-agent { margin-top: 10px; }
+
+.app-side-agent-btn {
+    display: block;
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 6px;
+    background: #f6f8fc;
+    color: var(--accent);
+    font: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    text-align: left;
+    cursor: pointer;
+}
+
+.app-side-agent-btn:hover { background: #eef3fc; }
+
 /* ── Main content area + section headers ── */
 .app-main { min-width: 0; }
 

@@ -21,9 +21,6 @@
 </head>
 <body>
   <h1>Chat sessions &nbsp; <span class="badge">backend: {{ backend }}</span></h1>
-  <form method="post" action="/chat/sessions">
-    <button type="submit">+ New chat</button>
-  </form>
   <ul>
     {% for s in sessions %}
       <li>

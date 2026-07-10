@@ -19,6 +19,7 @@ from app.models.schema import (
     _SNAKE_RE,
     format_errors,
 )
+from app.models.stages.code import check_inline_function_code
 
 # ── Enumerated vocabularies ──────────────────────────────────────────────────
 class StageType(str, Enum):
@@ -132,6 +133,17 @@ class PythonFunction(_Base):
             raise ValueError("function.kind=module needs `module`")
         if self.kind == FunctionKind.inline and not self.code:
             raise ValueError("function.kind=inline needs `code`")
+        return self
+
+    @model_validator(mode="after")
+    def _inline_code_is_runnable(self) -> "PythonFunction":
+        """Inline code must parse and define the function the runtime calls
+        (`transform` by default). Enforced here — a single stage's invariant — so
+        broken code (e.g. a bare body with a top-level `return`) is rejected at
+        write time instead of raising only when the runner exec()s it."""
+        if self.kind != FunctionKind.inline or not self.code:
+            return self
+        check_inline_function_code(self.code, self.function)
         return self
 
 

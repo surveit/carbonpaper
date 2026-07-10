@@ -16,3 +16,8 @@ class NoVersionToRunError(Exception):
     "Create version" action). Raised when `version_id` is None and no version
     exists yet — rather than fabricating a snapshot as a run side effect, which
     would immortalise (and potentially poison) the working copy."""
+
+
+class RegenerateWithoutSnapshotError(Exception):
+    """Raised when a from-scratch compile would overwrite reviewed work without a
+    prior version snapshot and without explicit confirm_overwrite."""
