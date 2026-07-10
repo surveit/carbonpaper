@@ -7,8 +7,8 @@ an engine for a project without seeding a project directory on disk.
 """
 from __future__ import annotations
 
-from app.chat.project_agent import get_project_sdk_engine
 from app.chat.sdk_engine import ClaudeAgentSdkEngine
+from app.compiler.agent.config import get_project_sdk_engine
 
 
 def test_project_sdk_engine_is_cached_and_correct_type() -> None:

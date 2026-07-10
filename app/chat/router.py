@@ -18,8 +18,9 @@ from fastapi.templating import Jinja2Templates
 
 from app.runtime.llm_agent_sdk import available as sdk_available
 
+from app.compiler.agent.config import get_project_agent, get_project_sdk_engine
+
 from .engine import ChatBackendError, ChatEngine, backend_label
-from .project_agent import get_project_agent, get_project_sdk_engine
 from .store import SessionStore
 from .turns import TurnManager
 

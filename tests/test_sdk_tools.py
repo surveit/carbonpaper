@@ -15,7 +15,7 @@ from typing import Any
 
 from claude_agent_sdk import SdkMcpTool
 
-from app.chat.sdk_tools import TOOL_SCHEMAS, build_project_mcp_server
+from app.compiler.agent.tools import TOOL_SCHEMAS, build_project_mcp_server
 
 
 def _call(tool: SdkMcpTool[Any], args: dict[str, Any]) -> dict[str, Any]:

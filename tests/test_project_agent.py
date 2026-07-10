@@ -7,10 +7,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from app.chat import project_agent
 from app.chat.dev_model import make_dev_model
 from app.chat.engine import ChatEngine
-from app.chat.project_tools import make_project_tools
+from app.compiler.agent import config as project_agent
+from app.compiler.agent.tools import make_project_tools
 
 _EXPECTED_TOOL_NAMES = {
     "list_projects",

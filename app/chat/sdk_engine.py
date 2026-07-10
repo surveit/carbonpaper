@@ -31,7 +31,7 @@ from claude_agent_sdk import (
 # PATH on Windows); reuse llm_agent_sdk's resolution so this engine and the
 # runtime backend agree on which CLI to spawn.
 from app.runtime.llm_agent_sdk import _CLI_PATH
-from app.chat.sdk_tools import TOOL_LABELS
+from app.compiler.agent.tools import TOOL_LABELS
 
 CLI_MODEL = os.environ.get("CW_CHAT_CLI_MODEL", "sonnet")
 

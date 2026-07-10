@@ -4,7 +4,7 @@ from typing import Any, Callable
 
 import pytest
 
-from app.chat import project_tools
+from app.compiler.agent import tools as project_tools
 from app.errors import RegenerateWithoutSnapshotError
 
 # Minimal valid handle block per stage type (app/models/stage.py:
