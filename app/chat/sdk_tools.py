@@ -30,7 +30,6 @@ from app.chat.project_tools import make_project_tools
 TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
     "list_projects": {},
     "describe_workflow": {},
-    "describe_stage_types": {},
     "read_stage": {
         "stage_id": Annotated[str, "The stage's id, as shown by describe_workflow."],
     },
@@ -53,9 +52,6 @@ TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
             "llm / function / ...), output_schema, and inputs. Every id in inputs "
             "must already be a stage in this workflow, or it is rejected.",
         ],
-    },
-    "create_version": {
-        "message": Annotated[str, "A short note describing this snapshot."],
     },
     "compile_workflow": {
         "conversation": Annotated[
@@ -80,11 +76,9 @@ TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
 TOOL_LABELS: dict[str, str] = {
     "list_projects": "Listing projects",
     "describe_workflow": "Reading the workflow",
-    "describe_stage_types": "Reading the stage-type catalog",
     "read_stage": "Reading a stage",
     "edit_stage": "Editing a stage",
     "add_stage": "Adding a stage",
-    "create_version": "Snapshotting a version",
     "compile_workflow": "Rebuilding the workflow from scratch",
     "ToolSearch": "Looking up a tool",
 }
@@ -118,7 +112,7 @@ def _wrap(fn: Callable[..., Any]) -> SdkMcpTool[Any]:
 def build_project_mcp_server(
     name: str, *, examples_dir: Path
 ) -> tuple[McpSdkServerConfig, list[str], list[SdkMcpTool[Any]]]:
-    """Wrap the 9 project tools as an in-process SDK-MCP server.
+    """Wrap the project tools as an in-process SDK-MCP server.
 
     Returns `(server, allowed_tool_names, wrapped_tools)`:
     - `server` goes into `ClaudeAgentOptions.mcp_servers`;

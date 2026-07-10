@@ -77,15 +77,6 @@ def test_edit_stage_tool_invalid_writes_nothing_and_reports_issues(tmp_path: Pat
     assert (pdir / "compiled" / "01_load.json").read_text(encoding="utf-8") == before
 
 
-def test_create_version_tool_snapshots_as_agent(tmp_path: Path) -> None:
-    _seed(tmp_path, "alpha")
-    tools = project_tools.make_project_tools("alpha", examples_dir=tmp_path)
-    out = _tool(tools, "create_version")("first snapshot")
-    assert out["reviewer"] == "agent"
-    assert (tmp_path / "alpha" / "versions" / out["id"] / "version.json").exists()
-
-
-
 # ─── compile_workflow (offline: monkeypatch the compiler, never call an LLM) ───
 
 _FRESH_COMPILE_RESULT: dict[str, Any] = {
