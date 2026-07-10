@@ -1,0 +1,31 @@
+{
+  "session_id": "679fae9e9277",
+  "created_at": "2026-07-09T14:10:18",
+  "title": "Editing: demo_smoke",
+  "context": {
+    "project": "demo_smoke"
+  },
+  "messages": [
+    {
+      "role": "user",
+      "parts": [
+        {
+          "type": "text",
+          "text": "what have I said so far"
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "parts": [
+        {
+          "type": "text",
+          "text": "You've said three things:\n\n1. **\"banana banana\"**\n2. **\"what am I thinking about?\"**\n3. **\"what have I said so far\"**\n\nThat's the full history of this conversation! Ready to get to work on **demo_smoke** whenever you are."
+        }
+      ]
+    }
+  ],
+  "active_turn": null,
+  "pending_user": null,
+  "sdk_session_id": "1d72f9b6-56c5-4961-8c53-4eb3cd9772bd"
+}

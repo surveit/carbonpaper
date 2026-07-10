@@ -23,7 +23,7 @@ from fastapi.staticfiles import StaticFiles
 from app.web.config import STATIC_DIR
 from app.web.routers import project, node_review, review, runs
 
-from app.chat.router import router as chat_router
+from app.agent.router import router as chat_router
 
 app = FastAPI(title="Workflow")
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
@@ -34,5 +34,5 @@ app.include_router(review.router)
 app.include_router(node_review.router)
 
 # Interactive, multi-turn chat surface (streaming + persistence). Separate from
-# the llm_transform batch path; see app/chat.
+# the llm_transform batch path; see app/agent.
 app.include_router(chat_router)

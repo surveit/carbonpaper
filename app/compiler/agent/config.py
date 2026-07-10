@@ -11,7 +11,7 @@ from app.compiler.agent.prompt import _system_prompt
 from app.web.config import EXAMPLES_DIR
 
 if TYPE_CHECKING:
-    from app.chat.sdk_engine import ClaudeAgentSdkEngine
+    from app.agent.sdk_engine import ClaudeAgentSdkEngine
 
 _sdk_engines: dict[str, "ClaudeAgentSdkEngine"] = {}
 
@@ -24,7 +24,7 @@ def get_project_sdk_engine(name: str) -> "ClaudeAgentSdkEngine":
     can run the tool loop. Construction is lazy w.r.t. the filesystem:
     make_project_tools only binds `EXAMPLES_DIR / name` into tool closures, so
     building the engine never reads the project directory."""
-    from app.chat.sdk_engine import ClaudeAgentSdkEngine
+    from app.agent.sdk_engine import ClaudeAgentSdkEngine
     from app.compiler.agent.tools import build_project_mcp_server
 
     if name not in _sdk_engines:

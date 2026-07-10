@@ -9,4 +9,4 @@ Split across three modules:
   - `config`  — the cached SDK-engine builder the web layer warms and drives.
 
 The generic chat spine (streaming, turns, session store, the SDK engine that
-drives claude_agent_sdk.query()) lives in `app.chat` and is reused verbatim."""
+drives claude_agent_sdk.query()) lives in `app.agent` and is reused verbatim."""

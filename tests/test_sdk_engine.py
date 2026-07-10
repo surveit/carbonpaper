@@ -11,7 +11,7 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
-import app.chat.sdk_engine as se
+import app.agent.sdk_engine as se
 
 
 class _Text:  # stand-ins matching the block interface the engine reads

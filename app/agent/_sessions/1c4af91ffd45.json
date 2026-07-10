@@ -1,0 +1,59 @@
+{
+  "session_id": "1c4af91ffd45",
+  "created_at": "2026-07-09T16:20:20",
+  "title": "Editing: alpha",
+  "context": {
+    "project": "alpha"
+  },
+  "messages": [
+    {
+      "role": "user",
+      "parts": [
+        {
+          "type": "text",
+          "text": "what stages exist?"
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "parts": [
+        {
+          "type": "thinking",
+          "text": "The user wants to know what stages exist in the workflow. I should use the `mcp__project__describe_workflow` tool to get an overview of the workflow and its stages. Let me load that tool first."
+        },
+        {
+          "type": "tool_call",
+          "name": "ToolSearch",
+          "args": "{\"query\": \"select:mcp__project__describe_workflow\", \"max_results\": 1}",
+          "label": "Looking up a tool"
+        },
+        {
+          "type": "tool_result",
+          "content": "{'type': 'tool_reference', 'tool_name': 'mcp__project__describe_workflow'}"
+        },
+        {
+          "type": "thinking",
+          "text": "Now let me call the describe_workflow tool to get the list of stages."
+        },
+        {
+          "type": "tool_call",
+          "name": "describe_workflow",
+          "args": "{}",
+          "label": "Reading the workflow"
+        },
+        {
+          "type": "tool_result",
+          "content": "{'type': 'text', 'text': '{\\n  \"name\": \"alpha\",\\n  \"stages\": [],\\n  \"issues\": []\\n}'}"
+        },
+        {
+          "type": "text",
+          "text": "The workflow **alpha** currently has **no stages** \u2014 it's empty.\n\nTo get started, you can ask me to add a stage. Just tell me:\n- **What it should do** (e.g. ingest documents, extract entities, filter rows, call an LLM)\n- **What type** it should be \u2014 I can run `describe_stage_types` to show you all available types if that's helpful\n\nWhat would you like to build?"
+        }
+      ]
+    }
+  ],
+  "active_turn": null,
+  "pending_user": null,
+  "sdk_session_id": "d2ff9e78-a2ca-4fbd-96a6-01c8bef6f111"
+}

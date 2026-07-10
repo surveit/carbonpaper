@@ -7,7 +7,7 @@ agent's cross-turn memory. The transcript lives here, in the app's own files, no
 in a vendor session store.
 
 Single-machine, filesystem-backed. In-flight turns live in memory (see
-app.chat.turns); surviving a server restart mid-turn is out of scope.
+app.agent.turns); surviving a server restart mid-turn is out of scope.
 """
 from __future__ import annotations
 

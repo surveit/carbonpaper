@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from app.chat.store import SessionStore
+from app.agent.store import SessionStore
 
 
 def test_project_session_roundtrips_neutral_transcript(tmp_path: Path):
