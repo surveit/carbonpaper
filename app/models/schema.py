@@ -306,6 +306,14 @@ class TableSchema(_Base):
                 raise ValueError(f"primary_key {k!r} is not a declared column")
         return self
 
+    def column(self, name: str) -> Optional[Column]:
+        """The column named `name`, or `None` if this schema declares no such
+        column."""
+        for c in self.columns:
+            if c.name == name:
+                return c
+        return None
+
     def subtract(self, other: "TableSchema") -> "TableSchema":
         """The columns of `self` whose names are not in `other`, as a schema
         describing a reply object (no primary key or table-level metadata).

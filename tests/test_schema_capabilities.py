@@ -275,6 +275,16 @@ def test_spec_column_fields_derived_from_model():
     assert set(sch._SPEC_COLUMN_FIELDS) == set(m.Column.model_fields) - prose
 
 
+# ── TableSchema.column ───────────────────────────────────────────────────────
+def test_column_finds_by_name_or_returns_none():
+    a = _ts(columns=[{"name": "id", "type": "str"}, {"name": "score", "type": "int"}])
+    col = a.column("score")
+    assert col is not None
+    assert col.name == "score"
+    assert col.type == "int"
+    assert a.column("gone") is None
+
+
 # ── TableSchema.is_subset_of ─────────────────────────────────────────────────
 def test_is_subset_of_true_when_present_and_identical():
     a = _ts(columns=[{"name": "id", "type": "str"}])

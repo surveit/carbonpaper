@@ -140,15 +140,14 @@ def _target_check_problems(config: EvalConfig, by_id: dict[str, Stage]) -> list[
     target = by_id[config.target_stage]
     if target.output_schema is None:
         return [f"cannot verify assertions: target `{target.id}` declares no output schema"]
-    target_types = {c.name: c.type for c in target.output_schema.columns}
     problems: list[str] = []
     for exp in config.expected:
-        got = target_types.get(exp.actual)
-        if got is None:
+        col = target.output_schema.column(exp.actual)
+        if col is None:
             problems.append(f"expected column asserts on `{exp.actual}`, "
                             f"which target `{target.id}` does not emit")
-        elif exp.metric == "abs_tol" and got not in _NUMERIC_TYPES:
-            problems.append(f"`{exp.actual}` is `{got}` on target "
+        elif exp.metric == "abs_tol" and col.type not in _NUMERIC_TYPES:
+            problems.append(f"`{exp.actual}` is `{col.type}` on target "
                             f"`{target.id}` but metric abs_tol needs a numeric")
     return problems
 

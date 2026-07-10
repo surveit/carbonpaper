@@ -23,7 +23,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from app.models.schema import Column
+from app.models.schema import Column, TableSchema
 from app.models.stage import Stage
 
 
@@ -64,13 +64,13 @@ def derive_cases_columns(
     workflow). `check_actuals` are each check's `actual` target column;
     blanks (an unfilled row in the authoring form) are ignored."""
     override_columns, override_problems = _override_columns(override)
-    target_columns, target_problems = _target_columns(target)
+    target_schema, target_problems = _target_schema(target)
 
     actuals = [a for a in check_actuals if a]
     clash = _clash_names(override_columns, actuals)
 
     injected = _rename_clashing(override_columns, clash, prefix="override.")
-    answers, check_problems = _answer_columns(target_columns, actuals, clash, target)
+    answers, check_problems = _answer_columns(target_schema, actuals, clash, target)
 
     return CasesColumns(
         injected=injected, answers=answers,
@@ -91,15 +91,14 @@ def _override_columns(override: Stage | None) -> tuple[list[Column], list[str]]:
     return list(override.output_schema.columns), []
 
 
-def _target_columns(target: Stage | None) -> tuple[dict[str, Column], list[str]]:
-    """The target stage's declared output columns by name, or `{}` plus a
-    problem naming why (no such stage, or the stage declares no output
-    schema)."""
+def _target_schema(target: Stage | None) -> tuple[TableSchema | None, list[str]]:
+    """The target stage's declared output schema, or `None` plus a problem
+    naming why (no such stage, or the stage declares no output schema)."""
     if target is None:
-        return {}, ["target stage does not exist in the workflow"]
+        return None, ["target stage does not exist in the workflow"]
     if target.output_schema is None:
-        return {}, [f"target stage `{target.id}` declares no output schema"]
-    return {c.name: c for c in target.output_schema.columns}, []
+        return None, [f"target stage `{target.id}` declares no output schema"]
+    return target.output_schema, []
 
 
 # ── Name-clash handling ─────────────────────────────────────────────────────
@@ -117,15 +116,15 @@ def _rename_clashing(columns: list[Column], clash: set[str], *, prefix: str) -> 
     return list(renamed.values())
 
 
-def _answer_columns(target_columns: dict[str, Column], actuals: list[str],
+def _answer_columns(target_schema: TableSchema | None, actuals: list[str],
                     clash: set[str], target: Stage | None) -> tuple[list[Column], list[str]]:
-    """One answer column per `actual` that resolves against `target_columns`
+    """One answer column per `actual` that resolves against `target_schema`
     (clash-renamed `output.<name>`); an `actual` with no matching target
     column is skipped and reported instead."""
     answers: dict[str, Column] = {}
     problems: list[str] = []
     for actual in actuals:
-        target_col = target_columns.get(actual)
+        target_col = target_schema.column(actual) if target_schema is not None else None
         if target_col is None:
             label = f"`{target.id}`" if target is not None else "the target"
             problems.append(f"check asserts on `{actual}`, which target {label} does not emit")

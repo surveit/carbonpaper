@@ -193,12 +193,9 @@ def _read_yaml(path: Path, *, what: str) -> dict:
 def _load_config_entry(path: Path) -> EvalConfigEntry:
     entry = EvalConfigEntry(config=None, path=path, issues=[])
     try:
-        data = yaml.safe_load(path.read_text(encoding="utf-8"))
-    except yaml.YAMLError as exc:
-        entry.issues.append(f"YAML parse error in {path}: {exc}")
-        return entry
-    if not data:
-        entry.issues.append(f"file is empty: {path}")
+        data = _read_yaml(path, what="eval config")
+    except ValueError as exc:
+        entry.issues.append(str(exc))
         return entry
     try:
         entry.config = EvalConfig.model_validate(data)
