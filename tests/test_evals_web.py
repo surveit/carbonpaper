@@ -43,8 +43,16 @@ def _write_methodology(examples_root: Path, name: str) -> Path:
         "id": "llm_transform", "type": "llm_transform", "name": "LLM transform",
         "inputs": ["input_data"],
         "llm": {"prompt_template": "Summarize: {text}"},
-        "output_schema": {"columns": [{"name": "doc_id", "type": "str"},
-                                       {"name": "summary", "type": "str"}]},
+        "output_schema": {"columns": [
+            {"name": "doc_id", "type": "str"},
+            {"name": "summary", "type": "str"},
+            # Enum-range, not-null column used only to exercise the
+            # cases-schema preview's rendering of range/nullability -- no
+            # other test's check targets this column.
+            {"name": "sentiment", "type": "str", "nullable": False,
+             "range": ["positive", "negative", "neutral"],
+             "description": "overall tone of the summary"},
+        ]},
     }
     publish_stage = {
         "id": "publish", "type": "publish", "name": "Publish",
@@ -781,6 +789,58 @@ def test_cases_schema_clash_renames_and_warns(tmp_examples):
     assert body["warnings"]
     assert any("doc_id" in w and "override.doc_id" in w and "output.doc_id" in w
                for w in body["warnings"])
+
+
+def test_cases_schema_table_html_renders_shared_schema_table(tmp_examples):
+    r = client.post(
+        f"/methodology/{METHODOLOGY}/evals/cases-schema",
+        data={
+            "override_stage": "input_data",
+            "target_stage": "llm_transform",
+            "expected_actual": ["summary"],
+        },
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["ok"] is True
+    assert 'class="schema"' in body["table_html"]
+    assert "Injected inputs" in body["table_html"]
+    assert "Expected answers" in body["table_html"]
+
+
+def test_cases_schema_table_html_shows_enum_range_and_not_null(tmp_examples):
+    # `sentiment` (llm_transform's output_schema) declares a range (enum) and
+    # nullable=False -- the answer column derived from a check on it must
+    # carry that shape through into the rendered table, not just name+type.
+    r = client.post(
+        f"/methodology/{METHODOLOGY}/evals/cases-schema",
+        data={
+            "override_stage": "input_data",
+            "target_stage": "llm_transform",
+            "expected_actual": ["sentiment"],
+        },
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["ok"] is True
+    html = body["table_html"]
+    assert "positive" in html and "negative" in html and "neutral" in html
+    assert "not null" in html
+
+
+def test_cases_schema_table_html_empty_when_problems(tmp_examples):
+    r = client.post(
+        f"/methodology/{METHODOLOGY}/evals/cases-schema",
+        data={
+            "override_stage": "publish",  # schemaless stage -- a problem
+            "target_stage": "llm_transform",
+            "expected_actual": [""],
+        },
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["ok"] is False
+    assert not body["table_html"]
 
 
 def test_cases_schema_empty_post_reports_problems_not_500(tmp_examples):

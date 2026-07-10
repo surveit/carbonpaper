@@ -1,0 +1,13 @@
+{# Renders the cases-file schema the `cases-schema` endpoint derives, as two
+   labelled groups of the shared schema table: the override stage's injected
+   input columns, and the per-check expected-answer columns. Either group is
+   omitted when it has no columns (e.g. no checks yet has no answer group). #}
+{% from "_schema_table.html" import schema_table %}
+{% if injected_schema.columns %}
+<h3>Injected inputs</h3>
+{{ schema_table(injected_schema) }}
+{% endif %}
+{% if answer_schema.columns %}
+<h3>Expected answers</h3>
+{{ schema_table(answer_schema) }}
+{% endif %}

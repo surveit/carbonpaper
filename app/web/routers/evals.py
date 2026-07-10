@@ -442,6 +442,7 @@ class CasesSchemaResponse(TypedDict):
     problems: list[str]
     warnings: list[str]
     columns: list[CasesSchemaColumn]
+    table_html: str
 
 
 @router.post("/methodology/{methodology}/evals/cases-schema")
@@ -452,7 +453,10 @@ async def cases_schema_json(request: Request, methodology: str) -> JSONResponse:
     download while the user is still picking override/target/expected
     columns. `derive_cases_columns` is the single source of truth for the
     derivation; this endpoint tags each returned column with the role the
-    form displays it under and surfaces any name-clash warning."""
+    form displays it under, surfaces any name-clash warning, and renders the
+    full derived schema (enums, nullability, ranges, descriptions) server-side
+    with the shared schema-table partial into `table_html`, so the caller
+    doesn't need to reimplement that rendering in JS."""
     fields = await _read_eval_form(request)
     listing = load_stages(methodology)
     by_id = {s.id: s for s in listing.stages}
@@ -470,9 +474,18 @@ async def cases_schema_json(request: Request, methodology: str) -> JSONResponse:
         )
         for col in derived.columns
     ]
+
+    table_html = ""
+    if not derived.problems:
+        injected_schema = TableSchema(columns=derived.injected)
+        answer_schema = TableSchema(columns=derived.answers)
+        table_html = templates.get_template("_cases_schema_tables.html").render(
+            injected_schema=injected_schema, answer_schema=answer_schema,
+        )
+
     body: CasesSchemaResponse = CasesSchemaResponse(
         ok=not derived.problems, problems=derived.problems,
-        warnings=derived.warnings, columns=columns,
+        warnings=derived.warnings, columns=columns, table_html=table_html,
     )
     return JSONResponse(content=dict(body))
 

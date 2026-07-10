@@ -48,21 +48,10 @@
                 "</ul></div>";
         }
         if (!(body.problems && body.problems.length)) {
-            if (!body.columns.length) {
-                html += "<p class=\"lede\">Pick override/target and add expected columns to see the required cases-file schema.</p>";
+            if (body.table_html) {
+                html += body.table_html;
             } else {
-                const injected = body.columns.filter(function (c) { return c.role === "injected"; });
-                const expected = body.columns.filter(function (c) { return c.role === "expected"; });
-                if (injected.length) {
-                    html += "<p class=\"lede\"><strong>injected inputs:</strong> " +
-                        injected.map(function (c) { return escapeHtml(c.name) + " (" + escapeHtml(c.type) + ")"; }).join(", ") +
-                        "</p>";
-                }
-                if (expected.length) {
-                    html += "<p class=\"lede\"><strong>expected answers:</strong> " +
-                        expected.map(function (c) { return escapeHtml(c.name) + " (" + escapeHtml(c.type) + ")"; }).join(", ") +
-                        "</p>";
-                }
+                html += "<p class=\"lede\">Pick override/target and add expected columns to see the required cases-file schema.</p>";
             }
         }
         containerEl.innerHTML = html;

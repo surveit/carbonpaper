@@ -7,6 +7,11 @@ authoring form's saved `TableRef.table_schema`, and
 check, so all three always agree on the exact column names a cases file must
 carry.
 
+Each derived column is a copy of the source stage's own `Column` (only the
+`name` is overridden) -- `type`, `nullable`, `range`, `description`, and
+`source` all carry through unchanged, so a caller can render or validate the
+full declared shape instead of just a name and type.
+
 Name clash: a check's target column can share a name with one of the
 override stage's own output columns. A flat table can't hold two columns
 with the same name, so a clashing name is disambiguated: the injected input
@@ -70,13 +75,13 @@ def derive_cases_columns(
     else:
         override_names = {c.name for c in override.output_schema.columns}
 
-    target_types: dict[str, str] = {}
+    target_columns: dict[str, Column] = {}
     if target is None:
         target_problems.append("target stage does not exist in the methodology")
     elif target.output_schema is None:
         target_problems.append(f"target stage `{target.id}` declares no output schema")
     else:
-        target_types = {c.name: c.type for c in target.output_schema.columns}
+        target_columns = {c.name: c for c in target.output_schema.columns}
 
     actuals = [a for a in check_actuals if a]
     clash = {a for a in actuals if a in override_names}
@@ -85,19 +90,19 @@ def derive_cases_columns(
     if override is not None and override.output_schema is not None:
         for col in override.output_schema.columns:
             file_name = f"override.{col.name}" if col.name in clash else col.name
-            injected[file_name] = Column(name=file_name, type=col.type)
+            injected[file_name] = col.model_copy(update={"name": file_name})
 
     answers: dict[str, Column] = {}
     for actual in actuals:
-        col_type = target_types.get(actual)
-        if col_type is None:
+        target_col = target_columns.get(actual)
+        if target_col is None:
             target_label = f"`{target.id}`" if target is not None else "the target"
             check_problems.append(
                 f"check asserts on `{actual}`, which target {target_label} does not emit"
             )
             continue
         file_name = f"output.{actual}" if actual in clash else actual
-        answers[file_name] = Column(name=file_name, type=col_type)
+        answers[file_name] = target_col.model_copy(update={"name": file_name})
 
     warnings = [
         f"`{name}` is both an injected input and a checked output -- the "
