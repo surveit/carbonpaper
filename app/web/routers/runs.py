@@ -301,17 +301,12 @@ _TRACE_VIEW_HTML = r"""<!doctype html><html><head><meta charset="utf-8">
 .story{font-size:15px;line-height:1.95}
 .step{margin:2px 0}.stepno{display:inline-block;min-width:56px;color:#888;font-size:12px;font-weight:500}
 .stage-link{font-weight:600;cursor:pointer;color:#1a3a72;text-decoration:underline;text-underline-offset:2px}
+.row-chip{cursor:pointer;background:#eef4ff;color:#1a3a72;border:1px solid #cfe0ff;border-radius:6px;padding:0 7px;font-size:12.5px;white-space:nowrap}
+.row-chip::before{content:"[";color:#8aa}.row-chip::after{content:"]";color:#8aa}
 .claim-tag{font-size:10.5px;border-radius:5px;padding:0 5px;margin-left:3px;background:#e8f8e8;color:#1f5a1f}
-.src-tag{font-size:10.5px;border-radius:5px;padding:0 5px;margin-left:3px;background:#f0f0ed;color:#666}
 .trunc{background:#fff4e6;color:#7a4a00;border-radius:8px;padding:8px 12px;font-size:13px;margin-bottom:12px}
 .mermaid{background:#fff}.nograph{color:#888;font-size:13px}
-.rowpeek{display:inline-block;vertical-align:middle}
-.rowpeek>summary{display:inline;cursor:pointer;color:#1a3a72;font-size:12px;list-style:none}
-.rowpeek>summary::after{content:" ▾";color:#888}
-.rowpeek[open]>summary::after{content:" ▴"}
-.rowpeek table{border-collapse:collapse;font-size:12px;margin:4px 0 2px 56px}
-.rowpeek th,.rowpeek td{padding:2px 8px;border-bottom:1px solid #eee;text-align:left}
-.rowpeek th{color:#777;font-weight:500}
+.lin-note{color:#888;font-size:12.5px;margin-bottom:14px}
 .lin-panel summary.disclosure{cursor:pointer;font-weight:500;padding:4px 0}
 .lin-panel{margin-top:18px;border-top:1px solid #eee;padding-top:14px}
 .lin-empty{color:#888;font-size:14px;padding:8px 0}
@@ -319,6 +314,7 @@ _TRACE_VIEW_HTML = r"""<!doctype html><html><head><meta charset="utf-8">
 </style></head><body>
 <div class="lin-wrap">
 <h1>Lineage</h1><div class="lin-sub" id="sub"></div>
+<div class="lin-note">Tracing the pipeline filtered to this single row — every step below is the one row on this row's path, so each carries [1 row].</div>
 <div class="toggle"><button id="b-story" class="on">Story</button><button id="b-graph">Graph</button></div>
 <div id="story" class="story"></div>
 <div id="graph" class="hidden"><pre class="mermaid" id="mmd">__MERMAID__</pre><div id="nograph" class="nograph hidden">Graph needs the compiled workflow, which isn't available for this run.</div></div>
@@ -329,13 +325,15 @@ const V = __PAYLOAD__, PROJECT = __PROJECT__;
 const esc = s => String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
 document.getElementById('sub').textContent = `run ${V.run_id} · ${V.start_stage} row ${V.start_row} · reads top to bottom, step 1 first`;
 const byStage = Object.fromEntries(V.nodes.map(n => [n.stage_id, n]));
-function link(sid, label){ return `<span class="stage-link" data-stage="${esc(sid)}">${esc(label)}</span>`; }
+// A transform-link opens the panel's Transform disclosure; a row-chip opens Output.
+function tlink(sid, label){ return `<span class="stage-link" data-stage="${esc(sid)}" data-disc="transform">${esc(label)}</span>`; }
+function ochip(n){ return `<span class="row-chip" data-stage="${esc(n.stage_id)}" data-disc="output">1 row</span>`; }
 function verb(n){
   const k = n.transform.kind, sid = n.stage_id;
-  if(k==='python') return `run python ${link(sid, sid + '()')}`;
-  if(k==='llm') return `ask the LLM in ${link(sid, sid)}`;
-  if(k==='join') return 'join';
-  return link(sid, sid);
+  if(k==='python') return `run python ${tlink(sid, sid + '()')}`;
+  if(k==='llm') return `ask the LLM in ${tlink(sid, sid)}`;
+  if(k==='join') return tlink(sid, 'join');
+  return tlink(sid, sid);
 }
 function predsOf(step){
   const from = V.edges.filter(e => e.to_step === step).map(e => e.from_step);
@@ -343,27 +341,22 @@ function predsOf(step){
   if(from.length === 1) return ` using step ${from[0]}'s output`;
   return ` joining steps ${from.join(' and ')}`;
 }
-function rowPeek(n){
-  const cells = Object.entries(n.row).map(([k,v]) => `<tr><th>${esc(k)}</th><td>${esc(v)}</td></tr>`).join('');
-  const cols = Object.keys(n.row).length;
-  return `<details class="rowpeek"><summary>${cols} column${cols===1?'':'s'}</summary><table>${cells}</table></details>`;
-}
-// ---- Story (numbered; stage names load the row-trimmed panel, ▾ peeks the row) ----
+// ---- Story: <transform-link> to get [1 row]; both open a panel disclosure ----
 let html = '';
 if(V.upstream.truncated){ html += `<div class="trunc">⋯ upstream not traced — ${esc(V.upstream.message)}</div>`; }
 V.nodes.forEach((n, i) => {
   let sentence;
   if(i===0 && !V.upstream.truncated){
-    sentence = `load ${link(n.stage_id, n.stage_id)} <span class="src-tag">source</span>`;
+    sentence = `${tlink(n.stage_id, n.stage_id)} to get ${ochip(n)}`;
   } else {
     const claimTag = n.role==='claim' ? ' <span class="claim-tag">published claim</span>' : '';
-    sentence = `${verb(n)}${predsOf(n.step)} to get ${link(n.stage_id, n.stage_id)}${claimTag}`;
+    sentence = `${verb(n)}${predsOf(n.step)} to get ${ochip(n)}${claimTag}`;
   }
-  html += `<div class="step"><span class="stepno">step ${n.step}</span>${sentence} ${rowPeek(n)}</div>`;
+  html += `<div class="step"><span class="stepno">step ${n.step}</span>${sentence}</div>`;
 });
 document.getElementById('story').innerHTML = html;
 // ---- The row-trimmed stage panel (the SAME _run_stage_panel.html as run-detail) ----
-async function loadStage(stageId){
+async function loadStage(stageId, target){
   const n = byStage[stageId];
   if(!n) return;
   const panel = document.getElementById('stage-panel');
@@ -372,13 +365,13 @@ async function loadStage(stageId){
     const r = await fetch(`/project/${encodeURIComponent(PROJECT)}/runs/${encodeURIComponent(V.run_id)}/stage/${encodeURIComponent(stageId)}/lineage_panel?row=${n.row_ordinal}`);
     if(!r.ok){ panel.innerHTML = `<div class="lin-empty">could not load ${esc(stageId)} (${r.status})</div>`; return; }
     panel.innerHTML = await r.text();
-    // innerHTML doesn't run <script>; re-create them so the panel's tabs work.
-    panel.querySelectorAll('script').forEach(old => { const s = document.createElement('script'); if(old.src) s.src = old.src; else s.textContent = old.textContent; old.replaceWith(s); });
+    const disc = panel.querySelector(`details[data-disc="${target || 'output'}"]`);
+    if(disc) disc.open = true;
     panel.scrollIntoView({ behavior:'smooth', block:'start' });
   } catch(e){ panel.innerHTML = `<div class="lin-empty">error: ${esc(e)}</div>`; }
 }
-window.loadStage = loadStage;  // mermaid nodes call this too (build_mermaid_graph click convention)
-document.getElementById('story').addEventListener('click', e => { const el = e.target.closest('.stage-link'); if(el) loadStage(el.dataset.stage); });
+window.loadStage = sid => loadStage(sid, 'output');  // mermaid nodes (build_mermaid_graph click convention)
+document.getElementById('story').addEventListener('click', e => { const el = e.target.closest('[data-stage]'); if(el) loadStage(el.dataset.stage, el.dataset.disc); });
 // ---- Graph (reuses the central mermaid workflow component) ----
 const mmd = document.getElementById('mmd');
 const hasGraph = mmd.textContent.trim().length > 0;

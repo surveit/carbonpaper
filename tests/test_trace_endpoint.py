@@ -56,8 +56,10 @@ def test_trace_view_renders_story_and_graph(tmp_path, monkeypatch):
     assert "mermaid" in body                            # reuses the central graph
     assert "stage-panel" in body                        # loads the shared stage panel
     assert "/lineage_panel?row=" in body                # trimmed to the traced row
+    assert 'data-disc="transform"' in body              # transform-link target
+    assert 'data-disc="output"' in body                 # row-chip target
+    assert "filtered to this single row" in body        # single-row subheader
     assert "enrich" in body and "seeds" in body        # both stages, in the payload
-    assert "score" in body                             # a new-at-stage column
     assert '"step": 1' in body and '"step": 2' in body  # numbered steps in payload
 
 
