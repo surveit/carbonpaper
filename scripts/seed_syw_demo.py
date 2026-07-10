@@ -38,20 +38,35 @@ _SCORE = (
     "    return row\n"
 )
 
+def _col(name: str, type_: str) -> dict:
+    return {"name": name, "type": type_, "nullable": False}
+
+
+_SEED_SCHEMA = {"primary_key": ["facility_id"],
+                "columns": [_col("facility_id", "str"), _col("name", "str")]}
+_REGION_SCHEMA = {"primary_key": ["facility_id"],
+                  "columns": [_col("facility_id", "str"), _col("name", "str"), _col("region", "str")]}
+_SCORE_SCHEMA = {"primary_key": ["facility_id"],
+                 "columns": [_col("facility_id", "str"), _col("name", "str"),
+                             _col("region", "str"), _col("risk_score", "float")]}
+
 COMPILED = [
     ("01_load_mills", {
         "id": "load_mills", "type": "input_data", "name": "Load mill seeds (synthetic)",
         "connector": {"kind": "computed_static", "notes": "hand-seeded demo rows"},
+        "output_schema": _SEED_SCHEMA,
     }),
     ("02_add_region", {
         "id": "add_region", "type": "python_row_function", "name": "Attach region (1:1)",
-        "inputs": [{"id": "load_mills"}],
+        "inputs": [{"id": "load_mills", "schema": _SEED_SCHEMA}],
         "function": {"kind": "inline", "code": _ADD_REGION},
+        "output_schema": _REGION_SCHEMA,
     }),
     ("03_score", {
         "id": "score", "type": "python_row_function", "name": "Compute risk score (1:1)",
-        "inputs": [{"id": "add_region"}],
+        "inputs": [{"id": "add_region", "schema": _REGION_SCHEMA}],
         "function": {"kind": "inline", "code": _SCORE},
+        "output_schema": _SCORE_SCHEMA,
     }),
 ]
 
