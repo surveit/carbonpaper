@@ -1,7 +1,6 @@
-"""Derive the eval-dataset schema an eval's checks require: the override
-stage's whole output (injected inputs) plus one expected-output column per
-check, named after the target column it grades. Single source of truth for
-this derivation -- called by
+"""Derive the override-stage columns an eval-dataset file must inject: the
+override stage's whole output, deconflicted against the checks' expected-
+output column names. Single source of truth for this derivation -- called by
 `app.services.eval_compatibility.check_eval_compatibility`'s override-coverage
 check, so callers always agree on the exact column names an eval-dataset
 file must carry.
@@ -18,42 +17,34 @@ input is written `override.<name>`, the expected-output column is written
 `output.<name>`. Non-conflicting names are left as-is. (Surfacing that
 conflict as a warning to an author is a UI/preview concern for the authoring
 form, not this derivation.)
+
+Both `override` and `target` must declare an output schema, and every name
+in `check_output_columns` must resolve against `target`'s declared output --
+this module raises `ValueError` otherwise rather than silently degrading, so
+`app.services.eval_compatibility.check_eval_compatibility` must verify those
+preconditions itself and report them as problems before calling in here.
 """
 from __future__ import annotations
 
-from app.models.schema import Column, TableSchema
+from app.models.schema import Column
 from app.models.stage import Stage
 
 
 def get_output_columns_from_stage(stage: Stage) -> list[Column]:
-    """The output columns `stage` declares, or `[]` if it declares no output
-    schema."""
+    """The output columns `stage` declares. Requires `stage` to declare an
+    output schema; raises `ValueError` if it doesn't."""
     if stage.output_schema is None:
-        return []
+        raise ValueError(f"stage {stage.id!r} declares no output schema")
     return list(stage.output_schema.columns)
-
-
-def derive_eval_dataset_columns(
-    override: Stage, target: Stage, check_output_columns: list[str],
-) -> TableSchema:
-    """The eval-dataset schema: `override`'s declared output columns
-    (injected as that stage's whole output) plus one expected-output column
-    per name in `check_output_columns` that resolves against `target`'s
-    declared output. A name that resolves to no target column is skipped --
-    `check_eval_compatibility` reports that separately, against the target's
-    declared output directly."""
-    injected, expected_output = _deconflicted_columns(override, target, check_output_columns)
-    return TableSchema(columns=[*injected, *expected_output])
 
 
 def get_injected_columns(
     override: Stage, target: Stage, check_output_columns: list[str],
 ) -> list[Column]:
-    """The override-stage columns of the eval-dataset schema
-    `derive_eval_dataset_columns` would build for this override/target/check
-    set, deconflicted against the checks' expected-output columns -- what a
-    caller needs to check that an eval-dataset file covers `override`'s
-    output specifically."""
+    """The override-stage columns of the eval-dataset schema this derivation
+    builds for this override/target/check set, deconflicted against the
+    checks' expected-output columns -- what a caller needs to check that an
+    eval-dataset file covers `override`'s output specifically."""
     injected, _ = _deconflicted_columns(override, target, check_output_columns)
     return injected
 
@@ -61,13 +52,16 @@ def get_injected_columns(
 def _deconflicted_columns(
     override: Stage, target: Stage, check_output_columns: list[str],
 ) -> tuple[list[Column], list[Column]]:
+    """Requires every name in `check_output_columns` to resolve against
+    `target`'s declared output; raises `ValueError` for a name that
+    doesn't."""
     override_columns = get_output_columns_from_stage(override)
     target_by_name = {c.name: c for c in get_output_columns_from_stage(target)}
-    expected_output_columns = [
-        target_by_name[name]
-        for name in dict.fromkeys(n for n in check_output_columns if n)
-        if name in target_by_name
-    ]
+    expected_output_columns = []
+    for name in dict.fromkeys(n for n in check_output_columns if n):
+        if name not in target_by_name:
+            raise ValueError(f"target stage {target.id!r} does not emit checked column {name!r}")
+        expected_output_columns.append(target_by_name[name])
     return deconflict_column_names(override_columns, expected_output_columns)
 
 

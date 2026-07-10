@@ -29,34 +29,40 @@ def check_eval_compatibility(config: EvalConfig,
     """Does `config` still fit `stages` as they are NOW? Binds by stage id
     and by declared output schema; the answer is computed fresh from the
     stages every time, never stored, so it can't drift from what they
-    actually declare. Runs every check and collects every problem in one
-    pass, except where an earlier failure makes the rest unanswerable: a
-    missing stage, a target-colliding reference override, or a structurally
-    broken workflow all short-circuit before the path (and so `settings`) is
-    even attempted."""
+    actually declare.
+
+    Two phases. First, the preconditions the coverage checks and
+    `_resolve_grain_settings` need to be answerable at all: every referenced
+    stage exists, the target is reachable, the target emits every checked
+    column, the override declares an output schema, no reference override
+    targets the target stage itself, and the workflow is structurally
+    valid. Any failure here short-circuits with `settings=None` -- in
+    particular, `_check_eval_dataset_covers_override` calls into
+    `app.services.eval_dataset_columns`, which raises rather than silently
+    degrading on a missing output schema or an unresolvable checked column,
+    so those preconditions must hold before it's reached. Second, once
+    preconditions hold, the coverage checks and grain resolution run and
+    are reported together."""
     by_id = {s.id: s for s in stages}
 
     missing = _check_stages_exist(config, by_id)
     if missing:
         return CompatibilityReport(ok=False, problems=missing, settings=None)
 
-    # Condition 4 + the structural check both leave the override→target path
-    # unresolvable, so `settings` can't even be attempted when either fires.
-    no_reference_override_on_target = _check_no_reference_override_on_target(config)
-    structure_problems = _check_workflow_structure(stages)
-    blocked = bool(no_reference_override_on_target) or bool(structure_problems)
+    precondition_problems = (
+        _check_target_reachable(config, stages)
+        + _check_target_emits_checked_columns(config, by_id)
+        + _check_override_declares_output_schema(config, by_id)
+        + _check_no_reference_override_on_target(config)
+        + _check_workflow_structure(stages)
+    )
+    if precondition_problems:
+        return CompatibilityReport(ok=False, problems=precondition_problems, settings=None)
 
     problems = (
-        _check_target_reachable(config, stages)
-        + _check_eval_dataset_covers_override(config, by_id)
+        _check_eval_dataset_covers_override(config, by_id)
         + _check_reference_overrides_cover_stages(config, by_id)
-        + _check_target_emits_checked_columns(config, by_id)
-        + no_reference_override_on_target
-        + structure_problems
     )
-    if blocked:
-        return CompatibilityReport(ok=False, problems=problems, settings=None)
-
     settings, grain_problems = _resolve_grain_settings(config, stages)
     problems += grain_problems
     return CompatibilityReport(ok=not problems, problems=problems, settings=settings)
@@ -100,17 +106,34 @@ def _find_descendants(stage_id: str, stages: Sequence[Stage]) -> set[str]:
     return descendants
 
 
-# ── Condition 2: every injected table is a valid stand-in ────────────────────
-def _check_eval_dataset_covers_override(config: EvalConfig, by_id: dict[str, Stage]) -> list[str]:
-    """The eval-dataset table, if attached, must be a valid stand-in for the
-    override stage's output: every column `get_injected_columns` says the
-    file must carry (deconflicted) has to spec-match a column already in it.
-    A dataless config skips this — its file is validated when attached."""
+# ── Precondition: the override must declare an output schema ─────────────────
+def _check_override_declares_output_schema(config: EvalConfig,
+                                           by_id: dict[str, Stage]) -> list[str]:
+    """The eval-dataset table, if attached, stands in for the override
+    stage's declared output, so the override must actually declare one
+    before `_check_eval_dataset_covers_override` can resolve required
+    columns against it. A dataless config has no file to stand in for, so
+    it's exempt."""
     if config.table is None:
         return []
     override = by_id[config.override_stage]
     if override.output_schema is None:
         return [f"override stage `{override.id}` declares no output schema"]
+    return []
+
+
+# ── Condition 2: every injected table is a valid stand-in ────────────────────
+def _check_eval_dataset_covers_override(config: EvalConfig, by_id: dict[str, Stage]) -> list[str]:
+    """The eval-dataset table, if attached, must be a valid stand-in for the
+    override stage's output: every column `get_injected_columns` says the
+    file must carry (deconflicted) has to spec-match a column already in it.
+    A dataless config skips this — its file is validated when attached.
+    Preconditions (override declares an output schema; every checked column
+    resolves against the target) are verified by the caller before this
+    runs."""
+    if config.table is None:
+        return []
+    override = by_id[config.override_stage]
     check_output_columns = [expected_output.output_column for expected_output in config.expected_outputs]
     required = TableSchema(columns=get_injected_columns(
         override, by_id[config.target_stage], check_output_columns))

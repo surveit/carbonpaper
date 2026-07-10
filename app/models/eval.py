@@ -70,7 +70,7 @@ class ExpectedOutput(_Base):
     here — it is named after `output_column` (the same name), unless
     `output_column` conflicts with one of the override stage's own output
     column names, in which case it is disambiguated (see
-    `app.services.eval_dataset_columns.derive_eval_dataset_columns`)."""
+    `app.services.eval_dataset_columns`)."""
     output_column: str
     metric: Literal["exact", "abs_tol", "sign"] = "exact"
     tolerance: Optional[float] = None

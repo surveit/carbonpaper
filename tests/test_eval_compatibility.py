@@ -2,8 +2,10 @@
 the stages it names, as they are right now."""
 from __future__ import annotations
 
+import pytest
+
 from app import models as m
-from app.services.eval_dataset_columns import derive_eval_dataset_columns, get_injected_columns
+from app.services.eval_dataset_columns import get_injected_columns, get_output_columns_from_stage
 from app.services.eval_compatibility import CompatibilityReport, check_eval_compatibility
 
 
@@ -102,13 +104,18 @@ def test_unknown_reference_override_stage():
 
 
 def test_override_stage_has_no_output_schema():
+    # get_output_columns_from_stage would raise on this stage -- the
+    # precondition check must catch it and report it, not let
+    # check_eval_compatibility crash.
     src = _file_input("src", cols=["k", "v", "quote"])
     src = src.model_copy(update={"output_schema": None})
     tgt = _row("tgt", ["src"], output_schema={
         "columns": [{"name": "k"}, {"name": "score", "type": "float"}]})
     report = check_eval_compatibility(_config(), [src, tgt])
+    assert isinstance(report, CompatibilityReport)
     assert report.ok is False
     assert any("declares no output schema" in p for p in report.problems)
+    assert report.settings is None
 
 
 def test_eval_dataset_table_missing_a_column_of_override_schema():
@@ -154,11 +161,16 @@ def test_reference_override_missing_a_column_of_its_stage_schema():
 
 
 def test_expected_output_column_not_in_target_schema():
+    # The checked-column resolution inside get_injected_columns would raise
+    # on this config -- the precondition check must catch it and report it,
+    # not let check_eval_compatibility crash.
     config = _config(expected_outputs=[
         {"output_column": "not_emitted", "metric": "abs_tol", "tolerance": 1}])
     report = check_eval_compatibility(config, _stages())
+    assert isinstance(report, CompatibilityReport)
     assert report.ok is False
     assert any("not_emitted" in p for p in report.problems)
+    assert report.settings is None
 
 
 def test_abs_tol_metric_on_str_typed_target_column():
@@ -254,7 +266,7 @@ def test_table_none_still_catches_target_assertion_error():
     assert any("not_emitted" in p for p in report.problems)
 
 
-# ── override coverage is conflict-aware (derive_eval_dataset_columns) ────────
+# ── override coverage is conflict-aware (get_injected_columns) ───────────────
 def test_coverage_check_rejects_bare_name_on_a_conflicting_column():
     # override's own output includes `v`; a check also grades `v` on the
     # target -- the conflict means the eval-dataset table must carry
@@ -286,37 +298,25 @@ def test_coverage_check_accepts_conflict_aware_injected_name():
     assert report.problems == []
 
 
-# ── derive_eval_dataset_columns / get_injected_columns (the shared derivation) ─
-def test_derive_eval_dataset_columns_no_conflict_named_after_target():
+# ── get_injected_columns (the shared derivation) ──────────────────────────────
+def test_get_injected_columns_no_conflict_named_after_target():
     override = _file_input("src", cols=["k", "v"])
     target = _row("tgt", ["src"], output_schema={
         "columns": [{"name": "k"}, {"name": "score", "type": "float"}]})
-    schema = derive_eval_dataset_columns(override, target, ["score"])
-    names = [c.name for c in schema.columns]
-    assert set(names) == {"k", "v", "score"}
+    injected = get_injected_columns(override, target, ["score"])
+    names = [c.name for c in injected]
+    assert set(names) == {"k", "v"}
     assert len(names) == len(set(names))  # never a duplicate column name
-    score_col = next(c for c in schema.columns if c.name == "score")
-    assert score_col.type == "float"
 
 
-def test_derive_eval_dataset_columns_conflict_renames_both_sides():
+def test_get_injected_columns_conflict_renames_override_side():
     override = _file_input("src", cols=["k", "score"])
     target = _row("tgt", ["src"], output_schema={
         "columns": [{"name": "k"}, {"name": "score", "type": "float"}]})
-    schema = derive_eval_dataset_columns(override, target, ["score"])
-    names = [c.name for c in schema.columns]
-    assert set(names) == {"k", "override.score", "output.score"}
+    injected = get_injected_columns(override, target, ["score"])
+    names = [c.name for c in injected]
+    assert set(names) == {"k", "override.score"}
     assert len(names) == len(set(names))  # never a duplicate column name
-
-
-def test_derive_eval_dataset_columns_check_output_column_not_on_target_is_skipped():
-    # An unresolvable check column is silently skipped here -- reported
-    # separately, against the target's declared output, by
-    # check_eval_compatibility's own target-assertion check.
-    override = _file_input("src", cols=["k"])
-    target = _row("tgt", ["src"], output_schema={"columns": [{"name": "k"}]})
-    schema = derive_eval_dataset_columns(override, target, ["not_emitted"])
-    assert not any(c.name == "not_emitted" for c in schema.columns)
 
 
 def test_get_injected_columns_is_the_override_side_of_the_derivation():
@@ -325,3 +325,20 @@ def test_get_injected_columns_is_the_override_side_of_the_derivation():
         "columns": [{"name": "k"}, {"name": "score", "type": "float"}]})
     injected = get_injected_columns(override, target, ["score"])
     assert {c.name for c in injected} == {"k", "override.score"}
+
+
+# ── fail loud: no silent degradation on a missing schema or checked column ───
+def test_get_output_columns_from_stage_raises_when_stage_has_no_output_schema():
+    stage = _file_input("src", cols=["k"]).model_copy(update={"output_schema": None})
+    with pytest.raises(ValueError, match="declares no output schema"):
+        get_output_columns_from_stage(stage)
+
+
+def test_get_injected_columns_raises_for_checked_column_not_on_target():
+    # An unresolvable check column is a precondition violation the caller
+    # (check_eval_compatibility) must verify before calling in here -- it is
+    # not silently skipped.
+    override = _file_input("src", cols=["k"])
+    target = _row("tgt", ["src"], output_schema={"columns": [{"name": "k"}]})
+    with pytest.raises(ValueError, match="not_emitted"):
+        get_injected_columns(override, target, ["not_emitted"])
