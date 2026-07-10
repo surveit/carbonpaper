@@ -19,7 +19,7 @@ from app.models.workflow import validate_workflow_draft
 from app.services import node_review
 from app.services.loader import (
     find_stage_file,
-    load_compiled_dir,
+    load_workflow_object,
     stage_to_spec_dict,
     write_stage,
 )
@@ -48,13 +48,12 @@ def _merge_patch(target: object, patch: object) -> object:
 
 def _current_specs(project_dir: Path) -> dict[str, dict]:
     """The workflow's current stages as ``{id: canonical spec dict}``, read through
-    the loader — the one thing that reads compiled files. Unparseable files are
-    skipped (a validated write can't have produced one)."""
-    return {
-        c.stage.id: stage_to_spec_dict(c.stage)
-        for c in load_compiled_dir(project_dir / "compiled")
-        if c.stage is not None
-    }
+    the loader as one in-memory ``Workflow`` object. The workflow being edited is
+    always a valid, non-empty one (you edit only after it compiles), so the strict
+    loader is right here — an unloadable workflow raises rather than letting an edit
+    proceed against a silently-partial view of it."""
+    workflow = load_workflow_object(project_dir)
+    return {stage.id: stage_to_spec_dict(stage) for stage in workflow.stages}
 
 
 def _apply(project_dir: Path, specs: dict[str, dict], stage_id: str, candidate: dict) -> EditStageResult:
