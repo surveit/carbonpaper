@@ -126,7 +126,7 @@
         <strong>Edge schema check — declared input schemas vs upstream output schemas:</strong>
         <ul>
         {% for i in edge_issues %}
-          <li class="{{ i.severity }}"><code>{{ i.upstream_id }} → {{ i.stage_id }}</code> — {{ i.severity }}: {{ i.problem }}</li>
+          <li><code>{{ i.upstream_id }} → {{ i.stage_id }}</code> — {{ i.problem }}</li>
         {% endfor %}
         </ul>
       </div>

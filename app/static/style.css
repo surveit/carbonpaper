@@ -1706,8 +1706,7 @@ td.row-num, th.row-num { text-align: right; color: #98a1b3; font-variant-numeric
 @keyframes chat-spin { to { transform: rotate(360deg); } }
 
 /* Edge-schema conformance list under the workflow graph (check_edge_schemas). */
-.edge-issues { border: 1px solid #cc8a00; background: #fffaf0; border-radius: 6px;
+.edge-issues { border: 1px solid #cc2a2a; background: #fff5f5; border-radius: 6px;
     padding: .6rem 1rem; margin: .8rem 0; font-size: .85rem; }
 .edge-issues ul { margin: .4rem 0 0; padding-left: 1.2rem; }
-.edge-issues li.error { color: #cc2a2a; }
-.edge-issues li.warning { color: #8a6200; }
+.edge-issues li { color: #cc2a2a; }

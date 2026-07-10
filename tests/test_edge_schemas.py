@@ -1,7 +1,7 @@
-"""Edge-schema check: walk the workflow's edges, delegate each declared input
-copy vs its upstream `output_schema` to `TableSchema.conformance_issues`, and tag
-each result with the edge identity. The graded conformance semantics themselves
-(type/nullable/enum/pk grading) are tested in test_schema_capabilities.py."""
+"""Edge-schema check: walk the workflow's edges and flag any whose declared input
+copy is not a spec-preserving projection of its upstream `output_schema`. The
+subset/subtraction relation itself is tested in test_schema_capabilities.py; here
+we test the edge layer's job — the conformance gate, edge tagging, and skip rules."""
 from __future__ import annotations
 
 from typing import Any
@@ -46,31 +46,44 @@ def down(schema: dict[str, Any]) -> Stage:
     return down_stage(inputs=[{"id": "up", "schema": schema}])
 
 
-def test_issue_is_tagged_with_the_edge_identity():
-    d = down({"primary_key": ["k"], "columns": [
+def test_conformant_projection_is_clean():
+    d = down({"columns": [{"name": "k", "type": "str", "nullable": False}]})
+    assert check_edge_schemas([UP, d]) == []
+
+
+def test_full_copy_is_clean():
+    d = down({"columns": [
         {"name": "k", "type": "str", "nullable": False},
-        {"name": "ghost", "type": "str", "nullable": True},
+        {"name": "v", "type": "float", "nullable": True},
+    ]})
+    assert check_edge_schemas([UP, d]) == []
+
+
+def test_nonconformant_edge_is_tagged_and_names_offending_columns():
+    d = down({"columns": [
+        {"name": "k", "type": "str", "nullable": False},
+        {"name": "v", "type": "str"},        # type disagrees with producer's float
+        {"name": "ghost", "type": "str"},    # not produced upstream
     ]})
     [i] = check_edge_schemas([UP, d])
     assert (i.upstream_id, i.stage_id) == ("up", "down")
-    assert i.severity == "warning" and "ghost" in i.problem
+    assert "`v`" in i.problem and "`ghost`" in i.problem
 
 
-def test_grading_passes_through_both_error_and_warning():
-    d = down({"primary_key": ["k"], "columns": [
-        {"name": "k", "type": "str", "nullable": False},
-        {"name": "v", "type": "str"},        # type mismatch -> error
-        {"name": "ghost", "type": "str"},    # not produced upstream -> warning
-    ]})
-    assert sorted(i.severity for i in check_edge_schemas([UP, d])) == ["error", "warning"]
+def test_covariant_nullability_is_rejected():
+    # A copy that only loosens nullable (producer guarantees non-null) is safe in
+    # principle, but conformance is strict spec-equality, so it is flagged.
+    up = up_stage(out_cols=[{"name": "k", "type": "str", "nullable": False}], out_pk=["k"])
+    d = down({"columns": [{"name": "k", "type": "str", "nullable": True}]})
+    [i] = check_edge_schemas([up, d])
+    assert "`k`" in i.problem
 
 
-def test_upstream_without_output_schema_is_a_warning():
+def test_upstream_without_output_schema_is_flagged():
     bare_up = up_stage("up")
-    d = down({"primary_key": ["k"], "columns": [{"name": "k"}]})
-    issues = check_edge_schemas([bare_up, d])
-    assert [i.severity for i in issues] == ["warning"]
-    assert "output_schema" in issues[0].problem
+    d = down({"columns": [{"name": "k"}]})
+    [i] = check_edge_schemas([bare_up, d])
+    assert "output_schema" in i.problem
 
 
 def test_bare_id_inputs_and_unresolved_upstreams_are_skipped():
@@ -82,7 +95,7 @@ def test_bare_id_inputs_and_unresolved_upstreams_are_skipped():
 
 
 def test_edge_issue_is_a_workflow_validation_issue():
-    d = down({"primary_key": ["k"], "columns": [
+    d = down({"columns": [
         {"name": "k", "type": "str", "nullable": False},
         {"name": "ghost", "type": "str", "nullable": True},
     ]})

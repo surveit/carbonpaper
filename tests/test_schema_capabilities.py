@@ -299,70 +299,15 @@ def test_is_subset_of_ignores_prose():
     assert a.is_subset_of(b) is True
 
 
-# ── TableSchema.conformance_issues (a declared consumer copy vs its producer) ─
-def test_conformance_projection_subset_is_clean():
-    producer = _ts(columns=[
-        {"name": "k", "type": "str", "nullable": False},
-        {"name": "v", "type": "float", "nullable": True},
-    ])
-    consumer = _ts(columns=[{"name": "k", "type": "str", "nullable": False}])
-    assert consumer.conformance_issues(producer) == []
-
-
-def test_conformance_full_copy_is_clean():
-    producer = _ts(columns=[
-        {"name": "k", "type": "str", "nullable": False},
-        {"name": "v", "type": "float", "nullable": True},
-    ])
-    assert producer.conformance_issues(producer) == []
-
-
-def test_conformance_phantom_column_is_a_warning_even_if_nullable():
-    producer = _ts(columns=[{"name": "k", "type": "str", "nullable": False}])
-    consumer = _ts(columns=[
-        {"name": "k", "type": "str", "nullable": False},
-        {"name": "ghost", "type": "str", "nullable": True},
-    ])
-    [issue] = consumer.conformance_issues(producer)
-    assert issue.severity == "warning" and "ghost" in issue.problem
-
-
-def test_conformance_type_mismatch_is_an_error():
-    producer = _ts(columns=[{"name": "v", "type": "float"}])
-    consumer = _ts(columns=[{"name": "v", "type": "str"}])
-    [issue] = consumer.conformance_issues(producer)
-    assert issue.severity == "error" and "`v`" in issue.problem
-
-
-def test_conformance_copy_stricter_nullability_is_an_error():
-    producer = _ts(columns=[{"name": "v", "type": "float", "nullable": True}])
-    consumer = _ts(columns=[{"name": "v", "type": "float", "nullable": False}])
-    [issue] = consumer.conformance_issues(producer)
-    assert issue.severity == "error" and "nullable" in issue.problem
-
-
-def test_conformance_copy_looser_nullability_is_a_warning():
-    producer = _ts(columns=[{"name": "v", "type": "float", "nullable": False}])
-    consumer = _ts(columns=[{"name": "v", "type": "float", "nullable": True}])
-    [issue] = consumer.conformance_issues(producer)
-    assert issue.severity == "warning" and "non-null" in issue.problem
-
-
-def test_conformance_narrower_enum_is_an_error():
-    # A spec disagreement beyond type/nullable — caught because conformance reads
-    # the full column spec, not just type and nullability.
-    producer = _ts(columns=[{"name": "s", "type": "str", "enum": ["A", "B", "C"]}])
-    consumer = _ts(columns=[{"name": "s", "type": "str", "enum": ["A", "B"]}])
-    [issue] = consumer.conformance_issues(producer)
-    assert issue.severity == "error" and "enum" in issue.problem
-
-
-def test_conformance_pk_mismatch_is_an_error():
-    producer = _ts(columns=[{"name": "k", "type": "str", "nullable": False}],
-                   primary_key=["k"])
-    consumer = _ts(columns=[{"name": "k", "type": "str", "nullable": False}])
-    [issue] = consumer.conformance_issues(producer)
-    assert issue.severity == "error" and "primary key" in issue.problem
+# ── Column spec/prose field partition ────────────────────────────────────────
+def test_spec_and_prose_fields_partition_the_column_model():
+    # spec_differences depends on every Column field being classified spec or
+    # prose; the module-load assert enforces it, and this pins it as a test.
+    from app.models.schema import _PROSE_COLUMN_FIELDS, _SPEC_COLUMN_FIELDS
+    spec = set(_SPEC_COLUMN_FIELDS)
+    prose = set(_PROSE_COLUMN_FIELDS)
+    assert spec.isdisjoint(prose)
+    assert spec | prose == set(m.Column.model_fields)
 
 
 # ── TableSchema.to_prompt ────────────────────────────────────────────────────

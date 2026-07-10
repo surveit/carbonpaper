@@ -175,15 +175,9 @@ def build_mermaid_graph(
     over the standing belief). When both are None, behaves exactly as before.
 
     edge_issues (from `check_edge_schemas`) flags edges: an edge named by any
-    issue is drawn with a "⚠ schema" label and a red/amber stroke — red if any
-    of its issues is an error, else amber.
+    issue is drawn with a "⚠ schema" label and a red stroke.
     """
-    # Worst severity per edge: an error anywhere on the edge wins over a warning.
-    edge_severity: dict[tuple[str, str], str] = {}
-    for edge_issue in edge_issues or []:
-        key = (edge_issue.upstream_id, edge_issue.stage_id)
-        if edge_issue.severity == "error" or key not in edge_severity:
-            edge_severity[key] = edge_issue.severity
+    flagged_edges = {(i.upstream_id, i.stage_id) for i in edge_issues or []}
     status_glyph = {
         "ok": "✓",
         "running": "⟳",
@@ -238,17 +232,15 @@ def build_mermaid_graph(
         if stroke_spec is not None:
             stroke, width = stroke_spec
             lines.append(f"    style {sid} stroke:{stroke},stroke-width:{width}")
-    edge_stroke = {"error": "#cc2a2a", "warning": "#cc8a00"}
     link_styles: list[str] = []
     link_index = 0
     for n in nodes:
         sid = n["id"]
         for upstream in n["input_ids"]:
-            sev = edge_severity.get((upstream, sid))
-            if sev in edge_stroke:
+            if (upstream, sid) in flagged_edges:
                 lines.append(f'    {upstream} -->|"⚠ schema"| {sid}')
                 link_styles.append(
-                    f"    linkStyle {link_index} stroke:{edge_stroke[sev]},stroke-width:2.5px"
+                    f"    linkStyle {link_index} stroke:#cc2a2a,stroke-width:2.5px"
                 )
             else:
                 lines.append(f"    {upstream} --> {sid}")

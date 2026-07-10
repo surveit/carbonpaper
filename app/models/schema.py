@@ -11,8 +11,7 @@ depending on `stage.py`.
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
-from typing import Any, Literal, Optional, Sequence
+from typing import Any, Optional, Sequence
 
 from pydantic import (
     BaseModel,
@@ -163,9 +162,7 @@ class Column(_Base):
         """The spec fields on which this column and `other` disagree (empty ⇒
         same spec): every Column field except identity (`name`) and prose
         (`description`, `source`), compared recursively into nested `fields`.
-        Prose never counts, at any nesting level. The canonical column-agreement
-        check — `is_subset_of`, `subtract`, and the workflow edge-schema check
-        all read column agreement through this."""
+        Prose never counts, at any nesting level."""
         diffs: list[str] = []
         for field_name in _SPEC_COLUMN_FIELDS:
             if field_name == "fields":
@@ -180,14 +177,23 @@ Column.model_rebuild()
 
 
 # ── Column spec-equality ─────────────────────────────────────────────────────
-# A producer's output column and a consumer's declared copy of it must match on
-# SPEC, but may legitimately differ in prose (description/source). The spec
-# fields are everything the Column model declares except its identity (`name`)
-# and prose (`description`, `source`) — derived from the model, so a newly added
-# capability is compared automatically instead of being silently ignored.
-_PROSE_COLUMN_FIELDS = frozenset({"name", "description", "source"})
-_SPEC_COLUMN_FIELDS: tuple[str, ...] = tuple(
-    f for f in Column.model_fields if f not in _PROSE_COLUMN_FIELDS
+# Every Column field, split into the two kinds spec_differences needs: SPEC fields
+# are compared for agreement; PROSE fields (identity + free text) never count.
+# Both are enumerated explicitly, and the assert makes the partition exhaustive:
+# adding a Column field trips it at import until the field is classified as one or
+# the other. (Python can't enforce that at type-check time — model fields aren't a
+# closed type the way TS `keyof` is — so the check runs at import, i.e. CI time.)
+_SPEC_COLUMN_FIELDS: tuple[str, ...] = (
+    "type", "nullable", "range", "enum", "fields", "value_type",
+)
+_PROSE_COLUMN_FIELDS: frozenset[str] = frozenset({"name", "description", "source"})
+assert set(_SPEC_COLUMN_FIELDS).isdisjoint(_PROSE_COLUMN_FIELDS), (
+    "a Column field cannot be both spec and prose: "
+    f"{set(_SPEC_COLUMN_FIELDS) & _PROSE_COLUMN_FIELDS}"
+)
+assert set(_SPEC_COLUMN_FIELDS) | _PROSE_COLUMN_FIELDS == set(Column.model_fields), (
+    "every Column field must be classified spec or prose; unclassified: "
+    f"{set(Column.model_fields) - set(_SPEC_COLUMN_FIELDS) - _PROSE_COLUMN_FIELDS}"
 )
 
 
@@ -204,20 +210,6 @@ def _fields_spec_equal(a: Optional[list[Column]], b: Optional[list[Column]]) -> 
         not a_by_name[name].spec_differences(b_by_name[name])
         for name in a_by_name
     )
-
-
-# ── Schema conformance (a declared consumer copy vs its producer) ────────────
-Severity = Literal["error", "warning"]
-
-
-@dataclass
-class SchemaConformanceIssue:
-    """One way a declared consumer schema fails to fully conform to a producer
-    schema, graded by severity. Pure schema-level vocabulary — no notion of which
-    stages or edge it came from; a caller that has that context (the workflow
-    edge check) wraps these to attach it."""
-    severity: Severity
-    problem: str
 
 
 # ── Column type wording (shared by to_prompt) ───────────────────────────────
@@ -324,8 +316,8 @@ class TableSchema(_Base):
         return self
 
     def subtract(self, other: "TableSchema") -> "TableSchema":
-        """The columns of `self` whose names are not in `other`, as a schema
-        describing a reply object (no primary key or table-level metadata).
+        """The columns of `self` whose names are not in `other`, as a new schema
+        (no primary key or table-level metadata).
 
         Requires `other` to be a spec-preserving subset of `self`
         (`other.is_subset_of(self)`): every column of `other` present in `self`
@@ -353,67 +345,13 @@ class TableSchema(_Base):
         """True exactly when every column here also appears in `other` with an
         identical spec — every Column spec field compared recursively via
         `Column.spec_differences`, prose (`description`/`source`) aside. I.e.
-        this schema is a spec-preserving subset of `other`. Called by `subtract`
-        (the subtrahend must be a subset of the minuend) and by `Stage`'s 1:1
-        validator (a transform's input must be a subset of its output)."""
+        this schema is a spec-preserving subset of `other`."""
         other_by_name = {c.name: c for c in other.columns}
         return all(
             (match := other_by_name.get(c.name)) is not None
             and not c.spec_differences(match)
             for c in self.columns
         )
-
-    def conformance_issues(self, producer: "TableSchema") -> list[SchemaConformanceIssue]:
-        """Whether this schema — read as a consumer's declared copy of `producer`'s
-        output — is satisfiable by `producer`, as a graded list of the ways it is
-        not (empty ⇒ fully conformant).
-
-        A consumer copy may be a projection: it need not declare every producer
-        column. But on everything it does declare it must agree with the producer:
-
-          error   — a declared column disagrees on any spec field except a
-                    nullable-loosening (type, enum, range, nested `fields`, ...);
-                    the copy claims `nullable: false` where the producer allows
-                    nulls; or the primary keys differ.
-          warning — the copy declares a column the producer does not produce; or
-                    it loosens `nullable: false` to `nullable: true` (safe but
-                    lossy).
-
-        Whether an issue blocks is the caller's policy; this only grades them."""
-        consumer_cols = {c.name: c for c in self.columns}
-        producer_cols = {c.name: c for c in producer.columns}
-        issues: list[SchemaConformanceIssue] = []
-        for name in sorted(set(consumer_cols) - set(producer_cols)):
-            issues.append(SchemaConformanceIssue(
-                "warning", f"column `{name}` is not produced by the producer"))
-        for name in sorted(set(consumer_cols) & set(producer_cols)):
-            consumer_col, producer_col = consumer_cols[name], producer_cols[name]
-            diffs = consumer_col.spec_differences(producer_col)
-            if "nullable" in diffs:
-                if not consumer_col.nullable:
-                    issues.append(SchemaConformanceIssue(
-                        "error", f"column `{name}`: declares nullable: false "
-                        "but the producer allows nulls"))
-                else:
-                    issues.append(SchemaConformanceIssue(
-                        "warning", f"column `{name}`: allows nulls "
-                        "but the producer guarantees non-null"))
-            if "type" in diffs:
-                issues.append(SchemaConformanceIssue(
-                    "error", f"column `{name}`: declared type `{consumer_col.type}` "
-                    f"but the producer declares `{producer_col.type}`"))
-            rest = [d for d in diffs if d not in ("nullable", "type")]
-            if rest:
-                issues.append(SchemaConformanceIssue(
-                    "error", f"column `{name}`: declared {', '.join(rest)} "
-                    "disagrees with the producer"))
-        consumer_pk = self.primary_key or []
-        producer_pk = producer.primary_key or []
-        if consumer_pk != producer_pk:
-            issues.append(SchemaConformanceIssue(
-                "error", f"primary key {consumer_pk} "
-                f"but the producer declares {producer_pk}"))
-        return issues
 
     def to_prompt(self) -> str:
         """Render this schema as instructions for an LLM reply: one line per

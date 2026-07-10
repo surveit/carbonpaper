@@ -21,7 +21,7 @@ from typing import Any
 
 from pydantic import ValidationError, model_validator
 
-from app.models.schema import Severity, TableSchema, _Base, format_errors
+from app.models.schema import TableSchema, _Base, format_errors
 from app.models.stage import Stage
 
 
@@ -85,7 +85,6 @@ class WorkflowValidationIssue:
     """A problem found validating a workflow at author/save time. Distinct from a
     runtime data-validation failure (`app/runtime/validation.py`'s `Issue`), which
     judges a produced dataframe — this judges the workflow definition itself."""
-    severity: Severity
     problem: str
 
 
@@ -99,16 +98,14 @@ class EdgeSchemaIssue(WorkflowValidationIssue):
 
 
 def check_edge_schemas(stages: list[Stage]) -> list[EdgeSchemaIssue]:
-    """Conformance of each declared input schema against the upstream stage's
-    declared `output_schema`, tagged with the edge it belongs to.
+    """One issue per edge whose declared input schema does not conform to the
+    upstream stage's declared `output_schema`, tagged with the edge it belongs to.
 
-    The comparison and its error/warning grading are `TableSchema.conformance_issues`
-    (a declared input copy may be a projection of the upstream's columns, but must
-    agree on everything it declares). This walks the edges, delegates that check,
-    and adds one edge-specific case: an upstream with no `output_schema` to check
-    against is a warning. An input declared as a bare id (no `schema:` block) is
-    skipped; an input id that resolves to no stage is `check_inputs_resolve`'s
-    concern.
+    Conformance is the subtraction relation: the declared input copy must be a
+    spec-preserving projection of the producer's output — it may drop columns, but
+    on every column it declares it must match the producer's spec exactly. An input
+    declared as a bare id (no `schema:` block) is skipped; an input id that resolves
+    to no stage is `check_inputs_resolve`'s concern.
     """
     by_id = {s.id: s for s in stages}
     out: list[EdgeSchemaIssue] = []
@@ -123,19 +120,23 @@ def check_edge_schemas(stages: list[Stage]) -> list[EdgeSchemaIssue]:
 
 def _edge_issues(upstream_id: str, stage_id: str, in_schema: TableSchema,
                  up_schema: TableSchema | None) -> list[EdgeSchemaIssue]:
-    """The conformance of `in_schema` (the downstream copy) against `up_schema`
-    (the upstream `output_schema`), as edge-tagged issues. The comparison and its
-    grading live on `TableSchema.conformance_issues`; this only supplies the edge
-    identity and the case where the upstream declares no schema to check against."""
-    def edge(severity: Severity, problem: str) -> EdgeSchemaIssue:
-        return EdgeSchemaIssue(upstream_id=upstream_id, stage_id=stage_id,
-                               severity=severity, problem=problem)
+    """One issue if `in_schema` (the downstream input copy) does not conform to
+    `up_schema` (the upstream output_schema), else none. Conformance is the
+    subtraction relation `in_schema.is_subset_of(up_schema)`: a spec-preserving
+    projection. Also flags the edge-only case of an upstream with no output_schema
+    to check against."""
+    def edge(problem: str) -> EdgeSchemaIssue:
+        return EdgeSchemaIssue(upstream_id=upstream_id, stage_id=stage_id, problem=problem)
 
     if up_schema is None or not up_schema.columns:
-        return [edge("warning",
-                     "upstream declares no output_schema to check the input copy against")]
-    return [edge(issue.severity, issue.problem)
-            for issue in in_schema.conformance_issues(up_schema)]
+        return [edge("upstream declares no output_schema to check the input copy against")]
+    if in_schema.is_subset_of(up_schema):
+        return []
+    producer_cols = {c.name: c for c in up_schema.columns}
+    offending = [c.name for c in in_schema.columns
+                 if c.name not in producer_cols or c.spec_differences(producer_cols[c.name])]
+    named = ", ".join(f"`{name}`" for name in offending)
+    return [edge(f"input columns do not match `{upstream_id}`'s output: {named}")]
 
 
 class Workflow(_Base):
