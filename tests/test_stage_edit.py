@@ -171,7 +171,8 @@ def test_add_stage_creates_new_stage_referencing_existing_input(tmp_path: Path) 
            "output_schema": _OUT_SCHEMA}
     result = stage_edit.add_stage_spec(pdir, json.dumps(new))
     assert result.ok is True and result.state == "unreviewed"
-    assert any(p.name.endswith("_score.json") for p in (pdir / "compiled").glob("*.json"))
+    # a new stage is named by its id (no NN_ prefix; file order is irrelevant)
+    assert (pdir / "compiled" / "score.json").exists()
 
 
 def test_add_stage_rejects_dangling_input(tmp_path: Path) -> None:

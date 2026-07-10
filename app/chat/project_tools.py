@@ -18,7 +18,7 @@ from app.models import NODE_TYPES
 from app.models.workflow import validate_workflow_draft
 from app.services import stage_edit, versioning, workspace
 from app.services.compilation import write_methodology
-from app.services.loader import find_stage_file
+from app.services.loader import load_compiled_dir, stage_to_json
 
 # read_section caps at this many collected lines; grep_doc at this many matches
 # — bounds the agent's context intake from a document that otherwise never
@@ -49,11 +49,13 @@ def make_project_tools(name: str, *, examples_dir: Path) -> list[Callable[..., A
         return dict(NODE_TYPES)
 
     def read_stage(stage_id: str) -> str:
-        """Return the on-disk JSON of one stage. Read a stage before editing it."""
-        target = find_stage_file(project_dir / "compiled", stage_id)
-        if target is None:
+        """Return the JSON of one stage from the loaded workflow. Read before editing."""
+        stages = {c.stage.id: c.stage
+                  for c in load_compiled_dir(project_dir / "compiled") if c.stage is not None}
+        stage = stages.get(stage_id)
+        if stage is None:
             raise ValueError(f"no stage '{stage_id}' in project '{name}'")
-        return target.read_text(encoding="utf-8")
+        return stage_to_json(stage)
 
     def edit_stage(stage_id: str, changes_json: str) -> dict[str, Any]:
         """Change specific fields of one stage. `changes_json` is a JSON object of

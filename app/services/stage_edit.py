@@ -1,11 +1,12 @@
 """stage_edit.py — the single validated writer for one compiled stage.
 
-Extracted from the node-edit route so the route and the editing agent's
-`edit_stage` tool share ONE writer: same validation (`validate_stage`), same
-canonical form + hash (so an edit recolours the DAG identically), same refusal to
-write an invalid spec. Lives here (not in node_review.py, which is free of
-app.models) because validating requires the Stage model. All on-disk I/O goes
-through the loader."""
+Extracted from the node-edit route so the route and the editing agent's tools
+share ONE writer. It never touches disk itself: it loads the current workflow
+through the loader (`Stage` objects, not raw files), applies the change to the
+in-memory stage set, validates the whole resulting workflow, and only if that is
+clean persists the one stage through `write_stage`. The loader is the sole disk
+interface, both directions.
+"""
 
 from __future__ import annotations
 
@@ -47,93 +48,70 @@ def _merge_patch(target: object, patch: object) -> object:
     return base
 
 
-def _current_stage(project_dir: Path, stage_id: str) -> dict:
-    """Read one stage's current on-disk spec as a dict. Raises FileNotFoundError
-    if it does not exist — edit revises, it never creates."""
-    target = find_stage_file(project_dir / "compiled", stage_id)
-    if target is None:
-        raise FileNotFoundError(f"no existing compiled file for stage '{stage_id}' in {project_dir.name}")
-    data = json.loads(target.read_text(encoding="utf-8"))
-    if not isinstance(data, dict):
-        raise ValueError(f"compiled file for stage '{stage_id}' is not a JSON object")
-    return data
+def _current_specs(project_dir: Path) -> dict[str, dict]:
+    """The workflow's current stages as ``{id: canonical spec dict}``, read through
+    the loader — the one thing that reads compiled files. Unparseable files are
+    skipped (a validated write can't have produced one)."""
+    return {
+        c.stage.id: stage_to_spec_dict(c.stage)
+        for c in load_compiled_dir(project_dir / "compiled")
+        if c.stage is not None
+    }
 
 
-def _write_validated(project_dir: Path, stage_id: str, stage: dict) -> EditStageResult:
-    """Shared tail for both writers: strip non-spec keys, enforce the id, validate,
-    and only then overwrite the stage's compiled file. Returns issues and writes
-    nothing on any problem; the returned hash/state recolour the DAG."""
-    stage = {k: v for k, v in stage.items() if k not in node_review.CANONICAL_IGNORE_KEYS}
-
-    parsed_id = stage.get("id")
-    if parsed_id != stage_id:
-        return EditStageResult(
-            ok=False,
-            issues=[f"the stage id must equal '{stage_id}' (got '{parsed_id}')"],
-        )
-
-    target = find_stage_file(project_dir / "compiled", stage_id)
-    if target is None:
-        raise FileNotFoundError(f"no existing compiled file for stage '{stage_id}' in {project_dir.name}")
-
-    issues = _workflow_issues_after(project_dir, stage, replacing=stage_id)
-    if issues:
-        return EditStageResult(ok=False, issues=issues)
-
-    validated = Stage.model_validate(stage)
-    write_stage(target, validated)
-    return _result_for(project_dir, validated)
-
-
-def _result_for(project_dir: Path, validated: Stage) -> EditStageResult:
-    """The canonical hash + review-state for a just-written stage. Shared so every
-    writer recolours the DAG identically."""
-    spec = stage_to_spec_dict(validated)
+def _result_for(project_dir: Path, stage: Stage) -> EditStageResult:
+    """The canonical hash + review-state for a just-written stage, read from the
+    same review decisions the DAG colours off — so the caller can reflect the new
+    node colour without a reload."""
+    spec = stage_to_spec_dict(stage)
     content_hash = node_review.node_content_hash(spec)
     decisions = node_review.load_node_decisions(project_dir)
     state = node_review.approval_state_for(spec, decisions)["state"]
     return EditStageResult(ok=True, content_hash=content_hash, state=state)
 
 
-def _next_index(compiled_dir: Path) -> int:
-    """The next `NN_` filename prefix for a new compiled stage: one past the
-    highest existing prefix (so a new stage is appended), or 1 if the dir is empty."""
-    indices = [
-        int(head)
-        for f in compiled_dir.glob("*.json")
-        if (head := f.name.split("_", 1)[0]).isdigit()
-    ]
-    return (max(indices) + 1) if indices else 1
+def _apply(project_dir: Path, specs: dict[str, dict], stage_id: str, candidate: dict) -> EditStageResult:
+    """Apply ``candidate`` as stage ``stage_id`` to the in-memory workflow ``specs``,
+    validate the whole resulting workflow (per-stage AND graph, via the same
+    `validate_workflow_draft` the loader enforces), and only if clean persist the
+    one stage through the loader. Returns issues and writes nothing otherwise."""
+    candidate = {k: v for k, v in candidate.items() if k not in node_review.CANONICAL_IGNORE_KEYS}
+    if candidate.get("id") != stage_id:
+        return EditStageResult(
+            ok=False,
+            issues=[f"the stage id must equal '{stage_id}' (got '{candidate.get('id')}')"],
+        )
 
+    resulting = {**specs, stage_id: candidate}
+    issues = validate_workflow_draft(list(resulting.values()))
+    if issues:
+        return EditStageResult(ok=False, issues=issues)
 
-def _workflow_issues_after(project_dir: Path, candidate: dict, *, replacing: str | None) -> list[str]:
-    """Every issue — per-stage OR cross-stage graph — the workflow would have if
-    `candidate` were written: added (replacing=None) or replacing the stage
-    `replacing`. Validates the whole resulting stage set through
-    `validate_workflow_draft`, the same gate `load_workflow` enforces, so no agent
-    write can leave `load_stages`/`load_workflow` unable to parse the project.
-    Subsumes per-stage validation and the dangling-input (inputs-resolve) check."""
-    drop = {replacing, candidate.get("id")}
-    others = [
-        stage_to_spec_dict(c.stage)
-        for c in load_compiled_dir(project_dir / "compiled")
-        if c.stage is not None and c.stage.id not in drop
-    ]
-    return validate_workflow_draft([*others, candidate])
+    validated = Stage.model_validate(candidate)
+    # Overwrite the stage's existing file if it has one; a new stage is named by
+    # its id (file order is irrelevant — the workflow order is the input_ids DAG).
+    target = find_stage_file(project_dir / "compiled", stage_id) or (
+        project_dir / "compiled" / f"{stage_id}.json"
+    )
+    write_stage(target, validated)
+    return _result_for(project_dir, validated)
 
 
 def edit_stage_spec(project_dir: Path, stage_id: str, spec_text: str) -> EditStageResult:
     """Replace `stage_id`'s spec with `spec_text` (a whole stage as JSON) — used by
     the human node editor, which submits the full spec it is showing. Returns
     issues (and writes nothing) on any parse/validation problem. Raises
-    FileNotFoundError if no compiled file for `stage_id` exists."""
+    FileNotFoundError if `stage_id` is not a stage in this workflow."""
     try:
         parsed = json.loads(spec_text)
     except json.JSONDecodeError as exc:
         return EditStageResult(ok=False, issues=[f"JSON parse error: {exc}"])
     if not isinstance(parsed, dict):
         return EditStageResult(ok=False, issues=["edited spec must be a JSON object (a single stage)"])
-    return _write_validated(project_dir, stage_id, parsed)
+    specs = _current_specs(project_dir)
+    if stage_id not in specs:
+        raise FileNotFoundError(f"no stage '{stage_id}' in {project_dir.name}")
+    return _apply(project_dir, specs, stage_id, parsed)
 
 
 def patch_stage_spec(project_dir: Path, stage_id: str, patch_text: str) -> EditStageResult:
@@ -149,41 +127,32 @@ def patch_stage_spec(project_dir: Path, stage_id: str, patch_text: str) -> EditS
         return EditStageResult(ok=False, issues=[f"JSON parse error: {exc}"])
     if not isinstance(patch, dict):
         return EditStageResult(ok=False, issues=["changes must be a JSON object of {field: new_value}"])
-    merged = _merge_patch(_current_stage(project_dir, stage_id), patch)
+    specs = _current_specs(project_dir)
+    if stage_id not in specs:
+        raise FileNotFoundError(f"no stage '{stage_id}' in {project_dir.name}")
+    merged = _merge_patch(specs[stage_id], patch)
     assert isinstance(merged, dict)  # both inputs are dicts, so the merge is too
-    return _write_validated(project_dir, stage_id, merged)
+    return _apply(project_dir, specs, stage_id, merged)
 
 
 def add_stage_spec(project_dir: Path, spec_text: str) -> EditStageResult:
     """Create a NEW stage from `spec_text` (a whole stage as JSON). The id must not
-    already exist (use edit for an existing one), the spec must validate, and every
-    id referenced in `inputs` must already be a stage in this workflow — a dangling
-    input is rejected, not written. Returns issues (and writes nothing) on any
-    problem. The new stage is appended as a fresh unreviewed (amber) node."""
+    already exist (use edit for an existing one). The resulting whole workflow is
+    validated — a dangling input (or any per-stage / graph problem) is rejected,
+    not written. The new stage lands as a fresh unreviewed (amber) node."""
     try:
         parsed = json.loads(spec_text)
     except json.JSONDecodeError as exc:
         return EditStageResult(ok=False, issues=[f"JSON parse error: {exc}"])
     if not isinstance(parsed, dict):
         return EditStageResult(ok=False, issues=["new stage must be a JSON object (a single stage)"])
-
-    stage = {k: v for k, v in parsed.items() if k not in node_review.CANONICAL_IGNORE_KEYS}
-    stage_id = stage.get("id")
+    stage_id = parsed.get("id")
     if not isinstance(stage_id, str) or not stage_id:
         return EditStageResult(ok=False, issues=["new stage must have a non-empty string 'id'"])
-
-    compiled_dir = project_dir / "compiled"
-    if find_stage_file(compiled_dir, stage_id) is not None:
+    specs = _current_specs(project_dir)
+    if stage_id in specs:
         return EditStageResult(
             ok=False,
             issues=[f"stage '{stage_id}' already exists — use edit_stage to change it"],
         )
-
-    issues = _workflow_issues_after(project_dir, stage, replacing=None)
-    if issues:
-        return EditStageResult(ok=False, issues=issues)
-
-    validated = Stage.model_validate(stage)
-    target = compiled_dir / f"{_next_index(compiled_dir):02d}_{stage_id}.json"
-    write_stage(target, validated)
-    return _result_for(project_dir, validated)
+    return _apply(project_dir, specs, stage_id, parsed)
