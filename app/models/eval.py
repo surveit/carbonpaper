@@ -42,7 +42,7 @@ from app.models.table import TableRef
 _SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
 
 
-def _slug(v: str) -> str:
+def _validate_slug(v: str) -> str:
     """Object ids land on disk as `<object_type>/<object_id>.data`, so keep them
     filesystem-safe: lowercase, digits, underscore or hyphen."""
     if not _SLUG_RE.match(v):
@@ -50,7 +50,7 @@ def _slug(v: str) -> str:
     return v
 
 
-SlugId = Annotated[str, AfterValidator(_slug)]
+SlugId = Annotated[str, AfterValidator(_validate_slug)]
 
 
 # ── Overrides ────────────────────────────────────────────────────────────────

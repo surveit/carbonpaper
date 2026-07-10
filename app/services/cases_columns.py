@@ -63,25 +63,25 @@ def derive_cases_columns(
     `target_stage` id resolved to (`None` if the id names no stage in the
     workflow). `check_actuals` are each check's `actual` target column;
     blanks (an unfilled row in the authoring form) are ignored."""
-    override_columns, override_problems = _override_columns(override)
-    target_schema, target_problems = _target_schema(target)
+    override_columns, override_problems = _resolve_override_columns(override)
+    target_schema, target_problems = _resolve_target_schema(target)
 
     actuals = [a for a in check_actuals if a]
-    clash = _clash_names(override_columns, actuals)
+    clash = _find_clashes(override_columns, actuals)
 
     injected = _rename_clashing(override_columns, clash, prefix="override.")
-    answers, check_problems = _answer_columns(target_schema, actuals, clash, target)
+    answers, check_problems = _build_answer_columns(target_schema, actuals, clash, target)
 
     return CasesColumns(
         injected=injected, answers=answers,
-        warnings=_clash_warnings(clash),
+        warnings=_build_clash_warnings(clash),
         override_problems=override_problems,
         other_problems=target_problems + check_problems,
     )
 
 
 # ── Per-side column resolution ────────────────────────────────────────────────
-def _override_columns(override: Stage | None) -> tuple[list[Column], list[str]]:
+def _resolve_override_columns(override: Stage | None) -> tuple[list[Column], list[str]]:
     """The override stage's declared output columns, or `[]` plus a problem
     naming why (no such stage, or the stage declares no output schema)."""
     if override is None:
@@ -91,7 +91,7 @@ def _override_columns(override: Stage | None) -> tuple[list[Column], list[str]]:
     return list(override.output_schema.columns), []
 
 
-def _target_schema(target: Stage | None) -> tuple[TableSchema | None, list[str]]:
+def _resolve_target_schema(target: Stage | None) -> tuple[TableSchema | None, list[str]]:
     """The target stage's declared output schema, or `None` plus a problem
     naming why (no such stage, or the stage declares no output schema)."""
     if target is None:
@@ -102,7 +102,7 @@ def _target_schema(target: Stage | None) -> tuple[TableSchema | None, list[str]]
 
 
 # ── Name-clash handling ─────────────────────────────────────────────────────
-def _clash_names(override_columns: list[Column], actuals: list[str]) -> set[str]:
+def _find_clashes(override_columns: list[Column], actuals: list[str]) -> set[str]:
     override_names = {c.name for c in override_columns}
     return {a for a in actuals if a in override_names}
 
@@ -116,8 +116,9 @@ def _rename_clashing(columns: list[Column], clash: set[str], *, prefix: str) -> 
     return list(renamed.values())
 
 
-def _answer_columns(target_schema: TableSchema | None, actuals: list[str],
-                    clash: set[str], target: Stage | None) -> tuple[list[Column], list[str]]:
+def _build_answer_columns(
+        target_schema: TableSchema | None, actuals: list[str],
+        clash: set[str], target: Stage | None) -> tuple[list[Column], list[str]]:
     """One answer column per `actual` that resolves against `target_schema`
     (clash-renamed `output.<name>`); an `actual` with no matching target
     column is skipped and reported instead."""
@@ -134,7 +135,7 @@ def _answer_columns(target_schema: TableSchema | None, actuals: list[str],
     return list(answers.values()), problems
 
 
-def _clash_warnings(clash: set[str]) -> list[str]:
+def _build_clash_warnings(clash: set[str]) -> list[str]:
     return [
         f"`{name}` is both an injected input and a checked output -- the "
         f"cases file names them `override.{name}` (input) and `output.{name}` (answer)."

@@ -42,7 +42,7 @@ def list_eval_configs(project_dir: Path) -> list[EvalConfigEntry]:
     malformed or invalid file becomes an entry with `issues` set and
     `config=None` rather than being dropped or aborting the whole listing.
     Empty (or absent) `eval_config/` yields an empty list."""
-    config_dir = _eval_config_dir(project_dir)
+    config_dir = _resolve_eval_config_dir(project_dir)
     if not config_dir.is_dir():
         return []
     entries: list[EvalConfigEntry] = []
@@ -55,7 +55,7 @@ def load_eval_config(project_dir: Path, eval_id: str) -> EvalConfig:
     """Load one eval config by id. Raises `FileNotFoundError` if the file is
     absent, `ValueError` (naming the path) if it is unreadable YAML or fails
     the EvalConfig contract — never returns a partial or best-guess config."""
-    path = _eval_config_dir(project_dir) / f"{eval_id}.yaml"
+    path = _resolve_eval_config_dir(project_dir) / f"{eval_id}.yaml"
     if not path.is_file():
         raise FileNotFoundError(f"no eval config at {path}")
     data = _read_yaml(path, what="eval config")
@@ -70,7 +70,7 @@ def load_eval_config(project_dir: Path, eval_id: str) -> EvalConfig:
 def save_eval_config(project_dir: Path, config: EvalConfig) -> Path:
     """Write `config` to `eval_config/{config.id}.yaml`. Overwrite allowed —
     configs are mutable authored objects, unlike dataset uploads."""
-    config_dir = _eval_config_dir(project_dir)
+    config_dir = _resolve_eval_config_dir(project_dir)
     config_dir.mkdir(parents=True, exist_ok=True)
     path = config_dir / f"{config.id}.yaml"
     path.write_text(
@@ -89,7 +89,7 @@ def load_eval_run(project_dir: Path, run_id: str) -> EvalRun:
     as a path component."""
     if not _SLUG_RE.match(run_id):
         raise ValueError(f"not a valid run id: {run_id!r}")
-    path = _eval_run_dir(project_dir) / f"{run_id}.json"
+    path = _resolve_eval_run_dir(project_dir) / f"{run_id}.json"
     if not path.is_file():
         raise FileNotFoundError(f"no eval run at {path}")
     try:
@@ -108,7 +108,7 @@ def list_eval_runs(project_dir: Path, config_id: str) -> list[EvalRun]:
     """All runs of `config_id`, newest-first by `(started_at or "", id)`. Runs
     are written elsewhere; this only reads `eval_run/*.json` (absent dir ->
     empty list, never created here)."""
-    run_dir = _eval_run_dir(project_dir)
+    run_dir = _resolve_eval_run_dir(project_dir)
     if not run_dir.is_dir():
         return []
     runs = [EvalRun.model_validate(json.loads(path.read_text(encoding="utf-8")))
@@ -126,7 +126,7 @@ def save_dataset_upload(project_dir: Path, filename: str, content: bytes) -> Pat
     are immutable once written."""
     if not _SLUG_RE.match(filename):
         raise ValueError(f"not a valid upload filename: {filename!r}")
-    data_dir = _eval_data_dir(project_dir)
+    data_dir = _resolve_eval_data_dir(project_dir)
     data_dir.mkdir(parents=True, exist_ok=True)
     path = data_dir / filename
     if path.exists():
@@ -167,15 +167,15 @@ def eval_status(report: CompatibilityReport, runs: list[EvalRun],
 
 
 # ── Directory layout ─────────────────────────────────────────────────────────
-def _eval_config_dir(project_dir: Path) -> Path:
+def _resolve_eval_config_dir(project_dir: Path) -> Path:
     return Path(project_dir) / "eval_config"
 
 
-def _eval_run_dir(project_dir: Path) -> Path:
+def _resolve_eval_run_dir(project_dir: Path) -> Path:
     return Path(project_dir) / "eval_run"
 
 
-def _eval_data_dir(project_dir: Path) -> Path:
+def _resolve_eval_data_dir(project_dir: Path) -> Path:
     return Path(project_dir) / "eval_data"
 
 

@@ -36,28 +36,28 @@ def check_eval_compatibility(config: EvalConfig,
     even attempted."""
     by_id = {s.id: s for s in stages}
 
-    missing = _missing_stage_problems(config, by_id)
+    missing = _check_stages_exist(config, by_id)
     if missing:
         return CompatibilityReport(ok=False, problems=missing, settings=None)
 
     problems = (
-        _reachability_problems(config, stages)
-        + _cases_coverage_problems(config, by_id)
-        + _reference_override_problems(config, by_id)
-        + _target_check_problems(config, by_id)
+        _check_target_reachable(config, stages)
+        + _check_cases_cover_override(config, by_id)
+        + _check_reference_overrides_cover_stages(config, by_id)
+        + _check_target_emits_checked_columns(config, by_id)
     )
-    gate_problems, blocked = _structural_gate_problems(config, stages)
+    gate_problems, blocked = _check_structural_gate(config, stages)
     problems += gate_problems
     if blocked:
         return CompatibilityReport(ok=False, problems=problems, settings=None)
 
-    settings, grain_problems = _grain_settings(config, stages)
+    settings, grain_problems = _resolve_grain_settings(config, stages)
     problems += grain_problems
     return CompatibilityReport(ok=not problems, problems=problems, settings=settings)
 
 
 # ── Condition 1: every referenced stage exists ────────────────────────────────
-def _missing_stage_problems(config: EvalConfig, by_id: dict[str, Stage]) -> list[str]:
+def _check_stages_exist(config: EvalConfig, by_id: dict[str, Stage]) -> list[str]:
     """Every stage id the config references (override, target, each reference
     override) must exist — checked first since nothing else here is
     answerable against a stage that isn't there."""
@@ -68,17 +68,17 @@ def _missing_stage_problems(config: EvalConfig, by_id: dict[str, Stage]) -> list
 
 
 # ── Condition 1b: the override must actually reach the target ────────────────
-def _reachability_problems(config: EvalConfig, stages: Sequence[Stage]) -> list[str]:
+def _check_target_reachable(config: EvalConfig, stages: Sequence[Stage]) -> list[str]:
     """The target must be reachable from the override, else the override
     injects into a branch that never feeds the target and the eval is inert.
     Reference overrides are exempt (they inject side data)."""
-    if config.target_stage in _descendants(config.override_stage, stages):
+    if config.target_stage in _find_descendants(config.override_stage, stages):
         return []
     return [f"target `{config.target_stage}` is not reachable from override "
            f"`{config.override_stage}`; the override would not affect it"]
 
 
-def _descendants(stage_id: str, stages: Sequence[Stage]) -> set[str]:
+def _find_descendants(stage_id: str, stages: Sequence[Stage]) -> set[str]:
     descendants: set[str] = set()
     stack = [stage_id]
     while stack:
@@ -91,7 +91,7 @@ def _descendants(stage_id: str, stages: Sequence[Stage]) -> set[str]:
 
 
 # ── Condition 2: every injected table is a valid stand-in ────────────────────
-def _cases_coverage_problems(config: EvalConfig, by_id: dict[str, Stage]) -> list[str]:
+def _check_cases_cover_override(config: EvalConfig, by_id: dict[str, Stage]) -> list[str]:
     """The cases table, if attached, must be a valid stand-in for the
     override stage's output: every column `derive_cases_columns` says the
     file must carry (clash-renamed) has to spec-match a column already in
@@ -102,11 +102,12 @@ def _cases_coverage_problems(config: EvalConfig, by_id: dict[str, Stage]) -> lis
     derived = derive_cases_columns(
         by_id[config.override_stage], by_id[config.target_stage], check_actuals)
     required = TableSchema(columns=derived.injected)
-    return derived.override_problems + _missing_columns_problems(
+    return derived.override_problems + _check_columns_covered(
         required, config.table.table_schema, config.override_stage, "cases table")
 
 
-def _reference_override_problems(config: EvalConfig, by_id: dict[str, Stage]) -> list[str]:
+def _check_reference_overrides_cover_stages(config: EvalConfig,
+                                            by_id: dict[str, Stage]) -> list[str]:
     """Each reference override's injected table must be a valid stand-in for
     the stage it overrides — same coverage requirement as the cases table,
     applied per reference override."""
@@ -117,14 +118,14 @@ def _reference_override_problems(config: EvalConfig, by_id: dict[str, Stage]) ->
             problems.append(f"cannot verify reference override `{ov.stage_id}`: "
                             f"stage declares no output schema")
             continue
-        problems += _missing_columns_problems(
+        problems += _check_columns_covered(
             stage.output_schema, ov.table.table_schema, ov.stage_id,
             f"reference override `{ov.stage_id}`")
     return problems
 
 
-def _missing_columns_problems(required: TableSchema, provided: TableSchema,
-                              stage_id: str, label: str) -> list[str]:
+def _check_columns_covered(required: TableSchema, provided: TableSchema,
+                           stage_id: str, label: str) -> list[str]:
     """Every column `required` has that `provided` doesn't spec-match, via
     `TableSchema.missing_from` — absent by name or differing on type,
     nullability, or another spec field (prose aside)."""
@@ -134,7 +135,8 @@ def _missing_columns_problems(required: TableSchema, provided: TableSchema,
 
 
 # ── Conditions 3 + 3b: the target's declared output covers the checks ────────
-def _target_check_problems(config: EvalConfig, by_id: dict[str, Stage]) -> list[str]:
+def _check_target_emits_checked_columns(config: EvalConfig,
+                                        by_id: dict[str, Stage]) -> list[str]:
     """Every check's `actual` column must exist on the target's declared
     output, and an abs_tol check needs that column to be numeric."""
     target = by_id[config.target_stage]
@@ -153,7 +155,7 @@ def _target_check_problems(config: EvalConfig, by_id: dict[str, Stage]) -> list[
 
 
 # ── Condition 4: a reference override cannot also be the target ──────────────
-def _target_collision_problems(config: EvalConfig) -> list[str]:
+def _check_no_reference_override_on_target(config: EvalConfig) -> list[str]:
     """A reference override on the target stage would make the target its
     own override, which has no coherent path to resolve — reported here
     rather than letting it reach `resolve_eval_run_settings`."""
@@ -162,7 +164,7 @@ def _target_collision_problems(config: EvalConfig) -> list[str]:
 
 
 # ── Structural: the stage list itself must be a valid workflow ───────────────
-def _structural_problems(stages: Sequence[Stage]) -> list[str]:
+def _check_workflow_structure(stages: Sequence[Stage]) -> list[str]:
     """Cross-stage problems (dangling input, duplicate id, cycle) a per-file
     validator wouldn't catch."""
     issues = validate_workflow(list(stages))
@@ -172,18 +174,19 @@ def _structural_problems(stages: Sequence[Stage]) -> list[str]:
            + "; ".join(issues)]
 
 
-def _structural_gate_problems(config: EvalConfig,
-                              stages: Sequence[Stage]) -> tuple[list[str], bool]:
+def _check_structural_gate(config: EvalConfig,
+                           stages: Sequence[Stage]) -> tuple[list[str], bool]:
     """Condition 4 + structural combined, with whether either blocks going
     further: both leave the path unresolvable, so `settings` can't even be
     attempted."""
-    problems = _target_collision_problems(config) + _structural_problems(stages)
+    problems = (_check_no_reference_override_on_target(config)
+               + _check_workflow_structure(stages))
     return problems, bool(problems)
 
 
 # ── Condition 5: the path must preserve grain (or fall back to a code scorer) ─
-def _grain_settings(config: EvalConfig,
-                    stages: Sequence[Stage]) -> tuple[EvalRunSettings, list[str]]:
+def _resolve_grain_settings(config: EvalConfig,
+                            stages: Sequence[Stage]) -> tuple[EvalRunSettings, list[str]]:
     """The path must preserve grain row-by-row, unless a code scorer takes
     over — the same decision `resolve_eval_run_settings` makes for a run."""
     workflow = Workflow.model_validate({"stages": [s.model_dump(mode="json") for s in stages]})
