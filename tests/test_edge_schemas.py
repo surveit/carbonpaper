@@ -67,7 +67,7 @@ def test_nonconformant_edge_is_tagged_and_names_offending_columns():
     ]})
     [i] = check_edge_schemas([UP, d])
     assert (i.upstream_id, i.stage_id) == ("up", "down")
-    assert "`v`" in i.problem and "`ghost`" in i.problem
+    assert "'v'" in i.problem and "'ghost'" in i.problem
 
 
 def test_covariant_nullability_is_rejected():
@@ -76,7 +76,7 @@ def test_covariant_nullability_is_rejected():
     up = up_stage(out_cols=[{"name": "k", "type": "str", "nullable": False}], out_pk=["k"])
     d = down({"columns": [{"name": "k", "type": "str", "nullable": True}]})
     [i] = check_edge_schemas([up, d])
-    assert "`k`" in i.problem
+    assert "'k'" in i.problem
 
 
 def test_upstream_without_output_schema_is_flagged():

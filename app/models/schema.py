@@ -165,9 +165,9 @@ class Column(_Base):
         Prose never counts, at any nesting level."""
         diffs: list[str] = []
         for field_name in _SPEC_COLUMN_FIELDS:
-            if field_name == "fields":
+            if field_name == _RECURSIVE_SPEC_FIELD:
                 if not _fields_spec_equal(self.fields, other.fields):
-                    diffs.append("fields")
+                    diffs.append(_RECURSIVE_SPEC_FIELD)
             elif getattr(self, field_name) != getattr(other, field_name):
                 diffs.append(field_name)
         return diffs
@@ -183,8 +183,11 @@ Column.model_rebuild()
 # adding a Column field trips it at import until the field is classified as one or
 # the other. (Python can't enforce that at type-check time — model fields aren't a
 # closed type the way TS `keyof` is — so the check runs at import, i.e. CI time.)
+# The one spec field holding nested columns: compared by sub-spec (recursing via
+# `_fields_spec_equal`), not by `==` like the scalar fields.
+_RECURSIVE_SPEC_FIELD = "fields"
 _SPEC_COLUMN_FIELDS: tuple[str, ...] = (
-    "type", "nullable", "range", "enum", "fields", "value_type",
+    "type", "nullable", "range", "enum", _RECURSIVE_SPEC_FIELD, "value_type",
 )
 _PROSE_COLUMN_FIELDS: frozenset[str] = frozenset({"name", "description", "source"})
 assert set(_SPEC_COLUMN_FIELDS).isdisjoint(_PROSE_COLUMN_FIELDS), (

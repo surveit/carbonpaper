@@ -121,22 +121,21 @@ def check_edge_schemas(stages: list[Stage]) -> list[EdgeSchemaIssue]:
 def _edge_issues(upstream_id: str, stage_id: str, in_schema: TableSchema,
                  up_schema: TableSchema | None) -> list[EdgeSchemaIssue]:
     """One issue if `in_schema` (the downstream input copy) does not conform to
-    `up_schema` (the upstream output_schema), else none. Conformance is the
-    subtraction relation `in_schema.is_subset_of(up_schema)`: a spec-preserving
-    projection. Also flags the edge-only case of an upstream with no output_schema
-    to check against."""
-    def edge(problem: str) -> EdgeSchemaIssue:
-        return EdgeSchemaIssue(upstream_id=upstream_id, stage_id=stage_id, problem=problem)
-
+    `up_schema` (the upstream output_schema), else none. Conformance is exactly
+    subtractability: `up_schema.subtract(in_schema)` succeeds iff the copy is a
+    spec-preserving projection of the producer, and raises naming the columns that
+    disagree. Also flags the edge-only case of an upstream with no output_schema to
+    check against."""
     if up_schema is None or not up_schema.columns:
-        return [edge("upstream declares no output_schema to check the input copy against")]
-    if in_schema.is_subset_of(up_schema):
+        return [EdgeSchemaIssue(
+            problem="upstream declares no output_schema to check the input copy against",
+            upstream_id=upstream_id, stage_id=stage_id)]
+    try:
+        up_schema.subtract(in_schema)
         return []
-    producer_cols = {c.name: c for c in up_schema.columns}
-    offending = [c.name for c in in_schema.columns
-                 if c.name not in producer_cols or c.spec_differences(producer_cols[c.name])]
-    named = ", ".join(f"`{name}`" for name in offending)
-    return [edge(f"input columns do not match `{upstream_id}`'s output: {named}")]
+    except ValueError as mismatch:
+        return [EdgeSchemaIssue(problem=str(mismatch),
+                                upstream_id=upstream_id, stage_id=stage_id)]
 
 
 class Workflow(_Base):
