@@ -56,12 +56,12 @@ def build_trace_view(trace: dict[str, Any], stages: dict[str, Stage]) -> dict[st
     an origin and why (the terminal reason, folded onto the earliest node
     rather than shown as its own step).
     """
-    chrono = list(reversed(trace["hops"]))
-    terminal = trace["terminal"]
-    truncated = terminal["kind"] != "origin"
+    chrono = list(reversed(trace["steps"]))
+    end = trace["end"]
+    truncated = not end["reached_origin"]
 
     nodes: list[dict[str, Any]] = []
-    for i, hop in enumerate(chrono):
+    for i, step in enumerate(chrono):
         is_claim = i == len(chrono) - 1
         is_first = i == 0
         if is_claim:
@@ -72,14 +72,14 @@ def build_trace_view(trace: dict[str, Any], stages: dict[str, Stage]) -> dict[st
             role = "step"
         nodes.append({
             "step": i + 1,  # 1-based, chronological — so the story can say "step 4"
-            "stage_id": hop["stage_id"],
-            "row_ordinal": hop["row_ordinal"],  # for loading the row-trimmed panel
-            "stage_type": hop["stage_type"],
-            "origin": hop["origin"],
+            "stage_id": step["stage_id"],
+            "row_ordinal": step["row_ordinal"],  # for loading the row-trimmed panel
+            "stage_type": step["stage_type"],
+            "origin": step["origin"],
             "role": role,
-            "columns_new": hop["columns_new"],
-            "row": hop["row"],
-            "transform": _transform_of(stages.get(hop["stage_id"])),
+            "columns_new": step["columns_new"],
+            "row": step["row"],
+            "transform": _transform_of(stages.get(step["stage_id"])),
         })
 
     edges = [
@@ -96,7 +96,7 @@ def build_trace_view(trace: dict[str, Any], stages: dict[str, Stage]) -> dict[st
         "edges": edges,
         "upstream": {
             "truncated": truncated,
-            "at_stage": terminal["stage_id"],
-            "message": terminal["message"],
+            "at_stage": end["at_stage"],
+            "message": end["message"],
         },
     }

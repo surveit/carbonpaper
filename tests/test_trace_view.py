@@ -23,17 +23,17 @@ def _stages() -> dict[str, Stage]:
 
 
 def _trace() -> dict:
-    # trace_to_dict shape: hops newest-first, terminal at the origin.
+    # trace_to_dict shape: steps newest-first, end at the origin.
     return {
         "run_id": "R1", "start_stage": "enrich", "start_row": 0,
-        "hops": [
+        "steps": [
             {"stage_id": "enrich", "stage_type": "python_row_function", "row_ordinal": 0,
              "row": {"facility_id": "a", "score": 1}, "columns_new": ["score"], "origin": "computed"},
             {"stage_id": "seeds", "stage_type": "input_data", "row_ordinal": 0,
              "row": {"facility_id": "a"}, "columns_new": ["facility_id"], "origin": "source"},
         ],
-        "terminal": {"kind": "origin", "stage_id": "seeds",
-                     "message": "input_data stage — the rows originate here"},
+        "end": {"reached_origin": True, "at_stage": "seeds",
+                "message": "input_data stage — the rows originate here"},
     }
 
 
@@ -76,11 +76,11 @@ def test_clean_origin_is_not_truncated():
     assert view["upstream"]["truncated"] is False
 
 
-def test_stop_terminal_marks_upstream_truncated():
+def test_stop_end_marks_upstream_truncated():
     trace = _trace()
-    trace["hops"] = trace["hops"][:1]  # only the enrich hop
-    trace["terminal"] = {"kind": "llm_transform", "stage_id": "enrich",
-                         "message": "llm_transform is 1:1 only once PR #29 lands (issue #61)"}
+    trace["steps"] = trace["steps"][:1]  # only the enrich step
+    trace["end"] = {"reached_origin": False, "at_stage": "enrich",
+                    "message": "stops at llm_transform … issue #61"}
     view = build_trace_view(trace, _stages())
     assert view["upstream"]["truncated"] is True
     assert "#61" in view["upstream"]["message"]

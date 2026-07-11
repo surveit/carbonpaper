@@ -2,14 +2,10 @@
 row-preserving stages of one run, by row ordinal alone.
 
 A stage is *row-preserving* when output row i is produced from input row i by
-position — true for `input_data` (rows originate here) and `python_row_function`
-(a 1:1 map over rows). For such a chain the row ordinal is the cross-stage key,
-so nothing needs to be recorded: the tracer just reads row i at each stage. At
-any other stage type the walk stops with a reason — `llm_transform` is 1:1 only
-once PR #29 lands (issue #61); `join` / `aggregate` / `python_frame_function`
-and fan-out reshape rows and need recorded edges (issue #58). The walk also
-stops if a supposedly row-preserving hop has unequal row counts on its two
-sides, because position cannot be trusted then.
+position. For such a chain the row ordinal is the cross-stage key, so nothing
+needs to be recorded: the tracer just reads row i at each stage. At any stage
+that reshapes rows the walk stops — the ancestry beyond it isn't positionally
+recoverable (recorded lineage is issue #58).
 
 Self-contained on the run directory: reads manifest.json (stage type, parent
 edges, row counts) and outputs/<stage>.parquet (row values). It never reads the
@@ -24,38 +20,24 @@ from typing import Any
 
 import pandas as pd
 
+from app.errors import RowOutOfRange, StageNotInRun
+
+# Stage types whose output rows are 1:1 with their input rows, by position.
+#   input_data          — rows originate here (the walk's natural end)
+#   python_row_function — the runtime maps the function over rows, 1:1 (PR #26)
+# Deliberately excluded, and why:
+#   llm_transform       — 1:1 only once PR #29 lands; add it then (issue #61)
+#   human_review_queue  — drops rejected rows (human_review_queue.py), so not 1:1
+#   join/aggregate/python_frame_function/fan-out — reshape rows (issue #58)
+# This is a tracer-side assumption; making the runtime *guarantee* preservation
+# for stages that declare it is issue #87.
 ROW_PRESERVING: frozenset[str] = frozenset({"input_data", "python_row_function"})
 
-# Why a stage could not be crossed, and the issue that tracks lifting the stop.
-STOP_MESSAGES: dict[str, str] = {
-    "origin": "input_data stage — the rows originate here",
-    "llm_transform": (
-        "tracing across an llm_transform is not supported yet (it becomes 1:1 "
-        "with PR #29) — issue #61"
-    ),
-    "reshaping": (
-        "tracing across a stage that reshapes rows (a join, aggregate, or frame "
-        "function) is not supported yet — issue #58"
-    ),
-    "rowcount_mismatch": (
-        "this stage's row count differs from its input, so per-row position "
-        "can't be trusted — tracing across it is not supported yet (issue #58)"
-    ),
-    "missing_output": "this stage's output file is missing from the run",
-    "missing_parent": "the parent named in the manifest is not in the run",
-    "no_parent_edge": "the manifest records no input edge for this stage",
-}
-
 
 @dataclass
-class StopReason:
-    kind: str      # a key of STOP_MESSAGES
-    stage_id: str  # the stage that could not be crossed (or the origin)
-    message: str
-
-
-@dataclass
-class Hop:
+class StageTransform:
+    """One stage on the traced path: the single row this stage contributed and
+    how it entered. (One step of the walk — see `Trace.steps`.)"""
     stage_id: str
     stage_type: str
     row_ordinal: int
@@ -65,12 +47,22 @@ class Hop:
 
 
 @dataclass
+class TraceEnd:
+    """Where and why the walk stopped. `reached_origin` is True only when it
+    landed on an `input_data` stage (a clean, complete trace); otherwise the
+    walk could not cross a stage and `message` says why."""
+    reached_origin: bool
+    at_stage: str
+    message: str
+
+
+@dataclass
 class Trace:
     run_id: str
     start_stage: str
     start_row: int
-    hops: list[Hop]         # newest first: start stage, then each ancestor
-    terminal: StopReason
+    steps: list[StageTransform]  # newest first: start stage, then each ancestor
+    end: TraceEnd
 
 
 def _load_manifest(run_dir: Path) -> dict[str, Any]:
@@ -130,42 +122,51 @@ def _new_columns(child: pd.DataFrame, parent: pd.DataFrame | None) -> list[str]:
     return [str(c) for c in child.columns if str(c) not in parent_cols]
 
 
+def _not_preserving_message(stage_type: str) -> str:
+    """The stop message when a stage can't be crossed. The outcome is the same
+    — the stage isn't row-preserving, so the ancestry isn't positionally
+    recoverable — but we name the stage type and point at the tracking issue."""
+    if stage_type == "llm_transform":
+        return ("stops at llm_transform (not row-preserving until it becomes 1:1, "
+                "PR #29 / issue #61)")
+    return (f"stops at {stage_type} — it reshapes rows, so row-level lineage "
+            "across it needs recording (issue #58)")
+
+
 def trace_row(run_dir: Path, stage_id: str, row_ordinal: int) -> Trace:
     """Trace one row's ancestry backward through row-preserving stages.
 
-    Returns a `Trace` whose `hops` run newest-first from `(stage_id,
+    Returns a `Trace` whose `steps` run newest-first from `(stage_id,
     row_ordinal)` to either an `input_data` origin or the first stage that
-    cannot be crossed (`terminal`). Raises `ValueError` for an unknown stage or
-    an out-of-range row — those are caller bugs, not traceable states.
+    cannot be crossed. Raises `StageNotInRun` / `RowOutOfRange` for a bad
+    stage id or row ordinal (caller/param errors), never for a traceable state.
     """
     run_dir = Path(run_dir)
     manifest = _load_manifest(run_dir)
     by_id = _stages_by_id(manifest)
     if stage_id not in by_id:
-        raise ValueError(f"stage {stage_id!r} not in run {run_dir.name}")
+        raise StageNotInRun(f"stage {stage_id!r} not in run {run_dir.name}")
 
-    hops: list[Hop] = []
+    steps: list[StageTransform] = []
     sid, r = stage_id, row_ordinal
-    terminal: StopReason | None = None
+    end: TraceEnd | None = None
 
-    while terminal is None:
+    while end is None:
         record = by_id[sid]
         stage_type = record.get("type", "")
         df = _read_output(run_dir, record)
         if df is None:
-            terminal = StopReason("missing_output", sid, STOP_MESSAGES["missing_output"])
+            end = TraceEnd(False, sid, "this stage's output file is missing from the run")
             break
         if r < 0 or r >= len(df):
-            raise ValueError(
-                f"row {r} out of range for stage {sid!r} ({len(df)} rows)"
-            )
+            raise RowOutOfRange(f"row {r} out of range for stage {sid!r} ({len(df)} rows)")
 
         parents = _parents(record)
         parent_df = None
         if len(parents) == 1 and parents[0] in by_id:
             parent_df = _read_output(run_dir, by_id[parents[0]])
 
-        hops.append(Hop(
+        steps.append(StageTransform(
             stage_id=sid,
             stage_type=stage_type,
             row_ordinal=r,
@@ -176,24 +177,23 @@ def trace_row(run_dir: Path, stage_id: str, row_ordinal: int) -> Trace:
 
         # Can we cross into the parent, keeping the same ordinal?
         if stage_type == "input_data":
-            terminal = StopReason("origin", sid, STOP_MESSAGES["origin"])
+            end = TraceEnd(True, sid, "input_data stage — the rows originate here")
         elif not parents:
-            terminal = StopReason("no_parent_edge", sid, STOP_MESSAGES["no_parent_edge"])
-        elif stage_type not in ROW_PRESERVING:
-            kind = "llm_transform" if stage_type == "llm_transform" else "reshaping"
-            terminal = StopReason(kind, sid, STOP_MESSAGES[kind])
-        elif len(parents) != 1:
-            # A row-preserving stage has exactly one input; more means the
-            # manifest is mislabeled — treat as reshaping, don't guess a parent.
-            terminal = StopReason("reshaping", sid, STOP_MESSAGES["reshaping"])
+            end = TraceEnd(False, sid, "the manifest records no input edge for this stage")
+        # A row-preserving stage has exactly one input; more (or the wrong type)
+        # means we can't trust position — treat it as not row-preserving.
+        elif stage_type not in ROW_PRESERVING or len(parents) != 1:
+            end = TraceEnd(False, sid, _not_preserving_message(stage_type))
         else:
             parent_id = parents[0]
             if parent_id not in by_id:
-                terminal = StopReason("missing_parent", sid, STOP_MESSAGES["missing_parent"])
+                end = TraceEnd(False, sid, "the parent named in the manifest is not in the run")
             elif parent_df is None:
-                terminal = StopReason("missing_output", parent_id, STOP_MESSAGES["missing_output"])
+                end = TraceEnd(False, parent_id, "this stage's output file is missing from the run")
             elif len(parent_df) != len(df):
-                terminal = StopReason("rowcount_mismatch", sid, STOP_MESSAGES["rowcount_mismatch"])
+                end = TraceEnd(False, sid,
+                               "this stage's row count differs from its input, so per-row "
+                               "position can't be trusted (issue #58)")
             else:
                 sid, r = parent_id, r  # same ordinal — the whole point
 
@@ -201,8 +201,8 @@ def trace_row(run_dir: Path, stage_id: str, row_ordinal: int) -> Trace:
         run_id=manifest.get("run_id", run_dir.name),
         start_stage=stage_id,
         start_row=row_ordinal,
-        hops=hops,
-        terminal=terminal,
+        steps=steps,
+        end=end,
     )
 
 
@@ -212,20 +212,20 @@ def trace_to_dict(trace: Trace) -> dict[str, Any]:
         "run_id": trace.run_id,
         "start_stage": trace.start_stage,
         "start_row": trace.start_row,
-        "hops": [
+        "steps": [
             {
-                "stage_id": hop.stage_id,
-                "stage_type": hop.stage_type,
-                "row_ordinal": hop.row_ordinal,
-                "row": hop.row,
-                "columns_new": hop.columns_new,
-                "origin": hop.origin,
+                "stage_id": step.stage_id,
+                "stage_type": step.stage_type,
+                "row_ordinal": step.row_ordinal,
+                "row": step.row,
+                "columns_new": step.columns_new,
+                "origin": step.origin,
             }
-            for hop in trace.hops
+            for step in trace.steps
         ],
-        "terminal": {
-            "kind": trace.terminal.kind,
-            "stage_id": trace.terminal.stage_id,
-            "message": trace.terminal.message,
+        "end": {
+            "reached_origin": trace.end.reached_origin,
+            "at_stage": trace.end.at_stage,
+            "message": trace.end.message,
         },
     }

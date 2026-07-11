@@ -30,8 +30,8 @@ def test_trace_endpoint_returns_serialized_trace(tmp_path, monkeypatch):
     resp = client.get("/project/proj/runs/R1/stage/enrich/row/1/trace")
     assert resp.status_code == 200
     body = resp.json()
-    assert [h["stage_id"] for h in body["hops"]] == ["enrich", "seeds"]
-    assert body["terminal"]["kind"] == "origin"
+    assert [s["stage_id"] for s in body["steps"]] == ["enrich", "seeds"]
+    assert body["end"]["reached_origin"] is True
 
 
 def test_trace_endpoint_404_for_unknown_stage(tmp_path, monkeypatch):
@@ -79,9 +79,9 @@ def test_lineage_panel_is_trimmed_to_the_row(tmp_path, monkeypatch):
     assert "A" not in body.split("Output")[-1]  # row 0's data not in the output table
 
 
-def test_trace_view_says_not_supported_for_reshaping_stage(tmp_path, monkeypatch):
-    """Starting a trace at a row-reshaping stage returns 200 with an explicit
-    'not supported yet' banner — never a 500, never a wrong lineage."""
+def test_trace_view_says_reshaping_not_traceable(tmp_path, monkeypatch):
+    """Starting a trace at a row-reshaping stage returns 200 with the reshaping
+    stop message (points at #58) — never a 500, never a wrong lineage."""
     project_runs = tmp_path / "proj" / "runs"
     project_runs.mkdir(parents=True)
     seeds = pd.DataFrame({"facility_id": ["a", "b"]})
@@ -93,5 +93,5 @@ def test_trace_view_says_not_supported_for_reshaping_stage(tmp_path, monkeypatch
     monkeypatch.setattr(loading, "EXAMPLES_DIR", tmp_path)
     resp = TestClient(app).get("/project/proj/runs/R2/stage/dedup/row/0/trace/view")
     assert resp.status_code == 200
-    assert "not supported yet" in resp.text
+    assert "reshapes rows" in resp.text
     assert "#58" in resp.text

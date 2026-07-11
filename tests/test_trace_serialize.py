@@ -19,7 +19,7 @@ def test_trace_to_dict_is_json_roundtrippable(tmp_path):
     payload = trace_to_dict(trace_row(run_dir, "enrich", 0))
     # Must survive a JSON round-trip unchanged.
     assert json.loads(json.dumps(payload)) == payload
-    assert payload["terminal"]["kind"] == "origin"
-    assert payload["hops"][0]["stage_id"] == "enrich"
-    assert payload["hops"][0]["columns_new"] == ["score"]
-    assert payload["hops"][0]["row"]["name"] == "A"
+    assert payload["end"]["reached_origin"] is True
+    assert payload["steps"][0]["stage_id"] == "enrich"
+    assert payload["steps"][0]["columns_new"] == ["score"]
+    assert payload["steps"][0]["row"]["name"] == "A"
