@@ -79,6 +79,29 @@ examples/<name>/      project dirs (untracked runtime data: compiled/ + methodol
 - [docs/models-and-storage.md](docs/models-and-storage.md) — the storage convention.
 
 ## Conventions (load-bearing, not stylistic)
+
+**Invariants are arch tests, not prose — and the test comes first.** An
+architectural invariant (an isolation, a layering rule, "X must not import Y",
+"these tools don't touch disk", a fabrication pattern) belongs in an *executable*
+check, not a sentence to be remembered — prose erodes silently; a failing test
+blocks the PR. Write the check **before** the code it constrains: confirm it holds
+on today's code, then confirm it goes *red* on a planted violation (a check that
+can't fail enforces nothing). Two homes, by kind — import-graph invariants
+(who-imports-whom, cycles, layers) are an `import-linter` contract in
+`pyproject [tool.importlinter]` (run `PYTHONPATH=. lint-imports`); content
+invariants (a call, a token, a `.get(k, <number>)` fallback — anything inside a
+file) are an AST test in `tests/arch/`, kept outside the package they scan so they
+never match their own source.
+
+This is the mechanized half of the *checklist-for-human* habit: before writing a
+review item for a person, ask whether an arch test can enforce it. If it can,
+write the test and drop the item — CI guards it now. If it genuinely can't, it
+stays a **manual-review** item. So every architectural invariant is either
+*enforced* (a `tests/arch/` check, an `import-linter` contract, or a Ruff rule) or
+*manual* — never merely hoped-for. Of the rules below, the blind-except ban is
+enforced (Ruff `BLE001`) and the services-below-routes isolation is still manual
+(#63); prefer moving the manual ones to enforced.
+
 - **Never fabricate.** A value that can't be sourced is `null`/`unknown`; the
   pipeline fails loudly or halts rather than inventing a number, URL, or citation.
   A requested LLM backend that isn't available raises rather than silently
