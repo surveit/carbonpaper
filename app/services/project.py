@@ -31,7 +31,7 @@ from pydantic import BaseModel
 from app.compiler import compile_methodology as compile_prose_to_workflow
 from app.errors import RegenerateWithoutSnapshotError
 from app.models.workflow import validate_workflow_draft
-from app.services import node_review, stage_edit, versioning, workspace
+from app.services import node_review, stage_edit, versioning, workflow
 from app.services.compilation import regenerate_workflow
 from app.services.loader import load_compiled_dir, stage_to_json
 from app.services.stage_edit import EditStageResult
@@ -372,15 +372,27 @@ def _editing_project_dir(name: str, examples_dir: Path | None = None) -> Path:
     return candidate
 
 
+def list_project_names(examples_dir: Path) -> list[str]:
+    """Sorted names of every project under `examples_dir` — a directory counts
+    only if it contains a `compiled/` subdirectory (an authored workflow)."""
+    if not examples_dir.is_dir():
+        return []
+    return sorted(
+        child.name
+        for child in examples_dir.iterdir()
+        if child.is_dir() and (child / "compiled").is_dir()
+    )
+
+
 def list_projects(examples_dir: Path | None = None) -> list[str]:
     """The names of every authored project in the workspace."""
-    return workspace.list_project_names(Path(examples_dir) if examples_dir is not None else EXAMPLES_DIR)
+    return list_project_names(Path(examples_dir) if examples_dir is not None else EXAMPLES_DIR)
 
 
 def describe_workflow(name: str, examples_dir: Path | None = None) -> dict[str, Any]:
     """A compact summary of one project's workflow (stage ids/types/inputs/review
     state), read through the tolerant loader."""
-    return workspace.project_workflow_summary(_editing_project_dir(name, examples_dir))
+    return workflow.project_workflow_summary(_editing_project_dir(name, examples_dir))
 
 
 def read_stage(name: str, stage_id: str, examples_dir: Path | None = None) -> str:
@@ -419,7 +431,7 @@ def regenerate_workflow_from_conversation(
     compiled draft is held to the same stage + graph validation every write obeys;
     an invalid result is returned, not written."""
     project_dir = _editing_project_dir(name, examples_dir)
-    summary = workspace.project_workflow_summary(project_dir)
+    summary = workflow.project_workflow_summary(project_dir)
     has_review_work = any(s["review_state"] != "unreviewed" for s in summary["stages"])
     if has_review_work:
         if not confirm_overwrite:
@@ -454,6 +466,7 @@ __all__ = [
     "project_meta",
     "write_project_meta",
     "project_state",
+    "list_project_names",
     "list_projects",
     "describe_workflow",
     "read_stage",
