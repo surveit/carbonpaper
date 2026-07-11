@@ -14,6 +14,12 @@
 <h1>{{ config.name }} <span class="badge {{ badge_class.get(status, 'pending') }}">{{ status }}</span></h1>
 {% if config.description %}<p class="lede">{{ config.description }}</p>{% endif %}
 
+{% if has_eval_dataset and report.ok %}
+<form action="/project/{{ project }}/evals/{{ config.id }}/run" method="post" style="display:inline;">
+  <button type="submit" class="btn primary">▶ Run eval</button>
+</form>
+{% endif %}
+
 <h2>Pathway</h2>
 <ul>
   <li><strong>override → target:</strong>

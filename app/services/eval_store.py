@@ -79,6 +79,16 @@ def save_eval_config(project_dir: Path, config: EvalConfig) -> Path:
     return path
 
 
+def save_eval_run(project_dir: Path, run: EvalRun) -> Path:
+    """Write `run` to `eval_run/{run.id}.json`. Runs are immutable results —
+    a run id is minted per execution, so this never overwrites a real prior run."""
+    run_dir = _resolve_eval_run_dir(project_dir)
+    run_dir.mkdir(parents=True, exist_ok=True)
+    path = run_dir / f"{run.id}.json"
+    path.write_text(run.model_dump_json(indent=2), encoding="utf-8")
+    return path
+
+
 def load_eval_run(project_dir: Path, run_id: str) -> EvalRun:
     """Load one run by id, reading only `eval_run/{run_id}.json` -- never the
     whole `eval_run/` directory, so a corrupt sibling run file can't block
@@ -105,9 +115,9 @@ def load_eval_run(project_dir: Path, run_id: str) -> EvalRun:
 
 
 def list_eval_runs(project_dir: Path, config_id: str) -> list[EvalRun]:
-    """All runs of `config_id`, newest-first by `(started_at or "", id)`. Runs
-    are written elsewhere; this only reads `eval_run/*.json` (absent dir ->
-    empty list, never created here)."""
+    """All runs of `config_id`, newest-first by `(started_at or "", id)`, reading
+    `eval_run/*.json` (absent dir -> empty list, never created here). Runs are
+    written by `save_eval_run`."""
     run_dir = _resolve_eval_run_dir(project_dir)
     if not run_dir.is_dir():
         return []

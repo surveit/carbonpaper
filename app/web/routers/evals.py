@@ -19,10 +19,12 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
+from app.errors import EvalNotScorableError
 from app.models import EvalConfig, EvalRun, Stage
 from app.services.eval_compatibility import check_eval_compatibility
+from app.services.eval_runner import run_eval
 from app.services.eval_store import (
     eval_status,
     latest_version_id,
@@ -166,6 +168,23 @@ async def eval_run_detail(request: Request, project: str, eval_id: str, run_id: 
         "eval_run.html",
         {"project": project, "config": config, "run": run},
     )
+
+
+# ─── Trigger a run ───────────────────────────────────────────────────────────
+
+@router.post("/project/{project}/evals/{eval_id}/run")
+async def trigger_eval_run(project: str, eval_id: str):
+    """Score the eval against the latest workflow version and redirect to the run.
+    Synchronous: an eval that can't be run (incompatible, no dataset, or no version)
+    surfaces as a 400 with the reason rather than a recorded non-result."""
+    project_dir = _resolve_project_dir(project)
+    config = _load_config_or_404(project_dir, eval_id)
+    try:
+        run = run_eval(project_dir, config, REPO_ROOT)
+    except EvalNotScorableError as exc:
+        return JSONResponse({"detail": str(exc)}, status_code=400)
+    return RedirectResponse(
+        url=f"/project/{project}/evals/{eval_id}/runs/{run.id}", status_code=303)
 
 
 # ─── Shared helpers ──────────────────────────────────────────────────────────
