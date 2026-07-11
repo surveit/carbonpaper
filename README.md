@@ -1,10 +1,9 @@
 # prototype_one — reviewable AI workflows
 
 Run data/OSINT pipelines as **workflows of typed, schema-validated stages** with
-human-review gates and fully persisted runs — so an AI-driven pipeline is
-*testable and reviewable*, not a black box.
+human-review gates and fully persisted runs — testable and reviewable, not a black box.
 
-- What this is and why: [docs/overview.md](docs/overview.md)
+- What & why: [docs/overview.md](docs/overview.md)
 - Code map: [docs/architecture.md](docs/architecture.md)
 - Contributor guide / conventions: [AGENTS.md](AGENTS.md)
 
