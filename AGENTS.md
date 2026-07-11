@@ -62,7 +62,7 @@ app/compiler/         prose → LLM → workflow authoring engine (python -m app
 app/main.py           thin FastAPI bootstrap; routes live in app/web/routers/   → app/AGENTS.md
 app/web/              the web layer (routers, loading, diagrams, config)
 app/services/         web-independent workflow logic (loader, compilation, node review, versioning)
-app/chat/             embeddable chat subsystem (PydanticAI; own backend env vars)
+app/agent/            generic agent infra (registry + Claude Agent SDK engine, file-based session store); concrete agents (e.g. the editing agent) register into it
 app/llm/              shared LLM vocabulary (the model menu)
 app/templates/, app/static/   the web UI
 tests/                pytest suite (offline: conftest forces the LLM mock)

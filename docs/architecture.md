@@ -105,14 +105,18 @@ pages) is not on master yet.
 - `versioning.py` — freeze `compiled/` into `versions/<version_id>/` with
   approval coverage recorded in `version.json`.
 
-## `app/chat/` — embeddable chat subsystem
+## `app/agent/` — generic agent infra
 
-A reusable PydanticAI chat engine (streaming, thinking events, pluggable tools,
-file-based session persistence) mounted into the app. Deliberately separate from
+Agent-agnostic chat wiring: a registry (`register`/`build_engine`) that turns a
+registered `AgentConfig` (system prompt, model, tool schemas) plus an opaque
+per-session `context` into a `ClaudeAgentSdkEngine` — the Claude Agent SDK,
+wrapping each agent's tools as an in-process MCP server. `store.py` persists one
+JSON file per session: an engine-agnostic transcript (`{role, parts}`) plus the
+CLI resume token that carries cross-turn memory (the session store does not
+replay history itself). `router.py` exposes the generic session/message routes;
+a concrete agent (e.g. the editing agent under `app/compiler/agent/`) registers
+itself and a host route creates sessions bound to it. Deliberately separate from
 the `llm_transform` batch path — this is the interactive, multi-turn surface.
-Its own backend selection (`CW_CHAT_BACKEND`: dev / claude_cli / anthropic) is
-separate from the runtime's `CW_LLM_*` namespace. Currently exposes one demo
-tool (list projects); it is not yet wired into authoring or review workflows.
 
 ## `app/llm/` — shared LLM vocabulary
 

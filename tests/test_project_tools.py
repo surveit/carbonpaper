@@ -10,7 +10,7 @@ from app.services import project as project_service
 
 # Minimal valid handle block per stage type (app/models/stage.py:
 # Stage._handle_for_type requires exactly one, keyed by `type`). Mirrors
-# tests/test_workspace.py's _HANDLE_BY_TYPE so every fixture stage here
+# tests/test_workflow_summary.py's _HANDLE_BY_TYPE so every fixture stage here
 # round-trips through Stage.model_validate rather than landing in `issues`.
 _HANDLE_BY_TYPE: dict[str, dict] = {
     "input_data": {"connector": {"kind": "computed_static"}},
@@ -249,9 +249,9 @@ def test_compile_workflow_regenerate_to_fewer_stages_drops_stale_files(
     assert loader.find_stage_file(pdir / "compiled", "score") is None
     assert len(remaining) == 1 and remaining[0].name.endswith("_load.json")
 
-    from app.services import workspace
+    from app.services import workflow
 
-    summary = workspace.project_workflow_summary(pdir)
+    summary = workflow.project_workflow_summary(pdir)
     assert [s["id"] for s in summary["stages"]] == ["load"]
 
 

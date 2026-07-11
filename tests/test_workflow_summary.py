@@ -1,7 +1,8 @@
+"""Tests for app/services/workflow.py's project_workflow_summary."""
 import json
 from pathlib import Path
 
-from app.services import workspace
+from app.services import workflow
 
 
 # Stage validation (app/models/stage.py: Stage._handle_for_type) requires one
@@ -39,17 +40,11 @@ def _write_stage(compiled: Path, order: int, sid: str, stype: str, inputs: list[
     (compiled / f"{order:02d}_{sid}.json").write_text(json.dumps(stage), encoding="utf-8")
 
 
-def test_list_project_names_only_dirs_with_compiled(tmp_path: Path) -> None:
-    _write_stage(tmp_path / "alpha" / "compiled", 1, "load", "input_data", [])
-    (tmp_path / "not_a_project").mkdir()
-    assert workspace.list_project_names(tmp_path) == ["alpha"]
-
-
 def test_workflow_summary_reports_ids_types_inputs_and_review_state(tmp_path: Path) -> None:
     pdir = tmp_path / "alpha"
     _write_stage(pdir / "compiled", 1, "load", "input_data", [])
     _write_stage(pdir / "compiled", 2, "score", "llm_transform", ["load"])
-    summary = workspace.project_workflow_summary(pdir)
+    summary = workflow.project_workflow_summary(pdir)
     assert summary["name"] == "alpha"
     by_id = {s["id"]: s for s in summary["stages"]}
     assert by_id["score"]["type"] == "llm_transform"
