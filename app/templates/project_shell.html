@@ -3,13 +3,14 @@
   project_shell.html — the LEFT-SIDEBAR PROJECT SHELL.
 
   Frames ONE project (a directory under examples/<name>/) with a fixed
-  left sidebar = project name + 5 nav items (Overview / Document / Data model /
-  Workflow / Runs), each carrying a small status glyph derived from `state`, plus a
-  {% block section %} the section templates fill.
+  left sidebar = project name + 6 nav items (Overview / Document / Data model /
+  Workflow / Runs / Evals), each carrying a small status glyph derived from `state`
+  (Evals carries a fixed glyph — its status is per-eval, shown on the Evals page),
+  plus a {% block section %} the section templates fill.
 
   Context every section route passes (the Phase-1 FROZEN CONTRACT, verbatim):
     state    = project_view.shell_state(mdir)  — the status snapshot + next_action CTA
-    section  = one of {overview, document, data_model, workflow, runs}
+    section  = one of {overview, document, data_model, workflow, runs, evals}
 
   The sidebar reads ONLY from `state`. The single source of truth for the WORKFLOW
   lock is state.data_model.state == "approved" — the SAME gate the SSE workflow
@@ -30,8 +31,9 @@
 {% endblock %}
 
 {% block content %}
-{# ── Derive the 5 nav items from `state` (load-bearing: 5 items, this order,
-      each = status-glyph + locked flag for workflow only). ─────────────────── #}
+{# ── Derive the nav items from `state` (this order, each = status-glyph + locked
+      flag for workflow only). Evals is last and carries a FIXED glyph — its status
+      is per-eval, surfaced on the Evals page, not summarised in the sidebar. ──── #}
 {% set base = "/project/" ~ state.name %}
 {% set wf_locked = (state.data_model.state != "approved") %}
 
@@ -76,6 +78,7 @@
      {'key': 'data_model', 'label': 'Data model', 'href': base ~ '/data_model',  'glyph': dm_glyph[0],  'glyph_class': dm_glyph[1],  'locked': false},
      {'key': 'workflow',   'label': 'Workflow',   'href': base ~ '/workflow',    'glyph': wf_glyph[0],  'glyph_class': wf_glyph[1],  'locked': wf_locked},
      {'key': 'runs',       'label': 'Runs',       'href': base ~ '/runs',        'glyph': runs_glyph[0],'glyph_class': runs_glyph[1],'locked': false},
+     {'key': 'evals',      'label': 'Evals',      'href': base ~ '/evals',       'glyph': '◎',          'glyph_class': 'glyph-home', 'locked': false},
    ] %}
 
 <div class="app-shell">
