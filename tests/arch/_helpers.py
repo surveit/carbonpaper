@@ -12,34 +12,22 @@ from collections.abc import Iterator
 from pathlib import Path
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
-_APP = _REPO_ROOT / "app"
 
 
-def iter_module_files(package: str) -> Iterator[Path]:
-    """Yield each .py file under app/<package>.
+def iter_py_files(root: str) -> Iterator[Path]:
+    """Yield each .py file under <repo-root>/<root>, e.g. "app/compiler/agent".
 
-    `package` is a path relative to app/ ("agent", "compiler/agent"); "" or "."
-    means the whole app tree.
+    `root` is a path relative to the repository root, so the target is named
+    explicitly rather than assumed to live under app/.
     """
-    root = _APP if package in ("", ".") else _APP / package
-    if not root.exists():
-        raise FileNotFoundError(f"architecture test targets a missing package: {root}")
-    yield from sorted(root.rglob("*.py"))
+    base = _REPO_ROOT / root
+    if not base.exists():
+        raise FileNotFoundError(f"architecture test targets a missing path: {base}")
+    yield from sorted(base.rglob("*.py"))
 
 
 def parse_module(path: Path) -> ast.Module:
     return ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-
-
-def collect_imports(tree: ast.Module) -> set[str]:
-    """Return the module names named by `import x` and `from x import ...`."""
-    names: set[str] = set()
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Import):
-            names.update(alias.name for alias in node.names)
-        elif isinstance(node, ast.ImportFrom) and node.module and node.level == 0:
-            names.add(node.module)
-    return names
 
 
 def collect_called_funcs(tree: ast.Module) -> set[str]:

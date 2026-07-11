@@ -9,14 +9,14 @@ config default that is not itself data — opts out with a trailing
 """
 from __future__ import annotations
 
-from arch._helpers import find_numeric_get_defaults, iter_module_files, parse_module
+from arch._helpers import find_numeric_get_defaults, iter_py_files, parse_module
 
 _OPT_OUT = "# data-default-ok"
 
 
 def test_no_silent_numeric_get_fallback() -> None:
     offenders: list[str] = []
-    for path in iter_module_files(""):
+    for path in iter_py_files("app"):
         lines = path.read_text(encoding="utf-8").splitlines()
         for start, end in find_numeric_get_defaults(parse_module(path)):
             if not any(_OPT_OUT in line for line in lines[start - 1 : end]):

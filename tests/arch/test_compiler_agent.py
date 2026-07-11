@@ -11,7 +11,7 @@ from __future__ import annotations
 from arch._helpers import (
     collect_called_funcs,
     collect_called_methods,
-    iter_module_files,
+    iter_py_files,
     parse_module,
 )
 
@@ -31,7 +31,7 @@ _DISK_METHODS = {
 
 def test_compiler_agent_reaches_disk_only_through_services() -> None:
     offenders: list[str] = []
-    for path in iter_module_files("compiler/agent"):
+    for path in iter_py_files("app/compiler/agent"):
         tree = parse_module(path)
         hits = (collect_called_funcs(tree) & _DISK_BUILTINS) | (
             collect_called_methods(tree) & _DISK_METHODS
