@@ -10,5 +10,5 @@ human-review gates and fully persisted runs — testable and reviewable, not a b
 ```
 pip install -r requirements.txt
 python -m uvicorn app.main:app --port 8765     # web UI
-python -m app.runtime.runner examples/<name>   # run a project's workflow from the CLI
+python -m app.runtime.runner <project_dir>     # run a project's workflow from the CLI
 ```

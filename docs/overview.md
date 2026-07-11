@@ -11,14 +11,13 @@ number or unsourced claim defeats the purpose. Two rules recur in the code:
   the run; decisions are content-hashed so they survive re-runs.
 
 ## Vocabulary (locked 2026-07-04; see [naming-refactor.md](naming-refactor.md))
-- **project** — the container `examples/<name>/` holding everything below.
+- **project** — the container directory holding everything below.
 - **methodology** — the authored prose method (`methodology_raw.md`).
 - **workflow** — the executable stage graph it compiles into (`compiled/*.json`, one
   validated `Stage` per file; a DAG of typed stages, every edge schema-validated).
 
 A project dir also holds `code/`, `data/`, `runs/<id>/` (outputs + `manifest.json`),
-`decisions/`, `versions/<id>/`. Project dirs are runtime data, not source — `examples/` is
-untracked; lobbymap, congresswatch, drift live on disk + in git history.
+`decisions/`, `versions/<id>/` — runtime data, not source.
 
 ## The three features
 | Feature | Code | Status |
@@ -28,7 +27,7 @@ untracked; lobbymap, congresswatch, drift live on disk + in git history.
 | **Eval** | `app/models/eval.py` | Data model only — `EvalConfig` + grain-preservation gate; no runner integration yet. |
 
 ## Where the product needs to go
-[RETHINK.md](RETHINK.md), written after running the shape on US Congress + lobbying, is the
-standing critique: the platform serves the workflow *author* well and the journalist barely
+[RETHINK.md](RETHINK.md) is the standing critique: the platform serves the workflow *author*
+well and the journalist barely
 — journalism questions are cross-entity ("who's the outlier?") while outputs are per-entity.
 Read it before adding operator-facing features.

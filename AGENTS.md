@@ -2,7 +2,7 @@
 
 **Workflows of typed, schema-validated stages** with human-review gates and persisted
 runs. Vocabulary (locked; `docs/naming-refactor.md`): **project** = the container
-`examples/<name>/` · **methodology** = the authored prose (`methodology_raw.md`) ·
+directory · **methodology** = the authored prose (`methodology_raw.md`) ·
 **workflow** = the stage graph it compiles to. What/why + features → `docs/overview.md`;
 code map → `docs/architecture.md`; quickstart → `README.md`.
 
@@ -18,7 +18,7 @@ app/runtime/   the Runner (executor, stages/, LLM backends)   → app/runtime/AG
 app/compiler/  prose → LLM → workflow engine (python -m app.compiler)
 app/web/       FastAPI routers + diagrams (thin app/main.py)  → app/AGENTS.md
 app/services/  web-independent logic (loader, compilation, node review, versioning)
-app/chat/  PydanticAI chat · app/llm/  model menu · examples/  untracked · tests/  pytest (offline)
+app/chat/  PydanticAI chat · app/llm/  model menu · tests/  pytest (offline)
 ```
 
 ## Conventions (load-bearing)

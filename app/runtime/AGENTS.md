@@ -44,7 +44,7 @@ ranges, nullability, PK uniqueness), distinct from the stage schemas in `app/mod
 
 ## Run / debug
 ```
-python -m app.runtime.runner examples/<name>          # auto backend
+python -m app.runtime.runner <project_dir>            # auto backend
 CW_LLM_FORCE_MOCK=1 python -m app.runtime.runner ...  # deterministic, no LLM
 ```
 Outputs: `runs/<id>/{manifest.json, outputs/*.parquet, artifacts/, queue/}`.

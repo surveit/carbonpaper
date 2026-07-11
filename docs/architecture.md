@@ -1,7 +1,7 @@
 # Architecture — the code map
 
-A FastAPI app over a file-backed project artifact under `examples/<name>/` (untracked
-runtime data — see [overview.md](overview.md) for the directory layout). ~6k lines of
+A FastAPI app over a file-backed project artifact — one directory per project (see
+[overview.md](overview.md) for the layout). ~6k lines of
 Python across six packages. Vocabulary: **project**/**methodology**/**workflow** per
 [naming-refactor.md](naming-refactor.md).
 
