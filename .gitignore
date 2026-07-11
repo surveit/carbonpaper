@@ -10,6 +10,9 @@ __pycache__/
 Thumbs.db
 build/
 
+# Agent-tool worktree scratch dirs (ephemeral, nested git repos)
+.claude/worktrees/
+
 # Persisted compilation objects (file-backed, like examples/<m>/runs)
 compilations/
 
