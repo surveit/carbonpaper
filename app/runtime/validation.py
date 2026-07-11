@@ -20,7 +20,62 @@ from typing import Any
 
 import pandas as pd
 
-from app.models import Column, TableSchema
+from app.models import Column, Stage, TableSchema
+
+
+class RowPreservationError(ValueError):
+    """A stage that declares itself row-preserving (`Stage.is_row_preserving`)
+    emitted a row count that doesn't match its input's — the 1:1 positional
+    contract the runtime guarantees was violated. Raised (not warned) so a
+    mislabeled or buggy stage fails the run loudly instead of silently producing
+    rows a positional consumer (the show-your-work lineage tracer) would
+    mis-map."""
+
+
+def check_row_preservation(
+    stage: Stage,
+    inputs: dict[str, pd.DataFrame],
+    output: pd.DataFrame,
+) -> None:
+    """Enforce the row-preservation contract for a stage that declares it.
+
+    A row-preserving stage (`Stage.is_row_preserving`) must emit exactly one
+    output row per input row, in input order. Row-COUNT equality against its
+    single input is the invariant we can and do check on every run; a mismatch
+    is the observable symptom of any fan-out / fan-in such a stage must never do.
+
+    Ordering (output row *i* corresponds to input row *i*) is preserved by
+    construction, not re-checked here: the row-preserving handlers emit in
+    input-row order (`python_row_function` iterates the input's records in
+    order; `llm_transform` zips the per-row replies back in order). We cannot
+    cheaply verify positional identity by value because these stages transform
+    the cells — so equal counts + in-order emission is the guarantee.
+
+    `input_data` originates rows and has no input, so there is nothing to
+    compare and this is a no-op there. A non-row-preserving stage is skipped
+    (its grain may legitimately change). Called by the runner on the raw handler
+    output, BEFORE any per-run --limit/--offset slicing (that truncation is the
+    runner's own, not a stage fanning out)."""
+    if not stage.is_row_preserving:
+        return
+    # Every row-preserving stage that has an input takes exactly one
+    # (input_data takes none); guard defensively rather than assume.
+    if len(stage.inputs) != 1:
+        return
+    src = inputs.get(stage.inputs[0].id)
+    if src is None:
+        return
+    in_n, out_n = len(src), len(output)
+    if in_n != out_n:
+        raise RowPreservationError(
+            f"Stage '{stage.id}' (type {stage.type}) declares row-preservation "
+            f"(1:1 with its input) but produced {out_n} row(s) from {in_n} input "
+            f"row(s). A row-preserving stage must emit exactly one output row per "
+            f"input row, in order — fanning out/in here would silently corrupt "
+            f"any positional (row-ordinal) lineage trace across this stage. Make "
+            f"the stage 1:1, or change its type (e.g. python_frame_function for a "
+            f"reshaping transform)."
+        )
 
 
 # Map our type vocabulary to permissive pandas dtype checks.

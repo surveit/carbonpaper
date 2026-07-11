@@ -396,6 +396,43 @@ class Stage(_Base):
             StageType.publish,
         )
 
+    @property
+    def is_row_preserving(self) -> bool:
+        """Declared, runtime-ENFORCED contract: this stage emits exactly one
+        output row per input row, in input order (positional 1:1). Derived
+        entirely from `type` — the stage types that are 1:1 *by construction*:
+          - input_data          — originates the rows (it has no input); the
+                                   positional anchor a downstream row-preserving
+                                   walk terminates at.
+          - python_row_function — the runtime maps the function over the input's
+                                   rows, one dict in → one dict out. It never
+                                   sees the frame, so it cannot fan out / fan in.
+          - llm_transform        — strictly 1:1 by construction: the
+                                   `_llm_transform_one_to_one` validator above
+                                   forces output ⊇ input on the same primary_key
+                                   (a fan-out stage cannot declare a valid unique
+                                   key), so one input row → one added-column
+                                   output row.
+
+        This is the property the runtime GUARANTEES (`runtime.validation.
+        check_row_preservation` fails the run loudly if a stage declared here
+        emits a different row count than its input) and persists to the run
+        manifest, so a positional consumer — the show-your-work lineage tracer —
+        can trust it instead of re-deriving row-preservation from a hardcoded
+        stage-type set of its own.
+
+        Deliberately NARROWER than `is_grain_preserving`: that property is the
+        eval-gating question and also counts `human_review_queue` (keyed, edits
+        in place) and `publish` (terminal) as grain-preserving. Neither is
+        positionally 1:1 the runtime can enforce — a review queue may DROP rows
+        (its `filter`), and publish is a side-effecting sink — so neither is
+        row-preserving here."""
+        return self.type in (
+            StageType.input_data,
+            StageType.python_row_function,
+            StageType.llm_transform,
+        )
+
 
 def validate_stage(stage: dict[str, Any]) -> list[str]:
     """Non-fatal structural validation of one stage dict ([] means valid)."""

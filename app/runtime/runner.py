@@ -32,7 +32,7 @@ from app.services.loader import WorkflowLoadError
 from app.services import versioning
 
 from .stages import HANDLERS, HaltForReview
-from .validation import validate_dataframe
+from .validation import check_row_preservation, validate_dataframe
 
 
 def topological_sort(stages: list[Stage]) -> list[Stage]:
@@ -196,6 +196,7 @@ def prepare_run(
         "status": "running",
         "stages": [
             {"stage_id": s.id, "type": s.type, "name": s.name,
+             "is_row_preserving": s.is_row_preserving,
              "status": "pending", "input_validation": [], "output_validation": None,
              "elapsed_ms": 0, "rows": 0, "error": None,
              "started_at": None, "finished_at": None}
@@ -329,6 +330,7 @@ def _execute_stages(
     def _pending_stub(s: Stage) -> dict[str, Any]:
         return {
             "stage_id": s.id, "type": s.type, "name": s.name,
+            "is_row_preserving": s.is_row_preserving,
             "status": "pending", "input_validation": [], "output_validation": None,
             "elapsed_ms": 0, "rows": 0, "error": None,
             "started_at": None, "finished_at": None,
@@ -365,6 +367,7 @@ def _execute_stages(
             "stage_id": sid,
             "type": stype,
             "name": stage.name,
+            "is_row_preserving": stage.is_row_preserving,
             "started_at": datetime.now().isoformat(timespec="seconds"),
             "status": "running",
             "input_validation": [],
@@ -410,6 +413,15 @@ def _execute_stages(
 
             if output is None:
                 output = pd.DataFrame()
+
+            # Enforce the row-preservation contract the STAGE declares
+            # (Stage.is_row_preserving) on the raw handler output — before the
+            # runner's own --limit/--offset slicing, which legitimately drops
+            # rows. A stage that claims to be 1:1 but fanned out/in here raises
+            # RowPreservationError (caught below, recorded as a stage error), so
+            # a mislabeled/buggy stage fails loudly instead of silently emitting
+            # rows the lineage tracer would mis-map by position.
+            check_row_preservation(stage, inputs_for_stage, output)
 
             # Generic row slicing, in the handler's emitted order. Offset
             # (per-run only, from --offset stage=M) drops the first M rows;
@@ -484,6 +496,7 @@ def _execute_stages(
                 "stage_id": sid,
                 "type": stage.type,
                 "name": stage.name,
+                "is_row_preserving": stage.is_row_preserving,
                 "status": "pending",
                 "input_validation": [],
                 "output_validation": None,
