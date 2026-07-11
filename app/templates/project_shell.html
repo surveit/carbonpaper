@@ -11,9 +11,10 @@
     state    = project_view.shell_state(mdir)  — the status snapshot + next_action CTA
     section  = one of {overview, document, data_model, workflow, runs}
 
-  The sidebar reads ONLY from `state`. The single source of truth for the WORKFLOW
-  lock is state.data_model.state == "approved" — the SAME gate the SSE workflow
-  stream enforces; the nav lock and the stream agree by construction.
+  The sidebar reads ONLY from `state`. The WORKFLOW nav unlocks once the data model
+  EXISTS (state.data_model.present) — it is auto-generated right after the data model,
+  so the reviewer can see the draft. Approval is a separate gate (on running the
+  workflow), not on seeing it.
 
   CARDINAL RULE: nothing here fabricates. Glyphs reflect the truthful on-disk state
   (none/unreviewed/approved/…); a "no workflow yet" project shows ○, not a fake ✓.
@@ -33,7 +34,7 @@
 {# ── Derive the 5 nav items from `state` (load-bearing: 5 items, this order,
       each = status-glyph + locked flag for workflow only). ─────────────────── #}
 {% set base = "/project/" ~ state.name %}
-{% set wf_locked = (state.data_model.state != "approved") %}
+{% set wf_locked = (not state.data_model.present) %}
 
 {# data-model glyph by gate state #}
 {% set dm_glyph_map = {
@@ -93,7 +94,7 @@
              section so the sidebar highlights where you are even while locked. #}
           <span class="app-nav-item locked {% if item.key == section %}current{% endif %}" tabindex="0"
                 {% if item.key == section %}aria-current="page"{% endif %}
-                title="Approve the data model first to unlock the workflow">
+                title="Generate the data model first to unlock the workflow">
             <span class="app-nav-glyph {{ item.glyph_class }}">{{ item.glyph }}</span>
             <span class="app-nav-label">{{ item.label }}</span>
           </span>
@@ -107,12 +108,6 @@
         {% endif %}
       {% endfor %}
     </nav>
-
-    {# Reach the chat-driven editing agent for this project. Posting opens a new
-       session bound to this project's editing agent, which redirects to the chat. #}
-    <form class="app-side-agent" method="post" action="/project/{{ state.name }}/edit-agent">
-      <button type="submit" class="app-side-agent-btn">✎ Edit with agent</button>
-    </form>
 
     {# A compact "do this next" pointer that's always visible, mirroring the CTA. #}
     {% if state.next_action %}

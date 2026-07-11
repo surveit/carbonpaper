@@ -4,14 +4,19 @@
     · the mermaid graph (build_mermaid_graph with review_by_id belief colours)
     · the per-node review split-view (reuses _node_review.html via the node-click panel)
     · the versions list
-    · a "Build workflow" AI chat (GET /project/{name}/workflow/stream)
     · Run + Create-version controls
 
-  LOCKED until state.data_model.state == "approved" (the SAME gate the SSE stream
-  enforces). When locked we render a "do this first" panel, not the graph.
+  The workflow is GENERATED automatically right after the data model (see
+  app.services.generation); this page shows a spinner while that runs and the graph
+  when it lands. There is no in-page build chat.
+
+  UNLOCKED once the data model EXISTS (state.data_model.present). Approval is a
+  separate gate (on running), not on seeing the draft. When there is no data model at
+  all we render a "generate the data model first" panel, not the graph.
 
   Context the route passes (for the unlocked workflow section):
     state       = project.project_state(mdir); section = "workflow"
+    generation  = generation.read_generation_status(mdir) | None
     stages      = the compiled/ stages (list of dicts; [] when none)
     mermaid     = build_mermaid_graph(stages, state.name, review_by_id=...) | None
     coverage    = node_review.coverage_for(stages, decisions) | None
@@ -20,7 +25,8 @@
     versions    = versioning.list_versions(mdir)   (list; may be empty)
 
   Reused (unchanged) routes: node review /node/{id}/review-partial,/decide,/edit;
-  /review/status; create version POST /version; run POST /run.
+  /review/status; create version POST /version; run POST /run; (re)generate POST
+  /generate; poll GET /generation-status.
 #}
 {# The section key stays 'workflow' (internal); the VISIBLE tab title says Workflow. #}
 {% block title %}{{ state.meta.title or state.name }} · Workflow{% endblock %}
@@ -43,15 +49,18 @@
 {% endblock %}
 
 {% block section %}
-{% set wf_locked = (state.data_model.state != "approved") %}
+{% set wf_locked = (not state.data_model.present) %}
+{% set wf_gen = (generation or {}).get('workflow') %}
+{% set wf_generating = wf_gen and wf_gen.status == 'running' %}
+{% set wf_gen_error = wf_gen and wf_gen.status == 'error' %}
 
 <div class="sec-head wf-head">
   <div class="wf-head-title">
     <h1>Workflow</h1>
-    <p class="lede">Typed stages wiring the <strong>approved</strong> schemas into a
-      pipeline. Click any node (or row) to <strong>review</strong> how that step is
-      modeled. Node colour = <em>belief</em> (do we trust it). Run it end-to-end, or
-      create an immutable version.</p>
+    <p class="lede">Typed stages wiring your data model into a pipeline. Click any node
+      (or row) to <strong>review</strong> how that step is modeled. Node colour =
+      <em>belief</em> (do we trust it). Run it end-to-end, or create an immutable
+      version.</p>
   </div>
   {% if not wf_locked %}
   <div class="actions wf-actions">
@@ -74,21 +83,13 @@
 </div>
 
 {% if wf_locked %}
-  {# ── LOCKED: the data model is not approved, so the workflow is unavailable. ── #}
+  {# ── LOCKED: there is no data model yet, so there is no workflow to wire. ── #}
   <div class="wf-locked-panel">
     <div class="wf-locked-glyph">🔒</div>
     <h2>Workflow locked</h2>
-    <p class="muted">The workflow is built on the <strong>approved</strong> data model.
-      Approve the data model first
-      {% if state.data_model.state == 'edited_stale' %}
-        — a schema changed after approval, so the data model is now
-        <span class="belief-chip belief-stale inline">edited · stale</span>. Re-approve to unlock.
-      {% elif state.data_model.state == 'none' %}
-        — there are no schemas authored yet.
-      {% else %}
-        (currently <span class="belief-chip belief-{{ state.data_model.state }} inline">{{ state.data_model.state|replace('_',' ') }}</span>).
-      {% endif %}
-    </p>
+    <p class="muted">The workflow wires the data model into a pipeline, so it unlocks
+      once the data model exists. Generate the data model first — the workflow is then
+      built automatically.</p>
     <a class="btn primary" href="/project/{{ state.name }}/data_model">Go to the data model →</a>
   </div>
 
@@ -139,15 +140,36 @@
           {% endfor %}
         </tbody>
       </table>
+      {% elif wf_generating %}
+      {# Auto-generation in flight — poll generation-status and reload when it settles. #}
+      <div class="wf-empty-graph">
+        <div class="empty-state" id="wf-generating">
+          <span class="spin"></span>
+          <h2>Generating the workflow…</h2>
+          <p class="muted">Wiring your data model into typed stages, ending in
+            <code>publish</code>. This takes a minute — the page updates itself when
+            it's done.</p>
+        </div>
+      </div>
+      {% elif wf_gen_error %}
+      {# Workflow generation failed — surface the reason loudly; nothing was written. #}
+      <div class="wf-empty-graph">
+        <div class="validation-report error" id="wf-gen-error">
+          <strong>⚠ Workflow generation failed</strong>
+          <p>The compiler did not produce a valid workflow, so nothing was written.</p>
+          {% if wf_gen.error %}<pre>{{ wf_gen.error }}</pre>{% endif %}
+        </div>
+      </div>
       {% else %}
-      {# Data model approved but no stages yet — the chat below authors them. #}
+      {# Data model present but no stages and nothing running — offer to build it. #}
       <div class="wf-empty-graph">
         <div class="empty-state wf-empty-state">
           <h2>No workflow yet</h2>
-          <p class="muted"><strong>Send</strong> to generate the pipeline that wires your
-            approved data model — the typed stages, ending in <code>publish</code>. Stages
-            appear here as they're persisted to
-            <code>examples/{{ state.name }}/compiled/</code>.</p>
+          <p class="muted">Generate the pipeline that wires your data model into typed
+            stages, ending in <code>publish</code>.</p>
+          <form method="post" action="/project/{{ state.name }}/generate">
+            <button type="submit" class="btn primary">Generate workflow</button>
+          </form>
         </div>
       </div>
       {% endif %}
@@ -183,42 +205,43 @@
     </div>
 
     <div class="right-pane wf-right" id="wf-right">
-      {# The build chat lives here; clicking a node swaps in the node-review panel. #}
+      {# Clicking a node swaps its review/edit panel (_node_review.html) in here. #}
       <div id="stage-panel">
-        <div class="flow-side-head">
-          <span class="flow-side-title">AI · workflow</span>
-          <span class="chat-live-dot" id="chat-live" hidden>● streaming…</span>
-        </div>
-        <div class="chat-log" id="chat-log">
-          <div class="chat-msg system">{% if stages %}The workflow is built. Click a node
-            to <strong>review</strong> it, or steer with a message to re-author.{% else %}The
-            workflow build streams here. <strong>Send</strong> to author it, or add a
-            message to steer.{% endif %}</div>
-        </div>
-        <div class="chat-working" id="chat-working"><span class="spin"></span>
-          <span id="chat-working-label">Generating…</span></div>
-        <div class="chat-input-row">
-          <textarea id="chat-input" placeholder="Optional steer for the workflow… (Enter to send)"></textarea>
-          <button id="chat-send" type="button">Send</button>
-          <p class="chat-hint chat-input-hint">Leave blank to wire your approved data model, or add guidance.</p>
-        </div>
-
-        <h4 class="chat-cards-head">Stages emitted</h4>
-        <div id="chat-cards">
-          <p class="muted" id="chat-cards-empty">Stage cards appear here as the agent emits
-            them, each with its <code>models</code> validation inline.</p>
+        <div class="empty-state wf-panel-hint">
+          <h2>Review a stage</h2>
+          <p class="muted">Click any node in the graph (or a row in the stage list) to
+            review how that step is modeled — its inputs, output schema, and belief —
+            and approve or edit it.</p>
         </div>
       </div>
     </div>
   </div>
 {% endif %}
 
+{% if wf_generating %}
+<script>
+(function () {
+  // While the workflow generates, poll generation-status and reload once the workflow
+  // phase settles (ok → graph renders; error → the error panel shows).
+  const NAME = {{ state.name | tojson }};
+  const STATUS_URL = '/project/' + encodeURIComponent(NAME) + '/generation-status';
+  const timer = setInterval(async function () {
+    try {
+      const r = await fetch(STATUS_URL);
+      const s = await r.json();
+      const wf = s && s.workflow;
+      if (wf && wf.status !== 'running') { clearInterval(timer); location.reload(); }
+    } catch (e) { /* transient — keep polling */ }
+  }, 2000);
+})();
+</script>
+{% endif %}
+
 {% if not wf_locked %}
 <script>
 (function () {
   // ════ Node-click → review panel. Clicking a node or stage row fetches its
-  //      review/edit partial (_node_review.html) and swaps it into #stage-panel,
-  //      replacing the build chat. ════
+  //      review/edit partial (_node_review.html) and swaps it into #stage-panel. ════
   const METHODOLOGY = {{ state.name | tojson }};
   const panel = document.getElementById('stage-panel');
   const wfRight = document.getElementById('wf-right');
@@ -315,151 +338,6 @@
       }
     });
   }
-})();
-</script>
-
-<script>
-(function () {
-  // ════ "Build workflow" chat — SSE GET /project/{name}/workflow/stream (phase=dag).
-  //      Streams stage cards into #chat-cards; on done, reloads to render the graph.
-  //      DOUBLE-SUBMIT GUARD: send disabled + "working…" until a terminal event. ════
-  const METHODOLOGY = {{ state.name | tojson }};
-  const WORKING_LABEL = 'Generating…';
-  const DONE_NOTE = 'Opening the workflow with the review / version / run UI. Refreshing…';
-
-  const log = document.getElementById('chat-log');
-  const cards = document.getElementById('chat-cards');
-  let cardsEmpty = document.getElementById('chat-cards-empty');
-  const input = document.getElementById('chat-input');
-  const sendBtn = document.getElementById('chat-send');
-  const liveDot = document.getElementById('chat-live');
-  const working = document.getElementById('chat-working');
-  const workingLabel = document.getElementById('chat-working-label');
-  let es = null;
-  let curAssistant = null;
-  let inFlight = false;
-  const history = [];
-
-  function escapeHtml(s) {
-    return String(s).replace(/[&<>"']/g, c => (
-      { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
-    ));
-  }
-  function scrollLog() { if (log) log.scrollTop = log.scrollHeight; }
-
-  function addBubble(role, text) {
-    if (!log) return null;
-    const div = document.createElement('div');
-    div.className = 'chat-msg ' + role;
-    div.textContent = text || '';
-    log.appendChild(div);
-    scrollLog();
-    return div;
-  }
-
-  function addCard(kind, obj, issues, path) {
-    if (!cards) return;
-    if (cardsEmpty) { cardsEmpty.remove(); cardsEmpty = null; }
-    const name = kind === 'schema'
-      ? ((obj && (obj.name || obj.title)) || '(unnamed schema)')
-      : ((obj && obj.id) || '(unnamed stage)');
-    const hasIssues = issues && issues.length;
-    const card = document.createElement('div');
-    card.className = 'emit-card ' + kind + (hasIssues ? ' has-issues' : '');
-    let html = '<div class="ec-head">'
-      + '<span class="ec-name">' + escapeHtml(name) + '</span>'
-      + '<span class="ec-kind">' + kind + '</span></div>';
-    if (hasIssues) {
-      html += '<ul class="ec-issues">'
-        + issues.map(i => '<li>' + escapeHtml(i) + '</li>').join('')
-        + '</ul>';
-    } else {
-      html += '<div class="ec-ok">✓ valid' + (path
-        ? ' · saved ' + escapeHtml(String(path).replace(/\\/g, '/').split('/').pop()) : '')
-        + '</div>';
-    }
-    html += '<details><summary>JSON</summary><pre>'
-      + escapeHtml(JSON.stringify(obj, null, 2)) + '</pre></details>';
-    card.innerHTML = html;
-    cards.appendChild(card);
-  }
-
-  function addDropCard(kind, obj, reason) {
-    if (!cards) return;
-    if (cardsEmpty) { cardsEmpty.remove(); cardsEmpty = null; }
-    const name = (obj && obj.id) || '(unnamed stage)';
-    const card = document.createElement('div');
-    card.className = 'emit-card ' + kind + ' dropped';
-    card.innerHTML = '<div class="ec-head">'
-      + '<span class="ec-name">' + escapeHtml(name) + '</span>'
-      + '<span class="ec-kind">' + kind + ' · dropped</span></div>'
-      + '<div class="ec-drop">⏸ ' + escapeHtml(reason || 'dropped by the phase gate') + '</div>';
-    cards.appendChild(card);
-  }
-
-  function setStreaming(on) {
-    inFlight = on;
-    if (liveDot) liveDot.hidden = !on;
-    if (working) working.classList.toggle('on', on);
-    if (sendBtn) sendBtn.disabled = on;
-    if (input) input.disabled = on;
-  }
-
-  function closeStream() { if (es) { es.close(); es = null; } }
-
-  function send() {
-    if (inFlight) return;
-    const message = (input && input.value || '').trim();
-    if (workingLabel) workingLabel.textContent = WORKING_LABEL;
-    if (message) { addBubble('user', message); history.push({ role: 'user', content: message }); }
-    if (input) input.value = '';
-    curAssistant = null;
-
-    const url = '/project/' + encodeURIComponent(METHODOLOGY)
-      + '/workflow/stream?message=' + encodeURIComponent(message);
-    es = new EventSource(url);
-    setStreaming(true);
-
-    es.onmessage = function (e) {
-      let ev;
-      try { ev = JSON.parse(e.data); } catch (err) { return; }
-      if (ev.type === 'assistant_delta') {
-        if (!curAssistant) { curAssistant = addBubble('assistant', ''); }
-        if (curAssistant) { curAssistant.textContent += ev.text; scrollLog(); }
-      } else if (ev.type === 'stage_emitted') {
-        addCard('stage', ev.stage, ev.issues, ev.path);
-      } else if (ev.type === 'schema_emitted') {
-        addCard('schema', ev.schema, ev.issues, ev.path);
-      } else if (ev.type === 'stage_dropped') {
-        addDropCard('stage', ev.stage, ev.reason);
-      } else if (ev.type === 'schema_dropped') {
-        addDropCard('schema', ev.schema, ev.reason);
-      } else if (ev.type === 'done' || ev.type === 'data_model_proposed') {
-        if (curAssistant) { history.push({ role: 'assistant', content: curAssistant.textContent }); }
-        const v = ev.validation || {};
-        const parts = [];
-        if (v.n_stages !== undefined) parts.push(v.n_stages + ' stage(s)');
-        if (v.n_schemas !== undefined) parts.push(v.n_schemas + ' schema(s)');
-        addBubble('system', 'Workflow built — ' + parts.join(', ') + '. ' + DONE_NOTE);
-        closeStream();
-        setStreaming(false);
-        setTimeout(() => location.reload(), 900);
-      } else if (ev.type === 'error') {
-        addBubble('error', '⚠ ' + ev.message);
-        closeStream();
-        setStreaming(false);
-      }
-    };
-
-    es.onerror = function () {
-      if (es && es.readyState === EventSource.CLOSED) { setStreaming(false); }
-    };
-  }
-
-  if (sendBtn) sendBtn.addEventListener('click', send);
-  if (input) input.addEventListener('keydown', function (e) {
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
-  });
 })();
 </script>
 {% endif %}

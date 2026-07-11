@@ -82,12 +82,14 @@ def test_project_page():
     assert "Status" in r.text                               # the status-tiles heading
 
 
-def test_project_page_has_edit_with_agent_control():
-    """The project shell (every section) offers an 'Edit with agent' control that
-    opens a chat session bound to this project's editing agent."""
+def test_project_shell_has_no_manual_edit_with_agent_control():
+    """The manual 'Edit with agent' side control was removed: the data model (and then
+    the workflow) is generated automatically on upload, so the shell no longer offers a
+    per-project agent button to author it by hand."""
     r = client.get("/project/demo")
     assert r.status_code == 200
-    assert 'action="/project/demo/edit-agent"' in r.text
+    assert "edit-agent" not in r.text
+    assert "Edit with agent" not in r.text
 
 
 def test_workflow_section_renders_the_graph():
