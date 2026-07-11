@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% block title %}{{ config.name }} · evals{% endblock %}
+
+{% block header_extra %}
+<a href="/project/{{ project }}/evals" class="back-link">← evals</a>
+{% endblock %}
+
+{% set badge_class = {
+     "run succeeded": "ok", "stale": "warn", "never run": "pending",
+     "no eval dataset yet": "pending", "run errored": "err", "broken": "err",
+   } %}
+
+{% block content %}
+<h1>{{ config.name }} <span class="badge {{ badge_class.get(status, 'pending') }}">{{ status }}</span></h1>
+{% if config.description %}<p class="lede">{{ config.description }}</p>{% endif %}
+
+<h2>Pathway</h2>
+<ul>
+  <li><strong>override → target:</strong>
+    <code>{{ config.override_stage }}</code> → <code>{{ config.target_stage }}</code></li>
+  {% if config.reference_overrides %}
+  <li><strong>reference overrides:</strong>
+    {% for ov in config.reference_overrides %}<code>{{ ov.stage_id }}</code>{% if not loop.last %}, {% endif %}{% endfor %}</li>
+  {% endif %}
+  {% if executing %}
+  <li><strong>executing stages:</strong>
+    {% for s in executing %}<code>{{ s }}</code>{% if not loop.last %}, {% endif %}{% endfor %}</li>
+  {% endif %}
+</ul>
+
+<h2>Compatibility</h2>
+{% if report.ok %}
+<p><span class="badge ok">ok</span> This eval fits the workflow as it stands now.</p>
+{% else %}
+<div class="load-issues">
+  <strong>{{ report.problems|length }} problem(s):</strong>
+  <ul>{% for p in report.problems %}<li>{{ p }}</li>{% endfor %}</ul>
+</div>
+{% endif %}
+
+<h2>Eval dataset</h2>
+{% if has_eval_dataset %}
+<p class="lede"><code>{{ config.table.path }}</code> ({{ config.table.format }})</p>
+{% if dataset_error %}
+<div class="load-issues">{{ dataset_error }}</div>
+{% else %}
+{% if dataset_capped %}<p class="lede">Showing the first {{ dataset_cap }} rows.</p>{% endif %}
+<div class="table-scroll">
+<table class="table">
+  <thead><tr>{% for c in dataset_columns %}<th>{{ c }}</th>{% endfor %}</tr></thead>
+  <tbody>
+    {% for row in dataset_rows %}
+    <tr>{% for c in dataset_columns %}<td>{{ row.get(c, '') }}</td>{% endfor %}</tr>
+    {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endif %}
+{% else %}
+<div class="empty-state">
+  <h2>No eval dataset yet</h2>
+  <p class="muted">This eval can't run until a dataset is attached. Attaching happens in
+    the authoring form (coming in a later change).</p>
+</div>
+{% endif %}
+
+<h2>Scoring rules</h2>
+<table class="table">
+  <thead><tr><th>target column</th><th>metric</th><th>tolerance</th></tr></thead>
+  <tbody>
+    {% for check in config.expected_outputs %}
+    <tr>
+      <td><code>{{ check.output_column }}</code></td>
+      <td>{{ check.metric }}</td>
+      <td>{{ check.tolerance if check.tolerance is not none else '—' }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% if config.metrics %}
+<p><strong>rollup metrics:</strong>
+  {% for m in config.metrics %}<code>{{ m }}</code>{% if not loop.last %}, {% endif %}{% endfor %}</p>
+{% endif %}
+{% if config.code %}
+<p><strong>code scorer:</strong> <code>{{ config.code.module }}.{{ config.code.function }}</code></p>
+{% endif %}
+
+<h2>Run history</h2>
+{% if runs_error %}
+<div class="load-issues">{{ runs_error }}</div>
+{% elif runs %}
+<table class="table">
+  <thead><tr><th>run id</th><th>started</th><th>version</th><th>status</th></tr></thead>
+  <tbody>
+    {% for r in runs %}
+    <tr>
+      <td><a href="/project/{{ project }}/evals/{{ config.id }}/runs/{{ r.id }}"><code>{{ r.id }}</code></a></td>
+      <td>{{ r.started_at or '—' }}</td>
+      <td><code>{{ r.workflow_version }}</code></td>
+      <td>{{ r.status }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<div class="empty-state">
+  <h2>Never run</h2>
+  <p class="muted">This eval has no recorded runs.</p>
+</div>
+{% endif %}
+{% endblock %}

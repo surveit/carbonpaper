@@ -21,7 +21,7 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
 from app.web.config import STATIC_DIR
-from app.web.routers import project, node_review, review, runs
+from app.web.routers import evals, project, node_review, review, runs
 
 from app.agent.router import router as chat_router
 from app.compiler.router import router as compiler_router
@@ -36,6 +36,7 @@ app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 app.include_router(project.router)
 app.include_router(runs.router)
+app.include_router(evals.router)
 app.include_router(review.router)
 app.include_router(node_review.router)
 
