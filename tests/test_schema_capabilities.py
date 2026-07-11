@@ -1,6 +1,7 @@
 """Tests for the schema capabilities in app/models/schema.py: Column.enum, the
 recursive json/list[json] shape (Column.fields / Column.value_type),
-TableSchema.subtract, and TableSchema.to_prompt."""
+TableSchema.subtract (strict=True and strict=False) / is_subset_of, and
+TableSchema.to_prompt."""
 from __future__ import annotations
 
 import pytest
@@ -274,6 +275,16 @@ def test_spec_column_fields_derived_from_model():
     assert set(sch._SPEC_COLUMN_FIELDS) == set(m.Column.model_fields) - prose
 
 
+# ── TableSchema.column_for_name ───────────────────────────────────────────────
+def test_column_for_name_finds_by_name_or_returns_none():
+    a = _ts(columns=[{"name": "id", "type": "str"}, {"name": "score", "type": "int"}])
+    col = a.column_for_name("score")
+    assert col is not None
+    assert col.name == "score"
+    assert col.type == "int"
+    assert a.column_for_name("gone") is None
+
+
 # ── TableSchema.is_subset_of ─────────────────────────────────────────────────
 def test_is_subset_of_true_when_present_and_identical():
     a = _ts(columns=[{"name": "id", "type": "str"}])
@@ -297,6 +308,46 @@ def test_is_subset_of_ignores_prose():
     a = _ts(columns=[{"name": "id", "type": "str", "description": "producer"}])
     b = _ts(columns=[{"name": "id", "type": "str", "description": "consumer"}])
     assert a.is_subset_of(b) is True
+
+
+# ── TableSchema.subtract(strict=False) ───────────────────────────────────────
+def test_subtract_strict_false_empty_when_subset():
+    a = _ts(columns=[{"name": "id", "type": "str"}])
+    b = _ts(columns=[{"name": "id", "type": "str"}, {"name": "score", "type": "int"}])
+    assert a.subtract(b, strict=False).columns == []
+    assert a.is_subset_of(b) is True
+
+
+def test_subtract_strict_false_lists_absent_column():
+    a = _ts(columns=[{"name": "id", "type": "str"}, {"name": "gone", "type": "str"}])
+    b = _ts(columns=[{"name": "id", "type": "str"}])
+    missing = a.subtract(b, strict=False).columns
+    assert [c.name for c in missing] == ["gone"]
+    assert a.is_subset_of(b) is False
+
+
+def test_subtract_strict_false_lists_column_with_differing_spec():
+    a = _ts(columns=[{"name": "id", "type": "str"}])
+    b = _ts(columns=[{"name": "id", "type": "int"}])
+    missing = a.subtract(b, strict=False).columns
+    assert [c.name for c in missing] == ["id"]
+    assert a.is_subset_of(b) is False
+
+
+def test_subtract_strict_false_ignores_prose_differences():
+    a = _ts(columns=[{"name": "id", "type": "str", "description": "producer"}])
+    b = _ts(columns=[{"name": "id", "type": "str", "description": "consumer"}])
+    assert a.subtract(b, strict=False).columns == []
+
+
+def test_subtract_strict_false_does_not_throw_on_spec_delta():
+    # Unlike the strict=True default, strict=False tolerates `other` NOT
+    # being a spec-preserving subset of `self` -- it just reports what's
+    # uncovered instead of raising.
+    a = _ts(columns=[{"name": "id", "type": "str"}])
+    b = _ts(columns=[{"name": "id", "type": "int"}])
+    diff = a.subtract(b, strict=False)
+    assert [c.name for c in diff.columns] == ["id"]
 
 
 # ── TableSchema.to_prompt ────────────────────────────────────────────────────

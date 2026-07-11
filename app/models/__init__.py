@@ -65,7 +65,7 @@ from app.models.eval import (
     EvalConfig,
     EvalRun,
     EvalRunSettings,
-    ExpectedColumn,
+    ExpectedOutput,
     StageOutputOverride,
     resolve_eval_run_settings,
 )
@@ -183,7 +183,7 @@ __all__ = [
     # general
     "TableRef",
     # eval contract
-    "StageOutputOverride", "ExpectedColumn", "CodeScorer", "EvalConfig",
+    "StageOutputOverride", "ExpectedOutput", "CodeScorer", "EvalConfig",
     "EvalRunSettings", "resolve_eval_run_settings", "EvalRun",
     # compat vocabularies (rendered by prompt.py / read by compiler.py)
     "SCALAR_COLUMN_TYPES", "SCHEMA_KINDS", "JOIN_TYPES", "CONNECTOR_KINDS",
