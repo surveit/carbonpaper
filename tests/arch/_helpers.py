@@ -58,3 +58,31 @@ def collect_called_methods(tree: ast.Module) -> set[str]:
         for node in ast.walk(tree)
         if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
     }
+
+
+def find_numeric_get_defaults(tree: ast.Module) -> list[tuple[int, int]]:
+    """(lineno, end_lineno) of each `x.get(key, <int/float literal>)` call.
+
+    A silent numeric fallback: when `key` is missing this substitutes a made-up
+    number instead of failing loud. `True`/`False` defaults are not numbers here.
+    """
+    spans: list[tuple[int, int]] = []
+    for node in ast.walk(tree):
+        if not (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "get"
+            and len(node.args) == 2
+            and not node.keywords
+        ):
+            continue
+        default = node.args[1]
+        if isinstance(default, ast.UnaryOp) and isinstance(default.op, ast.USub):
+            default = default.operand  # negative literal, e.g. -1
+        if (
+            isinstance(default, ast.Constant)
+            and isinstance(default.value, (int, float))
+            and not isinstance(default.value, bool)
+        ):
+            spans.append((node.lineno, node.end_lineno or node.lineno))
+    return spans
