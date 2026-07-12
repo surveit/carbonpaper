@@ -39,3 +39,15 @@ forbidden_modules = ["app.compiler", "app.web", "app.services"]
 # backend adapter) and core models, but must not import domain layers — so any
 # agent can run on it. The dependency points the other way: app.compiler.agent
 # imports app.agent to register itself, never the reverse.
+
+[[tool.importlinter.contracts]]
+name = "Status/review services stay below the routes layer"
+type = "forbidden"
+source_modules = ["app.services.node_review", "app.services.versioning"]
+forbidden_modules = ["app.main", "app.runtime", "app.compiler"]
+# node_review (belief/approval state) and versioning are pure helpers the routes
+# and templates lean on — never the reverse — so they stay unit-testable without
+# the runtime/compiler stack. app.services.project belongs to this rule too but
+# still imports app.compiler for its regenerate-from-document action
+# (project.py:437); tracked at #63 until that action moves to
+# app.services.compilation, which wraps the compiler by design and is out of scope.

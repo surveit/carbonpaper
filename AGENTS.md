@@ -98,9 +98,10 @@ review item for a person, ask whether an arch test can enforce it. If it can,
 write the test and drop the item — CI guards it now. If it genuinely can't, it
 stays a **manual-review** item. So every architectural invariant is either
 *enforced* (a `tests/arch/` check, an `import-linter` contract, or a Ruff rule) or
-*manual* — never merely hoped-for. Of the rules below, the blind-except ban is
-enforced (Ruff `BLE001`) and the services-below-routes isolation is still manual
-(#63); prefer moving the manual ones to enforced.
+*manual* — never merely hoped-for. Of the rules below, the blind-except ban (Ruff
+`BLE001`) and the status/review isolation (an import-linter contract) are enforced;
+the fabrication rule and project.py's slice of that isolation (#63) stay manual.
+Prefer moving the manual ones to enforced.
 
 - **Never fabricate.** A value that can't be sourced is `null`/`unknown`; the
   pipeline fails loudly or halts rather than inventing a number, URL, or citation.
@@ -116,11 +117,15 @@ enforced (Ruff `BLE001`) and the services-below-routes isolation is still manual
   sign-off: the runner halts, and decisions are content-hashed so they survive
   re-runs.
 - **The status/review helpers stay below the routes layer.**
-  `app/services/{project,node_review,versioning}` must not import `app.main`,
-  `app.runtime`, or `app.compiler` — routes and templates depend on them, not the
-  reverse, so the import graph stays acyclic and they stay unit-testable without the
-  runtime/compiler stack. (Other `app/services/` modules — e.g. `compilation.py`,
-  which wraps the compiler — are not bound by this.) Not lint-enforced yet: #63.
+  `app/services/node_review` and `app/services/versioning` must not import
+  `app.main`, `app.runtime`, or `app.compiler` — routes and templates depend on
+  them, not the reverse, so the import graph stays acyclic and they stay
+  unit-testable without the runtime/compiler stack. Enforced by the import-linter
+  contract "Status/review services stay below the routes layer". `app/services/project`
+  is meant to obey this too but still imports `app.compiler` for its
+  regenerate-from-document action (`project.py:437`); #63 tracks moving that action
+  into `app.services.compilation` (which wraps the compiler by design and is exempt)
+  so project can rejoin the contract.
 - **Never `except Exception` or bare `except`.** Catch specific exception types —
   swallowing all errors hides bugs and breaks fail-loudly. Enforced by Ruff
   `BLE001`.
