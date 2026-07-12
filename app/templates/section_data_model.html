@@ -2,13 +2,13 @@
 {#
   DATA MODEL — named-schema cards by kind + ER diagram + the approval GATE + the
   per-schema JSON edit. The data model is GENERATED automatically from the document
-  (see app.services.generation, kicked off on project create); this page shows a
-  spinner while that runs, the generated schemas when it lands, and a loud error if
-  generation failed. There is no in-page authoring chat.
+  (see app.services.generation, kicked off on project create) in the background; this
+  page just reads the result from disk — schemas when present, else a 0-state with a
+  Generate button. There is no in-page authoring chat, and (for now) no live status /
+  spinner: real-time updates are tracked in issue #95.
 
   Context the route passes (Phase-1 FROZEN CONTRACT for this section):
     state       = project.project_state(mdir); section = "data_model"
-    generation  = generation.read_generation_status(mdir) | None   (the poll payload)
     schemas     = _load_schemas(mdir)                         (list of schema dicts)
     er_diagram  = _build_schema_er_diagram(schemas) | None
     issues      = validate_schema_library(schemas)            (list[str], may be empty)
@@ -18,9 +18,8 @@
     kind_class  = SCHEMA_KIND_CLASS
     kind_glyph  = SCHEMA_KIND_GLYPH
 
-  Endpoints: (re)generate POST /project/{name}/generate; poll GET
-  /project/{name}/generation-status; approve POST .../data-model/approve; per-schema
-  edit POST .../schema/{name}/edit.
+  Endpoints: (re)generate POST /project/{name}/generate; approve POST
+  .../data-model/approve; per-schema edit POST .../schema/{name}/edit.
 #}
 {% block section_head %}
 <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
@@ -42,10 +41,6 @@
      'approved': 'approved', 'unreviewed': 'unreviewed', 'edited_stale': 'edited · stale',
      'rejected': 'rejected', 'none': 'none',
    } %}
-{% set dm_gen = (generation or {}).get('data_model') %}
-{% set dm_generating = dm_gen and dm_gen.status == 'running' %}
-{% set dm_gen_error = dm_gen and dm_gen.status == 'error' %}
-
 <div class="sec-head">
   <h1>Data model</h1>
   <p class="lede">Named schemas — the tables the methodology operates on — generated
@@ -158,58 +153,20 @@
       {% endif %}
     {% endfor %}
 
-  {% elif dm_generating %}
-    {# Auto-generation in flight — poll generation-status and reload when it settles. #}
-    <div class="empty-state dm-generating" id="dm-generating">
-      <span class="spin"></span>
-      <h2>Generating the data model…</h2>
-      <p class="muted">Reading <code>document.md</code> and authoring the named schemas.
-        This takes a minute — the page updates itself when it's done.</p>
-    </div>
-
-  {% elif dm_gen_error %}
-    {# Generation failed — surface the reason loudly; nothing was written. #}
-    <div class="validation-report error" id="dm-gen-error">
-      <strong>⚠ Data-model generation failed</strong>
-      <p>The generator did not produce a valid data model, so nothing was written.</p>
-      {% if dm_gen.error %}<pre>{{ dm_gen.error }}</pre>{% endif %}
-      <form method="post" action="/project/{{ state.name }}/generate">
-        <button type="submit" class="btn primary">Retry generation</button>
-      </form>
-    </div>
-
   {% else %}
-    {# No data model and none generating — offer to generate from the document. #}
+    {# No data model on disk yet. It is generated from the document in the background
+       on upload; without live status (see issue #95) the page just reflects disk. #}
     <div class="empty-state dm-empty-state" id="dm-empty">
       <h2>No data model yet</h2>
-      <p class="muted">Generate the named schemas from
-        <code>examples/{{ state.name }}/document.md</code>.</p>
+      <p class="muted">The data model is generated from
+        <code>examples/{{ state.name }}/document.md</code>. If you just created this
+        project it may still be generating — reload in a moment — or (re)generate it now.</p>
       <form method="post" action="/project/{{ state.name }}/generate">
         <button type="submit" class="btn primary">Generate data model</button>
       </form>
     </div>
   {% endif %}
 </div>
-
-{% if dm_generating %}
-<script>
-(function () {
-  // While generation runs, poll its status and reload once the data-model phase
-  // settles (ok → schemas render; error → the error panel shows). No websockets; a
-  // plain poll of the generation.json the background thread writes.
-  const NAME = {{ state.name | tojson }};
-  const STATUS_URL = '/project/' + encodeURIComponent(NAME) + '/generation-status';
-  const timer = setInterval(async function () {
-    try {
-      const r = await fetch(STATUS_URL);
-      const s = await r.json();
-      const dm = s && s.data_model;
-      if (dm && dm.status !== 'running') { clearInterval(timer); location.reload(); }
-    } catch (e) { /* transient — keep polling */ }
-  }, 2000);
-})();
-</script>
-{% endif %}
 
 {% if schemas %}
 <script>

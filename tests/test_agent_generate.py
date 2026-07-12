@@ -1,11 +1,10 @@
-"""The headless generate-validate-retry loop (app.agent.agent.run_until_valid) and
-the data-model block parser (app.compiler.data_model.parse_schema_blocks).
+"""The headless generate-validate-retry loop (app.agent.agent.run_until_valid): it
+validates an agent's JSON output INTO a caller-supplied Pydantic model, feeding the
+Pydantic (or JSON) errors back to the same session until it validates or the round
+budget is spent.
 
-The loop is tested over a SCRIPTED run_turn (canned assistant texts) rather than the
-real SDK engine, so no CLI subprocess is spawned. We assert the three behaviours that
-matter: it returns the first valid artifact, it feeds each round's issues back into the
-next prompt, and it raises (never returns an invalid artifact) once the round budget is
-spent. Coroutines are driven with asyncio.run, mirroring tests/test_sdk_engine.py.
+Driven over a SCRIPTED run_turn (canned assistant texts) so no CLI subprocess is
+spawned. Coroutines are run with asyncio.run, mirroring tests/test_sdk_engine.py.
 """
 from __future__ import annotations
 
@@ -13,10 +12,15 @@ import asyncio
 from typing import Any, Callable
 
 import pytest
+from pydantic import BaseModel
 
 from app.agent.agent import run_until_valid
-from app.compiler.data_model import parse_schema_blocks
 from app.errors import GenerationError
+
+
+class _Point(BaseModel):
+    x: int
+    y: int
 
 
 def _scripted_run_turn(
@@ -33,102 +37,55 @@ def _scripted_run_turn(
     return run_turn
 
 
-def _run(texts: list[str], validate: Callable[[str], list[str]], **kw: Any):
-    """Drive run_until_valid with identity extraction over `texts`; return
-    (result_or_exc, prompts_seen)."""
+def _run(texts: list[str], *, max_rounds: int = 3) -> tuple[_Point, list[str]]:
+    """Drive run_until_valid over `texts` into _Point; return (result, prompts_seen)."""
     prompts: list[str] = []
-    coro = run_until_valid(
-        _scripted_run_turn(texts, prompts),
-        seed="SEED",
-        extract=lambda text: text,
-        validate=validate,
-        max_rounds=kw.get("max_rounds", 3),
+    result = asyncio.run(
+        run_until_valid(
+            _scripted_run_turn(texts, prompts),
+            seed="SEED",
+            into=_Point,
+            max_rounds=max_rounds,
+        )
     )
-    return asyncio.run(coro), prompts
+    return result, prompts
 
 
-def test_returns_first_valid_artifact_without_retrying() -> None:
-    result, prompts = _run(["GOOD"], validate=lambda a: [])
-    assert result == "GOOD"
-    assert prompts == ["SEED"]  # exactly one turn, seeded with the document
+def test_returns_validated_model_on_first_valid_json() -> None:
+    result, prompts = _run(['{"x": 1, "y": 2}'])
+    assert result == _Point(x=1, y=2)  # a typed instance, not a dict
+    assert prompts == ["SEED"]
 
 
-def test_feeds_issues_back_then_returns_the_corrected_artifact() -> None:
-    result, prompts = _run(
-        ["BAD", "GOOD"],
-        validate=lambda a: [] if a == "GOOD" else ["kind must be one of ..."],
-    )
-    assert result == "GOOD"
+def test_feeds_pydantic_errors_back_then_returns_corrected_model() -> None:
+    result, prompts = _run(['{"x": 1}', '{"x": 1, "y": 2}'])  # first missing y
+    assert result == _Point(x=1, y=2)
     assert len(prompts) == 2
     assert prompts[0] == "SEED"
-    assert "kind must be one of ..." in prompts[1]  # the issue was kicked back
+    assert "y" in prompts[1]  # the missing-field error was kicked back
+
+
+def test_feeds_json_error_back_when_output_is_not_json() -> None:
+    result, prompts = _run(["sorry, no JSON here", '{"x": 3, "y": 4}'])
+    assert result == _Point(x=3, y=4)
+    assert "JSON" in prompts[1]  # the parse failure was kicked back
+
+
+def test_extracts_json_from_a_fenced_block() -> None:
+    result, prompts = _run(["Here you go:\n```json\n{\"x\": 5, \"y\": 6}\n```\n"])
+    assert result == _Point(x=5, y=6)
+    assert prompts == ["SEED"]
 
 
 def test_raises_after_round_budget_never_returns_invalid() -> None:
     prompts: list[str] = []
     coro = run_until_valid(
-        _scripted_run_turn(["BAD", "BAD", "BAD"], prompts),
+        _scripted_run_turn(['{"x": 1}', '{"x": 2}', '{"x": 3}'], prompts),  # all missing y
         seed="SEED",
-        extract=lambda text: text,
-        validate=lambda a: ["always wrong"],
+        into=_Point,
         max_rounds=3,
     )
     with pytest.raises(GenerationError) as exc_info:
         asyncio.run(coro)
-    assert "always wrong" in str(exc_info.value)
+    assert "_Point" in str(exc_info.value)  # names the target model
     assert len(prompts) == 3  # spent exactly the budget
-
-
-def test_parse_failure_is_fed_back_as_an_issue() -> None:
-    prompts: list[str] = []
-
-    def extract(text: str) -> str:
-        if text == "GOOD":
-            return text
-        raise ValueError("bad format")
-
-    coro = run_until_valid(
-        _scripted_run_turn(["garbage", "GOOD"], prompts),
-        seed="SEED",
-        extract=extract,
-        validate=lambda a: [],
-        max_rounds=3,
-    )
-    assert asyncio.run(coro) == "GOOD"
-    assert "could not parse" in prompts[1]
-    assert "bad format" in prompts[1]
-
-
-# ── parse_schema_blocks ─────────────────────────────────────────────────────────
-
-_SCHEMA_TEXT = """\
-Here are the tables.
-
-```schema
-{"name": "company", "kind": "input", "title": "Company", "columns": []}
-```
-
-```schema
-{"name": "filing", "kind": "computed", "title": "Filing", "columns": []}
-```
-
-```python
-print("not a schema")
-```
-"""
-
-
-def test_parse_schema_blocks_extracts_only_schema_blocks() -> None:
-    schemas = parse_schema_blocks(_SCHEMA_TEXT)
-    assert [s["name"] for s in schemas] == ["company", "filing"]  # python block ignored
-
-
-def test_parse_schema_blocks_raises_when_no_schema_block() -> None:
-    with pytest.raises(ValueError, match="no ```schema blocks"):
-        parse_schema_blocks("prose only, no fenced blocks")
-
-
-def test_parse_schema_blocks_raises_on_malformed_json() -> None:
-    text = "```schema\n{not valid json}\n```"
-    with pytest.raises(ValueError):
-        parse_schema_blocks(text)

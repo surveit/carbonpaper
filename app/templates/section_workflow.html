@@ -7,8 +7,9 @@
     · Run + Create-version controls
 
   The workflow is GENERATED automatically right after the data model (see
-  app.services.generation); this page shows a spinner while that runs and the graph
-  when it lands. There is no in-page build chat.
+  app.services.generation) in the background; this page just reads the result from
+  disk — the graph when stages are present, else a 0-state with a Generate button. No
+  live status / spinner yet (issue #95); there is no in-page build chat.
 
   UNLOCKED once the data model EXISTS (state.data_model.present). Approval is a
   separate gate (on running), not on seeing the draft. When there is no data model at
@@ -16,7 +17,6 @@
 
   Context the route passes (for the unlocked workflow section):
     state       = project.project_state(mdir); section = "workflow"
-    generation  = generation.read_generation_status(mdir) | None
     stages      = the compiled/ stages (list of dicts; [] when none)
     mermaid     = build_mermaid_graph(stages, state.name, review_by_id=...) | None
     coverage    = node_review.coverage_for(stages, decisions) | None
@@ -26,7 +26,7 @@
 
   Reused (unchanged) routes: node review /node/{id}/review-partial,/decide,/edit;
   /review/status; create version POST /version; run POST /run; (re)generate POST
-  /generate; poll GET /generation-status.
+  /generate.
 #}
 {# The section key stays 'workflow' (internal); the VISIBLE tab title says Workflow. #}
 {% block title %}{{ state.meta.title or state.name }} · Workflow{% endblock %}
@@ -50,9 +50,6 @@
 
 {% block section %}
 {% set wf_locked = (not state.data_model.present) %}
-{% set wf_gen = (generation or {}).get('workflow') %}
-{% set wf_generating = wf_gen and wf_gen.status == 'running' %}
-{% set wf_gen_error = wf_gen and wf_gen.status == 'error' %}
 
 <div class="sec-head wf-head">
   <div class="wf-head-title">
@@ -140,33 +137,15 @@
           {% endfor %}
         </tbody>
       </table>
-      {% elif wf_generating %}
-      {# Auto-generation in flight — poll generation-status and reload when it settles. #}
-      <div class="wf-empty-graph">
-        <div class="empty-state" id="wf-generating">
-          <span class="spin"></span>
-          <h2>Generating the workflow…</h2>
-          <p class="muted">Wiring your data model into typed stages, ending in
-            <code>publish</code>. This takes a minute — the page updates itself when
-            it's done.</p>
-        </div>
-      </div>
-      {% elif wf_gen_error %}
-      {# Workflow generation failed — surface the reason loudly; nothing was written. #}
-      <div class="wf-empty-graph">
-        <div class="validation-report error" id="wf-gen-error">
-          <strong>⚠ Workflow generation failed</strong>
-          <p>The compiler did not produce a valid workflow, so nothing was written.</p>
-          {% if wf_gen.error %}<pre>{{ wf_gen.error }}</pre>{% endif %}
-        </div>
-      </div>
       {% else %}
-      {# Data model present but no stages and nothing running — offer to build it. #}
+      {# No workflow on disk yet. It is generated right after the data model in the
+         background; without live status (issue #95) the page just reflects disk. #}
       <div class="wf-empty-graph">
         <div class="empty-state wf-empty-state">
           <h2>No workflow yet</h2>
-          <p class="muted">Generate the pipeline that wires your data model into typed
-            stages, ending in <code>publish</code>.</p>
+          <p class="muted">The workflow is generated automatically after the data model.
+            If you just generated the data model it may still be building — reload in a
+            moment — or (re)generate it now.</p>
           <form method="post" action="/project/{{ state.name }}/generate">
             <button type="submit" class="btn primary">Generate workflow</button>
           </form>
@@ -216,25 +195,6 @@
       </div>
     </div>
   </div>
-{% endif %}
-
-{% if wf_generating %}
-<script>
-(function () {
-  // While the workflow generates, poll generation-status and reload once the workflow
-  // phase settles (ok → graph renders; error → the error panel shows).
-  const NAME = {{ state.name | tojson }};
-  const STATUS_URL = '/project/' + encodeURIComponent(NAME) + '/generation-status';
-  const timer = setInterval(async function () {
-    try {
-      const r = await fetch(STATUS_URL);
-      const s = await r.json();
-      const wf = s && s.workflow;
-      if (wf && wf.status !== 'running') { clearInterval(timer); location.reload(); }
-    } catch (e) { /* transient — keep polling */ }
-  }, 2000);
-})();
-</script>
 {% endif %}
 
 {% if not wf_locked %}

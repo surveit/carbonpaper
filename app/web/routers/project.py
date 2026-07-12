@@ -234,8 +234,8 @@ async def new_project_submit(
         source="pasted document",
     )
     # Kick off automatic generation (data model → then workflow) in the background.
-    # The data-model page shows a spinner and polls generation-status while it runs;
-    # nothing is authored by hand here.
+    # The pages read the result from disk (no live status yet — issue #95); nothing is
+    # authored by hand here.
     generation.start_generation(project_dir, document=doc, model=model)
     # Land on the data-model section — that's where the generation spinner (and then
     # the generated schemas) render. The document section is read-only context.
@@ -261,14 +261,6 @@ async def generate_project(project_name: str):
         pdir, document=document_path.read_text(encoding="utf-8"), model=model
     )
     return RedirectResponse(url=f"/project/{project_name}/data_model", status_code=303)
-
-
-@router.get("/project/{project_name}/generation-status")
-async def generation_status(project_name: str):
-    """The generation.json poll payload the data-model spinner reads: per-phase
-    {status, error, …} for data_model + workflow, or null if generation never ran."""
-    pdir = _project_dir(project_name)
-    return JSONResponse(generation.read_generation_status(pdir))
 
 
 # ─── Unified PROJECT sections ────────────────────────────────────────────────
@@ -331,7 +323,6 @@ async def project_data_model(request: Request, project_name: str):
         {
             "state": shell_state(pdir),
             "section": "data_model",
-            "generation": generation.read_generation_status(pdir),
             "schemas": schemas,
             "er_diagram": build_schema_er_diagram(schemas) if schemas else None,
             "issues": validate_schema_library([_schema_spec(s) for s in schemas]) if schemas else [],
@@ -393,7 +384,6 @@ async def project_workflow(request: Request, project_name: str):
         {
             "state": shell_state(pdir),
             "section": "workflow",
-            "generation": generation.read_generation_status(pdir),
             "stages": stages,
             "mermaid": mermaid,
             "coverage": coverage,
