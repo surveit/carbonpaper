@@ -1,21 +1,20 @@
-"""Headless agent calls: run an agent to a VALIDATED Pydantic object, off the browser.
+"""Headless structured-output agent: run an agent to a VALIDATED Pydantic object.
 
-The interactive surface (app.agent.router + app.agent.turns) streams a chat to a
-human. This module is the non-interactive counterpart: run one agent turn, parse its
-output as JSON, and validate it INTO a caller-supplied Pydantic model. If validation
-fails, feed the errors back to the SAME agent session and let it try again, up to a
-bounded number of rounds. It returns a validated model instance or raises — never a
-partial or invalid one.
+The interactive surface (app.agent.router + app.agent.turns) streams a chat to a human.
+This is the non-interactive counterpart: an `Agent` is configured with a system prompt
+and a `target_schema` (the Pydantic model it must produce), given a `task` (the input
+material to work from), and `run()` returns a validated instance of that schema.
 
-Generic over the target model: `generate_valid(..., into=SomeModel)` returns a
-`SomeModel`. The model IS the contract — a drifted or malformed answer is rejected by
-`model_validate` and the Pydantic errors are what get sent back for correction.
+The agent produces its answer by CALLING one tool — `submit_answer`, whose input schema
+IS `target_schema` — rather than emitting JSON as free text. So the answer arrives
+structured (nothing to parse), the schema is carried by the tool definition (the
+provider renders it, not a hand-written dump in the prompt), and a rejected answer comes
+back as a tool error the agent corrects in the same loop. The submitted object is
+captured from the tool call and returned — it is never echoed back into the context.
 """
 from __future__ import annotations
 
-import json
-import re
-from typing import Any, Awaitable, Callable, TypeVar
+from typing import Any, Generic, TypeVar
 
 from pydantic import BaseModel, ValidationError
 
@@ -24,153 +23,93 @@ from app.agent.sdk_engine import CLI_MODEL, ClaudeAgentSdkEngine
 from app.errors import GenerationError
 from app.models.schema import format_errors
 
-# The Pydantic model a caller generates into; generate_valid returns an instance of it.
+# The Pydantic model this agent produces; run() returns an instance of it.
 Model = TypeVar("Model", bound=BaseModel)
 
-# Run one turn: given the prompt and the session to resume (None on the first turn),
-# return the assistant's text and the session id to resume next round.
-RunTurn = Callable[[str, "str | None"], Awaitable[tuple[str, "str | None"]]]
 
+class Agent(Generic[Model]):
+    """A headless agent that produces a validated `target_schema` instance.
 
-async def generate_valid(
-    *,
-    system_prompt: str,
-    seed: str,
-    into: type[Model],
-    model: str = CLI_MODEL,
-    max_rounds: int = 4,
-) -> Model:
-    """Run an agent until its JSON output validates as `into`, then return that model.
+    Configure it with a system prompt (its instructions), a `target_schema` (the model
+    it must produce), and a `task` (the input to work from); call `run()` to get the
+    validated answer. The agent submits its answer via the `submit_answer` tool, whose
+    input schema is `target_schema`; `run()` returns the captured instance, or raises
+    GenerationError if the agent never submits a valid one within `max_attempts`.
 
-    Each round: run one turn, parse the assistant's text as JSON, and validate it into
-    `into`. On success, return the instance. Otherwise resume the same session and
-    re-ask with the Pydantic errors, up to `max_rounds`. Raises GenerationError if no
-    round produces a valid `into` — it never returns an invalid one or fabricates a
-    stand-in."""
-    engine = _build_toolless_engine(system_prompt, model)
+    One Agent runs once (it holds the run's capture state).
+    """
 
-    async def run_turn(prompt: str, resume: str | None) -> tuple[str, str | None]:
-        return await _run_turn(engine, prompt, resume)
+    def __init__(
+        self,
+        *,
+        system_prompt: str,
+        target_schema: type[Model],
+        task: str,
+        model: str = CLI_MODEL,
+        max_attempts: int = 4,
+    ) -> None:
+        self._system_prompt = system_prompt
+        self._target_schema = target_schema
+        self._task = task
+        self._model = model
+        self._max_attempts = max_attempts
+        # Per-run capture state, written by submit_answer during the run.
+        self._answer: Model | None = None
+        self._attempts = 0
+        self._last_issues: list[str] = ["(agent submitted nothing)"]
 
-    return await run_until_valid(run_turn, seed=seed, into=into, max_rounds=max_rounds)
+    async def run(self) -> Model:
+        """Run the agent and return the validated `target_schema` it submits. Raises
+        GenerationError if no valid answer is submitted within `max_attempts` — it never
+        returns an invalid or fabricated one."""
+        engine = self._build_engine()
+        await engine.stream_turn(
+            self._task, message_history=None, emit=_ignore_event, resume=None
+        )
+        if self._answer is None:
+            raise GenerationError(
+                f"agent submitted no valid {self._target_schema.__name__} in "
+                f"{self._attempts} attempt(s); last issues: {self._last_issues}"
+            )
+        return self._answer
 
-
-async def run_until_valid(
-    run_turn: RunTurn,
-    *,
-    seed: str,
-    into: type[Model],
-    max_rounds: int,
-) -> Model:
-    """The parse-validate-retry loop, over any `run_turn` (the real SDK engine in
-    generate_valid; a stub in tests). Feeds each round's Pydantic errors back as the
-    next prompt so the agent corrects its own output, and raises once the round budget
-    is spent."""
-    prompt = seed
-    resume: str | None = None
-    last_issues: list[str] = ["(no output)"]
-    for _round in range(max_rounds):
-        text, resume = await run_turn(prompt, resume)
+    def submit_answer(self, **fields: Any) -> str:
+        """Submit your completed answer as this tool's arguments, matching this tool's
+        input schema exactly. Call it once, when the ENTIRE answer is ready. If it is
+        rejected, fix the reported problems and call submit_answer again. Once it is
+        accepted you are done — do not restate the answer."""
+        # Validates `fields` into target_schema and CAPTURES the instance on success —
+        # that captured object is what run() returns, so the agent never re-emits it. On
+        # failure it raises; the registry's tool wrapper turns the raise into an is_error
+        # tool result carrying these issues, which the agent then corrects and re-submits.
+        self._attempts += 1
         try:
-            return _parse_into(text, into)
-        except _Rejected as rejected:
-            last_issues = rejected.issues
-            prompt = _feedback_prompt(rejected.issues)
-    raise GenerationError(
-        f"agent did not produce a valid {into.__name__} after {max_rounds} rounds; "
-        f"last issues: {last_issues}"
-    )
+            self._answer = self._target_schema.model_validate(fields)
+        except ValidationError as err:
+            self._last_issues = format_errors(err)
+            raise ValueError(
+                "Submission rejected — fix these and call submit_answer again:\n"
+                + "\n".join(f"- {issue}" for issue in self._last_issues)
+            ) from err
+        return "Accepted — recorded. You are done; do not restate it."
 
-
-class _Rejected(Exception):
-    """One round's output was unusable — carries the issues to feed back to the agent
-    (a JSON parse failure, or the Pydantic validation errors)."""
-
-    def __init__(self, issues: list[str]) -> None:
-        super().__init__("; ".join(issues))
-        self.issues = issues
-
-
-def _parse_into(text: str, into: type[Model]) -> Model:
-    """Parse the agent's text as a JSON object and validate it into `into`. Raises
-    _Rejected (with the JSON error or the Pydantic errors) so the loop feeds the
-    failure back — a malformed or non-conforming answer is never silently accepted."""
-    raw = _extract_json(text)
-    try:
-        return into.model_validate(raw)
-    except ValidationError as err:
-        raise _Rejected(format_errors(err)) from err
-
-
-def _extract_json(text: str) -> Any:
-    """Pull the JSON object from the agent's text — the body of a ```json fence if
-    present, else the outermost {...} span — and parse it. Raises _Rejected if there
-    is no JSON object or it does not parse."""
-    fenced = re.search(r"```(?:json)?\s*\n(.*?)```", text, re.DOTALL)
-    if fenced:
-        candidate = fenced.group(1)
-    else:
-        start, end = text.find("{"), text.rfind("}")
-        if start == -1 or end <= start:
-            raise _Rejected(["no JSON object found in your output"])
-        candidate = text[start : end + 1]
-    try:
-        return json.loads(candidate)
-    except json.JSONDecodeError as err:
-        raise _Rejected([f"your output was not valid JSON: {err}"]) from err
-
-
-def _feedback_prompt(issues: list[str]) -> str:
-    """The next round's instruction: the failures, and a directive to fix them and
-    re-emit the COMPLETE corrected JSON object (a partial re-emit would leave the
-    previous round's bad output standing)."""
-    bullets = "\n".join(f"- {issue}" for issue in issues)
-    return (
-        "Your previous output failed validation:\n"
-        f"{bullets}\n\n"
-        "Fix every issue and re-emit the COMPLETE, corrected JSON object. Do not "
-        "explain — just emit the corrected JSON."
-    )
-
-
-# ── the real SDK engine (a no-tool text generator) ──────────────────────────────
-
-def _build_toolless_engine(system_prompt: str, model: str) -> ClaudeAgentSdkEngine:
-    """An engine with no tools: the agent answers in JSON that the caller validates,
-    so generation here is emit-JSON-and-validate rather than tool-calling."""
-    server, allowed, _wrapped = build_mcp_server([], {})
-    return ClaudeAgentSdkEngine(
-        system_prompt=system_prompt,
-        mcp_server=server,
-        allowed_tools=allowed,
-        model=model,
-    )
-
-
-async def _run_turn(
-    engine: ClaudeAgentSdkEngine, prompt: str, resume: str | None
-) -> tuple[str, str | None]:
-    """Run one engine turn with a no-op emit (a headless run has no browser to stream
-    to) and return the assistant's text plus the session id to resume next round."""
-    transcript, session_id = await engine.stream_turn(
-        prompt, message_history=None, emit=_ignore_event, resume=resume
-    )
-    return _assistant_text(transcript), session_id
+    def _build_engine(self) -> ClaudeAgentSdkEngine:
+        """Wrap the single submit_answer tool (whose input schema IS target_schema) as
+        an in-process server and build the engine, capped at max_attempts turns (+ a
+        small buffer for any preamble/closing turn) so an agent that never submits a
+        valid answer cannot loop forever."""
+        input_schema = self._target_schema.model_json_schema()
+        server, allowed, _wrapped = build_mcp_server(
+            [self.submit_answer], {"submit_answer": input_schema}
+        )
+        return ClaudeAgentSdkEngine(
+            system_prompt=self._system_prompt,
+            mcp_server=server,
+            allowed_tools=allowed,
+            model=self._model,
+            max_turns=self._max_attempts + 2,
+        )
 
 
 def _ignore_event(_event: dict[str, Any]) -> None:
     """Drop a stream event — a headless run has nowhere to forward it."""
-
-
-def _assistant_text(transcript: list[dict[str, Any]]) -> str:
-    """Concatenate the assistant turn's text parts, ignoring thinking and tool
-    blocks (which carry no JSON output)."""
-    for message in transcript:
-        if message.get("role") != "assistant":
-            continue
-        return "".join(
-            part.get("text", "")
-            for part in message.get("parts", [])
-            if part.get("type") == "text"
-        )
-    return ""

@@ -1,10 +1,9 @@
-"""The headless generate-validate-retry loop (app.agent.agent.run_until_valid): it
-validates an agent's JSON output INTO a caller-supplied Pydantic model, feeding the
-Pydantic (or JSON) errors back to the same session until it validates or the round
-budget is spent.
+"""The headless Agent (app.agent.agent.Agent): it produces a validated Pydantic object
+by having the model CALL a submit_answer tool whose input schema IS the target model.
 
-Driven over a SCRIPTED run_turn (canned assistant texts) so no CLI subprocess is
-spawned. Coroutines are run with asyncio.run, mirroring tests/test_sdk_engine.py.
+The submit/capture logic is tested directly (no CLI subprocess); run()'s loop is driven
+over a FAKE engine whose stream_turn simulates the agent calling submit_answer with
+scripted arguments. Coroutines are run with asyncio.run, mirroring tests/test_sdk_engine.py.
 """
 from __future__ import annotations
 
@@ -14,7 +13,7 @@ from typing import Any, Callable
 import pytest
 from pydantic import BaseModel
 
-from app.agent.agent import run_until_valid
+from app.agent.agent import Agent
 from app.errors import GenerationError
 
 
@@ -23,69 +22,61 @@ class _Point(BaseModel):
     y: int
 
 
-def _scripted_run_turn(
-    texts: list[str], captured_prompts: list[str]
-) -> Callable[[str, str | None], Any]:
-    """A run_turn that returns each canned text in turn, recording the prompt it was
-    called with so a test can assert what got fed back between rounds."""
-    outputs = iter(texts)
+class _FakeEngine:
+    """Stands in for the SDK engine: stream_turn simulates the agent calling
+    submit_answer with each scripted arg-dict. A rejected call raises (as the real tool
+    would), which we swallow — the real agent would read the error and retry, which the
+    next scripted call represents."""
 
-    async def run_turn(prompt: str, resume: str | None) -> tuple[str, str | None]:
-        captured_prompts.append(prompt)
-        return next(outputs), "sess-1"
+    def __init__(self, submit: Callable[..., str], scripted_calls: list[dict[str, Any]]) -> None:
+        self._submit = submit
+        self._scripted = scripted_calls
 
-    return run_turn
-
-
-def _run(texts: list[str], *, max_rounds: int = 3) -> tuple[_Point, list[str]]:
-    """Drive run_until_valid over `texts` into _Point; return (result, prompts_seen)."""
-    prompts: list[str] = []
-    result = asyncio.run(
-        run_until_valid(
-            _scripted_run_turn(texts, prompts),
-            seed="SEED",
-            into=_Point,
-            max_rounds=max_rounds,
-        )
-    )
-    return result, prompts
+    async def stream_turn(
+        self, task: str, *, message_history: Any, emit: Any, resume: Any
+    ) -> tuple[list[Any], None]:
+        for fields in self._scripted:
+            try:
+                self._submit(**fields)
+            except ValueError:
+                pass  # rejected submission; the agent would fix + retry (next call)
+        return [], None
 
 
-def test_returns_validated_model_on_first_valid_json() -> None:
-    result, prompts = _run(['{"x": 1, "y": 2}'])
-    assert result == _Point(x=1, y=2)  # a typed instance, not a dict
-    assert prompts == ["SEED"]
+def _agent(*, max_attempts: int = 4) -> "Agent[_Point]":
+    return Agent(system_prompt="sp", target_schema=_Point, task="make a point", max_attempts=max_attempts)
 
 
-def test_feeds_pydantic_errors_back_then_returns_corrected_model() -> None:
-    result, prompts = _run(['{"x": 1}', '{"x": 1, "y": 2}'])  # first missing y
+def test_submit_answer_captures_the_validated_instance() -> None:
+    agent = _agent()
+    message = agent.submit_answer(x=1, y=2)
+    assert agent._answer == _Point(x=1, y=2)  # captured, typed
+    assert "Accepted" in message
+    assert agent._attempts == 1
+
+
+def test_submit_answer_rejects_invalid_with_pydantic_issues() -> None:
+    agent = _agent()
+    with pytest.raises(ValueError) as exc_info:
+        agent.submit_answer(x=1)  # missing y
+    assert "y" in str(exc_info.value)  # the field error is reported back
+    assert agent._answer is None       # nothing captured on a bad submission
+    assert agent._attempts == 1
+
+
+def test_run_returns_the_submitted_answer_after_a_retry(monkeypatch: Any) -> None:
+    agent = _agent()
+    # First call is rejected (missing y), second is accepted — the loop returns it.
+    fake = _FakeEngine(agent.submit_answer, [{"x": 1}, {"x": 1, "y": 2}])
+    monkeypatch.setattr(agent, "_build_engine", lambda: fake)
+    result = asyncio.run(agent.run())
     assert result == _Point(x=1, y=2)
-    assert len(prompts) == 2
-    assert prompts[0] == "SEED"
-    assert "y" in prompts[1]  # the missing-field error was kicked back
 
 
-def test_feeds_json_error_back_when_output_is_not_json() -> None:
-    result, prompts = _run(["sorry, no JSON here", '{"x": 3, "y": 4}'])
-    assert result == _Point(x=3, y=4)
-    assert "JSON" in prompts[1]  # the parse failure was kicked back
-
-
-def test_extracts_json_from_a_fenced_block() -> None:
-    result, prompts = _run(["Here you go:\n```json\n{\"x\": 5, \"y\": 6}\n```\n"])
-    assert result == _Point(x=5, y=6)
-    assert prompts == ["SEED"]
-
-
-def test_raises_after_round_budget_never_returns_invalid() -> None:
-    prompts: list[str] = []
-    coro = run_until_valid(
-        _scripted_run_turn(['{"x": 1}', '{"x": 2}', '{"x": 3}'], prompts),  # all missing y
-        seed="SEED",
-        into=_Point,
-        max_rounds=3,
-    )
+def test_run_raises_when_no_valid_answer_is_submitted(monkeypatch: Any) -> None:
+    agent = _agent()
+    fake = _FakeEngine(agent.submit_answer, [{"x": 1}, {"x": 2}])  # never valid
+    monkeypatch.setattr(agent, "_build_engine", lambda: fake)
     with pytest.raises(GenerationError) as exc_info:
-        asyncio.run(coro)
+        asyncio.run(agent.run())
     assert "_Point" in str(exc_info.value)  # names the target model
-    assert len(prompts) == 3  # spent exactly the budget
