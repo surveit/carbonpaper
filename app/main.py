@@ -21,18 +21,28 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
 from app.web.config import STATIC_DIR
-from app.web.routers import project, node_review, review, runs
+from app.web.routers import evals, project, node_review, review, runs
 
-from app.chat.router import router as chat_router
+from app.agent.router import router as chat_router
+from app.compiler.router import router as compiler_router
+
+# Importing the compiler agent's config registers the "editing" agent with the
+# generic agent registry, so build_engine("editing", …) resolves. The registry is
+# populated by import side effect; keep this import even though the name is unused.
+from app.compiler.agent import config as _editing_agent_config  # noqa: F401
 
 app = FastAPI(title="Workflow")
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 app.include_router(project.router)
 app.include_router(runs.router)
+app.include_router(evals.router)
 app.include_router(review.router)
 app.include_router(node_review.router)
 
+# The compiler's chat-driven editing entry ('Edit with agent' -> a chat session).
+app.include_router(compiler_router)
+
 # Interactive, multi-turn chat surface (streaming + persistence). Separate from
-# the llm_transform batch path; see app/chat.
+# the llm_transform batch path; see app/agent.
 app.include_router(chat_router)

@@ -17,8 +17,8 @@ def test_workflow_clean():
     wf = m.parse_workflow([
         S(id="load", type="input_data",
           connector={"kind": "file", "params": {"path": "d.csv", "format": "csv"}}),
-        S(id="extract", type="llm_transform", inputs=[{"id": "load"}],
-          llm={"prompt_template": "do {x}"}),
+        S(id="extract", type="python_frame_function", inputs=[{"id": "load"}],
+          function={"kind": "inline", "code": "def transform(row): return row"}),
     ])
     assert [s.id for s in wf.stages] == ["load", "extract"]
 
@@ -34,15 +34,16 @@ def test_workflow_duplicate_ids():
 def test_workflow_dangling_input():
     with pytest.raises(ValidationError):
         m.parse_workflow([
-            S(id="b", type="llm_transform", inputs=[{"id": "ghost"}], llm={"prompt_template": "p"}),
+            S(id="b", type="python_frame_function", inputs=[{"id": "ghost"}],
+              function={"kind": "inline", "code": "def transform(row): return row"}),
         ])
 
 
 def test_workflow_cycle():
     with pytest.raises(ValidationError):
         m.parse_workflow([
-            S(id="a", type="python_frame_function", inputs=[{"id": "b"}], function={"kind": "inline", "code": "x"}),
-            S(id="b", type="python_frame_function", inputs=[{"id": "a"}], function={"kind": "inline", "code": "x"}),
+            S(id="a", type="python_frame_function", inputs=[{"id": "b"}], function={"kind": "inline", "code": "def transform(row): return row"}),
+            S(id="b", type="python_frame_function", inputs=[{"id": "a"}], function={"kind": "inline", "code": "def transform(row): return row"}),
         ])
 
 
@@ -58,15 +59,15 @@ def test_check_inputs_resolve_reports_all_dangling():
 
 
 def test_detect_cycle_reports_cycle():
-    a = Stage.model_validate(S(id="a", type="python_frame_function", inputs=[{"id": "b"}], function={"kind": "inline", "code": "x"}))
-    b = Stage.model_validate(S(id="b", type="python_frame_function", inputs=[{"id": "a"}], function={"kind": "inline", "code": "x"}))
+    a = Stage.model_validate(S(id="a", type="python_frame_function", inputs=[{"id": "b"}], function={"kind": "inline", "code": "def transform(row): return row"}))
+    b = Stage.model_validate(S(id="b", type="python_frame_function", inputs=[{"id": "a"}], function={"kind": "inline", "code": "def transform(row): return row"}))
     assert m.detect_cycle([a, b])  # non-empty
 
 
 def test_detect_cycle_empty_when_acyclic():
     a = Stage.model_validate(S(id="a", type="input_data",
                                connector={"kind": "file", "params": {"path": "d.csv"}}))
-    b = Stage.model_validate(S(id="b", type="llm_transform", inputs=[{"id": "a"}], llm={"prompt_template": "p"}))
+    b = Stage.model_validate(S(id="b", type="python_frame_function", inputs=[{"id": "a"}], function={"kind": "inline", "code": "def transform(row): return row"}))
     assert m.detect_cycle([a, b]) == []
 
 
@@ -86,3 +87,68 @@ def test_validate_workflow_reports_issues():
                                join={"keys": [{"left": "x", "right": "y"}]}))
     issues = m.validate_workflow([s])
     assert issues  # both inputs dangle — reported, not raised
+
+
+# ── llm_transform 1:1 eligibility (enforced by Stage construction, not here) ──
+# The invariant lives on the Stage model, so an ineligible stage fails to
+# construct — these assert the rejection at model_validate / parse_workflow.
+def _llm_1to1_dict(**over):
+    """Dict for a valid strictly-1:1 llm_transform: input {id(pk), text} → output adds score."""
+    base = dict(
+        id="score", type="llm_transform", inputs=[{
+            "id": "load",
+            "schema": {"columns": [{"name": "id", "type": "str"},
+                                   {"name": "text", "type": "str"}],
+                       "primary_key": ["id"]},
+        }],
+        output_schema={"columns": [{"name": "id", "type": "str"},
+                                   {"name": "text", "type": "str"},
+                                   {"name": "score", "type": "int"}],
+                       "primary_key": ["id"]},
+        llm={"prompt_template": "score {text}"},
+    )
+    base.update(over)
+    return S(**base)
+
+
+def test_llm_transform_valid_1to1_constructs():
+    assert Stage.model_validate(_llm_1to1_dict()).id == "score"
+
+
+def test_llm_transform_pk_mismatch_rejected():
+    with pytest.raises(ValidationError, match="primary_key"):
+        Stage.model_validate(_llm_1to1_dict(output_schema={
+            "columns": [{"name": "id", "type": "str"}, {"name": "text", "type": "str"},
+                        {"name": "score", "type": "int"}],
+            "primary_key": ["text"]}))
+
+
+def test_llm_transform_drops_input_column_rejected():
+    with pytest.raises(ValidationError, match="text"):
+        Stage.model_validate(_llm_1to1_dict(output_schema={
+            "columns": [{"name": "id", "type": "str"}, {"name": "score", "type": "int"}],
+            "primary_key": ["id"]}))  # dropped `text`
+
+
+def test_llm_transform_modifies_column_schema_rejected():
+    with pytest.raises(ValidationError, match="text"):
+        Stage.model_validate(_llm_1to1_dict(output_schema={
+            "columns": [{"name": "id", "type": "str"}, {"name": "text", "type": "int"},
+                        {"name": "score", "type": "int"}],
+            "primary_key": ["id"]}))  # `text` str -> int
+
+
+def test_llm_transform_adds_nothing_rejected():
+    with pytest.raises(ValidationError, match="adds no columns"):
+        Stage.model_validate(_llm_1to1_dict(output_schema={
+            "columns": [{"name": "id", "type": "str"}, {"name": "text", "type": "str"}],
+            "primary_key": ["id"]}))  # adds no new column
+
+
+def test_parse_workflow_rejects_ineligible_llm_transform():
+    """The load seam (parse_workflow → Stage construction) rejects a non-1:1 stage."""
+    bad = _llm_1to1_dict(output_schema={
+        "columns": [{"name": "id", "type": "str"}, {"name": "text", "type": "str"}],
+        "primary_key": ["id"]})
+    with pytest.raises(ValidationError, match="adds no columns"):
+        m.parse_workflow([bad])

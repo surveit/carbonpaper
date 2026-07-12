@@ -27,7 +27,7 @@ Three independent features operate on that artifact:
 | **Compiler** | `app/compiler/` | Distills prose into a *draft* workflow (LLM call + validate + re-ask on failure). Engine on master; the authoring UI is in the open PR stack. |
 | **Eval** *(model only)* | `app/models/eval.py` | Checks a workflow reproduces ground truth. `EvalConfig`/`EvalRun` exist as validated models; no runner integration yet. |
 
-**The schema layer — `app/models/`.** Pydantic models are the single source of
+**The schemas — `app/models/`.** Pydantic models are the single source of
 truth for the 8 stage types (their executable handles, the column-type vocab,
 connector kinds, aggregation formulas). Constructing a model validates it;
 `validate_workflow(stages)` returns a non-fatal issue list and `parse_workflow`
@@ -39,9 +39,9 @@ models. See `docs/models-and-storage.md`.
 ## The 8 stage types
 `input_data` · `llm_transform` · `python_row_function` · `python_frame_function` ·
 `join` · `aggregate` · `human_review_queue` · `publish`. Prefer `python_row_function`
-(runtime-enforced 1:1) over `python_frame_function` unless the logic needs the whole frame. Each compiled stage JSON declares typed `inputs`, a typed
+(runtime-enforced 1:1) over `python_frame_function` unless the logic needs the whole frame. Each compiled stage specification declares typed `inputs`, a typed
 `output_schema`, and one executable-handle block (`connector`/`llm`/`function`/
-`join`/`aggregate`/`queue`/`publish`). See `app/models/` for the definitions.
+`join`/`aggregate`/`queue`/`publish`). See `app/models/` for the schemas.
 
 ## Running it
 ```
@@ -49,15 +49,14 @@ pip install -r requirements.txt          # fastapi, pandas, pyarrow, claude-agen
 python -m uvicorn app.main:app --port 8765   # web UI: workflow view, runs, review queue
 python -m app.runtime.runner examples/<name> # run a project's workflow from the CLI
 ```
-LLM stages run through the Claude Agent SDK (`claude_agent_sdk`), which drives the
-installed `claude` CLI. Backend is selectable: `CW_LLM_BACKEND=agent_sdk|cli|mock`
-(default `auto` → agent_sdk, else the CLI). It never silently falls back to the
-mock; `CW_LLM_FORCE_MOCK=1` opts into the offline mock.
+LLM stages (`llm_transform`) call the model directly via `app.runtime.agent`, one
+conversation per row. Backend is selectable: `CW_LLM_BACKEND=auto|cli|agent_sdk|anthropic`
+(default `auto` → the claude CLI bridge; `anthropic` needs `ANTHROPIC_API_KEY`). A
+requested backend that isn't available raises rather than falling back.
 
 ## Repo layout
 ```
-app/models/           the stage-type schemas (Pydantic models)
-app/SCHEMA.md         prose schema spec (legacy — superseded by app/models/)
+app/models/           the stage-type schemas (Pydantic models) — the schema spec
 app/runtime/          the Runner (executor, stages/, LLM backends, validation)  → app/runtime/AGENTS.md
 app/compiler/         prose → LLM → workflow authoring engine (python -m app.compiler)
 app/main.py           thin FastAPI bootstrap; routes live in app/web/routers/   → app/AGENTS.md
@@ -82,8 +81,23 @@ examples/<name>/      project dirs (untracked runtime data: compiled/ + methodol
 ## Conventions (load-bearing, not stylistic)
 - **Never fabricate.** A value that can't be sourced is `null`/`unknown`; the
   pipeline fails loudly or halts rather than inventing a number, URL, or citation.
-  The LLM backends are opt-in and never silently fall back to a mock.
+  A requested LLM backend that isn't available raises rather than silently
+  substituting another.
+- **Schemas are called schemas.** A stage's `output_schema`, an input `schema:`
+  block, a `TableSchema` — these are *schemas*, and that is the word, in code,
+  comments, docs, and PR prose. Don't dress them up as "contracts" ("stage
+  contract", "producer contract", "response contract"): the word adds no meaning
+  and splits one concept across two names.
 - **`human_review_queue` is how we handle asymmetrical risk.** Where a wrong
   automated result is expensive or irreversible, gate that step behind human
   sign-off: the runner halts, and decisions are content-hashed so they survive
   re-runs.
+- **The status/review helpers stay below the routes layer.**
+  `app/services/{project,node_review,versioning}` must not import `app.main`,
+  `app.runtime`, or `app.compiler` — routes and templates depend on them, not the
+  reverse, so the import graph stays acyclic and they stay unit-testable without the
+  runtime/compiler stack. (Other `app/services/` modules — e.g. `compilation.py`,
+  which wraps the compiler — are not bound by this.) Not lint-enforced yet: #63.
+- **Never `except Exception` or bare `except`.** Catch specific exception types —
+  swallowing all errors hides bugs and breaks fail-loudly. Enforced by Ruff
+  `BLE001`.

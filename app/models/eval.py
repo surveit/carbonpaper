@@ -3,18 +3,28 @@
 An eval measures the *real* workflow, not a copy of it. The v1 shape
 (fan-out / fan-in are out of scope — those evals come later):
 
-  - An **EvalConfig** is the authored spec. At its core is ONE row-aligned table:
-    each row is a case whose `input_columns` are injected as `override_stage`'s
-    output, and whose `expected` columns are compared against `target_stage`'s
-    output on the same row. Because it's a single table, input and expected are
-    1:1 by construction — which is only well-defined when the override→target path
-    preserves grain (no fan-out / fan-in). It also carries any `reference_overrides`
-    (extra data a case needs loaded) and how to score (`expected` comparisons,
+  - An **EvalConfig** is the authored spec. What defines it is the checks: each
+    names a `target_stage` output column to grade (`ExpectedOutput.output_column`).
+    An optional row-aligned eval-dataset `table` supplies the data for those
+    checks; it's the data, not the definition, so a config can exist with no
+    `table` yet (attach it later). When a table is present, its columns are
+    exactly `override_stage`'s output columns (injected as that stage's whole
+    output) plus one expected-output column per check, named after the check's
+    target column (disambiguated on a name conflict — see
+    `app.services.eval_dataset_columns`).
+    (Not yet built: the scorer that runs this table through the workflow and
+    grades it is expected to align each target output row back to the eval-
+    dataset row that produced it by row-level lineage — an id stamped on each
+    injected eval-dataset row and carried through to the target — rather than
+    by a shared data column or row position; that alignment is only
+    well-defined when the override→target path preserves grain, no fan-out /
+    fan-in.) The config also carries any `reference_overrides` (extra data a
+    row needs loaded) and how to score (`expected_outputs` comparisons,
     rollup `metrics`, or a `code` scorer for the escape hatch).
   - A **StageOutputOverride** injects a whole table as some stage's output.
   - An **EvalRun** is the result at a specific workflow version: its computed
-    `settings` (can it be scored automatically, and if not why), whether it
-    `passed`, and the scorer's `metrics` / per-row result table.
+    `settings` (can it be scored automatically, and if not why), and the
+    scorer's `metrics` / per-row result table.
 
 Storage: eval objects live under their own `eval_config/` and `eval_run/` object
 types (see [[contract_pydantic_and_storage]]).
@@ -33,7 +43,7 @@ from app.models.table import TableRef
 _SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
 
 
-def _slug(v: str) -> str:
+def _validate_slug(v: str) -> str:
     """Object ids land on disk as `<object_type>/<object_id>.data`, so keep them
     filesystem-safe: lowercase, digits, underscore or hyphen."""
     if not _SLUG_RE.match(v):
@@ -41,7 +51,7 @@ def _slug(v: str) -> str:
     return v
 
 
-SlugId = Annotated[str, AfterValidator(_slug)]
+SlugId = Annotated[str, AfterValidator(_validate_slug)]
 
 
 # ── Overrides ────────────────────────────────────────────────────────────────
@@ -54,17 +64,19 @@ class StageOutputOverride(_Base):
 
 
 # ── The comparison ───────────────────────────────────────────────────────────
-class ExpectedColumn(_Base):
-    """One asserted output column: compare the target's `actual` column to the
-    dataset's `expected` column. Names legitimately differ (the node emits
-    `score`, the dataset column is `expected_score`)."""
-    actual: str
-    expected: str
+class ExpectedOutput(_Base):
+    """One check: which `target_stage` output column to grade, and how. The
+    eval-dataset file's expected-output column for this check is not authored
+    here — it is named after `output_column` (the same name), unless
+    `output_column` conflicts with one of the override stage's own output
+    column names, in which case it is disambiguated (see
+    `app.services.eval_dataset_columns`)."""
+    output_column: str
     metric: Literal["exact", "abs_tol", "sign"] = "exact"
     tolerance: Optional[float] = None
 
     @model_validator(mode="after")
-    def _tolerance_when_needed(self) -> "ExpectedColumn":
+    def _tolerance_when_needed(self) -> "ExpectedOutput":
         if self.metric == "abs_tol" and self.tolerance is None:
             raise ValueError("metric=abs_tol needs a `tolerance`")
         return self
@@ -80,15 +92,19 @@ class CodeScorer(_Base):
 
 # ── The eval config ──────────────────────────────────────────────────────────
 class EvalConfig(_Base):
-    """The authored eval: one row-aligned table of cases plus how it plugs into
-    the workflow and how it's scored.
+    """The authored eval: defined by its checks, plus how they plug into the
+    workflow's stages and how they're scored.
 
-    Each row's `input_columns` are injected at `override_stage`; its `expected`
-    columns are compared against `target_stage`'s output on the same row. The
-    single table makes input and expected 1:1 — valid only when the
-    override→target path is grain-preserving (see `resolve_eval_run_settings`).
-    `reference_overrides` inject extra data at other stages; `code` overrides the
-    per-column `expected` comparison when declarative scoring can't apply.
+    An optional eval-dataset `table` supplies the rows the checks run against:
+    its columns are `override_stage`'s output columns (injected as that
+    stage's whole output) plus one expected-output column per check, named
+    after the check's target column (`ExpectedOutput.output_column`). Each
+    check compares that expected-output column to the matching `target_stage`
+    output column. Row alignment between the injected eval-dataset rows and
+    the target's output is only well-defined when the override→target path is
+    grain-preserving (see `resolve_eval_run_settings`). `reference_overrides`
+    inject extra data at other stages; `code` overrides the per-column
+    comparison when declarative scoring can't apply.
     """
     id: SlugId
     project: str
@@ -97,16 +113,14 @@ class EvalConfig(_Base):
     # data + wiring
     override_stage: str
     target_stage: str
-    table: TableRef
-    key: list[str]
-    input_columns: list[str]
-    expected: list[ExpectedColumn]
+    table: Optional[TableRef] = None
+    expected_outputs: list[ExpectedOutput]
     # context + scoring
     reference_overrides: list[StageOutputOverride] = Field(default_factory=list)
     metrics: list[str] = Field(default_factory=list)
     code: Optional[CodeScorer] = None
 
-    @field_validator("key", "input_columns", "expected")
+    @field_validator("expected_outputs")
     @classmethod
     def _nonempty(cls, v: list) -> list:
         if not v:
@@ -200,9 +214,10 @@ class EvalRun(_Base):
     # How this run was scored (from resolve_eval_run_settings). `vetoed` = it
     # couldn't be scored declaratively and no code scorer was supplied.
     settings: EvalRunSettings
-    # Overall outcome and score outputs — the scorer decides both, and writes
-    # per-row success/failure into the result table at `result_ref`.
-    passed: Optional[bool] = None
+    # Score outputs — the scorer writes rollup metrics and a per-row result
+    # table at `result_ref`. There is no overall pass/fail: an eval-dataset row
+    # passes iff all its checks match, and whether the eval looks good is a human
+    # review judgment, not a stored bool.
     metrics: dict[str, Any] = Field(default_factory=dict)
     result_ref: Optional[str] = None
     started_at: Optional[str] = None
@@ -211,6 +226,6 @@ class EvalRun(_Base):
 
 
 __all__ = [
-    "StageOutputOverride", "ExpectedColumn", "CodeScorer", "EvalConfig",
+    "StageOutputOverride", "ExpectedOutput", "CodeScorer", "EvalConfig",
     "EvalRunSettings", "resolve_eval_run_settings", "EvalRun",
 ]

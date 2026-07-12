@@ -15,6 +15,8 @@ import asyncio
 import uuid
 from typing import Any
 
+from claude_agent_sdk import ClaudeSDKError
+
 
 class Turn:
     def __init__(self, turn_id: str, session_id: str):
@@ -64,11 +66,23 @@ class TurnManager:
 
     async def _run(self, turn, engine, store, session_id, prompt, history) -> None:
         try:
-            messages = await engine.stream_turn(
-                prompt, message_history=history, emit=turn.emit
+            resume = store.resume_token(session_id)
+            messages, resume_token = await engine.stream_turn(
+                prompt, message_history=history, emit=turn.emit, resume=resume
             )
             store.save_messages(session_id, messages)
-        except Exception as exc:  # surface, never swallow
+            if resume_token:
+                # Carry the CLI session forward so the next turn resumes this
+                # conversation (the demo backend returns None — nothing to carry).
+                store.set_resume_token(session_id, resume_token)
+        except (ClaudeSDKError, OSError) as exc:
+            # Expected failure modes of a model turn — a Claude Agent SDK error
+            # (CLI not found, connection dropped, process failure) or a
+            # socket/subprocess error (OSError) — reach the client as an error
+            # event. A genuine bug (KeyError, ValueError, …) is NOT caught here:
+            # it propagates and surfaces loudly rather than masquerading as a
+            # handled model failure. The `finally` still emits `done`, so the
+            # client is never left hanging.
             turn.emit({"kind": "error", "text": f"{type(exc).__name__}: {exc}"})
         finally:
             store.set_active_turn(session_id, None)

@@ -4,6 +4,8 @@ with the templates. No I/O — stages in, diagram source out."""
 
 from __future__ import annotations
 
+from typing import Any
+
 from app.models import Stage
 
 
@@ -42,55 +44,69 @@ def _safe_mermaid_type(t: str) -> str:
     ) or "any"
 
 
-def build_er_diagram(stages: list[Stage]) -> str:
-    """Mermaid erDiagram showing each stage's output_schema as an entity, with
-    PK markers, FK markers (inferred from upstream PKs), and edges from upstream
-    to downstream stages."""
+# ─── Named-schema data model (the ER view of schemas/, not stages) ────────────
+# Schema-kind → CSS class / glyph, shared with the data-model section template.
+SCHEMA_KIND_CLASS = {
+    "reference": "input",
+    "input": "aggregate",
+    "computed": "python",
+    "ground_truth": "human",
+}
+SCHEMA_KIND_GLYPH = {
+    "reference": "📚",
+    "input": "▶",
+    "computed": "λ",
+    "ground_truth": "✓",
+}
+SCHEMA_KIND_ORDER = ["reference", "input", "computed", "ground_truth"]
+
+
+def build_schema_er_diagram(schemas: list[dict[str, Any]]) -> str:
+    """Mermaid erDiagram from NAMED schemas (the data model). FK edges come from
+    explicit column `references` (schema or schema.column) — a real graph, not a
+    PK-name-collision heuristic. An empty-column schema still renders as an entity so
+    the reader sees it exists."""
     lines = ["erDiagram"]
+    names = {s.get("name") for s in schemas if s.get("name")}
 
-    # Index PK columns per stage so we can flag FKs.
-    pk_owner: dict[str, str] = {}
-    for s in stages:
-        schema = s.output_schema
-        for pk_col in (schema.primary_key if schema else None) or []:
-            pk_owner.setdefault(pk_col, s.id)
-
-    # Entity definitions
-    for s in stages:
-        schema = s.output_schema
-        cols = (schema.columns if schema else None) or []
-        if not cols:
+    for s in schemas:
+        sid = s.get("name")
+        if not sid:
             continue
-        pk_set = set((schema.primary_key if schema else None) or [])
-        lines.append(f"    {s.id} {{")
+        cols = s.get("columns") or []
+        pk_set = set(s.get("primary_key") or [])
+        lines.append(f"    {sid} {{")
+        if not cols:
+            lines.append(f"        any _ \"({s.get('kind', '')})\"")
         for col in cols:
-            name = col.name
+            name = col.get("name", "")
             if not name:
                 continue
-            t = _safe_mermaid_type(col.type)
-            marker = ""
-            if name in pk_set:
-                marker = "PK"
-            elif name in pk_owner and pk_owner[name] != s.id:
-                marker = "FK"
-            label = col.description or ""
-            comment = ""
-            if label:
-                # mermaid erDiagram comment must be in quotes; cap length
-                short = label.replace('"', "'")[:48]
-                comment = f' "{short}"'
+            t = _safe_mermaid_type(col.get("type", "str"))
+            marker = "PK" if name in pk_set else ("FK" if col.get("references") else "")
+            label = col.get("description") or ""
+            comment = f' "{label.replace(chr(34), chr(39))[:48]}"' if label else ""
             line = f"        {t} {name}"
             if marker:
                 line += f" {marker}"
-            line += comment
-            lines.append(line)
+            lines.append(line + comment)
         lines.append("    }")
 
-    # Relationship edges — one line per (upstream → downstream)
-    for s in stages:
-        for iid in s.input_ids:
-            lines.append(f"    {iid} ||--o{{ {s.id} : feeds")
-
+    # FK edges: a referencing column draws an edge from the target schema to this one.
+    seen_edges: set[str] = set()
+    for s in schemas:
+        sid = s.get("name")
+        for col in s.get("columns") or []:
+            ref = col.get("references") if isinstance(col, dict) else None
+            if not ref:
+                continue
+            target = ref.split(".", 1)[0].strip()
+            if target not in names or target == sid:
+                continue
+            edge = f"    {target} ||--o{{ {sid} : {col.get('name')}"
+            if edge not in seen_edges:
+                seen_edges.add(edge)
+                lines.append(edge)
     return "\n".join(lines)
 
 
@@ -105,13 +121,47 @@ REVIEW_STROKE = {
 }
 
 
+def _node_view(s: Stage | dict[str, Any]) -> dict[str, Any]:
+    """Read the label/edge fields a node needs off EITHER a typed Stage or a raw
+    draft dict, into a uniform dict. The workflow view passes validated Stages; the
+    project shell's workflow section passes draft dicts straight off disk (which may
+    not yet validate) — both render the same graph. `input_ids` normalises the
+    `inputs` shorthand (bare id string or {id: ...}) the Stage model also accepts."""
+    if isinstance(s, Stage):
+        return {
+            "id": s.id,
+            "name": s.name,
+            "type": s.type,
+            "has_notes": bool(s.compiler_notes),
+            "has_eval": s.eval is not None,
+            "has_review": s.review is not None,
+            "input_ids": s.input_ids,
+        }
+    input_ids: list[str] = []
+    for inp in s.get("inputs") or []:
+        if isinstance(inp, str):
+            input_ids.append(inp)
+        elif isinstance(inp, dict) and inp.get("id"):
+            input_ids.append(str(inp["id"]))
+    sid = s.get("id") or s.get("_filename") or "?"
+    return {
+        "id": sid,
+        "name": s.get("name") or sid,
+        "type": s.get("type") or "?",
+        "has_notes": bool(s.get("compiler_notes")),
+        "has_eval": bool(s.get("eval")),
+        "has_review": bool(s.get("review")),
+        "input_ids": input_ids,
+    }
+
+
 def build_mermaid_graph(
-    stages: list[Stage],
+    stages: list[Stage] | list[dict[str, Any]],
     project: str,
     status_by_id: dict[str, str] | None = None,
     review_by_id: dict[str, str] | None = None,
 ) -> str:
-    """Generate a Mermaid flowchart from stages.
+    """Generate a Mermaid flowchart from stages (typed Stages or raw draft dicts).
 
     If status_by_id is given, each node gets a status glyph in its label and a
     coloured stroke override (green/amber/red/grey) layered over its type class.
@@ -138,16 +188,17 @@ def build_mermaid_graph(
         "awaiting_review": ("#2a6ac8", "4px"),
         "pending": ("#cfcfcf", "1px"),
     }
+    nodes = [_node_view(s) for s in stages]
     lines = ["flowchart LR"]
-    for s in stages:
-        sid = s.id
-        name = s.name
-        stype = s.type
+    for n in nodes:
+        sid = n["id"]
+        name = n["name"]
+        stype = n["type"]
         glyph = TYPE_GLYPH.get(stype, "")
         klass = TYPE_CLASS.get(stype, "custom")
-        notes_indicator = "⚠ " if s.compiler_notes else ""
-        eval_indicator = "📊" if s.eval else ""
-        review_indicator = "👤" if s.review else ""
+        notes_indicator = "⚠ " if n["has_notes"] else ""
+        eval_indicator = "📊" if n["has_eval"] else ""
+        review_indicator = "👤" if n["has_review"] else ""
         small_line = f"{stype}".replace("_", " ")
         flags = " ".join(filter(None, [eval_indicator, review_indicator]))
         status = (status_by_id or {}).get(sid)
@@ -175,9 +226,9 @@ def build_mermaid_graph(
         if stroke_spec is not None:
             stroke, width = stroke_spec
             lines.append(f"    style {sid} stroke:{stroke},stroke-width:{width}")
-    for s in stages:
-        sid = s.id
-        for upstream in s.input_ids:
+    for n in nodes:
+        sid = n["id"]
+        for upstream in n["input_ids"]:
             lines.append(f"    {upstream} --> {sid}")
     lines += [
         "    classDef input fill:#e8f4f8,stroke:#3a8ca8,color:#000",
