@@ -79,6 +79,27 @@ def test_rows_page_shows_all_rows_under_cap(examples_dir, client):
     assert "Showing first" not in r.text
 
 
+def test_rows_page_links_each_row_to_its_trace(examples_dir, client):
+    _write_run(examples_dir, _df(3))
+    r = client.get(f"/project/{PROJ}/runs/{RUN}/stage/{STAGE}/rows")
+    assert r.status_code == 200
+    # every rendered row has a 0-indexed "View lineage" trace link
+    assert "View lineage" in r.text
+    for i in range(3):
+        assert f"/stage/{STAGE}/row/{i}/trace/view" in r.text
+
+
+def test_load_output_row_scopes_to_one_row(tmp_path):
+    from app.web.loading import load_output_row
+    (tmp_path / "outputs").mkdir()
+    pd.DataFrame({"a": [10, 20, 30]}).to_parquet(tmp_path / "outputs/o.parquet", index=False)
+    got = load_output_row(tmp_path, "outputs/o.parquet", 1)
+    assert got["preview"] == [{"a": "20"}] and got["rows_total"] == 3
+    past = load_output_row(tmp_path, "outputs/o.parquet", 9)
+    assert past["out_of_range"] is True and past["preview"] == []
+    assert load_output_row(tmp_path, None, 0) is None
+
+
 def test_rows_page_caps_rendered_rows(examples_dir, client, monkeypatch):
     monkeypatch.setattr(loading, "MAX_TABLE_ROWS", 10)
     _write_run(examples_dir, _df(25))
