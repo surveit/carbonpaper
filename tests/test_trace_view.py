@@ -17,7 +17,7 @@ def _stages() -> dict[str, Stage]:
         "enrich": _stage({
             "id": "enrich", "type": "python_row_function", "name": "Enrich",
             "inputs": [{"id": "seeds"}],
-            "function": {"kind": "inline", "code": "def f(row):\n    return row"},
+            "function": {"kind": "inline", "code": "def transform(row):\n    return row"},
         }),
     }
 
@@ -53,14 +53,14 @@ def test_nodes_and_edges_carry_step_numbers():
 def test_python_node_shows_full_inline_code_not_a_reference():
     view = build_trace_view(_trace(), _stages())
     detail = view["nodes"][-1]["transform"]["detail"]
-    assert detail == "def f(row):\n    return row"  # the whole function, verbatim
+    assert detail == "def transform(row):\n    return row"  # the whole function, verbatim
 
 
 def test_node_carries_transform_detail_from_compiled_stage():
     view = build_trace_view(_trace(), _stages())
     enrich = view["nodes"][-1]
     assert enrich["transform"]["kind"] == "python"
-    assert "def f(row)" in enrich["transform"]["detail"]
+    assert "def transform(row)" in enrich["transform"]["detail"]
 
 
 def test_edges_connect_consecutive_and_carry_the_source_row():
