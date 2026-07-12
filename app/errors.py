@@ -8,6 +8,16 @@ risk import cycles."""
 from __future__ import annotations
 
 
+class StageNotInRun(ValueError):
+    """A trace was requested for a stage id absent from the run's manifest — a
+    bad path/param (→ 404), not an internal fault."""
+
+
+class RowOutOfRange(ValueError):
+    """A trace was requested for a row ordinal outside a stage's output — a bad
+    path/param (→ 400), not an internal fault."""
+
+
 class NoVersionToRunError(Exception):
     """A run was requested for a project that has no version to run.
 

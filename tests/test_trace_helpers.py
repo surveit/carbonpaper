@@ -1,0 +1,79 @@
+"""Unit tests for the low-level readers in app/runtime/trace.py, plus the
+shared `write_run` fixture builder the later trace tests reuse."""
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+import pandas as pd
+
+from app.runtime.trace import (
+    ROW_PRESERVING,
+    _load_manifest,
+    _origin,
+    _parents,
+    _stages_by_id,
+)
+
+
+def write_run(tmp_path: Path, stages: list[dict], run_id: str = "T1") -> Path:
+    """Build a minimal run directory from a list of stage specs and return it.
+
+    Each spec: {"id": str, "type": str, "parents": list[str], "df": DataFrame}.
+    Writes outputs/<id>.parquet and a manifest.json whose per-stage records
+    carry `type`, `rows`, `output_path`, and one input_validation entry per
+    parent with phase "input:<parent>" — the exact shape the runner emits.
+    """
+    run_dir = tmp_path / run_id
+    (run_dir / "outputs").mkdir(parents=True)
+    records = []
+    for spec in stages:
+        rel = f"outputs/{spec['id']}.parquet"
+        spec["df"].to_parquet(run_dir / rel, index=False)
+        records.append({
+            "stage_id": spec["id"],
+            "type": spec["type"],
+            "rows": len(spec["df"]),
+            "output_path": rel,
+            "input_validation": [
+                {"phase": f"input:{p}", "ok": True} for p in spec.get("parents", [])
+            ],
+        })
+    (run_dir / "manifest.json").write_text(
+        json.dumps({"run_id": run_id, "stages": records}), encoding="utf-8"
+    )
+    return run_dir
+
+
+def test_row_preserving_set_is_exactly_the_two_v1_types():
+    assert ROW_PRESERVING == frozenset({"input_data", "python_row_function"})
+
+
+def test_parents_reads_input_phases_and_ignores_output_phase():
+    record = {
+        "input_validation": [
+            {"phase": "input:seeds"},
+            {"phase": "input:other"},
+        ],
+    }
+    assert _parents(record) == ["seeds", "other"]
+    assert _parents({"input_validation": []}) == []
+    assert _parents({}) == []
+
+
+def test_origin_maps_stage_type_to_label():
+    assert _origin("input_data") == "source"
+    assert _origin("python_row_function") == "computed"
+    assert _origin("llm_transform") == "llm"
+    assert _origin("join") == "other"
+
+
+def test_load_manifest_and_stages_by_id(tmp_path):
+    run_dir = write_run(tmp_path, [
+        {"id": "seeds", "type": "input_data", "parents": [],
+         "df": pd.DataFrame({"facility_id": ["a", "b"]})},
+    ])
+    manifest = _load_manifest(run_dir)
+    by_id = _stages_by_id(manifest)
+    assert manifest["run_id"] == "T1"
+    assert by_id["seeds"]["type"] == "input_data"

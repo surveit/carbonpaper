@@ -21,3 +21,8 @@ app/agent/_sessions/
 # Already-tracked files under examples/ stay tracked; new files need `git add -f`.
 examples/
 saydo/
+
+# Local process artifacts — brainstorming specs, plans, spikes, and scratch
+# scripts stay on the working machine, not in the repo/PRs.
+docs/superpowers/
+scripts/
