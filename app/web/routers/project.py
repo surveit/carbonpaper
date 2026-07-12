@@ -52,7 +52,7 @@ from fastapi.responses import (
 )
 
 from app.models import validate_named_schema, validate_schema_library
-from app.services import node_review, project, versioning
+from app.services import generation, node_review, project, versioning
 from app.services.loader import stage_to_spec_dict
 from app.web.config import EXAMPLES_DIR, templates
 from app.web.diagrams import (
@@ -122,17 +122,22 @@ def _schema_library_approval(
     }
 
 
+def _schema_spec(schema: dict[str, Any]) -> dict[str, Any]:
+    """One schema with loader bookkeeping (_filename/_order/_error) removed — the
+    spec only. The schema model is `extra="forbid"`, so validation and the edit
+    textarea must both see the spec, never the bookkeeping keys the loader injects."""
+    return {k: v for k, v in schema.items() if k not in node_review.CANONICAL_IGNORE_KEYS}
+
+
 def _schema_json_map(schemas: list[dict[str, Any]]) -> dict[str, str]:
-    """name → JSON text for the per-schema edit textareas. Bookkeeping keys
-    (_filename/_error) injected by the loader are stripped so the editable text is
-    the spec only (and round-trips through the schema-edit writer cleanly)."""
+    """name → JSON text for the per-schema edit textareas — the spec only (loader
+    bookkeeping stripped), so it round-trips through the schema-edit writer cleanly."""
     out: dict[str, str] = {}
     for s in schemas:
         name = s.get("name")
         if not name:
             continue
-        spec = {k: v for k, v in s.items() if k not in node_review.CANONICAL_IGNORE_KEYS}
-        out[name] = json.dumps(spec, indent=2, ensure_ascii=False)
+        out[name] = json.dumps(_schema_spec(s), indent=2, ensure_ascii=False)
     return out
 
 
@@ -228,9 +233,34 @@ async def new_project_submit(
         model=model,
         source="pasted document",
     )
-    # Land on the data-model section — authoring starts there (the document section is
-    # read-only context).
+    # Kick off automatic generation (data model → then workflow) in the background.
+    # The pages read the result from disk (no live status yet — issue #95); nothing is
+    # authored by hand here.
+    generation.start_generation(project_dir, document=doc, model=model)
+    # Land on the data-model section — that's where the generation spinner (and then
+    # the generated schemas) render. The document section is read-only context.
     return RedirectResponse(url=f"/project/{safe_name}/data_model", status_code=303)
+
+
+@router.post("/project/{project_name}/generate")
+async def generate_project(project_name: str):
+    """(Re)kick automatic data-model → workflow generation for an EXISTING project —
+    the manual counterpart to the auto-kick on create (for a legacy project that has a
+    document but no data model, or to regenerate from scratch). Reads document.md + the
+    project's model and starts the background run, then redirects to the data-model
+    page (which shows the spinner). 400 if there is no document to generate from."""
+    pdir = _project_dir(project_name)
+    document_path = pdir / "document.md"
+    if not document_path.is_file():
+        raise HTTPException(
+            status_code=400,
+            detail=f"examples/{project_name}/ has no document.md to generate from.",
+        )
+    model = project.project_meta(pdir).model or "sonnet"
+    generation.start_generation(
+        pdir, document=document_path.read_text(encoding="utf-8"), model=model
+    )
+    return RedirectResponse(url=f"/project/{project_name}/data_model", status_code=303)
 
 
 # ─── Unified PROJECT sections ────────────────────────────────────────────────
@@ -295,7 +325,7 @@ async def project_data_model(request: Request, project_name: str):
             "section": "data_model",
             "schemas": schemas,
             "er_diagram": build_schema_er_diagram(schemas) if schemas else None,
-            "issues": validate_schema_library(schemas) if schemas else [],
+            "issues": validate_schema_library([_schema_spec(s) for s in schemas]) if schemas else [],
             "approval": approval,
             "schema_json": _schema_json_map(schemas),
             "kind_order": SCHEMA_KIND_ORDER,

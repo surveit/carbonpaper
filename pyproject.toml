@@ -24,3 +24,18 @@ files = ["app"]
 [[tool.mypy.overrides]]
 module = ["pyarrow", "pyarrow.*"]
 ignore_missing_imports = true
+
+# Architecture boundaries, enforced by import-linter (`PYTHONPATH=. lint-imports`).
+# The content-level companions live in tests/arch/.
+[tool.importlinter]
+root_package = "app"
+
+[[tool.importlinter.contracts]]
+name = "Agent spine is domain-agnostic"
+type = "forbidden"
+source_modules = ["app.agent"]
+forbidden_modules = ["app.compiler", "app.web", "app.services"]
+# app.agent is a reusable chat/agent engine. It may use app.runtime (the LLM/CLI
+# backend adapter) and core models, but must not import domain layers — so any
+# agent can run on it. The dependency points the other way: app.compiler.agent
+# imports app.agent to register itself, never the reverse.

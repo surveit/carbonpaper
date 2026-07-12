@@ -1,0 +1,76 @@
+"""Static-analysis helpers for the architecture tests.
+
+Each helper reads a source file and inspects its AST. Nothing here imports the
+modules under test, so a boundary violation surfaces as a plain assertion naming
+the file rather than an import-time crash — and the tests run fine against code
+that itself imports heavy optional dependencies.
+"""
+from __future__ import annotations
+
+import ast
+from collections.abc import Iterator
+from pathlib import Path
+
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+
+
+def iter_py_files(root: str) -> Iterator[Path]:
+    """Yield each .py file under <repo-root>/<root>, e.g. "app/compiler/agent".
+
+    `root` is a path relative to the repository root, so the target is named
+    explicitly rather than assumed to live under app/.
+    """
+    base = _REPO_ROOT / root
+    if not base.exists():
+        raise FileNotFoundError(f"architecture test targets a missing path: {base}")
+    yield from sorted(base.rglob("*.py"))
+
+
+def parse_module(path: Path) -> ast.Module:
+    return ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+
+
+def collect_called_funcs(tree: ast.Module) -> set[str]:
+    """Return the names of calls to a bare function, e.g. `open(...)` -> {"open"}."""
+    return {
+        node.func.id
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+    }
+
+
+def collect_called_methods(tree: ast.Module) -> set[str]:
+    """Return the attribute names of method calls, e.g. `p.write_text()` -> {"write_text"}."""
+    return {
+        node.func.attr
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+    }
+
+
+def find_numeric_get_defaults(tree: ast.Module) -> list[tuple[int, int]]:
+    """(lineno, end_lineno) of each `x.get(key, <int/float literal>)` call.
+
+    A silent numeric fallback: when `key` is missing this substitutes a made-up
+    number instead of failing loud. `True`/`False` defaults are not numbers here.
+    """
+    spans: list[tuple[int, int]] = []
+    for node in ast.walk(tree):
+        if not (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "get"
+            and len(node.args) == 2
+            and not node.keywords
+        ):
+            continue
+        default = node.args[1]
+        if isinstance(default, ast.UnaryOp) and isinstance(default.op, ast.USub):
+            default = default.operand  # negative literal, e.g. -1
+        if (
+            isinstance(default, ast.Constant)
+            and isinstance(default.value, (int, float))
+            and not isinstance(default.value, bool)
+        ):
+            spans.append((node.lineno, node.end_lineno or node.lineno))
+    return spans

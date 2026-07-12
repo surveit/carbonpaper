@@ -6,5 +6,6 @@ httpx>=0.27              # fastapi.testclient (starlette TestClient) transport
 # releases can't break CI; bump deliberately.
 ruff==0.15.20
 mypy==2.1.0
+import-linter==2.13       # architecture-boundary contracts in pyproject [tool.importlinter]
 pandas-stubs==3.0.3.260530
 types-PyYAML==6.0.12.20250516  # stubs for `import yaml` in app/services/eval_store.py

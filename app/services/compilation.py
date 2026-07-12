@@ -264,7 +264,7 @@ def list_compilations(
             "input": m.get("input"),
             "model": m.get("model"),
             "status": m.get("status", "unknown"),
-            "n_stages": m.get("n_stages", 0),
+            "n_stages": m.get("n_stages"),
             "n_validation_issues": len(m.get("validation_issues") or []),
         })
     return out

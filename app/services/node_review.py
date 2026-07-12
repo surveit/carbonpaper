@@ -222,7 +222,7 @@ def coverage_for(stages: list[dict[str, Any]], df: pd.DataFrame) -> dict[str, An
     counts = {"approved": 0, "rejected": 0, "edited_stale": 0, "unreviewed": 0}
     for stage in stages:
         st = approval_state_for(stage, df)["state"]
-        counts[st] = counts.get(st, 0) + 1
+        counts[st] += 1
     total = len(stages)
     approved_pct = round(100.0 * counts["approved"] / total, 1) if total else 0.0
     return {

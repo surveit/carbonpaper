@@ -25,11 +25,7 @@ app/chat/  PydanticAI chat · app/llm/  model menu · tests/  pytest (offline)
 - **Never fabricate.** An unsourceable value is `null`/`unknown`; the pipeline fails loudly
   rather than inventing a number, URL, or citation. A requested LLM backend that isn't
   available raises rather than silently substituting another.
-- **Schemas are called schemas** — `output_schema`, an input `schema:` block, a `TableSchema`.
-  Never "contract"; the word adds no meaning and splits one concept across two names.
-- **`human_review_queue` handles asymmetrical risk.** A wrong result that's expensive or
-  irreversible halts for sign-off; decisions are content-hashed to survive re-runs.
 - **`app/services/{project,node_review,versioning}` stay below the routes layer** — no importing
-  `app.main`/`app.runtime`/`app.compiler` (import graph stays acyclic). Not lint-enforced: #63.
+  `app.main`/`app.runtime`/`app.compiler` (import graph stays acyclic).
 - **Never `except Exception` or bare `except`.** Catch specific types — swallowing errors breaks
   fail-loudly. Enforced by Ruff `BLE001`.
