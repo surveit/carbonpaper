@@ -38,15 +38,14 @@ def handle_llm_transform(stage: Stage, inputs: dict[str, pd.DataFrame], ctx: dic
             out_rows.append({**row_dict, "_raw": str(result)})
 
     df = pd.DataFrame(out_rows)
-    # Output columns = output_schema, period. The schema (plus any columns the
-    # stage spec explicitly names in `llm.passthrough_columns`) is the only
-    # source of truth for what survives — no runtime-side guessing at column
-    # names. Anything the LLM returned that isn't declared or passed through
-    # is dropped, and the drop is recorded on ctx rather than silent.
+    # Project onto exactly the columns output_schema declares, in declared order.
+    # A stable id the stage carries downstream is a declared column too — mark it
+    # source: passthrough so it rides through from the input row. Columns the LLM
+    # returned that the schema doesn't declare are dropped, and the drop is
+    # recorded on ctx rather than silently discarded.
     declared = [c.name for c in stage.output_schema.columns] if stage.output_schema else []
     if declared:
-        passthrough = [c for c in (llm.passthrough_columns or []) if c not in declared]
-        keep = [c for c in declared + passthrough if c in df.columns]
+        keep = [c for c in declared if c in df.columns]
         dropped = [c for c in df.columns if c not in keep]
         if dropped:
             ctx.setdefault("dropped_columns", {})[stage.id] = dropped

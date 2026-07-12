@@ -1,9 +1,10 @@
-"""Pins the fix for issue #50: llm_transform / human_review_queue must project
-their output onto EXACTLY the declared output_schema (plus any columns a
-methodology explicitly opts into via `llm.passthrough_columns` /
-`queue.passthrough_columns`) — never a runtime-hardcoded keep-list of
-LobbyMap/CongressWatch column names. Anything dropped must be recorded on
-ctx["dropped_columns"], not silently discarded."""
+"""Pins the fix for issue #50: llm_transform / human_review_queue project their
+output onto EXACTLY the columns declared in output_schema — never a runtime
+keep-list of methodology-specific column names. A column that must survive the
+stage (including a stable id carried through from the input row) earns its place
+by being declared in output_schema — mark a carried-through column
+source: passthrough. Anything the schema doesn't declare is dropped and recorded
+on ctx["dropped_columns"], not silently discarded."""
 from __future__ import annotations
 
 import pandas as pd
@@ -12,10 +13,8 @@ from app.models import Stage
 from app.runtime.stages import handle_human_review_queue, handle_llm_transform
 
 
-def _llm_stage(output_schema=None, passthrough_columns=None):
+def _llm_stage(output_schema=None):
     llm = {"prompt_template": "extract from {doc_id}"}
-    if passthrough_columns is not None:
-        llm["passthrough_columns"] = passthrough_columns
     kw = {
         "id": "evidence_extraction", "name": "Extract evidence",
         "type": "llm_transform", "inputs": [{"id": "load"}],
@@ -52,21 +51,25 @@ def test_llm_transform_keeps_only_declared_columns(monkeypatch):
         assert col in dropped
 
 
-def test_llm_transform_passthrough_columns_are_declared_not_hardcoded(monkeypatch):
+def test_llm_transform_carried_id_columns_survive_by_being_declared(monkeypatch):
+    # A stable id the stage needs downstream survives because it's *declared* in
+    # output_schema (source: passthrough documents that it rides through from the
+    # input row) — not because the runtime keeps a magic list of column names.
     monkeypatch.setenv("CW_LLM_FORCE_MOCK", "1")
-    stage = _llm_stage(
-        output_schema={"columns": [{"name": "evidence_id", "type": "str"},
-                                    {"name": "quote", "type": "str"}]},
-        passthrough_columns=["doc_id", "entity_id"],
-    )
+    stage = _llm_stage(output_schema={"columns": [
+        {"name": "evidence_id", "type": "str"},
+        {"name": "quote", "type": "str"},
+        {"name": "doc_id", "type": "str", "source": "passthrough"},
+        {"name": "entity_id", "type": "str", "source": "passthrough"},
+    ]})
     ctx: dict = {}
     out = handle_llm_transform(stage, {"load": _src_docs()}, ctx)
 
-    # Declared columns first, then explicit passthrough columns, in order.
+    # Output order is the schema's declared order — the author controls it there.
     assert list(out.columns) == ["evidence_id", "quote", "doc_id", "entity_id"]
     dropped = ctx["dropped_columns"]["evidence_extraction"]
     assert "doc_id" not in dropped and "entity_id" not in dropped
-    assert "query_id" in dropped  # still dropped: not declared, not passthrough
+    assert "query_id" in dropped  # still dropped: not declared
 
 
 def test_llm_transform_no_output_schema_keeps_everything(monkeypatch):
@@ -80,12 +83,10 @@ def test_llm_transform_no_output_schema_keeps_everything(monkeypatch):
     assert "evidence_extraction" not in ctx.get("dropped_columns", {})
 
 
-def _queue_stage(output_schema=None, passthrough_columns=None, flt=None):
+def _queue_stage(output_schema=None, flt=None):
     queue = {"hash_columns": ["entity_id"]}
     if flt is not None:
         queue["filter"] = flt
-    if passthrough_columns is not None:
-        queue["passthrough_columns"] = passthrough_columns
     kw = {
         "id": "review", "name": "Human review", "type": "human_review_queue",
         "inputs": [{"id": "scored"}], "queue": queue,
@@ -120,11 +121,13 @@ def test_human_review_queue_keeps_only_declared_columns(tmp_path):
         assert col in dropped
 
 
-def test_human_review_queue_passthrough_columns_are_declared_not_hardcoded(tmp_path):
+def test_human_review_queue_carried_columns_survive_by_being_declared(tmp_path):
+    # `quote` survives because it's declared in output_schema (source:
+    # passthrough), not because the runtime keeps a magic list of column names.
     stage = _queue_stage(
         output_schema={"columns": [{"name": "evidence_id", "type": "str"},
-                                    {"name": "final_score", "type": "int"}]},
-        passthrough_columns=["quote"],
+                                    {"name": "final_score", "type": "int"},
+                                    {"name": "quote", "type": "str", "source": "passthrough"}]},
         flt="entity_id == 'nope'",
     )
     ctx = {"project_dir": tmp_path, "run_dir": tmp_path}
@@ -133,4 +136,4 @@ def test_human_review_queue_passthrough_columns_are_declared_not_hardcoded(tmp_p
     assert list(out.columns) == ["evidence_id", "final_score", "quote"]
     dropped = ctx["dropped_columns"]["review"]
     assert "quote" not in dropped
-    assert "benchmark_id" in dropped  # still dropped: not declared, not passthrough
+    assert "benchmark_id" in dropped  # still dropped: not declared
