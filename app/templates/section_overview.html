@@ -63,7 +63,9 @@
   </a>
 
   {# Workflow (the typed-stage pipeline) #}
-  {% set wf_locked = (s.data_model.state != "approved") %}
+  {# Gating disabled for now (pending a rethink): the workflow tile never shows locked.
+     Restore `(s.data_model.state != "approved")` to re-gate on the data model. #}
+  {% set wf_locked = false %}
   <a class="ov-tile {% if wf_locked %}is-locked{% endif %}"
      href="/project/{{ s.name }}/workflow">
     <span class="ov-tile-k">Workflow</span>
