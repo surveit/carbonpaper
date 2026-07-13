@@ -182,6 +182,7 @@ def prepare_run(
         "run_dir": run_dir,
         "project_dir": project_dir,
         "queue_stats": {},
+        "dropped_columns": {},
         "limits": limits,
         "offsets": offsets,
     }
@@ -271,6 +272,7 @@ def _execute_stages(
         m["stages"] = [records_by_id.get(s.id) or _pending_stub(s) for s in ordered]
         m["status"] = status
         m["queue_stats"] = ctx.get("queue_stats", {})
+        m["dropped_columns"] = ctx.get("dropped_columns", {})
         m["updated_at"] = datetime.now().isoformat(timespec="seconds")
         try:
             (run_dir / "manifest.json").write_text(
@@ -426,6 +428,7 @@ def _execute_stages(
     manifest["stages"] = [records_by_id[s.id] for s in ordered if s.id in records_by_id]
     manifest["finished_at"] = datetime.now().isoformat(timespec="seconds")
     manifest["queue_stats"] = ctx.get("queue_stats", {})
+    manifest["dropped_columns"] = ctx.get("dropped_columns", {})
 
     if halted is not None:
         manifest["status"] = "awaiting_review"
@@ -497,6 +500,7 @@ def resume_run(project_dir: Path, run_id: str, repo_root: Path) -> dict[str, Any
         "run_dir": run_dir,
         "project_dir": project_dir,
         "queue_stats": manifest.get("queue_stats", {}),
+        "dropped_columns": manifest.get("dropped_columns", {}),
         # Re-apply the run's per-stage row slicing so stages that resume after
         # a halt honor the same limits/offsets the run started with.
         "limits": manifest.get("limit_overrides") or {},

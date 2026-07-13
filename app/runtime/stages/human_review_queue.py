@@ -202,11 +202,15 @@ def handle_human_review_queue(stage: Stage, inputs: dict[str, pd.DataFrame], ctx
 
     out = pd.concat([decided, passthrough], ignore_index=True, sort=False)
 
+    # Project onto exactly the columns output_schema declares — a column carried
+    # through from upstream that the stage wants downstream earns its place by
+    # being declared. Columns on the frame that the schema doesn't declare are
+    # dropped, and the drop is recorded on ctx rather than silently discarded.
     declared = [c.name for c in stage.output_schema.columns] if stage.output_schema else []
     if declared:
         keep = [c for c in declared if c in out.columns]
-        for must_keep in ["entity_id", "evidence_id", "benchmark_id", "query_id", "quote"]:
-            if must_keep in out.columns and must_keep not in keep:
-                keep.append(must_keep)
+        dropped = [c for c in out.columns if c not in keep]
+        if dropped:
+            ctx.setdefault("dropped_columns", {})[sid] = dropped
         out = out[keep]
     return out

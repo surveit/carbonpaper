@@ -57,16 +57,18 @@ def handle_llm_transform(stage: Stage, inputs: dict[str, pd.DataFrame], ctx: dic
             out_rows.append({**row_dict, "_raw": str(result)})
 
     df = pd.DataFrame(out_rows)
-    # Keep only columns declared in output_schema, preserving order, plus any
-    # passthrough columns that schema declared with source: passthrough.
+    # Project onto exactly the columns output_schema declares, in declared order.
+    # output_schema ⊇ the input schema (Stage validation), so a column shared with
+    # the input rides through untouched — it's excluded from the reply spec above,
+    # not asked of the model — while the columns output_schema adds are what the
+    # model returns. Anything the model returned that output_schema doesn't declare
+    # is dropped, and the drop is recorded on ctx rather than silently discarded.
     declared = [c.name for c in stage.output_schema.columns] if stage.output_schema else []
     if declared:
         keep = [c for c in declared if c in df.columns]
-        # Also keep stable id columns commonly used downstream
-        for must_keep in ["evidence_id", "doc_id", "entity_id", "source_class", "published_at",
-                          "benchmark_id", "query_id"]:
-            if must_keep in df.columns and must_keep not in keep:
-                keep.append(must_keep)
+        dropped = [c for c in df.columns if c not in keep]
+        if dropped:
+            ctx.setdefault("dropped_columns", {})[stage.id] = dropped
         df = df[keep]
     return df
 
