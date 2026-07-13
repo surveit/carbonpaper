@@ -339,8 +339,8 @@ async def project_data_model(request: Request, project_name: str):
 async def project_workflow(request: Request, project_name: str):
     """WORKFLOW — the typed-stage pipeline: the mermaid graph coloured by belief, the
     per-node review split-view, the versions list, and the Build / Run / Create-version
-    controls. LOCKED in the template until the data model is approved — the SAME gate
-    the SSE workflow stream enforces.
+    controls. Always navigable (the data-model→workflow nav lock is disabled pending a
+    rethink); renders an empty state when no workflow is authored yet.
 
     Belief colouring uses the SAME canonical spec (stage_to_spec_dict) the node-review
     decide route and the /review/status poller use, so the FIRST paint agrees with the

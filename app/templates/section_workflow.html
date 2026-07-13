@@ -49,7 +49,9 @@
 {% endblock %}
 
 {% block section %}
-{% set wf_locked = (not state.data_model.present) %}
+{# Gating disabled for now (pending a rethink): the workflow section always renders
+   its content, never the locked panel. Restore `(not state.data_model.present)` to re-gate. #}
+{% set wf_locked = false %}
 
 <div class="sec-head wf-head">
   <div class="wf-head-title">
