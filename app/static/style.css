@@ -1724,3 +1724,60 @@ td.row-num, th.row-num { text-align: right; color: #98a1b3; font-variant-numeric
     font-size: 14px; color: #222; }
 
 @keyframes chat-spin { to { transform: rotate(360deg); } }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Workflow section: full-width DAG in a zoomable viewport on TOP, the per-node
+   review docked full-width BELOW (section_workflow.html + _node_review.html).
+   (Tab bars, panes, schema cards, belief chips, the decision controls and the
+   JSON editor are shared with the runs view and defined above.)
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Big / expandable diagram viewport: scroll, zoom, drag-to-pan, fullscreen. The
+   inner svg is sized in diagram_viewport.js; max-width:none defeats mermaid's
+   useMaxWidth shrink so the graph is legible instead of tiny in the column. ── */
+.diagram-block { margin: 14px 0; }
+.diagram-tools { display: flex; gap: .4rem; align-items: center; margin: .5rem 0; flex-wrap: wrap; }
+.diagram-tools button { font: inherit; font-size: 13px; padding: .25rem .6rem; cursor: pointer;
+    border: 1px solid var(--border); background: #f7f7f8; border-radius: 5px; color: #333; }
+.diagram-tools button:hover { background: #ececec; }
+.diagram-tools .diagram-hint { font-size: 12px; }
+.diagram-viewport { overflow: auto; max-height: 72vh; min-height: 260px; border: 1px solid var(--border);
+    border-radius: 8px; background: #fbfbfc; resize: vertical; cursor: grab; }
+.diagram-viewport.grabbing { cursor: grabbing; }
+.diagram-viewport:fullscreen { max-height: none; height: 100vh; width: 100vw; background: #fbfbfc; }
+.diagram-viewport .mermaid { margin: 0; padding: .5rem; }
+.diagram-viewport .mermaid svg { max-width: none !important; height: auto; }
+/* The node currently open in the review panel — outline it in the graph so the two
+   agree on the selection (distinct from the belief FILL colour). */
+.diagram-viewport svg g.node.wf-node-active > rect,
+.diagram-viewport svg g.node.wf-node-active > polygon,
+.diagram-viewport svg g.node.wf-node-active > circle,
+.diagram-viewport svg g.node.wf-node-active > path { stroke: #2f43c9 !important; stroke-width: 3px !important; }
+.diagram-viewport svg g.node.wf-node-active { filter: drop-shadow(0 0 4px rgba(47,67,201,.55)); }
+
+/* ── Workflow: graph on top, stage detail full-width below (master-detail layout). ── */
+.wf-top .diagram-viewport { max-height: 56vh; }        /* cap so the detail below stays reachable */
+.wf-detail { margin-top: 20px; border-top: 2px solid var(--border); padding-top: 18px; min-height: 120px; }
+.wf-detail.loading { opacity: .5; }
+.wf-detail-empty { text-align: center; padding: 24px 0; }
+.wf-versions { margin-top: 22px; }
+.wf-versions > summary { cursor: pointer; font-weight: 700; font-size: 12px; text-transform: uppercase;
+    letter-spacing: .4px; color: #666; padding: 8px 0; }
+
+/* Node-review, full-width: decision bar pinned on top, then Input/Transform/Output/Spec tabs. */
+.nr-bar { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;
+    background: #f7f8fb; border: 1px solid var(--border); border-radius: 10px; padding: 12px 16px; }
+.nr-bar-id { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.nr-bar-name { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; min-width: 0; }
+.nr-bar-name h2 { margin: 0; font-size: 18px; }
+.nr-bar-name code { font-size: 12px; color: #666; }
+.nr-bar-decide { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.nr-meta { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 10px 2px 0; font-size: 12px; color: #666; }
+.nr-meta .nr-hash { font-size: 11px; color: #999; }
+.nr-scope { font-style: italic; }
+.nr-stale-note { margin: 8px 2px 0; }
+.nr-tabs { margin-top: 16px; }
+.nr-panes { margin-top: 6px; }
+.nr-panes .schema-card { margin: 0 0 16px; }
+.nr-panes .schema-card h4 { margin: 0 0 8px; font-size: 13px; }
+.node-review-full .nr-edit-hint { margin: 0 0 10px; }

@@ -1,95 +1,142 @@
-{# ── Per-node REVIEW / EDIT panel (right side of the project split view) ──
-   Loaded as a partial via fetch() from the workflow section (section_workflow.html)
-   when a workflow node is clicked. It answers the NODE-review question — "do we trust
-   HOW this step is
-   modeled" — which is deliberately distinct from the ROW-review queue ("is this
-   run's DATA right", which halts a run). Node review only colours the workflow.
+{# ── Per-node REVIEW / EDIT panel — full-width, below the workflow graph. Mirrors the
+   runs view's schema Input/Transform/Output layout, with the belief DECISION (approve /
+   reject / needs-changes) pinned at the TOP. Answers the NODE-review question — "do we
+   trust HOW this step is modeled" — distinct from the row-review queue (which halts a
+   run). Node review only colours the workflow graph.
 
-   Context this partial expects (passed by GET /project/{m}/node/{id}/review-partial):
-     project  — str
-     stage        — the loaded stage dict (must include .id, .type, .name)
-     review       — approval_state_for(stage, df):
-                      {state, current_hash, matched_decision}
-                      state ∈ {approved, unreviewed, rejected, edited_stale}
-     raw_json     — str: the stage's canonical JSON dump, seeds the editor
-     type_class   — TYPE_CLASS map (for the type tag)
-     type_glyph   — TYPE_GLYPH map
+   Context (GET /project/{project}/node/{id}/review-partial):
+     project      — str
+     stage        — the loaded Stage (.id .type .name .inputs[].table_schema
+                    .output_schema + the transform handle: llm/function/join/…)
+     review       — approval_state_for(stage, …) {state, current_hash, matched_decision}
+     raw_json     — stage_to_json(stage) for the Spec editor
+     function_code — python source for a function stage (may be None)
+     type_class / type_glyph — the type-tag maps
 #}
+{% from "_schema_table.html" import schema_table %}
 {% set state = review.state %}
-{% set belief_label = {
-     'approved': 'approved',
-     'unreviewed': 'unreviewed',
-     'rejected': 'rejected',
-     'edited_stale': 'edited · stale',
-   } %}
-<div class="stage-header">
-    <span class="type-tag big {{ type_class.get(stage.type, 'custom') }}">{{ type_glyph.get(stage.type, '') }} {{ stage.type }}</span>
-    <h1>{{ stage.name }}</h1>
-    <p class="stage-id"><code>{{ stage.id }}</code></p>
-</div>
+{% set belief_label = {'approved':'approved','unreviewed':'unreviewed','rejected':'rejected','edited_stale':'edited · stale'} %}
 
-{# What kind of review this is — keep it explicitly separate from the row queue. #}
-<p class="review-scope">
-    <strong>Node review</strong> — do we trust <em>how this step is modeled?</em>
-    Your decision colours the workflow; it does <em>not</em> halt a run.
-    <span class="muted">(That's <a href="/project/{{ project }}/runs">row review</a> in a run's queue — "is this run's <em>data</em> right?".)</span>
-</p>
+<div class="node-review-full" id="node-review-panel" data-stage-id="{{ stage.id }}">
 
-<div class="node-review" id="node-review-panel" data-stage-id="{{ stage.id }}">
-    <div class="nr-state-line">
-        <span class="belief-chip belief-{{ 'stale' if state == 'edited_stale' else state }}" data-role="state-chip">{{ belief_label.get(state, state) }}</span>
-        <code class="nr-hash" data-role="hash">{{ review.current_hash }}</code>
-        {% if review.matched_decision %}
-        <span class="muted nr-by">
-            {% if state == 'edited_stale' %}was approved by{% else %}by{% endif %}
-            {{ review.matched_decision.reviewer }}
-            {% if review.matched_decision.reviewed_at %}at {{ review.matched_decision.reviewed_at }}{% endif %}
-            {% if review.matched_decision.note %}— “{{ review.matched_decision.note }}”{% endif %}
-        </span>
-        {% endif %}
+  {# ── Decision bar (approve / reject at the top) ── #}
+  <div class="nr-bar">
+    <div class="nr-bar-id">
+      <span class="type-tag big {{ type_class.get(stage.type, 'custom') }}">{{ type_glyph.get(stage.type, '') }} {{ stage.type }}</span>
+      <div class="nr-bar-name"><h2>{{ stage.name }}</h2><code>{{ stage.id }}</code></div>
     </div>
-    {% if state == 'edited_stale' %}
-    <p class="nr-stale-note muted">This node was approved, then its spec changed (the content hash no longer matches the approved one). Re-review the current spec to restore trust.</p>
-    {% endif %}
-
-    {# ── Decision controls — mirror queue.html's decision-controls + submitDecision. ── #}
-    <div class="decision-controls nr-decide">
+    <div class="nr-bar-decide">
+      <span class="belief-chip belief-{{ 'stale' if state == 'edited_stale' else state }}" data-role="state-chip">{{ belief_label.get(state, state) }}</span>
+      <div class="decision-controls nr-decide">
         <button type="button" class="btn approve {% if state == 'approved' %}selected{% endif %}" data-decision="approve">✓ Approve</button>
         <button type="button" class="btn reject {% if state == 'rejected' %}selected{% endif %}" data-decision="reject">✗ Reject</button>
         <button type="button" class="btn modify" data-decision="needs_changes">↻ Needs changes</button>
         <input type="text" class="nr-note" data-role="note" placeholder="note (optional)">
+      </div>
+    </div>
+  </div>
+
+  <div class="nr-meta">
+    <code class="nr-hash" data-role="hash">{{ review.current_hash }}</code>
+    {% if review.matched_decision %}
+    <span class="muted nr-by">{% if state == 'edited_stale' %}was approved by{% else %}by{% endif %}
+      {{ review.matched_decision.reviewer }}{% if review.matched_decision.reviewed_at %} at {{ review.matched_decision.reviewed_at }}{% endif %}{% if review.matched_decision.note %} — “{{ review.matched_decision.note }}”{% endif %}</span>
+    {% endif %}
+    <span class="nr-scope muted">Node review — do we trust <em>how this step is modeled?</em> Colours the workflow; does not halt a run.</span>
+  </div>
+  {% if state == 'edited_stale' %}
+  <p class="nr-stale-note muted">This node was approved, then its spec changed (the content hash no longer matches). Re-approve the current spec to restore trust.</p>
+  {% endif %}
+
+  {# ── Input → Transform → Output → Spec (schema view, like the runs Schema layer) ── #}
+  <div class="stage-tabs nr-tabs">
+    <div class="tabs">
+      <button type="button" data-nrtab="inputs">Inputs</button>
+      <button type="button" data-nrtab="transform" class="active">Transform</button>
+      <button type="button" data-nrtab="outputs">Outputs</button>
+      <button type="button" data-nrtab="spec">Spec (JSON)</button>
+    </div>
+  </div>
+
+  <div class="panes nr-panes">
+    {# ── Inputs: the schema of each upstream output this stage consumes ── #}
+    <div class="pane" data-pane="inputs" hidden>
+      {% if stage.inputs %}
+        {% for inp in stage.inputs %}
+        <div class="schema-card">
+          <h4><a href="#" data-stage-link="{{ inp.id }}"><code>{{ inp.id }}</code></a> <span class="muted">— upstream output → this input</span></h4>
+          {{ schema_table(inp.table_schema) }}
+        </div>
+        {% endfor %}
+      {% else %}<p class="muted"><em>No declared inputs — a source stage.</em></p>{% endif %}
     </div>
 
-    {# ── Editable stage spec. The edit endpoint is the ONLY writer into compiled/;
+    {# ── Transform: how this step computes (+ eval / review routing) ── #}
+    <div class="pane" data-pane="transform">
+      {% include "_stage_executable.html" %}
+      {% if stage.eval %}
+      <section class="eval-block">
+        <h2>📊 Eval</h2>
+        <dl class="kv">
+          {% if stage.eval.reference %}<dt>reference</dt><dd><code>{{ stage.eval.reference }}</code></dd>{% endif %}
+          {% if stage.eval.join_on %}<dt>join_on</dt><dd>{% for k in stage.eval.join_on %}<code>{{ k }}</code>{% if not loop.last %}, {% endif %}{% endfor %}</dd>{% endif %}
+          {% if stage.eval.metrics %}<dt>metrics</dt><dd>{% for m in stage.eval.metrics %}<code>{{ m }}</code>{% if not loop.last %}, {% endif %}{% endfor %}</dd>{% endif %}
+        </dl>
+      </section>
+      {% endif %}
+      {% if stage.review %}
+      <section class="review-block">
+        <h2>👤 Review routing (on outputs)</h2>
+        <dl class="kv">
+          {% if stage.review.when %}<dt>when</dt><dd><code>{{ stage.review.when }}</code></dd>{% endif %}
+          {% if stage.review.routing %}<dt>routing</dt><dd>{{ stage.review.routing }}</dd>{% endif %}
+        </dl>
+      </section>
+      {% endif %}
+    </div>
+
+    {# ── Outputs: the schema this stage produces ── #}
+    <div class="pane" data-pane="outputs" hidden>
+      {% if stage.output_schema %}
+      <div class="schema-card"><h4>output schema</h4>{{ schema_table(stage.output_schema) }}</div>
+      {% else %}<p class="muted"><em>No output schema declared.</em></p>{% endif %}
+    </div>
+
+    {# ── Spec: the editable JSON. The edit endpoint is the ONLY writer into compiled/;
           it validates with validate_stage and refuses (400) on issues. ── #}
-    <div class="nr-edit">
-        <h3>Stage spec (JSON)</h3>
-        <p class="nr-edit-hint muted">Editing a knob changes the spec's content hash, so an approved node drops to <span class="belief-chip belief-stale inline">edited · stale</span> until re-approved. Save validates first — an invalid spec is refused, the file untouched.</p>
+    <div class="pane" data-pane="spec" hidden>
+      <p class="nr-edit-hint muted">Editing a knob changes the spec's content hash, so an approved node drops to <span class="belief-chip belief-stale inline">edited · stale</span> until re-approved. Save validates first — invalid JSON is refused, the file untouched.</p>
+      <div class="nr-edit">
         <textarea class="edit-textarea" data-role="spec" spellcheck="false">{{ raw_json }}</textarea>
         <div class="nr-edit-actions">
-            <button type="button" class="btn primary" data-role="save-spec">Save spec</button>
-            <span class="nr-edit-msg" data-role="edit-msg"></span>
+          <button type="button" class="btn primary" data-role="save-spec">Save spec</button>
+          <span class="nr-edit-msg" data-role="edit-msg"></span>
         </div>
         <ul class="nr-issues" data-role="issues" hidden></ul>
+      </div>
     </div>
+  </div>
 </div>
-
-<details class="raw-yaml">
-    <summary>Raw JSON (as loaded)</summary>
-    <pre>{{ raw_json }}</pre>
-</details>
 
 <script>
 (function () {
-  // This partial is injected via innerHTML and its <script> re-executed by the
-  // project page's loadStage (which re-creates panel scripts). Scope to the
-  // freshly-inserted panel.
+  // Injected via innerHTML; loadStage re-executes this script. Scope to this panel.
   const panel = document.getElementById('node-review-panel');
-  if (!panel) return;
+  if (!panel || panel._wired) return;
+  panel._wired = true;
   const PROJECT = {{ project | tojson }};
   const STAGE_ID = panel.dataset.stageId;
   const DECIDE_URL = `/project/${encodeURIComponent(PROJECT)}/node/${encodeURIComponent(STAGE_ID)}/decide`;
   const EDIT_URL = `/project/${encodeURIComponent(PROJECT)}/node/${encodeURIComponent(STAGE_ID)}/edit`;
+
+  // ── Input/Transform/Output/Spec tabs ──
+  const tabs = panel.querySelectorAll('[data-nrtab]');
+  const panes = panel.querySelectorAll('.nr-panes .pane');
+  function showTab(name) {
+    tabs.forEach(b => b.classList.toggle('active', b.dataset.nrtab === name));
+    panes.forEach(p => { p.hidden = (p.dataset.pane !== name); });
+  }
+  tabs.forEach(b => b.addEventListener('click', () => showTab(b.dataset.nrtab)));
 
   const chip = panel.querySelector('[data-role="state-chip"]');
   const hashEl = panel.querySelector('[data-role="hash"]');
@@ -97,27 +144,19 @@
   const specEl = panel.querySelector('[data-role="spec"]');
   const editMsg = panel.querySelector('[data-role="edit-msg"]');
   const issuesEl = panel.querySelector('[data-role="issues"]');
+  const BELIEF_LABEL = { approved: 'approved', unreviewed: 'unreviewed', rejected: 'rejected', edited_stale: 'edited · stale' };
 
-  const BELIEF_LABEL = { approved: 'approved', unreviewed: 'unreviewed',
-                         rejected: 'rejected', edited_stale: 'edited · stale' };
-
-  function setChip(state) {
+  function setChip(s) {
     if (!chip) return;
-    const cls = state === 'edited_stale' ? 'stale' : state;
+    const cls = s === 'edited_stale' ? 'stale' : s;
     chip.className = 'belief-chip belief-' + cls;
-    chip.textContent = BELIEF_LABEL[state] || state;
-    panel.querySelectorAll('.nr-decide [data-decision]').forEach(b => {
-      b.classList.toggle('selected', b.dataset.decision === state);
-    });
+    chip.textContent = BELIEF_LABEL[s] || s;
+    panel.querySelectorAll('.nr-decide [data-decision]').forEach(b => b.classList.toggle('selected', b.dataset.decision === s));
   }
+  // After a state-changing action, ask the page to re-poll /review/status so the graph
+  // node recolours live (the section exposes this hook).
+  function refreshGraph() { if (window._pollReviewStatus) window._pollReviewStatus(); }
 
-  // After any state-changing action, ask the project page to re-poll
-  // /review/status so the workflow node recolours live (the page exposes this hook).
-  function refreshDag() {
-    if (window._pollReviewStatus) window._pollReviewStatus();
-  }
-
-  // ── Approve / Reject / Needs-changes — mirrors queue.html submitDecision. ──
   async function submitDecision(decision) {
     const fd = new FormData();
     fd.append('content_hash', hashEl ? hashEl.textContent.trim() : '');
@@ -125,16 +164,11 @@
     if (noteInput && noteInput.value.trim()) fd.append('note', noteInput.value.trim());
     const r = await fetch(DECIDE_URL, { method: 'POST', body: fd });
     if (!r.ok) { alert(`Failed: ${r.status} ${await r.text()}`); return; }
-    // The decide endpoint returns the resulting state so the chip flips without
-    // a reload; fall back to the requested verb's obvious state if absent.
-    let state = decision === 'approve' ? 'approved'
-              : decision === 'reject' ? 'rejected' : 'unreviewed';
-    try { const d = await r.json(); if (d && d.state) state = d.state; } catch (e) {}
-    setChip(state);
-    refreshDag();
+    let s = decision === 'approve' ? 'approved' : decision === 'reject' ? 'rejected' : 'unreviewed';
+    try { const d = await r.json(); if (d && d.state) s = d.state; } catch (e) {}
+    setChip(s); refreshGraph();
   }
 
-  // ── Save edited spec — POST edit; on 400 render validate_stage issues. ──
   async function saveSpec(btn) {
     if (!specEl) return;
     btn.disabled = true;
@@ -147,23 +181,18 @@
       let d = null;
       try { d = await r.json(); } catch (e) {}
       if (r.status === 400 && d && d.issues) {
-        // Validation refused the write — surface every issue, file unchanged.
         if (editMsg) { editMsg.textContent = '✗ Not saved — validation failed'; editMsg.className = 'nr-edit-msg err'; }
-        if (issuesEl) {
-          issuesEl.hidden = false;
-          issuesEl.innerHTML = d.issues.map(i => `<li>${i}</li>`).join('');
-        }
+        if (issuesEl) { issuesEl.hidden = false; issuesEl.innerHTML = d.issues.map(i => `<li>${i}</li>`).join(''); }
         return;
       }
       if (!r.ok || !d || !d.ok) {
         if (editMsg) { editMsg.textContent = `✗ ${r.status} ${d && d.detail ? d.detail : ''}`.trim(); editMsg.className = 'nr-edit-msg err'; }
         return;
       }
-      // Saved. New hash + state come back so the node flips live.
       if (hashEl && d.content_hash) hashEl.textContent = d.content_hash;
       if (d.state) setChip(d.state);
       if (editMsg) { editMsg.textContent = '✓ Saved'; editMsg.className = 'nr-edit-msg ok'; }
-      refreshDag();
+      refreshGraph();
     } finally {
       btn.disabled = false;
     }
