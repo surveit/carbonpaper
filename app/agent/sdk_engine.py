@@ -71,6 +71,7 @@ class ClaudeAgentSdkEngine:
         allowed_tools: list[str],
         tool_labels: dict[str, str] | None = None,
         model: str = CLI_MODEL,
+        max_turns: int | None = None,
     ) -> None:
         self._system_prompt = system_prompt
         self._mcp_server = mcp_server
@@ -79,12 +80,17 @@ class ClaudeAgentSdkEngine:
         # bare tool name; an unlabelled tool falls back to its bare name.
         self._tool_labels = tool_labels or {}
         self._model = model
+        # A hard cap on assistant turns for this run, or None to let the agent work
+        # until done (the interactive default). A headless caller that runs a bounded
+        # tool loop — e.g. app.agent.agent.Agent's submit-and-retry — sets this so a
+        # model that never produces a valid answer cannot loop forever.
+        self._max_turns = max_turns
 
     def _options(self, resume: str | None) -> ClaudeAgentOptions:
-        # No max_turns cap: the agent should keep working until the task is done,
-        # not stop mid-way. The SDK default is None (uncapped), so we simply do not
-        # set it. `resume` continues a prior CLI session so the model sees the whole
-        # conversation (the first turn passes None and starts a fresh session).
+        # max_turns caps assistant turns when the caller set one (a bounded headless
+        # run); left unset the agent works until done. `resume` continues a prior CLI
+        # session so the model sees the whole conversation (the first turn passes None
+        # and starts a fresh session).
         kw: dict[str, Any] = dict(
             model=self._model,
             system_prompt=self._system_prompt,
@@ -92,6 +98,8 @@ class ClaudeAgentSdkEngine:
             allowed_tools=self._allowed_tools,
             setting_sources=[],
         )
+        if self._max_turns is not None:
+            kw["max_turns"] = self._max_turns
         if resume:
             kw["resume"] = resume
         if _CLI_PATH is not None:
