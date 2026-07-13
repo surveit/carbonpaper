@@ -31,13 +31,13 @@ def _ref(path="x.csv", cols=("k",)):
             "table_schema": {"columns": [{"name": c} for c in cols]}}
 
 
-# ── is_grain_preserving (fixed by stage type) ────────────────────────────────
+# ── is_grain_and_order_preserving (fixed by stage type) ────────────────────────────────
 def test_python_frame_function_not_grain_preserving():
-    assert m.Stage.model_validate(_py("t", ["a"])).is_grain_preserving is False
+    assert m.Stage.model_validate(_py("t", ["a"])).is_grain_and_order_preserving is False
 
 
-def test_python_row_function_is_grain_preserving():
-    assert m.Stage.model_validate(_py("t", ["a"], granularity="row")).is_grain_preserving is True
+def test_python_row_function_is_grain_and_order_preserving():
+    assert m.Stage.model_validate(_py("t", ["a"], granularity="row")).is_grain_and_order_preserving is True
 
 
 def test_python_row_function_rejects_multiple_inputs():
@@ -48,7 +48,7 @@ def test_python_row_function_rejects_multiple_inputs():
                                  function={"kind": "inline", "code": "def transform(row): return row"}))
 
 
-def test_llm_is_grain_preserving():
+def test_llm_is_grain_and_order_preserving():
     s = m.Stage.model_validate(S(
         id="e", type="llm_transform",
         inputs=[{"id": "a", "schema": {"columns": [{"name": "id", "type": "str"}],
@@ -56,11 +56,11 @@ def test_llm_is_grain_preserving():
         output_schema={"columns": [{"name": "id", "type": "str"}, {"name": "out", "type": "str"}],
                        "primary_key": ["id"]},
         llm={"prompt_template": "p"}))
-    assert s.is_grain_preserving is True
+    assert s.is_grain_and_order_preserving is True
 
 
-def test_input_data_is_grain_preserving():
-    assert m.Stage.model_validate(_file_input("load")).is_grain_preserving is True
+def test_input_data_is_grain_and_order_preserving():
+    assert m.Stage.model_validate(_file_input("load")).is_grain_and_order_preserving is True
 
 
 def test_join_and_aggregate_change_grain():
@@ -70,8 +70,8 @@ def test_join_and_aggregate_change_grain():
                                    aggregate={"group_by": ["g"],
                                               "aggregations": [{"formula": "sum", "output_column": "t",
                                                                 "value_column": "x"}]}))
-    assert j.is_grain_preserving is False    # fan-out
-    assert agg.is_grain_preserving is False  # fan-in
+    assert j.is_grain_and_order_preserving is False    # fan-out
+    assert agg.is_grain_and_order_preserving is False  # fan-in
 
 
 # ── TableRef (general, schema now required) ──────────────────────────────────

@@ -7,13 +7,13 @@ produced, row by row, and rolls the per-row matches up into metrics.
 
 Row alignment is by POSITION: target row i was produced from eval-dataset row i.
 That holds because this only scores paths compatibility judged grain-preserving, and
-`Stage.is_grain_preserving` is defined as 1:1 AND order-preserving (see its docstring
+`Stage.is_grain_and_order_preserving` is defined as 1:1 AND order-preserving (see its docstring
 — the guarantee is declared where a stage claims it, not assumed here). The one
 observable consequence — row count — is still checked: a length mismatch means a stage
 broke the grain claim, and `score_expected_outputs` raises rather than align a
 mismatched pair (which would report a fabricated result). A reorder that kept the count
 can't be detected post-hoc, which is exactly why order-preservation is part of the
-is_grain_preserving contract rather than a hope at this call site.
+is_grain_and_order_preserving contract rather than a hope at this call site.
 """
 from __future__ import annotations
 

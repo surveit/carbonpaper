@@ -367,7 +367,7 @@ class Stage(_Base):
         return self
 
     @property
-    def is_grain_preserving(self) -> bool:
+    def is_grain_and_order_preserving(self) -> bool:
         """Does one input row map to exactly one output row, IN THE SAME ORDER?
         Grain-preserving means both: 1:1 (no rows added or dropped) AND order-
         preserving (the Nth output row was produced from the Nth input row).
