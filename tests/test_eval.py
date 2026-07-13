@@ -71,6 +71,15 @@ def test_human_review_queue_not_grain_and_order_preserving():
     assert s.is_grain_and_order_preserving is False
 
 
+def test_publish_not_grain_and_order_preserving():
+    # handle_publish runs an authored function whose output is a table of
+    # artifact paths — different rows from its input, never row-alignable.
+    s = m.Stage.model_validate(S(id="pub", type="publish",
+                                 inputs=[{"id": "a"}], publish={},
+                                 function={"kind": "inline", "code": "def transform(row): return row"}))
+    assert s.is_grain_and_order_preserving is False
+
+
 def test_join_and_aggregate_change_grain():
     j = m.Stage.model_validate(S(id="j", type="join", inputs=[{"id": "a"}, {"id": "b"}],
                                  join={"keys": [{"left": "k", "right": "k"}]}))

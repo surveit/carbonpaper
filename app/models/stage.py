@@ -51,7 +51,6 @@ GRAIN_AND_ORDER_PRESERVING_TYPES: frozenset[StageType] = frozenset({
     StageType.input_data,
     StageType.python_row_function,
     StageType.llm_transform,
-    StageType.publish,
 })
 
 
@@ -401,7 +400,9 @@ class Stage(_Base):
                                  grain and order. Its intended "edits in place"
                                  contract would make it yes; closing that gap is #106.
           - join (fan-out) / aggregate (fan-in) → NO; grain changes are deferred
-          - publish            → terminal, never a tap target
+          - publish            → NO — handle_publish runs an authored function whose
+                                 output is a table of artifact paths, not the input
+                                 rows (and it is terminal — nothing downstream).
         """
         return self.type in GRAIN_AND_ORDER_PRESERVING_TYPES
 
