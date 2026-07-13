@@ -58,10 +58,11 @@ def handle_llm_transform(stage: Stage, inputs: dict[str, pd.DataFrame], ctx: dic
 
     df = pd.DataFrame(out_rows)
     # Project onto exactly the columns output_schema declares, in declared order.
-    # A stable id the stage carries downstream is a declared column too — mark it
-    # source: passthrough so it rides through from the input row. Columns the LLM
-    # returned that the schema doesn't declare are dropped, and the drop is
-    # recorded on ctx rather than silently discarded.
+    # output_schema ⊇ the input schema (Stage validation), so a column shared with
+    # the input rides through untouched — it's excluded from the reply spec above,
+    # not asked of the model — while the columns output_schema adds are what the
+    # model returns. Anything the model returned that output_schema doesn't declare
+    # is dropped, and the drop is recorded on ctx rather than silently discarded.
     declared = [c.name for c in stage.output_schema.columns] if stage.output_schema else []
     if declared:
         keep = [c for c in declared if c in df.columns]
