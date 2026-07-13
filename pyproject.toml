@@ -48,3 +48,24 @@ forbidden_modules = ["app.evals"]
 # app.evals depends on core (models/runtime/services) and is used by app.web; the
 # arrow points toward core. A lower layer importing app.evals would be a cycle-
 # forming inversion — e.g. runtime.run_subset must stay eval-agnostic.
+
+[[tool.importlinter.contracts]]
+name = "Services never import the web layer"
+type = "forbidden"
+source_modules = ["app.services"]
+forbidden_modules = ["app.web"]
+# app.services is web-independent domain logic: routes and templates depend on it,
+# never the reverse. The storage root (EXAMPLES_DIR) and project-file readers
+# (load_schemas, resolve_project_dir) live in app.services.workspace; app.web
+# re-exports them so routers are unaffected.
+
+[[tool.importlinter.contracts]]
+name = "Status/review services stay below the routes layer"
+type = "forbidden"
+source_modules = ["app.services.project", "app.services.node_review", "app.services.versioning"]
+forbidden_modules = ["app.main", "app.runtime", "app.compiler"]
+# project (status snapshot), node_review (belief state) and versioning are pure
+# helpers the routes and agent tools lean on — never the reverse — so they stay
+# unit-testable without the runtime/compiler stack. The compile step a workflow
+# regenerate needs lives in app.services.compilation (which wraps the compiler by
+# design and is out of this contract's scope).
