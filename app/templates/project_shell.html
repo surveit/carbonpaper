@@ -12,10 +12,10 @@
     state    = project_view.shell_state(mdir)  — the status snapshot + next_action CTA
     section  = one of {overview, document, data_model, workflow, runs, evals}
 
-  The sidebar reads ONLY from `state`. The WORKFLOW nav unlocks once the data model
-  EXISTS (state.data_model.present) — it is auto-generated right after the data model,
-  so the reviewer can see the draft. Approval is a separate gate (on running the
-  workflow), not on seeing it.
+  The sidebar reads ONLY from `state`. Every nav item is currently navigable: the
+  data-model→workflow lock is disabled (pending a rethink of the gating). The
+  workflow section renders whatever exists — an empty state when nothing is authored
+  yet — rather than a locked panel.
 
   CARDINAL RULE: nothing here fabricates. Glyphs reflect the truthful on-disk state
   (none/unreviewed/approved/…); a "no workflow yet" project shows ○, not a fake ✓.
@@ -36,7 +36,9 @@
       flag for workflow only). Evals is last and carries a FIXED glyph — its status
       is per-eval, surfaced on the Evals page, not summarised in the sidebar. ──── #}
 {% set base = "/project/" ~ state.name %}
-{% set wf_locked = (not state.data_model.present) %}
+{# Gating disabled for now (pending a rethink): the workflow nav is always
+   navigable. Restore `(not state.data_model.present)` to re-gate on the data model. #}
+{% set wf_locked = false %}
 
 {# data-model glyph by gate state #}
 {% set dm_glyph_map = {
