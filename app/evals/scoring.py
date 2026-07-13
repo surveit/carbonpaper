@@ -24,7 +24,7 @@ import pandas as pd
 
 from app.errors import EvalGrainViolationError
 from app.models import EvalConfig, Stage
-from app.services.eval_dataset_columns import (
+from app.evals.dataset_columns import (
     deconflict_column_names,
     get_output_columns_from_stage,
 )

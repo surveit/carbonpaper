@@ -11,7 +11,7 @@ An eval measures the *real* workflow, not a copy of it. The v1 shape
     exactly `override_stage`'s output columns (injected as that stage's whole
     output) plus one expected-output column per check, named after the check's
     target column (disambiguated on a name conflict — see
-    `app.services.eval_dataset_columns`).
+    `app.evals.dataset_columns`).
     (Not yet built: the scorer that runs this table through the workflow and
     grades it is expected to align each target output row back to the eval-
     dataset row that produced it by row-level lineage — an id stamped on each
@@ -70,7 +70,7 @@ class ExpectedOutput(_Base):
     here — it is named after `output_column` (the same name), unless
     `output_column` conflicts with one of the override stage's own output
     column names, in which case it is disambiguated (see
-    `app.services.eval_dataset_columns`)."""
+    `app.evals.dataset_columns`)."""
     output_column: str
     metric: Literal["exact", "abs_tol", "sign"] = "exact"
     tolerance: Optional[float] = None

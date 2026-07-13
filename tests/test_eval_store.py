@@ -1,4 +1,4 @@
-"""Tests for app/services/eval_store.py — eval config/run storage and status
+"""Tests for app/evals/store.py — eval config/run storage and status
 derivation. All storage lives under a tmp_path project dir; nothing here
 touches examples/."""
 from __future__ import annotations
@@ -9,8 +9,8 @@ import pytest
 import yaml
 
 from app.models import EvalConfig, EvalRun
-from app.services.eval_compatibility import CompatibilityReport
-from app.services.eval_store import (
+from app.evals.compatibility import CompatibilityReport
+from app.evals.store import (
     EvalConfigEntry,
     eval_status,
     latest_version_id,

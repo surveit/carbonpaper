@@ -23,9 +23,9 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 from app.errors import EvalNotScorableError
 from app.models import EvalConfig, EvalRun, Stage
-from app.services.eval_compatibility import check_eval_compatibility
+from app.evals.compatibility import check_eval_compatibility
 from app.evals.runner import run_eval
-from app.services.eval_store import (
+from app.evals.store import (
     eval_status,
     latest_version_id,
     list_eval_configs,

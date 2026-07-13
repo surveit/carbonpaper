@@ -1,7 +1,7 @@
 """Derive the override-stage columns an eval-dataset file must inject: the
 override stage's whole output, deconflicted against the checks' expected-
 output column names. Single source of truth for this derivation -- called by
-`app.services.eval_compatibility.check_eval_compatibility`'s override-coverage
+`app.evals.compatibility.check_eval_compatibility`'s override-coverage
 check, so callers always agree on the exact column names an eval-dataset
 file must carry.
 
@@ -21,7 +21,7 @@ form, not this derivation.)
 Both `override` and `target` must declare an output schema, and every name
 in `check_output_columns` must resolve against `target`'s declared output --
 this module raises `ValueError` otherwise rather than silently degrading, so
-`app.services.eval_compatibility.check_eval_compatibility` must verify those
+`app.evals.compatibility.check_eval_compatibility` must verify those
 preconditions itself and report them as problems before calling in here.
 """
 from __future__ import annotations

@@ -24,12 +24,12 @@ from app.models import (
     EvalConfig, EvalRun, EvalRunSettings, FileFormat, Stage, TableRef, Workflow,
 )
 from app.runtime.runner import run_subset
-from app.services.eval_compatibility import CompatibilityReport, check_eval_compatibility
-from app.services.eval_dataset_columns import (
+from app.evals.compatibility import CompatibilityReport, check_eval_compatibility
+from app.evals.dataset_columns import (
     deconflict_column_names,
     get_output_columns_from_stage,
 )
-from app.services.eval_store import latest_version_id, save_eval_run
+from app.evals.store import latest_version_id, save_eval_run
 from app.services.versioning import load_version_stages
 
 
