@@ -20,9 +20,11 @@ import json
 import logging
 import threading
 from pathlib import Path
+from typing import Any
 
+from app.agent.store import open_session_store, save_transcript_session
 from app.compiler import compile_methodology
-from app.compiler.data_model import compile_data_model
+from app.compiler.data_model import build_data_model_agent
 from app.models.named_schemas import SchemaLibrary
 from app.services.compilation import regenerate_workflow
 
@@ -51,14 +53,19 @@ def _run_generation(project_dir: Path, name: str, document: str, model: str) -> 
 
 
 def _generate_data_model(project_dir: Path, document: str, model: str) -> bool:
-    """Run the data-model agent call and persist the schemas. Returns whether it
-    succeeded; a failure is logged and leaves schemas/ untouched (no partial write)."""
+    """Run the data-model agent, persist the schemas, and persist the agent conversation
+    as a viewable chat session. Returns whether it succeeded; a failure is logged, leaves
+    schemas/ untouched (no partial write), and STILL persists the conversation with the
+    error surfaced — so a failed generation is visible rather than silent."""
+    agent = build_data_model_agent(document, model=model)
     try:
-        library = asyncio.run(compile_data_model(document, model=model))
-        _persist_schemas(project_dir, library)
-    except Exception:  # noqa: BLE001 — supervisor boundary: log the failure, never fake a success
+        library = asyncio.run(agent.run())
+    except Exception as exc:  # noqa: BLE001 — supervisor boundary: log the failure, never fake a success
+        _persist_conversation(project_dir, agent.transcript, error=exc)
         _log.exception("data-model generation failed for project %r", project_dir.name)
         return False
+    _persist_schemas(project_dir, library)
+    _persist_conversation(project_dir, agent.transcript)
     return True
 
 
@@ -79,7 +86,7 @@ def _generate_workflow(project_dir: Path, name: str, document: str, model: str) 
 def _persist_schemas(project_dir: Path, library: SchemaLibrary) -> None:
     """Replace schemas/ with the generated data model — clear stale files a shrinking
     re-generation would leave, then write one NN_<name>.json per schema. The library is
-    already validated by compile_data_model, so this only writes."""
+    already validated by the data-model agent, so this only writes."""
     schemas_dir = project_dir / "schemas"
     schemas_dir.mkdir(parents=True, exist_ok=True)
     for stale in schemas_dir.glob("*.json"):
@@ -88,3 +95,27 @@ def _persist_schemas(project_dir: Path, library: SchemaLibrary) -> None:
         payload = schema.model_dump(mode="json", exclude_none=True)
         path = schemas_dir / f"{index:02d}_{schema.name}.json"
         path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
+
+
+def _persist_conversation(
+    project_dir: Path, transcript: list[dict[str, Any]], *, error: Exception | None = None
+) -> None:
+    """Persist the data-model agent conversation as a view-only chat session so it is
+    openable in the chat UI. On failure, append a clear failure note so the session
+    surfaces the error rather than merely looking unfinished. Persisting is best-effort:
+    a store error is logged, never allowed to mask the generation outcome."""
+    messages = list(transcript)
+    if error is not None:
+        messages.append({
+            "role": "assistant",
+            "parts": [{"type": "text", "text": f"⚠ data-model generation failed: {error}"}],
+        })
+    try:
+        save_transcript_session(
+            open_session_store(),
+            transcript=messages,
+            title=f"Generation · data model · {project_dir.name}",
+            context={"project_id": project_dir.name, "phase": "data_model"},
+        )
+    except Exception:  # noqa: BLE001 — persistence is a secondary effect: log, never mask the run outcome
+        _log.exception("failed to persist data-model conversation for project %r", project_dir.name)

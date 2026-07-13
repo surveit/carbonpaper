@@ -9,7 +9,6 @@ routes know nothing about any specific agent; a concrete agent registers itself
 from __future__ import annotations
 
 import json
-import os
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request
@@ -21,15 +20,14 @@ from app.runtime.llm_agent_sdk import available as sdk_available
 from app.agent.registry import build_engine
 from app.agent.sdk_engine import CLI_MODEL
 
-from .store import SessionStore
+from .store import open_session_store
 from .turns import TurnManager
 
 TEMPLATES_DIR = Path(__file__).resolve().parent / "templates"
-SESSIONS_DIR = Path(os.environ.get("CW_CHAT_SESSIONS_DIR", str(Path(__file__).resolve().parent / "_sessions")))
 
 router = APIRouter()
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
-_store = SessionStore(SESSIONS_DIR)
+_store = open_session_store()
 _turns = TurnManager()
 
 

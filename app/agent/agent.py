@@ -57,13 +57,19 @@ class Agent(Generic[Model]):
         self._answer: Model | None = None
         self._attempts = 0
         self._last_issues: list[str] = ["(agent submitted nothing)"]
+        # The conversation the engine streamed, captured by run() on success OR failure,
+        # so a caller can persist it as a viewable chat session.
+        self._transcript: list[dict[str, Any]] = []
+        self._session_id: str | None = None
 
     async def run(self) -> Model:
         """Run the agent and return the validated `target_schema` it submits. Raises
         GenerationError if no valid answer is submitted within `max_attempts` — it never
         returns an invalid or fabricated one."""
         engine = self._build_engine()
-        await engine.stream_turn(
+        # Capture the streamed conversation (and CLI session id) instead of discarding it —
+        # assigned BEFORE the no-answer check so a FAILED run's transcript is still available.
+        self._transcript, self._session_id = await engine.stream_turn(
             self._task, message_history=None, emit=_ignore_event, resume=None
         )
         if self._answer is None:
@@ -72,6 +78,18 @@ class Agent(Generic[Model]):
                 f"{self._attempts} attempt(s); last issues: {self._last_issues}"
             )
         return self._answer
+
+    @property
+    def transcript(self) -> list[dict[str, Any]]:
+        """The conversation the engine streamed on the last run() as neutral
+        {role, parts} messages, ready to persist as a chat session. Empty before run()."""
+        return self._transcript
+
+    @property
+    def session_id(self) -> str | None:
+        """The CLI session id from the last run() (or None) — the resume token that would
+        continue this conversation."""
+        return self._session_id
 
     def submit_answer(self, **fields: Any) -> str:
         """Submit your completed answer as this tool's arguments, matching this tool's

@@ -1,11 +1,11 @@
 """Compile a methodology document into a DATA MODEL (a SchemaLibrary), headlessly.
 
 The sibling of `app.compiler.compiler.compile_methodology` (prose → workflow stages):
-this is prose → named schemas. It runs an `app.agent.Agent` whose target schema is
+this is prose → named schemas. It builds an `app.agent.Agent` whose target schema is
 `SchemaLibrary`, so the agent SUBMITS the data model through the submit_answer tool
-(validated against SchemaLibrary) rather than emitting free-text JSON. The result is a
-typed, reference-checked data model; persisting it under a project's schemas/ is the
-caller's job.
+(validated against SchemaLibrary) rather than emitting free-text JSON. Running the agent
+yields a typed, reference-checked data model; running it and persisting the result (and
+the conversation) is the caller's job.
 """
 from __future__ import annotations
 
@@ -14,18 +14,19 @@ from app.compiler.data_model_prompt import DATA_MODEL_SYSTEM_PROMPT
 from app.models.named_schemas import SchemaLibrary
 
 
-async def compile_data_model(document: str, *, model: str = "sonnet") -> SchemaLibrary:
-    """Generate the named-schema data model for `document` as a validated
-    SchemaLibrary. Raises GenerationError (via Agent.run) if the agent cannot submit a
-    valid library within its attempt budget — it never returns a partial or fabricated
-    model."""
-    agent: Agent[SchemaLibrary] = Agent(
+def build_data_model_agent(document: str, *, model: str = "sonnet") -> Agent[SchemaLibrary]:
+    """Configure the data-model agent for `document`: it authors the named-schema data
+    model and SUBMITS it as a SchemaLibrary via submit_answer. Drive it with `.run()`,
+    which returns the validated SchemaLibrary or raises GenerationError (it never returns
+    a partial or fabricated model); read `.transcript` afterwards to persist the
+    conversation. Returning the agent (rather than just the library) lets the caller
+    reach that transcript even when the run fails."""
+    return Agent(
         system_prompt=DATA_MODEL_SYSTEM_PROMPT,
         target_schema=SchemaLibrary,
         task=_frame(document),
         model=model,
     )
-    return await agent.run()
 
 
 def _frame(document: str) -> str:

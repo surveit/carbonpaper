@@ -12,10 +12,24 @@ app.agent.turns); surviving a server restart mid-turn is out of scope.
 from __future__ import annotations
 
 import json
+import os
 import uuid
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+
+# The process-wide sessions directory the chat UI reads/writes. Env-overridable so a
+# test (or an alternate deployment) can point it elsewhere.
+SESSIONS_DIR = Path(
+    os.environ.get("CW_CHAT_SESSIONS_DIR", str(Path(__file__).resolve().parent / "_sessions"))
+)
+
+
+def open_session_store() -> SessionStore:
+    """The canonical session store the chat UI reads/writes (rooted at SESSIONS_DIR).
+    Both the chat routes and headless writers (e.g. generation) use this so their
+    sessions land in the same place and list together."""
+    return SessionStore(SESSIONS_DIR)
 
 
 def _now() -> str:
@@ -117,6 +131,22 @@ class SessionStore:
     def history_view(self, sid: str) -> list[dict]:
         """The stored transcript rendered as simple bubbles for the template."""
         return _render_history_bubbles(self._read(sid).get("messages") or [])
+
+
+def save_transcript_session(
+    store: SessionStore,
+    *,
+    transcript: list[dict[str, Any]],
+    title: str,
+    context: dict[str, Any] | None = None,
+) -> str:
+    """Persist a finished headless conversation (e.g. a generation run) as a VIEW-ONLY
+    chat session and return its id. `agent_id` is left unset, so the chat UI renders the
+    transcript but the message route refuses to continue it — there is no agent bound to
+    answer a follow-up."""
+    sid = store.create(title=title, agent_id=None, context=context)
+    store.save_messages(sid, transcript)
+    return sid
 
 
 def _render_history_bubbles(messages: list[dict]) -> list[dict]:
