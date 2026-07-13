@@ -12,7 +12,7 @@ from typing import Sequence
 
 from app.models import (EvalConfig, EvalRunSettings, Stage, TableSchema,
                         Workflow, resolve_eval_run_settings, validate_workflow)
-from app.services.eval_dataset_columns import get_injected_columns
+from app.evals.dataset_columns import get_injected_columns
 
 _NUMERIC_TYPES = {"int", "float"}
 
@@ -38,7 +38,7 @@ def check_eval_compatibility(config: EvalConfig,
     targets the target stage itself, and the workflow is structurally
     valid. Any failure here short-circuits with `settings=None` -- in
     particular, `_check_eval_dataset_covers_override` calls into
-    `app.services.eval_dataset_columns`, which raises rather than silently
+    `app.evals.dataset_columns`, which raises rather than silently
     degrading on a missing output schema or an unresolvable checked column,
     so those preconditions must hold before it's reached. Second, once
     preconditions hold, the coverage checks and grain resolution run and

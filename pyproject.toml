@@ -39,3 +39,12 @@ forbidden_modules = ["app.compiler", "app.web", "app.services"]
 # backend adapter) and core models, but must not import domain layers — so any
 # agent can run on it. The dependency points the other way: app.compiler.agent
 # imports app.agent to register itself, never the reverse.
+
+[[tool.importlinter.contracts]]
+name = "Eval subsystem is a leaf — core layers never import it"
+type = "forbidden"
+source_modules = ["app.models", "app.runtime", "app.services", "app.llm", "app.agent", "app.compiler"]
+forbidden_modules = ["app.evals"]
+# app.evals depends on core (models/runtime/services) and is used by app.web; the
+# arrow points toward core. A lower layer importing app.evals would be a cycle-
+# forming inversion — e.g. runtime.run_subset must stay eval-agnostic.

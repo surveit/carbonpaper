@@ -1,12 +1,12 @@
-"""Tests for app/services/eval_compatibility.py — does an EvalConfig still fit
+"""Tests for app/evals/compatibility.py — does an EvalConfig still fit
 the stages it names, as they are right now."""
 from __future__ import annotations
 
 import pytest
 
 from app import models as m
-from app.services.eval_dataset_columns import get_injected_columns, get_output_columns_from_stage
-from app.services.eval_compatibility import CompatibilityReport, check_eval_compatibility
+from app.evals.dataset_columns import get_injected_columns, get_output_columns_from_stage
+from app.evals.compatibility import CompatibilityReport, check_eval_compatibility
 
 
 def S(**kw):

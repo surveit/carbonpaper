@@ -24,7 +24,7 @@ from app.models import (
     TableRef,
 )
 from app.models.schema import TableSchema
-from app.services.eval_store import save_eval_config
+from app.evals.store import save_eval_config
 
 client = TestClient(app)
 

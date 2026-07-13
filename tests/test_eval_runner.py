@@ -19,7 +19,7 @@ from app.main import app
 from app.models import EvalConfig, ExpectedOutput, FileFormat, TableRef
 from app.models.schema import TableSchema
 from app.evals.runner import run_eval
-from app.services.eval_store import load_eval_run, save_eval_config
+from app.evals.store import load_eval_run, save_eval_config
 
 _LOAD = {
     "id": "load", "type": "input_data", "name": "Load rows",
