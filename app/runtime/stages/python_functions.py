@@ -2,7 +2,8 @@
 
 One module for both: they are the two grains of the same idea (run authored
 python over the input), differing only in what the function is shown — a row
-dict or the whole frame — and they share the function loader.
+dict (`make_python_row_mapper`) or the whole frame
+(`handle_python_frame_function`) — and they share the function loader.
 """
 
 from __future__ import annotations
@@ -13,6 +14,8 @@ from typing import Any, Callable
 import pandas as pd
 
 from app.models import FunctionKind, Stage
+
+from .execution import Row
 
 
 def _load_python_function(stage: Stage) -> Callable[..., Any]:
@@ -44,25 +47,19 @@ def handle_python_frame_function(stage: Stage, inputs: dict[str, pd.DataFrame], 
     return fn(*args)
 
 
-def handle_python_row_function(stage: Stage, inputs: dict[str, pd.DataFrame], ctx: dict[str, Any]) -> pd.DataFrame:
-    """Per-row transform: the runtime maps the function over the single input's
-    rows — one dict in, one dict out. The function never sees the frame, so it
-    *cannot* fan out or fan in. This is what makes `is_grain_and_order_preserving` true by
-    construction rather than by author claim."""
-    declared = stage.inputs
-    if len(declared) != 1:
-        raise ValueError(
-            f"python_row_function stage {stage.id} takes exactly one input, got {len(declared)}"
-        )
+def make_python_row_mapper(stage: Stage, ctx: dict[str, Any]) -> Callable[[Row], Row]:
+    """Resolve the stage's function once; the runtime maps it over the single
+    input's rows — one dict in, one dict out. The function never sees the
+    frame, so it cannot fan out, fan in, or reorder."""
     fn = _load_python_function(stage)
-    src = inputs[declared[0].id]
-    out_rows: list[dict[str, Any]] = []
-    for record in src.to_dict("records"):
-        result = fn(record)
+
+    def map_row(row: Row) -> Row:
+        result = fn(row)
         if not isinstance(result, dict):
             raise ValueError(
-                f"python_row_function stage {stage.id}: function must return a dict per row, "
-                f"got {type(result).__name__}"
+                f"python_row_function stage {stage.id}: function must return a dict "
+                f"per row, got {type(result).__name__}"
             )
-        out_rows.append(result)
-    return pd.DataFrame(out_rows)
+        return result
+
+    return map_row

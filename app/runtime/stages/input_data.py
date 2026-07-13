@@ -11,7 +11,7 @@ import pandas as pd
 from app.models import ConnectorKind, Stage
 
 
-def handle_input_data(stage: Stage, inputs: dict[str, pd.DataFrame], ctx: dict[str, Any]) -> pd.DataFrame:
+def read_input_data(stage: Stage, ctx: dict[str, Any]) -> pd.DataFrame:
     connector = stage.connector
     assert connector is not None  # Stage validation: input_data carries connector
     params = connector.params
