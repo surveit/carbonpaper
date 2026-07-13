@@ -12,6 +12,7 @@ from typing import Any
 import pandas as pd
 from fastapi import HTTPException
 
+from app.errors import NoCompiledStagesError
 from app.models import Stage
 from app.services.loader import CompiledStageFile, load_compiled_dir
 from app.web.config import EXAMPLES_DIR, REPO_ROOT
@@ -100,9 +101,14 @@ class StageListing:
 
 
 def load_stages(project: str) -> StageListing:
+    """Compiled stages for `project`, or raises NoCompiledStagesError if the
+    project has no compiled/ directory yet. A plain domain error, not an
+    HTTPException: this is a filesystem read, and whether "no compiled/ dir"
+    is a 404 or a soft empty listing is up to the caller (see
+    load_stages_or_empty and each route's own handling)."""
     compiled_dir = EXAMPLES_DIR / project / "compiled"
     if not compiled_dir.is_dir():
-        raise HTTPException(status_code=404, detail=f"No compiled stages for {project}")
+        raise NoCompiledStagesError(project)
     entries = load_compiled_dir(compiled_dir)
     issues = [e for e in entries if e.issues]
     if issues:
@@ -118,13 +124,14 @@ def load_stages(project: str) -> StageListing:
 
 
 def load_stages_or_empty(project: str) -> StageListing:
-    """Like load_stages, but returns an EMPTY listing instead of 404 when the project
-    has no compiled/ workflow yet. For the shell's workflow section, which renders the
-    locked/empty page (not an error) for a project that has no workflow authored."""
-    compiled_dir = EXAMPLES_DIR / project / "compiled"
-    if not compiled_dir.is_dir():
+    """Like load_stages, but returns an EMPTY listing instead of raising when the
+    project has no compiled/ workflow yet. For the shell's workflow section, which
+    renders the locked/empty page (not an error) for a project that has no
+    workflow authored."""
+    try:
+        return load_stages(project)
+    except NoCompiledStagesError:
         return StageListing(stages=[], issues=[], order={})
-    return load_stages(project)
 
 
 def find_stage(stages: list[Stage], stage_id: str) -> Stage | None:

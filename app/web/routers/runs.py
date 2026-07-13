@@ -11,13 +11,14 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
-from app.errors import NoVersionToRunError
+from app.errors import NoCompiledStagesError, NoVersionToRunError
 from app.services.loader import WorkflowLoadError, load_workflow
 from app.runtime.preview import PREVIEWABLE_TYPES, PreviewError, run_stage_preview
 from app.runtime.runner import prepare_run, resume_run, run_prepared
 from app.web.config import EXAMPLES_DIR, REPO_ROOT, templates
 from app.web.diagrams import TYPE_CLASS, TYPE_GLYPH, build_mermaid_graph
 from app.web.loading import (
+    StageListing,
     build_llm_example,
     find_stage,
     list_runs,
@@ -33,6 +34,16 @@ from app.web.loading import (
 from app.web.project_view import shell_state
 
 router = APIRouter()
+
+
+def _load_stages_or_404(project: str) -> StageListing:
+    """load_stages, mapped to this router's HTTP contract: 404 if the project
+    has no compiled/ workflow yet. Behavior-preserving wrapper around the
+    (now HTTP-agnostic) loader — see app.errors.NoCompiledStagesError."""
+    try:
+        return load_stages(project)
+    except NoCompiledStagesError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 def run_in_background(target, *args) -> None:
@@ -96,7 +107,7 @@ async def run_status(project: str, run_id: str):
     manifest = load_manifest(runs_dir(project) / run_id)
     mstages = manifest.get("stages", [])
     status_by_id = {s["stage_id"]: s.get("status", "") for s in mstages}
-    mermaid = build_mermaid_graph(load_stages(project).stages, project, status_by_id=status_by_id)
+    mermaid = build_mermaid_graph(_load_stages_or_404(project).stages, project, status_by_id=status_by_id)
 
     def _count(st: str) -> int:
         return sum(1 for s in mstages if s.get("status") == st)
@@ -120,7 +131,7 @@ async def run_status(project: str, run_id: str):
 async def run_detail(request: Request, project: str, run_id: str):
     run_dir = runs_dir(project) / run_id
     manifest = load_manifest(run_dir)
-    stages = load_stages(project).stages
+    stages = _load_stages_or_404(project).stages
     status_by_id = {s["stage_id"]: s.get("status", "") for s in manifest.get("stages", [])}
     mermaid = build_mermaid_graph(stages, project, status_by_id=status_by_id)
 
@@ -158,7 +169,7 @@ async def run_stage_partial(
     output_preview = load_output_preview(run_dir, stage_record.get("output_path"))
 
     # Build input previews from upstream stages' outputs in this run.
-    stages_static = load_stages(project).stages
+    stages_static = _load_stages_or_404(project).stages
     stage_def = find_stage(stages_static, stage_id)
     output_by_id = {
         s.get("stage_id"): s.get("output_path") for s in manifest.get("stages", [])
@@ -264,7 +275,7 @@ async def run_stage_scratch_preview(
         except (TypeError, ValueError):
             continue
 
-    stages_static = load_stages(project).stages
+    stages_static = _load_stages_or_404(project).stages
     stage_def = find_stage(stages_static, stage_id)
     if stage_def is None:
         raise HTTPException(status_code=404, detail=f"No stage '{stage_id}'")

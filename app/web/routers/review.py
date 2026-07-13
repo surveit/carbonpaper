@@ -10,9 +10,11 @@ import pandas as pd
 from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 
+from app.errors import NoCompiledStagesError
 from app.runtime.llm import render_prompt
 from app.web.config import templates
 from app.web.loading import (
+    StageListing,
     decisions_path,
     display_cell,
     find_stage,
@@ -27,13 +29,22 @@ from app.web.loading import (
 router = APIRouter()
 
 
+def _load_stages_or_404(project: str) -> StageListing:
+    """load_stages, mapped to this router's HTTP contract: 404 if the project
+    has no compiled/ workflow yet. See app.errors.NoCompiledStagesError."""
+    try:
+        return load_stages(project)
+    except NoCompiledStagesError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
 @router.get("/project/{project}/runs/{run_id}/queue/{stage_id}", response_class=HTMLResponse)
 async def queue_page(request: Request, project: str, run_id: str, stage_id: str):
     """Reviewer UI for one queue stage in one run."""
     run_dir = runs_dir(project) / run_id
     manifest = load_manifest(run_dir)
 
-    stages = load_stages(project).stages
+    stages = _load_stages_or_404(project).stages
     stage_def = find_stage(stages, stage_id)
     if stage_def is None or stage_def.type != "human_review_queue":
         raise HTTPException(status_code=404, detail=f"No queue stage '{stage_id}'")

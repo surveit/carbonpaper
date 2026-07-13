@@ -21,3 +21,15 @@ class NoVersionToRunError(Exception):
 class RegenerateWithoutSnapshotError(Exception):
     """Raised when a from-scratch compile would overwrite reviewed work without a
     prior version snapshot and without explicit confirm_overwrite."""
+
+
+class NoCompiledStagesError(Exception):
+    """Raised by load_stages when a project has no compiled/ directory yet.
+
+    A plain filesystem fact ("nothing on disk"), not an HTTP concern — whether
+    that means a 404 or a soft empty listing is a presentation decision for the
+    caller (a route) to make, not the loader."""
+
+    def __init__(self, project: str):
+        self.project = project
+        super().__init__(f"No compiled stages for {project}")

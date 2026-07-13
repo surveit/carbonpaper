@@ -15,14 +15,24 @@ from __future__ import annotations
 from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 
+from app.errors import NoCompiledStagesError
 from app.services import node_review, stage_edit, versioning
 from app.services.loader import stage_to_json, stage_to_spec_dict
 from app.models import Stage
 from app.web.config import EXAMPLES_DIR, templates
 from app.web.diagrams import TYPE_CLASS, TYPE_GLYPH, build_mermaid_graph
-from app.web.loading import find_stage, load_stages, resolve_function_code
+from app.web.loading import StageListing, find_stage, load_stages, resolve_function_code
 
 router = APIRouter()
+
+
+def _load_stages_or_404(project: str) -> StageListing:
+    """load_stages, mapped to this router's HTTP contract: 404 if the project
+    has no compiled/ workflow yet. See app.errors.NoCompiledStagesError."""
+    try:
+        return load_stages(project)
+    except NoCompiledStagesError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 def _review_by_id(stages: list[Stage], decisions) -> dict[str, str]:
@@ -40,7 +50,7 @@ async def review_status(project: str):
     freshly-built mermaid graph coloured by approval. Mirrors run_status — the page
     swaps `mermaid` in place after a decision/edit so the workflow recolours without a
     full reload."""
-    stages = load_stages(project).stages
+    stages = _load_stages_or_404(project).stages
     decisions = node_review.load_node_decisions(EXAMPLES_DIR / project)
     review_by_id = _review_by_id(stages, decisions)
     coverage = node_review.coverage_for([stage_to_spec_dict(s) for s in stages], decisions)
@@ -60,7 +70,7 @@ async def node_review_partial(request: Request, project: str, stage_id: str):
     """Per-node REVIEW/EDIT panel (right side of the project split view). Mirrors
     stage_view_partial, but answers the node-review question (approve / reject / edit
     the spec) instead of showing the read-only stage detail."""
-    stages = load_stages(project).stages
+    stages = _load_stages_or_404(project).stages
     stage = find_stage(stages, stage_id)
     if stage is None:
         raise HTTPException(status_code=404, detail=f"No stage '{stage_id}' in {project}")
@@ -112,7 +122,7 @@ async def node_decide(
     # spec — the same source of truth the workflow colours by — so the returned chip and
     # the workflow agree. (record_node_decision stores 'needs_changes' verbatim, which
     # approval_state_for reports as 'unreviewed' for colouring.)
-    stages = load_stages(project).stages
+    stages = _load_stages_or_404(project).stages
     stage = find_stage(stages, stage_id)
     if stage is None:
         raise HTTPException(status_code=404, detail=f"No stage '{stage_id}' in {project}")
@@ -148,7 +158,7 @@ async def node_edit(
     # The writer reports only success; re-derive the node's colour here from the
     # freshly-written stage, the same way review_status colours the workflow, so
     # the caller can flip the node live without a full reload.
-    stage = find_stage(load_stages(project).stages, stage_id)
+    stage = find_stage(_load_stages_or_404(project).stages, stage_id)
     if stage is None:
         raise HTTPException(status_code=404, detail=f"No stage '{stage_id}' in {project}")
     spec = stage_to_spec_dict(stage)
