@@ -63,6 +63,14 @@ def test_input_data_is_grain_and_order_preserving():
     assert m.Stage.model_validate(_file_input("load")).is_grain_and_order_preserving is True
 
 
+def test_human_review_queue_not_grain_and_order_preserving():
+    # handle_human_review_queue drops rejected rows and concatenates
+    # decided+passthrough, so it changes both grain and order (see #106).
+    s = m.Stage.model_validate(S(id="rev", type="human_review_queue",
+                                 inputs=[{"id": "a"}], queue={}))
+    assert s.is_grain_and_order_preserving is False
+
+
 def test_join_and_aggregate_change_grain():
     j = m.Stage.model_validate(S(id="j", type="join", inputs=[{"id": "a"}, {"id": "b"}],
                                  join={"keys": [{"left": "k", "right": "k"}]}))

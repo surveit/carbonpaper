@@ -43,6 +43,18 @@ class StageType(str, Enum):
     publish = "publish"
 
 
+# The stage types that guarantee output row i came from input row i — 1:1 and in
+# the same order. Single source of truth for both the eval gate and the SYW
+# positional tracer (app/runtime/trace.py imports this); see
+# Stage.is_grain_and_order_preserving for the full contract and per-type reasoning.
+GRAIN_AND_ORDER_PRESERVING_TYPES: frozenset[StageType] = frozenset({
+    StageType.input_data,
+    StageType.python_row_function,
+    StageType.llm_transform,
+    StageType.publish,
+})
+
+
 class ConnectorKind(str, Enum):
     file = "file"
     computed_static = "computed_static"
@@ -378,23 +390,20 @@ class Stage(_Base):
         row-aligned) eval relies on to align a target's output rows back to the
         eval-dataset rows that produced them BY POSITION — no lineage id needed,
         because position IS the identity through a grain-preserving path. Fixed
-        entirely by stage type:
+        entirely by stage type (the set is GRAIN_AND_ORDER_PRESERVING_TYPES):
           - python_row_function → yes (runtime maps it per row, in emit order — enforced 1:1)
           - python_frame_function → NO (may reshape OR reorder the frame)
           - llm_transform      → yes (per-row 1:1 in emit order in v1; a fan-out LLM
                                  like doc→pieces is out of scope until fan-out evals)
           - input_data         → yes (originates the rows)
-          - human_review_queue → yes (keyed, edits in place — no reorder)
+          - human_review_queue → NO — handle_human_review_queue drops rejected rows
+                                 and concatenates decided+passthrough, changing both
+                                 grain and order. Its intended "edits in place"
+                                 contract would make it yes; closing that gap is #106.
           - join (fan-out) / aggregate (fan-in) → NO; grain changes are deferred
           - publish            → terminal, never a tap target
         """
-        return self.type in (
-            StageType.python_row_function,
-            StageType.llm_transform,
-            StageType.input_data,
-            StageType.human_review_queue,
-            StageType.publish,
-        )
+        return self.type in GRAIN_AND_ORDER_PRESERVING_TYPES
 
 
 def validate_stage(stage: dict[str, Any]) -> list[str]:
