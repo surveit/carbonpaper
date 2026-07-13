@@ -26,25 +26,62 @@ module = ["pyarrow", "pyarrow.*"]
 ignore_missing_imports = true
 
 # Architecture boundaries, enforced by import-linter (`PYTHONPATH=. lint-imports`).
-# The content-level companions live in tests/arch/.
+# Expressed as a WHITELIST: each restricted module is `protected` and declares the
+# only modules allowed to import it — a new cross-layer import is denied by default
+# (caught), not allowed until someone remembers to forbid it. Core modules
+# (app.models, app.errors, app.llm) are left open: everything may depend on them.
+# Content-level checks live in tests/arch/.
 [tool.importlinter]
 root_package = "app"
 
 [[tool.importlinter.contracts]]
-name = "Agent spine is domain-agnostic"
-type = "forbidden"
-source_modules = ["app.agent"]
-forbidden_modules = ["app.compiler", "app.web", "app.services"]
-# app.agent is a reusable chat/agent engine. It may use app.runtime (the LLM/CLI
-# backend adapter) and core models, but must not import domain layers — so any
-# agent can run on it. The dependency points the other way: app.compiler.agent
-# imports app.agent to register itself, never the reverse.
+name = "app.web imported only by the entrypoint"
+type = "protected"
+protected_modules = ["app.web"]
+allowed_importers = ["app.main"]
+# The web layer is the top: app.main mounts it, nothing else imports it. app.services
+# in particular stays web-independent — EXAMPLES_DIR / load_schemas live in
+# app.services.workspace and app.web re-exports them so routers are unaffected.
 
 [[tool.importlinter.contracts]]
-name = "Eval subsystem is a leaf — core layers never import it"
-type = "forbidden"
-source_modules = ["app.models", "app.runtime", "app.services", "app.llm", "app.agent", "app.compiler"]
-forbidden_modules = ["app.evals"]
-# app.evals depends on core (models/runtime/services) and is used by app.web; the
-# arrow points toward core. A lower layer importing app.evals would be a cycle-
-# forming inversion — e.g. runtime.run_subset must stay eval-agnostic.
+name = "app.services imported only by web, runtime, evals, compiler"
+type = "protected"
+protected_modules = ["app.services"]
+allowed_importers = ["app.web", "app.runtime", "app.evals", "app.compiler"]
+# Domain logic the upper layers lean on. As a declared whitelist, a new importer is
+# a deliberate edit, not an accident. (services → compiler is fine — compilation and
+# generation wrap it — which is why app.compiler lists app.services below.)
+
+[[tool.importlinter.contracts]]
+name = "app.compiler imported only by the entrypoint and services"
+type = "protected"
+protected_modules = ["app.compiler"]
+allowed_importers = ["app.main", "app.services"]
+# app.services.compilation / generation wrap the compile mechanism by design; app.main
+# runs it from the CLI. The reusable agent spine (app.agent) must not import it.
+
+[[tool.importlinter.contracts]]
+name = "app.runtime imported only by agent, evals, web"
+type = "protected"
+protected_modules = ["app.runtime"]
+allowed_importers = ["app.agent", "app.evals", "app.web"]
+# The runner is driven from web (top), the agent (as an LLM backend), and evals.
+# app.services must not reach into it — status/review helpers stay runtime-free.
+
+[[tool.importlinter.contracts]]
+name = "app.agent spine imported only by its registrar and the entrypoint"
+type = "protected"
+protected_modules = ["app.agent"]
+allowed_importers = ["app.compiler", "app.main"]
+# app.agent is a domain-agnostic chat/agent engine; app.compiler.agent imports it to
+# register the editing tools and app.main mounts it. Nothing else depends on the
+# spine, so any agent can run on it.
+
+[[tool.importlinter.contracts]]
+name = "app.evals is a leaf — imported only by web"
+type = "protected"
+protected_modules = ["app.evals"]
+allowed_importers = ["app.web"]
+# evals depends on core (models/runtime/services) and is surfaced by app.web; the
+# arrow points toward core. A lower layer importing evals would be a cycle-forming
+# inversion — e.g. runtime.run_subset must stay eval-agnostic.
