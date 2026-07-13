@@ -1,9 +1,9 @@
 """Run one eval against a pinned workflow version and record the result.
 
 Ties the pieces together: check the config still fits the workflow, inject the eval
-dataset as the override stage's output, execute the grain-preserving pathway to the
-target (app.runtime.eval_pathway), score the target's output against the dataset's
-expected columns (app.services.eval_scoring), and write an EvalRun.
+dataset as the override stage's output, run the grain-preserving stage subset to the
+target (app.runtime.runner.run_subset), score the target's output against the
+dataset's expected columns (app.evals.scoring), and write an EvalRun.
 
 v1 scores DECLARATIVELY only — a path that isn't grain-preserving is recorded as
 `vetoed` (a code scorer is the escape hatch, but executing one is not built yet). An
@@ -18,15 +18,17 @@ from typing import Any, Literal
 
 import pandas as pd
 
-from app.errors import EvalGrainViolationError, EvalNotScorableError, EvalPathwayError
-from app.models import EvalConfig, EvalRun, EvalRunSettings, FileFormat, Stage, TableRef
-from app.runtime.eval_pathway import execute_eval_pathway
+from app.errors import EvalGrainViolationError, EvalNotScorableError, SubsetRunError
+from app.evals.scoring import score_expected_outputs
+from app.models import (
+    EvalConfig, EvalRun, EvalRunSettings, FileFormat, Stage, TableRef, Workflow,
+)
+from app.runtime.runner import run_subset
 from app.services.eval_compatibility import CompatibilityReport, check_eval_compatibility
 from app.services.eval_dataset_columns import (
     deconflict_column_names,
     get_output_columns_from_stage,
 )
-from app.services.eval_scoring import score_expected_outputs
 from app.services.eval_store import latest_version_id, save_eval_run
 from app.services.versioning import load_version_stages
 
@@ -38,9 +40,8 @@ def run_eval(
     and return the saved EvalRun. Raises EvalNotScorableError if the eval can't be
     run at all (incompatible, or no dataset attached)."""
     version = _resolve_version(project_dir, version_id)
-    stages = load_version_stages(project_dir, version)
-    by_id = {stage.id: stage for stage in stages}
-    report = check_eval_compatibility(config, stages)
+    workflow = Workflow(stages=load_version_stages(project_dir, version))
+    report = check_eval_compatibility(config, workflow.stages)
     _require_runnable(config, report)
     settings = report.settings
     assert settings is not None  # report.ok (checked above) guarantees settings
@@ -48,7 +49,7 @@ def run_eval(
     if not settings.can_score_declaratively:
         run = _vetoed_run(config, version, settings)
     else:
-        run = _score_pathway(project_dir, repo_root, config, version, settings, by_id)
+        run = _score_run(project_dir, repo_root, config, version, settings, workflow)
     save_eval_run(project_dir, run)
     return run
 
@@ -63,13 +64,14 @@ def _require_runnable(config: EvalConfig, report: CompatibilityReport) -> None:
         raise EvalNotScorableError("eval has no dataset attached")
 
 
-def _score_pathway(
+def _score_run(
     project_dir: Path, repo_root: Path, config: EvalConfig, version: str,
-    settings: EvalRunSettings, by_id: dict[str, Stage],
+    settings: EvalRunSettings, workflow: Workflow,
 ) -> EvalRun:
-    """Execute the pathway on the injected dataset and score it. A pathway failure
-    or a grain violation is recorded as an `error` run (with the reason), not raised
-    — the run happened, it just couldn't produce a score."""
+    """Run the injected stage subset to the target and score its output. A run
+    failure or a grain violation is recorded as an `error` run (with the reason),
+    not raised — the run happened, it just couldn't produce a score."""
+    by_id = {stage.id: stage for stage in workflow.stages}
     override, target = by_id[config.override_stage], by_id[config.target_stage]
     assert config.table is not None  # _require_runnable checked this
     dataset = _read_table_ref(repo_root, config.table)
@@ -77,36 +79,36 @@ def _score_pathway(
     run_dir = project_dir / "eval_run" / run_id
     started = _now()
     try:
-        target_output = execute_eval_pathway(
-            project_dir, repo_root, version_id=version,
-            injected_outputs=_injected_outputs(repo_root, config, override, target, dataset),
-            frontier=settings.frontier, target=config.target_stage, run_dir=run_dir)
-        score = score_expected_outputs(config, override, target, dataset, target_output)
-    except (EvalPathwayError, EvalGrainViolationError) as exc:
+        outputs = run_subset(
+            workflow, stage_ids=settings.frontier, run_dir=run_dir, repo_root=repo_root,
+            injected_outputs=_build_injected_outputs(repo_root, config, override, target, dataset))
+        score = score_expected_outputs(config, override, target, dataset,
+                                       outputs[config.target_stage])
+    except (SubsetRunError, EvalGrainViolationError) as exc:
         return _build_run(config, version, settings, run_id=run_id, status="error",
-                    started=started, notes=[str(exc)])
+                          started=started, notes=[str(exc)])
     result_ref = _write_result_table(run_dir, score.per_row).relative_to(project_dir).as_posix()
     return _build_run(config, version, settings, run_id=run_id, status="scored",
-                started=started, metrics=score.metrics, result_ref=result_ref)
+                      started=started, metrics=score.metrics, result_ref=result_ref)
 
 
-def _injected_outputs(
+def _build_injected_outputs(
     repo_root: Path, config: EvalConfig, override: Stage, target: Stage, dataset: pd.DataFrame,
 ) -> dict[str, pd.DataFrame]:
-    """The tables seeded as stage outputs before the pathway runs: the eval dataset
+    """The tables seeded as stage outputs before the subset runs: the eval dataset
     as the override stage's output, plus each reference override's table."""
-    outputs = {config.override_stage: _override_output(override, target, config, dataset)}
+    outputs = {config.override_stage: _derive_override_output(override, target, config, dataset)}
     for ref in config.reference_overrides:
         outputs[ref.stage_id] = _read_table_ref(repo_root, ref.table)
     return outputs
 
 
-def _override_output(
+def _derive_override_output(
     override: Stage, target: Stage, config: EvalConfig, dataset: pd.DataFrame,
 ) -> pd.DataFrame:
-    """The override stage's output, taken from the eval dataset: its injected
-    columns, renamed from their (possibly deconflicted) dataset names back to the
-    override stage's own output column names so downstream stages see the schema
+    """Compute the override stage's output from the eval dataset: take its injected
+    columns and rename them from their (possibly deconflicted) dataset names back to
+    the override stage's own output column names, so downstream stages see the schema
     they expect."""
     override_columns = get_output_columns_from_stage(override)
     expected_source = [

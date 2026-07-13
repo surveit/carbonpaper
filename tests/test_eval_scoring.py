@@ -1,4 +1,4 @@
-"""Unit tests for app/services/eval_scoring.py: metric comparisons, the
+"""Unit tests for app/evals/scoring.py: metric comparisons, the
 positional grain guard, and that a checked column whose name clashes with an
 override column is read from the deconflicted `output.<name>` dataset column."""
 from __future__ import annotations
@@ -9,7 +9,7 @@ import pytest
 from app import models as m
 from app.errors import EvalGrainViolationError
 from app.models import EvalConfig, ExpectedOutput
-from app.services.eval_scoring import score_expected_outputs
+from app.evals.scoring import score_expected_outputs
 
 
 def _stage(id_, output_cols):

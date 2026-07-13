@@ -5,12 +5,15 @@ produce the output) alongside one expected-output column per check. This module
 compares each check's expected column to the matching column the target actually
 produced, row by row, and rolls the per-row matches up into metrics.
 
-Row alignment is by POSITION: the pathway that produced `target_df` is only scored
-here when compatibility judged it grain-preserving (strict 1:1), and the executor
-preserves row order, so target row i was produced from eval-dataset row i. That
-precondition is enforced, not assumed — a row-count mismatch means a stage broke
-the grain claim, and `score_expected_outputs` raises rather than align a mismatched
-pair (which would report a fabricated result).
+Row alignment is by POSITION: target row i was produced from eval-dataset row i.
+That holds because this only scores paths compatibility judged grain-preserving, and
+`Stage.is_grain_preserving` is defined as 1:1 AND order-preserving (see its docstring
+— the guarantee is declared where a stage claims it, not assumed here). The one
+observable consequence — row count — is still checked: a length mismatch means a stage
+broke the grain claim, and `score_expected_outputs` raises rather than align a
+mismatched pair (which would report a fabricated result). A reorder that kept the count
+can't be detected post-hoc, which is exactly why order-preservation is part of the
+is_grain_preserving contract rather than a hope at this call site.
 """
 from __future__ import annotations
 

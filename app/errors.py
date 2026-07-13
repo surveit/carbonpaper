@@ -55,7 +55,8 @@ class EvalGrainViolationError(Exception):
     mismatched pair and reporting a fabricated result."""
 
 
-class EvalPathwayError(Exception):
-    """Executing the override→target pathway did not cleanly produce the target's
-    output: a frontier stage errored, or the path halted for human review. The
-    message names what went wrong; the eval run is recorded as `error`."""
+class SubsetRunError(Exception):
+    """Running a subset of a workflow did not cleanly produce every requested
+    stage output: a stage errored, or the run halted for human review. The
+    message names what went wrong. (General runtime failure — callers like the
+    eval runner translate it into their own outcome, e.g. an `error` eval run.)"""

@@ -26,8 +26,8 @@ from typing import Any
 import pandas as pd
 import pyarrow.lib as pa_lib
 
-from app.errors import NoVersionToRunError
-from app.models import Stage
+from app.errors import NoVersionToRunError, SubsetRunError
+from app.models import Stage, Workflow
 from app.services.loader import WorkflowLoadError
 from app.services import versioning
 
@@ -230,6 +230,76 @@ def execute_run(
         prepare_run(project_dir, repo_root, version_id,
                     limits=limits, offsets=offsets)
     )
+
+
+def run_subset(
+    workflow: Workflow,
+    *,
+    injected_outputs: dict[str, pd.DataFrame],
+    stage_ids: list[str],
+    run_dir: Path,
+    repo_root: Path,
+) -> dict[str, pd.DataFrame]:
+    """Run only `stage_ids` of `workflow`, with `injected_outputs` seeded as the
+    outputs of stages OUTSIDE the subset (their upstream is cut off — the output is
+    given, not computed). Returns the outputs of every executed stage.
+
+    Any input of a subset stage that names a stage outside the subset must appear in
+    `injected_outputs`, or `_execute_stages` fails on it. Raises SubsetRunError if an
+    executed stage errors or the run halts for review, so a caller gets a clean output
+    set or a loud failure — never a half-populated dict."""
+    by_id = {stage.id: stage for stage in workflow.stages}
+    missing = [sid for sid in stage_ids if sid not in by_id]
+    if missing:
+        raise SubsetRunError(f"subset names stage(s) not in the workflow: {missing}")
+    ordered = topological_sort([by_id[sid] for sid in stage_ids])
+    (run_dir / "outputs").mkdir(parents=True, exist_ok=True)
+    outputs: dict[str, pd.DataFrame] = dict(injected_outputs)
+    manifest = _execute_stages(
+        ordered, _subset_ctx(repo_root, run_dir), _subset_manifest(run_dir, ordered),
+        run_dir, outputs)
+    _raise_if_run_failed(manifest)
+    return outputs
+
+
+def _subset_ctx(repo_root: Path, run_dir: Path) -> dict[str, Any]:
+    # No project_dir: a subset run is keyed on the Workflow + run_dir, not a project
+    # tree. A handler that needs project-relative state (only human_review_queue does,
+    # and it halts a subset run anyway) fails loudly on the missing key rather than
+    # reading a fabricated wrong directory.
+    return {"repo_root": repo_root, "run_dir": run_dir,
+            "queue_stats": {}, "limits": {}, "offsets": {}}
+
+
+def _subset_manifest(run_dir: Path, ordered: list[Stage]) -> dict[str, Any]:
+    return {
+        "run_id": run_dir.name,
+        "started_at": datetime.now().isoformat(timespec="seconds"),
+        "status": "running",
+        "stages": [{"stage_id": s.id, "type": s.type, "name": s.name,
+                    "status": "pending", "input_validation": [], "output_validation": None,
+                    "elapsed_ms": 0, "rows": 0, "error": None,
+                    "started_at": None, "finished_at": None}
+                   for s in ordered],
+    }
+
+
+def _raise_if_run_failed(manifest: dict[str, Any]) -> None:
+    """Turn a non-clean manifest into a SubsetRunError naming the cause. Reads the
+    same status/stage records `_execute_stages` writes — the manifest is the run's
+    result of record, so failure detection lives with it, not in each caller."""
+    status = manifest.get("status")
+    if status in ("ok", "warnings"):
+        return
+    if status == "awaiting_review":
+        raise SubsetRunError(
+            f"run halted for human review at {manifest.get('halted_at')!r}")
+    for stage in manifest.get("stages", []):
+        if stage.get("status") == "error":
+            error = stage.get("error") or {}
+            raise SubsetRunError(
+                f"stage {stage['stage_id']!r} errored: {error.get('message', 'unknown error')}")
+    raise SubsetRunError(f"run did not complete (status {status!r})")
 
 
 def _execute_stages(

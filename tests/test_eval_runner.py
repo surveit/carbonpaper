@@ -1,4 +1,4 @@
-"""End-to-end tests for the eval runner (app/services/eval_runner.py): inject an
+"""End-to-end tests for the eval runner (app/evals/runner.py): inject an
 eval dataset at the override stage, run the grain-preserving pathway to the target,
 score the target's output against the dataset's expected column, and record the run.
 
@@ -18,7 +18,7 @@ from app.errors import EvalNotScorableError
 from app.main import app
 from app.models import EvalConfig, ExpectedOutput, FileFormat, TableRef
 from app.models.schema import TableSchema
-from app.services.eval_runner import run_eval
+from app.evals.runner import run_eval
 from app.services.eval_store import load_eval_run, save_eval_config
 
 _LOAD = {
