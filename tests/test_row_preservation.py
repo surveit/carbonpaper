@@ -86,19 +86,19 @@ def test_row_preserving_types_declare_true(stage_type):
     ["python_frame_function", "join", "aggregate", "human_review_queue", "publish"],
 )
 def test_reshaping_and_terminal_types_declare_false(stage_type):
-    # Narrower than is_grain_preserving: human_review_queue (may DROP rows via
-    # its filter) and publish (terminal sink) are grain-preserving but NOT
-    # positionally row-preserving.
+    # Narrower than is_grain_and_order_preserving: human_review_queue (may DROP
+    # rows via its filter) and publish (terminal sink) are grain-and-order-
+    # preserving but NOT positionally row-preserving.
     assert _minimal_stage(stage_type).is_row_preserving is False
 
 
-def test_row_preserving_is_a_strict_subset_of_grain_preserving():
+def test_row_preserving_is_a_strict_subset_of_grain_and_order_preserving():
     for stage_type in ["input_data", "python_row_function", "llm_transform"]:
         s = _minimal_stage(stage_type)
-        assert s.is_row_preserving and s.is_grain_preserving
+        assert s.is_row_preserving and s.is_grain_and_order_preserving
     for stage_type in ["human_review_queue", "publish"]:
         s = _minimal_stage(stage_type)
-        assert s.is_grain_preserving and not s.is_row_preserving
+        assert s.is_grain_and_order_preserving and not s.is_row_preserving
 
 
 # ── The enforcement helper (unit) ────────────────────────────────────────────
@@ -133,6 +133,58 @@ def test_check_is_noop_for_input_data_source():
     stage = _minimal_stage("input_data")
     out = pd.DataFrame({"a": [1, 2, 3]})
     check_row_preservation(stage, {}, out)  # no raise
+
+
+# ── The positional key-equivalence backstop (unit) ───────────────────────────
+# Redundant with the trusted-by-construction order: when the input declares a
+# primary key that survives into the output, the key must line up row-for-row.
+# Catches a reorder/re-key bug that leaves the row COUNT intact.
+
+def test_check_raises_when_declared_key_is_misaligned():
+    # llm_transform declares primary_key ["id"] on its input; counts match but
+    # the output's key is in a different row order than the input's.
+    stage = _minimal_stage("llm_transform")
+    src = pd.DataFrame({"id": ["a", "b"], "text": ["x", "y"]})
+    swapped = pd.DataFrame({"id": ["b", "a"], "text": ["y", "x"], "score": [1, 2]})
+    with pytest.raises(RowPreservationError) as exc:
+        check_row_preservation(stage, {"up": src}, swapped)
+    assert "['id']" in str(exc.value)
+    assert stage.id in str(exc.value)
+
+
+def test_check_passes_when_declared_key_lines_up():
+    stage = _minimal_stage("llm_transform")
+    src = pd.DataFrame({"id": ["a", "b"], "text": ["x", "y"]})
+    aligned = pd.DataFrame({"id": ["a", "b"], "text": ["x", "y"], "score": [1, 2]})
+    check_row_preservation(stage, {"up": src}, aligned)  # no raise
+
+
+def test_check_skips_key_equivalence_when_no_key_declared():
+    # python_row_function's input declares no primary_key → stay on the trusted
+    # order and never compare keys, even if values differ row-for-row.
+    stage = _minimal_stage("python_row_function")
+    src = pd.DataFrame({"a": [1, 2]})
+    reordered = pd.DataFrame({"a": [2, 1]})
+    check_row_preservation(stage, {"up": src}, reordered)  # no raise
+
+
+def test_check_skips_key_equivalence_when_key_absent_from_output():
+    # Key declared on the input but the output no longer carries it → nothing to
+    # compare; a missing declared column is already an output-schema validation
+    # error, not this check's job to re-flag.
+    stage = _minimal_stage("llm_transform")
+    src = pd.DataFrame({"id": ["a", "b"], "text": ["x", "y"]})
+    no_key = pd.DataFrame({"text": ["y", "x"], "score": [1, 2]})
+    check_row_preservation(stage, {"up": src}, no_key)  # no raise
+
+
+def test_check_tolerates_benign_key_dtype_change():
+    # int key in, float key out, same values in the same order → aligned. The
+    # backstop guards against reordering, not a benign dtype promotion.
+    stage = _minimal_stage("llm_transform")
+    src = pd.DataFrame({"id": [1, 2], "text": ["x", "y"]})
+    promoted = pd.DataFrame({"id": [1.0, 2.0], "text": ["x", "y"], "score": [1, 2]})
+    check_row_preservation(stage, {"up": src}, promoted)  # no raise
 
 
 # ── End-to-end through the runner (fails loudly, persists the property) ───────

@@ -44,12 +44,16 @@ def check_row_preservation(
     single input is the invariant we can and do check on every run; a mismatch
     is the observable symptom of any fan-out / fan-in such a stage must never do.
 
-    Ordering (output row *i* corresponds to input row *i*) is preserved by
-    construction, not re-checked here: the row-preserving handlers emit in
-    input-row order (`python_row_function` iterates the input's records in
-    order; `llm_transform` zips the per-row replies back in order). We cannot
-    cheaply verify positional identity by value because these stages transform
-    the cells — so equal counts + in-order emission is the guarantee.
+    Ordering (output row *i* corresponds to input row *i*) is guaranteed by the
+    runtime's in-order mapping loop, not by these checks: the row-preserving
+    handlers emit in input-row order (`python_row_function` iterates the input's
+    records in order; `llm_transform` zips the per-row replies back in order).
+    Two checks back that trust: row-COUNT equality (always), and — when the input
+    declares a primary key that survives into the output — positional key
+    equivalence (out row *i*'s key == in row *i*'s key), a redundant backstop
+    that catches a reorder/re-key bug the count check alone cannot. The
+    transformed non-key cells still cannot be cheaply verified, so for a no-key
+    stage equal counts + in-order emission remains the guarantee.
 
     `input_data` originates rows and has no input, so there is nothing to
     compare and this is a no-op there. A non-row-preserving stage is skipped
@@ -76,6 +80,40 @@ def check_row_preservation(
             f"the stage 1:1, or change its type (e.g. python_frame_function for a "
             f"reshaping transform)."
         )
+
+    # Redundant backstop on the trusted-by-construction order: when the input
+    # declares a primary key that survives into the output, verify the key lines
+    # up row-for-row (out[i] key == in[i] key). The runtime's in-order mapping
+    # loop is what guarantees order; this catches a zip/reorder bug that keeps
+    # the row count intact but pairs an output row with the wrong input row. No
+    # declared key, or a key a handler legitimately dropped/renamed in the
+    # output → nothing to compare, and the trusted guarantee stands (skip).
+    input_schema = stage.inputs[0].table_schema
+    pk = input_schema.primary_key if input_schema else None
+    if pk and all(c in src.columns and c in output.columns for c in pk):
+        if not _key_lines_up_positionally(src, output, pk):
+            raise RowPreservationError(
+                f"Stage '{stage.id}' (type {stage.type}) preserved its input's row "
+                f"count but its primary key {pk} does not line up row-for-row with "
+                f"the input — output row i must carry input row i's key. A key "
+                f"mismatch at equal counts means rows were reordered or re-keyed, "
+                f"which would silently corrupt any positional (row-ordinal) lineage "
+                f"trace across this stage."
+            )
+
+
+def _key_lines_up_positionally(
+    src: pd.DataFrame, output: pd.DataFrame, pk: list[str]
+) -> bool:
+    """True if the primary-key column(s) match the input row-for-row, compared
+    by position (index reset) and by value: NaN aligns with NaN, and numeric
+    dtypes compare by value so a benign int→float does not read as a mismatch.
+    A False means an output row carries a different key than the input row at the
+    same position — the order the stage is trusted to preserve was not kept."""
+    left = src[pk].reset_index(drop=True)
+    right = output[pk].reset_index(drop=True)
+    matched = (left == right) | (left.isna() & right.isna())
+    return bool(matched.to_numpy().all())
 
 
 # Map our type vocabulary to permissive pandas dtype checks.

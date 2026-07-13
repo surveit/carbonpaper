@@ -421,12 +421,14 @@ class Stage(_Base):
         can trust it instead of re-deriving row-preservation from a hardcoded
         stage-type set of its own.
 
-        Deliberately NARROWER than `is_grain_preserving`: that property is the
-        eval-gating question and also counts `human_review_queue` (keyed, edits
-        in place) and `publish` (terminal) as grain-preserving. Neither is
-        positionally 1:1 the runtime can enforce — a review queue may DROP rows
-        (its `filter`), and publish is a side-effecting sink — so neither is
-        row-preserving here."""
+        Narrower than `is_grain_and_order_preserving` (with which it now shares
+        the word "order"): that property is the eval-gating question and also
+        counts `human_review_queue` (keyed, edits in place) and `publish`
+        (terminal). Neither is a positional row-ordinal 1:1 the runtime can
+        enforce — a review queue may DROP rows (its `filter`), and publish is a
+        side-effecting sink — so neither is row-preserving. `is_row_preserving`
+        is exactly the subset that is count-checkable per run, and it is the
+        property the tracer reads."""
         return self.type in (
             StageType.input_data,
             StageType.python_row_function,
