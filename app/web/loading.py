@@ -19,14 +19,73 @@ from app.web.config import EXAMPLES_DIR, REPO_ROOT
 
 # ─── Projects & stages ──────────────────────────────────────────────────
 
-def list_projects() -> list[str]:
+def list_projects() -> list[dict[str, Any]]:
+    """One project card per dir under examples/ that has EITHER a workflow
+    (compiled/*.json) OR a data model (schemas/*.json). Returns the shape the home
+    dashboard renders: name, what's authored (has_workflow / has_schemas), and the
+    counts shown on the badge (stages, schema docs, runs). Sorted by name.
+
+    Every count is read off disk — a card never advertises a stage/schema/run that
+    isn't there. A dir with neither a workflow nor a data model is not a project yet
+    and is omitted (not shown as an empty card). A run counts only if it has a
+    manifest.json (mirrors list_runs), so the count is real runs, never inflated."""
     if not EXAMPLES_DIR.exists():
         return []
-    return [
-        p.name
-        for p in sorted(EXAMPLES_DIR.iterdir())
-        if p.is_dir() and (p / "compiled").is_dir()
-    ]
+    out: list[dict[str, Any]] = []
+    for p in sorted(EXAMPLES_DIR.iterdir()):
+        if not p.is_dir():
+            continue
+        compiled_dir = p / "compiled"
+        schemas_dir = p / "schemas"
+        n_stages = len(list(compiled_dir.glob("*.json"))) if compiled_dir.is_dir() else 0
+        has_workflow = n_stages > 0
+        has_schemas = schemas_dir.is_dir() and any(schemas_dir.glob("*.json"))
+        n_schemas = len(load_schemas(p)) if has_schemas else 0
+        rdir = p / "runs"
+        n_runs = (
+            sum(1 for r in rdir.iterdir() if r.is_dir() and (r / "manifest.json").exists())
+            if rdir.is_dir() else 0
+        )
+        if not (has_workflow or has_schemas):
+            continue
+        out.append({
+            "name": p.name,
+            "has_workflow": has_workflow,
+            "has_schemas": has_schemas,
+            "n_stages": n_stages,
+            "n_schemas": n_schemas,
+            "n_runs": n_runs,
+        })
+    return out
+
+
+def load_schemas(project_dir: Path) -> list[dict[str, Any]]:
+    """Load the named-schema data model from <project_dir>/schemas/*.json — one schema
+    object per file (the shape the schema writer emits). Returns [] if the project has
+    no data model yet. A JSON parse error surfaces as an _error schema rather than
+    dropping the file silently."""
+    schemas_dir = Path(project_dir) / "schemas"
+    if not schemas_dir.is_dir():
+        return []
+    schemas: list[dict[str, Any]] = []
+    for schema_file in sorted(schemas_dir.glob("*.json")):
+        try:
+            doc = json.loads(schema_file.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as exc:
+            schemas.append({
+                "name": schema_file.stem,
+                "title": f"[JSON ERROR] {schema_file.name}",
+                "kind": "reference",
+                "notes": f"JSON parse error: {exc}",
+                "_filename": schema_file.name,
+                "_error": True,
+            })
+            continue
+        if not doc:
+            continue
+        doc["_filename"] = schema_file.name
+        schemas.append(doc)
+    return schemas
 
 
 @dataclass
@@ -58,26 +117,21 @@ def load_stages(project: str) -> StageListing:
     return StageListing(stages=stages, issues=[], order=order)
 
 
+def load_stages_or_empty(project: str) -> StageListing:
+    """Like load_stages, but returns an EMPTY listing instead of 404 when the project
+    has no compiled/ workflow yet. For the shell's workflow section, which renders the
+    locked/empty page (not an error) for a project that has no workflow authored."""
+    compiled_dir = EXAMPLES_DIR / project / "compiled"
+    if not compiled_dir.is_dir():
+        return StageListing(stages=[], issues=[], order={})
+    return load_stages(project)
+
+
 def find_stage(stages: list[Stage], stage_id: str) -> Stage | None:
     return next((s for s in stages if s.id == stage_id), None)
 
 
 # ─── Source & code reads ─────────────────────────────────────────────────────
-
-def read_prose_excerpt(stage: Stage, project: str) -> str | None:
-    doc = stage.source.doc if stage.source else None
-    if not doc:
-        return None
-    candidate = REPO_ROOT / doc
-    if not candidate.exists():
-        candidate = EXAMPLES_DIR / project / "stages" / Path(doc).name
-        if not candidate.exists():
-            return None
-    try:
-        return candidate.read_text(encoding="utf-8")
-    except OSError:
-        return None
-
 
 def read_module_code(module_path: str) -> str | None:
     """Resolve module 'examples.lobbymap.code.foo' to a file path and read it."""
@@ -199,6 +253,31 @@ def load_output_table(run_dir: Path, rel_path: str | None) -> dict[str, Any]:
         "rows": rows,
         "rows_total": len(df),
         "capped": len(df) > len(rows),
+    }
+
+
+def load_output_row(run_dir: Path, rel_path: str | None, row: int) -> dict[str, Any] | None:
+    """Preview shape (columns, rows_total, preview) holding just row `row` of a
+    stage output — the row-scoped variant of `load_output_preview`, used by the
+    lineage-trimmed stage panel. None if no path; {"error": ...} if unreadable;
+    an empty `preview` with `out_of_range` when the ordinal is past the end."""
+    if not rel_path:
+        return None
+    path = run_dir / rel_path
+    if not path.exists():
+        return {"error": f"missing on disk: {rel_path}"}
+    try:
+        df = read_table(path)
+    except Exception as exc:  # noqa: BLE001
+        return {"error": str(exc)}
+    if row < 0 or row >= len(df):
+        return {"columns": list(df.columns), "rows_total": len(df),
+                "preview": [], "row_index": row, "out_of_range": True}
+    return {
+        "columns": list(df.columns),
+        "rows_total": len(df),
+        "preview": df.iloc[[row]].fillna("").astype(str).to_dict(orient="records"),
+        "row_index": row,
     }
 
 

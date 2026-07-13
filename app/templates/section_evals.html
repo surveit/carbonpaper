@@ -1,0 +1,71 @@
+{% extends "project_shell.html" %}
+{#
+  EVALS — the evals list, framed by the project sidebar.
+
+  Context the route passes:
+    state = shell_state(project_dir); section = "evals"
+    evals = list of {id, name, status, issues}  (issues = parse/run problems, if any)
+    load_issues = workflow-load issues that stop compatibility being checked at all
+
+  Read-only: evals are authored elsewhere (the authoring form is a later PR), so there
+  is no "new eval" action here yet. Status is truthful — one word per eval, from
+  eval_store.eval_status.
+#}
+{% set badge_class = {
+     "run succeeded": "ok", "stale": "warn", "never run": "pending",
+     "no eval dataset yet": "pending", "run errored": "err", "broken": "err",
+   } %}
+{% block section %}
+<div class="sec-head wf-head">
+  <div class="wf-head-title">
+    <h1>Evals</h1>
+    <p class="lede">An eval checks whether a stretch of the workflow — from an
+      <strong>override</strong> stage to a <strong>target</strong> stage — still produces
+      the expected output on a fixed dataset. Status reflects both whether the eval still
+      fits the workflow and whether its last run is current.</p>
+  </div>
+</div>
+
+{% if load_issues %}
+<div class="load-issues">
+  <strong>{{ load_issues|length }} compiled file(s) failed validation; evals cannot be
+    checked against the workflow:</strong>
+  <ul>
+  {% for entry in load_issues %}
+    <li><code>{{ entry.filename }}</code>
+      <ul>{% for issue in entry.issues %}<li>{{ issue }}</li>{% endfor %}</ul>
+    </li>
+  {% endfor %}
+  </ul>
+</div>
+{% endif %}
+
+{% if evals %}
+<table class="stages">
+  <thead>
+    <tr><th>name</th><th>status</th><th></th></tr>
+  </thead>
+  <tbody>
+    {% for e in evals %}
+    <tr>
+      <td><a href="/project/{{ state.name }}/evals/{{ e.id }}">{{ e.name }}</a></td>
+      <td><span class="badge {{ badge_class.get(e.status, 'pending') }}">{{ e.status }}</span></td>
+      <td>
+        {% if e.issues %}
+        <div class="load-issues">
+          <ul>{% for issue in e.issues %}<li>{{ issue }}</li>{% endfor %}</ul>
+        </div>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<div class="empty-state">
+  <h2>No evals yet</h2>
+  <p class="muted">No eval configs are stored for this project. Evals are created from the
+    authoring form (coming in a later change).</p>
+</div>
+{% endif %}
+{% endblock %}

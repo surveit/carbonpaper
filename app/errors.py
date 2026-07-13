@@ -8,6 +8,16 @@ risk import cycles."""
 from __future__ import annotations
 
 
+class StageNotInRun(ValueError):
+    """A trace was requested for a stage id absent from the run's manifest — a
+    bad path/param (→ 404), not an internal fault."""
+
+
+class RowOutOfRange(ValueError):
+    """A trace was requested for a row ordinal outside a stage's output — a bad
+    path/param (→ 400), not an internal fault."""
+
+
 class NoVersionToRunError(Exception):
     """A run was requested for a project that has no version to run.
 
@@ -16,3 +26,17 @@ class NoVersionToRunError(Exception):
     "Create version" action). Raised when `version_id` is None and no version
     exists yet — rather than fabricating a snapshot as a run side effect, which
     would immortalise (and potentially poison) the working copy."""
+
+
+class RegenerateWithoutSnapshotError(Exception):
+    """Raised when a from-scratch compile would overwrite reviewed work without a
+    prior version snapshot and without explicit confirm_overwrite."""
+
+
+class GenerationError(Exception):
+    """A headless agent generation could not produce a VALID artifact.
+
+    Raised by `app.agent.agent.Agent.run` when the agent does not submit output that
+    validates against the target schema within its attempt budget. Fails loudly rather
+    than returning or persisting a partial or fabricated result — the caller logs the
+    failure honestly, never a fake success."""

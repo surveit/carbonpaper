@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}New methodology · paste doc → data model → workflow{% endblock %}
+
+{% block head_extra %}
+<style>
+  .meta-line { color:#666; font-size:13px; margin:4px 0 16px; }
+  .compile-form { max-width: 760px; }
+  .doc-textarea {
+    width: 100%; box-sizing: border-box; min-height: 360px; resize: vertical;
+    padding: 12px 14px; border: 1px solid #cfd4da; border-radius: 6px;
+    font-family: "SFMono-Regular", "Consolas", "Liberation Mono", Menlo, monospace;
+    font-size: 13px; line-height: 1.5; white-space: pre-wrap;
+  }
+  .doc-textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  .field { margin: 14px 0; }
+  .field label { display:block; font-weight:600; font-size:13px; margin-bottom:6px; }
+  .field input[type="text"] { width: 360px; max-width:100%; padding:7px 9px;
+    border:1px solid #cfd4da; border-radius:6px; font:inherit; }
+  .field select { padding:7px 9px; border:1px solid #cfd4da; border-radius:6px; font:inherit; }
+</style>
+{% endblock %}
+
+{% block header_extra %}
+<a href="/" class="back-link">← projects</a>
+{% endblock %}
+
+{% block content %}
+<h1>New methodology · paste doc → data model → workflow</h1>
+<p class="lede">
+  Paste a methodology write-up (how an investigation finds, verifies, and surfaces
+  its claims). The compiler describes the <strong>data model first</strong> — the named
+  schemas it needs — and <strong>STOPS for your approval</strong>. Only after you approve
+  does it author the workflow that wires those schemas. Output lands in a new
+  <code>examples/&lt;name&gt;/</code> working copy with the full review / version / run UI.
+</p>
+
+<div class="compile-form">
+  <form method="post" action="/project/new">
+    <div class="field">
+      <label for="m-name">Methodology name</label>
+      <input type="text" id="m-name" name="name" value="{{ default_name or '' }}"
+             placeholder="e.g. gated_demo" required
+             pattern="[A-Za-z0-9_\-]+"
+             title="letters, numbers, underscore, hyphen — becomes the examples/&lt;name&gt;/ directory">
+      <p class="meta-line">Becomes the <code>examples/&lt;name&gt;/</code> directory. Letters,
+        numbers, <code>_</code> and <code>-</code> only.</p>
+    </div>
+
+    <div class="field">
+      <label for="m-doc">Methodology document</label>
+      <textarea id="m-doc" class="doc-textarea" name="doc_text" required
+                placeholder="Paste the methodology here — prose describing the data sources, the intermediate tables, the judgment steps, and what gets published…">{{ default_doc or '' }}</textarea>
+      <p class="meta-line">Paste only — no file upload or URL fetch. The full text is kept
+        with the project at <code>examples/&lt;name&gt;/document.md</code>.</p>
+    </div>
+
+    <div class="field">
+      <label for="m-model">Model</label>
+      <select id="m-model" name="model">
+        <option value="sonnet" selected>sonnet (quality)</option>
+        <option value="haiku">haiku (fast)</option>
+      </select>
+    </div>
+
+    <button type="submit" class="btn primary">▶ Start</button>
+    <p class="meta-line">Creates <code>examples/&lt;name&gt;/</code>, then
+      opens the project. There you stream Phase 1 (data model), approve it, then build
+      the workflow.</p>
+  </form>
+</div>
+{% endblock %}

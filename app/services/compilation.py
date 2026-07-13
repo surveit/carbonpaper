@@ -87,6 +87,19 @@ def write_methodology(result: dict[str, Any], out_dir: str | Path) -> dict[str, 
     }
 
 
+def regenerate_workflow(result: dict[str, Any], project_dir: str | Path) -> dict[str, Any]:
+    """Replace a project's whole compiled/ workflow with `result`'s stages: remove
+    stale stage files a shrinking recompile would otherwise leave behind, then
+    write the new set. The full-reset counterpart to write_methodology's plain
+    write; the disk manipulation lives here in the compile-writer service, not in
+    the caller."""
+    compiled = Path(project_dir) / "compiled"
+    if compiled.is_dir():
+        for stale in compiled.glob("*.json"):
+            stale.unlink()
+    return write_methodology(result, project_dir)
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Compilation object — persist a compile as a first-class object (parallels a RUN)
 # ─────────────────────────────────────────────────────────────────────────────
@@ -167,7 +180,7 @@ def run_prepared_compilation(prep: dict[str, Any]) -> str:
     try:
         input_text = read_input(input_path)
         result = compile_methodology(input_text, name, model=model)
-    except Exception as exc:  # the compile failed — record it honestly, don't fake
+    except Exception as exc:  # noqa: BLE001 — supervisor boundary: any compile failure is recorded honestly, never faked
         manifest["status"] = "error"
         manifest["error"] = f"{type(exc).__name__}: {exc}"
         manifest["finished_at"] = datetime.now().isoformat(timespec="seconds")
@@ -251,7 +264,7 @@ def list_compilations(
             "input": m.get("input"),
             "model": m.get("model"),
             "status": m.get("status", "unknown"),
-            "n_stages": m.get("n_stages", 0),
+            "n_stages": m.get("n_stages"),
             "n_validation_issues": len(m.get("validation_issues") or []),
         })
     return out

@@ -7,8 +7,35 @@
 [tool.ruff]
 target-version = "py312"
 
+[tool.ruff.lint]
+# Ruff's default select (E4, E7, E9, F) plus BLE (flake8-blind-except): never
+# catch bare `except Exception`/`except:` — catch specific exception types.
+select = ["E4", "E7", "E9", "F", "BLE"]
+
 [tool.mypy]
 python_version = "3.12"
 files = ["app"]
-# No ignore_missing_imports: pandas-stubs is installed via requirements-dev.txt,
-# and the other deps ship their own types.
+# No blanket ignore_missing_imports: pandas-stubs and types-PyYAML are installed
+# via requirements-dev.txt, and the other deps ship their own types.
+
+# pyarrow is the exception: its compiled `pyarrow.lib` extension ships no
+# py.typed marker, so mypy can't analyze `import pyarrow` under CI (a locally
+# installed marker masks this). Scope the exemption to pyarrow only.
+[[tool.mypy.overrides]]
+module = ["pyarrow", "pyarrow.*"]
+ignore_missing_imports = true
+
+# Architecture boundaries, enforced by import-linter (`PYTHONPATH=. lint-imports`).
+# The content-level companions live in tests/arch/.
+[tool.importlinter]
+root_package = "app"
+
+[[tool.importlinter.contracts]]
+name = "Agent spine is domain-agnostic"
+type = "forbidden"
+source_modules = ["app.agent"]
+forbidden_modules = ["app.compiler", "app.web", "app.services"]
+# app.agent is a reusable chat/agent engine. It may use app.runtime (the LLM/CLI
+# backend adapter) and core models, but must not import domain layers — so any
+# agent can run on it. The dependency points the other way: app.compiler.agent
+# imports app.agent to register itself, never the reverse.

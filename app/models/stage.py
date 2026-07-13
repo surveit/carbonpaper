@@ -19,6 +19,7 @@ from app.models.schema import (
     _SNAKE_RE,
     format_errors,
 )
+from app.models.stages.code import check_inline_function_code
 
 # ── Enumerated vocabularies ──────────────────────────────────────────────────
 class StageType(str, Enum):
@@ -132,6 +133,17 @@ class PythonFunction(_Base):
             raise ValueError("function.kind=module needs `module`")
         if self.kind == FunctionKind.inline and not self.code:
             raise ValueError("function.kind=inline needs `code`")
+        return self
+
+    @model_validator(mode="after")
+    def _inline_code_is_runnable(self) -> "PythonFunction":
+        """Inline code must parse and define the function the runtime calls
+        (`transform` by default). Enforced here — a single stage's invariant — so
+        broken code (e.g. a bare body with a top-level `return`) is rejected at
+        write time instead of raising only when the runner exec()s it."""
+        if self.kind != FunctionKind.inline or not self.code:
+            return self
+        check_inline_function_code(self.code, self.function)
         return self
 
 
@@ -296,6 +308,62 @@ class Stage(_Base):
                 f"type `{self.type}` takes <= {max_inputs} input(s), got {len(self.inputs)} "
                 f"(more than one input is a join, or use python_frame_function)"
             )
+        return self
+
+    @model_validator(mode="after")
+    def _llm_transform_one_to_one(self) -> "Stage":
+        """An llm_transform maps one input row to one output row, so on its
+        DECLARED schemas alone it must: take exactly one input; declare a
+        primary_key on both that input's schema and its output_schema, naming
+        the same columns; keep every input column unchanged (a transform never
+        rewrites an existing column's schema); and add at least one new column.
+
+        Enforced here — a stage carries its own contract — so the reply spec the
+        runtime derives (`output_schema.subtract(input_schema)`) is exactly the
+        added columns and can never throw mid-run. Cross-stage checks (unique
+        ids, inputs resolve, acyclic) live in `workflow.graph_issues`; a single
+        stage's invariants live on the stage."""
+        if self.type != StageType.llm_transform:
+            return self
+
+        if len(self.inputs) != 1:
+            raise ValueError(
+                f"llm_transform must have exactly one input, has {len(self.inputs)}"
+            )
+        input_schema = self.inputs[0].table_schema
+        output_schema = self.output_schema
+        if input_schema is None or output_schema is None:
+            missing = "input schema" if input_schema is None else "output_schema"
+            raise ValueError(
+                f"llm_transform declares no {missing}; a 1:1 stage needs a "
+                "primary_key on both its input and output schemas"
+            )
+
+        issues: list[str] = []
+        input_pk, output_pk = input_schema.primary_key, output_schema.primary_key
+        if not input_pk:
+            issues.append("input schema declares no primary_key")
+        if not output_pk:
+            issues.append("output_schema declares no primary_key")
+        if input_pk and output_pk and set(input_pk) != set(output_pk):
+            issues.append(
+                f"input primary_key {input_pk} != output primary_key {output_pk}"
+            )
+
+        if not input_schema.is_subset_of(output_schema):
+            issues.append(
+                "output must keep every input column unchanged (a transform is "
+                f"additive: output ⊇ input); input columns "
+                f"{[c.name for c in input_schema.columns]} vs output columns "
+                f"{[c.name for c in output_schema.columns]}"
+            )
+
+        input_names = {c.name for c in input_schema.columns}
+        if not any(c.name not in input_names for c in output_schema.columns):
+            issues.append("output_schema adds no columns beyond the input")
+
+        if issues:
+            raise ValueError("llm_transform not strictly 1:1: " + "; ".join(issues))
         return self
 
     @property

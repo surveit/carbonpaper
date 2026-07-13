@@ -14,10 +14,15 @@ build/
 compilations/
 
 # Chat session transcripts (file-backed, per app/chat/store.py)
-app/chat/_sessions/
+app/agent/_sessions/
 
 # Example methodology content + scratch pipelines. Generated run outputs land
 # here, and lint/typecheck skip these dirs (ruff respects .gitignore).
 # Already-tracked files under examples/ stay tracked; new files need `git add -f`.
 examples/
 saydo/
+
+# Local process artifacts — brainstorming specs, plans, spikes, and scratch
+# scripts stay on the working machine, not in the repo/PRs.
+docs/superpowers/
+scripts/

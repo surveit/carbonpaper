@@ -38,7 +38,7 @@ try:
     )
     _AVAILABLE = True
     _IMPORT_ERROR = None
-except Exception as exc:  # pragma: no cover - import guard
+except ImportError as exc:  # pragma: no cover - import guard
     _AVAILABLE = False
     _IMPORT_ERROR = repr(exc)
 
@@ -106,7 +106,9 @@ async def _aquery(
         if on_event:
             try:
                 on_event(ev)
-            except Exception:
+            except Exception:  # noqa: BLE001 — on_event is arbitrary caller
+                # UI-streaming code; a bug in it must not abort the in-flight
+                # model query loop.
                 pass
 
     try:

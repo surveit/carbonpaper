@@ -16,12 +16,15 @@ def S(**kw):
 
 # ── column types ─────────────────────────────────────────────────────────────
 @pytest.mark.parametrize("t", ["str", "int", "float", "bool", "datetime", "date",
-                                "dict", "json", "list[str]", "list[list[int]]"])
+                                "json", "list[str]", "list[list[int]]"])
 def test_column_type_valid(t):
-    assert m.Column.model_validate({"name": "c", "type": t}).type == t
+    kw = {"name": "c", "type": t}
+    if t == "json":
+        kw["value_type"] = "str"  # a json column must declare fields or value_type
+    assert m.Column.model_validate(kw).type == t
 
 
-@pytest.mark.parametrize("t", ["weird", "List[str]", "list[]", "int32", "array"])
+@pytest.mark.parametrize("t", ["weird", "List[str]", "list[]", "int32", "array", "dict"])
 def test_column_type_invalid(t):
     with pytest.raises(ValidationError):
         m.Column.model_validate({"name": "c", "type": t})
@@ -54,7 +57,11 @@ def test_valid_input_data():
 
 def test_valid_llm_transform():
     s = m.Stage.model_validate(S(
-        id="extract", type="llm_transform", inputs=[{"id": "load"}],
+        id="extract", type="llm_transform",
+        inputs=[{"id": "load", "schema": {"columns": [{"name": "id", "type": "str"}],
+                                          "primary_key": ["id"]}}],
+        output_schema={"columns": [{"name": "id", "type": "str"}, {"name": "out", "type": "str"}],
+                       "primary_key": ["id"]},
         llm={"prompt_template": "do {x}", "tools": ["WebSearch"]}))
     assert s.llm.prompt_template == "do {x}"
 
@@ -72,7 +79,7 @@ def test_publish_also_requires_function():
 def test_publish_config_is_typed():
     s = m.Stage.model_validate(S(
         id="p", type="publish", inputs=[{"id": "a"}],
-        publish={"format": "json"}, function={"kind": "inline", "code": "x"}))
+        publish={"format": "json"}, function={"kind": "inline", "code": "def transform(row): return row"}))
     assert s.publish.format == m.PublishFormat.json
 
 
@@ -80,6 +87,25 @@ def test_python_function_inline_needs_code():
     with pytest.raises(ValidationError):
         m.Stage.model_validate(S(id="t", type="python_frame_function", inputs=[{"id": "a"}],
                                  function={"kind": "inline"}))
+
+
+def test_python_function_inline_code_must_compile():
+    # a bare body with a top-level `return` does not compile — the exact error the
+    # runtime hits when it exec()s the code, now caught at validation time.
+    with pytest.raises(ValidationError):
+        m.Stage.model_validate(S(id="t", type="python_row_function", inputs=[{"id": "a"}],
+                                 function={"kind": "inline", "code": "row['x'] = 1\nreturn row"}))
+
+
+def test_python_function_inline_code_must_define_transform():
+    with pytest.raises(ValidationError):
+        m.Stage.model_validate(S(id="t", type="python_row_function", inputs=[{"id": "a"}],
+                                 function={"kind": "inline", "code": "x = 1"}))
+
+
+def test_python_function_inline_valid_transform_ok():
+    m.Stage.model_validate(S(id="t", type="python_row_function", inputs=[{"id": "a"}],
+                             function={"kind": "inline", "code": "def transform(row): return row"}))
 
 
 def test_bad_id_snake_case():
@@ -179,8 +205,13 @@ def test_unknown_file_format_rejected():
 
 
 def test_model_enum_accepts_known():
-    s = m.Stage.model_validate(S(id="e", type="llm_transform", inputs=[{"id": "a"}],
-                                 llm={"prompt_template": "p", "model": "haiku"}))
+    s = m.Stage.model_validate(S(
+        id="e", type="llm_transform",
+        inputs=[{"id": "a", "schema": {"columns": [{"name": "id", "type": "str"}],
+                                       "primary_key": ["id"]}}],
+        output_schema={"columns": [{"name": "id", "type": "str"}, {"name": "out", "type": "str"}],
+                       "primary_key": ["id"]},
+        llm={"prompt_template": "p", "model": "haiku"}))
     assert s.llm.model == LLMModel.haiku
 
 
@@ -200,10 +231,10 @@ def test_validate_stage_helper():
 # ── PR: typed stage contract ─────────────────────────────────────────────────
 def test_inputs_are_refs_with_schema():
     s = m.Stage.model_validate(S(
-        id="x", type="llm_transform",
+        id="x", type="python_frame_function",
         inputs=[{"id": "a", "schema": {"primary_key": ["k"],
                                        "columns": [{"name": "k", "type": "str"}]}}],
-        llm={"prompt_template": "hi {k}"},
+        function={"kind": "inline", "code": "def transform(row): return row"},
     ))
     assert s.input_ids == ["a"]
     assert s.inputs[0].table_schema is not None
@@ -212,8 +243,8 @@ def test_inputs_are_refs_with_schema():
 
 def test_inputs_accept_bare_id_shorthand():
     s = m.Stage.model_validate(S(
-        id="x", type="llm_transform", inputs=["a"],
-        llm={"prompt_template": "hi"},
+        id="x", type="python_frame_function", inputs=["a"],
+        function={"kind": "inline", "code": "def transform(row): return row"},
     ))
     assert s.input_ids == ["a"]
     assert s.inputs[0].table_schema is None

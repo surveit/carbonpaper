@@ -23,7 +23,7 @@ def _py(id_, inputs, granularity="frame", **kw):
     """granularity 'row' -> python_row_function, else python_frame_function."""
     type_ = "python_row_function" if granularity == "row" else "python_frame_function"
     return S(id=id_, type=type_, inputs=[{"id": i} for i in inputs],
-             function={"kind": "inline", "code": "x"}, **kw)
+             function={"kind": "inline", "code": "def transform(row): return row"}, **kw)
 
 
 def _ref(path="x.csv", cols=("k",)):
@@ -45,12 +45,17 @@ def test_python_row_function_rejects_multiple_inputs():
     with pytest.raises(ValidationError):
         m.Stage.model_validate(S(id="t", type="python_row_function",
                                  inputs=[{"id": "a"}, {"id": "b"}],
-                                 function={"kind": "inline", "code": "x"}))
+                                 function={"kind": "inline", "code": "def transform(row): return row"}))
 
 
 def test_llm_is_grain_preserving():
-    s = m.Stage.model_validate(S(id="e", type="llm_transform", inputs=[{"id": "a"}],
-                                 llm={"prompt_template": "p"}))
+    s = m.Stage.model_validate(S(
+        id="e", type="llm_transform",
+        inputs=[{"id": "a", "schema": {"columns": [{"name": "id", "type": "str"}],
+                                       "primary_key": ["id"]}}],
+        output_schema={"columns": [{"name": "id", "type": "str"}, {"name": "out", "type": "str"}],
+                       "primary_key": ["id"]},
+        llm={"prompt_template": "p"}))
     assert s.is_grain_preserving is True
 
 
@@ -79,16 +84,13 @@ def test_tableref_schema_required():
         m.TableRef.model_validate({"path": "x.csv", "format": "csv"})
 
 
-# ── EvalConfig (merged dataset + eval, one row-aligned table) ────────────────
+# ── EvalConfig (defined by its checks; eval-dataset table is optional data) ──
 def _config(**over):
     base = {
         "id": "scoring", "project": "lobbymap", "name": "n",
         "override_stage": "evidence_with_benchmarks", "target_stage": "benchmark_scoring",
         "table": _ref(cols=["evidence_id", "benchmark_id", "quote", "expected_score"]),
-        "key": ["evidence_id", "benchmark_id"],
-        "input_columns": ["quote"],
-        "expected": [{"actual": "score", "expected": "expected_score",
-                      "metric": "abs_tol", "tolerance": 1}],
+        "expected_outputs": [{"output_column": "score", "metric": "abs_tol", "tolerance": 1}],
     }
     base.update(over)
     return base
@@ -99,7 +101,7 @@ def test_eval_config_valid():
         reference_overrides=[{"stage_id": "benchmark_library", "table": _ref()}],
         metrics=["mean_absolute_error"]))
     assert c.target_stage == "benchmark_scoring"
-    assert c.expected[0].expected == "expected_score"
+    assert c.expected_outputs[0].output_column == "score"
 
 
 def test_eval_config_bad_id():
@@ -112,10 +114,43 @@ def test_eval_config_override_equals_target():
         m.EvalConfig.model_validate(_config(target_stage="evidence_with_benchmarks"))
 
 
-@pytest.mark.parametrize("field", ["key", "input_columns", "expected"])
-def test_eval_config_nonempty(field):
+def test_eval_config_nonempty_expected_outputs():
     with pytest.raises(ValidationError):
-        m.EvalConfig.model_validate(_config(**{field: []}))
+        m.EvalConfig.model_validate(_config(expected_outputs=[]))
+
+
+def test_eval_config_table_optional():
+    # A config with no eval-dataset file is valid: expected_outputs is still required.
+    cfg = m.EvalConfig.model_validate({
+        "id": "e1", "project": "lobbymap", "name": "E1",
+        "override_stage": "a", "target_stage": "b",
+        "expected_outputs": [{"output_column": "score", "metric": "exact"}],
+    })
+    assert cfg.table is None
+
+
+def test_eval_config_no_key_or_input_columns_fields():
+    # `key` and `input_columns` are not part of the contract: the injected
+    # columns are derived from override_stage's output schema, not authored.
+    cfg = m.EvalConfig.model_validate({
+        "id": "e1", "project": "lobbymap", "name": "E1",
+        "override_stage": "a", "target_stage": "b",
+        "expected_outputs": [{"output_column": "score", "metric": "exact"}],
+    })
+    assert not hasattr(cfg, "key")
+    assert not hasattr(cfg, "input_columns")
+
+
+def test_eval_config_rejects_stray_key_field():
+    # extra="forbid" (app/models/schema.py _Base): a leftover `key` value
+    # from an old config is a validation error, not silently-dropped data.
+    with pytest.raises(ValidationError):
+        m.EvalConfig.model_validate({
+            "id": "e1", "project": "lobbymap", "name": "E1",
+            "override_stage": "a", "target_stage": "b",
+            "key": ["doc_id"],
+            "expected_outputs": [{"output_column": "score", "metric": "exact"}],
+        })
 
 
 def test_eval_config_duplicate_reference_override():
@@ -130,9 +165,22 @@ def test_eval_config_code_scorer():
     assert c.code.function == "score"
 
 
-def test_expected_column_abs_tol_needs_tolerance():
+def test_expected_output_abs_tol_needs_tolerance():
     with pytest.raises(ValidationError):
-        m.ExpectedColumn.model_validate({"actual": "a", "expected": "b", "metric": "abs_tol"})
+        m.ExpectedOutput.model_validate({"output_column": "a", "metric": "abs_tol"})
+
+
+def test_expected_output_valid_with_no_expected_field():
+    c = m.ExpectedOutput.model_validate({"output_column": "a"})
+    assert c.output_column == "a"
+    assert not hasattr(c, "expected")
+
+
+def test_expected_output_rejects_stray_expected_field():
+    # extra="forbid" (app/models/schema.py _Base): a leftover `expected` value
+    # from an old config is a validation error, not silently-dropped data.
+    with pytest.raises(ValidationError):
+        m.ExpectedOutput.model_validate({"output_column": "a", "expected": "b"})
 
 
 def test_stage_output_override():
@@ -140,16 +188,25 @@ def test_stage_output_override():
     assert o.stage_id == "benchmark_library"
 
 
-# ── EvalRun embeds settings ──────────────────────────────────────────────────
-def test_eval_run_embeds_settings_and_passed():
+# ── EvalRun embeds settings (no overall pass/fail) ────────────────────────────
+def test_eval_run_embeds_settings():
     r = m.EvalRun.model_validate({
         "id": "run-1", "config": "scoring", "project": "lobbymap",
         "workflow_version": "abc123", "status": "scored",
         "settings": {"can_score_declaratively": True,
                      "frontier": ["benchmark_scoring"], "blocking_stages": []},
-        "passed": True, "metrics": {"mean_absolute_error": 0.33}})
+        "metrics": {"mean_absolute_error": 0.33}})
     assert r.settings.can_score_declaratively is True
-    assert r.passed is True
+
+
+def test_eval_run_has_no_passed_field():
+    run = m.EvalRun.model_validate({
+        "id": "r1", "config": "e1", "project": "lobbymap",
+        "workflow_version": "v1", "status": "scored",
+        "settings": {"can_score_declaratively": True, "frontier": ["b"], "blocking_stages": []},
+        "metrics": {"match_rate": 1.0},
+    })
+    assert not hasattr(run, "passed")
 
 
 # ── resolve_eval_run_settings on a synthetic workflow ─────────────────────────────

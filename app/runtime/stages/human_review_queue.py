@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 import pandas as pd
+import pyarrow.lib as pa_lib
 
 from app.models import Stage
 
@@ -80,7 +81,11 @@ def handle_human_review_queue(stage: Stage, inputs: dict[str, pd.DataFrame], ctx
             queueable_mask = pd.Series(
                 src.eval(_translate_where(flt)), index=src.index, dtype=bool
             )
-        except Exception:
+        except (SyntaxError, ValueError, TypeError, KeyError, AttributeError, NameError):
+            # `flt` is an arbitrary author-supplied expression (queue.filter
+            # in the stage YAML); a malformed one must not crash the run —
+            # everything falls through to the queue instead, and the
+            # specific error is recorded below for the author to fix.
             queueable_mask = pd.Series([False] * len(src), index=src.index)
             ctx.setdefault("queue_stats", {}).setdefault(sid, {})[
                 "filter_error"
@@ -141,7 +146,13 @@ def handle_human_review_queue(stage: Stage, inputs: dict[str, pd.DataFrame], ctx
         # the content_hash so decisions can be recorded against it.
         try:
             pending.to_parquet(queue_path, index=False)
-        except Exception:
+        except (pa_lib.ArrowException, ValueError, TypeError):
+            # A column whose dtype/shape parquet can't represent (mixed-type
+            # object columns, nested Python values) — CSV stringifies those and
+            # succeeds. A disk/OS error (ENOSPC, permission) is deliberately NOT
+            # caught here: it would fail identically for CSV, so it propagates
+            # (and is recorded by the runner) rather than silently degrading the
+            # queue snapshot.
             queue_path = queue_dir / f"{sid}.csv"
             pending.to_csv(queue_path, index=False)
         raise HaltForReview(

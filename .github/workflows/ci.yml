@@ -19,6 +19,9 @@ jobs:
             requirements-dev.txt
       - run: python -m pip install -r requirements-dev.txt
       - run: ruff check .
+      # Architecture boundaries: contracts live in pyproject [tool.importlinter].
+      # PYTHONPATH=. lets grimp import the `app` package (run from source, not installed).
+      - run: PYTHONPATH=. lint-imports
 
   typecheck:
     runs-on: ubuntu-latest
