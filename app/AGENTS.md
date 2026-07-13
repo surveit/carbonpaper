@@ -22,7 +22,8 @@ routers in `app/web/routers/`, which import the Runner (`app.runtime`) and the s
   on `/compile`, not here.
 
 ## Live progress + scratch re-run
-`POST /project/<m>/run` → `prepare_run` (initial `running` manifest) → background thread →
+`POST /project/<m>/run` → resolve version + load its pinned stages → `prepare_run`
+(initial `running` manifest) → background thread →
 redirect; `run_detail.html` polls `…/status` every 2s and updates the graph in place, reloading
 once on the terminal transition. Scratch: pick N input rows → `…/stage/<sid>/preview`
 (`runtime/preview.py`) runs the handler **in memory**, persists nothing; refused for

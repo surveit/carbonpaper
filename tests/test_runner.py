@@ -17,10 +17,19 @@ import json
 import pandas as pd
 import pytest
 
-from app.errors import NoVersionToRunError
+from app.errors import NoVersionToRunError, WorkflowLoadError
 from app.runtime.runner import execute_run
-from app.services.loader import WorkflowLoadError
-from app.services.versioning import create_version
+from app.services.versioning import create_version, load_version_stages, resolve_version_id
+
+
+def _run(root, **kwargs):
+    """Resolve the latest version, load its pinned stages, and execute — the
+    same composition the web trigger route (and the CLI) performs, since the
+    runner takes version-pinned stages as input rather than reading versions."""
+    workflow_version = resolve_version_id(root, None)
+    stages = load_version_stages(root, workflow_version)
+    return execute_run(root, repo_root=root, stages=stages,
+                       workflow_version=workflow_version, **kwargs)
 
 
 def _seed_version(root):
@@ -46,7 +55,7 @@ def _make_project(root):
 def test_limit_truncates_and_is_recorded(tmp_path):
     _make_project(tmp_path)
     _seed_version(tmp_path)
-    manifest = execute_run(tmp_path, repo_root=tmp_path)
+    manifest = _run(tmp_path)
 
     assert manifest["status"] == "ok"
     [rec] = manifest["stages"]
@@ -69,8 +78,7 @@ def test_per_run_limit_and_offset_slice_and_are_recorded(tmp_path):
     # offset 1 drops row 0, then limit 3 keeps rows 1-3.
     _make_project(tmp_path)
     _seed_version(tmp_path)
-    manifest = execute_run(tmp_path, repo_root=tmp_path,
-                           limits={"load": 3}, offsets={"load": 1})
+    manifest = _run(tmp_path, limits={"load": 3}, offsets={"load": 1})
 
     [rec] = manifest["stages"]
     assert rec["rows"] == 3                                   # not the static 2
@@ -97,9 +105,9 @@ def test_per_run_override_for_unknown_stage_id_fails_loudly(tmp_path):
     _make_project(tmp_path)
     _seed_version(tmp_path)
     with pytest.raises(ValueError, match="unknown stage id"):
-        execute_run(tmp_path, repo_root=tmp_path, limits={"nope": 3})
+        _run(tmp_path, limits={"nope": 3})
     with pytest.raises(ValueError, match="unknown stage id"):
-        execute_run(tmp_path, repo_root=tmp_path, offsets={"nope": 1})
+        _run(tmp_path, offsets={"nope": 1})
 
 
 def _two_stage_project(root, rows: list[dict]):
@@ -134,7 +142,7 @@ def test_duplicate_input_rows_fail_the_stage(tmp_path):
         {"name": "a", "val": 1},
     ])
     _seed_version(tmp_path)
-    manifest = execute_run(tmp_path, repo_root=tmp_path)
+    manifest = _run(tmp_path)
 
     records = {r["stage_id"]: r for r in manifest["stages"]}
     assert records["load"]["status"] == "ok"     # producing dupes isn't the error…
@@ -154,7 +162,7 @@ def test_distinct_input_rows_pass(tmp_path):
         {"name": "a", "val": 2},
     ])
     _seed_version(tmp_path)
-    manifest = execute_run(tmp_path, repo_root=tmp_path)
+    manifest = _run(tmp_path)
     assert manifest["status"] == "ok"
     records = {r["stage_id"]: r for r in manifest["stages"]}
     assert records["consume"]["status"] == "ok"
@@ -167,7 +175,7 @@ def test_run_without_a_version_fails_loudly(tmp_path):
     disk — no run dir, no fabricated version."""
     _make_project(tmp_path)  # valid working copy, but no version created
     with pytest.raises(NoVersionToRunError):
-        execute_run(tmp_path, repo_root=tmp_path)
+        _run(tmp_path)
     assert not (tmp_path / "runs").exists()
     assert not (tmp_path / "versions").exists()
 
@@ -208,7 +216,7 @@ def test_invalid_workflow_never_becomes_a_version_and_run_never_pins_stale(tmp_p
 
     # A run refuses (no version) and does NOT auto-create one — nothing on disk.
     with pytest.raises(NoVersionToRunError):
-        execute_run(tmp_path, repo_root=tmp_path)
+        _run(tmp_path)
     assert not (tmp_path / "versions").exists()
     assert not (tmp_path / "runs").exists()
 
@@ -223,9 +231,9 @@ def test_invalid_workflow_never_becomes_a_version_and_run_never_pins_stale(tmp_p
     (tmp_path / "compiled" / "01_load.json").write_text(
         json.dumps(good), encoding="utf-8")
     with pytest.raises(NoVersionToRunError):
-        execute_run(tmp_path, repo_root=tmp_path)
+        _run(tmp_path)
 
     # Explicit creation, then the run succeeds against that version.
     _seed_version(tmp_path)
-    manifest = execute_run(tmp_path, repo_root=tmp_path)
+    manifest = _run(tmp_path)
     assert manifest["status"] == "ok"

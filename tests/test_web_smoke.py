@@ -102,13 +102,16 @@ def test_workflow_section_renders_the_graph():
 
 
 def test_trigger_run_returns_400_on_invalid_dag(monkeypatch):
-    """The run route surfaces a load failure as a 400 with the issue list."""
-    from app.services.loader import WorkflowLoadError
+    """The run route surfaces a version-snapshot load failure as a 400 with the
+    issue list. (The route resolves the pinned version and loads its stages
+    before preparing the run — the runner takes stages as input.)"""
+    from app.errors import WorkflowLoadError
 
-    def _boom(project_dir, repo_root):
+    def _boom(project_dir, version_id):
         raise WorkflowLoadError(Path("compiled"), ["01_bad.json: params.path missing"])
 
-    monkeypatch.setattr(runs_router, "prepare_run", _boom)
+    monkeypatch.setattr(runs_router, "resolve_version_id", lambda pd, vid: "v-test")
+    monkeypatch.setattr(runs_router, "load_version_stages", _boom)
     r = client.post("/project/demo/run")
     assert r.status_code == 400
     assert "01_bad.json: params.path missing" in r.json()["issues"]

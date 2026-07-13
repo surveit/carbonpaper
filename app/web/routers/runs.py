@@ -11,10 +11,10 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
-from app.errors import NoVersionToRunError, RowOutOfRange, StageNotInRun
-from app.services.loader import WorkflowLoadError, load_workflow
+from app.errors import NoVersionToRunError, RowOutOfRange, StageNotInRun, WorkflowLoadError
+from app.services.versioning import load_version_stages, resolve_version_id
 from app.runtime.preview import PREVIEWABLE_TYPES, PreviewError, run_stage_preview
-from app.runtime.runner import prepare_run, resume_run, run_prepared
+from app.runtime.runner import prepare_run, read_run_version, resume_run, run_prepared
 from app.runtime.trace import trace_row, trace_to_dict
 from app.web.trace_view import build_trace_view
 from app.web.config import EXAMPLES_DIR, REPO_ROOT, templates
@@ -56,10 +56,13 @@ async def trigger_run(project: str):
     project_dir = EXAMPLES_DIR / project
     if not project_dir.is_dir():
         raise HTTPException(status_code=404, detail=f"No project '{project}'")
-    # Set up the run (writes an initial `running` manifest), kick off execution
-    # in a background thread, and redirect immediately. The run page polls.
+    # Resolve the version this run pins to and load that snapshot's stages (the
+    # runner takes them as input), set up the run (initial `running` manifest),
+    # kick off execution in a background thread, and redirect. The page polls.
     try:
-        prep = prepare_run(project_dir, REPO_ROOT)
+        workflow_version = resolve_version_id(project_dir, None)
+        stages = load_version_stages(project_dir, workflow_version)
+        prep = prepare_run(project_dir, REPO_ROOT, stages, workflow_version)
     except NoVersionToRunError as exc:
         return JSONResponse({"detail": str(exc)}, status_code=400)
     except WorkflowLoadError as exc:
@@ -420,16 +423,21 @@ async def resume_run_route(project: str, run_id: str):
     run_dir = runs_dir(project) / run_id
     if not (run_dir / "manifest.json").exists():
         raise HTTPException(status_code=404, detail="Run not found")
-    # Validate the compiled workflow synchronously so load errors surface as a 400
-    # here rather than being swallowed on the background thread below.
+    # Load the PINNED version's stages synchronously so load errors surface as a
+    # 400 here rather than being swallowed on the background thread below. A
+    # resume executes the run's pinned snapshot, never the live working copy —
+    # so an invalid working copy cannot block resuming a valid pinned run.
     try:
-        load_workflow(project_dir)
+        workflow_version = read_run_version(project_dir, run_id)
+        stages = load_version_stages(project_dir, workflow_version)
+    except ValueError as exc:  # legacy run with no pinned workflow_version
+        return JSONResponse({"detail": str(exc)}, status_code=400)
     except WorkflowLoadError as exc:
         return JSONResponse({"detail": "compiled workflow failed validation",
                              "issues": exc.issues}, status_code=400)
     # Resume re-runs the queue stage + downstream (LLM-heavy) — do it in the
     # background and redirect immediately so the page can poll progress.
-    run_in_background(resume_run, project_dir, run_id, REPO_ROOT)
+    run_in_background(resume_run, project_dir, run_id, REPO_ROOT, stages, workflow_version)
     return RedirectResponse(
         url=f"/project/{project}/runs/{run_id}",
         status_code=303,

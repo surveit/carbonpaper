@@ -26,10 +26,8 @@ from typing import Any
 import pandas as pd
 import pyarrow.lib as pa_lib
 
-from app.errors import NoVersionToRunError, SubsetRunError
+from app.errors import SubsetRunError
 from app.models import Stage, Workflow
-from app.services.loader import WorkflowLoadError
-from app.services import versioning
 
 from .stages import HANDLERS, HaltForReview
 from .validation import validate_dataframe
@@ -93,41 +91,11 @@ def _reject_duplicate_input_rows(df: pd.DataFrame, input_id: str, stage_id: str)
     )
 
 
-def _resolve_version_id(project_dir: Path, version_id: str | None) -> str:
-    """Resolve the workflow version a run will be pinned to. Every run MUST target a
-    real, existing version — we never blank it, never fabricate one, never
-    silently read the working copy, and never CREATE one as a run side effect.
-    A run is read-only with respect to versions.
-
-    - If `version_id` is given, it must name an existing version; we fail loudly
-      otherwise rather than redirecting to some other snapshot.
-    - If `version_id` is None, pin to the latest existing version.
-    - If no version exists yet, raise NoVersionToRunError. A run will not
-      immortalise the working copy as a version (that is what let an invalid
-      working copy poison "the latest" and fail every subsequent run).
-    """
-    if version_id is not None:
-        # Validate the requested version exists (load_version_meta fails loudly
-        # if its version.json is missing) — a caller asking for a specific id
-        # must not be silently redirected to some other snapshot.
-        versioning.load_version_meta(project_dir, version_id)
-        return version_id
-
-    existing = versioning.list_versions(project_dir)  # newest-first
-    if existing:
-        return existing[0]["id"]
-
-    raise NoVersionToRunError(
-        f"No version to run for project '{project_dir.name}'. A run "
-        f"targets an existing version and never creates one — create a version "
-        f"first."
-    )
-
-
 def prepare_run(
     project_dir: Path,
     repo_root: Path,
-    version_id: str | None = None,
+    stages: list[Stage],
+    workflow_version: str,
     limits: dict[str, int] | None = None,
     offsets: dict[str, int] | None = None,
 ) -> dict[str, Any]:
@@ -136,13 +104,15 @@ def prepare_run(
     poll it while execution proceeds in the background. Returns a dict with the
     run_id, run_dir, ctx, ordered stages and the manifest.
 
-    The run is PINNED to a workflow version: stages are loaded from the version's
-    immutable snapshot (versioning.load_version_stages), never from the live
-    `compiled/` working copy, so working-copy edits can never affect this run.
-    `version_id` resolution is documented on _resolve_version_id (None -> the
-    latest existing version; a version-less project raises
-    NoVersionToRunError); the resolved id is recorded in the manifest as
-    `workflow_version`.
+    The run is PINNED to a workflow version: the caller supplies `stages`
+    already loaded from the immutable snapshot of `workflow_version` — never the
+    live `compiled/` working copy — so working-copy edits can never affect this
+    run. Resolution + loading belong to the version lifecycle
+    (app.services.versioning: resolve_version_id / load_version_stages); the
+    runner never reads versions itself. `workflow_version` is recorded in the
+    manifest, and because the caller resolves before this is called, a project
+    with no version (or an invalid snapshot) fails there — no run dir is ever
+    left behind.
 
     `limits` is a per-RUN row-cap override: {stage_id: N} truncates that
     stage's output to its first N rows for this run only, overriding any
@@ -151,13 +121,7 @@ def prepare_run(
     deterministic ordering (offset 5 + limit 3 = rows 6-8). Both are recorded
     in the manifest (`limit_overrides` / `offset_overrides`) so the slice is
     part of the run's provenance and survives a halt/resume. Unknown stage
-    ids fail loudly.
-
-    Raises NoVersionToRunError (no version exists) or WorkflowLoadError
-    (from the version snapshot's strict load) before the run dir is created, so
-    a run with no version — or an invalid workflow — never leaves a run behind."""
-    workflow_version = _resolve_version_id(project_dir, version_id)
-    stages = versioning.load_version_stages(project_dir, workflow_version)
+    ids fail loudly."""
     ordered = topological_sort(stages)
 
     limits = dict(limits or {})
@@ -219,16 +183,17 @@ def run_prepared(prep: dict[str, Any]) -> dict[str, Any]:
 def execute_run(
     project_dir: Path,
     repo_root: Path,
-    version_id: str | None = None,
+    stages: list[Stage],
+    workflow_version: str,
     limits: dict[str, int] | None = None,
     offsets: dict[str, int] | None = None,
 ) -> dict[str, Any]:
-    """Run the workflow once (synchronous). Returns the manifest dict. `version_id`
-    pins the run to a workflow version (None -> latest existing; none exists ->
-    NoVersionToRunError); see prepare_run / _resolve_version_id.
-    `limits`/`offsets` are per-run row slicing overrides; see prepare_run."""
+    """Run the workflow once (synchronous). Returns the manifest dict. `stages`
+    are the version-pinned stages of `workflow_version`, loaded by the caller
+    (app.services.versioning.resolve_version_id + load_version_stages); see
+    prepare_run. `limits`/`offsets` are per-run row slicing overrides."""
     return run_prepared(
-        prepare_run(project_dir, repo_root, version_id,
+        prepare_run(project_dir, repo_root, stages, workflow_version,
                     limits=limits, offsets=offsets)
     )
 
@@ -518,22 +483,17 @@ def _execute_stages(
     return manifest
 
 
-def resume_run(project_dir: Path, run_id: str, repo_root: Path) -> dict[str, Any]:
-    """Resume a previously halted run. Loads existing outputs from disk,
-    re-runs the halted queue stage (decisions now exist), continues
-    downstream, updates the same manifest in place."""
-    run_dir = project_dir / "runs" / run_id
-    manifest_path = run_dir / "manifest.json"
+def read_run_version(project_dir: Path, run_id: str) -> str:
+    """Return the workflow version a run is pinned to, read off its manifest.
+    Callers resuming a run use this to load the SAME snapshot's stages
+    (app.services.versioning.load_version_stages) before calling resume_run.
+    A run that carries no workflow_version is a pre-versioning (legacy) run we
+    cannot safely resume under the version model; fail loudly rather than
+    guessing which snapshot it meant."""
+    manifest_path = project_dir / "runs" / run_id / "manifest.json"
     if not manifest_path.exists():
         raise FileNotFoundError(f"No manifest at {manifest_path}")
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-
-    # Stay pinned to the SAME workflow snapshot the run started on. We read the
-    # version off the existing manifest and reload the version's stages — never
-    # the live working copy — so a resume can't silently execute a different workflow
-    # than the halted run did. A run that carries no workflow_version is a pre-
-    # versioning (legacy) run we cannot safely resume under the version model;
-    # fail loudly rather than guessing which snapshot it meant.
     workflow_version = manifest.get("workflow_version")
     if not workflow_version:
         raise ValueError(
@@ -541,7 +501,38 @@ def resume_run(project_dir: Path, run_id: str, repo_root: Path) -> dict[str, Any
             f"its manifest ({manifest_path}); cannot resume a versioned run "
             f"without its pinned workflow version."
         )
-    stages = versioning.load_version_stages(project_dir, workflow_version)
+    return str(workflow_version)
+
+
+def resume_run(
+    project_dir: Path,
+    run_id: str,
+    repo_root: Path,
+    stages: list[Stage],
+    workflow_version: str,
+) -> dict[str, Any]:
+    """Resume a previously halted run. Loads existing outputs from disk,
+    re-runs the halted queue stage (decisions now exist), continues
+    downstream, updates the same manifest in place.
+
+    A resume stays pinned to the SAME workflow snapshot the run started on:
+    `stages` must be that snapshot's stages, loaded by the caller for the
+    version read_run_version reports. The pin is re-checked against the
+    manifest here, so mismatched stages fail loudly instead of silently
+    executing a different workflow than the halted run did."""
+    run_dir = project_dir / "runs" / run_id
+    manifest_path = run_dir / "manifest.json"
+    if not manifest_path.exists():
+        raise FileNotFoundError(f"No manifest at {manifest_path}")
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+
+    pinned = manifest.get("workflow_version")
+    if pinned != workflow_version:
+        raise ValueError(
+            f"Run {run_id} of '{project_dir.name}' is pinned to workflow version "
+            f"{pinned!r}, but stages for {workflow_version!r} were supplied; "
+            f"resolve the version with read_run_version and reload."
+        )
     ordered = topological_sort(stages)
 
     # Reload outputs from disk for stages that completed successfully.
@@ -581,40 +572,7 @@ def resume_run(project_dir: Path, run_id: str, repo_root: Path) -> dict[str, Any
     return _execute_stages(ordered, ctx, manifest, run_dir, outputs_so_far)
 
 
-# CLI entrypoint for ad-hoc runs
-def main() -> int:
-    args = sys.argv[1:]
-    if not args:
-        print("Usage: python -m app.runtime.runner <project_dir> "
-              "[--limit <stage_id>=<N> ...] [--offset <stage_id>=<M> ...]")
-        return 1
-    project_dir = Path(args[0]).resolve()
-    limits: dict[str, int] = {}
-    offsets: dict[str, int] = {}
-    i = 1
-    while i < len(args):
-        if args[i] in ("--limit", "--offset") and i + 1 < len(args) and "=" in args[i + 1]:
-            stage_id, _, n = args[i + 1].partition("=")
-            (limits if args[i] == "--limit" else offsets)[stage_id] = int(n)
-            i += 2
-        else:
-            print(f"Unknown argument: {args[i]}")
-            return 1
-    repo_root = Path(__file__).resolve().parents[2]
-    try:
-        manifest = execute_run(project_dir, repo_root,
-                               limits=limits or None, offsets=offsets or None)
-    except (NoVersionToRunError, WorkflowLoadError) as exc:
-        print(exc)
-        return 1
-    print(json.dumps(
-        {"run_id": manifest["run_id"], "workflow_version": manifest["workflow_version"],
-         "status": manifest["status"],
-         "stages": [(s["stage_id"], s["status"], s["rows"]) for s in manifest["stages"]]},
-        indent=2,
-    ))
-    return 0 if manifest["status"] == "ok" else 1
-
-
 if __name__ == "__main__":
-    sys.exit(main())
+    # The CLI lives in app/runtime/__main__.py (it composes version resolution,
+    # which this library module deliberately does not import).
+    sys.exit("The runner CLI moved: python -m app.runtime <project_dir> [--limit ...]")

@@ -7,6 +7,8 @@ widely, including by low-level modules, so importing app packages here would
 risk import cycles."""
 from __future__ import annotations
 
+from pathlib import Path
+
 
 class StageNotInRun(ValueError):
     """A trace was requested for a stage id absent from the run's manifest — a
@@ -16,6 +18,20 @@ class StageNotInRun(ValueError):
 class RowOutOfRange(ValueError):
     """A trace was requested for a row ordinal outside a stage's output — a bad
     path/param (→ 400), not an internal fault."""
+
+
+class WorkflowLoadError(Exception):
+    """The compiled workflow failed validation; `issues` lists every problem found.
+
+    Raised by the strict loader (app.services.loader) wherever a workflow is
+    parsed off disk — the working copy or a version snapshot."""
+
+    def __init__(self, compiled_dir: Path, issues: list[str]):
+        self.issues = issues
+        super().__init__(
+            f"{compiled_dir}: {len(issues)} validation issue(s):\n  "
+            + "\n  ".join(issues)
+        )
 
 
 class NoVersionToRunError(Exception):

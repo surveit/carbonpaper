@@ -1,12 +1,15 @@
 # app/runtime — the Runner (workflow executor)
 
-Executes a workflow and persists the result. Does not import the compiler or the web app.
-Loads stages through `app/services/loader.py: load_workflow`, which parses each compiled
-stage spec into a `Stage` and raises `WorkflowLoadError` if any stage or cross-stage check
-fails — an invalid workflow is refused before the runner does any work.
+Executes a workflow and persists the result. Does not import the compiler, the web app,
+or app.services: the runner takes VERSION-PINNED STAGES AS INPUT. Callers (the web
+trigger route, the `app/runtime/__main__.py` CLI) resolve the version and load its
+snapshot's stages via `app.services.versioning` (`resolve_version_id` /
+`load_version_stages`); that strict load raises `WorkflowLoadError` (`app.errors`), so an
+invalid workflow is refused before the runner does any work.
 
 ## `runner.py` — the executor
-`topological_sort` → `execute_run(project_dir, repo_root)`. Per stage: validate declared
+`topological_sort` → `execute_run(project_dir, repo_root, stages, workflow_version)`.
+Per stage: validate declared
 inputs (`validation.py`), reject duplicate input rows, dispatch to the type's handler,
 validate the output, write `outputs/<stage>.parquet`, append to `manifest.json`.
 - **Duplicate-input throw (every stage type):** fails the stage if any input dataframe has
@@ -21,7 +24,8 @@ validate the output, write `outputs/<stage>.parquet`, append to `manifest.json`.
   unknown ids fail loudly.
 - **Halt + resume:** `human_review_queue` raises `HaltForReview`; the run marks
   `awaiting_review` and persists the pending queue. `resume_run(...)` reloads completed
-  outputs and continues once decisions exist.
+  outputs and continues once decisions exist — the caller reads the run's pinned version
+  (`read_run_version`) and supplies that same snapshot's stages; a mismatch fails loudly.
 
 ## `stages/` — one module per stage type (`HANDLERS`)
 `input_data` connectors `file` (csv/parquet/json/geojson; `_read_geojson` flattens a
@@ -46,7 +50,7 @@ ranges, nullability, PK uniqueness), distinct from the stage schemas in `app/mod
 
 ## Run / debug
 ```
-python -m app.runtime.runner <project_dir>            # auto backend
-CW_LLM_FORCE_MOCK=1 python -m app.runtime.runner ...  # deterministic, no LLM
+python -m app.runtime <project_dir>            # auto backend
+CW_LLM_FORCE_MOCK=1 python -m app.runtime ...  # deterministic, no LLM
 ```
 Outputs: `runs/<id>/{manifest.json, outputs/*.parquet, artifacts/, queue/}`.

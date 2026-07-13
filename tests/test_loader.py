@@ -6,8 +6,8 @@ import json
 
 import pytest
 
+from app.errors import WorkflowLoadError
 from app.services.loader import (
-    WorkflowLoadError,
     load_compiled_dir,
     load_workflow,
 )

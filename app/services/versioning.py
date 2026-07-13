@@ -37,6 +37,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from app.errors import NoVersionToRunError
 from app.models import Stage
 from app.services.loader import (
     load_compiled_dir,
@@ -108,6 +109,38 @@ def list_versions(project_dir: Path) -> list[dict[str, Any]]:
     metas.sort(key=lambda m: str(m.get("id") or m.get("created_at") or ""),
                reverse=True)
     return metas
+
+
+def resolve_version_id(project_dir: Path, version_id: str | None) -> str:
+    """Resolve the workflow version a run will be pinned to. Every run MUST target a
+    real, existing version — never blank it, never fabricate one, and never
+    CREATE one as a side effect. (The runner itself takes the resolved, loaded
+    stages as input; this resolution belongs to the version lifecycle, so callers
+    compose resolve_version_id → load_version_stages → run.)
+
+    - If `version_id` is given, it must name an existing version; fails loudly
+      otherwise rather than redirecting to some other snapshot.
+    - If `version_id` is None, pin to the latest existing version.
+    - If no version exists yet, raise NoVersionToRunError. A run will not
+      immortalise the working copy as a version (that is what let an invalid
+      working copy poison "the latest" and fail every subsequent run).
+    """
+    if version_id is not None:
+        # Validate the requested version exists (load_version_meta fails loudly
+        # if its version.json is missing) — a caller asking for a specific id
+        # must not be silently redirected to some other snapshot.
+        load_version_meta(project_dir, version_id)
+        return version_id
+
+    existing = list_versions(project_dir)  # newest-first
+    if existing:
+        return str(existing[0]["id"])
+
+    raise NoVersionToRunError(
+        f"No version to run for project '{project_dir.name}'. A run "
+        f"targets an existing version and never creates one — create a version "
+        f"first."
+    )
 
 
 def create_version(
@@ -184,5 +217,6 @@ __all__ = [
     "list_versions",
     "load_version_meta",
     "load_version_stages",
+    "resolve_version_id",
     "create_version",
 ]

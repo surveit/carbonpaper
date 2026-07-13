@@ -27,6 +27,7 @@ from typing import Any
 
 from pydantic import ValidationError
 
+from app.errors import WorkflowLoadError
 from app.models.workflow import Workflow, validate_workflow
 from app.models.schema import format_errors
 from app.models.stage import Stage
@@ -38,17 +39,6 @@ class CompiledStageFile:
     filename: str
     stage: Stage | None = None
     issues: list[str] = field(default_factory=list)
-
-
-class WorkflowLoadError(Exception):
-    """The compiled workflow failed validation; `issues` lists every problem found."""
-
-    def __init__(self, compiled_dir: Path, issues: list[str]):
-        self.issues = issues
-        super().__init__(
-            f"{compiled_dir}: {len(issues)} validation issue(s):\n  "
-            + "\n  ".join(issues)
-        )
 
 
 def load_compiled_dir(compiled_dir: Path) -> list[CompiledStageFile]:
