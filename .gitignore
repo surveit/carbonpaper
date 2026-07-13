@@ -26,3 +26,6 @@ saydo/
 # scripts stay on the working machine, not in the repo/PRs.
 docs/superpowers/
 scripts/
+
+# Agent-tool worktree scratch dirs (isolated checkouts for background agents)
+.claude/worktrees/
