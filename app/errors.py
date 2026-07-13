@@ -40,3 +40,23 @@ class GenerationError(Exception):
     validates against the target schema within its attempt budget. Fails loudly rather
     than returning or persisting a partial or fabricated result — the caller logs the
     failure honestly, never a fake success."""
+
+
+class EvalNotScorableError(Exception):
+    """An eval run was requested but the config can't be scored as it stands:
+    incompatible with the workflow, has no eval dataset, or taps a path that
+    isn't grain-preserving and carries no code scorer. The reason is the message."""
+
+
+class EvalGrainViolationError(Exception):
+    """The pathway that compatibility judged grain-preserving did not, in fact,
+    return one target row per injected eval-dataset row — so the rows can't be
+    aligned by position to score. Raised (loudly) rather than aligning a
+    mismatched pair and reporting a fabricated result."""
+
+
+class SubsetRunError(Exception):
+    """Running a subset of a workflow did not cleanly produce every requested
+    stage output: a stage errored, or the run halted for human review. The
+    message names what went wrong. (General runtime failure — callers like the
+    eval runner translate it into their own outcome, e.g. an `error` eval run.)"""

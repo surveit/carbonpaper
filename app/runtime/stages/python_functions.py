@@ -47,7 +47,7 @@ def handle_python_frame_function(stage: Stage, inputs: dict[str, pd.DataFrame], 
 def handle_python_row_function(stage: Stage, inputs: dict[str, pd.DataFrame], ctx: dict[str, Any]) -> pd.DataFrame:
     """Per-row transform: the runtime maps the function over the single input's
     rows — one dict in, one dict out. The function never sees the frame, so it
-    *cannot* fan out or fan in. This is what makes `is_grain_preserving` true by
+    *cannot* fan out or fan in. This is what makes `is_grain_and_order_preserving` true by
     construction rather than by author claim."""
     declared = stage.inputs
     if len(declared) != 1:

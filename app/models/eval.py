@@ -196,7 +196,7 @@ def resolve_eval_run_settings(
             if upstream not in seen and upstream not in ov:
                 stack.append(upstream)
 
-    blocking = sorted(n for n in frontier if not by_id[n].is_grain_preserving)
+    blocking = sorted(n for n in frontier if not by_id[n].is_grain_and_order_preserving)
     return EvalRunSettings(can_score_declaratively=not blocking,
                            frontier=sorted(frontier), blocking_stages=blocking)
 

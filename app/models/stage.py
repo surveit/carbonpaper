@@ -367,16 +367,24 @@ class Stage(_Base):
         return self
 
     @property
-    def is_grain_preserving(self) -> bool:
-        """Does one input row map to exactly one output row? This is the v1 eval
-        gate: a declarative (single-table, row-aligned) eval can only tap a node
-        reached through grain-preserving stages. Fixed entirely by stage type:
-          - python_row_function → yes (runtime maps it per row — enforced 1:1)
-          - python_frame_function → NO (may reshape the frame)
-          - llm_transform      → yes (per-row 1:1 in v1; a fan-out LLM like
-                                 doc→pieces is out of scope until fan-out evals)
+    def is_grain_and_order_preserving(self) -> bool:
+        """Does one input row map to exactly one output row, IN THE SAME ORDER?
+        Grain-preserving means both: 1:1 (no rows added or dropped) AND order-
+        preserving (the Nth output row was produced from the Nth input row).
+        Declaring a type grain-preserving commits it to both — a stage that
+        reordered rows would break the guarantee even at 1:1.
+
+        This is the v1 eval gate AND the property a declarative (single-table,
+        row-aligned) eval relies on to align a target's output rows back to the
+        eval-dataset rows that produced them BY POSITION — no lineage id needed,
+        because position IS the identity through a grain-preserving path. Fixed
+        entirely by stage type:
+          - python_row_function → yes (runtime maps it per row, in emit order — enforced 1:1)
+          - python_frame_function → NO (may reshape OR reorder the frame)
+          - llm_transform      → yes (per-row 1:1 in emit order in v1; a fan-out LLM
+                                 like doc→pieces is out of scope until fan-out evals)
           - input_data         → yes (originates the rows)
-          - human_review_queue → yes (keyed, edits in place)
+          - human_review_queue → yes (keyed, edits in place — no reorder)
           - join (fan-out) / aggregate (fan-in) → NO; grain changes are deferred
           - publish            → terminal, never a tap target
         """
