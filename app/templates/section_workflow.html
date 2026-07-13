@@ -7,9 +7,9 @@
     · Run + Create-version controls
 
   The workflow is GENERATED automatically right after the data model (see
-  app.services.generation) in the background; this page just reads the result from
-  disk — the graph when stages are present, else a 0-state with a Generate button. No
-  live status / spinner yet (issue #95); there is no in-page build chat.
+  app.services.generation) in the background; this page reads the result from disk AND
+  polls generation status (issue #95): while the workflow phase runs it shows a spinner,
+  and a FAILED generation is surfaced loudly instead of the silent "no workflow" state.
 
   UNLOCKED once the data model EXISTS (state.data_model.present). Approval is a
   separate gate (on running), not on seeing the draft. When there is no data model at
@@ -23,6 +23,8 @@
     type_class  = TYPE_CLASS
     type_glyph  = TYPE_GLYPH
     versions    = versioning.list_versions(mdir)   (list; may be empty)
+    generation  = the generation.json status dict | None
+    gen_phase   = the workflow phase record | None; gen_dm_phase = the data_model phase
 
   Reused (unchanged) routes: node review /node/{id}/review-partial,/decide,/edit;
   /review/status; create version POST /version; run POST /run; (re)generate POST
@@ -50,6 +52,11 @@
 
 {% block section %}
 {% set wf_locked = (not state.data_model.present) %}
+{# Live generation status (issue #95): the workflow phase drives this page's spinner /
+   loud failure; `gen_active` (whole generation still running) arms the poller. #}
+{% set gen_active = generation and generation.status == 'running' %}
+{% set gen_wf_running = gen_phase and gen_phase.status == 'running' %}
+{% set gen_wf_failed = gen_phase and gen_phase.status == 'error' %}
 
 <div class="sec-head wf-head">
   <div class="wf-head-title">
@@ -79,14 +86,40 @@
   {% endif %}
 </div>
 
+{# ── Regeneration banner: stages already on disk but a (re)generation is running or
+      failed. The 0-state branches above own the no-stages case. ── #}
+{% if not wf_locked and stages %}
+  {% if gen_wf_running %}
+  <div class="gen-status gen-running" id="wf-gen-banner">
+    <span class="spinner"></span>
+    <span>Rebuilding the workflow from your document… this page will refresh when it's ready.</span>
+  </div>
+  {% elif gen_wf_failed %}
+  <div class="gen-status gen-error" id="wf-gen-banner">
+    <strong>✗ Workflow generation failed</strong>
+    <p class="gen-err-msg">{{ gen_phase.error.message if gen_phase.error else 'unknown error' }}</p>
+  </div>
+  {% endif %}
+{% endif %}
+
 {% if wf_locked %}
-  {# ── LOCKED: there is no data model yet, so there is no workflow to wire. ── #}
+  {# ── LOCKED: there is no data model yet, so there is no workflow to wire. When a
+        generation is in flight the data model is on its way — say so and let the poller
+        unlock this page once the data-model phase lands (issue #95). ── #}
   <div class="wf-locked-panel">
+    {% if gen_active %}
+    <span class="spinner"></span>
+    <h2>Generating…</h2>
+    <p class="muted">The data model is being generated from your document; the workflow
+      is built right after and unlocks here automatically. This page refreshes when it's
+      ready.</p>
+    {% else %}
     <div class="wf-locked-glyph">🔒</div>
     <h2>Workflow locked</h2>
     <p class="muted">The workflow wires the data model into a pipeline, so it unlocks
       once the data model exists. Generate the data model first — the workflow is then
       built automatically.</p>
+    {% endif %}
     <a class="btn primary" href="/project/{{ state.name }}/data_model">Go to the data model →</a>
   </div>
 
@@ -137,15 +170,41 @@
           {% endfor %}
         </tbody>
       </table>
+      {% elif gen_wf_running %}
+      {# The workflow phase is running — spin instead of the misleading empty state. The
+         poller reloads once it finishes (issue #95). #}
+      <div class="wf-empty-graph">
+        <div class="gen-status gen-running wf-empty-state" id="wf-gen-status">
+          <span class="spinner"></span>
+          <div>
+            <h2>Building the workflow…</h2>
+            <p class="muted">Compiling your document into typed stages. This page
+              refreshes automatically when it's ready.</p>
+          </div>
+        </div>
+      </div>
+      {% elif gen_wf_failed %}
+      {# Loud failure: the orchestrator recorded WHY the workflow build failed; show it
+         rather than the silent "no workflow yet" state (issue #95). #}
+      <div class="wf-empty-graph">
+        <div class="gen-status gen-error wf-empty-state" id="wf-gen-status">
+          <h2>✗ Workflow generation failed</h2>
+          <p class="gen-err-msg">{{ gen_phase.error.message if gen_phase.error else 'unknown error' }}</p>
+          {% if gen_phase.error and gen_phase.error.traceback %}
+          <details class="gen-trace"><summary>Traceback</summary><pre>{{ gen_phase.error.traceback }}</pre></details>
+          {% endif %}
+          <form method="post" action="/project/{{ state.name }}/generate">
+            <button type="submit" class="btn primary">↻ Try again</button>
+          </form>
+        </div>
+      </div>
       {% else %}
-      {# No workflow on disk yet. It is generated right after the data model in the
-         background; without live status (issue #95) the page just reflects disk. #}
+      {# No workflow on disk and none building — the true 0-state. #}
       <div class="wf-empty-graph">
         <div class="empty-state wf-empty-state">
           <h2>No workflow yet</h2>
           <p class="muted">The workflow is generated automatically after the data model.
-            If you just generated the data model it may still be building — reload in a
-            moment — or (re)generate it now.</p>
+            Generate it now.</p>
           <form method="post" action="/project/{{ state.name }}/generate">
             <button type="submit" class="btn primary">Generate workflow</button>
           </form>
@@ -298,6 +357,34 @@
       }
     });
   }
+})();
+</script>
+{% endif %}
+
+{# ── Live generation poller (issue #95). Same fetch-poll-then-reload pattern as the run
+      poller; runs whenever a generation is in flight (armed even when the page is LOCKED,
+      so it unlocks itself once the data-model phase lands). Reloads the page when either
+      phase's status changes from what this render reflects — unlock, workflow-ready, or a
+      failure to surface. ── #}
+{% if gen_active %}
+<script>
+(function () {
+  const PROJECT = {{ state.name | tojson }};
+  const statusUrl = `/project/${encodeURIComponent(PROJECT)}/generation-status`;
+  const INIT_DM = {{ (gen_dm_phase.status if gen_dm_phase else None) | tojson }};
+  const INIT_WF = {{ (gen_phase.status if gen_phase else None) | tojson }};
+  let timer = null;
+  async function poll() {
+    let d;
+    try { const r = await fetch(statusUrl, { cache: 'no-store' }); if (!r.ok) return; d = await r.json(); }
+    catch (e) { return; }
+    const ph = d.phases || {};
+    if (ph.data_model !== INIT_DM || ph.workflow !== INIT_WF || d.terminal) {
+      if (timer) clearInterval(timer);
+      window.location.reload();
+    }
+  }
+  timer = setInterval(poll, 2000); poll();
 })();
 </script>
 {% endif %}

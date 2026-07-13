@@ -1724,3 +1724,20 @@ td.row-num, th.row-num { text-align: right; color: #98a1b3; font-variant-numeric
     font-size: 14px; color: #222; }
 
 @keyframes chat-spin { to { transform: rotate(360deg); } }
+
+/* ── Generation status (issue #95): spinner while data-model/workflow generation runs,
+      and a LOUD failure banner when it fails, on the data-model + workflow pages. Reuses
+      the .spinner keyframes from the run page. ── */
+.gen-status { display: flex; align-items: flex-start; gap: 14px; margin: 16px 0;
+    padding: 18px 20px; border-radius: 8px; border: 1px solid var(--border); }
+.gen-status.dm-empty-state, .gen-status.wf-empty-state { flex-direction: row; text-align: left; }
+.gen-status h2 { margin: 0 0 .3rem; }
+.gen-status .spinner { margin-top: 4px; }
+.gen-running { background: #fff9e6; border-color: #e6c34d; color: #6b5300; }
+.gen-error { flex-direction: column; background: #fdecea; border-color: #cc2a2a; color: #a11; }
+.gen-error h2, .gen-error strong { color: #a11; }
+.gen-err-msg { margin: .3rem 0 .6rem; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: .9rem; white-space: pre-wrap; word-break: break-word; }
+.gen-trace { margin: .3rem 0 .6rem; }
+.gen-trace pre { background: #fff; border: 1px solid #e3b3b3; border-radius: 6px;
+    padding: 10px 12px; overflow-x: auto; font-size: .8rem; color: #802020; }

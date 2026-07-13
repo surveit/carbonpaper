@@ -28,6 +28,7 @@ import pyarrow.lib as pa_lib
 
 from app.errors import NoVersionToRunError
 from app.models import Stage
+from app.services.job_status import atomic_write_json
 from app.services.loader import WorkflowLoadError
 from app.services import versioning
 
@@ -201,9 +202,7 @@ def prepare_run(
             for s in ordered
         ],
     }
-    (run_dir / "manifest.json").write_text(
-        json.dumps(manifest, indent=2, default=str), encoding="utf-8"
-    )
+    atomic_write_json(run_dir / "manifest.json", manifest)
     return {"run_id": run_id, "run_dir": run_dir, "ctx": ctx,
             "ordered": ordered, "manifest": manifest}
 
@@ -273,9 +272,10 @@ def _execute_stages(
         m["queue_stats"] = ctx.get("queue_stats", {})
         m["updated_at"] = datetime.now().isoformat(timespec="seconds")
         try:
-            (run_dir / "manifest.json").write_text(
-                json.dumps(m, indent=2, default=str), encoding="utf-8"
-            )
+            # Atomic (temp + rename): the live poller reads this every 2s while the
+            # run writes it after every stage, so a non-atomic write could be caught
+            # half-flushed. See app.services.job_status.atomic_write_json (issue #95).
+            atomic_write_json(run_dir / "manifest.json", m)
         except OSError:
             pass
 
@@ -438,9 +438,7 @@ def _execute_stages(
         )
         manifest.pop("halted_at", None)
 
-    (run_dir / "manifest.json").write_text(
-        json.dumps(manifest, indent=2, default=str), encoding="utf-8"
-    )
+    atomic_write_json(run_dir / "manifest.json", manifest)
 
     return manifest
 

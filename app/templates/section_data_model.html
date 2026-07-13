@@ -3,9 +3,10 @@
   DATA MODEL — named-schema cards by kind + ER diagram + the approval GATE + the
   per-schema JSON edit. The data model is GENERATED automatically from the document
   (see app.services.generation, kicked off on project create) in the background; this
-  page just reads the result from disk — schemas when present, else a 0-state with a
-  Generate button. There is no in-page authoring chat, and (for now) no live status /
-  spinner: real-time updates are tracked in issue #95.
+  page reads the result from disk — schemas when present, else a 0-state with a
+  Generate button — AND polls generation status (issue #95): while the data-model phase
+  runs it shows a spinner, and a FAILED generation is surfaced loudly (the error message
+  the orchestrator recorded) instead of the silent "no schemas yet" state.
 
   Context the route passes (Phase-1 FROZEN CONTRACT for this section):
     state       = project.project_state(mdir); section = "data_model"
@@ -17,6 +18,8 @@
     kind_order  = SCHEMA_KIND_ORDER
     kind_class  = SCHEMA_KIND_CLASS
     kind_glyph  = SCHEMA_KIND_GLYPH
+    generation  = the generation.json status dict | None      (job_status.load_generation_status)
+    gen_phase   = the data_model phase record of `generation` | None  (drives spinner/error)
 
   Endpoints: (re)generate POST /project/{name}/generate; approve POST
   .../data-model/approve; per-schema edit POST .../schema/{name}/edit.
@@ -41,12 +44,32 @@
      'approved': 'approved', 'unreviewed': 'unreviewed', 'edited_stale': 'edited · stale',
      'rejected': 'rejected', 'none': 'none',
    } %}
+{% set gen_running = gen_phase and gen_phase.status in ('running', 'pending') %}
+{% set gen_failed = gen_phase and gen_phase.status == 'error' %}
 <div class="sec-head">
   <h1>Data model</h1>
   <p class="lede">Named schemas — the tables the methodology operates on — generated
     from your document. Each table declares a <strong>kind</strong>: where it sits in
     the pipeline. Review the model and approve it; approval gates running the workflow.</p>
 </div>
+
+{# ── Live generation status (issue #95). Shown when schemas are ALREADY present but a
+      (re)generation is running or failed; the no-schemas 0-state below carries its own
+      copy. Both are driven by the same poller at the foot of the page. ── #}
+{% if schemas and gen_running %}
+<div class="gen-status gen-running" id="dm-gen-banner">
+  <span class="spinner"></span>
+  <span>Regenerating the data model from your document… this page will refresh when it's ready.</span>
+</div>
+{% elif schemas and gen_failed %}
+<div class="gen-status gen-error" id="dm-gen-banner">
+  <strong>✗ Data-model generation failed</strong>
+  <p class="gen-err-msg">{{ gen_phase.error.message if gen_phase.error else 'unknown error' }}</p>
+  <form method="post" action="/project/{{ state.name }}/generate">
+    <button type="submit" class="btn primary">↻ Try again</button>
+  </form>
+</div>
+{% endif %}
 
 {# ── The gate: approval bar over the whole schema set. Only rendered when a data
       model EXISTS — there is nothing to approve in the 0-state. ───────────────── #}
@@ -153,14 +176,36 @@
       {% endif %}
     {% endfor %}
 
+  {% elif gen_running %}
+    {# Generation in flight — spin instead of the misleading "nothing here" state. The
+       poller reloads the page once the data-model phase finishes (issue #95). #}
+    <div class="gen-status gen-running dm-empty-state" id="dm-gen-status">
+      <span class="spinner"></span>
+      <div>
+        <h2>Generating the data model…</h2>
+        <p class="muted">Reading <code>examples/{{ state.name }}/document.md</code> and
+          drafting the named schemas. This page refreshes automatically when it's ready.</p>
+      </div>
+    </div>
+  {% elif gen_failed %}
+    {# Loud failure: the background orchestrator recorded WHY it failed; show it rather
+       than the old silent "no data model yet" state (issue #95). #}
+    <div class="gen-status gen-error dm-empty-state" id="dm-gen-status">
+      <h2>✗ Data-model generation failed</h2>
+      <p class="gen-err-msg">{{ gen_phase.error.message if gen_phase.error else 'unknown error' }}</p>
+      {% if gen_phase.error and gen_phase.error.traceback %}
+      <details class="gen-trace"><summary>Traceback</summary><pre>{{ gen_phase.error.traceback }}</pre></details>
+      {% endif %}
+      <form method="post" action="/project/{{ state.name }}/generate">
+        <button type="submit" class="btn primary">↻ Try again</button>
+      </form>
+    </div>
   {% else %}
-    {# No data model on disk yet. It is generated from the document in the background
-       on upload; without live status (see issue #95) the page just reflects disk. #}
+    {# No data model on disk and no generation in flight — the true 0-state. #}
     <div class="empty-state dm-empty-state" id="dm-empty">
       <h2>No data model yet</h2>
       <p class="muted">The data model is generated from
-        <code>examples/{{ state.name }}/document.md</code>. If you just created this
-        project it may still be generating — reload in a moment — or (re)generate it now.</p>
+        <code>examples/{{ state.name }}/document.md</code>. Generate it now.</p>
       <form method="post" action="/project/{{ state.name }}/generate">
         <button type="submit" class="btn primary">Generate data model</button>
       </form>
@@ -249,6 +294,33 @@
     const save = ev.target.closest('[data-role="save-schema"]');
     if (save) { ev.preventDefault(); saveSchema(save.dataset.schemaName, save); }
   });
+})();
+</script>
+{% endif %}
+
+{# ── Live generation poller (issue #95). Reuses the same fetch-poll-then-reload
+      pattern as run_detail.html's run poller, over /generation-status. Only armed
+      while the data-model phase is actually running; reloads the page once that phase
+      reaches a terminal state (schemas now on disk, or an error to render). ── #}
+{% if gen_running %}
+<script>
+(function () {
+  const PROJECT = {{ state.name | tojson }};
+  const statusUrl = `/project/${encodeURIComponent(PROJECT)}/generation-status`;
+  let timer = null;
+  async function poll() {
+    let d;
+    try { const r = await fetch(statusUrl, { cache: 'no-store' }); if (!r.ok) return; d = await r.json(); }
+    catch (e) { return; }
+    const dm = (d.phases || {}).data_model;
+    // Reload as soon as the data-model phase is done (ok → schemas appear; error →
+    // the loud failure banner), or if the whole generation ended.
+    if (dm === 'ok' || dm === 'error' || d.terminal) {
+      if (timer) clearInterval(timer);
+      window.location.reload();
+    }
+  }
+  timer = setInterval(poll, 2000); poll();
 })();
 </script>
 {% endif %}

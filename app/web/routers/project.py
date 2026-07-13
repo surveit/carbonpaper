@@ -52,7 +52,7 @@ from fastapi.responses import (
 )
 
 from app.models import validate_named_schema, validate_schema_library
-from app.services import generation, node_review, project, versioning
+from app.services import generation, job_status, node_review, project, versioning
 from app.services.loader import stage_to_spec_dict
 from app.web.config import EXAMPLES_DIR, templates
 from app.web.diagrams import (
@@ -263,6 +263,27 @@ async def generate_project(project_name: str):
     return RedirectResponse(url=f"/project/{project_name}/data_model", status_code=303)
 
 
+@router.get("/project/{project_name}/generation-status")
+async def generation_status(project_name: str):
+    """Lightweight JSON for the data-model / workflow pages' live poller — the exact
+    counterpart of runs.run_status, over generation.json instead of a run manifest.
+    Reports the overall status, whether generation has finished (`terminal`), each
+    phase's status, and the error (type + message) if it failed — so a page can spin
+    while it runs and surface a failure loudly. `status: "idle"` when the project has
+    never generated (no status file)."""
+    pdir = _project_dir(project_name)
+    status = job_status.load_generation_status(pdir)
+    if status is None:
+        return JSONResponse({"status": "idle", "terminal": True, "phases": {}, "error": None})
+    return JSONResponse({
+        "status": status.get("status"),
+        "terminal": status.get("status") != "running",
+        "phases": {p.get("phase"): p.get("status") for p in status.get("phases", [])},
+        "error": status.get("error"),
+        "updated_at": status.get("updated_at"),
+    })
+
+
 # ─── Unified PROJECT sections ────────────────────────────────────────────────
 # One project (examples/<name>/) is framed by a left-sidebar shell (project_shell)
 # with five sections — Overview / Document / Data model / Workflow / Runs. Each
@@ -317,6 +338,7 @@ async def project_data_model(request: Request, project_name: str):
     pdir = _project_dir(project_name)
     schemas = load_schemas(pdir)
     approval = _schema_library_approval(pdir, schemas) if schemas else None
+    gen = job_status.load_generation_status(pdir)
     return templates.TemplateResponse(
         request,
         "section_data_model.html",
@@ -331,6 +353,10 @@ async def project_data_model(request: Request, project_name: str):
             "kind_order": SCHEMA_KIND_ORDER,
             "kind_class": SCHEMA_KIND_CLASS,
             "kind_glyph": SCHEMA_KIND_GLYPH,
+            # Live generation status: the data-model phase drives the spinner / loud
+            # failure banner on this page (issue #95).
+            "generation": gen,
+            "gen_phase": job_status.generation_phase(gen, "data_model"),
         },
     )
 
@@ -378,6 +404,7 @@ async def project_workflow(request: Request, project_name: str):
         build_mermaid_graph(stages, project_name, review_by_id=review_by_id)
         if stages else None
     )
+    gen = job_status.load_generation_status(pdir)
     return templates.TemplateResponse(
         request,
         "section_workflow.html",
@@ -390,6 +417,11 @@ async def project_workflow(request: Request, project_name: str):
             "type_class": TYPE_CLASS,
             "type_glyph": TYPE_GLYPH,
             "versions": versioning.list_versions(pdir),
+            # Live generation status: the workflow phase drives the spinner / loud
+            # failure banner on this page (issue #95).
+            "generation": gen,
+            "gen_phase": job_status.generation_phase(gen, "workflow"),
+            "gen_dm_phase": job_status.generation_phase(gen, "data_model"),
         },
     )
 
