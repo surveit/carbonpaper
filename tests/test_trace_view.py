@@ -80,10 +80,10 @@ def test_stop_end_marks_upstream_truncated():
     trace = _trace()
     trace["steps"] = trace["steps"][:1]  # only the enrich step
     trace["end"] = {"reached_origin": False, "at_stage": "enrich",
-                    "message": "stops at llm_transform … issue #61"}
+                    "message": "stops at enrich — it reshapes rows (issue #58)"}
     view = build_trace_view(trace, _stages())
     assert view["upstream"]["truncated"] is True
-    assert "#61" in view["upstream"]["message"]
+    assert "#58" in view["upstream"]["message"]
     assert view["nodes"][0]["role"] == "claim"  # single node is the claim
 
 

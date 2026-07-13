@@ -21,17 +21,27 @@ from typing import Any
 import pandas as pd
 
 from app.errors import RowOutOfRange, StageNotInRun
+from app.models.stage import GRAIN_AND_ORDER_PRESERVING_TYPES, StageType
 
-# Stage types whose output rows are 1:1 with their input rows, by position.
-#   input_data          — rows originate here (the walk's natural end)
-#   python_row_function — the runtime maps the function over rows, 1:1 (PR #26)
-# Deliberately excluded, and why:
-#   llm_transform       — 1:1 only once PR #29 lands; add it then (issue #61)
-#   human_review_queue  — drops rejected rows (human_review_queue.py), so not 1:1
-#   join/aggregate/python_frame_function/fan-out — reshape rows (issue #58)
-# This is a tracer-side assumption; making the runtime *guarantee* preservation
-# for stages that declare it is issue #87.
-ROW_PRESERVING: frozenset[str] = frozenset({"input_data", "python_row_function"})
+
+def _is_row_preserving(stage_type: str) -> bool:
+    """True when this stage type guarantees output row i came from input row i by
+    position, so the walk can cross the hop on ordinal alone.
+
+    Delegates to the model's single classification
+    (GRAIN_AND_ORDER_PRESERVING_TYPES) rather than a tracer-local list — a newly
+    preserving type, or a reclassified one, is picked up here automatically. This
+    reads a static type taxonomy, not the run's compiled methodology, so the
+    tracer stays self-contained on the run directory. A manifest type that isn't
+    a known StageType (a foreign or future run) is never trusted. Membership is
+    necessary but not sufficient: crossing is still gated on matching parent/child
+    row counts too (the len(parent_df) != len(df) guard below); making the runtime
+    itself *guarantee* preservation for declaring stages is issue #87.
+    """
+    try:
+        return StageType(stage_type) in GRAIN_AND_ORDER_PRESERVING_TYPES
+    except ValueError:
+        return False
 
 
 @dataclass
@@ -123,12 +133,10 @@ def _new_columns(child: pd.DataFrame, parent: pd.DataFrame | None) -> list[str]:
 
 
 def _not_preserving_message(stage_type: str) -> str:
-    """The stop message when a stage can't be crossed. The outcome is the same
-    — the stage isn't row-preserving, so the ancestry isn't positionally
-    recoverable — but we name the stage type and point at the tracking issue."""
-    if stage_type == "llm_transform":
-        return ("stops at llm_transform (not row-preserving until it becomes 1:1, "
-                "PR #29 / issue #61)")
+    """The stop message when a stage can't be crossed: the stage isn't row-
+    preserving, so the ancestry isn't positionally recoverable. Names the stage
+    type and points at the tracking issue. Also reached defensively for a
+    row-preserving type carrying the wrong parent arity (len(parents) != 1)."""
     return (f"stops at {stage_type} — it reshapes rows, so row-level lineage "
             "across it needs recording (issue #58)")
 
@@ -182,7 +190,7 @@ def trace_row(run_dir: Path, stage_id: str, row_ordinal: int) -> Trace:
             end = TraceEnd(False, sid, "the manifest records no input edge for this stage")
         # A row-preserving stage has exactly one input; more (or the wrong type)
         # means we can't trust position — treat it as not row-preserving.
-        elif stage_type not in ROW_PRESERVING or len(parents) != 1:
+        elif not _is_row_preserving(stage_type) or len(parents) != 1:
             end = TraceEnd(False, sid, _not_preserving_message(stage_type))
         else:
             parent_id = parents[0]
