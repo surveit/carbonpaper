@@ -37,7 +37,7 @@ FeatureCollection) + `computed_static`; `python_row_function`/`python_frame_func
   backend it raises rather than silently mocking.
 - `llm.py` renders + dispatches (`call_llm`, run per row by the row driver under bounded
   parallelism; the JSON parser recovers the last JSON value in prose).
-  `llm_agent_sdk.py` drives `claude_agent_sdk.query()`, locates
+  `app/core/llm/llm_agent_sdk.py` drives `claude_agent_sdk.query()`, locates
   `claude` (incl. Windows `~/.local/bin/claude.exe`), and honors a stage's `llm.tools:`
   (e.g. `[WebSearch, WebFetch]`, agent_sdk only). `llm_mock.py` — deterministic offline mock.
 

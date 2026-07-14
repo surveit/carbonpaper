@@ -1,7 +1,7 @@
 """
 llm_sdk.py — low-level Claude Code CLI discovery + event-loop plumbing.
 
-Shared by the runtime LLM backend (`app.runtime.llm_agent_sdk`) and the
+Shared by the runtime LLM backend (`app.core.llm.llm_agent_sdk`) and the
 authoring compiler (`app.compiler`). Neither of those imports the other; both
 import this neutral base, so the CLI-location + sync-drive logic lives in exactly
 one place. Pure stdlib — no SDK import, no app imports.

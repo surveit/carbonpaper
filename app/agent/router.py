@@ -15,7 +15,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 
-from app.runtime.llm_agent_sdk import available as sdk_available
+from app.core.llm.llm_agent_sdk import available as sdk_available
 
 from app.agent.registry import build_engine
 from app.agent.sdk_engine import CLI_MODEL

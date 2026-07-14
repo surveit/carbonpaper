@@ -8,7 +8,8 @@ from __future__ import annotations
 
 import pytest
 
-from app.runtime import options, llm_agent_sdk
+from app.core.llm import llm_agent_sdk
+from app.runtime import options
 from app.runtime.llm import call_llm
 
 

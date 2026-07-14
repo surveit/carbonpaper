@@ -11,7 +11,7 @@ from __future__ import annotations
 import os
 import shutil
 
-from . import llm_agent_sdk
+from app.core.llm import llm_agent_sdk
 
 
 class LLMError(Exception):
