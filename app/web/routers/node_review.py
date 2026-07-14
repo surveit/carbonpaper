@@ -19,6 +19,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from app.services import node_review, stage_edit, versioning
 from app.services.loader import stage_to_json, stage_to_spec_dict
 from app.core.models import Stage
+from app.runtime.examples import find_failing_examples
 from app.web.config import EXAMPLES_DIR, templates
 from app.web.diagrams import TYPE_CLASS, TYPE_GLYPH, build_mermaid_graph
 from app.web.loading import find_stage, load_stages, resolve_function_code
@@ -172,6 +173,15 @@ async def create_version_route(project: str, message: str = Form(...)):
     project_dir = EXAMPLES_DIR / project
     if not project_dir.is_dir():
         raise HTTPException(status_code=404, detail=f"No project '{project}'")
+
+    # Examples are the stage's behavior contract: a version is a committable
+    # snapshot, so it must not immortalise a python transform that fails its
+    # own examples. Absent examples don't block — the gate holds existing
+    # examples to green, it does not require them.
+    failing = find_failing_examples(load_stages(project).stages)
+    if failing:
+        return JSONResponse({"ok": False, "issues": failing}, status_code=400)
+
     existing = versioning.list_versions(project_dir)  # newest-first
     parent = existing[0]["id"] if existing else None
     try:
