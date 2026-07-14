@@ -119,6 +119,33 @@ def test_row_count_mismatch_reported():
     assert "2 row(s)" in (result.message or "") and "1" in (result.message or "")
 
 
+def test_frame_function_returning_none_is_error_not_crash():
+    # A very common authoring mistake: mutating in place (inplace=True) rather
+    # than returning the transformed frame. This must surface as an `error`
+    # result, not raise out of the runner.
+    stage = _frame_stage(
+        "def transform(df):\n    df.sort_values('amount', inplace=True)\n",
+        [{"name": "mutates_in_place",
+          "inputs": {"load": [{"amount": 1.0}]},
+          "expected": [{"amount": 1.0}]}],
+    )
+    [result] = run_stage_examples(stage)
+    assert result.status == "error"
+    assert "NoneType" in (result.message or "")
+
+
+def test_frame_function_returning_non_dataframe_is_error_not_crash():
+    stage = _frame_stage(
+        "def transform(df):\n    return {'not': 'a frame'}\n",
+        [{"name": "returns_dict",
+          "inputs": {"load": [{"amount": 1.0}]},
+          "expected": [{"amount": 1.0}]}],
+    )
+    [result] = run_stage_examples(stage)
+    assert result.status == "error"
+    assert "dict" in (result.message or "")
+
+
 def test_find_failing_examples_names_stage_and_example():
     green = _row_stage(_DOUBLE, [{
         "name": "doubles_two", "inputs": {"load": [{"amount": 2.0}]},

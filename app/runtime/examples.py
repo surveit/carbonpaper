@@ -97,7 +97,11 @@ def _run_one_example(stage: Stage, example: StageExample) -> ExampleResult:
         return ExampleResult(
             example.name, "error", message=f"{type(exc).__name__}: {exc}"
         )
-    assert actual is not None  # python transform handlers always return a frame
+    if not isinstance(actual, pd.DataFrame):
+        return ExampleResult(
+            example.name, "error",
+            message=f"function returned {type(actual).__name__}, expected a DataFrame",
+        )
     return _compare(stage, example, actual)
 
 
@@ -139,7 +143,7 @@ def _check_example_against_schemas(
 
 
 def _compare(stage: Stage, example: StageExample, actual: pd.DataFrame) -> ExampleResult:
-    columns = _comparison_columns(stage, example, actual)
+    columns = _select_comparison_columns(stage, example, actual)
     expected_rows = _canonicalize_rows(example.expected, columns)
     actual_rows = _canonicalize_rows(
         [{str(k): v for k, v in row.items()} for row in actual.to_dict("records")],
@@ -165,7 +169,7 @@ def _compare(stage: Stage, example: StageExample, actual: pd.DataFrame) -> Examp
     return ExampleResult(example.name, "passed")
 
 
-def _comparison_columns(
+def _select_comparison_columns(
     stage: Stage, example: StageExample, actual: pd.DataFrame
 ) -> list[str]:
     """The columns cells compare on: the output schema's columns when declared

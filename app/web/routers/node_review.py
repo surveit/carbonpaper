@@ -107,10 +107,10 @@ def _shape_one_example(example: StageExample, result: ExampleResult) -> dict[str
         "status": result.status,
         "message": result.message,
         "inputs": [
-            {"stage_id": stage_id, "columns": _row_columns(rows), "rows": rows}
+            {"stage_id": stage_id, "columns": _list_row_columns(rows), "rows": rows}
             for stage_id, rows in example.inputs.items()
         ],
-        "expected": {"columns": _row_columns(example.expected), "rows": example.expected},
+        "expected": {"columns": _list_row_columns(example.expected), "rows": example.expected},
         "diffs": [
             {"row": diff.row, "column": diff.column,
              "expected": diff.expected, "actual": diff.actual}
@@ -119,7 +119,7 @@ def _shape_one_example(example: StageExample, result: ExampleResult) -> dict[str
     }
 
 
-def _row_columns(rows: list[dict[str, Any]]) -> list[str]:
+def _list_row_columns(rows: list[dict[str, Any]]) -> list[str]:
     """Column order for rendering: first-appearance order across the rows."""
     seen: dict[str, None] = {}
     for row in rows:
