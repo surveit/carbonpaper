@@ -101,3 +101,10 @@ def test_description_carried_into_json_schema():
                      "description": "0 worst, 5 best"}])
     props = model.model_json_schema()["properties"]
     assert props["score"]["description"] == "0 worst, 5 best"
+
+
+def test_scalar_vocabulary_matches_schema_layer():
+    # row_model's python-type map must cover exactly the schema layer's scalars
+    from app.core.models.row_model import _SCALAR_PY_TYPES
+    from app.core.models.schema import SCALAR_COLUMN_TYPES
+    assert set(_SCALAR_PY_TYPES) == SCALAR_COLUMN_TYPES

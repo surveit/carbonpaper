@@ -10,13 +10,13 @@ Split across modules:
 
 Import from `app.core.models` (this aggregator) for the stable public surface.
 """
+from app.core.models.row_model import build_row_model
 from app.core.models.schema import (
     Column,
     SourceRef,
     TableSchema,
     is_valid_column_type,
 )
-from app.core.models.row_model import build_row_model
 from app.core.models.stage import (
     AggFormula,
     AggregateConfig,

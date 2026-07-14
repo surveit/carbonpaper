@@ -184,14 +184,15 @@ def mock_benchmark_scoring(input_row: dict[str, Any]) -> dict[str, Any]:
 
 # ─── Palm-oil Tier-2 OSINT (honest, no-fabrication mock) ─────────────────────
 #
-# These two mocks stand in for `claude -p` when the CLI isn't on PATH. They are
+# These two mocks are deterministic offline stand-ins for the live agent
+# backend, reachable only when the mock backend is explicitly selected
+# (`use_real=False` or CW_LLM_FORCE_MOCK=1; see app/runtime/llm.py). They are
 # deliberately *truthful*: the mock has NOT retrieved any document, so it never
 # asserts a feature is present and never invents an evidence URL. It emits
 # either documented negatives ("no project found in public registries") or
 # "unknown", at low confidence. This exercises the full extract → adversarial
 # verify → human-review → merge machinery without manufacturing findings —
-# which is the whole point of the methodology. Swap in real `claude -p` (put
-# claude on PATH) for genuine extraction.
+# which is the whole point of the methodology.
 
 # Candidate on-site features for a palm-oil mill (mirrors the real
 # data/palm/enrichment.jsonl sample for PO1000000320 / Rantau Panjang).
@@ -270,7 +271,11 @@ def _split_sentences(text: str) -> list[str]:
 # ─── Dispatcher ──────────────────────────────────────────────────────────────
 
 def mock_llm_call(stage_id: str, llm_config: LLMConfig, input_row: dict[str, Any]) -> Any:
-    """Return either a single output dict or a list of output dicts."""
+    """Return this stage's mock reply. The dispatcher (`app.runtime.llm.call_llm`)
+    requires a dict and raises `LLMError` for anything else; `mock_evidence_extraction`
+    and `mock_tier2_extract` return a list, so stages routed to `evidence_extraction`
+    or `tier2_extract` are rejected by the dispatcher at run time rather than
+    producing per-row output."""
     if stage_id == "evidence_extraction":
         return mock_evidence_extraction(input_row)
     if stage_id == "benchmark_scoring":
