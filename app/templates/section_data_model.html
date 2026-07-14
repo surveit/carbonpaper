@@ -70,7 +70,8 @@
           id="approve-dm-btn">{% if is_approved %}✓ Data model approved{% else %}✓ Approve data model{% endif %}</button>
   {% if dm_state == 'edited_stale' %}
   <p class="gate-stale-note" id="dm-stale-note">A schema changed after approval (the
-    library content hash no longer matches). Re-approve to unlock the workflow.</p>
+    library content hash no longer matches). Re-approve to restore the data model's
+    approved state.</p>
   {% endif %}
 </div>
 {% endif %}
@@ -191,7 +192,8 @@
         fd.append('content_hash', hashEl ? hashEl.textContent.trim() : '');
         const r = await fetch(APPROVE_URL, { method: 'POST', body: fd });
         if (!r.ok) { alert('Approve failed: ' + r.status + ' ' + await r.text()); return; }
-        // Reload so the workflow unlocks (server re-evaluates data_model_state == approved).
+        // Reload so the gate chip reflects the new approved state (server re-evaluates
+        // data_model_state).
         window.location.reload();
         return;
       } finally {
@@ -237,8 +239,8 @@
         return;
       }
       // Saved. The library hash changed → approval (if any) is now stale. Reload so
-      // the gate chip + workflow lock reflect it (mirrors node edit-clears-approval).
-      if (msg) { msg.textContent = '✓ Saved — data-model approval dropped (re-approve to unlock the workflow)'; msg.className = 'se-msg ok'; }
+      // the gate chip reflects it (mirrors node edit-clears-approval).
+      if (msg) { msg.textContent = '✓ Saved — data-model approval dropped (re-approve to restore it)'; msg.className = 'se-msg ok'; }
       setTimeout(() => window.location.reload(), 700);
     } finally {
       btn.disabled = false;

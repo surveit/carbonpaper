@@ -2,18 +2,39 @@
 
 app.services.project.project_state gives the DOMAIN status snapshot (counts,
 states, coverage) — no UI, no URLs. This module adds what the shell needs to
-RENDER but the domain layer must not know: the "what to do next" call-to-action,
-whose label text and section href are presentation/routing concerns. The section
+RENDER but the domain layer must not know: the left-nav tree (labels, hrefs, and
+a per-item status token) and the "what to do next" call-to-action. The section
 routes render shell_state(pdir), not the bare domain snapshot.
+
+The nav carries a semantic `status` token per item (ok / warn / bad / todo / none
+/ review / present / home / evals); the TEMPLATE maps that token to a glyph + colour
+(project_shell.html), so the visual vocabulary lives next to the markup while the
+structure + classification stay here and stay unit-testable.
 """
 
 from __future__ import annotations
 
 from pathlib import Path
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.services import project
+
+
+class NavItem(BaseModel):
+    """One sidebar entry: a stable `key` (matched against the active `section` to
+    highlight it), the visible label, the section href, a semantic `status` token
+    (the template maps it to a glyph + colour), and any child entries rendered
+    indented beneath it. Only the Workflow group carries children."""
+
+    key: str
+    label: str
+    href: str
+    status: str
+    children: list["NavItem"] = Field(default_factory=list)
+
+
+NavItem.model_rebuild()
 
 
 class NextAction(BaseModel):
@@ -26,19 +47,52 @@ class NextAction(BaseModel):
 
 
 class ShellState(project.ProjectState):
-    """A project's domain status snapshot (project.ProjectState) plus the sidebar's
-    next_action CTA. The CTA is a web-layer concern (label text + routing), so it is
-    added here rather than in the domain model. This is the object the shell and its
-    section templates render."""
+    """A project's domain status snapshot (project.ProjectState) plus the two
+    web-layer additions the shell renders: the left-nav tree and the next_action
+    CTA (label text + routing — presentation concerns the domain model must not
+    carry). This is the object the shell and its section templates render."""
 
+    nav: list[NavItem]
     next_action: NextAction
 
 
 def shell_state(pdir: Path) -> ShellState:
-    """The domain status snapshot (project.project_state) plus the sidebar's
-    next_action CTA. This is the object the shell and its section templates render."""
+    """The domain status snapshot (project.project_state) plus the sidebar's nav
+    tree and next_action CTA. This is the object the shell and its section templates
+    render."""
     state = project.project_state(pdir)
-    return ShellState(**state.model_dump(), next_action=_next_action(state))
+    return ShellState(
+        **state.model_dump(),
+        nav=build_nav(state),
+        next_action=_next_action(state),
+    )
+
+
+def build_nav(state: project.ProjectState) -> list[NavItem]:
+    """The shell's left-nav tree: Overview / Document / Data model / Workflow, with
+    Versions, Runs, and Evals nested under Workflow — the three things a workflow
+    has: its versioned snapshots, its executions, and the evals that score them.
+
+    Each item's `status` is derived from `state` (the truthful on-disk status); the
+    template turns it into a glyph. An absent thing is "none" (renders ○), never a
+    fabricated done-marker."""
+    base = f"/project/{state.name}"
+    return [
+        _nav_leaf("overview", "Overview", base, "home"),
+        _nav_leaf("document", "Document", f"{base}/document",
+                  _present_status(state.has_document)),
+        _nav_leaf("data_model", "Data model", f"{base}/data_model",
+                  _data_model_status(state.data_model)),
+        _nav_leaf("workflow", "Workflow", f"{base}/workflow",
+                  _workflow_status(state.workflow),
+                  children=[
+                      _nav_leaf("versions", "Versions", f"{base}/versions",
+                                _present_status(state.versions > 0)),
+                      _nav_leaf("runs", "Runs", f"{base}/runs",
+                                _runs_status(state.runs)),
+                      _nav_leaf("evals", "Evals", f"{base}/evals", "evals"),
+                  ]),
+    ]
 
 
 def _next_action(state: project.ProjectState) -> NextAction:
@@ -111,3 +165,60 @@ def _next_action(state: project.ProjectState) -> NextAction:
         label="View runs",
         href=f"{base}/runs",
     )
+
+
+# ─── Nav structure + status tokens ────────────────────────────────────────────
+# A nav item's status is a semantic token (ok / warn / bad / todo / none / review /
+# present / home / evals); project_shell.html maps it to a glyph + colour. Deriving
+# it here (not in Jinja) keeps the classification testable and the template dumb.
+
+
+def _nav_leaf(key: str, label: str, href: str, status: str,
+              children: list[NavItem] | None = None) -> NavItem:
+    """Build a NavItem with a status token and optional children."""
+    return NavItem(key=key, label=label, href=href, status=status,
+                   children=children or [])
+
+
+def _present_status(present: bool) -> str:
+    """Present/absent items (Document, Versions): "present" when the thing exists,
+    "none" when it does not."""
+    return "present" if present else "none"
+
+
+def _data_model_status(data_model: project.DataModelStatus) -> str:
+    """The data model's status token by approval state."""
+    by_state = {
+        "approved": "ok",
+        "edited_stale": "warn",
+        "rejected": "bad",
+        "unreviewed": "todo",
+        "none": "none",
+    }
+    return by_state.get(data_model.state, "none")
+
+
+def _workflow_status(workflow: project.WorkflowStatus) -> str:
+    """The workflow's status token by coverage: "none" when there is no workflow,
+    "ok" when every stage is approved, "warn" otherwise. (The data model is optional
+    input to the workflow, so there is no locked state.)"""
+    coverage = workflow.coverage
+    if not workflow.present:
+        return "none"
+    if coverage is not None and coverage.total > 0 and coverage.approved == coverage.total:
+        return "ok"
+    return "warn"
+
+
+def _runs_status(runs: project.RunsSummary) -> str:
+    """The runs' status token: "review" when a run awaits review (that wins), "none"
+    when there are no runs, then by the latest run's status (ok / bad / todo)."""
+    if runs.awaiting_review > 0:
+        return "review"
+    if runs.n == 0:
+        return "none"
+    if runs.latest_status == "ok":
+        return "ok"
+    if runs.latest_status in ("error", "errors"):
+        return "bad"
+    return "todo"

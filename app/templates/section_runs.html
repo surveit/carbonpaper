@@ -19,7 +19,7 @@
       snapshot, so a run is reproducible against the exact workflow it executed.</p>
   </div>
   <div class="actions wf-actions">
-    {% if state.data_model.state == "approved" %}
+    {% if state.workflow.present %}
     <form action="/project/{{ state.name }}/run" method="post" style="display:inline;">
       <button type="submit" class="btn primary">▶ Run workflow</button>
     </form>
@@ -65,10 +65,10 @@
 <div class="empty-state">
   <h2>No runs yet</h2>
   <p class="muted">
-    {% if state.data_model.state == "approved" %}
+    {% if state.workflow.present %}
       Click <strong>▶ Run workflow</strong> above (or on the Workflow page) to execute the pipeline end-to-end.
     {% else %}
-      Approve the data model and build the workflow first, then run it.
+      Build the workflow first, then run it.
     {% endif %}
   </p>
 </div>

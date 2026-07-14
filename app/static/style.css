@@ -1221,18 +1221,6 @@ td.row-num, th.row-num { text-align: right; color: #98a1b3; font-variant-numeric
     padding: 14px;
 }
 
-.phase.locked { opacity: .62; background: #fafafa; }
-
-.phase.locked .phase-num { background: #9aa3ad; }
-
-.phase.locked .phase-body { pointer-events: none; user-select: none; filter: grayscale(.4); }
-
-.phase.locked .phase-body::after {
-    content: "Approve the data model to unlock"; position: absolute; inset: 0;
-    display: flex; align-items: center; justify-content: center; text-align: center;
-    background: rgba(250,250,250,.55); color: #7a4a00; font-weight: 700; font-size: 14px;
-    border-radius: 6px; z-index: 2; }
-
 /* The gate (approval bar) — one approval over the whole schema set. */
 .gate-bar { display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
     margin: 18px 0 6px; padding: 14px 16px; border: 1px solid var(--border);
@@ -1351,7 +1339,7 @@ td.row-num, th.row-num { text-align: right; color: #98a1b3; font-variant-numeric
     transition: background 0.12s, color 0.12s;
 }
 
-.app-nav-item:hover:not(.locked):not(.current) { background: var(--hover); }
+.app-nav-item:hover:not(.current) { background: var(--hover); }
 
 .app-nav-item.current {
     background: var(--accent);
@@ -1360,17 +1348,26 @@ td.row-num, th.row-num { text-align: right; color: #98a1b3; font-variant-numeric
 
 .app-nav-item.current .app-nav-glyph { color: #fff; }
 
-.app-nav-item.locked {
-    color: #b0b0ac;
-    cursor: not-allowed;
+/* Workflow group: Versions / Runs / Evals render indented beneath the Workflow item,
+   joined by a left rail. The parent gets .trail when one of its children is active. */
+.app-nav-children {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin: 2px 0 2px 15px;
+    padding-left: 9px;
+    border-left: 1px solid var(--border);
 }
 
-/* Current-but-locked: still highlight where you are; the 🔒 glyph keeps signalling
-   the lock. The .current background rule above already applies; restore readable
-   text + keep the lock glyph visible against the blue. */
-.app-nav-item.locked.current { color: #fff; }
+.app-nav-item.child {
+    padding-top: 6px;
+    padding-bottom: 6px;
+    font-size: 13px;
+}
 
-.app-nav-item.locked.current .app-nav-glyph { color: #fff; }
+.app-nav-item.trail:not(.current) { color: var(--accent); }
+
+.app-nav-item.trail:not(.current) .app-nav-label { font-weight: 600; }
 
 .app-nav-glyph {
     flex: none;
@@ -1396,8 +1393,6 @@ td.row-num, th.row-num { text-align: right; color: #98a1b3; font-variant-numeric
 .app-nav-glyph.glyph-none   { color: #c4c4c0; }
 
 .app-nav-glyph.glyph-review { color: #2a6ac8; }
-
-.app-nav-glyph.glyph-locked { color: #b0903a; }
 
 /* Compact "do this next" pointer pinned under the nav. */
 .app-side-next {
@@ -1553,8 +1548,6 @@ td.row-num, th.row-num { text-align: right; color: #98a1b3; font-variant-numeric
 
 .ov-tile:hover { border-color: #c2c2bd; box-shadow: 0 1px 6px rgba(0, 0, 0, 0.06); }
 
-.ov-tile.is-locked { background: #fafafa; }
-
 .ov-tile-k {
     font-size: 11px;
     text-transform: uppercase;
@@ -1583,22 +1576,7 @@ td.row-num, th.row-num { text-align: right; color: #98a1b3; font-variant-numeric
 
 .ov-foot { font-size: 13px; margin-top: 8px; }
 
-/* ═══ WORKFLOW section: locked panel + empty-graph hint ═══ */
-.wf-locked-panel {
-    text-align: center;
-    padding: 56px 24px 64px;
-    border: 1px dashed var(--border);
-    border-radius: 10px;
-    background: #fafafa;
-    margin-top: 16px;
-}
-
-.wf-locked-glyph { font-size: 40px; line-height: 1; margin-bottom: 8px; }
-
-.wf-locked-panel h2 { margin: 0 0 8px; color: var(--fg); }
-
-.wf-locked-panel p { max-width: 540px; margin: 0 auto 18px; }
-
+/* ═══ WORKFLOW section: empty-graph hint ═══ */
 .wf-empty-graph { margin: 14px 0; }
 
 .wf-right { display: block; }
@@ -1760,9 +1738,7 @@ td.row-num, th.row-num { text-align: right; color: #98a1b3; font-variant-numeric
 .wf-detail { margin-top: 20px; border-top: 2px solid var(--border); padding-top: 18px; min-height: 120px; }
 .wf-detail.loading { opacity: .5; }
 .wf-detail-empty { text-align: center; padding: 24px 0; }
-.wf-versions { margin-top: 22px; }
-.wf-versions > summary { cursor: pointer; font-weight: 700; font-size: 12px; text-transform: uppercase;
-    letter-spacing: .4px; color: #666; padding: 8px 0; }
+.wf-versions-link { margin-top: 22px; font-size: 13px; }
 
 /* Node-review, full-width: decision bar pinned on top, then Input/Transform/Output/Spec tabs. */
 .nr-bar { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;

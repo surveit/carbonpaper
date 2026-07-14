@@ -30,9 +30,9 @@ Route order matters: the literal /project/new is declared on THIS router BEFORE 
 a project name. The two-word section paths (/data_model, /workflow, /document) never
 collide with a project name.
 
-Reuse rule: reuses P1's node_review (belief + schema-library gate) + versioning, P2's
-compiler (compile_methodology), and the shared web helpers (diagrams, loading,
-config). The app.models package is the only contract.
+Reuse rule: reuses P1's node_review (belief + schema-library gate), P2's compiler
+(compile_methodology), and the shared web helpers (diagrams, loading, config). The
+app.models package is the only contract.
 """
 
 from __future__ import annotations
@@ -52,7 +52,7 @@ from fastapi.responses import (
 )
 
 from app.models import validate_named_schema, validate_schema_library
-from app.services import generation, node_review, project, versioning
+from app.services import generation, node_review, project
 from app.services.loader import stage_to_spec_dict
 from app.web.config import EXAMPLES_DIR, templates
 from app.web.diagrams import (
@@ -389,15 +389,14 @@ async def project_workflow(request: Request, project_name: str):
             "coverage": coverage,
             "type_class": TYPE_CLASS,
             "type_glyph": TYPE_GLYPH,
-            "versions": versioning.list_versions(pdir),
         },
     )
 
 
-# ─── Data-model gate + schema edit (keyed on the PROJECT) ────────────────────
+# ─── Data-model review + schema edit (keyed on the PROJECT) ──────────────────
 # Human review actions on an existing data model: approve the whole schema library
-# (the gate that unlocks the workflow view) and edit a single schema — both key off
-# the project dir under examples/<name>/.
+# (records reviewer trust in the whole schema set) and edit a single schema — both
+# key off the project dir under examples/<name>/.
 
 
 @router.post("/project/{project_name}/data-model/approve")

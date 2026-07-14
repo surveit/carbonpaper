@@ -62,17 +62,11 @@
     {% endif %}
   </a>
 
-  {# Workflow (the typed-stage pipeline) #}
-  {# Gating disabled for now (pending a rethink): the workflow tile never shows locked.
-     Restore `(s.data_model.state != "approved")` to re-gate on the data model. #}
-  {% set wf_locked = false %}
-  <a class="ov-tile {% if wf_locked %}is-locked{% endif %}"
-     href="/project/{{ s.name }}/workflow">
+  {# Workflow (the typed-stage pipeline). The data model is optional input, so there
+     is no locked state. #}
+  <a class="ov-tile" href="/project/{{ s.name }}/workflow">
     <span class="ov-tile-k">Workflow</span>
-    {% if wf_locked %}
-      <span class="ov-tile-v locked">🔒 locked</span>
-      <span class="ov-tile-sub">approve the data model first</span>
-    {% elif not s.workflow.present %}
+    {% if not s.workflow.present %}
       <span class="ov-tile-v none">not built</span>
       <span class="ov-tile-sub">no stages yet</span>
     {% else %}
