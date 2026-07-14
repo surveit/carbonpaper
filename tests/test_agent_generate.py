@@ -68,7 +68,7 @@ def test_run_returns_the_submitted_answer_after_a_retry(monkeypatch: Any) -> Non
     agent = _agent()
     # First call is rejected (missing y), second is accepted — the loop returns it.
     fake = _FakeEngine(agent.submit_answer, [{"x": 1}, {"x": 1, "y": 2}])
-    monkeypatch.setattr(agent, "_build_engine", lambda: fake)
+    monkeypatch.setattr(agent, "build_engine", lambda: fake)
     result = asyncio.run(agent.run())
     assert result == _Point(x=1, y=2)
 
@@ -76,7 +76,16 @@ def test_run_returns_the_submitted_answer_after_a_retry(monkeypatch: Any) -> Non
 def test_run_raises_when_no_valid_answer_is_submitted(monkeypatch: Any) -> None:
     agent = _agent()
     fake = _FakeEngine(agent.submit_answer, [{"x": 1}, {"x": 2}])  # never valid
-    monkeypatch.setattr(agent, "_build_engine", lambda: fake)
+    monkeypatch.setattr(agent, "build_engine", lambda: fake)
     with pytest.raises(GenerationError) as exc_info:
         asyncio.run(agent.run())
     assert "_Point" in str(exc_info.value)  # names the target model
+
+
+def test_answer_exposes_the_captured_submission_for_live_driving(monkeypatch: Any) -> None:
+    # When driven as a live turn, the caller reads `answer` after the turn (rather than
+    # run()'s return value) to persist the result.
+    agent = _agent()
+    assert agent.answer is None
+    agent.submit_answer(x=3, y=4)
+    assert agent.answer == _Point(x=3, y=4)
