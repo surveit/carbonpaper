@@ -2,8 +2,10 @@
 
 **Date:** 2026-07-10
 **Status:** approved. Backend decided: document-oriented **SQLite key-value store**
-(stdlib `sqlite3`, no ORM). Record-map re-verified against current `master` (post-#80/#83).
-Ready to plan.
+(stdlib `sqlite3`, no ORM). Paths reflect the `app/core.*` + `app/evals.*` reorg (PRs #117/#119): persistence in
+`app/core/persistence.py`, evals in `app/evals/`. The §4 foundation is landing; the §5
+record-map's per-object locations (`Run` / `Version` / `Compilation` / `AgentSession`)
+are re-verified as each subsystem converts.
 **North star:** all storage behind one swappable class, so the app speaks objects and
 the backend (SQLite today; Postgres or plain files later) changes in exactly one place.
 
@@ -54,7 +56,7 @@ folding human-authored prose (`.md`) into models.
   records it is composite: `"<project>/<local_id>"` (e.g. `roldugin/20260710T142200`).
   In the SQLite store it is just the PK text; `list(prefix="roldugin/")` scopes to one
   project via an indexed `WHERE id LIKE`. No separate "scope" concept lives in the store.
-- **Pure contract** — a validation-only Pydantic model in `app/models` (`Stage`,
+- **Pure contract** — a validation-only Pydantic model in `app/core/models` (`Stage`,
   `TableSchema`, `SchemaLibrary`, `EvalConfig`). Side-effect-free; **never imports
   persistence.**
 - **Record** — a `PersistedModel` subclass that *is* a stored document. It embeds
@@ -102,12 +104,12 @@ model or an upload. The document store keys on it as plain text (no filesystem p
 `FrameStore` still writes `<collection>/<id>.parquet` files — so ids are validated once,
 at the seam: a `/` may nest, but any `..` component or absolute path is rejected. This
 centralizes the `is_relative_to` guard currently hand-rolled in `project.py` /
-`eval_store.py`.
+`app/evals/store.py`.
 
 ### 4.2 `PersistedModel`
 
 ```python
-class PersistedModel(_Base):           # _Base = the strict app.models base (extra=forbid, ...)
+class PersistedModel(_Base):           # _Base = the strict app.core.models base (extra=forbid, ...)
     id: str
     collection: ClassVar[str]          # declared per subclass; the table name
     SCHEMA_VERSION: ClassVar[int] = 1  # bump on a breaking field change; see §6 item 7
@@ -129,15 +131,15 @@ class PersistedModel(_Base):           # _Base = the strict app.models base (ext
 `DUMP_OPTS` is a per-model class attribute so a record can preserve exact
 serialization (see §7 — the working copy's stages must stay `by_alias, exclude_none`).
 
-Where it lives: `app/persistence.py` (shared core — `DocumentStore`, `SqliteKvStore`,
+Where it lives: `app/core/persistence.py` (shared core — `DocumentStore`, `SqliteKvStore`,
 `PersistedModel`, the `STORE` singleton, `DocumentNotFound`). Depends only on stdlib
-(`sqlite3`, `json`) + pydantic. `FrameStore` lives beside it (`app/frames.py`).
+(`sqlite3`, `json`) + pydantic. `FrameStore` lives beside it (`app/core/frames.py`).
 
 **Where the record classes live:** each in its owning subsystem, importing
-`PersistedModel` from `app/persistence` — `Run` in `app/runtime`, `AgentSession` in
+`PersistedModel` from `app/core/persistence` — `Run` in `app/runtime`, `AgentSession` in
 `app/agent`, `Compilation` in the compiler service (`app/services/compilation.py`),
 `Project` / `Workflow` / `Version` in `app/services`, `Eval` / `EvalRun` in
-`app/services/eval_store.py` (which already owns eval persistence). `app/models` (the
+`app/evals/store.py` (which already owns eval persistence). `app/core/models` (the
 pure contracts) never imports persistence; the arrow points one way, records →
 contracts.
 
@@ -204,11 +206,11 @@ also validates it at upload rather than at first read); write-once for uploads.
    separate collection. Matches node-review, which already treats the whole library as
    one approvable unit.
 
-4. **Evals are already persisted — fold `eval_store.py` in, don't greenfield them.**
+4. **Evals are already persisted — fold `app/evals/store.py` in, don't greenfield them.**
    Current master persists eval configs as **YAML** (`eval_config/<id>.yaml`, mutable),
    eval runs as JSON (`eval_run/<id>.json`), and dataset uploads as tabular files
    (`eval_data/<file>`). Under the unified layer: `EvalConfig` stays a pure contract in
-   `app/models`; an `Eval` record embeds it; `EvalRun` becomes a record; the dataset
+   `app/core/models`; an `Eval` record embeds it; `EvalRun` becomes a record; the dataset
    **is a frame** (see below), so it goes to `FrameStore`. **Resolved: eval configs move
    YAML → JSON** for uniformity — they are typed models, not hand-authored prose. This
    retires the only YAML in the codebase.
@@ -261,14 +263,14 @@ also validates it at upload rather than at first read); write-once for uploads.
 - `shutil.copytree` (versions embed their snapshot).
 - `NN_` filename ordering, `glob("*.json")`, `find_stage_file`/`write_stage` scan-by-id
   (stage_edit collapses to "mutate the `Workflow` doc, save").
-- YAML entirely — the one `yaml.safe_dump`/`safe_load` pair in `eval_store.py` (§6.4:
+- YAML entirely — the one `yaml.safe_dump`/`safe_load` pair in `app/evals/store.py` (§6.4:
   eval configs are JSON records now).
 - Three storage roots → one `data/app.db` SQLite file.
 - Every raw `dict` + `json.dumps(default=str)` document (runs, versions, compilations,
   agent sessions, `project.json` via `write_project_meta`) → validated records.
 - The bespoke `SessionStore` class and the per-module read/write helpers in
   `loader.py`, `versioning.py`, `compilation.py`, `runner.py`, `loading.py`,
-  `node_review.py`, `eval_store.py`, `project.py`.
+  `node_review.py`, `app/evals/store.py`, `project.py`.
 
 ## 9. Migration
 
@@ -297,7 +299,7 @@ increment, rebasing on master between each. Prefer several small merges over one
 
 ## 11. Rollout & testing
 
-- Land `app/persistence.py` (`SqliteKvStore` + `PersistedModel`) + `FrameStore` with unit
+- Land `app/core/persistence.py` (`SqliteKvStore` + `PersistedModel`) + `FrameStore` with unit
   tests (round-trip, composite ids, id path-safety, tolerant read, `DocumentNotFound`,
   prefix listing, `schema_version` round-trip) first. Tests run against an in-memory
   `sqlite3` (`":memory:"`), so they stay fast and isolated.

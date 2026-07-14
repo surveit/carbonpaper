@@ -2,11 +2,18 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Build the single document-storage seam — `app/persistence.py` (a SQLite key-value `DocumentStore` + `PersistedModel` base) and `app/frames.py` (`FrameStore` for parquet payloads) — fully tested, consumed by nothing yet.
+**Goal:** Build the single document-storage seam — `app/core/persistence.py` (a SQLite key-value `DocumentStore` + `PersistedModel` base) and `app/core/frames.py` (`FrameStore` for parquet payloads) — fully tested, consumed by nothing yet.
 
 **Architecture:** One SQLite table `documents(collection, id, data JSON, schema_version)` behind a `DocumentStore` interface; `PersistedModel.save()/load(id)` is the only thing records call. Tabular payloads (frames) get a parallel `FrameStore` over parquet files. Everything is additive — no existing module is modified except adding one exception class — so this phase conflicts with nothing on master and lands first.
 
 **Tech Stack:** Python 3.12, stdlib `sqlite3` + `json`, pydantic v2, pandas/pyarrow (already deps), pytest.
+
+**Status (2026-07-14):** Task 1 (`validate_id` + the `app/core/persistence.py` module shell) already landed alongside the architecture guards; subagent execution starts at **Task 2**. Paths reflect the `app/core.*` / `app/evals.*` reorg (PRs #117/#119).
+
+**Architecture guards (must stay green through every task):**
+- `app/_arch_tests/test_storage_engine_sealed.py` — `sqlite3` importable only by `app/core/persistence.py`.
+- import-linter contracts — `app.core.persistence` imports no app layer but `core.errors`; `app.core.models` never imports the store.
+- Run: `python -m pytest app/_arch_tests tests/arch -q` and `PYTHONPATH=. lint-imports`. If a guard goes red, the task's placement is wrong — fix the code, not the guard.
 
 ## Global Constraints
 
@@ -16,21 +23,21 @@ Every task's requirements implicitly include these (copied from `docs/persistenc
 - **Document-oriented.** Bodies are JSON; no typed/relational columns for document contents.
 - **`no Any`-dodging, no `type: ignore`.** mypy runs over `app/` and must stay clean. The one honest dynamic boundary — an arbitrary JSON body — is the alias `JsonDict = dict[str, Any]`, defined once and used in signatures.
 - **ruff clean, incl. BLE:** never `except Exception` / bare `except`. Catch specific types (`sqlite3.Error`, `json.JSONDecodeError`).
-- **Exceptions live in `app/errors.py`** (dependency-free), never inline. → `DocumentNotFound` goes there.
+- **Exceptions live in `app/core/errors.py`** (dependency-free), never inline. → `DocumentNotFound` goes there.
 - **Fail loudly:** the strict read raises `DocumentNotFound`; no silent empty-object fallback. The tolerant read returns `None`.
 - **Composite id convention:** project-scoped ids are `"<project>/<local>"`. Ids that become file paths (FrameStore) are validated — no `..` segment, no absolute path, no backslash.
-- **Layering:** `app/persistence.py` depends only on stdlib + pydantic + `app/errors`. It does **not** import `app/models` — so `PersistedModel` defines its own `ConfigDict` (mirroring `app/models/schema.py:_Base`) rather than importing that private base. `app/models` must never import persistence.
+- **Layering:** `app/core/persistence.py` depends only on stdlib + pydantic + `app/core/errors`. It does **not** import `app/core/models` — so `PersistedModel` defines its own `ConfigDict` (mirroring `app/core/models/schema.py:_Base`) rather than importing that private base. `app/core/models` must never import persistence.
 - **Tests are offline:** in-memory SQLite (`":memory:"`), no network, no LLM.
 
-**Deviations from the spec sketch (intentional):** `DocumentNotFound` lives in `app/errors.py` (repo convention, not `persistence.py`); `PersistedModel` extends `pydantic.BaseModel` with its own config (not the private `app.models._Base`) to keep the store layer dependency-light per the spec's own "stdlib + pydantic only" rule.
+**Deviations from the spec sketch (intentional):** `DocumentNotFound` lives in `app/core/errors.py` (repo convention, not `persistence.py`); `PersistedModel` extends `pydantic.BaseModel` with its own config (not the private `app.core.models._Base`) to keep the store layer dependency-light per the spec's own "stdlib + pydantic only" rule.
 
 ---
 
 ## File Structure
 
-- **Create `app/persistence.py`** — `JsonDict`, `validate_id`, `DocumentStore` (Protocol), `SqliteKvStore`, `configure_store`/`get_store`, `PersistedModel`. The whole document seam.
-- **Modify `app/errors.py`** — add `DocumentNotFound`.
-- **Create `app/frames.py`** — `FrameStore` (parquet payloads, reuses `validate_id`).
+- **Create `app/core/persistence.py`** — `JsonDict`, `validate_id`, `DocumentStore` (Protocol), `SqliteKvStore`, `configure_store`/`get_store`, `PersistedModel`. The whole document seam.
+- **Modify `app/core/errors.py`** — add `DocumentNotFound`.
+- **Create `app/core/frames.py`** — `FrameStore` (parquet payloads, reuses `validate_id`).
 - **Create `tests/test_persistence.py`** — store CRUD, prefix scoping, schema_version, id-safety, `PersistedModel`.
 - **Create `tests/test_frames.py`** — `FrameStore` round-trip, write-once, path-safety.
 
@@ -39,7 +46,7 @@ Every task's requirements implicitly include these (copied from `docs/persistenc
 ### Task 1: `validate_id` + module skeleton
 
 **Files:**
-- Create: `app/persistence.py`
+- Create: `app/core/persistence.py`
 - Test: `tests/test_persistence.py`
 
 **Interfaces:**
@@ -52,7 +59,7 @@ Every task's requirements implicitly include these (copied from `docs/persistenc
 # tests/test_persistence.py
 import pytest
 
-from app.persistence import validate_id
+from app.core.persistence import validate_id
 
 
 @pytest.mark.parametrize("good", ["abc", "roldugin/20260710T142200", "a/b/c", "a.b-c_d"])
@@ -69,12 +76,12 @@ def test_validate_id_rejects_unsafe(bad):
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `python -m pytest tests/test_persistence.py -v`
-Expected: FAIL — `ModuleNotFoundError: No module named 'app.persistence'`.
+Expected: FAIL — `ModuleNotFoundError: No module named 'app.core.persistence'`.
 
 - [ ] **Step 3: Write minimal implementation**
 
 ```python
-# app/persistence.py
+# app/core/persistence.py
 """The single document-storage seam. Everything above speaks typed PersistedModel
 objects; only this module knows they live in a SQLite key-value table.
 
@@ -114,7 +121,7 @@ Expected: PASS (both parametrized tests).
 - [ ] **Step 5: Commit**
 
 ```bash
-git add app/persistence.py tests/test_persistence.py
+git add app/core/persistence.py tests/test_persistence.py
 git commit -m "$(printf 'feat(persistence): add validate_id + module skeleton\n\nCo-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>')"
 ```
 
@@ -123,22 +130,22 @@ git commit -m "$(printf 'feat(persistence): add validate_id + module skeleton\n\
 ### Task 2: `DocumentNotFound` + `SqliteKvStore` core (write / read / schema_version)
 
 **Files:**
-- Modify: `app/errors.py`
-- Modify: `app/persistence.py`
+- Modify: `app/core/errors.py`
+- Modify: `app/core/persistence.py`
 - Test: `tests/test_persistence.py`
 
 **Interfaces:**
 - Consumes: `JsonDict` (Task 1).
 - Produces:
-  - `app.errors.DocumentNotFound(Exception)`.
+  - `app.core.errors.DocumentNotFound(Exception)`.
   - `SqliteKvStore(db_path: str)` with `write(collection: str, id: str, data: JsonDict, schema_version: int = 1) -> None`, `read(collection: str, id: str) -> JsonDict` (raises `DocumentNotFound` on miss), `schema_version(collection: str, id: str) -> int`. Backed by a `documents(collection, id, data, schema_version, PRIMARY KEY(collection, id))` table in WAL mode.
 
 - [ ] **Step 1: Write the failing test**
 
 ```python
 # tests/test_persistence.py  (append)
-from app.errors import DocumentNotFound
-from app.persistence import SqliteKvStore
+from app.core.errors import DocumentNotFound
+from app.core.persistence import SqliteKvStore
 
 
 @pytest.fixture
@@ -174,7 +181,7 @@ Expected: FAIL — `ImportError: cannot import name 'SqliteKvStore'` (and `Docum
 
 - [ ] **Step 3: Write minimal implementation**
 
-Add to `app/errors.py`:
+Add to `app/core/errors.py`:
 
 ```python
 class DocumentNotFound(Exception):
@@ -184,13 +191,13 @@ class DocumentNotFound(Exception):
     empty document."""
 ```
 
-Add to `app/persistence.py` (imports at top, class below `validate_id`):
+Add to `app/core/persistence.py` (imports at top, class below `validate_id`):
 
 ```python
 import json
 import sqlite3
 
-from app.errors import DocumentNotFound
+from app.core.errors import DocumentNotFound
 
 
 class SqliteKvStore:
@@ -246,7 +253,7 @@ Expected: PASS (4 tests).
 - [ ] **Step 5: Commit**
 
 ```bash
-git add app/errors.py app/persistence.py tests/test_persistence.py
+git add app/core/errors.py app/core/persistence.py tests/test_persistence.py
 git commit -m "$(printf 'feat(persistence): SqliteKvStore write/read + DocumentNotFound\n\nCo-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>')"
 ```
 
@@ -255,7 +262,7 @@ git commit -m "$(printf 'feat(persistence): SqliteKvStore write/read + DocumentN
 ### Task 3: `SqliteKvStore` — `exists`, `delete`, `read_tolerant`
 
 **Files:**
-- Modify: `app/persistence.py`
+- Modify: `app/core/persistence.py`
 - Test: `tests/test_persistence.py`
 
 **Interfaces:**
@@ -335,7 +342,7 @@ Expected: PASS (4 tests).
 - [ ] **Step 5: Commit**
 
 ```bash
-git add app/persistence.py tests/test_persistence.py
+git add app/core/persistence.py tests/test_persistence.py
 git commit -m "$(printf 'feat(persistence): exists/delete/read_tolerant\n\nCo-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>')"
 ```
 
@@ -344,7 +351,7 @@ git commit -m "$(printf 'feat(persistence): exists/delete/read_tolerant\n\nCo-Au
 ### Task 4: `SqliteKvStore` — `list_ids` / `read_all` with prefix scoping
 
 **Files:**
-- Modify: `app/persistence.py`
+- Modify: `app/core/persistence.py`
 - Test: `tests/test_persistence.py`
 
 **Interfaces:**
@@ -415,7 +422,7 @@ Expected: PASS (3 tests).
 - [ ] **Step 5: Commit**
 
 ```bash
-git add app/persistence.py tests/test_persistence.py
+git add app/core/persistence.py tests/test_persistence.py
 git commit -m "$(printf 'feat(persistence): list_ids/read_all with prefix scoping\n\nCo-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>')"
 ```
 
@@ -424,7 +431,7 @@ git commit -m "$(printf 'feat(persistence): list_ids/read_all with prefix scopin
 ### Task 5: `DocumentStore` protocol + `PersistedModel` + `configure_store`
 
 **Files:**
-- Modify: `app/persistence.py`
+- Modify: `app/core/persistence.py`
 - Test: `tests/test_persistence.py`
 
 **Interfaces:**
@@ -438,7 +445,7 @@ git commit -m "$(printf 'feat(persistence): list_ids/read_all with prefix scopin
 
 ```python
 # tests/test_persistence.py  (append)
-from app.persistence import PersistedModel, configure_store
+from app.core.persistence import PersistedModel, configure_store
 
 
 class _Widget(PersistedModel):
@@ -477,7 +484,7 @@ def test_delete_and_exists(configured):
 
 
 def test_get_store_unconfigured_raises():
-    import app.persistence as p
+    import app.core.persistence as p
     p._store = None
     with pytest.raises(RuntimeError):
         p.get_store()
@@ -490,7 +497,7 @@ Expected: FAIL — `ImportError: cannot import name 'PersistedModel'`.
 
 - [ ] **Step 3: Write minimal implementation**
 
-Extend the imports and add to `app/persistence.py`:
+Extend the imports and add to `app/core/persistence.py`:
 
 ```python
 from typing import ClassVar, Protocol, Self
@@ -530,8 +537,8 @@ class PersistedModel(BaseModel):
     configured DocumentStore, so nothing above this class touches storage. The
     body is serialized as JSON (see docs/persistence-unification.md).
 
-    Its own strict config mirrors app.models._Base without importing it, so the
-    storage layer stays free of an app.models dependency."""
+    Its own strict config mirrors app.core.models._Base without importing it, so the
+    storage layer stays free of an app.core.models dependency."""
 
     model_config = ConfigDict(
         extra="forbid",
@@ -587,7 +594,7 @@ Expected: PASS (all persistence tests, ~18).
 - [ ] **Step 5: Commit**
 
 ```bash
-git add app/persistence.py tests/test_persistence.py
+git add app/core/persistence.py tests/test_persistence.py
 git commit -m "$(printf 'feat(persistence): PersistedModel + DocumentStore protocol + configure_store\n\nCo-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>')"
 ```
 
@@ -596,7 +603,7 @@ git commit -m "$(printf 'feat(persistence): PersistedModel + DocumentStore proto
 ### Task 6: `FrameStore` (parquet payloads)
 
 **Files:**
-- Create: `app/frames.py`
+- Create: `app/core/frames.py`
 - Test: `tests/test_frames.py`
 
 **Interfaces:**
@@ -610,7 +617,7 @@ git commit -m "$(printf 'feat(persistence): PersistedModel + DocumentStore proto
 import pandas as pd
 import pytest
 
-from app.frames import FrameStore
+from app.core.frames import FrameStore
 
 
 @pytest.fixture
@@ -644,12 +651,12 @@ def test_unsafe_id_rejected(frames):
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `python -m pytest tests/test_frames.py -v`
-Expected: FAIL — `ModuleNotFoundError: No module named 'app.frames'`.
+Expected: FAIL — `ModuleNotFoundError: No module named 'app.core.frames'`.
 
 - [ ] **Step 3: Write minimal implementation**
 
 ```python
-# app/frames.py
+# app/core/frames.py
 """Parquet storage for the tabular payloads that aren't documents — run stage
 outputs, review-queue snapshots, decision logs, and uploaded eval datasets. Same
 (collection, id) addressing as the document store, different physical form: one
@@ -661,7 +668,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from app.persistence import validate_id
+from app.core.persistence import validate_id
 
 
 class FrameStore:
@@ -702,7 +709,7 @@ Expected: PASS (4 tests).
 - [ ] **Step 5: Commit**
 
 ```bash
-git add app/frames.py tests/test_frames.py
+git add app/core/frames.py tests/test_frames.py
 git commit -m "$(printf 'feat(persistence): FrameStore for parquet payloads\n\nCo-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>')"
 ```
 
@@ -711,9 +718,9 @@ git commit -m "$(printf 'feat(persistence): FrameStore for parquet payloads\n\nC
 ## Final verification (after Task 6)
 
 - [ ] **Full suite green:** `python -m pytest tests/test_persistence.py tests/test_frames.py -v` → all pass.
-- [ ] **No regressions:** `python -m pytest -q` → the whole suite still passes (this phase adds files, modifies only `app/errors.py`).
-- [ ] **Types clean:** `python -m mypy app/persistence.py app/frames.py app/errors.py` → no errors (no `Any`-dodge, no `type: ignore`).
-- [ ] **Lint clean:** `python -m ruff check app/persistence.py app/frames.py app/errors.py tests/test_persistence.py tests/test_frames.py` → no findings (no blind except).
+- [ ] **No regressions:** `python -m pytest -q` → the whole suite still passes (this phase adds files, modifies only `app/core/errors.py`).
+- [ ] **Types clean:** `python -m mypy app/core/persistence.py app/core/frames.py app/core/errors.py` → no errors (no `Any`-dodge, no `type: ignore`).
+- [ ] **Lint clean:** `python -m ruff check app/core/persistence.py app/core/frames.py app/core/errors.py tests/test_persistence.py tests/test_frames.py` → no findings (no blind except).
 
 ## What Phase 1 deliberately does NOT do
 
