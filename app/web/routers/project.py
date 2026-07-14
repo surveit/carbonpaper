@@ -51,7 +51,11 @@ from fastapi.responses import (
     RedirectResponse,
 )
 
-from app.models import validate_named_schema, validate_schema_library
+from app.models import (
+    parse_schema_library,
+    validate_named_schema,
+    validate_schema_library,
+)
 from app.services import generation, node_review, project
 from app.services.loader import stage_to_spec_dict
 from app.web.config import EXAMPLES_DIR, templates
@@ -257,6 +261,37 @@ async def generate_project(project_name: str):
     model = project.project_meta(pdir).model or "sonnet"
     session_id = generation.start_generation(
         pdir, document=document_path.read_text(encoding="utf-8"), model=model
+    )
+    return RedirectResponse(url=f"/chat/{session_id}", status_code=303)
+
+
+@router.post("/project/{project_name}/generate-workflow")
+async def generate_workflow(project_name: str):
+    """Generate the WORKFLOW ONLY, from document.md, using the project's data model as
+    reference — but only when that data model is APPROVED (an unapproved or absent data
+    model is not passed, and the compile proceeds document-only). Never regenerates the
+    data model (schemas/ is untouched). 400 if there is no document; otherwise runs the
+    workflow agent as a LIVE chat turn and redirects to /chat/<sid> so the build is
+    watchable (it lands on disk when the turn ends)."""
+    pdir = _project_dir(project_name)
+    document_path = pdir / "document.md"
+    if not document_path.is_file():
+        raise HTTPException(
+            status_code=400,
+            detail=f"examples/{project_name}/ has no document.md to generate from.",
+        )
+    model = project.project_meta(pdir).model or "sonnet"
+    schemas = load_schemas(pdir)
+    state = node_review.data_model_state(pdir, schemas)["state"] if schemas else "none"
+    data_model = None
+    if state == "approved":
+        # Strip the loader's bookkeeping keys (_filename/…) before the model validates.
+        data_model = parse_schema_library([_schema_spec(s) for s in schemas])
+    session_id = generation.start_workflow_generation(
+        pdir,
+        document=document_path.read_text(encoding="utf-8"),
+        model=model,
+        data_model=data_model,
     )
     return RedirectResponse(url=f"/chat/{session_id}", status_code=303)
 
