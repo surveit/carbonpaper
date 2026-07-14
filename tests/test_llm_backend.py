@@ -1,18 +1,17 @@
 """get_llm_call_type() decision matrix — fully hermetic via monkeypatch.
 
-Never touches the SDK's real availability or the real CLI path; both are patched
-so the table is deterministic on any machine. The key policy: a real backend
-that isn't available RAISES — we never silently fall back to the mock.
+The key policy: a live backend that isn't available RAISES — we never silently
+fall back to the mock. `mock` is reachable only when explicitly requested.
 """
 from __future__ import annotations
 
 import pytest
 
-from app.runtime import options, llm_agent_sdk
-from app.runtime.llm import call_llm
+from app.core.errors import LLMError
+from app.runtime import options
 
 
-def _set(monkeypatch, *, force_mock=False, backend=None, sdk_available=False, cli=None):
+def _set(monkeypatch, *, force_mock=False, backend=None, agent=False):
     if force_mock:
         monkeypatch.setenv("CW_LLM_FORCE_MOCK", "1")
     else:
@@ -21,65 +20,37 @@ def _set(monkeypatch, *, force_mock=False, backend=None, sdk_available=False, cl
         monkeypatch.delenv("CW_LLM_BACKEND", raising=False)
     else:
         monkeypatch.setenv("CW_LLM_BACKEND", backend)
-    monkeypatch.setattr(llm_agent_sdk, "available", lambda: sdk_available)
-    monkeypatch.setattr(options, "CLAUDE_BIN", cli)
+    monkeypatch.setattr(options, "agent_available", lambda: agent)
 
 
 def test_force_mock_overrides_everything(monkeypatch):
-    _set(monkeypatch, force_mock=True, backend="agent_sdk", sdk_available=True, cli="/x")
+    _set(monkeypatch, force_mock=True, backend="agent", agent=True)
     assert options.get_llm_call_type() == "mock"
 
 
 def test_explicit_mock(monkeypatch):
-    _set(monkeypatch, backend="mock", sdk_available=True, cli="/x")
+    _set(monkeypatch, backend="mock", agent=True)
     assert options.get_llm_call_type() == "mock"
 
 
-def test_backend_cli_available(monkeypatch):
-    _set(monkeypatch, backend="cli", sdk_available=True, cli="/usr/bin/claude")
-    assert options.get_llm_call_type() == "cli"
+def test_auto_picks_agent_when_available(monkeypatch):
+    _set(monkeypatch, agent=True)
+    assert options.get_llm_call_type() == "agent"
 
 
-def test_backend_cli_unavailable_raises(monkeypatch):
-    # No silent mock fallback: an explicit cli request with no CLI must raise.
-    _set(monkeypatch, backend="cli", sdk_available=True, cli=None)
-    with pytest.raises(options.LLMError):
+def test_auto_without_agent_raises_never_mocks(monkeypatch):
+    _set(monkeypatch, agent=False)
+    with pytest.raises(LLMError):
         options.get_llm_call_type()
 
 
-@pytest.mark.parametrize("avail,cli,expected", [
-    (True, "/x", "agent_sdk"),
-    (False, "/x", "cli"),
-])
-def test_backend_agent_sdk_degrades_to_cli(monkeypatch, avail, cli, expected):
-    _set(monkeypatch, backend="agent_sdk", sdk_available=avail, cli=cli)
-    assert options.get_llm_call_type() == expected
-
-
-def test_backend_agent_sdk_no_live_backend_raises(monkeypatch):
-    _set(monkeypatch, backend="agent_sdk", sdk_available=False, cli=None)
-    with pytest.raises(options.LLMError):
+def test_explicit_agent_unavailable_raises(monkeypatch):
+    _set(monkeypatch, backend="agent", agent=False)
+    with pytest.raises(LLMError):
         options.get_llm_call_type()
 
 
-@pytest.mark.parametrize("avail,cli,expected", [
-    (True, "/x", "agent_sdk"),
-    (False, "/x", "cli"),
-])
-def test_auto_prefers_sdk_then_cli(monkeypatch, avail, cli, expected):
-    _set(monkeypatch, backend=None, sdk_available=avail, cli=cli)
-    assert options.get_llm_call_type() == expected
-
-
-def test_auto_no_live_backend_raises(monkeypatch):
-    # The behavior change: auto no longer silently falls back to the mock.
-    _set(monkeypatch, backend=None, sdk_available=False, cli=None)
-    with pytest.raises(options.LLMError):
+def test_unknown_backend_value_raises(monkeypatch):
+    _set(monkeypatch, backend="cli", agent=True)
+    with pytest.raises(LLMError):
         options.get_llm_call_type()
-
-
-def test_call_llm_takes_llm_config_model():
-    from app.core.models import LLMConfig
-    cfg = LLMConfig(prompt_template="score {name}")
-    result = call_llm("some_stage", cfg, {"name": "acme"})
-    assert result is not None

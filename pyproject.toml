@@ -77,10 +77,11 @@ allowed_importers = ["app.agent", "app.evals", "app.web"]
 name = "app.agent spine imported only by its registrar and the entrypoint"
 type = "protected"
 protected_modules = ["app.agent"]
-allowed_importers = ["app.compiler", "app.main"]
+allowed_importers = ["app.compiler", "app.main", "app.runtime"]
 # app.agent is a domain-agnostic chat/agent engine; app.compiler.agent imports it to
-# register the editing tools and app.main mounts it. Nothing else depends on the
-# spine, so any agent can run on it.
+# register the editing tools, app.main mounts it, and app.runtime drives it as the
+# llm_transform reply backend. No package outside this list depends on the spine,
+# so any agent can run on it.
 
 [[tool.importlinter.contracts]]
 name = "app.evals is a leaf — imported only by web"

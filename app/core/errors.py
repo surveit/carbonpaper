@@ -60,3 +60,7 @@ class SubsetRunError(Exception):
     stage output: a stage errored, or the run halted for human review. The
     message names what went wrong. (General runtime failure — callers like the
     eval runner translate it into their own outcome, e.g. an `error` eval run.)"""
+
+
+class LLMError(Exception):
+    """A live-LLM call failed, or no LLM backend is available."""
