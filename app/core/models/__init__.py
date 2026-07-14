@@ -16,6 +16,7 @@ from app.core.models.schema import (
     TableSchema,
     is_valid_column_type,
 )
+from app.core.models.row_model import build_row_model
 from app.core.models.stage import (
     AggFormula,
     AggregateConfig,
@@ -170,7 +171,7 @@ NODE_TYPE_NAMES: set[str] = set(NODE_TYPES)
 __all__ = [
     "StageType", "ConnectorKind", "FileFormat", "AggFormula", "JoinType",
     "FunctionKind", "PublishFormat", "is_valid_column_type",
-    "SourceRef", "Column", "TableSchema", "Connector", "LLMConfig",
+    "SourceRef", "Column", "TableSchema", "build_row_model", "Connector", "LLMConfig",
     "PythonFunction", "JoinKey", "JoinConfig", "AggregationOp",
     "AggregateConfig", "QueueConfig", "PublishConfig", "ReviewConfig",
     "InputRef", "Stage", "validate_stage",
