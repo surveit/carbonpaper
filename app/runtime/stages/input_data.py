@@ -11,13 +11,29 @@ import pandas as pd
 from app.models import ConnectorKind, Stage
 
 
+def _resolve_within(anchor: Path, rel: str) -> Path:
+    """Join `rel` onto `anchor` and return the resolved path, but only if it stays
+    inside `anchor`. An absolute path or a `..` segment that escapes the anchor is
+    rejected loudly — a connector must not be able to read arbitrary files off the
+    host (invariant of #100). Mirrors the containment style used in the web layer
+    (`app/web/routers/runs.py`)."""
+    anchor = Path(anchor).resolve()
+    candidate = (anchor / rel).resolve()
+    if not candidate.is_relative_to(anchor):
+        raise ValueError(
+            f"connector path {rel!r} escapes the project root — absolute paths and "
+            f"'..' traversal are not allowed"
+        )
+    return candidate
+
+
 def handle_input_data(stage: Stage, inputs: dict[str, pd.DataFrame], ctx: dict[str, Any]) -> pd.DataFrame:
     connector = stage.connector
     assert connector is not None  # Stage validation: input_data carries connector
     params = connector.params
 
     if connector.kind == ConnectorKind.file:
-        path = ctx["repo_root"] / params["path"]   # required by Connector validation
+        path = _resolve_within(ctx["repo_root"], params["path"])   # required by Connector validation
         fmt = params.get("format", "csv")
         if fmt == "csv":
             df = pd.read_csv(path)
@@ -44,9 +60,9 @@ def handle_input_data(stage: Stage, inputs: dict[str, pd.DataFrame], ctx: dict[s
 
     if connector.kind == ConnectorKind.computed_static:
         # Demo mode: read from the file param if provided
-        path = params.get("file")
-        if path:
-            return pd.read_csv(ctx["repo_root"] / path)
+        file_param = params.get("file")
+        if file_param:
+            return pd.read_csv(_resolve_within(ctx["repo_root"], file_param))
         return pd.DataFrame()
 
     raise ValueError(f"Unknown connector kind: {connector.kind}")

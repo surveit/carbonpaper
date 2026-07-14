@@ -41,6 +41,12 @@ from app import models
 from app.compiler.prompt import SYSTEM_PROMPT, build_compile_prompt
 from app.llm_sdk import CLI_PATH, run_sync
 
+# The compiler is a CODE-AUTHORING surface: it turns prose into a workflow. It
+# must be granted NO tools — no web/network tool in particular (invariant 1 of
+# #100), so agent-authored code can never be steered by fetched web content. This
+# empty list is asserted by tests/test_authoring_no_web_tools.py; keep it empty.
+COMPILER_ALLOWED_TOOLS: list[str] = []
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 1. INPUT — read the unstructured account as text (no structural parsing)
@@ -91,7 +97,7 @@ async def _aquery(prompt_text: str, model: str, timeout_s: int) -> str:
     opts_kwargs: dict[str, Any] = dict(
         model=model,
         max_turns=1,
-        allowed_tools=[],          # no tools → single completion turn
+        allowed_tools=list(COMPILER_ALLOWED_TOOLS),   # no tools → single completion turn
         setting_sources=[],        # ignore inherited CLAUDE.md / settings
         system_prompt=SYSTEM_PROMPT,
     )
