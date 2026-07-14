@@ -2,8 +2,10 @@
 
 Ties the pieces together: check the config still fits the workflow, inject the eval
 dataset as the override stage's output, run the grain-preserving stage subset to the
-target (app.runtime.runner.run_subset), score the target's output against the
-dataset's expected columns (app.evals.scoring), and write an EvalRun.
+target (app.runtime.runner.run_subset — which derives which stages that is itself
+from the target and the injected stage ids; this layer no longer computes or hands
+over a frontier, see issue #102), score the target's output against the dataset's
+expected columns (app.evals.scoring), and write an EvalRun.
 
 v1 scores DECLARATIVELY only — a path that isn't grain-preserving is recorded as
 `vetoed` (a code scorer is the escape hatch, but executing one is not built yet). An
@@ -80,7 +82,7 @@ def _score_run(
     started = _now()
     try:
         outputs = run_subset(
-            workflow, stage_ids=settings.frontier, run_dir=run_dir, repo_root=repo_root,
+            workflow, target=config.target_stage, run_dir=run_dir, repo_root=repo_root,
             injected_outputs=_build_injected_outputs(repo_root, config, override, target, dataset))
         score = score_expected_outputs(config, override, target, dataset,
                                        outputs[config.target_stage])

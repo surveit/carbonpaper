@@ -13,7 +13,7 @@ surfaces every problem, not just the first.
 """
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Iterable
 
 from pydantic import ValidationError, model_validator
 
@@ -74,6 +74,57 @@ def graph_issues(stages: list[Stage]) -> list[str]:
     inputs, and a cycle. The single source of truth both the strict model
     validator and the non-fatal `validate_workflow` build on."""
     return check_unique_ids(stages) + check_inputs_resolve(stages) + detect_cycle(stages)
+
+
+def executable_frontier(
+    stages: list[Stage], targets: Iterable[str], injected: Iterable[str],
+) -> list[str]:
+    """The stages that must execute to produce every stage in `targets`, given
+    that `injected` stages are seeded from outside (their output is supplied, not
+    computed): each target plus its non-injected ancestors, found by walking
+    `input_ids` upward from `targets` and stopping at any node in `injected` — its
+    own upstream never executes either.
+
+    This is the one graph walk behind two different decisions, kept here so
+    neither has to trust the other's answer: `app.runtime.runner.run_subset` uses
+    it to derive which stages a subset run must actually execute (rather than
+    accepting a caller-supplied stage list — see issue #102), and
+    `app.models.eval.resolve_eval_run_settings` uses it to decide whether that
+    path is scorable declaratively.
+
+    Raises ValueError if a target or an injected id names no stage in `stages`,
+    or if a target is itself injected — asking to both skip and produce the same
+    stage has no coherent answer, so this fails at derivation time rather than
+    guessing.
+
+    Order is unspecified (returned sorted, for determinism); a caller that needs
+    an executable ORDER re-derives it (e.g. via `topological_sort` on the
+    stages named by the returned ids)."""
+    by_id = {s.id: s for s in stages}
+    target_list = list(targets)
+    injected_set = set(injected)
+    unknown = (set(target_list) | injected_set) - by_id.keys()
+    if unknown:
+        raise ValueError(f"references stage(s) not in the workflow: {sorted(unknown)}")
+    overlap = set(target_list) & injected_set
+    if overlap:
+        raise ValueError(
+            f"target(s) {sorted(overlap)} cannot also be injected/overridden")
+
+    frontier: list[str] = []
+    seen: set[str] = set()
+    stack = list(target_list)
+    while stack:
+        node = stack.pop()
+        if node in seen or node in injected_set:
+            continue  # an injected node's output is supplied, not computed —
+            # and we don't walk above it; its own upstream never executes either.
+        seen.add(node)
+        frontier.append(node)
+        for upstream in by_id[node].input_ids:
+            if upstream not in seen and upstream not in injected_set:
+                stack.append(upstream)
+    return sorted(frontier)
 
 
 class Workflow(_Base):

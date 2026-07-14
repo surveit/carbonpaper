@@ -21,13 +21,13 @@ import time
 import traceback
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterable
 
 import pandas as pd
 import pyarrow.lib as pa_lib
 
 from app.errors import NoVersionToRunError, SubsetRunError
-from app.models import Stage, Workflow
+from app.models import Stage, Workflow, executable_frontier
 from app.services.loader import WorkflowLoadError
 from app.services import versioning
 
@@ -236,24 +236,37 @@ def execute_run(
 def run_subset(
     workflow: Workflow,
     *,
+    target: str | Iterable[str],
     injected_outputs: dict[str, pd.DataFrame],
-    stage_ids: list[str],
     run_dir: Path,
     repo_root: Path,
 ) -> dict[str, pd.DataFrame]:
-    """Run only `stage_ids` of `workflow`, with `injected_outputs` seeded as the
-    outputs of stages OUTSIDE the subset (their upstream is cut off — the output is
-    given, not computed). Returns the outputs of every executed stage.
+    """Run only the stages needed to produce `target` (one stage id, or several)
+    from `workflow`. `injected_outputs` seeds the outputs of stages OUTSIDE the
+    subset — their OWN upstream is cut off, not executed — so its keys ARE the
+    injected/overridden set.
 
-    Any input of a subset stage that names a stage outside the subset must appear in
-    `injected_outputs`, or `_execute_stages` fails on it. Raises SubsetRunError if an
-    executed stage errors or the run halts for review, so a caller gets a clean output
-    set or a loud failure — never a half-populated dict."""
+    The runner derives the executable frontier itself (`app.models.
+    executable_frontier`: walk up from `target` through each stage's declared
+    inputs, stopping at any stage named in `injected_outputs`) and validates it,
+    rather than trusting a caller-supplied stage list (issue #102 — the caller
+    used to compute this and hand it over; now the runtime owns its own execution
+    contract). Any input of a frontier stage that names a stage outside the
+    frontier must appear in `injected_outputs`, or `_execute_stages` fails on it.
+
+    Returns the outputs of every executed stage (plus the injected ones — the
+    dict a downstream frontier stage's inputs are read from). Raises
+    SubsetRunError if `target`/`injected_outputs` names a stage id not in
+    `workflow`, a target stage is also injected, an executed stage errors, or the
+    run halts for review — a caller gets a clean output set or a loud failure,
+    never a half-populated dict."""
     by_id = {stage.id: stage for stage in workflow.stages}
-    missing = [sid for sid in stage_ids if sid not in by_id]
-    if missing:
-        raise SubsetRunError(f"subset names stage(s) not in the workflow: {missing}")
-    ordered = topological_sort([by_id[sid] for sid in stage_ids])
+    targets = [target] if isinstance(target, str) else list(target)
+    try:
+        frontier = executable_frontier(workflow.stages, targets, injected_outputs.keys())
+    except ValueError as exc:
+        raise SubsetRunError(str(exc)) from exc
+    ordered = topological_sort([by_id[sid] for sid in frontier])
     (run_dir / "outputs").mkdir(parents=True, exist_ok=True)
     outputs: dict[str, pd.DataFrame] = dict(injected_outputs)
     manifest = _execute_stages(
