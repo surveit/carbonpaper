@@ -22,12 +22,25 @@ _EXEMPT_PARTS = {"tests", _MARKER, "__pycache__", "_vendor", "node_modules", "ve
 def find_governed_files(test_file: str) -> list[Path]:
     """Source ``.py`` files in the folder this arch test lives in, and below."""
     feature_dir = _resolve_feature_dir(test_file)
-    return list(_iter_source_under(feature_dir))
+    files = list(_iter_source_under(feature_dir))
+    if not files:
+        raise ValueError(
+            f"architecture test {test_file} governs no source files under "
+            f"{feature_dir} — an _arch_tests/ folder must sit alongside the code it "
+            "checks; write the code before the rule can pass"
+        )
+    return files
 
 
 def scan_all_source() -> list[Path]:
     """Every source ``.py`` in the repo — whole repo minus the exemptions."""
-    return list(_iter_source_under(_REPO_ROOT))
+    files = list(_iter_source_under(_REPO_ROOT))
+    if not files:
+        raise ValueError(
+            f"scan_all_source found no source files under {_REPO_ROOT} — the scope "
+            "resolver is misconfigured (exemptions are excluding everything)"
+        )
+    return files
 
 
 def _resolve_feature_dir(test_file: str) -> Path:
