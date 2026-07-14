@@ -14,6 +14,8 @@ import pandas as pd
 
 from app.models import FunctionKind, Stage
 
+from ..lineage import Edge, record_edges, record_untracked
+
 
 def _load_python_function(stage: Stage) -> Callable[..., Any]:
     """Resolve the callable for a stage carrying a function: block."""
@@ -41,7 +43,46 @@ def handle_python_frame_function(stage: Stage, inputs: dict[str, pd.DataFrame], 
     fn = _load_python_function(stage)
     # Pass dataframes positionally in declared input order.
     args = [inputs[ref.id] for ref in stage.inputs]
-    return fn(*args)
+    output = fn(*args)
+
+    # A frame function is opaque — the runtime can't see how it maps rows. We
+    # attempt a conservative recovery (design §4.2): if there is a single input
+    # and every output row's shared-column content uniquely identifies one input
+    # row, record those edges. Otherwise mark the stage `untracked` rather than
+    # inventing a positional identity that a reshaping function may have broken.
+    if isinstance(output, pd.DataFrame) and len(stage.inputs) == 1:
+        edges = _recover_frame_edges(stage.inputs[0].id, args[0], output)
+        if edges is not None:
+            record_edges(ctx, stage.id, edges)
+        else:
+            record_untracked(ctx, stage.id)
+    else:
+        record_untracked(ctx, stage.id)
+    return output
+
+
+def _recover_frame_edges(
+    input_id: str, src: pd.DataFrame, output: pd.DataFrame
+) -> list[Edge] | None:
+    """Best-effort recovery of output→input edges for an opaque single-input
+    frame function. Returns edges only if the columns shared by input and output
+    identify each output row with exactly one input row (identity, permutation,
+    row subset). Returns None — meaning 'untracked' — if there is no shared
+    column, or any output row is unmatched or ambiguous (duplicate signatures,
+    NaN keys), so the tracer never trusts a guess."""
+    shared = [c for c in output.columns if c in src.columns]
+    if not shared:
+        return None
+    sig_to_positions: dict[tuple[Any, ...], list[int]] = {}
+    for pos, sig in enumerate(src[shared].itertuples(index=False, name=None)):
+        sig_to_positions.setdefault(sig, []).append(pos)
+    edges: list[Edge] = []
+    for out_row, sig in enumerate(output[shared].itertuples(index=False, name=None)):
+        candidates = sig_to_positions.get(sig)
+        if not candidates or len(candidates) != 1:
+            return None
+        edges.append((out_row, input_id, candidates[0]))
+    return edges
 
 
 def handle_python_row_function(stage: Stage, inputs: dict[str, pd.DataFrame], ctx: dict[str, Any]) -> pd.DataFrame:

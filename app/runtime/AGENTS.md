@@ -66,6 +66,15 @@ refused before the runner does any work.
 - **`validation.py`** — DATA validation of a dataframe against an `output_schema`
   (present columns, types, ranges, nullability, PK uniqueness). Distinct from the
   stage schemas in `app/models/`.
+- **`lineage.py` + `trace.py`** — row-level lineage for row-*reshaping* stages
+  (join fan-out, aggregate fan-in, human_review_queue drop/reorder, recoverable
+  python_frame_function). Those handlers record `out_row, in_stage, in_row` edges
+  into `ctx["lineage"]`; the runner re-slices them through the SAME offset/limit
+  as the output and persists `runs/<id>/lineage/<stage>.parquet` (an opaque frame
+  function that can't be recovered writes an `.untracked` marker instead). Row-
+  *preserving* stages record nothing — output row *i* is input row *i* by
+  position. `trace.py` walks (stage, out_row) back to origin rows, consuming
+  sidecars where present and following the ordinal positionally where not.
 
 ## Run / debug
 ```
@@ -73,4 +82,4 @@ python -m app.runtime.runner examples/<name>          # auto backend
 CW_LLM_FORCE_MOCK=1 python -m app.runtime.runner ...  # fast, deterministic, no LLM
 CW_LLM_BACKEND=agent_sdk python -m app.runtime.runner # real model (needs claude CLI)
 ```
-Outputs: `examples/<name>/runs/<id>/{manifest.json, outputs/*.parquet, artifacts/, queue/}`.
+Outputs: `examples/<name>/runs/<id>/{manifest.json, outputs/*.parquet, lineage/*.parquet, artifacts/, queue/}`.

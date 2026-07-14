@@ -31,6 +31,7 @@ from app.models import Stage
 from app.services.loader import WorkflowLoadError
 from app.services import versioning
 
+from .lineage import persist_stage_lineage
 from .stages import HANDLERS, HaltForReview
 from .validation import validate_dataframe
 
@@ -344,18 +345,27 @@ def _execute_stages(
             # then the cap keeps the first N. A per-run cap (--limit stage=N)
             # wins over the stage's static `limit:`. Used to throttle /
             # page the expensive LLM fan-out.
+            #
+            # `applied_offset`/`applied_limit` capture the exact slice actually
+            # taken so any lineage edges a reshaping handler recorded (on
+            # PRE-slice output ordinals) can be put through the identical slice
+            # before they're persisted — the correctness crux for lineage under
+            # --limit/--offset.
+            applied_offset = 0
             offset = (ctx.get("offsets") or {}).get(sid)
             if isinstance(offset, int) and offset > 0 and len(output) > 0:
                 record.setdefault("notes", []).append(
                     f"offset={offset}: dropped first {min(offset, len(output))} of {len(output)} row(s)"
                 )
                 output = output.iloc[offset:].reset_index(drop=True).copy()
+                applied_offset = offset
             limit = (ctx.get("limits") or {}).get(sid, stage.limit)
-            if isinstance(limit, int) and limit >= 0 and len(output) > limit:
+            applied_limit: int | None = limit if isinstance(limit, int) and limit >= 0 else None
+            if applied_limit is not None and len(output) > applied_limit:
                 record.setdefault("notes", []).append(
-                    f"limit={limit}: truncated from {len(output)} to {limit} row(s)"
+                    f"limit={applied_limit}: truncated from {len(output)} to {applied_limit} row(s)"
                 )
-                output = output.head(limit).copy()
+                output = output.head(applied_limit).copy()
 
             out_rep = validate_dataframe(
                 output, stage.output_schema, stage_id=sid, phase="output",
@@ -384,6 +394,18 @@ def _execute_stages(
             ) else "validation_warnings"
             record["rows"] = int(len(output))
             record["output_path"] = str(output_path.relative_to(run_dir))
+
+            # Persist row-level lineage for reshaping stages that recorded it.
+            # Edges were recorded on the handler's pre-slice ordinals, so
+            # re-slice them through the same offset/limit before writing the
+            # sidecar so out_row lines up with the persisted output.
+            recorded_lineage = (ctx.get("lineage") or {}).get(sid)
+            if recorded_lineage is not None:
+                lineage_note = persist_stage_lineage(
+                    run_dir, sid, recorded_lineage, applied_offset, applied_limit
+                )
+                if lineage_note is not None:
+                    record["lineage_path"] = lineage_note
 
         except Exception as exc:  # noqa: BLE001 — the runner's contract is
             # to record ANY stage failure (a handler can raise ValueError,

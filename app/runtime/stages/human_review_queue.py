@@ -11,7 +11,14 @@ import pyarrow.lib as pa_lib
 
 from app.models import Stage
 
+from ..lineage import Edge, record_edges
 from ._shared import HaltForReview, _translate_where
+
+# Hidden positional column: the source-row index each queue item / passthrough
+# row came from, carried through filter → decision → concat so output rows can
+# be traced back. The queue is not grain-and-order preserving (it drops rejected
+# rows and reorders decided-before-passthrough), so lineage must be recorded.
+_SRC_POS = "__lineage_src_pos__"
 
 
 def _content_hash(row: pd.Series, columns: list[str]) -> str:
@@ -69,7 +76,9 @@ def handle_human_review_queue(stage: Stage, inputs: dict[str, pd.DataFrame], ctx
     sid = stage.id
     queue_cfg = stage.queue
     assert queue_cfg is not None  # Stage validation: human_review_queue carries queue_cfg
-    src = inputs[stage.inputs[0].id].copy()
+    input_id = stage.inputs[0].id
+    src = inputs[input_id].copy()
+    src[_SRC_POS] = range(len(src))
     flt = queue_cfg.filter
 
     # Partition rows: those subject to review vs. those passing through.
@@ -143,9 +152,11 @@ def handle_human_review_queue(stage: Stage, inputs: dict[str, pd.DataFrame], ctx
         queue_dir.mkdir(parents=True, exist_ok=True)
         queue_path = queue_dir / f"{sid}.parquet"
         # Persist a snapshot — everything needed for the reviewer UI plus
-        # the content_hash so decisions can be recorded against it.
+        # the content_hash so decisions can be recorded against it. Strip the
+        # hidden lineage column so the reviewer-facing snapshot stays clean.
+        snapshot = pending.drop(columns=[_SRC_POS], errors="ignore")
         try:
-            pending.to_parquet(queue_path, index=False)
+            snapshot.to_parquet(queue_path, index=False)
         except (pa_lib.ArrowException, ValueError, TypeError):
             # A column whose dtype/shape parquet can't represent (mixed-type
             # object columns, nested Python values) — CSV stringifies those and
@@ -154,7 +165,7 @@ def handle_human_review_queue(stage: Stage, inputs: dict[str, pd.DataFrame], ctx
             # (and is recorded by the runner) rather than silently degrading the
             # queue snapshot.
             queue_path = queue_dir / f"{sid}.csv"
-            pending.to_csv(queue_path, index=False)
+            snapshot.to_csv(queue_path, index=False)
         raise HaltForReview(
             stage_id=sid,
             pending_count=int(len(pending)),
@@ -201,6 +212,18 @@ def handle_human_review_queue(stage: Stage, inputs: dict[str, pd.DataFrame], ctx
         decided = decided.rename(columns={"reviewer": "reviewer_id"})
 
     out = pd.concat([decided, passthrough], ignore_index=True, sort=False)
+
+    # Record row-level lineage before the hidden position column is dropped:
+    # each output row traces back to the input row it carried through (rejected
+    # rows were already dropped, so they simply have no edge).
+    if _SRC_POS in out.columns:
+        edges: list[Edge] = [
+            (out_row, input_id, int(pos))
+            for out_row, pos in enumerate(out[_SRC_POS])
+            if pd.notna(pos)
+        ]
+        record_edges(ctx, sid, edges)
+        out = out.drop(columns=[_SRC_POS])
 
     declared = [c.name for c in stage.output_schema.columns] if stage.output_schema else []
     if declared:
