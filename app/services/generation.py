@@ -45,6 +45,10 @@ def start_generation(project_dir: Path, *, document: str, model: str) -> str:
         context={"project_id": name, "phase": "data_model"},
     )
     agent = build_data_model_agent(document, model=model)
+    # Show the originating prompt as the user's message so the LIVE view doesn't lose it
+    # (the FE's live reattach only renders assistant events; the persisted transcript
+    # records this same prompt as the user turn, so live and reload agree).
+    store.set_pending_user(session_id, agent.task)
 
     async def _finish() -> None:
         _finish_data_model(project_dir, document, model, agent.answer)

@@ -88,6 +88,9 @@ def test_start_generation_creates_a_session_and_runs_a_live_turn(tmp_path: Path,
 
     async def _drive() -> str:
         sid = generation.start_generation(project_dir, document="doc", model="sonnet")
+        # The originating prompt is shown as the user's message (pending_user) so the LIVE
+        # view doesn't lose it — checked before the turn completes and clears it.
+        assert store.load(sid)["pending_user"] == _FakeAgent.task
         turn_id = store.load(sid)["active_turn"]
         assert turn_id, "a live turn should be active on the session while it generates"
         await turns._tasks[turn_id]
