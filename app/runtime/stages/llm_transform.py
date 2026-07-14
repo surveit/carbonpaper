@@ -3,7 +3,7 @@
 Runs the stage's prompt over each input row via the LLM layer (`llm.call_llm`;
 the runtime's row driver supplies bounded parallelism and reassembles results
 in input order). The columns `output_schema` adds beyond the input schema are
-the reply spec, compiled by `build_row_model` into the Pydantic model the
+the reply spec, compiled by `TableSchema.to_pydantic_model` into the model the
 agent backend enforces — a live reply is a validated instance of it, so reply
 columns arrive typed. The strictly-1:1 shape holds by construction: the mapper
 returns exactly one dict per input row; `Stage` validation fixes the schema
@@ -14,7 +14,6 @@ from __future__ import annotations
 from typing import Any, Callable
 
 from app.core.models import Stage
-from app.core.models.row_model import build_row_model
 
 from ..llm import backend_status, call_llm
 from .execution import Row
@@ -30,7 +29,7 @@ def make_llm_row_mapper(stage: Stage, ctx: dict[str, Any]) -> Callable[[Row], Ro
     input_schema = stage.inputs[0].table_schema
     assert stage.output_schema is not None and input_schema is not None
     reply_spec = stage.output_schema.subtract(input_schema)
-    reply_model = build_row_model(reply_spec, f"{stage.id}_reply")
+    reply_model = reply_spec.to_pydantic_model(f"{stage.id}_reply")
 
     # Record which backend handled this stage so the UI/manifest can label it.
     ctx.setdefault("llm_backend", {})[stage.id] = backend_status()

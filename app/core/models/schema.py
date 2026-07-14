@@ -383,6 +383,21 @@ class TableSchema(_Base):
         lines.append("Any other key is invalid.")
         return "\n".join(lines)
 
+    def to_pydantic_model(self, name: str) -> type[BaseModel]:
+        """Compile this schema to a Pydantic model class named `name`, one
+        field per column: scalar type, nullability, enum vocabulary, numeric
+        range, and description all carry over, and a `json`/`list[json]`
+        column's `fields` become a nested model, validated recursively. Every
+        column is a REQUIRED field — `nullable` permits a None value, not an
+        absent key — and unknown keys are rejected. The model both validates a
+        reply and, via `model_json_schema()`, states the expected shape up
+        front (e.g. as an agent tool's input schema)."""
+        # Local import: the builder needs Column/`_LIST_RE` from this module,
+        # so importing it at module scope would be circular.
+        from app.core.models.row_model import build_row_model
+
+        return build_row_model(name, self.columns)
+
 
 # ── Error formatting ─────────────────────────────────────────────────────────
 def format_errors(err: ValidationError) -> list[str]:

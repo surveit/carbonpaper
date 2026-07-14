@@ -1,25 +1,26 @@
-"""Compile a TableSchema into a Pydantic model: one field per column.
+"""Implementation of `TableSchema.to_pydantic_model` — one field per column.
 
-`build_row_model(schema, name)` returns a Pydantic model class whose fields
-mirror the schema's columns — name, scalar type, nullability, enum vocabulary,
-numeric range, and description all carry over, and a `json`/`list[json]`
-column with `fields` becomes a nested model, validated recursively. Every
-column is a REQUIRED field: `nullable` permits a None value, not an absent
-key. Unknown keys are rejected.
+The built Pydantic model class mirrors the schema's columns: name, scalar
+type, nullability, enum vocabulary, numeric range, and description all carry
+over, and a `json`/`list[json]` column with `fields` becomes a nested model,
+validated recursively. Every column is a REQUIRED field: `nullable` permits a
+None value, not an absent key. Unknown keys are rejected.
 
-Named consumer: app.runtime.stages.llm_transform compiles a stage's reply spec
-with this and hands the model to app.agent.agent.Agent as `target_schema`, so
-the reply spec is enforced (the agent must submit a validating instance)
-rather than merely described in prompt prose.
+The public entry point is the `TableSchema.to_pydantic_model(name)` method;
+this module holds the builder so the schema module stays declarative. Named
+consumer: app.runtime.stages.llm_transform compiles a stage's reply spec and
+hands the model to app.agent.agent.Agent as `target_schema`, so the reply
+spec is enforced (the agent must submit a validating instance) rather than
+merely described in prompt prose.
 """
 from __future__ import annotations
 
 import datetime
-from typing import Any, Literal, Optional
+from typing import Any, Literal, Optional, Sequence
 
 from pydantic import BaseModel, ConfigDict, Field, create_model
 
-from app.core.models.schema import Column, TableSchema, _LIST_RE
+from app.core.models.schema import Column, _LIST_RE
 
 _SCALAR_PY_TYPES: dict[str, type] = {
     "str": str,
@@ -31,11 +32,7 @@ _SCALAR_PY_TYPES: dict[str, type] = {
 }
 
 
-def build_row_model(schema: TableSchema, name: str) -> type[BaseModel]:
-    return _build_model(name, list(schema.columns))
-
-
-def _build_model(name: str, columns: list[Column]) -> type[BaseModel]:
+def build_row_model(name: str, columns: Sequence[Column]) -> type[BaseModel]:
     field_definitions: dict[str, Any] = {}
     for column in columns:
         annotation = _annotation_for(column, parent_name=name)
@@ -51,7 +48,7 @@ def _annotation_for(column: Column, parent_name: str) -> Any:
     if column.type in ("json", "list[json]"):
         inner: Any
         if column.fields is not None:
-            inner = _build_model(f"{parent_name}__{column.name}", list(column.fields))
+            inner = build_row_model(f"{parent_name}__{column.name}", column.fields)
         else:
             assert column.value_type is not None  # Column._json_shape enforces
             scalar_py_type: Any = _SCALAR_PY_TYPES[column.value_type]

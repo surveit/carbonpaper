@@ -51,10 +51,9 @@ def test_reply_model_is_the_subtracted_spec(monkeypatch):
 
 def test_reply_model_enforces_the_spec():
     # the model built for the stage rejects a wrong-shaped reply outright
-    from app.core.models.row_model import build_row_model
     stage = _stage()
     spec = stage.output_schema.subtract(stage.inputs[0].table_schema)
-    model = build_row_model(spec, "score_reply")
+    model = spec.to_pydantic_model("score_reply")
     with pytest.raises(ValidationError):
         model.model_validate({"score": "not-a-number-at-all"})
 

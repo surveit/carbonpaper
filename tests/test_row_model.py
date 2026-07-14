@@ -1,4 +1,4 @@
-"""build_row_model: a TableSchema compiled to a Pydantic model enforces the
+"""TableSchema.to_pydantic_model: the compiled Pydantic model enforces the
 schema recursively — presence, types, nullability, enum vocabulary, numeric
 range, nested json/list[json] fields — and rejects unknown keys."""
 from __future__ import annotations
@@ -7,11 +7,10 @@ import pytest
 from pydantic import ValidationError
 
 from app.core.models import TableSchema
-from app.core.models.row_model import build_row_model
 
 
 def _model(cols):
-    return build_row_model(TableSchema.model_validate({"columns": cols}), "reply")
+    return TableSchema.model_validate({"columns": cols}).to_pydantic_model("reply")
 
 
 def test_valid_row_roundtrips():
