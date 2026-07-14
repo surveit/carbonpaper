@@ -1,14 +1,14 @@
 """Auto-generation: on a fresh document, generate the DATA MODEL then the WORKFLOW,
 writing the results to disk.
 
-The data-model phase runs as a LIVE chat turn. `start_generation` creates a chat session
-and starts the data-model agent as a turn on the shared TurnManager, so the conversation
-streams to /chat/<sid> AS it generates (and is persisted when it ends). When the turn
-finishes and the agent has submitted a valid data model, the schemas are written and the
-WORKFLOW phase is kicked on a background thread — it is a blocking raw-completion
-(compile_methodology), not an agent conversation, so it stays off the event loop. A phase
-that fails is surfaced in the live turn / logged (never fabricated as success) and never
-built on.
+The data-model phase runs as a LIVE chat turn: `start_generation` delegates to
+`app.compiler.data_model.start_data_model_turn` (the bridge onto the app.agent spine),
+which creates a chat session and streams the data-model agent to /chat/<sid> as it
+authors the schemas. When the turn finishes with a valid submission, the schemas are
+written and the WORKFLOW phase is kicked on a background thread — it is a blocking
+raw-completion (compile_methodology), not an agent conversation, so it stays off the
+event loop. A phase that fails is surfaced in the live turn / logged (never fabricated as
+success) and never built on.
 
 The CLI subprocess the agent spawns runs with the Claude-Code session markers already
 stripped from os.environ (see app.compiler.compiler), which this module imports
@@ -21,10 +21,8 @@ import logging
 import threading
 from pathlib import Path
 
-from app.agent.store import open_session_store
-from app.agent.turns import default_turn_manager
 from app.compiler import compile_methodology
-from app.compiler.data_model import build_data_model_agent
+from app.compiler.data_model import start_data_model_turn
 from app.models.named_schemas import SchemaLibrary
 from app.services.compilation import regenerate_workflow
 
@@ -34,33 +32,15 @@ _log = logging.getLogger(__name__)
 def start_generation(project_dir: Path, *, document: str, model: str) -> str:
     """Kick off data-model → workflow generation and return the id of the chat session
     streaming the data-model conversation. The data-model agent runs as a LIVE turn
-    (watchable at /chat/<sid> while it works, persisted when it ends); on a valid
-    submission its schemas are written and the workflow phase is kicked. Must be called
-    from the server event loop — it starts the turn there."""
-    name = project_dir.name
-    store = open_session_store()
-    session_id = store.create(
-        title=f"Generation · data model · {name}",
-        agent_id=None,  # view-only: the UI renders + streams it, but there is no agent to continue it
-        context={"project_id": name, "phase": "data_model"},
+    (watchable at /chat/<sid>, persisted when it ends); on a valid submission its schemas
+    are written and the workflow phase is kicked. Must be called from the server event
+    loop — the underlying turn is started there."""
+    return start_data_model_turn(
+        document=document,
+        project_name=project_dir.name,
+        model=model,
+        on_answer=lambda answer: _finish_data_model(project_dir, document, model, answer),
     )
-    agent = build_data_model_agent(document, model=model)
-    # Show the originating prompt as the user's message so the LIVE view doesn't lose it
-    # (the FE's live reattach only renders assistant events; the persisted transcript
-    # records this same prompt as the user turn, so live and reload agree).
-    store.set_pending_user(session_id, agent.task)
-
-    async def _finish() -> None:
-        _finish_data_model(project_dir, document, model, agent.answer)
-
-    default_turn_manager().start(
-        engine=agent.build_engine(),
-        store=store,
-        session_id=session_id,
-        prompt=agent.task,
-        on_done=_finish,
-    )
-    return session_id
 
 
 def _finish_data_model(

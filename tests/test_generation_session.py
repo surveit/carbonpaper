@@ -11,6 +11,7 @@ import asyncio
 from pathlib import Path
 from typing import Any
 
+import app.compiler.data_model as data_model
 import app.services.generation as generation
 from app.agent.store import SessionStore
 from app.agent.turns import TurnManager
@@ -81,9 +82,11 @@ def test_start_generation_creates_a_session_and_runs_a_live_turn(tmp_path: Path,
     project_dir.mkdir()
     store = SessionStore(tmp_path / "sessions")
     turns = TurnManager()
-    monkeypatch.setattr(generation, "open_session_store", lambda: store)
-    monkeypatch.setattr(generation, "default_turn_manager", lambda: turns)
-    monkeypatch.setattr(generation, "build_data_model_agent", lambda *a, **k: _FakeAgent())
+    # The app.agent bridge (session + live turn) lives in app.compiler.data_model now,
+    # which generation delegates to; the completion side (_start_workflow) stays here.
+    monkeypatch.setattr(data_model, "open_session_store", lambda: store)
+    monkeypatch.setattr(data_model, "default_turn_manager", lambda: turns)
+    monkeypatch.setattr(data_model, "build_data_model_agent", lambda *a, **k: _FakeAgent())
     monkeypatch.setattr(generation, "_start_workflow", lambda *a: None)
 
     async def _drive() -> str:
