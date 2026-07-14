@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from app.models.stage import StageType
 
+from ..options import DEFAULT_PARALLEL
 from ._shared import HaltForReview
 from .aggregate import handle_aggregate
 from .execution import (
@@ -22,7 +23,7 @@ from .execution import (
 from .human_review_queue import handle_human_review_queue
 from .input_data import read_input_data
 from .join import handle_join
-from .llm_transform import handle_llm_transform
+from .llm_transform import make_llm_row_mapper
 from .publish import handle_publish
 from .python_functions import handle_python_frame_function, make_python_row_mapper
 
@@ -32,7 +33,11 @@ HANDLERS: dict[StageType, StageHandler] = {
     StageType.python_frame_function: FrameHandler(handle_python_frame_function),
     StageType.join_: FrameHandler(handle_join),
     StageType.aggregate: FrameHandler(handle_aggregate),
-    StageType.llm_transform: FrameHandler(handle_llm_transform),
+    StageType.llm_transform: RowMapHandler(
+        make_llm_row_mapper,
+        parallelism=DEFAULT_PARALLEL,
+        project_output_to_declared=True,
+    ),
     StageType.human_review_queue: FrameHandler(handle_human_review_queue),
     StageType.publish: FrameHandler(handle_publish),
 }
@@ -50,9 +55,9 @@ __all__ = [
     "handle_aggregate",
     "handle_human_review_queue",
     "handle_join",
-    "handle_llm_transform",
     "handle_publish",
     "handle_python_frame_function",
+    "make_llm_row_mapper",
     "make_python_row_mapper",
     "read_input_data",
 ]

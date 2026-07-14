@@ -1,13 +1,14 @@
 """
 LLM dispatch for `llm_transform` stages.
 
-`call_llm` / `call_llm_batch` render a stage's prompt and route it to the active
-backend chosen by `options.get_llm_call_type()` — the Agent SDK (`llm_agent_sdk`),
+`call_llm` renders a stage's prompt and routes it to the active backend
+chosen by `options.get_llm_call_type()` — the Agent SDK (`llm_agent_sdk`),
 the `claude -p` subprocess (`call_llm_real`), or the opt-in offline mock
 (`llm_mock`). Backends never silently fall back to the mock: a missing or failed
 live backend raises rather than fabricating output.
 
-Batching: ThreadPoolExecutor with bounded workers (default 4, override via
+Batching: the runtime's row driver (`app/runtime/stages/execution.py`) calls
+`call_llm` once per row under bounded parallelism (default 4, override via
 CW_LLM_PARALLEL).
 """
 
@@ -16,8 +17,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Any, Callable
+from typing import Any
 
 from app.models import LLMConfig
 
@@ -123,7 +123,7 @@ def call_llm_real(prompt: str, model: str = DEFAULT_MODEL) -> Any:
     return _parse_inner_result(envelope)
 
 
-# ─── Dispatcher used by handle_llm_transform ─────────────────────────────────
+# ─── Dispatcher used by llm_transform's row mapper ────────────────────────────
 
 def render_prompt(template: str, row: dict[str, Any]) -> str:
     """Render the prompt template safely. Missing placeholders are left
@@ -170,36 +170,6 @@ def call_llm(stage_id: str, llm_config: LLMConfig, input_row: dict[str, Any],
             return _parse_text_result(res["text"])
         return _parse_text_result(llm_agent_sdk.call_agent_sdk(prompt, mdl))
     return call_llm_real(prompt, model=mdl)  # cli subprocess
-
-
-def call_llm_batch(
-    stage_id: str,
-    llm_config: LLMConfig,
-    input_rows: list[dict[str, Any]],
-    *,
-    parallel: int = DEFAULT_PARALLEL,
-    progress_cb: Callable[[int, int], None] | None = None,
-) -> list[Any]:
-    """Run call_llm over a batch with bounded parallelism. Preserves order."""
-    results: list[Any] = [None] * len(input_rows)
-    done = 0
-    with ThreadPoolExecutor(max_workers=parallel) as pool:
-        futures = {
-            pool.submit(call_llm, stage_id, llm_config, row): idx
-            for idx, row in enumerate(input_rows)
-        }
-        for fut in as_completed(futures):
-            idx = futures[fut]
-            try:
-                results[idx] = fut.result()
-            except Exception as exc:  # noqa: BLE001 — batch supervisor: any per-row
-                # backend failure (network, subprocess, parse, …) is recorded as
-                # _error so one row can't abort the batch; surfaced, not swallowed.
-                results[idx] = {"_error": str(exc)}
-            done += 1
-            if progress_cb:
-                progress_cb(done, len(input_rows))
-    return results
 
 
 def backend_status() -> dict[str, Any]:
