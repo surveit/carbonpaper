@@ -1,9 +1,10 @@
 """The ``arch`` architecture-testing toolkit.
 
 Location-scoped file discovery (``find_governed_files`` / ``scan_all_source``) and
-reusable structural predicates (``check_*``) for the tests in ``_arch_tests/`` folders
-and the global rules in this package. Import-graph boundaries live separately in
-pyproject ``[tool.importlinter]``; this toolkit holds the content-level AST checks.
+reusable structural predicates (``check_*``). A rule scopes itself either to a
+subtree (``find_governed_files(__file__)``) or to the whole repo
+(``scan_all_source()``). Import-graph boundaries live separately in pyproject
+``[tool.importlinter]``; this toolkit holds the content-level AST checks.
 """
 from __future__ import annotations
 

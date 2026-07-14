@@ -17,6 +17,7 @@ from arch._helpers import (
 
 _DISK_BUILTINS = {"open"}
 _DISK_METHODS = {
+    "open",
     "read_text",
     "write_text",
     "read_bytes",

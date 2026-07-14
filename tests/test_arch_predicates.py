@@ -19,6 +19,14 @@ def test_check_no_raw_disk_ignores_clean_file(tmp_path: Path) -> None:
     assert check_no_raw_disk([ok]) == []
 
 
+def test_check_no_raw_disk_flags_path_open_method(tmp_path: Path) -> None:
+    bad = tmp_path / "bad.py"
+    bad.write_text("def go(p):\n    with p.open() as f:\n        return f.read()\n")
+    offenders = check_no_raw_disk([bad])
+    assert len(offenders) == 1
+    assert "open" in offenders[0]
+
+
 def test_check_no_fabricated_numbers_flags_numeric_get(tmp_path: Path) -> None:
     bad = tmp_path / "bad.py"
     bad.write_text("def go(d):\n    return d.get('r', 1.0)\n")
