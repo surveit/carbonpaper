@@ -146,7 +146,7 @@ def run_stage_preview(
         "_scratch_preview": True,
     }
 
-    output = handler(stage_def, inputs, ctx)
+    output = handler.execute(stage_def, inputs, ctx)
     if output is None:
         output = pd.DataFrame()
 

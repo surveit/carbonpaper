@@ -8,7 +8,7 @@ from pathlib import Path
 import pandas as pd
 
 from app.runtime.trace import (
-    ROW_PRESERVING,
+    _is_row_preserving,
     _load_manifest,
     _origin,
     _parents,
@@ -45,8 +45,16 @@ def write_run(tmp_path: Path, stages: list[dict], run_id: str = "T1") -> Path:
     return run_dir
 
 
-def test_row_preserving_set_is_exactly_the_two_v1_types():
-    assert ROW_PRESERVING == frozenset({"input_data", "python_row_function"})
+def test_is_row_preserving_matches_the_model_classification():
+    # Sourced from the model's is_grain_and_order_preserving, not a tracer-local
+    # list — llm_transform now crosses; human_review_queue does not (it drops +
+    # reorders, see #106); an unknown type is never trusted.
+    for stage_type in ("input_data", "python_row_function", "llm_transform"):
+        assert _is_row_preserving(stage_type) is True
+    for stage_type in ("python_frame_function", "join", "aggregate",
+                       "human_review_queue", "publish"):
+        assert _is_row_preserving(stage_type) is False
+    assert _is_row_preserving("not_a_stage_type") is False
 
 
 def test_parents_reads_input_phases_and_ignores_output_phase():

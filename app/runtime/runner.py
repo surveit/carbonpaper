@@ -396,7 +396,7 @@ def _execute_stages(
                 raise ValueError(f"No handler for stage type '{stype}'")
 
             try:
-                output = handler(stage, inputs_for_stage, ctx)
+                output = handler.execute(stage, inputs_for_stage, ctx)
             except HaltForReview as halt:
                 record["status"] = "awaiting_review"
                 record["rows"] = halt.pending_count

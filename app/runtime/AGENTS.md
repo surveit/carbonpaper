@@ -27,15 +27,17 @@ validate the output, write `outputs/<stage>.parquet`, append to `manifest.json`.
 `input_data` connectors `file` (csv/parquet/json/geojson; `_read_geojson` flattens a
 FeatureCollection) + `computed_static`; `python_row_function`/`python_frame_function`
 (`function: {kind: module|inline}`, row variant mapped per row); `join`; `aggregate`;
-`llm_transform` (batched); `human_review_queue` (content-hash → prior decisions or halt);
+`llm_transform` (row-mapped, bounded parallelism);
+`human_review_queue` (content-hash → prior decisions or halt);
 `publish` (a `function` module that writes artifacts).
 
 ## LLM backends (`llm_transform`)
 - `options.py` `get_llm_call_type()` picks `agent_sdk | cli | mock` from `CW_LLM_BACKEND`
   (default `auto`: agent_sdk → cli). Mock is opt-in (`CW_LLM_FORCE_MOCK=1`); with no live
   backend it raises rather than silently mocking.
-- `llm.py` renders + dispatches (`call_llm`/`call_llm_batch`; the JSON parser recovers the
-  last JSON value in prose). `llm_agent_sdk.py` drives `claude_agent_sdk.query()`, locates
+- `llm.py` renders + dispatches (`call_llm`, run per row by the row driver under bounded
+  parallelism; the JSON parser recovers the last JSON value in prose).
+  `llm_agent_sdk.py` drives `claude_agent_sdk.query()`, locates
   `claude` (incl. Windows `~/.local/bin/claude.exe`), and honors a stage's `llm.tools:`
   (e.g. `[WebSearch, WebFetch]`, agent_sdk only). `llm_mock.py` — deterministic offline mock.
 

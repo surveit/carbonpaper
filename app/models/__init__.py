@@ -67,7 +67,6 @@ from app.models.eval import (
     EvalRunSettings,
     ExpectedOutput,
     StageOutputOverride,
-    resolve_eval_run_settings,
 )
 # NOTE: the compiled-stage loader lives in app.services.loader (it does
 # filesystem I/O, which is service work, not schema). Import it from there;
@@ -184,7 +183,7 @@ __all__ = [
     "TableRef",
     # eval contract
     "StageOutputOverride", "ExpectedOutput", "CodeScorer", "EvalConfig",
-    "EvalRunSettings", "resolve_eval_run_settings", "EvalRun",
+    "EvalRunSettings", "EvalRun",
     # compat vocabularies (rendered by prompt.py / read by compiler.py)
     "SCALAR_COLUMN_TYPES", "SCHEMA_KINDS", "JOIN_TYPES", "CONNECTOR_KINDS",
     "NODE_TYPES", "NODE_TYPE_NAMES",

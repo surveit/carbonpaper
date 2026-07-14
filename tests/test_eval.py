@@ -6,7 +6,7 @@ import pytest
 from pydantic import ValidationError
 
 from app import models as m
-from app.models import resolve_eval_run_settings
+from app.evals.run_settings import resolve_eval_run_settings
 
 
 def S(**kw):
@@ -61,6 +61,23 @@ def test_llm_is_grain_and_order_preserving():
 
 def test_input_data_is_grain_and_order_preserving():
     assert m.Stage.model_validate(_file_input("load")).is_grain_and_order_preserving is True
+
+
+def test_human_review_queue_not_grain_and_order_preserving():
+    # handle_human_review_queue drops rejected rows and concatenates
+    # decided+passthrough, so it changes both grain and order (see #106).
+    s = m.Stage.model_validate(S(id="rev", type="human_review_queue",
+                                 inputs=[{"id": "a"}], queue={}))
+    assert s.is_grain_and_order_preserving is False
+
+
+def test_publish_not_grain_and_order_preserving():
+    # handle_publish runs an authored function whose output is a table of
+    # artifact paths — different rows from its input, never row-alignable.
+    s = m.Stage.model_validate(S(id="pub", type="publish",
+                                 inputs=[{"id": "a"}], publish={},
+                                 function={"kind": "inline", "code": "def transform(row): return row"}))
+    assert s.is_grain_and_order_preserving is False
 
 
 def test_join_and_aggregate_change_grain():

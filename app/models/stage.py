@@ -43,6 +43,26 @@ class StageType(str, Enum):
     publish = "publish"
 
 
+# The stage types that guarantee output row i came from input row i — 1:1 and in
+# the same order. This is owned by core (app.models) because it's a fact about the
+# stage-type contract that several layers must read — the eval gate, the SYW
+# positional tracer, the compiler — and only core is importable by all of them.
+# Ask it through is_grain_and_order_preserving(); the runtime handler registry is
+# held to conform (app/runtime/stages checks each type's shape against it at import).
+_GRAIN_AND_ORDER_PRESERVING_TYPES: frozenset[StageType] = frozenset({
+    StageType.input_data,
+    StageType.python_row_function,
+    StageType.llm_transform,
+})
+
+
+def is_grain_and_order_preserving(stage_type: StageType) -> bool:
+    """Does one input row of this stage type map to exactly one output row, in the
+    same order? Fixed entirely by stage type — see the
+    Stage.is_grain_and_order_preserving property for the per-type contract."""
+    return stage_type in _GRAIN_AND_ORDER_PRESERVING_TYPES
+
+
 class ConnectorKind(str, Enum):
     file = "file"
     computed_static = "computed_static"
@@ -378,23 +398,22 @@ class Stage(_Base):
         row-aligned) eval relies on to align a target's output rows back to the
         eval-dataset rows that produced them BY POSITION — no lineage id needed,
         because position IS the identity through a grain-preserving path. Fixed
-        entirely by stage type:
+        entirely by stage type (the module function is_grain_and_order_preserving):
           - python_row_function → yes (runtime maps it per row, in emit order — enforced 1:1)
           - python_frame_function → NO (may reshape OR reorder the frame)
           - llm_transform      → yes (per-row 1:1 in emit order in v1; a fan-out LLM
                                  like doc→pieces is out of scope until fan-out evals)
           - input_data         → yes (originates the rows)
-          - human_review_queue → yes (keyed, edits in place — no reorder)
+          - human_review_queue → NO — handle_human_review_queue drops rejected rows
+                                 and concatenates decided+passthrough, changing both
+                                 grain and order. Its intended "edits in place"
+                                 contract would make it yes; closing that gap is #106.
           - join (fan-out) / aggregate (fan-in) → NO; grain changes are deferred
-          - publish            → terminal, never a tap target
+          - publish            → NO — handle_publish runs an authored function whose
+                                 output is a table of artifact paths, not the input
+                                 rows (and it is terminal — nothing downstream).
         """
-        return self.type in (
-            StageType.python_row_function,
-            StageType.llm_transform,
-            StageType.input_data,
-            StageType.human_review_queue,
-            StageType.publish,
-        )
+        return is_grain_and_order_preserving(self.type)
 
 
 def validate_stage(stage: dict[str, Any]) -> list[str]:

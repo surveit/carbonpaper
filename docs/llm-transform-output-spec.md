@@ -67,10 +67,11 @@ This describes what the code does today, not an aspiration:
   (`output_schema − input_schema`) is exactly the reply columns and can never
   throw when the runtime derives it.
 - **The reply spec goes into the prompt; the call machinery is unchanged.**
-  `handle_llm_transform` appends `subtract(...).to_prompt()` to the stage's
-  prompt and runs it through the shared LLM layer (`llm.call_llm_batch`) — the
-  same call path as any other stage. Appending the derived spec is the only
-  thing this handler adds over a plain LLM call.
+  `make_llm_row_mapper` appends `subtract(...).to_prompt()` to the stage's
+  prompt and calls `llm.call_llm` per row, driven by the runtime's row driver
+  (`app/runtime/stages/execution.py`) — the same call path as any other
+  row-mapped stage. Appending the derived spec is the only thing this mapper
+  adds over a plain LLM call.
 - **There is no reply validation, retry, transcript, or JSON guarantee here.**
   Validating a reply against the derived spec, re-asking on violation, dropping
   (not nulling) a row that still fails, and persisting per-row conversations are

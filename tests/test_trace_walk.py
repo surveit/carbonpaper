@@ -33,12 +33,28 @@ def test_row_preserving_chain_traces_to_origin(tmp_path):
     assert trace.end.reached_origin is True
 
 
-def test_stop_at_llm_transform_points_at_issue_61(tmp_path):
+def test_llm_transform_traces_positionally(tmp_path):
+    # llm_transform is strictly 1:1 and order-preserving (PR #29), so the walk
+    # crosses it on ordinal alone, like python_row_function (closes #61).
     run_dir = _chain(tmp_path, "llm_transform")
+    trace = trace_row(run_dir, "enrich", 1)
+    assert [s.stage_id for s in trace.steps] == ["enrich", "seeds"]
+    assert [s.row_ordinal for s in trace.steps] == [1, 1]         # same ordinal
+    assert trace.steps[0].row["name"] == "B"
+    assert trace.steps[0].columns_new == ["score"]               # new at enrich
+    assert trace.steps[0].origin == "llm"
+    assert trace.end.reached_origin is True
+
+
+def test_stop_at_human_review_queue_points_at_issue_58(tmp_path):
+    # human_review_queue drops rejected rows and reorders (decided+passthrough),
+    # so position can't be trusted across it — the walk stops even when row counts
+    # happen to match. (#106 tracks making the handler order+grain preserving.)
+    run_dir = _chain(tmp_path, "human_review_queue")
     trace = trace_row(run_dir, "enrich", 0)
     assert [s.stage_id for s in trace.steps] == ["enrich"]        # cannot cross
     assert trace.end.reached_origin is False
-    assert "#61" in trace.end.message
+    assert "#58" in trace.end.message
 
 
 def test_stop_at_reshaping_stage_points_at_issue_58(tmp_path):

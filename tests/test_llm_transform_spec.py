@@ -1,12 +1,14 @@
 """The one thing llm_transform adds over a plain LLM call: it appends the
 derived reply spec (output_schema − input_schema, rendered by
 TableSchema.to_prompt) to the prompt. The call mechanism itself is unchanged
-(master's llm.call_llm_batch)."""
+(llm.call_llm per row, driven by the runtime's row driver)."""
 from __future__ import annotations
 
 import pandas as pd
 
 from app.models import Stage
+from app.models.stage import StageType
+from app.runtime.stages import HANDLERS
 from app.runtime.stages import llm_transform as lt
 
 
@@ -24,15 +26,20 @@ def _stage():
     })
 
 
+def _run(stage, frames, ctx=None):
+    return HANDLERS[StageType.llm_transform].execute(
+        stage, frames, ctx if ctx is not None else {})
+
+
 def test_reply_spec_appended_to_prompt(monkeypatch):
     captured: dict[str, str] = {}
 
-    def fake_batch(stage_id, llm_config, rows, **kw):
+    def fake_call(stage_id, llm_config, row, **kw):
         captured["template"] = llm_config.prompt_template
-        return [{"score": 5} for _ in rows]
+        return {"score": 5}
 
-    monkeypatch.setattr(lt, "call_llm_batch", fake_batch)
-    lt.handle_llm_transform(_stage(), {"load": pd.DataFrame({"id": ["r1"], "text": ["hi"]})}, {})
+    monkeypatch.setattr(lt, "call_llm", fake_call)
+    _run(_stage(), {"load": pd.DataFrame({"id": ["r1"], "text": ["hi"]})})
 
     template = captured["template"]
     assert "Rate: {text}" in template                      # original template preserved
@@ -43,9 +50,32 @@ def test_reply_spec_appended_to_prompt(monkeypatch):
 
 
 def test_output_rows_carry_reply_columns(monkeypatch):
-    monkeypatch.setattr(lt, "call_llm_batch", lambda *a, **k: [{"score": 7}])
-    out = lt.handle_llm_transform(
-        _stage(), {"load": pd.DataFrame({"id": ["r1"], "text": ["hi"]})}, {}
-    )
+    monkeypatch.setattr(lt, "call_llm", lambda *a, **k: {"score": 7})
+    out = _run(_stage(), {"load": pd.DataFrame({"id": ["r1"], "text": ["hi"]})})
     assert out.loc[0, "score"] == 7
     assert out.loc[0, "id"] == "r1"
+
+
+def test_list_reply_is_a_value_not_rows(monkeypatch):
+    # A JSON-list reply is data, not rows: exactly one output row per input row,
+    # the reply kept whole in _raw (then dropped-and-recorded by projection,
+    # since _raw is undeclared). The declared reply column is absent — output
+    # schema validation surfaces that on the run; nothing is invented.
+    monkeypatch.setattr(lt, "call_llm", lambda *a, **k: [{"score": 1}, {"score": 2}])
+    ctx: dict = {}
+    out = _run(_stage(), {"load": pd.DataFrame({"id": ["r1"], "text": ["hi"]})}, ctx)
+    assert len(out) == 1                                   # 1:1 — never fans out
+    assert list(out.columns) == ["id", "text"]             # "score" absent, not invented
+    assert "_raw" in ctx["dropped_columns"]["score"]       # reply preserved + recorded
+                                                           # ("score" = the stage id)
+
+
+def test_backend_error_is_recorded_per_row_not_raised(monkeypatch):
+    def boom(stage_id, llm_config, row, **kw):
+        raise RuntimeError("backend down")
+
+    monkeypatch.setattr(lt, "call_llm", boom)
+    ctx: dict = {}
+    out = _run(_stage(), {"load": pd.DataFrame({"id": ["r1"], "text": ["hi"]})}, ctx)
+    assert len(out) == 1                                   # still 1:1 — row survives
+    assert "_error" in ctx["dropped_columns"]["score"]     # recorded, not silent

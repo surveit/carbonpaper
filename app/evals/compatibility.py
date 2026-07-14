@@ -11,8 +11,9 @@ from dataclasses import dataclass, field
 from typing import Sequence
 
 from app.models import (EvalConfig, EvalRunSettings, Stage, TableSchema,
-                        Workflow, resolve_eval_run_settings, validate_workflow)
+                        Workflow, validate_workflow)
 from app.evals.dataset_columns import get_injected_columns
+from app.evals.run_settings import resolve_eval_run_settings
 
 _NUMERIC_TYPES = {"int", "float"}
 
