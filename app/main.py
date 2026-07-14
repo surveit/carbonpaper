@@ -23,7 +23,7 @@ from fastapi.staticfiles import StaticFiles
 from app.web.config import STATIC_DIR
 from app.web.routers import evals, project, node_review, review, runs
 
-from app.agent.router import router as chat_router
+from app.web.chat_router import router as chat_router
 from app.compiler.router import router as compiler_router
 
 # Importing the compiler agent's config registers the "editing" agent with the
@@ -44,5 +44,6 @@ app.include_router(node_review.router)
 app.include_router(compiler_router)
 
 # Interactive, multi-turn chat surface (streaming + persistence). Separate from
-# the row-mapped llm_transform path; see app/agent.
+# the row-mapped llm_transform path; HTTP routes in app/web/chat_router.py, the
+# engine (session store, turn manager, agent registry) in app/core/agent.
 app.include_router(chat_router)

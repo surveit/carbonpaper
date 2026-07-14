@@ -1,6 +1,6 @@
 """Headless structured-output agent: run an agent to a VALIDATED Pydantic object.
 
-The interactive surface (app.agent.router + app.core.agent.turns) streams a chat to a human.
+The interactive surface (app.web.chat_router + app.core.agent.turns) streams a chat to a human.
 This is the non-interactive counterpart: an `Agent` is configured with a system prompt
 and a `target_schema` (the Pydantic model it must produce), given a `task` (the input
 material to work from), and `run()` returns a validated instance of that schema.
