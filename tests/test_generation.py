@@ -1,5 +1,5 @@
 """Generation's WORKFLOW build: start_workflow_generation delegates to the app.compiler.workflow
-bridge (start_workflow_turn) with an on_answer that persists the submitted Workflow via
+bridge (start_workflow_generation_agent) with an on_answer that persists the submitted Workflow via
 _finish_workflow, and never touches schemas/ (workflow-only). The bridge's own live-turn
 machinery is tested in test_compile_workflow.py; here we test the generation-side wiring with
 the bridge stubbed.

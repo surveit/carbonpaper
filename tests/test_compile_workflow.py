@@ -1,6 +1,6 @@
 """The agent-based workflow compiler (app.compiler.workflow): build_workflow_agent configures
 an Agent[Workflow] so a schema-invalid draft re-fires through submit_answer until valid and the
-approved data model grounds the task; start_workflow_turn runs that agent as a LIVE chat turn on
+approved data model grounds the task; start_workflow_generation_agent runs that agent as a LIVE chat turn on
 the app.agent spine and calls back with the submitted Workflow. The Agent / turn are stubbed —
 no LLM, no CLI subprocess.
 """
@@ -61,7 +61,7 @@ def test_build_workflow_agent_ungrounded_task_has_no_schema(monkeypatch: Any):
     assert "documents" not in _FakeAgent.calls["task"]
 
 
-# ── start_workflow_turn: the app.agent bridge — a live, streamable turn + callback ────
+# ── start_workflow_generation_agent: the app.agent bridge — a live, streamable turn + callback ────
 
 class _FakeTurnAgent:
     """A workflow Agent driven as a live turn: stream_turn 'submits' a Workflow and the

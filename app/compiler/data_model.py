@@ -5,8 +5,8 @@ this is prose → named schemas. It builds an `app.agent.Agent` whose target sch
 `SchemaLibrary`, so the agent SUBMITS the data model through the submit_answer tool
 (validated against SchemaLibrary) rather than emitting free-text JSON.
 
-`start_data_model_turn` runs that agent as a LIVE chat turn on the app.agent spine, and is
-the bridge onto it: app.compiler is an allowed importer of app.agent, so the higher-level
+`start_data_model_generation_agent` runs that agent as a LIVE chat turn on the app.agent
+spine, and is the bridge onto it: app.compiler is an allowed importer of app.agent, so the higher-level
 orchestration in app.services (generation) delegates here rather than reaching into the
 spine itself. The submitted SchemaLibrary is handed back through a callback; persisting it
 is the caller's job.
@@ -22,14 +22,14 @@ from app.compiler.data_model_prompt import DATA_MODEL_SYSTEM_PROMPT
 from app.models.named_schemas import SchemaLibrary
 
 
-def start_data_model_turn(
+def start_data_model_generation_agent(
     *,
     document: str,
     project_name: str,
     model: str,
     on_answer: Callable[[SchemaLibrary | None], None],
 ) -> str:
-    """Start the data-model agent as a LIVE chat turn and return the session id.
+    """Start the data-model-generation agent as a LIVE chat turn and return the session id.
 
     Creates a view-only session (the framing prompt shown as the user's message) and
     streams the agent on the shared TurnManager, so the run is watchable at /chat/<sid>
@@ -65,7 +65,7 @@ def build_data_model_agent(document: str, *, model: str = "sonnet") -> Agent[Sch
     model and SUBMITS it as a SchemaLibrary via submit_answer. Read `.answer` after the
     run/turn for the validated library (None if nothing valid was submitted). `.run()`
     drives it headlessly; driving `.build_engine()` through the TurnManager runs it as a
-    live turn (see start_data_model_turn)."""
+    live turn (see start_data_model_generation_agent)."""
     return Agent(
         system_prompt=DATA_MODEL_SYSTEM_PROMPT,
         target_schema=SchemaLibrary,

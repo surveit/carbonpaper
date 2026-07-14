@@ -3,7 +3,8 @@ the schemas. The WORKFLOW is NOT auto-built — the create-flow stops at the dat
 be reviewed and approved first; the workflow is then generated on demand (grounded on that
 approved model) via start_workflow_generation.
 
-Both turns run through the app.compiler bridges (start_data_model_turn / start_workflow_turn):
+Both turns run through the app.compiler bridges (start_data_model_generation_agent /
+start_workflow_generation_agent):
 app.compiler owns the app.agent spine, so this orchestration delegates there rather than
 importing the spine directly. `start_generation` streams the data-model agent to /chat/<sid>;
 on a valid submission its schemas are written. `start_workflow_generation` is the manual
@@ -24,7 +25,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from app.compiler.data_model import start_data_model_turn
+from app.compiler.data_model import start_data_model_generation_agent
 from app.compiler.workflow import start_workflow_generation_agent
 from app.models.named_schemas import SchemaLibrary
 from app.models.workflow import Workflow
@@ -40,7 +41,7 @@ def start_generation(project_dir: Path, *, document: str, model: str) -> str:
     when it ends); on a valid submission its schemas are written. The workflow is NOT auto-built
     — the create-flow stops at the data model so it can be reviewed/approved first. Must be
     called from the server event loop — the underlying turn is started there."""
-    return start_data_model_turn(
+    return start_data_model_generation_agent(
         document=document,
         project_name=project_dir.name,
         model=model,

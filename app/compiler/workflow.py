@@ -6,7 +6,7 @@ the workflow through the submit_answer tool — validated against `Workflow` (ea
 invariants + the cross-stage graph checks) — and a schema-invalid draft comes back as a tool
 error the agent corrects IN THE SAME LOOP.
 
-`start_workflow_turn` runs that agent as a LIVE chat turn on the app.agent spine, and is the
+`start_workflow_generation_agent` runs that agent as a LIVE chat turn on the app.agent spine, and is the
 bridge onto it: app.compiler is an allowed importer of app.agent, so the orchestration in
 app.services (generation) delegates here rather than reaching into the spine itself. When a
 `data_model` (the approved SchemaLibrary) is given, its named schemas ground the task as the
