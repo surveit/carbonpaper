@@ -15,7 +15,6 @@ from app.runtime.stages.execution import (
     RowMapHandler,
     SourceHandler,
     check_registry_matches_model,
-    execute_handler,
 )
 
 
@@ -40,7 +39,7 @@ def _two_input_stage():
 
 def test_row_driver_maps_in_input_order():
     handler = RowMapHandler(make_mapper=lambda stage, ctx: lambda row: {"x": row["x"], "y": row["x"] * 10})
-    out = execute_handler(handler, _row_stage(), {"src": pd.DataFrame({"x": [1, 2, 3]})}, {})
+    out = handler.execute(_row_stage(), {"src": pd.DataFrame({"x": [1, 2, 3]})}, {})
     assert list(out["x"]) == [1, 2, 3]
     assert list(out["y"]) == [10, 20, 30]
 
@@ -55,32 +54,32 @@ def test_row_driver_preserves_order_under_parallelism():
         return map_row
 
     handler = RowMapHandler(make_mapper=make_mapper, parallelism=4)
-    out = execute_handler(handler, _row_stage(), {"src": pd.DataFrame({"x": list(range(8))})}, {})
+    out = handler.execute(_row_stage(), {"src": pd.DataFrame({"x": list(range(8))})}, {})
     assert list(out["x"]) == list(range(8))
 
 
 def test_row_driver_is_one_to_one():
     handler = RowMapHandler(make_mapper=lambda stage, ctx: lambda row: dict(row))
-    out = execute_handler(handler, _row_stage(), {"src": pd.DataFrame({"x": [1, 2]})}, {})
+    out = handler.execute(_row_stage(), {"src": pd.DataFrame({"x": [1, 2]})}, {})
     assert len(out) == 2
 
 
 def test_row_driver_rejects_non_dict_result():
     handler = RowMapHandler(make_mapper=lambda stage, ctx: lambda row: 42)
     with pytest.raises(ValueError, match="one dict per row"):
-        execute_handler(handler, _row_stage(), {"src": pd.DataFrame({"x": [1]})}, {})
+        handler.execute(_row_stage(), {"src": pd.DataFrame({"x": [1]})}, {})
 
 
 def test_row_driver_rejects_multiple_inputs():
     handler = RowMapHandler(make_mapper=lambda stage, ctx: lambda row: dict(row))
     frames = {"a": pd.DataFrame({"x": [1]}), "b": pd.DataFrame({"x": [1]})}
     with pytest.raises(ValueError, match="exactly one input"):
-        execute_handler(handler, _two_input_stage(), frames, {})
+        handler.execute(_two_input_stage(), frames, {})
 
 
 def test_row_driver_empty_input():
     handler = RowMapHandler(make_mapper=lambda stage, ctx: lambda row: dict(row))
-    out = execute_handler(handler, _row_stage(),
+    out = handler.execute(_row_stage(),
                           {"src": pd.DataFrame({"x": pd.Series([], dtype="int64")})}, {})
     assert len(out) == 0
 
@@ -92,7 +91,7 @@ def test_row_driver_projects_to_declared_columns():
         project_output_to_declared=True,
     )
     ctx: dict = {}
-    out = execute_handler(handler, _row_stage(output_schema=schema),
+    out = handler.execute(_row_stage(output_schema=schema),
                           {"src": pd.DataFrame({"x": [1]})}, ctx)
     assert list(out.columns) == ["x", "score"]
     assert ctx["dropped_columns"]["t"] == ["extra"]
@@ -100,13 +99,13 @@ def test_row_driver_projects_to_declared_columns():
 
 def test_source_handler_reads_without_frames():
     handler = SourceHandler(read=lambda stage, ctx: pd.DataFrame({"k": ["a"]}))
-    out = execute_handler(handler, _row_stage(), {}, {})
+    out = handler.execute(_row_stage(), {}, {})
     assert list(out["k"]) == ["a"]
 
 
 def test_frame_handler_receives_frames():
     handler = FrameHandler(apply=lambda stage, inputs, ctx: inputs["src"].head(1))
-    out = execute_handler(handler, _row_stage(), {"src": pd.DataFrame({"x": [1, 2]})}, {})
+    out = handler.execute(_row_stage(), {"src": pd.DataFrame({"x": [1, 2]})}, {})
     assert len(out) == 1
 
 
@@ -131,5 +130,5 @@ def test_check_registry_accepts_shapes_matching_the_model():
 
 def test_check_registry_rejects_shape_disagreeing_with_model():
     bad = _registry(FrameHandler(apply=lambda stage, inputs, ctx: pd.DataFrame()))
-    with pytest.raises(RuntimeError, match="disagrees"):
+    with pytest.raises(RuntimeError, match="is registered as"):
         check_registry_matches_model(bad)

@@ -32,7 +32,7 @@ import pyarrow
 
 from app.models import Stage
 
-from .stages import HANDLERS, execute_handler
+from .stages import HANDLERS
 
 
 # Stage types whose handlers are pure (no disk writes) and therefore safe to
@@ -146,7 +146,7 @@ def run_stage_preview(
         "_scratch_preview": True,
     }
 
-    output = execute_handler(handler, stage_def, inputs, ctx)
+    output = handler.execute(stage_def, inputs, ctx)
     if output is None:
         output = pd.DataFrame()
 

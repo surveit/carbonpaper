@@ -13,7 +13,7 @@ import pandas as pd
 
 from app.models import Stage
 from app.models.stage import StageType
-from app.runtime.stages import HANDLERS, execute_handler, handle_human_review_queue
+from app.runtime.stages import HANDLERS, handle_human_review_queue
 from app.runtime.stages import llm_transform as lt
 
 
@@ -40,7 +40,7 @@ def test_llm_transform_drops_undeclared_columns_including_former_hardcoded_ids(m
     monkeypatch.setattr(lt, "call_llm",
                         lambda *a, **k: {"score": 5, "benchmark_id": "B1", "query_id": "Q5"})
     ctx: dict = {}
-    out = execute_handler(HANDLERS[StageType.llm_transform], stage,
+    out = HANDLERS[StageType.llm_transform].execute(stage,
                           {"load": pd.DataFrame({"id": ["r1"], "text": ["hi"]})}, ctx)
 
     assert list(out.columns) == ["id", "text", "score"]
@@ -62,7 +62,7 @@ def test_llm_transform_declared_input_column_rides_through(monkeypatch):
     monkeypatch.setattr(lt, "call_llm", lambda *a, **k: {"score": 5})
     ctx: dict = {}
     src = pd.DataFrame({"id": ["r1"], "text": ["hi"], "entity_id": ["C:acme"]})
-    out = execute_handler(HANDLERS[StageType.llm_transform], stage, {"load": src}, ctx)
+    out = HANDLERS[StageType.llm_transform].execute(stage, {"load": src}, ctx)
 
     assert list(out.columns) == ["id", "text", "entity_id", "score"]
     assert out.loc[0, "entity_id"] == "C:acme"                          # rode through from input

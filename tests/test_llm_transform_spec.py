@@ -8,7 +8,7 @@ import pandas as pd
 
 from app.models import Stage
 from app.models.stage import StageType
-from app.runtime.stages import HANDLERS, execute_handler
+from app.runtime.stages import HANDLERS
 from app.runtime.stages import llm_transform as lt
 
 
@@ -27,7 +27,7 @@ def _stage():
 
 
 def _run(stage, frames, ctx=None):
-    return execute_handler(HANDLERS[StageType.llm_transform], stage, frames,
+    return HANDLERS[StageType.llm_transform].execute(stage, frames,
                            ctx if ctx is not None else {})
 
 

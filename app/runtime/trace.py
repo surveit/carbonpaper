@@ -21,7 +21,7 @@ from typing import Any
 import pandas as pd
 
 from app.errors import RowOutOfRange, StageNotInRun
-from app.models.stage import GRAIN_AND_ORDER_PRESERVING_TYPES, StageType
+from app.models.stage import StageType, is_grain_and_order_preserving
 
 
 def _is_row_preserving(stage_type: str) -> bool:
@@ -29,7 +29,7 @@ def _is_row_preserving(stage_type: str) -> bool:
     position, so the walk can cross the hop on ordinal alone.
 
     Delegates to the model's single classification
-    (GRAIN_AND_ORDER_PRESERVING_TYPES) rather than a tracer-local list — a newly
+    (is_grain_and_order_preserving) rather than a tracer-local list — a newly
     preserving type, or a reclassified one, is picked up here automatically. This
     reads a static type taxonomy, not the run's compiled methodology, so the
     tracer stays self-contained on the run directory. A manifest type that isn't
@@ -39,7 +39,7 @@ def _is_row_preserving(stage_type: str) -> bool:
     preservation by driving row-mapped stage types per-row (see app/runtime/stages/execution.py).
     """
     try:
-        return StageType(stage_type) in GRAIN_AND_ORDER_PRESERVING_TYPES
+        return is_grain_and_order_preserving(StageType(stage_type))
     except ValueError:
         return False
 

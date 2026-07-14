@@ -1,8 +1,8 @@
 """Stage handlers — one module per stage type (the two python-function grains
 share python_functions.py). `HANDLERS` maps stage type to a shaped handler:
 the shape (row-mapped / source / frame) fixes what the runtime hands the
-handler — see execution.py. `execute_handler` is the single dispatch the
-runner and preview go through."""
+handler — see execution.py. The runner and preview run a stage through
+`handler.execute(...)`."""
 
 from __future__ import annotations
 
@@ -18,7 +18,6 @@ from .execution import (
     SourceHandler,
     StageHandler,
     check_registry_matches_model,
-    execute_handler,
 )
 from .human_review_queue import handle_human_review_queue
 from .input_data import read_input_data
@@ -56,7 +55,6 @@ __all__ = [
     "SourceHandler",
     "StageHandler",
     "check_registry_matches_model",
-    "execute_handler",
     "handle_aggregate",
     "handle_human_review_queue",
     "handle_join",

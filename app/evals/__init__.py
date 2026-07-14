@@ -1,5 +1,6 @@
 """Eval subsystem: everything that defines, checks, stores, runs, and scores an eval.
 
+  - run_settings.py     — can this eval run be scored declaratively (resolve_eval_run_settings)
   - compatibility.py    — does an EvalConfig still fit the workflow (check_eval_compatibility)
   - dataset_columns.py  — derive the eval-dataset columns from override/target/checks
   - store.py            — read/write eval configs and runs on disk

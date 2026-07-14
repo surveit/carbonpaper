@@ -1,11 +1,12 @@
 """Handler shapes: what the runtime hands each stage type, and the row driver.
 
-A stage type's grain-and-order guarantee is a fact about HOW the runtime
-invokes its handler, not a claim the handler makes about itself:
+A stage type's grain-and-order guarantee is a fact about HOW the runtime invokes
+its handler, not a claim the handler makes about itself. Each shape is a class
+whose `execute` fixes the calling convention:
 
   RowMapHandler  — the runtime maps a per-row function over the single input's
-                   rows and reassembles results in input order: one dict in,
-                   one dict out. The mapper never sees the frame, so it cannot
+                   rows and reassembles results in input order: one dict in, one
+                   dict out. The mapper never sees the frame, so it cannot
                    reorder, drop, or fan out rows — preservation holds by
                    construction (issue #87).
   SourceHandler  — no upstream inputs; the handler originates rows from outside
@@ -13,90 +14,113 @@ invokes its handler, not a claim the handler makes about itself:
   FrameHandler   — the handler sees whole input frame(s) and may reshape or
                    reorder them freely; never grain-and-order preserving.
 
-The shape a type registers under is the runtime half of the model's
-GRAIN_AND_ORDER_PRESERVING_TYPES declaration; `check_registry_matches_model`
-holds the two sides equal when the registry module is imported.
+Preservation is carried by the shape CLASS — RowMap/Source preserve, Frame does
+not — so a handler cannot separately declare itself preserving; it either is a
+row-driven shape or it is not. Which shape a type registers under must agree with
+the core fact (app.models is_grain_and_order_preserving); check_registry_matches_model
+holds the two equal when the registry module is imported.
 """
 from __future__ import annotations
 
+from abc import ABC, abstractmethod
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from dataclasses import dataclass
-from typing import Any, Callable, ClassVar
+from typing import Any, Callable
 
 import pandas as pd
 
 from app.models import Stage
-from app.models.stage import GRAIN_AND_ORDER_PRESERVING_TYPES, StageType
+from app.models.stage import StageType, is_grain_and_order_preserving
 
 # One row of a stage's input or output: column label → cell value.
 Row = dict[str, Any]
 
 
-@dataclass(frozen=True)
-class RowMapHandler:
-    """Driven per row by the runtime; the mapper never sees the frame.
+class StageHandler(ABC):
+    """One stage type's calling convention. `execute` runs the stage; the concrete
+    shape fixes what the runtime hands the handler (a row at a time, nothing, or
+    whole frames), which is what makes grain-and-order preservation structural."""
+
+    @abstractmethod
+    def execute(
+        self, stage: Stage, inputs: dict[str, pd.DataFrame], ctx: dict[str, Any]
+    ) -> pd.DataFrame | None: ...
+
+
+class RowMapHandler(StageHandler):
+    """Driven per row by the runtime; the mapper never sees the frame, so it
+    cannot reorder, drop, or fan out rows.
 
     `make_mapper` runs once per stage execution (resolve code, render prompt
     additions, record backend info) and returns the per-row function.
     `parallelism` > 1 lets the driver run the mapper over rows concurrently —
     results are written back by input index, so output order is input order
-    regardless of completion order. `project_output_to_declared` asks the
-    driver to project the assembled frame onto exactly the columns
-    output_schema declares — a column-only operation that cannot change row
-    count or order.
+    regardless of completion order. `project_output_to_declared` asks the driver
+    to project the assembled frame onto exactly the columns output_schema declares
+    — a column-only operation that cannot change row count or order.
     """
-    make_mapper: Callable[[Stage, dict[str, Any]], Callable[[Row], Row]]
-    parallelism: int = 1
-    project_output_to_declared: bool = False
-    is_grain_and_order_preserving: ClassVar[bool] = True
+
+    def __init__(
+        self,
+        make_mapper: Callable[[Stage, dict[str, Any]], Callable[[Row], Row]],
+        parallelism: int = 1,
+        project_output_to_declared: bool = False,
+    ) -> None:
+        self.make_mapper = make_mapper
+        self.parallelism = parallelism
+        self.project_output_to_declared = project_output_to_declared
+
+    def execute(
+        self, stage: Stage, inputs: dict[str, pd.DataFrame], ctx: dict[str, Any]
+    ) -> pd.DataFrame:
+        return _run_row_mapper(self, stage, inputs, ctx)
 
 
-@dataclass(frozen=True)
-class SourceHandler:
+class SourceHandler(StageHandler):
     """Originates rows from outside the run; takes no upstream frames."""
-    read: Callable[[Stage, dict[str, Any]], pd.DataFrame]
-    is_grain_and_order_preserving: ClassVar[bool] = True
+
+    def __init__(self, read: Callable[[Stage, dict[str, Any]], pd.DataFrame]) -> None:
+        self.read = read
+
+    def execute(
+        self, stage: Stage, inputs: dict[str, pd.DataFrame], ctx: dict[str, Any]
+    ) -> pd.DataFrame:
+        return self.read(stage, ctx)
 
 
-@dataclass(frozen=True)
-class FrameHandler:
+class FrameHandler(StageHandler):
     """Sees whole input frame(s) keyed by upstream id; may reshape them."""
-    apply: Callable[[Stage, dict[str, pd.DataFrame], dict[str, Any]], pd.DataFrame | None]
-    is_grain_and_order_preserving: ClassVar[bool] = False
+
+    def __init__(
+        self,
+        apply: Callable[[Stage, dict[str, pd.DataFrame], dict[str, Any]], pd.DataFrame | None],
+    ) -> None:
+        self.apply = apply
+
+    def execute(
+        self, stage: Stage, inputs: dict[str, pd.DataFrame], ctx: dict[str, Any]
+    ) -> pd.DataFrame | None:
+        return self.apply(stage, inputs, ctx)
 
 
-StageHandler = RowMapHandler | SourceHandler | FrameHandler
-
-
-def execute_handler(
-    handler: StageHandler,
-    stage: Stage,
-    inputs: dict[str, pd.DataFrame],
-    ctx: dict[str, Any],
-) -> pd.DataFrame | None:
-    """Run one stage through its shape's calling convention."""
-    if isinstance(handler, SourceHandler):
-        return handler.read(stage, ctx)
-    if isinstance(handler, RowMapHandler):
-        return _run_row_mapper(handler, stage, inputs, ctx)
-    return handler.apply(stage, inputs, ctx)
+# The shapes that guarantee row-by-row preservation — the runtime side of the
+# core is_grain_and_order_preserving fact.
+_PRESERVING_SHAPES = (RowMapHandler, SourceHandler)
 
 
 def check_registry_matches_model(handlers: dict[StageType, StageHandler]) -> None:
-    """Raise unless the registry's handler shapes agree with the model's
-    GRAIN_AND_ORDER_PRESERVING_TYPES declaration. Called when the registry
-    module is imported, so a mis-shaped registration cannot start the app."""
-    by_shape = frozenset(
-        stage_type for stage_type, handler in handlers.items()
-        if handler.is_grain_and_order_preserving
-    )
-    if by_shape != GRAIN_AND_ORDER_PRESERVING_TYPES:
-        raise RuntimeError(
-            "handler registry disagrees with GRAIN_AND_ORDER_PRESERVING_TYPES: "
-            f"registered shapes imply {sorted(t.value for t in by_shape)}, "
-            f"the model declares "
-            f"{sorted(t.value for t in GRAIN_AND_ORDER_PRESERVING_TYPES)}"
-        )
+    """Raise unless each stage type's registered shape agrees with the core
+    is_grain_and_order_preserving fact. Called when the registry module is
+    imported, so a mis-shaped registration — a preserving type wired as a
+    FrameHandler, or the reverse — cannot start the app."""
+    for stage_type, handler in handlers.items():
+        shape_preserves = isinstance(handler, _PRESERVING_SHAPES)
+        if shape_preserves != is_grain_and_order_preserving(stage_type):
+            raise RuntimeError(
+                f"stage type {stage_type.value!r} is registered as "
+                f"{type(handler).__name__} (preserving={shape_preserves}), but the "
+                f"model declares grain-and-order-preserving="
+                f"{is_grain_and_order_preserving(stage_type)}"
+            )
 
 
 def _run_row_mapper(

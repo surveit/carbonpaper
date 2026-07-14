@@ -44,15 +44,23 @@ class StageType(str, Enum):
 
 
 # The stage types that guarantee output row i came from input row i — 1:1 and in
-# the same order. Single source of truth for the eval gate, the SYW positional
-# tracer (app/runtime/trace.py), and the runtime handler registry (checked equal
-# at import in app/runtime/stages); see Stage.is_grain_and_order_preserving for
-# the full contract and per-type reasoning.
-GRAIN_AND_ORDER_PRESERVING_TYPES: frozenset[StageType] = frozenset({
+# the same order. This is owned by core (app.models) because it's a fact about the
+# stage-type contract that several layers must read — the eval gate, the SYW
+# positional tracer, the compiler — and only core is importable by all of them.
+# Ask it through is_grain_and_order_preserving(); the runtime handler registry is
+# held to conform (app/runtime/stages checks each type's shape against it at import).
+_GRAIN_AND_ORDER_PRESERVING_TYPES: frozenset[StageType] = frozenset({
     StageType.input_data,
     StageType.python_row_function,
     StageType.llm_transform,
 })
+
+
+def is_grain_and_order_preserving(stage_type: StageType) -> bool:
+    """Does one input row of this stage type map to exactly one output row, in the
+    same order? Fixed entirely by stage type — see the
+    Stage.is_grain_and_order_preserving property for the per-type contract."""
+    return stage_type in _GRAIN_AND_ORDER_PRESERVING_TYPES
 
 
 class ConnectorKind(str, Enum):
@@ -390,7 +398,7 @@ class Stage(_Base):
         row-aligned) eval relies on to align a target's output rows back to the
         eval-dataset rows that produced them BY POSITION — no lineage id needed,
         because position IS the identity through a grain-preserving path. Fixed
-        entirely by stage type (the set is GRAIN_AND_ORDER_PRESERVING_TYPES):
+        entirely by stage type (the module function is_grain_and_order_preserving):
           - python_row_function → yes (runtime maps it per row, in emit order — enforced 1:1)
           - python_frame_function → NO (may reshape OR reorder the frame)
           - llm_transform      → yes (per-row 1:1 in emit order in v1; a fan-out LLM
@@ -405,7 +413,7 @@ class Stage(_Base):
                                  output is a table of artifact paths, not the input
                                  rows (and it is terminal — nothing downstream).
         """
-        return self.type in GRAIN_AND_ORDER_PRESERVING_TYPES
+        return is_grain_and_order_preserving(self.type)
 
 
 def validate_stage(stage: dict[str, Any]) -> list[str]:

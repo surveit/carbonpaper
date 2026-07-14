@@ -6,7 +6,7 @@ import pytest
 from pydantic import ValidationError
 
 from app import models as m
-from app.models import resolve_eval_run_settings
+from app.evals.run_settings import resolve_eval_run_settings
 
 
 def S(**kw):

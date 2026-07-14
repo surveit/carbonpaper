@@ -31,7 +31,7 @@ from app.models import Stage, Workflow
 from app.services.loader import WorkflowLoadError
 from app.services import versioning
 
-from .stages import HANDLERS, HaltForReview, execute_handler
+from .stages import HANDLERS, HaltForReview
 from .validation import validate_dataframe
 
 
@@ -396,7 +396,7 @@ def _execute_stages(
                 raise ValueError(f"No handler for stage type '{stype}'")
 
             try:
-                output = execute_handler(handler, stage, inputs_for_stage, ctx)
+                output = handler.execute(stage, inputs_for_stage, ctx)
             except HaltForReview as halt:
                 record["status"] = "awaiting_review"
                 record["rows"] = halt.pending_count

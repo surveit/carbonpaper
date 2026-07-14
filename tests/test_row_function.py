@@ -7,7 +7,7 @@ import pytest
 from pydantic import ValidationError
 
 from app.models import Stage
-from app.runtime.stages import HANDLERS, execute_handler
+from app.runtime.stages import HANDLERS
 
 
 def _stage(code, inputs=("src",)):
@@ -19,7 +19,7 @@ def _stage(code, inputs=("src",)):
 
 
 def _run(stage, frames):
-    return execute_handler(HANDLERS[stage.type], stage, frames, {})
+    return HANDLERS[stage.type].execute(stage, frames, {})
 
 
 def test_row_function_maps_per_row():
