@@ -5,16 +5,16 @@
 
   Context the route passes:
     state    = project_view.shell_state(pdir); section = "versions"
-    versions = versioning.list_versions(pdir)  — newest-first (may be empty)
+    versions = versioning.list_versions(pdir), each with a computed `published`
+               bool (versioning.version_is_published) — newest-first (may be empty)
 #}
 {% block section %}
 <div class="sec-head wf-head">
   <div class="wf-head-title">
     <h1>Versions</h1>
-    <p class="lede">Each version is an immutable snapshot of <code>compiled/</code> +
-      <code>schemas/</code> with approval coverage frozen at creation time. A run pins to
-      a version and reads its snapshot, so it is reproducible against the exact workflow
-      it executed.</p>
+    <p class="lede">Each version is an immutable, valid snapshot of the workflow's stages,
+      with approval coverage frozen at creation time. A run pins to a <em>published</em>
+      version — publishing records human approval and never edits content.</p>
   </div>
   <div class="actions wf-actions">
     <a href="/project/{{ state.name }}/workflow" class="btn">Workflow</a>
@@ -25,7 +25,7 @@
 {% if versions %}
 <table class="stages">
     <thead>
-        <tr><th>version</th><th>created</th><th>message</th><th>parent</th><th>coverage</th></tr>
+        <tr><th>version</th><th>created</th><th>message</th><th>parent</th><th>coverage</th><th>published</th></tr>
     </thead>
     <tbody>
         {% for v in versions %}
@@ -52,6 +52,16 @@
                 <span class="muted">—</span>
                 {% endif %}
             </td>
+            <td>
+                {% if v.published %}
+                <span class="muted">✓ {{ v.published_at or 'published' }}</span>
+                {% else %}
+                <form action="/project/{{ state.name }}/versions/{{ v.id }}/publish" method="post" style="display:inline">
+                    <button type="submit">Publish</button>
+                </form>
+                <span class="muted">unpublished</span>
+                {% endif %}
+            </td>
         </tr>
         {% endfor %}
     </tbody>
@@ -60,7 +70,8 @@
 <div class="empty-state">
   <h2>No versions yet</h2>
   <p class="muted">Click <strong>Create version</strong> on the Workflow page to snapshot
-    the current workflow. A run targets an existing version, so create one before running.</p>
+    the current workflow. A run targets an existing version, so save a version and
+    publish it before running.</p>
 </div>
 {% endif %}
 {% endblock %}

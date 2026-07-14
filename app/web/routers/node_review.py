@@ -13,7 +13,7 @@ and `versions/<id>/` (snapshots), managed by app.services.node_review + app.serv
 from __future__ import annotations
 
 from fastapi import APIRouter, Form, HTTPException, Request
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 from app.services import node_review, stage_edit, versioning
 from app.services.loader import stage_to_json, stage_to_spec_dict
@@ -182,11 +182,28 @@ async def create_version_route(project: str, message: str = Form(...)):
     return JSONResponse({"ok": True, "version": meta})
 
 
+@router.post("/project/{project}/versions/{version_id}/publish")
+async def publish_version_route(project: str, version_id: str):
+    """Record human approval on one version (the gate runs pin to). Idempotent;
+    metadata only — stage content is never touched. Redirects back to the
+    versions list."""
+    project_dir = EXAMPLES_DIR / project
+    if not project_dir.is_dir():
+        raise HTTPException(status_code=404, detail=f"No project '{project}'")
+    try:
+        versioning.publish_version(project_dir, version_id, reviewer="local")
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return RedirectResponse(url=f"/project/{project}/versions", status_code=303)
+
+
 @router.get("/project/{project}/versions", response_class=HTMLResponse)
 async def versions_index(request: Request, project: str):
     """VERSIONS section of the project shell: every version newest-first, with frozen
     coverage. A child of the Workflow group, so it passes the SAME shell_state the
-    other sections do (the sidebar agrees) plus its version rows."""
+    other sections do (the sidebar agrees) plus its version rows, each carrying a
+    computed `published` flag (the one place the legacy-meta rule is applied for
+    the template)."""
     project_dir = EXAMPLES_DIR / project
     if not project_dir.is_dir():
         raise HTTPException(status_code=404, detail=f"No project '{project}'")
@@ -196,6 +213,9 @@ async def versions_index(request: Request, project: str):
         {
             "state": shell_state(project_dir),
             "section": "versions",
-            "versions": versioning.list_versions(project_dir),
+            "versions": [
+                {**meta, "published": versioning.version_is_published(meta)}
+                for meta in versioning.list_versions(project_dir)
+            ],
         },
     )
