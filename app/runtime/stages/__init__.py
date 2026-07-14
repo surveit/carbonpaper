@@ -6,7 +6,7 @@ handler — see execution.py. The runner and preview run a stage through
 
 from __future__ import annotations
 
-from app.models.stage import StageType
+from app.core.models.stage import StageType
 
 from ..options import DEFAULT_PARALLEL
 from ._shared import HaltForReview

@@ -19,7 +19,7 @@ import os
 import subprocess
 from typing import Any
 
-from app.models import LLMConfig
+from app.core.models import LLMConfig
 
 from . import llm_mock
 from . import llm_agent_sdk

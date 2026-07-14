@@ -36,8 +36,8 @@ from typing import Annotated, Any, Literal, Optional
 
 from pydantic import AfterValidator, Field, field_validator, model_validator
 
-from app.models.schema import _Base
-from app.models.table import TableRef
+from app.core.models.schema import _Base
+from app.core.models.table import TableRef
 
 _SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
 

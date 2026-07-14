@@ -6,9 +6,9 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from app import models as m
+from app.core import models as m
 from app.errors import EvalGrainViolationError
-from app.models import EvalConfig, ExpectedOutput
+from app.core.models import EvalConfig, ExpectedOutput
 from app.evals.scoring import score_expected_outputs
 
 

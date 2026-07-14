@@ -13,8 +13,8 @@ from app.agent.store import SessionStore
 from app.agent.turns import TurnManager
 from app.compiler import workflow as wf
 from app.compiler.workflow_prompt import WORKFLOW_SYSTEM_PROMPT
-from app.models import parse_schema_library
-from app.models.workflow import Workflow
+from app.core.models import parse_schema_library
+from app.core.models.workflow import Workflow
 
 _STAGE = {
     "id": "load", "type": "input_data", "name": "Load documents",

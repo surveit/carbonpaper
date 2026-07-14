@@ -2,7 +2,7 @@
 
 `app/main.py` is a thin bootstrap: creates the FastAPI app, mounts `/static`, includes the
 routers in `app/web/routers/`, which import the Runner (`app.runtime`) and the schemas
-(`app.models`) and share `app/web/{config,loading,diagrams}`. Run:
+(`app.core.models`) and share `app/web/{config,loading,diagrams}`. Run:
 `python -m uvicorn app.main:app --port 8765`.
 
 ## Pages / routes

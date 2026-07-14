@@ -24,7 +24,7 @@ A project dir also holds `code/`, `data/`, `runs/<id>/` (outputs + `manifest.jso
 |---|---|---|
 | **Runner** | `app/runtime/` | On master — executes a workflow (typed `Stage` end-to-end), validates I/O, persists, halts for review, resumes. |
 | **Compiler** | `app/compiler/` | Engine on master (prose → LLM → validated workflow, re-ask on failure; `python -m app.compiler`); authoring UI in the PR stack. |
-| **Eval** | `app/models/eval.py` | Data model only — `EvalConfig` + grain-preservation gate; no runner integration yet. |
+| **Eval** | `app/core/models/eval.py` | Data model only — `EvalConfig` + grain-preservation gate; no runner integration yet. |
 
 ## Where the product needs to go
 [RETHINK.md](RETHINK.md) is the standing critique: the platform serves the workflow *author*

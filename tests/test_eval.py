@@ -1,11 +1,11 @@
-"""Tests for the eval contract (app/models/eval.py + table.py) and the
-grain-preservation gate on Stage that governs it (app/models/stage.py)."""
+"""Tests for the eval contract (app/core/models/eval.py + table.py) and the
+grain-preservation gate on Stage that governs it (app/core/models/stage.py)."""
 from __future__ import annotations
 
 import pytest
 from pydantic import ValidationError
 
-from app import models as m
+from app.core import models as m
 from app.evals.run_settings import resolve_eval_run_settings
 
 
@@ -159,7 +159,7 @@ def test_eval_config_no_key_or_input_columns_fields():
 
 
 def test_eval_config_rejects_stray_key_field():
-    # extra="forbid" (app/models/schema.py _Base): a leftover `key` value
+    # extra="forbid" (app/core/models/schema.py _Base): a leftover `key` value
     # from an old config is a validation error, not silently-dropped data.
     with pytest.raises(ValidationError):
         m.EvalConfig.model_validate({
@@ -194,7 +194,7 @@ def test_expected_output_valid_with_no_expected_field():
 
 
 def test_expected_output_rejects_stray_expected_field():
-    # extra="forbid" (app/models/schema.py _Base): a leftover `expected` value
+    # extra="forbid" (app/core/models/schema.py _Base): a leftover `expected` value
     # from an old config is a validation error, not silently-dropped data.
     with pytest.raises(ValidationError):
         m.ExpectedOutput.model_validate({"output_column": "a", "expected": "b"})

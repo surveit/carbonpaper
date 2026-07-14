@@ -8,15 +8,15 @@ Split across modules:
   - table.py         — TableRef (a general on-disk table pointer)
   - eval.py          — the eval contract (EvalConfig, EvalRun, scorability)
 
-Import from `app.models` (this aggregator) for the stable public surface.
+Import from `app.core.models` (this aggregator) for the stable public surface.
 """
-from app.models.schema import (
+from app.core.models.schema import (
     Column,
     SourceRef,
     TableSchema,
     is_valid_column_type,
 )
-from app.models.stage import (
+from app.core.models.stage import (
     AggFormula,
     AggregateConfig,
     AggregationOp,
@@ -38,7 +38,7 @@ from app.models.stage import (
     StageType,
     validate_stage,
 )
-from app.models.workflow import (
+from app.core.models.workflow import (
     Workflow,
     check_inputs_resolve,
     check_unique_ids,
@@ -47,7 +47,7 @@ from app.models.workflow import (
     validate_workflow,
     validate_workflow_draft,
 )
-from app.models.named_schemas import (
+from app.core.models.named_schemas import (
     NamedColumn,
     NamedSchema,
     SchemaKind,
@@ -59,8 +59,8 @@ from app.models.named_schemas import (
     validate_named_schema,
     validate_schema_library,
 )
-from app.models.table import TableRef
-from app.models.eval import (
+from app.core.models.table import TableRef
+from app.core.models.eval import (
     CodeScorer,
     EvalConfig,
     EvalRun,
@@ -70,7 +70,7 @@ from app.models.eval import (
 )
 # NOTE: the compiled-stage loader lives in app.services.loader (it does
 # filesystem I/O, which is service work, not schema). Import it from there;
-# app.models stays a pure, side-effect-free schema package.
+# app.core.models stays a pure, side-effect-free schema package.
 
 # ── Compat vocabularies (the plain-data surface the compiler + prompt render) ──
 # The Pydantic models above are the contract. The string/dict vocabularies below
@@ -82,7 +82,7 @@ from typing import Any as _Any
 
 # Scalar column-type vocabulary, re-exported from schema.py (its single
 # definition). `list[<type>]` / dict / json are handled by is_valid_column_type.
-from app.models.schema import SCALAR_COLUMN_TYPES
+from app.core.models.schema import SCALAR_COLUMN_TYPES
 
 # Kind/type vocabularies as string sets, derived from the enums so they stay in
 # lockstep with the models the runtime validates against.

@@ -24,7 +24,7 @@ alongside `runs/` (both are per-project working data, not source).
 consistently.
 
 Dependency note: this module may import app.services.node_review (to freeze coverage) and
-app.models, but nothing from app.runtime or app.compiler. Version snapshots are
+app.core.models, but nothing from app.runtime or app.compiler. Version snapshots are
 parsed through the same strict loader as the working copy (app.services.loader),
 so a version's stages load identically to the working copy's.
 """
@@ -37,7 +37,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from app.models import Stage
+from app.core.models import Stage
 from app.services.loader import (
     load_compiled_dir,
     load_workflow,

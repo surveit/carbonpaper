@@ -1,10 +1,10 @@
-"""Tests for app/models/stage.py — node types, handle blocks, the Stage model."""
+"""Tests for app/core/models/stage.py — node types, handle blocks, the Stage model."""
 from __future__ import annotations
 
 import pytest
 from pydantic import ValidationError
 
-from app import models as m
+from app.core import models as m
 from app.llm import LLMModel
 
 

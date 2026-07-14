@@ -32,7 +32,7 @@ collide with a project name.
 
 Reuse rule: reuses P1's node_review (belief + schema-library gate), P2's compiler
 (compile_methodology), and the shared web helpers (diagrams, loading, config). The
-app.models package is the only contract.
+app.core.models package is the only contract.
 """
 
 from __future__ import annotations
@@ -51,7 +51,7 @@ from fastapi.responses import (
     RedirectResponse,
 )
 
-from app.models import (
+from app.core.models import (
     parse_schema_library,
     validate_named_schema,
     validate_schema_library,

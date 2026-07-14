@@ -1,6 +1,6 @@
 # Named schemas + the eval data model
 
-Two related pieces of `app/models/`: the named-schema data model (author tables
+Two related pieces of `app/core/models/`: the named-schema data model (author tables
 first, wire the workflow over them) and the eval model (grade a workflow against
 an eval-dataset table). Both exist on master as **validated Pydantic models**; neither is
 yet consumed by the runtime, and no committed example exercises them end-to-end.
@@ -19,7 +19,7 @@ benchmark-scoring stage until `query`, `data_source`, and `benchmark` exist as
 tables — and nothing in the pipeline *produces* those; they're reference data. A
 workflow-first tool has nowhere to put them.
 
-The contract, in `app/models/named_schemas.py`:
+The contract, in `app/core/models/named_schemas.py`:
 
 - A **`NamedSchema`** is a `TableSchema` (columns + primary key) plus:
   - `name` — snake_case identity.
@@ -45,7 +45,7 @@ loosely, by intent). If you re-introduce coupling, make it loose first.
 Hard rule: **eval must not leak into the generation data model.** Generation has
 no knowledge that eval exists; eval depends on generation, one-directional.
 
-The contract, in `app/models/eval.py` (see its module docstring — it's the
+The contract, in `app/core/models/eval.py` (see its module docstring — it's the
 authoritative description):
 
 - An **`EvalConfig`** is the authored spec. Its core is ONE row-aligned
@@ -58,7 +58,7 @@ authoritative description):
 - That 1:1 alignment is only well-defined when every stage on the
   override→target path preserves grain (no fan-out/fan-in).
   `resolve_eval_run_settings` walks the path and checks each stage's
-  `is_grain_preserving` (defined per stage type in `app/models/stage.py`; the
+  `is_grain_preserving` (defined per stage type in `app/core/models/stage.py`; the
   `python_row_function` type exists precisely so the runtime *enforces* the 1:1
   guarantee rather than trusting it); a non-preserving stage makes the eval
   non-scorable and the settings say why.
@@ -84,7 +84,7 @@ authoritative description):
 - A `-2..+2` score plus "not applicable" / "not scored" states does NOT fit one
   numeric column — model a `status` enum + a nullable `score` (absence ≠ zero).
   This is a recurring trap in scoring pipelines.
-- **Beware `extra="ignore"`**: the shared model base (`app/models/schema.py`
+- **Beware `extra="ignore"`**: the shared model base (`app/core/models/schema.py`
   `_Base`) silently drops unknown keys, so a mistyped field name (or a
   constraint added under the wrong key) disappears without an error. Check your
   spelling against the model; don't trust silence.

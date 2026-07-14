@@ -20,8 +20,8 @@ from pathlib import Path
 import yaml
 from pydantic import ValidationError
 
-from app.models import EvalConfig, EvalRun
-from app.models.schema import format_errors
+from app.core.models import EvalConfig, EvalRun
+from app.core.models.schema import format_errors
 from app.evals.compatibility import CompatibilityReport
 from app.services.versioning import list_versions
 

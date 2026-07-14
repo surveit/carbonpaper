@@ -22,8 +22,8 @@ from app.agent.agent import Agent
 from app.agent.store import open_session_store
 from app.agent.turns import default_turn_manager
 from app.compiler.workflow_prompt import WORKFLOW_SYSTEM_PROMPT
-from app.models.named_schemas import SchemaLibrary
-from app.models.workflow import Workflow
+from app.core.models.named_schemas import SchemaLibrary
+from app.core.models.workflow import Workflow
 
 
 def start_workflow_generation_agent(

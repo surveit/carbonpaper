@@ -14,8 +14,8 @@ import json
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from app.models import Stage
-from app.models.workflow import validate_workflow_draft
+from app.core.models import Stage
+from app.core.models.workflow import validate_workflow_draft
 from app.services import node_review
 from app.services.loader import (
     find_stage_file,

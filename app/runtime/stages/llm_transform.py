@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from typing import Any, Callable
 
-from app.models import Stage
+from app.core.models import Stage
 
 from ..llm import backend_status, call_llm
 from .execution import Row

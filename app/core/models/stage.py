@@ -12,14 +12,14 @@ from typing import Any, Literal, Optional
 from pydantic import Field, ValidationError, field_validator, model_validator
 
 from app.llm.options import LLMModel
-from app.models.schema import (
+from app.core.models.schema import (
     SourceRef,
     TableSchema,
     _Base,
     _SNAKE_RE,
     format_errors,
 )
-from app.models.stages.code import check_inline_function_code
+from app.core.models.stages.code import check_inline_function_code
 
 # ── Enumerated vocabularies ──────────────────────────────────────────────────
 class StageType(str, Enum):
@@ -44,7 +44,7 @@ class StageType(str, Enum):
 
 
 # The stage types that guarantee output row i came from input row i — 1:1 and in
-# the same order. This is owned by core (app.models) because it's a fact about the
+# the same order. This is owned by core (app.core.models) because it's a fact about the
 # stage-type contract that several layers must read — the eval gate, the SYW
 # positional tracer, the compiler — and only core is importable by all of them.
 # Ask it through is_grain_and_order_preserving(); the runtime handler registry is
@@ -287,7 +287,7 @@ class Stage(_Base):
     compiler_notes: list[str] = Field(default_factory=list)
 
     # Descriptive eval note rendered on the stage page (reference data, metrics).
-    # Display only — the executable eval contract is EvalConfig (app/models/eval.py).
+    # Display only — the executable eval contract is EvalConfig (app/core/models/eval.py).
     eval: Optional[dict[str, Any]] = None
 
     @field_validator("inputs", mode="before")

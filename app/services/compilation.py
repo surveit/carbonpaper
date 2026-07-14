@@ -28,7 +28,7 @@ from typing import Any
 
 from app.compiler import compile_methodology, read_input
 from app.errors import RegenerateWithoutSnapshotError
-from app.models.workflow import validate_workflow_draft
+from app.core.models.workflow import validate_workflow_draft
 from app.services import versioning, workspace
 
 # The default root every compilation object hangs off. Callers may override

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from app import models as m
+from app.core import models as m
 from app.evals.dataset_columns import get_injected_columns, get_output_columns_from_stage
 from app.evals.compatibility import CompatibilityReport, check_eval_compatibility
 

@@ -3,12 +3,12 @@ target and decide whether it is row-alignable end to end.
 
 This is eval-gate logic (it returns an EvalRunSettings and reasons about the
 scoring path), so it lives in app.evals rather than in the core eval models. It
-reads the grain-and-order fact from core (app.models) like every other layer."""
+reads the grain-and-order fact from core (app.core.models) like every other layer."""
 from __future__ import annotations
 
 from typing import Iterable
 
-from app.models import EvalRunSettings, Workflow
+from app.core.models import EvalRunSettings, Workflow
 
 
 def resolve_eval_run_settings(
