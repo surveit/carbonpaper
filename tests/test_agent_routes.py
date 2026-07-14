@@ -13,6 +13,7 @@ from pydantic import BaseModel
 
 from app.agent import registry
 from app.agent.registry import AgentConfig, register
+from app.agent.router import _store
 from app.main import app
 
 client = TestClient(app)
@@ -90,3 +91,16 @@ def test_chat_page_renders_the_composer() -> None:
     assert page.status_code == 200
     assert f'const SID = "{sid}";' in page.text
     assert "const MESSAGE_URL = `/chat/${SID}/message`;" in page.text
+    assert 'id="input"' in page.text  # a bound agent keeps the message composer
+
+
+def test_chat_page_hides_composer_for_view_only_session() -> None:
+    # A generation session is created with no bound agent (agent_id=None): the UI renders
+    # and streams it, but there is no agent to reply to a typed message (post_message would
+    # 400), so the composer must be hidden — while live streaming still works.
+    sid = _store.create(title="Generation", agent_id=None, context={"phase": "workflow"})
+    page = client.get(f"/chat/{sid}")
+    assert page.status_code == 200
+    assert 'id="input"' not in page.text        # no message box on a view-only session
+    assert "read-only" in page.text.lower()      # copy explains why
+    assert "EventSource(" in page.text           # but it can still watch the live turn
