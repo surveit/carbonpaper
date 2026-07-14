@@ -44,5 +44,5 @@ app.include_router(node_review.router)
 app.include_router(compiler_router)
 
 # Interactive, multi-turn chat surface (streaming + persistence). Separate from
-# the llm_transform batch path; see app/agent.
+# the row-mapped llm_transform path; see app/agent.
 app.include_router(chat_router)

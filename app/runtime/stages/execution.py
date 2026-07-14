@@ -123,7 +123,7 @@ def _run_row_mapper(
         {str(k): v for k, v in record.items()} for record in src.to_dict("records")
     ]
 
-    results: list[Any] = [None] * len(records)
+    results: list[Row | None] = [None] * len(records)
     if handler.parallelism > 1 and len(records) > 1:
         with ThreadPoolExecutor(max_workers=handler.parallelism) as pool:
             futures = {

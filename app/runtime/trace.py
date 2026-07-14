@@ -35,8 +35,8 @@ def _is_row_preserving(stage_type: str) -> bool:
     tracer stays self-contained on the run directory. A manifest type that isn't
     a known StageType (a foreign or future run) is never trusted. Membership is
     necessary but not sufficient: crossing is still gated on matching parent/child
-    row counts too (the len(parent_df) != len(df) guard below); making the runtime
-    itself *guarantee* preservation for declaring stages is issue #87.
+    row counts too (the len(parent_df) != len(df) guard below). The runtime guarantees
+    preservation by driving row-mapped stage types per-row (see app/runtime/stages/execution.py).
     """
     try:
         return StageType(stage_type) in GRAIN_AND_ORDER_PRESERVING_TYPES

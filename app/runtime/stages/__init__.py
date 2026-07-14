@@ -29,6 +29,7 @@ from .python_functions import handle_python_frame_function, make_python_row_mapp
 
 HANDLERS: dict[StageType, StageHandler] = {
     StageType.input_data: SourceHandler(read_input_data),
+    # parallelism stays 1: the mapped function is user-authored code, not assumed thread-safe.
     StageType.python_row_function: RowMapHandler(make_python_row_mapper),
     StageType.python_frame_function: FrameHandler(handle_python_frame_function),
     StageType.join_: FrameHandler(handle_join),

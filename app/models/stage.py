@@ -44,9 +44,10 @@ class StageType(str, Enum):
 
 
 # The stage types that guarantee output row i came from input row i — 1:1 and in
-# the same order. Single source of truth for both the eval gate and the SYW
-# positional tracer (app/runtime/trace.py imports this); see
-# Stage.is_grain_and_order_preserving for the full contract and per-type reasoning.
+# the same order. Single source of truth for the eval gate, the SYW positional
+# tracer (app/runtime/trace.py), and the runtime handler registry (checked equal
+# at import in app/runtime/stages); see Stage.is_grain_and_order_preserving for
+# the full contract and per-type reasoning.
 GRAIN_AND_ORDER_PRESERVING_TYPES: frozenset[StageType] = frozenset({
     StageType.input_data,
     StageType.python_row_function,
