@@ -17,7 +17,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 
 from app.services import node_review, stage_edit, versioning
 from app.services.loader import stage_to_json, stage_to_spec_dict
-from app.models import Stage
+from app.core.models import Stage
 from app.web.config import EXAMPLES_DIR, templates
 from app.web.diagrams import TYPE_CLASS, TYPE_GLYPH, build_mermaid_graph
 from app.web.loading import find_stage, load_stages, resolve_function_code

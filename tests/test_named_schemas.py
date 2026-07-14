@@ -1,10 +1,10 @@
-"""Tests for app/models/named_schemas.py — the named data model."""
+"""Tests for app/core/models/named_schemas.py — the named data model."""
 from __future__ import annotations
 
 import pytest
 from pydantic import ValidationError
 
-from app import models as m
+from app.core import models as m
 
 
 def test_named_schema_valid():

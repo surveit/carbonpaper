@@ -8,7 +8,7 @@ from typing import Any
 
 import pandas as pd
 
-from app.models import ConnectorKind, Stage
+from app.core.models import ConnectorKind, Stage
 
 
 def read_input_data(stage: Stage, ctx: dict[str, Any]) -> pd.DataFrame:

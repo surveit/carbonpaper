@@ -4,7 +4,7 @@ from pathlib import Path
 from app.services import workspace
 
 
-# Stage validation (app/models/stage.py: Stage._handle_for_type) requires one
+# Stage validation (app/core/models/stage.py: Stage._handle_for_type) requires one
 # handle block per type — an input_data stage needs `connector`, an
 # llm_transform stage needs `llm` — or the tolerant loader reports it as an
 # issue rather than a parsed stage (see tests/test_loader.py's VALID fixture
@@ -29,7 +29,7 @@ def _write_stage(compiled: Path, order: int, sid: str, stype: str, inputs: list[
     stage: dict = {"id": sid, "name": f"{sid} step", "type": stype}
     stage.update(_HANDLE_BY_TYPE.get(stype, {}))
     if inputs:
-        # llm_transform is strictly 1:1 (app/models/stage.py): its input and output
+        # llm_transform is strictly 1:1 (app/core/models/stage.py): its input and output
         # schemas must share a primary_key and the output must add a column.
         if stype == "llm_transform":
             stage["inputs"] = [{"id": dep, "schema": _LLM_IN_SCHEMA} for dep in inputs]

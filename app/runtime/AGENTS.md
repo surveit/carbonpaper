@@ -42,7 +42,7 @@ FeatureCollection) + `computed_static`; `python_row_function`/`python_frame_func
   (e.g. `[WebSearch, WebFetch]`, agent_sdk only). `llm_mock.py` — deterministic offline mock.
 
 `validation.py` — DATA validation of a dataframe against an `output_schema` (columns, types,
-ranges, nullability, PK uniqueness), distinct from the stage schemas in `app/models/`.
+ranges, nullability, PK uniqueness), distinct from the stage schemas in `app/core/models/`.
 
 ## Run / debug
 ```

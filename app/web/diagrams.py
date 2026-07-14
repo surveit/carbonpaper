@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.models import Stage
+from app.core.models import Stage
 
 
 # Stage-type → CSS class for workflow node + badges.

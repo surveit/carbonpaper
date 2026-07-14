@@ -22,7 +22,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 from app.errors import EvalNotScorableError
-from app.models import EvalConfig, EvalRun, Stage
+from app.core.models import EvalConfig, EvalRun, Stage
 from app.evals.compatibility import check_eval_compatibility
 from app.evals.runner import run_eval
 from app.evals.store import (

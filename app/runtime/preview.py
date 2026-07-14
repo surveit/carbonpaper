@@ -30,7 +30,7 @@ from typing import Any
 import pandas as pd
 import pyarrow
 
-from app.models import Stage
+from app.core.models import Stage
 
 from .stages import HANDLERS
 

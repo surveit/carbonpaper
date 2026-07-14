@@ -21,7 +21,7 @@ from pydantic import BaseModel, ValidationError
 from app.agent.registry import build_mcp_server
 from app.agent.sdk_engine import CLI_MODEL, ClaudeAgentSdkEngine
 from app.errors import GenerationError
-from app.models.schema import format_errors
+from app.core.models.schema import format_errors
 
 # The Pydantic model this agent produces; run() returns an instance of it.
 Model = TypeVar("Model", bound=BaseModel)

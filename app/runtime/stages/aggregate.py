@@ -6,7 +6,7 @@ from typing import Any
 
 import pandas as pd
 
-from app.models import Stage
+from app.core.models import Stage
 
 from ._shared import _translate_where
 

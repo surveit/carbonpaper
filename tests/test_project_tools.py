@@ -8,7 +8,7 @@ from app.compiler.agent.tools import EditingContext, make_editing_tools
 from app.errors import RegenerateWithoutSnapshotError
 from app.services import compilation, workspace
 
-# Minimal valid handle block per stage type (app/models/stage.py:
+# Minimal valid handle block per stage type (app/core/models/stage.py:
 # Stage._handle_for_type requires exactly one, keyed by `type`). Mirrors
 # tests/test_workspace.py's _HANDLE_BY_TYPE so every fixture stage here
 # round-trips through Stage.model_validate rather than landing in `issues`.
@@ -171,7 +171,7 @@ def test_compile_workflow_reviewed_work_without_confirm_raises(examples_root: Pa
     tools = _tools("alpha")
 
     # Approve the seeded "load" stage so review work exists.
-    from app.models import Stage
+    from app.core.models import Stage
     from app.services import loader, node_review
 
     seeded = json.loads((pdir / "compiled" / "01_load.json").read_text(encoding="utf-8"))
@@ -191,7 +191,7 @@ def test_compile_workflow_confirm_overwrite_snapshots_then_writes(examples_root:
     _patch_compiler(monkeypatch, _FRESH_COMPILE_RESULT)
     tools = _tools("alpha")
 
-    from app.models import Stage
+    from app.core.models import Stage
     from app.services import loader, node_review
 
     seeded = json.loads((pdir / "compiled" / "01_load.json").read_text(encoding="utf-8"))

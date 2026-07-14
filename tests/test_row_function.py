@@ -6,7 +6,7 @@ import pandas as pd
 import pytest
 from pydantic import ValidationError
 
-from app.models import Stage
+from app.core.models import Stage
 from app.runtime.stages import HANDLERS
 
 

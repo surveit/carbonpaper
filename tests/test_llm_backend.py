@@ -79,7 +79,7 @@ def test_auto_no_live_backend_raises(monkeypatch):
 
 
 def test_call_llm_takes_llm_config_model():
-    from app.models import LLMConfig
+    from app.core.models import LLMConfig
     cfg = LLMConfig(prompt_template="score {name}")
     result = call_llm("some_stage", cfg, {"name": "acme"})
     assert result is not None

@@ -11,8 +11,8 @@ from __future__ import annotations
 
 import pandas as pd
 
-from app.models import Stage
-from app.models.stage import StageType
+from app.core.models import Stage
+from app.core.models.stage import StageType
 from app.runtime.stages import HANDLERS, handle_human_review_queue
 from app.runtime.stages import llm_transform as lt
 

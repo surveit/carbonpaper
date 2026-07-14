@@ -27,8 +27,8 @@ from typing import Any
 
 from app.compiler.data_model import start_data_model_generation_agent
 from app.compiler.workflow import start_workflow_generation_agent
-from app.models.named_schemas import SchemaLibrary
-from app.models.workflow import Workflow
+from app.core.models.named_schemas import SchemaLibrary
+from app.core.models.workflow import Workflow
 from app.services.compilation import regenerate_workflow
 from app.services.loader import stage_to_spec_dict
 

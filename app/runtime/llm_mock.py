@@ -20,7 +20,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from app.models import LLMConfig
+from app.core.models import LLMConfig
 
 
 # ─── Evidence extraction ─────────────────────────────────────────────────────

@@ -12,7 +12,7 @@ from typing import Any
 import pandas as pd
 from fastapi import HTTPException
 
-from app.models import Stage
+from app.core.models import Stage
 from app.services.loader import CompiledStageFile, load_compiled_dir
 from app.services.workspace import load_schemas
 from app.web.config import EXAMPLES_DIR, REPO_ROOT

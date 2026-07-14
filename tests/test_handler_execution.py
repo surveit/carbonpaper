@@ -8,8 +8,8 @@ import time
 import pandas as pd
 import pytest
 
-from app.models import Stage
-from app.models.stage import StageType
+from app.core.models import Stage
+from app.core.models.stage import StageType
 from app.runtime.stages.execution import (
     FrameHandler,
     RowMapHandler,

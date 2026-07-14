@@ -3,7 +3,7 @@ compiler.py — the COMPILE MECHANISM of the workflow platform.
 
 Job: take an UNSTRUCTURED input — a captured agent/tool transcript, working notes,
 or plain prose describing a research process — and DISTILL it into a *draft* workflow:
-a list of compiled stage dicts targeting `app.models`, plus a `methodology_raw.md`
+a list of compiled stage dicts targeting `app.core.models`, plus a `methodology_raw.md`
 and `compiler_notes` recording ambiguities.
 
 The approach is deliberately thin: we do NOT pre-parse the input into a structured
@@ -22,7 +22,7 @@ Pipeline:
 Persisting a compile as a first-class object (manifest / what-happened / workflow
 output on disk) is a SEPARATE concern owned by `app.services.compilation`.
 
-Dependency rule (critical, mirrors models' own): this module imports `app.models`,
+Dependency rule (critical, mirrors models' own): this module imports `app.core.models`,
 `app.compiler.prompt`, and the shared `app.llm_sdk` (CLI discovery + sync-drive) +
 `claude_agent_sdk`. It MUST NOT import `app.runtime.*` — the runner stays ignorant
 of the compiler; they meet only at the schema and share `app.llm_sdk`.
@@ -37,7 +37,7 @@ import re
 from pathlib import Path
 from typing import Any
 
-from app import models
+from app.core import models
 from app.compiler.prompt import SYSTEM_PROMPT, build_compile_prompt
 from app.llm_sdk import CLI_PATH, run_sync
 

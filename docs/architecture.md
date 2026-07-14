@@ -5,7 +5,7 @@ A FastAPI app over a file-backed project artifact — one directory per project 
 Python across six packages. Vocabulary: **project**/**methodology**/**workflow** per
 [naming-refactor.md](naming-refactor.md).
 
-## `app/models/` — the schema layer (Pydantic)
+## `app/core/models/` — the schema layer (Pydantic)
 THE canonical definition of what a workflow is. Constructing a model validates it;
 `validate_*` return issue lists, `parse_*` raise. **Dependency rule: imports nothing from
 runtime or web — keep it pure.** Checks the *spec*, distinct from RUNTIME data validation
@@ -35,7 +35,7 @@ frame), `SourceHandler` (originates rows; no upstream frames), or
 `FrameHandler` (whole frames; may reshape). The shape fixes what the runtime
 hands the handler, so grain-and-order preservation is structural for
 row-mapped types rather than declared per stage. The preservation fact itself is
-owned by core (`app.models.stage.is_grain_and_order_preserving`) so every layer
+owned by core (`app.core.models.stage.is_grain_and_order_preserving`) so every layer
 can read it; `check_registry_matches_model` raises at registry import if any
 type's registered shape disagrees with that core fact, and
 `tests/test_handler_registry.py` pins the same per-type equality in CI.

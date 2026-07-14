@@ -2,7 +2,7 @@
 chronological story/graph payload the template renders."""
 from __future__ import annotations
 
-from app.models import Stage
+from app.core.models import Stage
 from app.web.trace_view import build_trace_view
 
 

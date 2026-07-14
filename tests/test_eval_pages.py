@@ -15,7 +15,7 @@ import app.web.loading as loading
 import app.web.routers.evals as evals_router
 import app.web.routers.project as project_router
 from app.main import app
-from app.models import (
+from app.core.models import (
     EvalConfig,
     EvalRun,
     EvalRunSettings,
@@ -23,7 +23,7 @@ from app.models import (
     FileFormat,
     TableRef,
 )
-from app.models.schema import TableSchema
+from app.core.models.schema import TableSchema
 from app.evals.store import save_eval_config
 
 client = TestClient(app)

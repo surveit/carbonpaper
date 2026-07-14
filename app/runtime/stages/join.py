@@ -6,7 +6,7 @@ from typing import Any, Literal
 
 import pandas as pd
 
-from app.models import JoinType, Stage
+from app.core.models import JoinType, Stage
 
 
 def handle_join(stage: Stage, inputs: dict[str, pd.DataFrame], ctx: dict[str, Any]) -> pd.DataFrame:

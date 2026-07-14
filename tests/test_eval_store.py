@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from app.models import EvalConfig, EvalRun
+from app.core.models import EvalConfig, EvalRun
 from app.evals.compatibility import CompatibilityReport
 from app.evals.store import (
     EvalConfigEntry,

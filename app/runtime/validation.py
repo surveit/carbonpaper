@@ -20,7 +20,7 @@ from typing import Any
 
 import pandas as pd
 
-from app.models import Column, TableSchema
+from app.core.models import Column, TableSchema
 
 
 # Map our type vocabulary to permissive pandas dtype checks.
