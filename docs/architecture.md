@@ -34,10 +34,11 @@ input and reassembles results in input order — the function never sees the
 frame), `SourceHandler` (originates rows; no upstream frames), or
 `FrameHandler` (whole frames; may reshape). The shape fixes what the runtime
 hands the handler, so grain-and-order preservation is structural for
-row-mapped types rather than declared per stage. `check_registry_matches_model`
-raises at registry import if the shapes disagree with the model's
-`GRAIN_AND_ORDER_PRESERVING_TYPES`, and `tests/test_handler_registry.py` pins
-the same equality in CI.
+row-mapped types rather than declared per stage. The preservation fact itself is
+owned by core (`app.models.stage.is_grain_and_order_preserving`) so every layer
+can read it; `check_registry_matches_model` raises at registry import if any
+type's registered shape disagrees with that core fact, and
+`tests/test_handler_registry.py` pins the same per-type equality in CI.
 
 ## `app/compiler/` — prose → LLM → workflow engine
 Public surface `read_input` + `compile_methodology`. Validates the reply against the models

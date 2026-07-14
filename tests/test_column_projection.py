@@ -40,8 +40,8 @@ def test_llm_transform_drops_undeclared_columns_including_former_hardcoded_ids(m
     monkeypatch.setattr(lt, "call_llm",
                         lambda *a, **k: {"score": 5, "benchmark_id": "B1", "query_id": "Q5"})
     ctx: dict = {}
-    out = HANDLERS[StageType.llm_transform].execute(stage,
-                          {"load": pd.DataFrame({"id": ["r1"], "text": ["hi"]})}, ctx)
+    out = HANDLERS[StageType.llm_transform].execute(
+        stage, {"load": pd.DataFrame({"id": ["r1"], "text": ["hi"]})}, ctx)
 
     assert list(out.columns) == ["id", "text", "score"]
     dropped = ctx["dropped_columns"]["evidence_extraction"]

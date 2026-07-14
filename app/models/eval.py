@@ -101,7 +101,8 @@ class EvalConfig(_Base):
     check compares that expected-output column to the matching `target_stage`
     output column. Row alignment between the injected eval-dataset rows and
     the target's output is only well-defined when the override→target path is
-    grain-preserving (see `resolve_eval_run_settings`). `reference_overrides`
+    grain-preserving (see `app.evals.run_settings.resolve_eval_run_settings`).
+    `reference_overrides`
     inject extra data at other stages; `code` overrides the per-column
     comparison when declarative scoring can't apply.
     """
@@ -167,7 +168,7 @@ class EvalRun(_Base):
     # domain moved since the config was authored, it's stale; don't re-score.
     workflow_version: str
     status: Literal["scored", "vetoed", "error"]
-    # How this run was scored (from resolve_eval_run_settings). `vetoed` = it
+    # How this run was scored (from app.evals.run_settings). `vetoed` = it
     # couldn't be scored declaratively and no code scorer was supplied.
     settings: EvalRunSettings
     # Score outputs — the scorer writes rollup metrics and a per-row result

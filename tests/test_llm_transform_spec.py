@@ -27,8 +27,8 @@ def _stage():
 
 
 def _run(stage, frames, ctx=None):
-    return HANDLERS[StageType.llm_transform].execute(stage, frames,
-                           ctx if ctx is not None else {})
+    return HANDLERS[StageType.llm_transform].execute(
+        stage, frames, ctx if ctx is not None else {})
 
 
 def test_reply_spec_appended_to_prompt(monkeypatch):
