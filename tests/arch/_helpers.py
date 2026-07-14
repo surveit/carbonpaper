@@ -8,22 +8,7 @@ that itself imports heavy optional dependencies.
 from __future__ import annotations
 
 import ast
-from collections.abc import Iterator
 from pathlib import Path
-
-_REPO_ROOT = Path(__file__).resolve().parents[2]
-
-
-def iter_py_files(root: str) -> Iterator[Path]:
-    """Yield each .py file under <repo-root>/<root>, e.g. "app/compiler/agent".
-
-    `root` is a path relative to the repository root, so the target is named
-    explicitly rather than assumed to live under app/.
-    """
-    base = _REPO_ROOT / root
-    if not base.exists():
-        raise FileNotFoundError(f"architecture test targets a missing path: {base}")
-    yield from sorted(base.rglob("*.py"))
 
 
 def parse_module(path: Path) -> ast.Module:
