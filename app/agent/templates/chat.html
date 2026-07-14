@@ -41,6 +41,7 @@
     @keyframes tspin { 0%,80%,100%{ transform:scale(.6); opacity:.35 } 40%{ transform:scale(1); opacity:1 } }
     footer { position:fixed; bottom:0; left:0; right:0; background:#fff; border-top:1px solid var(--line); }
     .composer { max-width:760px; margin:0 auto; padding:10px 16px; display:flex; gap:8px; }
+    .view-only-note { color:var(--muted); font-size:13px; font-style:italic; }
     #input { flex:1; font:inherit; padding:9px 11px; border:1px solid #ccc; border-radius:8px; }
     #send { font:inherit; padding:9px 16px; border-radius:8px; border:1px solid #2a6ac8; background:#2a6ac8; color:#fff; cursor:pointer; }
     #send:disabled { opacity:.5; cursor:default; }
@@ -79,10 +80,16 @@
     {% endif %}
   </div>
 
-  <footer><div class="composer">
-    <input id="input" placeholder="Message… (Enter to send)" autocomplete="off" />
-    <button id="send">Send</button>
-  </div></footer>
+  <footer>
+  {% if view_only %}
+    <div class="composer view-only-note">Read-only generation view — watch it run; there's no agent here to reply to.</div>
+  {% else %}
+    <div class="composer">
+      <input id="input" placeholder="Message… (Enter to send)" autocomplete="off" />
+      <button id="send">Send</button>
+    </div>
+  {% endif %}
+  </footer>
 
 <script>
 const SID = {{ session_id | tojson }};
@@ -160,7 +167,7 @@ function newAssistant() {
 }
 
 function connect(turnId, fromIndex) {
-  streaming = true; sendBtn.disabled = true;
+  streaming = true; if (sendBtn) sendBtn.disabled = true;
   const bubble = newAssistant();
   const es = new EventSource(`/chat/${SID}/turn/${turnId}/stream?from=${fromIndex||0}`);
   es.onmessage = (m) => {
@@ -170,9 +177,9 @@ function connect(turnId, fromIndex) {
     else if (ev.kind === "tool_call") bubble.tool(ev.name, ev.args, ev.label);
     else if (ev.kind === "tool_result") bubble.toolResult(ev.content);
     else if (ev.kind === "error") bubble.error(ev.text);
-    else if (ev.kind === "done") { bubble.stop(); es.close(); streaming = false; sendBtn.disabled = false; input.focus(); }
+    else if (ev.kind === "done") { bubble.stop(); es.close(); streaming = false; if (sendBtn) sendBtn.disabled = false; if (input) input.focus(); }
   };
-  es.onerror = () => { bubble.stop(); es.close(); streaming = false; sendBtn.disabled = false; };
+  es.onerror = () => { bubble.stop(); es.close(); streaming = false; if (sendBtn) sendBtn.disabled = false; };
 }
 
 async function send() {
@@ -189,12 +196,16 @@ async function send() {
   connect(data.turn_id, 0);
 }
 
-sendBtn.addEventListener("click", send);
-input.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } });
+// The composer exists only when a real agent is bound; a view-only generation session has
+// no input to wire, but must still reattach to stream its live turn.
+if (input && sendBtn) {
+  sendBtn.addEventListener("click", send);
+  input.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } });
+}
 
 // Reattach to an in-flight turn after navigating away and back.
 if (ACTIVE_TURN) connect(ACTIVE_TURN, 0);
-input.focus();
+if (input) input.focus();
 </script>
 </body>
 </html>

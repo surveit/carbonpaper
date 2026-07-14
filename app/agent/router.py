@@ -83,6 +83,9 @@ async def chat_page(request: Request, sid: str):
         "history": _store.history_view(sid),
         "pending_user": data.get("pending_user"),
         "active_turn": data.get("active_turn"),
+        # No bound agent → the UI renders and streams the session, but there is no agent to
+        # reply to a typed message (post_message 400s), so the composer is hidden.
+        "view_only": data.get("agent_id") is None,
         "backend": _backend_label(),
         "backend_error": _backend_error(),
     })
