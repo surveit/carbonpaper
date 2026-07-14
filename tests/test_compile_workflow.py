@@ -1,7 +1,7 @@
 """The agent-based workflow compiler (app.compiler.workflow): build_workflow_agent configures
 an Agent[Workflow] so a schema-invalid draft re-fires through submit_answer until valid and the
 approved data model grounds the task; start_workflow_generation_agent runs that agent as a LIVE chat turn on
-the app.agent spine and calls back with the submitted Workflow. The Agent / turn are stubbed —
+the app.core.agent engine and calls back with the submitted Workflow. The Agent / turn are stubbed —
 no LLM, no CLI subprocess.
 """
 from __future__ import annotations
@@ -9,10 +9,10 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
-from app.agent.store import SessionStore
-from app.agent.turns import TurnManager
 from app.compiler import workflow as wf
 from app.compiler.workflow_prompt import WORKFLOW_SYSTEM_PROMPT
+from app.core.agent.store import SessionStore
+from app.core.agent.turns import TurnManager
 from app.core.models import parse_schema_library
 from app.core.models.workflow import Workflow
 

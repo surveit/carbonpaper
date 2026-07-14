@@ -13,8 +13,8 @@ build/
 # Persisted compilation objects (file-backed, like examples/<m>/runs)
 compilations/
 
-# Chat session transcripts (file-backed, per app/chat/store.py)
-app/agent/_sessions/
+# Chat session transcripts (file-backed, per app/core/agent/store.py)
+app/core/agent/_sessions/
 
 # Example methodology content + scratch pipelines. Generated run outputs land
 # here, and lint/typecheck skip these dirs (ruff respects .gitignore).

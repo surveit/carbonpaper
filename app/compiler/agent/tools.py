@@ -10,7 +10,7 @@ the project the session was opened on (call it first, then pass its value as
 `project_id`).
 
 The callables are wrapped as an in-process claude_agent_sdk MCP server by the
-generic `app.agent.registry.build_mcp_server`, using `TOOL_SCHEMAS` (input
+generic `app.core.agent.registry.build_mcp_server`, using `TOOL_SCHEMAS` (input
 schemas) and `TOOL_LABELS` (display labels) below.
 
 Every write tool validates before it writes and never fabricates a value: a

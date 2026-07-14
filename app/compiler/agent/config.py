@@ -3,7 +3,7 @@
 Builds the `AgentConfig` (system prompt + stage-type catalog, the tools' input
 schemas and display labels, and the EditingContext its opaque context validates
 against) and registers it under the id "editing" with its tool factory. Importing
-this module is what makes `app.agent.registry.build_engine("editing", …)` work;
+this module is what makes `app.core.agent.registry.build_engine("editing", …)` work;
 app.main imports it at startup."""
 
 from __future__ import annotations
@@ -12,7 +12,6 @@ from typing import Any, Callable
 
 from pydantic import BaseModel
 
-from app.agent.registry import AgentConfig, register
 from app.compiler.agent.prompt import EDITING_SYSTEM_PROMPT
 from app.compiler.agent.tools import (
     TOOL_LABELS,
@@ -20,6 +19,7 @@ from app.compiler.agent.tools import (
     EditingContext,
     make_editing_tools,
 )
+from app.core.agent.registry import AgentConfig, register
 
 CONFIG = AgentConfig(
     system_prompt=EDITING_SYSTEM_PROMPT,

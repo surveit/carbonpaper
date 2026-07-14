@@ -11,7 +11,7 @@ replayed transcript, carries the memory.
 
 Generic: the engine knows nothing about any specific agent. Its system prompt,
 tool labels, allowed tools and mounted MCP server are all supplied by the caller
-(see app.agent.registry.build_engine).
+(see app.core.agent.registry.build_engine).
 """
 from __future__ import annotations
 
@@ -82,7 +82,7 @@ class ClaudeAgentSdkEngine:
         self._model = model
         # A hard cap on assistant turns for this run, or None to let the agent work
         # until done (the interactive default). A headless caller that runs a bounded
-        # tool loop — e.g. app.agent.agent.Agent's submit-and-retry — sets this so a
+        # tool loop — e.g. app.core.agent.agent.Agent's submit-and-retry — sets this so a
         # model that never produces a valid answer cannot loop forever.
         self._max_turns = max_turns
 

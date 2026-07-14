@@ -5,8 +5,8 @@ approved model) via start_workflow_generation.
 
 Both turns run through the app.compiler bridges (start_data_model_generation_agent /
 start_workflow_generation_agent):
-app.compiler owns the app.agent spine, so this orchestration delegates there rather than
-importing the spine directly. `start_generation` streams the data-model agent to /chat/<sid>;
+app.compiler owns the app.core.agent engine, so this orchestration delegates there rather than
+importing the engine directly. `start_generation` streams the data-model agent to /chat/<sid>;
 on a valid submission its schemas are written. `start_workflow_generation` is the manual
 workflow build — clicking "Generate workflow" runs the workflow agent as a live turn and
 returns its session id (the route lands the user on /chat/<sid>); it compiles ONLY the

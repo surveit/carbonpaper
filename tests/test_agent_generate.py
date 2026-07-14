@@ -1,4 +1,4 @@
-"""The headless Agent (app.agent.agent.Agent): it produces a validated Pydantic object
+"""The headless Agent (app.core.agent.agent.Agent): it produces a validated Pydantic object
 by having the model CALL a submit_answer tool whose input schema IS the target model.
 
 The submit/capture logic is tested directly (no CLI subprocess); run()'s loop is driven
@@ -13,7 +13,7 @@ from typing import Any, Callable
 import pytest
 from pydantic import BaseModel
 
-from app.agent.agent import Agent
+from app.core.agent.agent import Agent
 from app.core.errors import GenerationError
 
 

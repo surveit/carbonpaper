@@ -1,10 +1,6 @@
-"""Reusable, embeddable AI chat subsystem.
+"""The chat subsystem's web-facing surface: FastAPI routes (`router.py`) and the
+Jinja2 templates they render.
 
-A generic chat engine (Claude Agent SDK) with per-host pluggable tools,
-file-based session persistence, and a streaming transport that surfaces
-thinking/tool events to the browser and lets a turn be re-attached after
-navigation.
-
-Separate from the row-mapped `llm_transform` path in app.runtime — this is the
-interactive, multi-turn surface.
+The generic chat engine this surface drives (session store, turn manager, the
+SDK-driving engine, and the agent registry) lives in `app.core.agent`.
 """

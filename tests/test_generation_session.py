@@ -13,8 +13,8 @@ from typing import Any
 
 import app.compiler.data_model as data_model
 import app.services.generation as generation
-from app.agent.store import SessionStore
-from app.agent.turns import TurnManager
+from app.core.agent.store import SessionStore
+from app.core.agent.turns import TurnManager
 
 
 class _FakeLibrary:
