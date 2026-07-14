@@ -1,17 +1,22 @@
 """
 versioning.py — immutable, committable snapshots of a workflow.
 
-A "version" is a frozen copy of a project's authored artifacts — its
-`compiled/` stages and `schemas/` data model — taken at a point in time, plus a
-`version.json` recording who created it, why, its parent, and the approval coverage
-AT creation time. Runs are pinned to a version and read its snapshot dir, so a run is
-reproducible against the exact workflow it executed, never "whatever the working copy
-happened to be".
+A "version" is a frozen copy of a project's authored `compiled/` stages, taken
+at a point in time, plus a `version.json` recording who created it, why, its
+parent, and the approval coverage AT creation time. Runs are pinned to a
+version and read its snapshot dir, so a run is reproducible against the exact
+workflow it executed, never "whatever the working copy happened to be". A
+stage embeds its own input/output schemas, so a version carries no separate
+data-model snapshot.
+
+A version can be minted from the project's working copy (`create_version`) or
+directly from a list of stage spec dicts with no working copy involved
+(`create_version_from_stages`, e.g. an authoring agent's proposed stages) —
+both write the identical on-disk shape.
 
 Layout:
     <project>/versions/<version_id>/
-        compiled/<id>.json      # copy of the working compiled/ at creation time
-        schemas/<...>           # copy of the working schemas/ at creation time (if any)
+        compiled/<id>.json      # frozen stages, one file per stage
         version.json            # {id, created_at, parent_version, message,
                                 #  reviewer, coverage, published, published_at}
 
@@ -40,10 +45,12 @@ from pathlib import Path
 from typing import Any
 
 from app.core.models import Stage
+from app.core.models.workflow import parse_workflow
 from app.services.loader import (
     load_compiled_dir,
     load_workflow,
     stage_to_spec_dict,
+    write_stage,
 )
 from app.services import node_review
 
@@ -145,15 +152,13 @@ def create_version(
     reviewer: str,
     parent_version: str | None = None,
 ) -> dict[str, Any]:
-    """Snapshot the working copy's compiled/ + schemas/ into a new
-    versions/<version_id>/ and write version.json with coverage frozen at creation
-    time. Returns the version.json dict.
+    """Snapshot the working copy's compiled/ into a new versions/<version_id>/
+    and write version.json with coverage frozen at creation time. Returns the
+    version.json dict.
 
     Coverage is computed from the SNAPSHOT's stages against the live
     node_decisions store, so the recorded coverage is exactly what was believed
-    about these specs at this instant. schemas/ is copied if it exists; a
-    project with no schema library still versions cleanly (the absence is
-    truthful, not an error).
+    about these specs at this instant.
 
     The working copy is strict-loaded first, through the same loader the runner
     uses; if it is not a valid workflow this raises WorkflowLoadError and writes
@@ -173,6 +178,42 @@ def create_version(
     # an already-valid snapshot.)
     load_workflow(project_dir)
 
+    version_id, vdir = _new_version_dir(project_dir)
+    shutil.copytree(compiled_src, vdir / "compiled")
+    return _write_version_meta(
+        project_dir, vdir, version_id,
+        message=message, reviewer=reviewer, parent_version=parent_version,
+    )
+
+
+def create_version_from_stages(
+    project_dir: Path,
+    stages: list[dict[str, Any]],
+    *,
+    message: str,
+    reviewer: str,
+    parent_version: str | None = None,
+) -> dict[str, Any]:
+    """Freeze raw stage spec dicts into a new immutable version, with no working
+    copy involved. The list is strict-parsed first (parse_workflow); an invalid
+    workflow raises pydantic.ValidationError and writes nothing — every version is
+    a valid workflow, from this seam or any other. Returns the version.json meta
+    (born unpublished)."""
+    workflow = parse_workflow(stages)
+    version_id, vdir = _new_version_dir(project_dir)
+    compiled = vdir / "compiled"
+    compiled.mkdir()
+    for index, stage in enumerate(workflow.stages, start=1):
+        write_stage(compiled / f"{index:02d}_{stage.id}.json", stage)
+    return _write_version_meta(
+        project_dir, vdir, version_id,
+        message=message, reviewer=reviewer, parent_version=parent_version,
+    )
+
+
+def _new_version_dir(project_dir: Path) -> tuple[str, Path]:
+    """Mint a timestamp version id and create its empty directory. Fails loudly if
+    two versions are created within one second."""
     version_id = datetime.now().strftime("%Y%m%dT%H%M%S")
     vdir = versions_dir(project_dir) / version_id
     if vdir.exists():
@@ -180,19 +221,23 @@ def create_version(
             f"Version dir already exists: {vdir} (two versions created within one second)"
         )
     vdir.mkdir(parents=True, exist_ok=False)
+    return version_id, vdir
 
-    # Freeze the artifacts. copytree the working compiled/ (required) and
-    # schemas/ (optional) verbatim — one canonical copy, git-model.
-    shutil.copytree(compiled_src, vdir / "compiled")
-    schemas_src = project_dir / "schemas"
-    if schemas_src.is_dir():
-        shutil.copytree(schemas_src, vdir / "schemas")
 
-    # Freeze coverage from the just-written snapshot's stages.
+def _write_version_meta(
+    project_dir: Path,
+    vdir: Path,
+    version_id: str,
+    *,
+    message: str,
+    reviewer: str,
+    parent_version: str | None,
+) -> dict[str, Any]:
+    """Freeze approval coverage from the just-written snapshot's stages and write
+    version.json. Every version is born unpublished."""
     stages = _load_stages_from(vdir / "compiled")
     decisions = node_review.load_node_decisions(project_dir)
     coverage = node_review.coverage_for(stages, decisions)
-
     meta: dict[str, Any] = {
         "id": version_id,
         "created_at": datetime.now().isoformat(timespec="seconds"),
@@ -215,6 +260,7 @@ __all__ = [
     "load_version_meta",
     "load_version_stages",
     "create_version",
+    "create_version_from_stages",
     "version_is_published",
     "publish_version",
 ]
