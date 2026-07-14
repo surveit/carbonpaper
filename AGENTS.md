@@ -25,7 +25,9 @@ app/chat/  PydanticAI chat · app/llm/  model menu · tests/  pytest (offline)
 - **Never fabricate.** An unsourceable value is `null`/`unknown`; the pipeline fails loudly
   rather than inventing a number, URL, or citation. A requested LLM backend that isn't
   available raises rather than silently substituting another.
-- **`app/services/{project,node_review,versioning}` stay below the routes layer** — no importing
-  `app.main`/`app.runtime`/`app.compiler` (import graph stays acyclic).
+- **`app/services` never imports `app/web`; `{project,node_review,versioning}` never import
+  `app.main`/`app.runtime`/`app.compiler`.** Services sit below the routes and the agent tools —
+  never the reverse (the compile step a workflow regenerate needs lives in
+  `app.services.compilation`, which wraps the compiler). Both enforced by import-linter.
 - **Never `except Exception` or bare `except`.** Catch specific types — swallowing errors breaks
   fail-loudly. Enforced by Ruff `BLE001`.

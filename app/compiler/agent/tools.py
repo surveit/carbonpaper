@@ -22,7 +22,7 @@ from typing import Annotated, Any, Callable
 
 from pydantic import BaseModel
 
-from app.services import project as project_service
+from app.services import compilation, project as project_service
 
 
 class EditingContext(BaseModel):
@@ -87,7 +87,7 @@ def make_editing_tools(ctx: EditingContext) -> list[Callable[..., Any]]:
         for those). Warn the user first: it replaces everything and takes a few
         minutes. If any node carries review work, pass confirm_overwrite=True (a
         version snapshot is taken first). An invalid result is returned, not written."""
-        return project_service.regenerate_workflow_from_conversation(
+        return compilation.regenerate_workflow_from_conversation(
             project_id, conversation, confirm_overwrite
         )
 

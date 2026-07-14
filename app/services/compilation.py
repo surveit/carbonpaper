@@ -27,6 +27,9 @@ from pathlib import Path
 from typing import Any
 
 from app.compiler import compile_methodology, read_input
+from app.errors import RegenerateWithoutSnapshotError
+from app.models.workflow import validate_workflow_draft
+from app.services import versioning, workspace
 
 # The default root every compilation object hangs off. Callers may override
 # (tests, alternate layouts); the convention lives here, defined once.
@@ -98,6 +101,45 @@ def regenerate_workflow(result: dict[str, Any], project_dir: str | Path) -> dict
         for stale in compiled.glob("*.json"):
             stale.unlink()
     return write_methodology(result, project_dir)
+
+
+def regenerate_workflow_from_conversation(
+    name: str,
+    conversation: str,
+    confirm_overwrite: bool = False,
+    examples_dir: Path | None = None,
+) -> dict[str, Any]:
+    """Rebuild a project's ENTIRE workflow from `conversation` — a full reset. If any
+    node carries review work, raise RegenerateWithoutSnapshotError unless
+    confirm_overwrite is set (in which case a version snapshot is taken first). The
+    compiled draft is held to the same stage + graph validation every write obeys;
+    an invalid result is returned, not written. Called by the editing agent's
+    compile_workflow tool; lives here (not in the status model) because it drives the
+    compiler."""
+    project_dir = workspace.resolve_project_dir(name, examples_dir)
+    summary = workspace.project_workflow_summary(project_dir)
+    has_review_work = any(s["review_state"] != "unreviewed" for s in summary["stages"])
+    if has_review_work:
+        if not confirm_overwrite:
+            raise RegenerateWithoutSnapshotError(
+                f"'{name}' has reviewed stages; re-call with confirm_overwrite=True to snapshot and regenerate."
+            )
+        existing = versioning.list_versions(project_dir)
+        parent = existing[0]["id"] if existing else None
+        versioning.create_version(
+            project_dir,
+            message=f"pre-regenerate snapshot of {name}",
+            reviewer="agent",
+            parent_version=parent,
+        )
+    result = compile_methodology(conversation, name)
+    if result["validation"]:
+        return {"ok": False, "issues": result["validation"]}
+    draft_issues = validate_workflow_draft(result["stages"])
+    if draft_issues:
+        return {"ok": False, "issues": draft_issues}
+    regenerate_workflow(result, project_dir)
+    return {"ok": True, "stages": [stage["id"] for stage in result["stages"]]}
 
 
 # ─────────────────────────────────────────────────────────────────────────────

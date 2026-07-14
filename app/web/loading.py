@@ -14,6 +14,7 @@ from fastapi import HTTPException
 
 from app.models import Stage
 from app.services.loader import CompiledStageFile, load_compiled_dir
+from app.services.workspace import load_schemas
 from app.web.config import EXAMPLES_DIR, REPO_ROOT
 
 
@@ -57,35 +58,6 @@ def list_projects() -> list[dict[str, Any]]:
             "n_runs": n_runs,
         })
     return out
-
-
-def load_schemas(project_dir: Path) -> list[dict[str, Any]]:
-    """Load the named-schema data model from <project_dir>/schemas/*.json — one schema
-    object per file (the shape the schema writer emits). Returns [] if the project has
-    no data model yet. A JSON parse error surfaces as an _error schema rather than
-    dropping the file silently."""
-    schemas_dir = Path(project_dir) / "schemas"
-    if not schemas_dir.is_dir():
-        return []
-    schemas: list[dict[str, Any]] = []
-    for schema_file in sorted(schemas_dir.glob("*.json")):
-        try:
-            doc = json.loads(schema_file.read_text(encoding="utf-8"))
-        except json.JSONDecodeError as exc:
-            schemas.append({
-                "name": schema_file.stem,
-                "title": f"[JSON ERROR] {schema_file.name}",
-                "kind": "reference",
-                "notes": f"JSON parse error: {exc}",
-                "_filename": schema_file.name,
-                "_error": True,
-            })
-            continue
-        if not doc:
-            continue
-        doc["_filename"] = schema_file.name
-        schemas.append(doc)
-    return schemas
 
 
 @dataclass

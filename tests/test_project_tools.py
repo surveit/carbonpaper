@@ -6,7 +6,7 @@ import pytest
 
 from app.compiler.agent.tools import EditingContext, make_editing_tools
 from app.errors import RegenerateWithoutSnapshotError
-from app.services import project as project_service
+from app.services import compilation, workspace
 
 # Minimal valid handle block per stage type (app/models/stage.py:
 # Stage._handle_for_type requires exactly one, keyed by `type`). Mirrors
@@ -21,9 +21,9 @@ _HANDLE_BY_TYPE: dict[str, dict] = {
 @pytest.fixture(autouse=True)
 def examples_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """Point the name-based service surface at a tmp examples root, so the tools —
-    which resolve names against project_service.EXAMPLES_DIR internally — read and
+    which resolve names against workspace.EXAMPLES_DIR internally — read and
     write there rather than the real workspace."""
-    monkeypatch.setattr(project_service, "EXAMPLES_DIR", tmp_path)
+    monkeypatch.setattr(workspace, "EXAMPLES_DIR", tmp_path)
     return tmp_path
 
 
@@ -135,7 +135,7 @@ _UNSOUND_COMPILE_RESULT: dict[str, Any] = {
 
 
 def _patch_compiler(monkeypatch: pytest.MonkeyPatch, result: dict[str, Any]) -> None:
-    monkeypatch.setattr(project_service, "compile_prose_to_workflow", lambda text, name: result)
+    monkeypatch.setattr(compilation, "compile_methodology", lambda text, name: result)
 
 
 def test_compile_workflow_fresh_project_writes_compiled_dir(examples_root: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -248,8 +248,6 @@ def test_compile_workflow_regenerate_to_fewer_stages_drops_stale_files(
     remaining = list((pdir / "compiled").glob("*.json"))
     assert loader.find_stage_file(pdir / "compiled", "score") is None
     assert len(remaining) == 1 and remaining[0].name.endswith("_load.json")
-
-    from app.services import workspace
 
     summary = workspace.project_workflow_summary(pdir)
     assert [s["id"] for s in summary["stages"]] == ["load"]

@@ -23,12 +23,12 @@ from app.compiler.agent.tools import (
     EditingContext,
     make_editing_tools,
 )
-from app.services import project as project_service
+from app.services import workspace
 
 
 @pytest.fixture(autouse=True)
 def examples_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    monkeypatch.setattr(project_service, "EXAMPLES_DIR", tmp_path)
+    monkeypatch.setattr(workspace, "EXAMPLES_DIR", tmp_path)
     return tmp_path
 
 

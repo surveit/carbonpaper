@@ -1,28 +1,28 @@
 {% extends "project_shell.html" %}
 {#
-  WORKFLOW — the typed-stage pipeline (renamed from "DAG" in all visible copy):
-    · the mermaid graph (build_mermaid_graph with review_by_id belief colours)
-    · the per-node review split-view (reuses _node_review.html via the node-click panel)
-    · the versions list
-    · Run + Create-version controls
+  WORKFLOW — the typed-stage pipeline. Master-detail layout, TOP-BOTTOM:
+    · the mermaid graph (build_mermaid_graph with review_by_id belief colours),
+      full-width on TOP in a zoomable / pannable / fullscreen diagram viewport
+    · on node-click, the per-node review (_node_review.html) DOCKS full-width BELOW
+      the graph — decision bar on top, then Inputs / Transform / Outputs / Spec tabs
+    · Run + Create-version controls (the version LIST lives on the Versions tab)
 
   The workflow is GENERATED automatically right after the data model (see
   app.services.generation) in the background; this page just reads the result from
   disk — the graph when stages are present, else a 0-state with a Generate button. No
   live status / spinner yet (issue #95); there is no in-page build chat.
 
-  UNLOCKED once the data model EXISTS (state.data_model.present). Approval is a
-  separate gate (on running), not on seeing the draft. When there is no data model at
-  all we render a "generate the data model first" panel, not the graph.
+  The data model is optional input to the workflow, so this section always renders —
+  there is no locked state. When no stages are on disk yet, it shows an empty state
+  (the workflow may still be building), not a lock.
 
-  Context the route passes (for the unlocked workflow section):
+  Context the route passes:
     state       = project.project_state(mdir); section = "workflow"
     stages      = the compiled/ stages (list of dicts; [] when none)
     mermaid     = build_mermaid_graph(stages, state.name, review_by_id=...) | None
     coverage    = node_review.coverage_for(stages, decisions) | None
     type_class  = TYPE_CLASS
     type_glyph  = TYPE_GLYPH
-    versions    = versioning.list_versions(mdir)   (list; may be empty)
 
   Reused (unchanged) routes: node review /node/{id}/review-partial,/decide,/edit;
   /review/status; create version POST /version; run POST /run; (re)generate POST
@@ -39,29 +39,27 @@
     if (window._loadStage) { window._loadStage(stageId); }
   };
   document.addEventListener("DOMContentLoaded", function () {
+    // startOnLoad:false + useMaxWidth:false — diagram_viewport.js renders the graph and
+    // sizes the svg itself, so it's legible (not shrunk to the column) and zoom is real.
     mermaid.initialize({
-      startOnLoad: true, theme: "default",
-      flowchart: { curve: "basis", padding: 20, useMaxWidth: true },
+      startOnLoad: false, theme: "default",
+      flowchart: { curve: "basis", padding: 20, useMaxWidth: false },
       securityLevel: "loose"
     });
   });
 </script>
+<script src="/static/diagram_viewport.js"></script>
 {% endblock %}
 
 {% block section %}
-{# Gating disabled for now (pending a rethink): the workflow section always renders
-   its content, never the locked panel. Restore `(not state.data_model.present)` to re-gate. #}
-{% set wf_locked = false %}
-
 <div class="sec-head wf-head">
   <div class="wf-head-title">
     <h1>Workflow</h1>
     <p class="lede">Typed stages wiring your data model into a pipeline. Click any node
-      (or row) to <strong>review</strong> how that step is modeled. Node colour =
-      <em>belief</em> (do we trust it). Run it end-to-end, or create an immutable
-      version.</p>
+      to <strong>review</strong> how that step is modeled — its inputs, transform, and
+      outputs. Node colour = <em>belief</em> (do we trust it). Run it end-to-end, or
+      create an immutable version.</p>
   </div>
-  {% if not wf_locked %}
   <div class="actions wf-actions">
     {% if coverage %}
     <span class="coverage-badge" id="coverage-badge"
@@ -78,24 +76,11 @@
     {% endif %}
     <a href="/project/{{ state.name }}/runs" class="btn">All runs</a>
   </div>
-  {% endif %}
 </div>
 
-{% if wf_locked %}
-  {# ── LOCKED: there is no data model yet, so there is no workflow to wire. ── #}
-  <div class="wf-locked-panel">
-    <div class="wf-locked-glyph">🔒</div>
-    <h2>Workflow locked</h2>
-    <p class="muted">The workflow wires the data model into a pipeline, so it unlocks
-      once the data model exists. Generate the data model first — the workflow is then
-      built automatically.</p>
-    <a class="btn primary" href="/project/{{ state.name }}/data_model">Go to the data model →</a>
-  </div>
-
-{% else %}
-  {# ── UNLOCKED: full workflow surface ── #}
-  <div class="split-view">
-    <div class="left-pane">
+{# ── Graph full-width on top, node review docked full-width below. ── #}
+<div class="wf-stack">
+    <div class="wf-top">
       <div class="legend">
         <span class="legend-label">type</span>
         <span class="badge input">▶ input_data</span>
@@ -115,30 +100,20 @@
       </div>
 
       {% if stages and mermaid %}
-      <div class="dag wf-graph">
-        <pre class="mermaid">
+      <div class="diagram-block">
+        <div class="diagram-tools">
+          <button type="button" data-zoom="in" title="Zoom in">+</button>
+          <button type="button" data-zoom="out" title="Zoom out">−</button>
+          <button type="button" data-zoom="reset" title="Fit to width">reset</button>
+          <button type="button" class="diagram-fs" title="Fullscreen">⛶ fullscreen</button>
+          <span class="muted diagram-hint">drag to pan · ⌘/Ctrl-scroll to zoom · click a node to review · fullscreen to expand</span>
+        </div>
+        <div class="diagram-viewport">
+          <pre class="mermaid">
 {{ mermaid }}
-        </pre>
+          </pre>
+        </div>
       </div>
-
-      <h2>Stage list</h2>
-      <table class="stages compact">
-        <thead><tr><th>#</th><th>id</th><th>type</th><th></th></tr></thead>
-        <tbody>
-          {% for s in stages %}
-          <tr>
-            <td>{{ s._order }}</td>
-            <td><a href="#" data-stage-link="{{ s.id }}"><code>{{ s.id }}</code></a></td>
-            <td><span class="type-tag {{ type_class.get(s.type, 'custom') }}">{{ type_glyph.get(s.type, '') }}</span></td>
-            <td>
-              {% if s.compiler_notes %}<span class="signal warn" title="compiler notes">⚠</span>{% endif %}
-              {% if s.eval %}<span class="signal eval" title="eval">📊</span>{% endif %}
-              {% if s.review %}<span class="signal review" title="review">👤</span>{% endif %}
-            </td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
       {% else %}
       {# No workflow on disk yet. It is generated right after the data model in the
          background; without live status (issue #95) the page just reflects disk. #}
@@ -154,63 +129,58 @@
         </div>
       </div>
       {% endif %}
+    </div>{# /.wf-top #}
 
-      {# ── Versions list ── #}
-      <h2>Versions</h2>
-      {% if versions %}
-      <table class="stages">
-        <thead><tr><th>version</th><th>created</th><th>message</th><th>coverage</th></tr></thead>
-        <tbody>
-          {% for v in versions %}
-          <tr>
-            <td><code>{{ v.id }}</code></td>
-            <td>{{ v.created_at }}</td>
-            <td>{{ v.message or '' }}{% if v.reviewer %} <span class="muted">— {{ v.reviewer }}</span>{% endif %}</td>
-            <td>
-              {% set cov = v.coverage %}
-              {% if cov %}
-              <div class="coverage-cell">
-                <span class="coverage-bar"><span class="coverage-fill" style="width: {{ cov.approved_pct }}%"></span></span>
-                <span class="coverage-counts"><b>{{ cov.approved }}</b>/{{ cov.total }}</span>
-              </div>
-              {% else %}<span class="muted">—</span>{% endif %}
-            </td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-      {% else %}
-      <p class="muted"><em>No versions yet. Click <strong>Create version</strong> above to
-        snapshot the current workflow. (A run on an unversioned workflow auto-creates one.)</em></p>
-      {% endif %}
-    </div>
-
-    <div class="right-pane wf-right" id="wf-right">
-      {# Clicking a node swaps its review/edit panel (_node_review.html) in here. #}
+    {% if stages and mermaid %}
+    {# ── Full-width stage detail — the node-review partial loads here on node-click. ── #}
+    <div class="wf-detail" id="wf-detail">
       <div id="stage-panel">
-        <div class="empty-state wf-panel-hint">
-          <h2>Review a stage</h2>
-          <p class="muted">Click any node in the graph (or a row in the stage list) to
-            review how that step is modeled — its inputs, output schema, and belief —
-            and approve or edit it.</p>
-        </div>
+        <div class="empty-state wf-detail-empty"><p class="muted">Click a node in the graph above to
+          <strong>review</strong> how that step is modeled — its inputs, transform, and outputs,
+          with <strong>approve / reject</strong> at the top.</p></div>
       </div>
     </div>
-  </div>
-{% endif %}
+    {% endif %}
 
-{% if not wf_locked %}
+    {% if stages %}
+    {# The version list lives on its own Versions tab (a child of Workflow); the
+       "Create version" button above snapshots the working copy into a new one. #}
+    <p class="wf-versions-link muted">Snapshots of this workflow live on the
+      <a href="/project/{{ state.name }}/versions">Versions</a> tab.</p>
+    {% endif %}
+  </div>{# /.wf-stack #}
+
 <script>
 (function () {
-  // ════ Node-click → review panel. Clicking a node or stage row fetches its
-  //      review/edit partial (_node_review.html) and swaps it into #stage-panel. ════
+  // ════ Node-click → review panel. Clicking a graph node (or an upstream-input link in
+  //      the open panel) fetches its review/edit partial (_node_review.html) and swaps
+  //      it into #stage-panel, docking it full-width below the graph. ════
   const METHODOLOGY = {{ state.name | tojson }};
   const panel = document.getElementById('stage-panel');
-  const wfRight = document.getElementById('wf-right');
+  const wfDetail = document.getElementById('wf-detail');
+
+  let activeStageId = null;
+  // Outline the reviewed node in the graph so the open panel and the graph agree on
+  // which stage is selected. Retries briefly if the svg hasn't rendered yet (a deep-link
+  // on load races the async mermaid render).
+  function highlightGraphNode(stageId, _tries) {
+    const svg = document.querySelector('.diagram-viewport svg');
+    if (!svg) {
+      if (stageId && (_tries || 0) < 12) setTimeout(() => highlightGraphNode(stageId, (_tries || 0) + 1), 300);
+      return;
+    }
+    svg.querySelectorAll('g.node.wf-node-active').forEach(n => n.classList.remove('wf-node-active'));
+    if (!stageId) return;
+    const esc = (window.CSS && CSS.escape) ? CSS.escape(stageId) : stageId;
+    // mermaid renders each flowchart node as <g class="node …" id="flowchart-<id>-<n>">
+    let node = svg.querySelector('g.node[id^="flowchart-' + esc + '-"]');
+    if (!node) node = svg.querySelector('g.node[id*="' + esc + '"]');   // fallback across versions
+    if (node) node.classList.add('wf-node-active');
+  }
 
   async function loadStage(stageId) {
     if (!stageId || !panel) return;
-    if (wfRight) wfRight.classList.add('loading');
+    if (wfDetail) wfDetail.classList.add('loading');
     try {
       const r = await fetch(`/project/${encodeURIComponent(METHODOLOGY)}/node/${encodeURIComponent(stageId)}/review-partial`);
       if (!r.ok) {
@@ -226,12 +196,12 @@
         old.replaceWith(s);
       });
       if (location.hash !== `#${stageId}`) { history.replaceState(null, '', `#${stageId}`); }
-      document.querySelectorAll('table.stages tr').forEach(tr => tr.classList.remove('active'));
-      const link = document.querySelector(`[data-stage-link="${stageId}"]`);
-      if (link) { const row = link.closest('tr'); if (row) row.classList.add('active'); }
-      if (wfRight) wfRight.scrollTop = 0;
+      activeStageId = stageId;
+      highlightGraphNode(stageId);
+      // The detail sits below the (possibly tall) graph — bring it into view.
+      if (wfDetail) wfDetail.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     } finally {
-      if (wfRight) wfRight.classList.remove('loading');
+      if (wfDetail) wfDetail.classList.remove('loading');
     }
   }
   window._loadStage = loadStage;
@@ -255,11 +225,15 @@
   const mermaidEl = document.querySelector('pre.mermaid');
   const $ = id => document.getElementById(id);
 
-  function rerenderDag(src) {
+  function rerenderGraph(src) {
     if (!mermaidEl || !window.mermaid) return;
     mermaidEl.removeAttribute('data-processed');
     mermaidEl.textContent = src;
-    try { mermaid.run({ nodes: [mermaidEl] }); } catch (e) {}
+    try {
+      const refit = () => { const vp = mermaidEl.closest('.diagram-viewport'); if (vp && vp._refit) vp._refit(); highlightGraphNode(activeStageId); };
+      const p = mermaid.run({ nodes: [mermaidEl] });
+      if (p && p.then) p.then(refit); else refit();
+    } catch (e) {}
   }
 
   async function pollReviewStatus() {
@@ -269,7 +243,7 @@
       if (!r.ok) return;
       d = await r.json();
     } catch (e) { return; }
-    if (d.mermaid) rerenderDag(d.mermaid);
+    if (d.mermaid) rerenderGraph(d.mermaid);
     const c = d.coverage;
     if (c) {
       if ($('cov-approved')) $('cov-approved').textContent = c.approved;
@@ -293,7 +267,8 @@
         fd.append('message', message);
         const r = await fetch(`/project/${encodeURIComponent(METHODOLOGY)}/version`, { method: 'POST', body: fd });
         if (!r.ok) { alert(`Version creation failed: ${r.status} ${await r.text()}`); return; }
-        window.location.reload();
+        // Land on the Versions tab so the reviewer sees the snapshot they just made.
+        window.location.href = `/project/${encodeURIComponent(METHODOLOGY)}/versions`;
       } finally {
         createBtn.disabled = false;
         createBtn.textContent = original;
@@ -302,5 +277,4 @@
   }
 })();
 </script>
-{% endif %}
 {% endblock %}
