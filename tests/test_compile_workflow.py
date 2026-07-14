@@ -88,7 +88,7 @@ class _FakeTurnAgent:
         return _Engine()
 
 
-def test_start_workflow_turn_runs_a_live_turn_and_calls_back(tmp_path: Any, monkeypatch: Any):
+def test_start_workflow_generation_agent_runs_a_live_turn_and_calls_back(tmp_path: Any, monkeypatch: Any):
     store = SessionStore(tmp_path / "sessions")
     turns = TurnManager()
     monkeypatch.setattr(wf, "open_session_store", lambda: store)
@@ -97,7 +97,7 @@ def test_start_workflow_turn_runs_a_live_turn_and_calls_back(tmp_path: Any, monk
     got: dict = {}
 
     async def _drive() -> str:
-        sid = wf.start_workflow_turn(
+        sid = wf.start_workflow_generation_agent(
             document="doc", project_name="demo", model="sonnet",
             data_model=None, on_answer=lambda ans: got.update(answer=ans),
         )
@@ -116,6 +116,6 @@ def test_start_workflow_turn_runs_a_live_turn_and_calls_back(tmp_path: Any, monk
 
 # ── the system prompt ─────────────────────────────────────────────────────────────────
 
-def test_workflow_system_prompt_submits_and_reuses_guidance():
+def test_workflow_system_prompt_submits_and_optimizes_for_reviewability():
     assert "submit_answer" in WORKFLOW_SYSTEM_PROMPT              # the agent submits
-    assert "judgment" in WORKFLOW_SYSTEM_PROMPT.lower()           # 'few judgment points' guidance
+    assert "review" in WORKFLOW_SYSTEM_PROMPT.lower()            # optimize for human reviewability

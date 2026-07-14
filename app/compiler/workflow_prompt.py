@@ -16,24 +16,33 @@ SUBMIT it by calling the `submit_answer` tool (its input schema defines the exac
 Call submit_answer once the whole workflow is ready; if it is rejected, fix the reported
 issues and call it again.
 
-# How to distill (the core insight)
-Recover the step sequence the account implies and classify each step into a node type —
-most steps are deterministic mechanism, a FEW are genuine judgment:
-- A known seed identity (what was true going in) -> an input_data stage.
-- Turning identity into search strings / query construction -> python_transform.
-- Deciding WHICH found source is authoritative / most-recent -> llm_transform (a real
-  judgment point).
-- Downloading a URL, converting a document to text, grepping fixed anchor keys -> each a
-  python_transform (deterministic mechanism, NOT an LLM stage).
-- Reading a document's text into a structured field set -> llm_transform (EXTRACT).
-- Reconciling conflicting figures across sources/years -> llm_transform (ADJUDICATE), or a
-  human_review_queue if it is low-volume / high-stakes.
-- Merging per-source rows back to one row per subject -> join or python_transform.
-- Rendering the final output -> publish.
+# The stage types
+Express each step as one typed stage; the submit_answer schema defines each type's exact
+shape. In one line each:
+- input_data — brings a known starting dataset into the workflow.
+- python_row_function — deterministic code run per row, one row in → one row out (preferred
+  for mechanism; it cannot fan rows out or in).
+- python_frame_function — deterministic code over the whole frame(s) that may reshape it
+  (dedup, pivot, multi-input merge).
+- llm_transform — a step that needs judgment or reads unstructured text into structure.
+- join — combines rows from upstream stages on a key.
+- aggregate — collapses rows into group summaries.
+- human_review_queue — routes items to a person to decide.
+- publish — renders the final output.
+Describe each stage you emit in one sentence and let the type follow from what the step is;
+do not prescribe a type from the situation.
 
-Keep llm_transform stages to the few real judgment points; make the rest deterministic.
-Wire `inputs` so the workflow is connected and acyclic: every input id must be the id of
-an upstream stage. Keep every id snake_case.
+# Optimize for reviewability
+The point of stages is that a HUMAN can review the process. Most types are transparent — a
+reviewer sees exactly what they do. llm_transform and the python_* functions are the genuine
+UNKNOWNS: their internals are opaque, so the more work you bury inside them, the less of the
+process anyone can actually review. Keep each doing only what it must, and let the transparent
+stages carry the structure. This is a real trade-off — a simpler, more reviewable workflow
+gives up some power and some robustness to corner cases — and reviewability is the thing to
+optimize, so make that trade deliberately.
+
+Wire `inputs` so the workflow is connected and acyclic: every input id must be the id of an
+upstream stage. Keep every id snake_case.
 
 NEVER fabricate data values, URLs, numbers, or sources; encode STRUCTURE only, and record
 genuine ambiguity in a stage's `compiler_notes`."""

@@ -26,7 +26,7 @@ from app.models.named_schemas import SchemaLibrary
 from app.models.workflow import Workflow
 
 
-def start_workflow_turn(
+def start_workflow_generation_agent(
     *,
     document: str,
     project_name: str,
@@ -34,7 +34,7 @@ def start_workflow_turn(
     data_model: SchemaLibrary | None,
     on_answer: Callable[[Workflow | None], None],
 ) -> str:
-    """Start the workflow agent as a LIVE chat turn and return the session id.
+    """Start the workflow-generation agent as a LIVE chat turn and return the session id.
 
     Creates a view-only session (the framing prompt shown as the user's message) and streams
     the agent on the shared TurnManager, so the compile is watchable at /chat/<sid> while it
@@ -77,14 +77,15 @@ def build_workflow_agent(
     return Agent(
         system_prompt=WORKFLOW_SYSTEM_PROMPT,
         target_schema=Workflow,
-        task=_frame(document, data_model),
+        task=_build_initial_message(document, data_model),
         model=model,
     )
 
 
-def _frame(document: str, data_model: SchemaLibrary | None) -> str:
-    """Frame the document (and, when grounded, the approved data model) as the material to
-    compile, delimited so the agent treats it as source, not instructions."""
+def _build_initial_message(document: str, data_model: SchemaLibrary | None) -> str:
+    """Build the agent's initial user message: the document (and, when grounded, the approved
+    data model) as the material to compile, delimited so the agent treats it as source, not
+    instructions."""
     grounding = ""
     if data_model is not None:
         grounding = "\n\n" + _render_data_model_reference(data_model)

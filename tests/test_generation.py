@@ -69,7 +69,7 @@ def test_start_workflow_generation_delegates_to_the_bridge_grounded(
         )
         return "sess-xyz"
 
-    monkeypatch.setattr(generation, "start_workflow_turn", fake_bridge)
+    monkeypatch.setattr(generation, "start_workflow_generation_agent", fake_bridge)
 
     sid = generation.start_workflow_generation(
         project_dir, document="doc", model="sonnet", data_model=_DM

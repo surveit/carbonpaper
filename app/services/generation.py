@@ -25,7 +25,7 @@ from pathlib import Path
 from typing import Any
 
 from app.compiler.data_model import start_data_model_turn
-from app.compiler.workflow import start_workflow_turn
+from app.compiler.workflow import start_workflow_generation_agent
 from app.models.named_schemas import SchemaLibrary
 from app.models.workflow import Workflow
 from app.services.compilation import regenerate_workflow
@@ -60,7 +60,7 @@ def start_workflow_generation(
     in `data_model` (the approved schemas) when given. Must be called from the server event
     loop."""
     name = project_dir.name
-    return start_workflow_turn(
+    return start_workflow_generation_agent(
         document=document,
         project_name=name,
         model=model,
