@@ -22,6 +22,19 @@ validate the output, write `outputs/<stage>.parquet`, append to `manifest.json`.
 - **Halt + resume:** `human_review_queue` raises `HaltForReview`; the run marks
   `awaiting_review` and persists the pending queue. `resume_run(...)` reloads completed
   outputs and continues once decisions exist.
+- **Subset runs — `run_subset(workflow, *, target, injected_outputs, run_dir, repo_root)`:**
+  runs only the stages needed to produce `target` (one id or several), treating the stages
+  named by `injected_outputs`' keys as already computed (their output is given, their own
+  upstream never runs). The runner derives that executable frontier itself — walk up from
+  `target` through declared inputs, stopping at any injected stage
+  (`app.models.executable_frontier`) — and validates it, rather than trusting a
+  caller-supplied stage list; a caller only says what it wants (`target`) and what it's
+  holding fixed (`injected_outputs`), not which stages that implies. Raises
+  `SubsetRunError` for an unknown target/injected id, a target that's also injected, a
+  stage error, or a halt. Used by `app.evals.runner.run_eval` to execute the
+  override→target pathway; keep it eval-agnostic (no eval-specific concept belongs here —
+  grain-preservation judgment stays in `app.models.eval.resolve_eval_run_settings`, which
+  shares the same frontier walk).
 
 ## `stages/` — one module per stage type (`HANDLERS`)
 `input_data` connectors `file` (csv/parquet/json/geojson; `_read_geojson` flattens a

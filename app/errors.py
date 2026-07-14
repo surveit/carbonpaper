@@ -56,7 +56,9 @@ class EvalGrainViolationError(Exception):
 
 
 class SubsetRunError(Exception):
-    """Running a subset of a workflow did not cleanly produce every requested
-    stage output: a stage errored, or the run halted for human review. The
-    message names what went wrong. (General runtime failure — callers like the
-    eval runner translate it into their own outcome, e.g. an `error` eval run.)"""
+    """A subset run (`app.runtime.runner.run_subset`) either could not be set up
+    or did not cleanly produce every stage output it derived: the target or an
+    injected stage names no stage in the workflow, a target is also injected, a
+    stage errored, or the run halted for human review. The message names what
+    went wrong. (General runtime failure — callers like the eval runner translate
+    it into their own outcome, e.g. an `error` eval run.)"""

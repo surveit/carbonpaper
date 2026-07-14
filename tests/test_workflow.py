@@ -152,3 +152,49 @@ def test_parse_workflow_rejects_ineligible_llm_transform():
         "primary_key": ["id"]})
     with pytest.raises(ValidationError, match="adds no columns"):
         m.parse_workflow([bad])
+
+
+# ── executable_frontier (issue #102: the shared walk-up-stop-at-injected graph
+# algorithm behind both `run_subset`'s own frontier derivation and
+# `resolve_eval_run_settings`'s scorability judgment) ─────────────────────────
+def _chain():
+    """a -> b -> c -> d, a straight line."""
+    return [
+        Stage.model_validate(S(id="a", type="input_data",
+                               connector={"kind": "file", "params": {"path": "d.csv"}})),
+        Stage.model_validate(S(id="b", type="python_frame_function", inputs=[{"id": "a"}],
+                               function={"kind": "inline", "code": "def transform(row): return row"})),
+        Stage.model_validate(S(id="c", type="python_frame_function", inputs=[{"id": "b"}],
+                               function={"kind": "inline", "code": "def transform(row): return row"})),
+        Stage.model_validate(S(id="d", type="python_frame_function", inputs=[{"id": "c"}],
+                               function={"kind": "inline", "code": "def transform(row): return row"})),
+    ]
+
+
+def test_executable_frontier_walks_up_to_the_source_with_no_injection():
+    assert set(m.executable_frontier(_chain(), targets=["d"], injected=[])) == {"a", "b", "c", "d"}
+
+
+def test_executable_frontier_stops_at_an_injected_node():
+    """An injected stage is not itself executed (its output is supplied), and
+    its own upstream is excluded too — the walk doesn't cross it."""
+    assert m.executable_frontier(_chain(), targets=["d"], injected=["b"]) == ["c", "d"]
+
+
+def test_executable_frontier_multiple_targets_union_their_ancestors():
+    assert set(m.executable_frontier(_chain(), targets=["b", "c"], injected=[])) == {"a", "b", "c"}
+
+
+def test_executable_frontier_unknown_target_raises():
+    with pytest.raises(ValueError):
+        m.executable_frontier(_chain(), targets=["ghost"], injected=[])
+
+
+def test_executable_frontier_unknown_injected_raises():
+    with pytest.raises(ValueError):
+        m.executable_frontier(_chain(), targets=["d"], injected=["ghost"])
+
+
+def test_executable_frontier_target_also_injected_raises():
+    with pytest.raises(ValueError):
+        m.executable_frontier(_chain(), targets=["d"], injected=["d"])
