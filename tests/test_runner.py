@@ -13,23 +13,28 @@ invalid working copy is refused loudly, writing nothing.
 from __future__ import annotations
 
 import json
+import time
 
 import pandas as pd
 import pytest
 
 from app.core.errors import NoVersionToRunError, SubsetRunError
 from app.core.models import Stage, Workflow
-from app.runtime.runner import execute_run, run_subset
+from app.runtime.runner import execute_run, prepare_run, run_subset
 from app.runtime.stages import llm_transform as lt
+from app.services import versioning
 from app.services.loader import WorkflowLoadError
 from app.services.versioning import create_version
 
 
 def _seed_version(root):
-    """Create the initial version a run targets. Runs no longer create versions,
-    so a test that builds a working copy must snapshot it into a version before
+    """Create the initial version a run targets, and publish it. Runs no longer
+    create versions, and now resolve published versions only, so a test that
+    builds a working copy must snapshot it into a version and publish it before
     running against it."""
-    return create_version(root, message="test seed", reviewer="test")["id"]
+    version_id = create_version(root, message="test seed", reviewer="test")["id"]
+    versioning.publish_version(root, version_id, reviewer="human")
+    return version_id
 
 
 def _make_project(root):
@@ -323,3 +328,29 @@ def test_invalid_workflow_never_becomes_a_version_and_run_never_pins_stale(tmp_p
     _seed_version(tmp_path)
     manifest = execute_run(tmp_path, repo_root=tmp_path)
     assert manifest["status"] == "ok"
+
+
+def test_run_skips_unpublished_latest_for_older_published(tmp_path):
+    # _seed_version publishes; a second, newer, UNPUBLISHED version must not win.
+    _make_project(tmp_path)
+    published_id = _seed_version(tmp_path)
+    time.sleep(1)  # version ids are second-resolution timestamps
+    versioning.create_version(tmp_path, message="newer draft", reviewer="agent")
+
+    prep = prepare_run(tmp_path, repo_root=tmp_path)
+    assert prep["manifest"]["workflow_version"] == published_id
+
+
+def test_run_with_no_published_version_fails_loudly(tmp_path):
+    _make_project(tmp_path)
+    versioning.create_version(tmp_path, message="draft", reviewer="agent")  # unpublished
+    with pytest.raises(NoVersionToRunError):
+        prepare_run(tmp_path, repo_root=tmp_path)
+
+
+def test_run_pinned_to_unpublished_version_fails_loudly(tmp_path):
+    _make_project(tmp_path)
+    unpublished_id = versioning.create_version(
+        tmp_path, message="draft", reviewer="agent")["id"]
+    with pytest.raises(NoVersionToRunError):
+        prepare_run(tmp_path, repo_root=tmp_path, version_id=unpublished_id)
