@@ -86,6 +86,16 @@ allowed_importers = ["app.compiler", "app.main", "app.runtime"]
 # so any agent can run on it.
 
 [[tool.importlinter.contracts]]
+name = "app.agent imports no domain layer"
+type = "forbidden"
+source_modules = ["app.agent"]
+forbidden_modules = ["app.services", "app.compiler", "app.web", "app.evals"]
+# The spine is domain-agnostic in BOTH directions: the protected contract above
+# limits who may import it; this one keeps workflow/domain state out of it. It may
+# use app.core (open) and app.runtime.llm_agent_sdk (CLI plumbing, whitelisted in
+# the app.runtime contract).
+
+[[tool.importlinter.contracts]]
 name = "app.evals is a leaf — imported only by web"
 type = "protected"
 protected_modules = ["app.evals"]
