@@ -177,10 +177,13 @@ async def create_version_route(project: str, message: str = Form(...)):
     # Examples are the stage's behavior contract: a version is a committable
     # snapshot, so it must not immortalise a python transform that fails its
     # own examples. Absent examples don't block — the gate holds existing
-    # examples to green, it does not require them.
-    failing = find_failing_examples(load_stages(project).stages)
-    if failing:
-        return JSONResponse({"ok": False, "issues": failing}, status_code=400)
+    # examples to green, it does not require them. The gate only applies when a
+    # compiled workflow exists; without one, versioning.create_version's own
+    # FileNotFoundError reports the missing workflow as a 400 below.
+    if (project_dir / "compiled").is_dir():
+        failing = find_failing_examples(load_stages(project).stages)
+        if failing:
+            return JSONResponse({"ok": False, "issues": failing}, status_code=400)
 
     existing = versioning.list_versions(project_dir)  # newest-first
     parent = existing[0]["id"] if existing else None

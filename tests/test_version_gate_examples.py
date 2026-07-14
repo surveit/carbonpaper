@@ -62,3 +62,9 @@ def test_green_examples_allow_version(client: TestClient, tmp_path: Path) -> Non
     response = client.post("/project/alpha/version", data={"message": "v1"})
     assert response.status_code == 200
     assert response.json()["ok"] is True
+
+
+def test_project_without_workflow_still_gets_400(client: TestClient, tmp_path: Path) -> None:
+    (tmp_path / "alpha").mkdir()
+    response = client.post("/project/alpha/version", data={"message": "v1"})
+    assert response.status_code == 400
