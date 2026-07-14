@@ -86,3 +86,45 @@ def test_generate_draft_id_avoids_taken(examples: Path) -> None:
     first = drafts.generate_draft_id(set(), rng=rng)
     second = drafts.generate_draft_id({first}, rng=random.Random(7))
     assert first != second
+
+
+def test_set_stage_replaces_existing_id_in_place(examples: Path) -> None:
+    draft = drafts.create_draft("demo", examples_dir=examples)
+    drafts.set_draft_stage("demo", draft["id"], json.dumps(_STAGE), examples_dir=examples)
+    renamed = dict(_STAGE, name="Load rows (renamed)")
+    result = drafts.set_draft_stage("demo", draft["id"], json.dumps(renamed),
+                                    examples_dir=examples)
+    assert result["stage_ids"] == ["load"]
+    after = drafts.read_draft("demo", draft["id"], examples_dir=examples)
+    assert len(after["stages"]) == 1
+    assert after["stages"][0]["name"] == "Load rows (renamed)"
+
+
+def test_save_version_freezes_valid_draft_and_chains_parent(examples: Path) -> None:
+    import time
+
+    pdir = examples / "demo"
+    draft = drafts.create_draft("demo", examples_dir=examples)
+    drafts.set_draft_stage("demo", draft["id"], json.dumps(_STAGE), examples_dir=examples)
+    first = drafts.save_version("demo", draft["id"], message="one", examples_dir=examples)
+    assert first["ok"] is True
+    assert first["version"]["published"] is False
+    assert first["version"]["parent_version"] is None
+    after = drafts.read_draft("demo", draft["id"], examples_dir=examples)
+    assert after["parent_version"] == first["version"]["id"]
+
+    time.sleep(1)  # version ids are second-resolution timestamps
+    second = drafts.save_version("demo", draft["id"], message="two", examples_dir=examples)
+    assert second["version"]["parent_version"] == first["version"]["id"]
+    assert len(versioning.list_versions(pdir)) == 2
+
+
+def test_save_version_refuses_invalid_draft(examples: Path) -> None:
+    pdir = examples / "demo"
+    draft = drafts.create_draft("demo", examples_dir=examples)
+    dangling = {"id": "load", "type": "input_data"}  # missing required fields
+    drafts.set_draft_stage("demo", draft["id"], json.dumps(dangling), examples_dir=examples)
+    result = drafts.save_version("demo", draft["id"], message="bad", examples_dir=examples)
+    assert result["ok"] is False
+    assert result["issues"]
+    assert versioning.list_versions(pdir) == []

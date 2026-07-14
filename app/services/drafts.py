@@ -105,6 +105,32 @@ def remove_draft_stage(
     return _describe(draft)
 
 
+def save_version(
+    name: str, draft_id: str, *, message: str, examples_dir: Path | None = None
+) -> dict[str, Any]:
+    """Freeze the draft's stages into a new immutable version — the draft's only
+    exit, and the single validation cliff: an invalid draft is refused with the
+    full issue list and nothing is written. On success the draft's parent
+    advances to the new version, so successive saves chain (v2 -> v3 -> v4)
+    rather than fanning out; the version is born unpublished (publishing is the
+    human's act)."""
+    project_dir = workspace.resolve_project_dir(name, examples_dir)
+    draft = _load_draft(project_dir, draft_id)
+    issues = validate_workflow_draft(draft["stages"])
+    if issues:
+        return {"ok": False, "issues": issues}
+    meta = versioning.create_version_from_stages(
+        project_dir,
+        draft["stages"],
+        message=message,
+        reviewer="agent",
+        parent_version=draft["parent_version"],
+    )
+    draft["parent_version"] = meta["id"]
+    _write_draft(project_dir, draft)
+    return {"ok": True, "version": meta}
+
+
 def generate_draft_id(taken: set[str], rng: random.Random | None = None) -> str:
     """A word-triplet id (e.g. brisk-otter-lamp) not in `taken`. 4096 combinations
     dwarf the handful of live drafts a project ever has; fails loudly if the space
