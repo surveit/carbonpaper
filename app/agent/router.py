@@ -15,7 +15,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 
-from app.runtime.llm_agent_sdk import available as sdk_available
+from app.core.llm_sdk import CLI_PATH
 
 from app.agent.registry import build_engine
 from app.agent.sdk_engine import CLI_MODEL
@@ -39,13 +39,13 @@ def create_agent_session(agent_id: str, context: dict, *, title: str | None = No
 
 
 def _backend_label() -> str:
-    if sdk_available():
+    if CLI_PATH is not None:
         return f"claude-cli:{CLI_MODEL} (subscription)"
     return "claude-cli (unavailable)"
 
 
 def _backend_error() -> str | None:
-    if sdk_available():
+    if CLI_PATH is not None:
         return None
     return (
         "The Claude CLI / Agent SDK isn't available. Install it and run "

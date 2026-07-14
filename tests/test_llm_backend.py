@@ -6,8 +6,11 @@ fall back to the mock. `mock` is reachable only when explicitly requested.
 from __future__ import annotations
 
 import pytest
+from pydantic import BaseModel
 
 from app.core.errors import LLMError
+from app.core.models import LLMConfig
+from app.runtime import llm as llm_module
 from app.runtime import options
 
 
@@ -54,3 +57,16 @@ def test_unknown_backend_value_raises(monkeypatch):
     _set(monkeypatch, backend="cli", agent=True)
     with pytest.raises(LLMError):
         options.get_llm_call_type()
+
+
+def test_call_llm_with_tools_raises_before_running_agent(monkeypatch):
+    """`llm.tools` is not supported by the agent backend: `call_llm` must reject
+    it up front, without constructing or running an `Agent`."""
+    monkeypatch.setattr(llm_module, "get_llm_call_type", lambda: "agent")
+
+    class _Reply(BaseModel):
+        score: int
+
+    config = LLMConfig(prompt_template="Rate: {text}", tools=["WebSearch"])
+    with pytest.raises(LLMError):
+        llm_module.call_llm("stage", config, {"text": "hi"}, reply_model=_Reply)

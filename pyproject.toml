@@ -66,12 +66,14 @@ allowed_importers = ["app.main", "app.services"]
 # runs it from the CLI. The reusable agent spine (app.agent) must not import it.
 
 [[tool.importlinter.contracts]]
-name = "app.runtime imported only by agent, evals, web"
+name = "app.runtime imported only by evals, web"
 type = "protected"
 protected_modules = ["app.runtime"]
-allowed_importers = ["app.agent", "app.evals", "app.web"]
-# The runner is driven from web (top), the agent (as an LLM backend), and evals.
-# app.services must not reach into it — status/review helpers stay runtime-free.
+allowed_importers = ["app.evals", "app.web"]
+# The runner is driven from web (top) and evals. app.agent sits below the runtime
+# (llm.py imports app.agent.agent.Agent as the reply backend) rather than the other
+# way round, so it is not an importer here. app.services must not reach into it —
+# status/review helpers stay runtime-free.
 
 [[tool.importlinter.contracts]]
 name = "app.agent spine imported only by its registrar and the entrypoint"

@@ -35,7 +35,7 @@
         <dt>tools</dt><dd>
             {% if stage.llm.tools %}
                 {% for t in stage.llm.tools %}<code>{{ t }}</code>{% if not loop.last %}, {% endif %}{% endfor %}
-                <span class="muted">— agent may call these (agent_sdk backend)</span>
+                <span class="muted">— not supported by the live backend; this stage fails at run time</span>
             {% else %}
                 <span class="muted">none — blind completion from training knowledge</span>
             {% endif %}
