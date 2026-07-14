@@ -16,6 +16,7 @@ from typing import Any, Optional, Sequence
 from pydantic import (
     BaseModel,
     ConfigDict,
+    Field,
     ValidationError,
     field_validator,
     model_validator,
@@ -76,14 +77,33 @@ class SourceRef(_Base):
 # ── Typed columns / schemas ──────────────────────────────────────────────────
 class Column(_Base):
     name: str
-    type: str = "str"
+    type: str = Field(
+        default="str",
+        description=(
+            "Column type: a scalar (str, int, float, bool, date, datetime); `json` (a nested "
+            "object — give its shape with `fields`, or an open string->scalar map with "
+            "`value_type`); or `list[X]` of any of these (e.g. list[str], list[json])."
+        ),
+    )
     nullable: bool = True
     description: Optional[str] = None
     range: Optional[list[Any]] = None
     source: Optional[str] = None
     enum: Optional[list[str]] = None
-    fields: Optional[list["Column"]] = None
-    value_type: Optional[str] = None
+    fields: Optional[list["Column"]] = Field(
+        default=None,
+        description=(
+            "Sub-columns of a `json`/`list[json]` column (a fixed set of object keys). "
+            "Declare exactly ONE of `fields` or `value_type` on a json column."
+        ),
+    )
+    value_type: Optional[str] = Field(
+        default=None,
+        description=(
+            "For an open `json`/`list[json]` map (string keys -> scalar values), the scalar "
+            "value type. Alternative to `fields`; declare exactly one."
+        ),
+    )
 
     @field_validator("type")
     @classmethod
