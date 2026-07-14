@@ -28,6 +28,17 @@ flush `manifest.json` mid-run; halt-on-review + resume; per-run `--limit`/`--off
 `field_checks`. `stages/` — one module per type. `llm*.py`/`options.py` — backends (opt-in
 mock). `preview.py` — scratch re-runs.
 
+Stage handlers register under a *shape* (`app/runtime/stages/execution.py`):
+`RowMapHandler` (the runtime maps a per-row function over the stage's single
+input and reassembles results in input order — the function never sees the
+frame), `SourceHandler` (originates rows; no upstream frames), or
+`FrameHandler` (whole frames; may reshape). The shape fixes what the runtime
+hands the handler, so grain-and-order preservation is structural for
+row-mapped types rather than declared per stage. `check_registry_matches_model`
+raises at registry import if the shapes disagree with the model's
+`GRAIN_AND_ORDER_PRESERVING_TYPES`, and `tests/test_handler_registry.py` pins
+the same equality in CI.
+
 ## `app/compiler/` — prose → LLM → workflow engine
 Public surface `read_input` + `compile_methodology`. Validates the reply against the models
 and **re-asks on schema-validation failure**, not just parse failure. CLI `python -m
@@ -48,6 +59,6 @@ into `versions/<id>/`).
 
 ## `app/chat/`, `app/llm/`, tests
 `chat/` — a reusable PydanticAI chat engine (streaming, tools, file persistence), separate
-from the batch `llm_transform` path; own env (`CW_CHAT_BACKEND`); one demo tool, not yet
+from the row-mapped `llm_transform` path; own env (`CW_CHAT_BACKEND`); one demo tool, not yet
 wired in. `llm/options.py` — the `LLMModel` menu. `tests/` (pytest; `conftest.py` forces
 `CW_LLM_FORCE_MOCK=1`); `.github/workflows/ci.yml` runs ruff + mypy + pytest on every PR.

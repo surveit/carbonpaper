@@ -42,6 +42,10 @@ HANDLERS: dict[StageType, StageHandler] = {
     StageType.publish: FrameHandler(handle_publish),
 }
 
+# A mis-shaped registration (e.g. a frame handler for a type the model declares
+# preserving) must not start the app — fail here, at import.
+check_registry_matches_model(HANDLERS)
+
 __all__ = [
     "HANDLERS",
     "HaltForReview",
