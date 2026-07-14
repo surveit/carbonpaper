@@ -5,7 +5,7 @@ from typing import Any, Callable
 import pytest
 
 from app.compiler.agent.tools import EditingContext, make_editing_tools
-from app.errors import RegenerateWithoutSnapshotError
+from app.core.errors import RegenerateWithoutSnapshotError
 from app.services import compilation, workspace
 
 # Minimal valid handle block per stage type (app/core/models/stage.py:

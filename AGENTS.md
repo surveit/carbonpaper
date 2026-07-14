@@ -18,7 +18,7 @@ app/runtime/   the Runner (executor, stages/, LLM backends)   → app/runtime/AG
 app/compiler/  prose → LLM → workflow engine (python -m app.compiler)
 app/web/       FastAPI routers + diagrams (thin app/main.py)  → app/AGENTS.md
 app/services/  web-independent logic (loader, compilation, node review, versioning)
-app/chat/  PydanticAI chat · app/llm/  model menu · tests/  pytest (offline)
+app/chat/  PydanticAI chat · app/core/llm/  model menu · tests/  pytest (offline)
 ```
 
 ## Conventions (load-bearing)

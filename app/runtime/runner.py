@@ -26,7 +26,7 @@ from typing import Any
 import pandas as pd
 import pyarrow.lib as pa_lib
 
-from app.errors import NoVersionToRunError, SubsetRunError
+from app.core.errors import NoVersionToRunError, SubsetRunError
 from app.core.models import Stage, Workflow
 from app.services.loader import WorkflowLoadError
 from app.services import versioning

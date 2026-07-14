@@ -14,7 +14,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 import app.web.routers.evals as evals_router
-from app.errors import EvalNotScorableError
+from app.core.errors import EvalNotScorableError
 from app.main import app
 from app.core.models import EvalConfig, ExpectedOutput, FileFormat, TableRef
 from app.core.models.schema import TableSchema

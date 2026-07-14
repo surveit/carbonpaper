@@ -18,7 +18,7 @@ from typing import Any, Literal
 
 import pandas as pd
 
-from app.errors import EvalGrainViolationError, EvalNotScorableError, SubsetRunError
+from app.core.errors import EvalGrainViolationError, EvalNotScorableError, SubsetRunError
 from app.evals.scoring import score_expected_outputs
 from app.core.models import (
     EvalConfig, EvalRun, EvalRunSettings, FileFormat, Stage, TableRef, Workflow,

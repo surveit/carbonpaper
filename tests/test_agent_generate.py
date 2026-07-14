@@ -14,7 +14,7 @@ import pytest
 from pydantic import BaseModel
 
 from app.agent.agent import Agent
-from app.errors import GenerationError
+from app.core.errors import GenerationError
 
 
 class _Point(BaseModel):
