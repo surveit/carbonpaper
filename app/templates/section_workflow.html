@@ -72,6 +72,9 @@
     <form action="/project/{{ state.name }}/run" method="post" style="display:inline;">
       <button type="submit" class="btn primary">▶ Run workflow</button>
     </form>
+    <form action="/project/{{ state.name }}/generate-workflow" method="post" style="display:inline;">
+      <button type="submit" class="btn" title="Recompile the workflow from the document, using the approved data model as reference. Replaces the current workflow.">↻ Regenerate workflow</button>
+    </form>
     <button type="button" class="btn" id="create-version-btn">Create version</button>
     {% endif %}
     <a href="/project/{{ state.name }}/runs" class="btn">All runs</a>
@@ -115,15 +118,25 @@
         </div>
       </div>
       {% else %}
-      {# No workflow on disk yet. It is generated right after the data model in the
-         background; without live status (issue #95) the page just reflects disk. #}
+      {# No workflow on disk yet. Generate it from the document, using the APPROVED data
+         model as reference; an unapproved / absent data model is NOT passed (see copy). #}
       <div class="wf-empty-graph">
         <div class="empty-state wf-empty-state">
           <h2>No workflow yet</h2>
-          <p class="muted">The workflow is generated automatically after the data model.
-            If you just generated the data model it may still be building — reload in a
-            moment — or (re)generate it now.</p>
-          <form method="post" action="/project/{{ state.name }}/generate">
+          {% if state.data_model.present and state.data_model.state == "approved" %}
+          <p class="muted">Generate the workflow from the document. This uses your
+            approved data model as reference — the compiler aligns each stage's inputs and
+            outputs to those schemas and records any deviation in its notes.</p>
+          {% elif state.data_model.present %}
+          <p class="muted">⚠ Your data model is not approved yet, so it will not be passed
+            to the workflow — generation proceeds from the document alone.
+            <a href="/project/{{ state.name }}/data_model">Approve it first</a> to anchor
+            the workflow to it, or generate now without it.</p>
+          {% else %}
+          <p class="muted">⚠ There is no data model — the workflow will be generated
+            straight from the document, with no reviewed data model to anchor to.</p>
+          {% endif %}
+          <form method="post" action="/project/{{ state.name }}/generate-workflow">
             <button type="submit" class="btn primary">Generate workflow</button>
           </form>
         </div>

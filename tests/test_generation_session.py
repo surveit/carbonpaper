@@ -1,7 +1,7 @@
 """Generation's data-model phase runs as a LIVE chat turn: start_generation creates a
 session and starts the data-model agent as a turn on the shared TurnManager (streamable at
 /chat/<sid> while it runs); when the turn ends with a valid submission, the schemas are
-written and the workflow phase is kicked.
+written. The create-flow stops there — the workflow is built separately, on demand.
 
 The agent + turn are faked; no CLI subprocess, no real LLM. Driven with asyncio.run.
 """
@@ -23,30 +23,24 @@ class _FakeLibrary:
     schemas: list[Any] = []
 
 
-# ── the completion hook (_finish_data_model): the substantive branch logic ──────────
+# ── the completion hook (_finish_data_model): persist the schemas, nothing more ──────
 
-def test_finish_persists_schemas_and_kicks_workflow_on_success(tmp_path: Path, monkeypatch: Any):
+def test_finish_persists_schemas_on_success(tmp_path: Path):
     project_dir = tmp_path / "demo"
     project_dir.mkdir()
-    kicked: list[Any] = []
-    monkeypatch.setattr(generation, "_start_workflow", lambda *a: kicked.append(a))
 
-    generation._finish_data_model(project_dir, "the document", "sonnet", _FakeLibrary())
+    generation._finish_data_model(project_dir, _FakeLibrary())
 
-    assert (project_dir / "schemas").exists()  # schemas persisted
-    assert kicked  # workflow phase kicked
+    assert (project_dir / "schemas").exists()  # schemas persisted; the workflow is NOT auto-built
 
 
-def test_finish_does_nothing_when_no_answer_was_submitted(tmp_path: Path, monkeypatch: Any):
+def test_finish_does_nothing_when_no_answer_was_submitted(tmp_path: Path):
     project_dir = tmp_path / "demo"
     project_dir.mkdir()
-    kicked: list[Any] = []
-    monkeypatch.setattr(generation, "_start_workflow", lambda *a: kicked.append(a))
 
-    generation._finish_data_model(project_dir, "the document", "sonnet", None)
+    generation._finish_data_model(project_dir, None)
 
-    assert not (project_dir / "schemas").exists()  # nothing built on a failed data model
-    assert not kicked
+    assert not (project_dir / "schemas").exists()  # nothing written on a failed data model
 
 
 # ── start_generation wiring: session up front + a live, streamable turn ──────────────
@@ -82,12 +76,11 @@ def test_start_generation_creates_a_session_and_runs_a_live_turn(tmp_path: Path,
     project_dir.mkdir()
     store = SessionStore(tmp_path / "sessions")
     turns = TurnManager()
-    # The app.agent bridge (session + live turn) lives in app.compiler.data_model now,
-    # which generation delegates to; the completion side (_start_workflow) stays here.
+    # The app.agent bridge (session + live turn) lives in app.compiler.data_model, which
+    # generation delegates to.
     monkeypatch.setattr(data_model, "open_session_store", lambda: store)
     monkeypatch.setattr(data_model, "default_turn_manager", lambda: turns)
     monkeypatch.setattr(data_model, "build_data_model_agent", lambda *a, **k: _FakeAgent())
-    monkeypatch.setattr(generation, "_start_workflow", lambda *a: None)
 
     async def _drive() -> str:
         sid = generation.start_generation(project_dir, document="doc", model="sonnet")
