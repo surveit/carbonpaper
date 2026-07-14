@@ -7,7 +7,7 @@ import pandas as pd
 import pytest
 
 from app.core import models as m
-from app.errors import EvalGrainViolationError
+from app.core.errors import EvalGrainViolationError
 from app.core.models import EvalConfig, ExpectedOutput
 from app.evals.scoring import score_expected_outputs
 

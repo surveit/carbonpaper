@@ -34,7 +34,7 @@ ignore_missing_imports = true
 # Expressed as a WHITELIST: each restricted module is `protected` and declares the
 # only modules allowed to import it — a new cross-layer import is denied by default
 # (caught), not allowed until someone remembers to forbid it. Core modules
-# (app.core.models, app.errors, app.llm) are left open: everything may depend on them.
+# (app.core.models, app.core.errors, app.core.llm) are left open: everything may depend on them.
 # Content-level checks live in tests/arch/.
 [tool.importlinter]
 root_package = "app"

@@ -5,7 +5,7 @@ import pytest
 from pydantic import ValidationError
 
 from app.core import models as m
-from app.llm import LLMModel
+from app.core.llm import LLMModel
 
 
 def S(**kw):

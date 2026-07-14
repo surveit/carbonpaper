@@ -20,7 +20,7 @@ from typing import Any
 
 import pandas as pd
 
-from app.errors import RowOutOfRange, StageNotInRun
+from app.core.errors import RowOutOfRange, StageNotInRun
 from app.core.models.stage import StageType, is_grain_and_order_preserving
 
 

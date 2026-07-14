@@ -11,7 +11,7 @@ from typing import Any, Literal, Optional
 
 from pydantic import Field, ValidationError, field_validator, model_validator
 
-from app.llm.options import LLMModel
+from app.core.llm.options import LLMModel
 from app.core.models.schema import (
     SourceRef,
     TableSchema,

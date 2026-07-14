@@ -5,7 +5,7 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from app.errors import RowOutOfRange, StageNotInRun
+from app.core.errors import RowOutOfRange, StageNotInRun
 from app.runtime.trace import trace_row
 from tests.test_trace_helpers import write_run
 

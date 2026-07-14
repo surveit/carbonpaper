@@ -58,8 +58,8 @@ diagrams}.py` — paths + Jinja · viewer reads over the loader · mermaid/ER bu
 docstring; the canonical-hash invariant must not rot); `versioning.py` (freeze `compiled/`
 into `versions/<id>/`).
 
-## `app/chat/`, `app/llm/`, tests
+## `app/chat/`, `app/core/llm/`, tests
 `chat/` — a reusable PydanticAI chat engine (streaming, tools, file persistence), separate
 from the row-mapped `llm_transform` path; own env (`CW_CHAT_BACKEND`); one demo tool, not yet
-wired in. `llm/options.py` — the `LLMModel` menu. `tests/` (pytest; `conftest.py` forces
+wired in. `core/llm/options.py` — the `LLMModel` menu. `tests/` (pytest; `conftest.py` forces
 `CW_LLM_FORCE_MOCK=1`); `.github/workflows/ci.yml` runs ruff + mypy + pytest on every PR.

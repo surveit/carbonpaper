@@ -22,7 +22,7 @@ from typing import Any
 
 import pandas as pd
 
-from app.errors import EvalGrainViolationError
+from app.core.errors import EvalGrainViolationError
 from app.core.models import EvalConfig, Stage
 from app.evals.dataset_columns import (
     deconflict_column_names,
