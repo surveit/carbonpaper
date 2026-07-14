@@ -13,7 +13,9 @@ Layout:
         compiled/<id>.json      # copy of the working compiled/ at creation time
         schemas/<...>           # copy of the working schemas/ at creation time (if any)
         version.json            # {id, created_at, parent_version, message,
-                                #  reviewer, coverage}
+                                #  reviewer, coverage, published, published_at}
+
+`published` records human approval; runs pin published versions only.
 
 `versions/` is a DURABLE on-disk record of what was believed and run — the
 "one canonical copy" the runner reads from. It lives under the project dir
@@ -110,6 +112,32 @@ def list_versions(project_dir: Path) -> list[dict[str, Any]]:
     return metas
 
 
+def version_is_published(meta: dict[str, Any]) -> bool:
+    """Whether this version carries human approval. Versions written before the
+    `published` flag existed were created only by the human "Create version"
+    action — the act publishing now records — so a missing key reads as
+    published. New metas always carry the key (False until published)."""
+    if "published" not in meta:
+        return True
+    return bool(meta["published"])
+
+
+def publish_version(project_dir: Path, version_id: str, *, reviewer: str) -> dict[str, Any]:
+    """Record human approval on one version: stamp published/published_at/
+    published_by into its version.json and return the updated meta. Idempotent —
+    an already-published version is returned unchanged (the first stamp wins).
+    Publishing touches metadata only, never stage content."""
+    meta = load_version_meta(project_dir, version_id)
+    if version_is_published(meta):
+        return meta
+    meta["published"] = True
+    meta["published_at"] = datetime.now().isoformat(timespec="seconds")
+    meta["published_by"] = reviewer
+    meta_path = versions_dir(project_dir) / version_id / "version.json"
+    meta_path.write_text(json.dumps(meta, indent=2, default=str), encoding="utf-8")
+    return meta
+
+
 def create_version(
     project_dir: Path,
     *,
@@ -172,6 +200,8 @@ def create_version(
         "message": message,
         "reviewer": reviewer,
         "coverage": coverage,
+        "published": False,
+        "published_at": None,
     }
     (vdir / "version.json").write_text(
         json.dumps(meta, indent=2, default=str), encoding="utf-8"
@@ -185,4 +215,6 @@ __all__ = [
     "load_version_meta",
     "load_version_stages",
     "create_version",
+    "version_is_published",
+    "publish_version",
 ]
