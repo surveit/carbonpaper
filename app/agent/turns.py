@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import asyncio
 import uuid
-from typing import Any
+from typing import Any, Awaitable, Callable
 
 from claude_agent_sdk import ClaudeSDKError
 
@@ -52,19 +52,20 @@ class TurnManager:
         self._turns: dict[str, Turn] = {}
         self._tasks: dict[str, asyncio.Task] = {}
 
-    def start(self, *, engine, store, session_id: str, prompt: str) -> str:
+    def start(self, *, engine, store, session_id: str, prompt: str,
+              on_done: Callable[[], Awaitable[None]] | None = None) -> str:
         turn_id = uuid.uuid4().hex[:12]
         turn = Turn(turn_id, session_id)
         self._turns[turn_id] = turn
         history = store.load_messages(session_id)
         store.set_active_turn(session_id, turn_id)
         task = asyncio.create_task(
-            self._run(turn, engine, store, session_id, prompt, history)
+            self._run(turn, engine, store, session_id, prompt, history, on_done)
         )
         self._tasks[turn_id] = task
         return turn_id
 
-    async def _run(self, turn, engine, store, session_id, prompt, history) -> None:
+    async def _run(self, turn, engine, store, session_id, prompt, history, on_done) -> None:
         try:
             resume = store.resume_token(session_id)
             messages, resume_token = await engine.stream_turn(
@@ -86,6 +87,15 @@ class TurnManager:
             turn.emit({"kind": "error", "text": f"{type(exc).__name__}: {exc}"})
         finally:
             store.set_active_turn(session_id, None)
+            if on_done is not None:
+                # Post-turn completion hook (e.g. generation persisting its schemas +
+                # kicking the workflow once its live turn ends). Runs on success AND
+                # error; a hook failure must not break teardown, so it is surfaced as an
+                # error event rather than raised.
+                try:
+                    await on_done()
+                except Exception as exc:  # noqa: BLE001 — hook boundary: never break turn teardown
+                    turn.emit({"kind": "error", "text": f"post-turn hook failed: {exc}"})
             turn.emit({"kind": "done"})
             turn.finish()
 
