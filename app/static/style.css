@@ -1756,4 +1756,21 @@ td.row-num, th.row-num { text-align: right; color: #98a1b3; font-variant-numeric
 .nr-panes { margin-top: 6px; }
 .nr-panes .schema-card { margin: 0 0 16px; }
 .nr-panes .schema-card h4 { margin: 0 0 8px; font-size: 13px; }
+
+/* Stage examples report (_stage_examples.html). Status colours reuse the
+   belief palette so "passed" reads the same green as an approved node. */
+.example-case { margin: 0.5rem 0; }
+.example-case summary { cursor: pointer; }
+.example-status {
+    display: inline-block; font-size: 11px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.4px; padding: 3px 10px; border-radius: 3px; margin-right: 8px;
+    border: 1px solid;
+}
+.example-status-passed { background: var(--belief-approved-bg); color: #1f5a1f; border-color: var(--belief-approved-bd); }
+.example-status-mismatch,
+.example-status-error { background: var(--belief-rejected-bg); color: #802020; border-color: var(--belief-rejected-bd); }
+.example-status-malformed { background: var(--belief-stale-bg); color: #7a4a00; border-color: var(--belief-stale-bd); }
+.example-rows { border-collapse: collapse; margin: 0.3rem 0 0.6rem; }
+.example-rows th, .example-rows td { border: 1px solid var(--border); padding: 0.15rem 0.5rem; font-size: 0.85rem; }
+.example-message { color: #802020; }
 .node-review-full .nr-edit-hint { margin: 0 0 10px; }

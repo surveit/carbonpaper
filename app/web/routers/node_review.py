@@ -13,13 +13,16 @@ app.services.node_review + app.services.versioning.
 
 from __future__ import annotations
 
+from typing import Any
+
 from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 
 from app.services import node_review, stage_edit, versioning
 from app.services.loader import stage_to_json, stage_to_spec_dict
 from app.core.models import Stage
-from app.runtime.examples import find_failing_examples
+from app.core.models.stages.examples import StageExample
+from app.runtime.examples import ExampleResult, find_failing_examples, run_stage_examples
 from app.web.config import EXAMPLES_DIR, templates
 from app.web.diagrams import TYPE_CLASS, TYPE_GLYPH, build_mermaid_graph
 from app.web.loading import find_stage, load_stages, resolve_function_code
@@ -80,8 +83,49 @@ async def node_review_partial(request: Request, project: str, stage_id: str):
             "function_code": resolve_function_code(stage),
             "type_class": TYPE_CLASS,
             "type_glyph": TYPE_GLYPH,
+            "example_views": _shape_example_views(stage),
         },
     )
+
+
+def _shape_example_views(stage: Stage) -> list[dict[str, Any]]:
+    """Pair each authored example with its run result, shaped for
+    _stage_examples.html ([] for stages without examples)."""
+    if not stage.examples:
+        return []
+    results = run_stage_examples(stage)
+    return [
+        _shape_one_example(example, result)
+        for example, result in zip(stage.examples, results)
+    ]
+
+
+def _shape_one_example(example: StageExample, result: ExampleResult) -> dict[str, Any]:
+    return {
+        "name": example.name,
+        "description": example.description,
+        "status": result.status,
+        "message": result.message,
+        "inputs": [
+            {"stage_id": stage_id, "columns": _row_columns(rows), "rows": rows}
+            for stage_id, rows in example.inputs.items()
+        ],
+        "expected": {"columns": _row_columns(example.expected), "rows": example.expected},
+        "diffs": [
+            {"row": diff.row, "column": diff.column,
+             "expected": diff.expected, "actual": diff.actual}
+            for diff in result.diffs
+        ],
+    }
+
+
+def _row_columns(rows: list[dict[str, Any]]) -> list[str]:
+    """Column order for rendering: first-appearance order across the rows."""
+    seen: dict[str, None] = {}
+    for row in rows:
+        for key in row:
+            seen.setdefault(key)
+    return list(seen)
 
 
 @router.post("/project/{project}/node/{stage_id}/decide")
