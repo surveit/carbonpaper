@@ -81,3 +81,10 @@ class ProjectExistsError(Exception):
     """A project create was requested for a name whose examples/<name>/ directory
     already exists. Raised (loudly) rather than clobbering existing data — the
     rename is the human's decision."""
+
+
+class DraftNotFoundError(Exception):
+    """A draft id names no existing draft for this project — unknown, expired
+    (drafts are disposable scratch that anything may delete), or not a
+    well-formed word-triplet id. The caller starts a new draft rather than
+    recovering this one."""
