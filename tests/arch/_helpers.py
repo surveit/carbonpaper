@@ -73,3 +73,26 @@ def find_numeric_get_defaults(tree: ast.Module) -> list[tuple[int, int]]:
         ):
             spans.append((node.lineno, node.end_lineno or node.lineno))
     return spans
+
+
+def collect_string_literals(tree: ast.AST) -> set[str]:
+    """Every string constant in the module EXCEPT docstrings (the first statement
+    of a module/class/function body is prose, not code)."""
+    docstring_ids: set[int] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
+            body = node.body
+            if (
+                body
+                and isinstance(body[0], ast.Expr)
+                and isinstance(body[0].value, ast.Constant)
+                and isinstance(body[0].value.value, str)
+            ):
+                docstring_ids.add(id(body[0].value))
+    return {
+        node.value
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Constant)
+        and isinstance(node.value, str)
+        and id(node) not in docstring_ids
+    }

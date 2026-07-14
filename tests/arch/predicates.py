@@ -11,6 +11,7 @@ from pathlib import Path
 from arch._helpers import (
     collect_called_funcs,
     collect_called_methods,
+    collect_string_literals,
     find_imported_modules,
     find_numeric_get_defaults,
     parse_module,
@@ -69,4 +70,21 @@ def check_no_fabricated_numbers(paths: list[Path]) -> list[str]:
         for start, end in find_numeric_get_defaults(parse_module(path)):
             if not any(_DATA_DEFAULT_OK in line for line in lines[start - 1 : end]):
                 offenders.append(f"{path}:{start}  {lines[start - 1].strip()}")
+    return offenders
+
+
+def check_literal_confined(
+    paths: list[Path], *, literal: str, owner_suffix: str
+) -> list[str]:
+    """Files other than the owner whose CODE contains the exact string `literal`.
+
+    Confines a directory-name literal to the one module that owns that directory
+    (sole-writer). Matches whole string constants only — building a path from the
+    name trips it; prose or a longer label containing the word does not."""
+    offenders: list[str] = []
+    for path in paths:
+        if path.as_posix().endswith(owner_suffix):
+            continue
+        if literal in collect_string_literals(parse_module(path)):
+            offenders.append(f"{path}: string literal {literal!r}")
     return offenders
