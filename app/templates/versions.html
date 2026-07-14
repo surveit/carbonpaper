@@ -1,19 +1,26 @@
-{% extends "base.html" %}
-{% block title %}{{ project }} · versions{% endblock %}
+{% extends "project_shell.html" %}
+{#
+  VERSIONS — every immutable version of a project, newest-first, with approval
+  coverage frozen at creation time. A child of the Workflow group in the shell.
 
-{% block header_extra %}
-<a href="/project/{{ project }}" class="back-link">← {{ project }}</a>
-{% endblock %}
-
-{% block content %}
-<div class="project-header">
-    <h1>Versions of <code>{{ project }}</code></h1>
-    <div class="actions">
-        <a href="/project/{{ project }}/workflow" class="btn">← Workflow</a>
-        <a href="/project/{{ project }}/runs" class="btn">All runs</a>
-    </div>
+  Context the route passes:
+    state    = project_view.shell_state(pdir); section = "versions"
+    versions = versioning.list_versions(pdir)  — newest-first (may be empty)
+#}
+{% block section %}
+<div class="sec-head wf-head">
+  <div class="wf-head-title">
+    <h1>Versions</h1>
+    <p class="lede">Each version is an immutable snapshot of <code>compiled/</code> +
+      <code>schemas/</code> with approval coverage frozen at creation time. A run pins to
+      a version and reads its snapshot, so it is reproducible against the exact workflow
+      it executed.</p>
+  </div>
+  <div class="actions wf-actions">
+    <a href="/project/{{ state.name }}/workflow" class="btn">Workflow</a>
+    <a href="/project/{{ state.name }}/runs" class="btn">Runs</a>
+  </div>
 </div>
-<p class="lede">Each version is an immutable snapshot of <code>compiled/</code> + <code>schemas/</code> with approval coverage frozen at creation time. Runs pin to a version and read its snapshot, so a run is reproducible against the exact workflow it executed.</p>
 
 {% if versions %}
 <table class="stages">
@@ -50,6 +57,10 @@
     </tbody>
 </table>
 {% else %}
-<p><em>No versions yet. Click <strong>Create version</strong> on the workflow page to snapshot the current workflow. A run targets an existing version, so create one before running.</em></p>
+<div class="empty-state">
+  <h2>No versions yet</h2>
+  <p class="muted">Click <strong>Create version</strong> on the Workflow page to snapshot
+    the current workflow. A run targets an existing version, so create one before running.</p>
+</div>
 {% endif %}
 {% endblock %}

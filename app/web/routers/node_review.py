@@ -21,6 +21,7 @@ from app.models import Stage
 from app.web.config import EXAMPLES_DIR, templates
 from app.web.diagrams import TYPE_CLASS, TYPE_GLYPH, build_mermaid_graph
 from app.web.loading import find_stage, load_stages, resolve_function_code
+from app.web.project_view import shell_state
 
 router = APIRouter()
 
@@ -183,7 +184,9 @@ async def create_version_route(project: str, message: str = Form(...)):
 
 @router.get("/project/{project}/versions", response_class=HTMLResponse)
 async def versions_index(request: Request, project: str):
-    """List every version of a project, newest-first, with frozen coverage."""
+    """VERSIONS section of the project shell: every version newest-first, with frozen
+    coverage. A child of the Workflow group, so it passes the SAME shell_state the
+    other sections do (the sidebar agrees) plus its version rows."""
     project_dir = EXAMPLES_DIR / project
     if not project_dir.is_dir():
         raise HTTPException(status_code=404, detail=f"No project '{project}'")
@@ -191,7 +194,8 @@ async def versions_index(request: Request, project: str):
         request,
         "versions.html",
         {
-            "project": project,
+            "state": shell_state(project_dir),
+            "section": "versions",
             "versions": versioning.list_versions(project_dir),
         },
     )

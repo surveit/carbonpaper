@@ -2,23 +2,28 @@
 {#
   project_shell.html — the LEFT-SIDEBAR PROJECT SHELL.
 
-  Frames ONE project (a directory under examples/<name>/) with a fixed
-  left sidebar = project name + 6 nav items (Overview / Document / Data model /
-  Workflow / Runs / Evals), each carrying a small status glyph derived from `state`
-  (Evals carries a fixed glyph — its status is per-eval, shown on the Evals page),
-  plus a {% block section %} the section templates fill.
+  Frames ONE project (a directory under examples/<name>/) with a fixed left sidebar
+  = project name + the nav tree + a {% block section %} the section templates fill.
 
-  Context every section route passes (the Phase-1 FROZEN CONTRACT, verbatim):
-    state    = project_view.shell_state(mdir)  — the status snapshot + next_action CTA
-    section  = one of {overview, document, data_model, workflow, runs, evals}
+  The nav is Overview / Document / Data model / Workflow, with Versions, Runs, and
+  Evals nested UNDER Workflow (the three things a workflow has: its versioned
+  snapshots, its executions, and the evals that score them). Its structure — labels,
+  hrefs, and a per-item status token — is built in app.web.project_view.build_nav and
+  rendered here from `state.nav`. The glyph vocabulary (status token → glyph + colour)
+  is the GLYPHS map below, so the visual choice sits next to the markup.
 
-  The sidebar reads ONLY from `state`. Every nav item is currently navigable: the
-  data-model→workflow lock is disabled (pending a rethink of the gating). The
-  workflow section renders whatever exists — an empty state when nothing is authored
-  yet — rather than a locked panel.
+  Context every section route passes:
+    state    = project_view.shell_state(mdir)  — status snapshot + nav + next_action
+    section  = the active nav key (overview / document / data_model / workflow /
+               versions / runs / evals); the matching item renders as `current`, and
+               the Workflow parent renders as `trail` when one of its children is active.
 
-  CARDINAL RULE: nothing here fabricates. Glyphs reflect the truthful on-disk state
-  (none/unreviewed/approved/…); a "no workflow yet" project shows ○, not a fake ✓.
+  Every item is navigable — the data model is optional input to the workflow, so there
+  is no lock. The workflow section renders whatever exists (an empty state when nothing
+  is authored yet).
+
+  CARDINAL RULE: nothing here fabricates. Glyphs (from build_nav) reflect the truthful
+  on-disk state; a "no workflow yet" project shows ○, not a fake ✓.
 #}
 {% block title %}{{ state.meta.title or state.name }} · {{ section|replace('_',' ')|capitalize }}{% endblock %}
 
@@ -32,84 +37,52 @@
 {% endblock %}
 
 {% block content %}
-{# ── Derive the nav items from `state` (this order, each = status-glyph + locked
-      flag for workflow only). Evals is last and carries a FIXED glyph — its status
-      is per-eval, surfaced on the Evals page, not summarised in the sidebar. ──── #}
-{% set base = "/project/" ~ state.name %}
-{# Gating disabled for now (pending a rethink): the workflow nav is always
-   navigable. Restore `(not state.data_model.present)` to re-gate on the data model. #}
-{% set wf_locked = false %}
-
-{# data-model glyph by gate state #}
-{% set dm_glyph_map = {
-     'approved':     ('✓', 'glyph-ok'),
-     'edited_stale': ('⚠', 'glyph-warn'),
-     'rejected':     ('✗', 'glyph-bad'),
-     'unreviewed':   ('●', 'glyph-todo'),
-     'none':         ('○', 'glyph-none'),
+{# Glyph vocabulary: maps a nav item's semantic status token (set in
+   project_view.build_nav) to a (glyph, css-class) pair. The visual choice lives
+   here next to the markup; the classification lives in Python. #}
+{% set GLYPHS = {
+     'home':    ('◆', 'glyph-home'),
+     'evals':   ('◎', 'glyph-home'),
+     'ok':      ('✓', 'glyph-ok'),
+     'present': ('●', 'glyph-ok'),
+     'warn':    ('⚠', 'glyph-warn'),
+     'bad':     ('✗', 'glyph-bad'),
+     'todo':    ('●', 'glyph-todo'),
+     'none':    ('○', 'glyph-none'),
+     'review':  ('👤', 'glyph-review'),
    } %}
-{% set dm_glyph = dm_glyph_map.get(state.data_model.state, ('○', 'glyph-none')) %}
-
-{# workflow glyph: locked first, else by coverage (✓ fully approved / ⚠ partial / ○ none) #}
-{% if wf_locked %}
-  {% set wf_glyph = ('🔒', 'glyph-locked') %}
-{% elif not state.workflow.present %}
-  {% set wf_glyph = ('○', 'glyph-none') %}
-{% elif state.workflow.coverage and state.workflow.coverage.total > 0
-        and state.workflow.coverage.approved == state.workflow.coverage.total %}
-  {% set wf_glyph = ('✓', 'glyph-ok') %}
-{% else %}
-  {% set wf_glyph = ('⚠', 'glyph-warn') %}
-{% endif %}
-
-{# runs glyph: human waiting > 0 wins, else by latest status, else none #}
-{% if state.runs.awaiting_review > 0 %}
-  {% set runs_glyph = ('👤', 'glyph-review') %}
-{% elif state.runs.n == 0 %}
-  {% set runs_glyph = ('○', 'glyph-none') %}
-{% elif state.runs.latest_status in ('ok',) %}
-  {% set runs_glyph = ('✓', 'glyph-ok') %}
-{% elif state.runs.latest_status in ('error', 'errors') %}
-  {% set runs_glyph = ('✗', 'glyph-bad') %}
-{% else %}
-  {% set runs_glyph = ('●', 'glyph-todo') %}
-{% endif %}
-
-{% set nav_items = [
-     {'key': 'overview',   'label': 'Overview',   'href': base,                 'glyph': '◆',          'glyph_class': 'glyph-home', 'locked': false},
-     {'key': 'document',   'label': 'Document',   'href': base ~ '/document',    'glyph': ('●' if state.has_document else '○'), 'glyph_class': ('glyph-ok' if state.has_document else 'glyph-none'), 'locked': false},
-     {'key': 'data_model', 'label': 'Data model', 'href': base ~ '/data_model',  'glyph': dm_glyph[0],  'glyph_class': dm_glyph[1],  'locked': false},
-     {'key': 'workflow',   'label': 'Workflow',   'href': base ~ '/workflow',    'glyph': wf_glyph[0],  'glyph_class': wf_glyph[1],  'locked': wf_locked},
-     {'key': 'runs',       'label': 'Runs',       'href': base ~ '/runs',        'glyph': runs_glyph[0],'glyph_class': runs_glyph[1],'locked': false},
-     {'key': 'evals',      'label': 'Evals',      'href': base ~ '/evals',       'glyph': '◎',          'glyph_class': 'glyph-home', 'locked': false},
-   ] %}
-
 <div class="app-shell">
   <aside class="app-side">
-    <a class="app-side-brand" href="{{ base }}" title="{{ state.meta.title or state.name }}">
+    <a class="app-side-brand" href="/project/{{ state.name }}" title="{{ state.meta.title or state.name }}">
       <span class="app-side-kicker">project</span>
       <span class="app-side-name">{{ state.meta.title or state.name }}</span>
       {% if state.meta.title %}<span class="app-side-slug"><code>{{ state.name }}</code></span>{% endif %}
     </a>
 
+    {# The nav tree comes entirely from `state.nav` (project_view.build_nav). Each item
+       is a link; a Workflow-style item with children renders them indented beneath it. #}
     <nav class="app-side-nav">
-      {% for item in nav_items %}
-        {% if item.locked %}
-          {# Locked items are non-links (the workflow gate). Still mark the current
-             section so the sidebar highlights where you are even while locked. #}
-          <span class="app-nav-item locked {% if item.key == section %}current{% endif %}" tabindex="0"
-                {% if item.key == section %}aria-current="page"{% endif %}
-                title="Generate the data model first to unlock the workflow">
-            <span class="app-nav-glyph {{ item.glyph_class }}">{{ item.glyph }}</span>
-            <span class="app-nav-label">{{ item.label }}</span>
-          </span>
-        {% else %}
-          <a class="app-nav-item {% if item.key == section %}current{% endif %}"
-             href="{{ item.href }}"
-             {% if item.key == section %}aria-current="page"{% endif %}>
-            <span class="app-nav-glyph {{ item.glyph_class }}">{{ item.glyph }}</span>
-            <span class="app-nav-label">{{ item.label }}</span>
+      {% for item in state.nav %}
+        {% set g = GLYPHS.get(item.status, GLYPHS['none']) %}
+        {% set child_keys = item.children | map(attribute='key') | list %}
+        <a class="app-nav-item {% if item.key == section %}current{% elif section in child_keys %}trail{% endif %}"
+           href="{{ item.href }}"
+           {% if item.key == section %}aria-current="page"{% endif %}>
+          <span class="app-nav-glyph {{ g[1] }}">{{ g[0] }}</span>
+          <span class="app-nav-label">{{ item.label }}</span>
+        </a>
+        {% if item.children %}
+        <div class="app-nav-children">
+          {% for child in item.children %}
+          {% set cg = GLYPHS.get(child.status, GLYPHS['none']) %}
+          <a class="app-nav-item child {% if child.key == section %}current{% endif %}"
+             href="{{ child.href }}"
+             {% if child.key == section %}aria-current="page"{% endif %}>
+            <span class="app-nav-glyph {{ cg[1] }}">{{ cg[0] }}</span>
+            <span class="app-nav-label">{{ child.label }}</span>
           </a>
+          {% endfor %}
+        </div>
         {% endif %}
       {% endfor %}
     </nav>
