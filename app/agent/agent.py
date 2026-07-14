@@ -57,19 +57,14 @@ class Agent(Generic[Model]):
         self._answer: Model | None = None
         self._attempts = 0
         self._last_issues: list[str] = ["(agent submitted nothing)"]
-        # The conversation the engine streamed, captured by run() on success OR failure,
-        # so a caller can persist it as a viewable chat session.
-        self._transcript: list[dict[str, Any]] = []
-        self._session_id: str | None = None
 
     async def run(self) -> Model:
-        """Run the agent and return the validated `target_schema` it submits. Raises
-        GenerationError if no valid answer is submitted within `max_attempts` — it never
-        returns an invalid or fabricated one."""
-        engine = self._build_engine()
-        # Capture the streamed conversation (and CLI session id) instead of discarding it —
-        # assigned BEFORE the no-answer check so a FAILED run's transcript is still available.
-        self._transcript, self._session_id = await engine.stream_turn(
+        """Run the agent HEADLESSLY and return the validated `target_schema` it submits.
+        Raises GenerationError if no valid answer is submitted within `max_attempts` — it
+        never returns an invalid or fabricated one. (To run it as a live, streamable turn
+        instead, drive `build_engine()` through the TurnManager and read `answer`.)"""
+        engine = self.build_engine()
+        await engine.stream_turn(
             self._task, message_history=None, emit=_ignore_event, resume=None
         )
         if self._answer is None:
@@ -80,16 +75,16 @@ class Agent(Generic[Model]):
         return self._answer
 
     @property
-    def transcript(self) -> list[dict[str, Any]]:
-        """The conversation the engine streamed on the last run() as neutral
-        {role, parts} messages, ready to persist as a chat session. Empty before run()."""
-        return self._transcript
+    def task(self) -> str:
+        """The framed input this agent works from — the prompt to stream when driving it
+        as a live turn (rather than headlessly via run())."""
+        return self._task
 
     @property
-    def session_id(self) -> str | None:
-        """The CLI session id from the last run() (or None) — the resume token that would
-        continue this conversation."""
-        return self._session_id
+    def answer(self) -> Model | None:
+        """The validated answer captured by submit_answer, or None if none has been
+        submitted. Read after driving the agent as a live turn to persist its result."""
+        return self._answer
 
     def submit_answer(self, **fields: Any) -> str:
         """Submit your completed answer as this tool's arguments, matching this tool's
@@ -111,11 +106,12 @@ class Agent(Generic[Model]):
             ) from err
         return "Accepted — recorded. You are done; do not restate it."
 
-    def _build_engine(self) -> ClaudeAgentSdkEngine:
-        """Wrap the single submit_answer tool (whose input schema IS target_schema) as
-        an in-process server and build the engine, capped at max_attempts turns (+ a
-        small buffer for any preamble/closing turn) so an agent that never submits a
-        valid answer cannot loop forever."""
+    def build_engine(self) -> ClaudeAgentSdkEngine:
+        """Build the engine that runs this agent: wrap the single submit_answer tool
+        (whose input schema IS target_schema) as an in-process server, capped at
+        max_attempts turns (+ a small buffer for any preamble/closing turn) so an agent
+        that never submits a valid answer cannot loop forever. Used by run(), and by a
+        caller driving the agent as a live turn: turns.start(engine=agent.build_engine()...)."""
         input_schema = self._target_schema.model_json_schema()
         server, allowed, _wrapped = build_mcp_server(
             [self.submit_answer], {"submit_answer": input_schema}

@@ -133,22 +133,6 @@ class SessionStore:
         return _render_history_bubbles(self._read(sid).get("messages") or [])
 
 
-def save_transcript_session(
-    store: SessionStore,
-    *,
-    transcript: list[dict[str, Any]],
-    title: str,
-    context: dict[str, Any] | None = None,
-) -> str:
-    """Persist a finished headless conversation (e.g. a generation run) as a VIEW-ONLY
-    chat session and return its id. `agent_id` is left unset, so the chat UI renders the
-    transcript but the message route refuses to continue it — there is no agent bound to
-    answer a follow-up."""
-    sid = store.create(title=title, agent_id=None, context=context)
-    store.save_messages(sid, transcript)
-    return sid
-
-
 def _render_history_bubbles(messages: list[dict]) -> list[dict]:
     """Render a session's neutral transcript (``{role, parts}`` with part types
     ``text|thinking|tool_call|tool_result``) into bubble dicts ``chat.html``

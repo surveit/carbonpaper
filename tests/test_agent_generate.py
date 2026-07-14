@@ -28,28 +28,19 @@ class _FakeEngine:
     would), which we swallow — the real agent would read the error and retry, which the
     next scripted call represents."""
 
-    def __init__(
-        self,
-        submit: Callable[..., str],
-        scripted_calls: list[dict[str, Any]],
-        *,
-        transcript: list[dict[str, Any]] | None = None,
-        session_id: str | None = None,
-    ) -> None:
+    def __init__(self, submit: Callable[..., str], scripted_calls: list[dict[str, Any]]) -> None:
         self._submit = submit
         self._scripted = scripted_calls
-        self._transcript = transcript if transcript is not None else []
-        self._session_id = session_id
 
     async def stream_turn(
         self, task: str, *, message_history: Any, emit: Any, resume: Any
-    ) -> tuple[list[dict[str, Any]], str | None]:
+    ) -> tuple[list[Any], None]:
         for fields in self._scripted:
             try:
                 self._submit(**fields)
             except ValueError:
                 pass  # rejected submission; the agent would fix + retry (next call)
-        return self._transcript, self._session_id
+        return [], None
 
 
 def _agent(*, max_attempts: int = 4) -> "Agent[_Point]":
@@ -77,7 +68,7 @@ def test_run_returns_the_submitted_answer_after_a_retry(monkeypatch: Any) -> Non
     agent = _agent()
     # First call is rejected (missing y), second is accepted — the loop returns it.
     fake = _FakeEngine(agent.submit_answer, [{"x": 1}, {"x": 1, "y": 2}])
-    monkeypatch.setattr(agent, "_build_engine", lambda: fake)
+    monkeypatch.setattr(agent, "build_engine", lambda: fake)
     result = asyncio.run(agent.run())
     assert result == _Point(x=1, y=2)
 
@@ -85,39 +76,16 @@ def test_run_returns_the_submitted_answer_after_a_retry(monkeypatch: Any) -> Non
 def test_run_raises_when_no_valid_answer_is_submitted(monkeypatch: Any) -> None:
     agent = _agent()
     fake = _FakeEngine(agent.submit_answer, [{"x": 1}, {"x": 2}])  # never valid
-    monkeypatch.setattr(agent, "_build_engine", lambda: fake)
+    monkeypatch.setattr(agent, "build_engine", lambda: fake)
     with pytest.raises(GenerationError) as exc_info:
         asyncio.run(agent.run())
     assert "_Point" in str(exc_info.value)  # names the target model
 
 
-def test_run_captures_the_transcript_and_session_id(monkeypatch: Any) -> None:
-    # The conversation the engine streamed is captured on the agent (not discarded),
-    # so a caller can persist it as a viewable chat session after the run.
+def test_answer_exposes_the_captured_submission_for_live_driving(monkeypatch: Any) -> None:
+    # When driven as a live turn, the caller reads `answer` after the turn (rather than
+    # run()'s return value) to persist the result.
     agent = _agent()
-    transcript = [
-        {"role": "user", "parts": [{"type": "text", "text": "make a point"}]},
-        {"role": "assistant", "parts": [{"type": "tool_call", "name": "submit_answer", "args": "{}"}]},
-    ]
-    fake = _FakeEngine(
-        agent.submit_answer, [{"x": 1, "y": 2}], transcript=transcript, session_id="sess-1"
-    )
-    monkeypatch.setattr(agent, "_build_engine", lambda: fake)
-    asyncio.run(agent.run())
-    assert agent.transcript == transcript
-    assert agent.session_id == "sess-1"
-
-
-def test_transcript_is_captured_even_when_generation_fails(monkeypatch: Any) -> None:
-    # A run that never submits a valid answer still captures the conversation, so a
-    # FAILED generation leaves a visible session instead of silence.
-    agent = _agent()
-    transcript = [{"role": "user", "parts": [{"type": "text", "text": "make a point"}]}]
-    fake = _FakeEngine(
-        agent.submit_answer, [{"x": 1}], transcript=transcript, session_id="sess-2"
-    )  # {"x": 1} never validates
-    monkeypatch.setattr(agent, "_build_engine", lambda: fake)
-    with pytest.raises(GenerationError):
-        asyncio.run(agent.run())
-    assert agent.transcript == transcript
-    assert agent.session_id == "sess-2"
+    assert agent.answer is None
+    agent.submit_answer(x=3, y=4)
+    assert agent.answer == _Point(x=3, y=4)

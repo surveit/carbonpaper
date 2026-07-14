@@ -1,13 +1,14 @@
-"""Auto-generation: on a fresh document, generate the DATA MODEL and then the WORKFLOW
-in the background, writing the results to disk.
+"""Auto-generation: on a fresh document, generate the DATA MODEL then the WORKFLOW,
+writing the results to disk.
 
-`start_generation` returns immediately, having spawned a daemon thread that runs the two
-phases in order — data model (an agent call, app.compiler.data_model) then workflow
-(app.compiler.compile_methodology) — and writes each to the project directory. The
-pages then simply read whatever is on disk (schemas/, compiled/); there is no status
-file or spinner yet (real-time status is tracked in issue #95). A phase that fails is
-LOGGED (never fabricated as success) and stops the chain — the workflow is not built on
-a data model that failed.
+The data-model phase runs as a LIVE chat turn. `start_generation` creates a chat session
+and starts the data-model agent as a turn on the shared TurnManager, so the conversation
+streams to /chat/<sid> AS it generates (and is persisted when it ends). When the turn
+finishes and the agent has submitted a valid data model, the schemas are written and the
+WORKFLOW phase is kicked on a background thread — it is a blocking raw-completion
+(compile_methodology), not an agent conversation, so it stays off the event loop. A phase
+that fails is surfaced in the live turn / logged (never fabricated as success) and never
+built on.
 
 The CLI subprocess the agent spawns runs with the Claude-Code session markers already
 stripped from os.environ (see app.compiler.compiler), which this module imports
@@ -15,14 +16,13 @@ transitively.
 """
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 import threading
 from pathlib import Path
-from typing import Any
 
-from app.agent.store import open_session_store, save_transcript_session
+from app.agent.store import open_session_store
+from app.agent.turns import default_turn_manager
 from app.compiler import compile_methodology
 from app.compiler.data_model import build_data_model_agent
 from app.models.named_schemas import SchemaLibrary
@@ -31,42 +31,54 @@ from app.services.compilation import regenerate_workflow
 _log = logging.getLogger(__name__)
 
 
-def start_generation(project_dir: Path, *, document: str, model: str) -> None:
-    """Kick off data-model → workflow generation for `project_dir` on a daemon thread
-    and return at once. Results land in schemas/ and compiled/; the pages read them
-    from disk on the next load."""
-    thread = threading.Thread(
-        target=_run_generation,
+def start_generation(project_dir: Path, *, document: str, model: str) -> str:
+    """Kick off data-model → workflow generation and return the id of the chat session
+    streaming the data-model conversation. The data-model agent runs as a LIVE turn
+    (watchable at /chat/<sid> while it works, persisted when it ends); on a valid
+    submission its schemas are written and the workflow phase is kicked. Must be called
+    from the server event loop — it starts the turn there."""
+    name = project_dir.name
+    store = open_session_store()
+    session_id = store.create(
+        title=f"Generation · data model · {name}",
+        agent_id=None,  # view-only: the UI renders + streams it, but there is no agent to continue it
+        context={"project_id": name, "phase": "data_model"},
+    )
+    agent = build_data_model_agent(document, model=model)
+
+    async def _finish() -> None:
+        _finish_data_model(project_dir, document, model, agent.answer)
+
+    default_turn_manager().start(
+        engine=agent.build_engine(),
+        store=store,
+        session_id=session_id,
+        prompt=agent.task,
+        on_done=_finish,
+    )
+    return session_id
+
+
+def _finish_data_model(
+    project_dir: Path, document: str, model: str, answer: SchemaLibrary | None
+) -> None:
+    """Completion hook for the data-model turn: if the agent submitted a valid data model
+    (`answer`), persist the schemas and kick the workflow phase; otherwise the failure was
+    already streamed to the live turn and there is nothing valid to build the workflow on."""
+    if answer is None:
+        return
+    _persist_schemas(project_dir, answer)
+    _start_workflow(project_dir, document, model)
+
+
+def _start_workflow(project_dir: Path, document: str, model: str) -> None:
+    """Run the workflow phase on a daemon thread — it is a blocking raw-completion
+    (compile_methodology), so it must not run on the event loop the live turn uses."""
+    threading.Thread(
+        target=_generate_workflow,
         args=(project_dir, project_dir.name, document, model),
         daemon=True,
-    )
-    thread.start()
-
-
-def _run_generation(project_dir: Path, name: str, document: str, model: str) -> None:
-    """The daemon-thread body: generate the data model, then (only if it succeeded) the
-    workflow. Each phase logs its own failure and stops the chain — the supervisor
-    boundary that keeps a bad generation from being built on."""
-    if not _generate_data_model(project_dir, document, model):
-        return
-    _generate_workflow(project_dir, name, document, model)
-
-
-def _generate_data_model(project_dir: Path, document: str, model: str) -> bool:
-    """Run the data-model agent, persist the schemas, and persist the agent conversation
-    as a viewable chat session. Returns whether it succeeded; a failure is logged, leaves
-    schemas/ untouched (no partial write), and STILL persists the conversation with the
-    error surfaced — so a failed generation is visible rather than silent."""
-    agent = build_data_model_agent(document, model=model)
-    try:
-        library = asyncio.run(agent.run())
-    except Exception as exc:  # noqa: BLE001 — supervisor boundary: log the failure, never fake a success
-        _persist_conversation(project_dir, agent.transcript, error=exc)
-        _log.exception("data-model generation failed for project %r", project_dir.name)
-        return False
-    _persist_schemas(project_dir, library)
-    _persist_conversation(project_dir, agent.transcript)
-    return True
+    ).start()
 
 
 def _generate_workflow(project_dir: Path, name: str, document: str, model: str) -> None:
@@ -95,27 +107,3 @@ def _persist_schemas(project_dir: Path, library: SchemaLibrary) -> None:
         payload = schema.model_dump(mode="json", exclude_none=True)
         path = schemas_dir / f"{index:02d}_{schema.name}.json"
         path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
-
-
-def _persist_conversation(
-    project_dir: Path, transcript: list[dict[str, Any]], *, error: Exception | None = None
-) -> None:
-    """Persist the data-model agent conversation as a view-only chat session so it is
-    openable in the chat UI. On failure, append a clear failure note so the session
-    surfaces the error rather than merely looking unfinished. Persisting is best-effort:
-    a store error is logged, never allowed to mask the generation outcome."""
-    messages = list(transcript)
-    if error is not None:
-        messages.append({
-            "role": "assistant",
-            "parts": [{"type": "text", "text": f"⚠ data-model generation failed: {error}"}],
-        })
-    try:
-        save_transcript_session(
-            open_session_store(),
-            transcript=messages,
-            title=f"Generation · data model · {project_dir.name}",
-            context={"project_id": project_dir.name, "phase": "data_model"},
-        )
-    except Exception:  # noqa: BLE001 — persistence is a secondary effect: log, never mask the run outcome
-        _log.exception("failed to persist data-model conversation for project %r", project_dir.name)

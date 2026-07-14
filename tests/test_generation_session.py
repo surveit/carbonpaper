@@ -1,17 +1,19 @@
-"""The data-model generation phase persists its agent conversation as a viewable chat
-session — on success AND on failure — so a completed OR failed generation leaves a
-session the chat UI can open, instead of silence.
+"""Generation's data-model phase runs as a LIVE chat turn: start_generation creates a
+session and starts the data-model agent as a turn on the shared TurnManager (streamable at
+/chat/<sid> while it runs); when the turn ends with a valid submission, the schemas are
+written and the workflow phase is kicked.
 
-The agent and the session store are faked; no CLI subprocess, no real LLM.
+The agent + turn are faked; no CLI subprocess, no real LLM. Driven with asyncio.run.
 """
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 from typing import Any
 
 import app.services.generation as generation
 from app.agent.store import SessionStore
-from app.errors import GenerationError
+from app.agent.turns import TurnManager
 
 
 class _FakeLibrary:
@@ -20,65 +22,79 @@ class _FakeLibrary:
     schemas: list[Any] = []
 
 
+# ── the completion hook (_finish_data_model): the substantive branch logic ──────────
+
+def test_finish_persists_schemas_and_kicks_workflow_on_success(tmp_path: Path, monkeypatch: Any):
+    project_dir = tmp_path / "demo"
+    project_dir.mkdir()
+    kicked: list[Any] = []
+    monkeypatch.setattr(generation, "_start_workflow", lambda *a: kicked.append(a))
+
+    generation._finish_data_model(project_dir, "the document", "sonnet", _FakeLibrary())
+
+    assert (project_dir / "schemas").exists()  # schemas persisted
+    assert kicked  # workflow phase kicked
+
+
+def test_finish_does_nothing_when_no_answer_was_submitted(tmp_path: Path, monkeypatch: Any):
+    project_dir = tmp_path / "demo"
+    project_dir.mkdir()
+    kicked: list[Any] = []
+    monkeypatch.setattr(generation, "_start_workflow", lambda *a: kicked.append(a))
+
+    generation._finish_data_model(project_dir, "the document", "sonnet", None)
+
+    assert not (project_dir / "schemas").exists()  # nothing built on a failed data model
+    assert not kicked
+
+
+# ── start_generation wiring: session up front + a live, streamable turn ──────────────
+
 class _FakeAgent:
-    """Stands in for app.agent.Agent: run() returns the library or raises, and the
-    transcript is available either way (as the real Agent captures it before raising)."""
+    """Stands in for the data-model Agent driven as a live turn: build_engine() returns
+    an engine whose stream_turn 'submits' an answer (sets `_answer`) and returns a
+    transcript, exactly as the real submit_answer + engine would during the turn."""
 
-    def __init__(self, *, transcript: list[dict[str, Any]], library: Any = None,
-                 error: Exception | None = None) -> None:
-        self.transcript = transcript
-        self.session_id = "sess-x"
-        self._library = library
-        self._error = error
+    task = "author the data model and submit it"
 
-    async def run(self) -> Any:
-        if self._error is not None:
-            raise self._error
-        return self._library
+    def __init__(self) -> None:
+        self._answer: Any = None
+
+    @property
+    def answer(self) -> Any:
+        return self._answer
+
+    def build_engine(self) -> Any:
+        agent = self
+
+        class _Engine:
+            async def stream_turn(self, prompt: str, *, message_history: Any, emit: Any, resume: Any):
+                emit({"kind": "text", "text": "authored"})
+                agent._answer = _FakeLibrary()  # the submit_answer tool would set this
+                return [{"role": "assistant", "parts": [{"type": "text", "text": "authored"}]}], None
+
+        return _Engine()
 
 
-def _wire(monkeypatch: Any, tmp_path: Path, agent: _FakeAgent) -> SessionStore:
-    monkeypatch.setattr(generation, "build_data_model_agent", lambda *a, **k: agent)
+def test_start_generation_creates_a_session_and_runs_a_live_turn(tmp_path: Path, monkeypatch: Any):
+    project_dir = tmp_path / "demo"
+    project_dir.mkdir()
     store = SessionStore(tmp_path / "sessions")
+    turns = TurnManager()
     monkeypatch.setattr(generation, "open_session_store", lambda: store)
-    return store
+    monkeypatch.setattr(generation, "default_turn_manager", lambda: turns)
+    monkeypatch.setattr(generation, "build_data_model_agent", lambda *a, **k: _FakeAgent())
+    monkeypatch.setattr(generation, "_start_workflow", lambda *a: None)
 
+    async def _drive() -> str:
+        sid = generation.start_generation(project_dir, document="doc", model="sonnet")
+        turn_id = store.load(sid)["active_turn"]
+        assert turn_id, "a live turn should be active on the session while it generates"
+        await turns._tasks[turn_id]
+        return sid
 
-def test_data_model_phase_persists_the_conversation_on_success(tmp_path: Path, monkeypatch: Any):
-    project_dir = tmp_path / "demo"
-    project_dir.mkdir()
-    transcript = [
-        {"role": "user", "parts": [{"type": "text", "text": "author the data model"}]},
-        {"role": "assistant", "parts": [
-            {"type": "tool_call", "name": "submit_answer", "args": '{"schemas": []}'},
-        ]},
-    ]
-    store = _wire(monkeypatch, tmp_path, _FakeAgent(transcript=transcript, library=_FakeLibrary()))
+    sid = asyncio.run(_drive())
 
-    ok = generation._generate_data_model(project_dir, "the document", "sonnet")
-
-    assert ok is True
-    sessions = store.list_sessions()
-    assert len(sessions) == 1
-    sid = sessions[0]["session_id"]
-    assert any("submit_answer" in str(bubble) for bubble in store.history_view(sid))
-
-
-def test_data_model_phase_persists_the_conversation_on_failure(tmp_path: Path, monkeypatch: Any):
-    project_dir = tmp_path / "demo"
-    project_dir.mkdir()
-    transcript = [
-        {"role": "user", "parts": [{"type": "text", "text": "author the data model"}]},
-    ]
-    agent = _FakeAgent(transcript=transcript, error=GenerationError("no valid SchemaLibrary"))
-    store = _wire(monkeypatch, tmp_path, agent)
-
-    ok = generation._generate_data_model(project_dir, "the document", "sonnet")
-
-    assert ok is False
-    # A session STILL exists, and it surfaces the failure rather than looking unfinished.
-    sessions = store.list_sessions()
-    assert len(sessions) == 1
-    sid = sessions[0]["session_id"]
-    view = store.history_view(sid)
-    assert any("failed" in str(bubble).lower() for bubble in view)
+    assert store.exists(sid)
+    assert store.load(sid)["messages"]          # TurnManager persisted the conversation
+    assert (project_dir / "schemas").exists()   # completion hook persisted the schemas

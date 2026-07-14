@@ -21,14 +21,14 @@ from app.agent.registry import build_engine
 from app.agent.sdk_engine import CLI_MODEL
 
 from .store import open_session_store
-from .turns import TurnManager
+from .turns import default_turn_manager
 
 TEMPLATES_DIR = Path(__file__).resolve().parent / "templates"
 
 router = APIRouter()
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 _store = open_session_store()
-_turns = TurnManager()
+_turns = default_turn_manager()
 
 
 def create_agent_session(agent_id: str, context: dict, *, title: str | None = None) -> str:
