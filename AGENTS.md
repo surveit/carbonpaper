@@ -1,7 +1,7 @@
 # prototype_one — reviewable AI workflows
 
 **Workflows of typed, schema-validated stages** with human-review gates and persisted
-runs. Vocabulary (locked; `docs/naming-refactor.md`): **project** = the container
+runs. Vocabulary (locked): **project** = the container
 directory · **methodology** = the authored prose (`methodology_raw.md`) ·
 **workflow** = the stage graph it compiles to. What/why + features → `docs/overview.md`;
 code map → `docs/architecture.md`; quickstart → `README.md`.
@@ -31,3 +31,8 @@ app/chat/  PydanticAI chat · app/core/llm/  model menu · tests/  pytest (offli
   `app.services.compilation`, which wraps the compiler). Both enforced by import-linter.
 - **Never `except Exception` or bare `except`.** Catch specific types — swallowing errors breaks
   fail-loudly. Enforced by Ruff `BLE001`.
+- **Planning docs stay out of the repo.** Design specs, implementation/execution plans,
+  brainstorming or "rethink" notes, and refactor/migration roadmaps are ephemeral working
+  artifacts — keep them in scratch or the PR description, never commit them. Committed docs
+  describe what the code does *today* (reference docs like `docs/architecture.md`), not what we
+  plan to do.

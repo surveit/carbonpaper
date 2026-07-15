@@ -3,7 +3,7 @@
 A FastAPI app over a file-backed project artifact — one directory per project (see
 [overview.md](overview.md) for the layout). ~6k lines of
 Python across six packages. Vocabulary: **project**/**methodology**/**workflow** per
-[naming-refactor.md](naming-refactor.md).
+[overview.md](overview.md).
 
 ## `app/core/models/` — the schema layer (Pydantic)
 THE canonical definition of what a workflow is. Constructing a model validates it;
