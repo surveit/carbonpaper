@@ -44,9 +44,9 @@ def read_input_data(stage: Stage, ctx: dict[str, Any]) -> pd.DataFrame:
 
     if connector.kind == ConnectorKind.computed_static:
         # Demo mode: read from the file param if provided
-        path = params.get("file")
-        if path:
-            return pd.read_csv(ctx["repo_root"] / path)
+        file_param = params.get("file")
+        if file_param:
+            return pd.read_csv(ctx["repo_root"] / file_param)
         return pd.DataFrame()
 
     raise ValueError(f"Unknown connector kind: {connector.kind}")
