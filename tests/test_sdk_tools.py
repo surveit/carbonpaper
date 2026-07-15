@@ -117,4 +117,5 @@ def test_unknown_draft_id_surfaces_as_tool_error(examples_root: Path) -> None:
     _server, _allowed, tools = _build("congresswatch")
     tool = next(t for t in tools if t.name == "read_draft")
     out = _call(tool, {"project_id": "congresswatch", "draft_id": "calm-otter-lamp"})
-    assert out.get("is_error") or "No draft" in out["content"][0]["text"]
+    assert out.get("is_error") is True
+    assert "No draft" in out["content"][0]["text"]

@@ -60,7 +60,9 @@ def test_literal_confined_flags_non_owner(tmp_path: Path) -> None:
 def test_literal_confined_ignores_docstrings_and_substrings(tmp_path: Path) -> None:
     clean = tmp_path / "clean.py"
     clean.write_text(
-        '"""Talks about drafts in prose."""\nLABEL = "Saving the draft"\n',
+        '"""Talks about drafts in prose."""\n'
+        'LABEL = "Saving the draft"\n'
+        'X = "the drafts folder"\n',
         encoding="utf-8",
     )
     assert check_literal_confined(

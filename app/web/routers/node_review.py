@@ -12,6 +12,8 @@ and `versions/<id>/` (snapshots), managed by app.services.node_review + app.serv
 
 from __future__ import annotations
 
+import re
+
 from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
@@ -24,6 +26,10 @@ from app.web.loading import find_stage, load_stages, resolve_function_code
 from app.web.project_view import shell_state
 
 router = APIRouter()
+
+# Version ids are second-resolution timestamps (%Y%m%dT%H%M%S); this guard keeps
+# a caller-supplied id from being used as a path segment with any other shape.
+_VERSION_ID = re.compile(r"^\d{8}T\d{6}$")
 
 
 def _review_by_id(stages: list[Stage], decisions) -> dict[str, str]:
@@ -164,8 +170,8 @@ async def node_edit(
 
 @router.post("/project/{project}/version")
 async def create_version_route(project: str, message: str = Form(...)):
-    """Snapshot the working copy's {compiled/, schemas/} into a new immutable
-    version + freeze approval coverage at creation time. The parent is the latest
+    """Snapshot the working copy's compiled/ into a new immutable version +
+    freeze approval coverage at creation time. The parent is the latest
     existing version (None for the very first version). The JS redirects to the
     versions list on success."""
     project_dir = EXAMPLES_DIR / project
@@ -190,6 +196,8 @@ async def publish_version_route(project: str, version_id: str):
     project_dir = EXAMPLES_DIR / project
     if not project_dir.is_dir():
         raise HTTPException(status_code=404, detail=f"No project '{project}'")
+    if not _VERSION_ID.match(version_id):
+        raise HTTPException(status_code=404, detail=f"No version '{version_id}'")
     try:
         versioning.publish_version(project_dir, version_id, reviewer="local")
     except FileNotFoundError as exc:

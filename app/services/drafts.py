@@ -177,7 +177,11 @@ def _load_draft(project_dir: Path, draft_id: str) -> dict[str, Any]:
             f"disposable; start a new one with create_draft."
         )
     loaded = json.loads(path.read_text(encoding="utf-8"))
-    assert isinstance(loaded, dict)
+    if not isinstance(loaded, dict):
+        raise DraftNotFoundError(
+            f"Draft file for '{draft_id}' is corrupt (not a JSON object) — "
+            f"start a new draft with create_draft."
+        )
     return loaded
 
 

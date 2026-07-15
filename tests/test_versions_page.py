@@ -64,3 +64,13 @@ def test_run_of_unpublished_project_explains_publish_gate(project: Path) -> None
     resp = client.post("/project/demo/run", follow_redirects=False)
     assert resp.status_code == 400
     assert "publish" in resp.json()["detail"]
+
+
+def test_publish_route_rejects_non_timestamp_version_id(project: Path) -> None:
+    before = versioning.list_versions(project)
+    resp = client.post(
+        "/project/demo/versions/not-a-version/publish", follow_redirects=False
+    )
+    assert resp.status_code == 404
+    assert "not-a-version" in resp.json()["detail"]
+    assert versioning.list_versions(project) == before
