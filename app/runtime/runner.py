@@ -197,12 +197,39 @@ def _rebind_connector(stage: Stage, binding: dict[str, Any]) -> Stage:
     return stage.model_copy(update={"connector": connector})
 
 
+def _describe_input_files(resolved: dict[str, dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    """Provenance record for each file-kind input: the designated absolute path,
+    which scope designated it (run binding or the workflow itself), and a
+    content hash + size streamed now, at prepare time. A designated file that
+    does not exist is a prepare-time error, not a mid-run one."""
+    records: dict[str, dict[str, Any]] = {}
+    for stage_id, entry in resolved.items():
+        path = Path(entry["params"]["path"])
+        if not path.is_file():
+            raise FileNotFoundError(
+                f"input `{stage_id}`: bound file does not exist: {path}")
+        digest, size = _hash_file(path)
+        records[stage_id] = {"path": str(path), "source": entry["source"],
+                             "sha256": digest, "bytes": size}
+    return records
+
+
+def _hash_file(path: Path, chunk_size: int = 1 << 20) -> tuple[str, int]:
+    digest, total = hashlib.sha256(), 0
+    with path.open("rb") as handle:
+        while block := handle.read(chunk_size):
+            digest.update(block)
+            total += len(block)
+    return digest.hexdigest(), total
+
+
 def prepare_run(
     project_dir: Path,
     repo_root: Path,
     version_id: str | None = None,
     limits: dict[str, int] | None = None,
     offsets: dict[str, int] | None = None,
+    bindings: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Create the run dir + id and write an initial `running` manifest (all
     stages pending) so a caller can redirect to the run page immediately and
@@ -226,11 +253,25 @@ def prepare_run(
     part of the run's provenance and survives a halt/resume. Unknown stage
     ids fail loudly.
 
+    `bindings` supplies an absolute file path per file-kind input stage for
+    this run only, overriding any path authored in the workflow (see
+    apply_input_bindings). Every file-kind input stage's designated path —
+    whether run-bound or workflow-authored — is recorded in the manifest
+    (`input_bindings`) as provenance: the absolute path, its source
+    (`"run"`/`"workflow"`), and a sha256 + byte count read from the file now.
+    An input stage left with no path, or a binding naming an unknown/non-file
+    stage id, fails loudly (MissingInputBindingError / ValueError); a bound or
+    authored path that does not exist on disk fails loudly (FileNotFoundError).
+
     Raises NoVersionToRunError (no version exists) or WorkflowLoadError
     (from the version snapshot's strict load) before the run dir is created, so
-    a run with no version — or an invalid workflow — never leaves a run behind."""
+    a run with no version — or an invalid workflow — never leaves a run behind.
+    The same holds for a binding/input-file failure: it is raised before the
+    run dir is created."""
     workflow_version = _resolve_version_id(project_dir, version_id)
     stages = versioning.load_version_stages(project_dir, workflow_version)
+    stages, resolved_inputs = apply_input_bindings(stages, bindings)
+    input_records = _describe_input_files(resolved_inputs)
     ordered = topological_sort(stages)
 
     limits = dict(limits or {})
@@ -266,6 +307,7 @@ def prepare_run(
         "workflow_version": workflow_version,
         "limit_overrides": limits,
         "offset_overrides": offsets,
+        "input_bindings": input_records,
         "status": "running",
         "stages": [
             {"stage_id": s.id, "type": s.type, "name": s.name,
@@ -295,14 +337,16 @@ def execute_run(
     version_id: str | None = None,
     limits: dict[str, int] | None = None,
     offsets: dict[str, int] | None = None,
+    bindings: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Run the workflow once (synchronous). Returns the manifest dict. `version_id`
     pins the run to a workflow version (None -> latest existing; none exists ->
     NoVersionToRunError); see prepare_run / _resolve_version_id.
-    `limits`/`offsets` are per-run row slicing overrides; see prepare_run."""
+    `limits`/`offsets` are per-run row slicing overrides; `bindings` supplies
+    per-run input file paths; see prepare_run."""
     return run_prepared(
         prepare_run(project_dir, repo_root, version_id,
-                    limits=limits, offsets=offsets)
+                    limits=limits, offsets=offsets, bindings=bindings)
     )
 
 
