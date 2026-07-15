@@ -32,14 +32,16 @@ FeatureCollection) + `computed_static`; `python_row_function`/`python_frame_func
 `publish` (a `function` module that writes artifacts).
 
 ## LLM backends (`llm_transform`)
-- `options.py` `get_llm_call_type()` picks `agent_sdk | cli | mock` from `CW_LLM_BACKEND`
-  (default `auto`: agent_sdk → cli). Mock is opt-in (`CW_LLM_FORCE_MOCK=1`); with no live
-  backend it raises rather than silently mocking.
-- `llm.py` renders + dispatches (`call_llm`, run per row by the row driver under bounded
-  parallelism; the JSON parser recovers the last JSON value in prose).
-  `llm_agent_sdk.py` drives `claude_agent_sdk.query()`, locates
-  `claude` (incl. Windows `~/.local/bin/claude.exe`), and honors a stage's `llm.tools:`
-  (e.g. `[WebSearch, WebFetch]`, agent_sdk only). `llm_mock.py` — deterministic offline mock.
+- `options.py` `get_llm_call_type()` picks `agent | mock` from `CW_LLM_BACKEND`
+  (default `auto`: agent when available — `claude_agent_sdk` importable and a `claude`
+  CLI located, incl. Windows `~/.local/bin/claude.exe`). Mock is opt-in
+  (`CW_LLM_FORCE_MOCK=1`); with no live backend it raises rather than silently mocking.
+- `llm.py` `call_llm` renders the stage's prompt and dispatches to the live backend: a
+  headless structured-output `app.agent.agent.Agent` whose `target_schema` is the stage's
+  compiled reply model, so the reply is validated by construction rather than parsed from
+  prose. A stage declaring `llm.tools` fails loudly — the agent backend doesn't support
+  tools. Run per row by the row driver under bounded parallelism. `llm_mock.py` —
+  deterministic offline mock.
 
 `validation.py` — DATA validation of a dataframe against an `output_schema` (columns, types,
 ranges, nullability, PK uniqueness), distinct from the stage schemas in `app/core/models/`.

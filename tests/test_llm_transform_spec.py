@@ -1,10 +1,12 @@
-"""The one thing llm_transform adds over a plain LLM call: it appends the
-derived reply spec (output_schema − input_schema, rendered by
-TableSchema.to_prompt) to the prompt. The call mechanism itself is unchanged
-(llm.call_llm per row, driven by the runtime's row driver)."""
+"""The one thing llm_transform adds over a plain LLM call: it compiles the
+derived reply spec — output_schema − input_schema — to the Pydantic model the
+agent backend enforces. The call mechanism itself is unchanged (llm.call_llm
+per row, driven by the runtime's row driver)."""
 from __future__ import annotations
 
 import pandas as pd
+import pytest
+from pydantic import ValidationError
 
 from app.core.models import Stage
 from app.core.models.stage import StageType
@@ -31,22 +33,29 @@ def _run(stage, frames, ctx=None):
         stage, frames, ctx if ctx is not None else {})
 
 
-def test_reply_spec_appended_to_prompt(monkeypatch):
-    captured: dict[str, str] = {}
+def test_reply_model_is_the_subtracted_spec(monkeypatch):
+    captured: dict[str, object] = {}
 
-    def fake_call(stage_id, llm_config, row, **kw):
+    def fake_call(stage_id, llm_config, row, *, reply_model, **kw):
+        captured["fields"] = set(reply_model.model_fields)
         captured["template"] = llm_config.prompt_template
         return {"score": 5}
 
     monkeypatch.setattr(lt, "call_llm", fake_call)
     _run(_stage(), {"load": pd.DataFrame({"id": ["r1"], "text": ["hi"]})})
 
-    template = captured["template"]
-    assert "Rate: {text}" in template                      # original template preserved
-    assert "Return ONE JSON object only" in template       # reply-spec header
-    reply_section = template.split("Return ONE JSON object only")[1]
-    assert '"score"' in reply_section                      # the derived new column is asked for
-    assert '"text"' not in reply_section                   # passthrough columns are NOT asked for
+    assert captured["fields"] == {"score"}            # added column asked for…
+    # …passthrough columns are not: they ride through from the input row.
+    assert captured["template"] == "Rate: {text}"     # template reaches the backend unaltered
+
+
+def test_reply_model_enforces_the_spec():
+    # the model built for the stage rejects a wrong-shaped reply outright
+    stage = _stage()
+    spec = stage.output_schema.subtract(stage.inputs[0].table_schema)
+    model = spec.to_pydantic_model("score_reply")
+    with pytest.raises(ValidationError):
+        model.model_validate({"score": "not-a-number-at-all"})
 
 
 def test_output_rows_carry_reply_columns(monkeypatch):
@@ -54,20 +63,6 @@ def test_output_rows_carry_reply_columns(monkeypatch):
     out = _run(_stage(), {"load": pd.DataFrame({"id": ["r1"], "text": ["hi"]})})
     assert out.loc[0, "score"] == 7
     assert out.loc[0, "id"] == "r1"
-
-
-def test_list_reply_is_a_value_not_rows(monkeypatch):
-    # A JSON-list reply is data, not rows: exactly one output row per input row,
-    # the reply kept whole in _raw (then dropped-and-recorded by projection,
-    # since _raw is undeclared). The declared reply column is absent — output
-    # schema validation surfaces that on the run; nothing is invented.
-    monkeypatch.setattr(lt, "call_llm", lambda *a, **k: [{"score": 1}, {"score": 2}])
-    ctx: dict = {}
-    out = _run(_stage(), {"load": pd.DataFrame({"id": ["r1"], "text": ["hi"]})}, ctx)
-    assert len(out) == 1                                   # 1:1 — never fans out
-    assert list(out.columns) == ["id", "text"]             # "score" absent, not invented
-    assert "_raw" in ctx["dropped_columns"]["score"]       # reply preserved + recorded
-                                                           # ("score" = the stage id)
 
 
 def test_backend_error_is_recorded_per_row_not_raised(monkeypatch):

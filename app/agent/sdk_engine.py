@@ -31,10 +31,9 @@ from claude_agent_sdk import (
     query,
 )
 
-# `_CLI_PATH` is the located Claude Code CLI (the SDK does not always find it on
-# PATH on Windows); reuse llm_agent_sdk's resolution so this engine and the
-# runtime backend agree on which CLI to spawn.
-from app.runtime.llm_agent_sdk import _CLI_PATH
+# `CLI_PATH` is the located Claude Code CLI (the SDK does not always find it on
+# PATH on Windows — app.core.llm_sdk probes the known install locations).
+from app.core.llm_sdk import CLI_PATH as _CLI_PATH
 
 CLI_MODEL = os.environ.get("CW_CHAT_CLI_MODEL", "sonnet")
 

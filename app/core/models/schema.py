@@ -74,6 +74,14 @@ class SourceRef(_Base):
     lines: Optional[list[int]] = None
 
 
+def _is_range_bound(v: Any) -> bool:
+    """Whether `v` is a valid `range` element: a non-bool number, or a string
+    containing "inf" (the unbounded-on-this-side sentinel)."""
+    if isinstance(v, str):
+        return "inf" in v
+    return isinstance(v, (int, float)) and not isinstance(v, bool)
+
+
 # ── Typed columns / schemas ──────────────────────────────────────────────────
 class Column(_Base):
     name: str
@@ -159,8 +167,11 @@ class Column(_Base):
     @model_validator(mode="after")
     def _range_is_numeric_bounds(self) -> "Column":
         """`range` is a numeric [low, high] bounds pair, valid only on int/float
-        columns. A categorical string vocabulary is declared with `enum`, not
-        `range`."""
+        columns. Either bound may instead be a string containing "inf" (e.g.
+        "+inf", "-inf") as an unbounded sentinel on that side — the same
+        sentinel `app/runtime/validation.py` recognizes when checking row data
+        against a declared range. A categorical string vocabulary is declared
+        with `enum`, not `range`."""
         if self.range is None:
             return self
         if self.type not in ("int", "float"):
@@ -169,12 +180,11 @@ class Column(_Base):
                 f"(int/float) columns (got {self.type!r}) — use enum for a "
                 "categorical string vocabulary"
             )
-        if len(self.range) != 2 or not all(
-            isinstance(v, (int, float)) and not isinstance(v, bool) for v in self.range
-        ):
+        if len(self.range) != 2 or not all(_is_range_bound(v) for v in self.range):
             raise ValueError(
                 f"column {self.name!r}: range must be exactly two numbers "
-                f"[low, high], got {self.range!r}"
+                f"[low, high] (a bound may be a string containing \"inf\" for "
+                f"unbounded), got {self.range!r}"
             )
         return self
 
@@ -392,6 +402,21 @@ class TableSchema(_Base):
             lines.extend(_render_column(c, ""))
         lines.append("Any other key is invalid.")
         return "\n".join(lines)
+
+    def to_pydantic_model(self, name: str) -> type[BaseModel]:
+        """Compile this schema to a Pydantic model class named `name`, one
+        field per column: scalar type, nullability, enum vocabulary, numeric
+        range, and description all carry over, and a `json`/`list[json]`
+        column's `fields` become a nested model, validated recursively. Every
+        column is a REQUIRED field — `nullable` permits a None value, not an
+        absent key — and unknown keys are rejected. The model both validates a
+        reply and, via `model_json_schema()`, states the expected shape up
+        front (e.g. as an agent tool's input schema)."""
+        # Local import: the builder needs Column/`_LIST_RE` from this module,
+        # so importing it at module scope would be circular.
+        from app.core.models.row_model import build_row_model
+
+        return build_row_model(name, self.columns)
 
 
 # ── Error formatting ─────────────────────────────────────────────────────────
