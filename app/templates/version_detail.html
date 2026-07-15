@@ -1,0 +1,69 @@
+{% extends "project_shell.html" %}
+{#
+  VERSION DETAIL — one immutable workflow version, read-only. Its frozen stage
+  graph plus metadata (message, coverage, published state) and the actions that
+  target this version: publish, run this version. Belief review is not here — a
+  version is frozen; review happens on the working-copy editor.
+
+  Context: state; section="workflow"; version (meta + computed `published`);
+           mermaid (frozen graph string); type_class; type_glyph.
+#}
+{% block title %}{{ state.meta.title or state.name }} · Version {{ version.id }}{% endblock %}
+
+{% block section_head %}
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    mermaid.initialize({ startOnLoad: false, theme: "default",
+      flowchart: { curve: "basis", padding: 20, useMaxWidth: false },
+      securityLevel: "loose" });
+  });
+</script>
+<script src="/static/diagram_viewport.js"></script>
+{% endblock %}
+
+{% block section %}
+<div class="sec-head wf-head">
+  <div class="wf-head-title">
+    <h1>Version <code>{{ version.id }}</code></h1>
+    <p class="lede">A read-only snapshot of the workflow. {% if version.message %}{{ version.message }}{% endif %}</p>
+  </div>
+  <div class="actions wf-actions">
+    <a href="/project/{{ state.name }}/workflow" class="btn">← All versions</a>
+    {% if version.published %}
+    <span class="muted">✓ published {{ version.published_at or '' }}</span>
+    <form action="/project/{{ state.name }}/workflow/version/{{ version.id }}/run" method="post" style="display:inline">
+      <button type="submit" class="btn primary">▶ Run this version</button>
+    </form>
+    {% else %}
+    <form action="/project/{{ state.name }}/versions/{{ version.id }}/publish" method="post" style="display:inline">
+      <button type="submit" class="btn primary">Publish</button>
+    </form>
+    <span class="muted">unpublished — publish to run</span>
+    {% endif %}
+  </div>
+</div>
+
+{# coverage (frozen at creation) #}
+{% set cov = version.coverage %}
+{% if cov %}
+<p class="muted"><b>{{ cov.approved }}</b>/{{ cov.total }} nodes approved when this version was cut.</p>
+{% endif %}
+
+<div class="wf-stack"><div class="wf-top">
+  <div class="diagram-block">
+    <div class="diagram-tools">
+      <button type="button" data-zoom="in" title="Zoom in">+</button>
+      <button type="button" data-zoom="out" title="Zoom out">−</button>
+      <button type="button" data-zoom="reset" title="Fit to width">reset</button>
+      <button type="button" class="diagram-fs" title="Fullscreen">⛶ fullscreen</button>
+      <span class="muted diagram-hint">drag to pan · ⌘/Ctrl-scroll to zoom</span>
+    </div>
+    <div class="diagram-viewport">
+      <pre class="mermaid">
+{{ mermaid }}
+      </pre>
+    </div>
+  </div>
+</div></div>
+{% endblock %}

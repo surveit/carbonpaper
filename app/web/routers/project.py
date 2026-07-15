@@ -55,7 +55,7 @@ from app.core.models import (
     validate_schema_library,
 )
 from app.services import data_model as data_model_service
-from app.services import generation, node_review, project
+from app.services import generation, node_review, project, versioning
 from app.services.loader import stage_to_spec_dict
 from app.web.config import EXAMPLES_DIR, templates
 from app.web.diagrams import (
@@ -392,6 +392,33 @@ async def project_workflow(request: Request, project_name: str):
             "stages": stages,
             "mermaid": mermaid,
             "coverage": coverage,
+            "type_class": TYPE_CLASS,
+            "type_glyph": TYPE_GLYPH,
+        },
+    )
+
+
+@router.get("/project/{project_name}/workflow/version/{version_id}",
+            response_class=HTMLResponse)
+async def project_workflow_version(request: Request, project_name: str, version_id: str):
+    """A single workflow VERSION, read-only: its frozen stage graph plus the
+    version's metadata, publish state, and the actions that target it (publish,
+    run this version). A version is immutable, so nothing here edits — belief
+    review lives on the working-copy editor. 404 if the version does not exist."""
+    pdir = _project_dir(project_name)
+    try:
+        stages = versioning.load_version_stages(pdir, version_id)
+        meta = versioning.load_version_meta(pdir, version_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return templates.TemplateResponse(
+        request,
+        "version_detail.html",
+        {
+            "state": shell_state(pdir),
+            "section": "workflow",
+            "version": {**meta, "published": versioning.version_is_published(meta)},
+            "mermaid": build_mermaid_graph(stages, project_name),
             "type_class": TYPE_CLASS,
             "type_glyph": TYPE_GLYPH,
         },
