@@ -25,8 +25,8 @@ per-file issues. Typed `Stage` objects flow end-to-end.
 `runner.py` — `execute_run`/`prepare_run`/`run_prepared`/`resume_run`. Per stage: validate
 inputs, reject duplicate rows, dispatch, validate output, write `outputs/<stage>.parquet`,
 flush `manifest.json` mid-run; halt-on-review + resume; per-run `--limit`/`--offset`;
-`field_checks`. `stages/` — one module per type. `llm*.py`/`options.py` — backends (opt-in
-mock). `preview.py` — scratch re-runs.
+`field_checks`. `stages/` — one module per type. `llm.py`/`options.py` — the agent
+backend (no fallback). `preview.py` — scratch re-runs.
 
 Stage handlers register under a *shape* (`app/runtime/stages/execution.py`):
 `RowMapHandler` (the runtime maps a per-row function over the stage's single
@@ -62,4 +62,5 @@ into `versions/<id>/`).
 `chat/` — a reusable PydanticAI chat engine (streaming, tools, file persistence), separate
 from the row-mapped `llm_transform` path; own env (`CW_CHAT_BACKEND`); one demo tool, not yet
 wired in. `core/llm/options.py` — the `LLMModel` menu. `tests/` (pytest; `conftest.py` forces
-`CW_LLM_FORCE_MOCK=1`); `.github/workflows/ci.yml` runs ruff + mypy + pytest on every PR.
+`agent_available` False so no test can reach a real model); `.github/workflows/ci.yml`
+runs ruff + mypy + pytest on every PR.

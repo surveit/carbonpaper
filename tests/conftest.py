@@ -1,8 +1,9 @@
 """Shared pytest fixtures.
 
-Default every test to the deterministic offline mock backend so the suite never
-shells out to the real `claude` CLI or touches the network. Tests that exercise
-backend *selection* opt out with monkeypatch.delenv("CW_LLM_FORCE_MOCK").
+Tests never reach a live LLM: `agent_available` is forced False, so any
+un-stubbed `call_llm` raises `LLMError` instead of shelling out to the real
+`claude` CLI. A test that exercises the LLM boundary monkeypatches `call_llm`
+(or `agent_available`) itself.
 """
 from __future__ import annotations
 
@@ -10,5 +11,5 @@ import pytest
 
 
 @pytest.fixture(autouse=True)
-def force_mock_llm(monkeypatch):
-    monkeypatch.setenv("CW_LLM_FORCE_MOCK", "1")
+def offline_llm(monkeypatch):
+    monkeypatch.setattr("app.runtime.options.agent_available", lambda: False)

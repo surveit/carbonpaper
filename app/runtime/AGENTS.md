@@ -31,24 +31,21 @@ FeatureCollection) + `computed_static`; `python_row_function`/`python_frame_func
 `human_review_queue` (content-hash → prior decisions or halt);
 `publish` (a `function` module that writes artifacts).
 
-## LLM backends (`llm_transform`)
-- `options.py` `get_llm_call_type()` picks `agent | mock` from `CW_LLM_BACKEND`
-  (default `auto`: agent when available — `claude_agent_sdk` importable and a `claude`
-  CLI located, incl. Windows `~/.local/bin/claude.exe`). Mock is opt-in
-  (`CW_LLM_FORCE_MOCK=1`); with no live backend it raises rather than silently mocking.
-- `llm.py` `call_llm` renders the stage's prompt and dispatches to the live backend: a
-  headless structured-output `app.agent.agent.Agent` whose `target_schema` is the stage's
-  compiled reply model, so the reply is validated by construction rather than parsed from
-  prose. A stage declaring `llm.tools` fails loudly — the agent backend doesn't support
-  tools. Run per row by the row driver under bounded parallelism. `llm_mock.py` —
-  deterministic offline mock.
+## LLM backend (`llm_transform`)
+- `options.py` `require_agent_backend()` raises unless the agent backend can run
+  (`claude_agent_sdk` importable and a `claude` CLI located, incl. Windows
+  `~/.local/bin/claude.exe`). The agent is the ONLY backend — no fallback of any kind.
+- `llm.py` `call_llm` renders the stage's prompt and runs a headless structured-output
+  `app.agent.agent.Agent` whose `target_schema` is the stage's compiled reply model, so
+  the reply is validated by construction rather than parsed from prose. A stage declaring
+  `llm.tools` fails loudly — the agent backend doesn't support tools. Run per row by the
+  row driver under bounded parallelism.
 
 `validation.py` — DATA validation of a dataframe against an `output_schema` (columns, types,
 ranges, nullability, PK uniqueness), distinct from the stage schemas in `app/core/models/`.
 
 ## Run / debug
 ```
-python -m app.runtime.runner <project_dir>            # auto backend
-CW_LLM_FORCE_MOCK=1 python -m app.runtime.runner ...  # deterministic, no LLM
+python -m app.runtime.runner <project_dir>
 ```
 Outputs: `runs/<id>/{manifest.json, outputs/*.parquet, artifacts/, queue/}`.

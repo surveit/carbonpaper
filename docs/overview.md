@@ -5,8 +5,8 @@ Serves **journalism and institutional accountability**: finding, verifying, and 
 true things about how power and money work. The standards *are* the product — a fabricated
 number or unsourced claim defeats the purpose. Two rules recur in the code:
 - **Never fabricate; fail loudly.** An unsourceable value is `null`/`unknown`; the pipeline
-  halts or errors rather than inventing a number, URL, citation, or quote (backends never
-  silently mock; the runner rejects duplicate rows; the queue says "reviewing blind").
+  halts or errors rather than inventing a number, URL, citation, or quote (a missing LLM
+  backend raises; the runner rejects duplicate rows; the queue says "reviewing blind").
 - **Expensive or irreversible steps sit behind human review.** `human_review_queue` halts
   the run; decisions are content-hashed so they survive re-runs.
 
