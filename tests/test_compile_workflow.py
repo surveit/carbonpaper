@@ -122,3 +122,8 @@ def test_start_workflow_generation_agent_runs_a_live_turn_and_calls_back(monkeyp
 def test_workflow_system_prompt_submits_and_optimizes_for_reviewability():
     assert "submit_answer" in WORKFLOW_SYSTEM_PROMPT              # the agent submits
     assert "review" in WORKFLOW_SYSTEM_PROMPT.lower()            # optimize for human reviewability
+
+
+def test_prompt_forbids_inventing_file_paths():
+    line = next(prompt_line for prompt_line in WORKFLOW_SYSTEM_PROMPT.splitlines() if "input_data" in prompt_line)
+    assert "never include a file path" in line.lower()

@@ -19,7 +19,8 @@ issues and call it again.
 # The stage types
 Express each step as one typed stage; the submit_answer schema defines each type's exact
 shape. In one line each:
-- input_data — brings a known starting dataset into the workflow.
+- input_data — brings a known starting dataset into the workflow; declare its schema and connector kind, and NEVER include a file path (where data
+  physically lives is not part of the methodology — the user binds a file when starting a run).
 - python_row_function — deterministic code run per row, one row in → one row out (preferred
   for mechanism; it cannot fan rows out or in).
 - python_frame_function — deterministic code over the whole frame(s) that may reshape it
