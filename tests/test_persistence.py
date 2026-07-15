@@ -54,3 +54,21 @@ def test_read_tolerant_corrupt_returns_none(store):
     )
     store._conn.commit()
     assert store.read_tolerant("run", "proj/bad") is None
+
+
+def test_list_ids_scopes_by_prefix(store):
+    store.write("run", "roldugin/1", {"n": 1})
+    store.write("run", "roldugin/2", {"n": 2})
+    store.write("run", "assad/1", {"n": 9})
+    assert store.list_ids("run") == ["assad/1", "roldugin/1", "roldugin/2"]
+    assert store.list_ids("run", "roldugin/") == ["roldugin/1", "roldugin/2"]
+
+
+def test_read_all_yields_id_and_body(store):
+    store.write("run", "p/1", {"n": 1})
+    store.write("run", "p/2", {"n": 2})
+    assert dict(store.read_all("run", "p/")) == {"p/1": {"n": 1}, "p/2": {"n": 2}}
+
+
+def test_list_ids_empty_collection(store):
+    assert store.list_ids("nothing") == []

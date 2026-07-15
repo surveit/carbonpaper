@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from typing import Any
+from typing import Any, Iterator
 
 from app.core.errors import DocumentNotFound
 
@@ -110,4 +110,27 @@ class SqliteKvStore:
         except json.JSONDecodeError:
             return None
         return parsed
+
+    def _scan(self, columns: str, collection: str, prefix: str) -> sqlite3.Cursor:
+        # `columns` is an internal literal, never user input. Prefix match is an
+        # index-friendly range on the (collection, id) primary key.
+        if prefix:
+            hi = prefix[:-1] + chr(ord(prefix[-1]) + 1)
+            return self._conn.execute(
+                f"SELECT {columns} FROM documents "
+                "WHERE collection=? AND id>=? AND id<? ORDER BY id",
+                (collection, prefix, hi),
+            )
+        return self._conn.execute(
+            f"SELECT {columns} FROM documents WHERE collection=? ORDER BY id",
+            (collection,),
+        )
+
+    def list_ids(self, collection: str, prefix: str = "") -> list[str]:
+        return [row[0] for row in self._scan("id", collection, prefix)]
+
+    def read_all(self, collection: str, prefix: str = "") -> Iterator[tuple[str, JsonDict]]:
+        for row_id, data in self._scan("id, data", collection, prefix):
+            body: JsonDict = json.loads(data)
+            yield row_id, body
 
