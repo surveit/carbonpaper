@@ -1,7 +1,7 @@
 import pytest
 
 from app.core.errors import DocumentNotFound
-from app.core.persistence import SqliteKvStore
+from app.core.persistence import PersistedModel, SqliteKvStore, configure_store
 
 
 @pytest.fixture
@@ -72,3 +72,45 @@ def test_read_all_yields_id_and_body(store):
 
 def test_list_ids_empty_collection(store):
     assert store.list_ids("nothing") == []
+
+
+class _Widget(PersistedModel):
+    collection = "widget"
+    name: str
+    count: int = 0
+
+
+@pytest.fixture
+def configured():
+    configure_store(SqliteKvStore(":memory:"))
+
+
+def test_save_and_load(configured):
+    _Widget(id="a", name="hi", count=2).save()
+    got = _Widget.load("a")
+    assert (got.name, got.count) == ("hi", 2)
+
+
+def test_load_or_none_missing(configured):
+    assert _Widget.load_or_none("absent") is None
+
+
+def test_list_returns_all_typed(configured):
+    _Widget(id="a", name="x").save()
+    _Widget(id="b", name="y").save()
+    names = sorted(w.name for w in _Widget.list())
+    assert names == ["x", "y"]
+
+
+def test_delete_and_exists(configured):
+    _Widget(id="a", name="x").save()
+    assert _Widget.exists("a") is True
+    _Widget.delete("a")
+    assert _Widget.exists("a") is False
+
+
+def test_get_store_unconfigured_raises():
+    import app.core.persistence as p
+    p._store = None
+    with pytest.raises(RuntimeError):
+        p.get_store()
