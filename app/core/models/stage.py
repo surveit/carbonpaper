@@ -220,12 +220,34 @@ class QueueConfig(_Base):
 
 
 class PublishConfig(_Base):
-    """publish handle (runs alongside a `function` block)."""
+    """publish handle (runs alongside a `function` block).
+
+    publish is the workflow's terminal, side-effecting step: its function is
+    handed the whole input frame(s) plus an `output_dir` and WRITES artifacts
+    (an HTML report, a set of per-subject files, …), then returns a small
+    manifest frame — one row per written artifact. It is a whole-frame operation,
+    not a row map: `one_file_per` / `cross_link` and combined reports need to see
+    many/all rows at once, which a 1-row-in/1-row-out map forbids. That is why
+    publish is a FrameHandler (never grain-and-order preserving) and NOT a
+    python_row_function; see issue #125.
+
+    `path_column` names WHICH column of that returned frame carries each
+    artifact's path (repo-/run-relative). The runtime does not guess: the handler
+    requires the returned frame to contain this column, so "which output column is
+    the path" is a declared part of the contract rather than a convention the
+    caller has to reverse-engineer from the function body."""
     format: Optional[PublishFormat] = None
     destination: Optional[str] = None
     template: Optional[str] = None
     one_file_per: Optional[str] = None
     cross_link: Optional[bool] = None
+    path_column: str = Field(
+        default="path",
+        description=(
+            "Column of the publish function's returned frame that holds each "
+            "written artifact's path (one row per artifact). Defaults to `path`."
+        ),
+    )
 
 
 class ReviewConfig(_Base):

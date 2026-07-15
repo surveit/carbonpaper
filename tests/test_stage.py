@@ -83,6 +83,25 @@ def test_publish_config_is_typed():
     assert s.publish.format == m.PublishFormat.json
 
 
+def test_publish_path_column_defaults_and_overrides():
+    default = m.Stage.model_validate(S(
+        id="p", type="publish", inputs=[{"id": "a"}],
+        publish={"format": "json"}, function={"kind": "inline", "code": "def transform(row): return row"}))
+    assert default.publish.path_column == "path"
+    custom = m.Stage.model_validate(S(
+        id="p", type="publish", inputs=[{"id": "a"}],
+        publish={"format": "json", "path_column": "artifact_path"},
+        function={"kind": "inline", "code": "def transform(row): return row"}))
+    assert custom.publish.path_column == "artifact_path"
+
+
+def test_publish_is_not_grain_and_order_preserving():
+    # publish is a terminal, whole-frame operation (issue #125): it must not be
+    # modeled as a row map, so it can never be grain-and-order preserving.
+    from app.core.models.stage import is_grain_and_order_preserving
+    assert is_grain_and_order_preserving(m.StageType.publish) is False
+
+
 def test_python_function_inline_needs_code():
     with pytest.raises(ValidationError):
         m.Stage.model_validate(S(id="t", type="python_frame_function", inputs=[{"id": "a"}],
