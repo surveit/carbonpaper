@@ -55,8 +55,15 @@ diagrams}.py` — paths + Jinja · viewer reads over the loader · mermaid/ER bu
 ## `app/services/` — web-independent workflow logic
 `loader.py` (canonical stage loader, above); `compilation.py` (compile persistence for
 `app/compiler`); `node_review.py` (content-hash approval over stage specs — read its
-docstring; the canonical-hash invariant must not rot); `versioning.py` (freeze `compiled/`
-into `versions/<id>/`).
+docstring; the canonical-hash invariant must not rot); `versioning.py` (freezes stages
+into an immutable `versions/<id>/` snapshot — a stage already carries its own
+input/output schemas, so a version has no separate schemas snapshot; mintable from the
+working `compiled/` directory or directly from a list of stage dicts; born unpublished,
+`publish_version` stamps human approval as metadata only, and the runner resolves
+published versions only); `drafts.py` (disposable, mutable scratch stages at a
+project's drafts directory for an agent or UI to assemble before freezing — invalid
+mid-edit is allowed, and `save_version` is its only exit, refusing an invalid draft
+with the full issue list).
 
 ## `app/chat/`, `app/core/llm/`, tests
 `chat/` — a reusable PydanticAI chat engine (streaming, tools, file persistence), separate

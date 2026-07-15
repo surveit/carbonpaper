@@ -3,11 +3,11 @@ workflow.
 
 `make_editing_tools(ctx)` returns callables bound to one editing session's
 `EditingContext` (which project it edits). Each read/write tool takes an explicit
-`project_id` and goes through the NAME-BASED service surface in
+`project_id` and goes through the NAME-BASED service surfaces in
 `app.services.project` (which resolves the project directory and returns in-memory
-objects) — the tools never build a filesystem path. `get_current_project` returns
-the project the session was opened on (call it first, then pass its value as
-`project_id`).
+objects) and `app.services.drafts` (the disposable draft-editing lifecycle) — the
+tools never build a filesystem path. `get_current_project` returns the project the
+session was opened on (call it first, then pass its value as `project_id`).
 
 The callables are wrapped as an in-process claude_agent_sdk MCP server by the
 generic `app.agent.registry.build_mcp_server`, using `TOOL_SCHEMAS` (input

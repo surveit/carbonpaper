@@ -1,7 +1,7 @@
 """Integration: the runner's row slicing (static `limit:` + per-run
 --limit/--offset overrides) with manifest persistence, the duplicate-input-row
 check at every stage boundary, and the version-lifecycle invariant that a run
-targets an existing version and never creates one.
+targets an existing, published version and never creates one.
 
 Builds small file-connector projects in a tmp dir, snapshots them into a
 version, runs them, and checks that `limit:` truncated the output, that per-run

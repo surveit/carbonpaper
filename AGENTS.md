@@ -17,7 +17,7 @@ app/core/models/    stage-type schemas (Pydantic) — source of truth; loader re
 app/runtime/   the Runner (executor, stages/, LLM backends)   → app/runtime/AGENTS.md
 app/compiler/  prose → LLM → workflow engine (python -m app.compiler)
 app/web/       FastAPI routers + diagrams (thin app/main.py)  → app/AGENTS.md
-app/services/  web-independent logic (loader, compilation, node review, versioning)
+app/services/  web-independent logic (loader, compilation, node review, versioning, drafts)
 app/chat/  PydanticAI chat · app/core/llm/  model menu · tests/  pytest (offline)
 ```
 
