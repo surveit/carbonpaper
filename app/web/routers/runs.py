@@ -74,14 +74,17 @@ async def trigger_run(project: str):
 
 @router.post("/project/{project}/workflow/version/{version_id}/run")
 async def trigger_run_of_version(project: str, version_id: str):
-    """Run one specific version. Pins the run to `version_id` (published only —
-    prepare_run raises NoVersionToRunError for an unpublished or missing id). Same
-    background-and-redirect flow as trigger_run."""
+    """Run one specific version. Pins the run to `version_id`: prepare_run raises
+    FileNotFoundError for a version_id with no version.json on disk (404), and
+    NoVersionToRunError for a version_id that exists but is not published (400).
+    Same background-and-redirect flow as trigger_run."""
     project_dir = EXAMPLES_DIR / project
     if not project_dir.is_dir():
         raise HTTPException(status_code=404, detail=f"No project '{project}'")
     try:
         prep = prepare_run(project_dir, REPO_ROOT, version_id=version_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
     except NoVersionToRunError as exc:
         return JSONResponse({"detail": str(exc)}, status_code=400)
     except WorkflowLoadError as exc:

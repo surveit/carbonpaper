@@ -419,8 +419,6 @@ async def project_workflow_version(request: Request, project_name: str, version_
             "section": "workflow",
             "version": {**meta, "published": versioning.version_is_published(meta)},
             "mermaid": build_mermaid_graph(stages, project_name),
-            "type_class": TYPE_CLASS,
-            "type_glyph": TYPE_GLYPH,
         },
     )
 

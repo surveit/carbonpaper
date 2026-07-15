@@ -47,6 +47,13 @@ def test_version_detail_404_for_unknown_version(project: Path) -> None:
     assert client.get("/project/demo/workflow/version/20990101T000000").status_code == 404
 
 
+def test_run_this_version_404_for_nonexistent_version(project: Path) -> None:
+    resp = client.post(
+        "/project/demo/workflow/version/20990101T000000/run", follow_redirects=False
+    )
+    assert resp.status_code == 404
+
+
 def test_run_this_version_gated_on_published(project: Path) -> None:
     meta = versioning.create_version(project, message="v1", reviewer="local")
     vid = meta["id"]
