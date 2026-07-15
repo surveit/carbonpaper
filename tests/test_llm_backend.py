@@ -1,7 +1,8 @@
-"""get_llm_call_type() decision matrix — fully hermetic via monkeypatch.
+"""Backend availability policy — fully hermetic via monkeypatch.
 
-The key policy: a live backend that isn't available RAISES — we never silently
-fall back to the mock. `mock` is reachable only when explicitly requested.
+The key policy: the structured-output agent is the ONLY backend and there is
+no fallback. When it isn't available (claude-agent-sdk not importable, or no
+claude CLI located), the runtime raises rather than fabricating a reply.
 """
 from __future__ import annotations
 
@@ -14,59 +15,41 @@ from app.runtime import llm as llm_module
 from app.runtime import options
 
 
-def _set(monkeypatch, *, force_mock=False, backend=None, agent=False):
-    if force_mock:
-        monkeypatch.setenv("CW_LLM_FORCE_MOCK", "1")
-    else:
-        monkeypatch.delenv("CW_LLM_FORCE_MOCK", raising=False)
-    if backend is None:
-        monkeypatch.delenv("CW_LLM_BACKEND", raising=False)
-    else:
-        monkeypatch.setenv("CW_LLM_BACKEND", backend)
-    monkeypatch.setattr(options, "agent_available", lambda: agent)
+class _Reply(BaseModel):
+    score: int
 
 
-def test_force_mock_overrides_everything(monkeypatch):
-    _set(monkeypatch, force_mock=True, backend="agent", agent=True)
-    assert options.get_llm_call_type() == "mock"
+def test_available_backend_passes(monkeypatch):
+    monkeypatch.setattr(options, "agent_available", lambda: True)
+    options.require_agent_backend()  # does not raise
 
 
-def test_explicit_mock(monkeypatch):
-    _set(monkeypatch, backend="mock", agent=True)
-    assert options.get_llm_call_type() == "mock"
-
-
-def test_auto_picks_agent_when_available(monkeypatch):
-    _set(monkeypatch, agent=True)
-    assert options.get_llm_call_type() == "agent"
-
-
-def test_auto_without_agent_raises_never_mocks(monkeypatch):
-    _set(monkeypatch, agent=False)
+def test_unavailable_backend_raises(monkeypatch):
+    monkeypatch.setattr(options, "agent_available", lambda: False)
     with pytest.raises(LLMError):
-        options.get_llm_call_type()
+        options.require_agent_backend()
 
 
-def test_explicit_agent_unavailable_raises(monkeypatch):
-    _set(monkeypatch, backend="agent", agent=False)
+def test_call_llm_without_backend_raises(monkeypatch):
+    """`call_llm` refuses to run without a live backend — no fallback reply."""
+    monkeypatch.setattr(options, "agent_available", lambda: False)
+    config = LLMConfig(prompt_template="Rate: {text}")
     with pytest.raises(LLMError):
-        options.get_llm_call_type()
-
-
-def test_unknown_backend_value_raises(monkeypatch):
-    _set(monkeypatch, backend="cli", agent=True)
-    with pytest.raises(LLMError):
-        options.get_llm_call_type()
+        llm_module.call_llm("stage", config, {"text": "hi"}, reply_model=_Reply)
 
 
 def test_call_llm_with_tools_raises_before_running_agent(monkeypatch):
     """`llm.tools` is not supported by the agent backend: `call_llm` must reject
     it up front, without constructing or running an `Agent`."""
-    monkeypatch.setattr(llm_module, "get_llm_call_type", lambda: "agent")
-
-    class _Reply(BaseModel):
-        score: int
+    monkeypatch.setattr(options, "agent_available", lambda: True)
 
     config = LLMConfig(prompt_template="Rate: {text}", tools=["WebSearch"])
     with pytest.raises(LLMError):
         llm_module.call_llm("stage", config, {"text": "hi"}, reply_model=_Reply)
+
+
+def test_backend_status_reports_unavailability(monkeypatch):
+    monkeypatch.setattr(options, "agent_available", lambda: False)
+    status = llm_module.backend_status()
+    assert status["backend"] is None
+    assert "No LLM backend available" in status["backend_error"]
