@@ -17,7 +17,7 @@ def read_input_data(stage: Stage, ctx: dict[str, Any]) -> pd.DataFrame:
     params = connector.params
 
     if connector.kind == ConnectorKind.file:
-        path = ctx["repo_root"] / params["path"]   # required by Connector validation
+        path = Path(params["path"])   # absolute: Connector/model + apply_input_bindings enforce it
         fmt = params.get("format", "csv")
         if fmt == "csv":
             df = pd.read_csv(path)

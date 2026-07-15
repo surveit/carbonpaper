@@ -131,3 +131,13 @@ def test_bound_file_must_exist_before_run_dir(tmp_path):
         execute_run(tmp_path, repo_root=tmp_path,
                     bindings={"load": str(tmp_path / "ghost.csv")})
     assert not (tmp_path / "runs").exists()
+
+
+def test_handler_ignores_repo_root_for_file_inputs(tmp_path):
+    # The path is absolute; repo_root must play no part in resolving it.
+    _make_bound_project(tmp_path)
+    elsewhere = tmp_path / "unrelated_repo_root"
+    elsewhere.mkdir()
+    manifest = execute_run(tmp_path, repo_root=elsewhere)
+    assert manifest["status"] == "ok"
+    assert manifest["stages"][0]["rows"] == 2
