@@ -14,9 +14,9 @@ def S(**kw):
     return kw
 
 
-def _file_input(id_):
+def _file_input(id_, tmp_path):
     return S(id=id_, type="input_data",
-             connector={"kind": "file", "params": {"path": f"{id_}.csv"}})
+             connector={"kind": "file", "params": {"path": str(tmp_path / f"{id_}.csv")}})
 
 
 def _py(id_, inputs, granularity="frame", **kw):
@@ -59,8 +59,8 @@ def test_llm_is_grain_and_order_preserving():
     assert s.is_grain_and_order_preserving is True
 
 
-def test_input_data_is_grain_and_order_preserving():
-    assert m.Stage.model_validate(_file_input("load")).is_grain_and_order_preserving is True
+def test_input_data_is_grain_and_order_preserving(tmp_path):
+    assert m.Stage.model_validate(_file_input("load", tmp_path)).is_grain_and_order_preserving is True
 
 
 def test_human_review_queue_not_grain_and_order_preserving():
@@ -227,38 +227,38 @@ def test_eval_run_has_no_passed_field():
 
 
 # ── resolve_eval_run_settings on a synthetic workflow ─────────────────────────────
-def _chain():
+def _chain(tmp_path):
     """a(input) → b(row) → c(frame) → d(row)."""
     return m.parse_workflow([
-        _file_input("a"),
+        _file_input("a", tmp_path),
         _py("b", ["a"], granularity="row"),
         _py("c", ["b"], granularity="frame"),
         _py("d", ["c"], granularity="row"),
     ])
 
 
-def test_blocked_by_frame_on_frontier():
-    v = resolve_eval_run_settings(_chain(), overrides=[], target="d")
+def test_blocked_by_frame_on_frontier(tmp_path):
+    v = resolve_eval_run_settings(_chain(tmp_path), overrides=[], target="d")
     assert v.can_score_declaratively is False
     assert v.blocking_stages == ["c"]
     assert set(v.frontier) == {"a", "b", "c", "d"}
 
 
-def test_override_cuts_above_the_frame_stage():
-    v = resolve_eval_run_settings(_chain(), overrides=["c"], target="d")
+def test_override_cuts_above_the_frame_stage(tmp_path):
+    v = resolve_eval_run_settings(_chain(tmp_path), overrides=["c"], target="d")
     assert v.can_score_declaratively is True
     assert v.frontier == ["d"]
 
 
-def test_scorable_when_tapping_before_the_frame_stage():
-    v = resolve_eval_run_settings(_chain(), overrides=[], target="b")
+def test_scorable_when_tapping_before_the_frame_stage(tmp_path):
+    v = resolve_eval_run_settings(_chain(tmp_path), overrides=[], target="b")
     assert v.can_score_declaratively is True
     assert set(v.frontier) == {"a", "b"}
 
 
-def test_join_changes_grain_so_not_scorable():
+def test_join_changes_grain_so_not_scorable(tmp_path):
     meth = m.parse_workflow([
-        _file_input("j1"), _file_input("j2"),
+        _file_input("j1", tmp_path), _file_input("j2", tmp_path),
         S(id="jn", type="join", inputs=[{"id": "j1"}, {"id": "j2"}],
           join={"keys": [{"left": "k", "right": "k"}]}),
     ])
@@ -267,16 +267,16 @@ def test_join_changes_grain_so_not_scorable():
     assert v.blocking_stages == ["jn"]
 
 
-def test_unknown_target_raises():
+def test_unknown_target_raises(tmp_path):
     with pytest.raises(ValueError):
-        resolve_eval_run_settings(_chain(), overrides=[], target="ghost")
+        resolve_eval_run_settings(_chain(tmp_path), overrides=[], target="ghost")
 
 
-def test_unknown_override_raises():
+def test_unknown_override_raises(tmp_path):
     with pytest.raises(ValueError):
-        resolve_eval_run_settings(_chain(), overrides=["ghost"], target="d")
+        resolve_eval_run_settings(_chain(tmp_path), overrides=["ghost"], target="d")
 
 
-def test_target_in_overrides_raises():
+def test_target_in_overrides_raises(tmp_path):
     with pytest.raises(ValueError):
-        resolve_eval_run_settings(_chain(), overrides=["d"], target="d")
+        resolve_eval_run_settings(_chain(tmp_path), overrides=["d"], target="d")

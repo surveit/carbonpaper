@@ -19,11 +19,13 @@ from app.services import node_review
 
 client = TestClient(app)
 
-_LOAD = {
-    "id": "load", "type": "input_data", "name": "Load documents",
-    "connector": {"kind": "file", "params": {"path": "data/docs.csv", "format": "csv"}},
-    "output_schema": {"columns": [{"name": "doc_id", "type": "str"}]},
-}
+def _load(tmp_path):
+    return {
+        "id": "load", "type": "input_data", "name": "Load documents",
+        "connector": {"kind": "file",
+                      "params": {"path": str(tmp_path / "data" / "docs.csv"), "format": "csv"}},
+        "output_schema": {"columns": [{"name": "doc_id", "type": "str"}]},
+    }
 _EXTRACT = {
     "id": "extract", "type": "llm_transform", "name": "Extract evidence pieces",
     "inputs": [{"id": "load", "schema": {"columns": [{"name": "doc_id", "type": "str"}],
@@ -49,7 +51,7 @@ def demo_project(tmp_path, monkeypatch):
     demo = tmp_path / "demo"
     compiled = demo / "compiled"
     compiled.mkdir(parents=True)
-    (compiled / "01_load.json").write_text(json.dumps(_LOAD, indent=2), encoding="utf-8")
+    (compiled / "01_load.json").write_text(json.dumps(_load(tmp_path), indent=2), encoding="utf-8")
     (compiled / "02_extract.json").write_text(json.dumps(_EXTRACT, indent=2), encoding="utf-8")
     schemas = demo / "schemas"
     schemas.mkdir()

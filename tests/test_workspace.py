@@ -7,14 +7,16 @@ from app.services import workspace
 # Stage validation (app/core/models/stage.py: Stage._handle_for_type) requires one
 # handle block per type — an input_data stage needs `connector`, an
 # llm_transform stage needs `llm` — or the tolerant loader reports it as an
-# issue rather than a parsed stage (see tests/test_loader.py's VALID fixture
+# issue rather than a parsed stage (see tests/test_loader.py's _valid fixture
 # for the same pattern). Minimal valid handles per type, added only when the
 # type needs one, so a stage written by this helper always round-trips through
 # Stage.model_validate.
-_HANDLE_BY_TYPE: dict[str, dict] = {
-    "input_data": {"connector": {"kind": "file", "params": {"path": "data/items.csv", "format": "csv"}}},
-    "llm_transform": {"llm": {"prompt_template": "score {row}"}},
-}
+def _handle_by_type(root: Path) -> dict[str, dict]:
+    return {
+        "input_data": {"connector": {"kind": "file",
+                                      "params": {"path": str(root / "data" / "items.csv"), "format": "csv"}}},
+        "llm_transform": {"llm": {"prompt_template": "score {row}"}},
+    }
 
 
 _LLM_IN_SCHEMA = {"primary_key": ["doc_id"],
@@ -27,7 +29,7 @@ _LLM_OUT_SCHEMA = {"primary_key": ["doc_id"],
 def _write_stage(compiled: Path, order: int, sid: str, stype: str, inputs: list[str]) -> None:
     compiled.mkdir(parents=True, exist_ok=True)
     stage: dict = {"id": sid, "name": f"{sid} step", "type": stype}
-    stage.update(_HANDLE_BY_TYPE.get(stype, {}))
+    stage.update(_handle_by_type(compiled.parent).get(stype, {}))
     if inputs:
         # llm_transform is strictly 1:1 (app/core/models/stage.py): its input and output
         # schemas must share a primary_key and the output must add a column.

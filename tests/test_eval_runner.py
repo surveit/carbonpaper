@@ -20,12 +20,14 @@ from app.evals.runner import run_eval
 from app.evals.store import load_eval_run, save_eval_config
 from app.services.versioning import WorkflowVersion
 
-_LOAD = {
-    "id": "load", "type": "input_data", "name": "Load rows",
-    "connector": {"kind": "file", "params": {"path": "data/rows.csv", "format": "csv"}},
-    "output_schema": {"columns": [{"name": "doc_id", "type": "str"},
-                                  {"name": "score", "type": "int"}]},
-}
+def _load(tmp_path):
+    return {
+        "id": "load", "type": "input_data", "name": "Load rows",
+        "connector": {"kind": "file",
+                      "params": {"path": str(tmp_path / "data" / "rows.csv"), "format": "csv"}},
+        "output_schema": {"columns": [{"name": "doc_id", "type": "str"},
+                                      {"name": "score", "type": "int"}]},
+    }
 # label = "pos" iff score >= 0 — a deterministic classifier we can predict.
 _CLASSIFY = {
     "id": "classify", "type": "python_row_function", "name": "Label by sign",
@@ -50,7 +52,7 @@ def project(tmp_path):
     WorkflowVersion(
         id="demo/v1", version_id="v1", created_at="2026-07-10T00:00:00",
         message="seed", reviewer="test",
-        stages=[Stage.model_validate(_LOAD), Stage.model_validate(_CLASSIFY)],
+        stages=[Stage.model_validate(_load(tmp_path)), Stage.model_validate(_CLASSIFY)],
     ).save()
 
     data = demo / "eval_data"

@@ -14,10 +14,10 @@ def S(**kw):
     return kw
 
 
-def _file_input(id_, cols=("k",)):
+def _file_input(id_, tmp_path, cols=("k",)):
     return m.Stage.model_validate(S(
         id=id_, type="input_data",
-        connector={"kind": "file", "params": {"path": f"{id_}.csv"}},
+        connector={"kind": "file", "params": {"path": str(tmp_path / f"{id_}.csv")}},
         output_schema={"columns": [{"name": c} for c in cols]}))
 
 
@@ -64,15 +64,15 @@ def _config(**over):
 
 # The default fixture: src(input) --v--> tgt(row), both grain-preserving, both
 # schemaed with columns matching the config above.
-def _stages():
-    src = _file_input("src", cols=["k", "v", "quote"])
+def _stages(tmp_path):
+    src = _file_input("src", tmp_path, cols=["k", "v", "quote"])
     tgt = _row("tgt", ["src"], output_schema={
         "columns": [{"name": "k"}, {"name": "score", "type": "float"}]})
     return [src, tgt]
 
 
-def test_all_conditions_pass():
-    report = check_eval_compatibility(_config(), _stages())
+def test_all_conditions_pass(tmp_path):
+    report = check_eval_compatibility(_config(), _stages(tmp_path))
     assert isinstance(report, CompatibilityReport)
     assert report.ok is True
     assert report.problems == []
@@ -80,34 +80,34 @@ def test_all_conditions_pass():
     assert report.settings.can_score_declaratively is True
 
 
-def test_unknown_override_stage():
-    report = check_eval_compatibility(_config(override_stage="ghost"), _stages())
+def test_unknown_override_stage(tmp_path):
+    report = check_eval_compatibility(_config(override_stage="ghost"), _stages(tmp_path))
     assert report.ok is False
     assert any("ghost" in p for p in report.problems)
     assert report.settings is None
 
 
-def test_unknown_target_stage():
-    report = check_eval_compatibility(_config(target_stage="ghost"), _stages())
+def test_unknown_target_stage(tmp_path):
+    report = check_eval_compatibility(_config(target_stage="ghost"), _stages(tmp_path))
     assert report.ok is False
     assert any("ghost" in p for p in report.problems)
     assert report.settings is None
 
 
-def test_unknown_reference_override_stage():
+def test_unknown_reference_override_stage(tmp_path):
     report = check_eval_compatibility(
         _config(reference_overrides=[{"stage_id": "ghost", "table": _ref()}]),
-        _stages())
+        _stages(tmp_path))
     assert report.ok is False
     assert any("ghost" in p for p in report.problems)
     assert report.settings is None
 
 
-def test_override_stage_has_no_output_schema():
+def test_override_stage_has_no_output_schema(tmp_path):
     # get_output_columns_from_stage would raise on this stage -- the
     # precondition check must catch it and report it, not let
     # check_eval_compatibility crash.
-    src = _file_input("src", cols=["k", "v", "quote"])
+    src = _file_input("src", tmp_path, cols=["k", "v", "quote"])
     src = src.model_copy(update={"output_schema": None})
     tgt = _row("tgt", ["src"], output_schema={
         "columns": [{"name": "k"}, {"name": "score", "type": "float"}]})
@@ -118,9 +118,9 @@ def test_override_stage_has_no_output_schema():
     assert report.settings is None
 
 
-def test_eval_dataset_table_missing_a_column_of_override_schema():
+def test_eval_dataset_table_missing_a_column_of_override_schema(tmp_path):
     # override's schema declares `extra_col`, which the eval-dataset table lacks.
-    src = _file_input("src", cols=["k", "v", "quote", "extra_col"])
+    src = _file_input("src", tmp_path, cols=["k", "v", "quote", "extra_col"])
     tgt = _row("tgt", ["src"], output_schema={
         "columns": [{"name": "k"}, {"name": "score", "type": "float"}]})
     report = check_eval_compatibility(_config(), [src, tgt])
@@ -128,10 +128,10 @@ def test_eval_dataset_table_missing_a_column_of_override_schema():
     assert any("extra_col" in p for p in report.problems)
 
 
-def test_dataset_schema_types_shared_column_differently():
+def test_dataset_schema_types_shared_column_differently(tmp_path):
     src = m.Stage.model_validate(S(
         id="src", type="input_data",
-        connector={"kind": "file", "params": {"path": "src.csv"}},
+        connector={"kind": "file", "params": {"path": str(tmp_path / "src.csv")}},
         output_schema={"columns": [
             {"name": "k"}, {"name": "v", "type": "int"}, {"name": "quote"}]}))
     tgt = _row("tgt", ["src"], output_schema={
@@ -148,11 +148,11 @@ def test_dataset_schema_types_shared_column_differently():
     assert any("v" in p for p in report.problems)
 
 
-def test_reference_override_missing_a_column_of_its_stage_schema():
-    src = _file_input("src", cols=["k", "v", "quote"])
+def test_reference_override_missing_a_column_of_its_stage_schema(tmp_path):
+    src = _file_input("src", tmp_path, cols=["k", "v", "quote"])
     tgt = _row("tgt", ["src"], output_schema={
         "columns": [{"name": "k"}, {"name": "score", "type": "float"}]})
-    ref_stage = _file_input("ref_stage", cols=["k", "extra"])
+    ref_stage = _file_input("ref_stage", tmp_path, cols=["k", "extra"])
     config = _config(reference_overrides=[
         {"stage_id": "ref_stage", "table": _ref(cols=["k"])}])
     report = check_eval_compatibility(config, [src, tgt, ref_stage])
@@ -160,31 +160,31 @@ def test_reference_override_missing_a_column_of_its_stage_schema():
     assert any("ref_stage" in p and "extra" in p for p in report.problems)
 
 
-def test_expected_output_column_not_in_target_schema():
+def test_expected_output_column_not_in_target_schema(tmp_path):
     # The checked-column resolution inside get_injected_columns would raise
     # on this config -- the precondition check must catch it and report it,
     # not let check_eval_compatibility crash.
     config = _config(expected_outputs=[
         {"output_column": "not_emitted", "metric": "abs_tol", "tolerance": 1}])
-    report = check_eval_compatibility(config, _stages())
+    report = check_eval_compatibility(config, _stages(tmp_path))
     assert isinstance(report, CompatibilityReport)
     assert report.ok is False
     assert any("not_emitted" in p for p in report.problems)
     assert report.settings is None
 
 
-def test_abs_tol_metric_on_str_typed_target_column():
+def test_abs_tol_metric_on_str_typed_target_column(tmp_path):
     tgt = _row("tgt", ["src"], output_schema={
         "columns": [{"name": "k"}, {"name": "score", "type": "str"}]})
-    src = _file_input("src", cols=["k", "v", "quote"])
+    src = _file_input("src", tmp_path, cols=["k", "v", "quote"])
     config = _config()
     report = check_eval_compatibility(config, [src, tgt])
     assert report.ok is False
     assert any("numeric" in p for p in report.problems)
 
 
-def test_grain_blocking_stage_without_code_scorer():
-    src = _file_input("src", cols=["k", "v", "quote"])
+def test_grain_blocking_stage_without_code_scorer(tmp_path):
+    src = _file_input("src", tmp_path, cols=["k", "v", "quote"])
     agg = _agg("agg", ["src"], output_schema={
         "columns": [{"name": "k"}, {"name": "t", "type": "int"}]})
     tgt = _row("tgt", ["agg"], output_schema={
@@ -194,8 +194,8 @@ def test_grain_blocking_stage_without_code_scorer():
     assert any("agg" in p for p in report.problems)
 
 
-def test_grain_blocking_stage_with_code_scorer_is_not_a_problem():
-    src = _file_input("src", cols=["k", "v", "quote"])
+def test_grain_blocking_stage_with_code_scorer_is_not_a_problem(tmp_path):
+    src = _file_input("src", tmp_path, cols=["k", "v", "quote"])
     agg = _agg("agg", ["src"], output_schema={
         "columns": [{"name": "k"}, {"name": "t", "type": "int"}]})
     tgt = _row("tgt", ["agg"], output_schema={
@@ -206,20 +206,20 @@ def test_grain_blocking_stage_with_code_scorer_is_not_a_problem():
     assert report.problems == []
 
 
-def test_reference_override_stage_equals_target_stage():
+def test_reference_override_stage_equals_target_stage(tmp_path):
     # A reference override on the target stage would make resolve_eval_run_settings
     # raise; check_eval_compatibility must catch this itself and report it instead.
     config = _config(reference_overrides=[{"stage_id": "tgt", "table": _ref()}])
-    report = check_eval_compatibility(config, _stages())
+    report = check_eval_compatibility(config, _stages(tmp_path))
     assert report.ok is False
     assert any("tgt" in p for p in report.problems)
     assert report.settings is None
 
 
-def test_stages_list_has_a_structural_problem():
+def test_stages_list_has_a_structural_problem(tmp_path):
     # A dangling input elsewhere in the stage list must not reach
     # Workflow.model_validate uncaught — it should surface as a problem string.
-    src = _file_input("src", cols=["k", "v", "quote"])
+    src = _file_input("src", tmp_path, cols=["k", "v", "quote"])
     tgt = _row("tgt", ["src"], output_schema={
         "columns": [{"name": "k"}, {"name": "score", "type": "float"}]})
     dangling = _row("dangling", ["missing_input"])
@@ -229,10 +229,10 @@ def test_stages_list_has_a_structural_problem():
     assert report.settings is None
 
 
-def test_target_not_reachable_from_override_is_broken():
+def test_target_not_reachable_from_override_is_broken(tmp_path):
     # Two independent branches off the same input: override feeds "a",
     # target is "b", neither downstream of the other.
-    src = _file_input("src", cols=["k", "v", "quote"])
+    src = _file_input("src", tmp_path, cols=["k", "v", "quote"])
     branch_a = _row("a", ["src"], output_schema={
         "columns": [{"name": "k"}, {"name": "score", "type": "float"}]})
     branch_b = _row("b", ["src"], output_schema={
@@ -243,35 +243,35 @@ def test_target_not_reachable_from_override_is_broken():
     assert any("is not reachable from override" in p for p in report.problems)
 
 
-def test_reachable_pathway_ok():
-    report = check_eval_compatibility(_config(), _stages())
+def test_reachable_pathway_ok(tmp_path):
+    report = check_eval_compatibility(_config(), _stages(tmp_path))
     assert report.ok is True
     assert report.problems == []
 
 
-def test_table_none_does_not_crash_and_skips_file_checks():
+def test_table_none_does_not_crash_and_skips_file_checks(tmp_path):
     config = _config(table=None)
-    report = check_eval_compatibility(config, _stages())
+    report = check_eval_compatibility(config, _stages(tmp_path))
     assert report.ok is True
     assert report.settings is not None
     assert not any("eval-dataset table" in p for p in report.problems)
     assert not any("not in the eval-dataset table" in p for p in report.problems)
 
 
-def test_table_none_still_catches_target_assertion_error():
+def test_table_none_still_catches_target_assertion_error(tmp_path):
     config = _config(table=None, expected_outputs=[
         {"output_column": "not_emitted", "metric": "abs_tol", "tolerance": 1}])
-    report = check_eval_compatibility(config, _stages())
+    report = check_eval_compatibility(config, _stages(tmp_path))
     assert report.ok is False
     assert any("not_emitted" in p for p in report.problems)
 
 
 # ── override coverage is conflict-aware (get_injected_columns) ───────────────
-def test_coverage_check_rejects_bare_name_on_a_conflicting_column():
+def test_coverage_check_rejects_bare_name_on_a_conflicting_column(tmp_path):
     # override's own output includes `v`; a check also grades `v` on the
     # target -- the conflict means the eval-dataset table must carry
     # `override.v`, not a bare `v`.
-    src = _file_input("src", cols=["k", "v", "quote"])
+    src = _file_input("src", tmp_path, cols=["k", "v", "quote"])
     tgt = _row("tgt", ["src"], output_schema={
         "columns": [{"name": "k"}, {"name": "v", "type": "str"},
                     {"name": "score", "type": "float"}]})
@@ -284,8 +284,8 @@ def test_coverage_check_rejects_bare_name_on_a_conflicting_column():
     assert any("override.v" in p for p in report.problems)
 
 
-def test_coverage_check_accepts_conflict_aware_injected_name():
-    src = _file_input("src", cols=["k", "v", "quote"])
+def test_coverage_check_accepts_conflict_aware_injected_name(tmp_path):
+    src = _file_input("src", tmp_path, cols=["k", "v", "quote"])
     tgt = _row("tgt", ["src"], output_schema={
         "columns": [{"name": "k"}, {"name": "v", "type": "str"},
                     {"name": "score", "type": "float"}]})
@@ -299,8 +299,8 @@ def test_coverage_check_accepts_conflict_aware_injected_name():
 
 
 # ── get_injected_columns (the shared derivation) ──────────────────────────────
-def test_get_injected_columns_no_conflict_named_after_target():
-    override = _file_input("src", cols=["k", "v"])
+def test_get_injected_columns_no_conflict_named_after_target(tmp_path):
+    override = _file_input("src", tmp_path, cols=["k", "v"])
     target = _row("tgt", ["src"], output_schema={
         "columns": [{"name": "k"}, {"name": "score", "type": "float"}]})
     injected = get_injected_columns(override, target, ["score"])
@@ -309,8 +309,8 @@ def test_get_injected_columns_no_conflict_named_after_target():
     assert len(names) == len(set(names))  # never a duplicate column name
 
 
-def test_get_injected_columns_conflict_renames_override_side():
-    override = _file_input("src", cols=["k", "score"])
+def test_get_injected_columns_conflict_renames_override_side(tmp_path):
+    override = _file_input("src", tmp_path, cols=["k", "score"])
     target = _row("tgt", ["src"], output_schema={
         "columns": [{"name": "k"}, {"name": "score", "type": "float"}]})
     injected = get_injected_columns(override, target, ["score"])
@@ -319,8 +319,8 @@ def test_get_injected_columns_conflict_renames_override_side():
     assert len(names) == len(set(names))  # never a duplicate column name
 
 
-def test_get_injected_columns_is_the_override_side_of_the_derivation():
-    override = _file_input("src", cols=["k", "score"])
+def test_get_injected_columns_is_the_override_side_of_the_derivation(tmp_path):
+    override = _file_input("src", tmp_path, cols=["k", "score"])
     target = _row("tgt", ["src"], output_schema={
         "columns": [{"name": "k"}, {"name": "score", "type": "float"}]})
     injected = get_injected_columns(override, target, ["score"])
@@ -328,17 +328,17 @@ def test_get_injected_columns_is_the_override_side_of_the_derivation():
 
 
 # ── fail loud: no silent degradation on a missing schema or checked column ───
-def test_get_output_columns_from_stage_raises_when_stage_has_no_output_schema():
-    stage = _file_input("src", cols=["k"]).model_copy(update={"output_schema": None})
+def test_get_output_columns_from_stage_raises_when_stage_has_no_output_schema(tmp_path):
+    stage = _file_input("src", tmp_path, cols=["k"]).model_copy(update={"output_schema": None})
     with pytest.raises(ValueError, match="declares no output schema"):
         get_output_columns_from_stage(stage)
 
 
-def test_get_injected_columns_raises_for_checked_column_not_on_target():
+def test_get_injected_columns_raises_for_checked_column_not_on_target(tmp_path):
     # An unresolvable check column is a precondition violation the caller
     # (check_eval_compatibility) must verify before calling in here -- it is
     # not silently skipped.
-    override = _file_input("src", cols=["k"])
+    override = _file_input("src", tmp_path, cols=["k"])
     target = _row("tgt", ["src"], output_schema={"columns": [{"name": "k"}]})
     with pytest.raises(ValueError, match="not_emitted"):
         get_injected_columns(override, target, ["not_emitted"])

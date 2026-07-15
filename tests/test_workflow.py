@@ -13,21 +13,23 @@ def S(**kw):
     return kw
 
 
-def test_workflow_clean():
+def test_workflow_clean(tmp_path):
     wf = m.parse_workflow([
         S(id="load", type="input_data",
-          connector={"kind": "file", "params": {"path": "d.csv", "format": "csv"}}),
+          connector={"kind": "file", "params": {"path": str(tmp_path / "d.csv"), "format": "csv"}}),
         S(id="extract", type="python_frame_function", inputs=[{"id": "load"}],
           function={"kind": "inline", "code": "def transform(row): return row"}),
     ])
     assert [s.id for s in wf.stages] == ["load", "extract"]
 
 
-def test_workflow_duplicate_ids():
+def test_workflow_duplicate_ids(tmp_path):
     with pytest.raises(ValidationError):
         m.parse_workflow([
-            S(id="a", type="input_data", connector={"kind": "file", "params": {"path": "d.csv"}}),
-            S(id="a", type="input_data", connector={"kind": "file", "params": {"path": "d.csv"}}),
+            S(id="a", type="input_data",
+              connector={"kind": "file", "params": {"path": str(tmp_path / "d.csv")}}),
+            S(id="a", type="input_data",
+              connector={"kind": "file", "params": {"path": str(tmp_path / "d.csv")}}),
         ])
 
 
@@ -64,19 +66,20 @@ def test_detect_cycle_reports_cycle():
     assert m.detect_cycle([a, b])  # non-empty
 
 
-def test_detect_cycle_empty_when_acyclic():
+def test_detect_cycle_empty_when_acyclic(tmp_path):
     a = Stage.model_validate(S(id="a", type="input_data",
-                               connector={"kind": "file", "params": {"path": "d.csv"}}))
+                               connector={"kind": "file", "params": {"path": str(tmp_path / "d.csv")}}))
     b = Stage.model_validate(S(id="b", type="python_frame_function", inputs=[{"id": "a"}], function={"kind": "inline", "code": "def transform(row): return row"}))
     assert m.detect_cycle([a, b]) == []
 
 
 # validate_workflow is the non-fatal aggregate entry: it runs every cross-stage
 # check on already-validated stages and returns all issues at once ([] means clean).
-def test_validate_workflow_clean_is_empty():
+def test_validate_workflow_clean_is_empty(tmp_path):
     stages = [
         Stage.model_validate(S(id="load", type="input_data",
-                               connector={"kind": "file", "params": {"path": "d.csv", "format": "csv"}})),
+                               connector={"kind": "file",
+                                          "params": {"path": str(tmp_path / "d.csv"), "format": "csv"}})),
     ]
     assert m.validate_workflow(stages) == []
 

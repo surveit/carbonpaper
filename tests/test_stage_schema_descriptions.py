@@ -17,11 +17,14 @@ def _desc(model: type, field: str) -> str:
     return (props[field].get("description") or "").lower()
 
 
-def test_connector_params_documents_file_path_and_placeholder():
-    # validator: `connector kind=file requires params.path` (stage.py) — #7
+def test_connector_params_documents_optional_absolute_path_and_bans_invention():
+    # validator: path optional; absolute when present (stage.py). The description is
+    # the only channel that reaches the compiling agent (submit_answer tool schema).
     d = _desc(Connector, "params")
-    assert "path" in d
-    assert "placeholder" in d
+    assert "absolute" in d
+    assert "omit" in d
+    assert "never invent" in d
+    assert "placeholder" not in d
 
 
 def test_output_schema_documents_llm_transform_additive_rule():

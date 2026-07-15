@@ -29,12 +29,14 @@ from app.evals.store import save_eval_config, save_eval_run
 
 client = TestClient(app)
 
-_OVERRIDE = {
-    "id": "load", "type": "input_data", "name": "Load documents",
-    "connector": {"kind": "file", "params": {"path": "data/docs.csv", "format": "csv"}},
-    "output_schema": {"columns": [{"name": "doc_id", "type": "str"},
-                                  {"name": "text", "type": "str"}]},
-}
+def _override(tmp_path):
+    return {
+        "id": "load", "type": "input_data", "name": "Load documents",
+        "connector": {"kind": "file",
+                      "params": {"path": str(tmp_path / "data" / "docs.csv"), "format": "csv"}},
+        "output_schema": {"columns": [{"name": "doc_id", "type": "str"},
+                                      {"name": "text", "type": "str"}]},
+    }
 _TARGET = {
     "id": "classify", "type": "python_row_function", "name": "Classify each row",
     "inputs": [{"id": "load", "schema": {"columns": [{"name": "doc_id", "type": "str"},
@@ -55,7 +57,7 @@ def demo_project(tmp_path, monkeypatch):
     demo = tmp_path / "demo"
     compiled = demo / "compiled"
     compiled.mkdir(parents=True)
-    (compiled / "01_load.json").write_text(json.dumps(_OVERRIDE), encoding="utf-8")
+    (compiled / "01_load.json").write_text(json.dumps(_override(tmp_path)), encoding="utf-8")
     (compiled / "02_classify.json").write_text(json.dumps(_TARGET), encoding="utf-8")
 
     for mod in (web_config, loading, evals_router, project_router):
