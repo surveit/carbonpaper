@@ -10,7 +10,7 @@ Sealed on purpose, and the seal is executable:
     ``pyproject.toml``.
 Swapping the backend (Postgres, or plain files for inspection) is a new
 DocumentStore implementation plus one ``configure_store`` call; nothing above the
-seam changes. See ``docs/persistence-unification.md``.
+seam changes.
 
 Implementation status: ``validate_id``, ``SqliteKvStore``, ``DocumentStore``, and
 ``PersistedModel`` are implemented; ``FrameStore`` lands next per the Phase-1 plan,
@@ -175,7 +175,7 @@ class PersistedModel(BaseModel):
     """Base for every stored record. A subclass sets `collection` (the table name)
     and carries an `id` (its primary key); save()/load()/list() go through the
     configured DocumentStore, so nothing above this class touches storage. The
-    body is serialized as JSON (see docs/persistence-unification.md).
+    body is serialized as JSON.
 
     Its own strict config mirrors app.core.models._Base without importing it, so the
     storage layer stays free of an app.core.models dependency."""

@@ -17,6 +17,7 @@ class FrameStore:
         self.root = Path(root)
 
     def _path(self, collection: str, id: str) -> Path:
+        validate_id(collection)
         validate_id(id)
         return self.root / collection / f"{id}.parquet"
 

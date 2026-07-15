@@ -36,3 +36,13 @@ def test_unsafe_id_rejected(frames, bad_id):
     # when a drive-absolute id would otherwise land outside frames.root entirely.
     escaped_path = frames.root / "run_output" / f"{bad_id}.parquet"
     assert not escaped_path.exists()
+
+
+@pytest.mark.parametrize("bad_collection", ["../evil", "C:/escape", "a\\b"])
+def test_unsafe_collection_rejected(frames, bad_collection):
+    with pytest.raises(ValueError):
+        frames.save_frame(bad_collection, "proj/1", pd.DataFrame({"a": [1]}))
+    # Same escape risk as an unsafe id (validate_id must run before any path is
+    # built), just on the other path segment — so it never lands on disk either.
+    escaped_path = frames.root / bad_collection / "proj/1.parquet"
+    assert not escaped_path.exists()

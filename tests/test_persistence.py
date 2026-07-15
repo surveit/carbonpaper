@@ -144,3 +144,14 @@ def test_validate_id_accepts_safe_ids(id_):
 def test_validate_id_rejects_unsafe_ids(id_):
     with pytest.raises(ValueError):
         validate_id(id_)
+
+
+def test_persistedmodel_config_mirrors_base():
+    # PersistedModel deliberately does not import app.core.models._Base (the
+    # store stays free of a models dependency), but its model_config is meant
+    # to mirror it exactly. Nothing else enforces that — silent drift here
+    # would change on-disk serialization — so pin it down explicitly.
+    from app.core.models.schema import _Base
+    from app.core.persistence import PersistedModel
+    for key in ("extra", "use_enum_values", "validate_default", "populate_by_name"):
+        assert PersistedModel.model_config.get(key) == _Base.model_config.get(key)
