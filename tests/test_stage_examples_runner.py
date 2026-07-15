@@ -146,6 +146,77 @@ def test_frame_function_returning_non_dataframe_is_error_not_crash():
     assert "dict" in (result.message or "")
 
 
+_LEFT_SCHEMA = {"columns": [
+    {"name": "id", "type": "str", "nullable": False},
+    {"name": "amount", "type": "float", "nullable": False},
+]}
+_RIGHT_SCHEMA = {"columns": [
+    {"name": "id", "type": "str", "nullable": False},
+    {"name": "label", "type": "str", "nullable": False},
+]}
+_MERGED_SCHEMA = {"columns": [
+    {"name": "id", "type": "str", "nullable": False},
+    {"name": "amount", "type": "float", "nullable": False},
+    {"name": "label", "type": "str", "nullable": False},
+]}
+
+
+def _multi_input_frame_stage(code: str, examples: list[dict]) -> Stage:
+    return Stage.model_validate({
+        "id": "merge", "name": "Merge", "type": "python_frame_function",
+        "inputs": [
+            {"id": "left", "schema": _LEFT_SCHEMA},
+            {"id": "right", "schema": _RIGHT_SCHEMA},
+        ],
+        "output_schema": _MERGED_SCHEMA,
+        "function": {"kind": "inline", "code": code},
+        "examples": examples,
+    })
+
+
+_MERGE = 'def transform(left_df, right_df):\n    return left_df.merge(right_df, on="id")\n'
+
+
+def test_multi_input_frame_example_passes():
+    stage = _multi_input_frame_stage(_MERGE, [{
+        "name": "merges_on_id",
+        "inputs": {
+            "left": [{"id": "a", "amount": 1.0}],
+            "right": [{"id": "a", "label": "widget"}],
+        },
+        "expected": [{"id": "a", "amount": 1.0, "label": "widget"}],
+    }])
+    [result] = run_stage_examples(stage)
+    assert result.status == "passed" and not result.diffs
+
+
+def test_multi_input_frame_positional_order_is_declared_order():
+    # Both inputs share a schema and each carries one distinguishable row.
+    # `transform` returns its FIRST positional argument; if the handler
+    # passed frames in dict order (or the wrong order) this would return
+    # the `right` input's row instead of `left`'s.
+    id_schema = {"columns": [{"name": "id", "type": "str", "nullable": False}]}
+    stage = Stage.model_validate({
+        "id": "first", "name": "First", "type": "python_frame_function",
+        "inputs": [
+            {"id": "left", "schema": id_schema},
+            {"id": "right", "schema": id_schema},
+        ],
+        "output_schema": id_schema,
+        "function": {"kind": "inline", "code": "def transform(a, b):\n    return a\n"},
+        "examples": [{
+            "name": "returns_first_declared_input",
+            "inputs": {
+                "left": [{"id": "from_left"}],
+                "right": [{"id": "from_right"}],
+            },
+            "expected": [{"id": "from_left"}],
+        }],
+    })
+    [result] = run_stage_examples(stage)
+    assert result.status == "passed" and not result.diffs
+
+
 def test_find_failing_examples_names_stage_and_example():
     green = _row_stage(_DOUBLE, [{
         "name": "doubles_two", "inputs": {"load": [{"amount": 2.0}]},

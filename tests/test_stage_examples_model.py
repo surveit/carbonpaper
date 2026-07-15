@@ -54,6 +54,27 @@ def test_example_inputs_must_match_declared_inputs():
         Stage.model_validate(_row_stage([wrong_key]))
 
 
+def test_multi_input_example_missing_one_input_is_rejected():
+    left_schema = {"columns": [{"name": "id", "type": "str", "nullable": False}]}
+    right_schema = {"columns": [{"name": "id", "type": "str", "nullable": False}]}
+    stage = {
+        "id": "merge", "name": "Merge", "type": "python_frame_function",
+        "inputs": [
+            {"id": "left", "schema": left_schema},
+            {"id": "right", "schema": right_schema},
+        ],
+        "output_schema": left_schema,
+        "function": {"kind": "inline", "code": "def transform(a, b):\n    return a\n"},
+        "examples": [{
+            "name": "only_left_supplied",
+            "inputs": {"left": [{"id": "x"}]},
+            "expected": [{"id": "x"}],
+        }],
+    }
+    with pytest.raises(ValidationError, match="declared inputs"):
+        Stage.model_validate(stage)
+
+
 def test_row_function_example_is_one_row_in_one_row_out():
     two_rows = {**_GOOD_EXAMPLE,
                 "inputs": {"load": [{"amount": 1.0}, {"amount": 2.0}]}}
