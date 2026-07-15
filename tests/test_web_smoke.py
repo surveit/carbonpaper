@@ -185,3 +185,10 @@ def test_versions_page_uses_the_project_shell():
     html = r.text
     assert 'class="app-side-nav"' in html          # the shell sidebar is present
     assert 'href="/project/demo/workflow"' in html  # sibling nav renders
+
+
+def test_new_project_page_shows_mcp_connect():
+    resp = client.get("/project/new")
+    assert resp.status_code == 200
+    assert "claude mcp add" in resp.text
+    assert "sift" in resp.text
