@@ -108,7 +108,15 @@ class PublishFormat(str, Enum):
 class Connector(_Base):
     """input_data handle."""
     kind: ConnectorKind
-    params: dict[str, Any] = Field(default_factory=dict)
+    params: dict[str, Any] = Field(
+        default_factory=dict,
+        description=(
+            "Connector parameters. For kind=file, params.path is REQUIRED — a "
+            "repo-root-relative path to the data file — plus optional params.format "
+            "(csv/parquet/json/geojson). If the real path isn't known yet, put a "
+            "placeholder path; it can be filled in later."
+        ),
+    )
     refresh: str = "ad_hoc"
     notes: Optional[str] = None
 
@@ -142,9 +150,24 @@ class PythonFunction(_Base):
     row-vs-frame distinction lives in the stage `type`, not here — the runtime
     reads the type to decide whether to invoke this per row or per frame."""
     kind: FunctionKind
-    code: Optional[str] = None
+    code: Optional[str] = Field(
+        default=None,
+        description=(
+            "Inline Python defining the function named by `function` (default `transform`). "
+            "Its signature depends on the stage type: "
+            "python_row_function -> `def transform(row: dict) -> dict` (one row in, one row "
+            "out; cannot fan out/in or reorder); "
+            "python_frame_function -> `def transform(df, ...) -> DataFrame` (the input pandas "
+            "DataFrame(s), positional in declared input order; may reshape); "
+            "publish -> `def transform(df, ..., output_dir) -> DataFrame` (write artifacts "
+            "under output_dir, return a table of their paths)."
+        ),
+    )
     module: Optional[str] = None
-    function: Optional[str] = None
+    function: Optional[str] = Field(
+        default=None,
+        description="Name of the top-level function the runtime calls (default `transform`).",
+    )
     requirements: list[str] = Field(default_factory=list)
 
     @model_validator(mode="after")
@@ -270,8 +293,23 @@ class Stage(_Base):
     type: StageType
     name: str
     source: Optional[SourceRef] = None
-    inputs: list[InputRef] = Field(default_factory=list)
-    output_schema: Optional[TableSchema] = None
+    inputs: list[InputRef] = Field(
+        default_factory=list,
+        description=(
+            "Upstream dependencies: each is an upstream stage id plus, optionally, the schema "
+            "this stage expects that input to satisfy — which is just the upstream stage's "
+            "output_schema. An llm_transform's single input must declare a primary_key."
+        ),
+    )
+    output_schema: Optional[TableSchema] = Field(
+        default=None,
+        description=(
+            "Columns this stage outputs, with an optional primary_key. For an llm_transform "
+            "this must be strictly ADDITIVE and 1:1: declare the SAME primary_key as its "
+            "single input's schema, keep every input column unchanged, and add at least one "
+            "new column (one input row -> one output row)."
+        ),
+    )
 
     # executable handles (exactly one populated, per type)
     connector: Optional[Connector] = None
