@@ -23,7 +23,6 @@ from app.core.models import Stage
 from app.web.config import EXAMPLES_DIR, templates
 from app.web.diagrams import TYPE_CLASS, TYPE_GLYPH, build_mermaid_graph
 from app.web.loading import find_stage, load_stages, resolve_function_code
-from app.web.project_view import shell_state
 
 router = APIRouter()
 
@@ -203,27 +202,3 @@ async def publish_version_route(project: str, version_id: str):
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     return RedirectResponse(url=f"/project/{project}/versions", status_code=303)
-
-
-@router.get("/project/{project}/versions", response_class=HTMLResponse)
-async def versions_index(request: Request, project: str):
-    """VERSIONS section of the project shell: every version newest-first, with frozen
-    coverage. A child of the Workflow group, so it passes the SAME shell_state the
-    other sections do (the sidebar agrees) plus its version rows, each carrying a
-    computed `published` flag (the one place the legacy-meta rule is applied for
-    the template)."""
-    project_dir = EXAMPLES_DIR / project
-    if not project_dir.is_dir():
-        raise HTTPException(status_code=404, detail=f"No project '{project}'")
-    return templates.TemplateResponse(
-        request,
-        "versions.html",
-        {
-            "state": shell_state(project_dir),
-            "section": "versions",
-            "versions": [
-                {**meta, "published": versioning.version_is_published(meta)}
-                for meta in versioning.list_versions(project_dir)
-            ],
-        },
-    )

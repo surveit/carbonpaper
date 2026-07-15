@@ -1,11 +1,13 @@
 {% extends "project_shell.html" %}
 {#
-  WORKFLOW — the typed-stage pipeline. Master-detail layout, TOP-BOTTOM:
+  WORKING COPY (served at /workflow/current) — the mutable typed-stage pipeline
+  editor. Master-detail layout, TOP-BOTTOM:
     · the mermaid graph (build_mermaid_graph with review_by_id belief colours),
       full-width on TOP in a zoomable / pannable / fullscreen diagram viewport
     · on node-click, the per-node review (_node_review.html) DOCKS full-width BELOW
       the graph — decision bar on top, then Inputs / Transform / Outputs / Spec tabs
-    · Run + Create-version controls (the version LIST lives on the Versions tab)
+    · Run + Create-version controls (the version LIST lives on the Workflow tab,
+      served at /workflow)
 
   The workflow is GENERATED automatically right after the data model (see
   app.services.generation) in the background; this page just reads the result from
@@ -54,11 +56,11 @@
 {% block section %}
 <div class="sec-head wf-head">
   <div class="wf-head-title">
-    <h1>Workflow</h1>
+    <h1>Working copy</h1>
     <p class="lede">Typed stages wiring your data model into a pipeline. Click any node
       to <strong>review</strong> how that step is modeled — its inputs, transform, and
       outputs. Node colour = <em>belief</em> (do we trust it). Run it end-to-end, or
-      create an immutable version.</p>
+      create an immutable version — versions live on the Workflow tab.</p>
   </div>
   <div class="actions wf-actions">
     {% if coverage %}
@@ -156,10 +158,10 @@
     {% endif %}
 
     {% if stages %}
-    {# The version list lives on its own Versions tab (a child of Workflow); the
-       "Create version" button above snapshots the working copy into a new one. #}
+    {# The version list lives on the Workflow tab; the "Create version" button above
+       snapshots this working copy into a new one. #}
     <p class="wf-versions-link muted">Snapshots of this workflow live on the
-      <a href="/project/{{ state.name }}/versions">Versions</a> tab.</p>
+      <a href="/project/{{ state.name }}/workflow">Workflow</a> tab.</p>
     {% endif %}
   </div>{# /.wf-stack #}
 
@@ -280,8 +282,9 @@
         fd.append('message', message);
         const r = await fetch(`/project/${encodeURIComponent(METHODOLOGY)}/version`, { method: 'POST', body: fd });
         if (!r.ok) { alert(`Version creation failed: ${r.status} ${await r.text()}`); return; }
-        // Land on the Versions tab so the reviewer sees the snapshot they just made.
-        window.location.href = `/project/${encodeURIComponent(METHODOLOGY)}/versions`;
+        // Land on the Workflow tab (the versions list) so the reviewer sees the
+        // snapshot they just made.
+        window.location.href = `/project/${encodeURIComponent(METHODOLOGY)}/workflow`;
       } finally {
         createBtn.disabled = false;
         createBtn.textContent = original;

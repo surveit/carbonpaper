@@ -93,10 +93,11 @@ def test_project_shell_has_no_manual_edit_with_agent_control():
 
 
 def test_workflow_section_renders_the_graph():
-    """GET /project/{name}/workflow renders the belief-coloured stage graph. With a
-    compiled workflow present, the mermaid source names the stages even before the
-    data-model gate is approved (the template locks interaction, not the graph)."""
-    r = client.get("/project/demo/workflow")
+    """GET /project/{name}/workflow/current renders the belief-coloured stage graph
+    (the working-copy editor). With a compiled workflow present, the mermaid source
+    names the stages even before the data-model gate is approved (the template locks
+    interaction, not the graph)."""
+    r = client.get("/project/demo/workflow/current")
     assert r.status_code == 200
     assert "extract" in r.text                              # a stage id in the graph
 
@@ -149,11 +150,12 @@ def test_build_nav_status_tokens(demo_project):
 
 
 def test_workflow_page_points_to_versions_tab():
-    """Option B: the version list lives on the Versions tab; the Workflow page keeps
-    the Create-version control and links to that tab, not a duplicated inline list."""
-    html = client.get("/project/demo/workflow").text
+    """Option B: the version list lives on the Workflow tab (/workflow); the working
+    copy editor (/workflow/current) keeps the Create-version control and links back to
+    that list, not a duplicated inline list."""
+    html = client.get("/project/demo/workflow/current").text
     assert "wf-versions-link" in html                  # the pointer to the tab
-    assert 'href="/project/demo/versions"' in html     # which links there
+    assert 'href="/project/demo/workflow"' in html      # which links there
 
 
 def test_sidebar_nests_versions_runs_evals_under_workflow():

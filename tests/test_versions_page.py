@@ -40,7 +40,7 @@ def project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 def test_versions_page_shows_publish_action_for_unpublished(project: Path) -> None:
     versioning.create_version(project, message="v1", reviewer="local")
-    page = client.get("/project/demo/versions")
+    page = client.get("/project/demo/workflow")
     assert page.status_code == 200
     assert "unpublished" in page.text
     assert "/publish" in page.text
@@ -55,7 +55,7 @@ def test_publish_route_stamps_and_redirects(project: Path) -> None:
     assert versioning.version_is_published(
         versioning.load_version_meta(project, meta["id"])
     )
-    page = client.get("/project/demo/versions")
+    page = client.get("/project/demo/workflow")
     assert "unpublished" not in page.text
 
 
@@ -74,3 +74,22 @@ def test_publish_route_rejects_non_timestamp_version_id(project: Path) -> None:
     assert resp.status_code == 404
     assert "not-a-version" in resp.json()["detail"]
     assert versioning.list_versions(project) == before
+
+
+def test_versions_route_redirects_to_workflow(project: Path) -> None:
+    r = client.get("/project/demo/versions", follow_redirects=False)
+    assert r.status_code in (307, 308)
+    assert r.headers["location"].endswith("/project/demo/workflow")
+
+
+def test_workflow_current_renders_the_editor(project: Path) -> None:
+    # The working-copy editor moved here; it still renders the graph + review controls.
+    page = client.get("/project/demo/workflow/current")
+    assert page.status_code == 200
+    assert "Run workflow" in page.text or "Regenerate" in page.text
+
+
+def test_workflow_list_rows_link_to_version_detail(project: Path) -> None:
+    meta = versioning.create_version(project, message="v1", reviewer="local")
+    page = client.get("/project/demo/workflow")
+    assert f"/workflow/version/{meta['id']}" in page.text

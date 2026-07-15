@@ -1,23 +1,24 @@
 {% extends "project_shell.html" %}
 {#
-  VERSIONS — every immutable version of a project, newest-first, with approval
-  coverage frozen at creation time. A child of the Workflow group in the shell.
+  WORKFLOW landing — every immutable version of a project, newest-first, with approval
+  coverage frozen at creation time. The mutable working copy (edit + review +
+  create-version) lives at /workflow/current, one click away from here.
 
   Context the route passes:
-    state    = project_view.shell_state(pdir); section = "versions"
+    state    = project_view.shell_state(pdir); section = "workflow"
     versions = versioning.list_versions(pdir), each with a computed `published`
                bool (versioning.version_is_published) — newest-first (may be empty)
 #}
 {% block section %}
 <div class="sec-head wf-head">
   <div class="wf-head-title">
-    <h1>Versions</h1>
+    <h1>Workflow</h1>
     <p class="lede">Each version is an immutable, valid snapshot of the workflow's stages,
       with approval coverage frozen at creation time. A run pins to a <em>published</em>
       version — publishing records human approval and never edits content.</p>
   </div>
   <div class="actions wf-actions">
-    <a href="/project/{{ state.name }}/workflow" class="btn">Workflow</a>
+    <a href="/project/{{ state.name }}/workflow/current" class="btn">Current working copy</a>
     <a href="/project/{{ state.name }}/runs" class="btn">Runs</a>
   </div>
 </div>
@@ -30,7 +31,7 @@
     <tbody>
         {% for v in versions %}
         <tr>
-            <td><code>{{ v.id }}</code></td>
+            <td><a href="/project/{{ state.name }}/workflow/version/{{ v.id }}"><code>{{ v.id }}</code></a></td>
             <td>{{ v.created_at }}</td>
             <td>{{ v.message or '' }}{% if v.reviewer %} <span class="muted">— {{ v.reviewer }}</span>{% endif %}</td>
             <td>{% if v.parent_version %}<code>{{ v.parent_version }}</code>{% else %}<span class="muted">—</span>{% endif %}</td>
@@ -69,9 +70,13 @@
 {% else %}
 <div class="empty-state">
   <h2>No versions yet</h2>
-  <p class="muted">Click <strong>Create version</strong> on the Workflow page to snapshot
-    the current workflow. A run targets an existing version, so save a version and
-    publish it before running.</p>
+  {% if state.workflow.present %}
+  <p class="muted">You have a working copy that hasn't been versioned. Open the
+    <a href="/project/{{ state.name }}/workflow/current">current working copy</a>
+    to review it and <strong>Create version</strong>.</p>
+  {% else %}
+  <p class="muted">No workflow yet. <a href="/project/{{ state.name }}/workflow/current">Generate one from your document</a> to get started.</p>
+  {% endif %}
 </div>
 {% endif %}
 {% endblock %}
