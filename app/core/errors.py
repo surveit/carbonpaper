@@ -68,6 +68,7 @@ class LLMError(Exception):
 
 class DocumentNotFound(Exception):
     """No document exists for a (collection, id) in the store. Raised by the
-    strict read path (DocumentStore.read / PersistedModel.load); the tolerant
-    path returns None instead. A genuine miss surfaced loudly, never a fabricated
-    empty document."""
+    strict read path (SqliteKvStore.read and .schema_version). Planned:
+    DocumentStore protocol and PersistedModel.load will also raise it; a tolerant
+    path will return None instead. A genuine miss surfaced loudly, never a
+    fabricated empty document."""

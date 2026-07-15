@@ -12,9 +12,9 @@ Swapping the backend (Postgres, or plain files for inspection) is a new
 DocumentStore implementation plus one ``configure_store`` call; nothing above the
 seam changes. See ``docs/persistence-unification.md``.
 
-Implementation status: this is the module shell. ``validate_id`` (Task 1) is here;
-``SqliteKvStore`` / ``PersistedModel`` land next per the Phase-1 plan, guarded by
-the arch checks above.
+Implementation status: ``validate_id`` and ``SqliteKvStore`` are implemented;
+``PersistedModel`` and the ``DocumentStore`` protocol land next per the Phase-1
+plan, guarded by the arch checks above.
 """
 from __future__ import annotations
 
