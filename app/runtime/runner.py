@@ -93,7 +93,7 @@ def _reject_duplicate_input_rows(df: pd.DataFrame, input_id: str, stage_id: str)
     )
 
 
-def _resolve_version_id(project_dir: Path, version_id: str | None) -> str:
+def resolve_version_id(project_dir: Path, version_id: str | None) -> str:
     """Resolve the workflow version a run will be pinned to. Every run MUST target a
     real, existing version — we never blank it, never fabricate one, never
     silently read the working copy, and never CREATE one as a run side effect.
@@ -239,7 +239,7 @@ def prepare_run(
     The run is PINNED to a workflow version: stages are loaded from the version's
     immutable snapshot (versioning.load_version_stages), never from the live
     `compiled/` working copy, so working-copy edits can never affect this run.
-    `version_id` resolution is documented on _resolve_version_id (None -> the
+    `version_id` resolution is documented on resolve_version_id (None -> the
     latest existing version; a version-less project raises
     NoVersionToRunError); the resolved id is recorded in the manifest as
     `workflow_version`.
@@ -268,7 +268,7 @@ def prepare_run(
     a run with no version — or an invalid workflow — never leaves a run behind.
     The same holds for a binding/input-file failure: it is raised before the
     run dir is created."""
-    workflow_version = _resolve_version_id(project_dir, version_id)
+    workflow_version = resolve_version_id(project_dir, version_id)
     stages = versioning.load_version_stages(project_dir, workflow_version)
     stages, resolved_inputs = apply_input_bindings(stages, bindings)
     input_records = _describe_input_files(resolved_inputs)
@@ -341,7 +341,7 @@ def execute_run(
 ) -> dict[str, Any]:
     """Run the workflow once (synchronous). Returns the manifest dict. `version_id`
     pins the run to a workflow version (None -> latest existing; none exists ->
-    NoVersionToRunError); see prepare_run / _resolve_version_id.
+    NoVersionToRunError); see prepare_run / resolve_version_id.
     `limits`/`offsets` are per-run row slicing overrides; `bindings` supplies
     per-run input file paths; see prepare_run."""
     return run_prepared(

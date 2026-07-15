@@ -21,6 +21,14 @@
   <div class="actions wf-actions">
     {% if state.workflow.present %}
     <form action="/project/{{ state.name }}/run" method="post" style="display:inline;">
+      {% for fi in file_inputs %}
+      <label style="display:block; margin:0.35rem 0;">
+        <code>{{ fi.stage_id }}</code> — data file
+        <input type="text" name="binding__{{ fi.stage_id }}" value="{{ fi.path }}"
+               placeholder="absolute path to the data file"
+               size="70" {% if not fi.path %}required{% endif %}>
+      </label>
+      {% endfor %}
       <button type="submit" class="btn primary">▶ Run workflow</button>
     </form>
     {% endif %}

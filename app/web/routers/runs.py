@@ -6,12 +6,14 @@ from __future__ import annotations
 
 import threading
 import traceback
+from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request, Response
+from fastapi.datastructures import FormData
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
-from app.core.errors import NoVersionToRunError, RowOutOfRange, StageNotInRun
+from app.core.errors import MissingInputBindingError, NoVersionToRunError, RowOutOfRange, StageNotInRun
 from app.services.loader import WorkflowLoadError, load_workflow
 from app.runtime.preview import PREVIEWABLE_TYPES, PreviewError, run_stage_preview
 from app.runtime.runner import prepare_run, resume_run, run_prepared
@@ -22,6 +24,7 @@ from app.web.diagrams import TYPE_CLASS, TYPE_GLYPH, build_mermaid_graph
 from app.web.loading import (
     build_llm_example,
     find_stage,
+    list_file_inputs,
     list_runs,
     load_manifest,
     load_output_preview,
@@ -52,15 +55,17 @@ def run_in_background(target, *args) -> None:
 
 
 @router.post("/project/{project}/run")
-async def trigger_run(project: str):
+async def trigger_run(request: Request, project: str):
     project_dir = EXAMPLES_DIR / project
     if not project_dir.is_dir():
         raise HTTPException(status_code=404, detail=f"No project '{project}'")
+    bindings = _collect_bindings(await request.form(), project_dir)
     # Set up the run (writes an initial `running` manifest), kick off execution
     # in a background thread, and redirect immediately. The run page polls.
     try:
-        prep = prepare_run(project_dir, REPO_ROOT)
-    except NoVersionToRunError as exc:
+        prep = prepare_run(project_dir, REPO_ROOT, bindings=bindings)
+    except (NoVersionToRunError, MissingInputBindingError, FileNotFoundError,
+            ValueError) as exc:
         return JSONResponse({"detail": str(exc)}, status_code=400)
     except WorkflowLoadError as exc:
         return JSONResponse({"detail": "compiled workflow failed validation",
@@ -70,6 +75,22 @@ async def trigger_run(project: str):
         url=f"/project/{project}/runs/{prep['run_id']}",
         status_code=303,
     )
+
+
+def _collect_bindings(form: FormData, project_dir: Path) -> dict[str, str]:
+    """Read `binding__<stage_id>` form fields into run bindings. A field whose
+    value equals the workflow-authored path is NOT a binding — the workflow is
+    the designating source, and the manifest provenance should say so."""
+    authored = {fi["stage_id"]: fi["path"] for fi in list_file_inputs(project_dir)}
+    bindings: dict[str, str] = {}
+    for key, value in form.items():
+        if not key.startswith("binding__"):
+            continue
+        stage_id = key[len("binding__"):]
+        path = str(value).strip()
+        if path and path != authored.get(stage_id, ""):
+            bindings[stage_id] = path
+    return bindings
 
 
 @router.get("/project/{project}/runs", response_class=HTMLResponse)
@@ -87,6 +108,7 @@ async def runs_index(request: Request, project: str):
             "state": shell_state(pdir),
             "section": "runs",
             "runs": list_runs(project),
+            "file_inputs": list_file_inputs(pdir),
         },
     )
 

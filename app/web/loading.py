@@ -12,9 +12,11 @@ from typing import Any
 import pandas as pd
 from fastapi import HTTPException
 
+from app.core.errors import NoVersionToRunError
 from app.core.models import Stage
+from app.runtime.runner import resolve_version_id
 from app.services.loader import CompiledStageFile, load_compiled_dir
-from app.services.versioning import list_versions
+from app.services.versioning import list_versions, load_version_stages
 from app.services.workspace import load_schemas
 from app.web.config import EXAMPLES_DIR, REPO_ROOT
 
@@ -110,6 +112,25 @@ def load_stages_or_empty(project: str) -> StageListing:
 
 def find_stage(stages: list[Stage], stage_id: str) -> Stage | None:
     return next((s for s in stages if s.id == stage_id), None)
+
+
+def list_file_inputs(project_dir: Path) -> list[dict[str, Any]]:
+    """File-kind input stages of the version a triggered run will execute
+    (resolve_version_id's choice), each with its workflow-authored absolute
+    path ('' when the stage authors none — the run form must collect one).
+    [] when the project has no versions yet."""
+    try:
+        version_id = resolve_version_id(project_dir, None)
+    except NoVersionToRunError:
+        return []
+    stages = load_version_stages(project_dir, version_id)
+    return [
+        {"stage_id": s.id, "name": s.name,
+         "path": str((s.connector.params or {}).get("path") or "")}
+        for s in stages
+        if s.type == "input_data" and s.connector is not None
+        and s.connector.kind == "file"
+    ]
 
 
 # ─── Source & code reads ─────────────────────────────────────────────────────
