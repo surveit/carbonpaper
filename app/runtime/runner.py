@@ -21,7 +21,7 @@ import time
 import traceback
 from datetime import datetime
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 import pandas as pd
 import pyarrow.lib as pa_lib
@@ -147,7 +147,8 @@ def apply_input_bindings(
             f"bindings target stage id(s) that are not file-kind input stages: "
             f"{sorted(unknown)}; file inputs are {sorted(file_input_ids)}")
 
-    out, resolved = [], {}
+    out: list[Stage] = []
+    resolved: dict[str, dict[str, Any]] = {}
     for stage in stages:
         if stage.id in normalized:
             stage = _rebind_connector(stage, normalized[stage.id])
@@ -160,7 +161,7 @@ def apply_input_bindings(
 
     unbound = [
         sid for sid, entry in resolved.items()
-        if not cast(dict[str, Any], entry).get("params", {}).get("path")
+        if not entry.get("params", {}).get("path")
     ]
     unbound.sort()
     if unbound:
@@ -178,7 +179,15 @@ def _reads_file(stage: Stage) -> bool:
 
 
 def _normalize_binding(stage_id: str, value: Any) -> dict[str, Any]:
-    params = {"path": value} if isinstance(value, str) else dict(value)
+    if isinstance(value, str):
+        params = {"path": value}
+    elif isinstance(value, dict):
+        params = dict(value)
+    else:
+        raise ValueError(
+            f"binding for `{stage_id}` must be a path string or a params dict, "
+            f"got {type(value).__name__}: {value!r}"
+        )
     path = params.get("path")
     if not isinstance(path, str) or not path.strip() or not Path(path).is_absolute():
         raise ValueError(f"binding for `{stage_id}` needs an ABSOLUTE file path, got {path!r}")
@@ -207,7 +216,7 @@ def _describe_input_files(resolved: dict[str, dict[str, Any]]) -> dict[str, dict
         path = Path(entry["params"]["path"])
         if not path.is_file():
             raise FileNotFoundError(
-                f"input `{stage_id}`: bound file does not exist: {path}")
+                f"input `{stage_id}`: bound file does not exist or is not a file: {path}")
         digest, size = _hash_file(path)
         records[stage_id] = {"path": str(path), "source": entry["source"],
                              "sha256": digest, "bytes": size}
@@ -682,6 +691,21 @@ def resume_run(project_dir: Path, run_id: str, repo_root: Path) -> dict[str, Any
             f"without its pinned workflow version."
         )
     stages = versioning.load_version_stages(project_dir, workflow_version)
+    # Re-apply this run's RUN-sourced input bindings (recorded as manifest
+    # provenance by prepare_run) to the freshly-reloaded stages. Without this, a
+    # file-kind input stage that had not yet executed when the run halted would
+    # resume reading the workflow-authored path (or KeyError if it authors
+    # none) while the manifest still claims `source: "run"` — a false
+    # provenance record. Manifests from before this feature carry no
+    # `input_bindings` key; `.get(..., {})` keeps those resuming exactly as
+    # before (apply_input_bindings with no bindings is the no-op-plus-check
+    # path, matching every file-kind input still needing a workflow path).
+    bindings = {
+        stage_id: rec["path"]
+        for stage_id, rec in manifest.get("input_bindings", {}).items()
+        if rec["source"] == "run"
+    }
+    stages, _ = apply_input_bindings(stages, bindings)
     ordered = topological_sort(stages)
 
     # Reload outputs from disk for stages that completed successfully.

@@ -59,13 +59,18 @@ async def trigger_run(request: Request, project: str):
     project_dir = EXAMPLES_DIR / project
     if not project_dir.is_dir():
         raise HTTPException(status_code=404, detail=f"No project '{project}'")
-    bindings = _collect_bindings(await request.form(), project_dir)
     # Set up the run (writes an initial `running` manifest), kick off execution
     # in a background thread, and redirect immediately. The run page polls.
+    # _collect_bindings itself loads the version's stages (list_file_inputs), so
+    # it can raise WorkflowLoadError for an unloadable snapshot just like
+    # prepare_run below — both must land in the same 400 handling.
     try:
+        bindings = _collect_bindings(await request.form(), project_dir)
         prep = prepare_run(project_dir, REPO_ROOT, bindings=bindings)
     except (NoVersionToRunError, MissingInputBindingError, FileNotFoundError,
             ValueError) as exc:
+        # ValueError here is binding/limit/offset validation failures raised by
+        # apply_input_bindings / prepare_run — not a catch-all for other bugs.
         return JSONResponse({"detail": str(exc)}, status_code=400)
     except WorkflowLoadError as exc:
         return JSONResponse({"detail": "compiled workflow failed validation",
@@ -101,6 +106,15 @@ async def runs_index(request: Request, project: str):
     pdir = EXAMPLES_DIR / project
     if not pdir.is_dir():
         raise HTTPException(status_code=404, detail=f"No project '{project}'")
+    # A version snapshot that no longer validates (e.g. a legacy repo-relative
+    # path) must surface as an issues banner, not a 500 — and NOT as a silent
+    # empty binding form, which would hide the problem instead of showing it.
+    try:
+        file_inputs = list_file_inputs(pdir)
+        load_issues: list[str] = []
+    except WorkflowLoadError as exc:
+        file_inputs = []
+        load_issues = exc.issues
     return templates.TemplateResponse(
         request,
         "section_runs.html",
@@ -108,7 +122,8 @@ async def runs_index(request: Request, project: str):
             "state": shell_state(pdir),
             "section": "runs",
             "runs": list_runs(project),
-            "file_inputs": list_file_inputs(pdir),
+            "file_inputs": file_inputs,
+            "load_issues": load_issues,
         },
     )
 

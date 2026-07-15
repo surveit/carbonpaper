@@ -14,6 +14,7 @@ import pytest
 from app.core.errors import MissingInputBindingError
 from app.core.models import Stage
 from app.runtime.runner import apply_input_bindings, execute_run
+from app.runtime.stages.input_data import read_input_data
 from app.services.versioning import create_version
 
 
@@ -52,6 +53,14 @@ def test_dict_binding_merges_over_params(tmp_path):
 def test_relative_binding_path_rejected(tmp_path):
     with pytest.raises(ValueError, match="load"):
         apply_input_bindings([_input_stage("load", None)], {"load": "data/items.csv"})
+
+
+def test_non_str_non_dict_binding_rejected_with_stage_id(tmp_path):
+    # A binding value that is neither a path string nor a params dict (e.g. an
+    # int from a malformed caller) must fail loudly and name the stage, not
+    # raise a bare TypeError from `dict(value)`.
+    with pytest.raises(ValueError, match="load"):
+        apply_input_bindings([_input_stage("load", None)], {"load": 7})
 
 
 def test_unknown_binding_key_rejected(tmp_path):
@@ -141,3 +150,12 @@ def test_handler_ignores_repo_root_for_file_inputs(tmp_path):
     manifest = execute_run(tmp_path, repo_root=elsewhere)
     assert manifest["status"] == "ok"
     assert manifest["stages"][0]["rows"] == 2
+
+
+def test_read_input_data_names_the_stage_when_no_path_is_bound(tmp_path):
+    # A path-free file-kind input reaching the handler directly (run_subset, or
+    # any caller that skips apply_input_bindings) must fail with a message that
+    # names the stage and explains why, not a bare KeyError.
+    stage = _input_stage("load_lobbying_filings", None)
+    with pytest.raises(ValueError, match="load_lobbying_filings"):
+        read_input_data(stage, ctx={})

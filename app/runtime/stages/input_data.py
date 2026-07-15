@@ -17,7 +17,13 @@ def read_input_data(stage: Stage, ctx: dict[str, Any]) -> pd.DataFrame:
     params = connector.params
 
     if connector.kind == ConnectorKind.file:
-        path = Path(params["path"])   # absolute: Connector/model + apply_input_bindings enforce it
+        if "path" not in params:
+            raise ValueError(
+                f"input stage '{stage.id}' has no file bound (connector params carry "
+                "no 'path'); runs bind one at prepare_run — subset/eval runs need the "
+                "workflow to author it or a reference override to inject it"
+            )
+        path = Path(params["path"])   # absolute: the model rejects a relative path when present
         fmt = params.get("format", "csv")
         if fmt == "csv":
             df = pd.read_csv(path)

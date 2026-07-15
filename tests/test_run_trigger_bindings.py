@@ -80,3 +80,32 @@ def test_runs_page_shows_one_field_per_file_input(project):
     assert resp.status_code == 200
     assert 'name="binding__load"' in resp.text
     assert str(project / "a.csv") in resp.text
+
+
+def _corrupt_version_snapshot_with_relative_path(project):
+    """Simulate a legacy version snapshot written before absolute paths were
+    enforced: write directly into the VERSION dir (not the working copy) so
+    load_version_stages hits an unloadable snapshot."""
+    version_id = sorted((project / "versions").iterdir())[-1].name
+    stage_path = project / "versions" / version_id / "compiled" / "01_load.json"
+    stage = json.loads(stage_path.read_text(encoding="utf-8"))
+    stage["connector"]["params"]["path"] = "relative/a.csv"
+    stage_path.write_text(json.dumps(stage), encoding="utf-8")
+
+
+def test_runs_page_surfaces_issues_for_a_legacy_version_not_500(project):
+    _corrupt_version_snapshot_with_relative_path(project)
+    resp = client.get("/project/demo/runs")
+    assert resp.status_code == 200
+    assert "ABSOLUTE" in resp.text
+    # An empty, silently-passing binding form would hide the problem — it must
+    # not render at all when the version snapshot fails to load.
+    assert 'name="binding__load"' not in resp.text
+
+
+def test_trigger_run_returns_400_with_issues_for_a_legacy_version(project):
+    _corrupt_version_snapshot_with_relative_path(project)
+    resp = client.post("/project/demo/run", data={}, follow_redirects=False)
+    assert resp.status_code == 400
+    body = resp.json()
+    assert any("ABSOLUTE" in issue for issue in body["issues"])
