@@ -1,12 +1,12 @@
 """The "sift" FastMCP server: authoring tools over app.services.
 
 Every tool takes an explicit `project_id` (the examples/<name>/ directory name)
-and goes through the name-based service surface — tools never build filesystem
-paths beyond resolving the project directory via workspace.resolve_project_dir
-(which refuses names that escape the workspace). Generation tools start LIVE
-chat turns on the server event loop and return immediately; callers poll
-get_project_status. Failures raise — FastMCP surfaces the exception message as
-a tool error — never a fabricated success."""
+and goes through the name-based service surface — tools resolve project
+directories only through workspace.resolve_project_dir (which refuses names
+escaping the workspace); any further path use stays inside that resolved
+directory. Generation tools start LIVE chat turns on the server event loop and
+return immediately; callers poll get_project_status. Failures raise — FastMCP
+surfaces the exception message as a tool error — never a fabricated success."""
 from __future__ import annotations
 
 from pathlib import Path
