@@ -87,3 +87,27 @@ class SqliteKvStore:
             raise DocumentNotFound(f"{collection}/{id}")
         return int(row[0])
 
+    def exists(self, collection: str, id: str) -> bool:
+        row = self._conn.execute(
+            "SELECT 1 FROM documents WHERE collection=? AND id=?", (collection, id)
+        ).fetchone()
+        return row is not None
+
+    def delete(self, collection: str, id: str) -> None:
+        self._conn.execute(
+            "DELETE FROM documents WHERE collection=? AND id=?", (collection, id)
+        )
+        self._conn.commit()
+
+    def read_tolerant(self, collection: str, id: str) -> JsonDict | None:
+        row = self._conn.execute(
+            "SELECT data FROM documents WHERE collection=? AND id=?", (collection, id)
+        ).fetchone()
+        if row is None:
+            return None
+        try:
+            parsed: JsonDict = json.loads(row[0])
+        except json.JSONDecodeError:
+            return None
+        return parsed
+

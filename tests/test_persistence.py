@@ -28,3 +28,29 @@ def test_read_missing_raises_document_not_found(store):
 def test_schema_version_persisted(store):
     store.write("run", "proj/1", {"status": "ok"}, schema_version=4)
     assert store.schema_version("run", "proj/1") == 4
+
+
+def test_exists_and_delete(store):
+    assert store.exists("run", "proj/1") is False
+    store.write("run", "proj/1", {"x": 1})
+    assert store.exists("run", "proj/1") is True
+    store.delete("run", "proj/1")
+    assert store.exists("run", "proj/1") is False
+
+
+def test_delete_missing_is_silent(store):
+    store.delete("run", "proj/absent")  # no raise
+
+
+def test_read_tolerant_missing_returns_none(store):
+    assert store.read_tolerant("run", "proj/absent") is None
+
+
+def test_read_tolerant_corrupt_returns_none(store):
+    # White-box: write a non-JSON body straight past write()'s json.dumps.
+    store._conn.execute(
+        "INSERT INTO documents (collection, id, data) VALUES (?, ?, ?)",
+        ("run", "proj/bad", "{not json"),
+    )
+    store._conn.commit()
+    assert store.read_tolerant("run", "proj/bad") is None
