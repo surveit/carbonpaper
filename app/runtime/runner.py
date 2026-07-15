@@ -21,13 +21,13 @@ import time
 import traceback
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import pandas as pd
 import pyarrow.lib as pa_lib
 
-from app.core.errors import NoVersionToRunError, SubsetRunError
-from app.core.models import Stage, Workflow
+from app.core.errors import MissingInputBindingError, NoVersionToRunError, SubsetRunError
+from app.core.models import Connector, ConnectorKind, Stage, StageType, Workflow
 from app.services.loader import WorkflowLoadError
 from app.services import versioning
 
@@ -122,6 +122,79 @@ def _resolve_version_id(project_dir: Path, version_id: str | None) -> str:
         f"targets an existing version and never creates one — create a version "
         f"first."
     )
+
+
+def apply_input_bindings(
+    stages: list[Stage], bindings: dict[str, Any] | None
+) -> tuple[list[Stage], dict[str, dict[str, Any]]]:
+    """Apply per-run input bindings to just-loaded stages, and check that every
+    file-kind input stage ends up with a file to read.
+
+    `bindings` maps an input stage id to a binding: an absolute path string
+    (shorthand) or a params dict ({path, format?, ...}) merged over the stage's
+    connector params. Bound stages are replaced by validated copies — the given
+    stages are never mutated. Returns (stages, resolved) where resolved maps
+    every file-kind input stage id to {"params": ..., "source": "run"|"workflow"}.
+
+    Fails loudly on: a binding keyed to anything but a file-kind input stage, a
+    relative or empty binding path, and any file-kind input stage left with no
+    path (MissingInputBindingError, naming all of them)."""
+    normalized = {k: _normalize_binding(k, v) for k, v in (bindings or {}).items()}
+    file_input_ids = {s.id for s in stages if _reads_file(s)}
+    unknown = set(normalized) - file_input_ids
+    if unknown:
+        raise ValueError(
+            f"bindings target stage id(s) that are not file-kind input stages: "
+            f"{sorted(unknown)}; file inputs are {sorted(file_input_ids)}")
+
+    out, resolved = [], {}
+    for stage in stages:
+        if stage.id in normalized:
+            stage = _rebind_connector(stage, normalized[stage.id])
+            assert stage.connector is not None
+            resolved[stage.id] = {"params": dict(stage.connector.params), "source": "run"}
+        elif stage.id in file_input_ids:
+            assert stage.connector is not None
+            resolved[stage.id] = {"params": dict(stage.connector.params), "source": "workflow"}
+        out.append(stage)
+
+    unbound = [
+        sid for sid, entry in resolved.items()
+        if not cast(dict[str, Any], entry).get("params", {}).get("path")
+    ]
+    unbound.sort()
+    if unbound:
+        raise MissingInputBindingError(
+            "no file bound for input stage(s) "
+            + ", ".join(f"`{s}`" for s in unbound)
+            + " — supply a run binding, or author an absolute path in the workflow")
+    return out, resolved
+
+
+def _reads_file(stage: Stage) -> bool:
+    return (stage.type == StageType.input_data
+            and stage.connector is not None
+            and stage.connector.kind == ConnectorKind.file)
+
+
+def _normalize_binding(stage_id: str, value: Any) -> dict[str, Any]:
+    params = {"path": value} if isinstance(value, str) else dict(value)
+    path = params.get("path")
+    if not isinstance(path, str) or not path.strip() or not Path(path).is_absolute():
+        raise ValueError(f"binding for `{stage_id}` needs an ABSOLUTE file path, got {path!r}")
+    return params
+
+
+def _rebind_connector(stage: Stage, binding: dict[str, Any]) -> Stage:
+    """A copy of `stage` with `binding` merged over its connector params. The
+    connector is re-validated as a whole (absolute path, known format), so a bad
+    binding fails here, not mid-run."""
+    assert stage.connector is not None
+    connector = Connector.model_validate({
+        **stage.connector.model_dump(),
+        "params": {**stage.connector.params, **binding},
+    })
+    return stage.model_copy(update={"connector": connector})
 
 
 def prepare_run(

@@ -78,3 +78,10 @@ class ProjectExistsError(Exception):
     """A project create was requested for a name whose examples/<name>/ directory
     already exists. Raised (loudly) rather than clobbering existing data — the
     rename is the human's decision."""
+
+
+class MissingInputBindingError(Exception):
+    """A run was requested but at least one file-kind input stage has no file
+    bound: no run binding was supplied and the workflow itself authors no path.
+    Raised before the run directory is created — a run never starts on inputs
+    that would have to be guessed. The message names every unbound stage."""
