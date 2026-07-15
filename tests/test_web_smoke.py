@@ -185,3 +185,21 @@ def test_versions_page_uses_the_project_shell():
     html = r.text
     assert 'class="app-side-nav"' in html          # the shell sidebar is present
     assert 'href="/project/demo/workflow"' in html  # sibling nav renders
+
+
+# ─── Schema table: the "range / enum" column actually renders enum ────────────
+
+
+def test_schema_table_renders_enum_vocabulary():
+    """The schema table header promises "range / enum"; an enum-typed column must
+    therefore surface its vocabulary in that cell (previously only `range` was
+    rendered, so the header lied for enum columns)."""
+    from app.core.models import TableSchema
+    from app.web.config import templates
+
+    schema = TableSchema.model_validate(
+        {"columns": [{"name": "status", "type": "str", "enum": ["open", "closed"]}]}
+    )
+    macro = templates.env.get_template("_schema_table.html").module
+    html = macro.schema_table(schema)
+    assert "open | closed" in html

@@ -129,7 +129,7 @@
               <td><span class="type-pill">{{ c.type }}</span></td>
               <td>{% if c.nullable %}<span class="muted">nullable</span>{% else %}<span class="strong">not null</span>{% endif %}</td>
               <td>{% if c.references %}<code class="range">→ {{ c.references }}</code>{% else %}<span class="muted">—</span>{% endif %}</td>
-              <td>{% if c.range %}<code class="range">{{ c.range }}</code>{% else %}<span class="muted">—</span>{% endif %}</td>
+              <td>{% if c.range %}<code class="range">{{ c.range }}</code>{% elif c.enum %}<code class="range">{{ c.enum | join(' | ') }}</code>{% else %}<span class="muted">—</span>{% endif %}</td>
               <td>{{ c.description or '' }}</td>
             </tr>
           {% endfor %}

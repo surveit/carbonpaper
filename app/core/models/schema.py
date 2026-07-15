@@ -76,11 +76,27 @@ class SourceRef(_Base):
 # ── Typed columns / schemas ──────────────────────────────────────────────────
 class Column(_Base):
     name: str
+    # `type` is a grammar-validated string, not an Enum or a typed AST, and that
+    # is deliberate (see #126). The vocabulary is recursive and parameterized —
+    # `list[str]`, `list[json]`, `list[list[int]]`, … — so a plain `Enum` can't
+    # enumerate it. A structural AST could, but every consumer already speaks the
+    # string: templates render `c.type` as a pill, the schema editor round-trips
+    # it through JSON, `to_prompt` and `_type_wording` format it for the LLM, and
+    # `validation.py` keys `PY_TYPE_OF` on it. The string is the natural
+    # serialization at all those boundaries, and `_known_type` /
+    # `is_valid_column_type` already enforce the grammar on the way in, so an AST
+    # would add ceremony at every edge without buying more safety.
     type: str = "str"
     nullable: bool = True
     description: Optional[str] = None
     range: Optional[list[Any]] = None
     source: Optional[str] = None
+    # A closed categorical-string vocabulary. Load-bearing, not decorative: the
+    # runtime warns on out-of-vocabulary values (`validation.py`), `to_prompt`
+    # lists the allowed values for the LLM ("one of: …"), it participates in
+    # producer/consumer spec-equality, and it is the sanctioned replacement for
+    # the old `range: [val1, val2, …]` categorical convention (see
+    # `_range_is_numeric_bounds`). Only valid on `str` columns.
     enum: Optional[list[str]] = None
     fields: Optional[list["Column"]] = None
     value_type: Optional[str] = None
