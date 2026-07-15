@@ -72,3 +72,9 @@ class DocumentNotFound(Exception):
     `PersistedModel.load`. The tolerant path (`read_tolerant` /
     `PersistedModel.load_or_none`) returns None instead. A genuine miss
     surfaced loudly, never a fabricated empty document."""
+
+
+class ProjectExistsError(Exception):
+    """A project create was requested for a name whose examples/<name>/ directory
+    already exists. Raised (loudly) rather than clobbering existing data — the
+    rename is the human's decision."""

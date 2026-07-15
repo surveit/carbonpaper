@@ -27,8 +27,10 @@ from typing import Any
 
 from app.compiler.data_model import start_data_model_generation_agent
 from app.compiler.workflow import start_workflow_generation_agent
+from app.core.models import parse_schema_library
 from app.core.models.named_schemas import SchemaLibrary
 from app.core.models.workflow import Workflow
+from app.services import node_review, workspace
 from app.services.compilation import regenerate_workflow
 from app.services.loader import stage_to_spec_dict
 
@@ -67,6 +69,22 @@ def start_workflow_generation(
         model=model,
         data_model=data_model,
         on_answer=lambda answer: _finish_workflow(project_dir, name, answer),
+    )
+
+
+def load_approved_data_model(project_dir: Path) -> SchemaLibrary | None:
+    """The project's data model as a validated SchemaLibrary — but ONLY when the
+    human has APPROVED it (the node-review gate); None when absent or unapproved.
+    Workflow generation grounds on the returned model; an unapproved model is
+    never passed as if it were reviewed."""
+    schemas = workspace.load_schemas(project_dir)
+    if not schemas:
+        return None
+    if node_review.data_model_state(project_dir, schemas)["state"] != "approved":
+        return None
+    # Strip the loader's bookkeeping keys (_filename/…) before the model validates.
+    return parse_schema_library(
+        [{k: v for k, v in s.items() if not k.startswith("_")} for s in schemas]
     )
 
 

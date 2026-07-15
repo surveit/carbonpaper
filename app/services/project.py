@@ -23,11 +23,14 @@ Two functions are the public surface:
 from __future__ import annotations
 
 import json
+import re
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 from pydantic import BaseModel
 
+from app.core.errors import ProjectExistsError
 from app.services import node_review, stage_edit, versioning, workspace
 from app.services.loader import load_compiled_dir, stage_to_json
 from app.services.stage_edit import EditStageResult
@@ -355,6 +358,41 @@ def project_state(pdir: Path) -> ProjectState:
 # comes from the model, so it is validated to stay inside the workspace.
 
 
+def create_project(
+    name: str,
+    document: str,
+    *,
+    model: str = "sonnet",
+    source: str,
+    examples_dir: Path | None = None,
+) -> str:
+    """Create the examples/<name>/ working copy for a NEW project: sanitize the
+    name, write document.md (the source of record) and project.json (real model +
+    created_at + source — never fabricated). Returns the sanitized name. Raises
+    ValueError on an empty document and ProjectExistsError on a name clash."""
+    safe_name = re.sub(r"[^a-z0-9_]", "_", name.strip().lower()) or "project"
+    doc = document.strip()
+    if not doc:
+        raise ValueError("The methodology document is empty.")
+    root = Path(examples_dir) if examples_dir is not None else workspace.EXAMPLES_DIR
+    project_dir = root / safe_name
+    if project_dir.exists():
+        raise ProjectExistsError(
+            f"examples/{safe_name}/ already exists — choose a different name."
+        )
+    project_dir.mkdir(parents=True)
+    (project_dir / "document.md").write_text(doc, encoding="utf-8")
+    write_project_meta(
+        project_dir,
+        name=safe_name,
+        title=None,
+        created_at=datetime.now().isoformat(timespec="seconds"),
+        model=model,
+        source=source,
+    )
+    return safe_name
+
+
 def list_projects(examples_dir: Path | None = None) -> list[str]:
     """The names of every authored project in the workspace."""
     return workspace.list_project_names(Path(examples_dir) if examples_dir is not None else workspace.EXAMPLES_DIR)
@@ -400,6 +438,7 @@ __all__ = [
     "project_meta",
     "write_project_meta",
     "project_state",
+    "create_project",
     "list_projects",
     "describe_workflow",
     "read_stage",
