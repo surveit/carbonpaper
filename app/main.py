@@ -20,6 +20,7 @@ from __future__ import annotations
 import os
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import AsyncIterator
 
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
@@ -30,6 +31,7 @@ from app.web.routers import evals, project, node_review, review, runs
 
 from app.agent.router import router as chat_router
 from app.compiler.router import router as compiler_router
+from app.mcp.server import mcp as sift_mcp
 
 # Importing the compiler agent's config registers the "editing" agent with the
 # generic agent registry, so build_engine("editing", …) resolves. The registry is
@@ -38,7 +40,7 @@ from app.compiler.agent import config as _editing_agent_config  # noqa: F401
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     # Guarded so a store configured ahead of time (the test suite's autouse
     # `:memory:` fixture) wins over the on-disk default — the app never
     # reconfigures a store that's already set.
@@ -46,7 +48,10 @@ async def lifespan(app: FastAPI):
         db_path = os.environ.get("CW_DB_PATH", "data/app.db")
         Path(db_path).parent.mkdir(parents=True, exist_ok=True)
         configure_store(SqliteKvStore(db_path))
-    yield
+    # The MCP session manager's task group must run for the server's lifetime —
+    # the /mcp endpoint errors without it. (Its run() is once-per-process.)
+    async with sift_mcp.session_manager.run():
+        yield
 
 
 app = FastAPI(title="Workflow", lifespan=lifespan)
@@ -64,3 +69,7 @@ app.include_router(compiler_router)
 # Interactive, multi-turn chat surface (streaming + persistence). Separate from
 # the row-mapped llm_transform path; see app/agent.
 app.include_router(chat_router)
+
+# The MCP authoring surface ("sift") — external agents author projects over
+# streamable HTTP; humans review/approve in the web UI above.
+app.mount("/mcp", sift_mcp.streamable_http_app())
