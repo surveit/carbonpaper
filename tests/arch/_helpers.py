@@ -33,6 +33,20 @@ def collect_called_methods(tree: ast.Module) -> set[str]:
     }
 
 
+def find_imported_modules(tree: ast.Module) -> set[str]:
+    """Dotted names this module imports: `import a.b` and `from a.b import c` both
+    yield "a.b". Relative imports (`from . import x`) are skipped — they are
+    same-package and never cross an architecture boundary."""
+    modules: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                modules.add(alias.name)
+        elif isinstance(node, ast.ImportFrom) and node.module is not None and node.level == 0:
+            modules.add(node.module)
+    return modules
+
+
 def find_numeric_get_defaults(tree: ast.Module) -> list[tuple[int, int]]:
     """(lineno, end_lineno) of each `x.get(key, <int/float literal>)` call.
 

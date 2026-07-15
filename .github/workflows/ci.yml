@@ -53,10 +53,12 @@ jobs:
       - run: python -m pip install -r requirements-dev.txt
       # Guard for refs without tests/: warn loudly instead of green-lighting a
       # bare `pytest`, which would collect the root-level manual probe scripts
-      # (test_roldugin.py etc.) that hit real APIs.
+      # (test_roldugin.py etc.) that hit real APIs. tests/ and app/ are named
+      # explicitly (not bare `pytest`) so the root probes stay uncollected while
+      # the colocated app/**/_arch_tests/ architecture checks DO run in CI.
       - run: |
           if [ -d tests ]; then
-            python -m pytest tests/
+            python -m pytest tests/ app/
           else
             echo "::warning::No tests/ directory on this ref — pytest was NOT run."
           fi

@@ -11,6 +11,7 @@ from pathlib import Path
 from arch._helpers import (
     collect_called_funcs,
     collect_called_methods,
+    find_imported_modules,
     find_numeric_get_defaults,
     parse_module,
 )
@@ -40,6 +41,23 @@ def check_no_raw_disk(paths: list[Path]) -> list[str]:
         )
         if hits:
             offenders.append(f"{path.name}: {sorted(hits)}")
+    return offenders
+
+
+def check_no_import(paths: list[Path], module: str, *, allow: set[str]) -> list[str]:
+    """Files that import `module` (or a submodule of it), except those whose path
+    ends with an entry in `allow`. Seals a backend behind its one owner — e.g.
+    `sqlite3` may be imported only by app/core/persistence.py, so no subsystem
+    talks to the database directly."""
+    allowed = {suffix.replace("\\", "/") for suffix in allow}
+    offenders: list[str] = []
+    for path in paths:
+        posix = path.as_posix()
+        if any(posix.endswith(suffix) for suffix in allowed):
+            continue
+        imported = find_imported_modules(parse_module(path))
+        if any(name == module or name.startswith(f"{module}.") for name in imported):
+            offenders.append(posix)
     return offenders
 
 

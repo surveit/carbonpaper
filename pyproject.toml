@@ -93,3 +93,25 @@ allowed_importers = ["app.web"]
 # evals depends on core (models/runtime/services) and is surfaced by app.web; the
 # arrow points toward core. A lower layer importing evals would be a cycle-forming
 # inversion — e.g. runtime.run_subset must stay eval-agnostic.
+
+[[tool.importlinter.contracts]]
+name = "app.core.persistence sits at the bottom — imports no app layer but core.errors"
+type = "forbidden"
+source_modules = ["app.core.persistence"]
+forbidden_modules = [
+    "app.core.models", "app.core.llm",
+    "app.services", "app.runtime", "app.web", "app.agent", "app.compiler", "app.evals",
+]
+# The document store is the lowest layer: it may lean on app.core.errors (where
+# DocumentNotFound lives) and nothing else first-party. If it imported the contracts
+# (app.core.models) or any upper layer, "records depend on the store, never the
+# reverse" would be a lie and the backend would stop being swappable in isolation.
+
+[[tool.importlinter.contracts]]
+name = "app.core.models stays pure — never imports the store"
+type = "forbidden"
+source_modules = ["app.core.models"]
+forbidden_modules = ["app.core.persistence"]
+# The pure contracts (Stage, TableSchema, …) are validation-only and side-effect-free.
+# Records embed contracts, so the arrow is records → contracts; a contract importing
+# persistence would invert that and drag storage into the type layer.
