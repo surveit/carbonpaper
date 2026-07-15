@@ -16,7 +16,7 @@ def S(**kw):
 
 def _file_input(id_):
     return S(id=id_, type="input_data",
-             connector={"kind": "file", "params": {"path": f"{id_}.csv"}})
+             connector={"kind": "file", "path": f"{id_}.csv"})
 
 
 def _py(id_, inputs, granularity="frame", **kw):

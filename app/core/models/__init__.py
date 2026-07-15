@@ -20,8 +20,11 @@ from app.core.models.stage import (
     AggFormula,
     AggregateConfig,
     AggregationOp,
+    ComputedStaticConnector,
     Connector,
+    ConnectorAdapter,
     ConnectorKind,
+    FileConnector,
     FileFormat,
     FunctionKind,
     InputRef,
@@ -110,7 +113,11 @@ NODE_TYPES: dict[str, dict[str, _Any]] = {
         "requires_inputs": False,
         "min_inputs": 0,
         "required": ["kind"],
-        "optional": ["params", "refresh", "notes"],
+        # kind-specific fields live on the connector subtype (kind=file →
+        # path[, format, list_columns, parse_dates]; kind=computed_static →
+        # optional file). See the connector-shape line in prompt.py.
+        "optional": ["path", "format", "list_columns", "parse_dates", "file",
+                     "refresh", "notes"],
     },
     "llm_transform": {
         "summary": "Row-by-row LLM call producing structured output.",
@@ -170,7 +177,8 @@ NODE_TYPE_NAMES: set[str] = set(NODE_TYPES)
 __all__ = [
     "StageType", "ConnectorKind", "FileFormat", "AggFormula", "JoinType",
     "FunctionKind", "PublishFormat", "is_valid_column_type",
-    "SourceRef", "Column", "TableSchema", "Connector", "LLMConfig",
+    "SourceRef", "Column", "TableSchema", "Connector", "ConnectorAdapter",
+    "FileConnector", "ComputedStaticConnector", "LLMConfig",
     "PythonFunction", "JoinKey", "JoinConfig", "AggregationOp",
     "AggregateConfig", "QueueConfig", "PublishConfig", "ReviewConfig",
     "InputRef", "Stage", "validate_stage",

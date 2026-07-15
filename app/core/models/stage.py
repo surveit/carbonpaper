@@ -7,9 +7,9 @@ strict about the fields declared here.
 from __future__ import annotations
 
 from enum import Enum
-from typing import Any, Literal, Optional
+from typing import Annotated, Any, Literal, Optional, Union
 
-from pydantic import Field, ValidationError, field_validator, model_validator
+from pydantic import Field, TypeAdapter, ValidationError, field_validator, model_validator
 
 from app.core.llm.options import LLMModel
 from app.core.models.schema import (
@@ -105,25 +105,55 @@ class PublishFormat(str, Enum):
 
 
 # ── Executable-handle blocks (each self-validates) ───────────────────────────
-class Connector(_Base):
-    """input_data handle."""
-    kind: ConnectorKind
-    params: dict[str, Any] = Field(default_factory=dict)
+# The input_data handle is a `kind`-discriminated union of connector subtypes.
+# Each kind's parameters are real typed fields — not an untyped `dict[str, Any]`
+# — so the schema is self-documenting and validated by shape (e.g. a `file`
+# connector without a `path` fails on the missing required field, not in a
+# hand-written validator). `kind` is the discriminator; adding a new connector
+# kind means adding a subtype and a runtime handler.
+class _ConnectorBase(_Base):
+    """Fields common to every connector kind."""
     refresh: str = "ad_hoc"
     notes: Optional[str] = None
 
-    @model_validator(mode="after")
-    def _params_for_kind(self) -> "Connector":
-        if self.kind == ConnectorKind.file:
-            path = (self.params or {}).get("path")
-            if not path or not isinstance(path, str):
-                raise ValueError(
-                    "connector kind=file requires params.path (repo-root-relative data file)"
-                )
-            fmt = (self.params or {}).get("format")
-            if fmt is not None and fmt not in {f.value for f in FileFormat}:
-                raise ValueError(f"unknown file format {fmt!r}")
-        return self
+
+class FileConnector(_ConnectorBase):
+    """input_data read from a repo-root-relative data file."""
+    kind: Literal["file"] = "file"
+    path: str = Field(description="repo-root-relative path to the data file")
+    format: Optional[FileFormat] = Field(
+        default=None, description="file format; defaults to csv when omitted"
+    )
+    list_columns: list[str] = Field(
+        default_factory=list,
+        description="columns whose cells are '[a, b]'-style lists to split on read",
+    )
+    parse_dates: list[str] = Field(
+        default_factory=list, description="columns to coerce to datetime on read"
+    )
+
+
+class ComputedStaticConnector(_ConnectorBase):
+    """input_data computed/seeded in place. Demo mode may seed the frame from an
+    optional CSV named by `file`; otherwise the stage originates an empty frame."""
+    kind: Literal["computed_static"] = "computed_static"
+    file: Optional[str] = Field(
+        default=None,
+        description="optional repo-root-relative CSV to seed the frame (demo mode)",
+    )
+
+
+# The connector handle, as a pydantic discriminated union. Used directly as the
+# `Stage.connector` annotation; `ConnectorAdapter` gives the same union a
+# standalone `.validate_python(...)` for validating a connector dict on its own.
+Connector = Annotated[
+    Union[FileConnector, ComputedStaticConnector],
+    Field(discriminator="kind"),
+]
+
+ConnectorAdapter: TypeAdapter[Union[FileConnector, ComputedStaticConnector]] = (
+    TypeAdapter(Connector)
+)
 
 
 class LLMConfig(_Base):

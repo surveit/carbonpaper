@@ -23,7 +23,7 @@ from app.evals.store import load_eval_run, save_eval_config
 
 _LOAD = {
     "id": "load", "type": "input_data", "name": "Load rows",
-    "connector": {"kind": "file", "params": {"path": "data/rows.csv", "format": "csv"}},
+    "connector": {"kind": "file", "path": "data/rows.csv", "format": "csv"},
     "output_schema": {"columns": [{"name": "doc_id", "type": "str"},
                                   {"name": "score", "type": "int"}]},
 }

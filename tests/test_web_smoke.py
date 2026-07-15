@@ -21,7 +21,7 @@ client = TestClient(app)
 
 _LOAD = {
     "id": "load", "type": "input_data", "name": "Load documents",
-    "connector": {"kind": "file", "params": {"path": "data/docs.csv", "format": "csv"}},
+    "connector": {"kind": "file", "path": "data/docs.csv", "format": "csv"},
     "output_schema": {"columns": [{"name": "doc_id", "type": "str"}]},
 }
 _EXTRACT = {
@@ -106,12 +106,12 @@ def test_trigger_run_returns_400_on_invalid_dag(monkeypatch):
     from app.services.loader import WorkflowLoadError
 
     def _boom(project_dir, repo_root):
-        raise WorkflowLoadError(Path("compiled"), ["01_bad.json: params.path missing"])
+        raise WorkflowLoadError(Path("compiled"), ["01_bad.json: path missing"])
 
     monkeypatch.setattr(runs_router, "prepare_run", _boom)
     r = client.post("/project/demo/run")
     assert r.status_code == 400
-    assert "01_bad.json: params.path missing" in r.json()["issues"]
+    assert "01_bad.json: path missing" in r.json()["issues"]
 
 
 # ─── Sidebar: Workflow group (Versions / Runs / Evals) + no lock ──────────────

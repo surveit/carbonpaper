@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.core.models import Stage
+from app.core.models import FileConnector, Stage
 from app.core.models.stage import StageType
 from app.web.loading import resolve_function_code
 
@@ -30,7 +30,7 @@ def _transform_of(stage: Stage | None) -> dict[str, Any]:
     # _Base sets use_enum_values, so stage.type is a plain str; compare by value.
     stage_type = str(stage.type)
     if stage_type == StageType.input_data.value:
-        path = stage.connector.params.get("path") if stage.connector else None
+        path = stage.connector.path if isinstance(stage.connector, FileConnector) else None
         src = path or (stage.source.doc if stage.source else None)
         return {"kind": "source", "detail": src or "originates the rows"}
     if stage_type in (StageType.python_row_function.value, StageType.python_frame_function.value):

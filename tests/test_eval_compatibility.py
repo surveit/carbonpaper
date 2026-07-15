@@ -17,7 +17,7 @@ def S(**kw):
 def _file_input(id_, cols=("k",)):
     return m.Stage.model_validate(S(
         id=id_, type="input_data",
-        connector={"kind": "file", "params": {"path": f"{id_}.csv"}},
+        connector={"kind": "file", "path": f"{id_}.csv"},
         output_schema={"columns": [{"name": c} for c in cols]}))
 
 
@@ -131,7 +131,7 @@ def test_eval_dataset_table_missing_a_column_of_override_schema():
 def test_dataset_schema_types_shared_column_differently():
     src = m.Stage.model_validate(S(
         id="src", type="input_data",
-        connector={"kind": "file", "params": {"path": "src.csv"}},
+        connector={"kind": "file", "path": "src.csv"},
         output_schema={"columns": [
             {"name": "k"}, {"name": "v", "type": "int"}, {"name": "quote"}]}))
     tgt = _row("tgt", ["src"], output_schema={
