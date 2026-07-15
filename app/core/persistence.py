@@ -18,7 +18,11 @@ the arch checks above.
 """
 from __future__ import annotations
 
+import json
+import sqlite3
 from typing import Any
+
+from app.core.errors import DocumentNotFound
 
 # The one honest dynamic boundary: an arbitrary pydantic model_dump / JSON body.
 JsonDict = dict[str, Any]
@@ -37,4 +41,49 @@ def validate_id(id: str) -> str:
     if any(part in ("", "..") for part in id.split("/")):
         raise ValueError(f"unsafe id (empty or '..' segment): {id!r}")
     return id
+
+
+class SqliteKvStore:
+    """DocumentStore backed by one SQLite table: opaque JSON bodies keyed by
+    (collection, id). Writes are atomic; WAL mode lets readers run concurrently
+    with a writer. `db_path` is a file path or ":memory:" (tests)."""
+
+    def __init__(self, db_path: str) -> None:
+        self._conn = sqlite3.connect(db_path, check_same_thread=False)
+        self._conn.execute("PRAGMA journal_mode=WAL")
+        self._conn.execute(
+            "CREATE TABLE IF NOT EXISTS documents ("
+            "  collection TEXT NOT NULL,"
+            "  id TEXT NOT NULL,"
+            "  data TEXT NOT NULL,"
+            "  schema_version INTEGER NOT NULL DEFAULT 1,"
+            "  PRIMARY KEY (collection, id))"
+        )
+        self._conn.commit()
+
+    def write(self, collection: str, id: str, data: JsonDict, schema_version: int = 1) -> None:
+        self._conn.execute(
+            "INSERT OR REPLACE INTO documents (collection, id, data, schema_version) "
+            "VALUES (?, ?, ?, ?)",
+            (collection, id, json.dumps(data), schema_version),
+        )
+        self._conn.commit()
+
+    def read(self, collection: str, id: str) -> JsonDict:
+        row = self._conn.execute(
+            "SELECT data FROM documents WHERE collection=? AND id=?", (collection, id)
+        ).fetchone()
+        if row is None:
+            raise DocumentNotFound(f"{collection}/{id}")
+        parsed: JsonDict = json.loads(row[0])
+        return parsed
+
+    def schema_version(self, collection: str, id: str) -> int:
+        row = self._conn.execute(
+            "SELECT schema_version FROM documents WHERE collection=? AND id=?",
+            (collection, id),
+        ).fetchone()
+        if row is None:
+            raise DocumentNotFound(f"{collection}/{id}")
+        return int(row[0])
 

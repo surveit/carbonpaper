@@ -64,3 +64,10 @@ class SubsetRunError(Exception):
 
 class LLMError(Exception):
     """A live-LLM call failed, or no LLM backend is available."""
+
+
+class DocumentNotFound(Exception):
+    """No document exists for a (collection, id) in the store. Raised by the
+    strict read path (DocumentStore.read / PersistedModel.load); the tolerant
+    path returns None instead. A genuine miss surfaced loudly, never a fabricated
+    empty document."""
