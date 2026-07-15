@@ -12,7 +12,7 @@ from app.services import workspace
 # type needs one, so a stage written by this helper always round-trips through
 # Stage.model_validate.
 _HANDLE_BY_TYPE: dict[str, dict] = {
-    "input_data": {"connector": {"kind": "file", "params": {"path": "data/items.csv", "format": "csv"}}},
+    "input_data": {"connector": {"kind": "file", "path": "data/items.csv", "format": "csv"}},
     "llm_transform": {"llm": {"prompt_template": "score {row}"}},
 }
 

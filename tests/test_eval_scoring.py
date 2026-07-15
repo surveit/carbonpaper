@@ -17,7 +17,7 @@ def _stage(id_, output_cols):
     which reads only stage ids and output schemas."""
     return m.Stage.model_validate({
         "id": id_, "type": "input_data", "name": id_,
-        "connector": {"kind": "file", "params": {"path": f"{id_}.csv"}},
+        "connector": {"kind": "file", "path": f"{id_}.csv"},
         "output_schema": {"columns": output_cols},
     })
 

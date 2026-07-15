@@ -51,7 +51,7 @@ def test_table_schema_ok():
 def test_valid_input_data():
     s = m.Stage.model_validate(S(
         id="load", type="input_data",
-        connector={"kind": "file", "params": {"path": "d.csv", "format": "csv"}}))
+        connector={"kind": "file", "path": "d.csv", "format": "csv"}))
     assert s.type == m.StageType.input_data
 
 
@@ -111,7 +111,7 @@ def test_python_function_inline_valid_transform_ok():
 def test_bad_id_snake_case():
     with pytest.raises(ValidationError):
         m.Stage.model_validate(S(id="BadId", type="input_data",
-                                 connector={"kind": "file", "params": {"path": "d.csv"}}))
+                                 connector={"kind": "file", "path": "d.csv"}))
 
 
 def test_unknown_type_raises():
@@ -139,7 +139,7 @@ def test_input_ids_property():
 
 def test_source_parses_as_sourceref():
     s = m.Stage.model_validate(S(id="load", type="input_data",
-                                 connector={"kind": "file", "params": {"path": "d.csv"}},
+                                 connector={"kind": "file", "path": "d.csv"},
                                  source={"doc": "x.md", "section": "S1", "lines": [1, 2]}))
     assert s.source.doc == "x.md" and s.source.lines == [1, 2]
 
@@ -180,15 +180,36 @@ def test_aggregate_valid():
                                                           "value_column": "x"}]}))
 
 
-# ── review cuts / enums ──────────────────────────────────────────────────────
+# ── connector discriminated union ────────────────────────────────────────────
 def test_unimplemented_connector_kind_rejected():
-    with pytest.raises(ValidationError):
-        m.Connector.model_validate({"kind": "http", "params": {"url": "x"}})
+    # An unknown kind has no subtype in the union; the discriminator names the
+    # kinds it does accept, so the failure is legible.
+    with pytest.raises(ValidationError) as exc:
+        m.ConnectorAdapter.validate_python({"kind": "http", "url": "x"})
+    assert "kind" in str(exc.value)
 
 
-def test_implemented_connectors_ok():
-    m.Connector.model_validate({"kind": "file", "params": {"path": "d.csv", "format": "csv"}})
-    m.Connector.model_validate({"kind": "computed_static", "params": {}})
+def test_implemented_connectors_parse_to_their_subtypes():
+    file_c = m.ConnectorAdapter.validate_python(
+        {"kind": "file", "path": "d.csv", "format": "csv"})
+    assert isinstance(file_c, m.FileConnector)
+    assert file_c.path == "d.csv" and file_c.format == "csv"
+
+    static_c = m.ConnectorAdapter.validate_python({"kind": "computed_static"})
+    assert isinstance(static_c, m.ComputedStaticConnector)
+
+
+def test_file_connector_optional_read_params_are_typed():
+    c = m.ConnectorAdapter.validate_python(
+        {"kind": "file", "path": "d.csv",
+         "list_columns": ["tags"], "parse_dates": ["seen_at"]})
+    assert c.list_columns == ["tags"] and c.parse_dates == ["seen_at"]
+
+
+def test_stage_connector_is_a_subtype_instance():
+    s = m.Stage.model_validate(S(id="load", type="input_data",
+                                 connector={"kind": "file", "path": "d.csv"}))
+    assert isinstance(s.connector, m.FileConnector)
 
 
 def test_weighted_formula_cut():
@@ -200,8 +221,8 @@ def test_weighted_formula_cut():
 
 
 def test_unknown_file_format_rejected():
-    with pytest.raises(ValidationError):
-        m.Connector.model_validate({"kind": "file", "params": {"path": "d.xyz", "format": "xyz"}})
+    with pytest.raises(ValidationError, match="format"):
+        m.ConnectorAdapter.validate_python({"kind": "file", "path": "d.xyz", "format": "xyz"})
 
 
 def test_model_enum_accepts_known():
@@ -224,7 +245,7 @@ def test_model_enum_rejects_unknown():
 # ── non-fatal helper ─────────────────────────────────────────────────────────
 def test_validate_stage_helper():
     assert m.validate_stage(S(id="load", type="input_data",
-                              connector={"kind": "file", "params": {"path": "d.csv"}})) == []
+                              connector={"kind": "file", "path": "d.csv"})) == []
     assert m.validate_stage({"id": "BadId", "type": "input_data", "name": "x", "connector": {"kind": "file"}})
 
 
@@ -251,16 +272,16 @@ def test_inputs_accept_bare_id_shorthand():
 
 
 def test_file_connector_requires_path():
-    with pytest.raises(ValidationError, match="params.path"):
+    with pytest.raises(ValidationError, match="path"):
         m.Stage.model_validate(S(id="load", type="input_data",
-                                 connector={"kind": "file", "params": {"format": "csv"}}))
+                                 connector={"kind": "file", "format": "csv"}))
 
 
 def test_file_connector_rejects_unknown_format():
-    with pytest.raises(ValidationError, match="unknown file format"):
+    with pytest.raises(ValidationError, match="format"):
         m.Stage.model_validate(S(id="load", type="input_data",
                                  connector={"kind": "file",
-                                            "params": {"path": "d.csv", "format": "derived"}}))
+                                            "path": "d.csv", "format": "derived"}))
 
 
 def test_unknown_keys_rejected():
@@ -272,7 +293,7 @@ def test_unknown_keys_rejected():
 
 def test_enum_fields_are_plain_strings():
     s = m.Stage.model_validate(S(id="load", type="input_data",
-                                 connector={"kind": "file", "params": {"path": "d.csv"}}))
+                                 connector={"kind": "file", "path": "d.csv"}))
     assert s.type == "input_data" and isinstance(s.type, str)
     assert s.connector is not None and isinstance(s.connector.kind, str)
 
@@ -285,6 +306,6 @@ def test_aggregation_requires_value_column_except_count():
 
 def test_stage_eval_block_is_kept():
     s = m.Stage.model_validate(S(id="load", type="input_data",
-                                 connector={"kind": "file", "params": {"path": "d.csv"}},
+                                 connector={"kind": "file", "path": "d.csv"},
                                  eval={"metrics": ["recall"]}))
     assert s.eval == {"metrics": ["recall"]}

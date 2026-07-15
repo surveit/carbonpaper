@@ -8,17 +8,16 @@ from typing import Any
 
 import pandas as pd
 
-from app.core.models import ConnectorKind, Stage
+from app.core.models import ComputedStaticConnector, FileConnector, Stage
 
 
 def read_input_data(stage: Stage, ctx: dict[str, Any]) -> pd.DataFrame:
     connector = stage.connector
     assert connector is not None  # Stage validation: input_data carries connector
-    params = connector.params
 
-    if connector.kind == ConnectorKind.file:
-        path = ctx["repo_root"] / params["path"]   # required by Connector validation
-        fmt = params.get("format", "csv")
+    if isinstance(connector, FileConnector):
+        path = ctx["repo_root"] / connector.path   # required field on FileConnector
+        fmt = connector.format or "csv"
         if fmt == "csv":
             df = pd.read_csv(path)
         elif fmt == "parquet":
@@ -31,22 +30,21 @@ def read_input_data(stage: Stage, ctx: dict[str, Any]) -> pd.DataFrame:
             raise ValueError(f"Unsupported file format: {fmt}")
 
         # Optional list-column splitting (e.g., "[a, b]" → ["a", "b"])
-        for col in params.get("list_columns", []):
+        for col in connector.list_columns:
             if col in df.columns:
                 df[col] = df[col].apply(_parse_list_cell)
 
         # Optional date parsing
-        for col in params.get("parse_dates", []):
+        for col in connector.parse_dates:
             if col in df.columns:
                 df[col] = pd.to_datetime(df[col], errors="coerce")
 
         return df
 
-    if connector.kind == ConnectorKind.computed_static:
-        # Demo mode: read from the file param if provided
-        path = params.get("file")
-        if path:
-            return pd.read_csv(ctx["repo_root"] / path)
+    if isinstance(connector, ComputedStaticConnector):
+        # Demo mode: read from the seed file if provided
+        if connector.file:
+            return pd.read_csv(ctx["repo_root"] / connector.file)
         return pd.DataFrame()
 
     raise ValueError(f"Unknown connector kind: {connector.kind}")

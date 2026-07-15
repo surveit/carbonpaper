@@ -16,7 +16,7 @@ def S(**kw):
 def test_workflow_clean():
     wf = m.parse_workflow([
         S(id="load", type="input_data",
-          connector={"kind": "file", "params": {"path": "d.csv", "format": "csv"}}),
+          connector={"kind": "file", "path": "d.csv", "format": "csv"}),
         S(id="extract", type="python_frame_function", inputs=[{"id": "load"}],
           function={"kind": "inline", "code": "def transform(row): return row"}),
     ])
@@ -26,8 +26,8 @@ def test_workflow_clean():
 def test_workflow_duplicate_ids():
     with pytest.raises(ValidationError):
         m.parse_workflow([
-            S(id="a", type="input_data", connector={"kind": "file", "params": {"path": "d.csv"}}),
-            S(id="a", type="input_data", connector={"kind": "file", "params": {"path": "d.csv"}}),
+            S(id="a", type="input_data", connector={"kind": "file", "path": "d.csv"}),
+            S(id="a", type="input_data", connector={"kind": "file", "path": "d.csv"}),
         ])
 
 
@@ -66,7 +66,7 @@ def test_detect_cycle_reports_cycle():
 
 def test_detect_cycle_empty_when_acyclic():
     a = Stage.model_validate(S(id="a", type="input_data",
-                               connector={"kind": "file", "params": {"path": "d.csv"}}))
+                               connector={"kind": "file", "path": "d.csv"}))
     b = Stage.model_validate(S(id="b", type="python_frame_function", inputs=[{"id": "a"}], function={"kind": "inline", "code": "def transform(row): return row"}))
     assert m.detect_cycle([a, b]) == []
 
@@ -76,7 +76,7 @@ def test_detect_cycle_empty_when_acyclic():
 def test_validate_workflow_clean_is_empty():
     stages = [
         Stage.model_validate(S(id="load", type="input_data",
-                               connector={"kind": "file", "params": {"path": "d.csv", "format": "csv"}})),
+                               connector={"kind": "file", "path": "d.csv", "format": "csv"})),
     ]
     assert m.validate_workflow(stages) == []
 

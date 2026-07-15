@@ -30,7 +30,7 @@ client = TestClient(app)
 
 _OVERRIDE = {
     "id": "load", "type": "input_data", "name": "Load documents",
-    "connector": {"kind": "file", "params": {"path": "data/docs.csv", "format": "csv"}},
+    "connector": {"kind": "file", "path": "data/docs.csv", "format": "csv"},
     "output_schema": {"columns": [{"name": "doc_id", "type": "str"},
                                   {"name": "text", "type": "str"}]},
 }

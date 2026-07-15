@@ -37,7 +37,7 @@ def _make_project(root):
         .to_csv(root / "data" / "items.csv", index=False)
     stage = {
         "id": "load", "name": "Load items", "type": "input_data",
-        "connector": {"kind": "file", "params": {"path": "data/items.csv", "format": "csv"}},
+        "connector": {"kind": "file", "path": "data/items.csv", "format": "csv"},
         "limit": 2,
     }
     (root / "compiled" / "01_load.json").write_text(json.dumps(stage), encoding="utf-8")
@@ -111,7 +111,7 @@ def _two_stage_project(root, rows: list[dict]):
     load = {
         "id": "load", "name": "Load items", "type": "input_data",
         "connector": {"kind": "file",
-                      "params": {"path": "data/items.csv", "format": "csv"}},
+                      "path": "data/items.csv", "format": "csv"},
     }
     consume = {
         "id": "consume", "name": "Consume items", "type": "python_frame_function",
@@ -178,13 +178,13 @@ def test_create_version_rejects_invalid_working_copy(tmp_path):
     be immortalised as a version."""
     (tmp_path / "compiled").mkdir(parents=True)
     bad = {"id": "load", "name": "Load", "type": "input_data",
-           "connector": {"kind": "file", "params": {"format": "csv"}}}  # no path
+           "connector": {"kind": "file", "format": "csv"}}  # no path
     (tmp_path / "compiled" / "01_load.json").write_text(
         json.dumps(bad), encoding="utf-8")
 
     with pytest.raises(WorkflowLoadError) as exc:
         create_version(tmp_path, message="x", reviewer="test")
-    assert any("params.path" in i for i in exc.value.issues)
+    assert any("path" in i for i in exc.value.issues)
     assert not (tmp_path / "versions").exists()  # snapshotted nothing
 
 
@@ -194,10 +194,10 @@ def test_invalid_workflow_never_becomes_a_version_and_run_never_pins_stale(tmp_p
     immortalised as 'the latest' and every later default run reloaded that
     poisoned snapshot and failed with a stale error. Now runs never create
     versions and create_version validates first, so the bug is impossible."""
-    # Invalid working copy: file connector missing params.path.
+    # Invalid working copy: file connector missing path.
     (tmp_path / "compiled").mkdir(parents=True)
     bad = {"id": "load", "name": "Load", "type": "input_data",
-           "connector": {"kind": "file", "params": {"format": "csv"}}}
+           "connector": {"kind": "file", "format": "csv"}}
     (tmp_path / "compiled" / "01_load.json").write_text(
         json.dumps(bad), encoding="utf-8")
 
@@ -219,7 +219,7 @@ def test_invalid_workflow_never_becomes_a_version_and_run_never_pins_stale(tmp_p
         tmp_path / "data" / "items.csv", index=False)
     good = {"id": "load", "name": "Load", "type": "input_data",
             "connector": {"kind": "file",
-                          "params": {"path": "data/items.csv", "format": "csv"}}}
+                          "path": "data/items.csv", "format": "csv"}}
     (tmp_path / "compiled" / "01_load.json").write_text(
         json.dumps(good), encoding="utf-8")
     with pytest.raises(NoVersionToRunError):

@@ -62,8 +62,14 @@ def _node_type_contract() -> str:
     out.append("")
     out.append("Column types: " + ", ".join(sorted(models.SCALAR_COLUMN_TYPES))
                + ", or list[<type>].")
-    out.append("Connector kinds (input_data.connector.kind): "
-               + ", ".join(sorted(models.CONNECTOR_KINDS)) + ".")
+    out.append(
+        "Connector kinds (input_data.connector.kind): "
+        + ", ".join(sorted(models.CONNECTOR_KINDS)) + ". "
+        "kind=file needs `path` (repo-root-relative) plus optional `format` "
+        "(csv|parquet|json|geojson), `list_columns`, `parse_dates`; "
+        "kind=computed_static takes an optional `file` seed CSV. Connector "
+        "params are top-level fields on the block, not a nested `params` dict. "
+        "Other kinds are draft-only (no runtime handler yet).")
     out.append("python_transform.function.kind ∈ {module, inline} "
                "(module → needs `module`; inline → needs `code`).")
     out.append("join.type ∈ " + ", ".join(sorted(models.JOIN_TYPES))

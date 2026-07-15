@@ -14,11 +14,11 @@ from app.services.loader import (
 
 VALID = {
     "id": "load", "name": "Load", "type": "input_data",
-    "connector": {"kind": "file", "params": {"path": "data/items.csv", "format": "csv"}},
+    "connector": {"kind": "file", "path": "data/items.csv", "format": "csv"},
 }
-INVALID = {  # file connector without params.path
+INVALID = {  # file connector without path
     "id": "bad", "name": "Bad", "type": "input_data",
-    "connector": {"kind": "file", "params": {"format": "csv"}},
+    "connector": {"kind": "file", "format": "csv"},
 }
 
 

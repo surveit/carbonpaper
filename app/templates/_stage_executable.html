@@ -12,11 +12,15 @@
     <dl class="kv">
         <dt>kind</dt><dd><code>{{ stage.connector.kind }}</code></dd>
         <dt>refresh</dt><dd>{{ stage.connector.refresh }}</dd>
+        {% if stage.connector.kind == "file" %}
+        <dt>path</dt><dd><code>{{ stage.connector.path }}</code></dd>
+        {% if stage.connector.format %}<dt>format</dt><dd><code>{{ stage.connector.format }}</code></dd>{% endif %}
+        {% if stage.connector.list_columns %}<dt>list_columns</dt><dd>{{ stage.connector.list_columns | join(", ") }}</dd>{% endif %}
+        {% if stage.connector.parse_dates %}<dt>parse_dates</dt><dd>{{ stage.connector.parse_dates | join(", ") }}</dd>{% endif %}
+        {% elif stage.connector.kind == "computed_static" and stage.connector.file %}
+        <dt>file</dt><dd><code>{{ stage.connector.file }}</code></dd>
+        {% endif %}
     </dl>
-    {% if stage.connector.params %}
-    <h3>params</h3>
-    <pre class="yaml-block">{{ stage.connector.params | tojson(indent=2) }}</pre>
-    {% endif %}
     {% if stage.connector.notes %}
     <h3>notes</h3>
     <p>{{ stage.connector.notes }}</p>
