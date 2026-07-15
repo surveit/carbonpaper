@@ -34,11 +34,19 @@ def validate_id(id: str) -> str:
     """Return ``id`` if it is safe to use as a storage key and relative-path
     component, else raise ``ValueError``. A composite id (``<project>/<local>``)
     may contain ``/``, but never an empty or ``..`` segment, a leading ``/``, a
-    backslash, or a NUL — so an id sourced from a model or an upload can't escape
-    its collection when a backend turns it into a file path."""
+    backslash, a NUL, or a colon — so an id sourced from a model or an upload
+    can't escape its collection when a backend turns it into a file path. This
+    rejects an absolute path under any OS convention: POSIX-absolute (``/x``) is
+    caught by the leading-``/`` check, and the colon ban catches every
+    Windows-absolute form — drive-absolute (``C:/x``, ``C:\\x``) and
+    drive-relative (``C:x``) alike, plus NTFS alternate-data-stream names
+    (``name:stream``) — on every OS, including when validation runs on Linux.
+    That last part matters because ``pathlib.Path(id).is_absolute()`` follows
+    whatever platform it runs on and would let ``C:/x`` through unchanged there,
+    so this check tests for ``:`` directly instead of deferring to pathlib."""
     if not id or id != id.strip():
         raise ValueError(f"empty or untrimmed id: {id!r}")
-    if id.startswith("/") or "\\" in id or "\x00" in id:
+    if id.startswith("/") or "\\" in id or "\x00" in id or ":" in id:
         raise ValueError(f"unsafe id: {id!r}")
     if any(part in ("", "..") for part in id.split("/")):
         raise ValueError(f"unsafe id (empty or '..' segment): {id!r}")

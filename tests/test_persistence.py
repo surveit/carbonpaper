@@ -1,7 +1,7 @@
 import pytest
 
 from app.core.errors import DocumentNotFound
-from app.core.persistence import PersistedModel, SqliteKvStore, configure_store
+from app.core.persistence import PersistedModel, SqliteKvStore, configure_store, validate_id
 
 
 @pytest.fixture
@@ -114,3 +114,33 @@ def test_get_store_unconfigured_raises():
     p._store = None
     with pytest.raises(RuntimeError):
         p.get_store()
+
+
+@pytest.mark.parametrize(
+    "id_",
+    ["abc", "roldugin/20260710T142200", "a/b/c", "a.b-c_d"],
+)
+def test_validate_id_accepts_safe_ids(id_):
+    assert validate_id(id_) == id_
+
+
+@pytest.mark.parametrize(
+    "id_",
+    [
+        "",
+        " x",
+        "/abs",
+        "a\\b",
+        "..",
+        "a/../b",
+        "a//b",
+        "a/",
+        "x\x00y",
+        "C:/evil",  # POSIX-style drive-absolute id
+        "C:\\evil",  # Windows-style drive-absolute id
+        "C:evil",  # drive-relative id (no root); anchors to whatever drive is current
+    ],
+)
+def test_validate_id_rejects_unsafe_ids(id_):
+    with pytest.raises(ValueError):
+        validate_id(id_)
