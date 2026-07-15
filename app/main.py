@@ -24,6 +24,7 @@ from typing import AsyncIterator
 
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
+from starlette.routing import Route
 
 from app.core.persistence import SqliteKvStore, configure_store, is_store_configured
 from app.web.config import STATIC_DIR
@@ -70,6 +71,10 @@ app.include_router(compiler_router)
 # the row-mapped llm_transform path; see app/agent.
 app.include_router(chat_router)
 
-# The MCP authoring surface ("sift") — external agents author projects over
-# streamable HTTP; humans review/approve in the web UI above.
-app.mount("/mcp", sift_mcp.streamable_http_app())
+# The MCP authoring surface ("sift"): an exact-path ASGI route, not a Mount —
+# a Mount never matches its own bare path and would 307-redirect POST /mcp to
+# /mcp/, which not every MCP client follows. The streamable-HTTP sub-app keeps
+# its default internal path (/mcp), so the unmodified scope path matches it.
+app.router.routes.append(
+    Route("/mcp", endpoint=sift_mcp.streamable_http_app(), methods=["GET", "POST", "DELETE"])
+)

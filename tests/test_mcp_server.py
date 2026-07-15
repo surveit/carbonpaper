@@ -47,6 +47,7 @@ def test_mcp_endpoint_initializes(client):
     resp = client.post("/mcp", json=INITIALIZE, headers=HEADERS)
     assert resp.status_code == 200
     assert resp.json()["result"]["serverInfo"]["name"] == "sift"
+    assert resp.history == []  # exact-path match — a 307 redirect would break non-following MCP clients
 
 
 def test_mcp_lists_the_authoring_tools(client):
