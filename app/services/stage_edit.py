@@ -56,6 +56,22 @@ def _current_specs(project_dir: Path) -> dict[str, dict]:
     return {stage.id: stage_to_spec_dict(stage) for stage in workflow.stages}
 
 
+def _current_specs_or_empty(project_dir: Path) -> dict[str, dict]:
+    """The empty-tolerant sibling of ``_current_specs``, for ``add_stage``: a
+    project whose ``compiled/`` holds no stage files yet yields ``{}`` instead of
+    raising, so the FIRST stage can be added to a fresh workflow (its resulting
+    single-stage workflow is validated by ``_apply`` exactly as any later add is).
+    A ``compiled/`` that HAS files but fails to load still raises — real corruption
+    in existing stages must fail loudly, not be silently treated as empty. This is
+    right for add and wrong for edit/patch: those target an existing stage, so an
+    empty workflow is genuinely an error there (surfaced as the stage not being
+    found)."""
+    compiled_dir = project_dir / "compiled"
+    if not compiled_dir.is_dir() or not any(compiled_dir.glob("*.json")):
+        return {}
+    return _current_specs(project_dir)
+
+
 def _apply(project_dir: Path, specs: dict[str, dict], stage_id: str, candidate: dict) -> EditStageResult:
     """Apply ``candidate`` as stage ``stage_id`` to the in-memory workflow ``specs``,
     validate the whole resulting workflow (per-stage AND graph, via the same
@@ -139,7 +155,7 @@ def add_stage_spec(project_dir: Path, spec_text: str) -> EditStageResult:
     stage_id = spec.get("id")
     if not isinstance(stage_id, str) or not stage_id:
         return EditStageResult(ok=False, issues=["new stage must have a non-empty string 'id'"])
-    specs = _current_specs(project_dir)
+    specs = _current_specs_or_empty(project_dir)
     if stage_id in specs:
         return EditStageResult(
             ok=False,

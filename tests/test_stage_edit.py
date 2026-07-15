@@ -201,3 +201,37 @@ def test_add_stage_rejects_duplicate_id(tmp_path: Path) -> None:
            "connector": {"kind": "computed_static"}}
     result = stage_edit.add_stage_spec(pdir, json.dumps(dup))
     assert result.ok is False and any("already exists" in i for i in result.issues)
+
+
+def test_add_first_stage_to_empty_workflow(tmp_path: Path) -> None:
+    # A fresh project: an empty compiled/ dir, no stages yet. Adding the FIRST stage
+    # must succeed — the incremental build path seeds a workflow from nothing, and a
+    # source stage (input_data, no inputs) has nothing upstream to resolve against.
+    compiled = tmp_path / "gamma" / "compiled"
+    compiled.mkdir(parents=True, exist_ok=True)
+    pdir = tmp_path / "gamma"
+    first = {"id": "load", "name": "Load", "type": "input_data",
+             "connector": {"kind": "computed_static"}}
+    result = stage_edit.add_stage_spec(pdir, json.dumps(first))
+    assert result.ok is True and not result.issues
+    assert (compiled / "load.json").exists()
+    # And a second stage can then reference the first — the graph builds up.
+    second = {"id": "score", "name": "Score", "type": "llm_transform",
+              "inputs": [{"id": "load", "schema": _IN_SCHEMA}],
+              "llm": {"prompt_template": "score {row}"},
+              "output_schema": _OUT_SCHEMA}
+    assert stage_edit.add_stage_spec(pdir, json.dumps(second)).ok is True
+
+
+def test_add_first_stage_still_validates_the_stage(tmp_path: Path) -> None:
+    # Tolerating an empty workflow does not weaken validation: an invalid first stage
+    # is still rejected and nothing is written.
+    compiled = tmp_path / "delta" / "compiled"
+    compiled.mkdir(parents=True, exist_ok=True)
+    pdir = tmp_path / "delta"
+    # input_data with connector kind=file but no params.path — invalid per the model.
+    bad = {"id": "load", "name": "Load", "type": "input_data",
+           "connector": {"kind": "file"}}
+    result = stage_edit.add_stage_spec(pdir, json.dumps(bad))
+    assert result.ok is False and result.issues
+    assert not any(compiled.glob("*.json"))
