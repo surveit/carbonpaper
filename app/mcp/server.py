@@ -60,9 +60,7 @@ def get_project_status(project_id: str) -> dict[str, Any]:
     (generating shows no schemas yet; then unapproved/approved), workflow stage
     counts and review coverage, versions, runs. Poll this after generate_* to see
     the result land."""
-    pdir = workspace.resolve_project_dir(project_id)
-    if not pdir.is_dir():
-        raise ValueError(f"no project '{project_id}' in the workspace")
+    pdir = _resolve_existing_project(project_id)
     return project_service.project_state(pdir).model_dump(mode="json")
 
 
@@ -74,7 +72,7 @@ async def generate_data_model(project_id: str) -> dict[str, Any]:
     they can watch it stream at the returned `watch` path in the web UI. The
     human then reviews/approves the data model in the web UI before the workflow
     is generated."""
-    pdir = workspace.resolve_project_dir(project_id)
+    pdir = _resolve_existing_project(project_id)
     document = _read_document(pdir, project_id)
     model = project_service.project_meta(pdir).model or "sonnet"
     session_id = generation.start_generation(pdir, document=document, model=model)
@@ -88,7 +86,7 @@ async def generate_workflow(project_id: str) -> dict[str, Any]:
     model is not passed — approve first for a grounded workflow). Never touches
     the schemas. Starts a live generation turn in the background and returns
     immediately — poll get_project_status until the workflow appears."""
-    pdir = workspace.resolve_project_dir(project_id)
+    pdir = _resolve_existing_project(project_id)
     document = _read_document(pdir, project_id)
     model = project_service.project_meta(pdir).model or "sonnet"
     data_model = generation.load_approved_data_model(pdir)
@@ -107,7 +105,8 @@ async def generate_workflow(project_id: str) -> dict[str, Any]:
 def read_data_model(project_id: str) -> list[dict[str, Any]]:
     """The project's data model: every named schema as JSON (empty list if none
     generated yet)."""
-    return workspace.load_schemas(workspace.resolve_project_dir(project_id))
+    pdir = _resolve_existing_project(project_id)
+    return workspace.load_schemas(pdir)
 
 
 @mcp.tool()
@@ -115,6 +114,7 @@ def describe_workflow(project_id: str) -> dict[str, Any]:
     """Summarize a project's workflow: each stage's id, type, name, upstream input
     ids, and review state. Read this before editing so you know the current
     shape. Does not return full stage specs — use read_stage for one."""
+    _resolve_existing_project(project_id)
     return project_service.describe_workflow(project_id)
 
 
@@ -149,6 +149,16 @@ def add_stage(project_id: str, stage_json: str) -> dict[str, Any]:
     returned. The new node lands 'unreviewed' (amber) for a human to approve."""
     result = project_service.add_stage(project_id, stage_json)
     return {"ok": result.ok, "issues": result.issues}
+
+
+def _resolve_existing_project(project_id: str) -> Path:
+    """Resolve a project id to its directory, raising if no such project exists —
+    a typo'd id is a loud error, never an empty result that reads as a real
+    (empty) project."""
+    pdir = workspace.resolve_project_dir(project_id)
+    if not pdir.is_dir():
+        raise ValueError(f"no project '{project_id}' in the workspace")
+    return pdir
 
 
 def _read_document(pdir: Path, project_id: str) -> str:

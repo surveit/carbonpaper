@@ -107,3 +107,14 @@ def test_generate_data_model_without_document_fails_loudly(tmp_path, monkeypatch
     (tmp_path / "empty_proj").mkdir()
     with pytest.raises(ValueError):
         asyncio.run(server.generate_data_model(project_id="empty_proj"))
+
+
+def test_read_tools_reject_unknown_project(tmp_path, monkeypatch):
+    from app.mcp import server
+    from app.services import workspace
+
+    monkeypatch.setattr(workspace, "EXAMPLES_DIR", tmp_path)
+    with pytest.raises(ValueError):
+        server.read_data_model(project_id="no_such_project")
+    with pytest.raises(ValueError):
+        server.describe_workflow(project_id="no_such_project")
