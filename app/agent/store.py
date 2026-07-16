@@ -1,35 +1,46 @@
-"""File-based chat session store (axis-1 persistence).
+"""Chat session store (axis-1 persistence).
 
-One JSON file per session under the sessions dir, holding session metadata plus
-one engine-agnostic transcript: a list of ``{role, parts}`` messages (part types
-``text|thinking|tool_call|tool_result``) plus the resume token that carries the
-agent's cross-turn memory. The transcript lives here, in the app's own files, not
-in a vendor session store.
+Each session is an `AgentSession` record in the process-wide document store (see
+app.core.persistence): metadata plus one engine-agnostic transcript — a list of
+``{role, parts}`` messages (part types ``text|thinking|tool_call|tool_result``) —
+plus the resume token that carries the agent's cross-turn memory. `SessionStore`
+is a stateless adapter over that record: every method loads, mutates, and saves
+through the configured store.
 
-Single-machine, filesystem-backed. In-flight turns live in memory (see
-app.agent.turns); surviving a server restart mid-turn is out of scope.
+In-flight turns live in memory (see app.agent.turns); surviving a server restart
+mid-turn is out of scope.
 """
 from __future__ import annotations
 
-import json
-import os
 import uuid
 from datetime import datetime
-from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
-# The process-wide sessions directory the chat UI reads/writes. Env-overridable so a
-# test (or an alternate deployment) can point it elsewhere.
-SESSIONS_DIR = Path(
-    os.environ.get("CW_CHAT_SESSIONS_DIR", str(Path(__file__).resolve().parent / "_sessions"))
-)
+from pydantic import Field
+
+from app.core.persistence import PersistedModel
+
+
+class AgentSession(PersistedModel):
+    """A chat session: metadata, the bound agent + its context, and the stored
+    transcript. `id` (inherited from PersistedModel) is the session id."""
+
+    collection: ClassVar[str] = "agent_session"
+    created_at: str
+    title: str = "New chat"
+    agent_id: str | None = None
+    context: dict[str, Any] = Field(default_factory=dict)
+    messages: list[dict[str, Any]] = Field(default_factory=list)  # engine-neutral {role, parts} transcript
+    active_turn: str | None = None
+    pending_user: str | None = None
+    sdk_session_id: str | None = None  # resume token (CLI session to resume)
 
 
 def open_session_store() -> SessionStore:
-    """The canonical session store the chat UI reads/writes (rooted at SESSIONS_DIR).
-    Both the chat routes and headless writers (e.g. generation) use this so their
-    sessions land in the same place and list together."""
-    return SessionStore(SESSIONS_DIR)
+    """The canonical session store the chat UI reads/writes. Both the chat routes
+    and headless writers (e.g. generation) use this so their sessions land in the
+    same document store and list together."""
+    return SessionStore()
 
 
 def _now() -> str:
@@ -37,21 +48,9 @@ def _now() -> str:
 
 
 class SessionStore:
-    def __init__(self, root: Path):
-        self.root = Path(root)
-        self.root.mkdir(parents=True, exist_ok=True)
-
-    def _path(self, sid: str) -> Path:
-        return self.root / f"{sid}.json"
-
-    def exists(self, sid: str) -> bool:
-        return self._path(sid).exists()
-
-    def _read(self, sid: str) -> dict:
-        return json.loads(self._path(sid).read_text(encoding="utf-8"))
-
-    def _write(self, sid: str, data: dict) -> None:
-        self._path(sid).write_text(json.dumps(data, indent=2), encoding="utf-8")
+    """Stateless adapter over `AgentSession`: every method loads, mutates, and
+    saves a record through the process-wide document store (app.core.persistence)
+    — the store instance itself holds no state of its own."""
 
     def create(
         self,
@@ -64,20 +63,21 @@ class SessionStore:
         opaque `context` (what that agent needs to bind its tools). Both are read
         back by the message route to build the engine for each turn."""
         sid = uuid.uuid4().hex[:12]
-        self._write(sid, {
-            "session_id": sid,
-            "created_at": _now(),
-            "title": title or "New chat",
-            "agent_id": agent_id,
-            "context": context or {},
-            "messages": [],
-            "active_turn": None,
-            "pending_user": None,
-        })
+        AgentSession(
+            id=sid,
+            created_at=_now(),
+            title=title or "New chat",
+            agent_id=agent_id,
+            context=context or {},
+        ).save()
         return sid
 
+    def exists(self, sid: str) -> bool:
+        return AgentSession.exists(sid)
+
     def load(self, sid: str) -> dict:
-        return self._read(sid)
+        session = AgentSession.load(sid)
+        return {"session_id": session.id, **session.model_dump(exclude={"id"})}
 
     def load_messages(self, sid: str) -> list[dict[str, Any]]:
         """Always empty: the agent's cross-turn memory comes from resuming the CLI
@@ -89,48 +89,43 @@ class SessionStore:
     def save_messages(self, sid: str, messages: list[dict[str, Any]]) -> None:
         """Persist the engine's neutral ``{role, parts}`` transcript verbatim — it
         is already plain JSON."""
-        data = self._read(sid)
-        data["messages"] = messages
-        data["pending_user"] = None
-        self._write(sid, data)
+        session = AgentSession.load(sid)
+        session.messages = messages
+        session.pending_user = None
+        session.save()
 
     def set_active_turn(self, sid: str, turn_id: str | None) -> None:
-        data = self._read(sid)
-        data["active_turn"] = turn_id
-        self._write(sid, data)
+        session = AgentSession.load(sid)
+        session.active_turn = turn_id
+        session.save()
 
     def resume_token(self, sid: str) -> str | None:
         """The CLI session id to resume for this chat session's next turn, or None
         on the first turn. Carries conversation memory across turns."""
-        return self._read(sid).get("sdk_session_id")
+        return AgentSession.load(sid).sdk_session_id
 
     def set_resume_token(self, sid: str, token: str) -> None:
-        data = self._read(sid)
-        data["sdk_session_id"] = token
-        self._write(sid, data)
+        session = AgentSession.load(sid)
+        session.sdk_session_id = token
+        session.save()
 
     def set_pending_user(self, sid: str, text: str | None) -> None:
-        data = self._read(sid)
-        data["pending_user"] = text
-        self._write(sid, data)
+        session = AgentSession.load(sid)
+        session.pending_user = text
+        session.save()
 
     def list_sessions(self) -> list[dict]:
-        out = []
-        for p in sorted(self.root.glob("*.json"), reverse=True):
-            try:
-                d = json.loads(p.read_text(encoding="utf-8"))
-            except (OSError, json.JSONDecodeError):
-                continue
-            out.append({
-                "session_id": d.get("session_id"),
-                "title": d.get("title"),
-                "created_at": d.get("created_at"),
-            })
-        return out
+        newest_first = sorted(
+            AgentSession.list(), key=lambda s: (s.created_at, s.id), reverse=True
+        )
+        return [
+            {"session_id": s.id, "title": s.title, "created_at": s.created_at}
+            for s in newest_first
+        ]
 
     def history_view(self, sid: str) -> list[dict]:
         """The stored transcript rendered as simple bubbles for the template."""
-        return _render_history_bubbles(self._read(sid).get("messages") or [])
+        return _render_history_bubbles(AgentSession.load(sid).messages)
 
 
 def _render_history_bubbles(messages: list[dict]) -> list[dict]:

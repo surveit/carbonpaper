@@ -5,7 +5,6 @@ with asyncio.run (no pytest-asyncio in this repo), mirroring tests/test_sdk_engi
 from __future__ import annotations
 
 import asyncio
-from pathlib import Path
 from typing import Any
 
 from app.agent.store import SessionStore
@@ -29,8 +28,8 @@ class _RaisingEngine:
         raise OSError("connection dropped")
 
 
-def test_start_invokes_on_done_after_the_turn(tmp_path: Path) -> None:
-    store = SessionStore(tmp_path)
+def test_start_invokes_on_done_after_the_turn() -> None:
+    store = SessionStore()
     sid = store.create()
     calls: list[str] = []
 
@@ -47,8 +46,8 @@ def test_start_invokes_on_done_after_the_turn(tmp_path: Path) -> None:
     assert calls == ["done"]
 
 
-def test_on_done_runs_even_when_the_turn_errors(tmp_path: Path) -> None:
-    store = SessionStore(tmp_path)
+def test_on_done_runs_even_when_the_turn_errors() -> None:
+    store = SessionStore()
     sid = store.create()
     calls: list[str] = []
 

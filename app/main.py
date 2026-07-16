@@ -17,9 +17,14 @@ Then open http://localhost:8765/
 
 from __future__ import annotations
 
+import os
+from contextlib import asynccontextmanager
+from pathlib import Path
+
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
+from app.core.persistence import SqliteKvStore, configure_store, is_store_configured
 from app.web.config import STATIC_DIR
 from app.web.routers import evals, project, node_review, review, runs
 
@@ -31,7 +36,20 @@ from app.compiler.router import router as compiler_router
 # populated by import side effect; keep this import even though the name is unused.
 from app.compiler.agent import config as _editing_agent_config  # noqa: F401
 
-app = FastAPI(title="Workflow")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Guarded so a store configured ahead of time (the test suite's autouse
+    # `:memory:` fixture) wins over the on-disk default — the app never
+    # reconfigures a store that's already set.
+    if not is_store_configured():
+        db_path = os.environ.get("CW_DB_PATH", "data/app.db")
+        Path(db_path).parent.mkdir(parents=True, exist_ok=True)
+        configure_store(SqliteKvStore(db_path))
+    yield
+
+
+app = FastAPI(title="Workflow", lifespan=lifespan)
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 app.include_router(project.router)

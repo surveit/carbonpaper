@@ -88,8 +88,8 @@ class _FakeTurnAgent:
         return _Engine()
 
 
-def test_start_workflow_generation_agent_runs_a_live_turn_and_calls_back(tmp_path: Any, monkeypatch: Any):
-    store = SessionStore(tmp_path / "sessions")
+def test_start_workflow_generation_agent_runs_a_live_turn_and_calls_back(monkeypatch: Any):
+    store = SessionStore()
     turns = TurnManager()
     monkeypatch.setattr(wf, "open_session_store", lambda: store)
     monkeypatch.setattr(wf, "default_turn_manager", lambda: turns)

@@ -74,7 +74,7 @@ class _FakeAgent:
 def test_start_generation_creates_a_session_and_runs_a_live_turn(tmp_path: Path, monkeypatch: Any):
     project_dir = tmp_path / "demo"
     project_dir.mkdir()
-    store = SessionStore(tmp_path / "sessions")
+    store = SessionStore()
     turns = TurnManager()
     # The app.agent bridge (session + live turn) lives in app.compiler.data_model, which
     # generation delegates to.

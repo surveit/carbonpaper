@@ -13,8 +13,9 @@ build/
 # Persisted compilation objects (file-backed, like examples/<m>/runs)
 compilations/
 
-# Chat session transcripts (file-backed, per app/chat/store.py)
-app/agent/_sessions/
+# Process-wide document store (SQLite; app/core/persistence.py), configured at
+# app startup (app/main.py lifespan). Path is overridable via CW_DB_PATH.
+data/
 
 # Example methodology content + scratch pipelines. Generated run outputs land
 # here, and lint/typecheck skip these dirs (ruff respects .gitignore).
