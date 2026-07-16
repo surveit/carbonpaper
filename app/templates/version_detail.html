@@ -5,7 +5,7 @@
   target this version: publish, run this version. Belief review is not here — a
   version is frozen; review happens on the working-copy editor.
 
-  Context: state; section="workflow"; version (meta + computed `published`);
+  Context: state; section="versions"; version (meta + computed `published`);
            mermaid (frozen graph string).
 #}
 {% block title %}{{ state.meta.title or state.name }} · Version {{ version.id }}{% endblock %}
@@ -29,7 +29,7 @@
     <p class="lede">A read-only snapshot of the workflow. {% if version.message %}{{ version.message }}{% endif %}</p>
   </div>
   <div class="actions wf-actions">
-    <a href="/project/{{ state.name }}/workflow" class="btn">← All versions</a>
+    <a href="/project/{{ state.name }}/workflow/versions" class="btn">← All versions</a>
     {% if version.published %}
     <span class="muted">✓ published {{ version.published_at or '' }}</span>
     <form action="/project/{{ state.name }}/workflow/version/{{ version.id }}/run" method="post" style="display:inline">

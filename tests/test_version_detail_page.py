@@ -41,6 +41,7 @@ def test_version_detail_renders_frozen_graph_and_publish(project: Path) -> None:
     assert meta["id"] in page.text
     assert "mermaid" in page.text          # the graph rendered
     assert "/publish" in page.text          # unpublished → Publish control present
+    assert 'href="/project/demo/workflow/versions"' in page.text  # ← All versions
 
 
 def test_version_detail_404_for_unknown_version(project: Path) -> None:

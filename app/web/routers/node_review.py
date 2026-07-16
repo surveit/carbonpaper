@@ -186,8 +186,8 @@ async def publish_version_route(project: str, version_id: str):
     """Record human approval on one version (the gate runs pin to). Idempotent;
     metadata only — stage content is never touched. A malformed version_id (any
     shape but the timestamp versioning.load_version_meta expects) 404s through
-    that same FileNotFoundError. Redirects to the workflow section (the version
-    list lives there) in one hop."""
+    that same FileNotFoundError. Publish is only ever posted from the version's own
+    detail page, so redirect back there (now showing published) in one hop."""
     project_dir = EXAMPLES_DIR / project
     if not project_dir.is_dir():
         raise HTTPException(status_code=404, detail=f"No project '{project}'")
@@ -195,4 +195,6 @@ async def publish_version_route(project: str, version_id: str):
         versioning.publish_version(project_dir, version_id, reviewer="local")
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
-    return RedirectResponse(url=f"/project/{project}/workflow", status_code=303)
+    return RedirectResponse(
+        url=f"/project/{project}/workflow/version/{version_id}", status_code=303
+    )

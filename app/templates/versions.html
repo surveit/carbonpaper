@@ -1,24 +1,26 @@
 {% extends "project_shell.html" %}
 {#
-  WORKFLOW landing — every immutable version of a project, newest-first, with approval
+  VERSIONS — every immutable version of a project, newest-first, with approval
   coverage frozen at creation time. The mutable working copy (edit + review +
-  create-version) lives at /workflow/current, one click away from here.
+  create-version) lives at /workflow, one click away from here. Published state
+  shows read-only — publishing itself is an approval act that happens only on the
+  version-detail page, after looking at that version.
 
   Context the route passes:
-    state    = project_view.shell_state(pdir); section = "workflow"
+    state    = project_view.shell_state(pdir); section = "versions"
     versions = versioning.list_versions(pdir), each with a computed `published`
                bool (versioning.version_is_published) — newest-first (may be empty)
 #}
 {% block section %}
 <div class="sec-head wf-head">
   <div class="wf-head-title">
-    <h1>Workflow</h1>
+    <h1>Versions</h1>
     <p class="lede">Each version is an immutable, valid snapshot of the workflow's stages,
       with approval coverage frozen at creation time. A run pins to a <em>published</em>
       version — publishing records human approval and never edits content.</p>
   </div>
   <div class="actions wf-actions">
-    <a href="/project/{{ state.name }}/workflow/current" class="btn">Current working copy</a>
+    <a href="/project/{{ state.name }}/workflow" class="btn">Current working copy</a>
     <a href="/project/{{ state.name }}/runs" class="btn">Runs</a>
   </div>
 </div>
@@ -57,9 +59,6 @@
                 {% if v.published %}
                 <span class="muted">✓ {{ v.published_at or 'published' }}</span>
                 {% else %}
-                <form action="/project/{{ state.name }}/versions/{{ v.id }}/publish" method="post" style="display:inline">
-                    <button type="submit">Publish</button>
-                </form>
                 <span class="muted">unpublished</span>
                 {% endif %}
             </td>
@@ -72,10 +71,10 @@
   <h2>No versions yet</h2>
   {% if state.workflow.present %}
   <p class="muted">You have a working copy that hasn't been versioned. Open the
-    <a href="/project/{{ state.name }}/workflow/current">current working copy</a>
+    <a href="/project/{{ state.name }}/workflow">current working copy</a>
     to review it and <strong>Create version</strong>.</p>
   {% else %}
-  <p class="muted">No workflow yet. <a href="/project/{{ state.name }}/workflow/current">Generate one from your document</a> to get started.</p>
+  <p class="muted">No workflow yet. <a href="/project/{{ state.name }}/workflow">Generate one from your document</a> to get started.</p>
   {% endif %}
 </div>
 {% endif %}

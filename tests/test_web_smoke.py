@@ -93,11 +93,11 @@ def test_project_shell_has_no_manual_edit_with_agent_control():
 
 
 def test_workflow_section_renders_the_graph():
-    """GET /project/{name}/workflow/current renders the belief-coloured stage graph
+    """GET /project/{name}/workflow renders the belief-coloured stage graph
     (the working-copy editor). With a compiled workflow present, the mermaid source
     names the stages even before the data-model gate is approved (the template locks
     interaction, not the graph)."""
-    r = client.get("/project/demo/workflow/current")
+    r = client.get("/project/demo/workflow")
     assert r.status_code == 200
     assert "extract" in r.text                              # a stage id in the graph
 
@@ -119,17 +119,19 @@ def test_trigger_run_returns_400_on_invalid_dag(monkeypatch):
 
 
 def test_build_nav_groups_workflow_children(demo_project):
-    """build_nav returns Runs/Evals as CHILDREN of the Workflow item — the Workflow
-    leaf itself lands on the version list (/workflow); the top level carries only
-    Overview / Document / Data model / Workflow. This is the sidebar's contract —
-    the template renders exactly this tree."""
+    """build_nav returns Versions/Runs/Evals as CHILDREN of the Workflow item — the
+    Workflow leaf itself lands on the working-copy editor (/workflow); the top level
+    carries only Overview / Document / Data model / Workflow. This is the sidebar's
+    contract — the template renders exactly this tree."""
     from app.web.project_view import build_nav, shell_state
 
     nav = build_nav(shell_state(demo_project / "demo"))
     assert [item.key for item in nav] == ["overview", "document", "data_model", "workflow"]
     workflow = nav[-1]
     assert workflow.href.endswith("/demo/workflow")
-    assert [child.key for child in workflow.children] == ["runs", "evals"]
+    assert [child.key for child in workflow.children] == ["versions", "runs", "evals"]
+    versions_child = workflow.children[0]
+    assert versions_child.href.endswith("/demo/workflow/versions")
     # The top-level items are leaves (only Workflow groups).
     assert all(not item.children for item in nav[:-1])
 
@@ -151,12 +153,12 @@ def test_build_nav_status_tokens(demo_project):
 
 
 def test_workflow_page_points_to_versions_tab():
-    """Option B: the version list lives on the Workflow tab (/workflow); the working
-    copy editor (/workflow/current) keeps the Create-version control and links back to
-    that list, not a duplicated inline list."""
-    html = client.get("/project/demo/workflow/current").text
-    assert "wf-versions-link" in html                  # the pointer to the tab
-    assert 'href="/project/demo/workflow"' in html      # which links there
+    """The version list lives at /workflow/versions; the working copy editor
+    (/workflow) keeps the Create-version control and links to that list, not a
+    duplicated inline list."""
+    html = client.get("/project/demo/workflow").text
+    assert "wf-versions-link" in html                            # the pointer to the tab
+    assert 'href="/project/demo/workflow/versions"' in html      # which links there
 
 
 def test_sidebar_nests_runs_evals_under_workflow():
@@ -204,9 +206,9 @@ def test_runs_page_links_to_the_pinned_workflow_version(demo_project):
 
 
 def test_versions_page_uses_the_project_shell():
-    """/project/demo/versions redirects to the Workflow tab (/workflow), a shell
-    section (carries the sidebar) — so the old versions URL still lands somewhere
-    consistent with the rest of the app, not a bare page."""
+    """/project/demo/versions redirects to the versions list (/workflow/versions), a
+    shell section (carries the sidebar) — so the old versions URL still lands
+    somewhere consistent with the rest of the app, not a bare page."""
     r = client.get("/project/demo/versions")
     assert r.status_code == 200
     html = r.text

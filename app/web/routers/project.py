@@ -12,10 +12,10 @@ A project is one directory under examples/<name>/ framed by a left-sidebar shell
     GET  /project/{project}                      — Overview
     GET  /project/{project}/document             — Document (read-only source)
     GET  /project/{project}/data_model           — Data model + ER + the approval GATE
-    GET  /project/{project}/workflow             — Workflow landing: versions, newest-first
-    GET  /project/{project}/workflow/current     — the mutable working-copy editor
+    GET  /project/{project}/workflow             — the mutable working-copy editor
+    GET  /project/{project}/workflow/versions    — the version list, newest-first
     GET  /project/{project}/workflow/version/{id}— one immutable version, read-only
-    GET  /project/{project}/versions             — 307 redirect to /workflow
+    GET  /project/{project}/versions             — 307 redirect to /workflow/versions
 
   Create + data-model gate
     GET  /project/new                            — the paste-doc create form
@@ -343,9 +343,9 @@ async def project_data_model(request: Request, project_name: str):
     )
 
 
-@router.get("/project/{project_name}/workflow/current", response_class=HTMLResponse)
-async def project_workflow_current(request: Request, project_name: str):
-    """WORKFLOW CURRENT — the mutable working-copy editor: the mermaid graph coloured
+@router.get("/project/{project_name}/workflow", response_class=HTMLResponse)
+async def project_workflow(request: Request, project_name: str):
+    """WORKFLOW — the mutable working-copy editor: the mermaid graph coloured
     by belief, the per-node review split-view, and the Build / Run / Create-version
     controls. Always navigable (the data-model→workflow nav lock is disabled pending a
     rethink); renders an empty state when no workflow is authored yet.
@@ -401,12 +401,14 @@ async def project_workflow_current(request: Request, project_name: str):
     )
 
 
-@router.get("/project/{project_name}/workflow", response_class=HTMLResponse)
-async def project_workflow(request: Request, project_name: str):
-    """WORKFLOW landing — the version history, newest-first. Each version links to
-    its read-only detail. The mutable working copy (edit + review + create-version)
-    lives at /workflow/current; a project with no versions yet shows the right CTA
-    (generate a workflow, or snapshot the working copy you already have)."""
+@router.get("/project/{project_name}/workflow/versions", response_class=HTMLResponse)
+async def project_workflow_versions(request: Request, project_name: str):
+    """VERSIONS — the version history, newest-first. Each version links to its
+    read-only detail; published state shows read-only here (publishing is an
+    approval act that happens on the detail page, after looking at the version).
+    The mutable working copy (edit + review + create-version) lives at /workflow; a
+    project with no versions yet shows the right CTA (generate a workflow, or
+    snapshot the working copy you already have)."""
     pdir = _project_dir(project_name)
     versions = [
         {**meta, "published": versioning.version_is_published(meta)}
@@ -415,14 +417,16 @@ async def project_workflow(request: Request, project_name: str):
     return templates.TemplateResponse(
         request,
         "versions.html",
-        {"state": shell_state(pdir), "section": "workflow", "versions": versions},
+        {"state": shell_state(pdir), "section": "versions", "versions": versions},
     )
 
 
 @router.get("/project/{project_name}/versions")
 async def versions_redirect(project_name: str):
-    """The versions list is the Workflow landing now; keep the old path working."""
-    return RedirectResponse(url=f"/project/{project_name}/workflow", status_code=307)
+    """The versions list moved to /workflow/versions; keep the old path working."""
+    return RedirectResponse(
+        url=f"/project/{project_name}/workflow/versions", status_code=307
+    )
 
 
 @router.get("/project/{project_name}/workflow/version/{version_id}",
@@ -443,7 +447,7 @@ async def project_workflow_version(request: Request, project_name: str, version_
         "version_detail.html",
         {
             "state": shell_state(pdir),
-            "section": "workflow",
+            "section": "versions",
             "version": {**meta, "published": versioning.version_is_published(meta)},
             "mermaid": build_mermaid_graph(stages, project_name),
         },

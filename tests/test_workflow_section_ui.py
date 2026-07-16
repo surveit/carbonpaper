@@ -66,33 +66,33 @@ def _make(tmp_path, monkeypatch, *, with_stages, with_schemas, approved):
 
 def test_zero_state_button_posts_generate_workflow_not_generate(tmp_path, monkeypatch):
     _make(tmp_path, monkeypatch, with_stages=False, with_schemas=True, approved=True)
-    html = client.get("/project/demo/workflow/current").text
+    html = client.get("/project/demo/workflow").text
     assert 'action="/project/demo/generate-workflow"' in html
     assert 'action="/project/demo/generate"' not in html  # not the full data-model regen
 
 
 def test_zero_state_approved_uses_data_model_reference(tmp_path, monkeypatch):
     _make(tmp_path, monkeypatch, with_stages=False, with_schemas=True, approved=True)
-    html = client.get("/project/demo/workflow/current").text.lower()
+    html = client.get("/project/demo/workflow").text.lower()
     assert "approved data model" in html
 
 
 def test_zero_state_unapproved_warns_not_passed(tmp_path, monkeypatch):
     _make(tmp_path, monkeypatch, with_stages=False, with_schemas=True, approved=False)
-    html = client.get("/project/demo/workflow/current").text.lower()
+    html = client.get("/project/demo/workflow").text.lower()
     assert "not approved" in html
     assert "will not be passed" in html
 
 
 def test_zero_state_no_data_model_warns(tmp_path, monkeypatch):
     _make(tmp_path, monkeypatch, with_stages=False, with_schemas=False, approved=False)
-    html = client.get("/project/demo/workflow/current").text.lower()
+    html = client.get("/project/demo/workflow").text.lower()
     assert "no data model" in html
     assert "/project/demo/generate-workflow" in html  # still generatable
 
 
 def test_workflow_present_has_regenerate_control(tmp_path, monkeypatch):
     _make(tmp_path, monkeypatch, with_stages=True, with_schemas=True, approved=True)
-    html = client.get("/project/demo/workflow/current").text
+    html = client.get("/project/demo/workflow").text
     assert "/project/demo/generate-workflow" in html
     assert "Regenerate workflow" in html
