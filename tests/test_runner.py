@@ -17,8 +17,9 @@ import json
 import pandas as pd
 import pytest
 
-from app.core.errors import NoVersionToRunError
-from app.runtime.runner import execute_run
+from app.core.errors import NoVersionToRunError, SubsetRunError
+from app.core.models import Stage, Workflow
+from app.runtime.runner import execute_run, run_subset
 from app.runtime.stages import llm_transform as lt
 from app.services.loader import WorkflowLoadError
 from app.services.versioning import create_version
@@ -190,9 +191,11 @@ def _llm_transform_project(root):
 
 
 def test_llm_generation_failure_surfaces_as_error_status_not_raised(tmp_path, monkeypatch):
-    # A row's generation failure must show up as an error-severity output
-    # issue and flip the stage to status=error — WITHOUT raising, so the
-    # stage still completes and keeps its (partial) output.
+    # A row's generation failure must show up as an error-severity output issue,
+    # flip the stage to status=error, AND carry a populated error record naming
+    # the real cause (so _raise_if_run_failed / eval subset runs don't report
+    # "unknown error") — WITHOUT raising, so the stage still completes and keeps
+    # its (partial) output.
     def boom(stage_id, llm_config, row, **kw):
         raise RuntimeError("boom")
 
@@ -204,12 +207,52 @@ def test_llm_generation_failure_surfaces_as_error_status_not_raised(tmp_path, mo
     records = {r["stage_id"]: r for r in manifest["stages"]}
     rec = records["score"]
     assert rec["status"] == "error"
-    assert rec["error"] is None                    # not raised: no exception record
     assert rec["rows"] == 1                         # stage completed, output kept
     issues = rec["output_validation"]["issues"]
     assert any("generation failed" in i["message"] and "boom" in i["message"]
                for i in issues)
+    assert rec["error"]["type"] == "RowGenerationError"
+    assert "boom" in rec["error"]["message"]         # the real reason, not "unknown error"
+    assert rec["error"]["traceback"] is None         # distinguishes it from a raised exception
     assert manifest["status"] == "errors"
+
+
+def test_run_subset_surfaces_the_real_row_failure_message(tmp_path, monkeypatch):
+    # run_subset backs eval/preview runs (app/evals/runner.py). A row failure
+    # must raise SubsetRunError naming the real cause via record["error"] —
+    # not "unknown error" — because _raise_if_run_failed reads that field.
+    def boom(stage_id, llm_config, row, **kw):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(lt, "call_llm", boom)
+    load = Stage.model_validate({
+        "id": "load", "name": "Load items", "type": "input_data",
+        "connector": {"kind": "file",
+                      "params": {"path": "data/items.csv", "format": "csv"}},
+    })
+    score = Stage.model_validate({
+        "id": "score", "name": "Score items", "type": "llm_transform",
+        "inputs": [{"id": "load", "schema": {
+            "columns": [{"name": "id", "type": "str"}, {"name": "text", "type": "str"}],
+            "primary_key": ["id"]}}],
+        "output_schema": {
+            "columns": [{"name": "id", "type": "str"}, {"name": "text", "type": "str"},
+                        {"name": "score", "type": "int", "nullable": False}],
+            "primary_key": ["id"]},
+        "llm": {"prompt_template": "Rate: {text}"},
+    })
+    workflow = Workflow(stages=[load, score])
+    injected_outputs = {"load": pd.DataFrame({"id": ["r1"], "text": ["hi"]})}
+
+    with pytest.raises(SubsetRunError) as exc_info:
+        run_subset(
+            workflow, injected_outputs=injected_outputs, stage_ids=["score"],
+            run_dir=tmp_path / "runs" / "subset1", repo_root=tmp_path,
+        )
+
+    message = str(exc_info.value)
+    assert "failed generation" in message and "boom" in message
+    assert "unknown error" not in message
 
 
 def test_run_without_a_version_fails_loudly(tmp_path):

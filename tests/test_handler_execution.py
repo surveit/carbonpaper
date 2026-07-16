@@ -101,6 +101,27 @@ def test_row_driver_collects_row_errors_without_dropping_the_stage():
     assert ctx["row_errors"]["t"] == [{"row": 1, "message": "boom"}]
 
 
+def test_row_driver_collects_multiple_row_errors_in_ascending_row_order():
+    from app.runtime.stages.execution import ROW_ERROR_KEY
+
+    def make_mapper(stage, ctx):
+        def map_row(row):
+            if row["x"] in (10, 30):
+                return {"x": row["x"], ROW_ERROR_KEY: f"boom-{row['x']}"}
+            return {"x": row["x"], "y": row["x"] * 10}
+        return map_row
+
+    handler = RowMapHandler(make_mapper=make_mapper)
+    ctx: dict = {}
+    # Rows at positions 0 and 2 of a 3-row input fail; position 1 succeeds.
+    out = handler.execute(_row_stage(), {"src": pd.DataFrame({"x": [10, 20, 30]})}, ctx)
+    assert len(out) == 3
+    assert ctx["row_errors"]["t"] == [
+        {"row": 0, "message": "boom-10"},
+        {"row": 2, "message": "boom-30"},
+    ]
+
+
 def test_row_driver_projects_to_declared_columns():
     schema = {"columns": [{"name": "x", "type": "int"}, {"name": "score", "type": "int"}]}
     handler = RowMapHandler(

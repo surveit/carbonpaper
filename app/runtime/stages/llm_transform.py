@@ -41,8 +41,10 @@ def make_llm_row_mapper(stage: Stage, ctx: dict[str, Any]) -> Callable[[Row], Ro
             # with the ROW_ERROR_KEY sentinel so the map completes (one bad row
             # does not abort the stage); the row driver collects these off the
             # assembled frame and the runner surfaces them as error-severity
-            # output issues.
-            return {**row, ROW_ERROR_KEY: str(exc)}
+            # output issues. Falls back to the exception's type name when its
+            # message is empty (e.g. a bare TimeoutError), so a message-less
+            # failure still reads as a failure rather than an empty-string cell.
+            return {**row, ROW_ERROR_KEY: str(exc) or type(exc).__name__}
         return {**row, **reply}
 
     return map_row

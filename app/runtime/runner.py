@@ -303,6 +303,14 @@ def _raise_if_run_failed(manifest: dict[str, Any]) -> None:
     raise SubsetRunError(f"run did not complete (status {status!r})")
 
 
+def _summarize_row_errors(row_errors: list[dict[str, Any]]) -> str:
+    """One-line summary of per-row generation failures for the stage's error
+    record — the per-row detail lives in output_validation issues."""
+    head = "; ".join(f"row {e['row']}: {e['message']}" for e in row_errors[:3])
+    more = f" (+{len(row_errors) - 3} more)" if len(row_errors) > 3 else ""
+    return f"{len(row_errors)} row(s) failed generation: {head}{more}"
+
+
 def _execute_stages(
     ordered: list[Stage],
     ctx: dict[str, Any],
@@ -433,11 +441,12 @@ def _execute_stages(
                 output, stage.output_schema, stage_id=sid, phase="output",
             )
             row_errors = (ctx.get("row_errors") or {}).get(sid, [])
-            for row_error in row_errors:
-                out_rep.issues.insert(0, Issue(
-                    "error", None,
-                    f"row {row_error['row']}: generation failed: {row_error['message']}",
-                ))
+            if row_errors:
+                out_rep.issues[0:0] = [
+                    Issue("error", None,
+                          f"row {row_error['row']}: generation failed: {row_error['message']}")
+                    for row_error in row_errors
+                ]
             record["output_validation"] = out_rep.to_dict()
 
             output_path = run_dir / "outputs" / f"{sid}.parquet"
@@ -459,6 +468,11 @@ def _execute_stages(
             outputs_so_far[sid] = output
             if row_errors:
                 record["status"] = "error"
+                record["error"] = {
+                    "type": "RowGenerationError",
+                    "message": _summarize_row_errors(row_errors),
+                    "traceback": None,
+                }
             else:
                 record["status"] = "ok" if out_rep.ok and all(
                     v["ok"] for v in record["input_validation"]

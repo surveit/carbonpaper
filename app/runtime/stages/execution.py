@@ -182,16 +182,19 @@ def _run_row_mapper(
 
 
 def _collect_row_errors(df: pd.DataFrame, stage: Stage, ctx: dict[str, Any]) -> None:
-    """Record any per-row failure the mapper flagged with the `ROW_ERROR_KEY`
-    sentinel, keyed by stage id on ctx. The runner surfaces these as error-severity
-    output issues and marks the stage `error`; the stage still keeps its other rows,
-    so one failed row does not abort the whole stage."""
+    """Record EVERY row carrying the `ROW_ERROR_KEY` sentinel, keyed by stage id on
+    ctx. `pd.isna` alone is the test: it distinguishes a successful row (NaN — the
+    mapper never set the sentinel) from a failed row (any string, including the
+    empty string a message-less exception stringifies to). The runner surfaces
+    these as error-severity output issues and marks the stage `error`; the stage
+    keeps EVERY row (a failed row simply carries null/missing generated columns),
+    so one failed row does not abort the stage."""
     if ROW_ERROR_KEY not in df.columns:
         return
     errors = [
         {"row": position, "message": str(value)}
         for position, value in enumerate(df[ROW_ERROR_KEY])
-        if not pd.isna(value) and str(value) != ""
+        if not pd.isna(value)
     ]
     if errors:
         ctx.setdefault("row_errors", {})[stage.id] = errors

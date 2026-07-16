@@ -4,6 +4,8 @@ agent backend enforces. The call mechanism itself is unchanged (llm.call_llm
 per row, driven by the runtime's row driver)."""
 from __future__ import annotations
 
+import asyncio
+
 import pandas as pd
 import pytest
 from pydantic import ValidationError
@@ -74,3 +76,17 @@ def test_backend_error_surfaces_as_row_error_not_raised(monkeypatch):
     out = _run(_stage(), {"load": pd.DataFrame({"id": ["r1"], "text": ["hi"]})}, ctx)
     assert len(out) == 1                                    # not raised; stage completes
     assert ctx["row_errors"]["score"] == [{"row": 0, "message": "backend down"}]
+
+
+def test_timeout_with_empty_message_is_captured_and_labeled(monkeypatch):
+    # asyncio.TimeoutError() (the real timeout path in app/runtime/llm.py)
+    # stringifies to "" — a message-less failure must still be captured (not
+    # mistaken for a successful row) and labeled with the exception's type name.
+    def boom(stage_id, llm_config, row, **kw):
+        raise asyncio.TimeoutError()
+
+    monkeypatch.setattr(lt, "call_llm", boom)
+    ctx: dict = {}
+    out = _run(_stage(), {"load": pd.DataFrame({"id": ["r1"], "text": ["hi"]})}, ctx)
+    assert len(out) == 1                                    # not raised; stage completes
+    assert ctx["row_errors"]["score"] == [{"row": 0, "message": "TimeoutError"}]
