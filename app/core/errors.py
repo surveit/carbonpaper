@@ -64,3 +64,11 @@ class SubsetRunError(Exception):
 
 class LLMError(Exception):
     """A live-LLM call failed, or no LLM backend is available."""
+
+
+class DocumentNotFound(Exception):
+    """No document exists for a (collection, id) in the store. Raised by the
+    strict read path — `SqliteKvStore.read`/`.schema_version` and
+    `PersistedModel.load`. The tolerant path (`read_tolerant` /
+    `PersistedModel.load_or_none`) returns None instead. A genuine miss
+    surfaced loudly, never a fabricated empty document."""
