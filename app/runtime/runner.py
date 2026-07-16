@@ -32,7 +32,7 @@ from app.services.loader import WorkflowLoadError
 from app.services import versioning
 
 from .stages import HANDLERS, HaltForReview
-from .validation import validate_dataframe
+from .validation import Issue, validate_dataframe
 
 
 def topological_sort(stages: list[Stage]) -> list[Stage]:
@@ -432,6 +432,12 @@ def _execute_stages(
             out_rep = validate_dataframe(
                 output, stage.output_schema, stage_id=sid, phase="output",
             )
+            row_errors = (ctx.get("row_errors") or {}).get(sid, [])
+            for row_error in row_errors:
+                out_rep.issues.insert(0, Issue(
+                    "error", None,
+                    f"row {row_error['row']}: generation failed: {row_error['message']}",
+                ))
             record["output_validation"] = out_rep.to_dict()
 
             output_path = run_dir / "outputs" / f"{sid}.parquet"
@@ -451,9 +457,12 @@ def _execute_stages(
                 )
 
             outputs_so_far[sid] = output
-            record["status"] = "ok" if out_rep.ok and all(
-                v["ok"] for v in record["input_validation"]
-            ) else "validation_warnings"
+            if row_errors:
+                record["status"] = "error"
+            else:
+                record["status"] = "ok" if out_rep.ok and all(
+                    v["ok"] for v in record["input_validation"]
+                ) else "validation_warnings"
             record["rows"] = int(len(output))
             record["output_path"] = str(output_path.relative_to(run_dir))
 

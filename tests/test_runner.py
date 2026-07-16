@@ -19,6 +19,7 @@ import pytest
 
 from app.core.errors import NoVersionToRunError
 from app.runtime.runner import execute_run
+from app.runtime.stages import llm_transform as lt
 from app.services.loader import WorkflowLoadError
 from app.services.versioning import create_version
 
@@ -159,6 +160,56 @@ def test_distinct_input_rows_pass(tmp_path):
     records = {r["stage_id"]: r for r in manifest["stages"]}
     assert records["consume"]["status"] == "ok"
     assert records["consume"]["rows"] == 2
+
+
+def _llm_transform_project(root):
+    """input_data loading one row, feeding an llm_transform. Exercises the
+    runner's row-error surfacing when a row's generation fails."""
+    (root / "compiled").mkdir(parents=True)
+    (root / "data").mkdir(parents=True)
+    pd.DataFrame({"id": ["r1"], "text": ["hi"]}).to_csv(
+        root / "data" / "items.csv", index=False)
+    load = {
+        "id": "load", "name": "Load items", "type": "input_data",
+        "connector": {"kind": "file",
+                      "params": {"path": "data/items.csv", "format": "csv"}},
+    }
+    score = {
+        "id": "score", "name": "Score items", "type": "llm_transform",
+        "inputs": [{"id": "load", "schema": {
+            "columns": [{"name": "id", "type": "str"}, {"name": "text", "type": "str"}],
+            "primary_key": ["id"]}}],
+        "output_schema": {
+            "columns": [{"name": "id", "type": "str"}, {"name": "text", "type": "str"},
+                        {"name": "score", "type": "int", "nullable": False}],
+            "primary_key": ["id"]},
+        "llm": {"prompt_template": "Rate: {text}"},
+    }
+    (root / "compiled" / "01_load.json").write_text(json.dumps(load), encoding="utf-8")
+    (root / "compiled" / "02_score.json").write_text(json.dumps(score), encoding="utf-8")
+
+
+def test_llm_generation_failure_surfaces_as_error_status_not_raised(tmp_path, monkeypatch):
+    # A row's generation failure must show up as an error-severity output
+    # issue and flip the stage to status=error — WITHOUT raising, so the
+    # stage still completes and keeps its (partial) output.
+    def boom(stage_id, llm_config, row, **kw):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(lt, "call_llm", boom)
+    _llm_transform_project(tmp_path)
+    _seed_version(tmp_path)
+    manifest = execute_run(tmp_path, repo_root=tmp_path)
+
+    records = {r["stage_id"]: r for r in manifest["stages"]}
+    rec = records["score"]
+    assert rec["status"] == "error"
+    assert rec["error"] is None                    # not raised: no exception record
+    assert rec["rows"] == 1                         # stage completed, output kept
+    issues = rec["output_validation"]["issues"]
+    assert any("generation failed" in i["message"] and "boom" in i["message"]
+               for i in issues)
+    assert manifest["status"] == "errors"
 
 
 def test_run_without_a_version_fails_loudly(tmp_path):

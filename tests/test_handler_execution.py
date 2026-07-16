@@ -84,6 +84,23 @@ def test_row_driver_empty_input():
     assert len(out) == 0
 
 
+def test_row_driver_collects_row_errors_without_dropping_the_stage():
+    from app.runtime.stages.execution import ROW_ERROR_KEY
+
+    def make_mapper(stage, ctx):
+        def map_row(row):
+            if row["x"] == 2:
+                return {"x": row["x"], ROW_ERROR_KEY: "boom"}
+            return {"x": row["x"], "y": row["x"] * 10}
+        return map_row
+
+    handler = RowMapHandler(make_mapper=make_mapper)
+    ctx: dict = {}
+    out = handler.execute(_row_stage(), {"src": pd.DataFrame({"x": [1, 2, 3]})}, ctx)
+    assert len(out) == 3                                    # stage completes, all rows kept
+    assert ctx["row_errors"]["t"] == [{"row": 1, "message": "boom"}]
+
+
 def test_row_driver_projects_to_declared_columns():
     schema = {"columns": [{"name": "x", "type": "int"}, {"name": "score", "type": "int"}]}
     handler = RowMapHandler(

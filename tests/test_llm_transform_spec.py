@@ -65,12 +65,12 @@ def test_output_rows_carry_reply_columns(monkeypatch):
     assert out.loc[0, "id"] == "r1"
 
 
-def test_backend_error_is_recorded_per_row_not_raised(monkeypatch):
+def test_backend_error_surfaces_as_row_error_not_raised(monkeypatch):
     def boom(stage_id, llm_config, row, **kw):
         raise RuntimeError("backend down")
 
     monkeypatch.setattr(lt, "call_llm", boom)
     ctx: dict = {}
     out = _run(_stage(), {"load": pd.DataFrame({"id": ["r1"], "text": ["hi"]})}, ctx)
-    assert len(out) == 1                                   # still 1:1 — row survives
-    assert "_error" in ctx["dropped_columns"]["score"]     # recorded, not silent
+    assert len(out) == 1                                    # not raised; stage completes
+    assert ctx["row_errors"]["score"] == [{"row": 0, "message": "backend down"}]
