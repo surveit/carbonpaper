@@ -10,7 +10,7 @@ number or unsourced claim defeats the purpose. Two rules recur in the code:
 - **Expensive or irreversible steps sit behind human review.** `human_review_queue` halts
   the run; decisions are content-hashed so they survive re-runs.
 
-## Vocabulary (locked 2026-07-04; see [naming-refactor.md](naming-refactor.md))
+## Vocabulary (locked 2026-07-04)
 - **project** — the container directory holding everything below.
 - **methodology** — the authored prose method (`methodology_raw.md`).
 - **workflow** — the executable stage graph it compiles into (`compiled/*.json`, one
@@ -25,9 +25,3 @@ A project dir also holds `code/`, `data/`, `runs/<id>/` (outputs + `manifest.jso
 | **Runner** | `app/runtime/` | On master — executes a workflow (typed `Stage` end-to-end), validates I/O, persists, halts for review, resumes. |
 | **Compiler** | `app/compiler/` | Engine on master (prose → LLM → validated workflow, re-ask on failure; `python -m app.compiler`); authoring UI in the PR stack. |
 | **Eval** | `app/core/models/eval.py` | Data model only — `EvalConfig` + grain-preservation gate; no runner integration yet. |
-
-## Where the product needs to go
-[RETHINK.md](RETHINK.md) is the standing critique: the platform serves the workflow *author*
-well and the journalist barely
-— journalism questions are cross-entity ("who's the outlier?") while outputs are per-entity.
-Read it before adding operator-facing features.
