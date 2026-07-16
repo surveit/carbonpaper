@@ -77,6 +77,18 @@ def test_create_version_from_invalid_stages_writes_nothing(tmp_path: Path) -> No
     assert versioning.list_versions(tmp_path) == []
 
 
+@pytest.mark.parametrize("bad_id", ["../../etc/passwd", "not-a-version"])
+def test_load_version_meta_rejects_non_timestamp_id(tmp_path: Path, bad_id: str) -> None:
+    with pytest.raises(FileNotFoundError):
+        versioning.load_version_meta(tmp_path, bad_id)
+
+
+@pytest.mark.parametrize("bad_id", ["../../etc/passwd", "not-a-version"])
+def test_load_version_stages_rejects_non_timestamp_id(tmp_path: Path, bad_id: str) -> None:
+    with pytest.raises(FileNotFoundError):
+        versioning.load_version_stages(tmp_path, bad_id)
+
+
 def test_create_version_no_longer_snapshots_schemas(tmp_path: Path) -> None:
     _seed_working_copy(tmp_path)
     schemas = tmp_path / "schemas"

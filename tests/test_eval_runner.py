@@ -44,15 +44,16 @@ _CLASSIFY = {
 
 @pytest.fixture
 def project(tmp_path):
-    """A `demo` project with a committed version `v1` (load → classify) and an eval
+    """A `demo` project with a committed version (load → classify) and an eval
     whose dataset's expected `label` is wrong on exactly one of four rows."""
     demo = tmp_path / "demo"
-    compiled = demo / "versions" / "v1" / "compiled"
+    version_id = "20260710T000000"  # timestamp-shaped, as real version ids are
+    compiled = demo / "versions" / version_id / "compiled"
     compiled.mkdir(parents=True)
     (compiled / "01_load.json").write_text(json.dumps(_LOAD), encoding="utf-8")
     (compiled / "02_classify.json").write_text(json.dumps(_CLASSIFY), encoding="utf-8")
-    (demo / "versions" / "v1" / "version.json").write_text(
-        json.dumps({"id": "v1", "created_at": "2026-07-10T00:00:00"}), encoding="utf-8")
+    (demo / "versions" / version_id / "version.json").write_text(
+        json.dumps({"id": version_id, "created_at": "2026-07-10T00:00:00"}), encoding="utf-8")
 
     data = demo / "eval_data"
     data.mkdir()
@@ -78,7 +79,7 @@ def test_run_eval_scores_the_pathway(project):
     run = run_eval(demo, config, repo_root)
 
     assert run.status == "scored"
-    assert run.workflow_version == "v1"
+    assert run.workflow_version == "20260710T000000"
     assert run.metrics["rows_scored"] == 4
     assert run.metrics["rows_passed"] == 3
     assert run.metrics["accuracy"] == pytest.approx(0.75)

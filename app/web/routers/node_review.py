@@ -12,8 +12,6 @@ and `versions/<id>/` (snapshots), managed by app.services.node_review + app.serv
 
 from __future__ import annotations
 
-import re
-
 from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
@@ -25,10 +23,6 @@ from app.web.diagrams import TYPE_CLASS, TYPE_GLYPH, build_mermaid_graph
 from app.web.loading import find_stage, load_stages, resolve_function_code
 
 router = APIRouter()
-
-# Version ids are second-resolution timestamps (%Y%m%dT%H%M%S); this guard keeps
-# a caller-supplied id from being used as a path segment with any other shape.
-_VERSION_ID = re.compile(r"^\d{8}T\d{6}$")
 
 
 def _review_by_id(stages: list[Stage], decisions) -> dict[str, str]:
@@ -190,15 +184,15 @@ async def create_version_route(project: str, message: str = Form(...)):
 @router.post("/project/{project}/versions/{version_id}/publish")
 async def publish_version_route(project: str, version_id: str):
     """Record human approval on one version (the gate runs pin to). Idempotent;
-    metadata only — stage content is never touched. Redirects back to the
-    versions list."""
+    metadata only — stage content is never touched. A malformed version_id (any
+    shape but the timestamp versioning.load_version_meta expects) 404s through
+    that same FileNotFoundError. Redirects to the workflow section (the version
+    list lives there) in one hop."""
     project_dir = EXAMPLES_DIR / project
     if not project_dir.is_dir():
         raise HTTPException(status_code=404, detail=f"No project '{project}'")
-    if not _VERSION_ID.match(version_id):
-        raise HTTPException(status_code=404, detail=f"No version '{version_id}'")
     try:
         versioning.publish_version(project_dir, version_id, reviewer="local")
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
-    return RedirectResponse(url=f"/project/{project}/versions", status_code=303)
+    return RedirectResponse(url=f"/project/{project}/workflow", status_code=303)

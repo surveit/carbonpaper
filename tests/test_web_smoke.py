@@ -193,13 +193,13 @@ def test_runs_page_links_to_the_pinned_workflow_version(demo_project):
         "run_id": "run-0001",
         "status": "complete",
         "started_at": "2026-07-16T00:00:00",
-        "workflow_version": "brave-otter-hill",
+        "workflow_version": "20260715T120000",
         "stages": [],
     }
     (run_dir / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
 
     html = client.get("/project/demo/runs").text
-    assert "/project/demo/workflow/version/brave-otter-hill" in html
+    assert "/project/demo/workflow/version/20260715T120000" in html
     assert "(unversioned)" not in html
 
 

@@ -39,6 +39,7 @@ so a version's stages load identically to the working copy's.
 from __future__ import annotations
 
 import json
+import re
 import shutil
 from datetime import datetime
 from pathlib import Path
@@ -54,10 +55,26 @@ from app.services.loader import (
 )
 from app.services import node_review
 
+# Version ids are second-resolution timestamps (%Y%m%dT%H%M%S); this guard keeps
+# a caller-supplied id from being used as a path segment with any other shape.
+_VERSION_ID = re.compile(r"^\d{8}T\d{6}$")
+
 
 def versions_dir(project_dir: Path) -> Path:
     """examples/<project>/versions/ — the parent of all version snapshots."""
     return Path(project_dir) / "versions"
+
+
+def _version_dir(project_dir: Path, version_id: str) -> Path:
+    """versions/<version_id>/ for a caller-supplied id, after checking its shape.
+    Raises FileNotFoundError if version_id is not a timestamp — this is the one
+    seam every version_id from a route passes through before becoming a path
+    segment, so a malformed id 404s instead of resolving anywhere on disk."""
+    if not _VERSION_ID.match(version_id):
+        raise FileNotFoundError(
+            f"No version '{version_id}' for project at {project_dir}"
+        )
+    return versions_dir(project_dir) / version_id
 
 
 def _load_stages_from(compiled_dir: Path) -> list[dict[str, Any]]:
@@ -77,7 +94,7 @@ def load_version_stages(project_dir: Path, version_id: str) -> list[Stage]:
     WorkflowLoadError rather than executing. Fails loudly if the version dir
     is missing rather than falling back to the working copy (a run pinned to a
     version must read THAT version)."""
-    vdir = versions_dir(project_dir) / version_id
+    vdir = _version_dir(project_dir, version_id)
     if not vdir.is_dir():
         raise FileNotFoundError(
             f"No version '{version_id}' for project at {project_dir} "
@@ -88,7 +105,7 @@ def load_version_stages(project_dir: Path, version_id: str) -> list[Stage]:
 
 def load_version_meta(project_dir: Path, version_id: str) -> dict[str, Any]:
     """Read versions/<version_id>/version.json. Fails loudly if absent."""
-    meta_path = versions_dir(project_dir) / version_id / "version.json"
+    meta_path = _version_dir(project_dir, version_id) / "version.json"
     if not meta_path.exists():
         raise FileNotFoundError(f"No version.json at {meta_path}")
     return json.loads(meta_path.read_text(encoding="utf-8"))
