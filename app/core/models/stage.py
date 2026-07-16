@@ -6,6 +6,7 @@ strict about the fields declared here.
 """
 from __future__ import annotations
 
+import re
 from enum import Enum
 from typing import Any, Literal, Optional
 
@@ -143,8 +144,8 @@ class LLMConfig(_Base):
             "Python's str.format_map: a single-brace {column_name} is replaced by "
             "that row's value, while double braces {{ }} are an escaped literal "
             "brace that never substitutes (so {{column_name}} sends the model the "
-            "literal text {column_name}, not the data). Inject at least one input "
-            "column with single braces."
+            "literal text {column_name}, not the data). Inject the input column(s) "
+            "the model needs, with single braces."
         ),
     )
     model: Optional[LLMModel] = None
@@ -453,7 +454,8 @@ class Stage(_Base):
         injected = find_template_fields(template)
         double_braced = [
             column.name for column in input_schema.columns
-            if column.name not in injected and "{{" + column.name + "}}" in template
+            if column.name not in injected
+            and re.search(r"\{\{\s*" + re.escape(column.name) + r"\s*\}\}", template)
         ]
         if double_braced:
             raise ValueError(

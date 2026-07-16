@@ -302,6 +302,19 @@ def test_llm_transform_rejects_double_braced_input_column():
             llm={"prompt_template": "Analyze {{content}} now"}))
 
 
+def test_llm_transform_rejects_spaced_double_braced_input_column():
+    # The canonical Jinja spelling "{{ content }}" (with spaces) is also an escaped
+    # literal under str.format_map — it must be rejected just like "{{content}}".
+    with pytest.raises(ValidationError, match="double-brace"):
+        m.Stage.model_validate(S(
+            id="extract", type="llm_transform",
+            inputs=[{"id": "load", "schema": {
+                "columns": [{"name": "content", "type": "str"}], "primary_key": ["content"]}}],
+            output_schema={"columns": [{"name": "content", "type": "str"},
+                                       {"name": "out", "type": "str"}], "primary_key": ["content"]},
+            llm={"prompt_template": "Analyze {{ content }} now"}))
+
+
 def test_llm_transform_allows_prompt_that_injects_nothing():
     # Unusual but not strictly wrong — must NOT be rejected by the double-brace check.
     s = m.Stage.model_validate(S(
