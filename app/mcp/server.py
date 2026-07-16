@@ -1,4 +1,4 @@
-"""The "sift" FastMCP server: authoring tools over app.services.
+"""The "glassbox" FastMCP server: authoring tools over app.services.
 
 Every tool takes an explicit `project_id` (the examples/<name>/ directory name)
 and goes through the name-based service surface — tools resolve project
@@ -19,7 +19,7 @@ from app.services import project as project_service
 from app.services import workspace
 
 INSTRUCTIONS = """\
-sift turns an investigation methodology (prose) into a reviewable, runnable data
+glassbox turns an investigation methodology (prose) into a reviewable, runnable data
 pipeline. Authoring order: create_project → generate_data_model → the human
 approves the data model in the web UI → generate_workflow → refine with
 edit_stage / add_stage. Generation runs in the background: poll
@@ -27,7 +27,7 @@ get_project_status until the data model / workflow appears. Approval is
 human-only and happens in the web UI, never through these tools."""
 
 mcp = FastMCP(
-    name="sift",
+    name="glassbox",
     instructions=INSTRUCTIONS,
     stateless_http=True,
     json_response=True,

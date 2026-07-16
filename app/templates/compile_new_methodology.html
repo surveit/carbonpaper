@@ -75,8 +75,8 @@
   <p class="meta-line">Connect Claude Code (or any MCP client) to this server and drive the
     same flow — create the project, generate the data model, then the workflow — from a chat
     session you can keep and resume. You still review and approve every stage here.</p>
-  <pre><code>claude mcp add --transport http sift {{ request.base_url }}mcp</code></pre>
+  <pre><code>claude mcp add --transport http glassbox {{ request.base_url }}mcp</code></pre>
   <p class="meta-line">Then start with a prompt like this (copy it):</p>
-  <pre style="white-space:pre-wrap"><code>I want to turn an investigation methodology into a reviewable data pipeline using the "sift" MCP server. Interview me about the investigation first. Then write a methodology document and call create_project, then generate_data_model — data model first: I approve it at {{ request.base_url }} before you call generate_workflow. Generation runs in the background, so poll get_project_status. Once the workflow lands, walk me through it and refine stages with edit_stage / add_stage.</code></pre>
+  <pre style="white-space:pre-wrap"><code>I want to turn an investigation methodology into a reviewable data pipeline using the "glassbox" MCP server. Interview me about the investigation first. Then write a methodology document and call create_project, then generate_data_model — data model first: I approve it at {{ request.base_url }} before you call generate_workflow. Generation runs in the background, so poll get_project_status. Once the workflow lands, walk me through it and refine stages with edit_stage / add_stage.</code></pre>
 </div>
 {% endblock %}

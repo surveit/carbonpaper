@@ -32,7 +32,7 @@ from app.web.routers import evals, project, node_review, review, runs
 
 from app.agent.router import router as chat_router
 from app.compiler.router import router as compiler_router
-from app.mcp.server import mcp as sift_mcp
+from app.mcp.server import mcp as glassbox_mcp
 
 # Importing the compiler agent's config registers the "editing" agent with the
 # generic agent registry, so build_engine("editing", …) resolves. The registry is
@@ -51,7 +51,7 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         configure_store(SqliteKvStore(db_path))
     # The MCP session manager's task group must run for the server's lifetime —
     # the /mcp endpoint errors without it. (Its run() is once-per-process.)
-    async with sift_mcp.session_manager.run():
+    async with glassbox_mcp.session_manager.run():
         yield
 
 
@@ -71,10 +71,10 @@ app.include_router(compiler_router)
 # the row-mapped llm_transform path; see app/agent.
 app.include_router(chat_router)
 
-# The MCP authoring surface ("sift"): an exact-path ASGI route, not a Mount —
+# The MCP authoring surface ("glassbox"): an exact-path ASGI route, not a Mount —
 # a Mount never matches its own bare path and would 307-redirect POST /mcp to
 # /mcp/, which not every MCP client follows. The streamable-HTTP sub-app keeps
 # its default internal path (/mcp), so the unmodified scope path matches it.
 app.router.routes.append(
-    Route("/mcp", endpoint=sift_mcp.streamable_http_app(), methods=["GET", "POST", "DELETE"])
+    Route("/mcp", endpoint=glassbox_mcp.streamable_http_app(), methods=["GET", "POST", "DELETE"])
 )

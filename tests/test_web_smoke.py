@@ -191,4 +191,4 @@ def test_new_project_page_shows_mcp_connect():
     resp = client.get("/project/new")
     assert resp.status_code == 200
     assert "claude mcp add" in resp.text
-    assert "sift" in resp.text
+    assert "glassbox" in resp.text
