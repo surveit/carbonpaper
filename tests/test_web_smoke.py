@@ -119,15 +119,17 @@ def test_trigger_run_returns_400_on_invalid_dag(monkeypatch):
 
 
 def test_build_nav_groups_workflow_children(demo_project):
-    """build_nav returns Versions/Runs/Evals as CHILDREN of the Workflow item;
-    the top level carries only Overview / Document / Data model / Workflow. This
-    is the sidebar's contract — the template renders exactly this tree."""
+    """build_nav returns Runs/Evals as CHILDREN of the Workflow item — the Workflow
+    leaf itself lands on the version list (/workflow); the top level carries only
+    Overview / Document / Data model / Workflow. This is the sidebar's contract —
+    the template renders exactly this tree."""
     from app.web.project_view import build_nav, shell_state
 
     nav = build_nav(shell_state(demo_project / "demo"))
     assert [item.key for item in nav] == ["overview", "document", "data_model", "workflow"]
     workflow = nav[-1]
-    assert [child.key for child in workflow.children] == ["versions", "runs", "evals"]
+    assert workflow.href.endswith("/demo/workflow")
+    assert [child.key for child in workflow.children] == ["runs", "evals"]
     # The top-level items are leaves (only Workflow groups).
     assert all(not item.children for item in nav[:-1])
 
@@ -135,7 +137,7 @@ def test_build_nav_groups_workflow_children(demo_project):
 def test_build_nav_status_tokens(demo_project):
     """Each item carries a semantic status token (the template maps it to a glyph).
     For the demo — no document, an approved data model, a workflow with unreviewed
-    stages, no versions — the classification is truthful, not a fabricated done-mark."""
+    stages — the classification is truthful, not a fabricated done-mark."""
     from app.web.project_view import build_nav, shell_state
 
     nav = build_nav(shell_state(demo_project / "demo"))
@@ -146,7 +148,6 @@ def test_build_nav_status_tokens(demo_project):
     assert status["workflow"] == "warn"       # stages present, none approved
     children = {c.key: c.status for c in nav[-1].children}
     assert children["evals"] == "evals"
-    assert children["versions"] == "none"     # no versions created
 
 
 def test_workflow_page_points_to_versions_tab():
@@ -158,13 +159,14 @@ def test_workflow_page_points_to_versions_tab():
     assert 'href="/project/demo/workflow"' in html      # which links there
 
 
-def test_sidebar_nests_versions_runs_evals_under_workflow():
-    """The rendered sidebar puts Versions/Runs/Evals inside a Workflow children
-    container, each linking to its own section — not as top-level items."""
+def test_sidebar_nests_runs_evals_under_workflow():
+    """The rendered sidebar puts Runs/Evals inside a Workflow children container,
+    each linking to its own section — not as top-level items. The Workflow leaf
+    itself links to the version list (/workflow)."""
     html = client.get("/project/demo").text
     assert "app-nav-children" in html
     assert 'href="/project/demo/workflow"' in html
-    for child_href in ("/project/demo/versions", "/project/demo/runs", "/project/demo/evals"):
+    for child_href in ("/project/demo/runs", "/project/demo/evals"):
         assert f'href="{child_href}"' in html
 
 
@@ -180,8 +182,9 @@ def test_sidebar_has_no_workflow_lock():
 
 
 def test_versions_page_uses_the_project_shell():
-    """The Versions page is a shell section (carries the sidebar), so the Versions
-    nav child leads somewhere consistent with the rest of the app, not a bare page."""
+    """/project/demo/versions redirects to the Workflow tab (/workflow), a shell
+    section (carries the sidebar) — so the old versions URL still lands somewhere
+    consistent with the rest of the app, not a bare page."""
     r = client.get("/project/demo/versions")
     assert r.status_code == 200
     html = r.text

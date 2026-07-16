@@ -46,7 +46,7 @@
       <td><a href="/project/{{ state.name }}/runs/{{ r.run_id }}"><code>{{ r.run_id }}</code></a></td>
       <td>
         {% if r.dag_version %}
-          <a href="/project/{{ state.name }}/workflow"><code>{{ r.dag_version }}</code></a>
+          <a href="/project/{{ state.name }}/workflow/version/{{ r.dag_version }}"><code>{{ r.dag_version }}</code></a>
         {% else %}
           <span class="muted">(unversioned)</span>
         {% endif %}

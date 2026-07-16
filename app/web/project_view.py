@@ -69,9 +69,10 @@ def shell_state(pdir: Path) -> ShellState:
 
 
 def build_nav(state: project.ProjectState) -> list[NavItem]:
-    """The shell's left-nav tree: Overview / Document / Data model / Workflow, with
-    Versions, Runs, and Evals nested under Workflow — the three things a workflow
-    has: its versioned snapshots, its executions, and the evals that score them.
+    """The shell's left-nav tree: Overview / Document / Data model / Workflow. The
+    Workflow leaf lands on the version list (`/workflow`); Runs and Evals nest
+    under it — the two other things a workflow has: its executions and the evals
+    that score them.
 
     Each item's `status` is derived from `state` (the truthful on-disk status); the
     template turns it into a glyph. An absent thing is "none" (renders ○), never a
@@ -86,8 +87,6 @@ def build_nav(state: project.ProjectState) -> list[NavItem]:
         _nav_leaf("workflow", "Workflow", f"{base}/workflow",
                   _workflow_status(state.workflow),
                   children=[
-                      _nav_leaf("versions", "Versions", f"{base}/versions",
-                                _present_status(state.versions > 0)),
                       _nav_leaf("runs", "Runs", f"{base}/runs",
                                 _runs_status(state.runs)),
                       _nav_leaf("evals", "Evals", f"{base}/evals", "evals"),
@@ -105,7 +104,7 @@ def _next_action(state: project.ProjectState) -> NextAction:
       1. no data model             → author it            (/data_model)
       2. data model not approved   → approve it           (/data_model)
       3. no workflow               → build the workflow   (/workflow)
-      4. workflow approved<total   → review the workflow  (/workflow)
+      4. workflow approved<total   → review the workflow  (/workflow/current)
       5. workflow approved, 0 runs → run it               (/workflow)
       6. runs awaiting_review>0    → review the run       (/runs)
       7. otherwise                 → view runs            (/runs)
@@ -137,13 +136,14 @@ def _next_action(state: project.ProjectState) -> NextAction:
             label="Build the workflow",
             href=f"{base}/workflow",
         )
-    # 4. Workflow present but not fully approved → review the workflow.
+    # 4. Workflow present but not fully approved → review the workflow (the belief
+    #    review controls live on the working-copy editor, not the version list).
     cov = workflow.coverage
     if cov is not None and cov.approved < cov.total:
         return NextAction(
             key="review_workflow",
             label="Review the workflow",
-            href=f"{base}/workflow",
+            href=f"{base}/workflow/current",
         )
     # 5. Workflow fully approved but never run → run it (the run button is on /workflow).
     if runs.n == 0:
@@ -181,8 +181,8 @@ def _nav_leaf(key: str, label: str, href: str, status: str,
 
 
 def _present_status(present: bool) -> str:
-    """Present/absent items (Document, Versions): "present" when the thing exists,
-    "none" when it does not."""
+    """Present/absent items (Document): "present" when the thing exists, "none"
+    when it does not."""
     return "present" if present else "none"
 
 
