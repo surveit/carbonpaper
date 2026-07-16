@@ -51,13 +51,13 @@ def test_document_only_project_is_listed(examples_root):
     assert card["is_ready"] is False
 
 
-def test_document_only_project_renders_as_setting_up(examples_root):
+def test_document_only_project_renders_as_under_development(examples_root):
     _make_document_only_project(examples_root)
     r = client.get("/")
     assert r.status_code == 200
     assert "fresh" in r.text
-    assert "Setting up" in r.text
-    assert "Ready to run" not in r.text
+    assert "Under development" in r.text
+    assert ">Live<" not in r.text
     assert "No projects yet" not in r.text
 
 
@@ -73,7 +73,7 @@ def test_versioned_project_is_ready_to_run(examples_root):
     [card] = list_projects()
     assert card["is_ready"] is True
     r = client.get("/")
-    assert "Ready to run" in r.text
+    assert ">Live<" in r.text
 
 
 def test_half_written_version_snapshot_does_not_flip_ready(examples_root):
