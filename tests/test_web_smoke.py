@@ -181,6 +181,28 @@ def test_sidebar_has_no_workflow_lock():
         assert "app-nav-item locked" not in html
 
 
+def test_runs_page_links_to_the_pinned_workflow_version(demo_project):
+    """A run's manifest pins a workflow_version; the runs list must render that as
+    a link to the version-detail page, not fall into the "(unversioned)" branch.
+    Regression for a key mismatch: the template read `r.dag_version` (never set
+    by list_runs, which emits `workflow_version`), so the guard was always falsy
+    and every run showed "(unversioned)" with no version-detail link."""
+    run_dir = demo_project / "demo" / "runs" / "run-0001"
+    run_dir.mkdir(parents=True)
+    manifest = {
+        "run_id": "run-0001",
+        "status": "complete",
+        "started_at": "2026-07-16T00:00:00",
+        "workflow_version": "brave-otter-hill",
+        "stages": [],
+    }
+    (run_dir / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+
+    html = client.get("/project/demo/runs").text
+    assert "/project/demo/workflow/version/brave-otter-hill" in html
+    assert "(unversioned)" not in html
+
+
 def test_versions_page_uses_the_project_shell():
     """/project/demo/versions redirects to the Workflow tab (/workflow), a shell
     section (carries the sidebar) — so the old versions URL still lands somewhere
