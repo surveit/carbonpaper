@@ -140,12 +140,8 @@ class LLMConfig(_Base):
     """llm_transform handle."""
     prompt_template: str = Field(
         description=(
-            "Instruction sent to the model once per input row, rendered with "
-            "Python's str.format_map: a single-brace {column_name} is replaced by "
-            "that row's value, while double braces {{ }} are an escaped literal "
-            "brace that never substitutes (so {{column_name}} sends the model the "
-            "literal text {column_name}, not the data). Inject the input column(s) "
-            "the model needs, with single braces."
+            "Sent to the model once per input row, rendered with Python's "
+            "str.format_map over the row — inject a column as {column_name}."
         ),
     )
     model: Optional[LLMModel] = None

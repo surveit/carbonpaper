@@ -25,8 +25,7 @@ shape. In one line each:
 - python_frame_function — deterministic code over the whole frame(s) that may reshape it
   (dedup, pivot, multi-input merge).
 - llm_transform — a step that needs judgment or reads unstructured text into structure.
-  Its prompt_template is rendered with Python's str.format_map: inject an input column
-  with SINGLE braces — {column_name} (NOT {{column_name}}, which renders as a literal).
+  Its prompt_template is rendered with Python's str.format_map: inject a column as {column_name}.
 - join — combines rows from upstream stages on a key.
 - aggregate — collapses rows into group summaries.
 - human_review_queue — routes items to a person to decide.
