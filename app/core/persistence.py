@@ -171,6 +171,10 @@ def get_store() -> DocumentStore:
     return _store
 
 
+def is_store_configured() -> bool:
+    return _store is not None
+
+
 class PersistedModel(BaseModel):
     """Base for every stored record. A subclass sets `collection` (the table name)
     and carries an `id` (its primary key); save()/load()/list() go through the
