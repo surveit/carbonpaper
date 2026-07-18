@@ -1,8 +1,8 @@
 """The MCP authoring surface: /mcp endpoint wiring + tool behavior.
 
 Endpoint tests drive the real streamable-HTTP mount through TestClient (the app
-lifespan starts the MCP session manager — hence the module-scoped `with` client:
-the session manager's run() is once-per-process). Tool-behavior tests call the
+lifespan starts a fresh MCP session manager per entry, so entering it here is
+safe alongside other lifespan-running tests). Tool-behavior tests call the
 tool functions directly against a tmp workspace."""
 from __future__ import annotations
 

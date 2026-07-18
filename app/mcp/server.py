@@ -9,10 +9,13 @@ return immediately; callers poll get_project_status. Failures raise — FastMCP
 surfaces the exception message as a tool error — never a fabricated success."""
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any
+from typing import Any, AsyncIterator
 
 from mcp.server.fastmcp import FastMCP
+from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
+from starlette.types import Receive, Scope, Send
 
 from app.services import data_model as data_model_service
 from app.services import generation
@@ -33,6 +36,56 @@ mcp = FastMCP(
     stateless_http=True,
     json_response=True,
 )
+
+
+# ─── Session-manager lifecycle (re-entrant) ──────────────────────────────────
+# The SDK caches ONE StreamableHTTPSessionManager on the FastMCP instance, and
+# its run() is once-per-instance — so an app lifespan built on it can only ever
+# be entered once per process (a second TestClient(app) would RuntimeError).
+# Instead, run_session_manager() builds a FRESH manager per lifespan entry, and
+# the /mcp endpoint delegates to whichever manager the current lifespan owns.
+
+_active_manager: StreamableHTTPSessionManager | None = None
+
+
+class _StreamableHTTPEndpoint:
+    """ASGI endpoint for /mcp: delegates to the CURRENT lifespan's manager. A
+    class instance (not a function) so Starlette's Route treats it as an ASGI
+    app rather than wrapping it as a request-response handler."""
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        manager = _active_manager
+        if manager is None:
+            raise RuntimeError(
+                "/mcp requested outside the app lifespan — the MCP session "
+                "manager only runs while the server is up."
+            )
+        await manager.handle_request(scope, receive, send)
+
+
+handle_streamable_http = _StreamableHTTPEndpoint()
+
+
+@asynccontextmanager
+async def run_session_manager() -> AsyncIterator[None]:
+    """Run a fresh MCP session manager for one server lifetime (the app lifespan
+    enters this). Mirrors the manager FastMCP.streamable_http_app() would build
+    from this module's `mcp` settings; `_mcp_server` is the SDK's only handle to
+    the underlying low-level server (no public accessor — pyproject pins the mcp
+    version bound this relies on)."""
+    global _active_manager
+    manager = StreamableHTTPSessionManager(
+        app=mcp._mcp_server,
+        json_response=mcp.settings.json_response,
+        stateless=mcp.settings.stateless_http,
+        security_settings=mcp.settings.transport_security,
+    )
+    async with manager.run():
+        _active_manager = manager
+        try:
+            yield
+        finally:
+            _active_manager = None
 
 
 @mcp.tool()
