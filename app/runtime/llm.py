@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import time
 from typing import Any
 
 from pydantic import BaseModel
@@ -84,14 +85,32 @@ def call_llm(
             f"stage {stage_id}: llm.tools is not supported by the agent backend"
         )
     prompt = render_prompt(llm_config.prompt_template, input_row)
-    agent: Agent[BaseModel] = Agent(
-        system_prompt=SYSTEM_PROMPT,
-        target_schema=reply_model,
-        task=prompt,
-        model=str(model or llm_config.model or DEFAULT_MODEL),
-    )
-    answer = run_sync(asyncio.wait_for(agent.run(), timeout=DEFAULT_TIMEOUT_S))
-    return answer.model_dump(mode="json")
+    model_name = str(model or llm_config.model or DEFAULT_MODEL)
+
+    # Honor llm_config.max_retries for TRANSIENT backend failures (a dropped CLI
+    # connection, a timeout) — distinct from the Agent's own in-loop retry on
+    # schema rejection. max_retries=N allows N+1 total attempts; a fresh Agent is
+    # built each attempt, and the LAST failure is re-raised so the caller still
+    # records a real error rather than a fabricated reply.
+    attempts = max(1, (llm_config.max_retries or 0) + 1)
+    last_exc: Exception | None = None
+    for attempt in range(attempts):
+        agent: Agent[BaseModel] = Agent(
+            system_prompt=SYSTEM_PROMPT,
+            target_schema=reply_model,
+            task=prompt,
+            model=model_name,
+        )
+        try:
+            answer = run_sync(asyncio.wait_for(agent.run(), timeout=DEFAULT_TIMEOUT_S))
+            return answer.model_dump(mode="json")
+        except Exception as exc:  # noqa: BLE001 — retry any backend failure up to
+            # max_retries, then re-raise the last so the caller records it.
+            last_exc = exc
+            if attempt + 1 < attempts:
+                time.sleep(min(4.0, 1.0 * (attempt + 1)))
+    assert last_exc is not None  # attempts >= 1, so the loop ran and set this
+    raise last_exc
 
 
 def backend_status() -> dict[str, Any]:
