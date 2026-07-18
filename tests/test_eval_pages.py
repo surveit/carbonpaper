@@ -1,6 +1,6 @@
 """Route tests for the eval read pages (app/web/routers/evals.py). Builds a demo
 project on disk — a compiled two-stage workflow, one valid+compatible eval with an
-attached dataset, plus one leftover config that no longer parses — points
+attached dataset, plus one leftover config that no longer validates — points
 EXAMPLES_DIR/REPO_ROOT at it, and checks each page renders the truthful state."""
 from __future__ import annotations
 
@@ -24,7 +24,8 @@ from app.core.models import (
     TableRef,
 )
 from app.core.models.schema import TableSchema
-from app.evals.store import save_eval_config
+from app.core.persistence import get_store
+from app.evals.store import save_eval_config, save_eval_run
 
 client = TestClient(app)
 
@@ -48,9 +49,9 @@ _TARGET = {
 @pytest.fixture(autouse=True)
 def demo_project(tmp_path, monkeypatch):
     """A demo project with a compiled override→target workflow and one compatible
-    eval whose dataset is on disk, plus a stale config that fails to parse. Repoints
-    EXAMPLES_DIR (project lookup) and REPO_ROOT (dataset path resolution) at tmp_path
-    in every module that captured them by import."""
+    eval whose dataset is on disk, plus a stale config that fails EvalConfig
+    validation. Repoints EXAMPLES_DIR (project lookup) and REPO_ROOT (dataset path
+    resolution) at tmp_path in every module that captured them by import."""
     demo = tmp_path / "demo"
     compiled = demo / "compiled"
     compiled.mkdir(parents=True)
@@ -79,8 +80,8 @@ def demo_project(tmp_path, monkeypatch):
         expected_outputs=[ExpectedOutput(output_column="label", metric="exact")],
     ))
     # A leftover config that no longer matches the schema — should render as broken.
-    (demo / "eval_config" / "stale.yaml").write_text(
-        "id: stale\nname: stale\noverride_stage: load\n", encoding="utf-8")
+    get_store().write("eval", f"{demo.name}/stale",
+                      {"id": "stale", "name": "stale", "override_stage": "load"})
     return tmp_path
 
 
@@ -125,9 +126,7 @@ def test_eval_run_page_renders_a_seeded_run():
                                  frontier=["classify"], blocking_stages=[]),
         metrics={"accuracy": 1.0},
     )
-    run_dir = evals_router.EXAMPLES_DIR / "demo" / "eval_run"
-    run_dir.mkdir(parents=True, exist_ok=True)
-    (run_dir / "run1.json").write_text(run.model_dump_json(), encoding="utf-8")
+    save_eval_run(evals_router.EXAMPLES_DIR / "demo", run)
 
     r = client.get("/project/demo/evals/label_check/runs/run1")
     assert r.status_code == 200
