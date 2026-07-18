@@ -20,17 +20,15 @@ bridges.
 """
 from __future__ import annotations
 
-import json
 import logging
 from pathlib import Path
 from typing import Any
 
 from app.compiler.data_model import start_data_model_generation_agent
 from app.compiler.workflow import start_workflow_generation_agent
-from app.core.models import parse_schema_library
 from app.core.models.named_schemas import SchemaLibrary
 from app.core.models.workflow import Workflow
-from app.services import node_review, workspace
+from app.services import data_model
 from app.services.compilation import regenerate_workflow
 from app.services.loader import stage_to_spec_dict
 
@@ -72,22 +70,6 @@ def start_workflow_generation(
     )
 
 
-def load_approved_data_model(project_dir: Path) -> SchemaLibrary | None:
-    """The project's data model as a validated SchemaLibrary — but ONLY when the
-    human has APPROVED it (the node-review gate); None when absent or unapproved.
-    Workflow generation grounds on the returned model; an unapproved model is
-    never passed as if it were reviewed."""
-    schemas = workspace.load_schemas(project_dir)
-    if not schemas:
-        return None
-    if node_review.data_model_state(project_dir, schemas)["state"] != "approved":
-        return None
-    # Strip the loader's bookkeeping keys (_filename/…) before the model validates.
-    return parse_schema_library(
-        [{k: v for k, v in s.items() if not k.startswith("_")} for s in schemas]
-    )
-
-
 def _finish_data_model(project_dir: Path, answer: SchemaLibrary | None) -> None:
     """Completion hook for the data-model turn (runs on the event loop): if the agent submitted
     a valid data model (`answer`), persist the schemas. The create-flow stops here — the
@@ -95,7 +77,7 @@ def _finish_data_model(project_dir: Path, answer: SchemaLibrary | None) -> None:
     already streamed to the live turn; there is nothing to persist."""
     if answer is None:
         return
-    _persist_schemas(project_dir, answer)
+    data_model.write_data_model(project_dir, answer)
 
 
 def _finish_workflow(project_dir: Path, name: str, answer: Workflow | None) -> None:
@@ -119,17 +101,3 @@ def _workflow_result(workflow: Workflow, name: str) -> dict[str, Any]:
         "compiler_notes": None,
         "validation": [],
     }
-
-
-def _persist_schemas(project_dir: Path, library: SchemaLibrary) -> None:
-    """Replace schemas/ with the generated data model — clear stale files a shrinking
-    re-generation would leave, then write one NN_<name>.json per schema. The library is already
-    validated by the data-model agent, so this only writes."""
-    schemas_dir = project_dir / "schemas"
-    schemas_dir.mkdir(parents=True, exist_ok=True)
-    for stale in schemas_dir.glob("*.json"):
-        stale.unlink()
-    for index, schema in enumerate(library.schemas, start=1):
-        payload = schema.model_dump(mode="json", exclude_none=True)
-        path = schemas_dir / f"{index:02d}_{schema.name}.json"
-        path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")

@@ -54,6 +54,7 @@ from app.core.models import (
     validate_named_schema,
     validate_schema_library,
 )
+from app.services import data_model as data_model_service
 from app.services import generation, node_review, project
 from app.services.loader import stage_to_spec_dict
 from app.web.config import EXAMPLES_DIR, templates
@@ -257,7 +258,7 @@ async def generate_workflow(project_name: str):
             detail=f"examples/{project_name}/ has no document.md to generate from.",
         )
     model = project.project_meta(pdir).model or "sonnet"
-    data_model = generation.load_approved_data_model(pdir)
+    data_model = data_model_service.load_data_model(pdir, approved_only=True)
     session_id = generation.start_workflow_generation(
         pdir,
         document=document_path.read_text(encoding="utf-8"),

@@ -14,6 +14,7 @@ from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 
+from app.services import data_model as data_model_service
 from app.services import generation
 from app.services import project as project_service
 from app.services import workspace
@@ -88,7 +89,7 @@ async def generate_workflow(project_id: str) -> dict[str, Any]:
     pdir = _resolve_existing_project(project_id)
     document = _read_document(pdir, project_id)
     model = project_service.project_meta(pdir).model or "sonnet"
-    data_model = generation.load_approved_data_model(pdir)
+    data_model = data_model_service.load_data_model(pdir, approved_only=True)
     session_id = generation.start_workflow_generation(
         pdir, document=document, model=model, data_model=data_model
     )
