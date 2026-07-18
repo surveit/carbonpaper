@@ -66,9 +66,9 @@ async def evals_index(request: Request, project: str):
 
 
 def _build_eval_index_rows(project_dir: Path, stages: list[Stage]) -> list[dict[str, Any]]:
-    """One `{id, name, status, issues}` row per `eval_config/*` file, in
-    list_eval_configs order. A config that failed to parse shows as `broken` with
-    its parse issues; one that loaded shows its computed status."""
+    """One `{id, name, status, issues}` row per eval config, in
+    list_eval_configs order. A config that failed to validate shows as `broken`
+    with its issues; one that loaded shows its computed status."""
     latest_version = latest_version_id(project_dir)
     rows: list[dict[str, Any]] = []
     for entry in list_eval_configs(project_dir):

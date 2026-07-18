@@ -26,8 +26,9 @@ An eval measures the *real* workflow, not a copy of it. The v1 shape
     `settings` (can it be scored automatically, and if not why), and the
     scorer's `metrics` / per-row result table.
 
-Storage: eval objects live under their own `eval_config/` and `eval_run/` object
-types (see [[contract_pydantic_and_storage]]).
+Storage: configs and runs are documents in the store (collections `eval` and
+`eval_run`); the eval dataset is an on-disk tabular file the config references by
+`table.path`.
 """
 from __future__ import annotations
 
