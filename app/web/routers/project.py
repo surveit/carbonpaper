@@ -38,9 +38,7 @@ app.core.models package is the only contract.
 from __future__ import annotations
 
 import json
-import re
 import shutil
-from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -51,11 +49,12 @@ from fastapi.responses import (
     RedirectResponse,
 )
 
+from app.core.errors import ProjectExistsError
 from app.core.models import (
-    parse_schema_library,
     validate_named_schema,
     validate_schema_library,
 )
+from app.services import data_model as data_model_service
 from app.services import generation, node_review, project
 from app.services.loader import stage_to_spec_dict
 from app.web.config import EXAMPLES_DIR, templates
@@ -209,34 +208,12 @@ async def new_project_submit(
     project carries a real model + created_at (non-legacy); we never fabricate those
     for legacy dirs. A name clash fails LOUDLY (400) rather than clobbering existing
     data — the rename is the human's decision."""
-    safe_name = re.sub(r"[^a-z0-9_]", "_", name.strip().lower()) or "project"
-    doc = doc_text.strip()
-    if not doc:
-        raise HTTPException(status_code=400, detail="The methodology document is empty.")
-
+    try:
+        safe_name = project.create_project(name, doc_text, model=model, source="pasted document")
+    except (ValueError, ProjectExistsError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
     project_dir = EXAMPLES_DIR / safe_name
-    # Don't silently overwrite an existing project's data — fail loudly so a name clash
-    # is the human's decision, not a quiet clobber.
-    if project_dir.exists():
-        raise HTTPException(
-            status_code=400,
-            detail=f"examples/{safe_name}/ already exists — choose a different name.",
-        )
-
-    project_dir.mkdir(parents=True, exist_ok=True)
-    # The source of record travels WITH the project (document.md is the canonical name
-    # project_state probes first). The data-model stream seeds Phase 1 from it.
-    (project_dir / "document.md").write_text(doc, encoding="utf-8")
-    # Record identity so the project is NON-legacy: a real model + creation time +
-    # source (never a fabricated default — write_project_meta persists exactly these).
-    project.write_project_meta(
-        project_dir,
-        name=safe_name,
-        title=None,
-        created_at=datetime.now().isoformat(timespec="seconds"),
-        model=model,
-        source="pasted document",
-    )
+    doc = (project_dir / "document.md").read_text(encoding="utf-8")
     # Kick off automatic generation (data model → then workflow). The data-model phase
     # runs as a LIVE chat turn; land the user on it so they watch the model being
     # authored (it streams while it runs, then persists as the session's transcript).
@@ -281,12 +258,7 @@ async def generate_workflow(project_name: str):
             detail=f"examples/{project_name}/ has no document.md to generate from.",
         )
     model = project.project_meta(pdir).model or "sonnet"
-    schemas = load_schemas(pdir)
-    state = node_review.data_model_state(pdir, schemas)["state"] if schemas else "none"
-    data_model = None
-    if state == "approved":
-        # Strip the loader's bookkeeping keys (_filename/…) before the model validates.
-        data_model = parse_schema_library([_schema_spec(s) for s in schemas])
+    data_model = data_model_service.load_data_model(pdir, approved_only=True)
     session_id = generation.start_workflow_generation(
         pdir,
         document=document_path.read_text(encoding="utf-8"),

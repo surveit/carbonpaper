@@ -49,10 +49,10 @@ allowed_importers = ["app.main"]
 # app.services.workspace and app.web re-exports them so routers are unaffected.
 
 [[tool.importlinter.contracts]]
-name = "app.services imported only by web, runtime, evals, compiler"
+name = "app.services imported only by web, runtime, evals, compiler, mcp"
 type = "protected"
 protected_modules = ["app.services"]
-allowed_importers = ["app.web", "app.runtime", "app.evals", "app.compiler"]
+allowed_importers = ["app.web", "app.runtime", "app.evals", "app.compiler", "app.mcp"]
 # Domain logic the upper layers lean on. As a declared whitelist, a new importer is
 # a deliberate edit, not an accident. (services → compiler is fine — compilation and
 # generation wrap it — which is why app.compiler lists app.services below.)
@@ -115,3 +115,11 @@ forbidden_modules = ["app.core.persistence"]
 # The pure contracts (Stage, TableSchema, …) are validation-only and side-effect-free.
 # Records embed contracts, so the arrow is records → contracts; a contract importing
 # persistence would invert that and drag storage into the type layer.
+
+[[tool.importlinter.contracts]]
+name = "app.mcp imported only by the entrypoint"
+type = "protected"
+protected_modules = ["app.mcp"]
+allowed_importers = ["app.main"]
+# The MCP surface is a top-level interface like app.web: app.main mounts it,
+# nothing else imports it. It depends only on app.services (+ app.core).
