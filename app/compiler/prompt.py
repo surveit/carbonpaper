@@ -67,7 +67,10 @@ def _node_type_contract() -> str:
     out.append("python_transform.function.kind ∈ {module, inline} "
                "(module → needs `module`; inline → needs `code`).")
     out.append("join.type ∈ " + ", ".join(sorted(models.JOIN_TYPES))
-               + "; join needs `keys`. publish also needs a `function:` block.")
+               + "; join needs `keys`. publish also needs a `function:` block whose "
+               "`transform(*frames, output_dir)` writes artifacts and returns one row per "
+               "written artifact; publish.path_column (default `path`) names the returned "
+               "column that holds each artifact's path.")
     return "\n".join(out)
 
 

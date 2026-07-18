@@ -161,7 +161,8 @@ NODE_TYPES: dict[str, dict[str, _Any]] = {
         "requires_inputs": True,
         "min_inputs": 1,
         "required": [],
-        "optional": ["format", "destination", "template", "one_file_per", "cross_link"],
+        "optional": ["format", "destination", "template", "one_file_per",
+                     "cross_link", "path_column"],
     },
 }
 
