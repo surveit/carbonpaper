@@ -14,6 +14,7 @@ from fastapi import HTTPException
 
 from app.core.models import Stage
 from app.services.loader import CompiledStageFile, load_compiled_dir
+from app.services.versioning import list_versions
 from app.services.workspace import load_schemas
 from app.web.config import EXAMPLES_DIR, REPO_ROOT
 
@@ -21,15 +22,20 @@ from app.web.config import EXAMPLES_DIR, REPO_ROOT
 # ─── Projects & stages ──────────────────────────────────────────────────
 
 def list_projects() -> list[dict[str, Any]]:
-    """One project card per dir under examples/ that has EITHER a workflow
-    (compiled/*.json) OR a data model (schemas/*.json). Returns the shape the home
-    dashboard renders: name, what's authored (has_workflow / has_schemas), and the
-    counts shown on the badge (stages, schema docs, runs). Sorted by name.
+    """One project card per dir under examples/, in the shape the home dashboard
+    renders. The card's headline question is binary — is the project still being
+    SET UP, or is it READY TO RUN? — so alongside the authored-what flags
+    (has_document / has_schemas / has_workflow) each card carries `is_ready`:
+    True iff at least one version exists, because runs target versions and a
+    project without one cannot be run yet. Sorted by name.
 
-    Every count is read off disk — a card never advertises a stage/schema/run that
-    isn't there. A dir with neither a workflow nor a data model is not a project yet
-    and is omitted (not shown as an empty card). A run counts only if it has a
-    manifest.json (mirrors list_runs), so the count is real runs, never inflated."""
+    Every flag and count is read off disk — a card never advertises a
+    stage/schema/run/version that isn't there. A directory counts as a project
+    from the moment creation writes its document.md (or project.json) — a
+    just-created project whose data model is still being generated must show up,
+    not appear only once generation finishes. A dir with none of those markers is
+    not a project and is omitted. A run counts only if it has a manifest.json
+    (mirrors list_runs), so the count is real runs, never inflated."""
     if not EXAMPLES_DIR.exists():
         return []
     out: list[dict[str, Any]] = []
@@ -47,12 +53,15 @@ def list_projects() -> list[dict[str, Any]]:
             sum(1 for r in rdir.iterdir() if r.is_dir() and (r / "manifest.json").exists())
             if rdir.is_dir() else 0
         )
-        if not (has_workflow or has_schemas):
+        has_document = (p / "document.md").is_file() or (p / "project.json").is_file()
+        if not (has_workflow or has_schemas or has_document):
             continue
         out.append({
             "name": p.name,
+            "has_document": has_document,
             "has_workflow": has_workflow,
             "has_schemas": has_schemas,
+            "is_ready": len(list_versions(p)) > 0,
             "n_stages": n_stages,
             "n_schemas": n_schemas,
             "n_runs": n_runs,

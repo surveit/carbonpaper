@@ -4,15 +4,20 @@
 <div class="dash-header">
     <div class="dash-header-text">
         <h1>Projects</h1>
-        <p class="lede">Each project is a directory under <code>examples/</code>, built in two steps: a <strong>data model</strong> (named schemas in <code>schemas/</code>), then a <strong>workflow</strong> (typed stages in <code>compiled/</code>) that wires transforms between those schemas, plus the <strong>runs</strong> executed against it.</p>
+        <p class="lede">Paste how your investigation works, and it becomes a chain of simple, inspectable steps — load sources, extract with an LLM, join, publish — that you can run and rerun. A project holds one investigation, from that write-up to its runs.</p>
     </div>
-    <a href="/project/new" class="btn primary new-methodology-btn">＋ New methodology</a>
+    <a href="/project/new" class="btn primary new-methodology-btn">＋ New project</a>
 </div>
 
 {% if projects %}
 <div class="project-grid">
     {% for m in projects %}
-    {% set open_url = ("/project/" ~ m.name) if m.has_workflow else ("/project/" ~ m.name ~ "/data_model") %}
+    {# Ready projects open on the overview; a project still in setup opens where
+       setup continues (the workflow section once a workflow exists, else the
+       data-model section — also where a fresh project's generation streams). #}
+    {% if m.is_ready %}{% set open_url = "/project/" ~ m.name %}
+    {% elif m.has_workflow %}{% set open_url = "/project/" ~ m.name ~ "/workflow" %}
+    {% else %}{% set open_url = "/project/" ~ m.name ~ "/data_model" %}{% endif %}
     <div class="project-card">
         <form class="project-delete" method="post" action="/project/{{ m.name }}/delete"
               onsubmit="return confirm('Delete project &#39;{{ m.name }}&#39; and all its runs? This cannot be undone.');">
@@ -20,18 +25,12 @@
         </form>
         <a href="{{ open_url }}" class="project-name">{{ m.name }}</a>
         <div class="project-status">
-            {% if m.has_workflow %}
-            <span class="badge {% if m.has_schemas %}python{% else %}input{% endif %}">Workflow · {{ m.n_stages }} stage{% if m.n_stages != 1 %}s{% endif %}</span>
+            {% if m.is_ready %}
+            <span class="badge python">Live</span>
             {% else %}
-            <span class="badge aggregate">Data model only</span>
+            <span class="badge llm">Under development</span>
             {% endif %}
             {% if m.n_runs > 0 %}<span class="status-dot">·</span><span class="status-meta">{{ m.n_runs }} run{% if m.n_runs != 1 %}s{% endif %}</span>{% endif %}
-            {% if m.has_schemas %}<span class="status-dot">·</span><span class="status-meta">{{ m.n_schemas }} schema{% if m.n_schemas != 1 %}s{% endif %}</span>{% endif %}
-        </div>
-        <div class="project-links">
-            {% if m.has_schemas %}<a href="/project/{{ m.name }}/data_model" class="proj-link">Data model</a>{% endif %}
-            {% if m.has_workflow %}<a href="/project/{{ m.name }}/workflow" class="proj-link">Workflow</a>{% endif %}
-            {% if m.n_runs > 0 %}<a href="/project/{{ m.name }}/runs" class="proj-link">Runs</a>{% endif %}
         </div>
     </div>
     {% endfor %}
@@ -39,8 +38,8 @@
 {% else %}
 <div class="empty-state">
     <h2>No projects yet — start your first one</h2>
-    <p class="muted">A project lives in <code>examples/&lt;name&gt;/</code>: author a data model, then a workflow, then run it.</p>
-    <a href="/project/new" class="btn primary new-methodology-btn">＋ New methodology</a>
+    <p class="muted">Paste how your investigation works, and it becomes a chain of simple, inspectable steps you can run and rerun.</p>
+    <a href="/project/new" class="btn primary new-methodology-btn">＋ New project</a>
 </div>
 {% endif %}
 {% endblock %}

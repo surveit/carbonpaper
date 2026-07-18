@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}New methodology · paste doc → data model → workflow{% endblock %}
+{% block title %}New project · paste methodology → data model → workflow{% endblock %}
 
 {% block head_extra %}
 <style>
@@ -25,7 +25,7 @@
 {% endblock %}
 
 {% block content %}
-<h1>New methodology · paste doc → data model → workflow</h1>
+<h1>New project · paste methodology → data model → workflow</h1>
 <p class="lede">
   Paste a methodology write-up (how an investigation finds, verifies, and surfaces
   its claims). The compiler describes the <strong>data model first</strong> — the named
@@ -37,7 +37,7 @@
 <div class="compile-form">
   <form method="post" action="/project/new">
     <div class="field">
-      <label for="m-name">Methodology name</label>
+      <label for="m-name">Project name</label>
       <input type="text" id="m-name" name="name" value="{{ default_name or '' }}"
              placeholder="e.g. gated_demo" required
              pattern="[A-Za-z0-9_\-]+"
