@@ -1,14 +1,16 @@
-"""Tests for app/evals/store.py — eval config/run storage and status
-derivation. All storage lives under a tmp_path project dir; nothing here
-touches examples/."""
+"""Tests for app/evals/store.py — eval config/run storage (document store) and
+status derivation. Config/run storage is scoped by a project dir (`tmp_path`
+here; only its `.name` is used, to key documents), isolated per test by the
+autouse in-memory store (see conftest.fresh_store). Dataset uploads stay on
+disk under `tmp_path` and are untouched by this conversion."""
 from __future__ import annotations
 
 from pathlib import Path
 
 import pytest
-import yaml
 
 from app.core.models import EvalConfig, EvalRun
+from app.core.persistence import get_store
 from app.evals.compatibility import CompatibilityReport
 from app.evals.store import (
     EvalConfigEntry,
@@ -20,6 +22,7 @@ from app.evals.store import (
     load_eval_run,
     save_dataset_upload,
     save_eval_config,
+    save_eval_run,
 )
 
 
@@ -54,16 +57,14 @@ def _run(**over):
 # ── save / list / load roundtrip ─────────────────────────────────────────────
 def test_save_list_load_roundtrip(tmp_path: Path):
     config = _config()
-    path = save_eval_config(tmp_path, config)
-    assert path == tmp_path / "eval_config" / "scoring.yaml"
-    assert path.is_file()
+    assert save_eval_config(tmp_path, config) is None
 
     entries = list_eval_configs(tmp_path)
     assert len(entries) == 1
     assert entries[0].config is not None
     assert entries[0].config.id == "scoring"
     assert entries[0].issues == []
-    assert entries[0].path == path
+    assert entries[0].id == "scoring"
 
     loaded = load_eval_config(tmp_path, "scoring")
     assert loaded == config
@@ -72,15 +73,16 @@ def test_save_list_load_roundtrip(tmp_path: Path):
 def test_save_eval_config_overwrite_allowed(tmp_path: Path):
     save_eval_config(tmp_path, _config())
     updated = _config(name="new name")
-    path = save_eval_config(tmp_path, updated)
+    save_eval_config(tmp_path, updated)
     loaded = load_eval_config(tmp_path, "scoring")
     assert loaded.name == "new name"
-    assert path == tmp_path / "eval_config" / "scoring.yaml"
+    # overwrite, not a second document
+    assert [e.id for e in list_eval_configs(tmp_path)] == ["scoring"]
 
 
-def test_save_eval_config_writes_yaml_safe_dump_shape(tmp_path: Path):
-    path = save_eval_config(tmp_path, _config())
-    data = yaml.safe_load(path.read_text(encoding="utf-8"))
+def test_save_eval_config_excludes_none_fields_from_the_stored_doc(tmp_path: Path):
+    save_eval_config(tmp_path, _config())
+    data = get_store().read("eval", f"{tmp_path.name}/scoring")
     assert data["id"] == "scoring"
     assert data["override_stage"] == "evidence_with_benchmarks"
     # exclude_none=True: reference_overrides default is [] (kept, not None-valued);
@@ -88,55 +90,40 @@ def test_save_eval_config_writes_yaml_safe_dump_shape(tmp_path: Path):
     assert "description" not in data
 
 
-def test_load_eval_config_missing_raises_file_not_found_with_path(tmp_path: Path):
+def test_load_eval_config_missing_raises_file_not_found(tmp_path: Path):
     with pytest.raises(FileNotFoundError) as exc:
         load_eval_config(tmp_path, "nope")
-    assert str(tmp_path / "eval_config" / "nope.yaml") in str(exc.value)
+    assert "nope" in str(exc.value)
+    assert tmp_path.name in str(exc.value)
 
 
-def test_load_eval_config_malformed_raises_value_error_with_path(tmp_path: Path):
-    bad_dir = tmp_path / "eval_config"
-    bad_dir.mkdir(parents=True)
-    bad_path = bad_dir / "broken.yaml"
-    bad_path.write_text("not: [valid, eval, config", encoding="utf-8")
+def test_load_eval_config_invalid_schema_raises_value_error(tmp_path: Path):
+    get_store().write("eval", f"{tmp_path.name}/broken", {"id": "broken"})
     with pytest.raises(ValueError) as exc:
         load_eval_config(tmp_path, "broken")
-    assert str(bad_path) in str(exc.value)
+    assert "broken" in str(exc.value)
 
 
 # ── list_eval_configs tolerance ──────────────────────────────────────────────
-def test_list_eval_configs_tolerates_malformed_yaml_others_still_load(tmp_path: Path):
+def test_list_eval_configs_tolerates_invalid_document_others_still_load(tmp_path: Path):
     save_eval_config(tmp_path, _config())
-    bad_dir = tmp_path / "eval_config"
-    (bad_dir / "broken.yaml").write_text("not: [valid, yaml", encoding="utf-8")
+    # valid JSON, but not a valid EvalConfig (missing required fields)
+    get_store().write("eval", f"{tmp_path.name}/broken", {"id": "broken"})
 
     entries = list_eval_configs(tmp_path)
     assert len(entries) == 2
-    by_path_name = {e.path.name: e for e in entries}
+    by_id = {e.id: e for e in entries}
 
-    good = by_path_name["scoring.yaml"]
+    good = by_id["scoring"]
     assert good.config is not None
     assert good.issues == []
 
-    broken = by_path_name["broken.yaml"]
+    broken = by_id["broken"]
     assert broken.config is None
     assert broken.issues != []
 
 
-def test_list_eval_configs_tolerates_valid_yaml_invalid_schema(tmp_path: Path):
-    bad_dir = tmp_path / "eval_config"
-    bad_dir.mkdir(parents=True)
-    # valid YAML, but not a valid EvalConfig (missing required fields)
-    (bad_dir / "incomplete.yaml").write_text(
-        yaml.safe_dump({"id": "incomplete"}), encoding="utf-8")
-
-    entries = list_eval_configs(tmp_path)
-    assert len(entries) == 1
-    assert entries[0].config is None
-    assert entries[0].issues != []
-
-
-def test_list_eval_configs_empty_dir_returns_empty(tmp_path: Path):
+def test_list_eval_configs_empty_store_returns_empty(tmp_path: Path):
     assert list_eval_configs(tmp_path) == []
 
 
@@ -163,74 +150,37 @@ def test_save_dataset_upload_rejects_non_slugish_filenames(tmp_path: Path, bad_n
         save_dataset_upload(tmp_path, bad_name, b"content")
 
 
-# ── list_eval_runs ────────────────────────────────────────────────────────────
-def test_list_eval_runs_filters_by_config_and_sorts_newest_first(tmp_path: Path):
-    run_dir = tmp_path / "eval_run"
-    run_dir.mkdir(parents=True)
-    r_old = _run(id="run-old", started_at="2026-01-01T00:00:00")
-    r_new = _run(id="run-new", started_at="2026-02-01T00:00:00")
-    r_other_config = _run(id="run-other", config="other-config")
-    for r in (r_old, r_new, r_other_config):
-        (run_dir / f"{r.id}.json").write_text(r.model_dump_json(), encoding="utf-8")
-
-    runs = list_eval_runs(tmp_path, "scoring")
-    assert [r.id for r in runs] == ["run-new", "run-old"]
-
-
-def test_list_eval_runs_no_run_dir_returns_empty(tmp_path: Path):
-    assert list_eval_runs(tmp_path, "scoring") == []
-
-
-def test_list_eval_runs_sorts_by_started_at_then_id_when_missing(tmp_path: Path):
-    run_dir = tmp_path / "eval_run"
-    run_dir.mkdir(parents=True)
-    r_no_start_a = _run(id="run-a", started_at=None)
-    r_no_start_b = _run(id="run-b", started_at=None)
-    for r in (r_no_start_a, r_no_start_b):
-        (run_dir / f"{r.id}.json").write_text(r.model_dump_json(), encoding="utf-8")
-
-    runs = list_eval_runs(tmp_path, "scoring")
-    # both have started_at=None -> "" -> tiebreak by id, newest-first means
-    # sorted descending on (started_at or "", id)
-    assert [r.id for r in runs] == ["run-b", "run-a"]
-
-
-# ── load_eval_run ─────────────────────────────────────────────────────────────
-def test_load_eval_run_reads_requested_run_only(tmp_path: Path):
-    run_dir = tmp_path / "eval_run"
-    run_dir.mkdir(parents=True)
-    wanted = _run(id="run-1")
-    (run_dir / "run-1.json").write_text(wanted.model_dump_json(), encoding="utf-8")
+# ── save / load eval run roundtrip ────────────────────────────────────────────
+def test_save_load_eval_run_roundtrip(tmp_path: Path):
+    run = _run()
+    assert save_eval_run(tmp_path, run) is None
 
     loaded = load_eval_run(tmp_path, "run-1")
-    assert loaded == wanted
+    assert loaded == run
 
 
-def test_load_eval_run_missing_raises_file_not_found_with_path(tmp_path: Path):
+def test_load_eval_run_missing_raises_file_not_found(tmp_path: Path):
     with pytest.raises(FileNotFoundError) as exc:
         load_eval_run(tmp_path, "nope")
-    assert str(tmp_path / "eval_run" / "nope.json") in str(exc.value)
+    assert "nope" in str(exc.value)
+    assert tmp_path.name in str(exc.value)
 
 
-def test_load_eval_run_malformed_raises_value_error_with_path(tmp_path: Path):
-    run_dir = tmp_path / "eval_run"
-    run_dir.mkdir(parents=True)
-    bad_path = run_dir / "broken.json"
-    bad_path.write_text("not json at all {", encoding="utf-8")
+def test_load_eval_run_invalid_schema_raises_value_error(tmp_path: Path):
+    get_store().write("eval_run", f"{tmp_path.name}/broken", {"id": "broken"})
     with pytest.raises(ValueError) as exc:
         load_eval_run(tmp_path, "broken")
-    assert str(bad_path) in str(exc.value)
+    assert "broken" in str(exc.value)
 
 
-def test_load_eval_run_ignores_sibling_corrupt_run(tmp_path: Path):
-    """The requested run loads fine even when another run file for the same
-    project dir is corrupt -- load_eval_run reads only the one file named by
-    run_id, unlike list_eval_runs which globs every eval_run/*.json."""
-    run_dir = tmp_path / "eval_run"
-    run_dir.mkdir(parents=True)
+def test_load_eval_run_ignores_sibling_invalid_run(tmp_path: Path):
+    """The requested run loads fine even when another run document for the same
+    project is invalid -- load_eval_run reads only the one document named by
+    run_id, unlike list_eval_runs which reads every eval_run document for the
+    project."""
     wanted = _run(id="run-good")
-    (run_dir / "run-good.json").write_text(wanted.model_dump_json(), encoding="utf-8")
-    (run_dir / "run-bad.json").write_text("not json at all {", encoding="utf-8")
+    save_eval_run(tmp_path, wanted)
+    get_store().write("eval_run", f"{tmp_path.name}/run-bad", {"id": "run-bad"})
 
     loaded = load_eval_run(tmp_path, "run-good")
     assert loaded == wanted
@@ -242,6 +192,34 @@ def test_load_eval_run_ignores_sibling_corrupt_run(tmp_path: Path):
 def test_load_eval_run_rejects_non_slugish_run_id(tmp_path: Path, bad_id):
     with pytest.raises(ValueError):
         load_eval_run(tmp_path, bad_id)
+
+
+# ── list_eval_runs ────────────────────────────────────────────────────────────
+def test_list_eval_runs_filters_by_config_and_sorts_newest_first(tmp_path: Path):
+    r_old = _run(id="run-old", started_at="2026-01-01T00:00:00")
+    r_new = _run(id="run-new", started_at="2026-02-01T00:00:00")
+    r_other_config = _run(id="run-other", config="other-config")
+    for r in (r_old, r_new, r_other_config):
+        save_eval_run(tmp_path, r)
+
+    runs = list_eval_runs(tmp_path, "scoring")
+    assert [r.id for r in runs] == ["run-new", "run-old"]
+
+
+def test_list_eval_runs_none_stored_returns_empty(tmp_path: Path):
+    assert list_eval_runs(tmp_path, "scoring") == []
+
+
+def test_list_eval_runs_sorts_by_started_at_then_id_when_missing(tmp_path: Path):
+    r_no_start_a = _run(id="run-a", started_at=None)
+    r_no_start_b = _run(id="run-b", started_at=None)
+    for r in (r_no_start_a, r_no_start_b):
+        save_eval_run(tmp_path, r)
+
+    runs = list_eval_runs(tmp_path, "scoring")
+    # both have started_at=None -> "" -> tiebreak by id, newest-first means
+    # sorted descending on (started_at or "", id)
+    assert [r.id for r in runs] == ["run-b", "run-a"]
 
 
 # ── latest_version_id ─────────────────────────────────────────────────────────
@@ -314,6 +292,6 @@ def test_eval_status_run_succeeded():
 
 
 def test_eval_config_entry_is_dataclass_shape():
-    entry = EvalConfigEntry(config=None, path=Path("x"), issues=["bad"])
+    entry = EvalConfigEntry(config=None, id="x", issues=["bad"])
     assert entry.config is None
     assert entry.issues == ["bad"]

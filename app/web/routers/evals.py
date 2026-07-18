@@ -73,7 +73,7 @@ def _build_eval_index_rows(project_dir: Path, stages: list[Stage]) -> list[dict[
     rows: list[dict[str, Any]] = []
     for entry in list_eval_configs(project_dir):
         if entry.config is None:
-            rows.append({"id": entry.path.stem, "name": entry.path.stem,
+            rows.append({"id": entry.id, "name": entry.id,
                          "status": "broken", "issues": entry.issues})
             continue
         status, run_issue = _resolve_eval_status(entry.config, stages, project_dir,

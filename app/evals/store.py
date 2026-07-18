@@ -1,27 +1,32 @@
-"""Filesystem storage for eval configs and runs, plus status derivation.
+"""Eval config/run storage (the document store), plus status derivation.
 
-Configs are mutable authored objects (`eval_config/{id}.yaml`, overwrite
-allowed). Runs are written elsewhere and only read here (`eval_run/*.json`).
-Dataset uploads are immutable once written (`eval_data/{filename}`) — a second
-upload under the same name is refused rather than silently replacing the file
-a config may already point at.
+Eval configs are mutable authored documents in the "eval" collection (write is
+upsert, so overwrite is inherent). Eval runs are immutable results in the
+"eval_run" collection: minted once per execution by the runner and only read
+here. Both collections are project-scoped -- each document id is
+`f"{project_dir.name}/{local_id}"` -- so listing or loading against a project
+with no eval activity yet returns empty results rather than requiring any
+scaffolding to exist first.
 
-Directories are created on write and never assumed to exist on read: listing
-or loading against a project with no eval activity yet returns empty results
-rather than creating scaffolding.
+Dataset uploads are a different kind of payload (raw file bytes, not an eval
+document) and stay on disk at `eval_data/{filename}`, immutable once written --
+a second upload under the same name is refused rather than silently replacing
+the file a config may already point at. (Deferred: dataset uploads and each
+run's per-row result table move to a tabular FrameStore in a later slice; this
+module only converts configs and runs.)
 """
 from __future__ import annotations
 
-import json
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
-import yaml
 from pydantic import ValidationError
 
+from app.core.errors import DocumentNotFound
 from app.core.models import EvalConfig, EvalRun
 from app.core.models.schema import format_errors
+from app.core.persistence import get_store
 from app.evals.compatibility import CompatibilityReport
 from app.services.versioning import list_versions
 
@@ -30,99 +35,91 @@ _SLUG_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
 
 @dataclass
 class EvalConfigEntry:
-    """One `eval_config/*.yaml` file: its parsed EvalConfig (None if unreadable
-    or invalid) and any issues encountered while loading it."""
+    """One stored eval config: its parsed EvalConfig (None if invalid), the local
+    eval `id` (the doc id with the project prefix stripped), and any issues
+    encountered while validating it."""
     config: EvalConfig | None
-    path: Path
+    id: str
     issues: list[str] = field(default_factory=list)
 
 
 def list_eval_configs(project_dir: Path) -> list[EvalConfigEntry]:
-    """All eval configs under `eval_config/`, tolerant of per-file problems: a
-    malformed or invalid file becomes an entry with `issues` set and
-    `config=None` rather than being dropped or aborting the whole listing.
-    Empty (or absent) `eval_config/` yields an empty list."""
-    config_dir = _resolve_eval_config_dir(project_dir)
-    if not config_dir.is_dir():
-        return []
+    """All eval configs stored for this project, tolerant of per-document
+    problems: a document that fails the EvalConfig contract becomes an entry
+    with `issues` set and `config=None` rather than being dropped or aborting
+    the whole listing. No configs stored yet -> empty list."""
     entries: list[EvalConfigEntry] = []
-    for path in sorted(config_dir.glob("*.yaml")):
-        entries.append(_load_config_entry(path))
+    for doc_id, data in get_store().read_all("eval", f"{project_dir.name}/"):
+        local_id = doc_id.split("/", 1)[1]
+        try:
+            entries.append(EvalConfigEntry(config=EvalConfig.model_validate(data), id=local_id))
+        except ValidationError as exc:
+            entries.append(EvalConfigEntry(config=None, id=local_id, issues=format_errors(exc)))
     return entries
 
 
 def load_eval_config(project_dir: Path, eval_id: str) -> EvalConfig:
-    """Load one eval config by id. Raises `FileNotFoundError` if the file is
-    absent, `ValueError` (naming the path) if it is unreadable YAML or fails
-    the EvalConfig contract — never returns a partial or best-guess config."""
-    path = _resolve_eval_config_dir(project_dir) / f"{eval_id}.yaml"
-    if not path.is_file():
-        raise FileNotFoundError(f"no eval config at {path}")
-    data = _read_yaml(path, what="eval config")
+    """Load one eval config by id. Raises `FileNotFoundError` if no such config is
+    stored, `ValueError` if the stored document fails the EvalConfig contract --
+    never returns a partial or best-guess config."""
+    try:
+        data = get_store().read("eval", f"{project_dir.name}/{eval_id}")
+    except DocumentNotFound as exc:
+        raise FileNotFoundError(
+            f"no eval config '{eval_id}' in project '{project_dir.name}'") from exc
     try:
         return EvalConfig.model_validate(data)
     except ValidationError as exc:
         raise ValueError(
-            f"invalid eval config at {path}: {'; '.join(format_errors(exc))}"
+            f"invalid eval config '{eval_id}' in project '{project_dir.name}': "
+            f"{'; '.join(format_errors(exc))}"
         ) from exc
 
 
-def save_eval_config(project_dir: Path, config: EvalConfig) -> Path:
-    """Write `config` to `eval_config/{config.id}.yaml`. Overwrite allowed —
-    configs are mutable authored objects, unlike dataset uploads."""
-    config_dir = _resolve_eval_config_dir(project_dir)
-    config_dir.mkdir(parents=True, exist_ok=True)
-    path = config_dir / f"{config.id}.yaml"
-    path.write_text(
-        yaml.safe_dump(config.model_dump(mode="json", exclude_none=True)),
-        encoding="utf-8")
-    return path
+def save_eval_config(project_dir: Path, config: EvalConfig) -> None:
+    """Save `config` as the eval document `{project_dir.name}/{config.id}`.
+    Overwrite allowed -- configs are mutable authored objects, unlike dataset
+    uploads."""
+    get_store().write(
+        "eval", f"{project_dir.name}/{config.id}",
+        config.model_dump(mode="json", exclude_none=True))
 
 
-def save_eval_run(project_dir: Path, run: EvalRun) -> Path:
-    """Write `run` to `eval_run/{run.id}.json`. Runs are immutable results —
-    a run id is minted per execution, so this never overwrites a real prior run."""
-    run_dir = _resolve_eval_run_dir(project_dir)
-    run_dir.mkdir(parents=True, exist_ok=True)
-    path = run_dir / f"{run.id}.json"
-    path.write_text(run.model_dump_json(indent=2), encoding="utf-8")
-    return path
+def save_eval_run(project_dir: Path, run: EvalRun) -> None:
+    """Save `run` as the eval_run document `{project_dir.name}/{run.id}`. Runs
+    are immutable results -- a run id is minted per execution, so this never
+    overwrites a real prior run."""
+    get_store().write("eval_run", f"{project_dir.name}/{run.id}", run.model_dump(mode="json"))
 
 
 def load_eval_run(project_dir: Path, run_id: str) -> EvalRun:
-    """Load one run by id, reading only `eval_run/{run_id}.json` -- never the
-    whole `eval_run/` directory, so a corrupt sibling run file can't block
-    loading a run that is itself fine. Raises `FileNotFoundError` if the file
-    is absent, `ValueError` (naming the path) if it is unreadable JSON or
-    fails the EvalRun contract. `run_id` must be a bare slugish name (same
-    filename-safety check as dataset uploads), so it is safe to use directly
-    as a path component."""
+    """Load one run by id. Raises `FileNotFoundError` if no such run is stored,
+    `ValueError` if `run_id` isn't a valid slug (same format rule as dataset
+    upload filenames -- bare, no path separators) or the stored document fails
+    the EvalRun contract."""
     if not _SLUG_RE.match(run_id):
         raise ValueError(f"not a valid run id: {run_id!r}")
-    path = _resolve_eval_run_dir(project_dir) / f"{run_id}.json"
-    if not path.is_file():
-        raise FileNotFoundError(f"no eval run at {path}")
     try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError as exc:
-        raise ValueError(f"malformed eval run JSON at {path}: {exc}") from exc
+        data = get_store().read("eval_run", f"{project_dir.name}/{run_id}")
+    except DocumentNotFound as exc:
+        raise FileNotFoundError(
+            f"no eval run '{run_id}' in project '{project_dir.name}'") from exc
     try:
         return EvalRun.model_validate(data)
     except ValidationError as exc:
         raise ValueError(
-            f"invalid eval run at {path}: {'; '.join(format_errors(exc))}"
+            f"invalid eval run '{run_id}' in project '{project_dir.name}': "
+            f"{'; '.join(format_errors(exc))}"
         ) from exc
 
 
 def list_eval_runs(project_dir: Path, config_id: str) -> list[EvalRun]:
-    """All runs of `config_id`, newest-first by `(started_at or "", id)`, reading
-    `eval_run/*.json` (absent dir -> empty list, never created here). Runs are
-    written by `save_eval_run`."""
-    run_dir = _resolve_eval_run_dir(project_dir)
-    if not run_dir.is_dir():
-        return []
-    runs = [EvalRun.model_validate(json.loads(path.read_text(encoding="utf-8")))
-            for path in run_dir.glob("*.json")]
+    """All runs of `config_id`, newest-first by `(started_at or "", id)`. No runs
+    stored yet -> empty list. Runs are written by `save_eval_run`. This reads and
+    validates every run stored for the project, so one malformed run raises
+    `ValidationError` rather than being silently dropped from the list."""
+    runs = [EvalRun.model_validate(data)
+            for _, data in get_store().read_all("eval_run", f"{project_dir.name}/")]
     runs = [r for r in runs if r.config == config_id]
     runs.sort(key=lambda r: (r.started_at or "", r.id), reverse=True)
     return runs
@@ -176,39 +173,6 @@ def eval_status(report: CompatibilityReport, runs: list[EvalRun],
     return "run succeeded"
 
 
-# ── Directory layout ─────────────────────────────────────────────────────────
-def _resolve_eval_config_dir(project_dir: Path) -> Path:
-    return Path(project_dir) / "eval_config"
-
-
-def _resolve_eval_run_dir(project_dir: Path) -> Path:
-    return Path(project_dir) / "eval_run"
-
-
+# ── Directory layout (dataset uploads only — deferred to a later slice) ──────
 def _resolve_eval_data_dir(project_dir: Path) -> Path:
     return Path(project_dir) / "eval_data"
-
-
-# ── YAML loading ─────────────────────────────────────────────────────────────
-def _read_yaml(path: Path, *, what: str) -> dict:
-    try:
-        data = yaml.safe_load(path.read_text(encoding="utf-8"))
-    except yaml.YAMLError as exc:
-        raise ValueError(f"malformed {what} YAML at {path}: {exc}") from exc
-    if not data:
-        raise ValueError(f"{what} file is empty: {path}")
-    return data
-
-
-def _load_config_entry(path: Path) -> EvalConfigEntry:
-    entry = EvalConfigEntry(config=None, path=path, issues=[])
-    try:
-        data = _read_yaml(path, what="eval config")
-    except ValueError as exc:
-        entry.issues.append(str(exc))
-        return entry
-    try:
-        entry.config = EvalConfig.model_validate(data)
-    except ValidationError as exc:
-        entry.issues.extend(format_errors(exc))
-    return entry

@@ -3,7 +3,7 @@
   - run_settings.py     — can this eval run be scored declaratively (resolve_eval_run_settings)
   - compatibility.py    — does an EvalConfig still fit the workflow (check_eval_compatibility)
   - dataset_columns.py  — derive the eval-dataset columns from override/target/checks
-  - store.py            — read/write eval configs and runs on disk
+  - store.py            — read/write eval configs and runs in the document store
   - runner.py           — run an eval against a workflow version (run_eval)
   - scoring.py          — compare a target's output to the dataset's expected columns
 
