@@ -16,7 +16,7 @@ from typing import Any, Callable
 from app.core.models import Stage
 
 from ..llm import backend_status, call_llm
-from .execution import Row
+from .execution import ROW_ERROR_KEY, Row
 
 
 def make_llm_row_mapper(stage: Stage, ctx: dict[str, Any]) -> Callable[[Row], Row]:
@@ -37,11 +37,14 @@ def make_llm_row_mapper(stage: Stage, ctx: dict[str, Any]) -> Callable[[Row], Ro
     def map_row(row: Row) -> Row:
         try:
             reply = call_llm(stage.id, llm, row, reply_model=reply_model)
-        except Exception as exc:  # noqa: BLE001 — per-row supervisor: any backend
-            # failure (agent error, timeout, validation exhaustion, …) is
-            # recorded as _error so one bad row can't abort the stage;
-            # surfaced, not swallowed.
-            return {**row, "_error": str(exc)}
+        except Exception as exc:  # noqa: BLE001 — per-row supervisor: tag the row
+            # with the ROW_ERROR_KEY sentinel so the map completes (one bad row
+            # does not abort the stage); the row driver collects these off the
+            # assembled frame and the runner surfaces them as error-severity
+            # output issues. Falls back to the exception's type name when its
+            # message is empty (e.g. a bare TimeoutError), so a message-less
+            # failure still reads as a failure rather than an empty-string cell.
+            return {**row, ROW_ERROR_KEY: str(exc) or type(exc).__name__}
         return {**row, **reply}
 
     return map_row

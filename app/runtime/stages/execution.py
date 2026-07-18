@@ -34,6 +34,12 @@ from app.core.models.stage import StageType, is_grain_and_order_preserving
 # One row of a stage's input or output: column label → cell value.
 Row = dict[str, Any]
 
+# Sentinel column a row mapper attaches to a row it could not produce (e.g. an
+# llm_transform whose generation failed). The row driver collects these off the
+# assembled frame so the runner can surface them as error-severity output issues
+# — a failed row is a reported error, not a silently dropped column.
+ROW_ERROR_KEY = "_error"
+
 
 class StageHandler(ABC):
     """One stage type's calling convention. `execute` runs the stage; the concrete
@@ -169,9 +175,29 @@ def _run_row_mapper(
             )
         out_rows.append(result)
     df = pd.DataFrame(out_rows)
+    _collect_row_errors(df, stage, ctx)
     if handler.project_output_to_declared:
         df = _project_onto_declared_columns(df, stage, ctx)
     return df
+
+
+def _collect_row_errors(df: pd.DataFrame, stage: Stage, ctx: dict[str, Any]) -> None:
+    """Record EVERY row carrying the `ROW_ERROR_KEY` sentinel, keyed by stage id on
+    ctx. `pd.isna` alone is the test: it distinguishes a successful row (NaN — the
+    mapper never set the sentinel) from a failed row (any string, including the
+    empty string a message-less exception stringifies to). The runner surfaces
+    these as error-severity output issues and marks the stage `error`; the stage
+    keeps EVERY row (a failed row simply carries null/missing generated columns),
+    so one failed row does not abort the stage."""
+    if ROW_ERROR_KEY not in df.columns:
+        return
+    errors = [
+        {"row": position, "message": str(value)}
+        for position, value in enumerate(df[ROW_ERROR_KEY])
+        if not pd.isna(value)
+    ]
+    if errors:
+        ctx.setdefault("row_errors", {})[stage.id] = errors
 
 
 def _project_onto_declared_columns(

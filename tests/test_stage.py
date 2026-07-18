@@ -288,3 +288,57 @@ def test_stage_eval_block_is_kept():
                                  connector={"kind": "file", "params": {"path": "d.csv"}},
                                  eval={"metrics": ["recall"]}))
     assert s.eval == {"metrics": ["recall"]}
+
+
+def test_llm_transform_rejects_double_braced_input_column():
+    # {{content}} is an escaped literal via str.format_map; the data never injects.
+    with pytest.raises(ValidationError, match="double-brace"):
+        m.Stage.model_validate(S(
+            id="extract", type="llm_transform",
+            inputs=[{"id": "load", "schema": {
+                "columns": [{"name": "content", "type": "str"}], "primary_key": ["content"]}}],
+            output_schema={"columns": [{"name": "content", "type": "str"},
+                                       {"name": "out", "type": "str"}], "primary_key": ["content"]},
+            llm={"prompt_template": "Analyze {{content}} now"}))
+
+
+def test_llm_transform_rejects_spaced_double_braced_input_column():
+    # The canonical Jinja spelling "{{ content }}" (with spaces) is also an escaped
+    # literal under str.format_map — it must be rejected just like "{{content}}".
+    with pytest.raises(ValidationError, match="double-brace"):
+        m.Stage.model_validate(S(
+            id="extract", type="llm_transform",
+            inputs=[{"id": "load", "schema": {
+                "columns": [{"name": "content", "type": "str"}], "primary_key": ["content"]}}],
+            output_schema={"columns": [{"name": "content", "type": "str"},
+                                       {"name": "out", "type": "str"}], "primary_key": ["content"]},
+            llm={"prompt_template": "Analyze {{ content }} now"}))
+
+
+def test_llm_transform_allows_prompt_that_injects_nothing():
+    # Unusual but not strictly wrong — must NOT be rejected by the double-brace check.
+    s = m.Stage.model_validate(S(
+        id="extract", type="llm_transform",
+        inputs=[{"id": "load", "schema": {
+            "columns": [{"name": "content", "type": "str"}], "primary_key": ["content"]}}],
+        output_schema={"columns": [{"name": "content", "type": "str"},
+                                   {"name": "out", "type": "str"}], "primary_key": ["content"]},
+        llm={"prompt_template": "score the row"}))
+    assert s.llm is not None
+
+
+def test_llm_transform_accepts_single_brace_input_column():
+    s = m.Stage.model_validate(S(
+        id="extract", type="llm_transform",
+        inputs=[{"id": "load", "schema": {
+            "columns": [{"name": "content", "type": "str"}], "primary_key": ["content"]}}],
+        output_schema={"columns": [{"name": "content", "type": "str"},
+                                   {"name": "out", "type": "str"}], "primary_key": ["content"]},
+        llm={"prompt_template": "Analyze {content} now"}))
+    assert s.llm.prompt_template == "Analyze {content} now"
+
+
+def test_prompt_template_field_names_str_format_map_and_single_brace():
+    desc = m.LLMConfig.model_fields["prompt_template"].description or ""
+    assert "str.format_map" in desc
+    assert "{column_name}" in desc
