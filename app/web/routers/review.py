@@ -54,6 +54,13 @@ async def queue_page(request: Request, project: str, run_id: str, stage_id: str)
     # The queue snapshot holds the scoring stage's OUTPUT (score + reasoning + ids);
     # the thing the model actually judged (the quote, the benchmark) lives in the
     # scoring stage's INPUT, one stage upstream. Join it back + render the prompt.
+    #
+    # This join can only be trusted against a declared, present, UNIQUE primary
+    # key. We never guess a join key from common id-ish column names: a guessed
+    # key that happens to collide (e.g. a non-unique entity_id) silently returns
+    # someone else's row via last-write-wins, and the reviewer has no way to tell
+    # they're looking at the wrong evidence. When the join can't be trusted, we
+    # say so loudly (with a reason) instead of rendering a plausible-looking lie.
     output_by_id = {s.get("stage_id"): s.get("output_path") for s in manifest.get("stages", [])}
     scored_ids = stage_def.input_ids
     scored_def = find_stage(stages, scored_ids[0]) if scored_ids else None
@@ -61,27 +68,54 @@ async def queue_page(request: Request, project: str, run_id: str, stage_id: str)
 
     input_lookup: dict[tuple, dict[str, Any]] = {}
     join_keys: list[str] = []
-    if scored_def and scored_def.input_ids:
+    # Reason the join is unusable for EVERY item in this queue (None if the join
+    # itself is fine; per-item lookup misses / render failures are handled below).
+    join_reason: str | None = None
+
+    if not scored_ids:
+        join_reason = f"queue stage '{stage_id}' declares no upstream (scoring) stage"
+    elif scored_def is None:
+        join_reason = f"could not find scoring stage '{scored_ids[0]}' in the compiled workflow"
+    elif not scored_def.input_ids:
+        join_reason = f"scoring stage '{scored_def.id}' declares no input of its own to join back to"
+    else:
         scored_in_id = scored_def.input_ids[0]
         scored_in = scored_def.inputs[0] if scored_def.inputs else None
         pk = scored_in.table_schema.primary_key if scored_in and scored_in.table_schema else None
         in_path = output_by_id.get(scored_in_id)
-        in_df = None
-        if in_path:
+        in_df: pd.DataFrame | None = None
+        if not in_path:
+            join_reason = f"no output recorded for upstream stage '{scored_in_id}' in this run's manifest"
+        else:
             p = run_dir / in_path
-            if p.exists():
+            if not p.exists():
+                join_reason = f"upstream input file missing on disk: {in_path}"
+            else:
                 try:
                     in_df = read_table(p)
-                except Exception:  # noqa: BLE001
-                    in_df = None
+                except Exception as exc:  # noqa: BLE001
+                    join_reason = f"could not read upstream input table '{in_path}': {exc}"
+
         if in_df is not None:
             cols = list(in_df.columns)
-            join_keys = [k for k in (pk or []) if k in cols] or \
-                [c for c in ("evidence_id", "entity_id", "doc_id", "id") if c in cols]
-            if join_keys:
-                for _, r in in_df.iterrows():
-                    key = tuple(str(r[k]) for k in join_keys)
-                    input_lookup[key] = {str(k): display_cell(v) for k, v in r.items()}
+            if not pk:
+                join_reason = "no primary_key declared on the scoring stage's input"
+            else:
+                missing = [k for k in pk if k not in cols]
+                if missing:
+                    join_reason = (
+                        f"declared primary_key columns {missing} not found in the input table"
+                    )
+                elif in_df.duplicated(subset=pk).any():
+                    join_reason = (
+                        f"declared primary_key {pk} is not unique in the input table "
+                        "— refusing to guess which row the model actually scored"
+                    )
+                else:
+                    join_keys = list(pk)
+                    for _, r in in_df.iterrows():
+                        key = tuple(str(r[k]) for k in join_keys)
+                        input_lookup[key] = {str(k): display_cell(v) for k, v in r.items()}
 
     items: list[dict[str, Any]] = []
     if snapshot is not None:
@@ -90,13 +124,28 @@ async def queue_page(request: Request, project: str, run_id: str, stage_id: str)
             existing = decision_by_hash.get(h)
             model_input = None
             rendered_prompt = None
-            if input_lookup and join_keys and all(k in row.index for k in join_keys):
-                model_input = input_lookup.get(tuple(str(row[k]) for k in join_keys))
-                if model_input and prompt_template:
-                    try:
-                        rendered_prompt = render_prompt(prompt_template, model_input)
-                    except Exception:  # noqa: BLE001
-                        rendered_prompt = None
+            blind_reason = join_reason
+            prompt_error: str | None = None
+            if join_keys:
+                if all(k in row.index for k in join_keys):
+                    key = tuple(str(row[k]) for k in join_keys)
+                    model_input = input_lookup.get(key)
+                    if model_input is None:
+                        blind_reason = (
+                            f"no input row found for join key {key} in the upstream table"
+                        )
+                    else:
+                        blind_reason = None
+                        if prompt_template:
+                            try:
+                                rendered_prompt = render_prompt(prompt_template, model_input)
+                            except Exception as exc:  # noqa: BLE001
+                                prompt_error = f"could not render the exact prompt: {exc}"
+                else:
+                    missing_cols = [k for k in join_keys if k not in row.index]
+                    blind_reason = (
+                        f"queue snapshot is missing join key column(s) {missing_cols}"
+                    )
             items.append({
                 "content_hash": h,
                 "row": {k: display_cell(v) for k, v in row.items()
@@ -104,6 +153,8 @@ async def queue_page(request: Request, project: str, run_id: str, stage_id: str)
                                      "reviewer", "reviewed_at")},
                 "model_input": model_input,
                 "rendered_prompt": rendered_prompt,
+                "blind_reason": blind_reason,
+                "prompt_error": prompt_error,
                 "prior_decision": existing,
             })
 

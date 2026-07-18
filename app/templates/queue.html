@@ -60,8 +60,11 @@
     {% elif item.model_input %}
     <details class="model-input-prompt"><summary>model input — all fields</summary>
         <pre>{{ item.model_input | tojson(indent=2) }}</pre></details>
+    {% if item.prompt_error %}
+    <p class="muted mi-missing"><em>⚠ Couldn't recover the exact prompt because: {{ item.prompt_error }}</em></p>
+    {% endif %}
     {% elif not quote %}
-    <p class="muted mi-missing"><em>⚠ Could not recover the model input for this item — reviewing blind. (Upstream output missing or keys didn't join.)</em></p>
+    <p class="muted mi-missing"><em>⚠ Reviewing blind — could not recover the model input because: {{ item.blind_reason or "unknown reason" }}</em></p>
     {% endif %}
 
     {% if item.row.get('reasoning') %}
