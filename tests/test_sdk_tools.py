@@ -17,7 +17,7 @@ from typing import Any
 import pytest
 from claude_agent_sdk import SdkMcpTool
 
-from app.compiler.agent.tools import (
+from app.agents.compiler.tools import (
     TOOL_SCHEMAS,
     EditingContext,
     make_editing_tools,

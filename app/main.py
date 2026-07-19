@@ -34,10 +34,10 @@ from app.web.chat_router import router as chat_router
 from app.compiler.router import router as compiler_router
 from app.mcp.server import handle_streamable_http, run_session_manager
 
-# Importing the compiler agent's config registers the "editing" agent with the
+# Importing the editing agent's config registers the "editing" agent with the
 # generic agent registry, so build_engine("editing", …) resolves. The registry is
 # populated by import side effect; keep this import even though the name is unused.
-from app.compiler.agent import config as _editing_agent_config  # noqa: F401
+from app.agents.compiler import config as _editing_agent_config  # noqa: F401
 
 
 @asynccontextmanager

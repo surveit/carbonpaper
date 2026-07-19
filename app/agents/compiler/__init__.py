@@ -1,4 +1,4 @@
-"""app.compiler.agent — the per-project editing agent that authors a workflow
+"""app.agents — the per-project editing agent that authors a workflow
 interactively (chat-driven), the conversational counterpart to the one-shot batch
 compile in `app.compiler`.
 

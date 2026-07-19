@@ -12,8 +12,8 @@ from typing import Any, Callable
 
 from pydantic import BaseModel
 
-from app.compiler.agent.prompt import EDITING_SYSTEM_PROMPT
-from app.compiler.agent.tools import (
+from app.agents.compiler.prompt import EDITING_SYSTEM_PROMPT
+from app.agents.compiler.tools import (
     TOOL_LABELS,
     TOOL_SCHEMAS,
     EditingContext,
