@@ -19,6 +19,8 @@ from pathlib import Path
 
 import pytest
 
+import pydantic
+
 from app.core.models import Stage
 from app.core.persistence import get_store
 from app.services import loader, node_review
@@ -26,9 +28,11 @@ from app.services.loader import WorkflowLoadError
 from app.services.versioning import (
     WorkflowVersion,
     create_version,
+    create_version_from_stages,
     list_versions,
     load_version_meta,
     load_version_stages,
+    publish_version,
 )
 
 _LOAD_STAGE = {
@@ -55,10 +59,13 @@ def test_create_version_returns_meta_and_round_trips(tmp_path):
     meta = create_version(tmp_path, message="first cut", reviewer="ada")
 
     assert set(meta) == {"id", "created_at", "parent_version", "message",
-                          "reviewer", "coverage"}
+                          "reviewer", "coverage", "published", "published_at",
+                          "published_by"}
     assert meta["message"] == "first cut"
     assert meta["reviewer"] == "ada"
     assert meta["parent_version"] is None
+    assert meta["published"] is False
+    assert meta["published_at"] is None
 
     [listed] = list_versions(tmp_path)
     assert listed == meta
@@ -205,3 +212,83 @@ def test_load_version_meta_missing_raises_file_not_found(tmp_path):
 def test_load_version_stages_missing_raises_file_not_found(tmp_path):
     with pytest.raises(FileNotFoundError):
         load_version_stages(tmp_path, "nope")
+
+
+# ── grandfather: a version document written before `published` existed ──────────
+
+def test_stored_version_missing_published_reads_as_published(tmp_path):
+    """A WorkflowVersion document written before the `published` field existed
+    was created only by the human "Create version" act — the approval
+    publishing now records — so a missing key reads as published=True. This
+    writes a WorkflowVersion-shaped dict straight to the store, bypassing the
+    grandfather-injecting model entirely, to prove the read path (not just
+    construction) applies the grandfather rule."""
+    vid = "20260101T000000"
+    data = {
+        "id": f"{tmp_path.name}/{vid}", "version_id": vid,
+        "created_at": "2026-01-01T00:00:00", "parent_version": None,
+        "message": "legacy", "reviewer": "human", "coverage": {},
+        "stages": [], "schemas": [],
+    }
+    get_store().write("workflow_version", f"{tmp_path.name}/{vid}", data)
+    meta = load_version_meta(tmp_path, vid)
+    assert meta["published"] is True
+
+
+# ── publish_version ──────────────────────────────────────────────────────────
+
+def test_publish_version_stamps_and_is_idempotent(tmp_path):
+    _seed(tmp_path)
+    vid = create_version(tmp_path, message="x", reviewer="ada")["id"]
+
+    meta = publish_version(tmp_path, vid, reviewer="human-1")
+    assert meta["published"] is True
+    assert meta["published_at"] is not None
+    assert meta["published_by"] == "human-1"
+
+    # Idempotent: a second publish keeps the FIRST publisher, doesn't error.
+    again = publish_version(tmp_path, vid, reviewer="human-2")
+    assert again["published"] is True
+    assert again["published_by"] == "human-1"
+    assert again["published_at"] == meta["published_at"]
+
+    reloaded = load_version_meta(tmp_path, vid)
+    assert reloaded["published"] is True
+    assert reloaded["published_by"] == "human-1"
+
+
+def test_publish_version_unknown_id_raises_file_not_found(tmp_path):
+    with pytest.raises(FileNotFoundError):
+        publish_version(tmp_path, "nope", reviewer="human")
+
+
+# ── create_version_from_stages: the single write chokepoint ─────────────────
+
+def test_create_version_from_stages_valid_is_loadable_and_unpublished(tmp_path):
+    meta = create_version_from_stages(
+        tmp_path, [_LOAD_STAGE], message="from stages", reviewer="ada",
+        parent_version="prior-id",
+    )
+    assert meta["published"] is False
+    assert meta["parent_version"] == "prior-id"
+    assert meta["reviewer"] == "ada"
+
+    [stage] = load_version_stages(tmp_path, meta["id"])
+    assert isinstance(stage, Stage)
+    assert stage.id == "load"
+
+
+def test_create_version_from_stages_invalid_raises_and_writes_nothing(tmp_path):
+    """A stage input referencing a missing stage id fails Workflow's graph
+    validation as a pydantic.ValidationError, straight from the raw dicts —
+    create_version_from_stages never writes a version for an invalid graph."""
+    dangling_input = {
+        "id": "consume", "name": "Consume", "type": "python_frame_function",
+        "inputs": [{"id": "no-such-stage"}],
+        "function": {"kind": "inline", "code": "def transform(df):\n    return df\n"},
+    }
+    with pytest.raises(pydantic.ValidationError):
+        create_version_from_stages(
+            tmp_path, [dangling_input], message="bad", reviewer="ada",
+        )
+    assert list_versions(tmp_path) == []

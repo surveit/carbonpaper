@@ -19,13 +19,15 @@ class RowOutOfRange(ValueError):
 
 
 class NoVersionToRunError(Exception):
-    """A run was requested for a project that has no version to run.
+    """A run was requested for a project that has no PUBLISHED version to run.
 
-    Runs are read-only with respect to versions: a run targets an existing
-    version and never creates one. Version creation is an explicit act (the
-    "Create version" action). Raised when `version_id` is None and no version
-    exists yet — rather than fabricating a snapshot as a run side effect, which
-    would immortalise (and potentially poison) the working copy."""
+    Runs are read-only with respect to versions: a run targets an existing,
+    published version and never creates or publishes one. Version creation and
+    publishing are separate explicit acts (the "Create version" and "Publish"
+    actions). Raised when `version_id` is None and no version is published yet
+    — rather than fabricating a snapshot as a run side effect, which would
+    immortalise (and potentially poison) the working copy — and when an
+    explicit `version_id` names a version that exists but isn't published."""
 
 
 class RegenerateWithoutSnapshotError(Exception):

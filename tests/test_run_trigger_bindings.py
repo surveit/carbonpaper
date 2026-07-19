@@ -11,6 +11,7 @@ from fastapi.testclient import TestClient
 
 import app.web.routers.runs as runs_router
 from app.main import app
+from app.services import versioning
 from app.services.versioning import create_version
 
 client = TestClient(app)
@@ -26,7 +27,8 @@ def project(tmp_path, monkeypatch):
              "connector": {"kind": "file",
                            "params": {"path": str(data), "format": "csv"}}}
     (proj / "compiled" / "01_load.json").write_text(json.dumps(stage), encoding="utf-8")
-    create_version(proj, message="seed", reviewer="test")
+    vid = create_version(proj, message="seed", reviewer="test")["id"]
+    versioning.publish_version(proj, vid, reviewer="human")
     monkeypatch.setattr(runs_router, "EXAMPLES_DIR", tmp_path)
     monkeypatch.setattr(runs_router, "run_in_background",
                         lambda target, *args: target(*args))
@@ -66,7 +68,8 @@ def test_unbound_input_returns_400(project):
     # wall-clock second and collide (FileExistsError), unrelated to what this
     # test is checking.
     time.sleep(1.1)
-    create_version(project, message="unbound", reviewer="test")
+    vid = create_version(project, message="unbound", reviewer="test")["id"]
+    versioning.publish_version(project, vid, reviewer="human")
 
     resp = client.post("/project/demo/run",
                        data={"binding__load": ""}, follow_redirects=False)

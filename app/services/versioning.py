@@ -14,15 +14,29 @@ like every other collection in the store — so listing or loading against a pro
 with no versions yet returns empty results rather than requiring any scaffolding to
 exist first. `version_id` uses the SAME timestamp scheme as run ids
 (datetime.now().strftime('%Y%m%dT%H%M%S')) so versions and runs sort and read
-consistently; it is the local "id" every caller of this module's four public
-functions works with — never the composite store id.
+consistently; it is the local "id" every caller of this module's public functions
+works with — never the composite store id.
+
+A version is born UNPUBLISHED (`published=False`): creating a snapshot and
+approving it for runs are separate acts. `publish_version` is the only way a
+version becomes published; a run (see app.runtime.runner.resolve_version_id)
+refuses to target an unpublished version. A version document stored before the
+`published` field existed carries no such key — it was created only by the
+human "Create version" act publishing now records, so it reads as published
+(see WorkflowVersion._grandfather_published).
+
+`create_version_from_stages` is the ONE place a WorkflowVersion is written:
+it strict-parses the given stage dicts, embeds the project's current schemas,
+freezes approval coverage, and saves — nothing is written on a validation
+failure. `create_version` (snapshot the working copy) is a thin adapter over
+it: it strict-loads compiled/ into stage dicts and delegates.
 
 Dependency note: this module may import app.services.node_review (to freeze
 coverage), app.services.workspace (to read the working data model), and
 app.core.models, but nothing from app.runtime or app.compiler. A version's stages
-are parsed through the same strict loader as the working copy (app.services.loader),
-so a version's stages load identically to the working copy's at the moment it was
-snapshotted.
+are parsed through the same strict parser as the working copy
+(app.core.models.workflow.parse_workflow / app.services.loader), so a version's
+stages load identically to the working copy's at the moment it was snapshotted.
 """
 
 from __future__ import annotations
@@ -31,11 +45,12 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, ClassVar
 
-from pydantic import Field, ValidationError
+from pydantic import Field, ValidationError, model_validator
 
 from app.core.errors import DocumentNotFound
 from app.core.models import Stage
 from app.core.models.schema import format_errors
+from app.core.models.workflow import parse_workflow
 from app.core.persistence import PersistedModel, get_store
 from app.services import node_review
 from app.services.loader import WorkflowLoadError, load_workflow, stage_to_spec_dict
@@ -45,9 +60,11 @@ from app.services.workspace import load_schemas
 class WorkflowVersion(PersistedModel):
     """One frozen snapshot, stored in the "workflow_version" collection. `id` (inherited
     from PersistedModel) is the composite `f"{project}/{version_id}"`; `version_id`
-    is the plain local id every caller of this module's four public functions
+    is the plain local id every caller of this module's public functions
     works with. `stages` and `schemas` are the frozen artifacts; `coverage` is
-    approval coverage computed against `stages` at creation time."""
+    approval coverage computed against `stages` at creation time. `published`
+    (plus `published_at`/`published_by`) records the approval act that makes a
+    version runnable — see the module docstring."""
 
     collection: ClassVar[str] = "workflow_version"
     # Dump the embedded stages in their canonical spec-dict shape (field aliases
@@ -63,6 +80,19 @@ class WorkflowVersion(PersistedModel):
     coverage: dict[str, Any] = Field(default_factory=dict)
     stages: list[Stage] = Field(default_factory=list)
     schemas: list[dict[str, Any]] = Field(default_factory=list)
+    published: bool = False
+    published_at: str | None = None
+    published_by: str | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _grandfather_published(cls, data: Any) -> Any:
+        # A version record written before the `published` field existed was created
+        # only by the human "Create version" act — the approval publishing now
+        # records — so a missing key reads as published. New records always carry it.
+        if isinstance(data, dict) and "published" not in data:
+            return {**data, "published": True}
+        return data
 
 
 def _meta(v: WorkflowVersion) -> dict[str, Any]:
@@ -75,7 +105,68 @@ def _meta(v: WorkflowVersion) -> dict[str, Any]:
         "message": v.message,
         "reviewer": v.reviewer,
         "coverage": v.coverage,
+        "published": v.published,
+        "published_at": v.published_at,
+        "published_by": v.published_by,
     }
+
+
+def create_version_from_stages(
+    project_dir: Path,
+    stages: list[dict[str, Any]],
+    *,
+    message: str,
+    reviewer: str,
+    parent_version: str | None = None,
+) -> dict[str, Any]:
+    """The single write chokepoint for a WorkflowVersion: strict-parse `stages`
+    (raw spec dicts) as a whole Workflow, embed the project's CURRENT schemas,
+    freeze approval coverage against the live node_decisions store, and save —
+    born unpublished. Returns its meta dict.
+
+    `stages` is parsed via app.core.models.workflow.parse_workflow, which raises
+    pydantic.ValidationError (per-stage schema errors AND cross-stage graph
+    issues alike) on anything invalid; nothing is written in that case. Every
+    version is therefore a loadable workflow, from this seam or any other.
+
+    Coverage is computed from the SNAPSHOT's stages against the live
+    node_decisions store, so the recorded coverage is exactly what was believed
+    about these specs at this instant. schemas/ is read via
+    workspace.load_schemas, which returns [] when the project has no schema
+    library yet — a project with no data model still versions cleanly (the
+    absence is truthful, not an error)."""
+    project_dir = Path(project_dir)
+    workflow = parse_workflow(stages)
+    schemas = load_schemas(project_dir)
+
+    version_id = datetime.now().strftime("%Y%m%dT%H%M%S")
+    project = project_dir.name
+    doc_id = f"{project}/{version_id}"
+    if WorkflowVersion.exists(doc_id):
+        raise FileExistsError(
+            f"Version already exists: {doc_id} (two versions created within one second)"
+        )
+
+    # Freeze coverage from the just-snapshotted stages against the live
+    # node_decisions store.
+    spec_dicts = [stage_to_spec_dict(s) for s in workflow.stages]
+    decisions = node_review.load_node_decisions(project_dir)
+    coverage = node_review.coverage_for(spec_dicts, decisions)
+
+    v = WorkflowVersion(
+        id=doc_id,
+        version_id=version_id,
+        created_at=datetime.now().isoformat(timespec="seconds"),
+        parent_version=parent_version,
+        message=message,
+        reviewer=reviewer,
+        coverage=coverage,
+        stages=workflow.stages,
+        schemas=schemas,
+        published=False,
+    )
+    v.save()
+    return _meta(v)
 
 
 def create_version(
@@ -86,20 +177,11 @@ def create_version(
     parent_version: str | None = None,
 ) -> dict[str, Any]:
     """Snapshot the working copy's compiled stages + schemas into a new Version
-    document, with approval coverage frozen at creation time. Returns its meta
-    dict.
-
-    Coverage is computed from the SNAPSHOT's stages against the live
-    node_decisions store, so the recorded coverage is exactly what was believed
-    about these specs at this instant. schemas/ is read via
-    workspace.load_schemas, which returns [] when the project has no schema
-    library yet — a project with no data model still versions cleanly (the
-    absence is truthful, not an error).
-
-    The working copy is strict-loaded first, through the same loader the runner
-    uses; if it is not a valid workflow this raises WorkflowLoadError and saves
-    nothing. Every version is therefore a loadable workflow, from this seam or
-    any other."""
+    document. Returns its meta dict. A thin adapter over
+    create_version_from_stages: the working copy is strict-loaded first,
+    through the same loader the runner uses (WorkflowLoadError, saving
+    nothing, if it is not a valid workflow), then handed to
+    create_version_from_stages as spec dicts — the single write chokepoint."""
     project_dir = Path(project_dir)
     compiled_src = project_dir / "compiled"
     if not compiled_src.is_dir():
@@ -113,33 +195,35 @@ def create_version(
     # run-path strict load then only guards on-read corruption of an
     # already-valid snapshot.)
     stages = load_workflow(project_dir)
-    schemas = load_schemas(project_dir)
-
-    version_id = datetime.now().strftime("%Y%m%dT%H%M%S")
-    project = project_dir.name
-    doc_id = f"{project}/{version_id}"
-    if WorkflowVersion.exists(doc_id):
-        raise FileExistsError(
-            f"Version already exists: {doc_id} (two versions created within one second)"
-        )
-
-    # Freeze coverage from the just-snapshotted stages against the live
-    # node_decisions store.
-    spec_dicts = [stage_to_spec_dict(s) for s in stages]
-    decisions = node_review.load_node_decisions(project_dir)
-    coverage = node_review.coverage_for(spec_dicts, decisions)
-
-    v = WorkflowVersion(
-        id=doc_id,
-        version_id=version_id,
-        created_at=datetime.now().isoformat(timespec="seconds"),
-        parent_version=parent_version,
+    return create_version_from_stages(
+        project_dir,
+        [stage_to_spec_dict(s) for s in stages],
         message=message,
         reviewer=reviewer,
-        coverage=coverage,
-        stages=stages,
-        schemas=schemas,
+        parent_version=parent_version,
     )
+
+
+def publish_version(project_dir: Path, version_id: str, *, reviewer: str) -> dict[str, Any]:
+    """Mark a version published: the metadata-only act that makes it eligible to
+    run (see app.runtime.runner.resolve_version_id). Idempotent — publishing an
+    already-published version returns it unchanged, keeping the FIRST
+    published_at/published_by rather than overwriting them with the second
+    caller's. Fails loudly (FileNotFoundError) if no such version is stored, or
+    if the stored document no longer validates (WorkflowLoadError)."""
+    name = Path(project_dir).name
+    doc_id = f"{name}/{version_id}"
+    try:
+        v = WorkflowVersion.load(doc_id)
+    except DocumentNotFound as exc:
+        raise FileNotFoundError(f"No version '{version_id}' for project '{name}'") from exc
+    except ValidationError as exc:
+        raise _invalid_version_document(doc_id, exc) from exc
+    if v.published:
+        return _meta(v)
+    v.published = True
+    v.published_at = datetime.now().isoformat(timespec="seconds")
+    v.published_by = reviewer
     v.save()
     return _meta(v)
 
@@ -209,4 +293,6 @@ __all__ = [
     "load_version_meta",
     "load_version_stages",
     "create_version",
+    "create_version_from_stages",
+    "publish_version",
 ]
