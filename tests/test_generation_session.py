@@ -13,8 +13,8 @@ from typing import Any
 
 import app.compiler.data_model as data_model
 import app.services.generation as generation
-from app.agent.store import SessionStore
-from app.agent.turns import TurnManager
+from app.core.agent.store import SessionStore
+from app.core.agent.turns import TurnManager
 
 
 class _FakeLibrary:
@@ -76,7 +76,7 @@ def test_start_generation_creates_a_session_and_runs_a_live_turn(tmp_path: Path,
     project_dir.mkdir()
     store = SessionStore()
     turns = TurnManager()
-    # The app.agent bridge (session + live turn) lives in app.compiler.data_model, which
+    # The app.core.agent bridge (session + live turn) lives in app.compiler.data_model, which
     # generation delegates to.
     monkeypatch.setattr(data_model, "open_session_store", lambda: store)
     monkeypatch.setattr(data_model, "default_turn_manager", lambda: turns)

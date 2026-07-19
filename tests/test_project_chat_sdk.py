@@ -9,8 +9,8 @@ engine for a project without seeding a project directory on disk.
 from __future__ import annotations
 
 import app.compiler.agent.config  # noqa: F401 — registers the "editing" agent
-from app.agent.registry import build_engine
-from app.agent.sdk_engine import ClaudeAgentSdkEngine
+from app.core.agent.registry import build_engine
+from app.core.agent.sdk_engine import ClaudeAgentSdkEngine
 
 
 def test_build_editing_engine_returns_correct_type() -> None:

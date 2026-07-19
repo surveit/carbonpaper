@@ -36,7 +36,7 @@ FeatureCollection) + `computed_static`; `python_row_function`/`python_frame_func
   (`claude_agent_sdk` importable and a `claude` CLI located, incl. Windows
   `~/.local/bin/claude.exe`). The agent is the ONLY backend — no fallback of any kind.
 - `llm.py` `call_llm` renders the stage's prompt and runs a headless structured-output
-  `app.agent.agent.Agent` whose `target_schema` is the stage's compiled reply model, so
+  `app.core.agent.agent.Agent` whose `target_schema` is the stage's compiled reply model, so
   the reply is validated by construction rather than parsed from prose. A stage declaring
   `llm.tools` fails loudly — the agent backend doesn't support tools. Run per row by the
   row driver under bounded parallelism.

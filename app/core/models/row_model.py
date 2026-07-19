@@ -9,7 +9,7 @@ None value, not an absent key. Unknown keys are rejected.
 The public entry point is the `TableSchema.to_pydantic_model(name)` method;
 this module holds the builder so the schema module stays declarative. Named
 consumer: app.runtime.stages.llm_transform compiles a stage's reply spec and
-hands the model to app.agent.agent.Agent as `target_schema`, so the reply
+hands the model to app.core.agent.agent.Agent as `target_schema`, so the reply
 spec is enforced (the agent must submit a validating instance) rather than
 merely described in prompt prose.
 """

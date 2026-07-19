@@ -34,7 +34,7 @@ ignore_missing_imports = true
 # Expressed as a WHITELIST: each restricted module is `protected` and declares the
 # only modules allowed to import it — a new cross-layer import is denied by default
 # (caught), not allowed until someone remembers to forbid it. Core modules
-# (app.core.models, app.core.errors, app.core.llm) are left open: everything may depend on them.
+# (app.core.models, app.core.errors, app.core.llm, app.core.agent) are left open: everything may depend on them.
 # Content-level checks live in tests/arch/.
 [tool.importlinter]
 root_package = "app"
@@ -63,27 +63,17 @@ type = "protected"
 protected_modules = ["app.compiler"]
 allowed_importers = ["app.main", "app.services"]
 # app.services.compilation / generation wrap the compile mechanism by design; app.main
-# runs it from the CLI. The reusable agent spine (app.agent) must not import it.
+# runs it from the CLI. The reusable agent spine (app.core.agent) must not import it.
 
 [[tool.importlinter.contracts]]
 name = "app.runtime imported only by evals, web"
 type = "protected"
 protected_modules = ["app.runtime"]
 allowed_importers = ["app.evals", "app.web"]
-# The runner is driven from web (top) and evals. app.agent sits below the runtime
-# (llm.py imports app.agent.agent.Agent as the reply backend) rather than the other
+# The runner is driven from web (top) and evals. app.core.agent sits below the runtime
+# (llm.py imports app.core.agent.agent.Agent as the reply backend) rather than the other
 # way round, so it is not an importer here. app.services must not reach into it —
 # status/review helpers stay runtime-free.
-
-[[tool.importlinter.contracts]]
-name = "app.agent spine imported only by its registrar and the entrypoint"
-type = "protected"
-protected_modules = ["app.agent"]
-allowed_importers = ["app.compiler", "app.main", "app.runtime"]
-# app.agent is a domain-agnostic chat/agent engine; app.compiler.agent imports it to
-# register the editing tools, app.main mounts it, and app.runtime drives it as the
-# llm_transform reply backend. No package outside this list depends on the spine,
-# so any agent can run on it.
 
 [[tool.importlinter.contracts]]
 name = "app.evals is a leaf — imported only by web"
@@ -100,7 +90,7 @@ type = "forbidden"
 source_modules = ["app.core.persistence"]
 forbidden_modules = [
     "app.core.models", "app.core.llm",
-    "app.services", "app.runtime", "app.web", "app.agent", "app.compiler", "app.evals",
+    "app.services", "app.runtime", "app.web", "app.core.agent", "app.compiler", "app.evals",
 ]
 # The document store is the lowest layer: it may lean on app.core.errors (where
 # DocumentNotFound lives) and nothing else first-party. If it imported the contracts

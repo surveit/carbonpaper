@@ -1,13 +1,13 @@
 """Compile a methodology document into a WORKFLOW (a validated `Workflow`).
 
 The sibling of `app.compiler.data_model` (prose → named schemas): this is prose → typed
-stages. It builds an `app.agent.Agent` whose target schema is `Workflow`, so the agent SUBMITS
+stages. It builds an `app.core.agent.agent.Agent` whose target schema is `Workflow`, so the agent SUBMITS
 the workflow through the submit_answer tool — validated against `Workflow` (each stage's own
 invariants + the cross-stage graph checks) — and a schema-invalid draft comes back as a tool
 error the agent corrects IN THE SAME LOOP.
 
-`start_workflow_generation_agent` runs that agent as a LIVE chat turn on the app.agent spine, and is the
-bridge onto it: app.compiler is an allowed importer of app.agent, so the orchestration in
+`start_workflow_generation_agent` runs that agent as a LIVE chat turn on the app.core.agent spine, and is the
+bridge onto it: app.compiler is an allowed importer of app.core.agent, so the orchestration in
 app.services (generation) delegates here rather than reaching into the spine itself. When a
 `data_model` (the approved SchemaLibrary) is given, its named schemas ground the task as the
 nouns the workflow imports and generates. The submitted Workflow is handed back through a
@@ -18,10 +18,10 @@ from __future__ import annotations
 import json
 from typing import Callable
 
-from app.agent.agent import Agent
-from app.agent.store import open_session_store
-from app.agent.turns import default_turn_manager
 from app.compiler.workflow_prompt import WORKFLOW_SYSTEM_PROMPT
+from app.core.agent.agent import Agent
+from app.core.agent.store import open_session_store
+from app.core.agent.turns import default_turn_manager
 from app.core.models.named_schemas import SchemaLibrary
 from app.core.models.workflow import Workflow
 

@@ -8,5 +8,6 @@ Split across three modules:
     workflow) and their claude_agent_sdk MCP wrapping;
   - `config`  — the cached SDK-engine builder the web layer warms and drives.
 
-The generic chat spine (streaming, turns, session store, the SDK engine that
-drives claude_agent_sdk.query()) lives in `app.agent` and is reused verbatim."""
+The generic chat spine is reused verbatim: streaming lives in `app.web.chat_router`;
+turns, the session store, and the SDK engine that drives claude_agent_sdk.query()
+live in `app.core.agent`."""

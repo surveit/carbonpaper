@@ -11,9 +11,9 @@ import pytest
 from fastapi.testclient import TestClient
 from pydantic import BaseModel
 
-from app.agent import registry
-from app.agent.registry import AgentConfig, register
-from app.agent.router import _store
+from app.web.chat_router import _store
+from app.core.agent import registry
+from app.core.agent.registry import AgentConfig, register
 from app.main import app
 
 client = TestClient(app)
