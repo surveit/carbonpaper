@@ -64,10 +64,34 @@ def test_test_violating_input_schema_is_malformed_not_code_bug():
     assert "null" in (result.message or "").lower()
 
 
-def test_nan_output_matches_expected_null():
+def test_nan_output_does_not_match_expected_none():
+    # None and NaN are distinct values; a test may treat them differently.
     stage = _row_stage(
         "def transform(row):\n    return {**row, 'doubled': float('nan')}\n",
-        [{"name": "nan_normalizes_to_null", "inputs": {"load": [{"amount": 1.0}]},
+        [{"name": "expects_none_gets_nan", "inputs": {"load": [{"amount": 1.0}]},
+          "expected": [{"amount": 1.0, "doubled": None}]}],
+    )
+    [result] = run_stage_tests(stage)
+    assert result.status == "mismatch"
+    [diff] = result.diffs
+    assert diff.column == "doubled" and diff.expected is None
+
+
+def test_nan_output_matches_expected_nan():
+    # Plain == would make NaN unequal to itself; the comparison must not.
+    stage = _row_stage(
+        "def transform(row):\n    return {**row, 'doubled': float('nan')}\n",
+        [{"name": "expects_nan_gets_nan", "inputs": {"load": [{"amount": 1.0}]},
+          "expected": [{"amount": 1.0, "doubled": float("nan")}]}],
+    )
+    [result] = run_stage_tests(stage)
+    assert result.status == "passed"
+
+
+def test_none_output_matches_expected_none():
+    stage = _row_stage(
+        "def transform(row):\n    return {**row, 'doubled': None}\n",
+        [{"name": "expects_none_gets_none", "inputs": {"load": [{"amount": 1.0}]},
           "expected": [{"amount": 1.0, "doubled": None}]}],
     )
     [result] = run_stage_tests(stage)
@@ -94,6 +118,37 @@ def test_frame_function_output_order_does_not_matter():
           "inputs": {"load": [{"amount": 1.0}, {"amount": 2.0}]},
           "expected": [{"amount": 1.0}, {"amount": 2.0}]}],
     )
+    [result] = run_stage_tests(stage)
+    assert result.status == "passed"
+
+
+def test_omitted_column_in_expected_row_claims_none():
+    # The malformed gate only requires each declared column to appear somewhere
+    # in the expected rows; a row that omits a column is claiming None there.
+    labelled_schema = {"columns": [
+        {"name": "amount", "type": "float", "nullable": False},
+        {"name": "label", "type": "str", "nullable": True},
+    ]}
+    stage = Stage.model_validate({
+        "id": "labelled", "name": "Labelled", "type": "python_frame_function",
+        "inputs": [{"id": "load", "schema": _IN_SCHEMA}],
+        "output_schema": labelled_schema,
+        "function": {"kind": "inline", "code": (
+            # dtype=object keeps the returned None a real None; pandas' default
+            # str dtype would store it as NaN, which is a different value here.
+            "import pandas as pd\n"
+            "def transform(df):\n"
+            "    return pd.DataFrame({\n"
+            "        'amount': [1.0, 2.0],\n"
+            "        'label': pd.Series(['x', None], dtype=object),\n"
+            "    })\n"
+        )},
+        "tests": [{
+            "name": "second_row_omits_label",
+            "inputs": {"load": [{"amount": 1.0}, {"amount": 2.0}]},
+            "expected": [{"amount": 1.0, "label": "x"}, {"amount": 2.0}],
+        }],
+    })
     [result] = run_stage_tests(stage)
     assert result.status == "passed"
 

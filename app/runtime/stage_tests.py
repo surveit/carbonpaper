@@ -7,17 +7,20 @@ handler registry the real runner uses — fidelity comes from sharing the
 execution path, not reimplementing it — and reports one StageTestResult each.
 
 Statuses:
-  passed    — actual output equals expected under the canonical comparison
+  passed    — actual output equals expected under the comparison below
   mismatch  — executed cleanly but at least one cell (or the row count) differs
   error     — the stage's function raised; message carries the exception
   malformed — the test itself violates the stage's declared schemas; a bad
               test is its own failure kind, never reported as a code bug
 
-Canonical comparison: cells compare on the output_schema's columns (union of
-expected/actual keys when no schema is declared); NaN, None and a missing key
-all normalise to null; python_frame_function outputs compare as a multiset of
-rows (the type is not order-preserving, so a test cannot pin an ordering)
-while order-preserving types compare positionally.
+Comparison: cells compare on the output_schema's columns. None and NaN are
+distinct values — a cell matches iff the values are equal, where None equals
+only None and float NaN equals float NaN (a plain `==` would make NaN unequal
+to itself). An omitted column in a row is a claim of None. Both sides compare
+as a multiset of rows: each is sorted into the same value-based order first,
+so no test pins an ordering (a python_row_function test is one row in → one
+row out, where order is vacuous; python_frame_function is not
+order-preserving).
 """
 from __future__ import annotations
 
@@ -29,7 +32,7 @@ from typing import Any, Literal
 import pandas as pd
 
 from app.core.models import Stage, TableSchema
-from app.core.models.stage import StageType, is_grain_and_order_preserving
+from app.core.models.stage import StageType
 from app.core.models.stages.stage_tests import STAGE_TEST_TYPES, StageTest
 from app.runtime.stages import HANDLERS
 from app.runtime.validation import validate_dataframe
@@ -39,7 +42,7 @@ Status = Literal["passed", "mismatch", "error", "malformed"]
 
 @dataclass
 class CellDiff:
-    """One differing cell: `row` indexes the canonical (compared) row order."""
+    """One differing cell: `row` indexes the compared (sorted) row order."""
     row: int
     column: str
     expected: Any
@@ -143,70 +146,54 @@ def _validate_test_against_schemas(
 
 
 def _compare(stage: Stage, test: StageTest, actual: pd.DataFrame) -> StageTestResult:
-    columns = _select_comparison_columns(stage, test, actual)
-    expected_rows = _canonicalize_rows(test.expected, columns)
-    actual_rows = _canonicalize_rows(
-        [{str(k): v for k, v in row.items()} for row in actual.to_dict("records")],
-        columns,
-    )
+    # Python transforms always declare their output schema; publish (the
+    # schema-less terminal stage) cannot carry tests.
+    assert stage.output_schema is not None
+    columns = [column.name for column in stage.output_schema.columns]
+    expected_rows = [_select_cells(row, columns) for row in test.expected]
+    actual_rows = [
+        _select_cells({str(key): value for key, value in row.items()}, columns)
+        for row in actual.to_dict("records")
+    ]
     if len(expected_rows) != len(actual_rows):
         return StageTestResult(
             test.name, "mismatch",
             message=f"expected {len(expected_rows)} row(s), got {len(actual_rows)}",
         )
-    if not is_grain_and_order_preserving(stage.type):
-        expected_rows = _sort_canonically(expected_rows)
-        actual_rows = _sort_canonically(actual_rows)
+    expected_rows = _sort_rows(expected_rows)
+    actual_rows = _sort_rows(actual_rows)
     diffs = [
         CellDiff(row=index, column=column,
                  expected=expected_row[column], actual=actual_row[column])
         for index, (expected_row, actual_row) in enumerate(zip(expected_rows, actual_rows))
         for column in columns
-        if expected_row[column] != actual_row[column]
+        if not _values_equal(expected_row[column], actual_row[column])
     ]
     if diffs:
         return StageTestResult(test.name, "mismatch", diffs=diffs)
     return StageTestResult(test.name, "passed")
 
 
-def _select_comparison_columns(
-    stage: Stage, test: StageTest, actual: pd.DataFrame
-) -> list[str]:
-    """The columns cells compare on: the output schema's columns when declared
-    (undeclared pass-through columns are outside the test's claim), else the
-    union of expected keys and actual columns (so an unexpected extra column
-    surfaces as a mismatch rather than being silently ignored)."""
-    if stage.output_schema is not None:
-        return [column.name for column in stage.output_schema.columns]
-    seen: dict[str, None] = {}
-    for row in test.expected:
-        for key in row:
-            seen.setdefault(key)
-    for key in actual.columns:
-        seen.setdefault(str(key))
-    return list(seen)
+def _select_cells(row: dict[str, Any], columns: list[str]) -> dict[str, Any]:
+    """Project a row onto the comparison columns. An omitted column in a row is
+    a claim of None: the malformed gate only guarantees each declared column
+    appears somewhere in the expected rows, not in every row dict."""
+    return {column: row.get(column) for column in columns}
 
 
-def _canonicalize_rows(
-    rows: list[dict[str, Any]], columns: list[str]
-) -> list[dict[str, Any]]:
-    return [{column: _canonicalize(row.get(column)) for column in columns} for row in rows]
+def _values_equal(expected: Any, actual: Any) -> bool:
+    """Cell equality with None and NaN as distinct values: None equals only
+    None, float NaN equals float NaN (a plain `==` would make NaN unequal to
+    itself), anything else compares by `==`."""
+    if expected is None or actual is None:
+        return expected is None and actual is None
+    if isinstance(expected, float) and isinstance(actual, float):
+        if math.isnan(expected) or math.isnan(actual):
+            return math.isnan(expected) and math.isnan(actual)
+    return bool(expected == actual)
 
 
-def _canonicalize(value: Any) -> Any:
-    """NaN, None and a missing key are the same absence."""
-    if value is None:
-        return None
-    if isinstance(value, float) and math.isnan(value):
-        return None
-    try:
-        if pd.isna(value):
-            return None
-    except (TypeError, ValueError):
-        pass  # non-scalar (list/dict): pd.isna is elementwise there — keep the value
-    return value
-
-
-def _sort_canonically(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """A stable, value-based order for multiset comparison of frame outputs."""
+def _sort_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """A stable, value-based row order applied to both sides so they compare
+    as a multiset — no test pins an output ordering."""
     return sorted(rows, key=lambda row: json.dumps(row, sort_keys=True, default=str))
