@@ -4,7 +4,7 @@ from typing import Any, Callable
 
 import pytest
 
-from app.compiler.agent.tools import EditingContext, make_editing_tools
+from app.agents.compiler.tools import EditingContext, make_editing_tools
 from app.core.errors import RegenerateWithoutSnapshotError
 from app.services import compilation, workspace
 
