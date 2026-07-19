@@ -144,18 +144,29 @@ def create_version(
     return _meta(v)
 
 
+def _invalid_version_document(doc_id: str, exc: ValidationError) -> WorkflowLoadError:
+    """A stored version document no longer validates — store corruption, or a
+    version written under older model rules (e.g. a repo-relative path from
+    before absolute paths were enforced). One error type meaning "this workflow
+    doesn't validate", raised LOUDLY wherever the document is read: never a
+    silent skip, which would make the version invisible while its id still
+    occupies the store. The fix is a store migration/cleanup, not tolerance."""
+    return WorkflowLoadError(f"version document {doc_id}", format_errors(exc))
+
+
 def list_versions(project_dir: Path) -> list[dict[str, Any]]:
-    """All versions for a project, NEWEST-FIRST, each as its meta dict. Skips any
-    stored document that fails the WorkflowVersion contract rather than fabricating
-    metadata for it (a half-written or corrupt document is simply not listed).
+    """All versions for a project, NEWEST-FIRST, each as its meta dict. A stored
+    document that fails the WorkflowVersion contract raises WorkflowLoadError
+    (see _invalid_version_document) — the whole listing fails rather than
+    quietly presenting a store with an invalid document in it as healthy.
     No versions stored yet -> []."""
     name = Path(project_dir).name
     metas: list[dict[str, Any]] = []
-    for _, data in get_store().read_all("workflow_version", f"{name}/"):
+    for doc_id, data in get_store().read_all("workflow_version", f"{name}/"):
         try:
             v = WorkflowVersion.model_validate(data)
-        except ValidationError:
-            continue
+        except ValidationError as exc:
+            raise _invalid_version_document(doc_id, exc) from exc
         metas.append(_meta(v))
     # version ids are strftime timestamps, so a reverse string sort on id is
     # chronological.
@@ -164,12 +175,15 @@ def list_versions(project_dir: Path) -> list[dict[str, Any]]:
 
 
 def load_version_meta(project_dir: Path, version_id: str) -> dict[str, Any]:
-    """This version's meta dict. Fails loudly if no such version is stored."""
+    """This version's meta dict. Fails loudly if no such version is stored, or
+    if the stored document no longer validates (WorkflowLoadError)."""
     name = Path(project_dir).name
     try:
         v = WorkflowVersion.load(f"{name}/{version_id}")
     except DocumentNotFound as exc:
         raise FileNotFoundError(f"No version '{version_id}' for project '{name}'") from exc
+    except ValidationError as exc:
+        raise _invalid_version_document(f"{name}/{version_id}", exc) from exc
     return _meta(v)
 
 
@@ -186,15 +200,7 @@ def load_version_stages(project_dir: Path, version_id: str) -> list[Stage]:
     except DocumentNotFound as exc:
         raise FileNotFoundError(f"No version '{version_id}' for project '{name}'") from exc
     except ValidationError as exc:
-        # On-read integrity failure: the stored document no longer validates
-        # (store corruption, or a version written under older model rules — e.g.
-        # a repo-relative path from before absolute paths were enforced).
-        # Translated to the one error type that means "this workflow doesn't
-        # validate", so callers surface issues instead of 500ing on a raw
-        # pydantic error.
-        raise WorkflowLoadError(
-            f"version document {name}/{version_id}", format_errors(exc)
-        ) from exc
+        raise _invalid_version_document(f"{name}/{version_id}", exc) from exc
     return v.stages
 
 

@@ -182,14 +182,17 @@ def test_list_versions_newest_first(tmp_path):
         "20260201T000000", "20260115T000000", "20260101T000000"]
 
 
-def test_list_versions_skips_a_corrupt_document(tmp_path):
-    """A stored document that fails the WorkflowVersion contract is skipped, not
-    fabricated into a listing — the store-backed analogue of a half-written
-    snapshot never being listed."""
+def test_list_versions_errors_on_a_corrupt_document(tmp_path):
+    """A stored document that fails the WorkflowVersion contract fails the whole
+    listing LOUDLY (WorkflowLoadError naming the document) — never a silent
+    skip, which would present a store holding an invalid document as healthy
+    and make the version invisible while its id still occupies the store. The
+    remedy for legacy/corrupt documents is a store migration, not tolerance."""
     _seed(tmp_path)
-    good = create_version(tmp_path, message="good", reviewer="test")
+    create_version(tmp_path, message="good", reviewer="test")
     get_store().write("workflow_version", f"{tmp_path.name}/20260101T000000", {"bogus": "data"})
-    assert [v["id"] for v in list_versions(tmp_path)] == [good["id"]]
+    with pytest.raises(WorkflowLoadError, match="20260101T000000"):
+        list_versions(tmp_path)
 
 
 # ── load_version_meta / load_version_stages ─────────────────────────────────────

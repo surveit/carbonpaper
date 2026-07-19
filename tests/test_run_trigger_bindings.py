@@ -99,24 +99,24 @@ def _corrupt_version_document_with_relative_path(project):
 
 
 # A version document that no longer validates (e.g. a legacy repo-relative path)
-# is SKIPPED by list_versions (the store's tolerant-listing semantics), so it can
-# never be selected as "the latest" — a project whose only version is invalid
-# behaves as version-less. Loading it EXPLICITLY (a pinned run / resume) must
-# surface validation issues as WorkflowLoadError, never a raw pydantic 500.
+# fails LOUDLY on every read — listing included — as WorkflowLoadError. No page
+# renders as if the store were healthy; the remedy for legacy documents is a
+# store migration, never a silent skip. The trigger endpoint translates the
+# failure into a structured 400 naming the issues.
 
-def test_runs_page_treats_an_invalid_only_version_as_versionless_not_500(project):
+def test_runs_page_fails_loudly_for_an_invalid_version(project):
+    from app.services.loader import WorkflowLoadError
+
     _corrupt_version_document_with_relative_path(project)
-    resp = client.get("/project/demo/runs")
-    assert resp.status_code == 200
-    # No silently-passing binding form for a version that can't be selected.
-    assert 'name="binding__load"' not in resp.text
+    with pytest.raises(WorkflowLoadError, match="ABSOLUTE"):
+        client.get("/project/demo/runs")
 
 
-def test_trigger_run_returns_400_when_the_only_version_is_invalid(project):
+def test_trigger_run_returns_400_with_issues_for_an_invalid_version(project):
     _corrupt_version_document_with_relative_path(project)
     resp = client.post("/project/demo/run", data={}, follow_redirects=False)
     assert resp.status_code == 400
-    assert "No version to run" in resp.json()["detail"]
+    assert any("ABSOLUTE" in issue for issue in resp.json()["issues"])
 
 
 def test_loading_an_invalid_version_explicitly_surfaces_issues(project):

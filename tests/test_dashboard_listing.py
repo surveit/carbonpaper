@@ -77,14 +77,17 @@ def test_versioned_project_is_ready_to_run(examples_root):
     assert ">Live<" in r.text
 
 
-def test_half_written_version_snapshot_does_not_flip_ready(examples_root):
-    """A stored document that fails the WorkflowVersion contract is not a version
-    (mirrors list_versions' tolerant skip), so it must not make the card claim
-    runnability."""
+def test_half_written_version_snapshot_fails_the_listing_loudly(examples_root):
+    """A stored document that fails the WorkflowVersion contract fails project
+    listing LOUDLY (list_versions raises WorkflowLoadError) — the dashboard must
+    not present a store holding an invalid document as healthy, and must never
+    guess whether the project is runnable. The remedy is a store migration."""
+    from app.services.loader import WorkflowLoadError
+
     proj = _make_document_only_project(examples_root, name="halfway")
     get_store().write("workflow_version", f"{proj.name}/20260101T000000", {"bogus": "data"})
-    [card] = list_projects()
-    assert card["is_ready"] is False
+    with pytest.raises(WorkflowLoadError, match="20260101T000000"):
+        list_projects()
 
 
 def test_random_directory_is_not_a_project(examples_root):

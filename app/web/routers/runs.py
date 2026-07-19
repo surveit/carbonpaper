@@ -106,15 +106,9 @@ async def runs_index(request: Request, project: str):
     pdir = EXAMPLES_DIR / project
     if not pdir.is_dir():
         raise HTTPException(status_code=404, detail=f"No project '{project}'")
-    # A version snapshot that no longer validates (e.g. a legacy repo-relative
-    # path) must surface as an issues banner, not a 500 — and NOT as a silent
-    # empty binding form, which would hide the problem instead of showing it.
-    try:
-        file_inputs = list_file_inputs(pdir)
-        load_issues: list[str] = []
-    except WorkflowLoadError as exc:
-        file_inputs = []
-        load_issues = exc.issues
+    # A stored version that no longer validates raises WorkflowLoadError from
+    # any listing/load (shell_state's version count included) and fails this
+    # page loudly — the remedy is a store migration, not a tolerant render.
     return templates.TemplateResponse(
         request,
         "section_runs.html",
@@ -122,8 +116,7 @@ async def runs_index(request: Request, project: str):
             "state": shell_state(pdir),
             "section": "runs",
             "runs": list_runs(project),
-            "file_inputs": file_inputs,
-            "load_issues": load_issues,
+            "file_inputs": list_file_inputs(pdir),
         },
     )
 

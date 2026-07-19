@@ -7,8 +7,6 @@
     state = project.project_state(mdir); section = "runs"
     runs  = main._list_runs(state.name)  — list of
             {run_id, status, started_at, dag_version, stages_total, stages_ok, stages_error}
-    load_issues = issues if the run-targeted version's snapshot failed to load
-                  (e.g. a legacy repo-relative path); [] when it loaded cleanly
 
   The "awaiting review" count comes from state.runs.awaiting_review (a run halted at a
   human_review_queue). Counts are truthful — only manifest-backed runs appear.
@@ -21,14 +19,7 @@
       snapshot, so a run is reproducible against the exact workflow it executed.</p>
   </div>
   <div class="actions wf-actions">
-    {% if load_issues %}
-    <div class="load-issues">
-      <strong>{{ load_issues|length }} issue{% if load_issues|length != 1 %}s{% endif %}
-        with the version a run would target; it cannot be started until they are
-        fixed:</strong>
-      <ul>{% for issue in load_issues %}<li>{{ issue }}</li>{% endfor %}</ul>
-    </div>
-    {% elif state.workflow.present %}
+    {% if state.workflow.present %}
     <form action="/project/{{ state.name }}/run" method="post" style="display:inline;">
       {% for fi in file_inputs %}
       <label style="display:block; margin:0.35rem 0;">
