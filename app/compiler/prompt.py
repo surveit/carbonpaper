@@ -54,10 +54,12 @@ def _node_type_contract() -> str:
         opt = ", ".join(spec.get("optional", [])) or "(none)"
         also = spec.get("also_requires", [])
         also_s = f"; also needs block(s): {', '.join(also)}" if also else ""
+        notes = spec.get("notes")
+        notes_s = f"\n    note: {notes}" if notes else ""
         out.append(
             f"- **{tname}** — {spec['summary']}\n"
             f"    handle block: `{handle}:` required fields=[{req}] optional=[{opt}]{also_s}\n"
-            f"    min_inputs={spec['min_inputs']}, requires_inputs={spec['requires_inputs']}"
+            f"    min_inputs={spec['min_inputs']}, requires_inputs={spec['requires_inputs']}{notes_s}"
         )
     out.append("")
     out.append("Column types: " + ", ".join(sorted(models.SCALAR_COLUMN_TYPES))

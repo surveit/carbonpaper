@@ -145,10 +145,57 @@ def test_source_parses_as_sourceref(tmp_path):
     assert s.source.doc == "x.md" and s.source.lines == [1, 2]
 
 
-def test_queue_block_without_hash_columns_is_valid():
-    # hash_columns optional; runner content-hashes on the upstream PK when absent
-    s = m.Stage.model_validate(S(id="rev", type="human_review_queue", inputs=[{"id": "a"}], queue={}))
-    assert s.queue is not None
+def test_queue_without_hash_columns_falls_back_to_upstream_pk():
+    # hash_columns is optional WHEN the upstream schema declares a primary_key —
+    # the runner content-hashes on that PK, so decisions can still be re-matched.
+    s = m.Stage.model_validate(S(
+        id="rev", type="human_review_queue",
+        inputs=[{"id": "a", "schema": {"columns": [{"name": "fac_id", "type": "str"}],
+                                       "primary_key": ["fac_id"]}}],
+        queue={},
+    ))
+    assert s.resolve_hash_columns() == ["fac_id"]
+
+
+def test_queue_with_explicit_hash_columns_is_valid():
+    s = m.Stage.model_validate(S(
+        id="rev", type="human_review_queue", inputs=[{"id": "a"}],
+        queue={"hash_columns": ["entity", "year"]},
+    ))
+    assert s.resolve_hash_columns() == ["entity", "year"]
+
+
+def test_queue_explicit_hash_columns_present_in_declared_upstream_ok():
+    s = m.Stage.model_validate(S(
+        id="rev", type="human_review_queue",
+        inputs=[{"id": "a", "schema": {"columns": [{"name": "fac_id", "type": "str"},
+                                                   {"name": "year", "type": "int"}],
+                                       "primary_key": ["fac_id"]}}],
+        queue={"hash_columns": ["fac_id", "year"]},
+    ))
+    assert s.resolve_hash_columns() == ["fac_id", "year"]
+
+
+def test_queue_without_hash_source_is_rejected():
+    # Neither hash_columns nor an upstream primary_key: the runner cannot hash a
+    # queued row, so a human decision can't be re-matched across runs. Rejected at
+    # build time (this was a runtime-only ValueError before).
+    with pytest.raises(ValidationError, match="hash_columns"):
+        m.Stage.model_validate(S(
+            id="rev", type="human_review_queue", inputs=[{"id": "a"}], queue={},
+        ))
+
+
+def test_queue_explicit_hash_columns_must_exist_in_declared_upstream():
+    # When the upstream schema IS declared, a named hash column that isn't in it is
+    # a wiring error the runner would only hit mid-run — reject it at build time.
+    with pytest.raises(ValidationError, match="not in the upstream schema"):
+        m.Stage.model_validate(S(
+            id="rev", type="human_review_queue",
+            inputs=[{"id": "a", "schema": {"columns": [{"name": "fac_id", "type": "str"}],
+                                           "primary_key": ["fac_id"]}}],
+            queue={"hash_columns": ["nonexistent"]},
+        ))
 
 
 # ── fixes folded into the model ──────────────────────────────────────────────
