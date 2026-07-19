@@ -7,21 +7,22 @@ needs to be recorded: the tracer just reads row i at each stage. At any stage
 that reshapes rows the walk stops — the ancestry beyond it isn't positionally
 recoverable (recorded lineage is issue #58).
 
-Self-contained on the run directory: reads manifest.json (stage type, parent
-edges, row counts) and outputs/<stage>.parquet (row values). It never reads the
-compiled DAG, so it is unaffected by later edits to the methodology.
+Self-contained on the run directory: reads the run's manifest (stage type,
+parent edges, row counts) from the document store, and
+outputs/<stage>.parquet (row values) off disk. It never reads the compiled
+DAG, so it is unaffected by later edits to the methodology.
 """
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import pandas as pd
 
-from app.core.errors import RowOutOfRange, StageNotInRun
+from app.core.errors import DocumentNotFound, RowOutOfRange, StageNotInRun
 from app.core.models.stage import StageType, is_grain_and_order_preserving
+from app.services import run_store
 
 
 def _is_row_preserving(stage_type: str) -> bool:
@@ -76,10 +77,15 @@ class Trace:
 
 
 def _load_manifest(run_dir: Path) -> dict[str, Any]:
-    path = Path(run_dir) / "manifest.json"
-    if not path.exists():
-        raise FileNotFoundError(f"no manifest.json in {run_dir}")
-    return json.loads(path.read_text(encoding="utf-8"))
+    """The run's manifest, from the document store. `project`/`run_id` are
+    derived from `run_dir`'s layout (`<project_dir>/runs/<run_id>` — the same
+    convention `app.web.loading.load_manifest` derives from)."""
+    run_dir = Path(run_dir)
+    project = run_dir.parent.parent.name
+    try:
+        return run_store.load_run(project, run_dir.name)
+    except DocumentNotFound as exc:
+        raise FileNotFoundError(f"no run manifest for {run_dir}") from exc
 
 
 def _stages_by_id(manifest: dict[str, Any]) -> dict[str, dict[str, Any]]:

@@ -448,8 +448,7 @@ async def resume_run_route(project: str, run_id: str):
     if not project_dir.is_dir():
         raise HTTPException(status_code=404, detail=f"No project '{project}'")
     run_dir = runs_dir(project) / run_id
-    if not (run_dir / "manifest.json").exists():
-        raise HTTPException(status_code=404, detail="Run not found")
+    load_manifest(run_dir)  # 404s if the run doesn't exist
     # Validate the compiled workflow synchronously so load errors surface as a 400
     # here rather than being swallowed on the background thread below.
     try:

@@ -2,7 +2,6 @@
 shared `write_run` fixture builder the later trace tests reuse."""
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import pandas as pd
@@ -14,15 +13,21 @@ from app.runtime.trace import (
     _parents,
     _stages_by_id,
 )
+from app.services import run_store
 
 
 def write_run(tmp_path: Path, stages: list[dict], run_id: str = "T1") -> Path:
     """Build a minimal run directory from a list of stage specs and return it.
 
     Each spec: {"id": str, "type": str, "parents": list[str], "df": DataFrame}.
-    Writes outputs/<id>.parquet and a manifest.json whose per-stage records
-    carry `type`, `rows`, `output_path`, and one input_validation entry per
-    parent with phase "input:<parent>" — the exact shape the runner emits.
+    Writes outputs/<id>.parquet to disk and saves a manifest to the document
+    store whose per-stage records carry `type`, `rows`, `output_path`, and one
+    input_validation entry per parent with phase "input:<parent>" — the exact
+    shape the runner emits. The manifest is saved keyed the same way a real
+    run's is: project = the run dir's grandparent name, run_id = the run dir's
+    own name (mirrors app.runtime.trace._load_manifest's derivation), so
+    `tmp_path` need not itself be a `<project>/runs/` layout — trace_row reads
+    back whatever `write_run` wrote, under the same derived project name.
     """
     run_dir = tmp_path / run_id
     (run_dir / "outputs").mkdir(parents=True)
@@ -39,9 +44,10 @@ def write_run(tmp_path: Path, stages: list[dict], run_id: str = "T1") -> Path:
                 {"phase": f"input:{p}", "ok": True} for p in spec.get("parents", [])
             ],
         })
-    (run_dir / "manifest.json").write_text(
-        json.dumps({"run_id": run_id, "stages": records}), encoding="utf-8"
-    )
+    project = run_dir.parent.parent.name
+    run_store.save_run(project, {
+        "run_id": run_id, "project": project, "status": "ok", "stages": records,
+    })
     return run_dir
 
 

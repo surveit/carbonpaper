@@ -11,6 +11,7 @@ from fastapi.testclient import TestClient
 
 import app.web.routers.runs as runs_router
 from app.main import app
+from app.services import run_store
 from app.services.versioning import create_version
 
 client = TestClient(app)
@@ -35,7 +36,7 @@ def project(tmp_path, monkeypatch):
 
 def _manifest(proj):
     run_dir = sorted((proj / "runs").iterdir())[-1]
-    return json.loads((run_dir / "manifest.json").read_text(encoding="utf-8"))
+    return run_store.load_run(proj.name, run_dir.name)
 
 
 def test_changed_field_becomes_run_binding(project, tmp_path):
@@ -127,3 +128,26 @@ def test_loading_an_invalid_version_explicitly_surfaces_issues(project):
     with pytest.raises(WorkflowLoadError) as exc:
         load_version_stages(project, version_id)
     assert any("ABSOLUTE" in issue for issue in exc.value.issues)
+
+
+# ─── Resume: the run-existence guard reads the store, not a manifest.json file ──
+
+def test_resume_route_does_not_404_for_a_real_run(project):
+    """Regression: the resume route's pre-check used to stat run_dir/manifest.json
+    directly, bypassing the document store the manifest now lives in — every real
+    run would incorrectly 404 on resume. It must accept a run that genuinely
+    exists (a completed run resumes as a no-op re-run of its already-ok stages)."""
+    trigger = client.post("/project/demo/run",
+                          data={"binding__load": str(project / "a.csv")},
+                          follow_redirects=False)
+    assert trigger.status_code == 303
+    run_id = sorted((project / "runs").iterdir())[-1].name
+
+    resp = client.post(f"/project/demo/runs/{run_id}/resume", follow_redirects=False)
+    assert resp.status_code == 303
+    assert resp.headers["location"] == f"/project/demo/runs/{run_id}"
+
+
+def test_resume_route_404s_for_an_unknown_run(project):
+    resp = client.post("/project/demo/runs/no-such-run/resume", follow_redirects=False)
+    assert resp.status_code == 404

@@ -45,6 +45,22 @@ def check_no_raw_disk(paths: list[Path]) -> list[str]:
     return offenders
 
 
+def check_no_call(paths: list[Path], names: set[str]) -> list[str]:
+    """Files that call a bare function or method named in `names` anywhere —
+    e.g. `check_no_call(paths, {"copytree"})` catches both `copytree(...)`
+    (after `from shutil import copytree`) and `shutil.copytree(...)`; the rule
+    is about the operation, not which module it was imported from. A
+    generalisation of `check_no_raw_disk`'s fixed builtin/method sets to an
+    arbitrary caller-supplied name set."""
+    offenders: list[str] = []
+    for path in paths:
+        tree = parse_module(path)
+        hits = (collect_called_funcs(tree) | collect_called_methods(tree)) & names
+        if hits:
+            offenders.append(f"{path.name}: {sorted(hits)}")
+    return offenders
+
+
 def check_no_import(paths: list[Path], module: str, *, allow: set[str]) -> list[str]:
     """Files that import `module` (or a submodule of it), except those whose path
     ends with an entry in `allow`. Seals a backend behind its one owner — e.g.

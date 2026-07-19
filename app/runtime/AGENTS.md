@@ -8,13 +8,16 @@ fails — an invalid workflow is refused before the runner does any work.
 ## `runner.py` — the executor
 `topological_sort` → `execute_run(project_dir, repo_root)`. Per stage: validate declared
 inputs (`validation.py`), reject duplicate input rows, dispatch to the type's handler,
-validate the output, write `outputs/<stage>.parquet`, append to `manifest.json`.
+validate the output, write `outputs/<stage>.parquet`, save the run's manifest to the
+document store's "run" collection (`app.services.run_store`).
 - **Duplicate-input throw (every stage type):** fails the stage if any input dataframe has
   exact duplicate full-content rows — the error names the input id + 0-based row numbers.
   Identity is a content hash over the whole row; `primary_key` plays no part (optional, may
   legitimately duplicate). If N draws per row are intended, add an explicit row_id upstream.
-- **Incremental manifest:** flushed after every stage (`running` → terminal), so the UI
-  shows live progress and a run can execute in a background thread (`prepare_run`/`run_prepared`).
+- **Incremental manifest:** persisted after every stage (`running` → terminal) via
+  `ctx["persist_manifest"]` — injected by the caller, so the UI shows live progress for a
+  project run (`prepare_run`/`run_prepared`, saved to the store) while an ephemeral eval/
+  preview subset run (`run_subset`) stays in-memory only.
 - **Row slicing:** any stage may carry `limit: N` (throttle the LLM fan-out for a dry run).
   Per run, `--limit <id>=<N>` overrides it and `--offset <id>=<M>` drops the first M rows
   first (offset 5 + limit 3 = rows 6-8); recorded in the manifest, re-applied on resume,
@@ -48,4 +51,5 @@ ranges, nullability, PK uniqueness), distinct from the stage schemas in `app/cor
 ```
 python -m app.runtime.runner <project_dir>
 ```
-Outputs: `runs/<id>/{manifest.json, outputs/*.parquet, artifacts/, queue/}`.
+Outputs: `runs/<id>/{outputs/*.parquet, artifacts/, queue/}` on disk; the run's
+manifest is a document in the store (`run` collection, id `<project>/<run_id>`).

@@ -3,13 +3,15 @@ Workflow runner.
 
 Topologically orders stages, runs each one through its type-specific handler,
 validates the input + output schema, and persists per-stage outputs as parquet
-(plus a manifest.json summarising the run).
+(plus the run's manifest, saved to the document store's "run" collection —
+see app.services.run_store).
 
 Run output layout:
     examples/<project>/runs/<run_id>/
-        manifest.json
         outputs/<stage_id>.parquet
         artifacts/<...>           # for publish stages
+The manifest itself is not a file here; it is a `run_store.Run` document keyed
+`<project>/<run_id>`.
 """
 
 from __future__ import annotations
@@ -27,10 +29,15 @@ import pandas as pd
 import pyarrow.lib as pa_lib
 from pydantic import ValidationError as PydanticValidationError
 
-from app.core.errors import MissingInputBindingError, NoVersionToRunError, SubsetRunError
+from app.core.errors import (
+    DocumentNotFound,
+    MissingInputBindingError,
+    NoVersionToRunError,
+    SubsetRunError,
+)
 from app.core.models import Connector, Stage, StageType, Workflow
 from app.services.loader import WorkflowLoadError
-from app.services import versioning
+from app.services import run_store, versioning
 
 from .stages import HANDLERS, PREFLIGHTS, HaltForReview
 from .validation import Issue, validate_dataframe
@@ -285,6 +292,11 @@ def prepare_run(
         "dropped_columns": {},
         "limits": limits,
         "offsets": offsets,
+        # The persist target _execute_stages' flush() and final write call —
+        # injected here (rather than hardcoded there) because _execute_stages
+        # also runs subset/eval runs, whose manifest must stay ephemeral (see
+        # _subset_ctx's no-op persist_manifest below).
+        "persist_manifest": lambda m: run_store.save_run(project_dir.name, m),
     }
     manifest: dict[str, Any] = {
         "run_id": run_id,
@@ -306,9 +318,7 @@ def prepare_run(
             for s in ordered
         ],
     }
-    (run_dir / "manifest.json").write_text(
-        json.dumps(manifest, indent=2, default=str), encoding="utf-8"
-    )
+    run_store.save_run(project_dir.name, manifest)
     return {"run_id": run_id, "run_dir": run_dir, "ctx": ctx,
             "ordered": ordered, "manifest": manifest}
 
@@ -375,7 +385,10 @@ def _subset_ctx(repo_root: Path, run_dir: Path) -> dict[str, Any]:
     # and it halts a subset run anyway) fails loudly on the missing key rather than
     # reading a fabricated wrong directory.
     return {"repo_root": repo_root, "run_dir": run_dir,
-            "queue_stats": {}, "limits": {}, "offsets": {}}
+            "queue_stats": {}, "limits": {}, "offsets": {},
+            # A subset run's manifest is returned in-memory (run_subset's return
+            # value) and never re-read from disk, so it never reaches the store.
+            "persist_manifest": lambda m: None}
 
 
 def _subset_manifest(run_dir: Path, ordered: list[Stage]) -> dict[str, Any]:
@@ -449,21 +462,21 @@ def _execute_stages(
         }
 
     def flush(status: str = "running") -> None:
-        """Write the manifest mid-run so the run page can show live progress
+        """Persist the manifest mid-run so the run page can show live progress
         (stages light up as they start/finish) instead of the whole pipeline
-        running silently and updating only at the very end."""
+        running silently and updating only at the very end. Persists through
+        `ctx["persist_manifest"]` — a project run saves to the store
+        (validating the manifest's shape on every call, so a malformed
+        manifest fails loudly here rather than being written silently); a
+        subset run's persist_manifest is a no-op, so its manifest stays
+        ephemeral."""
         m = dict(manifest)
         m["stages"] = [records_by_id.get(s.id) or _pending_stub(s) for s in ordered]
         m["status"] = status
         m["queue_stats"] = ctx.get("queue_stats", {})
         m["dropped_columns"] = ctx.get("dropped_columns", {})
         m["updated_at"] = datetime.now().isoformat(timespec="seconds")
-        try:
-            (run_dir / "manifest.json").write_text(
-                json.dumps(m, indent=2, default=str), encoding="utf-8"
-            )
-        except OSError:
-            pass
+        ctx["persist_manifest"](m)
 
     flush("running")  # initial: all stages pending
 
@@ -640,9 +653,7 @@ def _execute_stages(
         )
         manifest.pop("halted_at", None)
 
-    (run_dir / "manifest.json").write_text(
-        json.dumps(manifest, indent=2, default=str), encoding="utf-8"
-    )
+    ctx["persist_manifest"](manifest)
 
     return manifest
 
@@ -650,12 +661,14 @@ def _execute_stages(
 def resume_run(project_dir: Path, run_id: str, repo_root: Path) -> dict[str, Any]:
     """Resume a previously halted run. Loads existing outputs from disk,
     re-runs the halted queue stage (decisions now exist), continues
-    downstream, updates the same manifest in place."""
+    downstream, updates the same manifest in place (in the store)."""
     run_dir = project_dir / "runs" / run_id
-    manifest_path = run_dir / "manifest.json"
-    if not manifest_path.exists():
-        raise FileNotFoundError(f"No manifest at {manifest_path}")
-    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    try:
+        manifest = run_store.load_run(project_dir.name, run_id)
+    except DocumentNotFound as exc:
+        raise FileNotFoundError(
+            f"No run '{run_id}' for project '{project_dir.name}'"
+        ) from exc
 
     # Stay pinned to the SAME workflow snapshot the run started on. We read the
     # version off the existing manifest and reload the version's stages — never
@@ -667,8 +680,8 @@ def resume_run(project_dir: Path, run_id: str, repo_root: Path) -> dict[str, Any
     if not workflow_version:
         raise ValueError(
             f"Run {run_id} of '{project_dir.name}' has no 'workflow_version' in "
-            f"its manifest ({manifest_path}); cannot resume a versioned run "
-            f"without its pinned workflow version."
+            f"its manifest; cannot resume a versioned run without its pinned "
+            f"workflow version."
         )
     stages = versioning.load_version_stages(project_dir, workflow_version)
     # Replay this run's bindings (recorded verbatim by prepare_run) onto the
@@ -712,6 +725,7 @@ def resume_run(project_dir: Path, run_id: str, repo_root: Path) -> dict[str, Any
         # a halt honor the same limits/offsets the run started with.
         "limits": manifest.get("limit_overrides") or {},
         "offsets": manifest.get("offset_overrides") or {},
+        "persist_manifest": lambda m: run_store.save_run(project_dir.name, m),
     }
 
     manifest["resumed_at"] = datetime.now().isoformat(timespec="seconds")

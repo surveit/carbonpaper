@@ -1,10 +1,10 @@
-"""Filesystem access for the web layer: read compiled stage JSON, run
-manifests, stage outputs, review decisions, and queue snapshots off disk, plus
-small pure helpers for the stage-dict shape they return."""
+"""Filesystem access for the web layer: read compiled stage JSON, stage
+outputs, review decisions, and queue snapshots off disk, plus run manifests
+from the document store, plus small pure helpers for the stage-dict shape
+they return."""
 
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -12,9 +12,10 @@ from typing import Any
 import pandas as pd
 from fastapi import HTTPException
 
-from app.core.errors import NoVersionToRunError
+from app.core.errors import DocumentNotFound, NoVersionToRunError
 from app.core.models import Stage
 from app.runtime.runner import resolve_version_id
+from app.services import run_store
 from app.services.loader import CompiledStageFile, load_compiled_dir
 from app.services.versioning import list_versions, load_version_stages
 from app.services.workspace import load_schemas
@@ -36,8 +37,9 @@ def list_projects() -> list[dict[str, Any]]:
     from the moment creation writes its document.md (or project.json) — a
     just-created project whose data model is still being generated must show up,
     not appear only once generation finishes. A dir with none of those markers is
-    not a project and is omitted. A run counts only if it has a manifest.json
-    (mirrors list_runs), so the count is real runs, never inflated."""
+    not a project and is omitted. A run counts only if it has a document in the
+    store's "run" collection (mirrors list_runs), so the count is real runs,
+    never inflated."""
     if not EXAMPLES_DIR.exists():
         return []
     out: list[dict[str, Any]] = []
@@ -50,11 +52,7 @@ def list_projects() -> list[dict[str, Any]]:
         has_workflow = n_stages > 0
         has_schemas = schemas_dir.is_dir() and any(schemas_dir.glob("*.json"))
         n_schemas = len(load_schemas(p)) if has_schemas else 0
-        rdir = p / "runs"
-        n_runs = (
-            sum(1 for r in rdir.iterdir() if r.is_dir() and (r / "manifest.json").exists())
-            if rdir.is_dir() else 0
-        )
+        n_runs = len(run_store.list_runs(p.name))
         has_document = (p / "document.md").is_file() or (p / "project.json").is_file()
         if not (has_workflow or has_schemas or has_document):
             continue
@@ -167,39 +165,34 @@ def runs_dir(project: str) -> Path:
 
 
 def load_manifest(run_dir: Path) -> dict[str, Any]:
-    """A run's manifest.json as a dict, or 404 if the run doesn't exist."""
-    manifest_path = run_dir / "manifest.json"
-    if not manifest_path.exists():
+    """A run's manifest as a dict, or 404 if the run doesn't exist. The
+    manifest lives in the document store, not on disk; `project`/`run_id` are
+    derived from `run_dir`'s layout (`<project_dir>/runs/<run_id>` — the
+    stable convention every run dir follows)."""
+    project = run_dir.parent.parent.name
+    try:
+        return run_store.load_run(project, run_dir.name)
+    except DocumentNotFound:
         raise HTTPException(status_code=404, detail="Run not found")
-    return json.loads(manifest_path.read_text(encoding="utf-8"))
 
 
 def list_runs(project: str) -> list[dict[str, Any]]:
-    rdir = runs_dir(project)
-    if not rdir.is_dir():
-        return []
+    """Every run for this project, newest-first, in the summary-row shape the
+    runs-index template reads. No runs stored yet -> []."""
     entries = []
-    for run in sorted(rdir.iterdir(), reverse=True):
-        if not run.is_dir():
-            continue
-        manifest_path = run / "manifest.json"
-        if manifest_path.exists():
-            try:
-                manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-            except json.JSONDecodeError:
-                manifest = {"run_id": run.name, "status": "corrupt"}
-            entries.append({
-                "run_id": run.name,
-                "status": manifest.get("status", "unknown"),
-                "started_at": manifest.get("started_at"),
-                "finished_at": manifest.get("finished_at"),
-                # None for legacy (pre-versioning) runs; the template renders
-                # "(unversioned)" — a displayed truth, not a fabricated id.
-                "workflow_version": manifest.get("workflow_version"),
-                "stages_total": len(manifest.get("stages", [])),
-                "stages_ok": sum(1 for s in manifest.get("stages", []) if s.get("status") == "ok"),
-                "stages_error": sum(1 for s in manifest.get("stages", []) if s.get("status") == "error"),
-            })
+    for r in run_store.list_runs(project):
+        entries.append({
+            "run_id": r.run_id,
+            "status": r.status,
+            "started_at": r.started_at,
+            "finished_at": r.finished_at,
+            # None for legacy (pre-versioning) runs; the template renders
+            # "(unversioned)" — a displayed truth, not a fabricated id.
+            "workflow_version": r.workflow_version,
+            "stages_total": len(r.stages),
+            "stages_ok": sum(1 for s in r.stages if s.get("status") == "ok"),
+            "stages_error": sum(1 for s in r.stages if s.get("status") == "error"),
+        })
     return entries
 
 

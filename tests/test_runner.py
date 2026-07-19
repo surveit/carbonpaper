@@ -21,6 +21,7 @@ from app.core.errors import NoVersionToRunError, SubsetRunError
 from app.core.models import Stage, Workflow
 from app.runtime.runner import execute_run, resume_run, run_subset
 from app.runtime.stages import llm_transform as lt
+from app.services import run_store
 from app.services.loader import WorkflowLoadError
 from app.services.versioning import create_version, list_versions
 
@@ -61,9 +62,9 @@ def test_limit_truncates_and_is_recorded(tmp_path):
     out = pd.read_parquet(run_dir / "outputs" / "load.parquet")
     assert len(out) == 2
 
-    on_disk = json.loads((run_dir / "manifest.json").read_text(encoding="utf-8"))
-    assert on_disk["run_id"] == manifest["run_id"]
-    assert on_disk["status"] == "ok"
+    stored = run_store.load_run(tmp_path.name, manifest["run_id"])
+    assert stored["run_id"] == manifest["run_id"]
+    assert stored["status"] == "ok"
 
 
 def test_per_run_limit_and_offset_slice_and_are_recorded(tmp_path):
@@ -89,11 +90,9 @@ def test_per_run_limit_and_offset_slice_and_are_recorded(tmp_path):
     assert any(n.startswith("offset=1") for n in notes)
     assert any(n.startswith("limit=3") for n in notes)
 
-    on_disk = json.loads(
-        (tmp_path / "runs" / manifest["run_id"] / "manifest.json")
-        .read_text(encoding="utf-8"))
-    assert on_disk["limit_overrides"] == {"load": 3}
-    assert on_disk["offset_overrides"] == {"load": 1}
+    stored = run_store.load_run(tmp_path.name, manifest["run_id"])
+    assert stored["limit_overrides"] == {"load": 3}
+    assert stored["offset_overrides"] == {"load": 1}
 
 
 def test_per_run_override_for_unknown_stage_id_fails_loudly(tmp_path):
@@ -368,7 +367,7 @@ def test_resume_reapplies_run_bindings_for_a_pending_input_stage(tmp_path):
                     "elapsed_ms": 0, "rows": 0, "error": None,
                     "started_at": None, "finished_at": None}],
     }
-    (run_dir / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+    run_store.save_run(tmp_path.name, manifest)
 
     result = resume_run(tmp_path, run_id, repo_root=tmp_path)
 
