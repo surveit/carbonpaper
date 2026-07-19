@@ -57,11 +57,19 @@ def validate_stage_tests(
                 f"test {test.name!r}: inputs keys {sorted(test.inputs)} "
                 f"must be exactly the stage's declared inputs {sorted(declared)}"
             )
-        if stage_type == "python_row_function":
-            input_rows = next(iter(test.inputs.values()), [])
-            if len(input_rows) != 1 or len(test.expected) != 1:
-                raise ValueError(
-                    f"test {test.name!r}: a python_row_function test is "
-                    f"one row in → one row out (got {len(input_rows)} in, "
-                    f"{len(test.expected)} out)"
-                )
+        # Exhaustive over STAGE_TEST_TYPES (membership is checked above): the
+        # fallthrough fires only when the set grows without the new type's
+        # per-type invariant being decided here.
+        match stage_type:
+            case "python_row_function":
+                input_rows = next(iter(test.inputs.values()), [])
+                if len(input_rows) != 1 or len(test.expected) != 1:
+                    raise ValueError(
+                        f"test {test.name!r}: a python_row_function test is "
+                        f"one row in → one row out (got {len(input_rows)} in, "
+                        f"{len(test.expected)} out)"
+                    )
+            case "python_frame_function":
+                pass  # no per-type invariant: rows in and rows out are both free
+            case _:
+                raise AssertionError(f"unhandled stage test type: {stage_type}")
