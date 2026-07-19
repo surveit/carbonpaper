@@ -1,5 +1,5 @@
 """Direct unit tests for app/services/versioning.py — versions as documents in
-the store's "version" collection: the meta-dict / typed-stage-list contract of
+the store's "workflow_version" collection: the meta-dict / typed-stage-list contract of
 the four public functions (create_version, list_versions, load_version_meta,
 load_version_stages) that app.runtime.runner, app.evals, app.services.project,
 app.web.loading and app.services.compilation all depend on by signature.
@@ -24,7 +24,7 @@ from app.core.persistence import get_store
 from app.services import loader, node_review
 from app.services.loader import WorkflowLoadError
 from app.services.versioning import (
-    Version,
+    WorkflowVersion,
     create_version,
     list_versions,
     load_version_meta,
@@ -175,19 +175,19 @@ def test_list_versions_empty_when_none_created(tmp_path):
 
 def test_list_versions_newest_first(tmp_path):
     for vid in ("20260101T000000", "20260201T000000", "20260115T000000"):
-        Version(id=f"{tmp_path.name}/{vid}", version_id=vid, created_at=vid,
+        WorkflowVersion(id=f"{tmp_path.name}/{vid}", version_id=vid, created_at=vid,
                 message="m", reviewer="r").save()
     assert [v["id"] for v in list_versions(tmp_path)] == [
         "20260201T000000", "20260115T000000", "20260101T000000"]
 
 
 def test_list_versions_skips_a_corrupt_document(tmp_path):
-    """A stored document that fails the Version contract is skipped, not
+    """A stored document that fails the WorkflowVersion contract is skipped, not
     fabricated into a listing — the store-backed analogue of a half-written
     snapshot never being listed."""
     _seed(tmp_path)
     good = create_version(tmp_path, message="good", reviewer="test")
-    get_store().write("version", f"{tmp_path.name}/20260101T000000", {"bogus": "data"})
+    get_store().write("workflow_version", f"{tmp_path.name}/20260101T000000", {"bogus": "data"})
     assert [v["id"] for v in list_versions(tmp_path)] == [good["id"]]
 
 

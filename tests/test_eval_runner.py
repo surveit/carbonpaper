@@ -18,7 +18,7 @@ from app.core.models import EvalConfig, ExpectedOutput, FileFormat, Stage, Table
 from app.core.models.schema import TableSchema
 from app.evals.runner import run_eval
 from app.evals.store import load_eval_run, save_eval_config
-from app.services.versioning import Version
+from app.services.versioning import WorkflowVersion
 
 _LOAD = {
     "id": "load", "type": "input_data", "name": "Load rows",
@@ -47,7 +47,7 @@ def project(tmp_path):
     whose dataset's expected `label` is wrong on exactly one of four rows."""
     demo = tmp_path / "demo"
     demo.mkdir()
-    Version(
+    WorkflowVersion(
         id="demo/v1", version_id="v1", created_at="2026-07-10T00:00:00",
         message="seed", reviewer="test",
         stages=[Stage.model_validate(_LOAD), Stage.model_validate(_CLASSIFY)],

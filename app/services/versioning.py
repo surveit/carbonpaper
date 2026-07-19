@@ -1,7 +1,7 @@
 """
 versioning.py — immutable, committable snapshots of a workflow.
 
-A "version" is a `Version` document in the store's "version" collection: a frozen
+A "version" is a `WorkflowVersion` document in the store's "workflow_version" collection: a frozen
 copy of a project's authored artifacts — its compiled stages (typed, embedded
 verbatim) and its schemas/ data model (embedded raw) — taken at a point in time,
 plus who created it, why, its parent, and the approval coverage AT creation time.
@@ -41,14 +41,14 @@ from app.services.loader import load_workflow, stage_to_spec_dict
 from app.services.workspace import load_schemas
 
 
-class Version(PersistedModel):
-    """One frozen snapshot, stored in the "version" collection. `id` (inherited
+class WorkflowVersion(PersistedModel):
+    """One frozen snapshot, stored in the "workflow_version" collection. `id` (inherited
     from PersistedModel) is the composite `f"{project}/{version_id}"`; `version_id`
     is the plain local id every caller of this module's four public functions
     works with. `stages` and `schemas` are the frozen artifacts; `coverage` is
     approval coverage computed against `stages` at creation time."""
 
-    collection: ClassVar[str] = "version"
+    collection: ClassVar[str] = "workflow_version"
     # Dump the embedded stages in their canonical spec-dict shape (field aliases
     # restored, unset optionals dropped) — the same convention stage_to_spec_dict
     # uses, so a version's on-disk stage shape matches the working copy's.
@@ -64,7 +64,7 @@ class Version(PersistedModel):
     schemas: list[dict[str, Any]] = Field(default_factory=list)
 
 
-def _meta(v: Version) -> dict[str, Any]:
+def _meta(v: WorkflowVersion) -> dict[str, Any]:
     """The meta dict shape every caller of this module reads: `id` is the LOCAL
     version_id, never the composite store id."""
     return {
@@ -117,7 +117,7 @@ def create_version(
     version_id = datetime.now().strftime("%Y%m%dT%H%M%S")
     project = project_dir.name
     doc_id = f"{project}/{version_id}"
-    if Version.exists(doc_id):
+    if WorkflowVersion.exists(doc_id):
         raise FileExistsError(
             f"Version already exists: {doc_id} (two versions created within one second)"
         )
@@ -128,7 +128,7 @@ def create_version(
     decisions = node_review.load_node_decisions(project_dir)
     coverage = node_review.coverage_for(spec_dicts, decisions)
 
-    v = Version(
+    v = WorkflowVersion(
         id=doc_id,
         version_id=version_id,
         created_at=datetime.now().isoformat(timespec="seconds"),
@@ -145,14 +145,14 @@ def create_version(
 
 def list_versions(project_dir: Path) -> list[dict[str, Any]]:
     """All versions for a project, NEWEST-FIRST, each as its meta dict. Skips any
-    stored document that fails the Version contract rather than fabricating
+    stored document that fails the WorkflowVersion contract rather than fabricating
     metadata for it (a half-written or corrupt document is simply not listed).
     No versions stored yet -> []."""
     name = Path(project_dir).name
     metas: list[dict[str, Any]] = []
-    for _, data in get_store().read_all("version", f"{name}/"):
+    for _, data in get_store().read_all("workflow_version", f"{name}/"):
         try:
-            v = Version.model_validate(data)
+            v = WorkflowVersion.model_validate(data)
         except ValidationError:
             continue
         metas.append(_meta(v))
@@ -166,7 +166,7 @@ def load_version_meta(project_dir: Path, version_id: str) -> dict[str, Any]:
     """This version's meta dict. Fails loudly if no such version is stored."""
     name = Path(project_dir).name
     try:
-        v = Version.load(f"{name}/{version_id}")
+        v = WorkflowVersion.load(f"{name}/{version_id}")
     except DocumentNotFound as exc:
         raise FileNotFoundError(f"No version '{version_id}' for project '{name}'") from exc
     return _meta(v)
@@ -174,14 +174,14 @@ def load_version_meta(project_dir: Path, version_id: str) -> dict[str, Any]:
 
 def load_version_stages(project_dir: Path, version_id: str) -> list[Stage]:
     """This version's frozen stages, as typed Stage objects — already valid
-    (embedded from a strict load at creation time), so Version.load's pydantic
+    (embedded from a strict load at creation time), so WorkflowVersion.load's pydantic
     validation is the on-read integrity check and no re-load through the
     working-copy loader is needed. Fails loudly if the version is missing rather
     than falling back to the working copy (a run pinned to a version must read
     THAT version)."""
     name = Path(project_dir).name
     try:
-        v = Version.load(f"{name}/{version_id}")
+        v = WorkflowVersion.load(f"{name}/{version_id}")
     except DocumentNotFound as exc:
         raise FileNotFoundError(f"No version '{version_id}' for project '{name}'") from exc
     return v.stages

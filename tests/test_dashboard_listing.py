@@ -17,7 +17,7 @@ import app.web.loading as loading
 import app.web.routers.project as project_router
 from app.core.persistence import get_store
 from app.main import app
-from app.services.versioning import Version
+from app.services.versioning import WorkflowVersion
 from app.web.loading import list_projects
 
 client = TestClient(app)
@@ -67,7 +67,7 @@ def test_versioned_project_is_ready_to_run(examples_root):
     """A version is what makes a project runnable (runs target versions), so the
     card flips to ready exactly when one exists."""
     proj = _make_document_only_project(examples_root, name="versioned")
-    Version(
+    WorkflowVersion(
         id=f"{proj.name}/20260101T000000", version_id="20260101T000000",
         created_at="2026-01-01T00:00:00", message="seed", reviewer="test",
     ).save()
@@ -78,11 +78,11 @@ def test_versioned_project_is_ready_to_run(examples_root):
 
 
 def test_half_written_version_snapshot_does_not_flip_ready(examples_root):
-    """A stored document that fails the Version contract is not a version
+    """A stored document that fails the WorkflowVersion contract is not a version
     (mirrors list_versions' tolerant skip), so it must not make the card claim
     runnability."""
     proj = _make_document_only_project(examples_root, name="halfway")
-    get_store().write("version", f"{proj.name}/20260101T000000", {"bogus": "data"})
+    get_store().write("workflow_version", f"{proj.name}/20260101T000000", {"bogus": "data"})
     [card] = list_projects()
     assert card["is_ready"] is False
 
