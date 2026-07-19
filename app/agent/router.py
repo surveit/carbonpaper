@@ -4,7 +4,7 @@ Every session is bound to a registered agent by an `agent_id` and carries an
 opaque `context` (whatever that agent needs to bind its tools). A message turn
 looks the pair back up, builds the engine via the registry, and streams it. The
 routes know nothing about any specific agent; a concrete agent registers itself
-(see app.agent.registry) and a host route creates the session with its context.
+(see app.core.agent.registry) and a host route creates the session with its context.
 """
 from __future__ import annotations
 
@@ -17,11 +17,10 @@ from fastapi.templating import Jinja2Templates
 
 from app.core.llm_sdk import CLI_PATH
 
-from app.agent.registry import build_engine
-from app.agent.sdk_engine import CLI_MODEL
-
-from .store import open_session_store
-from .turns import default_turn_manager
+from app.core.agent.registry import build_engine
+from app.core.agent.sdk_engine import CLI_MODEL
+from app.core.agent.store import open_session_store
+from app.core.agent.turns import default_turn_manager
 
 TEMPLATES_DIR = Path(__file__).resolve().parent / "templates"
 

@@ -7,7 +7,7 @@ plus the resume token that carries the agent's cross-turn memory. `SessionStore`
 is a stateless adapter over that record: every method loads, mutates, and saves
 through the configured store.
 
-In-flight turns live in memory (see app.agent.turns); surviving a server restart
+In-flight turns live in memory (see app.core.agent.turns); surviving a server restart
 mid-turn is out of scope.
 """
 from __future__ import annotations

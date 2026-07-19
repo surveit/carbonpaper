@@ -1,7 +1,7 @@
 """LLM dispatch for `llm_transform` stages.
 
 `call_llm` runs one input row through a headless structured-output agent
-(`app.agent.agent.Agent`) whose `target_schema` is the stage's reply model —
+(`app.core.agent.agent.Agent`) whose `target_schema` is the stage's reply model —
 the reply arrives as a validated Pydantic instance submitted through the
 agent's submit_answer tool. The agent is the only backend: when it isn't
 available (`options.require_agent_backend`), the call raises rather than
@@ -21,7 +21,7 @@ from typing import Any
 
 from pydantic import BaseModel
 
-from app.agent.agent import Agent
+from app.core.agent.agent import Agent
 from app.core.errors import LLMError
 from app.core.llm_sdk import run_sync
 from app.core.models import LLMConfig

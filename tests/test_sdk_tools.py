@@ -17,12 +17,12 @@ from typing import Any
 import pytest
 from claude_agent_sdk import SdkMcpTool
 
-from app.agent.registry import build_mcp_server
 from app.compiler.agent.tools import (
     TOOL_SCHEMAS,
     EditingContext,
     make_editing_tools,
 )
+from app.core.agent.registry import build_mcp_server
 from app.services import workspace
 
 

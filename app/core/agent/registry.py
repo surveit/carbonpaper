@@ -23,7 +23,7 @@ from claude_agent_sdk import (
 )
 from pydantic import BaseModel, ConfigDict
 
-from app.agent.sdk_engine import MCP_SERVER_NAME, ClaudeAgentSdkEngine
+from app.core.agent.sdk_engine import MCP_SERVER_NAME, ClaudeAgentSdkEngine
 
 
 class AgentConfig(BaseModel):

@@ -1,4 +1,4 @@
-from app.agent.store import AgentSession, SessionStore
+from app.core.agent.store import AgentSession, SessionStore
 
 
 def test_project_session_roundtrips_neutral_transcript():

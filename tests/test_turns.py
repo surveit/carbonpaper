@@ -7,8 +7,8 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
-from app.agent.store import SessionStore
-from app.agent.turns import TurnManager
+from app.core.agent.store import SessionStore
+from app.core.agent.turns import TurnManager
 
 
 class _FakeEngine:

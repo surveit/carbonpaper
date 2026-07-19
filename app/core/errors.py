@@ -36,7 +36,7 @@ class RegenerateWithoutSnapshotError(Exception):
 class GenerationError(Exception):
     """A headless agent generation could not produce a VALID artifact.
 
-    Raised by `app.agent.agent.Agent.run` when the agent does not submit output that
+    Raised by `app.core.agent.agent.Agent.run` when the agent does not submit output that
     validates against the target schema within its attempt budget. Fails loudly rather
     than returning or persisting a partial or fabricated result — the caller logs the
     failure honestly, never a fake success."""

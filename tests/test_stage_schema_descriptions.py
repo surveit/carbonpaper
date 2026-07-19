@@ -1,6 +1,6 @@
 """The validator rules a compiling agent keeps tripping over must be documented in the
 FIELD DESCRIPTIONS, because the submit_answer tool's input schema is
-`Workflow.model_json_schema()` (app/agent/agent.py) — so a `Field(description=...)` is the
+`Workflow.model_json_schema()` (app/core/agent/agent.py) — so a `Field(description=...)` is the
 only channel that reaches the model at the point it fills the field. These assert each rule
 that currently lives only in a validator is also stated in the relevant field's description.
 """
