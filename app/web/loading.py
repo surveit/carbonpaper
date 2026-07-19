@@ -28,8 +28,9 @@ def list_projects() -> list[dict[str, Any]]:
     renders. The card's headline question is binary — is the project still being
     SET UP, or is it READY TO RUN? — so alongside the authored-what flags
     (has_document / has_schemas / has_workflow) each card carries `is_ready`:
-    True iff at least one version exists, because runs target versions and a
-    project without one cannot be run yet. Sorted by name.
+    True iff at least one PUBLISHED version exists, because a run pins a
+    published version (app.runtime.runner.resolve_version_id) and an
+    unpublished, agent-minted draft is not runnable. Sorted by name.
 
     Every flag and count is read off disk — a card never advertises a
     stage/schema/run/version that isn't there. A directory counts as a project
@@ -63,7 +64,7 @@ def list_projects() -> list[dict[str, Any]]:
             "has_document": has_document,
             "has_workflow": has_workflow,
             "has_schemas": has_schemas,
-            "is_ready": len(list_versions(p)) > 0,
+            "is_ready": any(v["published"] for v in list_versions(p)),
             "n_stages": n_stages,
             "n_schemas": n_schemas,
             "n_runs": n_runs,

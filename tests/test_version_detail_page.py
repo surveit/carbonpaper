@@ -75,3 +75,25 @@ def test_run_this_version_gated_on_published(project: Path) -> None:
     pub = client.post(f"/project/demo/workflow/version/{vid}/run", follow_redirects=False)
     assert pub.status_code == 303
     assert "/runs/" in pub.headers["location"]
+
+
+def test_run_this_version_400s_not_500s_on_unbound_input(
+    project: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A published version whose input stage authors no path (the workflow
+    leaves it for a run binding, per Connector's own docstring) is not
+    run-ready — prepare_run raises MissingInputBindingError. The route must
+    report this as a 400, the same way trigger_run does, not let it fall
+    through to an unhandled 500."""
+    unbound_stage = {
+        "id": "load", "name": "Load rows", "type": "input_data",
+        "connector": {"kind": "file", "params": {"format": "csv"}},
+    }
+    meta = versioning.create_version_from_stages(
+        project, [unbound_stage], message="v-unbound", reviewer="local")
+    vid = meta["id"]
+    versioning.publish_version(project, vid, reviewer="local")
+
+    resp = client.post(f"/project/demo/workflow/version/{vid}/run", follow_redirects=False)
+    assert resp.status_code == 400
+    assert "no file bound" in resp.json()["detail"]

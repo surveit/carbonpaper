@@ -143,13 +143,16 @@ def save_dataset_upload(project_dir: Path, filename: str, content: bytes) -> Pat
 
 
 def latest_version_id(project_dir: Path) -> str | None:
-    """The id of the newest version, or None if the project has never been
-    versioned."""
-    versions = list_versions(project_dir)
-    if not versions:
-        return None
-    version_id = versions[0]["id"]
-    return str(version_id) if version_id is not None else None
+    """The id of the newest PUBLISHED version, or None if the project has no
+    published version. Mirrors app.runtime.runner.resolve_version_id's gate: an
+    eval run pins a published version just like a normal run, so an
+    agent-minted draft that is newer but unpublished is skipped, not treated as
+    "the latest"."""
+    for meta in list_versions(project_dir):  # newest-first
+        if meta["published"]:
+            version_id = meta["id"]
+            return str(version_id) if version_id is not None else None
+    return None
 
 
 def eval_status(report: CompatibilityReport, runs: list[EvalRun],

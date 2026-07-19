@@ -77,6 +77,22 @@ def test_versioned_project_is_ready_to_run(examples_root):
     assert ">Live<" in r.text
 
 
+def test_unpublished_only_project_is_not_ready(examples_root):
+    """A project whose only version is an unpublished agent-minted draft is not
+    ready to run — a run pins a published version (resolve_version_id), so
+    "ready" must mean a published version exists, not merely a version."""
+    proj = _make_document_only_project(examples_root, name="drafted")
+    WorkflowVersion(
+        id=f"{proj.name}/20260101T000000", version_id="20260101T000000",
+        created_at="2026-01-01T00:00:00", message="agent draft", reviewer="agent",
+        published=False,
+    ).save()
+    [card] = list_projects()
+    assert card["is_ready"] is False
+    r = client.get("/")
+    assert ">Live<" not in r.text
+
+
 def test_half_written_version_snapshot_fails_the_listing_loudly(examples_root):
     """A stored document that fails the WorkflowVersion contract fails project
     listing LOUDLY (list_versions raises WorkflowLoadError) — the dashboard must

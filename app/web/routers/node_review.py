@@ -7,7 +7,7 @@ run.) It mirrors the queue's decide/partial patterns, lifted from data rows up t
 workflow node specs, and adds immutable version snapshots the runner pins runs to.
 
 State: `node_decisions.parquet` (approvals) under examples/<project>/, and version
-snapshots as documents in the store's `version` collection — managed by
+snapshots as documents in the store's `workflow_version` collection — managed by
 app.services.node_review + app.services.versioning.
 """
 

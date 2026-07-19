@@ -30,15 +30,16 @@ from app.evals.dataset_columns import (
     get_output_columns_from_stage,
 )
 from app.evals.store import latest_version_id, save_eval_run
-from app.services.versioning import load_version_stages
+from app.services.versioning import load_version_meta, load_version_stages
 
 
 def run_eval(
     project_dir: Path, config: EvalConfig, repo_root: Path, *, version_id: str | None = None,
 ) -> EvalRun:
-    """Run `config` against a workflow version (the latest if `version_id` is None)
-    and return the saved EvalRun. Raises EvalNotScorableError if the eval can't be
-    run at all (incompatible, or no dataset attached)."""
+    """Run `config` against a workflow version (the newest PUBLISHED version if
+    `version_id` is None; see `_resolve_version`) and return the saved EvalRun.
+    Raises EvalNotScorableError if the eval can't be run at all (incompatible,
+    no dataset attached, or the resolved version isn't published)."""
     version = _resolve_version(project_dir, version_id)
     workflow = Workflow(stages=load_version_stages(project_dir, version))
     report = validate_eval_compatibility(config, workflow.stages)
@@ -152,10 +153,25 @@ def _write_result_table(run_dir: Path, per_row: pd.DataFrame) -> Path:
 # ── Small helpers ────────────────────────────────────────────────────────────
 
 def _resolve_version(project_dir: Path, version_id: str | None) -> str:
-    version = version_id or latest_version_id(project_dir)
+    """Resolve the workflow version an eval run will be pinned to, mirroring
+    app.runtime.runner.resolve_version_id's gate: an eval run pins a PUBLISHED
+    version only, never an agent-minted draft that merely happens to be
+    newest. An explicit `version_id` must name an existing, published version
+    (a missing version id still raises FileNotFoundError, from
+    load_version_meta); None resolves to the newest published version, or
+    raises if none is published."""
+    if version_id is not None:
+        meta = load_version_meta(project_dir, version_id)
+        if not meta["published"]:
+            raise EvalNotScorableError(
+                f"version '{version_id}' of '{project_dir.name}' is not published; "
+                "an eval run pins a published version — publish it first."
+            )
+        return version_id
+    version = latest_version_id(project_dir)
     if version is None:
         raise EvalNotScorableError(
-            "project has no committed workflow version to run the eval against")
+            "project has no published workflow version to run the eval against")
     return version
 
 

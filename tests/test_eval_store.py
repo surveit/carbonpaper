@@ -235,6 +235,23 @@ def test_latest_version_id_returns_newest(tmp_path: Path):
     assert latest_version_id(tmp_path) == "20260201T000000"
 
 
+def test_latest_version_id_skips_unpublished_draft(tmp_path: Path):
+    """An eval run pins a published version just like the main runner (see
+    app.runtime.runner.resolve_version_id) — a newer, agent-minted unpublished
+    draft is not eligible to be "the latest"."""
+    WorkflowVersion(id=f"{tmp_path.name}/20260101T000000", version_id="20260101T000000",
+            created_at="x", message="m", reviewer="r", published=True).save()
+    WorkflowVersion(id=f"{tmp_path.name}/20260201T000000", version_id="20260201T000000",
+            created_at="x", message="m", reviewer="r", published=False).save()
+    assert latest_version_id(tmp_path) == "20260101T000000"
+
+
+def test_latest_version_id_none_when_only_unpublished(tmp_path: Path):
+    WorkflowVersion(id=f"{tmp_path.name}/20260101T000000", version_id="20260101T000000",
+            created_at="x", message="m", reviewer="r", published=False).save()
+    assert latest_version_id(tmp_path) is None
+
+
 # ── eval_status matrix ────────────────────────────────────────────────────────
 def _report(ok=True, settings=None):
     return CompatibilityReport(ok=ok, problems=[] if ok else ["broken thing"],

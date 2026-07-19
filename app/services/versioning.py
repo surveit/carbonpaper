@@ -80,6 +80,10 @@ class WorkflowVersion(PersistedModel):
     coverage: dict[str, Any] = Field(default_factory=dict)
     stages: list[Stage] = Field(default_factory=list)
     schemas: list[dict[str, Any]] = Field(default_factory=list)
+    # This default never applies on load: `_grandfather_published` below injects
+    # `True` whenever the input data carries no `published` key at all. Every
+    # construction site MUST therefore pass `published=` explicitly — a site
+    # that omits it is born published.
     published: bool = False
     published_at: str | None = None
     published_by: str | None = None

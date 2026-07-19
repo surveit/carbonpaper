@@ -115,6 +115,54 @@ def test_run_eval_raises_when_incompatible(project):
         run_eval(demo, config, repo_root)
 
 
+def test_run_eval_raises_when_explicit_version_is_unpublished(project):
+    """An eval run pins a published version, mirroring the main runner's gate
+    (app.runtime.runner.resolve_version_id) — a named version that exists but
+    was minted as an unpublished agent draft is not runnable, even by id."""
+    repo_root, demo, config = project
+    WorkflowVersion(
+        id="demo/v2-draft", version_id="v2-draft", created_at="2026-07-11T00:00:00",
+        message="agent draft", reviewer="agent",
+        stages=[Stage.model_validate(_load(repo_root)), Stage.model_validate(_CLASSIFY)],
+        published=False,
+    ).save()
+    with pytest.raises(EvalNotScorableError, match="not published"):
+        run_eval(demo, config, repo_root, version_id="v2-draft")
+
+
+def test_run_eval_none_version_id_skips_unpublished_draft(project):
+    """None resolves to the newest PUBLISHED version, skipping a newer
+    unpublished draft — same policy as the main runner."""
+    repo_root, demo, config = project
+    WorkflowVersion(
+        id="demo/v2-draft", version_id="v2-draft", created_at="2026-07-11T00:00:00",
+        message="agent draft", reviewer="agent",
+        stages=[Stage.model_validate(_load(repo_root)), Stage.model_validate(_CLASSIFY)],
+        published=False,
+    ).save()
+    run = run_eval(demo, config, repo_root)
+    assert run.workflow_version == "v1"
+
+
+def test_run_eval_raises_when_only_unpublished_version_exists(tmp_path):
+    """A project whose only version is an unpublished agent draft has no version
+    an eval can run against — same failure as a project with no version at all."""
+    demo = tmp_path / "demo2"
+    demo.mkdir()
+    WorkflowVersion(
+        id="demo2/v1", version_id="v1", created_at="2026-07-10T00:00:00",
+        message="agent draft", reviewer="agent",
+        stages=[Stage.model_validate(_load(tmp_path)), Stage.model_validate(_CLASSIFY)],
+        published=False,
+    ).save()
+    config = EvalConfig(
+        id="label_check", project="demo2", name="Label check",
+        override_stage="load", target_stage="classify",
+        table=None, expected_outputs=[ExpectedOutput(output_column="label", metric="exact")])
+    with pytest.raises(EvalNotScorableError, match="no published workflow version"):
+        run_eval(demo, config, tmp_path)
+
+
 def test_trigger_route_runs_and_redirects_to_the_run(project, monkeypatch):
     """POST .../run scores the eval and 303-redirects to its new run page."""
     repo_root, demo, config = project
