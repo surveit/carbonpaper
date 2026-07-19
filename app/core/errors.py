@@ -82,6 +82,14 @@ class ProjectExistsError(Exception):
     rename is the human's decision."""
 
 
+class DraftNotFoundError(Exception):
+    """No draft exists for a (project, draft_id) — the id is malformed (fails the
+    word-triplet shape), or well-formed but no such document is stored. Drafts
+    are disposable scratch space with no promise of survival, so a miss is an
+    ordinary outcome: the caller starts a new one with create_draft rather than
+    treating this as corruption."""
+
+
 class MissingInputBindingError(Exception):
     """A run was requested but at least one stage's preflight found it unready
     to run — e.g. an input stage with no file bound (no run binding supplied
