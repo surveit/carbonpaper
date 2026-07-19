@@ -174,7 +174,7 @@ def _llm_transform_project(root):
     load = {
         "id": "load", "name": "Load items", "type": "input_data",
         "connector": {"kind": "file",
-                      "params": {"path": "data/items.csv", "format": "csv"}},
+                      "params": {"path": str(root / "data" / "items.csv"), "format": "csv"}},
     }
     score = {
         "id": "score", "name": "Score items", "type": "llm_transform",
@@ -226,10 +226,11 @@ def test_run_subset_surfaces_the_real_row_failure_message(tmp_path, monkeypatch)
         raise RuntimeError("boom")
 
     monkeypatch.setattr(lt, "call_llm", boom)
+    # Path-free connector: `load`'s output is injected below, so no file exists
+    # or is read — declaring one would be a fabricated fixture value.
     load = Stage.model_validate({
         "id": "load", "name": "Load items", "type": "input_data",
-        "connector": {"kind": "file",
-                      "params": {"path": "data/items.csv", "format": "csv"}},
+        "connector": {"kind": "file"},
     })
     score = Stage.model_validate({
         "id": "score", "name": "Score items", "type": "llm_transform",

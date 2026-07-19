@@ -33,13 +33,13 @@ from app.services.versioning import (
 
 _LOAD_STAGE = {
     "id": "load", "name": "Load", "type": "input_data",
-    "connector": {"kind": "computed_static"},
+    "connector": {"kind": "file"},
 }
 
 
 def _seed(project_dir: Path, stage: dict = _LOAD_STAGE) -> None:
     """A minimal, strictly-loadable working copy: one input_data stage. Uses a
-    computed_static connector so no data file needs to exist on disk (these
+    path-free file connector so no data file needs to exist on disk (these
     tests never execute the workflow, only snapshot its spec)."""
     compiled = project_dir / "compiled"
     compiled.mkdir(parents=True, exist_ok=True)
@@ -128,7 +128,8 @@ def test_create_version_invalid_workflow_raises_and_writes_nothing(tmp_path):
     immortalised as a version."""
     (tmp_path / "compiled").mkdir()
     bad = {"id": "load", "name": "Load", "type": "input_data",
-           "connector": {"kind": "file", "params": {"format": "csv"}}}  # no path
+           "connector": {"kind": "file",
+                         "params": {"path": "data/items.csv", "format": "csv"}}}  # relative path
     (tmp_path / "compiled" / "01_load.json").write_text(json.dumps(bad), encoding="utf-8")
 
     with pytest.raises(WorkflowLoadError) as exc:

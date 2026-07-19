@@ -82,30 +82,48 @@ def test_runs_page_shows_one_field_per_file_input(project):
     assert str(project / "a.csv") in resp.text
 
 
-def _corrupt_version_snapshot_with_relative_path(project):
-    """Simulate a legacy version snapshot written before absolute paths were
-    enforced: write directly into the VERSION dir (not the working copy) so
-    load_version_stages hits an unloadable snapshot."""
-    version_id = sorted((project / "versions").iterdir())[-1].name
-    stage_path = project / "versions" / version_id / "compiled" / "01_load.json"
-    stage = json.loads(stage_path.read_text(encoding="utf-8"))
-    stage["connector"]["params"]["path"] = "relative/a.csv"
-    stage_path.write_text(json.dumps(stage), encoding="utf-8")
+def _corrupt_version_document_with_relative_path(project):
+    """Simulate a version document written before absolute paths were enforced:
+    rewrite the stored WorkflowVersion RAW through the store (bypassing model
+    validation, as an older writer effectively did) so the document no longer
+    validates on read. Returns the corrupted version's id."""
+    from app.core.persistence import get_store
+    from app.services.versioning import list_versions
+
+    version_id = list_versions(project)[0]["id"]
+    store = get_store()
+    doc = store.read("workflow_version", f"{project.name}/{version_id}")
+    doc["stages"][0]["connector"]["params"]["path"] = "relative/a.csv"
+    store.write("workflow_version", f"{project.name}/{version_id}", doc)
+    return version_id
 
 
-def test_runs_page_surfaces_issues_for_a_legacy_version_not_500(project):
-    _corrupt_version_snapshot_with_relative_path(project)
+# A version document that no longer validates (e.g. a legacy repo-relative path)
+# is SKIPPED by list_versions (the store's tolerant-listing semantics), so it can
+# never be selected as "the latest" — a project whose only version is invalid
+# behaves as version-less. Loading it EXPLICITLY (a pinned run / resume) must
+# surface validation issues as WorkflowLoadError, never a raw pydantic 500.
+
+def test_runs_page_treats_an_invalid_only_version_as_versionless_not_500(project):
+    _corrupt_version_document_with_relative_path(project)
     resp = client.get("/project/demo/runs")
     assert resp.status_code == 200
-    assert "ABSOLUTE" in resp.text
-    # An empty, silently-passing binding form would hide the problem — it must
-    # not render at all when the version snapshot fails to load.
+    # No silently-passing binding form for a version that can't be selected.
     assert 'name="binding__load"' not in resp.text
 
 
-def test_trigger_run_returns_400_with_issues_for_a_legacy_version(project):
-    _corrupt_version_snapshot_with_relative_path(project)
+def test_trigger_run_returns_400_when_the_only_version_is_invalid(project):
+    _corrupt_version_document_with_relative_path(project)
     resp = client.post("/project/demo/run", data={}, follow_redirects=False)
     assert resp.status_code == 400
-    body = resp.json()
-    assert any("ABSOLUTE" in issue for issue in body["issues"])
+    assert "No version to run" in resp.json()["detail"]
+
+
+def test_loading_an_invalid_version_explicitly_surfaces_issues(project):
+    from app.services.loader import WorkflowLoadError
+    from app.services.versioning import load_version_stages
+
+    version_id = _corrupt_version_document_with_relative_path(project)
+    with pytest.raises(WorkflowLoadError) as exc:
+        load_version_stages(project, version_id)
+    assert any("ABSOLUTE" in issue for issue in exc.value.issues)

@@ -35,9 +35,10 @@ from pydantic import Field, ValidationError
 
 from app.core.errors import DocumentNotFound
 from app.core.models import Stage
+from app.core.models.schema import format_errors
 from app.core.persistence import PersistedModel, get_store
 from app.services import node_review
-from app.services.loader import load_workflow, stage_to_spec_dict
+from app.services.loader import WorkflowLoadError, load_workflow, stage_to_spec_dict
 from app.services.workspace import load_schemas
 
 
@@ -184,6 +185,16 @@ def load_version_stages(project_dir: Path, version_id: str) -> list[Stage]:
         v = WorkflowVersion.load(f"{name}/{version_id}")
     except DocumentNotFound as exc:
         raise FileNotFoundError(f"No version '{version_id}' for project '{name}'") from exc
+    except ValidationError as exc:
+        # On-read integrity failure: the stored document no longer validates
+        # (store corruption, or a version written under older model rules — e.g.
+        # a repo-relative path from before absolute paths were enforced).
+        # Translated to the one error type that means "this workflow doesn't
+        # validate", so callers surface issues instead of 500ing on a raw
+        # pydantic error.
+        raise WorkflowLoadError(
+            f"version document {name}/{version_id}", format_errors(exc)
+        ) from exc
     return v.stages
 
 
