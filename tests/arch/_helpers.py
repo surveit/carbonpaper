@@ -47,6 +47,34 @@ def find_imported_modules(tree: ast.Module) -> set[str]:
     return modules
 
 
+def find_dict_key_uses(tree: ast.Module, keys: set[str]) -> list[tuple[int, str]]:
+    """(lineno, key) of each place the module reads or writes one of `keys` as a
+    dict key: a subscript (`x["path"]`), a `.get("path", ...)` first argument, or
+    a dict-literal key (`{"path": ...}`). String constants elsewhere — docstrings,
+    messages, comparisons — do not count: the rule is about touching the keyed
+    data, not about mentioning the word."""
+    uses: list[tuple[int, str]] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Subscript):
+            target = node.slice
+            if isinstance(target, ast.Constant) and target.value in keys:
+                uses.append((node.lineno, str(target.value)))
+        elif (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "get"
+            and node.args
+            and isinstance(node.args[0], ast.Constant)
+            and node.args[0].value in keys
+        ):
+            uses.append((node.lineno, str(node.args[0].value)))
+        elif isinstance(node, ast.Dict):
+            for key_node in node.keys:
+                if isinstance(key_node, ast.Constant) and key_node.value in keys:
+                    uses.append((key_node.lineno, str(key_node.value)))
+    return uses
+
+
 def find_numeric_get_defaults(tree: ast.Module) -> list[tuple[int, int]]:
     """(lineno, end_lineno) of each `x.get(key, <int/float literal>)` call.
 

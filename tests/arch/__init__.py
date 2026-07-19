@@ -8,7 +8,12 @@ subtree (``find_governed_files(__file__)``) or to the whole repo
 """
 from __future__ import annotations
 
-from arch.predicates import check_no_fabricated_numbers, check_no_import, check_no_raw_disk
+from arch.predicates import (
+    check_no_dict_keys,
+    check_no_fabricated_numbers,
+    check_no_import,
+    check_no_raw_disk,
+)
 from arch.scope import find_governed_files, scan_all_source
 
 __all__ = [
@@ -17,4 +22,5 @@ __all__ = [
     "check_no_raw_disk",
     "check_no_fabricated_numbers",
     "check_no_import",
+    "check_no_dict_keys",
 ]

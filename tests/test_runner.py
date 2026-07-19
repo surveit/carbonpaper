@@ -357,6 +357,7 @@ def test_resume_reapplies_run_bindings_for_a_pending_input_stage(tmp_path):
     manifest = {
         "run_id": run_id, "project": tmp_path.name, "workflow_version": version_id,
         "status": "awaiting_review",
+        "run_bindings": {"load": {"path": str(bound_csv)}},
         "input_bindings": {
             "load": {"path": str(bound_csv), "source": "run",
                      "sha256": "unused-in-this-test", "bytes": bound_csv.stat().st_size},

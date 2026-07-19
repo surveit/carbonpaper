@@ -11,6 +11,7 @@ from pathlib import Path
 from arch._helpers import (
     collect_called_funcs,
     collect_called_methods,
+    find_dict_key_uses,
     find_imported_modules,
     find_numeric_get_defaults,
     parse_module,
@@ -58,6 +59,18 @@ def check_no_import(paths: list[Path], module: str, *, allow: set[str]) -> list[
         imported = find_imported_modules(parse_module(path))
         if any(name == module or name.startswith(f"{module}.") for name in imported):
             offenders.append(posix)
+    return offenders
+
+
+def check_no_dict_keys(paths: list[Path], keys: set[str]) -> list[str]:
+    """Files that read or write any of `keys` as a dict key (subscript, .get,
+    or dict literal). Keeps domain vocabulary out of a module that must stay
+    generic — e.g. the runner must not touch connector params like "path"; only
+    the owning stage module may."""
+    offenders: list[str] = []
+    for path in paths:
+        for lineno, key in find_dict_key_uses(parse_module(path), keys):
+            offenders.append(f"{path.name}:{lineno}  key {key!r}")
     return offenders
 
 

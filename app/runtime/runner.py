@@ -293,6 +293,9 @@ def prepare_run(
         "workflow_version": workflow_version,
         "limit_overrides": limits,
         "offset_overrides": offsets,
+        # The run's bindings verbatim (generic bookkeeping a resume replays),
+        # alongside the stage-owned preflight provenance records.
+        "run_bindings": {sid: dict(params) for sid, params in (bindings or {}).items()},
         "input_bindings": input_records,
         "status": "running",
         "stages": [
@@ -668,19 +671,14 @@ def resume_run(project_dir: Path, run_id: str, repo_root: Path) -> dict[str, Any
             f"without its pinned workflow version."
         )
     stages = versioning.load_version_stages(project_dir, workflow_version)
-    # Re-apply this run's RUN-sourced bindings (recorded as manifest provenance
-    # by prepare_run) to the freshly-reloaded stages. Without this, an input
-    # stage that had not yet executed when the run halted would resume reading
-    # the workflow-authored path (or fail if it authors none) while the
-    # manifest still claims `source: "run"` — a false provenance record.
-    # Manifests from before this feature carry no `input_bindings` key;
-    # `.get(..., {})` keeps those resuming exactly as before.
-    bindings = {
-        stage_id: {"path": rec["path"]}
-        for stage_id, rec in manifest.get("input_bindings", {}).items()
-        if rec["source"] == "run"
-    }
-    stages, _ = apply_run_bindings(stages, bindings)
+    # Replay this run's bindings (recorded verbatim by prepare_run) onto the
+    # freshly-reloaded stages. Without this, a stage that had not yet executed
+    # when the run halted would resume on its workflow-authored params (or fail
+    # if it authors none) while the manifest still claims `source: "run"` — a
+    # false provenance record. Manifests from before this feature carry no
+    # `run_bindings` key; `.get(..., {})` keeps those resuming exactly as
+    # before.
+    stages, _ = apply_run_bindings(stages, manifest.get("run_bindings", {}))
     ordered = topological_sort(stages)
 
     # Reload outputs from disk for stages that completed successfully.
