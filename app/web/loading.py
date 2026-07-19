@@ -173,7 +173,7 @@ def load_manifest(run_dir: Path) -> dict[str, Any]:
     try:
         return run_store.load_run(project, run_dir.name)
     except DocumentNotFound:
-        raise HTTPException(status_code=404, detail="Run not found")
+        raise HTTPException(status_code=404, detail="Run not found") from None
 
 
 def list_runs(project: str) -> list[dict[str, Any]]:

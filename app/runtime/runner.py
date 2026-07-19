@@ -325,7 +325,7 @@ def prepare_run(
 
 def run_prepared(prep: dict[str, Any]) -> dict[str, Any]:
     """Execute a run previously set up by prepare_run(). Suitable for running in
-    a background thread (the manifest is updated on disk as stages complete)."""
+    a background thread (the manifest is persisted to the store as stages complete)."""
     return _execute_stages(prep["ordered"], prep["ctx"], prep["manifest"],
                            prep["run_dir"], outputs_so_far={})
 
