@@ -19,22 +19,16 @@ from app.core.llm_sdk import CLI_PATH
 
 from app.core.agent.registry import build_engine
 from app.core.agent.sdk_engine import CLI_MODEL
+from app.core.agent.session import create_agent_session
 from app.core.agent.store import open_session_store
 from app.core.agent.turns import default_turn_manager
 
-TEMPLATES_DIR = Path(__file__).resolve().parent / "templates"
+TEMPLATES_DIR = Path(__file__).resolve().parent / "chat_templates"
 
 router = APIRouter()
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 _store = open_session_store()
 _turns = default_turn_manager()
-
-
-def create_agent_session(agent_id: str, context: dict, *, title: str | None = None) -> str:
-    """Create a chat session bound to `agent_id` carrying `context`, and return its
-    id. The shared entry point a host route (e.g. an 'Edit with agent' button)
-    calls to open a session it then redirects the browser to."""
-    return _store.create(title=title or f"Agent: {agent_id}", agent_id=agent_id, context=context)
 
 
 def _backend_label() -> str:

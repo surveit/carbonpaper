@@ -3,7 +3,7 @@ llm_sdk.py — low-level Claude Code CLI discovery + event-loop plumbing.
 
 Shared by the runtime's llm_transform dispatch (`app.runtime`), the authoring
 compiler (`app.compiler`), and the chat engine (`app.core.agent.sdk_engine`,
-`app.agent.router`). None of those import each other; each imports this
+`app.web.chat_router`). None of those import each other; each imports this
 neutral base, so the CLI-location + sync-drive logic lives in exactly one
 place. Pure stdlib — no SDK import, no app imports.
 """

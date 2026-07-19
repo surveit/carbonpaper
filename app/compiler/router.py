@@ -2,14 +2,14 @@
 
 The 'Edit with agent' control on a project posts here; this opens a chat session
 bound to the "editing" agent, carrying the project as its context, and redirects
-the browser to that session's chat page. The generic chat surface (app.agent)
-takes over from there."""
+the browser to that session's chat page. The generic chat surface
+(app.web.chat_router) takes over from there."""
 from __future__ import annotations
 
 from fastapi import APIRouter
 from fastapi.responses import RedirectResponse
 
-from app.agent.router import create_agent_session
+from app.core.agent.session import create_agent_session
 
 router = APIRouter()
 
