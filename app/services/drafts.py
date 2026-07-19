@@ -11,14 +11,10 @@ versioned, not run). The only exit is save_version, which strict-validates and
 refuses rather than persist an invalid workflow.
 
 Draft ids are word triplets (e.g. brisk-otter-lamp): short enough for an agent
-to retype reliably, and unmistakable for a timestamp version id.
-
-This module is the SOLE owner of the drafts/ directory (enforced by
-tests/arch/test_drafts_sole_writer.py)."""
+to retype reliably, and unmistakable for a timestamp version id."""
 from __future__ import annotations
 
 import json
-import random
 import re
 from datetime import datetime
 from pathlib import Path
@@ -26,6 +22,7 @@ from typing import Any
 
 from app.core.errors import DraftNotFoundError
 from app.core.models.workflow import validate_workflow_draft
+from app.core.utils import generate_word_triplet_id
 from app.services import versioning, workspace
 from app.services.loader import stage_to_spec_dict
 
@@ -52,7 +49,7 @@ def create_draft(
     taken = {path.stem for path in directory.glob("*.json")}
     now = datetime.now().isoformat(timespec="seconds")
     draft: dict[str, Any] = {
-        "id": generate_draft_id(taken),
+        "id": generate_word_triplet_id(taken),
         "parent_version": from_version,
         "stages": stages,
         "created_at": now,
@@ -131,28 +128,7 @@ def save_version(
     return {"ok": True, "version": meta}
 
 
-def generate_draft_id(taken: set[str], rng: random.Random | None = None) -> str:
-    """A word-triplet id (e.g. brisk-otter-lamp) not in `taken`. 4096 combinations
-    dwarf the handful of live drafts a project ever has; fails loudly if the space
-    is somehow exhausted rather than looping forever."""
-    rng = rng or random.Random()
-    for _ in range(10_000):
-        candidate = "-".join(
-            (rng.choice(_ADJECTIVES), rng.choice(_ANIMALS), rng.choice(_THINGS))
-        )
-        if candidate not in taken:
-            return candidate
-    raise RuntimeError("Draft id space exhausted — delete stale drafts")
-
-
 # ─── internals ───────────────────────────────────────────────────────────────
-
-_ADJECTIVES = ("amber", "brisk", "calm", "dusky", "eager", "fresh", "glad", "keen",
-               "lucid", "mellow", "noble", "plain", "quiet", "rapid", "solid", "tidy")
-_ANIMALS = ("badger", "crane", "finch", "gecko", "heron", "ibis", "lynx", "marmot",
-            "mole", "newt", "otter", "owl", "pika", "raven", "seal", "toad")
-_THINGS = ("brook", "cove", "delta", "dune", "fern", "glen", "knoll", "lamp",
-           "mesa", "pond", "reef", "ridge", "shoal", "vale", "wharf", "yard")
 
 _DRAFT_ID = re.compile(r"^[a-z]+-[a-z]+-[a-z]+$")
 

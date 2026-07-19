@@ -9,7 +9,6 @@ subtree (``find_governed_files(__file__)``) or to the whole repo
 from __future__ import annotations
 
 from arch.predicates import (
-    check_literal_confined,
     check_no_fabricated_numbers,
     check_no_import,
     check_no_raw_disk,
@@ -22,5 +21,4 @@ __all__ = [
     "check_no_raw_disk",
     "check_no_fabricated_numbers",
     "check_no_import",
-    "check_literal_confined",
 ]

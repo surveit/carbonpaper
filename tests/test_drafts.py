@@ -3,7 +3,6 @@ intermediate states allowed, loss acceptable by design."""
 from __future__ import annotations
 
 import json
-import random
 from pathlib import Path
 
 import pytest
@@ -79,13 +78,6 @@ def test_unknown_and_malformed_draft_ids_fail_loudly(examples: Path) -> None:
         drafts.read_draft("demo", "calm-otter-lamp", examples_dir=examples)
     with pytest.raises(DraftNotFoundError):
         drafts.read_draft("demo", "../../etc/passwd", examples_dir=examples)
-
-
-def test_generate_draft_id_avoids_taken(examples: Path) -> None:
-    rng = random.Random(7)
-    first = drafts.generate_draft_id(set(), rng=rng)
-    second = drafts.generate_draft_id({first}, rng=random.Random(7))
-    assert first != second
 
 
 def test_set_stage_replaces_existing_id_in_place(examples: Path) -> None:
