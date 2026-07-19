@@ -205,9 +205,11 @@ def test_compile_workflow_confirm_overwrite_snapshots_then_writes(examples_root:
     assert len(versions) == 1
     snapshot_meta = json.loads((versions[0] / "version.json").read_text(encoding="utf-8"))
     assert snapshot_meta["reviewer"] == "agent"
-    # the snapshot preserves the PRE-regenerate (approved) spec
+    # the snapshot preserves the PRE-regenerate (approved) spec, in the canonical
+    # on-disk form every version is written in (load_version_stages parses it back
+    # to the same Stage; the approval hash is computed over this same canonical form)
     snapshotted_stage = json.loads((versions[0] / "compiled" / "01_load.json").read_text(encoding="utf-8"))
-    assert snapshotted_stage == seeded
+    assert snapshotted_stage == loader.stage_to_spec_dict(Stage.model_validate(seeded))
 
 
 def test_compile_workflow_validation_issues_writes_nothing(examples_root: Path, monkeypatch: pytest.MonkeyPatch) -> None:

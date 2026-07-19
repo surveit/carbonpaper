@@ -55,7 +55,7 @@ class SaveResult(TypedDict):
     success, or the blocking issues on failure."""
     ok: bool
     issues: NotRequired[list[str]]
-    version: NotRequired[dict[str, Any]]   # a VersionMeta.model_dump(mode="json") at the agent JSON boundary
+    version: NotRequired[dict[str, Any]]   # a WorkflowVersion.model_dump(mode="json") at the agent JSON boundary
 
 
 def create_draft(

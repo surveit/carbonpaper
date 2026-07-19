@@ -9,12 +9,11 @@ workflow it executed, never "whatever the working copy happened to be". A
 stage embeds its own input/output schemas, so a version carries no separate
 data-model snapshot.
 
-A version can be minted from the project's working copy (`create_version`,
-which snapshots the working copy's `compiled/` dir) or directly from a list of
-in-memory stage spec dicts with no working copy involved
-(`create_version_from_stages`, e.g. an authoring agent's proposed stages, or
-`app.services.drafts.save_version`'s draft stages) — both write the identical
-on-disk shape.
+Every version is written by ONE pathway: `create_version_from_stages` strict-
+parses a list of stage spec dicts and freezes them on disk. `create_version` is
+a thin adapter over it — it loads and validates the project's working copy
+(`compiled/`) and hands those stages on. Draft proposals
+(`app.services.drafts.save_version`) call `create_version_from_stages` directly.
 
 Layout:
     <project>/versions/<version_id>/
@@ -42,7 +41,6 @@ from __future__ import annotations
 
 import json
 import re
-import shutil
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -65,9 +63,12 @@ from app.services import node_review
 _VERSION_ID = re.compile(r"^\d{8}T\d{6}$")
 
 
-class VersionMeta(BaseModel):
-    """The version.json record: identity, provenance, frozen coverage, and publish
-    state. `published` records human approval (runs pin published versions only)."""
+class WorkflowVersion(BaseModel):
+    """One immutable version of a workflow — its identity, provenance (parent,
+    author, message), the approval coverage frozen at creation, and publish state.
+    This is the `version.json` record; the frozen stages themselves live on disk
+    and load separately via `load_version_stages`. `published` records human
+    approval (runs pin published versions only)."""
     id: str
     created_at: str
     parent_version: str | None
@@ -132,15 +133,15 @@ def load_version_stages(project_dir: Path, version_id: str) -> list[Stage]:
     return load_workflow(vdir)
 
 
-def load_version_meta(project_dir: Path, version_id: str) -> VersionMeta:
+def load_version_meta(project_dir: Path, version_id: str) -> WorkflowVersion:
     """Read versions/<version_id>/version.json. Fails loudly if absent."""
     meta_path = _version_dir(project_dir, version_id) / "version.json"
     if not meta_path.exists():
         raise FileNotFoundError(f"No version.json at {meta_path}")
-    return VersionMeta.model_validate_json(meta_path.read_text(encoding="utf-8"))
+    return WorkflowVersion.model_validate_json(meta_path.read_text(encoding="utf-8"))
 
 
-def list_versions(project_dir: Path) -> list[VersionMeta]:
+def list_versions(project_dir: Path) -> list[WorkflowVersion]:
     """All versions for a project, NEWEST-FIRST, each as its parsed
     version.json. Skips any directory lacking a readable, well-formed
     version.json rather than fabricating metadata for it (a half-written or
@@ -148,7 +149,7 @@ def list_versions(project_dir: Path) -> list[VersionMeta]:
     vroot = versions_dir(project_dir)
     if not vroot.is_dir():
         return []
-    metas: list[VersionMeta] = []
+    metas: list[WorkflowVersion] = []
     for d in vroot.iterdir():
         if not d.is_dir():
             continue
@@ -156,7 +157,7 @@ def list_versions(project_dir: Path) -> list[VersionMeta]:
         if not meta_path.exists():
             continue
         try:
-            metas.append(VersionMeta.model_validate_json(
+            metas.append(WorkflowVersion.model_validate_json(
                 meta_path.read_text(encoding="utf-8")
             ))
         except (json.JSONDecodeError, OSError, pydantic.ValidationError):
@@ -167,7 +168,7 @@ def list_versions(project_dir: Path) -> list[VersionMeta]:
     return metas
 
 
-def publish_version(project_dir: Path, version_id: str, *, reviewer: str) -> VersionMeta:
+def publish_version(project_dir: Path, version_id: str, *, reviewer: str) -> WorkflowVersion:
     """Record human approval on one version: stamp published/published_at/
     published_by into its version.json and return the updated meta. Idempotent —
     an already-published version is returned unchanged (the first stamp wins).
@@ -189,37 +190,26 @@ def create_version(
     message: str,
     reviewer: str,
     parent_version: str | None = None,
-) -> VersionMeta:
-    """Snapshot the working copy's compiled/ into a new versions/<version_id>/
-    and write version.json with coverage frozen at creation time. Returns the
-    version.json meta.
-
-    Coverage is computed from the SNAPSHOT's stages against the live
-    node_decisions store, so the recorded coverage is exactly what was believed
-    about these specs at this instant.
-
-    The working copy is strict-loaded first, through the same loader the runner
-    uses; if it is not a valid workflow this raises WorkflowLoadError and writes
-    nothing. Every version is therefore a loadable workflow, from this seam or
-    any other."""
+) -> WorkflowVersion:
+    """Snapshot the project's working copy (`compiled/`) into a new immutable
+    version. A thin adapter over create_version_from_stages: it strict-loads the
+    working copy first (WorkflowLoadError if it is not a valid workflow — nothing
+    is written), then hands its stages to the one write pathway. FileNotFoundError
+    if there is no working copy to snapshot. Returns the version record (born
+    unpublished)."""
     project_dir = Path(project_dir)
     compiled_src = project_dir / "compiled"
     if not compiled_src.is_dir():
         raise FileNotFoundError(
             f"Cannot create a version: no compiled/ workflow at {compiled_src}"
         )
-
-    # Validate BEFORE writing anything: a version is, by invariant, a loadable
-    # workflow. On failure load_workflow raises WorkflowLoadError and we
-    # snapshot nothing — an invalid workflow can never be immortalised as a
-    # version. (The run-path strict load then only guards on-disk corruption of
-    # an already-valid snapshot.)
-    load_workflow(project_dir)
-
-    version_id, vdir = _new_version_dir(project_dir)
-    shutil.copytree(compiled_src, vdir / "compiled")
-    return _write_version_meta(
-        project_dir, vdir, version_id,
+    # Strict-load the working copy: WorkflowLoadError (with its per-file issues)
+    # if it is not a valid workflow, before any version dir is created. The
+    # validated stages then flow through the single write pathway below.
+    stages = load_workflow(project_dir)
+    return create_version_from_stages(
+        project_dir,
+        [stage_to_spec_dict(stage) for stage in stages],
         message=message, reviewer=reviewer, parent_version=parent_version,
     )
 
@@ -231,7 +221,7 @@ def create_version_from_stages(
     message: str,
     reviewer: str,
     parent_version: str | None = None,
-) -> VersionMeta:
+) -> WorkflowVersion:
     """Freeze raw stage spec dicts into a new immutable version, with no working
     copy involved. The list is strict-parsed first (parse_workflow); an invalid
     workflow raises pydantic.ValidationError and writes nothing — every version is
@@ -270,13 +260,13 @@ def _write_version_meta(
     message: str,
     reviewer: str,
     parent_version: str | None,
-) -> VersionMeta:
+) -> WorkflowVersion:
     """Freeze approval coverage from the just-written snapshot's stages and write
     version.json. Every version is born unpublished."""
     stages = _load_stages_from(vdir / "compiled")
     decisions = node_review.load_node_decisions(project_dir)
     coverage = Coverage.model_validate(node_review.coverage_for(stages, decisions))
-    meta = VersionMeta(
+    meta = WorkflowVersion(
         id=version_id,
         created_at=datetime.now().isoformat(timespec="seconds"),
         parent_version=parent_version,
@@ -297,5 +287,5 @@ __all__ = [
     "create_version",
     "create_version_from_stages",
     "publish_version",
-    "VersionMeta",
+    "WorkflowVersion",
 ]

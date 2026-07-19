@@ -8,7 +8,7 @@
 
   Context the route passes:
     state    = project_view.shell_state(pdir); section = "versions"
-    versions = versioning.list_versions(pdir): VersionMeta models, each carrying
+    versions = versioning.list_versions(pdir): WorkflowVersion models, each carrying
                its own `published` bool — newest-first (may be empty)
 #}
 {% block section %}
