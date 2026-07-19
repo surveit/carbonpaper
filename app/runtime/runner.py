@@ -232,7 +232,7 @@ def prepare_run(
     immutable snapshot (versioning.load_version_stages), never from the live
     `compiled/` working copy, so working-copy edits can never affect this run.
     `version_id` resolution is documented on resolve_version_id (None -> the
-    latest existing version; a version-less project raises
+    newest PUBLISHED version; a project with no published version raises
     NoVersionToRunError); the resolved id is recorded in the manifest as
     `workflow_version`.
 
@@ -257,9 +257,10 @@ def prepare_run(
     bound, or the bound file absent — fails loudly (MissingInputBindingError,
     aggregating every unready stage).
 
-    Raises NoVersionToRunError (no version exists) or WorkflowLoadError
-    (from the version snapshot's strict load) before the run dir is created, so
-    a run with no version — or an invalid workflow — never leaves a run behind.
+    Raises NoVersionToRunError (no version exists, or none is published) or
+    WorkflowLoadError (from the version snapshot's strict load) before the run
+    dir is created, so a run with no published version — or an invalid
+    workflow — never leaves a run behind.
     The same holds for a binding/preflight failure: it is raised before the
     run dir is created."""
     workflow_version = resolve_version_id(project_dir, version_id)
@@ -337,7 +338,7 @@ def execute_run(
     bindings: Mapping[str, Mapping[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Run the workflow once (synchronous). Returns the manifest dict. `version_id`
-    pins the run to a workflow version (None -> latest existing; none exists ->
+    pins the run to a workflow version (None -> newest published; none published ->
     NoVersionToRunError); see prepare_run / resolve_version_id.
     `limits`/`offsets` are per-run row slicing overrides; `bindings` is the
     per-run connector-param override; see prepare_run."""

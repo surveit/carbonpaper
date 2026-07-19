@@ -22,7 +22,9 @@ workflow with an invalid stage (`WorkflowLoadError`), the viewer (same loader) r
 per-file issues. Typed `Stage` objects flow end-to-end.
 
 ## `app/runtime/` — the Runner  → `app/runtime/AGENTS.md`
-`runner.py` — `execute_run`/`prepare_run`/`run_prepared`/`resume_run`. Per stage: validate
+`runner.py` — `execute_run`/`prepare_run`/`run_prepared`/`resume_run`; every run pins to a
+PUBLISHED workflow version (`resolve_version_id`, defaulting to the newest published one) —
+never the working copy, never a draft, never an unpublished version. Per stage: validate
 inputs, reject duplicate rows, dispatch, validate output, write `outputs/<stage>.parquet`,
 flush `manifest.json` mid-run; halt-on-review + resume; per-run `--limit`/`--offset`;
 `field_checks`. `stages/` — one module per type. `llm.py`/`options.py` — the agent
@@ -47,16 +49,25 @@ app.compiler`; persistence in `app/services/compilation.py`. Authoring UI not on
 
 ## `app/web/` — the web layer  → `app/AGENTS.md`
 Thin `app/main.py` (~40 lines); routes under `/project/{project}/…`. Routers: `project.py`
-(index, workflow graph, stage detail, ER), `runs.py` (trigger/list/detail/status-poll, rows
-+ CSV, scratch preview, resume), `review.py` (review queue), `node_review.py` (node approval
-+ editing + version creation — the only writer to `compiled/`). `web/{config,loading,
-diagrams}.py` — paths + Jinja · viewer reads over the loader · mermaid/ER builders.
+(index, workflow graph, stage detail, ER, plus the version-first IA — `/workflow/versions`
+lists every version newest-first, `/workflow/version/{id}` is one immutable version's
+read-only detail with Publish/Run-this-version; the mutable editor stays at `/workflow`),
+`runs.py` (trigger/list/detail/status-poll, rows + CSV, scratch preview, resume, plus
+running one specific pinned version), `review.py` (review queue), `node_review.py` (node
+approval + editing + version creation + publish — the only writer to `compiled/`).
+`web/{config,loading,diagrams}.py` — paths + Jinja · viewer reads over the loader ·
+mermaid/ER builders.
 
 ## `app/services/` — web-independent workflow logic
 `loader.py` (canonical stage loader, above); `compilation.py` (compile persistence for
 `app/compiler`); `node_review.py` (content-hash approval over stage specs — read its
-docstring; the canonical-hash invariant must not rot); `versioning.py` (freeze compiled
-stages + schemas into a `Version` document in the store).
+docstring; the canonical-hash invariant must not rot); `versioning.py` (`create_version_from_stages`
+is the ONE write path for a `WorkflowVersion` document, born unpublished; `publish_version`
+is the metadata-only human-approval act a run's `resolve_version_id` requires before it
+will pin to that version); `drafts.py` (disposable, mutable scratch — a `Draft` document
+that may be invalid mid-edit, edited only through the editing agent's tools; `save_version`
+is its only exit, strict-validating before freezing it into a version via
+`create_version_from_stages`).
 
 ## `app/chat/`, `app/core/llm/`, tests
 `chat/` — a reusable PydanticAI chat engine (streaming, tools, file persistence), separate
