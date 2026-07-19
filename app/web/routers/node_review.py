@@ -6,8 +6,9 @@ review queue in `review.py`, which is "is this run's DATA right?" and DOES halt 
 run.) It mirrors the queue's decide/partial patterns, lifted from data rows up to
 workflow node specs, and adds immutable version snapshots the runner pins runs to.
 
-State lives under examples/<project>/: `node_decisions.parquet` (approvals)
-and `versions/<id>/` (snapshots), managed by app.services.node_review + app.services.versioning.
+State: `node_decisions.parquet` (approvals) under examples/<project>/, and version
+snapshots as documents in the store's `version` collection — managed by
+app.services.node_review + app.services.versioning.
 """
 
 from __future__ import annotations

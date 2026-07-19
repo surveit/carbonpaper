@@ -17,7 +17,8 @@ number or unsourced claim defeats the purpose. Two rules recur in the code:
   validated `Stage` per file; a DAG of typed stages, every edge schema-validated).
 
 A project dir also holds `code/`, `data/`, `runs/<id>/` (outputs + `manifest.json`),
-`decisions/`, `versions/<id>/` — runtime data, not source.
+and `decisions/` — runtime data, not source. Versions are documents in the store
+(the `version` collection), not a project subdir.
 
 ## The three features
 | Feature | Code | Status |

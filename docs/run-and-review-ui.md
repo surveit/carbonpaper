@@ -74,9 +74,9 @@ run's flagged rows.
   before touching the loader.
 - `POST …/node/{stage_id}/edit` is the **only** code path that writes to
   `compiled/`.
-- `POST /project/{p}/version` freezes `compiled/` into `versions/<version_id>/`
-  with approval coverage recorded; `GET /project/{p}/versions` lists the frozen
-  versions.
+- `POST /project/{p}/version` freezes `compiled/` into a `Version` document (in
+  the store) with approval coverage recorded; `GET /project/{p}/versions` lists
+  the frozen versions.
 
 ## Where to confirm visually
 
