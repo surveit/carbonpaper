@@ -21,8 +21,8 @@ from app.core.models.schema import (
     _SNAKE_RE,
     format_errors,
 )
-from app.core.models.stages.code import check_inline_function_code
-from app.core.models.stages.stage_tests import StageTest, check_stage_tests
+from app.core.models.stages.code import validate_inline_function_code
+from app.core.models.stages.stage_tests import StageTest, validate_stage_tests
 from app.core.prompt_template import find_template_fields
 
 # ── Enumerated vocabularies ──────────────────────────────────────────────────
@@ -196,7 +196,7 @@ class PythonFunction(_Base):
         write time instead of raising only when the runner exec()s it."""
         if self.kind != FunctionKind.inline or not self.code:
             return self
-        check_inline_function_code(self.code, self.function)
+        validate_inline_function_code(self.code, self.function)
         return self
 
 
@@ -373,7 +373,7 @@ class Stage(_Base):
 
     @model_validator(mode="after")
     def _tests_shape(self) -> "Stage":
-        check_stage_tests(self.type, self.input_ids, self.tests or [])
+        validate_stage_tests(self.type, self.input_ids, self.tests or [])
         return self
 
     @model_validator(mode="after")

@@ -21,14 +21,14 @@ from app.core.models.schema import _Base, format_errors
 from app.core.models.stage import Stage
 
 
-def check_unique_ids(stages: list[Stage]) -> list[str]:
+def validate_unique_ids(stages: list[Stage]) -> list[str]:
     """One issue per stage id that appears more than once."""
     ids = [s.id for s in stages]
     dupes = sorted({i for i in ids if ids.count(i) > 1})
     return [f"duplicate stage id `{d}`" for d in dupes]
 
 
-def check_inputs_resolve(stages: list[Stage]) -> list[str]:
+def validate_inputs_resolve(stages: list[Stage]) -> list[str]:
     """One issue per input that names no existing stage — all of them, so a
     reviewer fixes every dangling edge in one pass rather than one per re-run."""
     ids = {s.id for s in stages}
@@ -73,7 +73,7 @@ def graph_issues(stages: list[Stage]) -> list[str]:
     """Every cross-stage problem in the workflow graph: duplicate ids, dangling
     inputs, and a cycle. The single source of truth both the strict model
     validator and the non-fatal `validate_workflow` build on."""
-    return check_unique_ids(stages) + check_inputs_resolve(stages) + detect_cycle(stages)
+    return validate_unique_ids(stages) + validate_inputs_resolve(stages) + detect_cycle(stages)
 
 
 class Workflow(_Base):

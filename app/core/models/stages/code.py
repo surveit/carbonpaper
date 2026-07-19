@@ -21,7 +21,7 @@ def _binds_name(tree: ast.Module, name: str) -> bool:
     return False
 
 
-def check_inline_function_code(code: str, function: str | None) -> None:
+def validate_inline_function_code(code: str, function: str | None) -> None:
     """Raise ValueError if inline function `code` does not compile or does not
     define the function the runtime calls (`transform` by default, or `function`).
 

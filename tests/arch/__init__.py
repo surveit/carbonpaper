@@ -13,6 +13,7 @@ from arch.predicates import (
     check_no_fabricated_numbers,
     check_no_import,
     check_no_raw_disk,
+    find_check_prefixed_functions,
 )
 from arch.scope import find_governed_files, scan_all_source
 
@@ -23,4 +24,5 @@ __all__ = [
     "check_no_fabricated_numbers",
     "check_no_import",
     "check_no_dict_keys",
+    "find_check_prefixed_functions",
 ]

@@ -17,7 +17,7 @@ whose `execute` fixes the calling convention:
 Preservation is carried by the shape CLASS — RowMap/Source preserve, Frame does
 not — so a handler cannot separately declare itself preserving; it either is a
 row-driven shape or it is not. Which shape a type registers under must agree with
-the core fact (app.core.models is_grain_and_order_preserving); check_registry_matches_model
+the core fact (app.core.models is_grain_and_order_preserving); validate_registry_matches_model
 holds the two equal when the registry module is imported.
 """
 from __future__ import annotations
@@ -113,7 +113,7 @@ class FrameHandler(StageHandler):
 _PRESERVING_SHAPES = (RowMapHandler, SourceHandler)
 
 
-def check_registry_matches_model(handlers: dict[StageType, StageHandler]) -> None:
+def validate_registry_matches_model(handlers: dict[StageType, StageHandler]) -> None:
     """Raise unless each stage type's registered shape agrees with the core
     is_grain_and_order_preserving fact. Called when the registry module is
     imported, so a mis-shaped registration — a preserving type wired as a

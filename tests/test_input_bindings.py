@@ -1,6 +1,6 @@
 """Run bindings: per-run connector-param overrides merged into just-loaded
 stages (apply_run_bindings, generic), and the stage-owned preflight that judges
-run-readiness and records provenance (check_stages_ready + PREFLIGHTS).
+run-readiness and records provenance (validate_stages_ready + PREFLIGHTS).
 
 Pure-function tests plus prepare_run integration (manifest provenance, sha256,
 no-run-dir-on-failure).
@@ -15,7 +15,7 @@ import pytest
 
 from app.core.errors import MissingInputBindingError
 from app.core.models import Stage
-from app.runtime.runner import apply_run_bindings, check_stages_ready, execute_run
+from app.runtime.runner import apply_run_bindings, validate_stages_ready, execute_run
 from app.runtime.stages.input_data import read_input_data
 from app.services.versioning import create_version
 
@@ -98,19 +98,19 @@ def test_original_stages_untouched(tmp_path):
     assert original.connector.params["path"] == authored
 
 
-# ── check_stages_ready: stage-owned preflight, aggregated loudly ────────────
+# ── validate_stages_ready: stage-owned preflight, aggregated loudly ────────────
 
 def test_unready_stages_all_named(tmp_path):
     stages = [_input_stage("load_a", None), _input_stage("load_b", None)]
     with pytest.raises(MissingInputBindingError) as exc:
-        check_stages_ready(stages, {"load_a": "workflow", "load_b": "workflow"})
+        validate_stages_ready(stages, {"load_a": "workflow", "load_b": "workflow"})
     assert "load_a" in str(exc.value) and "load_b" in str(exc.value)
 
 
 def test_ready_stage_yields_provenance_record(tmp_path):
     data = tmp_path / "a.csv"
     pd.DataFrame({"x": [1]}).to_csv(data, index=False)
-    records = check_stages_ready(
+    records = validate_stages_ready(
         [_input_stage("load", str(data))], {"load": "workflow"})
     assert records["load"]["path"] == str(data)
     assert records["load"]["source"] == "workflow"
@@ -122,7 +122,7 @@ def test_connectorless_stage_has_no_preflight(tmp_path):
     data = tmp_path / "a.csv"
     pd.DataFrame({"x": [1]}).to_csv(data, index=False)
     stages = [_input_stage("load", str(data)), _connectorless_stage("derive", "load")]
-    records = check_stages_ready(stages, {"load": "workflow"})
+    records = validate_stages_ready(stages, {"load": "workflow"})
     assert set(records) == {"load"}
 
 

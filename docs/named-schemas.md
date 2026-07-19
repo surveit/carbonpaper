@@ -31,7 +31,7 @@ The contract, in `app/core/models/named_schemas.py`:
     - `ground_truth` — external truth used only by eval.
 - A **`NamedColumn`** may carry `references: <schema>` or `<schema>.<column>` —
   an explicit foreign key, making the data model a real graph rather than
-  PK-name-collision guessing. `check_references_resolve` validates the graph.
+  PK-name-collision guessing. `validate_references_resolve` validates the graph.
 - A **`SchemaLibrary`** is the set of a project's named schemas;
   `parse_schema_library` / `validate_schema_library` are the entry points.
 

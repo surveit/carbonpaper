@@ -88,7 +88,7 @@ def _run_one_test(stage: Stage, test: StageTest) -> StageTestResult:
         ref.id: _build_frame(test.inputs[ref.id], ref.table_schema)
         for ref in stage.inputs
     }
-    malformed = _check_test_against_schemas(stage, test, input_frames)
+    malformed = _validate_test_against_schemas(stage, test, input_frames)
     if malformed:
         return StageTestResult(test.name, "malformed", message=malformed)
     try:
@@ -115,7 +115,7 @@ def _build_frame(rows: list[dict[str, Any]], schema: TableSchema | None) -> pd.D
     return pd.DataFrame(columns=columns)
 
 
-def _check_test_against_schemas(
+def _validate_test_against_schemas(
     stage: Stage, test: StageTest, input_frames: dict[str, pd.DataFrame]
 ) -> str | None:
     """Schema-lint the test itself (error-severity issues only): its input

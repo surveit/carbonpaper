@@ -33,6 +33,15 @@ def collect_called_methods(tree: ast.Module) -> set[str]:
     }
 
 
+def find_function_defs(tree: ast.Module) -> list[tuple[str, int]]:
+    """(name, lineno) of every function or async-function definition."""
+    return [
+        (node.name, node.lineno)
+        for node in ast.walk(tree)
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+    ]
+
+
 def find_imported_modules(tree: ast.Module) -> set[str]:
     """Dotted names this module imports: `import a.b` and `from a.b import c` both
     yield "a.b". Relative imports (`from . import x`) are skipped — they are

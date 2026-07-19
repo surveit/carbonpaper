@@ -30,7 +30,7 @@ class StageTest(_Base):
     expected: list[dict[str, Any]]
 
 
-def check_stage_tests(
+def validate_stage_tests(
     stage_type: str, input_ids: list[str], tests: list[StageTest]
 ) -> None:
     """Raise ValueError if `tests` are malformed for a stage of `stage_type`

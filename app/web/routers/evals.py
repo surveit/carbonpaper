@@ -23,7 +23,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 from app.core.errors import EvalNotScorableError
 from app.core.models import EvalConfig, EvalRun, Stage
-from app.evals.compatibility import check_eval_compatibility
+from app.evals.compatibility import validate_eval_compatibility
 from app.evals.runner import run_eval
 from app.evals.store import (
     eval_status,
@@ -99,7 +99,7 @@ def _render_eval_detail(
     still fits the workflow (compatibility), a read-only preview of the eval
     dataset if one is attached, the scoring rules, and the run history."""
     stages = load_stages_or_empty(project).stages
-    report = check_eval_compatibility(config, stages)
+    report = validate_eval_compatibility(config, stages)
     runs, runs_error = _list_eval_runs_safely(project_dir, config.id)
     latest_version = latest_version_id(project_dir)
     status = ("broken" if runs_error else
@@ -210,7 +210,7 @@ def _resolve_eval_status(
 ) -> tuple[str, str | None]:
     """The one-word status for a loaded config, plus a run-listing error string
     if its `eval_run/` has a corrupt file (which forces `broken`)."""
-    report = check_eval_compatibility(config, stages)
+    report = validate_eval_compatibility(config, stages)
     runs, run_issue = _list_eval_runs_safely(project_dir, config.id)
     status = ("broken" if run_issue else
               eval_status(report, runs, latest_version,

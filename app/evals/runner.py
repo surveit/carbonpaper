@@ -24,7 +24,7 @@ from app.core.models import (
     EvalConfig, EvalRun, EvalRunSettings, FileFormat, Stage, TableRef, Workflow,
 )
 from app.runtime.runner import run_subset
-from app.evals.compatibility import CompatibilityReport, check_eval_compatibility
+from app.evals.compatibility import CompatibilityReport, validate_eval_compatibility
 from app.evals.dataset_columns import (
     deconflict_column_names,
     get_output_columns_from_stage,
@@ -41,7 +41,7 @@ def run_eval(
     run at all (incompatible, or no dataset attached)."""
     version = _resolve_version(project_dir, version_id)
     workflow = Workflow(stages=load_version_stages(project_dir, version))
-    report = check_eval_compatibility(config, workflow.stages)
+    report = validate_eval_compatibility(config, workflow.stages)
     _require_runnable(config, report)
     settings = report.settings
     assert settings is not None  # report.ok (checked above) guarantees settings

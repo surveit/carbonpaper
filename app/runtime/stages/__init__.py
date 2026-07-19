@@ -26,7 +26,7 @@ from .execution import (
     RowMapHandler,
     SourceHandler,
     StageHandler,
-    check_registry_matches_model,
+    validate_registry_matches_model,
 )
 from .human_review_queue import handle_human_review_queue
 from .input_data import preflight_input_data, read_input_data
@@ -59,7 +59,7 @@ HANDLERS: dict[StageType, StageHandler] = {
 
 # A mis-shaped registration (e.g. a frame handler for a type the model declares
 # preserving) must not start the app — fail here, at import.
-check_registry_matches_model(HANDLERS)
+validate_registry_matches_model(HANDLERS)
 
 __all__ = [
     "HANDLERS",
@@ -71,7 +71,7 @@ __all__ = [
     "RowMapHandler",
     "SourceHandler",
     "StageHandler",
-    "check_registry_matches_model",
+    "validate_registry_matches_model",
     "handle_aggregate",
     "handle_human_review_queue",
     "handle_join",

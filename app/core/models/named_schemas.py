@@ -67,14 +67,14 @@ class NamedSchema(TableSchema):
         return v
 
 
-def check_unique_schema_names(schemas: list[NamedSchema]) -> None:
+def validate_unique_schema_names(schemas: list[NamedSchema]) -> None:
     names = [s.name for s in schemas]
     dupes = sorted({n for n in names if names.count(n) > 1})
     if dupes:
         raise ValueError(f"duplicate schema name(s): {dupes}")
 
 
-def check_references_resolve(schemas: list[NamedSchema]) -> None:
+def validate_references_resolve(schemas: list[NamedSchema]) -> None:
     by_name = {s.name: s for s in schemas}
     for s in schemas:
         for col in s.columns:
@@ -97,8 +97,8 @@ class SchemaLibrary(_Base):
 
     @model_validator(mode="after")
     def _validate_library(self) -> "SchemaLibrary":
-        check_unique_schema_names(self.schemas)
-        check_references_resolve(self.schemas)
+        validate_unique_schema_names(self.schemas)
+        validate_references_resolve(self.schemas)
         return self
 
 

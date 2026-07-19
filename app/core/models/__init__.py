@@ -41,8 +41,8 @@ from app.core.models.stage import (
 from app.core.models.stages.stage_tests import StageTest
 from app.core.models.workflow import (
     Workflow,
-    check_inputs_resolve,
-    check_unique_ids,
+    validate_inputs_resolve,
+    validate_unique_ids,
     detect_cycle,
     parse_workflow,
     validate_workflow,
@@ -53,8 +53,8 @@ from app.core.models.named_schemas import (
     NamedSchema,
     SchemaKind,
     SchemaLibrary,
-    check_references_resolve,
-    check_unique_schema_names,
+    validate_references_resolve,
+    validate_unique_schema_names,
     parse_reference,
     parse_schema_library,
     validate_named_schema,
@@ -175,10 +175,10 @@ __all__ = [
     "AggregateConfig", "QueueConfig", "PublishConfig", "ReviewConfig",
     "InputRef", "Stage", "StageTest", "validate_stage",
     "Workflow", "parse_workflow", "validate_workflow", "validate_workflow_draft",
-    "check_unique_ids", "check_inputs_resolve", "detect_cycle",
+    "validate_unique_ids", "validate_inputs_resolve", "detect_cycle",
     "SchemaKind", "NamedColumn", "NamedSchema", "SchemaLibrary",
     "parse_schema_library", "validate_schema_library", "validate_named_schema",
-    "check_unique_schema_names", "check_references_resolve", "parse_reference",
+    "validate_unique_schema_names", "validate_references_resolve", "parse_reference",
     # general
     "TableRef",
     # eval contract
