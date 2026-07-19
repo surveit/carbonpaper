@@ -2,11 +2,20 @@
 share python_functions.py). `HANDLERS` maps stage type to a shaped handler:
 the shape (row-mapped / source / frame) fixes what the runtime hands the
 handler — see execution.py. The runner and preview run a stage through
-`handler.execute(...)`."""
+`handler.execute(...)`.
+
+`PREFLIGHTS` maps a stage type to its prepare-time readiness check: given the
+stage (with any run bindings already applied), return (issues, record) —
+human-readable issues naming what stops this stage from running ([] = ready),
+and a provenance record for the run manifest (None when unready). Only types
+whose readiness a valid model can't guarantee register one; the runner calls
+whatever is registered without knowing what any stage type checks."""
 
 from __future__ import annotations
 
-from app.core.models.stage import StageType
+from typing import Any, Callable
+
+from app.core.models.stage import Stage, StageType
 
 from ..options import DEFAULT_PARALLEL
 from ._shared import HaltForReview
@@ -20,11 +29,17 @@ from .execution import (
     check_registry_matches_model,
 )
 from .human_review_queue import handle_human_review_queue
-from .input_data import read_input_data
+from .input_data import preflight_input_data, read_input_data
 from .join import handle_join
 from .llm_transform import make_llm_row_mapper
 from .publish import handle_publish
 from .python_functions import handle_python_frame_function, make_python_row_mapper
+
+Preflight = Callable[[Stage], tuple[list[str], dict[str, Any] | None]]
+
+PREFLIGHTS: dict[StageType, Preflight] = {
+    StageType.input_data: preflight_input_data,
+}
 
 HANDLERS: dict[StageType, StageHandler] = {
     StageType.input_data: SourceHandler(read_input_data),
@@ -48,6 +63,8 @@ check_registry_matches_model(HANDLERS)
 
 __all__ = [
     "HANDLERS",
+    "PREFLIGHTS",
+    "Preflight",
     "HaltForReview",
     "FrameHandler",
     "Row",
@@ -62,5 +79,6 @@ __all__ = [
     "handle_python_frame_function",
     "make_llm_row_mapper",
     "make_python_row_mapper",
+    "preflight_input_data",
     "read_input_data",
 ]

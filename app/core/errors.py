@@ -81,7 +81,9 @@ class ProjectExistsError(Exception):
 
 
 class MissingInputBindingError(Exception):
-    """A run was requested but at least one file-kind input stage has no file
-    bound: no run binding was supplied and the workflow itself authors no path.
-    Raised before the run directory is created — a run never starts on inputs
-    that would have to be guessed. The message names every unbound stage."""
+    """A run was requested but at least one stage's preflight found it unready
+    to run — e.g. an input stage with no file bound (no run binding supplied
+    and the workflow itself authors no path), or bound to a file that does not
+    exist. Raised before the run directory is created — a run never starts on
+    inputs that would have to be guessed. The message names every unready
+    stage."""

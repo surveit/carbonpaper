@@ -21,17 +21,18 @@ import time
 import traceback
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
 
 import pandas as pd
 import pyarrow.lib as pa_lib
+from pydantic import ValidationError as PydanticValidationError
 
 from app.core.errors import MissingInputBindingError, NoVersionToRunError, SubsetRunError
-from app.core.models import Connector, ConnectorKind, Stage, StageType, Workflow
+from app.core.models import Connector, Stage, StageType, Workflow
 from app.services.loader import WorkflowLoadError
 from app.services import versioning
 
-from .stages import HANDLERS, HaltForReview
+from .stages import HANDLERS, PREFLIGHTS, HaltForReview
 from .validation import Issue, validate_dataframe
 
 
@@ -124,112 +125,86 @@ def resolve_version_id(project_dir: Path, version_id: str | None) -> str:
     )
 
 
-def apply_input_bindings(
-    stages: list[Stage], bindings: dict[str, Any] | None
-) -> tuple[list[Stage], dict[str, dict[str, Any]]]:
-    """Apply per-run input bindings to just-loaded stages, and check that every
-    file-kind input stage ends up with a file to read.
+def apply_run_bindings(
+    stages: list[Stage], bindings: Mapping[str, Mapping[str, Any]] | None
+) -> tuple[list[Stage], dict[str, str]]:
+    """Apply per-run bindings to just-loaded stages. A binding is a dict of
+    connector params, keyed by stage id, merged over that stage's connector
+    params for this run only. Bound stages are replaced by re-validated copies
+    (the Connector model enforces its own param rules — e.g. a `path` must be
+    absolute); the given stages are never mutated, so the version snapshot
+    stays immutable.
 
-    `bindings` maps an input stage id to a binding: an absolute path string
-    (shorthand) or a params dict ({path, format?, ...}) merged over the stage's
-    connector params. Bound stages are replaced by validated copies — the given
-    stages are never mutated. Returns (stages, resolved) where resolved maps
-    every file-kind input stage id to {"params": ..., "source": "run"|"workflow"}.
+    This function knows nothing about what any param MEANS — that a connector
+    reads a file, needs a path, has a format. Param semantics live in the
+    Connector model (validation) and in each stage type's preflight
+    (run-readiness — see stages.PREFLIGHTS).
 
-    Fails loudly on: a binding keyed to anything but a file-kind input stage, a
-    relative or empty binding path, and any file-kind input stage left with no
-    path (MissingInputBindingError, naming all of them)."""
-    normalized = {k: _normalize_binding(k, v) for k, v in (bindings or {}).items()}
-    file_input_ids = {s.id for s in stages if _reads_file(s)}
-    unknown = set(normalized) - file_input_ids
-    if unknown:
+    Returns (stages, param_sources): param_sources maps every
+    connector-carrying stage id to where its effective params came from —
+    "run" (a binding was applied) or "workflow" (authored params, untouched).
+
+    Fails loudly on a binding keyed to a stage id that does not exist or
+    carries no connector, and on a binding value that is not a dict of params."""
+    connector_ids = {s.id for s in stages if s.connector is not None}
+    given = dict(bindings or {})
+    unbindable = sorted(set(given) - connector_ids)
+    if unbindable:
         raise ValueError(
-            f"bindings target stage id(s) that are not file-kind input stages: "
-            f"{sorted(unknown)}; file inputs are {sorted(file_input_ids)}")
+            f"bindings target stage id(s) with no connector to bind: {unbindable}; "
+            f"bindable stages are {sorted(connector_ids)}")
 
-    out: list[Stage] = []
-    resolved: dict[str, dict[str, Any]] = {}
-    for stage in stages:
-        if stage.id in normalized:
-            stage = _rebind_connector(stage, normalized[stage.id])
-            assert stage.connector is not None
-            resolved[stage.id] = {"params": dict(stage.connector.params), "source": "run"}
-        elif stage.id in file_input_ids:
-            assert stage.connector is not None
-            resolved[stage.id] = {"params": dict(stage.connector.params), "source": "workflow"}
-        out.append(stage)
-
-    unbound = [
-        sid for sid, entry in resolved.items()
-        if not entry.get("params", {}).get("path")
+    rebound = [
+        _merge_connector_params(stage, given[stage.id]) if stage.id in given else stage
+        for stage in stages
     ]
-    unbound.sort()
-    if unbound:
-        raise MissingInputBindingError(
-            "no file bound for input stage(s) "
-            + ", ".join(f"`{s}`" for s in unbound)
-            + " — supply a run binding, or author an absolute path in the workflow")
-    return out, resolved
+    param_sources = {
+        sid: "run" if sid in given else "workflow" for sid in connector_ids
+    }
+    return rebound, param_sources
 
 
-def _reads_file(stage: Stage) -> bool:
-    return (stage.type == StageType.input_data
-            and stage.connector is not None
-            and stage.connector.kind == ConnectorKind.file)
-
-
-def _normalize_binding(stage_id: str, value: Any) -> dict[str, Any]:
-    if isinstance(value, str):
-        params = {"path": value}
-    elif isinstance(value, dict):
-        params = dict(value)
-    else:
+def _merge_connector_params(stage: Stage, binding: Mapping[str, Any]) -> Stage:
+    """A copy of `stage` with `binding` merged over its connector params,
+    re-validated as a whole Connector so a bad param fails at prepare, not
+    mid-run."""
+    if not isinstance(binding, Mapping):
         raise ValueError(
-            f"binding for `{stage_id}` must be a path string or a params dict, "
-            f"got {type(value).__name__}: {value!r}"
-        )
-    path = params.get("path")
-    if not isinstance(path, str) or not path.strip() or not Path(path).is_absolute():
-        raise ValueError(f"binding for `{stage_id}` needs an ABSOLUTE file path, got {path!r}")
-    return params
-
-
-def _rebind_connector(stage: Stage, binding: dict[str, Any]) -> Stage:
-    """A copy of `stage` with `binding` merged over its connector params. The
-    connector is re-validated as a whole (absolute path, known format), so a bad
-    binding fails here, not mid-run."""
-    assert stage.connector is not None
-    connector = Connector.model_validate({
-        **stage.connector.model_dump(),
-        "params": {**stage.connector.params, **binding},
-    })
+            f"binding for `{stage.id}` must be a dict of connector params, "
+            f"got {type(binding).__name__}: {binding!r}")
+    assert stage.connector is not None  # caller filters to connector-carrying stages
+    try:
+        connector = Connector.model_validate({
+            **stage.connector.model_dump(),
+            "params": {**stage.connector.params, **binding},
+        })
+    except PydanticValidationError as err:
+        raise ValueError(f"binding for `{stage.id}` is invalid: {err}") from err
     return stage.model_copy(update={"connector": connector})
 
 
-def _describe_input_files(resolved: dict[str, dict[str, Any]]) -> dict[str, dict[str, Any]]:
-    """Provenance record for each file-kind input: the designated absolute path,
-    which scope designated it (run binding or the workflow itself), and a
-    content hash + size streamed now, at prepare time. A designated file that
-    does not exist is a prepare-time error, not a mid-run one."""
+def check_stages_ready(
+    stages: list[Stage], param_sources: dict[str, str]
+) -> dict[str, dict[str, Any]]:
+    """Run each stage type's preflight — the stage-owned readiness check and
+    provenance record (stages.PREFLIGHTS) — over the whole workflow, BEFORE the
+    run dir is created. Every issue is aggregated into one
+    MissingInputBindingError so a caller fixes all unready stages in one pass.
+    Returns the provenance records keyed by stage id, each tagged with where
+    its params came from ("run" binding or the "workflow" itself)."""
+    issues: list[str] = []
     records: dict[str, dict[str, Any]] = {}
-    for stage_id, entry in resolved.items():
-        path = Path(entry["params"]["path"])
-        if not path.is_file():
-            raise FileNotFoundError(
-                f"input `{stage_id}`: bound file does not exist or is not a file: {path}")
-        digest, size = _hash_file(path)
-        records[stage_id] = {"path": str(path), "source": entry["source"],
-                             "sha256": digest, "bytes": size}
+    for stage in stages:
+        preflight = PREFLIGHTS.get(StageType(stage.type))
+        if preflight is None:
+            continue
+        stage_issues, record = preflight(stage)
+        issues.extend(stage_issues)
+        if record is not None:
+            records[stage.id] = {**record, "source": param_sources[stage.id]}
+    if issues:
+        raise MissingInputBindingError("; ".join(issues))
     return records
-
-
-def _hash_file(path: Path, chunk_size: int = 1 << 20) -> tuple[str, int]:
-    digest, total = hashlib.sha256(), 0
-    with path.open("rb") as handle:
-        while block := handle.read(chunk_size):
-            digest.update(block)
-            total += len(block)
-    return digest.hexdigest(), total
 
 
 def prepare_run(
@@ -238,7 +213,7 @@ def prepare_run(
     version_id: str | None = None,
     limits: dict[str, int] | None = None,
     offsets: dict[str, int] | None = None,
-    bindings: dict[str, Any] | None = None,
+    bindings: Mapping[str, Mapping[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Create the run dir + id and write an initial `running` manifest (all
     stages pending) so a caller can redirect to the run page immediately and
@@ -262,25 +237,27 @@ def prepare_run(
     part of the run's provenance and survives a halt/resume. Unknown stage
     ids fail loudly.
 
-    `bindings` supplies an absolute file path per file-kind input stage for
-    this run only, overriding any path authored in the workflow (see
-    apply_input_bindings). Every file-kind input stage's designated path —
-    whether run-bound or workflow-authored — is recorded in the manifest
-    (`input_bindings`) as provenance: the absolute path, its source
-    (`"run"`/`"workflow"`), and a sha256 + byte count read from the file now.
-    An input stage left with no path, or a binding naming an unknown/non-file
-    stage id, fails loudly (MissingInputBindingError / ValueError); a bound or
-    authored path that does not exist on disk fails loudly (FileNotFoundError).
+    `bindings` is a per-run connector-param override: {stage_id: params dict}
+    merged over that stage's connector params for this run only (see
+    apply_run_bindings — the runner attaches no meaning to the params; the
+    Connector model validates them and each stage type's preflight decides
+    run-readiness). Each preflight's provenance record — for an input stage,
+    the absolute path plus a sha256 + byte count streamed now — lands in the
+    manifest (`input_bindings`), tagged with the params' source
+    (`"run"`/`"workflow"`). A binding naming a stage with no connector fails
+    loudly (ValueError); a stage whose preflight finds it unready — no file
+    bound, or the bound file absent — fails loudly (MissingInputBindingError,
+    aggregating every unready stage).
 
     Raises NoVersionToRunError (no version exists) or WorkflowLoadError
     (from the version snapshot's strict load) before the run dir is created, so
     a run with no version — or an invalid workflow — never leaves a run behind.
-    The same holds for a binding/input-file failure: it is raised before the
+    The same holds for a binding/preflight failure: it is raised before the
     run dir is created."""
     workflow_version = resolve_version_id(project_dir, version_id)
     stages = versioning.load_version_stages(project_dir, workflow_version)
-    stages, resolved_inputs = apply_input_bindings(stages, bindings)
-    input_records = _describe_input_files(resolved_inputs)
+    stages, param_sources = apply_run_bindings(stages, bindings)
+    input_records = check_stages_ready(stages, param_sources)
     ordered = topological_sort(stages)
 
     limits = dict(limits or {})
@@ -346,13 +323,13 @@ def execute_run(
     version_id: str | None = None,
     limits: dict[str, int] | None = None,
     offsets: dict[str, int] | None = None,
-    bindings: dict[str, Any] | None = None,
+    bindings: Mapping[str, Mapping[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Run the workflow once (synchronous). Returns the manifest dict. `version_id`
     pins the run to a workflow version (None -> latest existing; none exists ->
     NoVersionToRunError); see prepare_run / resolve_version_id.
-    `limits`/`offsets` are per-run row slicing overrides; `bindings` supplies
-    per-run input file paths; see prepare_run."""
+    `limits`/`offsets` are per-run row slicing overrides; `bindings` is the
+    per-run connector-param override; see prepare_run."""
     return run_prepared(
         prepare_run(project_dir, repo_root, version_id,
                     limits=limits, offsets=offsets, bindings=bindings)
@@ -691,21 +668,19 @@ def resume_run(project_dir: Path, run_id: str, repo_root: Path) -> dict[str, Any
             f"without its pinned workflow version."
         )
     stages = versioning.load_version_stages(project_dir, workflow_version)
-    # Re-apply this run's RUN-sourced input bindings (recorded as manifest
-    # provenance by prepare_run) to the freshly-reloaded stages. Without this, a
-    # file-kind input stage that had not yet executed when the run halted would
-    # resume reading the workflow-authored path (or KeyError if it authors
-    # none) while the manifest still claims `source: "run"` — a false
-    # provenance record. Manifests from before this feature carry no
-    # `input_bindings` key; `.get(..., {})` keeps those resuming exactly as
-    # before (apply_input_bindings with no bindings is the no-op-plus-check
-    # path, matching every file-kind input still needing a workflow path).
+    # Re-apply this run's RUN-sourced bindings (recorded as manifest provenance
+    # by prepare_run) to the freshly-reloaded stages. Without this, an input
+    # stage that had not yet executed when the run halted would resume reading
+    # the workflow-authored path (or fail if it authors none) while the
+    # manifest still claims `source: "run"` — a false provenance record.
+    # Manifests from before this feature carry no `input_bindings` key;
+    # `.get(..., {})` keeps those resuming exactly as before.
     bindings = {
-        stage_id: rec["path"]
+        stage_id: {"path": rec["path"]}
         for stage_id, rec in manifest.get("input_bindings", {}).items()
         if rec["source"] == "run"
     }
-    stages, _ = apply_input_bindings(stages, bindings)
+    stages, _ = apply_run_bindings(stages, bindings)
     ordered = topological_sort(stages)
 
     # Reload outputs from disk for stages that completed successfully.
