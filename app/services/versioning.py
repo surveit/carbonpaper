@@ -50,7 +50,7 @@ from typing import Any
 import pydantic
 from pydantic import BaseModel, model_validator
 
-from app.core.models import Stage
+from app.core.models import Coverage, Stage
 from app.core.models.workflow import parse_workflow
 from app.services.loader import (
     load_compiled_dir,
@@ -63,18 +63,6 @@ from app.services import node_review
 # Version ids are second-resolution timestamps (%Y%m%dT%H%M%S); this guard keeps
 # a caller-supplied id from being used as a path segment with any other shape.
 _VERSION_ID = re.compile(r"^\d{8}T\d{6}$")
-
-
-class Coverage(BaseModel):
-    """Approval coverage frozen into a version at creation: how many of its stages
-    were approved / rejected / edited-stale / unreviewed, the total, and the
-    approved percentage. Built from node_review.coverage_for's dict."""
-    approved: int
-    rejected: int
-    edited_stale: int
-    unreviewed: int
-    total: int
-    approved_pct: float
 
 
 class VersionMeta(BaseModel):
@@ -310,5 +298,4 @@ __all__ = [
     "create_version_from_stages",
     "publish_version",
     "VersionMeta",
-    "Coverage",
 ]

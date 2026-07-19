@@ -59,6 +59,7 @@ from app.core.models.named_schemas import (
     validate_named_schema,
     validate_schema_library,
 )
+from app.core.models.coverage import Coverage
 from app.core.models.table import TableRef
 from app.core.models.eval import (
     CodeScorer,
@@ -181,6 +182,7 @@ __all__ = [
     "check_unique_schema_names", "check_references_resolve", "parse_reference",
     # general
     "TableRef",
+    "Coverage",
     # eval contract
     "StageOutputOverride", "ExpectedOutput", "CodeScorer", "EvalConfig",
     "EvalRunSettings", "EvalRun",
