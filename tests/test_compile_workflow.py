@@ -16,11 +16,13 @@ from app.core.agent.turns import TurnManager
 from app.core.models import parse_schema_library
 from app.core.models.workflow import Workflow
 
-_STAGE = {
-    "id": "load", "type": "input_data", "name": "Load documents",
-    "connector": {"kind": "file", "params": {"path": "data/docs.csv", "format": "csv"}},
-    "output_schema": {"columns": [{"name": "doc_id", "type": "str"}]},
-}
+def _stage(tmp_path):
+    return {
+        "id": "load", "type": "input_data", "name": "Load documents",
+        "connector": {"kind": "file",
+                      "params": {"path": str(tmp_path / "data" / "docs.csv"), "format": "csv"}},
+        "output_schema": {"columns": [{"name": "doc_id", "type": "str"}]},
+    }
 
 
 # ── build_workflow_agent: how the Agent is configured + grounded ──────────────────────
@@ -69,8 +71,9 @@ class _FakeTurnAgent:
 
     task = "compile the workflow and submit it"
 
-    def __init__(self) -> None:
+    def __init__(self, tmp_path: Any) -> None:
         self._answer: Any = None
+        self._tmp_path = tmp_path
 
     @property
     def answer(self) -> Any:
@@ -82,18 +85,20 @@ class _FakeTurnAgent:
         class _Engine:
             async def stream_turn(self, prompt: str, *, message_history: Any, emit: Any, resume: Any):
                 emit({"kind": "text", "text": "compiled"})
-                agent._answer = Workflow.model_validate({"stages": [_STAGE]})
+                agent._answer = Workflow.model_validate({"stages": [_stage(agent._tmp_path)]})
                 return [{"role": "assistant", "parts": [{"type": "text", "text": "compiled"}]}], None
 
         return _Engine()
 
 
-def test_start_workflow_generation_agent_runs_a_live_turn_and_calls_back(monkeypatch: Any):
+def test_start_workflow_generation_agent_runs_a_live_turn_and_calls_back(
+    monkeypatch: Any, tmp_path: Any
+):
     store = SessionStore()
     turns = TurnManager()
     monkeypatch.setattr(wf, "open_session_store", lambda: store)
     monkeypatch.setattr(wf, "default_turn_manager", lambda: turns)
-    monkeypatch.setattr(wf, "build_workflow_agent", lambda *a, **k: _FakeTurnAgent())
+    monkeypatch.setattr(wf, "build_workflow_agent", lambda *a, **k: _FakeTurnAgent(tmp_path))
     got: dict = {}
 
     async def _drive() -> str:
@@ -119,3 +124,8 @@ def test_start_workflow_generation_agent_runs_a_live_turn_and_calls_back(monkeyp
 def test_workflow_system_prompt_submits_and_optimizes_for_reviewability():
     assert "submit_answer" in WORKFLOW_SYSTEM_PROMPT              # the agent submits
     assert "review" in WORKFLOW_SYSTEM_PROMPT.lower()            # optimize for human reviewability
+
+
+def test_prompt_forbids_inventing_file_paths():
+    line = next(prompt_line for prompt_line in WORKFLOW_SYSTEM_PROMPT.splitlines() if "input_data" in prompt_line)
+    assert "never include a file path" in line.lower()

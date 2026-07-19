@@ -6,6 +6,7 @@ from pydantic import ValidationError
 
 from app.core import models as m
 from app.core.llm import LLMModel
+from app.core.models.stage import Connector
 
 
 def S(**kw):
@@ -48,10 +49,10 @@ def test_table_schema_ok():
 
 
 # ── per-type stage contract ──────────────────────────────────────────────────
-def test_valid_input_data():
+def test_valid_input_data(tmp_path):
     s = m.Stage.model_validate(S(
         id="load", type="input_data",
-        connector={"kind": "file", "params": {"path": "d.csv", "format": "csv"}}))
+        connector={"kind": "file", "params": {"path": str(tmp_path / "d.csv"), "format": "csv"}}))
     assert s.type == m.StageType.input_data
 
 
@@ -108,10 +109,10 @@ def test_python_function_inline_valid_transform_ok():
                              function={"kind": "inline", "code": "def transform(row): return row"}))
 
 
-def test_bad_id_snake_case():
+def test_bad_id_snake_case(tmp_path):
     with pytest.raises(ValidationError):
         m.Stage.model_validate(S(id="BadId", type="input_data",
-                                 connector={"kind": "file", "params": {"path": "d.csv"}}))
+                                 connector={"kind": "file", "params": {"path": str(tmp_path / "d.csv")}}))
 
 
 def test_unknown_type_raises():
@@ -137,9 +138,9 @@ def test_input_ids_property():
     assert s.input_ids == ["a", "b"]
 
 
-def test_source_parses_as_sourceref():
+def test_source_parses_as_sourceref(tmp_path):
     s = m.Stage.model_validate(S(id="load", type="input_data",
-                                 connector={"kind": "file", "params": {"path": "d.csv"}},
+                                 connector={"kind": "file", "params": {"path": str(tmp_path / "d.csv")}},
                                  source={"doc": "x.md", "section": "S1", "lines": [1, 2]}))
     assert s.source.doc == "x.md" and s.source.lines == [1, 2]
 
@@ -186,9 +187,9 @@ def test_unimplemented_connector_kind_rejected():
         m.Connector.model_validate({"kind": "http", "params": {"url": "x"}})
 
 
-def test_implemented_connectors_ok():
-    m.Connector.model_validate({"kind": "file", "params": {"path": "d.csv", "format": "csv"}})
-    m.Connector.model_validate({"kind": "computed_static", "params": {}})
+def test_implemented_connectors_ok(tmp_path):
+    m.Connector.model_validate({"kind": "file", "params": {"path": str(tmp_path / "d.csv"), "format": "csv"}})
+    m.Connector.model_validate({"kind": "file", "params": {}})
 
 
 def test_weighted_formula_cut():
@@ -199,9 +200,9 @@ def test_weighted_formula_cut():
                                         "value_column": "v", "weight_column": "w"})
 
 
-def test_unknown_file_format_rejected():
+def test_unknown_file_format_rejected(tmp_path):
     with pytest.raises(ValidationError):
-        m.Connector.model_validate({"kind": "file", "params": {"path": "d.xyz", "format": "xyz"}})
+        m.Connector.model_validate({"kind": "file", "params": {"path": str(tmp_path / "d.xyz"), "format": "xyz"}})
 
 
 def test_model_enum_accepts_known():
@@ -222,9 +223,9 @@ def test_model_enum_rejects_unknown():
 
 
 # ── non-fatal helper ─────────────────────────────────────────────────────────
-def test_validate_stage_helper():
+def test_validate_stage_helper(tmp_path):
     assert m.validate_stage(S(id="load", type="input_data",
-                              connector={"kind": "file", "params": {"path": "d.csv"}})) == []
+                              connector={"kind": "file", "params": {"path": str(tmp_path / "d.csv")}})) == []
     assert m.validate_stage({"id": "BadId", "type": "input_data", "name": "x", "connector": {"kind": "file"}})
 
 
@@ -250,17 +251,32 @@ def test_inputs_accept_bare_id_shorthand():
     assert s.inputs[0].table_schema is None
 
 
-def test_file_connector_requires_path():
-    with pytest.raises(ValidationError, match="params.path"):
-        m.Stage.model_validate(S(id="load", type="input_data",
-                                 connector={"kind": "file", "params": {"format": "csv"}}))
+def test_file_connector_without_path_is_valid():
+    c = Connector.model_validate({"kind": "file", "params": {}})
+    assert c.params.get("path") is None
 
 
-def test_file_connector_rejects_unknown_format():
+def test_file_connector_relative_path_rejected(tmp_path):
+    with pytest.raises(ValidationError, match="ABSOLUTE"):
+        Connector.model_validate({"kind": "file", "params": {"path": "data/items.csv"}})
+
+
+def test_file_connector_absolute_path_valid(tmp_path):
+    p = str(tmp_path / "items.csv")
+    c = Connector.model_validate({"kind": "file", "params": {"path": p}})
+    assert c.params["path"] == p
+
+
+def test_file_connector_empty_path_rejected():
+    with pytest.raises(ValidationError):
+        Connector.model_validate({"kind": "file", "params": {"path": ""}})
+
+
+def test_file_connector_rejects_unknown_format(tmp_path):
     with pytest.raises(ValidationError, match="unknown file format"):
         m.Stage.model_validate(S(id="load", type="input_data",
                                  connector={"kind": "file",
-                                            "params": {"path": "d.csv", "format": "derived"}}))
+                                            "params": {"path": str(tmp_path / "d.csv"), "format": "derived"}}))
 
 
 def test_unknown_keys_rejected():
@@ -270,9 +286,9 @@ def test_unknown_keys_rejected():
                                  queue={"hash_colums": ["x"]}))  # typo'd key must fail
 
 
-def test_enum_fields_are_plain_strings():
+def test_enum_fields_are_plain_strings(tmp_path):
     s = m.Stage.model_validate(S(id="load", type="input_data",
-                                 connector={"kind": "file", "params": {"path": "d.csv"}}))
+                                 connector={"kind": "file", "params": {"path": str(tmp_path / "d.csv")}}))
     assert s.type == "input_data" and isinstance(s.type, str)
     assert s.connector is not None and isinstance(s.connector.kind, str)
 
@@ -283,9 +299,9 @@ def test_aggregation_requires_value_column_except_count():
         m.AggregationOp.model_validate({"output_column": "t", "formula": "sum"})
 
 
-def test_stage_eval_block_is_kept():
+def test_stage_eval_block_is_kept(tmp_path):
     s = m.Stage.model_validate(S(id="load", type="input_data",
-                                 connector={"kind": "file", "params": {"path": "d.csv"}},
+                                 connector={"kind": "file", "params": {"path": str(tmp_path / "d.csv")}},
                                  eval={"metrics": ["recall"]}))
     assert s.eval == {"metrics": ["recall"]}
 

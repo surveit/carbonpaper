@@ -21,17 +21,18 @@ import time
 import traceback
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
 
 import pandas as pd
 import pyarrow.lib as pa_lib
+from pydantic import ValidationError as PydanticValidationError
 
-from app.core.errors import NoVersionToRunError, SubsetRunError
-from app.core.models import Stage, Workflow
+from app.core.errors import MissingInputBindingError, NoVersionToRunError, SubsetRunError
+from app.core.models import Connector, Stage, StageType, Workflow
 from app.services.loader import WorkflowLoadError
 from app.services import versioning
 
-from .stages import HANDLERS, HaltForReview
+from .stages import HANDLERS, PREFLIGHTS, HaltForReview
 from .validation import Issue, validate_dataframe
 
 
@@ -93,7 +94,7 @@ def _reject_duplicate_input_rows(df: pd.DataFrame, input_id: str, stage_id: str)
     )
 
 
-def _resolve_version_id(project_dir: Path, version_id: str | None) -> str:
+def resolve_version_id(project_dir: Path, version_id: str | None) -> str:
     """Resolve the workflow version a run will be pinned to. Every run MUST target a
     real, existing version — we never blank it, never fabricate one, never
     silently read the working copy, and never CREATE one as a run side effect.
@@ -124,12 +125,95 @@ def _resolve_version_id(project_dir: Path, version_id: str | None) -> str:
     )
 
 
+def apply_run_bindings(
+    stages: list[Stage], bindings: Mapping[str, Mapping[str, Any]] | None
+) -> tuple[list[Stage], dict[str, str]]:
+    """Apply per-run bindings to just-loaded stages. A binding is a dict of
+    connector params, keyed by stage id, merged over that stage's connector
+    params for this run only. Bound stages are replaced by re-validated copies
+    (the Connector model enforces its own param rules — e.g. a `path` must be
+    absolute); the given stages are never mutated, so the version snapshot
+    stays immutable.
+
+    This function knows nothing about what any param MEANS — that a connector
+    reads a file, needs a path, has a format. Param semantics live in the
+    Connector model (validation) and in each stage type's preflight
+    (run-readiness — see stages.PREFLIGHTS).
+
+    Returns (stages, param_sources): param_sources maps every
+    connector-carrying stage id to where its effective params came from —
+    "run" (a binding was applied) or "workflow" (authored params, untouched).
+
+    Fails loudly on a binding keyed to a stage id that does not exist or
+    carries no connector, and on a binding value that is not a dict of params."""
+    connector_ids = {s.id for s in stages if s.connector is not None}
+    given = dict(bindings or {})
+    unbindable = sorted(set(given) - connector_ids)
+    if unbindable:
+        raise ValueError(
+            f"bindings target stage id(s) with no connector to bind: {unbindable}; "
+            f"bindable stages are {sorted(connector_ids)}")
+
+    rebound = [
+        _merge_connector_params(stage, given[stage.id]) if stage.id in given else stage
+        for stage in stages
+    ]
+    param_sources = {
+        sid: "run" if sid in given else "workflow" for sid in connector_ids
+    }
+    return rebound, param_sources
+
+
+def _merge_connector_params(stage: Stage, binding: Mapping[str, Any]) -> Stage:
+    """A copy of `stage` with `binding` merged over its connector params,
+    re-validated as a whole Connector so a bad param fails at prepare, not
+    mid-run."""
+    if not isinstance(binding, Mapping):
+        raise ValueError(
+            f"binding for `{stage.id}` must be a dict of connector params, "
+            f"got {type(binding).__name__}: {binding!r}")
+    assert stage.connector is not None  # caller filters to connector-carrying stages
+    try:
+        connector = Connector.model_validate({
+            **stage.connector.model_dump(),
+            "params": {**stage.connector.params, **binding},
+        })
+    except PydanticValidationError as err:
+        raise ValueError(f"binding for `{stage.id}` is invalid: {err}") from err
+    return stage.model_copy(update={"connector": connector})
+
+
+def check_stages_ready(
+    stages: list[Stage], param_sources: dict[str, str]
+) -> dict[str, dict[str, Any]]:
+    """Run each stage type's preflight — the stage-owned readiness check and
+    provenance record (stages.PREFLIGHTS) — over the whole workflow, BEFORE the
+    run dir is created. Every issue is aggregated into one
+    MissingInputBindingError so a caller fixes all unready stages in one pass.
+    Returns the provenance records keyed by stage id, each tagged with where
+    its params came from ("run" binding or the "workflow" itself)."""
+    issues: list[str] = []
+    records: dict[str, dict[str, Any]] = {}
+    for stage in stages:
+        preflight = PREFLIGHTS.get(StageType(stage.type))
+        if preflight is None:
+            continue
+        stage_issues, record = preflight(stage)
+        issues.extend(stage_issues)
+        if record is not None:
+            records[stage.id] = {**record, "source": param_sources[stage.id]}
+    if issues:
+        raise MissingInputBindingError("; ".join(issues))
+    return records
+
+
 def prepare_run(
     project_dir: Path,
     repo_root: Path,
     version_id: str | None = None,
     limits: dict[str, int] | None = None,
     offsets: dict[str, int] | None = None,
+    bindings: Mapping[str, Mapping[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Create the run dir + id and write an initial `running` manifest (all
     stages pending) so a caller can redirect to the run page immediately and
@@ -139,7 +223,7 @@ def prepare_run(
     The run is PINNED to a workflow version: stages are loaded from the version's
     immutable snapshot (versioning.load_version_stages), never from the live
     `compiled/` working copy, so working-copy edits can never affect this run.
-    `version_id` resolution is documented on _resolve_version_id (None -> the
+    `version_id` resolution is documented on resolve_version_id (None -> the
     latest existing version; a version-less project raises
     NoVersionToRunError); the resolved id is recorded in the manifest as
     `workflow_version`.
@@ -153,11 +237,27 @@ def prepare_run(
     part of the run's provenance and survives a halt/resume. Unknown stage
     ids fail loudly.
 
+    `bindings` is a per-run connector-param override: {stage_id: params dict}
+    merged over that stage's connector params for this run only (see
+    apply_run_bindings — the runner attaches no meaning to the params; the
+    Connector model validates them and each stage type's preflight decides
+    run-readiness). Each preflight's provenance record — for an input stage,
+    the absolute path plus a sha256 + byte count streamed now — lands in the
+    manifest (`input_bindings`), tagged with the params' source
+    (`"run"`/`"workflow"`). A binding naming a stage with no connector fails
+    loudly (ValueError); a stage whose preflight finds it unready — no file
+    bound, or the bound file absent — fails loudly (MissingInputBindingError,
+    aggregating every unready stage).
+
     Raises NoVersionToRunError (no version exists) or WorkflowLoadError
     (from the version snapshot's strict load) before the run dir is created, so
-    a run with no version — or an invalid workflow — never leaves a run behind."""
-    workflow_version = _resolve_version_id(project_dir, version_id)
+    a run with no version — or an invalid workflow — never leaves a run behind.
+    The same holds for a binding/preflight failure: it is raised before the
+    run dir is created."""
+    workflow_version = resolve_version_id(project_dir, version_id)
     stages = versioning.load_version_stages(project_dir, workflow_version)
+    stages, param_sources = apply_run_bindings(stages, bindings)
+    input_records = check_stages_ready(stages, param_sources)
     ordered = topological_sort(stages)
 
     limits = dict(limits or {})
@@ -193,6 +293,10 @@ def prepare_run(
         "workflow_version": workflow_version,
         "limit_overrides": limits,
         "offset_overrides": offsets,
+        # The run's bindings verbatim (generic bookkeeping a resume replays),
+        # alongside the stage-owned preflight provenance records.
+        "run_bindings": {sid: dict(params) for sid, params in (bindings or {}).items()},
+        "input_bindings": input_records,
         "status": "running",
         "stages": [
             {"stage_id": s.id, "type": s.type, "name": s.name,
@@ -222,14 +326,16 @@ def execute_run(
     version_id: str | None = None,
     limits: dict[str, int] | None = None,
     offsets: dict[str, int] | None = None,
+    bindings: Mapping[str, Mapping[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Run the workflow once (synchronous). Returns the manifest dict. `version_id`
     pins the run to a workflow version (None -> latest existing; none exists ->
-    NoVersionToRunError); see prepare_run / _resolve_version_id.
-    `limits`/`offsets` are per-run row slicing overrides; see prepare_run."""
+    NoVersionToRunError); see prepare_run / resolve_version_id.
+    `limits`/`offsets` are per-run row slicing overrides; `bindings` is the
+    per-run connector-param override; see prepare_run."""
     return run_prepared(
         prepare_run(project_dir, repo_root, version_id,
-                    limits=limits, offsets=offsets)
+                    limits=limits, offsets=offsets, bindings=bindings)
     )
 
 
@@ -565,6 +671,14 @@ def resume_run(project_dir: Path, run_id: str, repo_root: Path) -> dict[str, Any
             f"without its pinned workflow version."
         )
     stages = versioning.load_version_stages(project_dir, workflow_version)
+    # Replay this run's bindings (recorded verbatim by prepare_run) onto the
+    # freshly-reloaded stages. Without this, a stage that had not yet executed
+    # when the run halted would resume on its workflow-authored params (or fail
+    # if it authors none) while the manifest still claims `source: "run"` — a
+    # false provenance record. Manifests from before this feature carry no
+    # `run_bindings` key; `.get(..., {})` keeps those resuming exactly as
+    # before.
+    stages, _ = apply_run_bindings(stages, manifest.get("run_bindings", {}))
     ordered = topological_sort(stages)
 
     # Reload outputs from disk for stages that completed successfully.

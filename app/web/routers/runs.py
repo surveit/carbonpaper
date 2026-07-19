@@ -6,12 +6,14 @@ from __future__ import annotations
 
 import threading
 import traceback
+from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request, Response
+from fastapi.datastructures import FormData
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
-from app.core.errors import NoVersionToRunError, RowOutOfRange, StageNotInRun
+from app.core.errors import MissingInputBindingError, NoVersionToRunError, RowOutOfRange, StageNotInRun
 from app.services.loader import WorkflowLoadError, load_workflow
 from app.runtime.preview import PREVIEWABLE_TYPES, PreviewError, run_stage_preview
 from app.runtime.runner import prepare_run, resume_run, run_prepared
@@ -22,6 +24,7 @@ from app.web.diagrams import TYPE_CLASS, TYPE_GLYPH, build_mermaid_graph
 from app.web.loading import (
     build_llm_example,
     find_stage,
+    list_file_inputs,
     list_runs,
     load_manifest,
     load_output_preview,
@@ -52,15 +55,21 @@ def run_in_background(target, *args) -> None:
 
 
 @router.post("/project/{project}/run")
-async def trigger_run(project: str):
+async def trigger_run(request: Request, project: str):
     project_dir = EXAMPLES_DIR / project
     if not project_dir.is_dir():
         raise HTTPException(status_code=404, detail=f"No project '{project}'")
     # Set up the run (writes an initial `running` manifest), kick off execution
     # in a background thread, and redirect immediately. The run page polls.
+    # _collect_bindings itself loads the version's stages (list_file_inputs), so
+    # it can raise WorkflowLoadError for an unloadable snapshot just like
+    # prepare_run below — both must land in the same 400 handling.
     try:
-        prep = prepare_run(project_dir, REPO_ROOT)
-    except NoVersionToRunError as exc:
+        bindings = _collect_bindings(await request.form(), project_dir)
+        prep = prepare_run(project_dir, REPO_ROOT, bindings=bindings)
+    except (NoVersionToRunError, MissingInputBindingError, ValueError) as exc:
+        # ValueError here is binding/limit/offset validation failures raised by
+        # apply_run_bindings / prepare_run — not a catch-all for other bugs.
         return JSONResponse({"detail": str(exc)}, status_code=400)
     except WorkflowLoadError as exc:
         return JSONResponse({"detail": "compiled workflow failed validation",
@@ -72,6 +81,23 @@ async def trigger_run(project: str):
     )
 
 
+def _collect_bindings(form: FormData, project_dir: Path) -> dict[str, dict[str, str]]:
+    """Read `binding__<stage_id>` form fields into run bindings (each a
+    connector-params dict, {"path": ...}). A field whose value equals the
+    workflow-authored path is NOT a binding — the workflow is the designating
+    source, and the manifest provenance should say so."""
+    authored = {fi["stage_id"]: fi["path"] for fi in list_file_inputs(project_dir)}
+    bindings: dict[str, dict[str, str]] = {}
+    for key, value in form.items():
+        if not key.startswith("binding__"):
+            continue
+        stage_id = key[len("binding__"):]
+        path = str(value).strip()
+        if path and path != authored.get(stage_id, ""):
+            bindings[stage_id] = {"path": path}
+    return bindings
+
+
 @router.get("/project/{project}/runs", response_class=HTMLResponse)
 async def runs_index(request: Request, project: str):
     """RUNS section of the project shell: the runs list, framed by the sidebar. Passes
@@ -80,6 +106,9 @@ async def runs_index(request: Request, project: str):
     pdir = EXAMPLES_DIR / project
     if not pdir.is_dir():
         raise HTTPException(status_code=404, detail=f"No project '{project}'")
+    # A stored version that no longer validates raises WorkflowLoadError from
+    # any listing/load (shell_state's version count included) and fails this
+    # page loudly — the remedy is a store migration, not a tolerant render.
     return templates.TemplateResponse(
         request,
         "section_runs.html",
@@ -87,6 +116,7 @@ async def runs_index(request: Request, project: str):
             "state": shell_state(pdir),
             "section": "runs",
             "runs": list_runs(project),
+            "file_inputs": list_file_inputs(pdir),
         },
     )
 

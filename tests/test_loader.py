@@ -12,13 +12,17 @@ from app.services.loader import (
     load_workflow,
 )
 
-VALID = {
-    "id": "load", "name": "Load", "type": "input_data",
-    "connector": {"kind": "file", "params": {"path": "data/items.csv", "format": "csv"}},
-}
-INVALID = {  # file connector without params.path
+def _valid(tmp_path):
+    return {
+        "id": "load", "name": "Load", "type": "input_data",
+        "connector": {"kind": "file",
+                      "params": {"path": str(tmp_path / "data" / "items.csv"), "format": "csv"}},
+    }
+
+
+INVALID = {  # file connector params.path is relative, not absolute
     "id": "bad", "name": "Bad", "type": "input_data",
-    "connector": {"kind": "file", "params": {"format": "csv"}},
+    "connector": {"kind": "file", "params": {"path": "data/items.csv", "format": "csv"}},
 }
 
 
@@ -28,7 +32,7 @@ def _write(root, name, data):
 
 
 def test_tolerant_load_reports_per_file_issues(tmp_path):
-    _write(tmp_path, "01_load.json", VALID)
+    _write(tmp_path, "01_load.json", _valid(tmp_path))
     _write(tmp_path, "02_bad.json", INVALID)
     entries = load_compiled_dir(tmp_path / "compiled")
     assert [e.filename for e in entries] == ["01_load.json", "02_bad.json"]
@@ -45,13 +49,13 @@ def test_tolerant_load_handles_unparseable_json(tmp_path):
 
 
 def test_strict_load_returns_stages(tmp_path):
-    _write(tmp_path, "01_load.json", VALID)
+    _write(tmp_path, "01_load.json", _valid(tmp_path))
     [stage] = load_workflow(tmp_path)
     assert stage.id == "load"
 
 
 def test_strict_load_raises_with_all_issues(tmp_path):
-    _write(tmp_path, "01_load.json", VALID)
+    _write(tmp_path, "01_load.json", _valid(tmp_path))
     _write(tmp_path, "02_bad.json", INVALID)
     with pytest.raises(WorkflowLoadError) as exc:
         load_workflow(tmp_path)

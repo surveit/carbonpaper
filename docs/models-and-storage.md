@@ -17,7 +17,7 @@ case: `validate_workflow(stages) -> list[str]` and `validate_stage(stage) -> lis
 (empty list = valid). `parse_workflow(stages) -> Workflow` raises instead.
 
 **Cut in this change (per review):**
-- Connector kinds reduced to the implemented `file` + `computed_static`. The rest
+- Connector kinds reduced to the implemented `file`. The rest
   (`http`/`scrape`/`api`/`manual_upload`/`sql`) were declared but never had a
   handler — add them back alongside a handler.
 - Weighted aggregation formulas (`weighted_mean`/`weighted_sum`) — unused in the

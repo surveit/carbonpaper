@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import re
 from enum import Enum
+from pathlib import Path
 from typing import Any, Literal, Optional
 
 from pydantic import Field, ValidationError, field_validator, model_validator
@@ -67,7 +68,6 @@ def is_grain_and_order_preserving(stage_type: StageType) -> bool:
 
 class ConnectorKind(str, Enum):
     file = "file"
-    computed_static = "computed_static"
 
 
 class FileFormat(str, Enum):
@@ -113,10 +113,11 @@ class Connector(_Base):
     params: dict[str, Any] = Field(
         default_factory=dict,
         description=(
-            "Connector parameters. For kind=file, params.path is REQUIRED — a "
-            "repo-root-relative path to the data file — plus optional params.format "
-            "(csv/parquet/json/geojson). If the real path isn't known yet, put a "
-            "placeholder path; it can be filled in later."
+            "Connector parameters. For kind=file: params.path, when present, is the "
+            "ABSOLUTE path to the data file, plus optional params.format "
+            "(csv/parquet/json/geojson). If the source material does not state where "
+            "the file lives, OMIT path entirely — the user binds a file when starting "
+            "a run. Never invent a path."
         ),
     )
     refresh: str = "ad_hoc"
@@ -126,10 +127,11 @@ class Connector(_Base):
     def _params_for_kind(self) -> "Connector":
         if self.kind == ConnectorKind.file:
             path = (self.params or {}).get("path")
-            if not path or not isinstance(path, str):
-                raise ValueError(
-                    "connector kind=file requires params.path (repo-root-relative data file)"
-                )
+            if path is not None:
+                if not isinstance(path, str) or not path.strip():
+                    raise ValueError("connector params.path must be a non-empty string when present")
+                if not Path(path).is_absolute():
+                    raise ValueError(f"connector params.path must be an ABSOLUTE path, got {path!r}")
             fmt = (self.params or {}).get("format")
             if fmt is not None and fmt not in {f.value for f in FileFormat}:
                 raise ValueError(f"unknown file format {fmt!r}")

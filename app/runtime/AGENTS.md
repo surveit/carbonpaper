@@ -24,8 +24,8 @@ validate the output, write `outputs/<stage>.parquet`, append to `manifest.json`.
   outputs and continues once decisions exist.
 
 ## `stages/` — one module per stage type (`HANDLERS`)
-`input_data` connectors `file` (csv/parquet/json/geojson; `_read_geojson` flattens a
-FeatureCollection) + `computed_static`; `python_row_function`/`python_frame_function`
+`input_data` connector `file` (csv/parquet/json/geojson; `_read_geojson` flattens a
+FeatureCollection); `python_row_function`/`python_frame_function`
 (`function: {kind: module|inline}`, row variant mapped per row); `join`; `aggregate`;
 `llm_transform` (row-mapped, bounded parallelism);
 `human_review_queue` (content-hash → prior decisions or halt);

@@ -41,12 +41,14 @@ class CompiledStageFile:
 
 
 class WorkflowLoadError(Exception):
-    """The compiled workflow failed validation; `issues` lists every problem found."""
+    """A stored workflow failed validation; `issues` lists every problem found.
+    `source` names where the workflow was read from — a compiled/ directory, or
+    a version document in the store."""
 
-    def __init__(self, compiled_dir: Path, issues: list[str]):
+    def __init__(self, source: Path | str, issues: list[str]):
         self.issues = issues
         super().__init__(
-            f"{compiled_dir}: {len(issues)} validation issue(s):\n  "
+            f"{source}: {len(issues)} validation issue(s):\n  "
             + "\n  ".join(issues)
         )
 

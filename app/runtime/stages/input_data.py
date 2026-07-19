@@ -1,14 +1,43 @@
-"""Handler for the input_data stage type."""
+"""Handler + preflight for the input_data stage type. Everything that knows
+what an input stage's connector params MEAN — that they designate a file, that
+a run needs the file to exist — lives here, next to the code that reads them;
+the runner calls both through type-keyed registries (HANDLERS, PREFLIGHTS) and
+attaches no meaning of its own."""
 
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 from typing import Any
 
 import pandas as pd
 
-from app.core.models import ConnectorKind, Stage
+from app.core.models import Stage
+
+
+def preflight_input_data(stage: Stage) -> tuple[list[str], dict[str, Any] | None]:
+    """Run-readiness + provenance for one input stage, checked at prepare time
+    (before the run dir is created): the effective connector params must
+    designate an existing file. Returns (issues, record) — issues name what is
+    missing ([] means ready); record is the manifest provenance for the
+    designated file (absolute path, sha256, byte count, both streamed now), or
+    None when the stage is not ready. The hash is a strong integrity signal for
+    "which file was designated", not a read-time proof — the handler opens the
+    file moments later."""
+    connector = stage.connector
+    assert connector is not None  # Stage validation: input_data carries connector
+    path_param = connector.params.get("path")
+    if not path_param:
+        return ([f"`{stage.id}`: no file bound — supply a run binding, or author "
+                 "an absolute path in the workflow"], None)
+    path = Path(path_param)
+    if not path.is_file():
+        return ([f"`{stage.id}`: bound file does not exist or is not a file: {path}"], None)
+    with path.open("rb") as handle:
+        digest = hashlib.file_digest(handle, "sha256")
+    return [], {"path": str(path), "sha256": digest.hexdigest(),
+                "bytes": path.stat().st_size}
 
 
 def read_input_data(stage: Stage, ctx: dict[str, Any]) -> pd.DataFrame:
@@ -16,40 +45,36 @@ def read_input_data(stage: Stage, ctx: dict[str, Any]) -> pd.DataFrame:
     assert connector is not None  # Stage validation: input_data carries connector
     params = connector.params
 
-    if connector.kind == ConnectorKind.file:
-        path = ctx["repo_root"] / params["path"]   # required by Connector validation
-        fmt = params.get("format", "csv")
-        if fmt == "csv":
-            df = pd.read_csv(path)
-        elif fmt == "parquet":
-            df = pd.read_parquet(path)
-        elif fmt == "json":
-            df = pd.read_json(path, lines=True)
-        elif fmt == "geojson":
-            df = _read_geojson(path)
-        else:
-            raise ValueError(f"Unsupported file format: {fmt}")
+    if "path" not in params:
+        raise ValueError(
+            f"input stage '{stage.id}' has no file bound (connector params carry "
+            "no 'path'); runs bind one at prepare_run — subset/eval runs need the "
+            "workflow to author it or a reference override to inject it"
+        )
+    path = Path(params["path"])   # absolute: the model rejects a relative path when present
+    fmt = params.get("format", "csv")
+    if fmt == "csv":
+        df = pd.read_csv(path)
+    elif fmt == "parquet":
+        df = pd.read_parquet(path)
+    elif fmt == "json":
+        df = pd.read_json(path, lines=True)
+    elif fmt == "geojson":
+        df = _read_geojson(path)
+    else:
+        raise ValueError(f"Unsupported file format: {fmt}")
 
-        # Optional list-column splitting (e.g., "[a, b]" → ["a", "b"])
-        for col in params.get("list_columns", []):
-            if col in df.columns:
-                df[col] = df[col].apply(_parse_list_cell)
+    # Optional list-column splitting (e.g., "[a, b]" → ["a", "b"])
+    for col in params.get("list_columns", []):
+        if col in df.columns:
+            df[col] = df[col].apply(_parse_list_cell)
 
-        # Optional date parsing
-        for col in params.get("parse_dates", []):
-            if col in df.columns:
-                df[col] = pd.to_datetime(df[col], errors="coerce")
+    # Optional date parsing
+    for col in params.get("parse_dates", []):
+        if col in df.columns:
+            df[col] = pd.to_datetime(df[col], errors="coerce")
 
-        return df
-
-    if connector.kind == ConnectorKind.computed_static:
-        # Demo mode: read from the file param if provided
-        path = params.get("file")
-        if path:
-            return pd.read_csv(ctx["repo_root"] / path)
-        return pd.DataFrame()
-
-    raise ValueError(f"Unknown connector kind: {connector.kind}")
+    return df
 
 
 def _read_geojson(path: Path) -> pd.DataFrame:

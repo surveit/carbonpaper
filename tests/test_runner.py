@@ -19,7 +19,7 @@ import pytest
 
 from app.core.errors import NoVersionToRunError, SubsetRunError
 from app.core.models import Stage, Workflow
-from app.runtime.runner import execute_run, run_subset
+from app.runtime.runner import execute_run, resume_run, run_subset
 from app.runtime.stages import llm_transform as lt
 from app.services.loader import WorkflowLoadError
 from app.services.versioning import create_version, list_versions
@@ -39,7 +39,8 @@ def _make_project(root):
         .to_csv(root / "data" / "items.csv", index=False)
     stage = {
         "id": "load", "name": "Load items", "type": "input_data",
-        "connector": {"kind": "file", "params": {"path": "data/items.csv", "format": "csv"}},
+        "connector": {"kind": "file",
+                      "params": {"path": str(root / "data" / "items.csv"), "format": "csv"}},
         "limit": 2,
     }
     (root / "compiled" / "01_load.json").write_text(json.dumps(stage), encoding="utf-8")
@@ -113,7 +114,7 @@ def _two_stage_project(root, rows: list[dict]):
     load = {
         "id": "load", "name": "Load items", "type": "input_data",
         "connector": {"kind": "file",
-                      "params": {"path": "data/items.csv", "format": "csv"}},
+                      "params": {"path": str(root / "data" / "items.csv"), "format": "csv"}},
     }
     consume = {
         "id": "consume", "name": "Consume items", "type": "python_frame_function",
@@ -173,7 +174,7 @@ def _llm_transform_project(root):
     load = {
         "id": "load", "name": "Load items", "type": "input_data",
         "connector": {"kind": "file",
-                      "params": {"path": "data/items.csv", "format": "csv"}},
+                      "params": {"path": str(root / "data" / "items.csv"), "format": "csv"}},
     }
     score = {
         "id": "score", "name": "Score items", "type": "llm_transform",
@@ -225,10 +226,11 @@ def test_run_subset_surfaces_the_real_row_failure_message(tmp_path, monkeypatch)
         raise RuntimeError("boom")
 
     monkeypatch.setattr(lt, "call_llm", boom)
+    # Path-free connector: `load`'s output is injected below, so no file exists
+    # or is read — declaring one would be a fabricated fixture value.
     load = Stage.model_validate({
         "id": "load", "name": "Load items", "type": "input_data",
-        "connector": {"kind": "file",
-                      "params": {"path": "data/items.csv", "format": "csv"}},
+        "connector": {"kind": "file"},
     })
     score = Stage.model_validate({
         "id": "score", "name": "Score items", "type": "llm_transform",
@@ -272,7 +274,8 @@ def test_create_version_rejects_invalid_working_copy(tmp_path):
     be immortalised as a version."""
     (tmp_path / "compiled").mkdir(parents=True)
     bad = {"id": "load", "name": "Load", "type": "input_data",
-           "connector": {"kind": "file", "params": {"format": "csv"}}}  # no path
+           "connector": {"kind": "file",
+                         "params": {"path": "data/items.csv", "format": "csv"}}}  # relative path
     (tmp_path / "compiled" / "01_load.json").write_text(
         json.dumps(bad), encoding="utf-8")
 
@@ -288,10 +291,11 @@ def test_invalid_workflow_never_becomes_a_version_and_run_never_pins_stale(tmp_p
     immortalised as 'the latest' and every later default run reloaded that
     poisoned snapshot and failed with a stale error. Now runs never create
     versions and create_version validates first, so the bug is impossible."""
-    # Invalid working copy: file connector missing params.path.
+    # Invalid working copy: file connector params.path is relative, not absolute.
     (tmp_path / "compiled").mkdir(parents=True)
     bad = {"id": "load", "name": "Load", "type": "input_data",
-           "connector": {"kind": "file", "params": {"format": "csv"}}}
+           "connector": {"kind": "file",
+                         "params": {"path": "data/items.csv", "format": "csv"}}}
     (tmp_path / "compiled" / "01_load.json").write_text(
         json.dumps(bad), encoding="utf-8")
 
@@ -313,7 +317,7 @@ def test_invalid_workflow_never_becomes_a_version_and_run_never_pins_stale(tmp_p
         tmp_path / "data" / "items.csv", index=False)
     good = {"id": "load", "name": "Load", "type": "input_data",
             "connector": {"kind": "file",
-                          "params": {"path": "data/items.csv", "format": "csv"}}}
+                          "params": {"path": str(tmp_path / "data" / "items.csv"), "format": "csv"}}}
     (tmp_path / "compiled" / "01_load.json").write_text(
         json.dumps(good), encoding="utf-8")
     with pytest.raises(NoVersionToRunError):
@@ -323,3 +327,52 @@ def test_invalid_workflow_never_becomes_a_version_and_run_never_pins_stale(tmp_p
     _seed_version(tmp_path)
     manifest = execute_run(tmp_path, repo_root=tmp_path)
     assert manifest["status"] == "ok"
+
+
+def test_resume_reapplies_run_bindings_for_a_pending_input_stage(tmp_path):
+    """Regression: an input stage that had NOT executed before a halt must
+    resume using its manifest-recorded RUN binding, not whatever path (or
+    absence of one) the workflow itself authors — otherwise the manifest's
+    `source: "run"` provenance record would be a lie, and a workflow-authored
+    path-free input stage would KeyError on resume instead of reading the
+    bound file.
+
+    Constructing a genuine halt-then-resume through human_review_queue is
+    disproportionate scaffolding for this fix, so this exercises resume_run's
+    actual contract directly: a hand-built manifest (as prepare_run + a halt
+    would have produced) naming a pending input stage with a `source: "run"`
+    binding, and a workflow that authors NO path for it."""
+    (tmp_path / "compiled").mkdir(parents=True)
+    stage = {"id": "load", "name": "Load items", "type": "input_data",
+              "connector": {"kind": "file", "params": {}}}  # no workflow-authored path
+    (tmp_path / "compiled" / "01_load.json").write_text(
+        json.dumps(stage), encoding="utf-8")
+    version_id = _seed_version(tmp_path)
+
+    bound_csv = tmp_path / "bound.csv"
+    pd.DataFrame({"name": ["bound-row"], "val": [42]}).to_csv(bound_csv, index=False)
+
+    run_id = "20260101T000000"
+    run_dir = tmp_path / "runs" / run_id
+    (run_dir / "outputs").mkdir(parents=True)
+    manifest = {
+        "run_id": run_id, "project": tmp_path.name, "workflow_version": version_id,
+        "status": "awaiting_review",
+        "run_bindings": {"load": {"path": str(bound_csv)}},
+        "input_bindings": {
+            "load": {"path": str(bound_csv), "source": "run",
+                     "sha256": "unused-in-this-test", "bytes": bound_csv.stat().st_size},
+        },
+        "stages": [{"stage_id": "load", "type": "input_data", "name": "Load items",
+                    "status": "pending", "input_validation": [], "output_validation": None,
+                    "elapsed_ms": 0, "rows": 0, "error": None,
+                    "started_at": None, "finished_at": None}],
+    }
+    (run_dir / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+
+    result = resume_run(tmp_path, run_id, repo_root=tmp_path)
+
+    [rec] = result["stages"]
+    assert rec["status"] == "ok", rec.get("error")
+    out = pd.read_parquet(run_dir / "outputs" / "load.parquet")
+    assert list(out["name"]) == ["bound-row"]

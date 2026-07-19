@@ -33,13 +33,13 @@ from app.services.versioning import (
 
 _LOAD_STAGE = {
     "id": "load", "name": "Load", "type": "input_data",
-    "connector": {"kind": "computed_static"},
+    "connector": {"kind": "file"},
 }
 
 
 def _seed(project_dir: Path, stage: dict = _LOAD_STAGE) -> None:
     """A minimal, strictly-loadable working copy: one input_data stage. Uses a
-    computed_static connector so no data file needs to exist on disk (these
+    path-free file connector so no data file needs to exist on disk (these
     tests never execute the workflow, only snapshot its spec)."""
     compiled = project_dir / "compiled"
     compiled.mkdir(parents=True, exist_ok=True)
@@ -128,7 +128,8 @@ def test_create_version_invalid_workflow_raises_and_writes_nothing(tmp_path):
     immortalised as a version."""
     (tmp_path / "compiled").mkdir()
     bad = {"id": "load", "name": "Load", "type": "input_data",
-           "connector": {"kind": "file", "params": {"format": "csv"}}}  # no path
+           "connector": {"kind": "file",
+                         "params": {"path": "data/items.csv", "format": "csv"}}}  # relative path
     (tmp_path / "compiled" / "01_load.json").write_text(json.dumps(bad), encoding="utf-8")
 
     with pytest.raises(WorkflowLoadError) as exc:
@@ -181,14 +182,17 @@ def test_list_versions_newest_first(tmp_path):
         "20260201T000000", "20260115T000000", "20260101T000000"]
 
 
-def test_list_versions_skips_a_corrupt_document(tmp_path):
-    """A stored document that fails the WorkflowVersion contract is skipped, not
-    fabricated into a listing — the store-backed analogue of a half-written
-    snapshot never being listed."""
+def test_list_versions_errors_on_a_corrupt_document(tmp_path):
+    """A stored document that fails the WorkflowVersion contract fails the whole
+    listing LOUDLY (WorkflowLoadError naming the document) — never a silent
+    skip, which would present a store holding an invalid document as healthy
+    and make the version invisible while its id still occupies the store. The
+    remedy for legacy/corrupt documents is a store migration, not tolerance."""
     _seed(tmp_path)
-    good = create_version(tmp_path, message="good", reviewer="test")
+    create_version(tmp_path, message="good", reviewer="test")
     get_store().write("workflow_version", f"{tmp_path.name}/20260101T000000", {"bogus": "data"})
-    assert [v["id"] for v in list_versions(tmp_path)] == [good["id"]]
+    with pytest.raises(WorkflowLoadError, match="20260101T000000"):
+        list_versions(tmp_path)
 
 
 # ── load_version_meta / load_version_stages ─────────────────────────────────────

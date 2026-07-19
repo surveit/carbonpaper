@@ -21,11 +21,13 @@ from app.services import node_review
 
 client = TestClient(app)
 
-_LOAD = {
-    "id": "load", "type": "input_data", "name": "Load documents",
-    "connector": {"kind": "file", "params": {"path": "data/docs.csv", "format": "csv"}},
-    "output_schema": {"columns": [{"name": "doc_id", "type": "str"}]},
-}
+def _load(tmp_path):
+    return {
+        "id": "load", "type": "input_data", "name": "Load documents",
+        "connector": {"kind": "file",
+                      "params": {"path": str(tmp_path / "data" / "docs.csv"), "format": "csv"}},
+        "output_schema": {"columns": [{"name": "doc_id", "type": "str"}]},
+    }
 _EXTRACT = {
     "id": "extract", "type": "llm_transform", "name": "Extract evidence",
     "inputs": [{"id": "load", "schema": {"columns": [{"name": "doc_id", "type": "str"}],
@@ -48,7 +50,7 @@ def _make(tmp_path, monkeypatch, *, with_stages, with_schemas, approved):
     if with_stages:
         c = proj / "compiled"
         c.mkdir()
-        (c / "01_load.json").write_text(json.dumps(_LOAD), encoding="utf-8")
+        (c / "01_load.json").write_text(json.dumps(_load(tmp_path)), encoding="utf-8")
         (c / "02_extract.json").write_text(json.dumps(_EXTRACT), encoding="utf-8")
     if with_schemas:
         s = proj / "schemas"

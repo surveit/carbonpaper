@@ -19,11 +19,13 @@ _DM = parse_schema_library([{
     "columns": [{"name": "doc_id", "type": "str", "description": "id"}],
 }])
 
-_STAGE = {
-    "id": "load", "type": "input_data", "name": "Load documents",
-    "connector": {"kind": "file", "params": {"path": "data/docs.csv", "format": "csv"}},
-    "output_schema": {"columns": [{"name": "doc_id", "type": "str"}]},
-}
+def _stage(tmp_path):
+    return {
+        "id": "load", "type": "input_data", "name": "Load documents",
+        "connector": {"kind": "file",
+                      "params": {"path": str(tmp_path / "data" / "docs.csv"), "format": "csv"}},
+        "output_schema": {"columns": [{"name": "doc_id", "type": "str"}]},
+    }
 
 
 # ── _finish_workflow: write on a valid submission only ────────────────────────────────
@@ -35,7 +37,7 @@ def test_finish_workflow_writes_the_workflow_on_success(tmp_path: Path, monkeypa
         lambda result, project_dir: wrote.update(result=result),
     )
 
-    generation._finish_workflow(tmp_path, "demo", Workflow.model_validate({"stages": [_STAGE]}))
+    generation._finish_workflow(tmp_path, "demo", Workflow.model_validate({"stages": [_stage(tmp_path)]}))
 
     assert [s["id"] for s in wrote["result"]["stages"]] == ["load"]   # Workflow -> canonical dicts
     assert wrote["result"]["validation"] == []
@@ -86,7 +88,7 @@ def test_start_workflow_generation_delegates_to_the_bridge_grounded(
         generation, "regenerate_workflow",
         lambda result, project_dir: written.update(result=result),
     )
-    captured["on_answer"](Workflow.model_validate({"stages": [_STAGE]}))
+    captured["on_answer"](Workflow.model_validate({"stages": [_stage(tmp_path)]}))
 
     assert [s["id"] for s in written["result"]["stages"]] == ["load"]  # workflow written on submit
     assert not (project_dir / "schemas").exists()                       # workflow-only: schemas untouched
