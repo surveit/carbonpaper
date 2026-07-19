@@ -22,20 +22,6 @@ def _content_hash(row: pd.Series, columns: list[str]) -> str:
     return hashlib.sha1("|".join(parts).encode("utf-8")).hexdigest()[:16]
 
 
-def _hash_columns_for(stage: Stage) -> list[str]:
-    """Columns to include in the content hash. Falls back to the upstream
-    input's primary_key if `queue.hash_columns` isn't set."""
-    queue = stage.queue
-    cols = queue.hash_columns if queue else None
-    if cols:
-        return list(cols)
-    if stage.inputs:
-        table_schema = stage.inputs[0].table_schema
-        if table_schema is not None and table_schema.primary_key:
-            return list(table_schema.primary_key)
-    return []
-
-
 def _decisions_path(ctx: dict[str, Any], stage_id: str) -> Path:
     project_dir: Path = ctx["project_dir"]
     d = project_dir / "decisions"
@@ -96,12 +82,14 @@ def handle_human_review_queue(stage: Stage, inputs: dict[str, pd.DataFrame], ctx
     queueable = src[queueable_mask].copy()
     passthrough = src[~queueable_mask].copy()
 
-    hash_cols = _hash_columns_for(stage)
-    if not hash_cols:
-        raise ValueError(
-            f"Queue stage '{sid}' has no hash_columns and no upstream primary_key; "
-            "cannot match items across runs."
-        )
+    hash_cols = stage.resolve_hash_columns()
+    # Stage validation guarantees a human_review_queue resolves a non-empty hash
+    # source — queue.hash_columns or the upstream primary_key (see
+    # Stage._queue_has_resolvable_hash) — so this documents the invariant rather
+    # than handling a reachable case. The missing-column check below still bites:
+    # the model only checks columns when the upstream schema is DECLARED, whereas
+    # this checks the ACTUAL frame.
+    assert hash_cols, f"queue stage '{sid}' has no resolvable hash columns"
     missing = [c for c in hash_cols if c not in queueable.columns]
     if missing:
         raise ValueError(

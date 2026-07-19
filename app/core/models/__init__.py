@@ -152,6 +152,11 @@ NODE_TYPES: dict[str, dict[str, _Any]] = {
         "required": [],
         "optional": ["filter", "hash_columns", "reviewer_instructions",
                      "routing", "conflict_resolution", "estimated_volume_per_week"],
+        "notes": (
+            "Requires a stable row identity to re-match human decisions across "
+            "re-runs: set hash_columns, or ensure the upstream input's schema "
+            "declares a primary_key (a stage with neither is rejected)."
+        ),
     },
     "publish": {
         "summary": "Render a final artifact (html, json, csv, cards).",

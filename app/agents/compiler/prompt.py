@@ -32,6 +32,9 @@ def _stage_type_catalog() -> str:
         required = ", ".join(spec.get("required", [])) or "none"
         takes = "takes inputs" if spec.get("requires_inputs") else "no inputs"
         lines.append(f"- {stage_type} — handle `{spec['handle']}`; required: {required}; {takes}")
+        note = spec.get("notes")
+        if note:
+            lines.append(f"    note: {note}")
     return "\n".join(lines)
 
 
