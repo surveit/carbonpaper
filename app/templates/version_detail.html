@@ -5,8 +5,8 @@
   target this version: publish, run this version. Belief review is not here — a
   version is frozen; review happens on the working-copy editor.
 
-  Context: state; section="versions"; version (meta + computed `published`);
-           mermaid (frozen graph string).
+  Context: state; section="versions"; version (a VersionMeta model, `published`
+           among its own fields); mermaid (frozen graph string).
 #}
 {% block title %}{{ state.meta.title or state.name }} · Version {{ version.id }}{% endblock %}
 

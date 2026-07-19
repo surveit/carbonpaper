@@ -18,7 +18,7 @@ import json
 import re
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, NotRequired, TypedDict, cast
 
 from app.core.errors import DraftNotFoundError
 from app.core.models.workflow import validate_workflow_draft
@@ -27,12 +27,43 @@ from app.services import versioning, workspace
 from app.services.loader import stage_to_spec_dict
 
 
+class Draft(TypedDict):
+    """The <project>/drafts/<draft_id>.json record: mutable scratch stages an
+    agent assembles before freezing them into an immutable version."""
+    id: str
+    parent_version: str | None
+    stages: list[dict[str, Any]]   # raw stage specs — the JSON boundary, may be invalid mid-edit
+    created_at: str
+    updated_at: str
+
+
+class DraftView(Draft):
+    """A draft plus its current, non-fatal validation problems."""
+    issues: list[str]              # non-fatal validation problems in the current stages
+
+
+class DraftEditResult(TypedDict):
+    """The summary every draft edit (set/remove stage) returns."""
+    ok: bool
+    draft_id: str
+    stage_ids: list[str | None]
+    issues: list[str]
+
+
+class SaveResult(TypedDict):
+    """The outcome of freezing a draft into a version: the new version's meta on
+    success, or the blocking issues on failure."""
+    ok: bool
+    issues: NotRequired[list[str]]
+    version: NotRequired[dict[str, Any]]   # a VersionMeta.model_dump(mode="json") at the agent JSON boundary
+
+
 def create_draft(
     name: str,
     *,
     from_version: str | None = None,
     examples_dir: Path | None = None,
-) -> dict[str, Any]:
+) -> Draft:
     """Start a new draft for a project and return it (its `id` names it in every
     later call). Seeded with the stages of `from_version` when given (and
     recording it as the draft's parent), empty otherwise."""
@@ -48,7 +79,7 @@ def create_draft(
     directory.mkdir(parents=True, exist_ok=True)
     taken = {path.stem for path in directory.glob("*.json")}
     now = datetime.now().isoformat(timespec="seconds")
-    draft: dict[str, Any] = {
+    draft: Draft = {
         "id": generate_word_triplet_id(taken),
         "parent_version": from_version,
         "stages": stages,
@@ -61,7 +92,7 @@ def create_draft(
 
 def read_draft(
     name: str, draft_id: str, *, examples_dir: Path | None = None
-) -> dict[str, Any]:
+) -> DraftView:
     """The draft plus a non-fatal `issues` list (schema + graph problems in its
     current stages; [] means it would save cleanly)."""
     project_dir = workspace.resolve_project_dir(name, examples_dir)
@@ -71,7 +102,7 @@ def read_draft(
 
 def set_draft_stage(
     name: str, draft_id: str, stage_json: str, *, examples_dir: Path | None = None
-) -> dict[str, Any]:
+) -> DraftEditResult:
     """Add or replace one stage (matched by its `id`) in the draft. The stage is
     stored even when the resulting workflow is invalid — a draft mid-surgery may
     have dangling edges — and the current problems come back as `issues` so the
@@ -88,7 +119,7 @@ def set_draft_stage(
 
 def remove_draft_stage(
     name: str, draft_id: str, stage_id: str, *, examples_dir: Path | None = None
-) -> dict[str, Any]:
+) -> DraftEditResult:
     """Delete one stage from the draft by id. Raises ValueError if no stage in
     the draft carries that id (deleting nothing is a caller mistake, not a
     success)."""
@@ -104,7 +135,7 @@ def remove_draft_stage(
 
 def save_version(
     name: str, draft_id: str, *, message: str, examples_dir: Path | None = None
-) -> dict[str, Any]:
+) -> SaveResult:
     """Freeze the draft's stages into a new immutable version — the draft's only
     exit, and the single validation cliff: an invalid draft is refused with the
     full issue list and nothing is written. On success the draft's parent
@@ -123,9 +154,9 @@ def save_version(
         reviewer="agent",
         parent_version=draft["parent_version"],
     )
-    draft["parent_version"] = meta["id"]
+    draft["parent_version"] = meta.id
     _write_draft(project_dir, draft)
-    return {"ok": True, "version": meta}
+    return {"ok": True, "version": meta.model_dump(mode="json")}
 
 
 # ─── internals ───────────────────────────────────────────────────────────────
@@ -145,7 +176,7 @@ def _draft_path(project_dir: Path, draft_id: str) -> Path:
     return _drafts_dir(project_dir) / f"{draft_id}.json"
 
 
-def _load_draft(project_dir: Path, draft_id: str) -> dict[str, Any]:
+def _load_draft(project_dir: Path, draft_id: str) -> Draft:
     path = _draft_path(project_dir, draft_id)
     if not path.is_file():
         raise DraftNotFoundError(
@@ -158,10 +189,12 @@ def _load_draft(project_dir: Path, draft_id: str) -> dict[str, Any]:
             f"Draft file for '{draft_id}' is corrupt (not a JSON object) — "
             f"start a new draft with create_draft."
         )
-    return loaded
+    # Trusted as a Draft: every write goes through _write_draft, which only ever
+    # writes the shape create_draft/set_draft_stage/remove_draft_stage build.
+    return cast(Draft, loaded)
 
 
-def _write_draft(project_dir: Path, draft: dict[str, Any]) -> None:
+def _write_draft(project_dir: Path, draft: Draft) -> None:
     draft["updated_at"] = datetime.now().isoformat(timespec="seconds")
     path = _draft_path(project_dir, str(draft["id"]))
     path.write_text(json.dumps(draft, indent=2), encoding="utf-8")
@@ -174,7 +207,7 @@ def _parse_stage_object(stage_json: str) -> dict[str, Any]:
     return stage
 
 
-def _describe(draft: dict[str, Any]) -> dict[str, Any]:
+def _describe(draft: Draft) -> DraftEditResult:
     """The summary every edit returns: what's in the draft now, and whether it
     would save cleanly."""
     return {

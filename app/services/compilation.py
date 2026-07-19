@@ -101,7 +101,7 @@ def regenerate_workflow_from_conversation(
                 f"'{name}' has reviewed stages; re-call with confirm_overwrite=True to snapshot and regenerate."
             )
         existing = versioning.list_versions(project_dir)
-        parent = existing[0]["id"] if existing else None
+        parent = existing[0].id if existing else None
         versioning.create_version(
             project_dir,
             message=f"pre-regenerate snapshot of {name}",

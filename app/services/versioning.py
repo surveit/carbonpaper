@@ -9,10 +9,12 @@ workflow it executed, never "whatever the working copy happened to be". A
 stage embeds its own input/output schemas, so a version carries no separate
 data-model snapshot.
 
-A version can be minted from the project's working copy (`create_version`) or
-directly from a list of stage spec dicts with no working copy involved
-(`create_version_from_stages`, e.g. an authoring agent's proposed stages) —
-both write the identical on-disk shape.
+A version can be minted from the project's working copy (`create_version`,
+which snapshots the working copy's `compiled/` dir) or directly from a list of
+in-memory stage spec dicts with no working copy involved
+(`create_version_from_stages`, e.g. an authoring agent's proposed stages, or
+`app.services.drafts.save_version`'s draft stages) — both write the identical
+on-disk shape.
 
 Layout:
     <project>/versions/<version_id>/
@@ -45,6 +47,9 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+import pydantic
+from pydantic import BaseModel, model_validator
+
 from app.core.models import Stage
 from app.core.models.workflow import parse_workflow
 from app.services.loader import (
@@ -58,6 +63,42 @@ from app.services import node_review
 # Version ids are second-resolution timestamps (%Y%m%dT%H%M%S); this guard keeps
 # a caller-supplied id from being used as a path segment with any other shape.
 _VERSION_ID = re.compile(r"^\d{8}T\d{6}$")
+
+
+class Coverage(BaseModel):
+    """Approval coverage frozen into a version at creation: how many of its stages
+    were approved / rejected / edited-stale / unreviewed, the total, and the
+    approved percentage. Built from node_review.coverage_for's dict."""
+    approved: int
+    rejected: int
+    edited_stale: int
+    unreviewed: int
+    total: int
+    approved_pct: float
+
+
+class VersionMeta(BaseModel):
+    """The version.json record: identity, provenance, frozen coverage, and publish
+    state. `published` records human approval (runs pin published versions only)."""
+    id: str
+    created_at: str
+    parent_version: str | None
+    message: str
+    reviewer: str
+    coverage: Coverage
+    published: bool
+    published_at: str | None = None
+    published_by: str | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _grandfather_published(cls, data: Any) -> Any:
+        # A version.json written before the `published` flag existed was created
+        # only by the human "Create version" act — the approval publishing now
+        # records — so a missing key reads as published. New metas always carry it.
+        if isinstance(data, dict) and "published" not in data:
+            return {**data, "published": True}
+        return data
 
 
 def versions_dir(project_dir: Path) -> Path:
@@ -103,22 +144,23 @@ def load_version_stages(project_dir: Path, version_id: str) -> list[Stage]:
     return load_workflow(vdir)
 
 
-def load_version_meta(project_dir: Path, version_id: str) -> dict[str, Any]:
+def load_version_meta(project_dir: Path, version_id: str) -> VersionMeta:
     """Read versions/<version_id>/version.json. Fails loudly if absent."""
     meta_path = _version_dir(project_dir, version_id) / "version.json"
     if not meta_path.exists():
         raise FileNotFoundError(f"No version.json at {meta_path}")
-    return json.loads(meta_path.read_text(encoding="utf-8"))
+    return VersionMeta.model_validate_json(meta_path.read_text(encoding="utf-8"))
 
 
-def list_versions(project_dir: Path) -> list[dict[str, Any]]:
+def list_versions(project_dir: Path) -> list[VersionMeta]:
     """All versions for a project, NEWEST-FIRST, each as its parsed
-    version.json. Skips any directory lacking a readable version.json rather than
-    fabricating metadata for it (a half-written snapshot is simply not listed)."""
+    version.json. Skips any directory lacking a readable, well-formed
+    version.json rather than fabricating metadata for it (a half-written or
+    malformed snapshot is simply not listed)."""
     vroot = versions_dir(project_dir)
     if not vroot.is_dir():
         return []
-    metas: list[dict[str, Any]] = []
+    metas: list[VersionMeta] = []
     for d in vroot.iterdir():
         if not d.is_dir():
             continue
@@ -126,39 +168,30 @@ def list_versions(project_dir: Path) -> list[dict[str, Any]]:
         if not meta_path.exists():
             continue
         try:
-            metas.append(json.loads(meta_path.read_text(encoding="utf-8")))
-        except (json.JSONDecodeError, OSError):
+            metas.append(VersionMeta.model_validate_json(
+                meta_path.read_text(encoding="utf-8")
+            ))
+        except (json.JSONDecodeError, OSError, pydantic.ValidationError):
             continue
     # Newest-first. version ids are strftime timestamps, so a reverse string sort
     # on id is chronological; fall back to created_at if an id is somehow absent.
-    metas.sort(key=lambda m: str(m.get("id") or m.get("created_at") or ""),
-               reverse=True)
+    metas.sort(key=lambda m: m.id or m.created_at, reverse=True)
     return metas
 
 
-def version_is_published(meta: dict[str, Any]) -> bool:
-    """Whether this version carries human approval. Versions written before the
-    `published` flag existed were created only by the human "Create version"
-    action — the act publishing now records — so a missing key reads as
-    published. New metas always carry the key (False until published)."""
-    if "published" not in meta:
-        return True
-    return bool(meta["published"])
-
-
-def publish_version(project_dir: Path, version_id: str, *, reviewer: str) -> dict[str, Any]:
+def publish_version(project_dir: Path, version_id: str, *, reviewer: str) -> VersionMeta:
     """Record human approval on one version: stamp published/published_at/
     published_by into its version.json and return the updated meta. Idempotent —
     an already-published version is returned unchanged (the first stamp wins).
     Publishing touches metadata only, never stage content."""
     meta = load_version_meta(project_dir, version_id)
-    if version_is_published(meta):
+    if meta.published:
         return meta
-    meta["published"] = True
-    meta["published_at"] = datetime.now().isoformat(timespec="seconds")
-    meta["published_by"] = reviewer
+    meta.published = True
+    meta.published_at = datetime.now().isoformat(timespec="seconds")
+    meta.published_by = reviewer
     meta_path = versions_dir(project_dir) / version_id / "version.json"
-    meta_path.write_text(json.dumps(meta, indent=2, default=str), encoding="utf-8")
+    meta_path.write_text(meta.model_dump_json(indent=2), encoding="utf-8")
     return meta
 
 
@@ -168,10 +201,10 @@ def create_version(
     message: str,
     reviewer: str,
     parent_version: str | None = None,
-) -> dict[str, Any]:
+) -> VersionMeta:
     """Snapshot the working copy's compiled/ into a new versions/<version_id>/
     and write version.json with coverage frozen at creation time. Returns the
-    version.json dict.
+    version.json meta.
 
     Coverage is computed from the SNAPSHOT's stages against the live
     node_decisions store, so the recorded coverage is exactly what was believed
@@ -210,7 +243,7 @@ def create_version_from_stages(
     message: str,
     reviewer: str,
     parent_version: str | None = None,
-) -> dict[str, Any]:
+) -> VersionMeta:
     """Freeze raw stage spec dicts into a new immutable version, with no working
     copy involved. The list is strict-parsed first (parse_workflow); an invalid
     workflow raises pydantic.ValidationError and writes nothing — every version is
@@ -249,25 +282,22 @@ def _write_version_meta(
     message: str,
     reviewer: str,
     parent_version: str | None,
-) -> dict[str, Any]:
+) -> VersionMeta:
     """Freeze approval coverage from the just-written snapshot's stages and write
     version.json. Every version is born unpublished."""
     stages = _load_stages_from(vdir / "compiled")
     decisions = node_review.load_node_decisions(project_dir)
-    coverage = node_review.coverage_for(stages, decisions)
-    meta: dict[str, Any] = {
-        "id": version_id,
-        "created_at": datetime.now().isoformat(timespec="seconds"),
-        "parent_version": parent_version,
-        "message": message,
-        "reviewer": reviewer,
-        "coverage": coverage,
-        "published": False,
-        "published_at": None,
-    }
-    (vdir / "version.json").write_text(
-        json.dumps(meta, indent=2, default=str), encoding="utf-8"
+    coverage = Coverage.model_validate(node_review.coverage_for(stages, decisions))
+    meta = VersionMeta(
+        id=version_id,
+        created_at=datetime.now().isoformat(timespec="seconds"),
+        parent_version=parent_version,
+        message=message,
+        reviewer=reviewer,
+        coverage=coverage,
+        published=False,
     )
+    (vdir / "version.json").write_text(meta.model_dump_json(indent=2), encoding="utf-8")
     return meta
 
 
@@ -278,6 +308,7 @@ __all__ = [
     "load_version_stages",
     "create_version",
     "create_version_from_stages",
-    "version_is_published",
     "publish_version",
+    "VersionMeta",
+    "Coverage",
 ]

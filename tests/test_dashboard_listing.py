@@ -68,7 +68,13 @@ def test_versioned_project_is_ready_to_run(examples_root):
     version_dir = proj / "versions" / "20260101T000000"
     version_dir.mkdir(parents=True)
     (version_dir / "version.json").write_text(
-        json.dumps({"id": "20260101T000000", "message": "seed"}), encoding="utf-8"
+        json.dumps({
+            "id": "20260101T000000", "created_at": "2026-01-01T00:00:00",
+            "parent_version": None, "message": "seed", "reviewer": "test",
+            "coverage": {"approved": 0, "rejected": 0, "edited_stale": 0,
+                         "unreviewed": 0, "total": 0, "approved_pct": 0.0},
+        }),
+        encoding="utf-8",
     )
     [card] = list_projects()
     assert card["is_ready"] is True

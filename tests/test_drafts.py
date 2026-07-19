@@ -37,9 +37,9 @@ def test_create_draft_seeded_from_version(examples: Path) -> None:
     compiled.mkdir()
     (compiled / "01_load.json").write_text(json.dumps(_STAGE), encoding="utf-8")
     meta = versioning.create_version(pdir, message="v1", reviewer="local")
-    draft = drafts.create_draft("demo", from_version=meta["id"], examples_dir=examples)
+    draft = drafts.create_draft("demo", from_version=meta.id, examples_dir=examples)
     assert [s["id"] for s in draft["stages"]] == ["load"]
-    assert draft["parent_version"] == meta["id"]
+    assert draft["parent_version"] == meta.id
 
 
 def test_set_stage_upserts_and_tolerates_invalid_state(examples: Path) -> None:

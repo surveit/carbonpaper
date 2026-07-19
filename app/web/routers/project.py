@@ -410,10 +410,7 @@ async def project_workflow_versions(request: Request, project_name: str):
     project with no versions yet shows the right CTA (generate a workflow, or
     snapshot the working copy you already have)."""
     pdir = _project_dir(project_name)
-    versions = [
-        {**meta, "published": versioning.version_is_published(meta)}
-        for meta in versioning.list_versions(pdir)
-    ]
+    versions = versioning.list_versions(pdir)
     return templates.TemplateResponse(
         request,
         "versions.html",
@@ -448,7 +445,7 @@ async def project_workflow_version(request: Request, project_name: str, version_
         {
             "state": shell_state(pdir),
             "section": "versions",
-            "version": {**meta, "published": versioning.version_is_published(meta)},
+            "version": meta,
             "mermaid": build_mermaid_graph(stages, project_name),
         },
     )

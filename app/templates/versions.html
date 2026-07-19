@@ -8,8 +8,8 @@
 
   Context the route passes:
     state    = project_view.shell_state(pdir); section = "versions"
-    versions = versioning.list_versions(pdir), each with a computed `published`
-               bool (versioning.version_is_published) — newest-first (may be empty)
+    versions = versioning.list_versions(pdir): VersionMeta models, each carrying
+               its own `published` bool — newest-first (may be empty)
 #}
 {% block section %}
 <div class="sec-head wf-head">

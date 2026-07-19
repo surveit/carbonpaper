@@ -53,7 +53,13 @@ def project(tmp_path):
     (compiled / "01_load.json").write_text(json.dumps(_LOAD), encoding="utf-8")
     (compiled / "02_classify.json").write_text(json.dumps(_CLASSIFY), encoding="utf-8")
     (demo / "versions" / version_id / "version.json").write_text(
-        json.dumps({"id": version_id, "created_at": "2026-07-10T00:00:00"}), encoding="utf-8")
+        json.dumps({
+            "id": version_id, "created_at": "2026-07-10T00:00:00",
+            "parent_version": None, "message": "seed", "reviewer": "test",
+            "coverage": {"approved": 0, "rejected": 0, "edited_stale": 0,
+                         "unreviewed": 0, "total": 0, "approved_pct": 0.0},
+        }),
+        encoding="utf-8")
 
     data = demo / "eval_data"
     data.mkdir()

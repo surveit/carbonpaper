@@ -32,7 +32,7 @@ def _seed_version(root):
     create versions, and now resolve published versions only, so a test that
     builds a working copy must snapshot it into a version and publish it before
     running against it."""
-    version_id = create_version(root, message="test seed", reviewer="test")["id"]
+    version_id = create_version(root, message="test seed", reviewer="test").id
     versioning.publish_version(root, version_id, reviewer="human")
     return version_id
 
@@ -351,6 +351,6 @@ def test_run_with_no_published_version_fails_loudly(tmp_path):
 def test_run_pinned_to_unpublished_version_fails_loudly(tmp_path):
     _make_project(tmp_path)
     unpublished_id = versioning.create_version(
-        tmp_path, message="draft", reviewer="agent")["id"]
+        tmp_path, message="draft", reviewer="agent").id
     with pytest.raises(NoVersionToRunError):
         prepare_run(tmp_path, repo_root=tmp_path, version_id=unpublished_id)

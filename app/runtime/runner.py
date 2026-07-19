@@ -113,7 +113,7 @@ def _resolve_version_id(project_dir: Path, version_id: str | None) -> str:
         # if its version.json is missing) — a caller asking for a specific id
         # must not be silently redirected to some other snapshot.
         meta = versioning.load_version_meta(project_dir, version_id)
-        if not versioning.version_is_published(meta):
+        if not meta.published:
             raise NoVersionToRunError(
                 f"Version '{version_id}' of project '{project_dir.name}' is not "
                 f"published. A run pins a published version — publish it first."
@@ -121,8 +121,8 @@ def _resolve_version_id(project_dir: Path, version_id: str | None) -> str:
         return version_id
 
     for meta in versioning.list_versions(project_dir):  # newest-first
-        if versioning.version_is_published(meta):
-            return str(meta["id"])
+        if meta.published:
+            return meta.id
 
     raise NoVersionToRunError(
         f"No published version to run for project '{project_dir.name}'. A run "
