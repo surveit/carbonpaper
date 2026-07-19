@@ -1,6 +1,6 @@
-"""run_stage_examples: execution through the real handlers + canonical comparison."""
+"""run_stage_tests: execution through the real handlers + canonical comparison."""
 from app.core.models import Stage
-from app.runtime.examples import find_failing_examples, run_stage_examples
+from app.runtime.stage_tests import find_failing_stage_tests, run_stage_tests
 
 _IN_SCHEMA = {"columns": [{"name": "amount", "type": "float", "nullable": False}]}
 _OUT_SCHEMA = {"columns": [
@@ -9,25 +9,25 @@ _OUT_SCHEMA = {"columns": [
 ]}
 
 
-def _row_stage(code: str, examples: list[dict]) -> Stage:
+def _row_stage(code: str, tests: list[dict]) -> Stage:
     return Stage.model_validate({
         "id": "double", "name": "Double", "type": "python_row_function",
         "inputs": [{"id": "load", "schema": _IN_SCHEMA}],
         "output_schema": _OUT_SCHEMA,
         "function": {"kind": "inline", "code": code},
-        "examples": examples,
+        "tests": tests,
     })
 
 
 _DOUBLE = "def transform(row):\n    return {**row, 'doubled': row['amount'] * 2}\n"
 
 
-def test_matching_example_passes():
+def test_matching_test_passes():
     stage = _row_stage(_DOUBLE, [{
         "name": "doubles_two", "inputs": {"load": [{"amount": 2.0}]},
         "expected": [{"amount": 2.0, "doubled": 4.0}],
     }])
-    [result] = run_stage_examples(stage)
+    [result] = run_stage_tests(stage)
     assert result.status == "passed" and not result.diffs
 
 
@@ -36,7 +36,7 @@ def test_wrong_expected_value_is_mismatch_with_cell_diff():
         "name": "expects_wrong_value", "inputs": {"load": [{"amount": 2.0}]},
         "expected": [{"amount": 2.0, "doubled": 5.0}],
     }])
-    [result] = run_stage_examples(stage)
+    [result] = run_stage_tests(stage)
     assert result.status == "mismatch"
     [diff] = result.diffs
     assert diff.column == "doubled" and diff.expected == 5.0 and diff.actual == 4.0
@@ -48,18 +48,18 @@ def test_raising_function_is_error_with_exception_text():
         [{"name": "raises", "inputs": {"load": [{"amount": 1.0}]},
           "expected": [{"amount": 1.0, "doubled": 2.0}]}],
     )
-    [result] = run_stage_examples(stage)
+    [result] = run_stage_tests(stage)
     assert result.status == "error"
     assert "KeyError" in (result.message or "")
 
 
-def test_example_violating_input_schema_is_malformed_not_code_bug():
-    # amount is non-nullable; the example's input row is null there.
+def test_test_violating_input_schema_is_malformed_not_code_bug():
+    # amount is non-nullable; the test's input row is null there.
     stage = _row_stage(_DOUBLE, [{
         "name": "null_amount", "inputs": {"load": [{"amount": None}]},
         "expected": [{"amount": None, "doubled": None}],
     }])
-    [result] = run_stage_examples(stage)
+    [result] = run_stage_tests(stage)
     assert result.status == "malformed"
     assert "null" in (result.message or "").lower()
 
@@ -70,23 +70,23 @@ def test_nan_output_matches_expected_null():
         [{"name": "nan_normalizes_to_null", "inputs": {"load": [{"amount": 1.0}]},
           "expected": [{"amount": 1.0, "doubled": None}]}],
     )
-    [result] = run_stage_examples(stage)
+    [result] = run_stage_tests(stage)
     assert result.status == "passed"
 
 
-def _frame_stage(code: str, examples: list[dict]) -> Stage:
+def _frame_stage(code: str, tests: list[dict]) -> Stage:
     return Stage.model_validate({
         "id": "reshape", "name": "Reshape", "type": "python_frame_function",
         "inputs": [{"id": "load", "schema": _IN_SCHEMA}],
         "output_schema": _IN_SCHEMA,
         "function": {"kind": "inline", "code": code},
-        "examples": examples,
+        "tests": tests,
     })
 
 
 def test_frame_function_output_order_does_not_matter():
-    # The function sorts descending; the example expects ascending order. The
-    # type is not order-preserving, so an example must not pin an ordering.
+    # The function sorts descending; the test expects ascending order. The
+    # type is not order-preserving, so a test must not pin an ordering.
     stage = _frame_stage(
         "def transform(df):\n"
         "    return df.sort_values('amount', ascending=False).reset_index(drop=True)\n",
@@ -94,16 +94,16 @@ def test_frame_function_output_order_does_not_matter():
           "inputs": {"load": [{"amount": 1.0}, {"amount": 2.0}]},
           "expected": [{"amount": 1.0}, {"amount": 2.0}]}],
     )
-    [result] = run_stage_examples(stage)
+    [result] = run_stage_tests(stage)
     assert result.status == "passed"
 
 
-def test_frame_function_empty_input_example_runs():
+def test_frame_function_empty_input_test_runs():
     stage = _frame_stage(
         "def transform(df):\n    return df\n",
         [{"name": "empty_in_empty_out", "inputs": {"load": []}, "expected": []}],
     )
-    [result] = run_stage_examples(stage)
+    [result] = run_stage_tests(stage)
     assert result.status == "passed"
 
 
@@ -114,7 +114,7 @@ def test_row_count_mismatch_reported():
           "inputs": {"load": [{"amount": 1.0}, {"amount": 2.0}]},
           "expected": [{"amount": 1.0}, {"amount": 2.0}]}],
     )
-    [result] = run_stage_examples(stage)
+    [result] = run_stage_tests(stage)
     assert result.status == "mismatch"
     assert "2 row(s)" in (result.message or "") and "1" in (result.message or "")
 
@@ -129,7 +129,7 @@ def test_frame_function_returning_none_is_error_not_crash():
           "inputs": {"load": [{"amount": 1.0}]},
           "expected": [{"amount": 1.0}]}],
     )
-    [result] = run_stage_examples(stage)
+    [result] = run_stage_tests(stage)
     assert result.status == "error"
     assert "NoneType" in (result.message or "")
 
@@ -141,7 +141,7 @@ def test_frame_function_returning_non_dataframe_is_error_not_crash():
           "inputs": {"load": [{"amount": 1.0}]},
           "expected": [{"amount": 1.0}]}],
     )
-    [result] = run_stage_examples(stage)
+    [result] = run_stage_tests(stage)
     assert result.status == "error"
     assert "dict" in (result.message or "")
 
@@ -161,7 +161,7 @@ _MERGED_SCHEMA = {"columns": [
 ]}
 
 
-def _multi_input_frame_stage(code: str, examples: list[dict]) -> Stage:
+def _multi_input_frame_stage(code: str, tests: list[dict]) -> Stage:
     return Stage.model_validate({
         "id": "merge", "name": "Merge", "type": "python_frame_function",
         "inputs": [
@@ -170,14 +170,14 @@ def _multi_input_frame_stage(code: str, examples: list[dict]) -> Stage:
         ],
         "output_schema": _MERGED_SCHEMA,
         "function": {"kind": "inline", "code": code},
-        "examples": examples,
+        "tests": tests,
     })
 
 
 _MERGE = 'def transform(left_df, right_df):\n    return left_df.merge(right_df, on="id")\n'
 
 
-def test_multi_input_frame_example_passes():
+def test_multi_input_frame_test_passes():
     stage = _multi_input_frame_stage(_MERGE, [{
         "name": "merges_on_id",
         "inputs": {
@@ -186,7 +186,7 @@ def test_multi_input_frame_example_passes():
         },
         "expected": [{"id": "a", "amount": 1.0, "label": "widget"}],
     }])
-    [result] = run_stage_examples(stage)
+    [result] = run_stage_tests(stage)
     assert result.status == "passed" and not result.diffs
 
 
@@ -204,7 +204,7 @@ def test_multi_input_frame_positional_order_is_declared_order():
         ],
         "output_schema": id_schema,
         "function": {"kind": "inline", "code": "def transform(a, b):\n    return a\n"},
-        "examples": [{
+        "tests": [{
             "name": "returns_first_declared_input",
             "inputs": {
                 "left": [{"id": "from_left"}],
@@ -213,11 +213,11 @@ def test_multi_input_frame_positional_order_is_declared_order():
             "expected": [{"id": "from_left"}],
         }],
     })
-    [result] = run_stage_examples(stage)
+    [result] = run_stage_tests(stage)
     assert result.status == "passed" and not result.diffs
 
 
-def test_find_failing_examples_names_stage_and_example():
+def test_find_failing_stage_tests_names_stage_and_test():
     green = _row_stage(_DOUBLE, [{
         "name": "doubles_two", "inputs": {"load": [{"amount": 2.0}]},
         "expected": [{"amount": 2.0, "doubled": 4.0}],
@@ -226,14 +226,14 @@ def test_find_failing_examples_names_stage_and_example():
         "name": "expects_wrong_value", "inputs": {"load": [{"amount": 2.0}]},
         "expected": [{"amount": 2.0, "doubled": 5.0}],
     }])
-    failures = find_failing_examples([green, red])
+    failures = find_failing_stage_tests([green, red])
     assert len(failures) == 1
     assert "expects_wrong_value" in failures[0] and "double" in failures[0]
 
 
-def test_stage_without_examples_contributes_no_failures():
+def test_stage_without_tests_contributes_no_failures():
     plain = Stage.model_validate({
         "id": "load", "name": "Load", "type": "input_data",
         "connector": {"kind": "computed_static"},
     })
-    assert find_failing_examples([plain]) == []
+    assert find_failing_stage_tests([plain]) == []

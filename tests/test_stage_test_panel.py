@@ -1,4 +1,4 @@
-"""The node review partial renders the stage's examples as a skimmable report."""
+"""The node review partial renders the stage's tests as a skimmable report."""
 import json
 from pathlib import Path
 
@@ -27,7 +27,7 @@ def _seed_project(root: Path) -> None:
         "output_schema": _OUT_SCHEMA,
         "function": {"kind": "inline",
                      "code": "def transform(row):\n    return {**row, 'doubled': row['amount'] * 2}\n"},
-        "examples": [
+        "tests": [
             {"name": "doubles_two", "description": "The basic doubling contract.",
              "inputs": {"load": [{"amount": 2.0}]},
              "expected": [{"amount": 2.0, "doubled": 4.0}]},
@@ -47,19 +47,19 @@ def client(tmp_path: Path, monkeypatch) -> TestClient:
     return TestClient(app)
 
 
-def test_panel_shows_each_example_with_status(client: TestClient, tmp_path: Path) -> None:
+def test_panel_shows_each_test_with_status(client: TestClient, tmp_path: Path) -> None:
     _seed_project(tmp_path)
     response = client.get("/project/alpha/node/double/review-partial")
     assert response.status_code == 200
     html = response.text
-    assert "Examples" in html
+    assert "Tests" in html
     assert "doubles_two" in html and "The basic doubling contract." in html
     assert "expects_wrong_value" in html
     assert "passed" in html and "mismatch" in html
 
 
-def test_panel_without_examples_has_no_examples_section(client: TestClient, tmp_path: Path) -> None:
+def test_panel_without_tests_has_no_tests_section(client: TestClient, tmp_path: Path) -> None:
     _seed_project(tmp_path)
     response = client.get("/project/alpha/node/load/review-partial")
     assert response.status_code == 200
-    assert "example-report" not in response.text
+    assert "test-report" not in response.text

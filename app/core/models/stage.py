@@ -22,7 +22,7 @@ from app.core.models.schema import (
     format_errors,
 )
 from app.core.models.stages.code import check_inline_function_code
-from app.core.models.stages.examples import StageExample, check_stage_examples
+from app.core.models.stages.stage_tests import StageTest, check_stage_tests
 from app.core.prompt_template import find_template_fields
 
 # ── Enumerated vocabularies ──────────────────────────────────────────────────
@@ -339,10 +339,10 @@ class Stage(_Base):
     eval: Optional[dict[str, Any]] = None
 
     # Authored input→expected-output cases for python transforms — the stage's
-    # reviewable behavior contract, run by app.runtime.examples. None when the
-    # stage has none: the canonical dump must not carry an `examples` key for
-    # stages without examples, or every pre-existing belief hash would change.
-    examples: Optional[list[StageExample]] = None
+    # reviewable behavior contract, run by app.runtime.stage_tests. None when the
+    # stage has none: the canonical dump must not carry a `tests` key for
+    # stages without tests, or every pre-existing belief hash would change.
+    tests: Optional[list[StageTest]] = None
 
     @field_validator("inputs", mode="before")
     @classmethod
@@ -363,17 +363,17 @@ class Stage(_Base):
             raise ValueError(f"id {v!r} should be snake_case")
         return v
 
-    @field_validator("examples", mode="before")
+    @field_validator("tests", mode="before")
     @classmethod
-    def _empty_examples_means_absent(cls, v: Any) -> Any:
-        """Normalise `examples: []` to absent, so the canonical dump (and the
+    def _empty_tests_means_absent(cls, v: Any) -> Any:
+        """Normalise `tests: []` to absent, so the canonical dump (and the
         belief hash computed over it) is identical whether the key was omitted
         or given empty."""
         return None if v == [] else v
 
     @model_validator(mode="after")
-    def _examples_shape(self) -> "Stage":
-        check_stage_examples(self.type, self.input_ids, self.examples or [])
+    def _tests_shape(self) -> "Stage":
+        check_stage_tests(self.type, self.input_ids, self.tests or [])
         return self
 
     @model_validator(mode="after")

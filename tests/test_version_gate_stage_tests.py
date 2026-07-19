@@ -1,4 +1,4 @@
-"""POST /project/{p}/version refuses to snapshot while any stage example is red."""
+"""POST /project/{p}/version refuses to snapshot while any stage test is red."""
 import json
 from pathlib import Path
 
@@ -28,7 +28,7 @@ def _seed_project(root: Path, expected_doubled: float) -> None:
         "output_schema": _OUT_SCHEMA,
         "function": {"kind": "inline",
                      "code": "def transform(row):\n    return {**row, 'doubled': row['amount'] * 2}\n"},
-        "examples": [{
+        "tests": [{
             "name": "doubles_two",
             "inputs": {"load": [{"amount": 2.0}]},
             "expected": [{"amount": 2.0, "doubled": expected_doubled}],
@@ -47,7 +47,7 @@ def client(tmp_path: Path, monkeypatch) -> TestClient:
     return TestClient(app)
 
 
-def test_red_example_blocks_version(client: TestClient, tmp_path: Path) -> None:
+def test_red_test_blocks_version(client: TestClient, tmp_path: Path) -> None:
     _seed_project(tmp_path, expected_doubled=5.0)  # wrong on purpose
     response = client.post("/project/alpha/version", data={"message": "v1"})
     assert response.status_code == 400
@@ -57,7 +57,7 @@ def test_red_example_blocks_version(client: TestClient, tmp_path: Path) -> None:
     assert not (tmp_path / "alpha" / "versions").exists()
 
 
-def test_green_examples_allow_version(client: TestClient, tmp_path: Path) -> None:
+def test_green_tests_allow_version(client: TestClient, tmp_path: Path) -> None:
     _seed_project(tmp_path, expected_doubled=4.0)
     response = client.post("/project/alpha/version", data={"message": "v1"})
     assert response.status_code == 200

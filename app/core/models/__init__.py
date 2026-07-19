@@ -38,7 +38,7 @@ from app.core.models.stage import (
     StageType,
     validate_stage,
 )
-from app.core.models.stages.examples import StageExample
+from app.core.models.stages.stage_tests import StageTest
 from app.core.models.workflow import (
     Workflow,
     check_inputs_resolve,
@@ -173,7 +173,7 @@ __all__ = [
     "SourceRef", "Column", "TableSchema", "Connector", "LLMConfig",
     "PythonFunction", "JoinKey", "JoinConfig", "AggregationOp",
     "AggregateConfig", "QueueConfig", "PublishConfig", "ReviewConfig",
-    "InputRef", "Stage", "StageExample", "validate_stage",
+    "InputRef", "Stage", "StageTest", "validate_stage",
     "Workflow", "parse_workflow", "validate_workflow", "validate_workflow_draft",
     "check_unique_ids", "check_inputs_resolve", "detect_cycle",
     "SchemaKind", "NamedColumn", "NamedSchema", "SchemaLibrary",
