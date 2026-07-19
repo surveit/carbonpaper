@@ -24,6 +24,7 @@ from app.evals.store import (
     save_eval_config,
     save_eval_run,
 )
+from app.services.versioning import Version
 
 
 def _ref(path="x.csv", cols=("k",)):
@@ -228,14 +229,9 @@ def test_latest_version_id_none_when_no_versions(tmp_path: Path):
 
 
 def test_latest_version_id_returns_newest(tmp_path: Path):
-    versions_dir = tmp_path / "versions"
     for vid in ("20260101T000000", "20260201T000000"):
-        vdir = versions_dir / vid
-        vdir.mkdir(parents=True)
-        (vdir / "version.json").write_text(
-            f'{{"id": "{vid}", "created_at": "x", "parent_version": null, '
-            f'"message": "m", "reviewer": "r", "coverage": {{}}}}',
-            encoding="utf-8")
+        Version(id=f"{tmp_path.name}/{vid}", version_id=vid, created_at="x",
+                message="m", reviewer="r").save()
     assert latest_version_id(tmp_path) == "20260201T000000"
 
 

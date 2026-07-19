@@ -22,7 +22,7 @@ from app.core.models import Stage, Workflow
 from app.runtime.runner import execute_run, run_subset
 from app.runtime.stages import llm_transform as lt
 from app.services.loader import WorkflowLoadError
-from app.services.versioning import create_version
+from app.services.versioning import create_version, list_versions
 
 
 def _seed_version(root):
@@ -263,7 +263,7 @@ def test_run_without_a_version_fails_loudly(tmp_path):
     with pytest.raises(NoVersionToRunError):
         execute_run(tmp_path, repo_root=tmp_path)
     assert not (tmp_path / "runs").exists()
-    assert not (tmp_path / "versions").exists()
+    assert list_versions(tmp_path) == []
 
 
 def test_create_version_rejects_invalid_working_copy(tmp_path):
@@ -279,7 +279,7 @@ def test_create_version_rejects_invalid_working_copy(tmp_path):
     with pytest.raises(WorkflowLoadError) as exc:
         create_version(tmp_path, message="x", reviewer="test")
     assert any("params.path" in i for i in exc.value.issues)
-    assert not (tmp_path / "versions").exists()  # snapshotted nothing
+    assert list_versions(tmp_path) == []  # snapshotted nothing
 
 
 def test_invalid_workflow_never_becomes_a_version_and_run_never_pins_stale(tmp_path):
@@ -298,12 +298,12 @@ def test_invalid_workflow_never_becomes_a_version_and_run_never_pins_stale(tmp_p
     # You cannot make a version from it, and it writes nothing.
     with pytest.raises(WorkflowLoadError):
         create_version(tmp_path, message="x", reviewer="test")
-    assert not (tmp_path / "versions").exists()
+    assert list_versions(tmp_path) == []
 
     # A run refuses (no version) and does NOT auto-create one — nothing on disk.
     with pytest.raises(NoVersionToRunError):
         execute_run(tmp_path, repo_root=tmp_path)
-    assert not (tmp_path / "versions").exists()
+    assert list_versions(tmp_path) == []
     assert not (tmp_path / "runs").exists()
 
     # Fix the working copy. A run STILL refuses until a version is created

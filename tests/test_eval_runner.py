@@ -2,12 +2,10 @@
 eval dataset at the override stage, run the grain-preserving pathway to the target,
 score the target's output against the dataset's expected column, and record the run.
 
-Builds a tiny versioned project on disk (load → classify) — no shipped data, no LLM:
-`classify` is a deterministic python_row_function so the whole loop is exercised
-without a model backend."""
+Builds a tiny project (load → classify) pinned to a stored version — no shipped
+data, no LLM: `classify` is a deterministic python_row_function so the whole loop
+is exercised without a model backend."""
 from __future__ import annotations
-
-import json
 
 import pandas as pd
 import pytest
@@ -16,10 +14,11 @@ from fastapi.testclient import TestClient
 import app.web.routers.evals as evals_router
 from app.core.errors import EvalNotScorableError
 from app.main import app
-from app.core.models import EvalConfig, ExpectedOutput, FileFormat, TableRef
+from app.core.models import EvalConfig, ExpectedOutput, FileFormat, Stage, TableRef
 from app.core.models.schema import TableSchema
 from app.evals.runner import run_eval
 from app.evals.store import load_eval_run, save_eval_config
+from app.services.versioning import Version
 
 _LOAD = {
     "id": "load", "type": "input_data", "name": "Load rows",
@@ -47,12 +46,12 @@ def project(tmp_path):
     """A `demo` project with a committed version `v1` (load → classify) and an eval
     whose dataset's expected `label` is wrong on exactly one of four rows."""
     demo = tmp_path / "demo"
-    compiled = demo / "versions" / "v1" / "compiled"
-    compiled.mkdir(parents=True)
-    (compiled / "01_load.json").write_text(json.dumps(_LOAD), encoding="utf-8")
-    (compiled / "02_classify.json").write_text(json.dumps(_CLASSIFY), encoding="utf-8")
-    (demo / "versions" / "v1" / "version.json").write_text(
-        json.dumps({"id": "v1", "created_at": "2026-07-10T00:00:00"}), encoding="utf-8")
+    demo.mkdir()
+    Version(
+        id="demo/v1", version_id="v1", created_at="2026-07-10T00:00:00",
+        message="seed", reviewer="test",
+        stages=[Stage.model_validate(_LOAD), Stage.model_validate(_CLASSIFY)],
+    ).save()
 
     data = demo / "eval_data"
     data.mkdir()

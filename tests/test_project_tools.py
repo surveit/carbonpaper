@@ -173,6 +173,7 @@ def test_compile_workflow_reviewed_work_without_confirm_raises(examples_root: Pa
     # Approve the seeded "load" stage so review work exists.
     from app.core.models import Stage
     from app.services import loader, node_review
+    from app.services.versioning import list_versions
 
     seeded = json.loads((pdir / "compiled" / "01_load.json").read_text(encoding="utf-8"))
     current_hash = node_review.node_content_hash(loader.stage_to_spec_dict(Stage.model_validate(seeded)))
@@ -183,7 +184,7 @@ def test_compile_workflow_reviewed_work_without_confirm_raises(examples_root: Pa
 
     # nothing overwritten, no version created
     assert json.loads((pdir / "compiled" / "01_load.json").read_text(encoding="utf-8")) == seeded
-    assert not (pdir / "versions").exists()
+    assert list_versions(pdir) == []
 
 
 def test_compile_workflow_confirm_overwrite_snapshots_then_writes(examples_root: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -193,6 +194,7 @@ def test_compile_workflow_confirm_overwrite_snapshots_then_writes(examples_root:
 
     from app.core.models import Stage
     from app.services import loader, node_review
+    from app.services.versioning import list_versions, load_version_stages
 
     seeded = json.loads((pdir / "compiled" / "01_load.json").read_text(encoding="utf-8"))
     current_hash = node_review.node_content_hash(loader.stage_to_spec_dict(Stage.model_validate(seeded)))
@@ -201,13 +203,12 @@ def test_compile_workflow_confirm_overwrite_snapshots_then_writes(examples_root:
     out = _tool(tools, "compile_workflow")("alpha", "the conversation so far", True)
 
     assert out == {"ok": True, "stages": ["load"]}
-    versions = list((pdir / "versions").iterdir())
+    versions = list_versions(pdir)
     assert len(versions) == 1
-    snapshot_meta = json.loads((versions[0] / "version.json").read_text(encoding="utf-8"))
-    assert snapshot_meta["reviewer"] == "agent"
+    assert versions[0]["reviewer"] == "agent"
     # the snapshot preserves the PRE-regenerate (approved) spec
-    snapshotted_stage = json.loads((versions[0] / "compiled" / "01_load.json").read_text(encoding="utf-8"))
-    assert snapshotted_stage == seeded
+    [snapshotted_stage] = load_version_stages(pdir, versions[0]["id"])
+    assert loader.stage_to_spec_dict(snapshotted_stage) == loader.stage_to_spec_dict(Stage.model_validate(seeded))
 
 
 def test_compile_workflow_validation_issues_writes_nothing(examples_root: Path, monkeypatch: pytest.MonkeyPatch) -> None:
