@@ -13,7 +13,7 @@ def _stage(data: dict) -> Stage:
 def _stages() -> dict[str, Stage]:
     return {
         "seeds": _stage({"id": "seeds", "type": "input_data", "name": "Load seeds",
-                         "connector": {"kind": "computed_static"}}),
+                         "connector": {"kind": "file"}}),
         "enrich": _stage({
             "id": "enrich", "type": "python_row_function", "name": "Enrich",
             "inputs": [{"id": "seeds"}],

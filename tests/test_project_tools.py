@@ -13,7 +13,7 @@ from app.services import compilation, workspace
 # tests/test_workspace.py's _HANDLE_BY_TYPE so every fixture stage here
 # round-trips through Stage.model_validate rather than landing in `issues`.
 _HANDLE_BY_TYPE: dict[str, dict] = {
-    "input_data": {"connector": {"kind": "computed_static"}},
+    "input_data": {"connector": {"kind": "file"}},
     "llm_transform": {"llm": {"model": "claude-sonnet-4-6", "prompt_template": "score {row}"}},
 }
 

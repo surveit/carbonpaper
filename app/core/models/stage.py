@@ -68,7 +68,6 @@ def is_grain_and_order_preserving(stage_type: StageType) -> bool:
 
 class ConnectorKind(str, Enum):
     file = "file"
-    computed_static = "computed_static"
 
 
 class FileFormat(str, Enum):

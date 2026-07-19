@@ -189,7 +189,7 @@ def test_unimplemented_connector_kind_rejected():
 
 def test_implemented_connectors_ok(tmp_path):
     m.Connector.model_validate({"kind": "file", "params": {"path": str(tmp_path / "d.csv"), "format": "csv"}})
-    m.Connector.model_validate({"kind": "computed_static", "params": {}})
+    m.Connector.model_validate({"kind": "file", "params": {}})
 
 
 def test_weighted_formula_cut():

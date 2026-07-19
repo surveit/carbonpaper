@@ -54,7 +54,7 @@ def _seed(examples: Path, name: str) -> Path:
         "id": "load",
         "name": "Load rows",
         "type": "input_data",
-        "connector": {"kind": "computed_static"},
+        "connector": {"kind": "file"},
     }
     (compiled / "01_load.json").write_text(json.dumps(stage), encoding="utf-8")
     return examples / name
