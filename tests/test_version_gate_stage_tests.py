@@ -19,7 +19,7 @@ def _seed_project(root: Path, expected_doubled: float) -> None:
     compiled.mkdir(parents=True)
     (compiled / "01_load.json").write_text(json.dumps({
         "id": "load", "name": "Load", "type": "input_data",
-        "connector": {"kind": "computed_static"},
+        "connector": {"kind": "file"},
         "output_schema": _IN_SCHEMA,
     }), encoding="utf-8")
     (compiled / "02_double.json").write_text(json.dumps({

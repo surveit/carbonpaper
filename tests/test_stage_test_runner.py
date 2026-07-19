@@ -289,6 +289,6 @@ def test_find_failing_stage_tests_names_stage_and_test():
 def test_stage_without_tests_contributes_no_failures():
     plain = Stage.model_validate({
         "id": "load", "name": "Load", "type": "input_data",
-        "connector": {"kind": "computed_static"},
+        "connector": {"kind": "file"},
     })
     assert find_failing_stage_tests([plain]) == []

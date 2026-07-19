@@ -41,7 +41,7 @@ def test_valid_test_parses_on_python_row_stage():
 def test_tests_rejected_on_non_python_stage():
     bad = {
         "id": "load", "name": "Load", "type": "input_data",
-        "connector": {"kind": "computed_static"},
+        "connector": {"kind": "file"},
         "tests": [{"name": "x", "inputs": {}, "expected": []}],
     }
     with pytest.raises(ValidationError, match="python transforms"):
