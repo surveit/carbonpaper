@@ -165,7 +165,7 @@ def test_workflow_page_points_to_versions_tab():
     the Create-version control and links to that tab, not a duplicated inline list."""
     html = client.get("/project/demo/workflow").text
     assert "wf-versions-link" in html                  # the pointer to the tab
-    assert 'href="/project/demo/versions"' in html     # which links there
+    assert 'href="/project/demo/workflow/versions"' in html     # which links there
 
 
 def test_sidebar_nests_versions_runs_evals_under_workflow():
@@ -174,7 +174,7 @@ def test_sidebar_nests_versions_runs_evals_under_workflow():
     html = client.get("/project/demo").text
     assert "app-nav-children" in html
     assert 'href="/project/demo/workflow"' in html
-    for child_href in ("/project/demo/versions", "/project/demo/runs", "/project/demo/evals"):
+    for child_href in ("/project/demo/workflow/versions", "/project/demo/runs", "/project/demo/evals"):
         assert f'href="{child_href}"' in html
 
 

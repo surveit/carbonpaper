@@ -16,7 +16,7 @@ from __future__ import annotations
 from typing import Any
 
 from fastapi import APIRouter, Form, HTTPException, Request
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 from app.services import node_review, stage_edit, versioning
 from app.services.loader import stage_to_json, stage_to_spec_dict
@@ -26,7 +26,6 @@ from app.runtime.stage_tests import StageTestResult, find_failing_stage_tests, r
 from app.web.config import EXAMPLES_DIR, templates
 from app.web.diagrams import TYPE_CLASS, TYPE_GLYPH, build_mermaid_graph
 from app.web.loading import find_stage, load_stages, resolve_function_code
-from app.web.project_view import shell_state
 
 router = APIRouter()
 
@@ -240,20 +239,20 @@ async def create_version_route(project: str, message: str = Form(...)):
     return JSONResponse({"ok": True, "version": meta})
 
 
-@router.get("/project/{project}/versions", response_class=HTMLResponse)
-async def versions_index(request: Request, project: str):
-    """VERSIONS section of the project shell: every version newest-first, with frozen
-    coverage. A child of the Workflow group, so it passes the SAME shell_state the
-    other sections do (the sidebar agrees) plus its version rows."""
+@router.post("/project/{project}/versions/{version_id}/publish")
+async def publish_version_route(project: str, version_id: str):
+    """Record human approval on one version (the gate runs pin to). Idempotent;
+    metadata only — stage content is never touched. A malformed version_id (any
+    shape but the timestamp versioning.load_version_meta expects) 404s through
+    that same FileNotFoundError. Publish is only ever posted from the version's own
+    detail page, so redirect back there (now showing published) in one hop."""
     project_dir = EXAMPLES_DIR / project
     if not project_dir.is_dir():
         raise HTTPException(status_code=404, detail=f"No project '{project}'")
-    return templates.TemplateResponse(
-        request,
-        "versions.html",
-        {
-            "state": shell_state(project_dir),
-            "section": "versions",
-            "versions": versioning.list_versions(project_dir),
-        },
+    try:
+        versioning.publish_version(project_dir, version_id, reviewer="local")
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return RedirectResponse(
+        url=f"/project/{project}/workflow/version/{version_id}", status_code=303
     )

@@ -86,7 +86,7 @@ def build_nav(state: project.ProjectState) -> list[NavItem]:
         _nav_leaf("workflow", "Workflow", f"{base}/workflow",
                   _workflow_status(state.workflow),
                   children=[
-                      _nav_leaf("versions", "Versions", f"{base}/versions",
+                      _nav_leaf("versions", "Versions", f"{base}/workflow/versions",
                                 _present_status(state.versions > 0)),
                       _nav_leaf("runs", "Runs", f"{base}/runs",
                                 _runs_status(state.runs)),
@@ -106,7 +106,7 @@ def _next_action(state: project.ProjectState) -> NextAction:
       2. data model not approved   → approve it           (/data_model)
       3. no workflow               → build the workflow   (/workflow)
       4. workflow approved<total   → review the workflow  (/workflow)
-      5. workflow approved, 0 runs → run it               (/workflow)
+      5. workflow approved, 0 runs → run it               (/workflow/versions)
       6. runs awaiting_review>0    → review the run       (/runs)
       7. otherwise                 → view runs            (/runs)
     """
@@ -145,12 +145,13 @@ def _next_action(state: project.ProjectState) -> NextAction:
             label="Review the workflow",
             href=f"{base}/workflow",
         )
-    # 5. Workflow fully approved but never run → run it (the run button is on /workflow).
+    # 5. Workflow fully approved but never run → run it (picked from the version
+    #    list, since a run pins to a published version).
     if runs.n == 0:
         return NextAction(
             key="run_workflow",
             label="Run the workflow",
-            href=f"{base}/workflow",
+            href=f"{base}/workflow/versions",
         )
     # 6. A run is halted awaiting review → review the run.
     if runs.awaiting_review > 0:

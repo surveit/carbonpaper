@@ -1,4 +1,5 @@
-"""Run lifecycle: trigger a run, list runs, poll live status, render a run's
+"""Run lifecycle: trigger a run (against the latest published version, or a
+specific pinned version), list runs, poll live status, render a run's
 detail + per-stage panel, the scratch in-memory re-run, artifact serving, and
 resume."""
 
@@ -82,6 +83,29 @@ async def trigger_run(request: Request, project: str):
         url=f"/project/{project}/runs/{prep['run_id']}",
         status_code=303,
     )
+
+
+@router.post("/project/{project}/workflow/version/{version_id}/run")
+async def trigger_run_of_version(project: str, version_id: str):
+    """Run one specific version. Pins the run to `version_id`: prepare_run raises
+    FileNotFoundError for a version_id with no version document on disk (404),
+    and NoVersionToRunError for a version_id that exists but is not published
+    (400). Same background-and-redirect flow as trigger_run."""
+    project_dir = EXAMPLES_DIR / project
+    if not project_dir.is_dir():
+        raise HTTPException(status_code=404, detail=f"No project '{project}'")
+    try:
+        prep = prepare_run(project_dir, REPO_ROOT, version_id=version_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except NoVersionToRunError as exc:
+        return JSONResponse({"detail": str(exc)}, status_code=400)
+    except WorkflowLoadError as exc:
+        return JSONResponse({"detail": "workflow version failed validation",
+                             "issues": exc.issues}, status_code=400)
+    run_in_background(run_prepared, prep)
+    return RedirectResponse(url=f"/project/{project}/runs/{prep['run_id']}",
+                            status_code=303)
 
 
 def _collect_bindings(
