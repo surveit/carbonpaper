@@ -67,10 +67,9 @@ async def trigger_run(request: Request, project: str):
     try:
         bindings = _collect_bindings(await request.form(), project_dir)
         prep = prepare_run(project_dir, REPO_ROOT, bindings=bindings)
-    except (NoVersionToRunError, MissingInputBindingError, FileNotFoundError,
-            ValueError) as exc:
+    except (NoVersionToRunError, MissingInputBindingError, ValueError) as exc:
         # ValueError here is binding/limit/offset validation failures raised by
-        # apply_input_bindings / prepare_run — not a catch-all for other bugs.
+        # apply_run_bindings / prepare_run — not a catch-all for other bugs.
         return JSONResponse({"detail": str(exc)}, status_code=400)
     except WorkflowLoadError as exc:
         return JSONResponse({"detail": "compiled workflow failed validation",
@@ -82,19 +81,20 @@ async def trigger_run(request: Request, project: str):
     )
 
 
-def _collect_bindings(form: FormData, project_dir: Path) -> dict[str, str]:
-    """Read `binding__<stage_id>` form fields into run bindings. A field whose
-    value equals the workflow-authored path is NOT a binding — the workflow is
-    the designating source, and the manifest provenance should say so."""
+def _collect_bindings(form: FormData, project_dir: Path) -> dict[str, dict[str, str]]:
+    """Read `binding__<stage_id>` form fields into run bindings (each a
+    connector-params dict, {"path": ...}). A field whose value equals the
+    workflow-authored path is NOT a binding — the workflow is the designating
+    source, and the manifest provenance should say so."""
     authored = {fi["stage_id"]: fi["path"] for fi in list_file_inputs(project_dir)}
-    bindings: dict[str, str] = {}
+    bindings: dict[str, dict[str, str]] = {}
     for key, value in form.items():
         if not key.startswith("binding__"):
             continue
         stage_id = key[len("binding__"):]
         path = str(value).strip()
         if path and path != authored.get(stage_id, ""):
-            bindings[stage_id] = path
+            bindings[stage_id] = {"path": path}
     return bindings
 
 
