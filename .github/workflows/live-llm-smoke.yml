@@ -1,0 +1,36 @@
+# Tier-2 smoke: the journey with a real llm_transform stage. Manual-trigger
+# ONLY (workflow_dispatch) and never merge-blocking: a live model call is
+# inherently flakier than the offline gate (.github/workflows CI), and a
+# routinely-red required check erodes trust in the green ones.
+#
+# Token spend is bounded by the test itself (tests/test_journey_live_llm.py:
+# 3 rows x 3 attempts max, small model, one-line prompt — under a cent per
+# run). ANTHROPIC_API_KEY should be a dedicated key with a spend cap set in
+# the Anthropic console, so a misbehaving run is capped twice.
+name: live-llm-smoke
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency: live-llm-smoke
+
+jobs:
+  live-llm:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - run: python -m pip install -r requirements-dev.txt
+      - run: npm install -g @anthropic-ai/claude-code
+      - run: python -m pytest -m live_llm tests/test_journey_live_llm.py
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
