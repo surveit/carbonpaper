@@ -26,7 +26,7 @@ import re
 from pathlib import Path
 from typing import Any, ClassVar
 
-from pydantic import Field
+from pydantic import BaseModel, Field
 
 from app.core.errors import DocumentNotFound, DraftNotFoundError
 from app.core.models.workflow import validate_workflow_draft
@@ -34,6 +34,7 @@ from app.core.persistence import PersistedModel
 from app.core.utils import generate_word_triplet_id
 from app.services import versioning, workspace
 from app.services.loader import stage_to_spec_dict
+from app.services.versioning import VersionMeta
 
 
 class Draft(PersistedModel):
@@ -51,17 +52,55 @@ class Draft(PersistedModel):
     stages: list[dict[str, Any]] = Field(default_factory=list)
 
 
-def _view(d: Draft) -> dict[str, Any]:
+class DraftView(BaseModel):
     """The agent-facing shape every caller of this module reads: `id` is the
     LOCAL draft_id, never the composite store id — mirrors versioning's
-    `_meta`."""
-    return {
-        "id": d.draft_id,
-        "parent_version": d.parent_version,
-        "stages": d.stages,
-        "created_at": d.created_at,
-        "updated_at": d.updated_at,
-    }
+    VersionMeta. `stages` stays raw spec dicts (never typed `Stage`) — the one
+    sanctioned boundary where a draft's stages are allowed to be unloadable as
+    a workflow mid-edit."""
+
+    id: str
+    parent_version: str | None
+    stages: list[dict[str, Any]]
+    created_at: str
+    updated_at: str
+
+
+class DraftDetail(DraftView):
+    """A draft's view plus its current validation problems."""
+
+    issues: list[str]
+
+
+class DraftEdit(BaseModel):
+    """The summary every draft edit (set/remove stage) returns: what's in the
+    draft now, and whether it would save cleanly."""
+
+    ok: bool
+    draft_id: str
+    stage_ids: list[str | None]
+    issues: list[str]
+
+
+class SaveResult(BaseModel):
+    """The outcome of freezing a draft into a version: either refused with the
+    blocking `issues` (nothing written, `version` stays None), or the frozen
+    version's meta."""
+
+    ok: bool
+    issues: list[str] = Field(default_factory=list)
+    version: VersionMeta | None = None
+
+
+def _view(d: Draft) -> DraftView:
+    """Project a Draft down to its public view."""
+    return DraftView(
+        id=d.draft_id,
+        parent_version=d.parent_version,
+        stages=d.stages,
+        created_at=d.created_at,
+        updated_at=d.updated_at,
+    )
 
 
 def create_draft(
@@ -69,7 +108,7 @@ def create_draft(
     *,
     from_version: str | None = None,
     examples_dir: Path | None = None,
-) -> dict[str, Any]:
+) -> DraftView:
     """Start a new draft for project `name` and return its view (its `id` names
     it in every later call). Seeded with the stages of `from_version` when
     given (and recording it as the draft's parent), empty otherwise."""
@@ -94,17 +133,17 @@ def create_draft(
 
 def read_draft(
     name: str, draft_id: str, *, examples_dir: Path | None = None
-) -> dict[str, Any]:
+) -> DraftDetail:
     """The draft's view plus a non-fatal `issues` list (schema + graph problems
     in its current stages; [] means it would save cleanly)."""
     project_dir = workspace.resolve_project_dir(name, examples_dir)
     d = _load(project_dir, draft_id)
-    return {**_view(d), "issues": validate_workflow_draft(d.stages)}
+    return DraftDetail(**_view(d).model_dump(), issues=validate_workflow_draft(d.stages))
 
 
 def set_draft_stage(
     name: str, draft_id: str, stage_json: str, *, examples_dir: Path | None = None
-) -> dict[str, Any]:
+) -> DraftEdit:
     """Add or replace one stage (matched by its `id`) in the draft. The stage is
     stored even when the resulting workflow is invalid — a draft mid-surgery may
     have dangling edges — and the current problems come back as `issues` so the
@@ -121,7 +160,7 @@ def set_draft_stage(
 
 def remove_draft_stage(
     name: str, draft_id: str, stage_id: str, *, examples_dir: Path | None = None
-) -> dict[str, Any]:
+) -> DraftEdit:
     """Delete one stage from the draft by id. Raises ValueError if no stage in
     the draft carries that id (deleting nothing is a caller mistake, not a
     success)."""
@@ -137,22 +176,18 @@ def remove_draft_stage(
 
 def save_version(
     name: str, draft_id: str, *, message: str, examples_dir: Path | None = None
-) -> dict[str, Any]:
+) -> SaveResult:
     """Freeze the draft's stages into a new immutable version — the draft's only
     exit, and the single validation cliff: an invalid draft is refused with the
     full issue list and nothing is written. On success the draft's parent
     advances to the new version, so successive saves chain (v2 -> v3 -> v4)
     rather than fanning out; the version is born unpublished (publishing is the
-    human's act).
-
-    Returns `{"ok": True, "version": <VersionMeta dumped to plain JSON>}` — the
-    caller (the draft editing tool) JSON-encodes this result, so the typed
-    VersionMeta is dumped to a plain dict at this boundary."""
+    human's act)."""
     project_dir = workspace.resolve_project_dir(name, examples_dir)
     d = _load(project_dir, draft_id)
     issues = validate_workflow_draft(d.stages)
     if issues:
-        return {"ok": False, "issues": issues}
+        return SaveResult(ok=False, issues=issues)
     meta = versioning.create_version_from_stages(
         project_dir,
         d.stages,
@@ -162,7 +197,7 @@ def save_version(
     )
     d.parent_version = meta.id
     d.save()
-    return {"ok": True, "version": meta.model_dump(mode="json")}
+    return SaveResult(ok=True, version=meta)
 
 
 # ─── internals ───────────────────────────────────────────────────────────────
@@ -203,12 +238,12 @@ def _parse_stage_object(stage_json: str) -> dict[str, Any]:
     return stage
 
 
-def _describe(d: Draft) -> dict[str, Any]:
+def _describe(d: Draft) -> DraftEdit:
     """The summary every edit returns: what's in the draft now, and whether it
     would save cleanly."""
-    return {
-        "ok": True,
-        "draft_id": d.draft_id,
-        "stage_ids": [s.get("id") for s in d.stages],
-        "issues": validate_workflow_draft(d.stages),
-    }
+    return DraftEdit(
+        ok=True,
+        draft_id=d.draft_id,
+        stage_ids=[s.get("id") for s in d.stages],
+        issues=validate_workflow_draft(d.stages),
+    )

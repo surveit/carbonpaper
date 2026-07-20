@@ -16,13 +16,14 @@ from typing import Any
 
 import pytest
 from claude_agent_sdk import SdkMcpTool
+from pydantic import BaseModel
 
 from app.agents.compiler.tools import (
     TOOL_SCHEMAS,
     EditingContext,
     make_editing_tools,
 )
-from app.core.agent.registry import build_mcp_server
+from app.core.agent.registry import _as_content, build_mcp_server
 from app.services import workspace
 
 
@@ -136,3 +137,17 @@ def test_unknown_draft_id_surfaces_as_tool_error(examples_root: Path) -> None:
     out = _call(tool, {"project_id": "congresswatch", "draft_id": "calm-otter-lamp"})
     assert out.get("is_error") is True
     assert "No draft" in out["content"][0]["text"]
+
+
+def test_as_content_serializes_a_pydantic_model_to_its_fields() -> None:
+    """A tool returning a pydantic model (e.g. the draft tools' DraftView /
+    SaveResult) must reach the model as JSON content, not an unserializable
+    object — this is the seam create_draft/read_draft/set_draft_stage/
+    remove_draft_stage/save_version all rely on."""
+
+    class _Sample(BaseModel):
+        ok: bool
+        label: str
+
+    out = _as_content(_Sample(ok=True, label="draft"))
+    assert json.loads(out["content"][0]["text"]) == {"ok": True, "label": "draft"}

@@ -23,6 +23,7 @@ from typing import Annotated, Any, Callable
 from pydantic import BaseModel
 
 from app.services import compilation, drafts, project as project_service
+from app.services.drafts import DraftDetail, DraftEdit, DraftView, SaveResult
 
 
 class EditingContext(BaseModel):
@@ -91,7 +92,7 @@ def make_editing_tools(ctx: EditingContext) -> list[Callable[..., Any]]:
             project_id, conversation, confirm_overwrite
         )
 
-    def create_draft(project_id: str, from_version: str = "") -> dict[str, Any]:
+    def create_draft(project_id: str, from_version: str = "") -> DraftView:
         """Start a DRAFT: a disposable scratch copy of workflow stages you edit
         freely (invalid intermediate states are fine) and later freeze with
         save_version. Pass from_version to seed it from an existing version's
@@ -100,24 +101,24 @@ def make_editing_tools(ctx: EditingContext) -> list[Callable[..., Any]]:
         expendable — if one is lost, start a new one."""
         return drafts.create_draft(project_id, from_version=from_version or None)
 
-    def read_draft(project_id: str, draft_id: str) -> dict[str, Any]:
+    def read_draft(project_id: str, draft_id: str) -> DraftDetail:
         """The draft's current stages plus `issues` — every schema/graph problem
         it would fail on if saved now ([] means save_version will succeed)."""
         return drafts.read_draft(project_id, draft_id)
 
-    def set_draft_stage(project_id: str, draft_id: str, stage_json: str) -> dict[str, Any]:
+    def set_draft_stage(project_id: str, draft_id: str, stage_json: str) -> DraftEdit:
         """Add or replace ONE stage in the draft (matched by the stage's `id`).
         `stage_json` is the complete stage as a JSON object string. The draft
         accepts invalid intermediate states — the returned `issues` list what
         still blocks saving."""
         return drafts.set_draft_stage(project_id, draft_id, stage_json)
 
-    def remove_draft_stage(project_id: str, draft_id: str, stage_id: str) -> dict[str, Any]:
+    def remove_draft_stage(project_id: str, draft_id: str, stage_id: str) -> DraftEdit:
         """Delete one stage from the draft by id. Removing a stage other stages
         still input from leaves dangling edges — visible in `issues` until fixed."""
         return drafts.remove_draft_stage(project_id, draft_id, stage_id)
 
-    def save_version(project_id: str, draft_id: str, message: str) -> dict[str, Any]:
+    def save_version(project_id: str, draft_id: str, message: str) -> SaveResult:
         """Freeze the draft into a new immutable version — your proposal for a
         human to review. Validates the whole workflow first: an invalid draft is
         refused with the full issue list and nothing is written. The version is

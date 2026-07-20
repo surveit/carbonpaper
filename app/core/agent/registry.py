@@ -111,5 +111,9 @@ def _wrap(fn: Callable[..., Any], schema: dict[str, object]) -> SdkMcpTool[Any]:
 
 
 def _as_content(value: object) -> dict[str, Any]:
-    text = value if isinstance(value, str) else json.dumps(value, default=str, indent=2)
+    if isinstance(value, str):
+        text = value
+    else:
+        dumpable = value.model_dump(mode="json") if isinstance(value, BaseModel) else value
+        text = json.dumps(dumpable, default=str, indent=2)
     return {"content": [{"type": "text", "text": text}]}
