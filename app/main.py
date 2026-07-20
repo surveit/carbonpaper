@@ -26,7 +26,8 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from starlette.routing import Route
 
-from app.core.persistence import SqliteKvStore, configure_store, is_store_configured
+from app.core.persistence import configure_store, is_store_configured
+from app.core.sqlite_store import SqliteKvStore
 from app.web.config import STATIC_DIR
 from app.web.routers import evals, project, node_review, review, runs
 

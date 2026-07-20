@@ -1,7 +1,8 @@
 import pytest
 
 from app.core.errors import DocumentNotFound
-from app.core.persistence import PersistedModel, SqliteKvStore, configure_store, validate_id
+from app.core.persistence import PersistedModel, configure_store, validate_id
+from app.core.sqlite_store import SqliteKvStore
 
 
 @pytest.fixture
