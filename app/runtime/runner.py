@@ -3,15 +3,15 @@ Workflow runner.
 
 Topologically orders stages, runs each one through its type-specific handler,
 validates the input + output schema, and persists per-stage outputs as parquet
-(plus the run's manifest, saved to the document store's "run" collection —
-see app.services.run_store).
+(plus the run's manifest, saved to the document store's "workflow_run"
+collection — see app.services.run_store).
 
 Run output layout:
     examples/<project>/runs/<run_id>/
         outputs/<stage_id>.parquet
         artifacts/<...>           # for publish stages
-The manifest itself is not a file here; it is a `run_store.Run` document keyed
-`<project>/<run_id>`.
+The manifest itself is not a file here; it is a `run_store.WorkflowRun`
+document keyed `<project>/<run_id>`.
 """
 
 from __future__ import annotations

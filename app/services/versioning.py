@@ -1,13 +1,14 @@
 """
 versioning.py — immutable, committable snapshots of a workflow.
 
-A "version" is a `WorkflowVersion` document in the store's "workflow_version" collection: a frozen
-copy of a project's authored artifacts — its compiled stages (typed, embedded
-verbatim) and its schemas/ data model (embedded raw) — taken at a point in time,
-plus who created it, why, its parent, and the approval coverage AT creation time.
-Runs are pinned to a version and read its embedded stages, so a run is
-reproducible against the exact workflow it executed, never "whatever the working
-copy happened to be".
+A "version" is a `WorkflowVersion` document (defined in
+app.core.models.records.workflow_version) in the store's "workflow_version"
+collection: a frozen copy of a project's authored artifacts — its compiled
+stages (typed, embedded verbatim) and its schemas/ data model (embedded raw)
+— taken at a point in time, plus who created it, why, its parent, and the
+approval coverage AT creation time. Runs are pinned to a version and read its
+embedded stages, so a run is reproducible against the exact workflow it
+executed, never "whatever the working copy happened to be".
 
 Each version's document id is `f"{project_dir.name}/{version_id}"` — project-scoped,
 like every other collection in the store — so listing or loading against a project
@@ -29,40 +30,18 @@ from __future__ import annotations
 
 from datetime import datetime
 from pathlib import Path
-from typing import Any, ClassVar
+from typing import Any
 
-from pydantic import Field, ValidationError
+from pydantic import ValidationError
 
 from app.core.errors import DocumentNotFound
 from app.core.models import Stage
+from app.core.models.records.workflow_version import WorkflowVersion
 from app.core.models.schema import format_errors
-from app.core.persistence import PersistedModel, get_store
+from app.core.persistence import get_store
 from app.services import node_review
 from app.services.loader import WorkflowLoadError, load_workflow, stage_to_spec_dict
 from app.services.workspace import load_schemas
-
-
-class WorkflowVersion(PersistedModel):
-    """One frozen snapshot, stored in the "workflow_version" collection. `id` (inherited
-    from PersistedModel) is the composite `f"{project}/{version_id}"`; `version_id`
-    is the plain local id every caller of this module's four public functions
-    works with. `stages` and `schemas` are the frozen artifacts; `coverage` is
-    approval coverage computed against `stages` at creation time."""
-
-    collection: ClassVar[str] = "workflow_version"
-    # Dump the embedded stages in their canonical spec-dict shape (field aliases
-    # restored, unset optionals dropped) — the same convention stage_to_spec_dict
-    # uses, so a version's on-disk stage shape matches the working copy's.
-    DUMP_OPTS: ClassVar[dict[str, Any]] = {"by_alias": True, "exclude_none": True}
-
-    version_id: str
-    created_at: str
-    parent_version: str | None = None
-    message: str
-    reviewer: str
-    coverage: dict[str, Any] = Field(default_factory=dict)
-    stages: list[Stage] = Field(default_factory=list)
-    schemas: list[dict[str, Any]] = Field(default_factory=list)
 
 
 def _meta(v: WorkflowVersion) -> dict[str, Any]:

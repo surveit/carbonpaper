@@ -9,7 +9,7 @@ fails — an invalid workflow is refused before the runner does any work.
 `topological_sort` → `execute_run(project_dir, repo_root)`. Per stage: validate declared
 inputs (`validation.py`), reject duplicate input rows, dispatch to the type's handler,
 validate the output, write `outputs/<stage>.parquet`, save the run's manifest to the
-document store's "run" collection (`app.services.run_store`).
+document store's "workflow_run" collection (`app.services.run_store`).
 - **Duplicate-input throw (every stage type):** fails the stage if any input dataframe has
   exact duplicate full-content rows — the error names the input id + 0-based row numbers.
   Identity is a content hash over the whole row; `primary_key` plays no part (optional, may

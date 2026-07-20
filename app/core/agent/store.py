@@ -1,11 +1,11 @@
 """Chat session store (axis-1 persistence).
 
-Each session is an `AgentSession` record in the process-wide document store (see
-app.core.persistence): metadata plus one engine-agnostic transcript — a list of
-``{role, parts}`` messages (part types ``text|thinking|tool_call|tool_result``) —
-plus the resume token that carries the agent's cross-turn memory. `SessionStore`
-is a stateless adapter over that record: every method loads, mutates, and saves
-through the configured store.
+Each session is an `AgentSession` record (defined in
+app.core.models.records.agent_session): metadata plus one engine-agnostic
+transcript — a list of ``{role, parts}`` messages (part types
+``text|thinking|tool_call|tool_result``) — plus the resume token that carries
+the agent's cross-turn memory. `SessionStore` is a stateless adapter over that
+record: every method loads, mutates, and saves through the configured store.
 
 In-flight turns live in memory (see app.core.agent.turns); surviving a server restart
 mid-turn is out of scope.
@@ -14,26 +14,9 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import Any, ClassVar
+from typing import Any
 
-from pydantic import Field
-
-from app.core.persistence import PersistedModel
-
-
-class AgentSession(PersistedModel):
-    """A chat session: metadata, the bound agent + its context, and the stored
-    transcript. `id` (inherited from PersistedModel) is the session id."""
-
-    collection: ClassVar[str] = "agent_session"
-    created_at: str
-    title: str = "New chat"
-    agent_id: str | None = None
-    context: dict[str, Any] = Field(default_factory=dict)
-    messages: list[dict[str, Any]] = Field(default_factory=list)  # engine-neutral {role, parts} transcript
-    active_turn: str | None = None
-    pending_user: str | None = None
-    sdk_session_id: str | None = None  # resume token (CLI session to resume)
+from app.core.models.records.agent_session import AgentSession
 
 
 def open_session_store() -> SessionStore:

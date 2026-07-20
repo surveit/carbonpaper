@@ -38,8 +38,8 @@ def list_projects() -> list[dict[str, Any]]:
     just-created project whose data model is still being generated must show up,
     not appear only once generation finishes. A dir with none of those markers is
     not a project and is omitted. A run counts only if it has a document in the
-    store's "run" collection (mirrors list_runs), so the count is real runs,
-    never inflated."""
+    store's "workflow_run" collection (mirrors list_runs), so the count is real
+    runs, never inflated."""
     if not EXAMPLES_DIR.exists():
         return []
     out: list[dict[str, Any]] = []
