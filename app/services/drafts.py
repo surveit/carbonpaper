@@ -143,7 +143,11 @@ def save_version(
     full issue list and nothing is written. On success the draft's parent
     advances to the new version, so successive saves chain (v2 -> v3 -> v4)
     rather than fanning out; the version is born unpublished (publishing is the
-    human's act)."""
+    human's act).
+
+    Returns `{"ok": True, "version": <VersionMeta dumped to plain JSON>}` — the
+    caller (the draft editing tool) JSON-encodes this result, so the typed
+    VersionMeta is dumped to a plain dict at this boundary."""
     project_dir = workspace.resolve_project_dir(name, examples_dir)
     d = _load(project_dir, draft_id)
     issues = validate_workflow_draft(d.stages)
@@ -156,9 +160,9 @@ def save_version(
         reviewer="agent",
         parent_version=d.parent_version,
     )
-    d.parent_version = meta["id"]
+    d.parent_version = meta.id
     d.save()
-    return {"ok": True, "version": meta}
+    return {"ok": True, "version": meta.model_dump(mode="json")}
 
 
 # ─── internals ───────────────────────────────────────────────────────────────

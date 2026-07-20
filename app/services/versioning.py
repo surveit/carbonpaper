@@ -28,8 +28,8 @@ human "Create version" act publishing now records, so it reads as published
 `create_version_from_stages` is the ONE place a WorkflowVersion is written:
 it strict-parses the given stage dicts, embeds the project's current schemas,
 freezes approval coverage, and saves — nothing is written on a validation
-failure. `create_version` (snapshot the working copy) is a thin adapter over
-it: it strict-loads compiled/ into stage dicts and delegates.
+failure. `create_version_from_disk` (snapshot the working copy) is a thin
+adapter over it: it strict-loads compiled/ into stage dicts and delegates.
 
 Dependency note: this module may import app.services.node_review (to freeze
 coverage), app.services.workspace (to read the working data model), and
@@ -45,16 +45,24 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, ClassVar
 
-from pydantic import Field, ValidationError, model_validator
+from pydantic import BaseModel, Field, ValidationError, model_validator
 
 from app.core.errors import DocumentNotFound
-from app.core.models import Stage
+from app.core.models import Coverage, Stage
 from app.core.models.schema import format_errors
 from app.core.models.workflow import parse_workflow
 from app.core.persistence import PersistedModel, get_store
 from app.services import node_review
 from app.services.loader import WorkflowLoadError, load_workflow, stage_to_spec_dict
 from app.services.workspace import load_schemas
+
+
+def _no_coverage() -> Coverage:
+    # The zero-stage shape coverage_for itself returns for an empty stage list —
+    # a WorkflowVersion constructed without an explicit `coverage=` (every
+    # in-repo case is a test seeding a version directly) is born carrying it.
+    return Coverage(approved=0, rejected=0, edited_stale=0, unreviewed=0,
+                     total=0, approved_pct=0.0)
 
 
 class WorkflowVersion(PersistedModel):
@@ -76,7 +84,7 @@ class WorkflowVersion(PersistedModel):
     parent_version: str | None = None
     message: str
     reviewer: str
-    coverage: dict[str, Any] = Field(default_factory=dict)
+    coverage: Coverage = Field(default_factory=_no_coverage)
     stages: list[Stage] = Field(default_factory=list)
     schemas: list[dict[str, Any]] = Field(default_factory=list)
     # This default never applies on load: `_grandfather_published` below injects
@@ -98,20 +106,36 @@ class WorkflowVersion(PersistedModel):
         return data
 
 
-def _meta(v: WorkflowVersion) -> dict[str, Any]:
-    """The meta dict shape every caller of this module reads: `id` is the LOCAL
-    version_id, never the composite store id."""
-    return {
-        "id": v.version_id,
-        "created_at": v.created_at,
-        "parent_version": v.parent_version,
-        "message": v.message,
-        "reviewer": v.reviewer,
-        "coverage": v.coverage,
-        "published": v.published,
-        "published_at": v.published_at,
-        "published_by": v.published_by,
-    }
+class VersionMeta(BaseModel):
+    """The public projection of a WorkflowVersion: every field callers of this
+    module need EXCEPT the heavy embedded `stages`/`schemas` (see
+    load_version_stages for those). `id` is the LOCAL version_id, never the
+    composite store id."""
+
+    id: str
+    created_at: str
+    parent_version: str | None
+    message: str
+    reviewer: str
+    coverage: Coverage
+    published: bool
+    published_at: str | None
+    published_by: str | None
+
+
+def _meta(v: WorkflowVersion) -> VersionMeta:
+    """Project a WorkflowVersion down to its public VersionMeta."""
+    return VersionMeta(
+        id=v.version_id,
+        created_at=v.created_at,
+        parent_version=v.parent_version,
+        message=v.message,
+        reviewer=v.reviewer,
+        coverage=v.coverage,
+        published=v.published,
+        published_at=v.published_at,
+        published_by=v.published_by,
+    )
 
 
 def create_version_from_stages(
@@ -121,11 +145,11 @@ def create_version_from_stages(
     message: str,
     reviewer: str,
     parent_version: str | None = None,
-) -> dict[str, Any]:
+) -> VersionMeta:
     """The single write chokepoint for a WorkflowVersion: strict-parse `stages`
     (raw spec dicts) as a whole Workflow, embed the project's CURRENT schemas,
     freeze approval coverage against the live node_decisions store, and save —
-    born unpublished. Returns its meta dict.
+    born unpublished. Returns its meta.
 
     `stages` is parsed via app.core.models.workflow.parse_workflow, which raises
     pydantic.ValidationError (per-stage schema errors AND cross-stage graph
@@ -137,7 +161,12 @@ def create_version_from_stages(
     about these specs at this instant. schemas/ is read via
     workspace.load_schemas, which returns [] when the project has no schema
     library yet — a project with no data model still versions cleanly (the
-    absence is truthful, not an error)."""
+    absence is truthful, not an error).
+
+    version_id has 1-second resolution; two versions minted within the same
+    wall-clock second for the same project collide on doc id, and the second
+    save simply overwrites the first — an accepted same-second clobber, not
+    guarded against."""
     project_dir = Path(project_dir)
     workflow = parse_workflow(stages)
     schemas = load_schemas(project_dir)
@@ -145,16 +174,12 @@ def create_version_from_stages(
     version_id = datetime.now().strftime("%Y%m%dT%H%M%S")
     project = project_dir.name
     doc_id = f"{project}/{version_id}"
-    if WorkflowVersion.exists(doc_id):
-        raise FileExistsError(
-            f"Version already exists: {doc_id} (two versions created within one second)"
-        )
 
     # Freeze coverage from the just-snapshotted stages against the live
     # node_decisions store.
     spec_dicts = [stage_to_spec_dict(s) for s in workflow.stages]
     decisions = node_review.load_node_decisions(project_dir)
-    coverage = node_review.coverage_for(spec_dicts, decisions)
+    coverage = Coverage.model_validate(node_review.coverage_for(spec_dicts, decisions))
 
     v = WorkflowVersion(
         id=doc_id,
@@ -171,19 +196,19 @@ def create_version_from_stages(
     return _meta(v)
 
 
-def create_version(
+def create_version_from_disk(
     project_dir: Path,
     *,
     message: str,
     reviewer: str,
     parent_version: str | None = None,
-) -> dict[str, Any]:
+) -> VersionMeta:
     """Snapshot the working copy's compiled stages + schemas into a new Version
-    document. Returns its meta dict. A thin adapter over
-    create_version_from_stages: the working copy is strict-loaded first,
-    through the same loader the runner uses (WorkflowLoadError, saving
-    nothing, if it is not a valid workflow), then handed to
-    create_version_from_stages as spec dicts — the single write chokepoint."""
+    document. Returns its meta. A thin adapter over create_version_from_stages:
+    the working copy is strict-loaded first, through the same loader the
+    runner uses (WorkflowLoadError, saving nothing, if it is not a valid
+    workflow), then handed to create_version_from_stages as spec dicts — the
+    single write chokepoint."""
     project_dir = Path(project_dir)
     compiled_src = project_dir / "compiled"
     if not compiled_src.is_dir():
@@ -206,7 +231,7 @@ def create_version(
     )
 
 
-def publish_version(project_dir: Path, version_id: str, *, reviewer: str) -> dict[str, Any]:
+def publish_version(project_dir: Path, version_id: str, *, reviewer: str) -> VersionMeta:
     """Mark a version published: the metadata-only act that makes it eligible to
     run (see app.runtime.runner.resolve_version_id). Idempotent — publishing an
     already-published version returns it unchanged, keeping the FIRST
@@ -240,14 +265,14 @@ def _invalid_version_document(doc_id: str, exc: ValidationError) -> WorkflowLoad
     return WorkflowLoadError(f"version document {doc_id}", format_errors(exc))
 
 
-def list_versions(project_dir: Path) -> list[dict[str, Any]]:
-    """All versions for a project, NEWEST-FIRST, each as its meta dict. A stored
+def list_versions(project_dir: Path) -> list[VersionMeta]:
+    """All versions for a project, NEWEST-FIRST, each as its meta. A stored
     document that fails the WorkflowVersion contract raises WorkflowLoadError
     (see _invalid_version_document) — the whole listing fails rather than
     quietly presenting a store with an invalid document in it as healthy.
     No versions stored yet -> []."""
     name = Path(project_dir).name
-    metas: list[dict[str, Any]] = []
+    metas: list[VersionMeta] = []
     for doc_id, data in get_store().read_all("workflow_version", f"{name}/"):
         try:
             v = WorkflowVersion.model_validate(data)
@@ -256,12 +281,12 @@ def list_versions(project_dir: Path) -> list[dict[str, Any]]:
         metas.append(_meta(v))
     # version ids are strftime timestamps, so a reverse string sort on id is
     # chronological.
-    metas.sort(key=lambda m: str(m["id"]), reverse=True)
+    metas.sort(key=lambda m: m.id, reverse=True)
     return metas
 
 
-def load_version_meta(project_dir: Path, version_id: str) -> dict[str, Any]:
-    """This version's meta dict. Fails loudly if no such version is stored, or
+def load_version_meta(project_dir: Path, version_id: str) -> VersionMeta:
+    """This version's meta. Fails loudly if no such version is stored, or
     if the stored document no longer validates (WorkflowLoadError)."""
     name = Path(project_dir).name
     try:
@@ -291,10 +316,11 @@ def load_version_stages(project_dir: Path, version_id: str) -> list[Stage]:
 
 
 __all__ = [
+    "VersionMeta",
     "list_versions",
     "load_version_meta",
     "load_version_stages",
-    "create_version",
+    "create_version_from_disk",
     "create_version_from_stages",
     "publish_version",
 ]

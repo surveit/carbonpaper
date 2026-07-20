@@ -12,7 +12,7 @@ from fastapi.testclient import TestClient
 import app.web.routers.runs as runs_router
 from app.main import app
 from app.services import versioning
-from app.services.versioning import create_version
+from app.services.versioning import create_version_from_disk
 
 client = TestClient(app)
 
@@ -27,7 +27,7 @@ def project(tmp_path, monkeypatch):
              "connector": {"kind": "file",
                            "params": {"path": str(data), "format": "csv"}}}
     (proj / "compiled" / "01_load.json").write_text(json.dumps(stage), encoding="utf-8")
-    vid = create_version(proj, message="seed", reviewer="test")["id"]
+    vid = create_version_from_disk(proj, message="seed", reviewer="test").id
     versioning.publish_version(proj, vid, reviewer="human")
     monkeypatch.setattr(runs_router, "EXAMPLES_DIR", tmp_path)
     monkeypatch.setattr(runs_router, "run_in_background",
@@ -63,12 +63,12 @@ def test_unbound_input_returns_400(project):
     stage = json.loads(compiled.read_text(encoding="utf-8"))
     stage["connector"]["params"] = {}
     compiled.write_text(json.dumps(stage), encoding="utf-8")
-    # version ids are second-resolution timestamps (versioning.create_version);
+    # version ids are second-resolution timestamps (versioning.create_version_from_disk);
     # without this the fixture's version and this one can land in the same
-    # wall-clock second and collide (FileExistsError), unrelated to what this
+    # wall-clock second and silently clobber each other, unrelated to what this
     # test is checking.
     time.sleep(1.1)
-    vid = create_version(project, message="unbound", reviewer="test")["id"]
+    vid = create_version_from_disk(project, message="unbound", reviewer="test").id
     versioning.publish_version(project, vid, reviewer="human")
 
     resp = client.post("/project/demo/run",
@@ -93,7 +93,7 @@ def _corrupt_version_document_with_relative_path(project):
     from app.core.persistence import get_store
     from app.services.versioning import list_versions
 
-    version_id = list_versions(project)[0]["id"]
+    version_id = list_versions(project)[0].id
     store = get_store()
     doc = store.read("workflow_version", f"{project.name}/{version_id}")
     doc["stages"][0]["connector"]["params"]["path"] = "relative/a.csv"

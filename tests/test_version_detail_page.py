@@ -43,10 +43,10 @@ def project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 
 def test_version_detail_renders_frozen_graph_and_publish(project: Path) -> None:
-    meta = versioning.create_version(project, message="v1", reviewer="local")
-    page = client.get(f"/project/demo/workflow/version/{meta['id']}")
+    meta = versioning.create_version_from_disk(project, message="v1", reviewer="local")
+    page = client.get(f"/project/demo/workflow/version/{meta.id}")
     assert page.status_code == 200
-    assert meta["id"] in page.text
+    assert meta.id in page.text
     assert "mermaid" in page.text          # the graph rendered
     assert "/publish" in page.text          # unpublished → Publish control present
     assert 'href="/project/demo/workflow/versions"' in page.text  # ← All versions
@@ -64,8 +64,8 @@ def test_run_this_version_404_for_nonexistent_version(project: Path) -> None:
 
 
 def test_run_this_version_gated_on_published(project: Path) -> None:
-    meta = versioning.create_version(project, message="v1", reviewer="local")
-    vid = meta["id"]
+    meta = versioning.create_version_from_disk(project, message="v1", reviewer="local")
+    vid = meta.id
     # Unpublished → 400 explaining the publish gate.
     unpub = client.post(f"/project/demo/workflow/version/{vid}/run", follow_redirects=False)
     assert unpub.status_code == 400
@@ -91,7 +91,7 @@ def test_run_this_version_400s_not_500s_on_unbound_input(
     }
     meta = versioning.create_version_from_stages(
         project, [unbound_stage], message="v-unbound", reviewer="local")
-    vid = meta["id"]
+    vid = meta.id
     versioning.publish_version(project, vid, reviewer="local")
 
     resp = client.post(f"/project/demo/workflow/version/{vid}/run", follow_redirects=False)

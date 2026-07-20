@@ -64,7 +64,7 @@ def list_projects() -> list[dict[str, Any]]:
             "has_document": has_document,
             "has_workflow": has_workflow,
             "has_schemas": has_schemas,
-            "is_ready": any(v["published"] for v in list_versions(p)),
+            "is_ready": any(v.published for v in list_versions(p)),
             "n_stages": n_stages,
             "n_schemas": n_schemas,
             "n_runs": n_runs,

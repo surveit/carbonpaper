@@ -229,14 +229,14 @@ async def create_version_route(project: str, message: str = Form(...)):
             return JSONResponse({"ok": False, "issues": failing}, status_code=400)
 
     existing = versioning.list_versions(project_dir)  # newest-first
-    parent = existing[0]["id"] if existing else None
+    parent = existing[0].id if existing else None
     try:
-        meta = versioning.create_version(
+        meta = versioning.create_version_from_disk(
             project_dir, message=message, reviewer="local", parent_version=parent
         )
     except FileNotFoundError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return JSONResponse({"ok": True, "version": meta})
+    return JSONResponse({"ok": True, "version": meta.model_dump(mode="json")})
 
 
 @router.post("/project/{project}/versions/{version_id}/publish")

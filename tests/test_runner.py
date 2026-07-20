@@ -24,7 +24,7 @@ from app.runtime.runner import execute_run, resume_run, run_subset
 from app.runtime.stages import llm_transform as lt
 from app.services.loader import WorkflowLoadError
 from app.services import versioning
-from app.services.versioning import create_version, list_versions
+from app.services.versioning import create_version_from_disk, list_versions
 
 
 def _seed_version(root):
@@ -32,7 +32,7 @@ def _seed_version(root):
     create versions, so a test that builds a working copy must snapshot it into
     a version before running against it; runs are also gated on published, so
     the seed must be published for a run against it to succeed."""
-    vid = create_version(root, message="test seed", reviewer="test")["id"]
+    vid = create_version_from_disk(root, message="test seed", reviewer="test").id
     versioning.publish_version(root, vid, reviewer="human")
     return vid
 
@@ -281,7 +281,7 @@ def test_unpublished_latest_is_skipped_for_an_older_published_version(tmp_path):
     published_id = _seed_version(tmp_path)  # published
 
     time.sleep(1)  # version ids are second-resolution
-    create_version(tmp_path, message="unpublished newer", reviewer="test")
+    create_version_from_disk(tmp_path, message="unpublished newer", reviewer="test")
 
     manifest = execute_run(tmp_path, repo_root=tmp_path)
     assert manifest["workflow_version"] == published_id
@@ -293,7 +293,7 @@ def test_run_with_no_published_version_fails_loudly(tmp_path):
     just like the no-version-at-all case, rather than silently running an
     unreviewed snapshot."""
     _make_project(tmp_path)
-    create_version(tmp_path, message="unpublished", reviewer="test")
+    create_version_from_disk(tmp_path, message="unpublished", reviewer="test")
 
     with pytest.raises(NoVersionToRunError):
         execute_run(tmp_path, repo_root=tmp_path)
@@ -304,7 +304,7 @@ def test_run_with_explicit_unpublished_id_fails_loudly(tmp_path):
     """An explicit version_id naming a real but unpublished version is refused
     the same way — a run pins to a published version, never to a draft."""
     _make_project(tmp_path)
-    unpublished_id = create_version(tmp_path, message="unpublished", reviewer="test")["id"]
+    unpublished_id = create_version_from_disk(tmp_path, message="unpublished", reviewer="test").id
 
     with pytest.raises(NoVersionToRunError):
         execute_run(tmp_path, repo_root=tmp_path, version_id=unpublished_id)
@@ -312,9 +312,9 @@ def test_run_with_explicit_unpublished_id_fails_loudly(tmp_path):
 
 
 def test_create_version_rejects_invalid_working_copy(tmp_path):
-    """create_version strict-loads before it snapshots: an invalid working copy
-    raises WorkflowLoadError and writes NOTHING, so no invalid workflow can
-    be immortalised as a version."""
+    """create_version_from_disk strict-loads before it snapshots: an invalid
+    working copy raises WorkflowLoadError and writes NOTHING, so no invalid
+    workflow can be immortalised as a version."""
     (tmp_path / "compiled").mkdir(parents=True)
     bad = {"id": "load", "name": "Load", "type": "input_data",
            "connector": {"kind": "file",
@@ -323,7 +323,7 @@ def test_create_version_rejects_invalid_working_copy(tmp_path):
         json.dumps(bad), encoding="utf-8")
 
     with pytest.raises(WorkflowLoadError) as exc:
-        create_version(tmp_path, message="x", reviewer="test")
+        create_version_from_disk(tmp_path, message="x", reviewer="test")
     assert any("params.path" in i for i in exc.value.issues)
     assert list_versions(tmp_path) == []  # snapshotted nothing
 
@@ -333,7 +333,8 @@ def test_invalid_workflow_never_becomes_a_version_and_run_never_pins_stale(tmp_p
     working copy as a version BEFORE validating it, so an invalid workflow got
     immortalised as 'the latest' and every later default run reloaded that
     poisoned snapshot and failed with a stale error. Now runs never create
-    versions and create_version validates first, so the bug is impossible."""
+    versions and create_version_from_disk validates first, so the bug is
+    impossible."""
     # Invalid working copy: file connector params.path is relative, not absolute.
     (tmp_path / "compiled").mkdir(parents=True)
     bad = {"id": "load", "name": "Load", "type": "input_data",
@@ -344,7 +345,7 @@ def test_invalid_workflow_never_becomes_a_version_and_run_never_pins_stale(tmp_p
 
     # You cannot make a version from it, and it writes nothing.
     with pytest.raises(WorkflowLoadError):
-        create_version(tmp_path, message="x", reviewer="test")
+        create_version_from_disk(tmp_path, message="x", reviewer="test")
     assert list_versions(tmp_path) == []
 
     # A run refuses (no version) and does NOT auto-create one — nothing on disk.

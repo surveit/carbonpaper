@@ -152,8 +152,7 @@ def latest_version_id(project_dir: Path) -> str | None:
     versions = list_versions(project_dir)  # newest-first
     if not versions:
         return None
-    version_id = versions[0]["id"]
-    return str(version_id) if version_id is not None else None
+    return versions[0].id
 
 
 def eval_status(report: CompatibilityReport, runs: list[EvalRun],
