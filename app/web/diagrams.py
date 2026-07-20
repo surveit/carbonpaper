@@ -232,6 +232,7 @@ def build_mermaid_graph(
         "validation_warnings": "⚠",
         "error": "✗",
         "awaiting_review": "👤",
+        "cancelled": "✖",
         "pending": "…",
     }
     status_stroke = {
@@ -240,6 +241,7 @@ def build_mermaid_graph(
         "validation_warnings": ("#cc8a00", "3px"),
         "error": ("#cc2a2a", "3px"),              # errored → red
         "awaiting_review": ("#2a6ac8", "4px"),
+        "cancelled": ("#8a8a8a", "3px"),          # cancelled → grey
         "pending": ("#cfcfcf", "1px"),
     }
     nodes = [_node_view(s) for s in stages]
