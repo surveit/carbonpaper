@@ -200,6 +200,35 @@ async def run_status(project: str, run_id: str):
     })
 
 
+def _artifact_links(project: str, run_id: str, run_dir: Path, manifest: dict) -> list[dict]:
+    """Browsable links to the files a completed run published.
+
+    Only returns links once the run has finished AND a publish stage completed —
+    linking to the files it actually wrote under artifacts/ (preferring a
+    browsable index.html) rather than a hardcoded guess. Empty for in-progress or
+    never-published runs, so the page shows no banner."""
+    if manifest.get("status") in ("running", None):
+        return []
+    has_ok_publish = any(
+        s.get("type") == "publish" and s.get("status") in ("ok", "validation_warnings")
+        for s in manifest.get("stages", [])
+    )
+    artifacts_root = run_dir / "artifacts"
+    if not (has_ok_publish and artifacts_root.is_dir()):
+        return []
+    files = sorted(f for f in artifacts_root.rglob("*") if f.is_file())
+    index = next((f for f in files if f.name == "index.html"), None)
+    if index is not None:
+        files = [index]
+    return [
+        {
+            "name": f.name,
+            "url": f"/project/{project}/runs/{run_id}/artifact/{f.relative_to(artifacts_root).as_posix()}",
+        }
+        for f in files
+    ]
+
+
 @router.get("/project/{project}/runs/{run_id}", response_class=HTMLResponse)
 async def run_detail(request: Request, project: str, run_id: str):
     run_dir = runs_dir(project) / run_id
@@ -207,28 +236,7 @@ async def run_detail(request: Request, project: str, run_id: str):
     stages = load_stages(project).stages
     status_by_id = {s["stage_id"]: s.get("status", "") for s in manifest.get("stages", [])}
     mermaid = build_mermaid_graph(stages, project, status_by_id=status_by_id)
-
-    # Only surface artifact links once the run has finished AND a publish stage
-    # completed — link to the files it actually wrote (preferring a browsable
-    # index.html) rather than a hardcoded guess.
-    artifact_links = []
-    if manifest.get("status") not in ("running", None):
-        has_ok_publish = any(
-            s.get("type") == "publish" and s.get("status") in ("ok", "validation_warnings")
-            for s in manifest.get("stages", [])
-        )
-        artifacts_root = run_dir / "artifacts"
-        if has_ok_publish and artifacts_root.is_dir():
-            files = sorted(f for f in artifacts_root.rglob("*") if f.is_file())
-            index = next((f for f in files if f.name == "index.html"), None)
-            if index is not None:
-                files = [index]
-            for f in files:
-                rel = f.relative_to(artifacts_root).as_posix()
-                artifact_links.append({
-                    "name": f.name,
-                    "url": f"/project/{project}/runs/{run_id}/artifact/{rel}",
-                })
+    artifact_links = _artifact_links(project, run_id, run_dir, manifest)
 
     return templates.TemplateResponse(
         request,
