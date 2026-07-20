@@ -80,6 +80,49 @@ def test_runs_page_renders_version_picker_latest_selected(project_two_versions):
     assert 'name="binding__load"' in resp.text                # inputs share the form
 
 
+def _seed_load_stage(proj):
+    proj.mkdir(parents=True, exist_ok=True)
+    (proj / "compiled").mkdir(parents=True)
+    data = proj / "a.csv"
+    pd.DataFrame({"name": ["x"], "val": [1]}).to_csv(data, index=False)
+    stage = {"id": "load", "name": "Load", "type": "input_data",
+             "connector": {"kind": "file",
+                           "params": {"path": str(data), "format": "csv"}}}
+    (proj / "compiled" / "01_load.json").write_text(json.dumps(stage), encoding="utf-8")
+
+
+def test_run_picker_offers_only_published_versions(tmp_path, monkeypatch):
+    """A run pins a PUBLISHED version, so the picker lists only published ones —
+    an unpublished (agent-minted or not-yet-approved) version is never offered."""
+    proj = tmp_path / "demo"
+    _seed_load_stage(proj)
+    published = create_version_from_disk(proj, message="approved", reviewer="test").version_id
+    time.sleep(1.1)
+    unpublished = create_version_from_disk(proj, message="draft", reviewer="test").version_id
+    publish_version(proj, published, reviewer="test")  # only the older one
+    monkeypatch.setattr(runs_router, "EXAMPLES_DIR", tmp_path)
+
+    resp = client.get("/project/demo/runs")
+    assert resp.status_code == 200
+    assert published in resp.text          # the published version IS offered
+    assert unpublished not in resp.text    # the unpublished one is NOT
+    assert 'name="version_id"' in resp.text
+
+
+def test_run_form_hidden_when_no_published_version(tmp_path, monkeypatch):
+    """A project whose only version is unpublished shows 'publish a version first'
+    instead of a run form — nothing is runnable."""
+    proj = tmp_path / "demo"
+    _seed_load_stage(proj)
+    create_version_from_disk(proj, message="unpublished", reviewer="test")  # never published
+    monkeypatch.setattr(runs_router, "EXAMPLES_DIR", tmp_path)
+
+    resp = client.get("/project/demo/runs")
+    assert resp.status_code == 200
+    assert 'name="version_id"' not in resp.text   # no run form
+    assert "publish a version" in resp.text
+
+
 @pytest.fixture
 def project_versions_diff_paths(tmp_path, monkeypatch):
     """Two versions whose input stage authors DIFFERENT data files (a.csv in v1,
