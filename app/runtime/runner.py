@@ -509,231 +509,230 @@ def _execute_stages(
 
     flush("running")  # initial: all stages pending
 
-    try:
-        for idx, stage in enumerate(ordered):
-            # Between-stage cancel checkpoint: before this stage starts (even
-            # before checking whether it's a resume-skip), stop if a cancel was
-            # requested. No exception, no record written here — the stage simply
-            # never starts, so it stays (or becomes) `pending` below.
-            if _is_run_cancelled(ctx):
+    for idx, stage in enumerate(ordered):
+        # Between-stage cancel checkpoint: before this stage starts (even
+        # before checking whether it's a resume-skip), stop if a cancel was
+        # requested. No exception, no record written here — the stage simply
+        # never starts, so it stays (or becomes) `pending` below.
+        if _is_run_cancelled(ctx):
+            cancelled = True
+            cancel_at_index = idx
+            break
+
+        sid = stage.id
+        stype = stage.type
+
+        # Skip stages already produced (resume path).
+        if sid in outputs_so_far and records_by_id.get(sid, {}).get("status") in ("ok", "validation_warnings"):
+            continue
+
+        record: dict[str, Any] = {
+            "stage_id": sid,
+            "type": stype,
+            "name": stage.name,
+            "started_at": datetime.now().isoformat(timespec="seconds"),
+            "status": "running",
+            "input_validation": [],
+            "output_validation": None,
+            "elapsed_ms": 0,
+            "rows": 0,
+            "error": None,
+        }
+        t0 = time.perf_counter()
+        records_by_id[sid] = record
+        flush("running")  # show this stage as running
+
+        try:
+            inputs_for_stage: dict[str, pd.DataFrame] = {}
+            for ref in stage.inputs:
+                if ref.id not in outputs_so_far:
+                    raise RuntimeError(f"Upstream stage '{ref.id}' has no output yet")
+                df = outputs_so_far[ref.id]
+                _reject_duplicate_input_rows(df, ref.id, sid)
+                inputs_for_stage[ref.id] = df
+                if ref.table_schema is not None:
+                    rep = validate_dataframe(
+                        df, ref.table_schema, stage_id=sid, phase=f"input:{ref.id}",
+                    )
+                    record["input_validation"].append(rep.to_dict())
+
+            handler = HANDLERS.get(stype)
+            if handler is None:
+                raise ValueError(f"No handler for stage type '{stype}'")
+
+            try:
+                output = handler.execute(stage, inputs_for_stage, ctx)
+            except HaltForReview as halt:
+                record["status"] = "awaiting_review"
+                record["rows"] = halt.pending_count
+                record["queue_path"] = str(halt.queue_path.relative_to(run_dir))
+                record["elapsed_ms"] = int((time.perf_counter() - t0) * 1000)
+                record["finished_at"] = datetime.now().isoformat(timespec="seconds")
+                records_by_id[sid] = record
+                halted = halt
+                halt_at_index = idx
+                break
+            except RunCancelled:
+                # Mid-stage cancel: the row driver unwound out of
+                # handler.execute (see execution.py::_run_row_mapper). This
+                # stage made no output — it is marked cancelled, not ok.
+                record["status"] = "cancelled"
+                record["elapsed_ms"] = int((time.perf_counter() - t0) * 1000)
+                record["finished_at"] = datetime.now().isoformat(timespec="seconds")
+                records_by_id[sid] = record
                 cancelled = True
                 cancel_at_index = idx
                 break
 
+            if output is None:
+                output = pd.DataFrame()
+
+            # Generic row slicing, in the handler's emitted order. Offset
+            # (per-run only, from --offset stage=M) drops the first M rows;
+            # then the cap keeps the first N. A per-run cap (--limit stage=N)
+            # wins over the stage's static `limit:`. Used to throttle /
+            # page the expensive LLM fan-out.
+            offset = (ctx.get("offsets") or {}).get(sid)
+            if isinstance(offset, int) and offset > 0 and len(output) > 0:
+                record.setdefault("notes", []).append(
+                    f"offset={offset}: dropped first {min(offset, len(output))} of {len(output)} row(s)"
+                )
+                output = output.iloc[offset:].reset_index(drop=True).copy()
+            limit = (ctx.get("limits") or {}).get(sid, stage.limit)
+            if isinstance(limit, int) and limit >= 0 and len(output) > limit:
+                record.setdefault("notes", []).append(
+                    f"limit={limit}: truncated from {len(output)} to {limit} row(s)"
+                )
+                output = output.head(limit).copy()
+
+            out_rep = validate_dataframe(
+                output, stage.output_schema, stage_id=sid, phase="output",
+            )
+            row_errors = (ctx.get("row_errors") or {}).get(sid, [])
+            if row_errors:
+                out_rep.issues[0:0] = [
+                    Issue("error", None,
+                          f"row {row_error['row']}: generation failed: {row_error['message']}")
+                    for row_error in row_errors
+                ]
+            record["output_validation"] = out_rep.to_dict()
+
+            output_path = run_dir / "outputs" / f"{sid}.parquet"
+            try:
+                output.to_parquet(output_path, index=False)
+            except (pa_lib.ArrowException, ValueError, TypeError) as exc:
+                # A column whose dtype/shape parquet can't represent (mixed-type
+                # object columns, nested Python values) falls back to CSV, which
+                # stringifies them, rather than losing the stage output; the
+                # fallback is recorded, never silent. A disk/OS error is NOT
+                # caught: it would fail identically for CSV, so it propagates to
+                # the per-stage handler below and lands in the manifest.
+                output_path = run_dir / "outputs" / f"{sid}.csv"
+                output.to_csv(output_path, index=False)
+                record.setdefault("notes", []).append(
+                    f"Wrote CSV instead of parquet: {exc}"
+                )
+
+            outputs_so_far[sid] = output
+            if row_errors:
+                record["status"] = "error"
+                record["error"] = {
+                    "type": "RowGenerationError",
+                    "message": _summarize_row_errors(row_errors),
+                    "traceback": None,
+                }
+            else:
+                record["status"] = "ok" if out_rep.ok and all(
+                    v["ok"] for v in record["input_validation"]
+                ) else "validation_warnings"
+            record["rows"] = int(len(output))
+            record["output_path"] = str(output_path.relative_to(run_dir))
+
+        except Exception as exc:  # noqa: BLE001 — the runner's contract is
+            # to record ANY stage failure (a handler can raise ValueError,
+            # RuntimeError, a pandas/pyarrow error, etc.) in the manifest and
+            # continue/halt rather than crash the whole run.
+            record["status"] = "error"
+            record["error"] = {
+                "type": type(exc).__name__,
+                "message": str(exc),
+                "traceback": traceback.format_exc(limit=8),
+            }
+            outputs_so_far[sid] = pd.DataFrame()
+        finally:
+            # awaiting_review / cancelled records finalize themselves (above)
+            # so their own custom fields aren't clobbered by a second,
+            # slightly-later timestamp here.
+            if record["status"] not in ("awaiting_review", "cancelled"):
+                record["elapsed_ms"] = int((time.perf_counter() - t0) * 1000)
+                record["finished_at"] = datetime.now().isoformat(timespec="seconds")
+                records_by_id[sid] = record
+            flush("running")  # persist this stage's result for the live page
+
+    # If halted, mark remaining stages as pending so the workflow can render
+    # them greyed out.
+    if halted is not None:
+        for stage in ordered[halt_at_index + 1:]:
             sid = stage.id
-            stype = stage.type
-
-            # Skip stages already produced (resume path).
-            if sid in outputs_so_far and records_by_id.get(sid, {}).get("status") in ("ok", "validation_warnings"):
-                continue
-
-            record: dict[str, Any] = {
+            records_by_id[sid] = {
                 "stage_id": sid,
-                "type": stype,
+                "type": stage.type,
                 "name": stage.name,
-                "started_at": datetime.now().isoformat(timespec="seconds"),
-                "status": "running",
+                "status": "pending",
                 "input_validation": [],
                 "output_validation": None,
                 "elapsed_ms": 0,
                 "rows": 0,
                 "error": None,
+                "started_at": None,
+                "finished_at": None,
             }
-            t0 = time.perf_counter()
-            records_by_id[sid] = record
-            flush("running")  # show this stage as running
 
-            try:
-                inputs_for_stage: dict[str, pd.DataFrame] = {}
-                for ref in stage.inputs:
-                    if ref.id not in outputs_so_far:
-                        raise RuntimeError(f"Upstream stage '{ref.id}' has no output yet")
-                    df = outputs_so_far[ref.id]
-                    _reject_duplicate_input_rows(df, ref.id, sid)
-                    inputs_for_stage[ref.id] = df
-                    if ref.table_schema is not None:
-                        rep = validate_dataframe(
-                            df, ref.table_schema, stage_id=sid, phase=f"input:{ref.id}",
-                        )
-                        record["input_validation"].append(rep.to_dict())
+    # If cancelled, mark not-yet-run stages pending from cancel_at_index on.
+    # The between-stage path's own stage never got a record (not-yet-started
+    # stays pending); the mid-stage path's already has one (status
+    # "cancelled", set above) and is left alone by the `not in` guard.
+    if cancelled:
+        for stage in ordered[cancel_at_index:]:
+            if stage.id not in records_by_id:
+                records_by_id[stage.id] = _pending_stub(stage)
 
-                handler = HANDLERS.get(stype)
-                if handler is None:
-                    raise ValueError(f"No handler for stage type '{stype}'")
+    # Emit stages in topological order so the manifest reads top-to-bottom.
+    manifest["stages"] = [records_by_id[s.id] for s in ordered if s.id in records_by_id]
+    manifest["finished_at"] = datetime.now().isoformat(timespec="seconds")
+    manifest["queue_stats"] = ctx.get("queue_stats", {})
+    manifest["dropped_columns"] = ctx.get("dropped_columns", {})
 
-                try:
-                    output = handler.execute(stage, inputs_for_stage, ctx)
-                except HaltForReview as halt:
-                    record["status"] = "awaiting_review"
-                    record["rows"] = halt.pending_count
-                    record["queue_path"] = str(halt.queue_path.relative_to(run_dir))
-                    record["elapsed_ms"] = int((time.perf_counter() - t0) * 1000)
-                    record["finished_at"] = datetime.now().isoformat(timespec="seconds")
-                    records_by_id[sid] = record
-                    halted = halt
-                    halt_at_index = idx
-                    break
-                except RunCancelled:
-                    # Mid-stage cancel: the row driver unwound out of
-                    # handler.execute (see execution.py::_run_row_mapper). This
-                    # stage made no output — it is marked cancelled, not ok.
-                    record["status"] = "cancelled"
-                    record["elapsed_ms"] = int((time.perf_counter() - t0) * 1000)
-                    record["finished_at"] = datetime.now().isoformat(timespec="seconds")
-                    records_by_id[sid] = record
-                    cancelled = True
-                    cancel_at_index = idx
-                    break
-
-                if output is None:
-                    output = pd.DataFrame()
-
-                # Generic row slicing, in the handler's emitted order. Offset
-                # (per-run only, from --offset stage=M) drops the first M rows;
-                # then the cap keeps the first N. A per-run cap (--limit stage=N)
-                # wins over the stage's static `limit:`. Used to throttle /
-                # page the expensive LLM fan-out.
-                offset = (ctx.get("offsets") or {}).get(sid)
-                if isinstance(offset, int) and offset > 0 and len(output) > 0:
-                    record.setdefault("notes", []).append(
-                        f"offset={offset}: dropped first {min(offset, len(output))} of {len(output)} row(s)"
-                    )
-                    output = output.iloc[offset:].reset_index(drop=True).copy()
-                limit = (ctx.get("limits") or {}).get(sid, stage.limit)
-                if isinstance(limit, int) and limit >= 0 and len(output) > limit:
-                    record.setdefault("notes", []).append(
-                        f"limit={limit}: truncated from {len(output)} to {limit} row(s)"
-                    )
-                    output = output.head(limit).copy()
-
-                out_rep = validate_dataframe(
-                    output, stage.output_schema, stage_id=sid, phase="output",
-                )
-                row_errors = (ctx.get("row_errors") or {}).get(sid, [])
-                if row_errors:
-                    out_rep.issues[0:0] = [
-                        Issue("error", None,
-                              f"row {row_error['row']}: generation failed: {row_error['message']}")
-                        for row_error in row_errors
-                    ]
-                record["output_validation"] = out_rep.to_dict()
-
-                output_path = run_dir / "outputs" / f"{sid}.parquet"
-                try:
-                    output.to_parquet(output_path, index=False)
-                except (pa_lib.ArrowException, ValueError, TypeError) as exc:
-                    # A column whose dtype/shape parquet can't represent (mixed-type
-                    # object columns, nested Python values) falls back to CSV, which
-                    # stringifies them, rather than losing the stage output; the
-                    # fallback is recorded, never silent. A disk/OS error is NOT
-                    # caught: it would fail identically for CSV, so it propagates to
-                    # the per-stage handler below and lands in the manifest.
-                    output_path = run_dir / "outputs" / f"{sid}.csv"
-                    output.to_csv(output_path, index=False)
-                    record.setdefault("notes", []).append(
-                        f"Wrote CSV instead of parquet: {exc}"
-                    )
-
-                outputs_so_far[sid] = output
-                if row_errors:
-                    record["status"] = "error"
-                    record["error"] = {
-                        "type": "RowGenerationError",
-                        "message": _summarize_row_errors(row_errors),
-                        "traceback": None,
-                    }
-                else:
-                    record["status"] = "ok" if out_rep.ok and all(
-                        v["ok"] for v in record["input_validation"]
-                    ) else "validation_warnings"
-                record["rows"] = int(len(output))
-                record["output_path"] = str(output_path.relative_to(run_dir))
-
-            except Exception as exc:  # noqa: BLE001 — the runner's contract is
-                # to record ANY stage failure (a handler can raise ValueError,
-                # RuntimeError, a pandas/pyarrow error, etc.) in the manifest and
-                # continue/halt rather than crash the whole run.
-                record["status"] = "error"
-                record["error"] = {
-                    "type": type(exc).__name__,
-                    "message": str(exc),
-                    "traceback": traceback.format_exc(limit=8),
-                }
-                outputs_so_far[sid] = pd.DataFrame()
-            finally:
-                # awaiting_review / cancelled records finalize themselves (above)
-                # so their own custom fields aren't clobbered by a second,
-                # slightly-later timestamp here.
-                if record["status"] not in ("awaiting_review", "cancelled"):
-                    record["elapsed_ms"] = int((time.perf_counter() - t0) * 1000)
-                    record["finished_at"] = datetime.now().isoformat(timespec="seconds")
-                    records_by_id[sid] = record
-                flush("running")  # persist this stage's result for the live page
-
-        # If halted, mark remaining stages as pending so the workflow can render
-        # them greyed out.
-        if halted is not None:
-            for stage in ordered[halt_at_index + 1:]:
-                sid = stage.id
-                records_by_id[sid] = {
-                    "stage_id": sid,
-                    "type": stage.type,
-                    "name": stage.name,
-                    "status": "pending",
-                    "input_validation": [],
-                    "output_validation": None,
-                    "elapsed_ms": 0,
-                    "rows": 0,
-                    "error": None,
-                    "started_at": None,
-                    "finished_at": None,
-                }
-
-        # If cancelled, mark not-yet-run stages pending from cancel_at_index on.
-        # The between-stage path's own stage never got a record (not-yet-started
-        # stays pending); the mid-stage path's already has one (status
-        # "cancelled", set above) and is left alone by the `not in` guard.
-        if cancelled:
-            for stage in ordered[cancel_at_index:]:
-                if stage.id not in records_by_id:
-                    records_by_id[stage.id] = _pending_stub(stage)
-
-        # Emit stages in topological order so the manifest reads top-to-bottom.
-        manifest["stages"] = [records_by_id[s.id] for s in ordered if s.id in records_by_id]
-        manifest["finished_at"] = datetime.now().isoformat(timespec="seconds")
-        manifest["queue_stats"] = ctx.get("queue_stats", {})
-        manifest["dropped_columns"] = ctx.get("dropped_columns", {})
-
-        if halted is not None:
-            manifest["status"] = "awaiting_review"
-            manifest["halted_at"] = halted.stage_id
-        elif cancelled:
-            # Never run the normal ok/errors/warnings computation for a cancelled
-            # run — a run stopped by request is neither a clean completion nor a
-            # failure.
-            manifest["status"] = "cancelled"
-            manifest["cancelled_at"] = ordered[cancel_at_index].id
-            manifest.pop("halted_at", None)
-        else:
-            manifest["status"] = (
-                "ok" if all(s["status"] == "ok" for s in manifest["stages"])
-                else "errors" if any(s["status"] == "error" for s in manifest["stages"])
-                else "warnings"
-            )
-            manifest.pop("halted_at", None)
-
-        (run_dir / "manifest.json").write_text(
-            json.dumps(manifest, indent=2, default=str), encoding="utf-8"
+    if halted is not None:
+        manifest["status"] = "awaiting_review"
+        manifest["halted_at"] = halted.stage_id
+    elif cancelled:
+        # Never run the normal ok/errors/warnings computation for a cancelled
+        # run — a run stopped by request is neither a clean completion nor a
+        # failure.
+        manifest["status"] = "cancelled"
+        manifest["cancelled_at"] = ordered[cancel_at_index].id
+        manifest.pop("halted_at", None)
+    else:
+        manifest["status"] = (
+            "ok" if all(s["status"] == "ok" for s in manifest["stages"])
+            else "errors" if any(s["status"] == "error" for s in manifest["stages"])
+            else "warnings"
         )
-    finally:
-        # The registry entry must not outlive the run — clear() runs in this
-        # `finally` so it fires on ANY exit from the block above: the normal
-        # path through the final manifest write, or an exception raised while
-        # computing or writing it.
-        identity = _read_run_identity(ctx)
-        if identity is not None:
-            clear(*identity)
+        manifest.pop("halted_at", None)
 
+    (run_dir / "manifest.json").write_text(
+        json.dumps(manifest, indent=2, default=str), encoding="utf-8"
+    )
+
+    # The registry entry must not outlive the run: clear() fires on the normal
+    # completion path and on the halt/cancel paths (both `break` out of the loop
+    # and fall through to this single return). A hard crash mid-write would skip
+    # it, leaking one completed run's (project, run_id) key — harmless, since run
+    # ids are per-second timestamps that already collide on run_dir.
+    identity = _read_run_identity(ctx)
+    if identity is not None:
+        clear(*identity)
     return manifest
 
 
