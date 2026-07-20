@@ -221,7 +221,7 @@ async def create_version_route(project: str, message: str = Form(...)):
     # snapshot, so it must not immortalise a python transform that fails its
     # own tests. Absent tests don't block — the gate holds existing
     # tests to green, it does not require them. The gate only applies when a
-    # compiled workflow exists; without one, versioning.create_version's own
+    # compiled workflow exists; without one, versioning.create_version_from_disk's own
     # FileNotFoundError reports the missing workflow as a 400 below.
     if (project_dir / "compiled").is_dir():
         failing = find_failing_stage_tests(load_stages(project).stages)

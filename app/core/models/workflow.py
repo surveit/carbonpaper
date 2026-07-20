@@ -99,7 +99,7 @@ def validate_workflow(stages: list[Stage]) -> list[str]:
     acyclic. Per-stage invariants (e.g. llm_transform being strictly 1:1) are
     already enforced by `Stage` construction, so any `list[Stage]` reaching here
     is stage-valid; this is the remaining, whole-graph seam `load_workflow` (and
-    hence `create_version`) enforces, so an invalid workflow is never versioned
+    hence `create_version_from_disk`) enforces, so an invalid workflow is never versioned
     or run."""
     return graph_issues(stages)
 
