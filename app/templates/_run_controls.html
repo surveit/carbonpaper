@@ -1,0 +1,45 @@
+{#
+  RUN CONTROLS — one form that configures AND launches a run:
+    · a version_id <select>: every version newest-first, the latest pre-selected
+      (so a run defaults to latest, any version is one click away)
+    · one path field per file-kind input (binding__<stage_id>), prefilled with the
+      SELECTED version's workflow-authored path
+    · ▶ Run workflow
+
+  Version and inputs belong together: different versions can author different input
+  stages/paths, so the fields describe whichever version is picked. When the version
+  changes, run_controls.js refetches that version's inputs
+  (GET /project/<name>/run-inputs?version_id=) and re-renders the path fields.
+
+  Context (inherited from the including template):
+    state       = shell_state(pdir)         — state.name for the form action
+    versions    = versioning.list_versions(pdir)  — newest-first (may be empty)
+    file_inputs = loading.list_file_inputs(pdir)   — [{stage_id, name, path}]
+#}
+{% if versions %}
+<form action="/project/{{ state.name }}/run" method="post" class="run-controls"
+      data-project="{{ state.name }}">
+  <label class="run-version">version
+    <select name="version_id">
+      {% for v in versions %}
+      <option value="{{ v.id }}"{% if loop.first %} selected{% endif %}>{{ v.id }}{% if v.message %} — {{ v.message }}{% endif %}{% if loop.first %} (latest){% endif %}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <div class="run-inputs">
+    {% for fi in file_inputs %}
+    <label style="display:block; margin:0.35rem 0;">
+      <code>{{ fi.stage_id }}</code> — data file
+      <input type="text" name="binding__{{ fi.stage_id }}" value="{{ fi.path }}"
+             placeholder="absolute path to the data file"
+             size="70" {% if not fi.path %}required{% endif %}>
+    </label>
+    {% endfor %}
+  </div>
+  <button type="submit" class="btn primary">▶ Run workflow</button>
+</form>
+<script src="/static/run_controls.js"></script>
+{% else %}
+<p class="muted">No version to run yet —
+  <a href="/project/{{ state.name }}/workflow">create a version</a> first.</p>
+{% endif %}

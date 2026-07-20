@@ -103,6 +103,16 @@ def test_workflow_section_renders_the_graph():
     assert "extract" in r.text                              # a stage id in the graph
 
 
+def test_workflow_page_run_links_to_the_runs_config_form():
+    """Running is configured (pick version + set inputs) on ONE surface — the Runs
+    page. The Workflow page's run affordance links there rather than posting a bare
+    run inline, so version + inputs are never split across two places."""
+    r = client.get("/project/demo/workflow")
+    assert r.status_code == 200
+    assert 'href="/project/demo/runs" class="btn primary"' in r.text  # links to the config form
+    assert '<form action="/project/demo/run"' not in r.text           # no inline bare run
+
+
 def test_trigger_run_returns_400_on_invalid_dag(monkeypatch):
     """The run route surfaces a load failure as a 400 with the issue list."""
     from app.services.loader import WorkflowLoadError
