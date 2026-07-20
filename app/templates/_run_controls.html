@@ -8,12 +8,16 @@
       the chosen file to POST /project/<name>/upload-input, which saves it and puts
       the saved copy's absolute path in the field. The field is display-only; Browse
       is the only way to change it (a workflow-authored path is still read in place).
+    · alongside each path field, an optional row-cap field (limit__<stage_id>):
+      blank runs the full file, a number N caps that input stage's OUTPUT to its
+      first N rows for this run only (see prepare_run's `limits` in
+      app/runtime/runner.py — this form is just its web-form surface)
     · ▶ Run workflow
 
   Version and inputs belong together: different versions can author different input
   stages/paths, so the fields describe whichever version is picked. When the version
   changes, run_controls.js refetches that version's inputs
-  (GET /project/<name>/run-inputs?version_id=) and re-renders the path fields.
+  (GET /project/<name>/run-inputs?version_id=) and re-renders the path + row-cap fields.
 
   Context (inherited from the including template):
     state       = shell_state(pdir)         — state.name for the form action
@@ -41,6 +45,8 @@
         <input type="file" class="file-input" hidden>
         <button type="button" class="btn browse-btn">Browse…</button>
       </span>
+      · first <input type="number" name="limit__{{ fi.stage_id }}" min="0"
+                      placeholder="all" size="6"> rows
     </label>
     {% endfor %}
   </div>

@@ -1,14 +1,15 @@
-// Keep the run form's input-path fields in sync with the chosen version, and
-// let each path field's "Browse…" button pick a file with the browser's own
-// native dialog (works on every OS).
+// Keep the run form's fields in sync with the chosen version, and let each path
+// field's "Browse…" button pick a file with the browser's own native dialog
+// (works on every OS).
 //
 // Two jobs, one file because they share the same fields:
 //
 //  1. Version sync — a workflow version can author different input stages / paths
 //     than another, so when the version <select> changes we refetch that version's
 //     inputs (GET /project/<name>/run-inputs?version_id=) and rebuild the path
-//     fields. That is what makes the run form "one page": the version you pick and
-//     the input paths you set always describe the same version.
+//     fields, each paired with its row-cap field (limit__<stage_id>). That is what
+//     makes the run form "one page": the version you pick and the input paths/caps
+//     you set always describe the same version.
 //
 //  2. File picker — a run reads its input files off the server's disk by absolute
 //     path, but a browser <input type=file> hands over only bytes, never a path
@@ -28,16 +29,20 @@
   // here on version change behaves identically to a server-rendered one.
   function fieldHtml(fileInput) {
     var required = fileInput.path ? "" : " required";
+    var stageId = escapeHtml(fileInput.stage_id);
     return (
       '<label class="run-input-row">' +
-      "<code>" + escapeHtml(fileInput.stage_id) + "</code> — data file " +
+      "<code>" + stageId + "</code> — data file " +
       '<span class="path-field">' +
-      '<input type="text" name="binding__' + escapeHtml(fileInput.stage_id) +
+      '<input type="text" name="binding__' + stageId +
       '" value="' + escapeHtml(fileInput.path || "") + '" readonly ' +
       'placeholder="no file chosen — click Browse…" size="70"' + required + ">" +
       '<input type="file" class="file-input" hidden>' +
       '<button type="button" class="btn browse-btn">Browse…</button>' +
-      "</span></label>"
+      "</span>" +
+      ' · first <input type="number" name="limit__' + stageId +
+      '" min="0" placeholder="all" size="6"> rows' +
+      "</label>"
     );
   }
 

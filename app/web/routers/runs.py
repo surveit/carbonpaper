@@ -73,7 +73,9 @@ async def trigger_run(request: Request, project: str):
         form = await request.form()
         version_id = str(form.get("version_id") or "").strip() or None
         bindings = _collect_bindings(form, project_dir, version_id)
-        prep = prepare_run(project_dir, REPO_ROOT, version_id=version_id, bindings=bindings)
+        limits = _collect_limits(form)
+        prep = prepare_run(project_dir, REPO_ROOT, version_id=version_id,
+                            bindings=bindings, limits=limits)
     except (NoVersionToRunError, MissingInputBindingError, ValueError) as exc:
         # ValueError here is binding/limit/offset validation failures raised by
         # apply_run_bindings / prepare_run — not a catch-all for other bugs.
@@ -137,6 +139,28 @@ def _collect_bindings(
         if path and path != authored.get(stage_id, ""):
             bindings[stage_id] = {"path": path}
     return bindings
+
+
+def _collect_limits(form: FormData) -> dict[str, int]:
+    """Read `limit__<stage_id>` form fields into a per-run row-cap override,
+    the same shape `prepare_run`'s `limits` parameter takes. A blank field
+    means "no cap" and is left out of the dict (never recorded as 0). A value
+    that is not a non-negative whole number fails loudly, naming the stage."""
+    limits: dict[str, int] = {}
+    for key, value in form.items():
+        if not key.startswith("limit__"):
+            continue
+        stage_id = key[len("limit__"):]
+        text = str(value).strip()
+        if not text:
+            continue
+        if not text.isdigit():
+            raise ValueError(
+                f"row limit for stage '{stage_id}' must be a non-negative "
+                f"whole number, got {value!r}"
+            )
+        limits[stage_id] = int(text)
+    return limits
 
 
 @router.get("/project/{project}/run-inputs")
