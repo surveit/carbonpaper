@@ -110,6 +110,60 @@ def build_schema_er_diagram(schemas: list[dict[str, Any]]) -> str:
     return "\n".join(lines)
 
 
+def build_schema_table_graph(schemas: list[dict[str, Any]]) -> str:
+    """Mermaid flowchart of the data model at TABLE level: one node per named
+    schema (name + title, coloured by kind), one edge per foreign-key reference.
+    The columns-free companion to build_schema_er_diagram — same deterministic
+    edge source (explicit column `references` only), so it makes no dataflow
+    claim: an edge A --> B means B carries a key pointing at A, and a table that
+    reads another without carrying its key (e.g. a roll-up) shows no edge.
+    Nodes click through to focusSchema(name) so the page can open that schema's
+    reference detail."""
+    lines = ["flowchart LR"]
+    names = {s.get("name") for s in schemas if s.get("name")}
+
+    for s in schemas:
+        sid = s.get("name")
+        if not sid:
+            continue
+        klass = SCHEMA_KIND_CLASS.get(s.get("kind", ""), "custom")
+        title = (s.get("title") or "").strip().replace('"', "'")[:48]
+        label = f'"<b>{sid}</b>'
+        if title and title != sid:
+            label += f"<br/><span style='font-size:10px;color:#888'>{title}</span>"
+        label += '"'
+        lines.append(f"    {sid}[{label}]:::{klass}")
+        lines.append(f'    click {sid} call focusSchema("{sid}") "Open columns"')
+
+    # FK edges: referenced schema --> the schema whose column carries the key.
+    # Same extraction as the ER view, deduped at table level.
+    seen_edges: set[str] = set()
+    for s in schemas:
+        sid = s.get("name")
+        for col in s.get("columns") or []:
+            ref = col.get("references") if isinstance(col, dict) else None
+            if not ref:
+                continue
+            target = ref.split(".", 1)[0].strip()
+            if target not in names or target == sid:
+                continue
+            edge = f"    {target} --> {sid}"
+            if edge not in seen_edges:
+                seen_edges.add(edge)
+                lines.append(edge)
+
+    # Same kind-fill palette as the workflow graph's classDefs, keyed through
+    # SCHEMA_KIND_CLASS so a node here matches the kind's .type-tag chip.
+    lines += [
+        "    classDef input fill:#e8f4f8,stroke:#3a8ca8,color:#000",
+        "    classDef aggregate fill:#f0f0e6,stroke:#888533,color:#000",
+        "    classDef python fill:#eef2f7,stroke:#4a5e85,color:#000",
+        "    classDef human fill:#fce8f4,stroke:#c0399a,color:#000",
+        "    classDef custom fill:#fde8e8,stroke:#cc3333,color:#000",
+    ]
+    return "\n".join(lines)
+
+
 # Node-review BELIEF → stroke colour. Distinct from the type fill (classDef) and
 # from run status: this is "do we trust HOW this node is modeled". Kept identical
 # to the --belief-* palette in style.css so a legend chip equals the workflow stroke.

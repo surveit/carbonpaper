@@ -69,6 +69,7 @@ from app.web.diagrams import (
     TYPE_GLYPH,
     build_mermaid_graph,
     build_schema_er_diagram,
+    build_schema_table_graph,
 )
 from app.web.loading import (
     list_projects,
@@ -333,6 +334,7 @@ async def project_data_model(request: Request, project_name: str):
             "section": "data_model",
             "schemas": schemas,
             "er_diagram": build_schema_er_diagram(schemas) if schemas else None,
+            "table_graph": build_schema_table_graph(schemas) if schemas else None,
             "issues": validate_schema_library([_schema_spec(s) for s in schemas]) if schemas else [],
             "approval": approval,
             "schema_json": _schema_json_map(schemas),
