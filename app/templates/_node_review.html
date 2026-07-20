@@ -14,6 +14,8 @@
      type_class / type_glyph — the type-tag maps
      test_views — shaped per-test run results for _stage_tests.html
                     ([] for stages without tests; see node_review._shape_one_test)
+     test_derivable — stage.type in STAGE_TEST_TYPES; gates the Generate tests
+                    button in _stage_tests.html (python transforms only)
 #}
 {% from "_schema_table.html" import schema_table %}
 {% set state = review.state %}
@@ -131,6 +133,7 @@
   const STAGE_ID = panel.dataset.stageId;
   const DECIDE_URL = `/project/${encodeURIComponent(PROJECT)}/node/${encodeURIComponent(STAGE_ID)}/decide`;
   const EDIT_URL = `/project/${encodeURIComponent(PROJECT)}/node/${encodeURIComponent(STAGE_ID)}/edit`;
+  const GENERATE_TESTS_URL = `/project/${encodeURIComponent(PROJECT)}/node/${encodeURIComponent(STAGE_ID)}/generate-tests`;
 
   // ── Input/Transform/Output/Spec tabs ──
   const tabs = panel.querySelectorAll('[data-nrtab]');
@@ -200,6 +203,68 @@
       btn.disabled = false;
     }
   }
+
+  // ── Generate tests: kick a hidden derivation turn, poll its status, then
+  //    re-fetch this whole panel via window._loadStage so the freshly derived
+  //    suite renders (mirrors how a decision/edit refreshes the graph). ──
+  const genBtn = panel.querySelector('[data-role="generate-tests"]');
+  const genMsg = panel.querySelector('[data-role="generate-tests-msg"]');
+
+  function generateTestsStatusUrl(sid) {
+    return `/project/${encodeURIComponent(PROJECT)}/generation-session/${encodeURIComponent(sid)}/status`;
+  }
+
+  function resetGenerateTestsButton() {
+    if (!genBtn) return;
+    genBtn.disabled = false;
+    genBtn.textContent = 'Generate tests';
+  }
+
+  async function pollGenerateTestsStatus(sid) {
+    // The panel may have been replaced by another stage's review-partial while this
+    // poll was in flight (window._loadStage overwrites panel.innerHTML unconditionally
+    // on tab switch). genBtn is this panel's own button, so once the panel is replaced
+    // it's no longer connected to the document — use that as the "stale poll" signal
+    // and stop touching this panel entirely.
+    if (!genBtn || !genBtn.isConnected) return;
+    let d;
+    try {
+      const r = await fetch(generateTestsStatusUrl(sid), { cache: 'no-store' });
+      if (!r.ok) { resetGenerateTestsButton(); return; }
+      d = await r.json();
+    } catch (e) { resetGenerateTestsButton(); return; }
+    if (d.active) { setTimeout(() => pollGenerateTestsStatus(sid), 2000); return; }
+    if (d.error) {
+      if (genMsg) { genMsg.textContent = d.error; genMsg.className = 'nr-edit-msg err'; }
+      resetGenerateTestsButton();
+      return;
+    }
+    if (!genBtn.isConnected) return;
+    if (window._loadStage) window._loadStage(STAGE_ID);
+  }
+
+  async function startGenerateTests() {
+    if (!genBtn) return;
+    genBtn.disabled = true;
+    genBtn.textContent = 'Deriving tests…';
+    if (genMsg) { genMsg.textContent = ''; genMsg.className = 'nr-edit-msg'; }
+    try {
+      const r = await fetch(GENERATE_TESTS_URL, { method: 'POST' });
+      let d = null;
+      try { d = await r.json(); } catch (e) {}
+      if (!r.ok || !d || !d.ok) {
+        if (genMsg) { genMsg.textContent = `✗ ${r.status} ${d && d.detail ? d.detail : ''}`.trim(); genMsg.className = 'nr-edit-msg err'; }
+        resetGenerateTestsButton();
+        return;
+      }
+      pollGenerateTestsStatus(d.session);
+    } catch (e) {
+      if (genMsg) { genMsg.textContent = 'Failed to start derivation.'; genMsg.className = 'nr-edit-msg err'; }
+      resetGenerateTestsButton();
+    }
+  }
+
+  if (genBtn) genBtn.addEventListener('click', startGenerateTests);
 
   panel.addEventListener('click', function (ev) {
     const dec = ev.target.closest('[data-decision]');

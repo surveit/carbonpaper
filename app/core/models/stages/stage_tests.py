@@ -13,6 +13,8 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
+from pydantic import BaseModel, ConfigDict, model_validator
+
 from app.core.models.schema import _Base
 
 # The stage types whose handlers can execute a test.
@@ -73,3 +75,26 @@ def validate_stage_tests(
                 pass  # no per-type invariant: rows in and rows out are both free
             case _:
                 raise AssertionError(f"unhandled stage test type: {stage_type}")
+
+
+def build_stage_tests_model(
+    stage_type: str, input_ids: list[str]
+) -> type[BaseModel]:
+    """A pydantic model of shape ``{"tests": [StageTest, ...]}`` whose
+    validation is bound to one stage's context: the shape rules that
+    validate_stage_tests enforces (inputs match the declared upstream ids,
+    row functions are one row in → one row out) run at model_validate time.
+    Built per stage so an agent's submit_answer tool can reject a malformed
+    suite inside the agent loop instead of at stage-write time."""
+
+    class StageTestSuite(BaseModel):
+        tests: list[StageTest]
+
+        model_config = ConfigDict(extra="forbid")
+
+        @model_validator(mode="after")
+        def _stage_rules(self) -> "StageTestSuite":
+            validate_stage_tests(stage_type, input_ids, self.tests)
+            return self
+
+    return StageTestSuite

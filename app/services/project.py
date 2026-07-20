@@ -113,7 +113,7 @@ class ProjectState(BaseModel):
 _DOCUMENT_CANDIDATES = ("document.md", "methodology_raw.md", "methodology_raw.txt")
 
 
-def _document_path(pdir: Path) -> Path | None:
+def find_document_path(pdir: Path) -> Path | None:
     """First existing source-document file in <pdir> (see _DOCUMENT_CANDIDATES),
     or None when the project has no document on disk. Returns the absolute Path so
     callers can read or link it; None is a truthful 'no document', not an error."""
@@ -296,7 +296,7 @@ def project_state(pdir: Path) -> ProjectState:
     meta = project_meta(pdir)
 
     # ── Document ──
-    doc_path = _document_path(pdir)
+    doc_path = find_document_path(pdir)
     has_document = doc_path is not None
 
     # ── Data model (named schemas) ──
@@ -427,6 +427,7 @@ __all__ = [
     "project_meta",
     "write_project_meta",
     "project_state",
+    "find_document_path",
     "create_project",
     "list_projects",
     "describe_workflow",
