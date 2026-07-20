@@ -5,10 +5,11 @@
   target this version: publish, run this version. Belief review is not here — a
   version is frozen; review happens on the working-copy editor.
 
-  Context: state; section="versions"; version (the versioning.load_version_meta
-           dict, `published` among its own keys); mermaid (frozen graph string).
+  Context: state; section="versions"; version (the versioning.load_version
+           WorkflowVersion, `published` among its own attributes); mermaid
+           (frozen graph string).
 #}
-{% block title %}{{ state.meta.title or state.name }} · Version {{ version.id }}{% endblock %}
+{% block title %}{{ state.meta.title or state.name }} · Version {{ version.version_id }}{% endblock %}
 
 {% block section_head %}
 <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
@@ -25,18 +26,18 @@
 {% block section %}
 <div class="sec-head wf-head">
   <div class="wf-head-title">
-    <h1>Version <code>{{ version.id }}</code></h1>
+    <h1>Version <code>{{ version.version_id }}</code></h1>
     <p class="lede">A read-only snapshot of the workflow. {% if version.message %}{{ version.message }}{% endif %}</p>
   </div>
   <div class="actions wf-actions">
     <a href="/project/{{ state.name }}/workflow/versions" class="btn">← All versions</a>
     {% if version.published %}
     <span class="muted">✓ published {{ version.published_at or '' }}</span>
-    <form action="/project/{{ state.name }}/workflow/version/{{ version.id }}/run" method="post" style="display:inline">
+    <form action="/project/{{ state.name }}/workflow/version/{{ version.version_id }}/run" method="post" style="display:inline">
       <button type="submit" class="btn primary">▶ Run this version</button>
     </form>
     {% else %}
-    <form action="/project/{{ state.name }}/versions/{{ version.id }}/publish" method="post" style="display:inline">
+    <form action="/project/{{ state.name }}/versions/{{ version.version_id }}/publish" method="post" style="display:inline">
       <button type="submit" class="btn primary">Publish</button>
     </form>
     <span class="muted">unpublished — publish to run</span>

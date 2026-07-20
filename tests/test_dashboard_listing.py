@@ -70,6 +70,7 @@ def test_versioned_project_is_ready_to_run(examples_root):
     WorkflowVersion(
         id=f"{proj.name}/20260101T000000", version_id="20260101T000000",
         created_at="2026-01-01T00:00:00", message="seed", reviewer="test",
+        published=True,
     ).save()
     [card] = list_projects()
     assert card["is_ready"] is True

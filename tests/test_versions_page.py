@@ -61,11 +61,11 @@ def test_publish_route_stamps_and_redirects_to_detail(project: Path) -> None:
     version you just approved), not the list."""
     meta = versioning.create_version_from_disk(project, message="v1", reviewer="local")
     resp = client.post(
-        f"/project/demo/versions/{meta.id}/publish", follow_redirects=False
+        f"/project/demo/versions/{meta.version_id}/publish", follow_redirects=False
     )
     assert resp.status_code == 303
-    assert resp.headers["location"].endswith(f"/project/demo/workflow/version/{meta.id}")
-    assert versioning.load_version_meta(project, meta.id).published
+    assert resp.headers["location"].endswith(f"/project/demo/workflow/version/{meta.version_id}")
+    assert versioning.load_version(project, meta.version_id).published
     page = client.get("/project/demo/workflow/versions")
     assert "unpublished" not in page.text
 
@@ -103,4 +103,4 @@ def test_workflow_renders_the_editor(project: Path) -> None:
 def test_workflow_versions_list_rows_link_to_version_detail(project: Path) -> None:
     meta = versioning.create_version_from_disk(project, message="v1", reviewer="local")
     page = client.get("/project/demo/workflow/versions")
-    assert f"/workflow/version/{meta.id}" in page.text
+    assert f"/workflow/version/{meta.version_id}" in page.text

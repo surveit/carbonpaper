@@ -30,7 +30,7 @@ from app.evals.dataset_columns import (
     get_output_columns_from_stage,
 )
 from app.evals.store import latest_version_id, save_eval_run
-from app.services.versioning import load_version_meta, load_version_stages
+from app.services.versioning import load_version, load_version_stages
 
 
 def run_eval(
@@ -161,10 +161,10 @@ def _resolve_version(project_dir: Path, version_id: str | None) -> str:
     a version to decide whether to publish it -- so unlike a production run it
     is never gated on publication. An explicit `version_id` must name an
     existing version (a missing version id raises FileNotFoundError, from
-    load_version_meta) and is returned as-is; None resolves to the newest
+    load_version) and is returned as-is; None resolves to the newest
     version overall, or raises if the project has no version at all."""
     if version_id is not None:
-        load_version_meta(project_dir, version_id)  # raises FileNotFoundError if missing
+        load_version(project_dir, version_id)  # raises FileNotFoundError if missing
         return version_id
     version = latest_version_id(project_dir)
     if version is None:

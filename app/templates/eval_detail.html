@@ -19,7 +19,7 @@
 <form action="/project/{{ project }}/evals/{{ config.id }}/run" method="post" style="display:inline;">
   <select name="version_id">
     {% for v in versions %}
-    <option value="{{ v.id }}">{{ v.id }}{% if not v.published %} · unpublished{% endif %}</option>
+    <option value="{{ v.version_id }}">{{ v.version_id }}{% if not v.published %} · unpublished{% endif %}</option>
     {% endfor %}
   </select>
   <button type="submit" class="btn primary">▶ Run eval</button>

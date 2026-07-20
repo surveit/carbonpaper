@@ -229,21 +229,21 @@ async def create_version_route(project: str, message: str = Form(...)):
             return JSONResponse({"ok": False, "issues": failing}, status_code=400)
 
     existing = versioning.list_versions(project_dir)  # newest-first
-    parent = existing[0].id if existing else None
+    parent = existing[0].version_id if existing else None
     try:
-        meta = versioning.create_version_from_disk(
+        version = versioning.create_version_from_disk(
             project_dir, message=message, reviewer="local", parent_version=parent
         )
     except FileNotFoundError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return JSONResponse({"ok": True, "version": meta.model_dump(mode="json")})
+    return JSONResponse({"ok": True, "version": version.model_dump(mode="json")})
 
 
 @router.post("/project/{project}/versions/{version_id}/publish")
 async def publish_version_route(project: str, version_id: str):
     """Record human approval on one version (the gate runs pin to). Idempotent;
     metadata only — stage content is never touched. A malformed version_id (any
-    shape but the timestamp versioning.load_version_meta expects) 404s through
+    shape but the timestamp versioning.load_version expects) 404s through
     that same FileNotFoundError. Publish is only ever posted from the version's own
     detail page, so redirect back there (now showing published) in one hop."""
     project_dir = EXAMPLES_DIR / project

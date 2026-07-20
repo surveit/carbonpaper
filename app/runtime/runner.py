@@ -111,20 +111,20 @@ def resolve_version_id(project_dir: Path, version_id: str | None) -> str:
       run), and a run will not treat an unreviewed draft as runnable.
     """
     if version_id is not None:
-        # Validate the requested version exists (load_version_meta fails loudly
-        # if its version.json is missing) — a caller asking for a specific id
+        # Validate the requested version exists (load_version fails loudly if
+        # its version.json is missing) — a caller asking for a specific id
         # must not be silently redirected to some other snapshot.
-        meta = versioning.load_version_meta(project_dir, version_id)
-        if not meta.published:
+        version = versioning.load_version(project_dir, version_id)
+        if not version.published:
             raise NoVersionToRunError(
                 f"Version '{version_id}' of '{project_dir.name}' is not published. "
                 f"A run pins a published version — publish it first."
             )
         return version_id
 
-    for meta in versioning.list_versions(project_dir):  # newest-first
-        if meta.published:
-            return meta.id
+    for version in versioning.list_versions(project_dir):  # newest-first
+        if version.published:
+            return version.version_id
 
     raise NoVersionToRunError(
         f"No published version to run for '{project_dir.name}'. A run "

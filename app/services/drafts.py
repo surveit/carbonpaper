@@ -42,7 +42,6 @@ from app.core.persistence import PersistedModel
 from app.core.utils import generate_word_triplet_id
 from app.services import versioning, workspace
 from app.services.loader import stage_to_spec_dict
-from app.services.versioning import VersionMeta
 
 
 class Draft(PersistedModel):
@@ -66,9 +65,9 @@ class Draft(PersistedModel):
 
 class DraftView(BaseModel):
     """The agent-facing shape every caller of this module reads: `id` is the
-    LOCAL draft_id, never the composite store id — mirrors versioning's
-    VersionMeta. `stages` are validated `Stage` objects — see `Draft`'s
-    docstring for what "valid" does and doesn't cover mid-edit."""
+    LOCAL draft_id, never the composite store id. `stages` are validated
+    `Stage` objects — see `Draft`'s docstring for what "valid" does and
+    doesn't cover mid-edit."""
 
     id: str
     parent_version: str | None
@@ -95,12 +94,12 @@ class DraftEdit(BaseModel):
 
 class SaveResult(BaseModel):
     """The outcome of freezing a draft into a version: either refused with the
-    blocking `issues` (nothing written, `version` stays None), or the frozen
-    version's meta."""
+    blocking `issues` (nothing written, `version_id` stays None), or the new
+    version's id."""
 
     ok: bool
     issues: list[str] = Field(default_factory=list)
-    version: VersionMeta | None = None
+    version_id: str | None = None
 
 
 def _view(d: Draft) -> DraftView:
@@ -210,9 +209,9 @@ def save_version(
         reviewer="agent",
         parent_version=d.parent_version,
     )
-    d.parent_version = meta.id
+    d.parent_version = meta.version_id
     d.save()
-    return SaveResult(ok=True, version=meta)
+    return SaveResult(ok=True, version_id=meta.version_id)
 
 
 # ─── internals ───────────────────────────────────────────────────────────────

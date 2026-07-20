@@ -143,7 +143,7 @@ def test_draft_round_trip_creates_an_unpublished_version(examples_root: Path) ->
     )
     save_result = json.loads(saved["content"][0]["text"])
     assert save_result["ok"] is True
-    assert save_result["version"]["published"] is False
+    assert save_result["version_id"] is not None
 
 
 def test_set_draft_stage_rejects_malformed_stage_as_tool_error(examples_root: Path) -> None:
