@@ -221,6 +221,12 @@
   }
 
   async function pollGenerateTestsStatus(sid) {
+    // The panel may have been replaced by another stage's review-partial while this
+    // poll was in flight (window._loadStage overwrites panel.innerHTML unconditionally
+    // on tab switch). genBtn is this panel's own button, so once the panel is replaced
+    // it's no longer connected to the document — use that as the "stale poll" signal
+    // and stop touching this panel entirely.
+    if (!genBtn || !genBtn.isConnected) return;
     let d;
     try {
       const r = await fetch(generateTestsStatusUrl(sid), { cache: 'no-store' });
@@ -233,6 +239,7 @@
       resetGenerateTestsButton();
       return;
     }
+    if (!genBtn.isConnected) return;
     if (window._loadStage) window._loadStage(STAGE_ID);
   }
 

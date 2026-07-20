@@ -21,7 +21,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from app.core.agent.store import open_session_store
 from app.services import generation, node_review, stage_edit, versioning
 from app.services import project as project_service
-from app.services.loader import stage_to_json, stage_to_spec_dict
+from app.services.loader import WorkflowLoadError, stage_to_json, stage_to_spec_dict
 from app.core.models import Stage
 from app.core.models.stages.stage_tests import STAGE_TEST_TYPES, StageTest
 from app.runtime.stage_tests import StageTestResult, find_failing_stage_tests, run_stage_tests
@@ -212,10 +212,11 @@ async def node_edit(
 async def node_generate_tests(project: str, stage_id: str):
     """Kick off hidden stage-test derivation for one python-transform stage and
     return the session id the JS poller watches. `generation.start_stage_test_generation`
-    raises ValueError for an unknown/non-python stage or a project with no document —
-    all three surface here as 400 with its message; the button is destructive
-    (REPLACES the stage's tests wholesale on completion), which is documented on
-    the button's tooltip, not re-litigated here."""
+    raises ValueError for an unknown/non-python stage or a project with no document, and
+    WorkflowLoadError (via its `load_workflow` call) if the compiled workflow itself
+    fails to load — both surface here as 400 with the underlying message; the button is
+    destructive (REPLACES the stage's tests wholesale on completion), which is
+    documented on the button's tooltip, not re-litigated here."""
     project_dir = EXAMPLES_DIR / project
     if not project_dir.is_dir():
         raise HTTPException(status_code=404, detail=f"No project '{project}'")
@@ -224,7 +225,7 @@ async def node_generate_tests(project: str, stage_id: str):
         session_id = generation.start_stage_test_generation(
             project_dir, stage_id=stage_id, model=model
         )
-    except ValueError as exc:
+    except (ValueError, WorkflowLoadError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return JSONResponse({"ok": True, "session": session_id})
 

@@ -205,6 +205,20 @@ def test_status_reports_error_after_failed_derivation(client: TestClient, tmp_pa
     assert "tests" not in stage  # nothing written on a failed derivation
 
 
+def test_generate_tests_maps_workflow_load_error_to_400(client: TestClient, tmp_path: Path):
+    """A project whose compiled/ workflow fails to load (here: one stage file holds
+    invalid JSON) makes `generation.start_stage_test_generation`'s `load_workflow`
+    call raise `WorkflowLoadError` — the route must map that to 400, the same as the
+    ValueError cases above, not let it propagate as an uncaught 500."""
+    _seed_project(tmp_path)
+    (tmp_path / "alpha" / "compiled" / "01_load.json").write_text("{not valid json", encoding="utf-8")
+
+    response = client.post("/project/alpha/node/double/generate-tests")
+
+    assert response.status_code == 400
+    assert "JSON parse error" in response.json()["detail"]
+
+
 def test_status_unknown_session_is_404(client: TestClient, tmp_path: Path):
     _seed_project(tmp_path)
 
