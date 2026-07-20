@@ -1,22 +1,72 @@
 """Compiler bridge for stage-test derivation: builds the code-blind agent
-that authors StageTest cases for one python transform stage.
+that authors StageTest cases for one python transform stage, and runs it as a
+live chat turn on the app.core.agent spine (`start_stage_test_derivation_agent`).
 
 The deriver's task is assembled from the methodology document and the
 stage's declared identity and schemas ONLY — the stage's function code and
 any existing tests are excluded by construction (they are never rendered
 into the task), so expected outputs cannot be anchored on an
-implementation."""
+implementation. The submitted suite is handed back through a callback;
+persisting it (via app.services.stage_edit) is the caller's job."""
 from __future__ import annotations
+
+from typing import Callable
 
 from pydantic import BaseModel
 
 from app.compiler.stage_tests_prompt import STAGE_TESTS_SYSTEM_PROMPT
 from app.core.agent.agent import Agent
+from app.core.agent.store import open_session_store
+from app.core.agent.turns import default_turn_manager
 from app.core.models import Stage
 from app.core.models.stages.stage_tests import (
     STAGE_TEST_TYPES,
     build_stage_tests_model,
 )
+
+
+def start_stage_test_derivation_agent(
+    *,
+    document: str,
+    stage: Stage,
+    project_id: str,
+    model: str,
+    on_answer: Callable[[BaseModel | None], None],
+) -> str:
+    """Start the stage-test deriver as a LIVE chat turn and return the session id.
+
+    The session is HIDDEN and VIEW-ONLY (`agent_id=None`, `context["hidden"] = True`):
+    it streams on the shared TurnManager like a workflow/data-model generation turn, but
+    is a background derivation the project chat index does not list — there is no one to
+    reply to it. When the turn finishes, `on_answer` is called with the submitted suite
+    (a `StageTestSuite` bound to `stage`'s type/inputs) — or None if none was submitted.
+    Must be called from the server event loop (it starts a turn there)."""
+    store = open_session_store()
+    session_id = store.create(
+        title=f"Generation · stage tests · {stage.id}",
+        agent_id=None,  # view-only: rendered + streamed, but no agent to continue it
+        context={
+            "project_id": project_id,
+            "phase": "stage_tests",
+            "stage_id": stage.id,
+            "hidden": True,
+        },
+    )
+    agent = build_stage_test_deriver(document, stage, model=model)
+    # Show the framing prompt as the user's message so the live view doesn't lose it.
+    store.set_pending_user(session_id, agent.task)
+
+    async def _on_done() -> None:
+        on_answer(agent.answer)
+
+    default_turn_manager().start(
+        engine=agent.build_engine(),
+        store=store,
+        session_id=session_id,
+        prompt=agent.task,
+        on_done=_on_done,
+    )
+    return session_id
 
 
 def build_stage_test_deriver(
