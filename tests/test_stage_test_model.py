@@ -105,3 +105,27 @@ def test_tests_round_trip_through_spec_dict():
     assert reloaded.tests is not None
     assert reloaded.tests[0].inputs == {"load": [{"amount": 2.0}]}
     assert reloaded.tests[0].expected == [{"amount": 2.0, "doubled": 4.0}]
+
+
+def test_stage_tests_model_accepts_a_valid_suite():
+    from app.core.models.stages.stage_tests import build_stage_tests_model
+    model = build_stage_tests_model("python_row_function", ["load"])
+    suite = model.model_validate({"tests": [_GOOD_TEST]})
+    assert suite.tests[0].name == _GOOD_TEST["name"]
+
+
+def test_stage_tests_model_rejects_wrong_input_ids():
+    from app.core.models.stages.stage_tests import build_stage_tests_model
+    model = build_stage_tests_model("python_row_function", ["load"])
+    bad = dict(_GOOD_TEST, inputs={"ghost": [{"amount": 2.0}]})
+    with pytest.raises(ValidationError, match="declared inputs"):
+        model.model_validate({"tests": [bad]})
+
+
+def test_stage_tests_model_rejects_row_function_fan_out():
+    from app.core.models.stages.stage_tests import build_stage_tests_model
+    model = build_stage_tests_model("python_row_function", ["load"])
+    bad = dict(_GOOD_TEST, expected=[{"amount": 2.0, "doubled": 4.0},
+                                     {"amount": 3.0, "doubled": 6.0}])
+    with pytest.raises(ValidationError, match="one row in"):
+        model.model_validate({"tests": [bad]})
