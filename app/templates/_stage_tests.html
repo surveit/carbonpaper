@@ -1,10 +1,23 @@
 {# Tests — the stage's authored input/output cases, one skimmable section per
-   test. Context: test_views (see node_review._shape_one_test; [] hides
-   the block). Reads like a report: the headings alone give the case coverage;
-   expanding a section shows the data. Non-passing sections start open. #}
-{% if test_views %}
+   test. Context: test_views (see node_review._shape_one_test; [] when the stage
+   has no tests) and test_derivable (stage.type in STAGE_TEST_TYPES). The section
+   renders when there are cases to show OR the stage is a python transform that
+   could grow some via the Generate tests button — otherwise it's hidden, same as
+   before this button existed. Reads like a report: the headings alone give the
+   case coverage; expanding a section shows the data. Non-passing sections start
+   open. #}
+{% if test_views or test_derivable %}
 <section class="exec-block test-report">
-  <h2>🧪 Tests</h2>
+  <h2>🧪 Tests
+    {% if test_derivable %}
+    <button type="button" class="btn" data-role="generate-tests"
+            title="Replaces this stage's tests with a fresh derivation from the methodology">Generate tests</button>
+    <span class="nr-edit-msg" data-role="generate-tests-msg"></span>
+    {% endif %}
+  </h2>
+  {% if not test_views %}
+  <p class="muted">No tests yet.</p>
+  {% endif %}
   {% for view in test_views %}
   <details class="test-case" {% if view.status != "passed" %}open{% endif %}>
     <summary>

@@ -1,0 +1,237 @@
+"""Route-level tests for the Generate-tests action on the stage review panel:
+POST /project/{project}/node/{stage_id}/generate-tests starts a hidden derivation
+turn (app.services.generation.start_stage_test_generation) and GET
+/project/{project}/generation-session/{sid}/status polls it, per
+app/web/routers/node_review.py.
+
+The engine is faked (no CLI subprocess, no real LLM) via the same
+build_stage_test_deriver monkeypatch tests/test_stage_test_generation_service.py
+uses. Unlike that lower-level test, this one drives the turn from OUTSIDE the
+route handler: the fake turn runs on the TestClient's own event loop (kept alive
+by using it as a context manager, so the loop survives across the POST and the
+follow-up status polls) while the test polls /generation-session/.../status —
+the same thing the page's JS does — until it reports inactive.
+"""
+from __future__ import annotations
+
+import json
+import time
+from pathlib import Path
+from typing import Any
+
+import pytest
+from fastapi.testclient import TestClient
+
+import app.compiler.stage_tests as compiler_stage_tests
+from app.core.agent.store import SessionStore
+from app.core.agent.turns import TurnManager
+from app.core.models.stages.stage_tests import build_stage_tests_model
+from app.main import app
+
+_IN_SCHEMA = {"columns": [{"name": "amount", "type": "float", "nullable": False}]}
+_OUT_SCHEMA = {"columns": [
+    {"name": "amount", "type": "float", "nullable": False},
+    {"name": "doubled", "type": "float", "nullable": False},
+]}
+
+
+def _seed_project(root: Path) -> Path:
+    """A project (alpha) with a document and a three-stage workflow
+    load -> double -> publish. `double` (python_row_function) is the stage tests
+    are derived for; `publish` and `load` are non-python controls for the
+    button/template assertions."""
+    project_dir = root / "alpha"
+    project_dir.mkdir(parents=True)
+    (project_dir / "document.md").write_text("Double the amount.", encoding="utf-8")
+    compiled = project_dir / "compiled"
+    compiled.mkdir()
+    (compiled / "01_load.json").write_text(json.dumps({
+        "id": "load", "name": "Load", "type": "input_data",
+        "connector": {"kind": "file"}, "output_schema": _IN_SCHEMA,
+    }), encoding="utf-8")
+    (compiled / "02_double.json").write_text(json.dumps({
+        "id": "double", "name": "Double", "type": "python_row_function",
+        "inputs": [{"id": "load", "schema": _IN_SCHEMA}],
+        "output_schema": _OUT_SCHEMA,
+        "function": {"kind": "inline",
+                     "code": "def transform(row):\n    return {**row, 'doubled': row['amount'] * 2}\n"},
+    }), encoding="utf-8")
+    (compiled / "03_publish.json").write_text(json.dumps({
+        "id": "publish", "name": "Publish", "type": "publish",
+        "inputs": [{"id": "double", "schema": _OUT_SCHEMA}],
+        "function": {"kind": "inline", "code": "def transform(df, output_dir):\n    return df\n"},
+        "publish": {},
+    }), encoding="utf-8")
+    return project_dir
+
+
+def _valid_suite() -> Any:
+    """A validated StageTestSuite for the `double` stage's shape (one input
+    `load`, a python_row_function so each test is one row in / one row out)."""
+    suite_model = build_stage_tests_model("python_row_function", ["load"])
+    return suite_model.model_validate({
+        "tests": [{
+            "name": "doubles_two",
+            "inputs": {"load": [{"amount": 2.0}]},
+            "expected": [{"amount": 2.0, "doubled": 4.0}],
+        }]
+    })
+
+
+class _FakeDeriverAgent:
+    """Stands in for the stage-test deriver Agent: stream_turn 'submits' a valid
+    suite and returns a transcript, exactly as the real submit_answer + engine
+    would during the turn."""
+
+    task = "derive tests for stage `double` and submit them"
+
+    def __init__(self) -> None:
+        self._answer: Any = None
+
+    @property
+    def answer(self) -> Any:
+        return self._answer
+
+    def build_engine(self) -> Any:
+        agent = self
+
+        class _Engine:
+            async def stream_turn(self, prompt: str, *, message_history: Any, emit: Any, resume: Any):
+                emit({"kind": "text", "text": "derived"})
+                agent._answer = _valid_suite()
+                return [{"role": "assistant", "parts": [{"type": "text", "text": "derived"}]}], None
+
+        return _Engine()
+
+
+class _FakeDeriverAgentNoAnswer:
+    """A deriver whose turn ends without ever calling submit_answer — exercises
+    the no-answer -> GenerationError -> persisted-failure path."""
+
+    task = "derive tests for stage `double` and submit them"
+
+    def __init__(self) -> None:
+        self._answer: Any = None
+
+    @property
+    def answer(self) -> Any:
+        return self._answer
+
+    def build_engine(self) -> Any:
+        class _Engine:
+            async def stream_turn(self, prompt: str, *, message_history: Any, emit: Any, resume: Any):
+                emit({"kind": "text", "text": "gave up"})
+                return [{"role": "assistant", "parts": [{"type": "text", "text": "gave up"}]}], None
+
+        return _Engine()
+
+
+@pytest.fixture
+def client(tmp_path: Path, monkeypatch):
+    """The review-partial's TestClient fixture (tests/test_stage_test_panel.py),
+    but held open as a context manager: the derivation turn is fire-and-forget
+    background work on the client's own event loop, so that loop must survive
+    across the POST and the follow-up status polls, not be torn down after each
+    request (starlette's TestClient tears down a fresh portal per call unless
+    it's used as `with TestClient(app) as client:`)."""
+    import app.web.loading as loading
+    import app.web.routers.node_review as node_review_router
+    monkeypatch.setattr(node_review_router, "EXAMPLES_DIR", tmp_path)
+    monkeypatch.setattr(loading, "EXAMPLES_DIR", tmp_path)
+    with TestClient(app) as c:
+        yield c
+
+
+def _poll_until_inactive(client: TestClient, project: str, sid: str, *,
+                          timeout: float = 5.0, interval: float = 0.02) -> dict:
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        response = client.get(f"/project/{project}/generation-session/{sid}/status")
+        assert response.status_code == 200
+        data = response.json()
+        if not data["active"]:
+            return data
+        time.sleep(interval)
+    pytest.fail("derivation did not finish within the poll timeout")
+
+
+# ── POST generate-tests ──────────────────────────────────────────────────────
+
+def test_generate_tests_derives_and_patches_the_stage(client: TestClient, tmp_path: Path, monkeypatch):
+    project_dir = _seed_project(tmp_path)
+    monkeypatch.setattr(compiler_stage_tests, "default_turn_manager", lambda: TurnManager())
+    monkeypatch.setattr(compiler_stage_tests, "build_stage_test_deriver", lambda *a, **k: _FakeDeriverAgent())
+
+    response = client.post("/project/alpha/node/double/generate-tests")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["ok"] is True
+    sid = data["session"]
+
+    status = _poll_until_inactive(client, "alpha", sid)
+    assert status["error"] is None
+
+    stage = json.loads((project_dir / "compiled" / "02_double.json").read_text(encoding="utf-8"))
+    assert stage["tests"][0]["name"] == "doubles_two"
+
+
+def test_generate_tests_rejects_non_python_stage(client: TestClient, tmp_path: Path):
+    _seed_project(tmp_path)
+    before = len(SessionStore().list_sessions())
+
+    response = client.post("/project/alpha/node/publish/generate-tests")
+
+    assert response.status_code == 400
+    assert "python transform" in response.json()["detail"]
+    assert len(SessionStore().list_sessions()) == before  # no orphaned session
+
+
+def test_status_reports_error_after_failed_derivation(client: TestClient, tmp_path: Path, monkeypatch):
+    project_dir = _seed_project(tmp_path)
+    monkeypatch.setattr(compiler_stage_tests, "default_turn_manager", lambda: TurnManager())
+    monkeypatch.setattr(
+        compiler_stage_tests, "build_stage_test_deriver", lambda *a, **k: _FakeDeriverAgentNoAnswer()
+    )
+
+    response = client.post("/project/alpha/node/double/generate-tests")
+    sid = response.json()["session"]
+
+    status = _poll_until_inactive(client, "alpha", sid)
+
+    assert status["error"] is not None
+    assert status["error"].startswith("derivation failed: ")
+    stage = json.loads((project_dir / "compiled" / "02_double.json").read_text(encoding="utf-8"))
+    assert "tests" not in stage  # nothing written on a failed derivation
+
+
+def test_status_unknown_session_is_404(client: TestClient, tmp_path: Path):
+    _seed_project(tmp_path)
+
+    response = client.get("/project/alpha/generation-session/doesnotexist/status")
+
+    assert response.status_code == 404
+
+
+# ── Template: the button appears only for python-transform stages ───────────
+
+def test_review_partial_shows_generate_tests_button_for_python_stage(client: TestClient, tmp_path: Path):
+    _seed_project(tmp_path)
+
+    response = client.get("/project/alpha/node/double/review-partial")
+
+    assert response.status_code == 200
+    assert '<button type="button" class="btn" data-role="generate-tests"' in response.text
+    assert "Generate tests" in response.text
+
+
+@pytest.mark.parametrize("stage_id", ["publish", "load"])
+def test_review_partial_hides_generate_tests_button_for_non_python_stage(
+    client: TestClient, tmp_path: Path, stage_id: str
+):
+    _seed_project(tmp_path)
+
+    response = client.get(f"/project/alpha/node/{stage_id}/review-partial")
+
+    assert response.status_code == 200
+    assert '<button type="button" class="btn" data-role="generate-tests"' not in response.text
