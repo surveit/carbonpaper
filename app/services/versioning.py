@@ -184,6 +184,7 @@ def load_version_stages(project_dir: Path, version_id: str) -> list[Stage]:
 
 
 __all__ = [
+    "WorkflowVersion",
     "list_versions",
     "load_version_meta",
     "load_version_stages",

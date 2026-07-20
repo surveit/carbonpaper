@@ -12,8 +12,8 @@ Split across modules:
   - agent_session.py     — AgentSession, one chat session's metadata + transcript
 
 Each owning service (app.services.versioning, app.services.run_store,
-app.core.agent.store) imports its record from here rather than defining it,
-so callers of those services see no change.
+app.core.agent.store) imports its record from the modules here rather than
+defining it, so callers of those services see no change.
 """
 from app.core.models.records.agent_session import AgentSession
 from app.core.models.records.workflow_run import WorkflowRun
