@@ -1,16 +1,16 @@
 """Tier-2 smoke: the journey with a REAL llm_transform stage — spends tokens.
 
-Deselected by default (pytest.ini adds `-m "not live_llm"`); opt in with
-`pytest -m live_llm`. Run it before dogfooding sessions and after LLM-adjacent
-changes — not on every push: a live model call is inherently flakier than the
-offline tier, and a red check nobody trusts is worse than no check.
+Deselected from a default local pytest run (pytest.ini adds `-m "not
+live_llm"`) so `pytest` never spends tokens by surprise; opt in with
+`pytest -m live_llm`. CI opts in on every push (the live-llm-smoke workflow),
+which the tiny budget below is sized for.
 
 Covers what tests/test_journey_smoke.py structurally cannot: real completions
 arriving through the structured-output agent and conforming to the stage's
 reply spec, transient-failure retries, and the timeout path.
 
 Token budget is bounded BY CONSTRUCTION, and the bounds are asserted so they
-survive future edits: 3 rows x (max_retries=2 + 1) = at most 9 model calls per
+survive future edits: 1 row x (max_retries=2 + 1) = at most 3 model calls per
 run, on the default (small) model with a one-line prompt.
 
 When the backend is missing this tier FAILS, never skips: opting in states an
@@ -35,7 +35,7 @@ client = TestClient(app)
 pytestmark = pytest.mark.live_llm
 
 PROJECT = "smoke_live_llm"
-ROWS = 3         # one CSV row = one model call per attempt
+ROWS = 1         # one CSV row = one model call per attempt
 MAX_RETRIES = 2  # transient-failure retries per row (attempts = retries + 1)
 
 
@@ -87,10 +87,8 @@ def live_project(tmp_path, monkeypatch):
 
     source = tmp_path / "claims.csv"
     frame = pd.DataFrame({
-        "claim_id": ["c1", "c2", "c3"],
-        "text": ["The company paid $2 million to the lobbying firm.",
-                 "The sky over the harbor was overcast all morning.",
-                 "Their subsidiary reported no revenue for the quarter."],
+        "claim_id": ["c1"],
+        "text": ["The company paid $2 million to the lobbying firm."],
     })
     assert len(frame) == ROWS  # budget bound: one model call per row per attempt
     frame.to_csv(source, index=False)
