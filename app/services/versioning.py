@@ -20,10 +20,9 @@ works with — never the composite store id.
 A version is born UNPUBLISHED (`published=False`): creating a snapshot and
 approving it for runs are separate acts. `publish_version` is the only way a
 version becomes published; a run (see app.runtime.runner.resolve_version_id)
-refuses to target an unpublished version. A version document stored before the
-`published` field existed carries no such key — it was created only by the
-human "Create version" act publishing now records, so it reads as published
-(see WorkflowVersion._grandfather_published).
+refuses to target an unpublished version. A stored document that carries no
+`published` key (e.g. one written before the field existed) reads as
+unpublished, the same as the field's default.
 
 `create_version_from_stages` is the ONE place a WorkflowVersion is written:
 it strict-parses the given stage dicts, embeds the project's current schemas,
@@ -45,7 +44,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, ClassVar
 
-from pydantic import BaseModel, Field, ValidationError, model_validator
+from pydantic import Field, ValidationError
 
 from app.core.errors import DocumentNotFound
 from app.core.models import Coverage, Stage
@@ -87,55 +86,9 @@ class WorkflowVersion(PersistedModel):
     coverage: Coverage = Field(default_factory=_no_coverage)
     stages: list[Stage] = Field(default_factory=list)
     schemas: list[dict[str, Any]] = Field(default_factory=list)
-    # This default never applies on load: `_grandfather_published` below injects
-    # `True` whenever the input data carries no `published` key at all. Every
-    # construction site MUST therefore pass `published=` explicitly — a site
-    # that omits it is born published.
     published: bool = False
     published_at: str | None = None
     published_by: str | None = None
-
-    @model_validator(mode="before")
-    @classmethod
-    def _grandfather_published(cls, data: Any) -> Any:
-        # A version record written before the `published` field existed was created
-        # only by the human "Create version" act — the approval publishing now
-        # records — so a missing key reads as published. New records always carry it.
-        if isinstance(data, dict) and "published" not in data:
-            return {**data, "published": True}
-        return data
-
-
-class VersionMeta(BaseModel):
-    """The public projection of a WorkflowVersion: every field callers of this
-    module need EXCEPT the heavy embedded `stages`/`schemas` (see
-    load_version_stages for those). `id` is the LOCAL version_id, never the
-    composite store id."""
-
-    id: str
-    created_at: str
-    parent_version: str | None
-    message: str
-    reviewer: str
-    coverage: Coverage
-    published: bool
-    published_at: str | None
-    published_by: str | None
-
-
-def _meta(v: WorkflowVersion) -> VersionMeta:
-    """Project a WorkflowVersion down to its public VersionMeta."""
-    return VersionMeta(
-        id=v.version_id,
-        created_at=v.created_at,
-        parent_version=v.parent_version,
-        message=v.message,
-        reviewer=v.reviewer,
-        coverage=v.coverage,
-        published=v.published,
-        published_at=v.published_at,
-        published_by=v.published_by,
-    )
 
 
 def create_version_from_stages(
@@ -145,11 +98,11 @@ def create_version_from_stages(
     message: str,
     reviewer: str,
     parent_version: str | None = None,
-) -> VersionMeta:
+) -> WorkflowVersion:
     """The single write chokepoint for a WorkflowVersion: strict-parse `stages`
     (raw spec dicts) as a whole Workflow, embed the project's CURRENT schemas,
     freeze approval coverage against the live node_decisions store, and save —
-    born unpublished. Returns its meta.
+    born unpublished. Returns the saved WorkflowVersion.
 
     `stages` is parsed via app.core.models.workflow.parse_workflow, which raises
     pydantic.ValidationError (per-stage schema errors AND cross-stage graph
@@ -193,7 +146,7 @@ def create_version_from_stages(
         published=False,
     )
     v.save()
-    return _meta(v)
+    return v
 
 
 def create_version_from_disk(
@@ -202,9 +155,9 @@ def create_version_from_disk(
     message: str,
     reviewer: str,
     parent_version: str | None = None,
-) -> VersionMeta:
+) -> WorkflowVersion:
     """Snapshot the working copy's compiled stages + schemas into a new Version
-    document. Returns its meta. A thin adapter over create_version_from_stages:
+    document. Returns the saved WorkflowVersion. A thin adapter over create_version_from_stages:
     the working copy is strict-loaded first, through the same loader the
     runner uses (WorkflowLoadError, saving nothing, if it is not a valid
     workflow), then handed to create_version_from_stages as spec dicts — the
@@ -231,7 +184,7 @@ def create_version_from_disk(
     )
 
 
-def publish_version(project_dir: Path, version_id: str, *, reviewer: str) -> VersionMeta:
+def publish_version(project_dir: Path, version_id: str, *, reviewer: str) -> WorkflowVersion:
     """Mark a version published: the metadata-only act that makes it eligible to
     run (see app.runtime.runner.resolve_version_id). Idempotent — publishing an
     already-published version returns it unchanged, keeping the FIRST
@@ -247,12 +200,12 @@ def publish_version(project_dir: Path, version_id: str, *, reviewer: str) -> Ver
     except ValidationError as exc:
         raise _invalid_version_document(doc_id, exc) from exc
     if v.published:
-        return _meta(v)
+        return v
     v.published = True
     v.published_at = datetime.now().isoformat(timespec="seconds")
     v.published_by = reviewer
     v.save()
-    return _meta(v)
+    return v
 
 
 def _invalid_version_document(doc_id: str, exc: ValidationError) -> WorkflowLoadError:
@@ -265,28 +218,28 @@ def _invalid_version_document(doc_id: str, exc: ValidationError) -> WorkflowLoad
     return WorkflowLoadError(f"version document {doc_id}", format_errors(exc))
 
 
-def list_versions(project_dir: Path) -> list[VersionMeta]:
-    """All versions for a project, NEWEST-FIRST, each as its meta. A stored
-    document that fails the WorkflowVersion contract raises WorkflowLoadError
-    (see _invalid_version_document) — the whole listing fails rather than
-    quietly presenting a store with an invalid document in it as healthy.
-    No versions stored yet -> []."""
+def list_versions(project_dir: Path) -> list[WorkflowVersion]:
+    """All versions for a project, NEWEST-FIRST. A stored document that fails
+    the WorkflowVersion contract raises WorkflowLoadError (see
+    _invalid_version_document) — the whole listing fails rather than quietly
+    presenting a store with an invalid document in it as healthy. No versions
+    stored yet -> []."""
     name = Path(project_dir).name
-    metas: list[VersionMeta] = []
+    versions: list[WorkflowVersion] = []
     for doc_id, data in get_store().read_all("workflow_version", f"{name}/"):
         try:
             v = WorkflowVersion.model_validate(data)
         except ValidationError as exc:
             raise _invalid_version_document(doc_id, exc) from exc
-        metas.append(_meta(v))
-    # version ids are strftime timestamps, so a reverse string sort on id is
-    # chronological.
-    metas.sort(key=lambda m: m.id, reverse=True)
-    return metas
+        versions.append(v)
+    # version ids are strftime timestamps, so a reverse string sort on version_id
+    # is chronological.
+    versions.sort(key=lambda v: v.version_id, reverse=True)
+    return versions
 
 
-def load_version_meta(project_dir: Path, version_id: str) -> VersionMeta:
-    """This version's meta. Fails loudly if no such version is stored, or
+def load_version(project_dir: Path, version_id: str) -> WorkflowVersion:
+    """This version, in full. Fails loudly if no such version is stored, or
     if the stored document no longer validates (WorkflowLoadError)."""
     name = Path(project_dir).name
     try:
@@ -295,7 +248,7 @@ def load_version_meta(project_dir: Path, version_id: str) -> VersionMeta:
         raise FileNotFoundError(f"No version '{version_id}' for project '{name}'") from exc
     except ValidationError as exc:
         raise _invalid_version_document(f"{name}/{version_id}", exc) from exc
-    return _meta(v)
+    return v
 
 
 def load_version_stages(project_dir: Path, version_id: str) -> list[Stage]:
@@ -316,9 +269,9 @@ def load_version_stages(project_dir: Path, version_id: str) -> list[Stage]:
 
 
 __all__ = [
-    "VersionMeta",
+    "WorkflowVersion",
     "list_versions",
-    "load_version_meta",
+    "load_version",
     "load_version_stages",
     "create_version_from_disk",
     "create_version_from_stages",

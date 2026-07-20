@@ -22,7 +22,7 @@
   <label class="run-version">version
     <select name="version_id">
       {% for v in versions %}
-      <option value="{{ v.id }}"{% if loop.first %} selected{% endif %}>{{ v.id }}{% if v.message %} — {{ v.message }}{% endif %}{% if loop.first %} (latest){% endif %}</option>
+      <option value="{{ v.version_id }}"{% if loop.first %} selected{% endif %}>{{ v.version_id }}{% if v.message %} — {{ v.message }}{% endif %}{% if loop.first %} (latest){% endif %}</option>
       {% endfor %}
     </select>
   </label>

@@ -33,7 +33,7 @@
     <tbody>
         {% for v in versions %}
         <tr>
-            <td><a href="/project/{{ state.name }}/workflow/version/{{ v.id }}"><code>{{ v.id }}</code></a></td>
+            <td><a href="/project/{{ state.name }}/workflow/version/{{ v.version_id }}"><code>{{ v.version_id }}</code></a></td>
             <td>{{ v.created_at }}</td>
             <td>{{ v.message or '' }}{% if v.reviewer %} <span class="muted">— {{ v.reviewer }}</span>{% endif %}</td>
             <td>{% if v.parent_version %}<code>{{ v.parent_version }}</code>{% else %}<span class="muted">—</span>{% endif %}</td>

@@ -1,6 +1,6 @@
 """Direct unit tests for app/services/versioning.py — versions as documents in
-the store's "workflow_version" collection: the VersionMeta / typed-stage-list contract
-of the four public functions (create_version_from_disk, list_versions, load_version_meta,
+the store's "workflow_version" collection: the WorkflowVersion contract of the
+four public functions (create_version_from_disk, list_versions, load_version,
 load_version_stages) that app.runtime.runner, app.evals, app.services.project,
 app.web.loading and app.services.compilation all depend on by signature.
 
@@ -30,7 +30,7 @@ from app.services.versioning import (
     create_version_from_disk,
     create_version_from_stages,
     list_versions,
-    load_version_meta,
+    load_version,
     load_version_stages,
     publish_version,
 )
@@ -53,14 +53,11 @@ def _seed(project_dir: Path, stage: dict = _LOAD_STAGE) -> None:
 # ── create_version_from_disk ─────────────────────────────────────────────────
 
 def test_create_version_returns_meta_and_round_trips(tmp_path):
-    """create_version_from_disk's return value, list_versions, load_version_meta and
+    """create_version_from_disk's return value, list_versions, load_version and
     load_version_stages all agree on the same version."""
     _seed(tmp_path)
     meta = create_version_from_disk(tmp_path, message="first cut", reviewer="ada")
 
-    assert set(meta.model_dump()) == {"id", "created_at", "parent_version", "message",
-                                       "reviewer", "coverage", "published", "published_at",
-                                       "published_by"}
     assert meta.message == "first cut"
     assert meta.reviewer == "ada"
     assert meta.parent_version is None
@@ -69,9 +66,9 @@ def test_create_version_returns_meta_and_round_trips(tmp_path):
 
     [listed] = list_versions(tmp_path)
     assert listed == meta
-    assert load_version_meta(tmp_path, meta.id) == meta
+    assert load_version(tmp_path, meta.version_id) == meta
 
-    [stage] = load_version_stages(tmp_path, meta.id)
+    [stage] = load_version_stages(tmp_path, meta.version_id)
     assert isinstance(stage, Stage)
     assert stage.id == "load"
 
@@ -95,9 +92,9 @@ def test_create_version_records_parent(tmp_path, monkeypatch):
 
     first = create_version_from_disk(tmp_path, message="v1", reviewer="ada")
     second = create_version_from_disk(tmp_path, message="v2", reviewer="ada",
-                                      parent_version=first.id)
-    assert second.id != first.id
-    assert second.parent_version == first.id
+                                      parent_version=first.version_id)
+    assert second.version_id != first.version_id
+    assert second.parent_version == first.version_id
 
 
 def test_create_version_freezes_coverage_from_node_decisions(tmp_path):
@@ -173,8 +170,8 @@ def test_versions_are_scoped_per_project(tmp_path):
     _seed(proj_b)
     meta_a = create_version_from_disk(proj_a, message="a", reviewer="test")
     meta_b = create_version_from_disk(proj_b, message="b", reviewer="test")
-    assert [v.id for v in list_versions(proj_a)] == [meta_a.id]
-    assert [v.id for v in list_versions(proj_b)] == [meta_b.id]
+    assert [v.version_id for v in list_versions(proj_a)] == [meta_a.version_id]
+    assert [v.version_id for v in list_versions(proj_b)] == [meta_b.version_id]
 
 
 # ── list_versions ────────────────────────────────────────────────────────────
@@ -187,7 +184,7 @@ def test_list_versions_newest_first(tmp_path):
     for vid in ("20260101T000000", "20260201T000000", "20260115T000000"):
         WorkflowVersion(id=f"{tmp_path.name}/{vid}", version_id=vid, created_at=vid,
                 message="m", reviewer="r").save()
-    assert [v.id for v in list_versions(tmp_path)] == [
+    assert [v.version_id for v in list_versions(tmp_path)] == [
         "20260201T000000", "20260115T000000", "20260101T000000"]
 
 
@@ -204,11 +201,11 @@ def test_list_versions_errors_on_a_corrupt_document(tmp_path):
         list_versions(tmp_path)
 
 
-# ── load_version_meta / load_version_stages ─────────────────────────────────────
+# ── load_version / load_version_stages ─────────────────────────────────────
 
-def test_load_version_meta_missing_raises_file_not_found(tmp_path):
+def test_load_version_missing_raises_file_not_found(tmp_path):
     with pytest.raises(FileNotFoundError):
-        load_version_meta(tmp_path, "nope")
+        load_version(tmp_path, "nope")
 
 
 def test_load_version_stages_missing_raises_file_not_found(tmp_path):
@@ -216,17 +213,13 @@ def test_load_version_stages_missing_raises_file_not_found(tmp_path):
         load_version_stages(tmp_path, "nope")
 
 
-# ── grandfather: a version document written before `published` existed ──────────
-
-def test_stored_version_missing_published_reads_as_published(tmp_path):
-    """A WorkflowVersion document written before the `published` field existed
-    was created only by the human "Create version" act — the approval
-    publishing now records — so a missing key reads as published=True. This
-    writes a WorkflowVersion-shaped dict straight to the store, bypassing the
-    grandfather-injecting model entirely, to prove the read path (not just
-    construction) applies the grandfather rule. `coverage` is also omitted, so
-    the model's default (a zero-stage Coverage) applies — this test is about
-    the `published` grandfather, not coverage."""
+def test_stored_version_missing_published_reads_as_unpublished(tmp_path):
+    """A stored document that carries no `published` key at all (e.g. written
+    under an older shape) reads as unpublished, the same as the field's plain
+    default — there is no special-casing of a missing key. This writes a
+    WorkflowVersion-shaped dict straight to the store, bypassing model
+    construction entirely, to prove the read path (not just construction)
+    applies the default."""
     vid = "20260101T000000"
     data = {
         "id": f"{tmp_path.name}/{vid}", "version_id": vid,
@@ -235,15 +228,15 @@ def test_stored_version_missing_published_reads_as_published(tmp_path):
         "stages": [], "schemas": [],
     }
     get_store().write("workflow_version", f"{tmp_path.name}/{vid}", data)
-    meta = load_version_meta(tmp_path, vid)
-    assert meta.published is True
+    meta = load_version(tmp_path, vid)
+    assert meta.published is False
 
 
 # ── publish_version ──────────────────────────────────────────────────────────
 
 def test_publish_version_stamps_and_is_idempotent(tmp_path):
     _seed(tmp_path)
-    vid = create_version_from_disk(tmp_path, message="x", reviewer="ada").id
+    vid = create_version_from_disk(tmp_path, message="x", reviewer="ada").version_id
 
     meta = publish_version(tmp_path, vid, reviewer="human-1")
     assert meta.published is True
@@ -256,7 +249,7 @@ def test_publish_version_stamps_and_is_idempotent(tmp_path):
     assert again.published_by == "human-1"
     assert again.published_at == meta.published_at
 
-    reloaded = load_version_meta(tmp_path, vid)
+    reloaded = load_version(tmp_path, vid)
     assert reloaded.published is True
     assert reloaded.published_by == "human-1"
 
@@ -277,7 +270,7 @@ def test_create_version_from_stages_valid_is_loadable_and_unpublished(tmp_path):
     assert meta.parent_version == "prior-id"
     assert meta.reviewer == "ada"
 
-    [stage] = load_version_stages(tmp_path, meta.id)
+    [stage] = load_version_stages(tmp_path, meta.version_id)
     assert isinstance(stage, Stage)
     assert stage.id == "load"
 

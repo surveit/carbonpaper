@@ -118,7 +118,7 @@ def _as_content(value: object) -> dict[str, Any]:
         # comes back to the agent in the SAME canonical spec form it writes stages
         # in — aliased (`schema`, not `table_schema`) and without the unset-optional
         # nulls, matching loader.stage_to_spec_dict. Additive for every other
-        # model-returning tool: an alias-free model (VersionMeta, DraftEdit,
+        # model-returning tool: an alias-free model (DraftView, DraftEdit,
         # SaveResult, ...) dumps equivalently (a dropped null re-parses as its
         # default).
         dumpable = (

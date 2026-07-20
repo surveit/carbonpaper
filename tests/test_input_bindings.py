@@ -137,7 +137,7 @@ def _make_bound_project(root, filename="a.csv"):
              "connector": {"kind": "file",
                            "params": {"path": str(data), "format": "csv"}}}
     (root / "compiled" / "01_load.json").write_text(json.dumps(stage), encoding="utf-8")
-    vid = create_version_from_disk(root, message="seed", reviewer="test").id
+    vid = create_version_from_disk(root, message="seed", reviewer="test").version_id
     versioning.publish_version(root, vid, reviewer="human")
     return data
 
@@ -173,7 +173,7 @@ def test_unbound_input_leaves_no_run_dir(tmp_path):
     stage = {"id": "load", "name": "Load", "type": "input_data",
              "connector": {"kind": "file", "params": {}}}
     (tmp_path / "compiled" / "01_load.json").write_text(json.dumps(stage), encoding="utf-8")
-    vid = create_version_from_disk(tmp_path, message="seed", reviewer="test").id
+    vid = create_version_from_disk(tmp_path, message="seed", reviewer="test").version_id
     versioning.publish_version(tmp_path, vid, reviewer="human")
 
     with pytest.raises(MissingInputBindingError, match="load"):

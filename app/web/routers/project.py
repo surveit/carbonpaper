@@ -436,8 +436,7 @@ async def project_workflow_version(request: Request, project_name: str, version_
     review lives on the working-copy editor. 404 if the version does not exist."""
     pdir = _project_dir(project_name)
     try:
-        stages = versioning.load_version_stages(pdir, version_id)
-        meta = versioning.load_version_meta(pdir, version_id)
+        version = versioning.load_version(pdir, version_id)
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     return templates.TemplateResponse(
@@ -446,8 +445,8 @@ async def project_workflow_version(request: Request, project_name: str, version_
         {
             "state": shell_state(pdir),
             "section": "versions",
-            "version": meta,
-            "mermaid": build_mermaid_graph(stages, project_name),
+            "version": version,
+            "mermaid": build_mermaid_graph(version.stages, project_name),
         },
     )
 

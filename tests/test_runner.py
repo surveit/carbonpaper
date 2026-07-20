@@ -32,7 +32,7 @@ def _seed_version(root):
     create versions, so a test that builds a working copy must snapshot it into
     a version before running against it; runs are also gated on published, so
     the seed must be published for a run against it to succeed."""
-    vid = create_version_from_disk(root, message="test seed", reviewer="test").id
+    vid = create_version_from_disk(root, message="test seed", reviewer="test").version_id
     versioning.publish_version(root, vid, reviewer="human")
     return vid
 
@@ -304,7 +304,7 @@ def test_run_with_explicit_unpublished_id_fails_loudly(tmp_path):
     """An explicit version_id naming a real but unpublished version is refused
     the same way — a run pins to a published version, never to a draft."""
     _make_project(tmp_path)
-    unpublished_id = create_version_from_disk(tmp_path, message="unpublished", reviewer="test").id
+    unpublished_id = create_version_from_disk(tmp_path, message="unpublished", reviewer="test").version_id
 
     with pytest.raises(NoVersionToRunError):
         execute_run(tmp_path, repo_root=tmp_path, version_id=unpublished_id)
