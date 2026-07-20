@@ -12,6 +12,8 @@
      raw_json     — stage_to_json(stage) for the Spec editor
      function_code — python source for a function stage (may be None)
      type_class / type_glyph — the type-tag maps
+     test_views — shaped per-test run results for _stage_tests.html
+                    ([] for stages without tests; see node_review._shape_one_test)
 #}
 {% from "_schema_table.html" import schema_table %}
 {% set state = review.state %}
@@ -74,6 +76,7 @@
     {# ── Transform: how this step computes (+ eval / review routing) ── #}
     <div class="pane" data-pane="transform">
       {% include "_stage_executable.html" %}
+      {% include "_stage_tests.html" %}
       {% if stage.eval %}
       <section class="eval-block">
         <h2>📊 Eval</h2>

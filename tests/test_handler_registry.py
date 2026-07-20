@@ -1,7 +1,7 @@
 """Each stage type's registered handler SHAPE must agree with the core
 grain-and-order fact (a preserving type is registered as a row-driven shape, a
 non-preserving one as a FrameHandler). The registry import already enforces this
-via check_registry_matches_model; these tests pin the equality and the total
+via validate_registry_matches_model; these tests pin the equality and the total
 coverage of stage types as named, discoverable checks."""
 from __future__ import annotations
 

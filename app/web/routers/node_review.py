@@ -13,12 +13,16 @@ app.services.node_review + app.services.versioning.
 
 from __future__ import annotations
 
+from typing import Any
+
 from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 
 from app.services import node_review, stage_edit, versioning
 from app.services.loader import stage_to_json, stage_to_spec_dict
 from app.core.models import Stage
+from app.core.models.stages.stage_tests import StageTest
+from app.runtime.stage_tests import StageTestResult, find_failing_stage_tests, run_stage_tests
 from app.web.config import EXAMPLES_DIR, templates
 from app.web.diagrams import TYPE_CLASS, TYPE_GLYPH, build_mermaid_graph
 from app.web.loading import find_stage, load_stages, resolve_function_code
@@ -79,8 +83,49 @@ async def node_review_partial(request: Request, project: str, stage_id: str):
             "function_code": resolve_function_code(stage),
             "type_class": TYPE_CLASS,
             "type_glyph": TYPE_GLYPH,
+            "test_views": _shape_test_views(stage),
         },
     )
+
+
+def _shape_test_views(stage: Stage) -> list[dict[str, Any]]:
+    """Pair each authored test with its run result, shaped for
+    _stage_tests.html ([] for stages without tests)."""
+    if not stage.tests:
+        return []
+    results = run_stage_tests(stage)
+    return [
+        _shape_one_test(test, result)
+        for test, result in zip(stage.tests, results)
+    ]
+
+
+def _shape_one_test(test: StageTest, result: StageTestResult) -> dict[str, Any]:
+    return {
+        "name": test.name,
+        "description": test.description,
+        "status": result.status,
+        "message": result.message,
+        "inputs": [
+            {"stage_id": stage_id, "columns": _list_row_columns(rows), "rows": rows}
+            for stage_id, rows in test.inputs.items()
+        ],
+        "expected": {"columns": _list_row_columns(test.expected), "rows": test.expected},
+        "diffs": [
+            {"row": diff.row, "column": diff.column,
+             "expected": diff.expected, "actual": diff.actual}
+            for diff in result.diffs
+        ],
+    }
+
+
+def _list_row_columns(rows: list[dict[str, Any]]) -> list[str]:
+    """Column order for rendering: first-appearance order across the rows."""
+    seen: dict[str, None] = {}
+    for row in rows:
+        for key in row:
+            seen.setdefault(key)
+    return list(seen)
 
 
 @router.post("/project/{project}/node/{stage_id}/decide")
@@ -172,6 +217,18 @@ async def create_version_route(project: str, message: str = Form(...)):
     project_dir = EXAMPLES_DIR / project
     if not project_dir.is_dir():
         raise HTTPException(status_code=404, detail=f"No project '{project}'")
+
+    # Tests are the stage's behavior contract: a version is a committable
+    # snapshot, so it must not immortalise a python transform that fails its
+    # own tests. Absent tests don't block — the gate holds existing
+    # tests to green, it does not require them. The gate only applies when a
+    # compiled workflow exists; without one, versioning.create_version's own
+    # FileNotFoundError reports the missing workflow as a 400 below.
+    if (project_dir / "compiled").is_dir():
+        failing = find_failing_stage_tests(load_stages(project).stages)
+        if failing:
+            return JSONResponse({"ok": False, "issues": failing}, status_code=400)
+
     existing = versioning.list_versions(project_dir)  # newest-first
     parent = existing[0]["id"] if existing else None
     try:

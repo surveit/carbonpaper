@@ -1,7 +1,7 @@
 """Derive the override-stage columns an eval-dataset file must inject: the
 override stage's whole output, deconflicted against the checks' expected-
 output column names. Single source of truth for this derivation -- called by
-`app.evals.compatibility.check_eval_compatibility`'s override-coverage
+`app.evals.compatibility.validate_eval_compatibility`'s override-coverage
 check, so callers always agree on the exact column names an eval-dataset
 file must carry.
 
@@ -21,7 +21,7 @@ form, not this derivation.)
 Both `override` and `target` must declare an output schema, and every name
 in `check_output_columns` must resolve against `target`'s declared output --
 this module raises `ValueError` otherwise rather than silently degrading, so
-`app.evals.compatibility.check_eval_compatibility` must verify those
+`app.evals.compatibility.validate_eval_compatibility` must verify those
 preconditions itself and report them as problems before calling in here.
 """
 from __future__ import annotations
@@ -73,13 +73,13 @@ def deconflict_column_names(
     shared between them: a name present on both sides is rewritten
     `override.<name>` on the injected side and `output.<name>` on the
     expected-output side."""
-    conflicts = _check_for_column_name_conflicts(override_columns, expected_output_columns)
+    conflicts = _find_column_name_conflicts(override_columns, expected_output_columns)
     injected = _rename_columns(override_columns, conflicts, prefix="override.")
     expected_output = _rename_columns(expected_output_columns, conflicts, prefix="output.")
     return injected, expected_output
 
 
-def _check_for_column_name_conflicts(
+def _find_column_name_conflicts(
     override_columns: list[Column], expected_output_columns: list[Column],
 ) -> set[str]:
     override_names = {c.name for c in override_columns}

@@ -12,6 +12,7 @@ from arch._helpers import (
     collect_called_funcs,
     collect_called_methods,
     find_dict_key_uses,
+    find_function_defs,
     find_imported_modules,
     find_numeric_get_defaults,
     parse_module,
@@ -82,4 +83,16 @@ def check_no_fabricated_numbers(paths: list[Path]) -> list[str]:
         for start, end in find_numeric_get_defaults(parse_module(path)):
             if not any(_DATA_DEFAULT_OK in line for line in lines[start - 1 : end]):
                 offenders.append(f"{path}:{start}  {lines[start - 1].strip()}")
+    return offenders
+
+
+def find_check_prefixed_functions(paths: list[Path]) -> list[str]:
+    """Function definitions named ``check_*`` / ``_check_*`` — the vocabulary
+    for a function that enforces or reports on an invariant is ``validate_*``
+    (or ``find_*`` when it returns the offending items)."""
+    offenders: list[str] = []
+    for path in paths:
+        for name, lineno in find_function_defs(parse_module(path)):
+            if name.startswith(("check_", "_check_")):
+                offenders.append(f"{path}:{lineno}  def {name}")
     return offenders

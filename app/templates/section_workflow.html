@@ -279,7 +279,16 @@
         const fd = new FormData();
         fd.append('message', message);
         const r = await fetch(`/project/${encodeURIComponent(METHODOLOGY)}/version`, { method: 'POST', body: fd });
-        if (!r.ok) { alert(`Version creation failed: ${r.status} ${await r.text()}`); return; }
+        if (!r.ok) {
+          let detail = 'Version creation failed.';
+          try {
+            const body = await r.json();
+            if (body.issues) detail = 'Cannot create a version:\n' + body.issues.join('\n');
+            else if (body.detail) detail = body.detail;
+          } catch (parseError) { /* non-JSON error body: keep the generic message */ }
+          alert(detail);
+          return;
+        }
         // Land on the Versions tab so the reviewer sees the snapshot they just made.
         window.location.href = `/project/${encodeURIComponent(METHODOLOGY)}/versions`;
       } finally {

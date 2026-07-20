@@ -21,7 +21,8 @@ from app.core.models.schema import (
     _SNAKE_RE,
     format_errors,
 )
-from app.core.models.stages.code import check_inline_function_code
+from app.core.models.stages.code import validate_inline_function_code
+from app.core.models.stages.stage_tests import StageTest, validate_stage_tests
 from app.core.prompt_template import find_template_fields
 
 # ── Enumerated vocabularies ──────────────────────────────────────────────────
@@ -195,7 +196,7 @@ class PythonFunction(_Base):
         write time instead of raising only when the runner exec()s it."""
         if self.kind != FunctionKind.inline or not self.code:
             return self
-        check_inline_function_code(self.code, self.function)
+        validate_inline_function_code(self.code, self.function)
         return self
 
 
@@ -338,6 +339,12 @@ class Stage(_Base):
     # Display only — the executable eval contract is EvalConfig (app/core/models/eval.py).
     eval: Optional[dict[str, Any]] = None
 
+    # Authored input→expected-output cases for python transforms — the stage's
+    # reviewable behavior contract, run by app.runtime.stage_tests. None when the
+    # stage has none: the canonical dump must not carry a `tests` key for
+    # stages without tests, or every pre-existing belief hash would change.
+    tests: Optional[list[StageTest]] = None
+
     @field_validator("inputs", mode="before")
     @classmethod
     def _bare_id_shorthand(cls, v: Any) -> Any:
@@ -371,6 +378,19 @@ class Stage(_Base):
         if not _SNAKE_RE.match(v):
             raise ValueError(f"id {v!r} should be snake_case")
         return v
+
+    @field_validator("tests", mode="before")
+    @classmethod
+    def _empty_tests_means_absent(cls, v: Any) -> Any:
+        """Normalise `tests: []` to absent, so the canonical dump (and the
+        belief hash computed over it) is identical whether the key was omitted
+        or given empty."""
+        return None if v == [] else v
+
+    @model_validator(mode="after")
+    def _tests_shape(self) -> "Stage":
+        validate_stage_tests(self.type, self.input_ids, self.tests or [])
+        return self
 
     @model_validator(mode="after")
     def _handle_for_type(self) -> "Stage":

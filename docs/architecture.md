@@ -36,7 +36,7 @@ frame), `SourceHandler` (originates rows; no upstream frames), or
 hands the handler, so grain-and-order preservation is structural for
 row-mapped types rather than declared per stage. The preservation fact itself is
 owned by core (`app.core.models.stage.is_grain_and_order_preserving`) so every layer
-can read it; `check_registry_matches_model` raises at registry import if any
+can read it; `validate_registry_matches_model` raises at registry import if any
 type's registered shape disagrees with that core fact, and
 `tests/test_handler_registry.py` pins the same per-type equality in CI.
 

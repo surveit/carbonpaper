@@ -51,11 +51,11 @@ def test_workflow_cycle():
 
 # the graph checks are plain functions — test them directly (the point of the split).
 # Each RETURNS its issues (all of them) rather than raising on the first.
-def test_check_inputs_resolve_reports_all_dangling():
+def test_validate_inputs_resolve_reports_all_dangling():
     s = Stage.model_validate(S(id="b", type="join",
                                inputs=[{"id": "ghost1"}, {"id": "ghost2"}],
                                join={"keys": [{"left": "x", "right": "y"}]}))
-    issues = m.check_inputs_resolve([s])
+    issues = m.validate_inputs_resolve([s])
     assert len(issues) == 2  # both dangling inputs, not just the first
     assert all("references no stage" in i for i in issues)
 

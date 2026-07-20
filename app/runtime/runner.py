@@ -183,7 +183,7 @@ def _merge_connector_params(stage: Stage, binding: Mapping[str, Any]) -> Stage:
     return stage.model_copy(update={"connector": connector})
 
 
-def check_stages_ready(
+def validate_stages_ready(
     stages: list[Stage], param_sources: dict[str, str]
 ) -> dict[str, dict[str, Any]]:
     """Run each stage type's preflight — the stage-owned readiness check and
@@ -257,7 +257,7 @@ def prepare_run(
     workflow_version = resolve_version_id(project_dir, version_id)
     stages = versioning.load_version_stages(project_dir, workflow_version)
     stages, param_sources = apply_run_bindings(stages, bindings)
-    input_records = check_stages_ready(stages, param_sources)
+    input_records = validate_stages_ready(stages, param_sources)
     ordered = topological_sort(stages)
 
     limits = dict(limits or {})

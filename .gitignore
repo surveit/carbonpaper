@@ -26,4 +26,4 @@ docs/superpowers/
 scripts/
 
 # agent chat session scratch (dev-only, never committed)
-app/core/agent/_sessions/
+app/agent/_sessions/

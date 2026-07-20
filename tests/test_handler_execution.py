@@ -14,7 +14,7 @@ from app.runtime.stages.execution import (
     FrameHandler,
     RowMapHandler,
     SourceHandler,
-    check_registry_matches_model,
+    validate_registry_matches_model,
 )
 
 
@@ -163,10 +163,10 @@ def _registry(llm_shape):
 
 def test_check_registry_accepts_shapes_matching_the_model():
     good = _registry(RowMapHandler(make_mapper=lambda s, c: lambda r: r))
-    check_registry_matches_model(good)  # must not raise
+    validate_registry_matches_model(good)  # must not raise
 
 
 def test_check_registry_rejects_shape_disagreeing_with_model():
     bad = _registry(FrameHandler(apply=lambda stage, inputs, ctx: pd.DataFrame()))
     with pytest.raises(RuntimeError, match="is registered as"):
-        check_registry_matches_model(bad)
+        validate_registry_matches_model(bad)
