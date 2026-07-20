@@ -106,6 +106,72 @@ def test_finish_with_no_answer_raises(tmp_path: Path):
     assert "tests" not in stage  # nothing written on a failed derivation
 
 
+def test_finish_with_empty_suite_raises(tmp_path: Path):
+    """`{"tests": []}` validates as a suite (validate_stage_tests short-circuits on an
+    empty list), but writing it through would wipe any existing tests while reporting
+    success. The completion hook must reject it before it reaches stage_edit."""
+    project_dir = tmp_path / "demo"
+    _seed_project(project_dir, existing_tests=[{
+        "name": "old_case",
+        "inputs": {"load": [{"amount": 1.0}]},
+        "expected": [{"amount": 1.0, "doubled": 2.0}],
+    }])
+    empty_suite = build_stage_tests_model("python_row_function", ["load"]).model_validate({"tests": []})
+
+    with pytest.raises(GenerationError, match="empty test suite"):
+        generation._finish_stage_tests(project_dir, "double", empty_suite)
+
+    stage = json.loads((project_dir / "compiled" / "02_double.json").read_text(encoding="utf-8"))
+    names = [t["name"] for t in stage["tests"]]
+    assert names == ["old_case"]  # existing tests survive — nothing written on rejection
+
+
+def test_finish_stage_tests_preserves_null_cells(tmp_path: Path):
+    """A null cell in an expected row (e.g. a nullable column the transform sometimes
+    leaves unset) must survive the write path intact. `expected` is typed
+    `list[dict[str, Any]]` — a plain dict, not a sub-model — so pydantic's
+    `exclude_none=True` (used both when building the patch and when write_stage
+    re-serializes the validated Stage) only drops None MODEL FIELDS; it does not walk
+    into that dict to strip None entries. And patch_stage_spec's RFC 7386 merge patch
+    replaces the whole `tests` array wholesale (a list value is returned as-is, never
+    recursed into) rather than deep-merging its contents. Pins that neither step
+    silently turns a declared null into a missing key."""
+    project_dir = tmp_path / "demo"
+    project_dir.mkdir(parents=True)
+    (project_dir / "document.md").write_text("Double the amount.", encoding="utf-8")
+    compiled = project_dir / "compiled"
+    compiled.mkdir()
+    out_schema = {"columns": [
+        {"name": "amount", "type": "float", "nullable": False},
+        {"name": "flag", "type": "bool", "nullable": True},
+    ]}
+    (compiled / "01_load.json").write_text(json.dumps({
+        "id": "load", "name": "Load", "type": "input_data",
+        "connector": {"kind": "file"},
+        "output_schema": _IN_SCHEMA,
+    }), encoding="utf-8")
+    (compiled / "02_double.json").write_text(json.dumps({
+        "id": "double", "name": "Double", "type": "python_row_function",
+        "inputs": [{"id": "load", "schema": _IN_SCHEMA}],
+        "output_schema": out_schema,
+        "function": {"kind": "inline",
+                     "code": "def transform(row):\n    return {**row, 'flag': None}\n"},
+    }), encoding="utf-8")
+
+    suite = build_stage_tests_model("python_row_function", ["load"]).model_validate({
+        "tests": [{
+            "name": "flag_defaults_null",
+            "inputs": {"load": [{"amount": 1.0}]},
+            "expected": [{"amount": 1.0, "flag": None}],
+        }]
+    })
+
+    generation._finish_stage_tests(project_dir, "double", suite)
+
+    stage = json.loads((project_dir / "compiled" / "02_double.json").read_text(encoding="utf-8"))
+    assert stage["tests"][0]["expected"][0] == {"amount": 1.0, "flag": None}
+
+
 # ── start_stage_test_generation wiring: hidden view-only session + a live turn ───────────
 
 class _FakeDeriverAgent:

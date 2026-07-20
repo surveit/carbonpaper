@@ -205,6 +205,27 @@ def test_status_reports_error_after_failed_derivation(client: TestClient, tmp_pa
     assert "tests" not in stage  # nothing written on a failed derivation
 
 
+def test_generate_tests_rejects_python_stage_without_output_schema(client: TestClient, tmp_path: Path):
+    """`double` is a python_row_function (tests are derivable for its TYPE), but a python
+    transform can validly lack an output_schema — only llm_transform enforces one. Tests
+    still need it to state expected rows, so the route must reject with 400 and leave no
+    orphaned session, the same as the wrong-TYPE case above."""
+    project_dir = _seed_project(tmp_path)
+    (project_dir / "compiled" / "02_double.json").write_text(json.dumps({
+        "id": "double", "name": "Double", "type": "python_row_function",
+        "inputs": [{"id": "load", "schema": _IN_SCHEMA}],
+        "function": {"kind": "inline",
+                     "code": "def transform(row):\n    return {**row, 'doubled': row['amount'] * 2}\n"},
+    }), encoding="utf-8")
+    before = len(SessionStore().list_sessions())
+
+    response = client.post("/project/alpha/node/double/generate-tests")
+
+    assert response.status_code == 400
+    assert "output schema" in response.json()["detail"]
+    assert len(SessionStore().list_sessions()) == before  # no orphaned session
+
+
 def test_generate_tests_maps_workflow_load_error_to_400(client: TestClient, tmp_path: Path):
     """A project whose compiled/ workflow fails to load (here: one stage file holds
     invalid JSON) makes `generation.start_stage_test_generation`'s `load_workflow`

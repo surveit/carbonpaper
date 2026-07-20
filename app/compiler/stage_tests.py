@@ -119,7 +119,10 @@ def render_derivation_task(document: str, stage: Stage) -> str:
         else f"Input `{ref.id}` (no schema declared)"
         for ref in stage.inputs
     )
-    assert stage.output_schema is not None  # python transforms declare their output schema
+    if stage.output_schema is None:
+        raise ValueError(
+            f"stage `{stage.id}` has no output schema — tests need one to state expected rows"
+        )
     return (
         f"----- METHODOLOGY DOCUMENT -----\n{document}\n"
         f"----- END DOCUMENT -----\n\n"
