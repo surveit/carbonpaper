@@ -23,7 +23,6 @@ from __future__ import annotations
 
 import json
 import re
-from datetime import datetime
 from pathlib import Path
 from typing import Any, ClassVar
 
@@ -50,8 +49,6 @@ class Draft(PersistedModel):
     draft_id: str
     parent_version: str | None = None
     stages: list[dict[str, Any]] = Field(default_factory=list)
-    created_at: str
-    updated_at: str
 
 
 def _view(d: Draft) -> dict[str, Any]:
@@ -85,14 +82,11 @@ def create_draft(
     else:
         stages = []
     draft_id = generate_word_triplet_id(_taken(project_dir))
-    now = datetime.now().isoformat(timespec="seconds")
     d = Draft(
         id=_doc_id(project_dir, draft_id),
         draft_id=draft_id,
         parent_version=from_version,
         stages=stages,
-        created_at=now,
-        updated_at=now,
     )
     d.save()
     return _view(d)
@@ -121,7 +115,7 @@ def set_draft_stage(
     d = _load(project_dir, draft_id)
     kept = [s for s in d.stages if s.get("id") != stage["id"]]
     d.stages = kept + [stage]
-    _save(d)
+    d.save()
     return _describe(d)
 
 
@@ -137,7 +131,7 @@ def remove_draft_stage(
     if len(kept) == len(d.stages):
         raise ValueError(f"No stage '{stage_id}' in draft '{draft_id}'")
     d.stages = kept
-    _save(d)
+    d.save()
     return _describe(d)
 
 
@@ -163,7 +157,7 @@ def save_version(
         parent_version=d.parent_version,
     )
     d.parent_version = meta["id"]
-    _save(d)
+    d.save()
     return {"ok": True, "version": meta}
 
 
@@ -196,11 +190,6 @@ def _load(project_dir: Path, draft_id: str) -> Draft:
             f"No draft '{draft_id}' for project '{Path(project_dir).name}' — drafts are "
             f"disposable; start a new one with create_draft."
         ) from exc
-
-
-def _save(d: Draft) -> None:
-    d.updated_at = datetime.now().isoformat(timespec="seconds")
-    d.save()
 
 
 def _parse_stage_object(stage_json: str) -> dict[str, Any]:

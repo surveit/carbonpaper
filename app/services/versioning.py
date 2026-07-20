@@ -73,7 +73,6 @@ class WorkflowVersion(PersistedModel):
     DUMP_OPTS: ClassVar[dict[str, Any]] = {"by_alias": True, "exclude_none": True}
 
     version_id: str
-    created_at: str
     parent_version: str | None = None
     message: str
     reviewer: str
@@ -160,7 +159,6 @@ def create_version_from_stages(
     v = WorkflowVersion(
         id=doc_id,
         version_id=version_id,
-        created_at=datetime.now().isoformat(timespec="seconds"),
         parent_version=parent_version,
         message=message,
         reviewer=reviewer,

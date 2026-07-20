@@ -20,9 +20,10 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from datetime import datetime
 from typing import Any, ClassVar, Iterator, Protocol, Self
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.core.errors import DocumentNotFound
 
@@ -175,11 +176,23 @@ def is_store_configured() -> bool:
     return _store is not None
 
 
+def _now_iso() -> str:
+    return datetime.now().isoformat(timespec="seconds")
+
+
 class PersistedModel(BaseModel):
     """Base for every stored record. A subclass sets `collection` (the table name)
     and carries an `id` (its primary key); save()/load()/list() go through the
     configured DocumentStore, so nothing above this class touches storage. The
     body is serialized as JSON.
+
+    `created_at`/`updated_at` are stamped automatically, so a subclass never
+    hand-rolls them: on a fresh construct (no stored value yet) both
+    default_factory to now; on load from the store, the stored values are
+    present in the input dict so the factory never fires, and the original
+    values survive. `save()` re-stamps `updated_at` to now on every call, so it
+    always reflects the last write while `created_at` stays at first-construct
+    time.
 
     Its own strict config mirrors app.core.models._Base without importing it, so the
     storage layer stays free of an app.core.models dependency."""
@@ -192,6 +205,8 @@ class PersistedModel(BaseModel):
     )
 
     id: str
+    created_at: str = Field(default_factory=_now_iso)
+    updated_at: str = Field(default_factory=_now_iso)
     collection: ClassVar[str]
     SCHEMA_VERSION: ClassVar[int] = 1
     # Extra model_dump kwargs a subclass needs to preserve exact on-disk shape
@@ -200,6 +215,7 @@ class PersistedModel(BaseModel):
     DUMP_OPTS: ClassVar[JsonDict] = {}
 
     def save(self) -> None:
+        self.updated_at = _now_iso()
         get_store().write(
             self.collection,
             self.id,
