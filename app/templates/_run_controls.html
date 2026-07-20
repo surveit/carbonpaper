@@ -3,7 +3,10 @@
     · a version_id <select>: every version newest-first, the latest pre-selected
       (so a run defaults to latest, any version is one click away)
     · one path field per file-kind input (binding__<stage_id>), prefilled with the
-      SELECTED version's workflow-authored path
+      SELECTED version's workflow-authored path — each with a Browse… button that
+      (via run_controls.js → POST /project/<name>/pick-file) pops the native macOS
+      file dialog and drops the chosen file's absolute path in; the run references
+      that file in place (the server reads its inputs off the local disk by path)
     · ▶ Run workflow
 
   Version and inputs belong together: different versions can author different input
@@ -28,11 +31,14 @@
   </label>
   <div class="run-inputs">
     {% for fi in file_inputs %}
-    <label style="display:block; margin:0.35rem 0;">
+    <label class="run-input-row">
       <code>{{ fi.stage_id }}</code> — data file
-      <input type="text" name="binding__{{ fi.stage_id }}" value="{{ fi.path }}"
-             placeholder="absolute path to the data file"
-             size="70" {% if not fi.path %}required{% endif %}>
+      <span class="path-field">
+        <input type="text" name="binding__{{ fi.stage_id }}" value="{{ fi.path }}"
+               placeholder="absolute path to the data file"
+               size="70" {% if not fi.path %}required{% endif %}>
+        <button type="button" class="btn browse-btn">Browse…</button>
+      </span>
     </label>
     {% endfor %}
   </div>

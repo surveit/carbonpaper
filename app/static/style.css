@@ -1774,3 +1774,20 @@ td.row-num, th.row-num { text-align: right; color: #98a1b3; font-variant-numeric
 .test-rows th, .test-rows td { border: 1px solid var(--border); padding: 0.15rem 0.5rem; font-size: 0.85rem; }
 .test-message { color: #802020; }
 .node-review-full .nr-edit-hint { margin: 0 0 10px; }
+
+/* ─── Run form: input path fields + native file picker ────────────────────────
+   The run form (_run_controls.html) collects one absolute path per file input.
+   Each path field pairs a text input with a Browse… button; run_controls.js has
+   it POST /project/<name>/pick-file, which pops the native macOS file dialog and
+   returns the chosen file's absolute path (the run references it in place). */
+.run-input-row { display: block; margin: 0.35rem 0; }
+.path-field {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 4px;
+    max-width: 100%;
+}
+.path-field input { flex: 1 1 auto; min-width: 0; }  /* shrink, don't overflow */
+.browse-btn { padding: 6px 12px; white-space: nowrap; flex: 0 0 auto; }
+.browse-btn:disabled { opacity: 0.6; cursor: default; }  /* while the dialog is up */

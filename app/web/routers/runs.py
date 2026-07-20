@@ -24,9 +24,11 @@ from app.web.trace_view import build_trace_view
 from app.web.config import EXAMPLES_DIR, REPO_ROOT, templates
 from app.web.diagrams import TYPE_CLASS, TYPE_GLYPH, build_mermaid_graph
 from app.web.loading import (
+    NativePickerUnavailable,
     build_llm_example,
     find_stage,
     list_file_inputs,
+    pick_file_native,
     list_runs,
     load_manifest,
     load_output_preview,
@@ -146,6 +148,27 @@ async def run_inputs(project: str, version_id: str | None = None):
     if not project_dir.is_dir():
         raise HTTPException(status_code=404, detail=f"No project '{project}'")
     return JSONResponse(list_file_inputs(project_dir, version_id))
+
+
+@router.post("/project/{project}/pick-file")
+def pick_file(project: str):
+    """Pop the native macOS 'Choose File' dialog on the server (the user's own
+    Mac) and return the chosen file's absolute path as JSON — the run then reads
+    that file in place, no upload. A sync `def` route so FastAPI runs the blocking
+    dialog in its threadpool instead of stalling the event loop. The dialog opens
+    in the project's data/ dir. {ok:true, cancelled:false, path} on pick,
+    {ok:true, cancelled:true, path:null} on cancel, 501 {ok:false, error} when the
+    native dialog can't run (the form falls back to typing the path)."""
+    project_dir = EXAMPLES_DIR / project
+    if not project_dir.is_dir():
+        raise HTTPException(status_code=404, detail=f"No project '{project}'")
+    data_dir = project_dir / "data"
+    start = data_dir if data_dir.is_dir() else project_dir
+    try:
+        path = pick_file_native(start)
+    except NativePickerUnavailable as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=501)
+    return JSONResponse({"ok": True, "cancelled": path is None, "path": path})
 
 
 @router.get("/project/{project}/runs", response_class=HTMLResponse)

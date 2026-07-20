@@ -5,6 +5,8 @@ small pure helpers for the stage-dict shape they return."""
 from __future__ import annotations
 
 import json
+import subprocess
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -134,6 +136,53 @@ def list_file_inputs(project_dir: Path, version_id: str | None = None) -> list[d
         if s.type == "input_data" and s.connector is not None
         and s.connector.kind == "file"
     ]
+
+
+# ─── Native file picker (run-input file chooser) ─────────────────────────────
+
+class NativePickerUnavailable(Exception):
+    """The OS's native file-open dialog can't be shown here — not macOS, no GUI
+    session, or `osascript` missing. The caller falls back to manual path entry."""
+
+
+def pick_file_native(start_dir: Path | None) -> str | None:
+    """Show macOS's native 'Choose File' dialog and return the chosen file's
+    absolute path, or None if the user cancelled. Raises NativePickerUnavailable
+    when the dialog can't run at all.
+
+    A run reads its input off the SERVER's disk by absolute path, and this is a
+    LOCAL tool — the server is the user's own Mac — so popping the real Finder
+    dialog server-side and handing back the picked path references the file in
+    place (no upload, no copy), unlike a browser `<input type=file>` which hides
+    the path. `start_dir` is where the dialog opens (skipped if it doesn't
+    exist). Blocking by design: it waits for the user to pick or cancel (5-min
+    cap), so callers must run it off the event loop (a sync route does this)."""
+    if sys.platform != "darwin":
+        raise NativePickerUnavailable(
+            "native file dialog is macOS-only; type or paste the path instead")
+    prompt = "Choose a data file"
+    if start_dir and start_dir.is_dir():
+        # json.dumps yields an AppleScript-safe double-quoted string literal
+        # (escapes " and \); the path is server-derived, not user input.
+        script = (f'POSIX path of (choose file with prompt "{prompt}" '
+                  f'default location (POSIX file {json.dumps(str(start_dir))}))')
+    else:
+        script = f'POSIX path of (choose file with prompt "{prompt}")'
+    try:
+        proc = subprocess.run(
+            ["osascript", "-e", script],
+            capture_output=True, text=True, timeout=300,
+        )
+    except FileNotFoundError as exc:  # osascript not on PATH
+        raise NativePickerUnavailable("osascript not found") from exc
+    except subprocess.TimeoutExpired as exc:
+        raise NativePickerUnavailable("file dialog timed out") from exc
+    if proc.returncode == 0:
+        return proc.stdout.strip() or None
+    err = (proc.stderr or "").strip()
+    if "User canceled" in err or "-128" in err:
+        return None  # cancel is a normal outcome, not a failure
+    raise NativePickerUnavailable(err or "file dialog failed")
 
 
 # ─── Source & code reads ─────────────────────────────────────────────────────
