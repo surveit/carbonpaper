@@ -41,6 +41,8 @@ def _write_run(
         "stages": [
             {
                 "stage_id": STAGE,
+                "type": "input_data",
+                "name": STAGE,
                 "status": "ok",
                 "rows": len(df),
                 "output_path": output_rel,

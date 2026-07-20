@@ -21,13 +21,15 @@ def write_run(tmp_path: Path, stages: list[dict], run_id: str = "T1") -> Path:
 
     Each spec: {"id": str, "type": str, "parents": list[str], "df": DataFrame}.
     Writes outputs/<id>.parquet to disk and saves a manifest to the document
-    store whose per-stage records carry `type`, `rows`, `output_path`, and one
-    input_validation entry per parent with phase "input:<parent>" — the exact
-    shape the runner emits. The manifest is saved keyed the same way a real
-    run's is: project = the run dir's grandparent name, run_id = the run dir's
-    own name (mirrors app.runtime.trace._load_manifest's derivation), so
-    `tmp_path` need not itself be a `<project>/runs/` layout — trace_row reads
-    back whatever `write_run` wrote, under the same derived project name.
+    store whose per-stage records carry `type`, `name`, `rows`, `output_path`,
+    and one input_validation entry per parent with phase "input:<parent>" —
+    the exact shape the runner emits (see StageRun / ValidationReport in
+    app.core.models.records.workflow_run). The manifest is saved keyed the
+    same way a real run's is: project = the run dir's grandparent name, run_id
+    = the run dir's own name (mirrors app.runtime.trace._load_manifest's
+    derivation), so `tmp_path` need not itself be a `<project>/runs/` layout —
+    trace_row reads back whatever `write_run` wrote, under the same derived
+    project name.
     """
     run_dir = tmp_path / run_id
     (run_dir / "outputs").mkdir(parents=True)
@@ -38,10 +40,13 @@ def write_run(tmp_path: Path, stages: list[dict], run_id: str = "T1") -> Path:
         records.append({
             "stage_id": spec["id"],
             "type": spec["type"],
+            "name": spec["id"],
             "rows": len(spec["df"]),
             "output_path": rel,
             "input_validation": [
-                {"phase": f"input:{p}", "ok": True} for p in spec.get("parents", [])
+                {"stage_id": spec["id"], "phase": f"input:{p}", "rows": 0,
+                 "ok": True, "issues": []}
+                for p in spec.get("parents", [])
             ],
         })
     project = run_dir.parent.parent.name

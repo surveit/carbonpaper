@@ -190,8 +190,8 @@ def list_runs(project: str) -> list[dict[str, Any]]:
             # "(unversioned)" — a displayed truth, not a fabricated id.
             "workflow_version": r.workflow_version,
             "stages_total": len(r.stages),
-            "stages_ok": sum(1 for s in r.stages if s.get("status") == "ok"),
-            "stages_error": sum(1 for s in r.stages if s.get("status") == "error"),
+            "stages_ok": sum(1 for s in r.stages if s.status == "ok"),
+            "stages_error": sum(1 for s in r.stages if s.status == "error"),
         })
     return entries
 

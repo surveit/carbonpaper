@@ -24,10 +24,10 @@ per-file issues. Typed `Stage` objects flow end-to-end.
 ## `app/runtime/` — the Runner  → `app/runtime/AGENTS.md`
 `runner.py` — `execute_run`/`prepare_run`/`run_prepared`/`resume_run`. Per stage: validate
 inputs, reject duplicate rows, dispatch, validate output, write `outputs/<stage>.parquet`,
-flush the run's manifest to the document store mid-run (`app.services.run_store`); halt-
-on-review + resume; per-run `--limit`/`--offset`; `field_checks`. `stages/` — one module
-per type. `llm.py`/`options.py` — the agent backend (no fallback). `preview.py` — scratch
-re-runs.
+flush the run's manifest (a typed `WorkflowRun` record, `app.core.models.records.workflow_run`)
+to the document store mid-run; halt-on-review + resume; per-run `--limit`/`--offset`;
+`field_checks`. `stages/` — one module per type. `llm.py`/`options.py` — the agent backend
+(no fallback). `preview.py` — scratch re-runs.
 
 Stage handlers register under a *shape* (`app/runtime/stages/execution.py`):
 `RowMapHandler` (the runtime maps a per-row function over the stage's single
