@@ -31,6 +31,14 @@ app/chat/  PydanticAI chat · app/core/llm/  model menu · tests/  pytest (offli
   `app.services.compilation`, which wraps the compiler). Both enforced by import-linter.
 - **Never `except Exception` or bare `except`.** Catch specific types — swallowing errors breaks
   fail-loudly. Enforced by Ruff `BLE001`.
+- **No `dict[str, Any]` as a stand-in for a structured value.** A dict with a known, fixed set of
+  keys is a missing model — define a Pydantic model (`PersistedModel` for a stored object) or
+  reference an existing one, and pass *that*. A function returning `dict[str, Any]`, or a field
+  typed `dict[str, Any]`, for something with named fields is a review-blocking smell — model it.
+  `dict[str, Any]` is allowed only at a genuine dynamic-JSON boundary where the shape is
+  caller-defined and not yet known: a raw stage-spec dict that may be invalid mid-edit (matching
+  `stage_to_spec_dict` / `validate_workflow_draft`), or foreign JSON being parsed — and even
+  there, parse into a model at the first point the shape is known.
 - **Planning docs stay out of the repo.** Design specs, implementation/execution plans,
   brainstorming or "rethink" notes, and refactor/migration roadmaps are ephemeral working
   artifacts — keep them in scratch or the PR description, never commit them. Committed docs
