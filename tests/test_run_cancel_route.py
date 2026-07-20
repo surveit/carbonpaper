@@ -74,6 +74,40 @@ def _write_one_stage_project(examples_dir: Path) -> None:
     (proj_dir / "compiled" / "01_load.json").write_text(json.dumps(stage), encoding="utf-8")
 
 
+def _write_status_manifest(examples_dir: Path, stage_statuses: list[tuple[str, str]]) -> Path:
+    """Write a manifest whose stages carry the given (stage_id, status) pairs,
+    for exercising run_status's per-status counts."""
+    run_dir = examples_dir / PROJ / "runs" / RUN
+    run_dir.mkdir(parents=True, exist_ok=True)
+    stages = [{"stage_id": sid, "status": status} for sid, status in stage_statuses]
+    (run_dir / "manifest.json").write_text(
+        json.dumps({"run_id": RUN, "status": "cancelled", "stages": stages}),
+        encoding="utf-8",
+    )
+    return run_dir
+
+
+def test_run_status_counts_include_a_cancelled_stage(examples_dir, client):
+    """A stage cancelled mid-fan-out (runner's `except RunCancelled` branch,
+    app/runtime/runner.py) must be counted, not silently dropped from every
+    bucket — app/templates/run_detail.html's `al-cancelled` chip reads this
+    same `counts.cancelled` field."""
+    _write_one_stage_project(examples_dir)
+    _write_status_manifest(examples_dir, [
+        ("load", "ok"),
+        ("score", "cancelled"),
+        ("publish", "pending"),
+    ])
+
+    resp = client.get(f"/project/{PROJ}/runs/{RUN}/status")
+    assert resp.status_code == 200
+    counts = resp.json()["counts"]
+    assert counts["cancelled"] == 1
+    assert counts["total"] == 3
+    assert counts["ok"] == 1
+    assert counts["pending"] == 1
+
+
 def test_run_detail_page_shows_cancel_button_only_while_running(examples_dir, client):
     _write_one_stage_project(examples_dir)
     _write_manifest(examples_dir, "running")

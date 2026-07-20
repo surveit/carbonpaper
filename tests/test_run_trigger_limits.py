@@ -118,6 +118,17 @@ def test_non_integer_limit_returns_400_and_creates_no_run(project):
     assert not (project / "runs").exists()
 
 
+def test_negative_limit_returns_400_and_creates_no_run(project):
+    resp = client.post(
+        "/project/demo/run",
+        data={"binding__load": str(project / "a.csv"), "limit__load": "-1"},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 400
+    assert "load" in resp.json()["detail"]
+    assert not (project / "runs").exists()
+
+
 def test_runs_page_shows_a_limit_field_per_file_input(project):
     resp = client.get("/project/demo/runs")
     assert resp.status_code == 200

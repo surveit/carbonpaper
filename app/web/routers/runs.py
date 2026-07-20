@@ -154,7 +154,7 @@ def _collect_limits(form: FormData) -> dict[str, int]:
         text = str(value).strip()
         if not text:
             continue
-        if not text.isdigit():
+        if not text.isdecimal():
             raise ValueError(
                 f"row limit for stage '{stage_id}' must be a non-negative "
                 f"whole number, got {value!r}"
@@ -247,7 +247,8 @@ async def run_status(project: str, run_id: str):
                    "err": _count("error"), "total": len(mstages),
                    "done": _count("ok") + _count("validation_warnings"),
                    "running": _count("running"), "pending": _count("pending"),
-                   "awaiting": _count("awaiting_review")},
+                   "awaiting": _count("awaiting_review"),
+                   "cancelled": _count("cancelled")},
         "stages": [{"stage_id": s["stage_id"], "status": s.get("status")} for s in mstages],
         "mermaid": mermaid,
     })

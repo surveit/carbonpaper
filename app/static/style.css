@@ -1018,6 +1018,7 @@ table.data-preview.scratch th { background: #f3ecd0; }
 .alert.err { background: #fdecea; color: #a11; }
 .alert.warn { background: var(--warn-bg); color: var(--warn-border); }
 .alert.awaiting { background: var(--review-bg); color: var(--review-border); }
+.alert.cancelled { background: var(--code-bg); color: var(--muted); }
 .lede .lg { padding: 0 .25rem; border-radius: 3px; font-weight: 600; }
 .lg-done { color: #2a8a2a; } .lg-run { color: #b8860b; } .lg-err { color: #cc2a2a; } .lg-pend { color: #999; }
 
