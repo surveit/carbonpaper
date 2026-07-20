@@ -69,9 +69,9 @@
     </span>
     {% endif %}
     {% if stages %}
-    <form action="/project/{{ state.name }}/run" method="post" style="display:inline;">
-      <button type="submit" class="btn primary">▶ Run workflow</button>
-    </form>
+    {# Running is configured on the Runs page (pick version + set input paths), so
+       version and inputs are never split across two surfaces. #}
+    <a href="/project/{{ state.name }}/runs" class="btn primary">▶ Run workflow</a>
     <form action="/project/{{ state.name }}/generate-workflow" method="post" style="display:inline;">
       <button type="submit" class="btn" title="Recompile the workflow from the document, using the approved data model as reference. Replaces the current workflow.">↻ Regenerate workflow</button>
     </form>

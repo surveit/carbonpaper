@@ -114,13 +114,15 @@ def find_stage(stages: list[Stage], stage_id: str) -> Stage | None:
     return next((s for s in stages if s.id == stage_id), None)
 
 
-def list_file_inputs(project_dir: Path) -> list[dict[str, Any]]:
-    """File-kind input stages of the version a triggered run will execute
-    (resolve_version_id's choice), each with its workflow-authored absolute
-    path ('' when the stage authors none — the run form must collect one).
+def list_file_inputs(project_dir: Path, version_id: str | None = None) -> list[dict[str, Any]]:
+    """File-kind input stages of the version a triggered run will execute, each
+    with its workflow-authored absolute path ('' when the stage authors none —
+    the run form must collect one). `version_id` selects which version to read;
+    None resolves to the latest (resolve_version_id's default), so the run form's
+    prefill and the run's binding provenance both speak about the SAME version.
     [] when the project has no versions yet."""
     try:
-        version_id = resolve_version_id(project_dir, None)
+        version_id = resolve_version_id(project_dir, version_id)
     except NoVersionToRunError:
         return []
     stages = load_version_stages(project_dir, version_id)

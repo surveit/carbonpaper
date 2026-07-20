@@ -15,6 +15,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 from app.core.errors import MissingInputBindingError, NoVersionToRunError, RowOutOfRange, StageNotInRun
 from app.services.loader import WorkflowLoadError, load_workflow
+from app.services.versioning import list_versions
 from app.runtime.preview import PREVIEWABLE_TYPES, PreviewError, run_stage_preview
 from app.runtime.runner import prepare_run, resume_run, run_prepared
 from app.runtime.trace import trace_row, trace_to_dict
@@ -65,8 +66,10 @@ async def trigger_run(request: Request, project: str):
     # it can raise WorkflowLoadError for an unloadable snapshot just like
     # prepare_run below — both must land in the same 400 handling.
     try:
-        bindings = _collect_bindings(await request.form(), project_dir)
-        prep = prepare_run(project_dir, REPO_ROOT, bindings=bindings)
+        form = await request.form()
+        version_id = str(form.get("version_id") or "").strip() or None
+        bindings = _collect_bindings(form, project_dir, version_id)
+        prep = prepare_run(project_dir, REPO_ROOT, version_id=version_id, bindings=bindings)
     except (NoVersionToRunError, MissingInputBindingError, ValueError) as exc:
         # ValueError here is binding/limit/offset validation failures raised by
         # apply_run_bindings / prepare_run — not a catch-all for other bugs.
@@ -81,12 +84,17 @@ async def trigger_run(request: Request, project: str):
     )
 
 
-def _collect_bindings(form: FormData, project_dir: Path) -> dict[str, dict[str, str]]:
+def _collect_bindings(
+    form: FormData, project_dir: Path, version_id: str | None = None
+) -> dict[str, dict[str, str]]:
     """Read `binding__<stage_id>` form fields into run bindings (each a
     connector-params dict, {"path": ...}). A field whose value equals the
     workflow-authored path is NOT a binding — the workflow is the designating
-    source, and the manifest provenance should say so."""
-    authored = {fi["stage_id"]: fi["path"] for fi in list_file_inputs(project_dir)}
+    source, and the manifest provenance should say so. `version_id` selects which
+    version's authored paths to compare against (None -> latest), so a run pinned
+    to an older version judges provenance against THAT version, not the latest."""
+    authored = {fi["stage_id"]: fi["path"]
+                for fi in list_file_inputs(project_dir, version_id)}
     bindings: dict[str, dict[str, str]] = {}
     for key, value in form.items():
         if not key.startswith("binding__"):
@@ -96,6 +104,18 @@ def _collect_bindings(form: FormData, project_dir: Path) -> dict[str, dict[str, 
         if path and path != authored.get(stage_id, ""):
             bindings[stage_id] = {"path": path}
     return bindings
+
+
+@router.get("/project/{project}/run-inputs")
+async def run_inputs(project: str, version_id: str | None = None):
+    """The file-kind input stages of one version as JSON ([{stage_id, name,
+    path}]). The run form fetches this when the version dropdown changes so its
+    path fields describe the version about to run — a different version can author
+    different input stages/paths. `version_id` None resolves to the latest."""
+    project_dir = EXAMPLES_DIR / project
+    if not project_dir.is_dir():
+        raise HTTPException(status_code=404, detail=f"No project '{project}'")
+    return JSONResponse(list_file_inputs(project_dir, version_id))
 
 
 @router.get("/project/{project}/runs", response_class=HTMLResponse)
@@ -116,6 +136,7 @@ async def runs_index(request: Request, project: str):
             "state": shell_state(pdir),
             "section": "runs",
             "runs": list_runs(project),
+            "versions": list_versions(pdir),
             "file_inputs": list_file_inputs(pdir),
         },
     )
