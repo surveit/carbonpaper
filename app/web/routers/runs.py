@@ -585,9 +585,7 @@ async def cancel_run_route(project: str, run_id: str):
     while the run is still `running` — but redirects back either way, same as
     resume, so the page's poller/reload handles the rest."""
     run_dir = runs_dir(project) / run_id
-    if not (run_dir / "manifest.json").exists():
-        raise HTTPException(status_code=404, detail="Run not found")
-    manifest = load_manifest(run_dir)
+    manifest = load_manifest(run_dir)  # 404s if the run doesn't exist
     if manifest.get("status") == "running":
         request_cancel(project, run_id)
     return RedirectResponse(

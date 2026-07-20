@@ -13,9 +13,10 @@ The web thread only ever ADDS a key to the registry.
 The key is a run's logical identity, never its persistence layout (e.g. the
 run directory path): this module knows nothing about how or where a run is
 stored, only that a run is identified by ``(project, run_id)``. That keeps
-the cancel registry independent of the persistence model — enforced by
-app/runtime/_arch_tests/test_cancellation_is_a_stdlib_leaf.py, which requires
-this module to import nothing from ``app.`` (stdlib only).
+the cancel registry independent of the persistence model — enforced by the
+"app.runtime.cancellation is a stdlib-only leaf" import-linter contract in
+pyproject.toml, which forbids this module from importing any other app
+module (stdlib only).
 """
 from __future__ import annotations
 
