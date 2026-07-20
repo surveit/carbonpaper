@@ -18,6 +18,7 @@ from starlette.concurrency import run_in_threadpool
 from app.core.errors import MissingInputBindingError, NoVersionToRunError, RowOutOfRange, StageNotInRun
 from app.services.loader import WorkflowLoadError, load_workflow
 from app.services.versioning import list_versions
+from app.runtime.cancellation import request_cancel
 from app.runtime.preview import PREVIEWABLE_TYPES, PreviewError, run_stage_preview
 from app.runtime.runner import prepare_run, resume_run, run_prepared
 from app.runtime.trace import trace_row, trace_to_dict
@@ -570,6 +571,25 @@ async def resume_run_route(project: str, run_id: str):
     # Resume re-runs the queue stage + downstream (LLM-heavy) — do it in the
     # background and redirect immediately so the page can poll progress.
     run_in_background(resume_run, project_dir, run_id, REPO_ROOT)
+    return RedirectResponse(
+        url=f"/project/{project}/runs/{run_id}",
+        status_code=303,
+    )
+
+
+@router.post("/project/{project}/runs/{run_id}/cancel")
+async def cancel_run_route(project: str, run_id: str):
+    """Cooperative cancel: records a cancel request for (project, run_id) that
+    the run thread polls at its checkpoints (see app.runtime.cancellation). A
+    no-op on a run that is already terminal — cancelling only means something
+    while the run is still `running` — but redirects back either way, same as
+    resume, so the page's poller/reload handles the rest."""
+    run_dir = runs_dir(project) / run_id
+    if not (run_dir / "manifest.json").exists():
+        raise HTTPException(status_code=404, detail="Run not found")
+    manifest = load_manifest(run_dir)
+    if manifest.get("status") == "running":
+        request_cancel(project, run_id)
     return RedirectResponse(
         url=f"/project/{project}/runs/{run_id}",
         status_code=303,

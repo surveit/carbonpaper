@@ -44,6 +44,11 @@
     <span id="progress-counts" class="progress-counts">
         <b>{{ done }}/{{ total }}</b> complete · <span id="pc-running">{{ running }}</span> in&nbsp;progress · <span id="pc-todo">{{ pending }}</span> to&nbsp;do
     </span>
+    {% if is_running %}
+    <form method="post" action="/project/{{ project }}/runs/{{ run_id }}/cancel" id="cancel-run-form">
+        <button type="submit" class="btn danger" id="cancel-run-btn">✕ Cancel run</button>
+    </form>
+    {% endif %}
 </div>
 
 <div id="alert-strip" class="alert-strip" {% if not (warn or err or awaiting) %}hidden{% endif %}>
@@ -114,6 +119,18 @@
   }
   window._loadStage = loadStage;
   if (location.hash) loadStage(decodeURIComponent(location.hash.slice(1)));
+
+  // ── Cancel button: disable + relabel immediately on submit so a second
+  //    click can't fire a second request while the redirect is in flight.
+  //    The poller above (or the full reload on a non-live page) handles
+  //    picking up the resulting `cancelled` status. ──
+  const cancelForm = document.getElementById('cancel-run-form');
+  if (cancelForm) {
+    cancelForm.addEventListener('submit', function () {
+      const btn = document.getElementById('cancel-run-btn');
+      if (btn) { btn.disabled = true; btn.textContent = 'Cancelling…'; }
+    });
+  }
 
   // ── Live progress poller ──
   const RUNNING = {{ is_running | tojson }};
