@@ -21,8 +21,8 @@ from typing import Any
 import pandas as pd
 
 from app.core.errors import DocumentNotFound, RowOutOfRange, StageNotInRun
+from app.core.models.records.workflow_run import StageRun, WorkflowRun
 from app.core.models.stage import StageType, is_grain_and_order_preserving
-from app.services import run_store
 
 
 def _is_row_preserving(stage_type: str) -> bool:
@@ -76,28 +76,27 @@ class Trace:
     end: TraceEnd
 
 
-def _load_manifest(run_dir: Path) -> dict[str, Any]:
-    """The run's manifest, from the document store. `project`/`run_id` are
-    derived from `run_dir`'s layout (`<project_dir>/runs/<run_id>` — the same
-    convention `app.web.loading.load_manifest` derives from)."""
+def _load_manifest(run_dir: Path) -> WorkflowRun:
+    """The run's WorkflowRun record, from the document store. `project`/
+    `run_id` are derived from `run_dir`'s layout (`<project_dir>/runs/<run_id>`
+    — the same convention `app.web.loading.load_manifest` derives from)."""
     run_dir = Path(run_dir)
     project = run_dir.parent.parent.name
     try:
-        return run_store.load_run(project, run_dir.name)
+        return WorkflowRun.load(f"{project}/{run_dir.name}")
     except DocumentNotFound as exc:
         raise FileNotFoundError(f"no run manifest for {run_dir}") from exc
 
 
-def _stages_by_id(manifest: dict[str, Any]) -> dict[str, dict[str, Any]]:
-    return {s["stage_id"]: s for s in manifest.get("stages", [])}
+def _stages_by_id(manifest: WorkflowRun) -> dict[str, StageRun]:
+    return {s.stage_id: s for s in manifest.stages}
 
 
-def _parents(stage_record: dict[str, Any]) -> list[str]:
+def _parents(stage_record: StageRun) -> list[str]:
     parents: list[str] = []
-    for entry in stage_record.get("input_validation") or []:
-        phase = entry.get("phase", "")
-        if phase.startswith("input:"):
-            parents.append(phase.split(":", 1)[1])
+    for entry in stage_record.input_validation:
+        if entry.phase.startswith("input:"):
+            parents.append(entry.phase.split(":", 1)[1])
     return parents
 
 
@@ -109,8 +108,8 @@ def _origin(stage_type: str) -> str:
     }.get(stage_type, "other")
 
 
-def _read_output(run_dir: Path, stage_record: dict[str, Any]) -> pd.DataFrame | None:
-    rel = stage_record.get("output_path")
+def _read_output(run_dir: Path, stage_record: StageRun) -> pd.DataFrame | None:
+    rel = stage_record.output_path
     if not rel:
         return None
     path = Path(run_dir) / rel
@@ -167,7 +166,7 @@ def trace_row(run_dir: Path, stage_id: str, row_ordinal: int) -> Trace:
 
     while end is None:
         record = by_id[sid]
-        stage_type = record.get("type", "")
+        stage_type = record.type
         df = _read_output(run_dir, record)
         if df is None:
             end = TraceEnd(False, sid, "this stage's output file is missing from the run")
@@ -212,7 +211,7 @@ def trace_row(run_dir: Path, stage_id: str, row_ordinal: int) -> Trace:
                 sid, r = parent_id, r  # same ordinal — the whole point
 
     return Trace(
-        run_id=manifest.get("run_id", run_dir.name),
+        run_id=manifest.run_id,
         start_stage=stage_id,
         start_row=row_ordinal,
         steps=steps,

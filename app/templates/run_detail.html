@@ -85,7 +85,7 @@
     <div class="empty-state"><h2>Select a stage</h2><p>Click any node in the workflow to load its run details.</p></div>
 </div>
 
-<details class="raw-yaml"><summary>Raw manifest</summary><pre>{{ manifest | tojson(indent=2) }}</pre></details>
+<details class="raw-yaml"><summary>Raw manifest</summary><pre>{{ manifest.model_dump(mode='json') | tojson(indent=2) }}</pre></details>
 
 <script>
 (function () {

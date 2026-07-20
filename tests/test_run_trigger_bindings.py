@@ -10,8 +10,8 @@ import pytest
 from fastapi.testclient import TestClient
 
 import app.web.routers.runs as runs_router
+from app.core.models.records.workflow_run import WorkflowRun
 from app.main import app
-from app.services import run_store
 from app.services.versioning import create_version
 
 client = TestClient(app)
@@ -34,9 +34,9 @@ def project(tmp_path, monkeypatch):
     return proj
 
 
-def _manifest(proj):
+def _manifest(proj) -> WorkflowRun:
     run_dir = sorted((proj / "runs").iterdir())[-1]
-    return run_store.load_run(proj.name, run_dir.name)
+    return WorkflowRun.load(f"{proj.name}/{run_dir.name}")
 
 
 def test_changed_field_becomes_run_binding(project, tmp_path):
@@ -45,7 +45,7 @@ def test_changed_field_becomes_run_binding(project, tmp_path):
     resp = client.post("/project/demo/run",
                        data={"binding__load": str(other)}, follow_redirects=False)
     assert resp.status_code == 303
-    assert _manifest(project)["input_bindings"]["load"]["source"] == "run"
+    assert _manifest(project).input_bindings["load"]["source"] == "run"
 
 
 def test_untouched_prefill_stays_workflow_source(project):
@@ -53,7 +53,7 @@ def test_untouched_prefill_stays_workflow_source(project):
     resp = client.post("/project/demo/run",
                        data={"binding__load": authored}, follow_redirects=False)
     assert resp.status_code == 303
-    assert _manifest(project)["input_bindings"]["load"]["source"] == "workflow"
+    assert _manifest(project).input_bindings["load"]["source"] == "workflow"
 
 
 def test_unbound_input_returns_400(project):

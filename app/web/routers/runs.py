@@ -127,24 +127,24 @@ async def run_status(project: str, run_id: str):
     counts, and a freshly-built mermaid graph. Lets the run page update progress
     in place (no full-page reload) so it stays clickable while running."""
     manifest = load_manifest(runs_dir(project) / run_id)
-    mstages = manifest.get("stages", [])
-    status_by_id = {s["stage_id"]: s.get("status", "") for s in mstages}
+    mstages = manifest.stages
+    status_by_id = {s.stage_id: s.status for s in mstages}
     mermaid = build_mermaid_graph(load_stages(project).stages, project, status_by_id=status_by_id)
 
     def _count(st: str) -> int:
-        return sum(1 for s in mstages if s.get("status") == st)
+        return sum(1 for s in mstages if s.status == st)
 
     return JSONResponse({
-        "status": manifest.get("status"),
-        "terminal": manifest.get("status") != "running",
-        "halted_at": manifest.get("halted_at"),
-        "finished_at": manifest.get("finished_at"),
+        "status": manifest.status,
+        "terminal": manifest.status != "running",
+        "halted_at": manifest.halted_at,
+        "finished_at": manifest.finished_at,
         "counts": {"ok": _count("ok"), "warn": _count("validation_warnings"),
                    "err": _count("error"), "total": len(mstages),
                    "done": _count("ok") + _count("validation_warnings"),
                    "running": _count("running"), "pending": _count("pending"),
                    "awaiting": _count("awaiting_review")},
-        "stages": [{"stage_id": s["stage_id"], "status": s.get("status")} for s in mstages],
+        "stages": [{"stage_id": s.stage_id, "status": s.status} for s in mstages],
         "mermaid": mermaid,
     })
 
@@ -154,7 +154,7 @@ async def run_detail(request: Request, project: str, run_id: str):
     run_dir = runs_dir(project) / run_id
     manifest = load_manifest(run_dir)
     stages = load_stages(project).stages
-    status_by_id = {s["stage_id"]: s.get("status", "") for s in manifest.get("stages", [])}
+    status_by_id = {s.stage_id: s.status for s in manifest.stages}
     mermaid = build_mermaid_graph(stages, project, status_by_id=status_by_id)
 
     return templates.TemplateResponse(
@@ -182,20 +182,18 @@ async def run_stage_partial(
     run_dir = runs_dir(project) / run_id
     manifest = load_manifest(run_dir)
     stage_record = next(
-        (s for s in manifest.get("stages", []) if s.get("stage_id") == stage_id),
+        (s for s in manifest.stages if s.stage_id == stage_id),
         None,
     )
     if stage_record is None:
         raise HTTPException(status_code=404, detail=f"No stage '{stage_id}' in run")
 
-    output_preview = load_output_preview(run_dir, stage_record.get("output_path"))
+    output_preview = load_output_preview(run_dir, stage_record.output_path)
 
     # Build input previews from upstream stages' outputs in this run.
     stages_static = load_stages(project).stages
     stage_def = find_stage(stages_static, stage_id)
-    output_by_id = {
-        s.get("stage_id"): s.get("output_path") for s in manifest.get("stages", [])
-    }
+    output_by_id = {s.stage_id: s.output_path for s in manifest.stages}
     input_previews: list[dict[str, Any]] = []
     if stage_def is not None:
         for input_id in stage_def.input_ids:
@@ -239,7 +237,7 @@ async def run_stage_rows(
     The page links to the uncapped CSV download."""
     run_dir = runs_dir(project) / run_id
     stage_record = manifest_stage(run_dir, stage_id)
-    table = load_output_table(run_dir, stage_record.get("output_path"))
+    table = load_output_table(run_dir, stage_record.output_path)
     return templates.TemplateResponse(
         request,
         "run_stage_rows.html",
@@ -248,7 +246,7 @@ async def run_stage_rows(
             "run_id": run_id,
             "stage_id": stage_id,
             "stage": stage_record,
-            "output_path": stage_record.get("output_path"),
+            "output_path": stage_record.output_path,
             **table,
         },
     )
@@ -259,7 +257,7 @@ async def run_stage_rows_csv(project: str, run_id: str, stage_id: str):
     """One stage's complete output as a CSV download (no row cap)."""
     run_dir = runs_dir(project) / run_id
     stage_record = manifest_stage(run_dir, stage_id)
-    df = read_output_df(run_dir, stage_record.get("output_path"))
+    df = read_output_df(run_dir, stage_record.output_path)
     filename = f"{project}__{run_id}__{stage_id}.csv"
     return Response(
         content=df.to_csv(index=False),
@@ -281,7 +279,7 @@ async def run_stage_lineage_panel(
     run_dir = runs_dir(project) / run_id
     manifest = load_manifest(run_dir)
     stage_record = next(
-        (s for s in manifest.get("stages", []) if s.get("stage_id") == stage_id),
+        (s for s in manifest.stages if s.stage_id == stage_id),
         None,
     )
     if stage_record is None:
@@ -302,7 +300,7 @@ async def run_stage_lineage_panel(
             "stage": stage_record,
             "stage_def": stage_def,
             "function_code": resolve_function_code(stage_def),
-            "preview": load_output_row(run_dir, stage_record.get("output_path"), row),
+            "preview": load_output_row(run_dir, stage_record.output_path, row),
             "scoped_row": row,
             "type_glyph": TYPE_GLYPH,
             "type_class": TYPE_CLASS,
@@ -403,9 +401,7 @@ async def run_stage_scratch_preview(
     if stage_def is None:
         raise HTTPException(status_code=404, detail=f"No stage '{stage_id}'")
 
-    output_by_id = {
-        s.get("stage_id"): s.get("output_path") for s in manifest.get("stages", [])
-    }
+    output_by_id = {s.stage_id: s.output_path for s in manifest.stages}
 
     try:
         result = run_stage_preview(

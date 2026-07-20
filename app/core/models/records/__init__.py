@@ -11,9 +11,12 @@ Split across modules:
   - workflow_run.py      — WorkflowRun, one run's manifest
   - agent_session.py     — AgentSession, one chat session's metadata + transcript
 
-Each owning service (app.services.versioning, app.services.run_store,
-app.core.agent.store) imports its record from the modules here rather than
-defining it, so callers of those services see no change.
+WorkflowVersion and AgentSession are wrapped by an owning service
+(app.services.versioning, app.core.agent.store respectively), which imports
+its record from the modules here rather than defining it, so callers of that
+service see no change. WorkflowRun has no such wrapper — it is its own
+storage API (`.save()` / `.load()` / `.list_for_project()`); callers import it
+directly from workflow_run.py.
 """
 from app.core.models.records.agent_session import AgentSession
 from app.core.models.records.workflow_run import WorkflowRun

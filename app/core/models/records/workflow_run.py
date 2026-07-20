@@ -1,10 +1,11 @@
 """WorkflowRun: one run's manifest — the runner's in-progress/finished record
 for one execution of a project's pinned workflow version.
 
-Defined here (not in app.services.run_store, which owns the save/load/list
-operations) so it sits alongside the other records; see
-app.core.models.records for why a record — unlike the pure contracts
-alongside app.core.models — may import PersistedModel."""
+`WorkflowRun` is its own storage API (Active-Record): `.save()` / `.load(id)`
+(both from PersistedModel) / `.list_for_project(project)` below — there is no
+separate service module wrapping it the way app.services.versioning wraps
+WorkflowVersion. See app.core.models.records for why a record — unlike the
+pure contracts alongside app.core.models — may import PersistedModel."""
 from __future__ import annotations
 
 from typing import Any, ClassVar
@@ -85,12 +86,12 @@ class StageRun(BaseModel):
 class WorkflowRun(PersistedModel):
     """One run's manifest, stored in the "workflow_run" collection. `id`
     (inherited from PersistedModel) is the composite `f"{project}/{run_id}"`;
-    `run_id` is the plain local id every caller of app.services.run_store's
-    functions works with. `stages` is the per-stage execution log — StageRun
-    records, rewritten whole on every stage completion by
-    `app.runtime.runner._execute_stages`. `project` is None for an ephemeral
-    subset/eval run (app.runtime.runner.run_subset): that manifest is keyed on
-    a Workflow + run_dir rather than a project tree, and is never saved."""
+    `run_id` is the plain local id every caller works with. `stages` is the
+    per-stage execution log — StageRun records, rewritten whole on every stage
+    completion by `app.runtime.runner._execute_stages`. `project` is None for
+    an ephemeral subset/eval run (app.runtime.runner.run_subset): that
+    manifest is keyed on a Workflow + run_dir rather than a project tree, and
+    is never saved."""
 
     collection: ClassVar[str] = "workflow_run"
 
@@ -115,3 +116,16 @@ class WorkflowRun(PersistedModel):
     queue_stats: dict[str, Any] = Field(default_factory=dict)
     dropped_columns: dict[str, list[str]] = Field(default_factory=dict)
     stages: list[StageRun] = Field(default_factory=list)
+
+    @classmethod
+    def list_for_project(cls, project: str) -> list[WorkflowRun]:
+        """Every run for `project`, NEWEST-FIRST (run ids are strftime
+        timestamps, so a reverse id sort is chronological — the same trick
+        app.services.versioning uses for version ids). A stored run document
+        that fails this model's contract raises ValidationError rather than
+        being silently dropped (mirrors app.evals.store.list_eval_runs: one
+        malformed document fails the whole listing instead of presenting the
+        store as healthy). No runs stored yet -> []."""
+        runs = cls.list(prefix=f"{project}/")
+        runs.sort(key=lambda r: r.run_id, reverse=True)
+        return runs

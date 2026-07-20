@@ -4,6 +4,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
+from app.core.models.records.workflow_run import StageRun
 from app.runtime.trace import _new_columns, _read_output, _row_dict
 from tests.test_trace_helpers import write_run
 
@@ -14,8 +15,12 @@ def test_read_output_returns_none_when_file_missing(tmp_path):
          "df": pd.DataFrame({"a": [1]})},
     ])
     (run_dir / "outputs" / "seeds.parquet").unlink()
-    assert _read_output(run_dir, {"output_path": "outputs/seeds.parquet"}) is None
-    assert _read_output(run_dir, {}) is None
+    stage = StageRun(stage_id="seeds", type="input_data", name="seeds",
+                      output_path="outputs/seeds.parquet")
+    assert _read_output(run_dir, stage) is None
+    # No output_path at all (a pending stub) is the same "nothing to read" case
+    # — a StageRun's output_path always defaults to None, never absent.
+    assert _read_output(run_dir, StageRun(stage_id="seeds", type="input_data", name="seeds")) is None
 
 
 def test_row_dict_stringifies_keys_and_delists_arrays():

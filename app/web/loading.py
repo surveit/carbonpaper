@@ -14,8 +14,8 @@ from fastapi import HTTPException
 
 from app.core.errors import DocumentNotFound, NoVersionToRunError
 from app.core.models import Stage
+from app.core.models.records.workflow_run import StageRun, WorkflowRun
 from app.runtime.runner import resolve_version_id
-from app.services import run_store
 from app.services.loader import CompiledStageFile, load_compiled_dir
 from app.services.versioning import list_versions, load_version_stages
 from app.services.workspace import load_schemas
@@ -52,7 +52,7 @@ def list_projects() -> list[dict[str, Any]]:
         has_workflow = n_stages > 0
         has_schemas = schemas_dir.is_dir() and any(schemas_dir.glob("*.json"))
         n_schemas = len(load_schemas(p)) if has_schemas else 0
-        n_runs = len(run_store.list_runs(p.name))
+        n_runs = len(WorkflowRun.list_for_project(p.name))
         has_document = (p / "document.md").is_file() or (p / "project.json").is_file()
         if not (has_workflow or has_schemas or has_document):
             continue
@@ -164,36 +164,21 @@ def runs_dir(project: str) -> Path:
     return EXAMPLES_DIR / project / "runs"
 
 
-def load_manifest(run_dir: Path) -> dict[str, Any]:
-    """A run's manifest as a dict, or 404 if the run doesn't exist. The
+def load_manifest(run_dir: Path) -> WorkflowRun:
+    """A run's WorkflowRun record, or 404 if the run doesn't exist. The
     manifest lives in the document store, not on disk; `project`/`run_id` are
     derived from `run_dir`'s layout (`<project_dir>/runs/<run_id>` — the
     stable convention every run dir follows)."""
     project = run_dir.parent.parent.name
     try:
-        return run_store.load_run(project, run_dir.name)
+        return WorkflowRun.load(f"{project}/{run_dir.name}")
     except DocumentNotFound:
         raise HTTPException(status_code=404, detail="Run not found") from None
 
 
-def list_runs(project: str) -> list[dict[str, Any]]:
-    """Every run for this project, newest-first, in the summary-row shape the
-    runs-index template reads. No runs stored yet -> []."""
-    entries = []
-    for r in run_store.list_runs(project):
-        entries.append({
-            "run_id": r.run_id,
-            "status": r.status,
-            "started_at": r.started_at,
-            "finished_at": r.finished_at,
-            # None for legacy (pre-versioning) runs; the template renders
-            # "(unversioned)" — a displayed truth, not a fabricated id.
-            "workflow_version": r.workflow_version,
-            "stages_total": len(r.stages),
-            "stages_ok": sum(1 for s in r.stages if s.status == "ok"),
-            "stages_error": sum(1 for s in r.stages if s.status == "error"),
-        })
-    return entries
+def list_runs(project: str) -> list[WorkflowRun]:
+    """Every run for this project, newest-first. No runs stored yet -> []."""
+    return WorkflowRun.list_for_project(project)
 
 
 # ─── Tabular output previews ─────────────────────────────────────────────────
@@ -208,13 +193,10 @@ def read_table(path: Path) -> pd.DataFrame:
     return pd.read_parquet(path) if path.suffix == ".parquet" else pd.read_csv(path)
 
 
-def manifest_stage(run_dir: Path, stage_id: str) -> dict[str, Any]:
-    """The manifest record for one stage of a run; 404 if run or stage missing."""
+def manifest_stage(run_dir: Path, stage_id: str) -> StageRun:
+    """The stage record for one stage of a run; 404 if run or stage missing."""
     manifest = load_manifest(run_dir)
-    stage_record = next(
-        (s for s in manifest.get("stages", []) if s.get("stage_id") == stage_id),
-        None,
-    )
+    stage_record = next((s for s in manifest.stages if s.stage_id == stage_id), None)
     if stage_record is None:
         raise HTTPException(status_code=404, detail=f"No stage '{stage_id}' in run")
     return stage_record

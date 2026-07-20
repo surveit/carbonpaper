@@ -19,9 +19,9 @@ import pytest
 
 from app.core.errors import NoVersionToRunError, SubsetRunError
 from app.core.models import Stage, Workflow
+from app.core.models.records.workflow_run import StageRun, WorkflowRun
 from app.runtime.runner import execute_run, resume_run, run_subset
 from app.runtime.stages import llm_transform as lt
-from app.services import run_store
 from app.services.loader import WorkflowLoadError
 from app.services.versioning import create_version, list_versions
 
@@ -62,9 +62,9 @@ def test_limit_truncates_and_is_recorded(tmp_path):
     out = pd.read_parquet(run_dir / "outputs" / "load.parquet")
     assert len(out) == 2
 
-    stored = run_store.load_run(tmp_path.name, manifest.run_id)
-    assert stored["run_id"] == manifest.run_id
-    assert stored["status"] == "ok"
+    stored = WorkflowRun.load(f"{tmp_path.name}/{manifest.run_id}")
+    assert stored.run_id == manifest.run_id
+    assert stored.status == "ok"
 
 
 def test_per_run_limit_and_offset_slice_and_are_recorded(tmp_path):
@@ -90,9 +90,9 @@ def test_per_run_limit_and_offset_slice_and_are_recorded(tmp_path):
     assert any(n.startswith("offset=1") for n in notes)
     assert any(n.startswith("limit=3") for n in notes)
 
-    stored = run_store.load_run(tmp_path.name, manifest.run_id)
-    assert stored["limit_overrides"] == {"load": 3}
-    assert stored["offset_overrides"] == {"load": 1}
+    stored = WorkflowRun.load(f"{tmp_path.name}/{manifest.run_id}")
+    assert stored.limit_overrides == {"load": 3}
+    assert stored.offset_overrides == {"load": 1}
 
 
 def test_per_run_override_for_unknown_stage_id_fails_loudly(tmp_path):
@@ -354,20 +354,18 @@ def test_resume_reapplies_run_bindings_for_a_pending_input_stage(tmp_path):
     run_id = "20260101T000000"
     run_dir = tmp_path / "runs" / run_id
     (run_dir / "outputs").mkdir(parents=True)
-    manifest = {
-        "run_id": run_id, "project": tmp_path.name, "workflow_version": version_id,
-        "status": "awaiting_review",
-        "run_bindings": {"load": {"path": str(bound_csv)}},
-        "input_bindings": {
+    manifest = WorkflowRun(
+        id=f"{tmp_path.name}/{run_id}",
+        run_id=run_id, project=tmp_path.name, workflow_version=version_id,
+        status="awaiting_review",
+        run_bindings={"load": {"path": str(bound_csv)}},
+        input_bindings={
             "load": {"path": str(bound_csv), "source": "run",
                      "sha256": "unused-in-this-test", "bytes": bound_csv.stat().st_size},
         },
-        "stages": [{"stage_id": "load", "type": "input_data", "name": "Load items",
-                    "status": "pending", "input_validation": [], "output_validation": None,
-                    "elapsed_ms": 0, "rows": 0, "error": None,
-                    "started_at": None, "finished_at": None}],
-    }
-    run_store.save_run(tmp_path.name, manifest)
+        stages=[StageRun(stage_id="load", type="input_data", name="Load items")],
+    )
+    manifest.save()
 
     result = resume_run(tmp_path, run_id, repo_root=tmp_path)
 

@@ -14,8 +14,8 @@ import pytest
 from fastapi.testclient import TestClient
 
 import app.web.loading as loading
+from app.core.models.records.workflow_run import StageRun, WorkflowRun
 from app.main import app
-from app.services import run_store
 
 PROJ = "testmeth"
 RUN = "run-0001"
@@ -34,22 +34,11 @@ def _write_run(
         df.to_parquet(run_dir / output_rel, index=False)
     else:
         df.to_csv(run_dir / output_rel, index=False)
-    manifest = {
-        "run_id": RUN,
-        "project": PROJ,
-        "status": "complete",
-        "stages": [
-            {
-                "stage_id": STAGE,
-                "type": "input_data",
-                "name": STAGE,
-                "status": "ok",
-                "rows": len(df),
-                "output_path": output_rel,
-            }
-        ],
-    }
-    run_store.save_run(PROJ, manifest)
+    WorkflowRun(
+        id=f"{PROJ}/{RUN}", run_id=RUN, project=PROJ, status="complete",
+        stages=[StageRun(stage_id=STAGE, type="input_data", name=STAGE,
+                          status="ok", rows=len(df), output_path=output_rel)],
+    ).save()
     return run_dir
 
 
@@ -159,8 +148,8 @@ def test_rows_404_when_output_file_missing(examples_dir, client):
 
 def test_rows_rejects_output_path_outside_run_dir(examples_dir, client):
     _write_run(examples_dir, _df(2))
-    manifest = run_store.load_run(PROJ, RUN)
-    manifest["stages"][0]["output_path"] = "../../../../etc/passwd"
-    run_store.save_run(PROJ, manifest)
+    manifest = WorkflowRun.load(f"{PROJ}/{RUN}")
+    manifest.stages[0].output_path = "../../../../etc/passwd"
+    manifest.save()
     r = client.get(f"/project/{PROJ}/runs/{RUN}/stage/{STAGE}/rows")
     assert r.status_code == 404

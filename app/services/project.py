@@ -31,7 +31,8 @@ from typing import Any
 from pydantic import BaseModel
 
 from app.core.errors import ProjectExistsError
-from app.services import node_review, run_store, stage_edit, versioning, workspace
+from app.core.models.records.workflow_run import WorkflowRun
+from app.services import node_review, stage_edit, versioning, workspace
 from app.services.loader import load_compiled_dir, stage_to_json
 from app.services.stage_edit import EditStageResult
 
@@ -172,14 +173,14 @@ def _load_compiled_stages(pdir: Path) -> list[dict[str, Any]]:
 def _runs_summary(pdir: Path) -> RunsSummary:
     """Summarise the project's runs into a RunsSummary (n / awaiting_review /
     latest_status), sourced from the document store's "workflow_run" collection
-    — mirrors loading.list_runs' source exactly (app.services.run_store), so n is
-    the count of real runs, never inflated. `awaiting_review` counts runs whose
-    status is 'awaiting_review' (halted at a human_review_queue) — the driver of
-    the "review the run" rung of the ladder. `latest_status` is the newest run's
-    status (run_store.list_runs is newest-first); None when there are no runs.
-    A stored run document that fails the WorkflowRun contract raises
-    ValidationError (run_store.list_runs) rather than being silently hidden."""
-    runs = run_store.list_runs(pdir.name)
+    — mirrors loading.list_runs' source exactly (WorkflowRun.list_for_project),
+    so n is the count of real runs, never inflated. `awaiting_review` counts runs
+    whose status is 'awaiting_review' (halted at a human_review_queue) — the
+    driver of the "review the run" rung of the ladder. `latest_status` is the
+    newest run's status (list_for_project is newest-first); None when there are
+    no runs. A stored run document that fails the WorkflowRun contract raises
+    ValidationError (list_for_project) rather than being silently hidden."""
+    runs = WorkflowRun.list_for_project(pdir.name)
     if not runs:
         return RunsSummary(n=0, awaiting_review=0, latest_status=None)
     awaiting = sum(1 for r in runs if r.status == "awaiting_review")

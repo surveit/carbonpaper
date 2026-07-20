@@ -79,9 +79,9 @@ def test_versioned_project_is_ready_to_run(examples_root):
 
 def test_project_with_a_run_reports_n_runs(examples_root):
     """n_runs is sourced from the store's "workflow_run" collection
-    (app.services.run_store), not a runs/*/manifest.json directory scan — a run
-    recorded there must be reflected on the card."""
-    from app.services.run_store import WorkflowRun
+    (WorkflowRun.list_for_project), not a runs/*/manifest.json directory scan —
+    a run recorded there must be reflected on the card."""
+    from app.core.models.records.workflow_run import WorkflowRun
 
     proj = _make_document_only_project(examples_root, name="ran")
     WorkflowRun(id=f"{proj.name}/20260101T000000", run_id="20260101T000000",
