@@ -207,7 +207,7 @@ def test_compile_workflow_confirm_overwrite_snapshots_then_writes(examples_root:
     assert len(versions) == 1
     assert versions[0].reviewer == "agent"
     # the snapshot preserves the PRE-regenerate (approved) spec
-    [snapshotted_stage] = load_version_stages(pdir, versions[0].id)
+    [snapshotted_stage] = load_version_stages(pdir, versions[0].version_id)
     assert loader.stage_to_spec_dict(snapshotted_stage) == loader.stage_to_spec_dict(Stage.model_validate(seeded))
 
 

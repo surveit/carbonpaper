@@ -149,7 +149,7 @@ def test_run_eval_none_version_id_resolves_to_newest_overall(project):
 
 def test_run_eval_raises_when_selected_version_does_not_exist(project):
     """An explicit version_id that names no stored version raises
-    FileNotFoundError (from load_version_meta), not EvalNotScorableError."""
+    FileNotFoundError (from load_version), not EvalNotScorableError."""
     repo_root, demo, config = project
     with pytest.raises(FileNotFoundError):
         run_eval(demo, config, repo_root, version_id="nonexistent")

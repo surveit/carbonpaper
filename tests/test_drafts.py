@@ -41,9 +41,9 @@ def test_create_draft_seeded_from_version(examples: Path) -> None:
     meta = versioning.create_version_from_stages(
         pdir, [_STAGE], message="v1", reviewer="local"
     )
-    draft = drafts.create_draft("demo", from_version=meta.id, examples_dir=examples)
+    draft = drafts.create_draft("demo", from_version=meta.version_id, examples_dir=examples)
     assert [s.id for s in draft.stages] == ["load"]
-    assert draft.parent_version == meta.id
+    assert draft.parent_version == meta.version_id
 
 
 # A valid Stage whose `inputs` name a stage id absent from the draft: Stage
@@ -136,16 +136,18 @@ def test_save_version_freezes_valid_draft_and_chains_parent(examples: Path) -> N
     drafts.set_draft_stage("demo", draft.id, json.dumps(_STAGE), examples_dir=examples)
     first = drafts.save_version("demo", draft.id, message="one", examples_dir=examples)
     assert first.ok is True
-    assert first.version is not None
-    assert first.version.published is False
-    assert first.version.parent_version is None
+    assert first.version_id is not None
+    [saved_first] = versioning.list_versions(pdir)
+    assert saved_first.published is False
+    assert saved_first.parent_version is None
     after = drafts.read_draft("demo", draft.id, examples_dir=examples)
-    assert after.parent_version == first.version.id
+    assert after.parent_version == first.version_id
 
     time.sleep(1)  # version ids are second-resolution timestamps
     second = drafts.save_version("demo", draft.id, message="two", examples_dir=examples)
-    assert second.version is not None
-    assert second.version.parent_version == first.version.id
+    assert second.version_id is not None
+    saved_second = versioning.load_version(pdir, second.version_id)
+    assert saved_second.parent_version == first.version_id
     assert len(versioning.list_versions(pdir)) == 2
 
 
@@ -160,5 +162,5 @@ def test_save_version_refuses_incomplete_workflow(examples: Path) -> None:
     result = drafts.save_version("demo", draft.id, message="bad", examples_dir=examples)
     assert result.ok is False
     assert result.issues
-    assert result.version is None
+    assert result.version_id is None
     assert versioning.list_versions(pdir) == []
