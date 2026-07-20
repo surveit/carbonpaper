@@ -16,7 +16,7 @@ from pydantic import BaseModel
 
 from app.compiler.stage_tests_prompt import STAGE_TESTS_SYSTEM_PROMPT
 from app.core.agent.agent import Agent
-from app.core.agent.store import open_session_store
+from app.core.agent.store import SessionStore, open_session_store
 from app.core.agent.turns import default_turn_manager
 from app.core.models import Stage
 from app.core.models.stages.stage_tests import (
@@ -40,6 +40,9 @@ def start_stage_test_derivation_agent(
     is a background derivation the project chat index does not list — there is no one to
     reply to it. When the turn finishes, `on_answer` is called with the submitted suite
     (a `StageTestSuite` bound to `stage`'s type/inputs) — or None if none was submitted.
+    If `on_answer` raises (e.g. the finisher's patch is refused), the error is appended to
+    the session's persisted transcript as an assistant message BEFORE it propagates — so
+    the failure is visible on session reload, not only to a client watching the live turn.
     Must be called from the server event loop (it starts a turn there)."""
     store = open_session_store()
     session_id = store.create(
@@ -57,7 +60,11 @@ def start_stage_test_derivation_agent(
     store.set_pending_user(session_id, agent.task)
 
     async def _on_done() -> None:
-        on_answer(agent.answer)
+        try:
+            on_answer(agent.answer)
+        except Exception as exc:
+            _persist_derivation_failure(store, session_id, exc)
+            raise
 
     default_turn_manager().start(
         engine=agent.build_engine(),
@@ -67,6 +74,19 @@ def start_stage_test_derivation_agent(
         on_done=_on_done,
     )
     return session_id
+
+
+def _persist_derivation_failure(store: SessionStore, session_id: str, error: Exception) -> None:
+    """Append a synthetic assistant message reporting `error` to `session_id`'s stored
+    transcript, so the failure survives past the in-memory turn buffer: a client that
+    was not watching the live turn still sees it on reload. Runs before the caller
+    re-raises `error`."""
+    messages = list(store.load(session_id)["messages"])
+    messages.append({
+        "role": "assistant",
+        "parts": [{"type": "text", "text": f"derivation failed: {error}"}],
+    })
+    store.save_messages(session_id, messages)
 
 
 def build_stage_test_deriver(
