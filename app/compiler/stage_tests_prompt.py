@@ -13,8 +13,10 @@ Derive a test suite that covers, at minimum:
 - for every nullable input column: a case where it is null;
 - a case at each numeric or date boundary the methodology names (thresholds,
   cutoffs, rounding rules) — one just below, one at, one just above;
-- where the schema permits duplicates or ties: a case exercising them;
-- for frame-level transforms: an empty-input case.
+- for frame-level transforms only (a row-level transform sees one independent
+  row at a time, so cross-row cases are neither expressible nor meaningful for
+  it): a case exercising any duplicates or ties the schema permits, and an
+  empty-input case.
 
 Each test's name states the behavior it pins, in snake_case (e.g.
 withdrawn_bill_maps_to_null). Each description says WHY the case exists —
