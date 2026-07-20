@@ -208,6 +208,28 @@ async def run_detail(request: Request, project: str, run_id: str):
     status_by_id = {s["stage_id"]: s.get("status", "") for s in manifest.get("stages", [])}
     mermaid = build_mermaid_graph(stages, project, status_by_id=status_by_id)
 
+    # Only surface artifact links once the run has finished AND a publish stage
+    # completed — link to the files it actually wrote (preferring a browsable
+    # index.html) rather than a hardcoded guess.
+    artifact_links = []
+    if manifest.get("status") not in ("running", None):
+        has_ok_publish = any(
+            s.get("type") == "publish" and s.get("status") in ("ok", "validation_warnings")
+            for s in manifest.get("stages", [])
+        )
+        artifacts_root = run_dir / "artifacts"
+        if has_ok_publish and artifacts_root.is_dir():
+            files = sorted(f for f in artifacts_root.rglob("*") if f.is_file())
+            index = next((f for f in files if f.name == "index.html"), None)
+            if index is not None:
+                files = [index]
+            for f in files:
+                rel = f.relative_to(artifacts_root).as_posix()
+                artifact_links.append({
+                    "name": f.name,
+                    "url": f"/project/{project}/runs/{run_id}/artifact/{rel}",
+                })
+
     return templates.TemplateResponse(
         request,
         "run_detail.html",
@@ -216,6 +238,7 @@ async def run_detail(request: Request, project: str, run_id: str):
             "run_id": run_id,
             "manifest": manifest,
             "mermaid": mermaid,
+            "artifact_links": artifact_links,
             "type_glyph": TYPE_GLYPH,
             "type_class": TYPE_CLASS,
         },
