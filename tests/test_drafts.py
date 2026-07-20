@@ -1,8 +1,10 @@
 """The draft lifecycle: disposable scratch documents in the store's "draft"
-collection, word-triplet ids, invalid intermediate states allowed, loss
-acceptable by design. Mirrors test_versioning.py's tmp_path-as-project-dir
-convention (project scoping is by directory name, not existence on disk —
-drafts are store-only and never touch the filesystem)."""
+collection, word-triplet ids, loss acceptable by design. A stored stage is
+always individually valid (a malformed one is rejected at set_draft_stage,
+never stored); a workflow-level incompleteness — a dangling input, a
+duplicate id, a cycle — stays allowed mid-edit. Mirrors test_versioning.py's
+tmp_path-as-project-dir convention (project scoping is by directory name, not
+existence on disk — drafts are store-only and never touch the filesystem)."""
 from __future__ import annotations
 
 import json
@@ -40,20 +42,28 @@ def test_create_draft_seeded_from_version(examples: Path) -> None:
         pdir, [_STAGE], message="v1", reviewer="local"
     )
     draft = drafts.create_draft("demo", from_version=meta.id, examples_dir=examples)
-    assert [s["id"] for s in draft.stages] == ["load"]
+    assert [s.id for s in draft.stages] == ["load"]
     assert draft.parent_version == meta.id
 
 
-def test_set_stage_upserts_and_tolerates_invalid_state(examples: Path) -> None:
+# A valid Stage whose `inputs` name a stage id absent from the draft: Stage
+# validation is per-stage only (see app.core.models.workflow.check_inputs_resolve
+# for the cross-stage check), so this parses and stores fine even though the
+# input never resolves.
+_DANGLING_INPUT_STAGE = dict(
+    _STAGE, id="later", type="python_row_function",
+    inputs=[{"id": "missing"}],
+    function={"kind": "inline", "code": "def transform(row): return row"},
+)
+del _DANGLING_INPUT_STAGE["connector"]
+
+
+def test_set_stage_upserts_and_tolerates_dangling_input(examples: Path) -> None:
     draft = drafts.create_draft("demo", examples_dir=examples)
-    dangling = dict(_STAGE, id="later", type="python_row_function",
-                    inputs=[{"id": "missing"}],
-                    function={"kind": "inline", "code": "def transform(row): return row"})
-    del dangling["connector"]
-    result = drafts.set_draft_stage("demo", draft.id, json.dumps(dangling),
+    result = drafts.set_draft_stage("demo", draft.id, json.dumps(_DANGLING_INPUT_STAGE),
                                     examples_dir=examples)
-    assert result.ok is True            # stored despite dangling input
-    assert result.issues                 # ...but the problems are named
+    assert result.ok is True            # stored despite the dangling input
+    assert result.issues                 # ...but the problem is named
     replaced = drafts.set_draft_stage("demo", draft.id, json.dumps(_STAGE),
                                       examples_dir=examples)
     assert set(replaced.stage_ids) == {"later", "load"}
@@ -68,7 +78,7 @@ def test_set_stage_replaces_existing_id_in_place(examples: Path) -> None:
     assert result.stage_ids == ["load"]
     after = drafts.read_draft("demo", draft.id, examples_dir=examples)
     assert len(after.stages) == 1
-    assert after.stages[0]["name"] == "Load rows (renamed)"
+    assert after.stages[0].name == "Load rows (renamed)"
 
 
 def test_set_stage_rejects_non_object_json(examples: Path) -> None:
@@ -76,6 +86,32 @@ def test_set_stage_rejects_non_object_json(examples: Path) -> None:
     with pytest.raises(ValueError):
         drafts.set_draft_stage("demo", draft.id, '["not a stage"]',
                                examples_dir=examples)
+
+
+def test_set_stage_rejects_malformed_stage_missing_field(examples: Path) -> None:
+    """A stage missing required fields (here: `name` and the `connector`
+    handle block a type=input_data stage needs) is the agent's error — reject
+    it back to the agent, don't store it."""
+    draft = drafts.create_draft("demo", examples_dir=examples)
+    malformed = {"id": "load", "type": "input_data"}
+    with pytest.raises(ValueError):
+        drafts.set_draft_stage("demo", draft.id, json.dumps(malformed),
+                               examples_dir=examples)
+    after = drafts.read_draft("demo", draft.id, examples_dir=examples)
+    assert after.stages == []
+
+
+def test_set_stage_rejects_unknown_connector_kind(examples: Path) -> None:
+    """`ConnectorKind` only enumerates "file" — an unrecognised kind (e.g. a
+    dropped `computed_static`) fails Stage validation and is rejected, not
+    stored with issues."""
+    draft = drafts.create_draft("demo", examples_dir=examples)
+    malformed = dict(_STAGE, connector={"kind": "computed_static"})
+    with pytest.raises(ValueError):
+        drafts.set_draft_stage("demo", draft.id, json.dumps(malformed),
+                               examples_dir=examples)
+    after = drafts.read_draft("demo", draft.id, examples_dir=examples)
+    assert after.stages == []
 
 
 def test_remove_stage(examples: Path) -> None:
@@ -113,11 +149,14 @@ def test_save_version_freezes_valid_draft_and_chains_parent(examples: Path) -> N
     assert len(versioning.list_versions(pdir)) == 2
 
 
-def test_save_version_refuses_invalid_draft(examples: Path) -> None:
+def test_save_version_refuses_incomplete_workflow(examples: Path) -> None:
+    """A dangling input is a valid Stage (per-stage validation doesn't check
+    cross-stage input resolution) so it stores fine, but save_version still
+    refuses to freeze a workflow-level problem into a version."""
     pdir = examples / "demo"
     draft = drafts.create_draft("demo", examples_dir=examples)
-    dangling = {"id": "load", "type": "input_data"}  # missing required fields
-    drafts.set_draft_stage("demo", draft.id, json.dumps(dangling), examples_dir=examples)
+    drafts.set_draft_stage("demo", draft.id, json.dumps(_DANGLING_INPUT_STAGE),
+                           examples_dir=examples)
     result = drafts.save_version("demo", draft.id, message="bad", examples_dir=examples)
     assert result.ok is False
     assert result.issues

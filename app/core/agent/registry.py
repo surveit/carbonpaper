@@ -114,6 +114,17 @@ def _as_content(value: object) -> dict[str, Any]:
     if isinstance(value, str):
         text = value
     else:
-        dumpable = value.model_dump(mode="json") if isinstance(value, BaseModel) else value
+        # by_alias + exclude_none so a model carrying Stage(s) (e.g. a draft view)
+        # comes back to the agent in the SAME canonical spec form it writes stages
+        # in — aliased (`schema`, not `table_schema`) and without the unset-optional
+        # nulls, matching loader.stage_to_spec_dict. Additive for every other
+        # model-returning tool: an alias-free model (VersionMeta, DraftEdit,
+        # SaveResult, ...) dumps equivalently (a dropped null re-parses as its
+        # default).
+        dumpable = (
+            value.model_dump(mode="json", by_alias=True, exclude_none=True)
+            if isinstance(value, BaseModel)
+            else value
+        )
         text = json.dumps(dumpable, default=str, indent=2)
     return {"content": [{"type": "text", "text": text}]}

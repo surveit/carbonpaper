@@ -94,23 +94,31 @@ def make_editing_tools(ctx: EditingContext) -> list[Callable[..., Any]]:
 
     def create_draft(project_id: str, from_version: str = "") -> DraftView:
         """Start a DRAFT: a disposable scratch copy of workflow stages you edit
-        freely (invalid intermediate states are fine) and later freeze with
-        save_version. Pass from_version to seed it from an existing version's
-        stages; omit it to start empty. Returns the draft, whose `id` (a word
-        triplet like brisk-otter-lamp) you pass to every draft tool. Drafts are
+        freely and later freeze with save_version. Each stage you set must be
+        individually valid, but the WORKFLOW may stay incomplete mid-build (e.g.
+        a stage whose input references one you have not added yet) until you
+        save. Pass from_version to seed it from an existing version's stages;
+        omit it to start empty. Returns the draft, whose `id` (a word triplet
+        like brisk-otter-lamp) you pass to every draft tool. Drafts are
         expendable — if one is lost, start a new one."""
         return drafts.create_draft(project_id, from_version=from_version or None)
 
     def read_draft(project_id: str, draft_id: str) -> DraftDetail:
-        """The draft's current stages plus `issues` — every schema/graph problem
-        it would fail on if saved now ([] means save_version will succeed)."""
+        """The draft's current stages plus `issues` — every cross-stage graph
+        problem (dangling input, duplicate id, cycle) it would fail on if saved
+        now ([] means save_version will succeed). Every stored stage is already
+        individually valid, so `issues` never covers a single stage's own shape."""
         return drafts.read_draft(project_id, draft_id)
 
     def set_draft_stage(project_id: str, draft_id: str, stage_json: str) -> DraftEdit:
         """Add or replace ONE stage in the draft (matched by the stage's `id`).
-        `stage_json` is the complete stage as a JSON object string. The draft
-        accepts invalid intermediate states — the returned `issues` list what
-        still blocks saving."""
+        `stage_json` is the complete stage as a JSON object string. A MALFORMED
+        stage — invalid JSON, not an object, or failing the stage schema
+        (unknown type, missing required field, wrong shape, ...) — is REJECTED:
+        nothing is written, and you get the validation errors back to fix and
+        retry. A VALID stage whose `inputs` reference a stage id you have not
+        added yet IS stored — that's the workflow still being built, not a bad
+        stage — and shows up in the returned `issues`."""
         return drafts.set_draft_stage(project_id, draft_id, stage_json)
 
     def remove_draft_stage(project_id: str, draft_id: str, stage_id: str) -> DraftEdit:
@@ -216,7 +224,8 @@ TOOL_SCHEMAS: dict[str, ToolInputSchema] = {
             str,
             "The complete stage as a JSON object (encoded as a string), including "
             "its id. An existing stage with the same id is replaced; otherwise "
-            "the stage is added.",
+            "the stage is added. A malformed stage (bad JSON, wrong shape, unknown "
+            "type) is rejected outright and nothing is written.",
         ],
     },
     "remove_draft_stage": {
