@@ -15,9 +15,18 @@
 {% if config.description %}<p class="lede">{{ config.description }}</p>{% endif %}
 
 {% if has_eval_dataset and report.ok %}
+{% if versions %}
 <form action="/project/{{ project }}/evals/{{ config.id }}/run" method="post" style="display:inline;">
+  <select name="version_id">
+    {% for v in versions %}
+    <option value="{{ v.id }}">{{ v.id }}{% if not v.published %} · unpublished{% endif %}</option>
+    {% endfor %}
+  </select>
   <button type="submit" class="btn primary">▶ Run eval</button>
 </form>
+{% else %}
+<p class="muted">This project has no workflow version yet — an eval needs one to run against.</p>
+{% endif %}
 {% endif %}
 
 <h2>Pathway</h2>

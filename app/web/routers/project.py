@@ -13,6 +13,9 @@ A project is one directory under examples/<name>/ framed by a left-sidebar shell
     GET  /project/{project}/document             — Document (read-only source)
     GET  /project/{project}/data_model           — Data model + ER + the approval GATE
     GET  /project/{project}/workflow             — Workflow (belief graph + node review)
+    GET  /project/{project}/workflow/versions    — the version list, newest-first
+    GET  /project/{project}/workflow/version/{id}— one immutable version, read-only
+    GET  /project/{project}/versions             — 307 redirect to /workflow/versions
 
   Create + data-model gate
     GET  /project/new                            — the paste-doc create form
@@ -55,7 +58,7 @@ from app.core.models import (
     validate_schema_library,
 )
 from app.services import data_model as data_model_service
-from app.services import generation, node_review, project
+from app.services import generation, node_review, project, versioning
 from app.services.loader import stage_to_spec_dict
 from app.web.config import EXAMPLES_DIR, templates
 from app.web.diagrams import (
@@ -343,9 +346,10 @@ async def project_data_model(request: Request, project_name: str):
 @router.get("/project/{project_name}/workflow", response_class=HTMLResponse)
 async def project_workflow(request: Request, project_name: str):
     """WORKFLOW — the typed-stage pipeline: the mermaid graph coloured by belief, the
-    per-node review split-view, the versions list, and the Build / Run / Create-version
-    controls. Always navigable (the data-model→workflow nav lock is disabled pending a
-    rethink); renders an empty state when no workflow is authored yet.
+    per-node review split-view, and the Build / Run / Create-version controls. The
+    version list lives on its own /workflow/versions tab, linked from here. Always
+    navigable (the data-model→workflow nav lock is disabled pending a rethink);
+    renders an empty state when no workflow is authored yet.
 
     Belief colouring uses the SAME canonical spec (stage_to_spec_dict) the node-review
     decide route and the /review/status poller use, so the FIRST paint agrees with the
@@ -394,6 +398,56 @@ async def project_workflow(request: Request, project_name: str):
             "coverage": coverage,
             "type_class": TYPE_CLASS,
             "type_glyph": TYPE_GLYPH,
+        },
+    )
+
+
+@router.get("/project/{project_name}/workflow/versions", response_class=HTMLResponse)
+async def project_workflow_versions(request: Request, project_name: str):
+    """VERSIONS — the version history, newest-first. Each version links to its
+    read-only detail; published state shows read-only here (publishing is an
+    approval act that happens on the detail page, after looking at the version).
+    The mutable working copy (edit + review + create-version) lives at /workflow; a
+    project with no versions yet shows the right CTA (generate a workflow, or
+    snapshot the working copy you already have)."""
+    pdir = _project_dir(project_name)
+    versions = versioning.list_versions(pdir)
+    return templates.TemplateResponse(
+        request,
+        "versions.html",
+        {"state": shell_state(pdir), "section": "versions", "versions": versions},
+    )
+
+
+@router.get("/project/{project_name}/versions")
+async def versions_redirect(project_name: str):
+    """The versions list moved to /workflow/versions; keep the old path working."""
+    return RedirectResponse(
+        url=f"/project/{project_name}/workflow/versions", status_code=307
+    )
+
+
+@router.get("/project/{project_name}/workflow/version/{version_id}",
+            response_class=HTMLResponse)
+async def project_workflow_version(request: Request, project_name: str, version_id: str):
+    """A single workflow VERSION, read-only: its frozen stage graph plus the
+    version's metadata, publish state, and the actions that target it (publish,
+    run this version). A version is immutable, so nothing here edits — belief
+    review lives on the working-copy editor. 404 if the version does not exist."""
+    pdir = _project_dir(project_name)
+    try:
+        stages = versioning.load_version_stages(pdir, version_id)
+        meta = versioning.load_version_meta(pdir, version_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return templates.TemplateResponse(
+        request,
+        "version_detail.html",
+        {
+            "state": shell_state(pdir),
+            "section": "versions",
+            "version": meta,
+            "mermaid": build_mermaid_graph(stages, project_name),
         },
     )
 

@@ -1,3 +1,5 @@
+from datetime import datetime, timedelta
+
 import pytest
 
 from app.core.errors import DocumentNotFound
@@ -144,6 +146,41 @@ def test_validate_id_accepts_safe_ids(id_):
 def test_validate_id_rejects_unsafe_ids(id_):
     with pytest.raises(ValueError):
         validate_id(id_)
+
+
+def test_fresh_construct_stamps_created_and_updated_to_now(configured):
+    before = datetime.now()
+    w = _Widget(id="a", name="hi")
+    after = datetime.now()
+    created = datetime.fromisoformat(w.created_at)
+    updated = datetime.fromisoformat(w.updated_at)
+    assert w.created_at == w.updated_at
+    assert before - timedelta(seconds=1) <= created <= after + timedelta(seconds=1)
+    assert before - timedelta(seconds=1) <= updated <= after + timedelta(seconds=1)
+
+
+def test_save_advances_updated_at_but_not_created_at(configured):
+    # A known past created_at survives a save, while updated_at re-stamps to now
+    # on every call — proving the base class, not the caller, owns the stamping.
+    past = "2020-01-01T00:00:00"
+    w = _Widget(id="a", name="hi", created_at=past, updated_at=past)
+    w.save()
+    assert w.created_at == past
+    assert w.updated_at != past
+    reloaded = _Widget.load("a")
+    assert reloaded.created_at == past
+    assert reloaded.updated_at != past
+
+
+def test_load_of_a_record_without_timestamps_fills_defaults_via_factory(configured):
+    # An OLD stored record written before created_at/updated_at existed carries
+    # no such keys. extra="forbid" must still accept it on load: absent field +
+    # default_factory means the factory supplies a value rather than raising.
+    from app.core.persistence import get_store
+    get_store().write("widget", "legacy", {"id": "legacy", "name": "old"})
+    w = _Widget.load("legacy")
+    assert w.created_at
+    assert w.updated_at
 
 
 def test_persistedmodel_config_mirrors_base():

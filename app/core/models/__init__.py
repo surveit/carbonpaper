@@ -10,6 +10,7 @@ Split across modules:
 
 Import from `app.core.models` (this aggregator) for the stable public surface.
 """
+from app.core.models.coverage import Coverage
 from app.core.models.schema import (
     Column,
     SourceRef,
@@ -173,6 +174,7 @@ NODE_TYPES: dict[str, dict[str, _Any]] = {
 NODE_TYPE_NAMES: set[str] = set(NODE_TYPES)
 
 __all__ = [
+    "Coverage",
     "StageType", "ConnectorKind", "FileFormat", "AggFormula", "JoinType",
     "FunctionKind", "PublishFormat", "is_valid_column_type",
     "SourceRef", "Column", "TableSchema", "Connector", "LLMConfig",

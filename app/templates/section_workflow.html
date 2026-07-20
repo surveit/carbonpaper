@@ -159,7 +159,7 @@
     {# The version list lives on its own Versions tab (a child of Workflow); the
        "Create version" button above snapshots the working copy into a new one. #}
     <p class="wf-versions-link muted">Snapshots of this workflow live on the
-      <a href="/project/{{ state.name }}/versions">Versions</a> tab.</p>
+      <a href="/project/{{ state.name }}/workflow/versions">Versions</a> tab.</p>
     {% endif %}
   </div>{# /.wf-stack #}
 
@@ -290,7 +290,7 @@
           return;
         }
         // Land on the Versions tab so the reviewer sees the snapshot they just made.
-        window.location.href = `/project/${encodeURIComponent(METHODOLOGY)}/versions`;
+        window.location.href = `/project/${encodeURIComponent(METHODOLOGY)}/workflow/versions`;
       } finally {
         createBtn.disabled = false;
         createBtn.textContent = original;

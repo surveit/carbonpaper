@@ -18,7 +18,7 @@ number or unsourced claim defeats the purpose. Two rules recur in the code:
 
 A project dir also holds `code/`, `data/`, `runs/<id>/` (outputs + `manifest.json`),
 and `decisions/` — runtime data, not source. Versions are documents in the store
-(the `version` collection), not a project subdir.
+(the `workflow_version` collection), not a project subdir.
 
 ## The three features
 | Feature | Code | Status |

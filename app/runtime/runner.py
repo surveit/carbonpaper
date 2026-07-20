@@ -96,32 +96,40 @@ def _reject_duplicate_input_rows(df: pd.DataFrame, input_id: str, stage_id: str)
 
 def resolve_version_id(project_dir: Path, version_id: str | None) -> str:
     """Resolve the workflow version a run will be pinned to. Every run MUST target a
-    real, existing version — we never blank it, never fabricate one, never
+    real, PUBLISHED version — we never blank it, never fabricate one, never
     silently read the working copy, and never CREATE one as a run side effect.
     A run is read-only with respect to versions.
 
-    - If `version_id` is given, it must name an existing version; we fail loudly
-      otherwise rather than redirecting to some other snapshot.
-    - If `version_id` is None, pin to the latest existing version.
-    - If no version exists yet, raise NoVersionToRunError. A run will not
-      immortalise the working copy as a version (that is what let an invalid
-      working copy poison "the latest" and fail every subsequent run).
+    - If `version_id` is given, it must name an existing, published version; we
+      fail loudly otherwise rather than redirecting to some other snapshot or
+      silently running an unreviewed draft.
+    - If `version_id` is None, pin to the newest PUBLISHED version (an
+      unpublished version more recent than it is skipped).
+    - If no version exists, or none is published, raise NoVersionToRunError. A
+      run will not immortalise the working copy as a version (that is what let
+      an invalid working copy poison "the latest" and fail every subsequent
+      run), and a run will not treat an unreviewed draft as runnable.
     """
     if version_id is not None:
         # Validate the requested version exists (load_version_meta fails loudly
         # if its version.json is missing) — a caller asking for a specific id
         # must not be silently redirected to some other snapshot.
-        versioning.load_version_meta(project_dir, version_id)
+        meta = versioning.load_version_meta(project_dir, version_id)
+        if not meta.published:
+            raise NoVersionToRunError(
+                f"Version '{version_id}' of '{project_dir.name}' is not published. "
+                f"A run pins a published version — publish it first."
+            )
         return version_id
 
-    existing = versioning.list_versions(project_dir)  # newest-first
-    if existing:
-        return existing[0]["id"]
+    for meta in versioning.list_versions(project_dir):  # newest-first
+        if meta.published:
+            return meta.id
 
     raise NoVersionToRunError(
-        f"No version to run for project '{project_dir.name}'. A run "
-        f"targets an existing version and never creates one — create a version "
-        f"first."
+        f"No published version to run for '{project_dir.name}'. A run "
+        f"targets a published version and never creates one — save a version "
+        f"and publish it first."
     )
 
 
@@ -224,7 +232,7 @@ def prepare_run(
     immutable snapshot (versioning.load_version_stages), never from the live
     `compiled/` working copy, so working-copy edits can never affect this run.
     `version_id` resolution is documented on resolve_version_id (None -> the
-    latest existing version; a version-less project raises
+    newest PUBLISHED version; a project with no published version raises
     NoVersionToRunError); the resolved id is recorded in the manifest as
     `workflow_version`.
 
@@ -249,9 +257,10 @@ def prepare_run(
     bound, or the bound file absent — fails loudly (MissingInputBindingError,
     aggregating every unready stage).
 
-    Raises NoVersionToRunError (no version exists) or WorkflowLoadError
-    (from the version snapshot's strict load) before the run dir is created, so
-    a run with no version — or an invalid workflow — never leaves a run behind.
+    Raises NoVersionToRunError (no version exists, or none is published) or
+    WorkflowLoadError (from the version snapshot's strict load) before the run
+    dir is created, so a run with no published version — or an invalid
+    workflow — never leaves a run behind.
     The same holds for a binding/preflight failure: it is raised before the
     run dir is created."""
     workflow_version = resolve_version_id(project_dir, version_id)
@@ -329,7 +338,7 @@ def execute_run(
     bindings: Mapping[str, Mapping[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Run the workflow once (synchronous). Returns the manifest dict. `version_id`
-    pins the run to a workflow version (None -> latest existing; none exists ->
+    pins the run to a workflow version (None -> newest published; none published ->
     NoVersionToRunError); see prepare_run / resolve_version_id.
     `limits`/`offsets` are per-run row slicing overrides; `bindings` is the
     per-run connector-param override; see prepare_run."""

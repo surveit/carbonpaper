@@ -26,6 +26,7 @@ from app.core.models import (
 from app.core.models.schema import TableSchema
 from app.core.persistence import get_store
 from app.evals.store import save_eval_config, save_eval_run
+from app.services.versioning import WorkflowVersion
 
 client = TestClient(app)
 
@@ -137,3 +138,30 @@ def test_eval_run_page_renders_a_seeded_run():
 
 def test_eval_run_page_404_when_run_missing():
     assert client.get("/project/demo/evals/label_check/runs/ghost").status_code == 404
+
+
+def test_eval_detail_shows_no_versions_note_when_project_has_no_version():
+    """No stored version -> the page can't offer a run form (nothing to select),
+    so it shows a disabled note instead."""
+    r = client.get("/project/demo/evals/label_check")
+    assert r.status_code == 200
+    assert 'name="version_id"' not in r.text
+    assert "no workflow version" in r.text.lower()
+
+
+def test_eval_detail_offers_a_version_select_newest_first_marking_unpublished():
+    """With versions present, the run form offers a <select> populated
+    newest-first, marking each unpublished option."""
+    WorkflowVersion(id="demo/v1", version_id="v1", created_at="2026-07-10T00:00:00",
+                    message="m", reviewer="r", published=True).save()
+    WorkflowVersion(id="demo/v2-draft", version_id="v2-draft", created_at="2026-07-11T00:00:00",
+                    message="m", reviewer="agent", published=False).save()
+
+    r = client.get("/project/demo/evals/label_check")
+    assert r.status_code == 200
+    assert 'name="version_id"' in r.text
+    v2_pos = r.text.index('value="v2-draft"')
+    v1_pos = r.text.index('value="v1"')
+    assert v2_pos < v1_pos          # newest (v2-draft) listed first
+    assert "v2-draft · unpublished" in r.text
+    assert "v1 · unpublished" not in r.text

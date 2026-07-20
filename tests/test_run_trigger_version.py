@@ -11,7 +11,7 @@ from fastapi.testclient import TestClient
 
 import app.web.routers.runs as runs_router
 from app.main import app
-from app.services.versioning import create_version, list_versions
+from app.services.versioning import create_version_from_disk, list_versions, publish_version
 
 client = TestClient(app)
 
@@ -29,11 +29,14 @@ def project_two_versions(tmp_path, monkeypatch):
              "connector": {"kind": "file",
                            "params": {"path": str(data), "format": "csv"}}}
     (proj / "compiled" / "01_load.json").write_text(json.dumps(stage), encoding="utf-8")
-    create_version(proj, message="v1", reviewer="test")
+    v1 = create_version_from_disk(proj, message="v1", reviewer="test")
     # version ids are second-resolution timestamps; without this the two versions
-    # can land in the same wall-clock second and collide (FileExistsError).
+    # can land in the same wall-clock second and collide.
     time.sleep(1.1)
-    create_version(proj, message="v2", reviewer="test")
+    v2 = create_version_from_disk(proj, message="v2", reviewer="test")
+    # runs pin PUBLISHED versions, so publish both to isolate version SELECTION.
+    publish_version(proj, v1.id, reviewer="test")
+    publish_version(proj, v2.id, reviewer="test")
     monkeypatch.setattr(runs_router, "EXAMPLES_DIR", tmp_path)
     monkeypatch.setattr(runs_router, "run_in_background",
                         lambda target, *args: target(*args))
@@ -48,7 +51,7 @@ def _manifest(proj):
 def test_posted_version_id_pins_the_run(project_two_versions):
     """version_id from the form is the version the run executes — even when it is
     not the latest one."""
-    older = list_versions(project_two_versions)[-1]["id"]  # list is newest-first
+    older = list_versions(project_two_versions)[-1].id  # list is newest-first
     resp = client.post("/project/demo/run",
                        data={"version_id": older}, follow_redirects=False)
     assert resp.status_code == 303
@@ -57,7 +60,7 @@ def test_posted_version_id_pins_the_run(project_two_versions):
 
 def test_omitted_version_id_defaults_to_latest(project_two_versions):
     """No version_id in the form → the run pins to the latest version."""
-    latest = list_versions(project_two_versions)[0]["id"]
+    latest = list_versions(project_two_versions)[0].id
     resp = client.post("/project/demo/run", data={}, follow_redirects=False)
     assert resp.status_code == 303
     assert _manifest(project_two_versions)["workflow_version"] == latest
@@ -68,7 +71,7 @@ def test_runs_page_renders_version_picker_latest_selected(project_two_versions):
     latest pre-selected — so a run defaults to latest but any version is one click
     away, in the same form that collects the input paths."""
     versions = list_versions(project_two_versions)  # newest-first
-    latest, older = versions[0]["id"], versions[-1]["id"]
+    latest, older = versions[0].id, versions[-1].id
     resp = client.get("/project/demo/runs")
     assert resp.status_code == 200
     assert 'name="version_id"' in resp.text
@@ -97,10 +100,13 @@ def project_versions_diff_paths(tmp_path, monkeypatch):
             encoding="utf-8")
 
     _author(a)
-    create_version(proj, message="v1 reads a.csv", reviewer="test")
+    v1 = create_version_from_disk(proj, message="v1 reads a.csv", reviewer="test")
     time.sleep(1.1)
     _author(b)
-    create_version(proj, message="v2 reads b.csv", reviewer="test")
+    v2 = create_version_from_disk(proj, message="v2 reads b.csv", reviewer="test")
+    # runs pin PUBLISHED versions.
+    publish_version(proj, v1.id, reviewer="test")
+    publish_version(proj, v2.id, reviewer="test")
     monkeypatch.setattr(runs_router, "EXAMPLES_DIR", tmp_path)
     monkeypatch.setattr(runs_router, "run_in_background",
                         lambda target, *args: target(*args))
@@ -114,7 +120,7 @@ def test_binding_provenance_uses_the_selected_versions_authored_path(
     binding — provenance is 'workflow'. It must be judged against that version's
     authored path, not the latest version's (which authors a different file)."""
     proj = project_versions_diff_paths
-    older = list_versions(proj)[-1]["id"]  # v1, authored a.csv
+    older = list_versions(proj)[-1].id  # v1, authored a.csv
     resp = client.post("/project/demo/run",
                        data={"version_id": older, "binding__load": str(proj / "a.csv")},
                        follow_redirects=False)
@@ -130,7 +136,7 @@ def test_run_inputs_endpoint_returns_the_selected_versions_inputs(
     version reports its own authored path."""
     proj = project_versions_diff_paths
     versions = list_versions(proj)  # newest-first: v2 (b.csv), v1 (a.csv)
-    latest, older = versions[0]["id"], versions[-1]["id"]
+    latest, older = versions[0].id, versions[-1].id
 
     latest_inputs = client.get(f"/project/demo/run-inputs?version_id={latest}").json()
     assert latest_inputs == [{"stage_id": "load", "name": "Load",

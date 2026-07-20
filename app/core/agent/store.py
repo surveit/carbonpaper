@@ -13,7 +13,6 @@ mid-turn is out of scope.
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
 from typing import Any, ClassVar
 
 from pydantic import Field
@@ -26,7 +25,6 @@ class AgentSession(PersistedModel):
     transcript. `id` (inherited from PersistedModel) is the session id."""
 
     collection: ClassVar[str] = "agent_session"
-    created_at: str
     title: str = "New chat"
     agent_id: str | None = None
     context: dict[str, Any] = Field(default_factory=dict)
@@ -41,10 +39,6 @@ def open_session_store() -> SessionStore:
     and headless writers (e.g. generation) use this so their sessions land in the
     same document store and list together."""
     return SessionStore()
-
-
-def _now() -> str:
-    return datetime.now().isoformat(timespec="seconds")
 
 
 class SessionStore:
@@ -65,7 +59,6 @@ class SessionStore:
         sid = uuid.uuid4().hex[:12]
         AgentSession(
             id=sid,
-            created_at=_now(),
             title=title or "New chat",
             agent_id=agent_id,
             context=context or {},

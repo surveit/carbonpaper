@@ -17,7 +17,8 @@ from app.core.errors import MissingInputBindingError
 from app.core.models import Stage
 from app.runtime.runner import apply_run_bindings, validate_stages_ready, execute_run
 from app.runtime.stages.input_data import read_input_data
-from app.services.versioning import create_version
+from app.services import versioning
+from app.services.versioning import create_version_from_disk
 
 
 def _input_stage(stage_id: str, path: str | None) -> Stage:
@@ -136,7 +137,8 @@ def _make_bound_project(root, filename="a.csv"):
              "connector": {"kind": "file",
                            "params": {"path": str(data), "format": "csv"}}}
     (root / "compiled" / "01_load.json").write_text(json.dumps(stage), encoding="utf-8")
-    create_version(root, message="seed", reviewer="test")
+    vid = create_version_from_disk(root, message="seed", reviewer="test").id
+    versioning.publish_version(root, vid, reviewer="human")
     return data
 
 
@@ -171,7 +173,8 @@ def test_unbound_input_leaves_no_run_dir(tmp_path):
     stage = {"id": "load", "name": "Load", "type": "input_data",
              "connector": {"kind": "file", "params": {}}}
     (tmp_path / "compiled" / "01_load.json").write_text(json.dumps(stage), encoding="utf-8")
-    create_version(tmp_path, message="seed", reviewer="test")
+    vid = create_version_from_disk(tmp_path, message="seed", reviewer="test").id
+    versioning.publish_version(tmp_path, vid, reviewer="human")
 
     with pytest.raises(MissingInputBindingError, match="load"):
         execute_run(tmp_path, repo_root=tmp_path)

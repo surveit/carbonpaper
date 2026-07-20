@@ -31,6 +31,7 @@ from typing import Any
 from pydantic import BaseModel
 
 from app.core.errors import ProjectExistsError
+from app.core.models import Coverage
 from app.services import node_review, stage_edit, versioning, workspace
 from app.services.loader import load_compiled_dir, stage_to_json
 from app.services.stage_edit import EditStageResult
@@ -39,20 +40,8 @@ from app.services.stage_edit import EditStageResult
 # ─── Status models ────────────────────────────────────────────────────────────
 # The typed shapes project_meta / project_state return. Every field is read off
 # disk truthfully (see project_state); an unknown fact is None / 0 / a "none" state,
-# never a fabricated placeholder.
-
-
-class Coverage(BaseModel):
-    """Approval coverage over a workflow's compiled stages (mirrors
-    node_review.coverage_for): how many stages sit in each belief state, the total,
-    and the approved percentage (over total; 0.0 when there are no stages)."""
-
-    approved: int
-    rejected: int
-    edited_stale: int
-    unreviewed: int
-    total: int
-    approved_pct: float
+# never a fabricated placeholder. Coverage itself lives in app.core.models — the
+# shared shape versioning.WorkflowVersion also embeds.
 
 
 class DataModelStatus(BaseModel):

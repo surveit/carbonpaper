@@ -33,6 +33,7 @@ from app.evals.store import (
     load_eval_config,
     load_eval_run,
 )
+from app.services.versioning import list_versions
 from app.web.config import EXAMPLES_DIR, REPO_ROOT, templates
 from app.web.loading import load_stages_or_empty, read_table
 from app.web.project_view import shell_state
@@ -97,7 +98,9 @@ def _render_eval_detail(
 ) -> HTMLResponse:
     """Assemble the detail page: the override→target pathway, whether the config
     still fits the workflow (compatibility), a read-only preview of the eval
-    dataset if one is attached, the scoring rules, and the run history."""
+    dataset if one is attached, the scoring rules, the run history, and the
+    project's versions (newest-first) so the run form can offer a selection —
+    an eval scores whichever version the user picks, published or not."""
     stages = load_stages_or_empty(project).stages
     report = validate_eval_compatibility(config, stages)
     runs, runs_error = _list_eval_runs_safely(project_dir, config.id)
@@ -117,6 +120,7 @@ def _render_eval_detail(
             "executing": executing,
             "runs": runs,
             "runs_error": runs_error,
+            "versions": list_versions(project_dir),
             **_read_eval_dataset_preview(config),
         },
     )
@@ -173,16 +177,24 @@ async def eval_run_detail(request: Request, project: str, eval_id: str, run_id: 
 # ─── Trigger a run ───────────────────────────────────────────────────────────
 
 @router.post("/project/{project}/evals/{eval_id}/run")
-async def trigger_eval_run(project: str, eval_id: str):
-    """Score the eval against the latest workflow version and redirect to the run.
-    Synchronous: an eval that can't be run (incompatible, no dataset, or no version)
-    surfaces as a 400 with the reason rather than a recorded non-result."""
+async def trigger_eval_run(request: Request, project: str, eval_id: str):
+    """Score the eval against the SELECTED workflow version (the `version_id`
+    form field; newest overall if omitted) and redirect to the run. Synchronous:
+    an eval that can't be run (incompatible, no dataset, or no version at all)
+    surfaces as a 400 with the reason; a selected version_id naming no stored
+    version surfaces as a 404 -- neither records a non-result."""
     project_dir = _resolve_project_dir(project)
     config = _load_config_or_404(project_dir, eval_id)
+    form = await request.form()
+    version_id = form.get("version_id") or None
+    if version_id is not None and not isinstance(version_id, str):
+        raise HTTPException(status_code=400, detail="version_id must be a string")
     try:
-        run = run_eval(project_dir, config, REPO_ROOT)
+        run = run_eval(project_dir, config, REPO_ROOT, version_id=version_id)
     except EvalNotScorableError as exc:
         return JSONResponse({"detail": str(exc)}, status_code=400)
+    except FileNotFoundError as exc:
+        return JSONResponse({"detail": str(exc)}, status_code=404)
     return RedirectResponse(
         url=f"/project/{project}/evals/{eval_id}/runs/{run.id}", status_code=303)
 
