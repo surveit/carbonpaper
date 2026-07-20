@@ -10,9 +10,10 @@ import traceback
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Request, Response
+from fastapi import APIRouter, File, Form, HTTPException, Request, Response, UploadFile
 from fastapi.datastructures import FormData
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from starlette.concurrency import run_in_threadpool
 
 from app.core.errors import MissingInputBindingError, NoVersionToRunError, RowOutOfRange, StageNotInRun
 from app.services.loader import WorkflowLoadError, load_workflow
@@ -27,6 +28,7 @@ from app.web.loading import (
     build_llm_example,
     find_stage,
     list_file_inputs,
+    save_uploaded_input,
     list_runs,
     load_manifest,
     load_output_preview,
@@ -146,6 +148,29 @@ async def run_inputs(project: str, version_id: str | None = None):
     if not project_dir.is_dir():
         raise HTTPException(status_code=404, detail=f"No project '{project}'")
     return JSONResponse(list_file_inputs(project_dir, version_id))
+
+
+@router.post("/project/{project}/upload-input")
+async def upload_input(
+    project: str,
+    stage_id: str = Form(...),
+    file: UploadFile = File(...),
+):
+    """Save a browser-uploaded run-input file and return its absolute path as
+    JSON ({ok:true, path}). The run form's Browse… uses the browser's own native
+    file dialog (works on every OS) — but a browser hands over only bytes, never
+    a path, so we save those bytes server-side (uploads/<stage_id>/<name>) and
+    hand back the saved copy's path for the field. The disk copy runs in a
+    threadpool so a large upload doesn't stall the event loop."""
+    project_dir = EXAMPLES_DIR / project
+    if not project_dir.is_dir():
+        raise HTTPException(status_code=404, detail=f"No project '{project}'")
+    if not file.filename:
+        return JSONResponse({"ok": False, "error": "no file provided"}, status_code=400)
+    path = await run_in_threadpool(
+        save_uploaded_input, project_dir, stage_id, file.filename, file.file
+    )
+    return JSONResponse({"ok": True, "path": str(path)})
 
 
 @router.get("/project/{project}/runs", response_class=HTMLResponse)

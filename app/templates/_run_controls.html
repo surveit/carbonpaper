@@ -2,8 +2,12 @@
   RUN CONTROLS — one form that configures AND launches a run:
     · a version_id <select>: every version newest-first, the latest pre-selected
       (so a run defaults to latest, any version is one click away)
-    · one path field per file-kind input (binding__<stage_id>), prefilled with the
-      SELECTED version's workflow-authored path
+    · one read-only path field per file-kind input (binding__<stage_id>), showing
+      the SELECTED version's workflow-authored path — each with a Browse… button
+      that (via run_controls.js) opens the browser's native file dialog and uploads
+      the chosen file to POST /project/<name>/upload-input, which saves it and puts
+      the saved copy's absolute path in the field. The field is display-only; Browse
+      is the only way to change it (a workflow-authored path is still read in place).
     · ▶ Run workflow
 
   Version and inputs belong together: different versions can author different input
@@ -28,11 +32,15 @@
   </label>
   <div class="run-inputs">
     {% for fi in file_inputs %}
-    <label style="display:block; margin:0.35rem 0;">
+    <label class="run-input-row">
       <code>{{ fi.stage_id }}</code> — data file
-      <input type="text" name="binding__{{ fi.stage_id }}" value="{{ fi.path }}"
-             placeholder="absolute path to the data file"
-             size="70" {% if not fi.path %}required{% endif %}>
+      <span class="path-field">
+        <input type="text" name="binding__{{ fi.stage_id }}" value="{{ fi.path }}"
+               placeholder="no file chosen — click Browse…" readonly
+               size="70" {% if not fi.path %}required{% endif %}>
+        <input type="file" class="file-input" hidden>
+        <button type="button" class="btn browse-btn">Browse…</button>
+      </span>
     </label>
     {% endfor %}
   </div>

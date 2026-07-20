@@ -1,10 +1,21 @@
-// Keep the run form's input-path fields in sync with the chosen version.
+// Keep the run form's input-path fields in sync with the chosen version, and
+// let each path field's "Browse…" button pick a file with the browser's own
+// native dialog (works on every OS).
 //
-// A workflow version can author different input stages / paths than another, so
-// when the version <select> changes we refetch that version's inputs
-// (GET /project/<name>/run-inputs?version_id=) and rebuild the path fields. This
-// is what makes the run form "one page": the version you pick and the input
-// paths you set always describe the same version.
+// Two jobs, one file because they share the same fields:
+//
+//  1. Version sync — a workflow version can author different input stages / paths
+//     than another, so when the version <select> changes we refetch that version's
+//     inputs (GET /project/<name>/run-inputs?version_id=) and rebuild the path
+//     fields. That is what makes the run form "one page": the version you pick and
+//     the input paths you set always describe the same version.
+//
+//  2. File picker — a run reads its input files off the server's disk by absolute
+//     path, but a browser <input type=file> hands over only bytes, never a path
+//     (every OS hides it). So Browse… opens the native file dialog, then uploads
+//     the chosen file to POST /project/<name>/upload-input, which saves it and
+//     returns the saved copy's absolute path — that goes into the (read-only)
+//     field. Browse is the only way to set it; the field itself isn't typeable.
 (function () {
   function escapeHtml(value) {
     return String(value).replace(/[&<>"']/g, function (c) {
@@ -13,15 +24,20 @@
     });
   }
 
+  // Must mirror _run_controls.html's field markup exactly, so a field rebuilt
+  // here on version change behaves identically to a server-rendered one.
   function fieldHtml(fileInput) {
     var required = fileInput.path ? "" : " required";
     return (
-      '<label style="display:block; margin:0.35rem 0;">' +
+      '<label class="run-input-row">' +
       "<code>" + escapeHtml(fileInput.stage_id) + "</code> — data file " +
+      '<span class="path-field">' +
       '<input type="text" name="binding__' + escapeHtml(fileInput.stage_id) +
-      '" value="' + escapeHtml(fileInput.path || "") + '" ' +
-      'placeholder="absolute path to the data file" size="70"' + required + ">" +
-      "</label>"
+      '" value="' + escapeHtml(fileInput.path || "") + '" readonly ' +
+      'placeholder="no file chosen — click Browse…" size="70"' + required + ">" +
+      '<input type="file" class="file-input" hidden>' +
+      '<button type="button" class="btn browse-btn">Browse…</button>' +
+      "</span></label>"
     );
   }
 
@@ -44,8 +60,65 @@
     }
   }
 
+  // ─── Upload a browser-picked file, then fill the path field ─────────────
+  function stageIdOf(input) {
+    var name = input.getAttribute("name") || "";
+    return name.indexOf("binding__") === 0 ? name.slice("binding__".length) : "";
+  }
+
+  async function uploadFile(file, input, project, btn) {
+    var label = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = "Uploading…";
+    try {
+      var fd = new FormData();
+      fd.append("stage_id", stageIdOf(input));
+      fd.append("file", file);
+      var resp = await fetch(
+        "/project/" + encodeURIComponent(project) + "/upload-input",
+        { method: "POST", body: fd }
+      );
+      var data = {};
+      try { data = await resp.json(); } catch (e) { /* leave data empty */ }
+      if (resp.ok && data.ok && data.path) {
+        input.value = data.path;
+        input.dispatchEvent(new Event("change", { bubbles: true }));
+      } else {
+        alert("Upload failed: " + (data.error || ("HTTP " + resp.status)) +
+              "\nPlease try again.");
+      }
+    } catch (e) {
+      alert("Upload failed: couldn't reach the server. Please try again.");
+    } finally {
+      btn.disabled = false;
+      btn.textContent = label;
+    }
+  }
+
+  // ─── Wire forms ─────────────────────────────────────────────────────────
   document.querySelectorAll("form.run-controls").forEach(function (form) {
+    var project = form.getAttribute("data-project");
     var select = form.querySelector('select[name="version_id"]');
     if (select) select.addEventListener("change", function () { refreshInputs(form); });
+
+    // Delegated so buttons/inputs rebuilt by refreshInputs() stay wired.
+    form.addEventListener("click", function (e) {
+      var btn = e.target.closest(".browse-btn");
+      if (!btn || !form.contains(btn)) return;
+      e.preventDefault();
+      var row = btn.closest(".run-input-row");
+      var picker = row && row.querySelector("input.file-input");
+      if (picker) picker.click();  // open the browser's native file dialog
+    });
+
+    form.addEventListener("change", function (e) {
+      var picker = e.target.closest("input.file-input");
+      if (!picker || !form.contains(picker) || !picker.files.length) return;
+      var row = picker.closest(".run-input-row");
+      var input = row && row.querySelector('input[name^="binding__"]');
+      var btn = row && row.querySelector(".browse-btn");
+      if (input && btn) uploadFile(picker.files[0], input, project, btn);
+      picker.value = "";  // let the same file be re-picked later
+    });
   });
 })();
