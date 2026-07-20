@@ -115,10 +115,11 @@ def test_run_eval_raises_when_incompatible(project):
         run_eval(demo, config, repo_root)
 
 
-def test_run_eval_raises_when_explicit_version_is_unpublished(project):
-    """An eval run pins a published version, mirroring the main runner's gate
-    (app.runtime.runner.resolve_version_id) — a named version that exists but
-    was minted as an unpublished agent draft is not runnable, even by id."""
+def test_run_eval_scores_an_explicit_unpublished_version(project):
+    """An eval is a validation tool: it must be able to score ANY version the
+    user selects, published or not, to decide whether to publish it. A named
+    version that exists but is an unpublished agent draft is runnable — the
+    recorded workflow_version is exactly the one selected."""
     repo_root, demo, config = project
     WorkflowVersion(
         id="demo/v2-draft", version_id="v2-draft", created_at="2026-07-11T00:00:00",
@@ -126,13 +127,15 @@ def test_run_eval_raises_when_explicit_version_is_unpublished(project):
         stages=[Stage.model_validate(_load(repo_root)), Stage.model_validate(_CLASSIFY)],
         published=False,
     ).save()
-    with pytest.raises(EvalNotScorableError, match="not published"):
-        run_eval(demo, config, repo_root, version_id="v2-draft")
+    run = run_eval(demo, config, repo_root, version_id="v2-draft")
+    assert run.status == "scored"
+    assert run.workflow_version == "v2-draft"
 
 
-def test_run_eval_none_version_id_skips_unpublished_draft(project):
-    """None resolves to the newest PUBLISHED version, skipping a newer
-    unpublished draft — same policy as the main runner."""
+def test_run_eval_none_version_id_resolves_to_newest_overall(project):
+    """None resolves to the newest version overall (any published state) —
+    an unpublished draft that is newer than the published version is picked,
+    since selecting the version to eval is now explicit, not gated."""
     repo_root, demo, config = project
     WorkflowVersion(
         id="demo/v2-draft", version_id="v2-draft", created_at="2026-07-11T00:00:00",
@@ -141,25 +144,27 @@ def test_run_eval_none_version_id_skips_unpublished_draft(project):
         published=False,
     ).save()
     run = run_eval(demo, config, repo_root)
-    assert run.workflow_version == "v1"
+    assert run.workflow_version == "v2-draft"
 
 
-def test_run_eval_raises_when_only_unpublished_version_exists(tmp_path):
-    """A project whose only version is an unpublished agent draft has no version
-    an eval can run against — same failure as a project with no version at all."""
+def test_run_eval_raises_when_selected_version_does_not_exist(project):
+    """An explicit version_id that names no stored version raises
+    FileNotFoundError (from load_version_meta), not EvalNotScorableError."""
+    repo_root, demo, config = project
+    with pytest.raises(FileNotFoundError):
+        run_eval(demo, config, repo_root, version_id="nonexistent")
+
+
+def test_run_eval_raises_when_no_versions_exist_at_all(tmp_path):
+    """A project with no stored version at all has nothing an eval can run
+    against — that's the only case None-resolution still raises."""
     demo = tmp_path / "demo2"
     demo.mkdir()
-    WorkflowVersion(
-        id="demo2/v1", version_id="v1", created_at="2026-07-10T00:00:00",
-        message="agent draft", reviewer="agent",
-        stages=[Stage.model_validate(_load(tmp_path)), Stage.model_validate(_CLASSIFY)],
-        published=False,
-    ).save()
     config = EvalConfig(
         id="label_check", project="demo2", name="Label check",
         override_stage="load", target_stage="classify",
         table=None, expected_outputs=[ExpectedOutput(output_column="label", metric="exact")])
-    with pytest.raises(EvalNotScorableError, match="no published workflow version"):
+    with pytest.raises(EvalNotScorableError, match="no workflow version"):
         run_eval(demo, config, tmp_path)
 
 
@@ -185,3 +190,39 @@ def test_trigger_route_400s_when_not_runnable(project, monkeypatch):
     r = TestClient(app).post("/project/demo/evals/label_check/run", follow_redirects=False)
     assert r.status_code == 400
     assert "no dataset" in r.json()["detail"]
+
+
+def test_trigger_route_scores_an_explicitly_selected_unpublished_version(project, monkeypatch):
+    """Selecting an unpublished version by id in the run form scores THAT
+    version — the route no longer auto-pins to a published latest."""
+    repo_root, demo, config = project
+    save_eval_config(demo, config)
+    WorkflowVersion(
+        id="demo/v2-draft", version_id="v2-draft", created_at="2026-07-11T00:00:00",
+        message="agent draft", reviewer="agent",
+        stages=[Stage.model_validate(_load(repo_root)), Stage.model_validate(_CLASSIFY)],
+        published=False,
+    ).save()
+    monkeypatch.setattr(evals_router, "EXAMPLES_DIR", repo_root)
+    monkeypatch.setattr(evals_router, "REPO_ROOT", repo_root)
+
+    r = TestClient(app).post(
+        "/project/demo/evals/label_check/run",
+        data={"version_id": "v2-draft"}, follow_redirects=False)
+    assert r.status_code == 303
+    run_id = r.headers["location"].rsplit("/", 1)[-1]
+    assert load_eval_run(demo, run_id).workflow_version == "v2-draft"
+
+
+def test_trigger_route_404s_when_selected_version_does_not_exist(project, monkeypatch):
+    """A version_id that names no stored version is a client error, not a
+    500 -- the route reports 404 with the reason."""
+    repo_root, demo, config = project
+    save_eval_config(demo, config)
+    monkeypatch.setattr(evals_router, "EXAMPLES_DIR", repo_root)
+    monkeypatch.setattr(evals_router, "REPO_ROOT", repo_root)
+
+    r = TestClient(app).post(
+        "/project/demo/evals/label_check/run",
+        data={"version_id": "nonexistent"}, follow_redirects=False)
+    assert r.status_code == 404

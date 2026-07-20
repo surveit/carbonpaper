@@ -36,10 +36,13 @@ from app.services.versioning import load_version_meta, load_version_stages
 def run_eval(
     project_dir: Path, config: EvalConfig, repo_root: Path, *, version_id: str | None = None,
 ) -> EvalRun:
-    """Run `config` against a workflow version (the newest PUBLISHED version if
-    `version_id` is None; see `_resolve_version`) and return the saved EvalRun.
-    Raises EvalNotScorableError if the eval can't be run at all (incompatible,
-    no dataset attached, or the resolved version isn't published)."""
+    """Run `config` against the SELECTED workflow version (the newest version
+    overall if `version_id` is None; see `_resolve_version`) and return the
+    saved EvalRun. An eval may score an unpublished version -- that is how a
+    proposal is validated before publishing, unlike a production run, which
+    pins published versions only. Raises EvalNotScorableError if the eval
+    can't be run at all (incompatible, no dataset attached, or the project has
+    no workflow version at all)."""
     version = _resolve_version(project_dir, version_id)
     workflow = Workflow(stages=load_version_stages(project_dir, version))
     report = validate_eval_compatibility(config, workflow.stages)
@@ -153,25 +156,20 @@ def _write_result_table(run_dir: Path, per_row: pd.DataFrame) -> Path:
 # ── Small helpers ────────────────────────────────────────────────────────────
 
 def _resolve_version(project_dir: Path, version_id: str | None) -> str:
-    """Resolve the workflow version an eval run will be pinned to, mirroring
-    app.runtime.runner.resolve_version_id's gate: an eval run pins a PUBLISHED
-    version only, never an agent-minted draft that merely happens to be
-    newest. An explicit `version_id` must name an existing, published version
-    (a missing version id still raises FileNotFoundError, from
-    load_version_meta); None resolves to the newest published version, or
-    raises if none is published."""
+    """Resolve the workflow version an eval run will score: the version the
+    user SELECTED, published or not. An eval is a validation tool -- you eval
+    a version to decide whether to publish it -- so unlike a production run it
+    is never gated on publication. An explicit `version_id` must name an
+    existing version (a missing version id raises FileNotFoundError, from
+    load_version_meta) and is returned as-is; None resolves to the newest
+    version overall, or raises if the project has no version at all."""
     if version_id is not None:
-        meta = load_version_meta(project_dir, version_id)
-        if not meta["published"]:
-            raise EvalNotScorableError(
-                f"version '{version_id}' of '{project_dir.name}' is not published; "
-                "an eval run pins a published version — publish it first."
-            )
+        load_version_meta(project_dir, version_id)  # raises FileNotFoundError if missing
         return version_id
     version = latest_version_id(project_dir)
     if version is None:
         raise EvalNotScorableError(
-            "project has no published workflow version to run the eval against")
+            "project has no workflow version to run the eval against")
     return version
 
 
