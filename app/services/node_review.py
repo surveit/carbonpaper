@@ -48,6 +48,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from enum import Enum
 from pathlib import Path
 from typing import Any
 
@@ -58,6 +59,16 @@ import pandas as pd
 # this set is the invariant — extend it whenever a loader gains a new injected
 # key, or cosmetic reloads will break approvals.
 CANONICAL_IGNORE_KEYS: set[str] = {"_filename", "_order", "_error"}
+
+
+class NodeApprovalState(str, Enum):
+    """The `state` value returned by `approval_state_for` / `data_model_state`
+    (and aggregated by `coverage_for`) — see their docstrings for what each
+    member means."""
+    approved = "approved"
+    rejected = "rejected"
+    unreviewed = "unreviewed"
+    edited_stale = "edited_stale"
 
 # Columns of the node-decision store, in order. Mirrors the row-decisions store
 # in app/main.py (content_hash + decision + reviewer + reviewed_at) plus the
@@ -338,6 +349,7 @@ def data_model_state(
 
 __all__ = [
     "CANONICAL_IGNORE_KEYS",
+    "NodeApprovalState",
     "NODE_DECISION_COLUMNS",
     "SCHEMA_LIBRARY_STAGE_ID",
     "canonical_node_spec",
