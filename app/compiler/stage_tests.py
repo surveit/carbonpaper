@@ -18,8 +18,8 @@ from app.compiler.stage_tests_prompt import STAGE_TESTS_SYSTEM_PROMPT
 from app.core.agent.agent import Agent
 from app.core.agent.store import SessionStore, open_session_store
 from app.core.agent.turns import default_turn_manager
-from app.core.models import Stage
-from app.core.models.stages.stage_tests import (
+from app.models import Stage
+from app.models.stages.stage_tests import (
     STAGE_TEST_TYPES,
     build_stage_tests_model,
 )

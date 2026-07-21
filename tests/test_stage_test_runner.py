@@ -1,5 +1,5 @@
 """run_stage_tests: execution through the real handlers + canonical comparison."""
-from app.core.models import Stage
+from app.models import Stage
 from app.runtime.stage_tests import find_failing_stage_tests, run_stage_tests
 
 _IN_SCHEMA = {"columns": [{"name": "amount", "type": "float", "nullable": False}]}

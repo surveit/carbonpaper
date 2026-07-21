@@ -29,7 +29,7 @@ from pydantic import ValidationError as PydanticValidationError
 
 from app.core.errors import MissingInputBindingError, NoVersionToRunError, SubsetRunError
 from app.core.frames import PARQUET_SUFFIX
-from app.core.models import Connector, Stage, StageType, Workflow
+from app.models import Connector, Stage, StageType, Workflow
 from app.core.run_status import RunStatus, StageStatus
 from app.services.errors import WorkflowLoadError
 from app.services import versioning

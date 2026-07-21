@@ -24,7 +24,7 @@ from pathlib import Path
 from pydantic import ValidationError
 
 from app.core.errors import DocumentNotFound
-from app.core.models import EvalConfig, EvalRun
+from app.models import EvalConfig, EvalRun
 from app.core.persistence import get_store
 from app.core.utils import format_errors
 from app.evals.compatibility import CompatibilityReport

@@ -19,7 +19,7 @@ from app.compiler.data_model_prompt import DATA_MODEL_SYSTEM_PROMPT
 from app.core.agent.agent import Agent
 from app.core.agent.store import open_session_store
 from app.core.agent.turns import default_turn_manager
-from app.core.models.named_schemas import SchemaLibrary
+from app.models.named_schemas import SchemaLibrary
 
 
 def start_data_model_generation_agent(

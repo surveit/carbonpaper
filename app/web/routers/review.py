@@ -10,7 +10,7 @@ import pandas as pd
 from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 
-from app.core.models import RowReviewDecision
+from app.models import RowReviewDecision
 from app.runtime.llm import render_prompt
 from app.web.config import templates
 from app.web.loading import (

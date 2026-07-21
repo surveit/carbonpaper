@@ -20,7 +20,7 @@ from typing import Any, Literal, Optional, Sequence
 
 from pydantic import BaseModel, ConfigDict, Field, create_model
 
-from app.core.models.schema import (
+from app.models.schema import (
     Column,
     JSON_COLUMN_TYPE,
     LIST_JSON_COLUMN_TYPE,

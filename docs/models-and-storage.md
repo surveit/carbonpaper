@@ -1,6 +1,6 @@
 # Data model (Pydantic) + storage convention
 
-## Data model — `app/core/models/` — IMPLEMENTED
+## Data model — `app/models/` — IMPLEMENTED
 
 The workflow contract is a single Pydantic module: `Stage`, `Workflow`,
 and the handle blocks (`Connector`, `LLMConfig`, `PythonFunction`, `JoinConfig`,

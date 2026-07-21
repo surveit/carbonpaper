@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from typing import Any, Callable
 
-from app.core.models.stage import Stage, StageType
+from app.models.stage import Stage, StageType
 
 from ..errors import HaltForReview
 from ..options import DEFAULT_PARALLEL

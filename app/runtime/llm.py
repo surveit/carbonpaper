@@ -24,7 +24,7 @@ from pydantic import BaseModel
 from app.core.agent.agent import Agent
 from app.core.errors import LLMError
 from app.core.llm_sdk import run_sync
-from app.core.models import LLMConfig
+from app.models import LLMConfig
 
 from .options import (
     CLAUDE_BIN,

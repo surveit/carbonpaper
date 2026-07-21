@@ -7,7 +7,7 @@ from typing import Any
 
 import pandas as pd
 
-from app.core.models import Stage
+from app.models import Stage
 
 from .python_functions import _load_python_function
 

@@ -4,7 +4,7 @@ prompt.py — the COMPILER's system prompt + prompt builder.
 The compiler's whole job is one LLM call: hand the model an UNSTRUCTURED account
 of a research process (a captured agent/tool transcript, a set of notes, or plain
 prose) and ask it to emit a structured workflow that validates against
-`app/core/models`. This module owns *how we ask* — kept separate from
+`app/models`. This module owns *how we ask* — kept separate from
 `app/compiler.py` (which owns the mechanism: call, parse, validate, persist).
 
 `_node_type_contract()` renders the contract straight from `models.NODE_TYPES`
@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import json
 
-from app.core import models
+from app import models
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -27,7 +27,7 @@ SYSTEM_PROMPT = (
     "research process — it may be a captured agent/tool transcript, a set of "
     "notes, or plain prose describing how an investigation was carried out — and "
     "you DISTILL it into a reusable, structured workflow of typed stages "
-    "targeting app/core/models.\n\n"
+    "targeting app/models.\n\n"
     "You have NO tools and NO web access: work only from the text the user gives "
     "you. Put the LLM (llm_transform) only at the FEW genuine judgment points; "
     "everything mechanical (building queries, downloading, parsing, joining, "
@@ -130,7 +130,7 @@ the FEW genuine judgment points and everything else as deterministic mechanism.
 
 Subject / out-name: "{name}"
 
-# The output contract (target: app/core/models)
+# The output contract (target: app/models)
 Emit a workflow as a list of STAGE dicts. Each stage validates against this
 contract:
 

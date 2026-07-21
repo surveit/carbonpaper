@@ -20,7 +20,7 @@ import app.services.generation as generation
 from app.core.agent.store import SessionStore
 from app.core.agent.turns import TurnManager
 from app.core.errors import GenerationError
-from app.core.models.stages.stage_tests import build_stage_tests_model
+from app.models.stages.stage_tests import build_stage_tests_model
 
 _IN_SCHEMA = {"columns": [{"name": "amount", "type": "float", "nullable": False}]}
 _OUT_SCHEMA = {"columns": [

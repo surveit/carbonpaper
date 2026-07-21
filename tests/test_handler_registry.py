@@ -5,7 +5,7 @@ via validate_registry_matches_model; these tests pin the equality and the total
 coverage of stage types as named, discoverable checks."""
 from __future__ import annotations
 
-from app.core.models.stage import StageType, is_grain_and_order_preserving
+from app.models.stage import StageType, is_grain_and_order_preserving
 from app.runtime.stages import HANDLERS
 from app.runtime.stages.execution import RowMapHandler, SourceHandler
 

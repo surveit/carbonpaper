@@ -8,8 +8,8 @@ import time
 import pandas as pd
 import pytest
 
-from app.core.models import Stage
-from app.core.models.stage import StageType
+from app.models import Stage
+from app.models.stage import StageType
 from app.runtime.cancellation import request_cancel
 from app.runtime.errors import RunCancelled
 from app.runtime.stages.execution import (

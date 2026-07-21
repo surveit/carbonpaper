@@ -16,7 +16,7 @@ Two reviews, deliberately distinct:
     store) = "is this run's data right?" — the human_review_queue, which DOES
     halt a run.
 
-Dependency rule (mirrors app/core/models' discipline): this module imports NOTHING
+Dependency rule (mirrors app/models' discipline): this module imports NOTHING
 from app.runtime or app.compiler. It is pure stdlib + pandas, so it stays
 a trustworthy, side-effect-light interface that both the routes layer and the
 versioning layer can lean on.

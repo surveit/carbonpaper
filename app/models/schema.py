@@ -47,7 +47,7 @@ STRUCTURED_COLUMN_TYPES: set[str] = {"json"}
 _LIST_RE = re.compile(r"^list\[(.+)\]$")
 
 # Named handles for the column-type values compared individually below (and by
-# app.core.models.row_model / app.runtime.validation) — as opposed to the
+# app.models.row_model / app.runtime.validation) — as opposed to the
 # scalar/structured *sets* above, which are membership-tested as a whole.
 STR_COLUMN_TYPE = "str"
 JSON_COLUMN_TYPE = "json"
@@ -427,6 +427,6 @@ class TableSchema(_Base):
         front (e.g. as an agent tool's input schema)."""
         # Local import: the builder needs Column/`_LIST_RE` from this module,
         # so importing it at module scope would be circular.
-        from app.core.models.row_model import build_row_model
+        from app.models.row_model import build_row_model
 
         return build_row_model(name, self.columns)

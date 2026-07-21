@@ -22,7 +22,7 @@ import pandas as pd
 
 from app.core.errors import RowOutOfRange, StageNotInRun
 from app.core.frames import PARQUET_SUFFIX
-from app.core.models.stage import StageType, is_grain_and_order_preserving
+from app.models.stage import StageType, is_grain_and_order_preserving
 
 
 def _is_row_preserving(stage_type: str) -> bool:

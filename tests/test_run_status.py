@@ -5,7 +5,7 @@ status migration depends on (see app/core/run_status.py's module docstring):
 Jinja templates build CSS classes with `status-{{ status }}`, the run-page
 poller reads `status` straight off the JSON API, and the manifest is JSON on
 disk. If a future edit swapped `enum.StrEnum` for `class X(str, Enum)` (the
-pattern app.core.models uses for StageType etc.), every assertion below would
+pattern app.models uses for StageType etc.), every assertion below would
 fail loudly.
 
 The last two tests drive the real producer (app.runtime.runner.execute_run)

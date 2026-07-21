@@ -25,4 +25,4 @@ and `decisions/` — runtime data, not source. Versions are documents in the sto
 |---|---|---|
 | **Runner** | `app/runtime/` | On master — executes a workflow (typed `Stage` end-to-end), validates I/O, persists, halts for review, resumes. |
 | **Compiler** | `app/compiler/` | Engine on master (prose → LLM → validated workflow, re-ask on failure; `python -m app.compiler`); authoring UI in the PR stack. |
-| **Eval** | `app/core/models/eval.py` | Data model only — `EvalConfig` + grain-preservation gate; no runner integration yet. |
+| **Eval** | `app/models/eval.py` | Data model only — `EvalConfig` + grain-preservation gate; no runner integration yet. |

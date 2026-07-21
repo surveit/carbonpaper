@@ -38,7 +38,7 @@ from typing import Any
 from pydantic import BaseModel
 
 from app.core.errors import ProjectExistsError
-from app.core.models import Coverage, SchemaLibrary, Stage
+from app.models import Coverage, SchemaLibrary, Stage
 from app.core.run_status import RunStatus
 from app.services import data_model, node_review, stage_edit, versioning, workspace
 from app.services.loader import load_compiled_dir, stage_to_json, write_stage
@@ -48,7 +48,7 @@ from app.services.stage_edit import EditStageResult
 # ─── Status models ────────────────────────────────────────────────────────────
 # The typed shapes project_meta / project_state return. Every field is read off
 # disk truthfully (see project_state); an unknown fact is None / 0 / a "none" state,
-# never a fabricated placeholder. Coverage itself lives in app.core.models — the
+# never a fabricated placeholder. Coverage itself lives in app.models — the
 # shared shape versioning.WorkflowVersion also embeds.
 
 

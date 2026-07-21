@@ -1,11 +1,11 @@
-"""Tests for app/core/models/workflow.py — the Workflow model and its graph checks."""
+"""Tests for app/models/workflow.py — the Workflow model and its graph checks."""
 from __future__ import annotations
 
 import pytest
 from pydantic import ValidationError
 
-from app.core import models as m
-from app.core.models import Stage
+from app import models as m
+from app.models import Stage
 
 
 def S(**kw):

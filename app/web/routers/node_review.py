@@ -23,8 +23,8 @@ from app.services import generation, node_review, stage_edit, versioning
 from app.services import project as project_service
 from app.services.errors import WorkflowLoadError
 from app.services.loader import stage_to_json, stage_to_spec_dict
-from app.core.models import Stage
-from app.core.models.stages.stage_tests import STAGE_TEST_TYPES, StageTest
+from app.models import Stage
+from app.models.stages.stage_tests import STAGE_TEST_TYPES, StageTest
 from app.runtime.stage_tests import StageTestResult, find_failing_stage_tests, run_stage_tests
 from app.web.config import EXAMPLES_DIR, templates
 from app.web.diagrams import TYPE_CLASS, TYPE_GLYPH, build_mermaid_graph

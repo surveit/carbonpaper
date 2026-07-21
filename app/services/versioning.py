@@ -32,9 +32,9 @@ adapter over it: it strict-loads compiled/ into stage dicts and delegates.
 
 Dependency note: this module may import app.services.node_review (to freeze
 coverage), app.services.workspace (to read the working data model), and
-app.core.models, but nothing from app.runtime or app.compiler. A version's stages
+app.models, but nothing from app.runtime or app.compiler. A version's stages
 are parsed through the same strict parser as the working copy
-(app.core.models.workflow.parse_workflow / app.services.loader), so a version's
+(app.models.workflow.parse_workflow / app.services.loader), so a version's
 stages load identically to the working copy's at the moment it was snapshotted.
 """
 
@@ -47,8 +47,8 @@ from typing import Any, ClassVar
 from pydantic import Field, ValidationError
 
 from app.core.errors import DocumentNotFound
-from app.core.models import Coverage, Stage
-from app.core.models.workflow import parse_workflow
+from app.models import Coverage, Stage
+from app.models.workflow import parse_workflow
 from app.core.persistence import PersistedModel, get_store
 from app.core.utils import format_errors
 from app.services import node_review
@@ -105,7 +105,7 @@ def create_version_from_stages(
     freeze approval coverage against the live node_decisions store, and save —
     born unpublished. Returns the saved WorkflowVersion.
 
-    `stages` is parsed via app.core.models.workflow.parse_workflow, which raises
+    `stages` is parsed via app.models.workflow.parse_workflow, which raises
     pydantic.ValidationError (per-stage schema errors AND cross-stage graph
     issues alike) on anything invalid; nothing is written in that case. Every
     version is therefore a loadable workflow, from this seam or any other.

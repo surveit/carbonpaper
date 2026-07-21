@@ -21,7 +21,7 @@ import pytest
 
 import pydantic
 
-from app.core.models import Stage
+from app.models import Stage
 from app.core.persistence import get_store
 from app.services import loader, node_review
 from app.services.loader import WorkflowLoadError

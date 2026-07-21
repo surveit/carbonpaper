@@ -6,8 +6,8 @@ that currently lives only in a validator is also stated in the relevant field's 
 """
 from __future__ import annotations
 
-from app.core.models.schema import Column
-from app.core.models.stage import Connector, PythonFunction, Stage
+from app.models.schema import Column
+from app.models.stage import Connector, PythonFunction, Stage
 
 
 def _desc(model: type, field: str) -> str:

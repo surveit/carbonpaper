@@ -17,7 +17,7 @@ from typing import Any, Optional
 
 from pydantic import Field, ValidationError, field_validator, model_validator
 
-from app.core.models.schema import (
+from app.models.schema import (
     Column,
     SourceRef,
     TableSchema,

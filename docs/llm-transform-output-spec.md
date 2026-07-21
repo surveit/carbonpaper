@@ -57,7 +57,7 @@ separate concern that belongs to the LLM layer, planned for a later PR (see Stat
 This describes what the code does today, not an aspiration:
 
 - **Rule 1 is enforced by `Stage` construction, not in the handler.** The
-  `Stage` model's 1:1 validator (`app/core/models/stage.py`) rejects any
+  `Stage` model's 1:1 validator (`app/models/stage.py`) rejects any
   `llm_transform` whose *declared* schemas aren't 1:1: exactly one input, the
   input schema and `output_schema` naming the same primary key, the output
   keeping every input column unchanged (a transform never rewrites a column's

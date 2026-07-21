@@ -31,7 +31,7 @@ import pandas as pd
 import pyarrow
 
 from app.core.frames import PARQUET_SUFFIX
-from app.core.models import Stage
+from app.models import Stage
 
 from .errors import PreviewError
 from .stages import HANDLERS

@@ -1,7 +1,7 @@
 """run_workflow_tests: aggregate a workflow's stage tests into a typed report."""
 import pytest
 
-from app.core.models import Stage
+from app.models import Stage
 from app.runtime.stage_tests import run_workflow_tests
 
 _IN_SCHEMA = {"columns": [{"name": "amount", "type": "float", "nullable": False}]}

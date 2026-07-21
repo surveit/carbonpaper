@@ -34,7 +34,7 @@ ignore_missing_imports = true
 # Expressed as a WHITELIST: each restricted module is `protected` and declares the
 # only modules allowed to import it — a new cross-layer import is denied by default
 # (caught), not allowed until someone remembers to forbid it. Core modules
-# (app.core.models, app.core.errors, app.core.llm, app.core.agent) are left open: everything may depend on them.
+# (app.models, app.core.errors, app.core.llm, app.core.agent) are left open: everything may depend on them.
 # Content-level checks live in tests/arch/.
 [tool.importlinter]
 root_package = "app"
@@ -95,18 +95,18 @@ name = "app.core.persistence sits at the bottom — imports no app layer but cor
 type = "forbidden"
 source_modules = ["app.core.persistence"]
 forbidden_modules = [
-    "app.core.models", "app.core.llm",
+    "app.models", "app.core.llm",
     "app.services", "app.runtime", "app.web", "app.core.agent", "app.compiler", "app.evals",
 ]
 # The document store is the lowest layer: it may lean on app.core.errors (where
 # DocumentNotFound lives) and nothing else first-party. If it imported the contracts
-# (app.core.models) or any upper layer, "records depend on the store, never the
+# (app.models) or any upper layer, "records depend on the store, never the
 # reverse" would be a lie and the backend would stop being swappable in isolation.
 
 [[tool.importlinter.contracts]]
-name = "app.core.models stays pure — never imports the store"
+name = "app.models stays pure — never imports the store"
 type = "forbidden"
-source_modules = ["app.core.models"]
+source_modules = ["app.models"]
 forbidden_modules = ["app.core.persistence"]
 # The pure contracts (Stage, TableSchema, …) are validation-only and side-effect-free.
 # Records embed contracts, so the arrow is records → contracts; a contract importing

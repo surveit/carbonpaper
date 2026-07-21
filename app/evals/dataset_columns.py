@@ -26,8 +26,8 @@ preconditions itself and report them as problems before calling in here.
 """
 from __future__ import annotations
 
-from app.core.models.schema import Column
-from app.core.models.stage import Stage
+from app.models.schema import Column
+from app.models.stage import Stage
 
 
 def get_output_columns_from_stage(stage: Stage) -> list[Column]:

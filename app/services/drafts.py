@@ -13,7 +13,7 @@ Every stored stage is a valid `Stage` — set_draft_stage rejects a malformed
 one outright (see its docstring). What stays allowed mid-edit is WORKFLOW-level
 incompleteness: a valid stage whose `inputs` reference a stage id not yet in
 the draft, a duplicate id, or a cycle — the cross-stage graph checks
-(`app.core.models.workflow.validate_workflow`) — since a draft is a workflow
+(`app.models.workflow.validate_workflow`) — since a draft is a workflow
 under construction, not yet a finished one. The only exit is save_version,
 which requires the whole graph to be clean and refuses rather than persist an
 incomplete workflow.
@@ -36,7 +36,7 @@ from typing import Any, ClassVar
 from pydantic import BaseModel, Field, ValidationError
 
 from app.core.errors import DocumentNotFound, DraftNotFoundError
-from app.core.models import Stage, validate_workflow
+from app.models import Stage, validate_workflow
 from app.core.persistence import PersistedModel
 from app.core.utils import format_errors, generate_word_triplet_id
 from app.services import versioning, workspace
@@ -250,7 +250,7 @@ def _parse_stage(stage_json: str) -> Stage:
     or failing `Stage.model_validate`. `Stage` validation is per-stage only —
     it does not check whether `inputs` reference a stage id that exists
     elsewhere in the draft, which is a cross-stage graph concern (see
-    app.core.models.workflow.check_inputs_resolve) and stays allowed here."""
+    app.models.workflow.check_inputs_resolve) and stays allowed here."""
     obj = json.loads(stage_json)
     if not isinstance(obj, dict):
         raise ValueError("stage_json must be a JSON object")

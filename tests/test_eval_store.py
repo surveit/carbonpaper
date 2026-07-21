@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from app.core.models import EvalConfig, EvalRun
+from app.models import EvalConfig, EvalRun
 from app.core.persistence import get_store
 from app.evals.compatibility import CompatibilityReport
 from app.evals.store import (

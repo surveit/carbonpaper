@@ -15,7 +15,7 @@ from fastapi import HTTPException
 
 from app.core.errors import NoVersionToRunError
 from app.core.frames import PARQUET_SUFFIX
-from app.core.models import Stage, StageType
+from app.models import Stage, StageType
 from app.core.run_status import StageStatus
 from app.runtime.runner import resolve_version_id
 from app.services.loader import CompiledStageFile, load_compiled_dir

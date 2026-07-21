@@ -21,7 +21,7 @@ from typing import Any
 
 import pandas as pd
 
-from app.core.models import Column, RANGE_UNBOUNDED_MARKER, STR_COLUMN_TYPE, TableSchema
+from app.models import Column, RANGE_UNBOUNDED_MARKER, STR_COLUMN_TYPE, TableSchema
 
 
 # Map our type vocabulary to permissive pandas dtype checks.
