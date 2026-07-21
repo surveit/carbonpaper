@@ -7,7 +7,6 @@ Routes under test:
 from __future__ import annotations
 
 import io
-import json
 from pathlib import Path
 
 import pandas as pd
@@ -15,6 +14,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 import app.web.loading as loading
+from app.core.models.records.workflow_run import StageRun, WorkflowRun
 from app.main import app
 
 PROJ = "testmeth"
@@ -25,7 +25,8 @@ STAGE = "stage_a"
 def _write_run(
     examples_dir: Path, df: pd.DataFrame, fmt: str = "parquet"
 ) -> Path:
-    """Lay out examples/<PROJ>/runs/<RUN>/ with a manifest + one stage output."""
+    """Lay out examples/<PROJ>/runs/<RUN>/ with one stage output on disk, and
+    save the run's manifest to the document store."""
     run_dir = examples_dir / PROJ / "runs" / RUN
     (run_dir / "outputs").mkdir(parents=True)
     output_rel = f"outputs/{STAGE}.{fmt}"
@@ -33,19 +34,11 @@ def _write_run(
         df.to_parquet(run_dir / output_rel, index=False)
     else:
         df.to_csv(run_dir / output_rel, index=False)
-    manifest = {
-        "run_id": RUN,
-        "status": "complete",
-        "stages": [
-            {
-                "stage_id": STAGE,
-                "status": "ok",
-                "rows": len(df),
-                "output_path": output_rel,
-            }
-        ],
-    }
-    (run_dir / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+    WorkflowRun(
+        id=f"{PROJ}/{RUN}", run_id=RUN, project=PROJ, status="complete",
+        stages=[StageRun(stage_id=STAGE, type="input_data", name=STAGE,
+                          status="ok", rows=len(df), output_path=output_rel)],
+    ).save()
     return run_dir
 
 
@@ -154,9 +147,9 @@ def test_rows_404_when_output_file_missing(examples_dir, client):
 
 
 def test_rows_rejects_output_path_outside_run_dir(examples_dir, client):
-    run_dir = _write_run(examples_dir, _df(2))
-    manifest = json.loads((run_dir / "manifest.json").read_text(encoding="utf-8"))
-    manifest["stages"][0]["output_path"] = "../../../../etc/passwd"
-    (run_dir / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+    _write_run(examples_dir, _df(2))
+    manifest = WorkflowRun.load(f"{PROJ}/{RUN}")
+    manifest.stages[0].output_path = "../../../../etc/passwd"
+    manifest.save()
     r = client.get(f"/project/{PROJ}/runs/{RUN}/stage/{STAGE}/rows")
     assert r.status_code == 404

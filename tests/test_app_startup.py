@@ -6,6 +6,7 @@ from __future__ import annotations
 import asyncio
 
 import app.core.persistence as persistence
+from app.core.sqlite_store import SqliteKvStore
 from app.main import app, lifespan
 
 
@@ -25,7 +26,7 @@ def test_lifespan_configures_store_from_env(monkeypatch, tmp_path):
 
 def test_lifespan_does_not_overwrite_a_configured_store(monkeypatch, tmp_path):
     # If a store is already configured (as in tests), the guard leaves it alone.
-    sentinel = persistence.SqliteKvStore(":memory:")
+    sentinel = SqliteKvStore(":memory:")
     monkeypatch.setattr(persistence, "_store", sentinel)
     monkeypatch.setenv("CW_DB_PATH", str(tmp_path / "should_not_be_created.db"))
 

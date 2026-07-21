@@ -22,5 +22,6 @@ def offline_llm(monkeypatch):
 
 @pytest.fixture(autouse=True)
 def fresh_store():
-    from app.core.persistence import SqliteKvStore, configure_store
+    from app.core.persistence import configure_store
+    from app.core.sqlite_store import SqliteKvStore
     configure_store(SqliteKvStore(":memory:"))

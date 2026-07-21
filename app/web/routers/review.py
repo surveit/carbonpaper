@@ -54,7 +54,7 @@ async def queue_page(request: Request, project: str, run_id: str, stage_id: str)
     # The queue snapshot holds the scoring stage's OUTPUT (score + reasoning + ids);
     # the thing the model actually judged (the quote, the benchmark) lives in the
     # scoring stage's INPUT, one stage upstream. Join it back + render the prompt.
-    output_by_id = {s.get("stage_id"): s.get("output_path") for s in manifest.get("stages", [])}
+    output_by_id = {s.stage_id: s.output_path for s in manifest.stages}
     scored_ids = stage_def.input_ids
     scored_def = find_stage(stages, scored_ids[0]) if scored_ids else None
     prompt_template = scored_def.llm.prompt_template if scored_def and scored_def.llm else None
@@ -122,7 +122,7 @@ async def queue_page(request: Request, project: str, run_id: str, stage_id: str)
             "reviewed_count": reviewed_count,
             "total": total,
             "all_reviewed": total > 0 and reviewed_count == total,
-            "manifest_status": manifest.get("status"),
+            "manifest_status": manifest.status,
         },
     )
 

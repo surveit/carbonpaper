@@ -150,20 +150,20 @@ def test_run_binding_recorded_with_hash_and_source(tmp_path):
     manifest = execute_run(tmp_path, repo_root=tmp_path,
                            bindings={"load": {"path": str(other)}})
 
-    assert manifest["status"] == "ok"
-    rec = manifest["input_bindings"]["load"]
+    assert manifest.status == "ok"
+    rec = manifest.input_bindings["load"]
     assert rec["path"] == str(other)
     assert rec["source"] == "run"
     assert rec["sha256"] == hashlib.sha256(other.read_bytes()).hexdigest()
     assert rec["bytes"] == other.stat().st_size
-    out = pd.read_parquet(tmp_path / "runs" / manifest["run_id"] / "outputs" / "load.parquet")
+    out = pd.read_parquet(tmp_path / "runs" / manifest.run_id / "outputs" / "load.parquet")
     assert list(out["val"]) == [9]                     # read the BOUND file
 
 
 def test_workflow_path_recorded_as_workflow_source(tmp_path):
     data = _make_bound_project(tmp_path)
     manifest = execute_run(tmp_path, repo_root=tmp_path)
-    rec = manifest["input_bindings"]["load"]
+    rec = manifest.input_bindings["load"]
     assert rec["source"] == "workflow"
     assert rec["path"] == str(data)
 
@@ -195,8 +195,8 @@ def test_handler_ignores_repo_root_for_file_inputs(tmp_path):
     elsewhere = tmp_path / "unrelated_repo_root"
     elsewhere.mkdir()
     manifest = execute_run(tmp_path, repo_root=elsewhere)
-    assert manifest["status"] == "ok"
-    assert manifest["stages"][0]["rows"] == 2
+    assert manifest.status == "ok"
+    assert manifest.stages[0].rows == 2
 
 
 def test_read_input_data_names_the_stage_when_no_path_is_bound(tmp_path):

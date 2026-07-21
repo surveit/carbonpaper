@@ -42,53 +42,19 @@ from __future__ import annotations
 
 from datetime import datetime
 from pathlib import Path
-from typing import Any, ClassVar
+from typing import Any
 
-from pydantic import Field, ValidationError
+from pydantic import ValidationError
 
 from app.core.errors import DocumentNotFound
 from app.core.models import Coverage, Stage
+from app.core.models.records.workflow_version import WorkflowVersion
 from app.core.models.schema import format_errors
 from app.core.models.workflow import parse_workflow
-from app.core.persistence import PersistedModel, get_store
+from app.core.persistence import get_store
 from app.services import node_review
 from app.services.loader import WorkflowLoadError, load_workflow, stage_to_spec_dict
 from app.services.workspace import load_schemas
-
-
-def _no_coverage() -> Coverage:
-    # The zero-stage shape coverage_for itself returns for an empty stage list —
-    # a WorkflowVersion constructed without an explicit `coverage=` (every
-    # in-repo case is a test seeding a version directly) is born carrying it.
-    return Coverage(approved=0, rejected=0, edited_stale=0, unreviewed=0,
-                     total=0, approved_pct=0.0)
-
-
-class WorkflowVersion(PersistedModel):
-    """One frozen snapshot, stored in the "workflow_version" collection. `id` (inherited
-    from PersistedModel) is the composite `f"{project}/{version_id}"`; `version_id`
-    is the plain local id every caller of this module's public functions
-    works with. `stages` and `schemas` are the frozen artifacts; `coverage` is
-    approval coverage computed against `stages` at creation time. `published`
-    (plus `published_at`/`published_by`) records the approval act that makes a
-    version runnable — see the module docstring."""
-
-    collection: ClassVar[str] = "workflow_version"
-    # Dump the embedded stages in their canonical spec-dict shape (field aliases
-    # restored, unset optionals dropped) — the same convention stage_to_spec_dict
-    # uses, so a version's on-disk stage shape matches the working copy's.
-    DUMP_OPTS: ClassVar[dict[str, Any]] = {"by_alias": True, "exclude_none": True}
-
-    version_id: str
-    parent_version: str | None = None
-    message: str
-    reviewer: str
-    coverage: Coverage = Field(default_factory=_no_coverage)
-    stages: list[Stage] = Field(default_factory=list)
-    schemas: list[dict[str, Any]] = Field(default_factory=list)
-    published: bool = False
-    published_at: str | None = None
-    published_by: str | None = None
 
 
 def create_version_from_stages(

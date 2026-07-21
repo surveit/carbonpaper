@@ -6,9 +6,9 @@ targets an existing version and never creates one.
 Builds small file-connector projects in a tmp dir, snapshots them into a
 version, runs them, and checks that `limit:` truncated the output, that per-run
 --limit/--offset slice the output and are recorded as run provenance (not
-silent), that manifest.json landed on disk, and that a stage fed exact duplicate
-full-content rows fails loudly naming them. Also checks that an unversioned or
-invalid working copy is refused loudly, writing nothing.
+silent), that the manifest landed in the document store, and that a stage fed
+exact duplicate full-content rows fails loudly naming them. Also checks that an
+unversioned or invalid working copy is refused loudly, writing nothing.
 """
 from __future__ import annotations
 
@@ -20,6 +20,7 @@ import pytest
 
 from app.core.errors import NoVersionToRunError, SubsetRunError
 from app.core.models import Stage, Workflow
+from app.core.models.records.workflow_run import StageRun, WorkflowRun
 from app.runtime.runner import execute_run, resume_run, run_subset
 from app.runtime.stages import llm_transform as lt
 from app.services.loader import WorkflowLoadError
@@ -56,19 +57,19 @@ def test_limit_truncates_and_is_recorded(tmp_path):
     _seed_version(tmp_path)
     manifest = execute_run(tmp_path, repo_root=tmp_path)
 
-    assert manifest["status"] == "ok"
-    [rec] = manifest["stages"]
-    assert rec["status"] == "ok"
-    assert rec["rows"] == 2                                   # truncated from 5
-    assert any("truncated" in n for n in rec.get("notes", []))   # not silent
+    assert manifest.status == "ok"
+    [rec] = manifest.stages
+    assert rec.status == "ok"
+    assert rec.rows == 2                                      # truncated from 5
+    assert any("truncated" in n for n in rec.notes)               # not silent
 
-    run_dir = tmp_path / "runs" / manifest["run_id"]
+    run_dir = tmp_path / "runs" / manifest.run_id
     out = pd.read_parquet(run_dir / "outputs" / "load.parquet")
     assert len(out) == 2
 
-    on_disk = json.loads((run_dir / "manifest.json").read_text(encoding="utf-8"))
-    assert on_disk["run_id"] == manifest["run_id"]
-    assert on_disk["status"] == "ok"
+    stored = WorkflowRun.load(f"{tmp_path.name}/{manifest.run_id}")
+    assert stored.run_id == manifest.run_id
+    assert stored.status == "ok"
 
 
 def test_per_run_limit_and_offset_slice_and_are_recorded(tmp_path):
@@ -80,25 +81,23 @@ def test_per_run_limit_and_offset_slice_and_are_recorded(tmp_path):
     manifest = execute_run(tmp_path, repo_root=tmp_path,
                            limits={"load": 3}, offsets={"load": 1})
 
-    [rec] = manifest["stages"]
-    assert rec["rows"] == 3                                   # not the static 2
+    [rec] = manifest.stages
+    assert rec.rows == 3                                      # not the static 2
     out = pd.read_parquet(
-        tmp_path / "runs" / manifest["run_id"] / "outputs" / "load.parquet")
+        tmp_path / "runs" / manifest.run_id / "outputs" / "load.parquet")
     assert list(out["val"]) == [1, 2, 3]
 
     # The slice is part of the run's provenance: recorded on the manifest
     # and noted on the stage record, never silent.
-    assert manifest["limit_overrides"] == {"load": 3}
-    assert manifest["offset_overrides"] == {"load": 1}
-    notes = rec.get("notes", [])
+    assert manifest.limit_overrides == {"load": 3}
+    assert manifest.offset_overrides == {"load": 1}
+    notes = rec.notes
     assert any(n.startswith("offset=1") for n in notes)
     assert any(n.startswith("limit=3") for n in notes)
 
-    on_disk = json.loads(
-        (tmp_path / "runs" / manifest["run_id"] / "manifest.json")
-        .read_text(encoding="utf-8"))
-    assert on_disk["limit_overrides"] == {"load": 3}
-    assert on_disk["offset_overrides"] == {"load": 1}
+    stored = WorkflowRun.load(f"{tmp_path.name}/{manifest.run_id}")
+    assert stored.limit_overrides == {"load": 3}
+    assert stored.offset_overrides == {"load": 1}
 
 
 def test_per_run_override_for_unknown_stage_id_fails_loudly(tmp_path):
@@ -144,14 +143,14 @@ def test_duplicate_input_rows_fail_the_stage(tmp_path):
     _seed_version(tmp_path)
     manifest = execute_run(tmp_path, repo_root=tmp_path)
 
-    records = {r["stage_id"]: r for r in manifest["stages"]}
-    assert records["load"]["status"] == "ok"     # producing dupes isn't the error…
-    assert records["consume"]["status"] == "error"  # …feeding them to a stage is
-    msg = records["consume"]["error"]["message"]
+    records = {r.stage_id: r for r in manifest.stages}
+    assert records["load"].status == "ok"        # producing dupes isn't the error…
+    assert records["consume"].status == "error"  # …feeding them to a stage is
+    msg = records["consume"].error.message
     assert "load" in msg                          # names the offending input
     assert "[0, 2]" in msg                        # names the duplicate row numbers
     assert "row_id" in msg                        # points at the explicit-draws fix
-    assert manifest["status"] == "errors"
+    assert manifest.status == "errors"
 
 
 def test_distinct_input_rows_pass(tmp_path):
@@ -163,10 +162,10 @@ def test_distinct_input_rows_pass(tmp_path):
     ])
     _seed_version(tmp_path)
     manifest = execute_run(tmp_path, repo_root=tmp_path)
-    assert manifest["status"] == "ok"
-    records = {r["stage_id"]: r for r in manifest["stages"]}
-    assert records["consume"]["status"] == "ok"
-    assert records["consume"]["rows"] == 2
+    assert manifest.status == "ok"
+    records = {r.stage_id: r for r in manifest.stages}
+    assert records["consume"].status == "ok"
+    assert records["consume"].rows == 2
 
 
 def _llm_transform_project(root):
@@ -210,23 +209,23 @@ def test_llm_generation_failure_surfaces_as_error_status_not_raised(tmp_path, mo
     _seed_version(tmp_path)
     manifest = execute_run(tmp_path, repo_root=tmp_path)
 
-    records = {r["stage_id"]: r for r in manifest["stages"]}
+    records = {r.stage_id: r for r in manifest.stages}
     rec = records["score"]
-    assert rec["status"] == "error"
-    assert rec["rows"] == 1                         # stage completed, output kept
-    issues = rec["output_validation"]["issues"]
-    assert any("generation failed" in i["message"] and "boom" in i["message"]
+    assert rec.status == "error"
+    assert rec.rows == 1                             # stage completed, output kept
+    issues = rec.output_validation.issues
+    assert any("generation failed" in i.message and "boom" in i.message
                for i in issues)
-    assert rec["error"]["type"] == "RowGenerationError"
-    assert "boom" in rec["error"]["message"]         # the real reason, not "unknown error"
-    assert rec["error"]["traceback"] is None         # distinguishes it from a raised exception
-    assert manifest["status"] == "errors"
+    assert rec.error.type == "RowGenerationError"
+    assert "boom" in rec.error.message               # the real reason, not "unknown error"
+    assert rec.error.traceback is None                # distinguishes it from a raised exception
+    assert manifest.status == "errors"
 
 
 def test_run_subset_surfaces_the_real_row_failure_message(tmp_path, monkeypatch):
     # run_subset backs eval/preview runs (app/evals/runner.py). A row failure
-    # must raise SubsetRunError naming the real cause via record["error"] —
-    # not "unknown error" — because _raise_if_run_failed reads that field.
+    # must raise SubsetRunError naming the real cause via the stage record's
+    # `error` — not "unknown error" — because _raise_if_run_failed reads that field.
     def boom(stage_id, llm_config, row, **kw):
         raise RuntimeError("boom")
 
@@ -284,8 +283,8 @@ def test_unpublished_latest_is_skipped_for_an_older_published_version(tmp_path):
     create_version_from_disk(tmp_path, message="unpublished newer", reviewer="test")
 
     manifest = execute_run(tmp_path, repo_root=tmp_path)
-    assert manifest["workflow_version"] == published_id
-    assert manifest["status"] == "ok"
+    assert manifest.workflow_version == published_id
+    assert manifest.status == "ok"
 
 
 def test_run_with_no_published_version_fails_loudly(tmp_path):
@@ -370,7 +369,7 @@ def test_invalid_workflow_never_becomes_a_version_and_run_never_pins_stale(tmp_p
     # Explicit creation, then the run succeeds against that version.
     _seed_version(tmp_path)
     manifest = execute_run(tmp_path, repo_root=tmp_path)
-    assert manifest["status"] == "ok"
+    assert manifest.status == "ok"
 
 
 def test_resume_reapplies_run_bindings_for_a_pending_input_stage(tmp_path):
@@ -399,24 +398,22 @@ def test_resume_reapplies_run_bindings_for_a_pending_input_stage(tmp_path):
     run_id = "20260101T000000"
     run_dir = tmp_path / "runs" / run_id
     (run_dir / "outputs").mkdir(parents=True)
-    manifest = {
-        "run_id": run_id, "project": tmp_path.name, "workflow_version": version_id,
-        "status": "awaiting_review",
-        "run_bindings": {"load": {"path": str(bound_csv)}},
-        "input_bindings": {
+    manifest = WorkflowRun(
+        id=f"{tmp_path.name}/{run_id}",
+        run_id=run_id, project=tmp_path.name, workflow_version=version_id,
+        status="awaiting_review",
+        run_bindings={"load": {"path": str(bound_csv)}},
+        input_bindings={
             "load": {"path": str(bound_csv), "source": "run",
                      "sha256": "unused-in-this-test", "bytes": bound_csv.stat().st_size},
         },
-        "stages": [{"stage_id": "load", "type": "input_data", "name": "Load items",
-                    "status": "pending", "input_validation": [], "output_validation": None,
-                    "elapsed_ms": 0, "rows": 0, "error": None,
-                    "started_at": None, "finished_at": None}],
-    }
-    (run_dir / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+        stages=[StageRun(stage_id="load", type="input_data", name="Load items")],
+    )
+    manifest.save()
 
     result = resume_run(tmp_path, run_id, repo_root=tmp_path)
 
-    [rec] = result["stages"]
-    assert rec["status"] == "ok", rec.get("error")
+    [rec] = result.stages
+    assert rec.status == "ok", rec.error
     out = pd.read_parquet(run_dir / "outputs" / "load.parquet")
     assert list(out["name"]) == ["bound-row"]

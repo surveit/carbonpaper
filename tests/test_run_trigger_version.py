@@ -10,6 +10,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 import app.web.routers.runs as runs_router
+from app.core.models.records.workflow_run import WorkflowRun
 from app.main import app
 from app.services.versioning import create_version_from_disk, list_versions, publish_version
 
@@ -43,9 +44,9 @@ def project_two_versions(tmp_path, monkeypatch):
     return proj
 
 
-def _manifest(proj):
+def _manifest(proj) -> WorkflowRun:
     run_dir = sorted((proj / "runs").iterdir())[-1]
-    return json.loads((run_dir / "manifest.json").read_text(encoding="utf-8"))
+    return WorkflowRun.load(f"{proj.name}/{run_dir.name}")
 
 
 def test_posted_version_id_pins_the_run(project_two_versions):
@@ -55,7 +56,7 @@ def test_posted_version_id_pins_the_run(project_two_versions):
     resp = client.post("/project/demo/run",
                        data={"version_id": older}, follow_redirects=False)
     assert resp.status_code == 303
-    assert _manifest(project_two_versions)["workflow_version"] == older
+    assert _manifest(project_two_versions).workflow_version == older
 
 
 def test_omitted_version_id_defaults_to_latest(project_two_versions):
@@ -63,7 +64,7 @@ def test_omitted_version_id_defaults_to_latest(project_two_versions):
     latest = list_versions(project_two_versions)[0].version_id
     resp = client.post("/project/demo/run", data={}, follow_redirects=False)
     assert resp.status_code == 303
-    assert _manifest(project_two_versions)["workflow_version"] == latest
+    assert _manifest(project_two_versions).workflow_version == latest
 
 
 def test_runs_page_renders_version_picker_latest_selected(project_two_versions):
@@ -168,7 +169,7 @@ def test_binding_provenance_uses_the_selected_versions_authored_path(
                        data={"version_id": older, "binding__load": str(proj / "a.csv")},
                        follow_redirects=False)
     assert resp.status_code == 303
-    assert _manifest(proj)["input_bindings"]["load"]["source"] == "workflow"
+    assert _manifest(proj).input_bindings["load"]["source"] == "workflow"
 
 
 def test_run_inputs_endpoint_returns_the_selected_versions_inputs(
