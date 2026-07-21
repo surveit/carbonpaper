@@ -6,6 +6,9 @@
   - store.py            — read/write eval configs and runs in the document store
   - runner.py           — run an eval against a workflow version (run_eval)
   - scoring.py          — compare a target's output to the dataset's expected columns
+  - differential.py     — derive a stage's transform N times independently and surface
+                          where survivors that all pass the frozen tests still diverge,
+                          i.e. where the tests underdetermine the spec (derive_n_version_and_diff)
 
 Depends on app.runtime (to execute a stage subset), app.services (versioning),
 and app.core.models. Nothing in those layers imports app.evals. The eval MODELS live in

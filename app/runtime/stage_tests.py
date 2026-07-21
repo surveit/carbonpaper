@@ -57,6 +57,18 @@ class StageTestResult:
     message: str | None = None
 
 
+@dataclass
+class TransformOutcome:
+    """Result of running a stage's transform on one input bundle, OUTSIDE the
+    authored-test frame: `rows` is the output projected onto the output schema's
+    columns, or None with `error` set when the inputs are malformed for the
+    declared schemas or the function raised. Shares run_stage_tests' execution
+    path (the same handler registry and input validation) so a probe run and a
+    test run agree on what a candidate does."""
+    rows: list[dict[str, Any]] | None
+    error: str | None = None
+
+
 def run_stage_tests(stage: Stage) -> list[StageTestResult]:
     """Execute each of `stage.tests` through the stage's registered handler
     and compare to its expected rows. Raises ValueError for stage types whose
@@ -106,6 +118,75 @@ def _run_one_test(stage: Stage, test: StageTest) -> StageTestResult:
             message=f"function returned {type(actual).__name__}, expected a DataFrame",
         )
     return _compare(stage, test, actual)
+
+
+def run_transform(
+    stage: Stage, inputs: dict[str, list[dict[str, Any]]]
+) -> TransformOutcome:
+    """Execute `stage`'s registered handler on `inputs` (each declared input id
+    mapped to its rows) and return the output rows projected onto the output
+    schema — or an error message when the inputs violate the declared input
+    schemas or the function raises. Unlike run_stage_tests this holds no
+    `expected`: it is how a caller probes what a stage's transform DOES on an
+    input, e.g. to compare two candidate implementations on a case beyond the
+    frozen tests. Raises ValueError for a stage type that carries no runnable
+    transform, and asserts the output schema the projection needs."""
+    if stage.type not in STAGE_TEST_TYPES:
+        raise ValueError(
+            f"stage {stage.id} ({stage.type}) has no runnable transform to probe"
+        )
+    assert stage.output_schema is not None
+    input_frames = {
+        ref.id: _build_frame(inputs.get(ref.id, []), ref.table_schema)
+        for ref in stage.inputs
+    }
+    problems: list[str] = []
+    for ref in stage.inputs:
+        report = validate_dataframe(
+            input_frames[ref.id], ref.table_schema, stage_id=stage.id, phase="input"
+        )
+        problems += [
+            f"input {ref.id}: {issue.message}"
+            for issue in report.issues if issue.severity == "error"
+        ]
+    if problems:
+        return TransformOutcome(rows=None, error="; ".join(problems))
+    try:
+        actual = HANDLERS[StageType(stage.type)].execute(stage, input_frames, ctx={})
+    except Exception as exc:  # noqa: BLE001 — the function is authored code; any raise IS the result
+        return TransformOutcome(rows=None, error=f"{type(exc).__name__}: {exc}")
+    if not isinstance(actual, pd.DataFrame):
+        return TransformOutcome(
+            rows=None,
+            error=f"function returned {type(actual).__name__}, expected a DataFrame",
+        )
+    columns = [column.name for column in stage.output_schema.columns]
+    rows = [
+        _select_cells({str(key): value for key, value in row.items()}, columns)
+        for row in actual.to_dict("records")
+    ]
+    return TransformOutcome(rows=rows)
+
+
+def outputs_agree(
+    columns: list[str],
+    rows_a: list[dict[str, Any]],
+    rows_b: list[dict[str, Any]],
+) -> bool:
+    """Do two output row-sets agree over `columns`? The SAME comparison
+    run_stage_tests holds a candidate to its expected rows by: both sides
+    compare as a multiset (no ordering is pinned), None equals only None, and
+    float NaN equals float NaN. Used to decide whether two candidate
+    implementations behave identically on a probe input."""
+    if len(rows_a) != len(rows_b):
+        return False
+    sorted_a = _sort_rows([_select_cells(row, columns) for row in rows_a])
+    sorted_b = _sort_rows([_select_cells(row, columns) for row in rows_b])
+    return all(
+        _values_equal(row_a[column], row_b[column])
+        for row_a, row_b in zip(sorted_a, sorted_b)
+        for column in columns
+    )
 
 
 def _build_frame(rows: list[dict[str, Any]], schema: TableSchema | None) -> pd.DataFrame:
