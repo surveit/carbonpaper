@@ -161,7 +161,7 @@ def test_run_tests_reports_summary_diffs_and_coverage(tmp_path, monkeypatch):
     assert report["untested_python_stages"] == ["untested"]
     assert report["summary"]["failed"] == 1
     [run] = report["stages"]
-    failing = next(o for o in run["outcomes"] if o["name"] == "wrong")
+    failing = next(o for o in run["results"] if o["name"] == "wrong")
     assert failing["status"] != "passed"
     assert failing["diffs"][0]["column"] == "doubled"
 

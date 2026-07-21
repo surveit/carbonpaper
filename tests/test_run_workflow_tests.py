@@ -89,7 +89,7 @@ def test_single_stage_id_scopes_the_run():
 def test_mismatch_surfaces_cell_diffs_in_outcome():
     report = run_workflow_tests(_workflow(), stage_id="double")
     [run] = report.stages
-    failing = next(o for o in run.outcomes if o.name == "wrong")
+    failing = next(o for o in run.results if o.name == "wrong")
     assert failing.status == "mismatch"
     [diff] = failing.diffs
     assert diff.column == "doubled" and diff.expected == 5.0 and diff.actual == 4.0

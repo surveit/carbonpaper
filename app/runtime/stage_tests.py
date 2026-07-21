@@ -59,29 +59,15 @@ class StageTestResult:
 
 
 # ─── Typed run report (JSON-serialisable; the MCP run_tests tool returns this) ─
-# The dataclasses above are the in-process result of one test; these Pydantic
-# models are the aggregated, model_dump-able report a caller (an authoring
-# agent) reads. `expected`/`actual` are Any because a cell holds a genuinely
-# arbitrary scalar value, not a structured shape being lazily typed.
-
-class CellDiffReport(BaseModel):
-    row: int
-    column: str
-    expected: Any
-    actual: Any
-
-
-class TestOutcome(BaseModel):
-    name: str
-    status: Status
-    diffs: list[CellDiffReport] = []
-    message: str | None = None
-
+# StageTestResult is one test's outcome; these models aggregate a run of them
+# into a report a caller (an authoring agent) reads. StageTestRun embeds the
+# StageTestResult dataclasses directly — Pydantic serialises them under
+# model_dump(mode="json") — so there is one result type, not a mirror of it.
 
 class StageTestRun(BaseModel):
     stage_id: str
     stage_type: str
-    outcomes: list[TestOutcome]
+    results: list[StageTestResult]
 
 
 class TestRunSummary(BaseModel):
@@ -166,28 +152,19 @@ def _find_stage(stages: list[Stage], stage_id: str) -> Stage:
 
 
 def _run_one_stage(stage: Stage) -> StageTestRun:
-    outcomes = [_to_outcome(result) for result in run_stage_tests(stage)]
-    return StageTestRun(stage_id=stage.id, stage_type=stage.type, outcomes=outcomes)
-
-
-def _to_outcome(result: StageTestResult) -> TestOutcome:
-    diffs = [
-        CellDiffReport(row=d.row, column=d.column, expected=d.expected, actual=d.actual)
-        for d in result.diffs
-    ]
-    return TestOutcome(
-        name=result.name, status=result.status, diffs=diffs, message=result.message
+    return StageTestRun(
+        stage_id=stage.id, stage_type=stage.type, results=run_stage_tests(stage)
     )
 
 
 def _summarize(runs: list[StageTestRun]) -> TestRunSummary:
-    outcomes = [outcome for run in runs for outcome in run.outcomes]
-    passed = sum(1 for outcome in outcomes if outcome.status == "passed")
+    results = [result for run in runs for result in run.results]
+    passed = sum(1 for result in results if result.status == "passed")
     return TestRunSummary(
         stages_run=len(runs),
-        tests_total=len(outcomes),
+        tests_total=len(results),
         passed=passed,
-        failed=len(outcomes) - passed,
+        failed=len(results) - passed,
     )
 
 
