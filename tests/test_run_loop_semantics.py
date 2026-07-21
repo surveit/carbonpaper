@@ -257,8 +257,11 @@ def test_legacy_scalar_halted_at_manifest_renders_one_queue_link(tmp_path, monke
     page = client.get(f"/project/legacy_halt/runs/{run_id}")
     assert page.status_code == 200
     # One review-queue link for the whole "review" id — not one per character
-    # ("queue/r", "queue/e", ...), which would leave "queue/review" absent.
-    assert page.text.count("queue/review") == 1
+    # ("queue/r", "queue/e", ...). Match through the href's closing quote:
+    # the page also embeds the raw manifest JSON, whose queue-file path
+    # ("queue/review.parquet" on POSIX) would otherwise add a false match.
+    assert page.text.count('queue/review"') == 1
+    assert 'queue/r"' not in page.text
 
 
 # ── Resume clears the stale halt marker ──────────────────────────────────────
