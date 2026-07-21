@@ -1849,3 +1849,56 @@ td.row-num, th.row-num { text-align: right; color: #98a1b3; font-variant-numeric
 .path-field input[readonly] { background: var(--code-bg); cursor: default; }
 .browse-btn { padding: 6px 12px; white-space: nowrap; flex: 0 0 auto; }
 .browse-btn:disabled { opacity: 0.6; cursor: default; }  /* while uploading */
+
+/* ─── Run launch (Runs page): the run form gets its own "Run the workflow" section
+   below the header, styled to the app tokens as one bordered panel rather than raw
+   browser controls crammed into the header's button row. The input-path rows keep
+   their own .path-field / .browse-btn rules above; this styles the panel around them
+   plus the version select. */
+.run-launch { margin: 8px 0 28px; }
+.run-launch h2 { font-size: 15px; margin: 0 0 10px; }
+.run-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    max-width: 760px;
+    padding: 16px 18px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: white;
+}
+.run-controls .run-inputs { display: flex; flex-direction: column; gap: 12px; }
+.run-controls .run-version,
+.run-controls .run-input-row {
+    display: block;
+    margin: 0;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--muted);
+}
+.run-controls .run-version { display: flex; flex-direction: column; gap: 5px; }
+.run-controls select {
+    padding: 7px 9px;
+    font-family: inherit;
+    font-size: 14px;
+    color: var(--fg);
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    max-width: 440px;
+}
+/* The path input keeps its .path-field flex sizing + readonly code-bg (above); add
+   only the shared border/radius so it matches the select. */
+.run-controls .path-field input,
+.run-controls select {
+    border: 1px solid var(--border);
+    border-radius: 4px;
+}
+.run-controls .path-field input { padding: 7px 9px; font-size: 14px; }
+.run-controls select:focus,
+.run-controls .path-field input:focus {
+    outline: none;
+    border-color: var(--accent, #2563eb);
+    box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15);
+}
+.run-controls > .btn.primary { align-self: flex-start; margin-top: 2px; }

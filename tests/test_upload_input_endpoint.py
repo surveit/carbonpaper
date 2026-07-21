@@ -37,7 +37,8 @@ def test_upload_saves_under_stage_dir_and_returns_path(project):
 
 
 def test_reupload_same_stage_and_name_overwrites(project):
-    files = lambda b: {"file": ("a.csv", b, "text/csv")}
+    def files(b):
+        return {"file": ("a.csv", b, "text/csv")}
     p1 = client.post("/project/demo/upload-input", data={"stage_id": "s"},
                      files=files(b"one")).json()["path"]
     p2 = client.post("/project/demo/upload-input", data={"stage_id": "s"},

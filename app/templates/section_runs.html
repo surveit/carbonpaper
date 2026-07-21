@@ -18,13 +18,14 @@
     <p class="lede">Each run pins to a workflow <strong>version</strong> and reads its
       snapshot, so a run is reproducible against the exact workflow it executed.</p>
   </div>
-  <div class="actions wf-actions">
-    {% if state.workflow.present %}
-    {% include "_run_controls.html" %}
-    {% endif %}
-    <a href="/project/{{ state.name }}/workflow" class="btn">Workflow</a>
-  </div>
 </div>
+
+{% if state.workflow.present %}
+<section class="run-launch">
+  <h2>Run the workflow</h2>
+  {% include "_run_controls.html" %}
+</section>
+{% endif %}
 
 {% if state.runs.awaiting_review > 0 %}
 <div class="banner-review">
