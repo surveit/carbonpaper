@@ -30,6 +30,7 @@ from dataclasses import dataclass, field
 from typing import Any, Literal
 
 import pandas as pd
+from pydantic import BaseModel
 
 from app.core.models import Stage, TableSchema
 from app.core.models.stage import StageType
@@ -55,6 +56,63 @@ class StageTestResult:
     status: Status
     diffs: list[CellDiff] = field(default_factory=list)
     message: str | None = None
+
+
+# ─── Typed run report (JSON-serialisable; the MCP run_tests tool returns this) ─
+# The dataclasses above are the in-process result of one test; these Pydantic
+# models are the aggregated, model_dump-able report a caller (an authoring
+# agent) reads. `expected`/`actual` are Any because a cell holds a genuinely
+# arbitrary scalar value, not a structured shape being lazily typed.
+
+class CellDiffReport(BaseModel):
+    row: int
+    column: str
+    expected: Any
+    actual: Any
+
+
+class TestOutcome(BaseModel):
+    name: str
+    status: Status
+    diffs: list[CellDiffReport] = []
+    message: str | None = None
+
+
+class StageTestRun(BaseModel):
+    stage_id: str
+    stage_type: str
+    outcomes: list[TestOutcome]
+
+
+class TestRunSummary(BaseModel):
+    stages_run: int
+    tests_total: int
+    passed: int
+    failed: int
+
+
+class WorkflowTestReport(BaseModel):
+    summary: TestRunSummary
+    stages: list[StageTestRun]
+    untested_python_stages: list[str]
+
+
+def run_workflow_tests(
+    stages: list[Stage], stage_id: str | None = None
+) -> WorkflowTestReport:
+    """Run authored stage tests against their current code and report the result.
+
+    With `stage_id` None, run every python-transform stage that carries tests;
+    with a `stage_id`, run just that stage (raising ValueError if it names no
+    stage, or names one whose type carries no runnable tests). Either way,
+    `untested_python_stages` lists the in-scope python transforms that have no
+    tests — a coverage gap the caller should see, not a failure."""
+    targets = _select_target_stages(stages, stage_id)
+    runs = [_run_one_stage(stage) for stage in targets if stage.tests]
+    untested = [stage.id for stage in targets if not stage.tests]
+    return WorkflowTestReport(
+        summary=_summarize(runs), stages=runs, untested_python_stages=untested
+    )
 
 
 def run_stage_tests(stage: Stage) -> list[StageTestResult]:
@@ -84,6 +142,53 @@ def find_failing_stage_tests(stages: list[Stage]) -> list[str]:
                     f"stage {stage.id} fails test {result.name!r} ({result.status}) — {detail}"
                 )
     return failures
+
+
+def _select_target_stages(stages: list[Stage], stage_id: str | None) -> list[Stage]:
+    """The python-transform stages a run covers: all of them when `stage_id` is
+    None, or exactly the named one — raising ValueError if it is absent or is not
+    a stage type that carries runnable tests."""
+    if stage_id is None:
+        return [stage for stage in stages if stage.type in STAGE_TEST_TYPES]
+    stage = _find_stage(stages, stage_id)
+    if stage.type not in STAGE_TEST_TYPES:
+        raise ValueError(
+            f"stage {stage_id} ({stage.type}) does not carry runnable tests"
+        )
+    return [stage]
+
+
+def _find_stage(stages: list[Stage], stage_id: str) -> Stage:
+    for stage in stages:
+        if stage.id == stage_id:
+            return stage
+    raise ValueError(f"no stage '{stage_id}' in the workflow")
+
+
+def _run_one_stage(stage: Stage) -> StageTestRun:
+    outcomes = [_to_outcome(result) for result in run_stage_tests(stage)]
+    return StageTestRun(stage_id=stage.id, stage_type=stage.type, outcomes=outcomes)
+
+
+def _to_outcome(result: StageTestResult) -> TestOutcome:
+    diffs = [
+        CellDiffReport(row=d.row, column=d.column, expected=d.expected, actual=d.actual)
+        for d in result.diffs
+    ]
+    return TestOutcome(
+        name=result.name, status=result.status, diffs=diffs, message=result.message
+    )
+
+
+def _summarize(runs: list[StageTestRun]) -> TestRunSummary:
+    outcomes = [outcome for run in runs for outcome in run.outcomes]
+    passed = sum(1 for outcome in outcomes if outcome.status == "passed")
+    return TestRunSummary(
+        stages_run=len(runs),
+        tests_total=len(outcomes),
+        passed=passed,
+        failed=len(outcomes) - passed,
+    )
 
 
 def _run_one_test(stage: Stage, test: StageTest) -> StageTestResult:
