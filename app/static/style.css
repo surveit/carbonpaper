@@ -1830,3 +1830,22 @@ td.row-num, th.row-num { text-align: right; color: #98a1b3; font-variant-numeric
 .test-rows th, .test-rows td { border: 1px solid var(--border); padding: 0.15rem 0.5rem; font-size: 0.85rem; }
 .test-message { color: #802020; }
 .node-review-full .nr-edit-hint { margin: 0 0 10px; }
+
+/* ─── Run form: input path fields + browser file upload ───────────────────────
+   The run form (_run_controls.html) collects one absolute path per file input.
+   Each path field pairs a text input with a Browse… button; run_controls.js has
+   it open the browser's native file dialog and upload the pick to
+   POST /project/<name>/upload-input, which returns the saved copy's path. */
+.run-input-row { display: block; margin: 0.35rem 0; }
+.path-field {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 4px;
+    max-width: 100%;
+}
+.path-field input { flex: 1 1 auto; min-width: 0; }  /* shrink, don't overflow */
+/* Read-only display: set only via Browse…, so it reads as a field, not an input. */
+.path-field input[readonly] { background: var(--code-bg); cursor: default; }
+.browse-btn { padding: 6px 12px; white-space: nowrap; flex: 0 0 auto; }
+.browse-btn:disabled { opacity: 0.6; cursor: default; }  /* while uploading */

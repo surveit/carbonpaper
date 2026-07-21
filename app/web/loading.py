@@ -5,6 +5,7 @@ small pure helpers for the stage-dict shape they return."""
 from __future__ import annotations
 
 import json
+import shutil
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -134,6 +135,39 @@ def list_file_inputs(project_dir: Path, version_id: str | None = None) -> list[d
         if s.type == "input_data" and s.connector is not None
         and s.connector.kind == "file"
     ]
+
+
+# ─── Uploaded run-input files ────────────────────────────────────────────────
+
+def _safe_component(raw: str, fallback: str) -> str:
+    """A single, traversal-safe path component from untrusted input: the basename
+    with any directory parts stripped, rejecting the specials that would still
+    escape ('', '.', '..' — note Path('../..').name is '..', not '')."""
+    name = Path(raw).name
+    return fallback if name in ("", ".", "..") else name
+
+
+def save_uploaded_input(project_dir: Path, stage_id: str, filename: str, src) -> Path:
+    """Save a browser-uploaded run-input file under the project's
+    uploads/<stage_id>/ dir and return its absolute path.
+
+    A run reads its inputs off the SERVER's disk by absolute path, but a browser
+    `<input type=file>` hands over only bytes, never a path (every OS hides it) —
+    so the cross-platform Browse uploads the file and the run then reads THIS
+    saved copy by path, exactly like any other input. `src` is a readable binary
+    stream (the UploadFile's file); it's streamed to disk, so large files don't
+    have to sit in memory. Both the stage id and filename are reduced to a single
+    safe component (no directory traversal); the per-stage subdir keeps two
+    stages' same-named files from colliding, and re-uploading the same stage/name
+    overwrites in place (a fresh pick replaces the old copy)."""
+    safe_stage = _safe_component(stage_id, "input")
+    safe_name = _safe_component(filename, "upload.dat")
+    dest_dir = project_dir / "uploads" / safe_stage
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    dest = dest_dir / safe_name
+    with dest.open("wb") as out:
+        shutil.copyfileobj(src, out)
+    return dest.resolve()
 
 
 # ─── Source & code reads ─────────────────────────────────────────────────────
