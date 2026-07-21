@@ -68,12 +68,9 @@ _ALLOWLIST: frozenset[str] = frozenset(
         "assistant",
         "error",
         "inf",
-        "json",
-        "list[json]",
         "modify",
         "passed",
         "reject",
-        "str",
         "text",
     }
 )

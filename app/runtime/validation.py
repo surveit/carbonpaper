@@ -20,7 +20,7 @@ from typing import Any
 
 import pandas as pd
 
-from app.core.models import Column, TableSchema
+from app.core.models import Column, STR_COLUMN_TYPE, TableSchema
 
 
 # Map our type vocabulary to permissive pandas dtype checks.
@@ -128,7 +128,7 @@ def validate_dataframe(
                     pass  # mixed types — the type check below will catch it
 
         # Enum (categorical strings): values must be in the declared vocabulary
-        if col.enum and col_type == "str":
+        if col.enum and col_type == STR_COLUMN_TYPE:
             non_null = series.dropna()
             if len(non_null):
                 allowed = set(col.enum)
