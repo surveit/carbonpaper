@@ -68,11 +68,13 @@ allowed_importers = ["app.main", "app.services"]
 # runs it from the CLI. The reusable agent spine (app.core.agent) must not import it.
 
 [[tool.importlinter.contracts]]
-name = "app.runtime imported only by evals, web"
+name = "app.runtime imported only by evals, web, mcp"
 type = "protected"
 protected_modules = ["app.runtime"]
-allowed_importers = ["app.evals", "app.web"]
-# The runner is driven from web (top) and evals. app.core.agent sits below the runtime
+allowed_importers = ["app.evals", "app.web", "app.mcp"]
+# The runner is driven by the top-level interfaces: web, evals, and mcp (the glassbox
+# authoring surface, a top-level runtime driver like app.web — its run_tests tool runs a
+# stage's authored tests against its current code). app.core.agent sits below the runtime
 # (llm.py imports app.core.agent.agent.Agent as the reply backend) rather than the other
 # way round, so it is not an importer here. app.services must not reach into it —
 # status/review helpers stay runtime-free.
