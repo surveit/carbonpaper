@@ -147,12 +147,14 @@ ignore_imports = ["app.compiler.router -> fastapi"]
 # from source_modules — a forbidden contract only restricts the modules it
 # names). Routing/HTTP concerns stay out of the domain and infra layers.
 #
-# app.compiler.router is a ratchet exception: it is the compiler subsystem's
-# own "Edit with agent" web entry, mounted directly by app.main (mirroring the
-# existing "app.compiler imported only by the entrypoint and services"
-# contract above) rather than living under app.web. Moving the file would
-# fight that established ownership split for one router; flagged in the
-# task-4 report instead.
+# app.compiler.router is a deliberate, permanent carve-out, not ratchet debt to
+# be emptied: it is the compiler subsystem's own "Edit with agent" web entry,
+# mounted directly by app.main and owned by its subsystem — the same
+# entrypoint-mounted pattern as the "app.mcp imported only by the entrypoint"
+# and "app.agents imported only by the entrypoint" contracts above, just
+# expressed as an ignore_imports exception here instead of a protected
+# contract, since app.compiler is a source_module of the forbidden contract
+# above rather than its own protected_modules entry.
 
 # NB: "app.seeds reaches the store through services" is enforced as an AST allowlist
 # in app/seeds/_arch_tests/test_seed_reaches_store_via_services.py (check_no_import),

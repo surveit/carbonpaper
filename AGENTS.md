@@ -47,6 +47,6 @@ app/chat/  PydanticAI chat · app/core/llm/  model menu · tests/  pytest (offli
 - **Reuse audit in the review guide.** For each new public function a PR introduces, the review
   guide includes one line: "reuse audit: searched \<where/what was searched\>; found none" or
   "reuse audit: extends \<existing primitive\> because \<one-line reason\>". Re-derived existing
-  primitives (schema set-math, stage lookups, manifest writers) have been the most repeated
+  primitives (schema set-math, stage lookups, manifest writers) have been a repeated
   review finding; the audit line makes the search visible so the reviewer can spot-check it
   instead of re-deriving the inventory themselves.
