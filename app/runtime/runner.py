@@ -21,7 +21,7 @@ import time
 import traceback
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Iterable, Mapping
 
 import pandas as pd
 import pyarrow.lib as pa_lib
@@ -461,12 +461,12 @@ def _find_blocking_upstream(stage: Stage, blocked: set[str]) -> list[str]:
     return [input_id for input_id in stage.input_ids if input_id in blocked]
 
 
-def _final_run_status(stage_records: list[dict[str, Any]]) -> RunStatus:
-    """A non-cancelled run's overall status from its stage records, error-first:
+def _final_run_status(stage_statuses: Iterable[str]) -> RunStatus:
+    """A non-cancelled run's overall status from its stages' statuses, error-first:
     any errored stage -> errors; else any halted stage -> awaiting_review; else
     any warnings -> warnings; else ok. A `pending` (blocked) stage only exists
     downstream of an errored/halted one, so it never needs a branch of its own."""
-    statuses = {record["status"] for record in stage_records}
+    statuses = set(stage_statuses)
     if StageStatus.ERROR in statuses:
         return RunStatus.ERRORS
     if StageStatus.AWAITING_REVIEW in statuses:
@@ -744,7 +744,9 @@ def _execute_stages(
             manifest["halted_at"] = halted_stage_ids
         else:
             manifest.pop("halted_at", None)
-        manifest["status"] = _final_run_status(manifest["stages"])
+        manifest["status"] = _final_run_status(
+            record["status"] for record in manifest["stages"]
+        )
 
     (run_dir / "manifest.json").write_text(
         json.dumps(manifest, indent=2, default=str), encoding="utf-8"
