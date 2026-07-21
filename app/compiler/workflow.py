@@ -16,7 +16,7 @@ callback; persisting it is the caller's job.
 from __future__ import annotations
 
 import json
-from typing import Callable
+from typing import Awaitable, Callable
 
 from app.compiler.workflow_prompt import WORKFLOW_SYSTEM_PROMPT
 from app.core.agent.agent import Agent
@@ -33,6 +33,7 @@ def start_workflow_generation_agent(
     model: str,
     data_model: SchemaLibrary | None,
     on_answer: Callable[[Workflow | None], None],
+    after_persist: Callable[[], Awaitable[None]] | None = None,
 ) -> str:
     """Start the workflow-generation agent as a LIVE chat turn and return the session id.
 
@@ -40,8 +41,14 @@ def start_workflow_generation_agent(
     the agent on the shared TurnManager, so the compile is watchable at /chat/<sid> while it
     happens and persists when it ends. Compiles ONLY the workflow, grounding it in `data_model`
     (the approved schemas) when given. When the turn finishes, `on_answer` is called with the
-    submitted Workflow — or None if none was submitted. Must be called from the server event
-    loop (it starts a turn there)."""
+    submitted Workflow — or None if none was submitted.
+
+    `after_persist`, when given, is awaited AFTER `on_answer` has persisted a submitted
+    workflow (and never when nothing was submitted) — the seam the generation-time stage-test
+    pipeline hangs on, kept as an injected coroutine so this compiler bridge does not reach
+    into the runtime the pipeline needs. A raise from it fails the turn loudly (the TurnManager
+    surfaces it as an error event); it is not swallowed here. Must be called from the server
+    event loop (it starts a turn there)."""
     store = open_session_store()
     session_id = store.create(
         title=f"Generation · workflow · {project_name}",
@@ -54,6 +61,8 @@ def start_workflow_generation_agent(
 
     async def _on_done() -> None:
         on_answer(agent.answer)
+        if agent.answer is not None and after_persist is not None:
+            await after_persist()
 
     default_turn_manager().start(
         engine=agent.build_engine(),

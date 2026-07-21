@@ -1,7 +1,14 @@
-"""The deriver bridge: task assembly is code-blind and schema-grounded."""
+"""The deriver bridge: task assembly is code-blind and schema-grounded. The repair bridge is
+its mirror: it DOES see the code, but its answer schema carries no test-editing lever."""
 import pytest
 
-from app.compiler.stage_tests import build_stage_test_deriver, render_derivation_task
+from app.compiler.stage_tests import (
+    RepairedStageCode,
+    build_stage_test_deriver,
+    build_stage_test_repair_agent,
+    render_derivation_task,
+    render_repair_task,
+)
 from app.core.models import Stage
 
 _CODE = "def transform(row):\n    return {**row, 'doubled': row['amount'] * 2}\n"
@@ -63,3 +70,31 @@ def test_deriver_target_schema_is_stage_bound():
         agent._target_schema.model_validate({"tests": [{
             "name": "x", "inputs": {"ghost": [{"amount": 1.0}]},
             "expected": [{"amount": 1.0, "doubled": 2.0}]}]})
+
+
+# ── the code-repair bridge ────────────────────────────────────────────────────────────
+
+def test_repair_agent_answer_schema_is_code_only():
+    """The repair agent's ONLY output field is `code` — it structurally cannot edit the tests,
+    which is the whole invariant (a red test is fixed by fixing code, never by rewriting it)."""
+    agent = build_stage_test_repair_agent(_python_stage(), "some failures")
+    assert agent._target_schema is RepairedStageCode
+    assert set(RepairedStageCode.model_fields) == {"code"}
+
+
+def test_repair_task_shows_code_and_failures_but_not_the_methodology():
+    task = render_repair_task(_python_stage(), "FAILREPORT: row 0 differs")
+    assert "def transform" in task        # the code IS shown to the repairer
+    assert "FAILREPORT" in task           # and the failing-test report
+    assert "double" in task               # stage identity
+
+
+def test_repair_agent_rejects_non_python_stage():
+    pub = Stage.model_validate({
+        "id": "pub", "name": "Publish", "type": "publish",
+        "inputs": [{"id": "double"}],
+        "function": {"kind": "inline", "code": "def transform(df, output_dir):\n    return df\n"},
+        "publish": {},
+    })
+    with pytest.raises(ValueError, match="python transforms"):
+        build_stage_test_repair_agent(pub, "failures")

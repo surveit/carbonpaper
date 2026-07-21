@@ -11,7 +11,7 @@ not here.
 """
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, model_validator
 
@@ -20,16 +20,41 @@ from app.core.models.schema import _Base
 # The stage types whose handlers can execute a test.
 STAGE_TEST_TYPES = frozenset({"python_row_function", "python_frame_function"})
 
+# The one origin value the generation pipeline stamps onto the tests it authors.
+# A case WITHOUT this marker (origin is None) is human territory — hand-authored,
+# hand-edited, or a fixture — and `stage_tests_are_frozen` keeps such a set out of
+# a regenerate's reach.
+GENERATED_ORIGIN = "generated"
+
 
 class StageTest(_Base):
     """One case: `inputs` maps each of the stage's declared upstream ids to that
     input's rows; `expected` is the output rows those inputs must produce.
     `name` is the case's stable handle — what it pins down, e.g.
-    "withdrawn_bill_maps_to_null"; `description` says why the case exists."""
+    "withdrawn_bill_maps_to_null"; `description` says why the case exists.
+
+    `origin` is `"generated"` on a case the generation pipeline authored, and
+    None (the default, dropped from the canonical dump) on any human-authored or
+    hand-edited case — the marker `stage_tests_are_frozen` reads to decide whether
+    a regenerate may overwrite a stage's suite."""
     name: str
     description: Optional[str] = None
     inputs: dict[str, list[dict[str, Any]]]
     expected: list[dict[str, Any]]
+    origin: Optional[Literal["generated"]] = None
+
+
+def stage_tests_are_frozen(tests: Optional[list[StageTest]]) -> bool:
+    """Is this stage's test set HUMAN-touched, so a regenerate must leave it be?
+
+    True iff the stage carries tests AND at least one case is NOT machine-authored
+    (its `origin` is not "generated"): a hand-written case, a fixture, or a set a
+    human edited. A set the generation pipeline wrote wholesale (every case
+    `origin="generated"`) is False — safe to re-derive — and a stage with no tests
+    is False (nothing to freeze)."""
+    if not tests:
+        return False
+    return any(test.origin != GENERATED_ORIGIN for test in tests)
 
 
 def validate_stage_tests(

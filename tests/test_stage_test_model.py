@@ -3,7 +3,10 @@ import pytest
 from pydantic import ValidationError
 
 from app.core.models import Stage, StageTest
-from app.core.models.stages.stage_tests import build_stage_tests_model
+from app.core.models.stages.stage_tests import (
+    build_stage_tests_model,
+    stage_tests_are_frozen,
+)
 from app.services.loader import stage_to_spec_dict
 
 _IN_SCHEMA = {"columns": [{"name": "amount", "type": "float", "nullable": False}]}
@@ -127,3 +130,39 @@ def test_stage_tests_model_rejects_row_function_fan_out():
                                      {"amount": 3.0, "doubled": 6.0}])
     with pytest.raises(ValidationError, match="one row in"):
         model.model_validate({"tests": [bad]})
+
+
+# ── origin marker + the freeze it drives ──────────────────────────────────────────────
+
+def test_origin_defaults_none_and_is_dropped_from_the_canonical_dump():
+    """A test authored the old way (no origin) round-trips with NO `origin` key, so every
+    pre-existing belief hash is unchanged by the new field."""
+    stage = Stage.model_validate(_row_stage(tests=[_GOOD_TEST]))
+    assert stage.tests[0].origin is None
+    dumped = stage_to_spec_dict(stage)
+    assert "origin" not in dumped["tests"][0]
+
+
+def test_generated_origin_survives_the_round_trip():
+    generated = dict(_GOOD_TEST, origin="generated")
+    stage = Stage.model_validate(_row_stage(tests=[generated]))
+    assert stage.tests[0].origin == "generated"
+    assert stage_to_spec_dict(stage)["tests"][0]["origin"] == "generated"
+
+
+def test_origin_rejects_unknown_values():
+    with pytest.raises(ValidationError):
+        StageTest.model_validate({**_GOOD_TEST, "origin": "handwritten"})
+
+
+def test_stage_tests_are_frozen_only_when_a_case_is_not_machine_authored():
+    assert stage_tests_are_frozen(None) is False          # no tests → nothing to freeze
+    all_generated = [StageTest.model_validate({**_GOOD_TEST, "origin": "generated"})]
+    assert stage_tests_are_frozen(all_generated) is False  # wholesale machine-authored → re-derivable
+    hand_authored = [StageTest.model_validate(_GOOD_TEST)]  # origin unset
+    assert stage_tests_are_frozen(hand_authored) is True    # a human case freezes the set
+    mixed = [
+        StageTest.model_validate({**_GOOD_TEST, "origin": "generated"}),
+        StageTest.model_validate({**_GOOD_TEST, "name": "extra"}),  # one human case
+    ]
+    assert stage_tests_are_frozen(mixed) is True

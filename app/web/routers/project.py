@@ -61,6 +61,7 @@ from app.services import data_model as data_model_service
 from app.services import generation, node_review, project, versioning
 from app.services.loader import stage_to_spec_dict
 from app.web.config import EXAMPLES_DIR, templates
+from app.web.stage_test_derivation import generate_stage_tests_for_workflow
 from app.web.diagrams import (
     SCHEMA_KIND_CLASS,
     SCHEMA_KIND_GLYPH,
@@ -263,11 +264,16 @@ async def generate_workflow(project_name: str):
         )
     model = project.project_meta(pdir).model or "sonnet"
     data_model = data_model_service.load_data_model(pdir, approved_only=True)
+    document = document_path.read_text(encoding="utf-8")
     session_id = generation.start_workflow_generation(
         pdir,
-        document=document_path.read_text(encoding="utf-8"),
+        document=document,
         model=model,
         data_model=data_model,
+        # After the workflow lands on disk, derive each python transform's tests and repair
+        # its code until green — headless, on the same turn. Injected here (not in the service)
+        # because running tests needs app.runtime, which app.services must not import.
+        on_persisted=lambda: generate_stage_tests_for_workflow(pdir, document=document, model=model),
     )
     return RedirectResponse(url=f"/chat/{session_id}", status_code=303)
 
