@@ -35,4 +35,5 @@ def test_invalid_working_copy_versions_as_400_with_issues(tmp_path, monkeypatch)
     assert resp.status_code == 400, resp.text
     body = resp.json()
     assert body["ok"] is False
+    assert "working copy failed validation" in body["detail"]
     assert any("ABSOLUTE" in issue for issue in body["issues"]), body

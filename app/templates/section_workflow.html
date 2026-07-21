@@ -283,7 +283,7 @@
           let detail = 'Version creation failed.';
           try {
             const body = await r.json();
-            if (body.issues) detail = 'Cannot create a version:\n' + body.issues.join('\n');
+            if (body.issues) detail = (body.detail || 'Cannot create a version:') + '\n\n' + body.issues.join('\n');
             else if (body.detail) detail = body.detail;
           } catch (parseError) { /* non-JSON error body: keep the generic message */ }
           alert(detail);
