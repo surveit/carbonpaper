@@ -24,6 +24,7 @@
 {% set running = manifest.stages | selectattr('status', 'equalto', 'running') | list | length %}
 {% set pending = manifest.stages | selectattr('status', 'equalto', 'pending') | list | length %}
 {% set awaiting = manifest.stages | selectattr('status', 'equalto', 'awaiting_review') | list | length %}
+{% set cancelled = manifest.stages | selectattr('status', 'equalto', 'cancelled') | list | length %}
 {% set done = ok + warn %}
 {% set is_running = manifest.status == 'running' %}
 
@@ -44,12 +45,18 @@
     <span id="progress-counts" class="progress-counts">
         <b>{{ done }}/{{ total }}</b> complete · <span id="pc-running">{{ running }}</span> in&nbsp;progress · <span id="pc-todo">{{ pending }}</span> to&nbsp;do
     </span>
+    {% if is_running %}
+    <form method="post" action="/project/{{ project }}/runs/{{ run_id }}/cancel" id="cancel-run-form">
+        <button type="submit" class="btn danger" id="cancel-run-btn">✕ Cancel run</button>
+    </form>
+    {% endif %}
 </div>
 
-<div id="alert-strip" class="alert-strip" {% if not (warn or err or awaiting) %}hidden{% endif %}>
+<div id="alert-strip" class="alert-strip" {% if not (warn or err or awaiting or cancelled) %}hidden{% endif %}>
     <span id="al-err" class="alert err" {% if not err %}hidden{% endif %}>✗ <b>{{ err }}</b> error{% if err != 1 %}s{% endif %}</span>
     <span id="al-warn" class="alert warn" {% if not warn %}hidden{% endif %}>⚠ <b>{{ warn }}</b> warning{% if warn != 1 %}s{% endif %}</span>
     <span id="al-awaiting" class="alert awaiting" {% if not awaiting %}hidden{% endif %}>👤 <b>{{ awaiting }}</b> awaiting review</span>
+    <span id="al-cancelled" class="alert cancelled" {% if not cancelled %}hidden{% endif %}>✖ <b>{{ cancelled }}</b> cancelled</span>
 </div>
 
 {% if err and not is_running %}
@@ -115,6 +122,18 @@
   window._loadStage = loadStage;
   if (location.hash) loadStage(decodeURIComponent(location.hash.slice(1)));
 
+  // ── Cancel button: disable + relabel immediately on submit so a second
+  //    click can't fire a second request while the redirect is in flight.
+  //    The poller above (or the full reload on a non-live page) handles
+  //    picking up the resulting `cancelled` status. ──
+  const cancelForm = document.getElementById('cancel-run-form');
+  if (cancelForm) {
+    cancelForm.addEventListener('submit', function () {
+      const btn = document.getElementById('cancel-run-btn');
+      if (btn) { btn.disabled = true; btn.textContent = 'Cancelling…'; }
+    });
+  }
+
   // ── Live progress poller ──
   const RUNNING = {{ is_running | tojson }};
   if (RUNNING) {
@@ -136,11 +155,12 @@
       const fill = $('progress-fill'); if (fill && c.total) fill.style.width = (100 * c.done / c.total) + '%';
       const pc = $('progress-counts'); if (pc) pc.innerHTML = `<b>${c.done}/${c.total}</b> complete · ${c.running} in&nbsp;progress · ${c.pending} to&nbsp;do`;
       // alert strip
-      const anyAlert = c.err || c.warn || c.awaiting;
+      const anyAlert = c.err || c.warn || c.awaiting || c.cancelled;
       show($('alert-strip'), anyAlert);
       show($('al-err'), c.err); if ($('al-err')) $('al-err').innerHTML = `✗ <b>${c.err}</b> error${c.err!=1?'s':''}`;
       show($('al-warn'), c.warn); if ($('al-warn')) $('al-warn').innerHTML = `⚠ <b>${c.warn}</b> warning${c.warn!=1?'s':''}`;
       show($('al-awaiting'), c.awaiting); if ($('al-awaiting')) $('al-awaiting').innerHTML = `👤 <b>${c.awaiting}</b> awaiting review`;
+      show($('al-cancelled'), c.cancelled); if ($('al-cancelled')) $('al-cancelled').innerHTML = `✖ <b>${c.cancelled}</b> cancelled`;
 
       const sig = d.stages.map(s => s.status).join(',');
       if (sig !== lastSig) { lastSig = sig; rerenderWorkflow(d.mermaid); }

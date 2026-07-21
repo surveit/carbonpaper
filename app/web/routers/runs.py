@@ -16,8 +16,10 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from starlette.concurrency import run_in_threadpool
 
 from app.core.errors import MissingInputBindingError, NoVersionToRunError, RowOutOfRange, StageNotInRun
+from app.core.run_status import RunStatus, StageStatus
 from app.services.loader import WorkflowLoadError, load_workflow
 from app.services.versioning import list_versions
+from app.runtime.cancellation import request_cancel
 from app.runtime.preview import PREVIEWABLE_TYPES, PreviewError, run_stage_preview
 from app.runtime.runner import prepare_run, resume_run, run_prepared
 from app.runtime.trace import trace_row, trace_to_dict
@@ -72,7 +74,9 @@ async def trigger_run(request: Request, project: str):
         form = await request.form()
         version_id = str(form.get("version_id") or "").strip() or None
         bindings = _collect_bindings(form, project_dir, version_id)
-        prep = prepare_run(project_dir, REPO_ROOT, version_id=version_id, bindings=bindings)
+        limits = _collect_limits(form)
+        prep = prepare_run(project_dir, REPO_ROOT, version_id=version_id,
+                            bindings=bindings, limits=limits)
     except (NoVersionToRunError, MissingInputBindingError, ValueError) as exc:
         # ValueError here is binding/limit/offset validation failures raised by
         # apply_run_bindings / prepare_run — not a catch-all for other bugs.
@@ -136,6 +140,28 @@ def _collect_bindings(
         if path and path != authored.get(stage_id, ""):
             bindings[stage_id] = {"path": path}
     return bindings
+
+
+def _collect_limits(form: FormData) -> dict[str, int]:
+    """Read `limit__<stage_id>` form fields into a per-run row-cap override,
+    the same shape `prepare_run`'s `limits` parameter takes. A blank field
+    means "no cap" and is left out of the dict (never recorded as 0). A value
+    that is not a non-negative whole number fails loudly, naming the stage."""
+    limits: dict[str, int] = {}
+    for key, value in form.items():
+        if not key.startswith("limit__"):
+            continue
+        stage_id = key[len("limit__"):]
+        text = str(value).strip()
+        if not text:
+            continue
+        if not text.isdecimal():
+            raise ValueError(
+                f"row limit for stage '{stage_id}' must be a non-negative "
+                f"whole number, got {value!r}"
+            )
+        limits[stage_id] = int(text)
+    return limits
 
 
 @router.get("/project/{project}/run-inputs")
@@ -210,19 +236,20 @@ async def run_status(project: str, run_id: str):
     status_by_id = {s["stage_id"]: s.get("status", "") for s in mstages}
     mermaid = build_mermaid_graph(load_stages(project).stages, project, status_by_id=status_by_id)
 
-    def _count(st: str) -> int:
+    def _count(st: StageStatus) -> int:
         return sum(1 for s in mstages if s.get("status") == st)
 
     return JSONResponse({
         "status": manifest.get("status"),
-        "terminal": manifest.get("status") != "running",
+        "terminal": manifest.get("status") != RunStatus.RUNNING,
         "halted_at": manifest.get("halted_at"),
         "finished_at": manifest.get("finished_at"),
-        "counts": {"ok": _count("ok"), "warn": _count("validation_warnings"),
-                   "err": _count("error"), "total": len(mstages),
-                   "done": _count("ok") + _count("validation_warnings"),
-                   "running": _count("running"), "pending": _count("pending"),
-                   "awaiting": _count("awaiting_review")},
+        "counts": {"ok": _count(StageStatus.OK), "warn": _count(StageStatus.VALIDATION_WARNINGS),
+                   "err": _count(StageStatus.ERROR), "total": len(mstages),
+                   "done": _count(StageStatus.OK) + _count(StageStatus.VALIDATION_WARNINGS),
+                   "running": _count(StageStatus.RUNNING), "pending": _count(StageStatus.PENDING),
+                   "awaiting": _count(StageStatus.AWAITING_REVIEW),
+                   "cancelled": _count(StageStatus.CANCELLED)},
         "stages": [{"stage_id": s["stage_id"], "status": s.get("status")} for s in mstages],
         "mermaid": mermaid,
     })
@@ -235,10 +262,11 @@ def _artifact_links(project: str, run_id: str, run_dir: Path, manifest: dict) ->
     linking to the files it actually wrote under artifacts/ (preferring a
     browsable index.html) rather than a hardcoded guess. Empty for in-progress or
     never-published runs, so the page shows no banner."""
-    if manifest.get("status") in ("running", None):
+    if manifest.get("status") in (RunStatus.RUNNING, None):
         return []
     has_ok_publish = any(
-        s.get("type") == "publish" and s.get("status") in ("ok", "validation_warnings")
+        s.get("type") == "publish"
+        and s.get("status") in (StageStatus.OK, StageStatus.VALIDATION_WARNINGS)
         for s in manifest.get("stages", [])
     )
     artifacts_root = run_dir / "artifacts"
@@ -570,6 +598,23 @@ async def resume_run_route(project: str, run_id: str):
     # Resume re-runs the queue stage + downstream (LLM-heavy) — do it in the
     # background and redirect immediately so the page can poll progress.
     run_in_background(resume_run, project_dir, run_id, REPO_ROOT)
+    return RedirectResponse(
+        url=f"/project/{project}/runs/{run_id}",
+        status_code=303,
+    )
+
+
+@router.post("/project/{project}/runs/{run_id}/cancel")
+async def cancel_run_route(project: str, run_id: str):
+    """Cooperative cancel: records a cancel request for (project, run_id) that
+    the run thread polls at its checkpoints (see app.runtime.cancellation). A
+    no-op on a run that is already terminal — cancelling only means something
+    while the run is still `running` — but redirects back either way, same as
+    resume, so the page's poller/reload handles the rest."""
+    run_dir = runs_dir(project) / run_id
+    manifest = load_manifest(run_dir)  # 404s if the run doesn't exist
+    if manifest.get("status") == RunStatus.RUNNING:
+        request_cancel(project, run_id)
     return RedirectResponse(
         url=f"/project/{project}/runs/{run_id}",
         status_code=303,

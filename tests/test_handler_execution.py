@@ -10,6 +10,7 @@ import pytest
 
 from app.core.models import Stage
 from app.core.models.stage import StageType
+from app.runtime.cancellation import RunCancelled, request_cancel
 from app.runtime.stages.execution import (
     FrameHandler,
     RowMapHandler,
@@ -56,6 +57,60 @@ def test_row_driver_preserves_order_under_parallelism():
     handler = RowMapHandler(make_mapper=make_mapper, parallelism=4)
     out = handler.execute(_row_stage(), {"src": pd.DataFrame({"x": list(range(8))})}, {})
     assert list(out["x"]) == list(range(8))
+
+
+def test_row_driver_parallel_branch_raises_run_cancelled_when_pre_requested():
+    # Cancellation is requested BEFORE execute() even starts. The check runs
+    # once per as_completed() wakeup, but a freed worker thread picks up its
+    # next queued row independently of that check — so "how many rows race
+    # ahead before the first check fires" is a genuine OS-scheduling race,
+    # not something this test can pin to an exact count. Using few workers
+    # (parallelism=2) against many more rows than could plausibly be
+    # dispatched in that race window keeps `len(calls) < len(records)` true
+    # without being timing-flaky.
+    calls: list[int] = []
+
+    def make_mapper(stage, ctx):
+        def map_row(row):
+            calls.append(row["x"])
+            time.sleep(0.01)
+            return {"x": row["x"]}
+        return map_row
+
+    handler = RowMapHandler(make_mapper=make_mapper, parallelism=2)
+    ctx: dict = {"project": "p-parallel", "run_id": "r-parallel"}
+    request_cancel("p-parallel", "r-parallel")
+    records = list(range(200))
+    with pytest.raises(RunCancelled):
+        handler.execute(_row_stage(), {"src": pd.DataFrame({"x": records})}, ctx)
+    assert 0 < len(calls) < len(records)  # some rows started, nowhere near all
+
+
+def test_row_driver_sequential_branch_raises_run_cancelled_when_pre_requested():
+    calls: list[int] = []
+
+    def make_mapper(stage, ctx):
+        def map_row(row):
+            calls.append(row["x"])
+            return {"x": row["x"]}
+        return map_row
+
+    handler = RowMapHandler(make_mapper=make_mapper)  # parallelism=1 -> sequential branch
+    ctx: dict = {"project": "p-seq", "run_id": "r-seq"}
+    request_cancel("p-seq", "r-seq")
+    with pytest.raises(RunCancelled):
+        handler.execute(_row_stage(), {"src": pd.DataFrame({"x": [1, 2, 3]})}, ctx)
+    assert calls == []  # cancelled before the first row's mapper ever ran
+
+
+def test_row_driver_ignores_cancellation_when_ctx_has_no_run_identity():
+    # A subset/eval run's ctx carries no project/run_id (see
+    # runner._subset_ctx) — cancellation must never apply to it, even if the
+    # same run_id happens to be cancelled elsewhere.
+    request_cancel("some-project", "some-run")
+    handler = RowMapHandler(make_mapper=lambda stage, ctx: lambda row: dict(row))
+    out = handler.execute(_row_stage(), {"src": pd.DataFrame({"x": [1, 2]})}, {})
+    assert len(out) == 2  # ran to completion, unaffected
 
 
 def test_row_driver_is_one_to_one():

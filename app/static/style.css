@@ -687,6 +687,9 @@ a.fact-chip:hover { background: var(--hover); color: var(--fg); }
     border-color: var(--accent);
 }
 .btn.primary:hover { background: #1a52d4; }
+.btn.danger { background: #fde8e8; color: #802020; border-color: #cc2a2a; }
+.btn.danger:hover { background: #fbdada; }
+.btn.danger:disabled { opacity: 0.6; cursor: default; }
 
 /* Run status badges */
 .run-status {
@@ -705,6 +708,7 @@ a.fact-chip:hover { background: var(--hover); color: var(--fg); }
 .run-status.status-errors,
 .run-status.status-error { background: #fde8e8; color: #802020; border-color: #cc3333; }
 .run-status.status-running { background: #eef2f7; color: #2c3e60; border-color: #4a5e85; }
+.run-status.status-cancelled { background: var(--code-bg); color: var(--muted); border-color: var(--border); }
 .run-status.status-corrupt,
 .run-status.status-unknown { background: var(--code-bg); color: var(--muted); border-color: var(--border); }
 
@@ -991,6 +995,7 @@ table.data-preview.scratch th { background: #f3ecd0; }
 /* ── Run page redesign: progress framing, full-width workflow, nested-tab panel ── */
 .run-topbar h1 { margin-bottom: .1rem; }
 .run-progress { display: flex; align-items: center; gap: 1rem; margin: 1rem 0 .4rem; flex-wrap: wrap; }
+.run-progress form { margin: 0 0 0 auto; }
 .spinner { width: 18px; height: 18px; border: 3px solid #e3e3e0; border-top-color: var(--accent);
     border-radius: 50%; animation: spin .8s linear infinite; display: inline-block; flex: none; }
 .spinner[hidden] { display: none; }
@@ -1001,6 +1006,7 @@ table.data-preview.scratch th { background: #f3ecd0; }
 .overall-status.status-ok { background: #e6f4e6; color: #1f6b1f; }
 .overall-status.status-errors, .overall-status.status-error { background: #fdecea; color: #a11; }
 .overall-status.status-awaiting_review { background: var(--review-bg); color: var(--review-border); }
+.overall-status.status-cancelled { background: var(--code-bg); color: var(--muted); }
 .progress-track { flex: 1; min-width: 160px; max-width: 420px; height: 10px; background: #e8e8e4;
     border-radius: 6px; overflow: hidden; }
 .progress-fill { height: 100%; background: #2a8a2a; transition: width .4s ease; }
@@ -1012,6 +1018,7 @@ table.data-preview.scratch th { background: #f3ecd0; }
 .alert.err { background: #fdecea; color: #a11; }
 .alert.warn { background: var(--warn-bg); color: var(--warn-border); }
 .alert.awaiting { background: var(--review-bg); color: var(--review-border); }
+.alert.cancelled { background: var(--code-bg); color: var(--muted); }
 .lede .lg { padding: 0 .25rem; border-radius: 3px; font-weight: 600; }
 .lg-done { color: #2a8a2a; } .lg-run { color: #b8860b; } .lg-err { color: #cc2a2a; } .lg-pend { color: #999; }
 

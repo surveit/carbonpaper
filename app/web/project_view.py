@@ -18,6 +18,7 @@ from pathlib import Path
 
 from pydantic import BaseModel, Field
 
+from app.core.run_status import RunStatus
 from app.services import project
 
 
@@ -218,8 +219,11 @@ def _runs_status(runs: project.RunsSummary) -> str:
         return "review"
     if runs.n == 0:
         return "none"
-    if runs.latest_status == "ok":
+    if runs.latest_status == RunStatus.OK:
         return "ok"
-    if runs.latest_status in ("error", "errors"):
+    # "error" (singular) is not a RunStatus member the runner ever writes at the
+    # run level (only RunStatus.ERRORS, plural) — matched here defensively
+    # alongside it in case an older/foreign manifest used the singular form.
+    if runs.latest_status in (RunStatus.ERRORS, "error"):
         return "bad"
     return "todo"

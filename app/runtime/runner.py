@@ -29,9 +29,11 @@ from pydantic import ValidationError as PydanticValidationError
 
 from app.core.errors import MissingInputBindingError, NoVersionToRunError, SubsetRunError
 from app.core.models import Connector, Stage, StageType, Workflow
+from app.core.run_status import RunStatus, StageStatus
 from app.services.loader import WorkflowLoadError
 from app.services import versioning
 
+from .cancellation import RunCancelled, consume_cancel
 from .stages import HANDLERS, PREFLIGHTS, HaltForReview
 from .validation import Issue, validate_dataframe
 
@@ -290,6 +292,11 @@ def prepare_run(
         "repo_root": repo_root,
         "run_dir": run_dir,
         "project_dir": project_dir,
+        # This run's logical identity for cancellation's checkpoints (see
+        # app.runtime.cancellation) — read by _execute_stages, never by name
+        # of anything on disk. run_dir above stays I/O-only.
+        "project": project_dir.name,
+        "run_id": run_id,
         "queue_stats": {},
         "dropped_columns": {},
         "limits": limits,
@@ -306,10 +313,10 @@ def prepare_run(
         # alongside the stage-owned preflight provenance records.
         "run_bindings": {sid: dict(params) for sid, params in (bindings or {}).items()},
         "input_bindings": input_records,
-        "status": "running",
+        "status": RunStatus.RUNNING,
         "stages": [
             {"stage_id": s.id, "type": s.type, "name": s.name,
-             "status": "pending", "input_validation": [], "output_validation": None,
+             "status": StageStatus.PENDING, "input_validation": [], "output_validation": None,
              "elapsed_ms": 0, "rows": 0, "error": None,
              "started_at": None, "finished_at": None}
             for s in ordered
@@ -391,9 +398,9 @@ def _subset_manifest(run_dir: Path, ordered: list[Stage]) -> dict[str, Any]:
     return {
         "run_id": run_dir.name,
         "started_at": datetime.now().isoformat(timespec="seconds"),
-        "status": "running",
+        "status": RunStatus.RUNNING,
         "stages": [{"stage_id": s.id, "type": s.type, "name": s.name,
-                    "status": "pending", "input_validation": [], "output_validation": None,
+                    "status": StageStatus.PENDING, "input_validation": [], "output_validation": None,
                     "elapsed_ms": 0, "rows": 0, "error": None,
                     "started_at": None, "finished_at": None}
                    for s in ordered],
@@ -405,13 +412,13 @@ def _raise_if_run_failed(manifest: dict[str, Any]) -> None:
     same status/stage records `_execute_stages` writes — the manifest is the run's
     result of record, so failure detection lives with it, not in each caller."""
     status = manifest.get("status")
-    if status in ("ok", "warnings"):
+    if status in (RunStatus.OK, RunStatus.WARNINGS):
         return
-    if status == "awaiting_review":
+    if status == RunStatus.AWAITING_REVIEW:
         raise SubsetRunError(
             f"run halted for human review at {manifest.get('halted_at')!r}")
     for stage in manifest.get("stages", []):
-        if stage.get("status") == "error":
+        if stage.get("status") == StageStatus.ERROR:
             error = stage.get("error") or {}
             raise SubsetRunError(
                 f"stage {stage['stage_id']!r} errored: {error.get('message', 'unknown error')}")
@@ -426,6 +433,25 @@ def _summarize_row_errors(row_errors: list[dict[str, Any]]) -> str:
     return f"{len(row_errors)} row(s) failed generation: {head}{more}"
 
 
+def _read_run_identity(ctx: dict[str, Any]) -> tuple[str, str] | None:
+    """This run's logical (project, run_id) identity, read off ctx — the keys
+    prepare_run/resume_run stamp for cancellation's checkpoints. None when
+    either is absent: a subset/eval run's ctx (built by _subset_ctx) carries
+    neither key, so those runs are simply not cancellable."""
+    project, run_id = ctx.get("project"), ctx.get("run_id")
+    if not isinstance(project, str) or not isinstance(run_id, str):
+        return None
+    return project, run_id
+
+
+def _consume_cancel(ctx: dict[str, Any]) -> bool:
+    """Consume this run's cancel message if one is pending — read-once, so a
+    True means one was pending and is now gone (see _read_run_identity for when
+    a run is cancellable at all)."""
+    identity = _read_run_identity(ctx)
+    return identity is not None and consume_cancel(*identity)
+
+
 def _execute_stages(
     ordered: list[Stage],
     ctx: dict[str, Any],
@@ -433,15 +459,24 @@ def _execute_stages(
     run_dir: Path,
     outputs_so_far: dict[str, pd.DataFrame],
 ) -> dict[str, Any]:
-    """Execute ordered stages, honoring HaltForReview.
+    """Execute ordered stages, honoring HaltForReview and RunCancelled.
 
     Stages whose ids are already in `outputs_so_far` are skipped (their
     output was computed in a prior partial run and loaded from disk by
     the resume path). On HaltForReview the loop stops; remaining stages
     are appended as `pending` records and manifest status is
-    `awaiting_review`."""
+    `awaiting_review`.
+
+    On a cancel request (polled via ctx's `project`/`run_id` — see
+    app.runtime.cancellation) the loop stops the same way and manifest status
+    is `cancelled`: between stages, before the next one starts (it stays
+    `pending`); or mid-stage, via RunCancelled unwinding out of
+    handler.execute (that stage's own record is marked `cancelled`).
+    Stages already completed keep their `ok` record and on-disk output."""
     halted: HaltForReview | None = None
     halt_at_index: int = -1
+    cancelled = False
+    cancel_at_index: int = -1
 
     # Carry over any existing records (from a previously halted manifest
     # we're resuming). Build an index for upsert behavior.
@@ -452,12 +487,12 @@ def _execute_stages(
     def _pending_stub(s: Stage) -> dict[str, Any]:
         return {
             "stage_id": s.id, "type": s.type, "name": s.name,
-            "status": "pending", "input_validation": [], "output_validation": None,
+            "status": StageStatus.PENDING, "input_validation": [], "output_validation": None,
             "elapsed_ms": 0, "rows": 0, "error": None,
             "started_at": None, "finished_at": None,
         }
 
-    def flush(status: str = "running") -> None:
+    def flush(status: RunStatus = RunStatus.RUNNING) -> None:
         """Write the manifest mid-run so the run page can show live progress
         (stages light up as they start/finish) instead of the whole pipeline
         running silently and updating only at the very end."""
@@ -474,14 +509,25 @@ def _execute_stages(
         except OSError:
             pass
 
-    flush("running")  # initial: all stages pending
+    flush(RunStatus.RUNNING)  # initial: all stages pending
 
     for idx, stage in enumerate(ordered):
+        # Between-stage cancel checkpoint: before this stage starts (even
+        # before checking whether it's a resume-skip), consume a pending cancel
+        # message and, if there was one, stop. No exception, no record written
+        # here — the stage simply never starts, so it stays `pending` below.
+        if _consume_cancel(ctx):
+            cancelled = True
+            cancel_at_index = idx
+            break
+
         sid = stage.id
         stype = stage.type
 
         # Skip stages already produced (resume path).
-        if sid in outputs_so_far and records_by_id.get(sid, {}).get("status") in ("ok", "validation_warnings"):
+        if sid in outputs_so_far and records_by_id.get(sid, {}).get("status") in (
+            StageStatus.OK, StageStatus.VALIDATION_WARNINGS
+        ):
             continue
 
         record: dict[str, Any] = {
@@ -489,7 +535,7 @@ def _execute_stages(
             "type": stype,
             "name": stage.name,
             "started_at": datetime.now().isoformat(timespec="seconds"),
-            "status": "running",
+            "status": StageStatus.RUNNING,
             "input_validation": [],
             "output_validation": None,
             "elapsed_ms": 0,
@@ -498,7 +544,7 @@ def _execute_stages(
         }
         t0 = time.perf_counter()
         records_by_id[sid] = record
-        flush("running")  # show this stage as running
+        flush(RunStatus.RUNNING)  # show this stage as running
 
         try:
             inputs_for_stage: dict[str, pd.DataFrame] = {}
@@ -521,14 +567,19 @@ def _execute_stages(
             try:
                 output = handler.execute(stage, inputs_for_stage, ctx)
             except HaltForReview as halt:
-                record["status"] = "awaiting_review"
+                record["status"] = StageStatus.AWAITING_REVIEW
                 record["rows"] = halt.pending_count
                 record["queue_path"] = str(halt.queue_path.relative_to(run_dir))
-                record["elapsed_ms"] = int((time.perf_counter() - t0) * 1000)
-                record["finished_at"] = datetime.now().isoformat(timespec="seconds")
-                records_by_id[sid] = record
                 halted = halt
                 halt_at_index = idx
+                break
+            except RunCancelled:
+                # Mid-stage cancel: the row driver unwound out of
+                # handler.execute (see execution.py::_run_row_mapper). This
+                # stage made no output — it is marked cancelled, not ok.
+                record["status"] = StageStatus.CANCELLED
+                cancelled = True
+                cancel_at_index = idx
                 break
 
             if output is None:
@@ -582,16 +633,16 @@ def _execute_stages(
 
             outputs_so_far[sid] = output
             if row_errors:
-                record["status"] = "error"
+                record["status"] = StageStatus.ERROR
                 record["error"] = {
                     "type": "RowGenerationError",
                     "message": _summarize_row_errors(row_errors),
                     "traceback": None,
                 }
             else:
-                record["status"] = "ok" if out_rep.ok and all(
+                record["status"] = StageStatus.OK if out_rep.ok and all(
                     v["ok"] for v in record["input_validation"]
-                ) else "validation_warnings"
+                ) else StageStatus.VALIDATION_WARNINGS
             record["rows"] = int(len(output))
             record["output_path"] = str(output_path.relative_to(run_dir))
 
@@ -599,7 +650,7 @@ def _execute_stages(
             # to record ANY stage failure (a handler can raise ValueError,
             # RuntimeError, a pandas/pyarrow error, etc.) in the manifest and
             # continue/halt rather than crash the whole run.
-            record["status"] = "error"
+            record["status"] = StageStatus.ERROR
             record["error"] = {
                 "type": type(exc).__name__,
                 "message": str(exc),
@@ -607,11 +658,13 @@ def _execute_stages(
             }
             outputs_so_far[sid] = pd.DataFrame()
         finally:
-            if record["status"] != "awaiting_review":
-                record["elapsed_ms"] = int((time.perf_counter() - t0) * 1000)
-                record["finished_at"] = datetime.now().isoformat(timespec="seconds")
-                records_by_id[sid] = record
-            flush("running")  # persist this stage's result for the live page
+            # Every terminal status (ok, error, awaiting_review, cancelled)
+            # finalizes its timing here — `record` is already in records_by_id
+            # by reference, so the except branches above set only their
+            # distinguishing fields (status, halt queue info).
+            record["elapsed_ms"] = int((time.perf_counter() - t0) * 1000)
+            record["finished_at"] = datetime.now().isoformat(timespec="seconds")
+            flush(RunStatus.RUNNING)  # persist this stage's result for the live page
 
     # If halted, mark remaining stages as pending so the workflow can render
     # them greyed out.
@@ -622,7 +675,7 @@ def _execute_stages(
                 "stage_id": sid,
                 "type": stage.type,
                 "name": stage.name,
-                "status": "pending",
+                "status": StageStatus.PENDING,
                 "input_validation": [],
                 "output_validation": None,
                 "elapsed_ms": 0,
@@ -639,20 +692,26 @@ def _execute_stages(
     manifest["dropped_columns"] = ctx.get("dropped_columns", {})
 
     if halted is not None:
-        manifest["status"] = "awaiting_review"
+        manifest["status"] = RunStatus.AWAITING_REVIEW
         manifest["halted_at"] = halted.stage_id
+    elif cancelled:
+        # Never run the normal ok/errors/warnings computation for a cancelled
+        # run — a run stopped by request is neither a clean completion nor a
+        # failure.
+        manifest["status"] = RunStatus.CANCELLED
+        manifest["cancelled_at"] = ordered[cancel_at_index].id
+        manifest.pop("halted_at", None)
     else:
         manifest["status"] = (
-            "ok" if all(s["status"] == "ok" for s in manifest["stages"])
-            else "errors" if any(s["status"] == "error" for s in manifest["stages"])
-            else "warnings"
+            RunStatus.OK if all(s["status"] == StageStatus.OK for s in manifest["stages"])
+            else RunStatus.ERRORS if any(s["status"] == StageStatus.ERROR for s in manifest["stages"])
+            else RunStatus.WARNINGS
         )
         manifest.pop("halted_at", None)
 
     (run_dir / "manifest.json").write_text(
         json.dumps(manifest, indent=2, default=str), encoding="utf-8"
     )
-
     return manifest
 
 
@@ -693,7 +752,7 @@ def resume_run(project_dir: Path, run_id: str, repo_root: Path) -> dict[str, Any
     # Reload outputs from disk for stages that completed successfully.
     outputs_so_far: dict[str, pd.DataFrame] = {}
     for record in manifest.get("stages", []):
-        if record.get("status") not in ("ok", "validation_warnings"):
+        if record.get("status") not in (StageStatus.OK, StageStatus.VALIDATION_WARNINGS):
             continue
         op = record.get("output_path")
         if not op:
@@ -715,6 +774,11 @@ def resume_run(project_dir: Path, run_id: str, repo_root: Path) -> dict[str, Any
         "repo_root": repo_root,
         "run_dir": run_dir,
         "project_dir": project_dir,
+        # This run's logical identity for cancellation's checkpoints — see the
+        # matching comment in prepare_run. Stamped here too so a resumed run
+        # is cancellable, not just a fresh one.
+        "project": project_dir.name,
+        "run_id": run_id,
         "queue_stats": manifest.get("queue_stats", {}),
         "dropped_columns": manifest.get("dropped_columns", {}),
         # Re-apply the run's per-stage row slicing so stages that resume after
@@ -759,7 +823,7 @@ def main() -> int:
          "stages": [(s["stage_id"], s["status"], s["rows"]) for s in manifest["stages"]]},
         indent=2,
     ))
-    return 0 if manifest["status"] == "ok" else 1
+    return 0 if manifest["status"] == RunStatus.OK else 1
 
 
 if __name__ == "__main__":

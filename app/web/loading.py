@@ -15,6 +15,7 @@ from fastapi import HTTPException
 
 from app.core.errors import NoVersionToRunError
 from app.core.models import Stage
+from app.core.run_status import StageStatus
 from app.runtime.runner import resolve_version_id
 from app.services.loader import CompiledStageFile, load_compiled_dir
 from app.services.versioning import list_versions, load_version_stages
@@ -234,8 +235,8 @@ def list_runs(project: str) -> list[dict[str, Any]]:
                 # "(unversioned)" — a displayed truth, not a fabricated id.
                 "workflow_version": manifest.get("workflow_version"),
                 "stages_total": len(manifest.get("stages", [])),
-                "stages_ok": sum(1 for s in manifest.get("stages", []) if s.get("status") == "ok"),
-                "stages_error": sum(1 for s in manifest.get("stages", []) if s.get("status") == "error"),
+                "stages_ok": sum(1 for s in manifest.get("stages", []) if s.get("status") == StageStatus.OK),
+                "stages_error": sum(1 for s in manifest.get("stages", []) if s.get("status") == StageStatus.ERROR),
             })
     return entries
 

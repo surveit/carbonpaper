@@ -24,3 +24,14 @@ def offline_llm(monkeypatch):
 def fresh_store():
     from app.core.persistence import SqliteKvStore, configure_store
     configure_store(SqliteKvStore(":memory:"))
+
+
+@pytest.fixture(autouse=True)
+def reset_cancellation_registry():
+    """The cancel registry is process-global and production never removes keys
+    (see app.runtime.cancellation), so reset it around each test to keep runs
+    independent."""
+    from app.runtime.cancellation import reset
+    reset()
+    yield
+    reset()
