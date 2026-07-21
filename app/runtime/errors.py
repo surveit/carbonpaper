@@ -21,3 +21,10 @@ class HaltForReview(Exception):
 class PreviewError(Exception):
     """Raised when a scratch preview can't be run (bad type, missing upstream
     output, missing handler). The route turns this into a 4xx with the message."""
+
+
+class RunCancelled(Exception):
+    """Raised on the run thread when it consumes a cancel message for its
+    (project, run_id); caught by the runner to stop the run. An internal
+    control signal — sibling in spirit to HaltForReview
+    (app/runtime/errors.py) — never surfaced to a user as an error."""

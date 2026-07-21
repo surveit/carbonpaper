@@ -31,7 +31,8 @@ import pandas as pd
 from app.core.models import Stage
 from app.core.models.stage import StageType, is_grain_and_order_preserving
 
-from ..cancellation import RunCancelled, consume_cancel
+from ..cancellation import consume_cancel
+from ..errors import RunCancelled
 
 # One row of a stage's input or output: column label → cell value.
 Row = dict[str, Any]

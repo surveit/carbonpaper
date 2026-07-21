@@ -28,16 +28,7 @@ _ERRORS_MODULE_NAME = "errors.py"
 # Pre-existing classes that name-match the exception heuristic but cannot move
 # into an errors.py today. A ratchet: new entries are forbidden — a new
 # offender must be moved, not added here.
-#
-# - app/runtime/cancellation.py: RunCancelled — cancellation.py is a
-#   stdlib-only leaf (app/runtime/_arch_tests/test_cancellation_is_a_stdlib_leaf.py):
-#   it may not import any other app module, including a sibling errors.py, so
-#   its one exception has to stay declared where it's raised.
-_ALLOWLIST: frozenset[tuple[str, str]] = frozenset(
-    {
-        ("app/runtime/cancellation.py", "RunCancelled"),
-    }
-)
+_ALLOWLIST: frozenset[tuple[str, str]] = frozenset()
 
 
 def find_exception_class_defs(tree: ast.Module) -> list[tuple[int, str]]:

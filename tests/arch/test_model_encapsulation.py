@@ -127,7 +127,7 @@ _RULES: tuple[ProtectedAttributeRule, ...] = (
         # offender must call (or add) a TableSchema method, not extend this.
         allowlist=frozenset(
             {
-                "app/runtime/stages/execution.py:231",
+                "app/runtime/stages/execution.py:232",
                 "app/runtime/stages/human_review_queue.py:198",
                 "app/runtime/stage_tests.py:199",
                 "app/runtime/stage_tests.py:234",

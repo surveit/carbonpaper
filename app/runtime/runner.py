@@ -33,7 +33,8 @@ from app.core.run_status import RunStatus, StageStatus
 from app.services.errors import WorkflowLoadError
 from app.services import versioning
 
-from .cancellation import RunCancelled, consume_cancel
+from .cancellation import consume_cancel
+from .errors import RunCancelled
 from .stages import HANDLERS, PREFLIGHTS, HaltForReview
 from .validation import Issue, validate_dataframe
 
