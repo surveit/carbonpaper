@@ -1,0 +1,66 @@
+"""tests/test_seed_lobbying.py — smoke test for the committed lobbying-issue-
+triage WorkflowFile fixture (app/seeds/data/lobbying_issue_triage.json,
+produced by app.seeds.capture_lobbying): importing it through the project
+export/import seam must produce a runnable project with the source workflow's
+shape. A WorkflowFile carries no review state (see its docstring), so an
+import always starts with a clean, unreviewed slate — never a fabricated
+"pre-approved" project."""
+from __future__ import annotations
+
+from pathlib import Path
+
+from app.services import node_review, project, versioning
+from app.services.loader import load_workflow
+from app.services.project import WorkflowFile, import_project
+
+_FIXTURE_PATH = Path(__file__).resolve().parents[1] / "app" / "seeds" / "data" / "lobbying_issue_triage.json"
+_EXPECTED_STAGE_IDS = {"raw_filings", "classify_issues", "rank_by_spend", "publish_report"}
+
+
+def test_committed_lobbying_fixture_imports_and_validates_cleanly(tmp_path):
+    """WorkflowFile.model_validate_json + import_project on the committed
+    fixture: the project lists, its workflow loads with the 4 documented
+    stages, and exactly one (runnable) version exists. Approval coverage and
+    the data-model state are entirely unreviewed post-import — review state is
+    not part of a WorkflowFile, so this is never fabricated as "carried over"
+    from whatever the source project had recorded. Never executes the
+    workflow (no LLM call) — this is an import + validate smoke test."""
+    examples_dir = tmp_path / "examples"
+    examples_dir.mkdir()
+
+    wf = WorkflowFile.model_validate_json(_FIXTURE_PATH.read_text(encoding="utf-8"))
+    assert {stage.id for stage in wf.stages} == _EXPECTED_STAGE_IDS
+
+    imported_name = import_project(wf, name="lobbying_smoke", examples_dir=examples_dir)
+    project_dir = examples_dir / imported_name
+    assert imported_name in project.list_projects(examples_dir=examples_dir)
+
+    summary = project.describe_workflow(imported_name, examples_dir=examples_dir)
+    assert summary["issues"] == []
+    assert {stage["id"] for stage in summary["stages"]} == _EXPECTED_STAGE_IDS
+
+    # The strict loader too — the same one create_version required to succeed
+    # before import_project's version snapshot was written.
+    loaded_stages = load_workflow(project_dir)
+    assert {stage.id for stage in loaded_stages} == _EXPECTED_STAGE_IDS
+
+    versions = versioning.list_versions(project_dir)
+    assert len(versions) == 1
+
+    # A WorkflowFile carries no review state (see its docstring): a fresh
+    # import is always fully unreviewed, whatever the source had recorded.
+    imported_coverage = project.project_state(project_dir).workflow.coverage
+    assert imported_coverage is not None
+    assert imported_coverage.model_dump() == {
+        "approved": 0, "rejected": 0, "edited_stale": 0, "unreviewed": len(wf.stages),
+        "total": len(wf.stages), "approved_pct": 0.0,
+    }
+    assert project.project_state(project_dir).data_model.state == "unreviewed"
+    assert node_review.load_node_decisions(project_dir).empty
+
+    # The sample input CSV ships as a SIBLING fixture, not inside the
+    # WorkflowFile and not auto-copied into the project (binding a file is a
+    # run-time concern) — see app.seeds.__init__'s documented layout.
+    sibling_csv = _FIXTURE_PATH.with_suffix(".csv")
+    assert sibling_csv.is_file()
+    assert not (project_dir / "input").exists()

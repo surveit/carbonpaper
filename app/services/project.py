@@ -31,10 +31,10 @@ from typing import Any
 from pydantic import BaseModel
 
 from app.core.errors import ProjectExistsError
-from app.core.models import Coverage
+from app.core.models import Coverage, SchemaLibrary, Stage
 from app.core.run_status import RunStatus
-from app.services import node_review, stage_edit, versioning, workspace
-from app.services.loader import load_compiled_dir, stage_to_json
+from app.services import data_model, node_review, stage_edit, versioning, workspace
+from app.services.loader import load_compiled_dir, stage_to_json, write_stage
 from app.services.stage_edit import EditStageResult
 
 
@@ -348,6 +348,16 @@ def project_state(pdir: Path) -> ProjectState:
 # comes from the model, so it is validated to stay inside the workspace.
 
 
+def sanitize_project_name(name: str) -> str:
+    """Normalize `name` to the safe examples/<name>/ directory form
+    create_project uses: lowercased, every run of non-[a-z0-9_] characters
+    collapsed to a single `_`, defaulting to "project" if that leaves
+    nothing. A pure function so callers that need to know a project's
+    directory NAME before calling create_project (e.g. to decide whether one
+    already exists) can compute the same name it will use."""
+    return re.sub(r"[^a-z0-9_]", "_", name.strip().lower()) or "project"
+
+
 def create_project(
     name: str,
     document: str,
@@ -360,7 +370,7 @@ def create_project(
     name, write document.md (the source of record) and project.json (real model +
     created_at + source — never fabricated). Returns the sanitized name. Raises
     ValueError on an empty document and ProjectExistsError on a name clash."""
-    safe_name = re.sub(r"[^a-z0-9_]", "_", name.strip().lower()) or "project"
+    safe_name = sanitize_project_name(name)
     doc = document.strip()
     if not doc:
         raise ValueError("The methodology document is empty.")
@@ -418,6 +428,67 @@ def add_stage(name: str, stage_json: str, examples_dir: Path | None = None) -> E
     return stage_edit.add_stage_spec(workspace.resolve_project_dir(name, examples_dir), stage_json)
 
 
+# ─── Portable WorkflowFile: project export / import ──────────────────────────
+
+class WorkflowFile(BaseModel):
+    """A portable project — methodology + data model + workflow stages — as one
+    pydantic-serialized document. Not review state, not input data (a run-time
+    concern per #135). Serialize with `model_dump_json`, load with `model_validate_json`."""
+
+    name: str
+    document: str
+    model: str
+    source: str
+    data_model: SchemaLibrary
+    stages: list[Stage]
+
+
+def export_project(name: str, *, examples_dir: Path | None = None) -> WorkflowFile:
+    """Read project `name`'s working copy through the loaders into a WorkflowFile —
+    read-only. Raises FileNotFoundError if no such project; ValueError if it has no
+    recorded model/source/document (never fabricated)."""
+    pdir = workspace.resolve_project_dir(name, examples_dir)
+    meta = project_meta(pdir)
+    if meta.model is None or meta.source is None:
+        raise ValueError(
+            f"project '{name}' has no recorded model/source in project.json — cannot export"
+        )
+    document_path = project_state(pdir).document_path
+    if document_path is None:
+        raise ValueError(f"project '{name}' has no document — cannot export")
+    library = data_model.load_data_model(pdir) or SchemaLibrary(schemas=[])
+    stages = [c.stage for c in load_compiled_dir(pdir / "compiled") if c.stage is not None]
+    return WorkflowFile(
+        name=name,
+        document=Path(document_path).read_text(encoding="utf-8"),
+        model=meta.model,
+        source=meta.source,
+        data_model=library,
+        stages=stages,
+    )
+
+
+def import_project(
+    wf: WorkflowFile, *, name: str | None = None, examples_dir: Path | None = None,
+) -> str:
+    """Write `wf` into the workspace under `name` (default: `wf.name`) through the
+    existing service writers, then mint one version when it carries stages. Import-if-
+    absent only: raises ProjectExistsError on a name clash. Returns the sanitized name."""
+    target = sanitize_project_name(name or wf.name)
+    pdir = workspace.resolve_project_dir(target, examples_dir)
+    if pdir.exists():
+        raise ProjectExistsError(f"examples/{target}/ already exists — choose a different name.")
+    create_project(target, wf.document, model=wf.model, source=wf.source, examples_dir=examples_dir)
+    data_model.write_data_model(pdir, wf.data_model)
+    for i, stage in enumerate(wf.stages, start=1):
+        stage_path = pdir / "compiled" / f"{i:02d}_{stage.id}.json"
+        stage_path.parent.mkdir(parents=True, exist_ok=True)
+        write_stage(stage_path, stage)
+    if wf.stages:
+        versioning.create_version_from_disk(pdir, message=f"Imported '{target}'", reviewer="import")
+    return target
+
+
 __all__ = [
     "Coverage",
     "DataModelStatus",
@@ -429,10 +500,14 @@ __all__ = [
     "write_project_meta",
     "project_state",
     "find_document_path",
+    "sanitize_project_name",
     "create_project",
     "list_projects",
     "describe_workflow",
     "read_stage",
     "edit_stage",
     "add_stage",
+    "WorkflowFile",
+    "export_project",
+    "import_project",
 ]

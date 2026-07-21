@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block title %}Admin{% endblock %}
+{% block content %}
+<div class="dash-header">
+    <div class="dash-header-text">
+        <h1>Workspace admin</h1>
+        <p class="lede">Load a packaged seed bundle into this workspace, or export a project to a portable bundle directory.</p>
+    </div>
+</div>
+
+{% if msg %}
+<div class="banner">{{ msg }}</div>
+{% endif %}
+
+<h2>Seed bundles</h2>
+{% if bundles %}
+<table class="stages">
+    <thead>
+        <tr><th>bundle</th><th></th></tr>
+    </thead>
+    <tbody>
+        {% for b in bundles %}
+        <tr>
+            <td><code>{{ b }}</code>{% if b in projects %} <span class="badge python">loaded</span>{% endif %}</td>
+            <td>
+                <form method="post" action="/admin/load/{{ b }}" style="display:inline;">
+                    <button type="submit" class="btn">Load</button>
+                </form>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<div class="empty-state">
+    <h2>No seed bundles packaged</h2>
+    <p class="muted">app/seeds/data/ has no committed bundle directories.</p>
+</div>
+{% endif %}
+
+<h2>Projects</h2>
+{% if projects %}
+<table class="stages">
+    <thead>
+        <tr><th>project</th><th></th></tr>
+    </thead>
+    <tbody>
+        {% for p in projects %}
+        <tr>
+            <td><a href="/project/{{ p }}">{{ p }}</a></td>
+            <td>
+                <form method="post" action="/admin/export/{{ p }}" style="display:inline;">
+                    <button type="submit" class="btn">Export</button>
+                </form>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<div class="empty-state">
+    <h2>No projects yet</h2>
+    <p class="muted">Load a seed bundle above, or <a href="/project/new">create a project</a>.</p>
+</div>
+{% endif %}
+{% endblock %}

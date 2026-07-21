@@ -27,8 +27,9 @@ from fastapi.staticfiles import StaticFiles
 from starlette.routing import Route
 
 from app.core.persistence import SqliteKvStore, configure_store, is_store_configured
+from app.seeds.seed import seed_demo_data_if_enabled
 from app.web.config import STATIC_DIR
-from app.web.routers import evals, project, node_review, review, runs
+from app.web.routers import admin, evals, project, node_review, review, runs
 
 from app.web.chat_router import router as chat_router
 from app.compiler.router import router as compiler_router
@@ -49,6 +50,11 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         db_path = os.environ.get("CW_DB_PATH", "data/app.db")
         Path(db_path).parent.mkdir(parents=True, exist_ok=True)
         configure_store(SqliteKvStore(db_path))
+    # Opt-in demo data: CW_SEED_DEMO=1 seeds the committed example bundles into
+    # the workspace (seed-if-absent, never destructive); a normal boot leaves
+    # this env var unset, so it does nothing. All seeding logic lives in
+    # app.seeds — this is its one call site.
+    seed_demo_data_if_enabled()
     # The MCP session manager's task group must run for the server's lifetime —
     # the /mcp endpoint errors without it. A fresh manager per entry keeps this
     # lifespan re-entrant (several TestClient(app) uses in one process).
@@ -64,6 +70,7 @@ app.include_router(runs.router)
 app.include_router(evals.router)
 app.include_router(review.router)
 app.include_router(node_review.router)
+app.include_router(admin.router)
 
 # The compiler's chat-driven editing entry ('Edit with agent' -> a chat session).
 app.include_router(compiler_router)
