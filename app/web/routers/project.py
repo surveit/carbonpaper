@@ -57,6 +57,7 @@ from app.core.models import (
     validate_named_schema,
     validate_schema_library,
 )
+from app.runtime.torture_rows import torture_gate
 from app.services import data_model as data_model_service
 from app.services import generation, node_review, project, versioning
 from app.services.loader import stage_to_spec_dict
@@ -268,6 +269,12 @@ async def generate_workflow(project_name: str):
         document=document_path.read_text(encoding="utf-8"),
         model=model,
         data_model=data_model,
+        # Closes the generation loop: every submitted workflow's generated python
+        # stages are EXECUTED against schema-derived torture rows inside the agent
+        # loop, and a stage that throws on a null/ndarray/empty-frame representation
+        # bounces back for repair before the turn finishes. Wired here because the
+        # web layer is the composition root allowed to reach app.runtime.
+        post_validate=torture_gate,
     )
     return RedirectResponse(url=f"/chat/{session_id}", status_code=303)
 

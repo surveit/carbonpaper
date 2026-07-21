@@ -89,3 +89,41 @@ def test_answer_exposes_the_captured_submission_for_live_driving(monkeypatch: An
     assert agent.answer is None
     agent.submit_answer(x=3, y=4)
     assert agent.answer == _Point(x=3, y=4)
+
+
+# ── post_validate: the second gate a schema-valid answer must also clear ──────
+def test_post_validate_rejection_is_surfaced_and_nothing_is_captured() -> None:
+    def _reject(_point: _Point) -> None:
+        raise ValueError("stage `s` threw on torture row `null:load.q`")
+
+    agent: "Agent[_Point]" = Agent(
+        system_prompt="sp", target_schema=_Point, task="t", post_validate=_reject
+    )
+    with pytest.raises(ValueError) as exc_info:
+        agent.submit_answer(x=1, y=2)  # schema-valid, but the gate rejects it
+    assert "torture row" in str(exc_info.value)  # the gate's message reaches the agent
+    assert agent._answer is None                 # a rejected answer is never recorded
+    assert agent._last_issues == ["stage `s` threw on torture row `null:load.q`"]
+
+
+def test_post_validate_pass_captures_the_answer() -> None:
+    seen: list[_Point] = []
+    agent: "Agent[_Point]" = Agent(
+        system_prompt="sp", target_schema=_Point, task="t",
+        post_validate=lambda point: seen.append(point),
+    )
+    agent.submit_answer(x=1, y=2)
+    assert agent._answer == _Point(x=1, y=2)  # captured only after the gate passed
+    assert seen == [_Point(x=1, y=2)]         # the gate saw the schema-valid instance
+
+
+def test_post_validate_runs_only_after_schema_validation() -> None:
+    # A schema-invalid submission never reaches the gate — it is rejected first.
+    calls: list[_Point] = []
+    agent: "Agent[_Point]" = Agent(
+        system_prompt="sp", target_schema=_Point, task="t",
+        post_validate=lambda point: calls.append(point),
+    )
+    with pytest.raises(ValueError):
+        agent.submit_answer(x=1)  # missing y
+    assert calls == []
