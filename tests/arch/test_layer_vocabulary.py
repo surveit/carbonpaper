@@ -32,9 +32,9 @@ from pathlib import Path
 import pytest
 
 from arch._helpers import parse_module
+from arch.scope import find_source_files_under
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
-_EXEMPT_DIR_NAMES = {"tests", "_arch_tests", "__pycache__"}
 
 # A capital letter preceded by a lowercase/digit, or a capital letter that
 # starts a new word before a lowercase run (handles runs of capitals like an
@@ -78,19 +78,6 @@ def find_banned_vocabulary_uses(
         offenders.extend(_find_banned_identifiers(tree, banned_tokens))
     offenders.extend(_find_banned_string_dict_keys(tree, banned_tokens))
     return offenders
-
-
-def find_source_files(target: Path) -> list[Path]:
-    """The .py files a rule's target covers: itself if `target` is a file, or
-    every non-exempt .py file below it (skipping tests/ and _arch_tests/) if
-    `target` is a directory."""
-    if target.is_file():
-        return [target]
-    return sorted(
-        path
-        for path in target.rglob("*.py")
-        if not any(part in _EXEMPT_DIR_NAMES for part in path.relative_to(target).parts)
-    )
 
 
 def _find_banned_identifiers(tree: ast.Module, banned_tokens: frozenset[str]) -> list[tuple[int, str]]:
@@ -231,7 +218,7 @@ def describe_rule_id(rule: LayerVocabularyRule) -> str:
 def test_infra_target_stays_free_of_banned_vocabulary(rule: LayerVocabularyRule) -> None:
     offenders = [
         f"{path.relative_to(_REPO_ROOT).as_posix()}:{lineno}  {name!r}"
-        for path in find_source_files(rule.target)
+        for path in find_source_files_under(rule.target)
         for lineno, name in find_banned_vocabulary_uses(
             parse_module(path), rule.banned_tokens, match_identifiers=rule.match_identifiers
         )
@@ -320,19 +307,3 @@ def test_find_banned_vocabulary_uses_still_flags_keys_when_identifiers_skipped()
 def test_find_banned_vocabulary_uses_ignores_clean_snippet() -> None:
     tree = ast.parse("def load_record(store):\n    return store.get('id')\n")
     assert find_banned_vocabulary_uses(tree, frozenset({"workflow", "project"})) == []
-
-
-def test_find_source_files_returns_single_file_target(tmp_path: Path) -> None:
-    target = tmp_path / "mod.py"
-    target.write_text("x = 1\n")
-    assert find_source_files(target) == [target]
-
-
-def test_find_source_files_walks_directory_excluding_tests_and_arch_tests(tmp_path: Path) -> None:
-    (tmp_path / "sub").mkdir()
-    (tmp_path / "sub" / "a.py").write_text("")
-    (tmp_path / "tests").mkdir()
-    (tmp_path / "tests" / "b.py").write_text("")
-    (tmp_path / "_arch_tests").mkdir()
-    (tmp_path / "_arch_tests" / "c.py").write_text("")
-    assert {p.name for p in find_source_files(tmp_path)} == {"a.py"}

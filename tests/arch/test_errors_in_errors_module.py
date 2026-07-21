@@ -18,13 +18,11 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
-import pytest
-
 from arch._helpers import parse_module
+from arch.scope import find_source_files_under
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _APP_ROOT = _REPO_ROOT / "app"
-_EXEMPT_DIR_NAMES = {"_arch_tests", "__pycache__"}
 _ERRORS_MODULE_NAME = "errors.py"
 
 # Pre-existing classes that name-match the exception heuristic but cannot move
@@ -68,28 +66,33 @@ def find_base_class_names(node: ast.ClassDef) -> list[str]:
     return names
 
 
-def find_source_files(target: Path) -> list[Path]:
-    """The .py files under `target` this rule governs: every non-exempt .py
-    file below it (skipping _arch_tests/ and __pycache__)."""
-    return sorted(
-        path
-        for path in target.rglob("*.py")
-        if not any(part in _EXEMPT_DIR_NAMES for part in path.relative_to(target).parts)
-    )
-
-
 def _is_exception_base_name(name: str) -> bool:
     return name in ("Exception", "BaseException") or name.endswith(("Error", "Exception"))
 
 
-def test_exception_classes_live_in_an_errors_module() -> None:
-    offenders = [
-        f"{path.relative_to(_REPO_ROOT).as_posix()}:{lineno}  class {name}"
-        for path in find_source_files(_APP_ROOT)
+def _is_valid_errors_home(path: Path) -> bool:
+    """True if `path`'s filename makes it a valid home for an exception
+    class — the rule checks the filename only, not which package it sits in
+    (see the module docstring)."""
+    return path.name == _ERRORS_MODULE_NAME
+
+
+def find_errors_module_offenders(paths: list[Path], repo_root: Path) -> list[str]:
+    """"<path>:<lineno>  class <name>" for every exception class under
+    `paths` that does not live in a file named errors.py, skipping entries in
+    `_ALLOWLIST`. Shared by the production check and its own unit tests so a
+    test can prove the filename filter actually suppresses an errors.py hit."""
+    return [
+        f"{path.relative_to(repo_root).as_posix()}:{lineno}  class {name}"
+        for path in paths
+        if not _is_valid_errors_home(path)
         for lineno, name in find_exception_class_defs(parse_module(path))
-        if (path.relative_to(_REPO_ROOT).as_posix(), name) not in _ALLOWLIST
-        if path.name != _ERRORS_MODULE_NAME
+        if (path.relative_to(repo_root).as_posix(), name) not in _ALLOWLIST
     ]
+
+
+def test_exception_classes_live_in_an_errors_module() -> None:
+    offenders = find_errors_module_offenders(find_source_files_under(_APP_ROOT), _REPO_ROOT)
     assert not offenders, (
         "exception classes must be declared in a package's errors.py, not "
         "inline near their raise site:\n  " + "\n  ".join(offenders)
@@ -155,28 +158,25 @@ def test_find_exception_class_defs_does_not_match_inside_a_word() -> None:
     assert find_exception_class_defs(tree) == []
 
 
-def test_find_source_files_walks_directory_excluding_arch_tests(tmp_path: Path) -> None:
-    (tmp_path / "sub").mkdir()
-    (tmp_path / "sub" / "a.py").write_text("")
-    (tmp_path / "_arch_tests").mkdir()
-    (tmp_path / "_arch_tests" / "b.py").write_text("")
-    assert {p.name for p in find_source_files(tmp_path)} == {"a.py"}
+def test_is_valid_errors_home_accepts_errors_py() -> None:
+    assert _is_valid_errors_home(Path("app/core/errors.py")) is True
 
 
-@pytest.mark.parametrize(
-    "filename",
-    ["errors.py"],
-)
-def test_exception_classes_live_in_an_errors_module_permits_errors_py(
-    tmp_path: Path, filename: str
-) -> None:
+def test_is_valid_errors_home_rejects_other_filename() -> None:
+    assert _is_valid_errors_home(Path("app/core/exceptions.py")) is False
+
+
+def test_find_errors_module_offenders_permits_an_exception_in_errors_py(tmp_path: Path) -> None:
     """A file literally named errors.py is always a valid home, whatever
-    package it sits in — the rule checks the filename only, not the path."""
-    target = tmp_path / filename
+    package it sits in — the rule checks the filename only, not the path.
+    Red/green proof that the filename filter actually suppresses a hit: the
+    same class body in a differently-named file (below) IS flagged."""
+    target = tmp_path / "errors.py"
     target.write_text("class Boom(Exception):\n    pass\n")
-    offenders = [
-        (lineno, name)
-        for lineno, name in find_exception_class_defs(parse_module(target))
-        if target.name != _ERRORS_MODULE_NAME
-    ]
-    assert offenders == []
+    assert find_errors_module_offenders([target], tmp_path) == []
+
+
+def test_find_errors_module_offenders_flags_an_exception_outside_errors_py(tmp_path: Path) -> None:
+    target = tmp_path / "other.py"
+    target.write_text("class Boom(Exception):\n    pass\n")
+    assert find_errors_module_offenders([target], tmp_path) == ["other.py:1  class Boom"]

@@ -30,10 +30,10 @@ from pathlib import Path
 import pytest
 
 from arch._helpers import parse_module
+from arch.scope import find_source_files_under
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _APP_ROOT = _REPO_ROOT / "app"
-_EXEMPT_DIR_NAMES = {"tests", "_arch_tests", "__pycache__"}
 
 _BANNED_TAGS = ("html", "div", "table", "body", "span", "ul", "li", "form", "button")
 _HTML_TAG_PATTERN = re.compile(
@@ -69,20 +69,10 @@ def find_html_tag_string_literals(tree: ast.Module) -> list[tuple[int, str]]:
     return offenders
 
 
-def find_source_files(target: Path) -> list[Path]:
-    """The .py files under `target` this rule governs: every non-exempt .py
-    file below it (skipping tests/, _arch_tests/, and __pycache__)."""
-    return sorted(
-        path
-        for path in target.rglob("*.py")
-        if not any(part in _EXEMPT_DIR_NAMES for part in path.relative_to(target).parts)
-    )
-
-
 def test_no_html_tags_in_python_string_literals() -> None:
     offenders = [
         f"{path.relative_to(_REPO_ROOT).as_posix()}:{lineno}  {text!r}"
-        for path in find_source_files(_APP_ROOT)
+        for path in find_source_files_under(_APP_ROOT)
         for lineno, text in find_html_tag_string_literals(parse_module(path))
         if (path.relative_to(_REPO_ROOT).as_posix(), lineno) not in _ALLOWLIST
     ]
@@ -132,13 +122,3 @@ def test_find_html_tag_string_literals_ignores_generic_xml_ish_tag() -> None:
 def test_find_html_tag_string_literals_ignores_clean_snippet() -> None:
     tree = ast.parse('def render(name: str) -> str:\n    return f"hello {name}"\n')
     assert find_html_tag_string_literals(tree) == []
-
-
-def test_find_source_files_excludes_tests_and_arch_tests_dirs(tmp_path: Path) -> None:
-    (tmp_path / "sub").mkdir()
-    (tmp_path / "sub" / "a.py").write_text("")
-    (tmp_path / "tests").mkdir()
-    (tmp_path / "tests" / "b.py").write_text("")
-    (tmp_path / "_arch_tests").mkdir()
-    (tmp_path / "_arch_tests" / "c.py").write_text("")
-    assert {p.name for p in find_source_files(tmp_path)} == {"a.py"}

@@ -4,6 +4,9 @@ An architecture test lives in an ``_arch_tests/`` folder inside the code it gove
 ``find_governed_files(__file__)`` returns the source files in that folder's parent
 subtree, so a test declares its scope by where it sits — no hardcoded path.
 ``scan_all_source()`` is the whole-repo scope for genuinely-global rules.
+``find_source_files_under(target)`` is for a rule that names its own target
+path explicitly (a single file or a package directory) rather than deriving
+it from the test's own location.
 
 Exemptions are checked on the path RELATIVE to the scan base, not the absolute path:
 the checkout may itself live under a hidden directory (e.g. a git worktree under
@@ -39,6 +42,27 @@ def scan_all_source() -> list[Path]:
         raise ValueError(
             f"scan_all_source found no source files under {_REPO_ROOT} — the scope "
             "resolver is misconfigured (exemptions are excluding everything)"
+        )
+    return files
+
+
+def find_source_files_under(target: Path) -> list[Path]:
+    """The ``.py`` files a rule's `target` governs: `target` itself if it is
+    a single file, or every non-exempt ``.py`` file in its subtree if it is a
+    directory (see the module docstring for the exempt parts).
+
+    Raises ``FileNotFoundError`` if `target` does not exist at all, or
+    ``ValueError`` if a directory target yields zero files — a rule pointed
+    at the wrong path, or every match got exempted, is a silent-pass hole,
+    not an empty rule.
+    """
+    if target.is_file():
+        return [target]
+    files = list(_iter_source_under(target))
+    if not files:
+        raise ValueError(
+            f"architecture test targets {target}, which governs no source files — "
+            "check the target path and the exempt parts"
         )
     return files
 

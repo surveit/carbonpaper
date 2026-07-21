@@ -64,10 +64,10 @@ from pathlib import Path
 import pytest
 
 from arch._helpers import parse_module
+from arch.scope import find_source_files_under
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _APP_ROOT = _REPO_ROOT / "app"
-_EXEMPT_DIR_NAMES = {"tests", "_arch_tests", "__pycache__"}
 
 _MUTATING_METHODS = frozenset({"append", "remove", "clear", "pop", "insert", "extend", "sort"})
 _COMPREHENSION_TYPES = (ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp)
@@ -169,14 +169,14 @@ _RULES: tuple[ProtectedAttributeRule, ...] = (
 
 
 def find_source_files(root: Path, rule: ProtectedAttributeRule) -> list[Path]:
-    """The .py files under `root` this rule governs: every file except those
-    under its owner package or one of its exempt paths, and except tests/,
-    _arch_tests/, and __pycache__ anywhere in the tree."""
+    """The .py files under `root` this rule governs: the shared arch-test
+    scope (see arch.scope for the base tests/_arch_tests/__pycache__
+    exemptions), minus every file under this rule's own owner package or one
+    of its exempt paths."""
     skip = (rule.owner, *rule.exempt_paths)
     files = [
         path
-        for path in sorted(root.rglob("*.py"))
-        if not any(part in _EXEMPT_DIR_NAMES for part in path.relative_to(root).parts)
+        for path in find_source_files_under(root)
         if not any(path == skipped or skipped in path.parents for skipped in skip)
     ]
     if not files:

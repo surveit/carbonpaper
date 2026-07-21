@@ -8,6 +8,7 @@ from arch.scope import (
     _is_source,
     _resolve_feature_dir,
     find_governed_files,
+    find_source_files_under,
     scan_all_source,
 )
 
@@ -89,3 +90,44 @@ def test_scan_all_source_raises_when_no_source(
     (tmp_path / "tests" / "only.py").write_text("")  # exempt -> nothing governable
     with pytest.raises(ValueError, match="no source files"):
         scope.scan_all_source()
+
+
+def test_find_source_files_under_returns_single_file_target(tmp_path: Path) -> None:
+    target = tmp_path / "mod.py"
+    target.write_text("x = 1\n")
+    assert find_source_files_under(target) == [target]
+
+
+def test_find_source_files_under_walks_directory_excluding_exempt_parts(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "sub").mkdir()
+    (tmp_path / "sub" / "a.py").write_text("")
+    (tmp_path / "tests").mkdir()
+    (tmp_path / "tests" / "b.py").write_text("")
+    (tmp_path / "_arch_tests").mkdir()
+    (tmp_path / "_arch_tests" / "c.py").write_text("")
+    assert {p.name for p in find_source_files_under(tmp_path)} == {"a.py"}
+
+
+def test_find_source_files_under_raises_on_missing_file_target(tmp_path: Path) -> None:
+    target = tmp_path / "gone.py"
+    with pytest.raises(FileNotFoundError, match="missing path"):
+        find_source_files_under(target)
+
+
+def test_find_source_files_under_raises_on_missing_directory_target(
+    tmp_path: Path,
+) -> None:
+    target = tmp_path / "no_such_dir"
+    with pytest.raises(FileNotFoundError, match="missing path"):
+        find_source_files_under(target)
+
+
+def test_find_source_files_under_raises_when_directory_governs_nothing(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "tests").mkdir()
+    (tmp_path / "tests" / "only.py").write_text("")  # exempt -> nothing governable
+    with pytest.raises(ValueError, match="governs no source files"):
+        find_source_files_under(tmp_path)

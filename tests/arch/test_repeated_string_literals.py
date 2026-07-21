@@ -8,14 +8,27 @@ stage-type set, compared inline instead of through one shared name.
 
 Detection is AST-based: a string literal counts only when it is a direct
 operand of ``==``, ``!=``, ``in``, or ``not in`` (a literal passed as a call
-argument, assigned to a variable, or used as a dict key is a different
-concern, covered by other rules). A literal shorter than two characters is
-exempt (an empty string or a single-character literal, e.g. ``","``, is
-punctuation, not vocabulary). Occurrences are grouped into "sites": every
-comparison inside one function collapses to a single site (repetition inside
-one function is a local style call, not a cross-site drift risk), while a
+argument, assigned to a variable, or used as a dict key is out of scope for
+this rule — not because it can't drift, but because this rule only detects
+the comparison shape). A literal shorter than two characters is exempt (an
+empty string or a single-character literal, e.g. ``","``, is punctuation,
+not vocabulary). Occurrences are grouped into "sites": every comparison
+inside one function collapses to a single site (repetition inside one
+function is a local style call, not a cross-site drift risk), while a
 comparison outside any function is its own site per line. A value compared at
 two or more distinct sites is a violation.
+
+Two known limitations:
+
+- The allowlist below is value-keyed, not site-keyed: adding a value to it
+  (because today's two sites are legitimately unrelated, e.g. a coincidental
+  shared literal) exempts every future comparison of that same value anywhere
+  in the tree, not just today's two sites. A new, unrelated pair of sites that
+  happens to compare an already-allowlisted value will pass silently.
+- Membership tests against a tuple/list literal (``x in ("a", "b")``) are out
+  of scope: the operand actually compared is the container, not the string
+  constants inside it, so this rule's ``ast.Constant`` check on the immediate
+  operand never sees them.
 """
 from __future__ import annotations
 
@@ -25,10 +38,10 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from arch._helpers import parse_module
+from arch.scope import find_source_files_under
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _APP_ROOT = _REPO_ROOT / "app"
-_EXEMPT_DIR_NAMES = {"tests", "_arch_tests", "__pycache__"}
 _COMPARISON_OPS = (ast.Eq, ast.NotEq, ast.In, ast.NotIn)
 _MIN_LITERAL_LENGTH = 2
 
@@ -119,16 +132,6 @@ def find_compared_string_literals(tree: ast.Module) -> list[LiteralComparisonSit
     return visitor.sites
 
 
-def find_source_files(target: Path) -> list[Path]:
-    """The .py files under `target` this rule governs: every non-exempt .py
-    file below it (skipping tests/, _arch_tests/, and __pycache__)."""
-    return sorted(
-        path
-        for path in target.rglob("*.py")
-        if not any(part in _EXEMPT_DIR_NAMES for part in path.relative_to(target).parts)
-    )
-
-
 def find_repeated_literal_values(
     sites_by_file: dict[str, list[LiteralComparisonSite]],
 ) -> dict[str, list[str]]:
@@ -153,7 +156,7 @@ def find_repeated_literal_values(
 def test_repeated_compared_string_literals_are_named_constants() -> None:
     sites_by_file = {
         path.relative_to(_REPO_ROOT).as_posix(): find_compared_string_literals(parse_module(path))
-        for path in find_source_files(_APP_ROOT)
+        for path in find_source_files_under(_APP_ROOT)
     }
     offenders = {
         value: sites
@@ -230,16 +233,6 @@ def test_find_compared_string_literals_uses_module_scope_outside_any_function() 
     tree = ast.parse('_DEFAULT = "running"\nassert _DEFAULT == "running"\n')
     sites = find_compared_string_literals(tree)
     assert sites == [LiteralComparisonSite("running", 2, "module@2")]
-
-
-def test_find_source_files_excludes_tests_and_arch_tests_dirs(tmp_path: Path) -> None:
-    (tmp_path / "sub").mkdir()
-    (tmp_path / "sub" / "a.py").write_text("")
-    (tmp_path / "tests").mkdir()
-    (tmp_path / "tests" / "b.py").write_text("")
-    (tmp_path / "_arch_tests").mkdir()
-    (tmp_path / "_arch_tests" / "c.py").write_text("")
-    assert {p.name for p in find_source_files(tmp_path)} == {"a.py"}
 
 
 def test_find_repeated_literal_values_ignores_repeats_within_one_function() -> None:
