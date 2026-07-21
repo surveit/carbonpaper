@@ -40,6 +40,11 @@ from app.runtime.validation import Severity, validate_dataframe
 
 Status = Literal["passed", "mismatch", "error", "malformed"]
 
+# Named handle for the one Status member actually compared below (find_failing_
+# stage_tests / _summarize) — the others are only ever constructed, never
+# compared, so they don't need a name of their own.
+STATUS_PASSED: Status = "passed"
+
 
 @dataclass
 class CellDiff:
@@ -122,7 +127,7 @@ def find_failing_stage_tests(stages: list[Stage]) -> list[str]:
         if not stage.tests:
             continue
         for result in run_stage_tests(stage):
-            if result.status != "passed":
+            if result.status != STATUS_PASSED:
                 detail = result.message or f"{len(result.diffs)} differing cell(s)"
                 failures.append(
                     f"stage {stage.id} fails test {result.name!r} ({result.status}) — {detail}"
@@ -159,7 +164,7 @@ def _run_one_stage(stage: Stage) -> StageTestRun:
 
 def _summarize(runs: list[StageTestRun]) -> TestRunSummary:
     results = [result for run in runs for result in run.results]
-    passed = sum(1 for result in results if result.status == "passed")
+    passed = sum(1 for result in results if result.status == STATUS_PASSED)
     return TestRunSummary(
         stages_run=len(runs),
         tests_total=len(results),
