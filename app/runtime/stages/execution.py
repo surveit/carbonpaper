@@ -31,7 +31,7 @@ import pandas as pd
 from app.core.models import Stage
 from app.core.models.stage import StageType, is_grain_and_order_preserving
 
-from ..cancellation import RunCancelled, is_cancelled
+from ..cancellation import RunCancelled, consume_cancel
 
 # One row of a stage's input or output: column label → cell value.
 Row = dict[str, Any]
@@ -163,7 +163,7 @@ def _run_row_mapper(
                 for index, record in enumerate(records)
             }
             for future in as_completed(futures):
-                if _is_run_cancelled(ctx):
+                if _consume_cancel(ctx):
                     # Drop every row not yet started; rows already dispatched
                     # (<= parallelism) keep running in their worker threads —
                     # a blocking call can't be killed — and are joined by the
@@ -173,7 +173,7 @@ def _run_row_mapper(
                 results[futures[future]] = future.result()
     else:
         for index, record in enumerate(records):
-            if _is_run_cancelled(ctx):
+            if _consume_cancel(ctx):
                 raise RunCancelled(f"stage {stage.id}: cancelled")
             results[index] = map_row(record)
 
@@ -192,15 +192,15 @@ def _run_row_mapper(
     return df
 
 
-def _is_run_cancelled(ctx: dict[str, Any]) -> bool:
-    """True if this run's (project, run_id) — read off ctx — has a cancel
-    requested. False when either is absent: a subset/eval run's ctx carries
-    neither key (see runner._subset_ctx), so those runs are simply not
-    cancellable."""
+def _consume_cancel(ctx: dict[str, Any]) -> bool:
+    """Consume this run's cancel message if one is pending — read-once, so a
+    True means one was pending and is now gone. Identity is (project, run_id)
+    read off ctx; False when either is absent: a subset/eval run's ctx carries
+    neither key (see runner._subset_ctx), so those runs are never cancellable."""
     project, run_id = ctx.get("project"), ctx.get("run_id")
     if not isinstance(project, str) or not isinstance(run_id, str):
         return False
-    return is_cancelled(project, run_id)
+    return consume_cancel(project, run_id)
 
 
 def _collect_row_errors(df: pd.DataFrame, stage: Stage, ctx: dict[str, Any]) -> None:

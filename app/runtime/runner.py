@@ -33,7 +33,7 @@ from app.core.run_status import RunStatus, StageStatus
 from app.services.loader import WorkflowLoadError
 from app.services import versioning
 
-from .cancellation import RunCancelled, is_cancelled
+from .cancellation import RunCancelled, consume_cancel
 from .stages import HANDLERS, PREFLIGHTS, HaltForReview
 from .validation import Issue, validate_dataframe
 
@@ -444,11 +444,12 @@ def _read_run_identity(ctx: dict[str, Any]) -> tuple[str, str] | None:
     return project, run_id
 
 
-def _is_run_cancelled(ctx: dict[str, Any]) -> bool:
-    """True if this run has a cancel requested (see _read_run_identity for
-    when a run is cancellable at all)."""
+def _consume_cancel(ctx: dict[str, Any]) -> bool:
+    """Consume this run's cancel message if one is pending — read-once, so a
+    True means one was pending and is now gone (see _read_run_identity for when
+    a run is cancellable at all)."""
     identity = _read_run_identity(ctx)
-    return identity is not None and is_cancelled(*identity)
+    return identity is not None and consume_cancel(*identity)
 
 
 def _execute_stages(
@@ -512,10 +513,10 @@ def _execute_stages(
 
     for idx, stage in enumerate(ordered):
         # Between-stage cancel checkpoint: before this stage starts (even
-        # before checking whether it's a resume-skip), stop if a cancel was
-        # requested. No exception, no record written here — the stage simply
-        # never starts, so it stays (or becomes) `pending` below.
-        if _is_run_cancelled(ctx):
+        # before checking whether it's a resume-skip), consume a pending cancel
+        # message and, if there was one, stop. No exception, no record written
+        # here — the stage simply never starts, so it stays `pending` below.
+        if _consume_cancel(ctx):
             cancelled = True
             cancel_at_index = idx
             break

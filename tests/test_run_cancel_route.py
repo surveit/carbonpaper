@@ -13,7 +13,7 @@ from fastapi.testclient import TestClient
 
 import app.web.loading as loading
 from app.main import app
-from app.runtime.cancellation import is_cancelled
+from app.runtime.cancellation import consume_cancel
 
 PROJ = "testmeth"
 RUN = "run-0001"
@@ -44,7 +44,7 @@ def test_cancel_on_a_running_run_requests_cancellation_and_redirects(examples_di
     r = client.post(f"/project/{PROJ}/runs/{RUN}/cancel", follow_redirects=False)
     assert r.status_code == 303
     assert r.headers["location"] == f"/project/{PROJ}/runs/{RUN}"
-    assert is_cancelled(PROJ, RUN) is True
+    assert consume_cancel(PROJ, RUN) is True  # the route dropped a cancel message
 
 
 def test_cancel_on_a_terminal_run_is_a_noop_but_still_redirects(examples_dir, client):
@@ -52,7 +52,7 @@ def test_cancel_on_a_terminal_run_is_a_noop_but_still_redirects(examples_dir, cl
     r = client.post(f"/project/{PROJ}/runs/{RUN}/cancel", follow_redirects=False)
     assert r.status_code == 303
     assert r.headers["location"] == f"/project/{PROJ}/runs/{RUN}"
-    assert is_cancelled(PROJ, RUN) is False
+    assert consume_cancel(PROJ, RUN) is False  # terminal run: no message dropped
 
 
 def test_cancel_on_a_missing_run_404s(examples_dir, client):
