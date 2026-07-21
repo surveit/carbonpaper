@@ -38,9 +38,6 @@ ignore_missing_imports = true
 # Content-level checks live in tests/arch/.
 [tool.importlinter]
 root_package = "app"
-# fastapi is an external package; a forbidden contract naming it as a
-# forbidden_module needs the import graph to include external packages.
-include_external_packages = true
 
 [[tool.importlinter.contracts]]
 name = "app.web imported only by the entrypoint"
