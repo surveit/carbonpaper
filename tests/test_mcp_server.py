@@ -66,6 +66,8 @@ def test_mcp_lists_the_authoring_tools(client):
         "read_stage",
         "edit_stage",
         "add_stage",
+        "generate_stage_tests",
+        "run_tests",
     } <= names
 
 
@@ -108,6 +110,92 @@ def test_generate_data_model_without_document_fails_loudly(tmp_path, monkeypatch
     (tmp_path / "empty_proj").mkdir()
     with pytest.raises(ValueError):
         asyncio.run(server.generate_data_model(project_id="empty_proj"))
+
+
+_IN_SCHEMA = {"columns": [{"name": "amount", "type": "float", "nullable": False}]}
+_OUT_SCHEMA = {"columns": [
+    {"name": "amount", "type": "float", "nullable": False},
+    {"name": "doubled", "type": "float", "nullable": True},
+]}
+_DOUBLE = "def transform(row):\n    return {**row, 'doubled': row['amount'] * 2}\n"
+
+
+def _write_compiled_workflow(pdir: Path) -> None:
+    """A minimal 3-stage compiled workflow: an input_data source, a
+    python_row_function with one passing + one failing test, and an untested
+    python transform (the coverage gap run_tests should surface)."""
+    from app.services.loader import write_stage
+
+    compiled = pdir / "compiled"
+    compiled.mkdir(parents=True)
+    stages = [
+        {"id": "load", "name": "Load", "type": "input_data", "connector": {"kind": "file"}},
+        {"id": "double", "name": "Double", "type": "python_row_function",
+         "inputs": [{"id": "load", "schema": _IN_SCHEMA}], "output_schema": _OUT_SCHEMA,
+         "function": {"kind": "inline", "code": _DOUBLE},
+         "tests": [
+             {"name": "doubles", "inputs": {"load": [{"amount": 2.0}]},
+              "expected": [{"amount": 2.0, "doubled": 4.0}]},
+             {"name": "wrong", "inputs": {"load": [{"amount": 2.0}]},
+              "expected": [{"amount": 2.0, "doubled": 5.0}]},
+         ]},
+        {"id": "untested", "name": "Untested", "type": "python_row_function",
+         "inputs": [{"id": "load", "schema": _IN_SCHEMA}], "output_schema": _OUT_SCHEMA,
+         "function": {"kind": "inline", "code": _DOUBLE}},
+    ]
+    from app.core.models import Stage
+    for spec in stages:
+        write_stage(compiled / f"{spec['id']}.json", Stage.model_validate(spec))
+
+
+def test_run_tests_reports_summary_diffs_and_coverage(tmp_path, monkeypatch):
+    from app.mcp import server
+    from app.services import workspace
+
+    monkeypatch.setattr(workspace, "EXAMPLES_DIR", tmp_path)
+    pdir = tmp_path / "trail"
+    _write_compiled_workflow(pdir)
+
+    report = server.run_tests(project_id="trail")
+    assert set(report) == {"summary", "stages", "untested_python_stages"}
+    assert report["untested_python_stages"] == ["untested"]
+    assert report["summary"]["failed"] == 1
+    [run] = report["stages"]
+    failing = next(o for o in run["outcomes"] if o["name"] == "wrong")
+    assert failing["status"] != "passed"
+    assert failing["diffs"][0]["column"] == "doubled"
+
+
+def test_run_tests_scopes_to_one_stage(tmp_path, monkeypatch):
+    from app.mcp import server
+    from app.services import workspace
+
+    monkeypatch.setattr(workspace, "EXAMPLES_DIR", tmp_path)
+    pdir = tmp_path / "trail"
+    _write_compiled_workflow(pdir)
+
+    report = server.run_tests(project_id="trail", stage_id="double")
+    assert report["summary"]["tests_total"] == 2
+
+
+def test_generate_stage_tests_kicks_the_derivation_turn(tmp_path, monkeypatch):
+    from app.mcp import server
+    from app.services import workspace
+
+    monkeypatch.setattr(workspace, "EXAMPLES_DIR", tmp_path)
+    server.create_project(name="probe", document="doc text")
+
+    seen: dict[str, object] = {}
+
+    def fake_start(pdir: Path, *, stage_id: str, model: str) -> str:
+        seen["stage_id"] = stage_id
+        return "sess-tests"
+
+    monkeypatch.setattr(server.generation, "start_stage_test_generation", fake_start)
+    out = asyncio.run(server.generate_stage_tests(project_id="probe", stage_id="double"))
+    assert out["status"] == "started"
+    assert out["watch"] == "/chat/sess-tests"
+    assert seen["stage_id"] == "double"
 
 
 def test_read_tools_reject_unknown_project(tmp_path, monkeypatch):
