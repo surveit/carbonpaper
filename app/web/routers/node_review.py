@@ -291,6 +291,17 @@ async def create_version_route(project: str, message: str = Form(...)):
         )
     except FileNotFoundError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except WorkflowLoadError as exc:
+        # create_version_from_disk validates the working copy first; hand its
+        # itemized issue report to the save handler (which renders `issues`) as
+        # a structured 400 — the same shape trigger_run uses — never a bare 500.
+        return JSONResponse(
+            {"ok": False,
+             "detail": ("Cannot save a version: the current working copy failed "
+                        "validation. Fix these stages and save again."),
+             "issues": exc.issues},
+            status_code=400,
+        )
     return JSONResponse({"ok": True, "version": version.model_dump(mode="json")})
 
 
