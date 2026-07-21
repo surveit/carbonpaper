@@ -16,6 +16,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from starlette.concurrency import run_in_threadpool
 
 from app.core.errors import MissingInputBindingError, NoVersionToRunError, RowOutOfRange, StageNotInRun
+from app.core.run_status import RunStatus, StageStatus
 from app.services.loader import WorkflowLoadError, load_workflow
 from app.services.versioning import list_versions
 from app.runtime.cancellation import request_cancel
@@ -235,20 +236,20 @@ async def run_status(project: str, run_id: str):
     status_by_id = {s["stage_id"]: s.get("status", "") for s in mstages}
     mermaid = build_mermaid_graph(load_stages(project).stages, project, status_by_id=status_by_id)
 
-    def _count(st: str) -> int:
+    def _count(st: StageStatus) -> int:
         return sum(1 for s in mstages if s.get("status") == st)
 
     return JSONResponse({
         "status": manifest.get("status"),
-        "terminal": manifest.get("status") != "running",
+        "terminal": manifest.get("status") != RunStatus.RUNNING,
         "halted_at": manifest.get("halted_at"),
         "finished_at": manifest.get("finished_at"),
-        "counts": {"ok": _count("ok"), "warn": _count("validation_warnings"),
-                   "err": _count("error"), "total": len(mstages),
-                   "done": _count("ok") + _count("validation_warnings"),
-                   "running": _count("running"), "pending": _count("pending"),
-                   "awaiting": _count("awaiting_review"),
-                   "cancelled": _count("cancelled")},
+        "counts": {"ok": _count(StageStatus.OK), "warn": _count(StageStatus.VALIDATION_WARNINGS),
+                   "err": _count(StageStatus.ERROR), "total": len(mstages),
+                   "done": _count(StageStatus.OK) + _count(StageStatus.VALIDATION_WARNINGS),
+                   "running": _count(StageStatus.RUNNING), "pending": _count(StageStatus.PENDING),
+                   "awaiting": _count(StageStatus.AWAITING_REVIEW),
+                   "cancelled": _count(StageStatus.CANCELLED)},
         "stages": [{"stage_id": s["stage_id"], "status": s.get("status")} for s in mstages],
         "mermaid": mermaid,
     })
@@ -611,7 +612,7 @@ async def cancel_run_route(project: str, run_id: str):
     resume, so the page's poller/reload handles the rest."""
     run_dir = runs_dir(project) / run_id
     manifest = load_manifest(run_dir)  # 404s if the run doesn't exist
-    if manifest.get("status") == "running":
+    if manifest.get("status") == RunStatus.RUNNING:
         request_cancel(project, run_id)
     return RedirectResponse(
         url=f"/project/{project}/runs/{run_id}",

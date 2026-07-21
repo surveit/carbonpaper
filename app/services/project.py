@@ -32,6 +32,7 @@ from pydantic import BaseModel
 
 from app.core.errors import ProjectExistsError
 from app.core.models import Coverage
+from app.core.run_status import RunStatus
 from app.services import node_review, stage_edit, versioning, workspace
 from app.services.loader import load_compiled_dir, stage_to_json
 from app.services.stage_edit import EditStageResult
@@ -186,7 +187,7 @@ def _runs_summary(pdir: Path) -> RunsSummary:
         except json.JSONDecodeError:
             status = "corrupt"
         statuses.append((run.name, status))
-        if status == "awaiting_review":
+        if status == RunStatus.AWAITING_REVIEW:
             awaiting += 1
     if not statuses:
         return RunsSummary(n=0, awaiting_review=0, latest_status=None)

@@ -7,6 +7,7 @@ from __future__ import annotations
 from typing import Any
 
 from app.core.models import Stage
+from app.core.run_status import StageStatus
 
 
 # Stage-type → CSS class for workflow node + badges.
@@ -226,23 +227,26 @@ def build_mermaid_graph(
     When both are given, run status takes precedence (a live run's colour wins
     over the standing belief). When both are None, behaves exactly as before.
     """
-    status_glyph = {
-        "ok": "✓",
-        "running": "⟳",
-        "validation_warnings": "⚠",
-        "error": "✗",
-        "awaiting_review": "👤",
-        "cancelled": "✖",
-        "pending": "…",
+    # Keyed by StageStatus but typed `dict[str, ...]`: status_by_id (below) carries
+    # plain strings read back off the JSON manifest, and a StrEnum member hashes/
+    # equals its bare string, so lookups by that plain string still hit.
+    status_glyph: dict[str, str] = {
+        StageStatus.OK: "✓",
+        StageStatus.RUNNING: "⟳",
+        StageStatus.VALIDATION_WARNINGS: "⚠",
+        StageStatus.ERROR: "✗",
+        StageStatus.AWAITING_REVIEW: "👤",
+        StageStatus.CANCELLED: "✖",
+        StageStatus.PENDING: "…",
     }
-    status_stroke = {
-        "ok": ("#2a8a2a", "3px"),                 # complete → green
-        "running": ("#e0a800", "3px"),            # in progress → yellow
-        "validation_warnings": ("#cc8a00", "3px"),
-        "error": ("#cc2a2a", "3px"),              # errored → red
-        "awaiting_review": ("#2a6ac8", "4px"),
-        "cancelled": ("#8a8a8a", "3px"),          # cancelled → grey
-        "pending": ("#cfcfcf", "1px"),
+    status_stroke: dict[str, tuple[str, str]] = {
+        StageStatus.OK: ("#2a8a2a", "3px"),                 # complete → green
+        StageStatus.RUNNING: ("#e0a800", "3px"),            # in progress → yellow
+        StageStatus.VALIDATION_WARNINGS: ("#cc8a00", "3px"),
+        StageStatus.ERROR: ("#cc2a2a", "3px"),              # errored → red
+        StageStatus.AWAITING_REVIEW: ("#2a6ac8", "4px"),
+        StageStatus.CANCELLED: ("#8a8a8a", "3px"),          # cancelled → grey
+        StageStatus.PENDING: ("#cfcfcf", "1px"),
     }
     nodes = [_node_view(s) for s in stages]
     lines = ["flowchart LR"]

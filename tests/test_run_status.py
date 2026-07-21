@@ -1,0 +1,142 @@
+"""Contract test for app.core.run_status: StageStatus and RunStatus must
+render as their bare string value everywhere — str(), f-strings, json.dumps —
+never as "ClassName.MEMBER". This is the enum.StrEnum guarantee the run/stage
+status migration depends on (see app/core/run_status.py's module docstring):
+Jinja templates build CSS classes with `status-{{ status }}`, the run-page
+poller reads `status` straight off the JSON API, and the manifest is JSON on
+disk. If a future edit swapped `enum.StrEnum` for `class X(str, Enum)` (the
+pattern app.core.models uses for StageType etc.), every assertion below would
+fail loudly.
+
+The last two tests drive the real producer (app.runtime.runner.execute_run)
+end to end, proving the full round trip: enum member -> manifest.json on disk
+-> reloaded plain string -> the run-detail template's `status-<value>` CSS
+class and the `/status` JSON poller.
+"""
+from __future__ import annotations
+
+import json
+
+import pandas as pd
+import pytest
+from fastapi.testclient import TestClient
+
+import app.web.loading as loading
+from app.core.run_status import RunStatus, StageStatus
+from app.main import app
+from app.runtime.runner import execute_run
+from app.services import versioning
+from app.services.versioning import create_version_from_disk
+
+# The exact value sets, derived by grepping every `record["status"]` /
+# `manifest["status"]` literal the runner writes (app/runtime/runner.py) and
+# the status_glyph/status_stroke maps that key off them (app/web/diagrams.py).
+STAGE_STATUS_VALUES = {
+    "pending", "running", "ok", "validation_warnings",
+    "error", "awaiting_review", "cancelled",
+}
+RUN_STATUS_VALUES = {
+    "running", "ok", "warnings", "errors", "awaiting_review", "cancelled",
+}
+
+
+@pytest.mark.parametrize("member", list(StageStatus), ids=lambda m: m.name)
+def test_stage_status_member_renders_as_its_bare_value(member: StageStatus) -> None:
+    assert isinstance(member, str)
+    assert str(member) == member.value
+    assert f"{member}" == member.value
+    assert json.dumps(member) == json.dumps(member.value)
+    assert member == member.value
+
+
+@pytest.mark.parametrize("member", list(RunStatus), ids=lambda m: m.name)
+def test_run_status_member_renders_as_its_bare_value(member: RunStatus) -> None:
+    assert isinstance(member, str)
+    assert str(member) == member.value
+    assert f"{member}" == member.value
+    assert json.dumps(member) == json.dumps(member.value)
+    assert member == member.value
+
+
+def test_stage_status_matches_the_values_the_runner_produces() -> None:
+    assert {m.value for m in StageStatus} == STAGE_STATUS_VALUES
+
+
+def test_run_status_matches_the_values_the_runner_produces() -> None:
+    assert {m.value for m in RunStatus} == RUN_STATUS_VALUES
+
+
+def test_css_class_pattern_renders_bare_not_qualified() -> None:
+    """Locks in the exact template pattern app/templates/run_detail.html uses
+    (`class="status-{{ manifest.status }}"`) against a real enum member."""
+    assert f"status-{RunStatus.OK}" == "status-ok"
+    assert f"status-{StageStatus.VALIDATION_WARNINGS}" == "status-validation_warnings"
+
+
+# ─── End-to-end: the real producer (app.runtime.runner) through to disk ──────
+
+PROJECT = "status_enum_journey"
+
+
+def _make_project(root) -> None:
+    (root / "compiled").mkdir(parents=True)
+    (root / "data").mkdir(parents=True)
+    pd.DataFrame({"name": ["a", "b"], "val": [1, 2]}).to_csv(root / "data" / "items.csv", index=False)
+    stage = {
+        "id": "load", "name": "Load items", "type": "input_data",
+        "connector": {"kind": "file",
+                      "params": {"path": str(root / "data" / "items.csv"), "format": "csv"}},
+    }
+    (root / "compiled" / "01_load.json").write_text(json.dumps(stage), encoding="utf-8")
+
+
+def _seed_and_publish(project_dir) -> None:
+    vid = create_version_from_disk(project_dir, message="seed", reviewer="test").version_id
+    versioning.publish_version(project_dir, vid, reviewer="human")
+
+
+def test_a_real_run_produces_enum_statuses_that_round_trip_to_bare_strings(tmp_path) -> None:
+    _make_project(tmp_path)
+    _seed_and_publish(tmp_path)
+
+    manifest = execute_run(tmp_path, repo_root=tmp_path)
+
+    # The producer's in-memory manifest carries real enum members, not plain
+    # str — and they still equal / stringify as the bare value.
+    assert manifest["status"] == RunStatus.OK
+    assert isinstance(manifest["status"], RunStatus)
+    assert str(manifest["status"]) == "ok"
+    assert manifest["stages"][0]["status"] == StageStatus.OK
+    assert isinstance(manifest["stages"][0]["status"], StageStatus)
+
+    # On disk — what templates/JS actually read — it round-trips to a bare
+    # JSON string, with no trace of the enum class name.
+    run_dir = tmp_path / "runs" / manifest["run_id"]
+    raw_text = (run_dir / "manifest.json").read_text(encoding="utf-8")
+    on_disk = json.loads(raw_text)
+    assert on_disk["status"] == "ok"
+    assert on_disk["stages"][0]["status"] == "ok"
+    assert "RunStatus" not in raw_text
+    assert "StageStatus" not in raw_text
+
+
+def test_a_real_run_renders_bare_status_through_the_web_layer(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(loading, "EXAMPLES_DIR", tmp_path)
+    project_dir = tmp_path / PROJECT
+    _make_project(project_dir)
+    _seed_and_publish(project_dir)
+
+    manifest = execute_run(project_dir, repo_root=project_dir)
+    run_id = manifest["run_id"]
+
+    client = TestClient(app)
+
+    page = client.get(f"/project/{PROJECT}/runs/{run_id}")
+    assert page.status_code == 200
+    assert "status-ok" in page.text
+    assert "RunStatus" not in page.text
+
+    status = client.get(f"/project/{PROJECT}/runs/{run_id}/status").json()
+    assert status["status"] == "ok"
+    assert status["counts"]["ok"] == 1
+    assert status["counts"]["total"] == 1
