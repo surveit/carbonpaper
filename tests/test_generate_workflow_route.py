@@ -50,8 +50,8 @@ def captured(monkeypatch):
     redirects to /chat/<id>) instead of spawning a real compile turn."""
     box: dict = {}
 
-    def fake(project_dir, *, document, model, data_model):
-        box.update(document=document, model=model, data_model=data_model)
+    def fake(project_dir, *, document, model, data_model, on_persisted=None):
+        box.update(document=document, model=model, data_model=data_model, on_persisted=on_persisted)
         return "sess-abc"
 
     monkeypatch.setattr(generation, "start_workflow_generation", fake)

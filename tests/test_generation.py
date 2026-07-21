@@ -64,10 +64,10 @@ def test_start_workflow_generation_delegates_to_the_bridge_grounded(
     project_dir.mkdir()
     captured: dict = {}
 
-    def fake_bridge(*, document, project_name, model, data_model, on_answer):
+    def fake_bridge(*, document, project_name, model, data_model, on_answer, after_persist=None):
         captured.update(
             document=document, project_name=project_name, model=model,
-            data_model=data_model, on_answer=on_answer,
+            data_model=data_model, on_answer=on_answer, after_persist=after_persist,
         )
         return "sess-xyz"
 

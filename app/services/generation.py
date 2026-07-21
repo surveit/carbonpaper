@@ -28,7 +28,7 @@ from __future__ import annotations
 import json
 import logging
 from pathlib import Path
-from typing import Any
+from typing import Any, Awaitable, Callable
 
 from pydantic import BaseModel
 
@@ -37,11 +37,15 @@ from app.compiler.stage_tests import start_stage_test_derivation_agent
 from app.compiler.workflow import start_workflow_generation_agent
 from app.core.errors import GenerationError
 from app.core.models.named_schemas import SchemaLibrary
-from app.core.models.stages.stage_tests import STAGE_TEST_TYPES
+from app.core.models.stages.stage_tests import (
+    STAGE_TEST_TYPES,
+    StageTest,
+    stage_tests_are_frozen,
+)
 from app.core.models.workflow import Workflow
 from app.services import data_model
 from app.services.compilation import regenerate_workflow
-from app.services.loader import load_workflow, stage_to_spec_dict
+from app.services.loader import WorkflowLoadError, load_workflow, stage_to_spec_dict
 from app.services.project import find_document_path
 from app.services.stage_edit import patch_stage_spec
 
@@ -68,11 +72,17 @@ def start_workflow_generation(
     document: str,
     model: str,
     data_model: SchemaLibrary | None,
+    on_persisted: Callable[[], Awaitable[None]] | None = None,
 ) -> str:
     """Run the WORKFLOW agent as a LIVE chat turn and return its session id (the caller lands
     the user on /chat/<sid>). Compiles ONLY the workflow — schemas/ is untouched — grounding it
-    in `data_model` (the approved schemas) when given. Must be called from the server event
-    loop."""
+    in `data_model` (the approved schemas) when given.
+
+    `on_persisted`, when given, is awaited AFTER the submitted workflow lands on disk (and only
+    then) — the generation-time stage-test derivation + repair pass. It is injected (not
+    imported) so this service stays runtime-free: running derived tests needs app.runtime, which
+    app.services must not reach into, so the web layer supplies the coroutine. Must be called
+    from the server event loop."""
     name = project_dir.name
     return start_workflow_generation_agent(
         document=document,
@@ -80,6 +90,7 @@ def start_workflow_generation(
         model=model,
         data_model=data_model,
         on_answer=lambda answer: _finish_workflow(project_dir, name, answer),
+        after_persist=on_persisted,
     )
 
 
@@ -93,9 +104,11 @@ def start_stage_test_generation(project_dir: Path, *, stage_id: str, model: str)
     session/turn are started, so a rejected stage never creates an orphaned session
     (build_stage_test_deriver / render_derivation_task would raise the same errors, but only
     after the session already exists). On completion, `_finish_stage_tests`
-    REPLACES the stage's tests wholesale with whatever suite the agent submitted — no
-    human-touched marker exists yet, so this is a destructive regenerate (documented on the
-    generate-tests button/route). Must be called from the server event loop."""
+    REPLACES the stage's tests wholesale with whatever suite the agent submitted — a
+    deliberate, human-initiated regenerate of one stage (documented on the generate-tests
+    button/route). Its cases carry no `origin=generated` marker, so a later whole-workflow
+    regenerate treats them as human-frozen and preserves them. Must be called from the server
+    event loop."""
     doc_path = find_document_path(project_dir)
     if doc_path is None:
         raise ValueError(f"{project_dir.name} has no document to derive tests from")
@@ -132,17 +145,68 @@ def _finish_data_model(project_dir: Path, answer: SchemaLibrary | None) -> None:
 
 def _finish_workflow(project_dir: Path, name: str, answer: Workflow | None) -> None:
     """Completion hook for the workflow turn: if the agent submitted a valid Workflow, write it
-    (schemas/ untouched); otherwise the failure was already streamed to the live turn."""
+    (schemas/ untouched); otherwise the failure was already streamed to the live turn.
+
+    Human-touched tests survive a regenerate: any stage whose current suite is frozen
+    (`stage_tests_are_frozen` — a hand-authored or hand-edited set, NOT one the pipeline wrote
+    wholesale) is snapshotted BEFORE `regenerate_workflow` wipes compiled/, then patched back
+    onto the same-id stage of the new workflow. The generation-time derivation (on_persisted)
+    then skips exactly those stages, so their tests are neither re-derived nor overwritten.
+    Machine-generated suites are not carried — they are re-derived fresh against the new code."""
     if answer is None:
         return
+    frozen = _frozen_tests_by_stage(project_dir)
     regenerate_workflow(_workflow_result(answer, name), project_dir)
+    _restore_frozen_tests(project_dir, frozen)
+
+
+def _frozen_tests_by_stage(project_dir: Path) -> dict[str, list[StageTest]]:
+    """Snapshot every stage whose current tests are human-frozen, keyed by stage id, from the
+    workflow as it stands BEFORE a regenerate. Returns {} when the project has no loadable
+    compiled workflow yet (first generation) — there is nothing to preserve."""
+    try:
+        stages = load_workflow(project_dir)
+    except WorkflowLoadError:
+        return {}
+    return {
+        stage.id: stage.tests
+        for stage in stages
+        if stage.tests is not None and stage_tests_are_frozen(stage.tests)
+    }
+
+
+def _restore_frozen_tests(
+    project_dir: Path, frozen: dict[str, list[StageTest]]
+) -> None:
+    """Patch each snapshotted frozen suite back onto the newly-written stage of the same id.
+
+    A restore that no longer validates against the regenerated stage (its shape changed, so the
+    old cases cannot apply) raises GenerationError rather than silently dropping a human's tests
+    — a real conflict the author must resolve. A stage that vanished from the new workflow simply
+    has nowhere to restore to and is skipped."""
+    if not frozen:
+        return
+    current = {stage.id for stage in load_workflow(project_dir)}
+    for stage_id, tests in frozen.items():
+        if stage_id not in current:
+            continue
+        patch = {"tests": [
+            test.model_dump(mode="json", by_alias=True, exclude_none=True) for test in tests
+        ]}
+        result = patch_stage_spec(project_dir, stage_id, json.dumps(patch))
+        if not result.ok:
+            raise GenerationError(
+                f"regenerating '{project_dir.name}' would drop hand-authored tests on "
+                f"stage '{stage_id}': they no longer fit the regenerated stage "
+                f"({'; '.join(result.issues)})"
+            )
 
 
 def _finish_stage_tests(project_dir: Path, stage_id: str, answer: BaseModel | None) -> None:
     """Completion hook for the stage-test-derivation turn (runs on the event loop):
     REPLACES `stage_id`'s tests wholesale with the submitted suite — the whole `tests`
-    array, not a merge of individual cases, since no human-touched marker exists yet to
-    tell an authored case from a stale one.
+    array, not a merge of individual cases: this is a deliberate, human-initiated regenerate
+    of one stage, so the prior cases are meant to go.
 
     Fails loudly rather than writing on a doubt: `answer is None` (the agent never
     submitted) or an empty `tests` array (the agent submitted a suite with no cases,
