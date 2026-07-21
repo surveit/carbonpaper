@@ -184,7 +184,7 @@ def trace_row(run_dir: Path, stage_id: str, row_ordinal: int) -> Trace:
         ))
 
         # Can we cross into the parent, keeping the same ordinal?
-        if stage_type == "input_data":
+        if stage_type == StageType.input_data:
             end = TraceEnd(True, sid, "input_data stage — the rows originate here")
         elif not parents:
             end = TraceEnd(False, sid, "the manifest records no input edge for this stage")

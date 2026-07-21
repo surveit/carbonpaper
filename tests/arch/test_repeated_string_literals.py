@@ -63,7 +63,6 @@ _ALLOWLIST: frozenset[str] = frozenset(
         "assistant",
         "error",
         "inf",
-        "input_data",
         "json",
         "list[json]",
         "modify",

@@ -14,7 +14,7 @@ import pandas as pd
 from fastapi import HTTPException
 
 from app.core.errors import NoVersionToRunError
-from app.core.models import Stage
+from app.core.models import Stage, StageType
 from app.core.run_status import StageStatus
 from app.runtime.runner import resolve_version_id
 from app.services.loader import CompiledStageFile, load_compiled_dir
@@ -133,7 +133,7 @@ def list_file_inputs(project_dir: Path, version_id: str | None = None) -> list[d
         {"stage_id": s.id, "name": s.name,
          "path": str((s.connector.params or {}).get("path") or "")}
         for s in stages
-        if s.type == "input_data" and s.connector is not None
+        if s.type == StageType.input_data and s.connector is not None
         and s.connector.kind == "file"
     ]
 
