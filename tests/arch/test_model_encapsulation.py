@@ -18,6 +18,16 @@ length, iterate it plainly), but two things are never its job:
   new one must be fixed (by adding or reusing an owner method), not added to
   the list.
 
+Three distinct escape hatches appear below, and none substitutes for another:
+the owner-package exemption (`rule.owner` — code inside the model's own
+package is the implementation, not an outside caller), the Tier-2 ratchet
+allowlist (`rule.allowlist` — a named pre-existing derivation site that may
+only shrink, never grow), and `exempt_paths` (a file-scope exclusion for a
+DIFFERENT model that happens to declare a same-named attribute — e.g.
+`Draft.stages` in `app/services/drafts.py` — out of scope for that row on
+both tiers because the file owns its OWN same-named attribute, not because
+its re-derivation sites were grandfathered in).
+
 Real review finding this codifies: `Workflow` already had nowhere to look up
 one stage by id, so three call sites hand-rolled `{stage.id: stage for stage
 in workflow.stages}` themselves (`app/runtime/runner.py`,
@@ -188,12 +198,12 @@ def find_mutation_sites(
         if isinstance(node, (ast.Assign, ast.AugAssign)):
             targets = node.targets if isinstance(node, ast.Assign) else [node.target]
             for target in targets:
-                site = _mutated_protected_target(target, attribute, receiver_is_relevant)
+                site = _describe_mutated_protected_target(target, attribute, receiver_is_relevant)
                 if site is not None:
                     offenders.append((node.lineno, f"assignment to {site}"))
         elif isinstance(node, ast.Delete):
             for target in node.targets:
-                site = _mutated_protected_target(target, attribute, receiver_is_relevant)
+                site = _describe_mutated_protected_target(target, attribute, receiver_is_relevant)
                 if site is not None:
                     offenders.append((node.lineno, f"del {site}"))
         elif (
@@ -217,15 +227,15 @@ def find_derivation_sites(
     offenders: list[tuple[int, str]] = []
     for node in ast.walk(tree):
         if isinstance(node, _COMPREHENSION_TYPES):
-            kind = _comprehension_derivation_kind(node, attribute, receiver_is_relevant)
+            kind = _classify_comprehension_derivation(node, attribute, receiver_is_relevant)
             if kind is not None:
                 offenders.append((node.lineno, kind))
         elif isinstance(node, ast.For):
-            kind = _for_loop_derivation_kind(node, attribute, receiver_is_relevant)
+            kind = _classify_for_loop_derivation(node, attribute, receiver_is_relevant)
             if kind is not None:
                 offenders.append((node.lineno, kind))
         elif isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
-            kind = _predicate_call_derivation_kind(node, attribute, receiver_is_relevant)
+            kind = _classify_predicate_call_derivation(node, attribute, receiver_is_relevant)
             if kind is not None:
                 offenders.append((node.lineno, kind))
     return offenders
@@ -234,7 +244,7 @@ def find_derivation_sites(
 # --- shared attribute-access matching ---------------------------------------
 
 
-def _receiver_identifier(value: ast.expr) -> str | None:
+def _identify_receiver(value: ast.expr) -> str | None:
     """The identifier `value` (the object side of an attribute access) reads
     as: a bare name's own id, or a chained attribute's own (rightmost) attr.
     None for anything else (e.g. a call result) — nothing to filter on."""
@@ -251,11 +261,11 @@ def _is_protected_access(
     return (
         isinstance(node, ast.Attribute)
         and node.attr == attribute
-        and receiver_is_relevant(_receiver_identifier(node.value))
+        and receiver_is_relevant(_identify_receiver(node.value))
     )
 
 
-def _mutated_protected_target(
+def _describe_mutated_protected_target(
     target: ast.expr, attribute: str, receiver_is_relevant: Callable[[str | None], bool],
 ) -> str | None:
     """Describe `target` if it IS the protected attribute or a subscript of
@@ -270,13 +280,13 @@ def _mutated_protected_target(
 # --- Tier-2 comprehension/generator/for-loop shapes -------------------------
 
 
-def _loop_var_names(target: ast.expr) -> frozenset[str]:
+def _collect_loop_var_names(target: ast.expr) -> frozenset[str]:
     """Every name a `for` target binds: a bare name, or every name inside a
     tuple-unpacking target (`for a, b in ...`)."""
     if isinstance(target, ast.Name):
         return frozenset({target.id})
     if isinstance(target, ast.Tuple):
-        return frozenset().union(*(_loop_var_names(elt) for elt in target.elts)) if target.elts else frozenset()
+        return frozenset().union(*(_collect_loop_var_names(elt) for elt in target.elts)) if target.elts else frozenset()
     return frozenset()
 
 
@@ -288,7 +298,17 @@ def _contains_attr_on_var(node: ast.AST, var_names: frozenset[str]) -> bool:
     return any(_is_attr_on_var(n, var_names) for n in ast.walk(node))
 
 
-def _matching_generator(
+def _is_boolean_test_on_var(node: ast.expr, var_names: frozenset[str]) -> bool:
+    """True when `node` is a boolean or comparison expression (`s.id ==
+    target`, `s.active and s.ready`) that reads one of `var_names`'s own
+    attributes — the shape `any()`/`all()` wrap around a GeneratorExp's elt
+    as their sole predicate. This is the same "test the loop variable" shape
+    a comprehension's `if` clause expresses via `gen.ifs`; here it is carried
+    in the elt/body instead, with no `if` clause to hold it."""
+    return isinstance(node, (ast.Compare, ast.BoolOp)) and _contains_attr_on_var(node, var_names)
+
+
+def _find_matching_generator(
     node: ast.ListComp | ast.SetComp | ast.DictComp | ast.GeneratorExp,
     attribute: str,
     receiver_is_relevant: Callable[[str | None], bool],
@@ -302,34 +322,38 @@ def _matching_generator(
     return None
 
 
-def _comprehension_derivation_kind(
+def _classify_comprehension_derivation(
     node: ast.ListComp | ast.SetComp | ast.DictComp | ast.GeneratorExp,
     attribute: str,
     receiver_is_relevant: Callable[[str | None], bool],
 ) -> str | None:
-    gen = _matching_generator(node, attribute, receiver_is_relevant)
+    gen = _find_matching_generator(node, attribute, receiver_is_relevant)
     if gen is None:
         return None
-    var_names = _loop_var_names(gen.target)
+    var_names = _collect_loop_var_names(gen.target)
     if any(_contains_attr_on_var(cond, var_names) for cond in gen.ifs):
         return "filtering"
     if isinstance(node, ast.DictComp) and _is_attr_on_var(node.key, var_names):
         return "indexing"
     if isinstance(node, (ast.ListComp, ast.SetComp, ast.GeneratorExp)) and _is_attr_on_var(node.elt, var_names):
         return "projection"
+    if isinstance(node, (ast.ListComp, ast.SetComp, ast.GeneratorExp)) and _is_boolean_test_on_var(
+        node.elt, var_names
+    ):
+        return "filtering"
     return None
 
 
-def _for_loop_derivation_kind(
+def _classify_for_loop_derivation(
     node: ast.For, attribute: str, receiver_is_relevant: Callable[[str | None], bool],
 ) -> str | None:
-    """The statement-loop equivalent of `_comprehension_derivation_kind`: a
+    """The statement-loop equivalent of `_classify_comprehension_derivation`: a
     plain `for x in y:` that reaches the same shapes by hand (an `if` on the
     loop variable's attribute, a dict keyed by one, or a projecting
     `.append`) rather than through a comprehension."""
     if not _is_protected_access(node.iter, attribute, receiver_is_relevant):
         return None
-    var_names = _loop_var_names(node.target)
+    var_names = _collect_loop_var_names(node.target)
     for stmt in node.body:
         if isinstance(stmt, ast.If) and _contains_attr_on_var(stmt.test, var_names):
             return "filtering"
@@ -360,14 +384,18 @@ def _is_projecting_append(stmt: ast.stmt, var_names: frozenset[str]) -> bool:
 # --- Tier-2 filter()/sorted() shape (no comprehension involved) -------------
 
 
-def _predicate_call_derivation_kind(
+def _classify_predicate_call_derivation(
     node: ast.Call, attribute: str, receiver_is_relevant: Callable[[str | None], bool],
 ) -> str | None:
     """filter(predicate, protected_attr) or sorted(protected_attr, key=...):
-    the attribute passed straight in, paired with an explicit predicate/key,
-    with no comprehension to catch it the way `next(x for x in ... if ...)`
-    already is (that generator is its own GeneratorExp node, walked and
-    classified by `_comprehension_derivation_kind`)."""
+    the attribute passed straight in, paired with an explicit predicate/key.
+
+    any()/all()/next() wrapping a generator expression over the attribute
+    (`any(s.id == target for s in workflow.stages)`) need no special-casing
+    here: that generator is its own GeneratorExp node, walked and classified
+    by `_classify_comprehension_derivation`, which treats a boolean/
+    comparison expression in the elt as filtering — the same test any()/all()
+    perform — not just a bare-attribute elt as projection."""
     assert isinstance(node.func, ast.Name)
     name = node.func.id
     if name == "filter" and len(node.args) >= 2:
@@ -465,6 +493,20 @@ def test_find_derivation_sites_flags_projection() -> None:
 def test_find_derivation_sites_flags_filtering() -> None:
     tree = ast.parse("matches = [s for s in workflow.stages if s.id == target]\n")
     assert find_derivation_sites(tree, "stages") == [(1, "filtering")]
+
+
+def test_find_derivation_sites_flags_any_call_with_comparison_predicate() -> None:
+    """`any()`'s sole argument is a GeneratorExp whose elt is a comparison,
+    not a comprehension `if` clause — the gap this rule used to miss."""
+    tree = ast.parse("found = any(s.id == t for s in x.stages)\n")
+    assert find_derivation_sites(tree, "stages") == [(1, "filtering")]
+
+
+def test_find_derivation_sites_allows_any_call_with_no_attribute_use() -> None:
+    """The generator elt references no attribute of the loop variable at
+    all, so there is nothing to derive from `.stages` — not flagged."""
+    tree = ast.parse("found = any(True for _ in x.stages)\n")
+    assert find_derivation_sites(tree, "stages") == []
 
 
 def test_find_derivation_sites_allows_a_pass_through_render_loop() -> None:
