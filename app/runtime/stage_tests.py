@@ -36,7 +36,7 @@ from app.core.models import Stage, TableSchema
 from app.core.models.stage import StageType
 from app.core.models.stages.stage_tests import STAGE_TEST_TYPES, StageTest
 from app.runtime.stages import HANDLERS
-from app.runtime.validation import validate_dataframe
+from app.runtime.validation import Severity, validate_dataframe
 
 Status = Literal["passed", "mismatch", "error", "malformed"]
 
@@ -214,7 +214,7 @@ def _validate_test_against_schemas(
         )
         problems += [
             f"input {ref.id}: {issue.message}"
-            for issue in report.issues if issue.severity == "error"
+            for issue in report.issues if issue.severity == Severity.error
         ]
     expected_frame = _build_frame(test.expected, stage.output_schema)
     report = validate_dataframe(
@@ -222,7 +222,7 @@ def _validate_test_against_schemas(
     )
     problems += [
         f"expected rows: {issue.message}"
-        for issue in report.issues if issue.severity == "error"
+        for issue in report.issues if issue.severity == Severity.error
     ]
     return "; ".join(problems) if problems else None
 

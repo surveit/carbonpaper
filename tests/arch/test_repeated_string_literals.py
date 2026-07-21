@@ -65,7 +65,6 @@ _ALLOWLIST: frozenset[str] = frozenset(
         "abs_tol",
         "approved",
         "assistant",
-        "error",
         "modify",
         "passed",
         "reject",

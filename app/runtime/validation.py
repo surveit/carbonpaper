@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field
+from enum import Enum
 from typing import Any
 
 import pandas as pd
@@ -36,9 +37,16 @@ PY_TYPE_OF = {
 }
 
 
+class Severity(str, Enum):
+    """An `Issue`'s severity — `error` fails `ValidationReport.ok`, `warning`
+    is informational only."""
+    error = "error"
+    warning = "warning"
+
+
 @dataclass
 class Issue:
-    severity: str    # "error" | "warning"
+    severity: str    # Severity.error | Severity.warning
     column: str | None
     message: str
 
@@ -52,7 +60,7 @@ class ValidationReport:
 
     @property
     def ok(self) -> bool:
-        return not any(i.severity == "error" for i in self.issues)
+        return not any(i.severity == Severity.error for i in self.issues)
 
     def to_dict(self) -> dict[str, Any]:
         return {
