@@ -452,7 +452,7 @@ def _consume_cancel(ctx: dict[str, Any]) -> bool:
     return identity is not None and consume_cancel(*identity)
 
 
-def find_blocking_upstream(stage: Stage, blocked: set[str]) -> list[str]:
+def _find_blocking_upstream(stage: Stage, blocked: set[str]) -> list[str]:
     """Input-producer stage ids in `blocked` — producers that errored, halted,
     or are themselves downstream of one. Non-empty means this stage cannot run
     on real inputs and must be skipped; empty means every producer succeeded.
@@ -560,7 +560,7 @@ def _execute_stages(
         # blocked set so its own downstream follows, and drops any stale output
         # so a resume cannot reuse it. Checked before the resume-skip so a
         # newly-blocked upstream overrides a prior `ok` output on disk.
-        if find_blocking_upstream(stage, blocked):
+        if _find_blocking_upstream(stage, blocked):
             records_by_id[sid] = _pending_stub(stage)
             blocked.add(sid)
             outputs_so_far.pop(sid, None)
@@ -680,12 +680,19 @@ def _execute_stages(
 
             outputs_so_far[sid] = output
             if row_errors:
+                # A per-row generation failure is a stage error, so it blocks its
+                # downstream exactly like a raised exception: join the blocked set
+                # so every transitive consumer is skipped rather than run on this
+                # stage's partial frame and marked `ok`. The partial output file
+                # stays on disk for inspection; the stage's own `error` status
+                # keeps a resume from reusing it, and `blocked` protects the rest.
                 record["status"] = StageStatus.ERROR
                 record["error"] = {
                     "type": "RowGenerationError",
                     "message": _summarize_row_errors(row_errors),
                     "traceback": None,
                 }
+                blocked.add(sid)
             else:
                 record["status"] = StageStatus.OK if out_rep.ok and all(
                     v["ok"] for v in record["input_validation"]
@@ -818,6 +825,12 @@ def resume_run(project_dir: Path, run_id: str, repo_root: Path) -> dict[str, Any
     }
 
     manifest["resumed_at"] = datetime.now().isoformat(timespec="seconds")
+    # Drop the halt marker the halted run left behind: the run is no longer
+    # halted — it is resuming — so a mid-run flush() (which persists status
+    # `running`) must not carry `halted_at`, or the run page would show the
+    # "halted for review" banner and queue links while the stage re-runs. The
+    # loop re-adds `halted_at` if a stage halts again; otherwise it stays gone.
+    manifest.pop("halted_at", None)
     return _execute_stages(ordered, ctx, manifest, run_dir, outputs_so_far)
 
 

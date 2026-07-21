@@ -205,11 +205,20 @@ def runs_dir(project: str) -> Path:
 
 
 def load_manifest(run_dir: Path) -> dict[str, Any]:
-    """A run's manifest.json as a dict, or 404 if the run doesn't exist."""
+    """A run's manifest.json as a dict, or 404 if the run doesn't exist.
+
+    Normalizes `halted_at` to a list so every consumer sees one shape: legacy
+    (pre-fork-aware) manifests persisted it as a scalar stage id string, which a
+    template `{% for %}` would iterate character-by-character. A single id is
+    wrapped into a one-element list here."""
     manifest_path = run_dir / "manifest.json"
     if not manifest_path.exists():
         raise HTTPException(status_code=404, detail="Run not found")
-    return json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    halted_at = manifest.get("halted_at")
+    if isinstance(halted_at, str):
+        manifest["halted_at"] = [halted_at]
+    return manifest
 
 
 def list_runs(project: str) -> list[dict[str, Any]]:

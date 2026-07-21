@@ -28,6 +28,7 @@ import app.runtime.runner as runner
 import app.web.loading as loading
 from app.main import app
 from app.runtime.runner import prepare_run, run_prepared
+from app.runtime.stages import llm_transform as lt
 from app.services import versioning
 from app.services.versioning import create_version_from_disk
 
@@ -66,6 +67,29 @@ def _passthrough_stage(stage_id, input_id, name="Passthrough"):
             "inputs": [{"id": input_id}],
             "function": {"kind": "inline",
                          "code": "def transform(df):\n    return df\n"}}
+
+
+def _score_load_stage(root):
+    """An input_data stage reading a 2-row (id, text) csv for an llm_transform."""
+    (root / "data").mkdir(parents=True, exist_ok=True)
+    csv_path = root / "data" / "score_items.csv"
+    pd.DataFrame({"id": ["a", "b"], "text": ["x", "y"]}).to_csv(csv_path, index=False)
+    return {"id": "load", "name": "Load", "type": "input_data",
+            "connector": {"kind": "file",
+                          "params": {"path": str(csv_path), "format": "csv"}}}
+
+
+def _score_stage(stage_id, input_id, name="Score"):
+    """An llm_transform adding a non-null `score` column to each (id, text) row."""
+    return {"id": stage_id, "name": name, "type": "llm_transform",
+            "inputs": [{"id": input_id, "schema": {
+                "columns": [{"name": "id", "type": "str"}, {"name": "text", "type": "str"}],
+                "primary_key": ["id"]}}],
+            "output_schema": {
+                "columns": [{"name": "id", "type": "str"}, {"name": "text", "type": "str"},
+                            {"name": "score", "type": "int", "nullable": False}],
+                "primary_key": ["id"]},
+            "llm": {"prompt_template": "Rate: {text}"}}
 
 
 def _queue_stage(stage_id, input_id, name="Review"):
@@ -204,6 +228,67 @@ def test_multi_halt_run_renders_the_full_halted_at_list_through_the_web_layer(
     assert "queue/review_b" in page.text
 
 
+# ── Legacy scalar halted_at manifests ────────────────────────────────────────
+
+def test_legacy_scalar_halted_at_manifest_renders_one_queue_link(tmp_path, monkeypatch):
+    """A pre-fork-aware manifest persisted `halted_at` as a scalar stage-id
+    string. load_manifest normalizes it to a one-element list so run_detail.html
+    renders a single review-queue link, not one per character (a `{% for %}`
+    over a string iterates characters)."""
+    monkeypatch.setattr(loading, "EXAMPLES_DIR", tmp_path)
+    project_dir = tmp_path / "legacy_halt"
+    _write_stage(project_dir, "01_load.json", _load_items_stage(project_dir))
+    _write_stage(project_dir, "02_review.json", _queue_stage("review", "load"))
+    _seed_version(project_dir)
+
+    halted = run_prepared(prepare_run(project_dir, repo_root=project_dir))
+    run_id = halted["run_id"]
+
+    # Rewrite the on-disk manifest to the legacy scalar shape.
+    manifest_path = project_dir / "runs" / run_id / "manifest.json"
+    on_disk = json.loads(manifest_path.read_text(encoding="utf-8"))
+    on_disk["halted_at"] = "review"
+    manifest_path.write_text(json.dumps(on_disk), encoding="utf-8")
+
+    normalized = loading.load_manifest(project_dir / "runs" / run_id)
+    assert normalized["halted_at"] == ["review"]
+
+    client = TestClient(app)
+    page = client.get(f"/project/legacy_halt/runs/{run_id}")
+    assert page.status_code == 200
+    # One review-queue link for the whole "review" id — not one per character
+    # ("queue/r", "queue/e", ...), which would leave "queue/review" absent.
+    assert page.text.count("queue/review") == 1
+
+
+# ── Resume clears the stale halt marker ──────────────────────────────────────
+
+def test_resume_pops_stale_halted_at_before_re_executing(tmp_path, monkeypatch):
+    """A resumed run is no longer halted, so resume_run must hand _execute_stages
+    a manifest WITHOUT `halted_at` — otherwise a mid-run flush (which persists
+    status `running`) would carry the halt marker and the run page would show the
+    review banner + queue links while the halted stage re-runs. The loop re-adds
+    `halted_at` only if a stage halts again."""
+    _write_stage(tmp_path, "01_load.json", _load_items_stage(tmp_path))
+    _write_stage(tmp_path, "02_review.json", _queue_stage("review", "load"))
+    _seed_version(tmp_path)
+
+    halted = run_prepared(prepare_run(tmp_path, repo_root=tmp_path))
+    assert halted["halted_at"] == ["review"]  # the halted run recorded the marker
+
+    captured: dict[str, bool] = {}
+    real_execute = runner._execute_stages
+
+    def capture(ordered, ctx, manifest, run_dir, outputs_so_far):
+        captured["halted_at_present"] = "halted_at" in manifest
+        return real_execute(ordered, ctx, manifest, run_dir, outputs_so_far)
+
+    monkeypatch.setattr(runner, "_execute_stages", capture)
+    runner.resume_run(tmp_path, halted["run_id"], tmp_path)
+
+    assert captured["halted_at_present"] is False
+
+
 # ── Mixed error + halt ───────────────────────────────────────────────────────
 
 def test_error_and_halt_together_report_errors_but_keep_stage_awaiting_review(tmp_path):
@@ -268,6 +353,54 @@ def test_cancel_after_a_halt_clears_halted_at_and_reports_cancelled(tmp_path, mo
 
 
 # ── Resume after error is not stale ──────────────────────────────────────────
+
+def test_row_error_stage_blocks_downstream_and_resume_is_not_stale(tmp_path, monkeypatch):
+    """load -> score (llm, one row fails generation) -> tail, plus an independent
+    load -> good_tail fork. A per-row generation failure marks `score` `error`,
+    so it MUST block its downstream exactly like a raised error: `tail` stays
+    pending with no output file (never run on `score`'s partial frame and marked
+    `ok`), while the independent `good_tail` fork finishes. On resume with the
+    failure removed, `score` re-runs and `tail` runs on its real (non-stale)
+    output. This is the row-error path of the fabricated-success/stale-reuse bug
+    the fork-blocking invariant closes."""
+    failing = {"id": "a"}  # which input id's generation fails; cleared before resume
+
+    def fake_call_llm(stage_id, llm_config, row, **kwargs):
+        if row["id"] == failing["id"]:
+            raise RuntimeError("boom")
+        return {"score": 5}
+
+    monkeypatch.setattr(lt, "call_llm", fake_call_llm)
+
+    _write_stage(tmp_path, "01_load.json", _score_load_stage(tmp_path))
+    _write_stage(tmp_path, "02_score.json", _score_stage("score", "load"))
+    _write_stage(tmp_path, "03_tail.json", _passthrough_stage("tail", "score"))
+    _write_stage(tmp_path, "04_good.json", _passthrough_stage("good_tail", "load"))
+    _seed_version(tmp_path)
+
+    first = run_prepared(prepare_run(tmp_path, repo_root=tmp_path))
+
+    assert first["status"] == "errors"
+    assert _stage_status(first, "score") == "error"
+    assert _stage_status(first, "tail") == "pending"
+    assert _stage_status(first, "good_tail") == "ok"
+
+    outputs = tmp_path / "runs" / first["run_id"] / "outputs"
+    assert (outputs / "good_tail.parquet").exists()
+    assert not (outputs / "tail.parquet").exists()
+
+    # Remove the failure and resume the same run: score re-runs (both rows now
+    # succeed), and tail runs on score's real output rather than a stale frame.
+    failing["id"] = None
+    resumed = runner.resume_run(tmp_path, first["run_id"], tmp_path)
+
+    assert resumed["status"] == "ok"
+    assert _stage_status(resumed, "score") == "ok"
+    assert _stage_status(resumed, "tail") == "ok"
+    assert _stage_status(resumed, "good_tail") == "ok"
+    tail_out = pd.read_parquet(outputs / "tail.parquet")
+    assert list(tail_out["score"]) == [5, 5]  # real generated data, not stale
+
 
 def test_resume_after_error_reruns_the_errored_stage_and_its_downstream(tmp_path):
     """load -> mid -> tail. `load` passes preflight (a valid csv exists) but is
