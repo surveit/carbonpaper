@@ -371,7 +371,7 @@ def run_subset(
     `injected_outputs`, or `_execute_stages` fails on it. Raises SubsetRunError if an
     executed stage errors or the run halts for review, so a caller gets a clean output
     set or a loud failure — never a half-populated dict."""
-    by_id = {stage.id: stage for stage in workflow.stages}
+    by_id = workflow.index_stages_by_id()
     missing = [sid for sid in stage_ids if sid not in by_id]
     if missing:
         raise SubsetRunError(f"subset names stage(s) not in the workflow: {missing}")
