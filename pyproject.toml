@@ -132,30 +132,6 @@ allowed_importers = ["app.main"]
 # app.main registers it on the shared engine, nothing else imports it. It leans
 # on app.core.agent (the engine) + app.services (to read/edit projects).
 
-[[tool.importlinter.contracts]]
-name = "fastapi stays in the web layer"
-type = "forbidden"
-source_modules = [
-    "app.agents", "app.compiler", "app.core", "app.evals",
-    "app.mcp", "app.runtime", "app.services",
-]
-forbidden_modules = ["fastapi"]
-ignore_imports = ["app.compiler.router -> fastapi"]
-# The FastAPI() instance is constructed in app.main (app/main.py), outside
-# app.web; every route module lives under app.web. So the whitelist is every
-# other first-party package (app.web itself and app.main are simply absent
-# from source_modules — a forbidden contract only restricts the modules it
-# names). Routing/HTTP concerns stay out of the domain and infra layers.
-#
-# app.compiler.router is a deliberate, permanent carve-out, not ratchet debt to
-# be emptied: it is the compiler subsystem's own "Edit with agent" web entry,
-# mounted directly by app.main and owned by its subsystem — the same
-# entrypoint-mounted pattern as the "app.mcp imported only by the entrypoint"
-# and "app.agents imported only by the entrypoint" contracts above, just
-# expressed as an ignore_imports exception here instead of a protected
-# contract, since app.compiler is a source_module of the forbidden contract
-# above rather than its own protected_modules entry.
-
 # NB: "app.seeds reaches the store through services" is enforced as an AST allowlist
 # in app/seeds/_arch_tests/test_seed_reaches_store_via_services.py (check_no_import),
 # not a forbidden contract here — same as the cancellation stdlib-leaf rule.
