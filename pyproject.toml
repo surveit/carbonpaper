@@ -127,22 +127,7 @@ allowed_importers = ["app.main"]
 # app.main registers it on the shared engine, nothing else imports it. It leans
 # on app.core.agent (the engine) + app.services (to read/edit projects).
 
-[[tool.importlinter.contracts]]
-name = "app.runtime.cancellation is a stdlib-only leaf — imports no app module"
-type = "forbidden"
-source_modules = ["app.runtime.cancellation"]
-forbidden_modules = [
-    "app.core", "app.services", "app.web", "app.compiler", "app.evals", "app.mcp", "app.agents", "app.main",
-    "app.runtime.runner", "app.runtime.stages", "app.runtime.llm", "app.runtime.options",
-    "app.runtime.preview", "app.runtime.trace", "app.runtime.validation", "app.runtime.stage_tests",
-]
-# The cancel registry is keyed on a run's logical (project, run_id) identity,
-# never its persistence layout (see cancellation.py's module docstring) — so it
-# must import nothing from app, stdlib only. A "forbidden" contract (unlike an
-# AST scan for `node.level == 0` imports) resolves relative imports on the real
-# import graph, so a same-package `from .runner import x` is caught exactly
-# like `from app.runtime.runner import x`. "app" and "app.runtime" themselves
-# can't be listed here — import-linter skips a forbidden module that contains
-# the source module as an "overlap" (the same reason the app.core.persistence
-# contract above enumerates its siblings instead of bare "app") — so every
-# other app module is enumerated individually instead.
+# NB: "app.runtime.cancellation is a stdlib-only leaf" is enforced as an AST
+# allowlist in app/runtime/_arch_tests/test_cancellation_is_a_stdlib_leaf.py
+# (check_imports_are_stdlib_only), not a forbidden contract here — the allowlist
+# is self-maintaining (no sibling list to extend) and catches relative imports.
