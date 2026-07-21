@@ -19,7 +19,7 @@ is ready; if it is rejected, fix the reported issues and call it again.
 - The schemas exist to TYPE and VALIDATE the objects that flow through a repeatable
   workflow which re-runs this methodology. Produce the FEWEST, SIMPLEST tables that
   capture the core NOUNS of the methodology — not every incidental or intermediate
-  table. A few well-chosen schemas beat many granular ones.
+  table.
 - Choose each table's `kind` truthfully: `reference` = must be SOURCED, not computed (a
   dimension / lookup / benchmark); `input` = raw data fetched into the pipeline;
   `computed` = produced by a later pipeline stage; `ground_truth` = external truth used
@@ -27,4 +27,13 @@ is ready; if it is rejected, fix the reported issues and call it again.
 - Wire foreign keys with a column's `references` ("<schema>" or "<schema>.<column>")
   wherever one table points at another, so the data model is a connected graph.
 - NEVER fabricate data values, URLs, or numbers — encode STRUCTURE only; record genuine
-  ambiguity in a schema's or a column's `description`."""
+  ambiguity in a schema's or a column's `description`.
+
+# Titles and descriptions are the review surface
+A reviewer approves the data model from a page that shows each schema's `title` and
+`description` before its columns — write both for a non-engineer deciding whether the
+model captures their method.
+- `title`: a 2-5 word gloss in the method's own vocabulary ("the watchlist", "raw
+  export rows") — what the table IS, not a restatement of its name.
+- `description`: 2-4 sentences on what the table is and why the method needs it — its
+  role, not a column tour (the columns render separately)."""
