@@ -34,13 +34,6 @@ _pending: set[tuple[str, str]] = set()
 _lock = threading.Lock()
 
 
-class RunCancelled(Exception):
-    """Raised on the run thread when it consumes a cancel message for its
-    (project, run_id); caught by the runner to stop the run. An internal
-    control signal — sibling in spirit to HaltForReview
-    (app/runtime/stages/_shared.py) — never surfaced to a user as an error."""
-
-
 def request_cancel(project: str, run_id: str) -> None:
     """Drop a cancel message into (project, run_id)'s mailbox. Called from the
     web thread; idempotent — a run has at most one pending cancel. Takes effect

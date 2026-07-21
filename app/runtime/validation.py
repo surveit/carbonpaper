@@ -16,11 +16,12 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field
+from enum import Enum
 from typing import Any
 
 import pandas as pd
 
-from app.core.models import Column, TableSchema
+from app.core.models import Column, RANGE_UNBOUNDED_MARKER, STR_COLUMN_TYPE, TableSchema
 
 
 # Map our type vocabulary to permissive pandas dtype checks.
@@ -36,9 +37,16 @@ PY_TYPE_OF = {
 }
 
 
+class Severity(str, Enum):
+    """An `Issue`'s severity — `error` fails `ValidationReport.ok`, `warning`
+    is informational only."""
+    error = "error"
+    warning = "warning"
+
+
 @dataclass
 class Issue:
-    severity: str    # "error" | "warning"
+    severity: str    # Severity.error | Severity.warning
     column: str | None
     message: str
 
@@ -52,7 +60,7 @@ class ValidationReport:
 
     @property
     def ok(self) -> bool:
-        return not any(i.severity == "error" for i in self.issues)
+        return not any(i.severity == Severity.error for i in self.issues)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -113,8 +121,8 @@ def validate_dataframe(
             if len(non_null) and len(col_range) == 2:
                 lo, hi = col_range
                 # strings like "+inf" → sentinel; treat as unbounded
-                lo_v = -math.inf if (isinstance(lo, str) and "inf" in lo) else lo
-                hi_v = math.inf if (isinstance(hi, str) and "inf" in hi) else hi
+                lo_v = -math.inf if (isinstance(lo, str) and RANGE_UNBOUNDED_MARKER in lo) else lo
+                hi_v = math.inf if (isinstance(hi, str) and RANGE_UNBOUNDED_MARKER in hi) else hi
                 try:
                     bad = ((non_null < lo_v) | (non_null > hi_v)).sum()
                     if bad:
@@ -128,7 +136,7 @@ def validate_dataframe(
                     pass  # mixed types — the type check below will catch it
 
         # Enum (categorical strings): values must be in the declared vocabulary
-        if col.enum and col_type == "str":
+        if col.enum and col_type == STR_COLUMN_TYPE:
             non_null = series.dropna()
             if len(non_null):
                 allowed = set(col.enum)

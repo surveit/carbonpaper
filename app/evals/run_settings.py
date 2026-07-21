@@ -25,7 +25,7 @@ def resolve_eval_run_settings(
     (loudly) if `target` or any override names no stage, or if `target` is itself
     overridden — a misconfigured eval should fail at definition, not at score time.
     """
-    by_id = {s.id: s for s in workflow.stages}
+    by_id = workflow.index_stages_by_id()
     if target not in by_id:
         raise ValueError(f"target {target!r} is not a stage in the workflow")
     ov = set(overrides)

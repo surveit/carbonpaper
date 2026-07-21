@@ -21,6 +21,7 @@ from typing import Any
 import pandas as pd
 
 from app.core.errors import RowOutOfRange, StageNotInRun
+from app.core.frames import PARQUET_SUFFIX
 from app.core.models.stage import StageType, is_grain_and_order_preserving
 
 
@@ -110,7 +111,7 @@ def _read_output(run_dir: Path, stage_record: dict[str, Any]) -> pd.DataFrame | 
     path = Path(run_dir) / rel
     if not path.exists():
         return None
-    return pd.read_parquet(path) if path.suffix == ".parquet" else pd.read_csv(path)
+    return pd.read_parquet(path) if path.suffix == PARQUET_SUFFIX else pd.read_csv(path)
 
 
 def _scalar(value: Any) -> Any:
@@ -184,7 +185,7 @@ def trace_row(run_dir: Path, stage_id: str, row_ordinal: int) -> Trace:
         ))
 
         # Can we cross into the parent, keeping the same ordinal?
-        if stage_type == "input_data":
+        if stage_type == StageType.input_data:
             end = TraceEnd(True, sid, "input_data stage — the rows originate here")
         elif not parents:
             end = TraceEnd(False, sid, "the manifest records no input edge for this stage")

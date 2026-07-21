@@ -13,6 +13,10 @@ Import from `app.core.models` (this aggregator) for the stable public surface.
 from app.core.models.coverage import Coverage
 from app.core.models.schema import (
     Column,
+    JSON_COLUMN_TYPE,
+    LIST_JSON_COLUMN_TYPE,
+    RANGE_UNBOUNDED_MARKER,
+    STR_COLUMN_TYPE,
     SourceRef,
     TableSchema,
     is_valid_column_type,
@@ -35,6 +39,7 @@ from app.core.models.stage import (
     PythonFunction,
     QueueConfig,
     ReviewConfig,
+    RowReviewDecision,
     Stage,
     StageType,
     validate_stage,
@@ -68,6 +73,7 @@ from app.core.models.eval import (
     EvalRun,
     EvalRunSettings,
     ExpectedOutput,
+    ScoringMetric,
     StageOutputOverride,
 )
 # NOTE: the compiled-stage loader lives in app.services.loader (it does
@@ -180,6 +186,7 @@ __all__ = [
     "SourceRef", "Column", "TableSchema", "Connector", "LLMConfig",
     "PythonFunction", "JoinKey", "JoinConfig", "AggregationOp",
     "AggregateConfig", "QueueConfig", "PublishConfig", "ReviewConfig",
+    "RowReviewDecision",
     "InputRef", "Stage", "StageTest", "validate_stage",
     "Workflow", "parse_workflow", "validate_workflow", "validate_workflow_draft",
     "validate_unique_ids", "validate_inputs_resolve", "detect_cycle",
@@ -189,9 +196,12 @@ __all__ = [
     # general
     "TableRef",
     # eval contract
-    "StageOutputOverride", "ExpectedOutput", "CodeScorer", "EvalConfig",
+    "StageOutputOverride", "ExpectedOutput", "ScoringMetric", "CodeScorer", "EvalConfig",
     "EvalRunSettings", "EvalRun",
     # compat vocabularies (rendered by prompt.py / read by compiler.py)
     "SCALAR_COLUMN_TYPES", "SCHEMA_KINDS", "JOIN_TYPES", "CONNECTOR_KINDS",
     "NODE_TYPES", "NODE_TYPE_NAMES",
+    # individual column-type comparison handles
+    "STR_COLUMN_TYPE", "JSON_COLUMN_TYPE", "LIST_JSON_COLUMN_TYPE",
+    "RANGE_UNBOUNDED_MARKER",
 ]

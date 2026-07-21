@@ -22,7 +22,9 @@ def load_data_model(
     schemas = workspace.load_schemas(project_dir)
     if not schemas:
         return None
-    if approved_only and node_review.data_model_state(project_dir, schemas)["state"] != "approved":
+    if (approved_only
+            and node_review.data_model_state(project_dir, schemas)["state"]
+            != node_review.NodeApprovalState.approved):
         return None
     # Strip the loader's bookkeeping keys (_filename/…) before the model validates.
     return parse_schema_library(

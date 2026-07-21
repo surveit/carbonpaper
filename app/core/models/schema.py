@@ -47,6 +47,13 @@ SCALAR_COLUMN_TYPES: set[str] = {"str", "int", "float", "bool", "datetime", "dat
 STRUCTURED_COLUMN_TYPES: set[str] = {"json"}
 _LIST_RE = re.compile(r"^list\[(.+)\]$")
 
+# Named handles for the column-type values compared individually below (and by
+# app.core.models.row_model / app.runtime.validation) — as opposed to the
+# scalar/structured *sets* above, which are membership-tested as a whole.
+STR_COLUMN_TYPE = "str"
+JSON_COLUMN_TYPE = "json"
+LIST_JSON_COLUMN_TYPE = "list[json]"
+
 
 def is_valid_column_type(t: str) -> bool:
     """Scalar, `json`, or `list[X]` where X is scalar / `json` / a nested
@@ -74,11 +81,18 @@ class SourceRef(_Base):
     lines: Optional[list[int]] = None
 
 
+# The substring a `range` bound string carries to mean "unbounded on this
+# side" (e.g. "+inf", "-inf") — recognized here and by the matching check in
+# app/runtime/validation.py when it validates row data against a declared
+# range.
+RANGE_UNBOUNDED_MARKER = "inf"
+
+
 def _is_range_bound(v: Any) -> bool:
     """Whether `v` is a valid `range` element: a non-bool number, or a string
-    containing "inf" (the unbounded-on-this-side sentinel)."""
+    containing RANGE_UNBOUNDED_MARKER (the unbounded-on-this-side sentinel)."""
     if isinstance(v, str):
-        return "inf" in v
+        return RANGE_UNBOUNDED_MARKER in v
     return isinstance(v, (int, float)) and not isinstance(v, bool)
 
 
@@ -123,7 +137,7 @@ class Column(_Base):
     @model_validator(mode="after")
     def _enum_only_on_str(self) -> "Column":
         if self.enum is not None:
-            if self.type != "str":
+            if self.type != STR_COLUMN_TYPE:
                 raise ValueError(
                     f"column {self.name!r}: enum is only valid on type 'str' "
                     f"(got {self.type!r})"
@@ -134,7 +148,7 @@ class Column(_Base):
 
     @model_validator(mode="after")
     def _json_shape(self) -> "Column":
-        is_json = self.type == "json" or self.type == "list[json]"
+        is_json = self.type == JSON_COLUMN_TYPE or self.type == LIST_JSON_COLUMN_TYPE
         if is_json:
             if self.fields is None and self.value_type is None:
                 raise ValueError(
@@ -275,8 +289,8 @@ def _render_column(col: Column, indent: str) -> list[str]:
     header = f'{indent}"{col.name}":'
     sub_lines: list[str] = []
 
-    if col.type == "json" or col.type == "list[json]":
-        is_array = col.type == "list[json]"
+    if col.type == JSON_COLUMN_TYPE or col.type == LIST_JSON_COLUMN_TYPE:
+        is_array = col.type == LIST_JSON_COLUMN_TYPE
         if col.fields is not None:
             if is_array:
                 shape = "an array of objects, each with keys:"

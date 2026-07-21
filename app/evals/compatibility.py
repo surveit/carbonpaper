@@ -10,8 +10,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Sequence
 
-from app.core.models import (EvalConfig, EvalRunSettings, Stage, TableSchema,
-                        Workflow, validate_workflow)
+from app.core.models import (EvalConfig, EvalRunSettings, ScoringMetric, Stage,
+                        TableSchema, Workflow, validate_workflow)
 from app.evals.dataset_columns import get_injected_columns
 from app.evals.run_settings import resolve_eval_run_settings
 
@@ -184,7 +184,7 @@ def _validate_target_emits_checked_columns(config: EvalConfig,
         if col is None:
             problems.append(f"expected output asserts on `{expected_output.output_column}`, "
                             f"which target `{target.id}` does not emit")
-        elif expected_output.metric == "abs_tol" and col.type not in _NUMERIC_TYPES:
+        elif expected_output.metric == ScoringMetric.abs_tol and col.type not in _NUMERIC_TYPES:
             problems.append(f"`{expected_output.output_column}` is `{col.type}` on target "
                             f"`{target.id}` but metric abs_tol needs a numeric")
     return problems

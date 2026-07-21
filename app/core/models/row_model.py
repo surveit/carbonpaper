@@ -20,7 +20,12 @@ from typing import Any, Literal, Optional, Sequence
 
 from pydantic import BaseModel, ConfigDict, Field, create_model
 
-from app.core.models.schema import Column, _LIST_RE
+from app.core.models.schema import (
+    Column,
+    JSON_COLUMN_TYPE,
+    LIST_JSON_COLUMN_TYPE,
+    _LIST_RE,
+)
 
 _SCALAR_PY_TYPES: dict[str, type] = {
     "str": str,
@@ -45,7 +50,7 @@ def build_row_model(name: str, columns: Sequence[Column]) -> type[BaseModel]:
 
 
 def _annotation_for(column: Column, parent_name: str) -> Any:
-    if column.type in ("json", "list[json]"):
+    if column.type in (JSON_COLUMN_TYPE, LIST_JSON_COLUMN_TYPE):
         inner: Any
         if column.fields is not None:
             inner = build_row_model(f"{parent_name}__{column.name}", column.fields)
@@ -53,7 +58,7 @@ def _annotation_for(column: Column, parent_name: str) -> Any:
             assert column.value_type is not None  # Column._json_shape enforces
             scalar_py_type: Any = _SCALAR_PY_TYPES[column.value_type]
             inner = dict[str, scalar_py_type]
-        return list[inner] if column.type == "list[json]" else inner
+        return list[inner] if column.type == LIST_JSON_COLUMN_TYPE else inner
     if column.enum is not None:
         return Literal.__getitem__(tuple(column.enum))
     return _scalar_or_list_annotation(column.type)

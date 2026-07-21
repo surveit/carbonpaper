@@ -75,7 +75,7 @@ def _score_run(
     """Run the injected stage subset to the target and score its output. A run
     failure or a grain violation is recorded as an `error` run (with the reason),
     not raised — the run happened, it just couldn't produce a score."""
-    by_id = {stage.id: stage for stage in workflow.stages}
+    by_id = workflow.index_stages_by_id()
     override, target = by_id[config.override_stage], by_id[config.target_stage]
     assert config.table is not None  # _require_runnable checked this
     dataset = _read_table_ref(repo_root, config.table)

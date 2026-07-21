@@ -13,11 +13,26 @@ mid-turn is out of scope.
 from __future__ import annotations
 
 import uuid
+from enum import Enum
 from typing import Any, ClassVar
 
 from pydantic import Field
 
 from app.core.persistence import PersistedModel
+
+
+class MessageRole(str, Enum):
+    """A neutral-transcript message's `role` (see the module docstring)."""
+    user = "user"
+    assistant = "assistant"
+
+
+class PartType(str, Enum):
+    """A neutral-transcript message part's `type` (see the module docstring)."""
+    text = "text"
+    thinking = "thinking"
+    tool_call = "tool_call"
+    tool_result = "tool_result"
 
 
 class AgentSession(PersistedModel):
@@ -134,15 +149,15 @@ def _render_history_bubbles(messages: list[dict]) -> list[dict]:
     for message in messages:
         role = message.get("role")
         parts = message.get("parts") or []
-        if role == "user":
-            text = "".join(p.get("text", "") for p in parts if p.get("type") == "text")
+        if role == MessageRole.user:
+            text = "".join(p.get("text", "") for p in parts if p.get("type") == PartType.text)
             bubbles.append({"role": "user", "text": text})
-        elif role == "assistant":
-            thinking = "".join(p.get("text", "") for p in parts if p.get("type") == "thinking")
-            text = "".join(p.get("text", "") for p in parts if p.get("type") == "text")
+        elif role == MessageRole.assistant:
+            thinking = "".join(p.get("text", "") for p in parts if p.get("type") == PartType.thinking)
+            text = "".join(p.get("text", "") for p in parts if p.get("type") == PartType.text)
             tools = [{"name": p.get("name", ""), "args": p.get("args", ""),
                       "label": p.get("label") or p.get("name", "")}
-                     for p in parts if p.get("type") == "tool_call"]
+                     for p in parts if p.get("type") == PartType.tool_call]
             bubbles.append({"role": "assistant", "thinking": thinking,
                             "text": text, "tools": tools})
     return bubbles

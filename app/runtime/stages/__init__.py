@@ -17,8 +17,8 @@ from typing import Any, Callable
 
 from app.core.models.stage import Stage, StageType
 
+from ..errors import HaltForReview
 from ..options import DEFAULT_PARALLEL
-from ._shared import HaltForReview
 from .aggregate import handle_aggregate
 from .execution import (
     FrameHandler,

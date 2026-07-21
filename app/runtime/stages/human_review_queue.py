@@ -9,9 +9,10 @@ from typing import Any
 import pandas as pd
 import pyarrow.lib as pa_lib
 
-from app.core.models import Stage
+from app.core.models import RowReviewDecision, Stage
 
-from ._shared import HaltForReview, _translate_where
+from ..errors import HaltForReview
+from ._shared import _translate_where
 
 
 def _content_hash(row: pd.Series, columns: list[str]) -> str:
@@ -153,10 +154,10 @@ def handle_human_review_queue(stage: Stage, inputs: dict[str, pd.DataFrame], ctx
     def _apply(row: pd.Series) -> pd.Series:
         ai = row.get("score")
         decision = row.get("decision")
-        if decision == "modify":
+        if decision == RowReviewDecision.modify:
             final = row.get("modified_score")
             human = row.get("modified_score")
-        elif decision == "reject":
+        elif decision == RowReviewDecision.reject:
             final = pd.NA
             human = pd.NA
         else:  # approve
@@ -174,7 +175,7 @@ def handle_human_review_queue(stage: Stage, inputs: dict[str, pd.DataFrame], ctx
         # DataFrame — the stubs can't see that, so check it at runtime.
         assert isinstance(decided, pd.DataFrame)
         # Drop rejected rows from the output (final_score is NA).
-        decided = decided[decided["decision"] != "reject"].copy()
+        decided = decided[decided["decision"] != RowReviewDecision.reject].copy()
 
     # Pass-through rows: keep ai score as final.
     if len(passthrough) and "score" in passthrough.columns:

@@ -10,6 +10,7 @@ import pandas as pd
 from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 
+from app.core.models import RowReviewDecision
 from app.runtime.llm import render_prompt
 from app.web.config import templates
 from app.web.loading import (
@@ -137,10 +138,11 @@ async def queue_decide(
     modified_score: str | None = Form(None),
 ):
     """Persist a reviewer's decision against a content_hash."""
-    if decision not in ("approve", "reject", "modify"):
+    if decision not in (RowReviewDecision.approve, RowReviewDecision.reject,
+                        RowReviewDecision.modify):
         raise HTTPException(status_code=400, detail=f"unknown decision '{decision}'")
     mod_val: float | None = None
-    if decision == "modify":
+    if decision == RowReviewDecision.modify:
         if not modified_score:
             raise HTTPException(status_code=400, detail="modify requires modified_score")
         try:

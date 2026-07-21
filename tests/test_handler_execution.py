@@ -10,7 +10,8 @@ import pytest
 
 from app.core.models import Stage
 from app.core.models.stage import StageType
-from app.runtime.cancellation import RunCancelled, request_cancel
+from app.runtime.cancellation import request_cancel
+from app.runtime.errors import RunCancelled
 from app.runtime.stages.execution import (
     FrameHandler,
     RowMapHandler,

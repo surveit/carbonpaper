@@ -19,7 +19,7 @@ from pathlib import Path
 from pydantic import BaseModel, Field
 
 from app.core.run_status import RunStatus
-from app.services import project
+from app.services import node_review, project
 
 
 class NavItem(BaseModel):
@@ -125,7 +125,7 @@ def _next_action(state: project.ProjectState) -> NextAction:
             href=f"{base}/data_model",
         )
     # 2. Data model present but not approved → approve it.
-    if data_model.state != "approved":
+    if data_model.state != node_review.NodeApprovalState.approved:
         return NextAction(
             key="approve_data_model",
             label="Approve the data model",

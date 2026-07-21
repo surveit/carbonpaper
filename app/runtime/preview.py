@@ -30,8 +30,10 @@ from typing import Any
 import pandas as pd
 import pyarrow
 
+from app.core.frames import PARQUET_SUFFIX
 from app.core.models import Stage
 
+from .errors import PreviewError
 from .stages import HANDLERS
 
 
@@ -46,13 +48,8 @@ PREVIEWABLE_TYPES: set[str] = {
 }
 
 
-class PreviewError(Exception):
-    """Raised when a scratch preview can't be run (bad type, missing upstream
-    output, missing handler). The route turns this into a 4xx with the message."""
-
-
 def _read_output(path: Path) -> pd.DataFrame:
-    if path.suffix == ".parquet":
+    if path.suffix == PARQUET_SUFFIX:
         return pd.read_parquet(path)
     return pd.read_csv(path)
 

@@ -23,7 +23,7 @@ from typing import Any
 import pandas as pd
 
 from app.core.errors import EvalGrainViolationError
-from app.core.models import EvalConfig, Stage
+from app.core.models import EvalConfig, ScoringMetric, Stage
 from app.evals.dataset_columns import (
     deconflict_column_names,
     get_output_columns_from_stage,
@@ -128,12 +128,12 @@ def _value_matches(expected: Any, actual: Any, metric: str, tolerance: float | N
     (an unverifiable pair is not a pass)."""
     if pd.isna(expected) or pd.isna(actual):
         return False
-    if metric == "exact":
+    if metric == ScoringMetric.exact:
         return bool(expected == actual)
-    if metric == "abs_tol":
+    if metric == ScoringMetric.abs_tol:
         assert tolerance is not None  # EvalConfig validates abs_tol carries one
         return abs(float(actual) - float(expected)) <= tolerance
-    if metric == "sign":
+    if metric == ScoringMetric.sign:
         return _sign(float(actual)) == _sign(float(expected))
     raise ValueError(f"unknown metric {metric!r}")
 

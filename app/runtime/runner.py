@@ -28,12 +28,14 @@ import pyarrow.lib as pa_lib
 from pydantic import ValidationError as PydanticValidationError
 
 from app.core.errors import MissingInputBindingError, NoVersionToRunError, SubsetRunError
+from app.core.frames import PARQUET_SUFFIX
 from app.core.models import Connector, Stage, StageType, Workflow
 from app.core.run_status import RunStatus, StageStatus
-from app.services.loader import WorkflowLoadError
+from app.services.errors import WorkflowLoadError
 from app.services import versioning
 
-from .cancellation import RunCancelled, consume_cancel
+from .cancellation import consume_cancel
+from .errors import RunCancelled
 from .stages import HANDLERS, PREFLIGHTS, HaltForReview
 from .validation import Issue, validate_dataframe
 
@@ -371,7 +373,7 @@ def run_subset(
     `injected_outputs`, or `_execute_stages` fails on it. Raises SubsetRunError if an
     executed stage errors or the run halts for review, so a caller gets a clean output
     set or a loud failure — never a half-populated dict."""
-    by_id = {stage.id: stage for stage in workflow.stages}
+    by_id = workflow.index_stages_by_id()
     missing = [sid for sid in stage_ids if sid not in by_id]
     if missing:
         raise SubsetRunError(f"subset names stage(s) not in the workflow: {missing}")
@@ -804,7 +806,7 @@ def resume_run(project_dir: Path, run_id: str, repo_root: Path) -> dict[str, Any
         if not path.exists():
             continue
         try:
-            if path.suffix == ".parquet":
+            if path.suffix == PARQUET_SUFFIX:
                 outputs_so_far[record["stage_id"]] = pd.read_parquet(path)
             else:
                 outputs_so_far[record["stage_id"]] = pd.read_csv(path)

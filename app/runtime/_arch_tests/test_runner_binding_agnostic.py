@@ -2,13 +2,16 @@
 
 ``app/runtime/runner.py`` orchestrates runs generically: it merges run bindings
 into connector params and asks each stage type's preflight whether the stage is
-ready — without knowing what any param means. The param vocabulary ("path",
-"format", "file", "list_columns", "parse_dates") belongs to the stage modules
-that read it (``stages/input_data.py``) and to the Connector model that
-validates it. If the runner starts touching those keys, stage-specific
-semantics are leaking back into the orchestrator — the exact smell this rule
-exists to stop. Scope is runner.py alone: stage modules under ``stages/``
-legitimately own these keys.
+ready — without knowing what any param means. The param vocabulary ("format",
+"file", "list_columns", "parse_dates") belongs to the stage modules that read
+it (``stages/input_data.py``) and to the Connector model that validates it. If
+the runner starts touching those keys, stage-specific semantics are leaking
+back into the orchestrator — the exact smell this rule exists to stop. Scope
+is runner.py alone: stage modules under ``stages/`` legitimately own these
+keys.
+
+The "path" key is covered instead by the row for this file in
+``tests/arch/test_layer_vocabulary.py``.
 """
 from __future__ import annotations
 
@@ -16,7 +19,7 @@ from pathlib import Path
 
 from arch import check_no_dict_keys
 
-_CONNECTOR_PARAM_KEYS = {"path", "format", "file", "list_columns", "parse_dates"}
+_CONNECTOR_PARAM_KEYS = {"format", "file", "list_columns", "parse_dates"}
 
 
 def test_runner_never_touches_connector_param_keys() -> None:

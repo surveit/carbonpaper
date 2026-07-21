@@ -87,6 +87,13 @@ class Workflow(_Base):
             raise ValueError("; ".join(issues))
         return self
 
+    def index_stages_by_id(self) -> dict[str, Stage]:
+        """This workflow's stages keyed by id, for callers that need repeated
+        by-id lookup. Unique ids are already a graph invariant (see
+        `validate_unique_ids`), so this never collapses two stages onto one
+        key."""
+        return {stage.id: stage for stage in self.stages}
+
 
 def parse_workflow(stages: list[dict[str, Any]]) -> Workflow:
     """Parse + validate a list of stage dicts. Raises ValidationError if invalid."""

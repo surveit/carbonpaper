@@ -33,6 +33,7 @@ Storage: configs and runs are documents in the store (collections `eval` and
 from __future__ import annotations
 
 import re
+from enum import Enum
 from typing import Annotated, Any, Literal, Optional
 
 from pydantic import AfterValidator, Field, field_validator, model_validator
@@ -63,6 +64,14 @@ class StageOutputOverride(_Base):
     table: TableRef
 
 
+class ScoringMetric(str, Enum):
+    """How `ExpectedOutput` grades one column: `exact` equality, `abs_tol`
+    within `tolerance`, or `sign` (same sign)."""
+    exact = "exact"
+    abs_tol = "abs_tol"
+    sign = "sign"
+
+
 # ── The comparison ───────────────────────────────────────────────────────────
 class ExpectedOutput(_Base):
     """One check: which `target_stage` output column to grade, and how. The
@@ -72,12 +81,12 @@ class ExpectedOutput(_Base):
     column names, in which case it is disambiguated (see
     `app.evals.dataset_columns`)."""
     output_column: str
-    metric: Literal["exact", "abs_tol", "sign"] = "exact"
+    metric: ScoringMetric = ScoringMetric.exact
     tolerance: Optional[float] = None
 
     @model_validator(mode="after")
     def _tolerance_when_needed(self) -> "ExpectedOutput":
-        if self.metric == "abs_tol" and self.tolerance is None:
+        if self.metric == ScoringMetric.abs_tol and self.tolerance is None:
             raise ValueError("metric=abs_tol needs a `tolerance`")
         return self
 

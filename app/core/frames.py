@@ -11,6 +11,11 @@ import pandas as pd
 
 from app.core.persistence import validate_id
 
+# The on-disk extension for a frame file, named so every reader that
+# distinguishes a parquet output from a csv one (by `Path.suffix`) compares
+# against the same value instead of re-typing the literal.
+PARQUET_SUFFIX = ".parquet"
+
 
 class FrameStore:
     def __init__(self, root: Path) -> None:
