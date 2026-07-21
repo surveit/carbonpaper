@@ -19,11 +19,11 @@ from app.core.models.schema import (
     TableSchema,
     _Base,
     _SNAKE_RE,
-    format_errors,
 )
 from app.core.models.stages.code import validate_inline_function_code
 from app.core.models.stages.stage_tests import StageTest, validate_stage_tests
 from app.core.prompt_template import find_template_fields
+from app.core.utils import format_errors
 
 # ── Enumerated vocabularies ──────────────────────────────────────────────────
 class StageType(str, Enum):

@@ -23,8 +23,8 @@ from app.core.models.schema import (
     TableSchema,
     _Base,
     _SNAKE_RE,
-    format_errors,
 )
+from app.core.utils import format_errors
 
 
 class SchemaKind(str, Enum):

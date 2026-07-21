@@ -48,9 +48,9 @@ from pydantic import Field, ValidationError
 
 from app.core.errors import DocumentNotFound
 from app.core.models import Coverage, Stage
-from app.core.models.schema import format_errors
 from app.core.models.workflow import parse_workflow
 from app.core.persistence import PersistedModel, get_store
+from app.core.utils import format_errors
 from app.services import node_review
 from app.services.errors import WorkflowLoadError
 from app.services.loader import load_workflow, stage_to_spec_dict

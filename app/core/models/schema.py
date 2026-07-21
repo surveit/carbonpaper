@@ -2,8 +2,8 @@
 
 The pieces both the workflow (`stage.py`) and the named data model (`named_schemas.py`)
 build on: the model base, the column-type vocabulary, `Column`, `TableSchema` (an
-anonymous schema that can be declared inline), the `SourceRef` provenance handle,
-and the error formatter. They live *below* both modules — `stage.py` and
+anonymous schema that can be declared inline), and the `SourceRef` provenance
+handle. They live *below* both modules — `stage.py` and
 `named_schemas.py` import from here, never the other way around — so `NamedColumn`
 and `NamedSchema` can extend `Column`/`TableSchema` without `named_schemas.py`
 depending on `stage.py`.
@@ -17,7 +17,6 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
-    ValidationError,
     field_validator,
     model_validator,
 )
@@ -431,14 +430,3 @@ class TableSchema(_Base):
         from app.core.models.row_model import build_row_model
 
         return build_row_model(name, self.columns)
-
-
-# ── Error formatting ─────────────────────────────────────────────────────────
-def format_errors(err: ValidationError) -> list[str]:
-    """Pydantic errors → human-readable issue strings."""
-    out: list[str] = []
-    for e in err.errors():
-        loc = ".".join(str(p) for p in e.get("loc", ()) if p != "stages")
-        msg = e.get("msg", "invalid")
-        out.append(f"{loc}: {msg}" if loc else msg)
-    return out

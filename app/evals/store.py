@@ -25,8 +25,8 @@ from pydantic import ValidationError
 
 from app.core.errors import DocumentNotFound
 from app.core.models import EvalConfig, EvalRun
-from app.core.models.schema import format_errors
 from app.core.persistence import get_store
+from app.core.utils import format_errors
 from app.evals.compatibility import CompatibilityReport
 from app.services.versioning import list_versions
 

@@ -37,9 +37,8 @@ from pydantic import BaseModel, Field, ValidationError
 
 from app.core.errors import DocumentNotFound, DraftNotFoundError
 from app.core.models import Stage, validate_workflow
-from app.core.models.schema import format_errors
 from app.core.persistence import PersistedModel
-from app.core.utils import generate_word_triplet_id
+from app.core.utils import format_errors, generate_word_triplet_id
 from app.services import versioning, workspace
 from app.services.loader import stage_to_spec_dict
 
