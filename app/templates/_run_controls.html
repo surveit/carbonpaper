@@ -1,6 +1,6 @@
 {#
   RUN CONTROLS — one form that configures AND launches a run:
-    · a version_id <select>: every version newest-first, the latest pre-selected
+    · a version_id <select>: every published version newest-first, the latest pre-selected
       (so a run defaults to latest, any version is one click away)
     · one read-only path field per file-kind input (binding__<stage_id>), showing
       the SELECTED version's workflow-authored path — each with a Browse… button
@@ -17,7 +17,7 @@
 
   Context (inherited from the including template):
     state       = shell_state(pdir)         — state.name for the form action
-    versions    = versioning.list_versions(pdir)  — newest-first (may be empty)
+    versions    = the project's PUBLISHED versions, newest-first (may be empty)
     file_inputs = loading.list_file_inputs(pdir)   — [{stage_id, name, path}]
 #}
 {% if versions %}
@@ -48,6 +48,6 @@
 </form>
 <script src="/static/run_controls.js"></script>
 {% else %}
-<p class="muted">No version to run yet —
-  <a href="/project/{{ state.name }}/workflow">create a version</a> first.</p>
+<p class="muted">No published version to run yet —
+  <a href="/project/{{ state.name }}/workflow/versions">publish a version</a> first.</p>
 {% endif %}

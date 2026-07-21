@@ -191,7 +191,10 @@ async def runs_index(request: Request, project: str):
             "state": shell_state(pdir),
             "section": "runs",
             "runs": list_runs(project),
-            "versions": list_versions(pdir),
+            # Only PUBLISHED versions are runnable (resolve_version_id gates on it),
+            # so the run form's version picker offers only those — never an
+            # unpublished version the run would then reject.
+            "versions": [v for v in list_versions(pdir) if v.published],
             "file_inputs": list_file_inputs(pdir),
         },
     )
