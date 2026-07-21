@@ -24,6 +24,7 @@ from app.services import project as project_service
 from app.services.loader import WorkflowLoadError, stage_to_json, stage_to_spec_dict
 from app.core.models import Stage
 from app.core.models.stages.stage_tests import STAGE_TEST_TYPES, StageTest
+from app.runtime.stage_coverage import measure_stage_test_coverage
 from app.runtime.stage_tests import StageTestResult, find_failing_stage_tests, run_stage_tests
 from app.web.config import EXAMPLES_DIR, templates
 from app.web.diagrams import TYPE_CLASS, TYPE_GLYPH, build_mermaid_graph
@@ -86,6 +87,7 @@ async def node_review_partial(request: Request, project: str, stage_id: str):
             "type_glyph": TYPE_GLYPH,
             "test_views": _shape_test_views(stage),
             "test_derivable": stage.type in STAGE_TEST_TYPES,
+            "test_coverage": _shape_test_coverage(stage),
         },
     )
 
@@ -100,6 +102,26 @@ def _shape_test_views(stage: Stage) -> list[dict[str, Any]]:
         _shape_one_test(test, result)
         for test, result in zip(stage.tests, results)
     ]
+
+
+def _shape_test_coverage(stage: Stage) -> dict[str, Any] | None:
+    """Branch-coverage summary for the Tests section header — the reviewable
+    "N tests, X% branch coverage" claim (see app.runtime.stage_coverage). None
+    for stages without tests: there is nothing to measure yet."""
+    if not stage.tests:
+        return None
+    report = measure_stage_test_coverage(stage)
+    return {
+        "test_count": report.test_count,
+        "branch_percent": report.branch_percent,
+        "covered_branches": report.covered_branches,
+        "total_branches": report.total_branches,
+        "uncovered_lines": report.uncovered_lines,
+        "uncovered_branches": [
+            {"line": b.line, "branches_taken": b.branches_taken, "branches_total": b.branches_total}
+            for b in report.uncovered_branches
+        ],
+    }
 
 
 def _shape_one_test(test: StageTest, result: StageTestResult) -> dict[str, Any]:

@@ -1,6 +1,9 @@
 {# Tests — the stage's authored input/output cases, one skimmable section per
    test. Context: test_views (see node_review._shape_one_test; [] when the stage
-   has no tests) and test_derivable (stage.type in STAGE_TEST_TYPES). The section
+   has no tests), test_derivable (stage.type in STAGE_TEST_TYPES), and
+   test_coverage (see node_review._shape_test_coverage; None when the stage has
+   no tests) — the reviewable "N tests, X% branch coverage" claim: any code path
+   in the transform no test ever hit is either dead or needs a case. The section
    renders when there are cases to show OR the stage is a python transform that
    could grow some via the Generate tests button — otherwise it's hidden, same as
    before this button existed. Reads like a report: the headings alone give the
@@ -9,6 +12,9 @@
 {% if test_views or test_derivable %}
 <section class="exec-block test-report">
   <h2>🧪 Tests
+    {% if test_coverage %}
+    <span class="muted test-coverage-summary">— {{ test_coverage.test_count }} test{{ "s" if test_coverage.test_count != 1 else "" }}, {{ test_coverage.branch_percent }}% branch coverage{% if test_coverage.total_branches %} ({{ test_coverage.covered_branches }}/{{ test_coverage.total_branches }} branches){% endif %}</span>
+    {% endif %}
     {% if test_derivable %}
     <button type="button" class="btn" data-role="generate-tests"
             title="Replaces this stage's tests with a fresh derivation from the methodology">Generate tests</button>
@@ -17,6 +23,26 @@
   </h2>
   {% if not test_views %}
   <p class="muted">No tests yet.</p>
+  {% endif %}
+  {% if test_coverage and (test_coverage.uncovered_branches or test_coverage.uncovered_lines) %}
+  <details class="test-case" open>
+    <summary><span class="test-status test-status-mismatch">uncovered</span> <strong>Branch coverage gaps</strong></summary>
+    {% if test_coverage.uncovered_branches %}
+    <h3>branches with an untaken exit</h3>
+    <table class="test-rows">
+      <thead><tr><th>line</th><th>branches taken</th></tr></thead>
+      <tbody>
+        {% for b in test_coverage.uncovered_branches %}
+        <tr><td>{{ b.line }}</td><td>{{ b.branches_taken }}/{{ b.branches_total }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% endif %}
+    {% if test_coverage.uncovered_lines %}
+    <h3>lines no test ever reached</h3>
+    <p><code>{{ test_coverage.uncovered_lines | join(", ") }}</code></p>
+    {% endif %}
+  </details>
   {% endif %}
   {% for view in test_views %}
   <details class="test-case" {% if view.status != "passed" %}open{% endif %}>

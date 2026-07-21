@@ -16,6 +16,9 @@
                     ([] for stages without tests; see node_review._shape_one_test)
      test_derivable — stage.type in STAGE_TEST_TYPES; gates the Generate tests
                     button in _stage_tests.html (python transforms only)
+     test_coverage — branch-coverage summary (test_count, branch_percent,
+                    uncovered_lines, uncovered_branches) or None for stages
+                    without tests; see node_review._shape_test_coverage
 #}
 {% from "_schema_table.html" import schema_table %}
 {% set state = review.state %}

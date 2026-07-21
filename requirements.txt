@@ -7,3 +7,4 @@ python-multipart>=0.0.9
 claude-agent-sdk>=0.2.10   # real LLM backend for llm_transform stages (needs the claude CLI installed)
 mcp>=1.23                  # streamable-HTTP MCP server (app/mcp) — already a claude-agent-sdk dependency
 pydantic>=2                # DAG contract models (app/models.py)
+coverage>=7.0               # branch-coverage meter over a stage's transform (app/runtime/stage_coverage.py)

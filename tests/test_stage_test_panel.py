@@ -56,6 +56,10 @@ def test_panel_shows_each_test_with_status(client: TestClient, tmp_path: Path) -
     assert "doubles_two" in html and "The basic doubling contract." in html
     assert "expects_wrong_value" in html
     assert "passed" in html and "mismatch" in html
+    # The branch-coverage claim (app.runtime.stage_coverage): `double`'s
+    # transform is a single straight-line statement, so 2 tests trivially
+    # reach 100% branch coverage.
+    assert "2 tests, 100.0% branch coverage" in html
 
 
 def test_panel_without_tests_has_no_tests_section(client: TestClient, tmp_path: Path) -> None:
