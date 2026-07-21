@@ -22,8 +22,11 @@ from __future__ import annotations
 import json
 
 import pandas as pd
+from fastapi.testclient import TestClient
 
 import app.runtime.runner as runner
+import app.web.loading as loading
+from app.main import app
 from app.runtime.runner import prepare_run, run_prepared
 from app.services import versioning
 from app.services.versioning import create_version_from_disk
@@ -172,6 +175,35 @@ def test_two_parallel_halts_each_block_only_their_own_downstream(tmp_path):
     assert _stage_status(manifest, "tail_b") == "pending"
 
 
+def test_multi_halt_run_renders_the_full_halted_at_list_through_the_web_layer(
+    tmp_path, monkeypatch
+):
+    """Verifies the `/status` JSON poller and run_detail.html against a real
+    2-halt run — Part A's status consumers must render the whole `halted_at`
+    list, not just the first (or a single scalar id, the pre-fork-aware
+    shape)."""
+    monkeypatch.setattr(loading, "EXAMPLES_DIR", tmp_path)
+    project_dir = tmp_path / "multi_halt_web"
+    _write_stage(project_dir, "01_load.json", _load_items_stage(project_dir))
+    _write_stage(project_dir, "02_review_a.json", _queue_stage("review_a", "load"))
+    _write_stage(project_dir, "03_review_b.json", _queue_stage("review_b", "load"))
+    _seed_version(project_dir)
+
+    manifest = run_prepared(prepare_run(project_dir, repo_root=project_dir))
+    run_id = manifest["run_id"]
+
+    client = TestClient(app)
+
+    status = client.get(f"/project/multi_halt_web/runs/{run_id}/status").json()
+    assert set(status["halted_at"]) == {"review_a", "review_b"}
+    assert status["terminal"] is True  # awaiting_review stops the live poller
+
+    page = client.get(f"/project/multi_halt_web/runs/{run_id}")
+    assert page.status_code == 200
+    assert "queue/review_a" in page.text
+    assert "queue/review_b" in page.text
+
+
 # ── Mixed error + halt ───────────────────────────────────────────────────────
 
 def test_error_and_halt_together_report_errors_but_keep_stage_awaiting_review(tmp_path):
@@ -189,6 +221,50 @@ def test_error_and_halt_together_report_errors_but_keep_stage_awaiting_review(tm
     assert _stage_status(manifest, "boom") == "error"
     assert _stage_status(manifest, "review") == "awaiting_review"
     assert manifest["halted_at"] == ["review"]
+
+
+# ── Cancel after a halt ──────────────────────────────────────────────────────
+
+def test_cancel_after_a_halt_clears_halted_at_and_reports_cancelled(tmp_path, monkeypatch):
+    """load -> review (halts, `continue`s to the next stage) -> good_tail. A
+    cancel is consumed at good_tail's between-stage checkpoint, AFTER review
+    already halted. Cancel is a hard stop that wins over an earlier halt: the
+    manifest must not carry a leftover `halted_at` (which would make
+    run_detail.html show the halt review banner on a cancelled run) — mirrors
+    the pre-fork-aware runner, whose cancelled branch always popped
+    `halted_at`.
+
+    consume_cancel is monkeypatched deterministically (same technique as
+    test_run_cancel.py's mid-run cancel test) so the cancel lands on the third
+    between-stage checkpoint (good_tail's) rather than depending on thread
+    timing."""
+    _write_stage(tmp_path, "01_load.json", _load_items_stage(tmp_path))
+    _write_stage(tmp_path, "02_review.json", _queue_stage("review", "load"))
+    _write_stage(tmp_path, "03_good.json", _passthrough_stage("good_tail", "load"))
+    _seed_version(tmp_path)
+
+    calls = {"n": 0}
+
+    def fake_consume_cancel(project: str, run_id: str) -> bool:
+        calls["n"] += 1
+        return calls["n"] > 2  # nothing at load's/review's checkpoints, then a message
+
+    monkeypatch.setattr(runner, "consume_cancel", fake_consume_cancel)
+
+    manifest = run_prepared(prepare_run(tmp_path, repo_root=tmp_path))
+
+    assert manifest["status"] == "cancelled"
+    assert manifest["cancelled_at"] == "good_tail"
+    assert "halted_at" not in manifest
+    assert _stage_status(manifest, "load") == "ok"
+    assert _stage_status(manifest, "review") == "awaiting_review"
+    assert _stage_status(manifest, "good_tail") == "pending"
+
+    on_disk = json.loads(
+        (tmp_path / "runs" / manifest["run_id"] / "manifest.json").read_text(encoding="utf-8")
+    )
+    assert on_disk["status"] == "cancelled"
+    assert "halted_at" not in on_disk
 
 
 # ── Resume after error is not stale ──────────────────────────────────────────

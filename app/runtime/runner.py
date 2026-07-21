@@ -415,8 +415,8 @@ def _raise_if_run_failed(manifest: dict[str, Any]) -> None:
     if status in (RunStatus.OK, RunStatus.WARNINGS):
         return
     if status == RunStatus.AWAITING_REVIEW:
-        raise SubsetRunError(
-            f"run halted for human review at {manifest.get('halted_at')!r}")
+        halted_at = ", ".join(manifest.get("halted_at") or [])
+        raise SubsetRunError(f"run halted for human review at {halted_at}")
     for stage in manifest.get("stages", []):
         if stage.get("status") == StageStatus.ERROR:
             error = stage.get("error") or {}
@@ -723,18 +723,20 @@ def _execute_stages(
     manifest["queue_stats"] = ctx.get("queue_stats", {})
     manifest["dropped_columns"] = ctx.get("dropped_columns", {})
 
-    if halted_stage_ids:
-        manifest["halted_at"] = halted_stage_ids
-    else:
-        manifest.pop("halted_at", None)
-
     if cancelled:
         # A cancel is a hard stop: a run stopped by request is neither a clean
         # completion nor a failure, so it keeps the cancelled outcome regardless
-        # of any error/halt a stage recorded before the cancel arrived.
+        # of any error/halt a stage recorded before the cancel arrived — and
+        # carries no `halted_at`, so a cancelled run never shows the review
+        # banner for a halt that happened earlier in the same run.
         manifest["status"] = RunStatus.CANCELLED
         manifest["cancelled_at"] = ordered[cancel_at_index].id
+        manifest.pop("halted_at", None)
     else:
+        if halted_stage_ids:
+            manifest["halted_at"] = halted_stage_ids
+        else:
+            manifest.pop("halted_at", None)
         manifest["status"] = _final_run_status(manifest["stages"])
 
     (run_dir / "manifest.json").write_text(

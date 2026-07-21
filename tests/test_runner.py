@@ -20,7 +20,7 @@ import pytest
 
 from app.core.errors import NoVersionToRunError, SubsetRunError
 from app.core.models import Stage, Workflow
-from app.runtime.runner import execute_run, resume_run, run_subset
+from app.runtime.runner import _raise_if_run_failed, execute_run, resume_run, run_subset
 from app.runtime.stages import llm_transform as lt
 from app.services.loader import WorkflowLoadError
 from app.services import versioning
@@ -260,6 +260,24 @@ def test_run_subset_surfaces_the_real_row_failure_message(tmp_path, monkeypatch)
     message = str(exc_info.value)
     assert "failed generation" in message and "boom" in message
     assert "unknown error" not in message
+
+
+def test_raise_if_run_failed_lists_halted_stages_as_readable_text():
+    """`halted_at` is a list of stage ids (see app/runtime/runner.py's
+    _execute_stages). _raise_if_run_failed's message must read them out
+    comma-joined, not as Python's list repr (`['review_a', 'review_b']`)."""
+    manifest = {
+        "status": "awaiting_review",
+        "halted_at": ["review_a", "review_b"],
+        "stages": [],
+    }
+
+    with pytest.raises(SubsetRunError) as exc_info:
+        _raise_if_run_failed(manifest)
+
+    message = str(exc_info.value)
+    assert "review_a, review_b" in message
+    assert "[" not in message and "]" not in message
 
 
 def test_run_without_a_version_fails_loudly(tmp_path):
