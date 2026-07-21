@@ -5,6 +5,7 @@ they return."""
 
 from __future__ import annotations
 
+import json
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
@@ -12,10 +13,12 @@ from typing import Any
 
 import pandas as pd
 from fastapi import HTTPException
+from pydantic import ValidationError
 
 from app.core.errors import DocumentNotFound, NoVersionToRunError
 from app.core.models import Stage
 from app.core.models.records.workflow_run import StageRun, WorkflowRun
+from app.core.persistence import get_store
 from app.runtime.runner import resolve_version_id
 from app.services.loader import CompiledStageFile, load_compiled_dir
 from app.services.versioning import list_versions, load_version_stages
@@ -54,7 +57,13 @@ def list_projects() -> list[dict[str, Any]]:
         has_workflow = n_stages > 0
         has_schemas = schemas_dir.is_dir() and any(schemas_dir.glob("*.json"))
         n_schemas = len(load_schemas(p)) if has_schemas else 0
-        n_runs = len(WorkflowRun.list_for_project(p.name))
+        # A run document that can't be read (schema drift / corruption) must not
+        # 500 the whole dashboard — a run is historical record. Count stays honest
+        # via the id scan (no body parse); the store stays strict, the app degrades.
+        try:
+            n_runs = len(WorkflowRun.list_for_project(p.name))
+        except (ValidationError, json.JSONDecodeError):
+            n_runs = len(get_store().list_ids(WorkflowRun.collection, prefix=f"{p.name}/"))
         has_document = (p / "document.md").is_file() or (p / "project.json").is_file()
         if not (has_workflow or has_schemas or has_document):
             continue

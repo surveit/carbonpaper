@@ -28,11 +28,12 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from app.core.errors import ProjectExistsError
 from app.core.models import Coverage
 from app.core.models.records.workflow_run import WorkflowRun
+from app.core.persistence import get_store
 from app.services import node_review, stage_edit, versioning, workspace
 from app.services.loader import load_compiled_dir, stage_to_json
 from app.services.stage_edit import EditStageResult
@@ -167,9 +168,20 @@ def _runs_summary(pdir: Path) -> RunsSummary:
     whose status is 'awaiting_review' (halted at a human_review_queue) — the
     driver of the "review the run" rung of the ladder. `latest_status` is the
     newest run's status (list_for_project is newest-first); None when there are
-    no runs. A stored run document that fails the WorkflowRun contract raises
-    ValidationError (list_for_project) rather than being silently hidden."""
-    runs = WorkflowRun.list_for_project(pdir.name)
+    no runs.
+
+    A stored run document that can't be read — schema drift after a model change,
+    or corruption — degrades to a 'corrupt' summary instead of sinking the whole
+    project page. The persistence layer stays strict (list_for_project raises);
+    the application catches it here. Unlike a version document (which gates
+    runnability and so fails loud), a run is historical record — one unreadable
+    run must not blind the project to the rest. The count stays honest via the id
+    scan, which reads no document bodies."""
+    try:
+        runs = WorkflowRun.list_for_project(pdir.name)
+    except (ValidationError, json.JSONDecodeError):
+        n = len(get_store().list_ids(WorkflowRun.collection, prefix=f"{pdir.name}/"))
+        return RunsSummary(n=n, awaiting_review=0, latest_status="corrupt")
     if not runs:
         return RunsSummary(n=0, awaiting_review=0, latest_status=None)
     awaiting = sum(1 for r in runs if r.status == "awaiting_review")

@@ -107,6 +107,27 @@ def test_project_with_a_run_reports_n_runs(examples_root):
     assert card["n_runs"] == 1
 
 
+def test_a_corrupt_run_document_degrades_instead_of_sinking_the_dashboard(examples_root):
+    """A run document that no longer satisfies the WorkflowRun contract — schema
+    drift after a model change, or corruption — must not 500 the home dashboard or
+    the project overview. Unlike a version document (which gates runnability and so
+    fails loud, below), a run is historical record: the card still renders, the run
+    count stays honest (the id scan counts good + corrupt alike), and the overview
+    surfaces 'corrupt' rather than hiding the trouble."""
+    from app.core.models.records.workflow_run import WorkflowRun
+    from app.services import project
+
+    proj = _make_document_only_project(examples_root, name="corruptrun")
+    WorkflowRun(id=f"{proj.name}/20260101T000000", run_id="20260101T000000",
+                project=proj.name, status="ok").save()
+    get_store().write("workflow_run", f"{proj.name}/20260102T000000", {"bogus": "data"})
+
+    [card] = list_projects()
+    assert card["n_runs"] == 2                         # honest: good + corrupt both counted
+    assert client.get("/").status_code == 200          # dashboard survives
+    assert project.project_state(proj).runs.latest_status == "corrupt"  # overview degrades, not raises
+
+
 def test_half_written_version_snapshot_fails_the_listing_loudly(examples_root):
     """A stored document that fails the WorkflowVersion contract fails project
     listing LOUDLY (list_versions raises WorkflowLoadError) — the dashboard must
