@@ -30,7 +30,7 @@ from pydantic import ValidationError as PydanticValidationError
 from app.core.errors import MissingInputBindingError, NoVersionToRunError, SubsetRunError
 from app.core.models import Connector, Stage, StageType, Workflow
 from app.core.run_status import RunStatus, StageStatus
-from app.services.loader import WorkflowLoadError
+from app.services.errors import WorkflowLoadError
 from app.services import versioning
 
 from .cancellation import RunCancelled, consume_cancel

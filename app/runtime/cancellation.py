@@ -38,7 +38,7 @@ class RunCancelled(Exception):
     """Raised on the run thread when it consumes a cancel message for its
     (project, run_id); caught by the runner to stop the run. An internal
     control signal — sibling in spirit to HaltForReview
-    (app/runtime/stages/_shared.py) — never surfaced to a user as an error."""
+    (app/runtime/errors.py) — never surfaced to a user as an error."""
 
 
 def request_cancel(project: str, run_id: str) -> None:

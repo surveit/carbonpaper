@@ -21,7 +21,8 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from app.core.agent.store import open_session_store
 from app.services import generation, node_review, stage_edit, versioning
 from app.services import project as project_service
-from app.services.loader import WorkflowLoadError, stage_to_json, stage_to_spec_dict
+from app.services.errors import WorkflowLoadError
+from app.services.loader import stage_to_json, stage_to_spec_dict
 from app.core.models import Stage
 from app.core.models.stages.stage_tests import STAGE_TEST_TYPES, StageTest
 from app.runtime.stage_tests import StageTestResult, find_failing_stage_tests, run_stage_tests

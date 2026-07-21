@@ -52,7 +52,8 @@ from app.core.models.schema import format_errors
 from app.core.models.workflow import parse_workflow
 from app.core.persistence import PersistedModel, get_store
 from app.services import node_review
-from app.services.loader import WorkflowLoadError, load_workflow, stage_to_spec_dict
+from app.services.errors import WorkflowLoadError
+from app.services.loader import load_workflow, stage_to_spec_dict
 from app.services.workspace import load_schemas
 
 

@@ -11,7 +11,8 @@ import pyarrow.lib as pa_lib
 
 from app.core.models import Stage
 
-from ._shared import HaltForReview, _translate_where
+from ..errors import HaltForReview
+from ._shared import _translate_where
 
 
 def _content_hash(row: pd.Series, columns: list[str]) -> str:

@@ -31,6 +31,8 @@ from app.core.models.workflow import Workflow, validate_workflow
 from app.core.models.schema import format_errors
 from app.core.models.stage import Stage
 
+from .errors import WorkflowLoadError
+
 
 @dataclass
 class CompiledStageFile:
@@ -38,19 +40,6 @@ class CompiledStageFile:
     filename: str
     stage: Stage | None = None
     issues: list[str] = field(default_factory=list)
-
-
-class WorkflowLoadError(Exception):
-    """A stored workflow failed validation; `issues` lists every problem found.
-    `source` names where the workflow was read from — a compiled/ directory, or
-    a version document in the store."""
-
-    def __init__(self, source: Path | str, issues: list[str]):
-        self.issues = issues
-        super().__init__(
-            f"{source}: {len(issues)} validation issue(s):\n  "
-            + "\n  ".join(issues)
-        )
 
 
 def load_compiled_dir(compiled_dir: Path) -> list[CompiledStageFile]:
