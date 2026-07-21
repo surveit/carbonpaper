@@ -63,8 +63,6 @@ _PYTHON_ENTRYPOINT_IDIOM = "__main__"
 _ALLOWLIST: frozenset[str] = frozenset(
     {
         "assistant",
-        "modify",
-        "reject",
         "text",
     }
 )

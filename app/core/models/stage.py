@@ -241,6 +241,16 @@ class AggregateConfig(_Base):
     having: Optional[str] = None
 
 
+class RowReviewDecision(str, Enum):
+    """A reviewer's verdict on one human_review_queue row, persisted in the
+    queue's decisions store: `approve` keeps the AI score as final, `modify`
+    substitutes a human-entered score, `reject` drops the row from the
+    stage's output."""
+    approve = "approve"
+    modify = "modify"
+    reject = "reject"
+
+
 class QueueConfig(_Base):
     """human_review_queue handle. `hash_columns` is optional ONLY when the upstream
     input schema declares a primary_key (the runner content-hashes on that PK when
