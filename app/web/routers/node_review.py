@@ -18,10 +18,12 @@ from typing import Any
 from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
-from app.services import node_review, stage_edit, versioning
-from app.services.loader import stage_to_json, stage_to_spec_dict
+from app.core.agent.store import open_session_store
+from app.services import generation, node_review, stage_edit, versioning
+from app.services import project as project_service
+from app.services.loader import WorkflowLoadError, stage_to_json, stage_to_spec_dict
 from app.core.models import Stage
-from app.core.models.stages.stage_tests import StageTest
+from app.core.models.stages.stage_tests import STAGE_TEST_TYPES, StageTest
 from app.runtime.stage_tests import StageTestResult, find_failing_stage_tests, run_stage_tests
 from app.web.config import EXAMPLES_DIR, templates
 from app.web.diagrams import TYPE_CLASS, TYPE_GLYPH, build_mermaid_graph
@@ -83,6 +85,7 @@ async def node_review_partial(request: Request, project: str, stage_id: str):
             "type_class": TYPE_CLASS,
             "type_glyph": TYPE_GLYPH,
             "test_views": _shape_test_views(stage),
+            "test_derivable": stage.type in STAGE_TEST_TYPES,
         },
     )
 
@@ -202,6 +205,58 @@ async def node_edit(
     decisions = node_review.load_node_decisions(project_dir)
     state = node_review.approval_state_for(spec, decisions)["state"]
     return JSONResponse({"ok": True, "content_hash": content_hash, "state": state})
+
+
+@router.post("/project/{project}/node/{stage_id}/generate-tests")
+async def node_generate_tests(project: str, stage_id: str):
+    """Kick off hidden stage-test derivation for one python-transform stage and
+    return the session id the JS poller watches. `generation.start_stage_test_generation`
+    raises ValueError for an unknown/non-python stage or a project with no document, and
+    WorkflowLoadError (via its `load_workflow` call) if the compiled workflow itself
+    fails to load — both surface here as 400 with the underlying message; the button is
+    destructive (REPLACES the stage's tests wholesale on completion), which is
+    documented on the button's tooltip, not re-litigated here."""
+    project_dir = EXAMPLES_DIR / project
+    if not project_dir.is_dir():
+        raise HTTPException(status_code=404, detail=f"No project '{project}'")
+    model = project_service.project_meta(project_dir).model or "sonnet"
+    try:
+        session_id = generation.start_stage_test_generation(
+            project_dir, stage_id=stage_id, model=model
+        )
+    except (ValueError, WorkflowLoadError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return JSONResponse({"ok": True, "session": session_id})
+
+
+@router.get("/project/{project}/generation-session/{sid}/status")
+async def generation_session_status(project: str, sid: str):
+    """Poll target for a hidden derivation session: `active` mirrors the session's
+    `active_turn` (truthy while the turn runs); once inactive, `error` reports the
+    persisted failure text if `app.compiler.stage_tests._persist_derivation_failure`
+    appended one (an assistant message starting `derivation failed: `), else None."""
+    del project  # URL-namespaced only; sessions are looked up by id, not by project.
+    store = open_session_store()
+    if not store.exists(sid):
+        raise HTTPException(status_code=404, detail=f"No session '{sid}'")
+    session = store.load(sid)
+    active = bool(session["active_turn"])
+    error = None if active else _find_derivation_failure(session["messages"])
+    return JSONResponse({"active": active, "error": error})
+
+
+def _find_derivation_failure(messages: list[dict]) -> str | None:
+    """The persisted derivation-failure text among a session's messages (see
+    `_persist_derivation_failure`), or None if none of them report one."""
+    for message in messages:
+        if message.get("role") != "assistant":
+            continue
+        text = "".join(
+            part.get("text", "") for part in message.get("parts", []) if part.get("type") == "text"
+        )
+        if text.startswith("derivation failed: "):
+            return text
+    return None
 
 
 # ─── Versioning ──────────────────────────────────────────────────────────────

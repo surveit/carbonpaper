@@ -10,9 +10,10 @@ import traceback
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Request, Response
+from fastapi import APIRouter, File, Form, HTTPException, Request, Response, UploadFile
 from fastapi.datastructures import FormData
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from starlette.concurrency import run_in_threadpool
 
 from app.core.errors import MissingInputBindingError, NoVersionToRunError, RowOutOfRange, StageNotInRun
 from app.services.loader import WorkflowLoadError, load_workflow
@@ -27,6 +28,7 @@ from app.web.loading import (
     build_llm_example,
     find_stage,
     list_file_inputs,
+    save_uploaded_input,
     list_runs,
     load_manifest,
     load_output_preview,
@@ -148,6 +150,29 @@ async def run_inputs(project: str, version_id: str | None = None):
     return JSONResponse(list_file_inputs(project_dir, version_id))
 
 
+@router.post("/project/{project}/upload-input")
+async def upload_input(
+    project: str,
+    stage_id: str = Form(...),
+    file: UploadFile = File(...),
+):
+    """Save a browser-uploaded run-input file and return its absolute path as
+    JSON ({ok:true, path}). The run form's Browse… uses the browser's own native
+    file dialog (works on every OS) — but a browser hands over only bytes, never
+    a path, so we save those bytes server-side (uploads/<stage_id>/<name>) and
+    hand back the saved copy's path for the field. The disk copy runs in a
+    threadpool so a large upload doesn't stall the event loop."""
+    project_dir = EXAMPLES_DIR / project
+    if not project_dir.is_dir():
+        raise HTTPException(status_code=404, detail=f"No project '{project}'")
+    if not file.filename:
+        return JSONResponse({"ok": False, "error": "no file provided"}, status_code=400)
+    path = await run_in_threadpool(
+        save_uploaded_input, project_dir, stage_id, file.filename, file.file
+    )
+    return JSONResponse({"ok": True, "path": str(path)})
+
+
 @router.get("/project/{project}/runs", response_class=HTMLResponse)
 async def runs_index(request: Request, project: str):
     """RUNS section of the project shell: the runs list, framed by the sidebar. Passes
@@ -203,6 +228,35 @@ async def run_status(project: str, run_id: str):
     })
 
 
+def _artifact_links(project: str, run_id: str, run_dir: Path, manifest: dict) -> list[dict]:
+    """Browsable links to the files a completed run published.
+
+    Only returns links once the run has finished AND a publish stage completed —
+    linking to the files it actually wrote under artifacts/ (preferring a
+    browsable index.html) rather than a hardcoded guess. Empty for in-progress or
+    never-published runs, so the page shows no banner."""
+    if manifest.get("status") in ("running", None):
+        return []
+    has_ok_publish = any(
+        s.get("type") == "publish" and s.get("status") in ("ok", "validation_warnings")
+        for s in manifest.get("stages", [])
+    )
+    artifacts_root = run_dir / "artifacts"
+    if not (has_ok_publish and artifacts_root.is_dir()):
+        return []
+    files = sorted(f for f in artifacts_root.rglob("*") if f.is_file())
+    index = next((f for f in files if f.name == "index.html"), None)
+    if index is not None:
+        files = [index]
+    return [
+        {
+            "name": f.name,
+            "url": f"/project/{project}/runs/{run_id}/artifact/{f.relative_to(artifacts_root).as_posix()}",
+        }
+        for f in files
+    ]
+
+
 @router.get("/project/{project}/runs/{run_id}", response_class=HTMLResponse)
 async def run_detail(request: Request, project: str, run_id: str):
     run_dir = runs_dir(project) / run_id
@@ -210,6 +264,7 @@ async def run_detail(request: Request, project: str, run_id: str):
     stages = load_stages(project).stages
     status_by_id = {s["stage_id"]: s.get("status", "") for s in manifest.get("stages", [])}
     mermaid = build_mermaid_graph(stages, project, status_by_id=status_by_id)
+    artifact_links = _artifact_links(project, run_id, run_dir, manifest)
 
     return templates.TemplateResponse(
         request,
@@ -219,6 +274,7 @@ async def run_detail(request: Request, project: str, run_id: str):
             "run_id": run_id,
             "manifest": manifest,
             "mermaid": mermaid,
+            "artifact_links": artifact_links,
             "type_glyph": TYPE_GLYPH,
             "type_class": TYPE_CLASS,
         },

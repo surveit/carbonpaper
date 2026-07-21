@@ -48,8 +48,15 @@ def _backend_error() -> str | None:
 
 @router.get("/chat", response_class=HTMLResponse)
 async def chat_index(request: Request):
+    all_sessions = _store.list_sessions()
+    # Load full sessions to check context; filter out those marked hidden at the route level.
+    visible_sessions = []
+    for s in all_sessions:
+        full_data = _store.load(s["session_id"])
+        if full_data.get("context", {}).get("hidden") is not True:
+            visible_sessions.append(s)
     return templates.TemplateResponse(request, "chat_index.html", {
-        "sessions": _store.list_sessions(),
+        "sessions": visible_sessions,
         "backend": _backend_label(),
     })
 

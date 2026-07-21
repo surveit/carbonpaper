@@ -67,9 +67,10 @@
     <a href="/project/{{ project }}/runs/{{ run_id }}/queue/{{ manifest.halted_at }}" class="btn primary">Open review queue →</a>
 </p>
 {% endif %}
-{% set publish_stage = manifest.stages | selectattr('type', 'equalto', 'publish') | first %}
-{% if publish_stage and publish_stage.status != 'error' %}
-<p class="banner">📤 Published artifact: <a href="/project/{{ project }}/runs/{{ run_id }}/artifact/profiles/index.html">browse generated org profiles</a></p>
+{% if artifact_links %}
+<p class="banner">📤 Generated outputs:
+    {% for a in artifact_links %}<a href="{{ a.url }}">{{ a.name }}</a>{% if not loop.last %} · {% endif %}{% endfor %}
+</p>
 {% endif %}
 
 {# ── The workflow is the main object: full width, on top. ── #}

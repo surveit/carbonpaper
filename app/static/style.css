@@ -600,6 +600,62 @@ table.stages.compact tr.active td a code {
     color: var(--muted);
 }
 
+/* Data model tier 1 — the table-level FK graph + summary cards.
+   (Tier 2 — the ER + column tables — reuses .dm-table above.) */
+.dm-graph { margin: 14px 0 4px; padding: 14px; }
+.dm-graph-caption {
+    font-size: 12px;
+    color: var(--muted);
+    margin: 4px 0 8px;
+    max-width: 72ch;
+}
+.dm-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 12px;
+    margin: 12px 0 4px;
+}
+.dm-card {
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    padding: 12px 14px 13px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+.dm-card-head { display: flex; align-items: baseline; gap: 10px; }
+.dm-card-name { font-weight: 600; font-size: 13px; }
+.dm-card-title { color: var(--muted); font-size: 13px; margin: 0; }
+.dm-card-desc { font-size: 13px; margin: 0; line-height: 1.5; }
+.dm-facts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: auto;
+    padding-top: 9px;
+    border-top: 1px dashed var(--border);
+}
+.fact-chip {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 11px;
+    color: var(--muted);
+    background: var(--exec-bg);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 1px 7px;
+    text-decoration: none;
+    white-space: nowrap;
+}
+a.fact-chip:hover { background: var(--hover); color: var(--fg); }
+.dm-ref-heading {
+    margin-top: 36px;
+    padding-top: 16px;
+    border-top: 2px solid var(--border);
+}
+.dm-ref-heading h2 { margin: 0 0 2px; font-size: 17px; }
+.dm-ref-heading p { margin: 0 0 8px; font-size: 13px; max-width: 80ch; }
+
 /* Project header with action buttons */
 .project-header {
     display: flex;
@@ -1774,3 +1830,22 @@ td.row-num, th.row-num { text-align: right; color: #98a1b3; font-variant-numeric
 .test-rows th, .test-rows td { border: 1px solid var(--border); padding: 0.15rem 0.5rem; font-size: 0.85rem; }
 .test-message { color: #802020; }
 .node-review-full .nr-edit-hint { margin: 0 0 10px; }
+
+/* ─── Run form: input path fields + browser file upload ───────────────────────
+   The run form (_run_controls.html) collects one absolute path per file input.
+   Each path field pairs a text input with a Browse… button; run_controls.js has
+   it open the browser's native file dialog and upload the pick to
+   POST /project/<name>/upload-input, which returns the saved copy's path. */
+.run-input-row { display: block; margin: 0.35rem 0; }
+.path-field {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 4px;
+    max-width: 100%;
+}
+.path-field input { flex: 1 1 auto; min-width: 0; }  /* shrink, don't overflow */
+/* Read-only display: set only via Browse…, so it reads as a field, not an input. */
+.path-field input[readonly] { background: var(--code-bg); cursor: default; }
+.browse-btn { padding: 6px 12px; white-space: nowrap; flex: 0 0 auto; }
+.browse-btn:disabled { opacity: 0.6; cursor: default; }  /* while uploading */
