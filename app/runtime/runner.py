@@ -452,6 +452,30 @@ def _consume_cancel(ctx: dict[str, Any]) -> bool:
     return identity is not None and consume_cancel(*identity)
 
 
+def find_blocking_upstream(stage: Stage, blocked: set[str]) -> list[str]:
+    """Input-producer stage ids in `blocked` — producers that errored, halted,
+    or are themselves downstream of one. Non-empty means this stage cannot run
+    on real inputs and must be skipped; empty means every producer succeeded.
+    Topological order guarantees every producer has been processed before its
+    consumer, so membership in `blocked` is decided by the time it is read."""
+    return [input_id for input_id in stage.input_ids if input_id in blocked]
+
+
+def _final_run_status(stage_records: list[dict[str, Any]]) -> RunStatus:
+    """A non-cancelled run's overall status from its stage records, error-first:
+    any errored stage -> errors; else any halted stage -> awaiting_review; else
+    any warnings -> warnings; else ok. A `pending` (blocked) stage only exists
+    downstream of an errored/halted one, so it never needs a branch of its own."""
+    statuses = {record["status"] for record in stage_records}
+    if StageStatus.ERROR in statuses:
+        return RunStatus.ERRORS
+    if StageStatus.AWAITING_REVIEW in statuses:
+        return RunStatus.AWAITING_REVIEW
+    if StageStatus.VALIDATION_WARNINGS in statuses:
+        return RunStatus.WARNINGS
+    return RunStatus.OK
+
+
 def _execute_stages(
     ordered: list[Stage],
     ctx: dict[str, Any],
@@ -463,18 +487,25 @@ def _execute_stages(
 
     Stages whose ids are already in `outputs_so_far` are skipped (their
     output was computed in a prior partial run and loaded from disk by
-    the resume path). On HaltForReview the loop stops; remaining stages
-    are appended as `pending` records and manifest status is
-    `awaiting_review`.
+    the resume path).
+
+    A stage's `ok` status asserts every upstream stage succeeded, so error and
+    halt are fork-blocking, not loop-ending. An errored stage and a
+    HaltForReview stage both go into a `blocked` set; a stage whose any
+    input-producer is blocked is skipped (`pending`, no output written) and
+    joins the set, so the block propagates to the whole transitive downstream
+    while independent forks run to completion. The run status is `errors` if
+    any stage errored, else `awaiting_review` if any halted, else the usual
+    ok/warnings; `halted_at` lists every halted stage.
 
     On a cancel request (polled via ctx's `project`/`run_id` — see
-    app.runtime.cancellation) the loop stops the same way and manifest status
-    is `cancelled`: between stages, before the next one starts (it stays
+    app.runtime.cancellation) the loop stops dead and manifest status is
+    `cancelled`: between stages, before the next one starts (it stays
     `pending`); or mid-stage, via RunCancelled unwinding out of
     handler.execute (that stage's own record is marked `cancelled`).
     Stages already completed keep their `ok` record and on-disk output."""
-    halted: HaltForReview | None = None
-    halt_at_index: int = -1
+    halted_stage_ids: list[str] = []
+    blocked: set[str] = set()
     cancelled = False
     cancel_at_index: int = -1
 
@@ -524,6 +555,18 @@ def _execute_stages(
         sid = stage.id
         stype = stage.type
 
+        # A stage whose any input-producer errored, halted, or is itself
+        # blocked cannot run on real inputs. It stays pending, joins the
+        # blocked set so its own downstream follows, and drops any stale output
+        # so a resume cannot reuse it. Checked before the resume-skip so a
+        # newly-blocked upstream overrides a prior `ok` output on disk.
+        if find_blocking_upstream(stage, blocked):
+            records_by_id[sid] = _pending_stub(stage)
+            blocked.add(sid)
+            outputs_so_far.pop(sid, None)
+            flush(RunStatus.RUNNING)
+            continue
+
         # Skip stages already produced (resume path).
         if sid in outputs_so_far and records_by_id.get(sid, {}).get("status") in (
             StageStatus.OK, StageStatus.VALIDATION_WARNINGS
@@ -567,12 +610,16 @@ def _execute_stages(
             try:
                 output = handler.execute(stage, inputs_for_stage, ctx)
             except HaltForReview as halt:
+                # Fork-blocking, not loop-ending: this stage awaits review and
+                # blocks its downstream, but independent forks keep running.
+                # `continue` runs the finally below (timing + flush), then moves
+                # to the next stage without touching the output-processing block.
                 record["status"] = StageStatus.AWAITING_REVIEW
                 record["rows"] = halt.pending_count
                 record["queue_path"] = str(halt.queue_path.relative_to(run_dir))
-                halted = halt
-                halt_at_index = idx
-                break
+                halted_stage_ids.append(sid)
+                blocked.add(sid)
+                continue
             except RunCancelled:
                 # Mid-stage cancel: the row driver unwound out of
                 # handler.execute (see execution.py::_run_row_mapper). This
@@ -649,14 +696,16 @@ def _execute_stages(
         except Exception as exc:  # noqa: BLE001 — the runner's contract is
             # to record ANY stage failure (a handler can raise ValueError,
             # RuntimeError, a pandas/pyarrow error, etc.) in the manifest and
-            # continue/halt rather than crash the whole run.
+            # keep running independent forks rather than crash the whole run.
+            # The stage joins the blocked set, so its transitive downstream is
+            # skipped and never marked `ok` on this stage's absent output.
             record["status"] = StageStatus.ERROR
             record["error"] = {
                 "type": type(exc).__name__,
                 "message": str(exc),
                 "traceback": traceback.format_exc(limit=8),
             }
-            outputs_so_far[sid] = pd.DataFrame()
+            blocked.add(sid)
         finally:
             # Every terminal status (ok, error, awaiting_review, cancelled)
             # finalizes its timing here — `record` is already in records_by_id
@@ -666,48 +715,27 @@ def _execute_stages(
             record["finished_at"] = datetime.now().isoformat(timespec="seconds")
             flush(RunStatus.RUNNING)  # persist this stage's result for the live page
 
-    # If halted, mark remaining stages as pending so the workflow can render
-    # them greyed out.
-    if halted is not None:
-        for stage in ordered[halt_at_index + 1:]:
-            sid = stage.id
-            records_by_id[sid] = {
-                "stage_id": sid,
-                "type": stage.type,
-                "name": stage.name,
-                "status": StageStatus.PENDING,
-                "input_validation": [],
-                "output_validation": None,
-                "elapsed_ms": 0,
-                "rows": 0,
-                "error": None,
-                "started_at": None,
-                "finished_at": None,
-            }
-
     # Emit stages in topological order so the manifest reads top-to-bottom.
+    # Blocked downstream stages were marked `pending` inline, so no post-loop
+    # fill is needed.
     manifest["stages"] = [records_by_id[s.id] for s in ordered if s.id in records_by_id]
     manifest["finished_at"] = datetime.now().isoformat(timespec="seconds")
     manifest["queue_stats"] = ctx.get("queue_stats", {})
     manifest["dropped_columns"] = ctx.get("dropped_columns", {})
 
-    if halted is not None:
-        manifest["status"] = RunStatus.AWAITING_REVIEW
-        manifest["halted_at"] = halted.stage_id
-    elif cancelled:
-        # Never run the normal ok/errors/warnings computation for a cancelled
-        # run — a run stopped by request is neither a clean completion nor a
-        # failure.
+    if halted_stage_ids:
+        manifest["halted_at"] = halted_stage_ids
+    else:
+        manifest.pop("halted_at", None)
+
+    if cancelled:
+        # A cancel is a hard stop: a run stopped by request is neither a clean
+        # completion nor a failure, so it keeps the cancelled outcome regardless
+        # of any error/halt a stage recorded before the cancel arrived.
         manifest["status"] = RunStatus.CANCELLED
         manifest["cancelled_at"] = ordered[cancel_at_index].id
-        manifest.pop("halted_at", None)
     else:
-        manifest["status"] = (
-            RunStatus.OK if all(s["status"] == StageStatus.OK for s in manifest["stages"])
-            else RunStatus.ERRORS if any(s["status"] == StageStatus.ERROR for s in manifest["stages"])
-            else RunStatus.WARNINGS
-        )
-        manifest.pop("halted_at", None)
+        manifest["status"] = _final_run_status(manifest["stages"])
 
     (run_dir / "manifest.json").write_text(
         json.dumps(manifest, indent=2, default=str), encoding="utf-8"

@@ -68,10 +68,12 @@
 </div>
 {% endif %}
 
-{% if manifest.status == 'awaiting_review' %}
+{% if manifest.halted_at %}
 <p class="banner banner-review">
-    ⏸ Run halted at <code>{{ manifest.halted_at }}</code> — items need human review.
-    <a href="/project/{{ project }}/runs/{{ run_id }}/queue/{{ manifest.halted_at }}" class="btn primary">Open review queue →</a>
+    ⏸ Run halted for human review — items need decisions before downstream stages can run.
+    {% for stage_id in manifest.halted_at %}
+    <a href="/project/{{ project }}/runs/{{ run_id }}/queue/{{ stage_id }}" class="btn primary">Open review queue: {{ stage_id }} →</a>
+    {% endfor %}
 </p>
 {% endif %}
 {% if artifact_links %}
