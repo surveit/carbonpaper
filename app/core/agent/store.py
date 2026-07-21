@@ -13,25 +13,9 @@ mid-turn is out of scope.
 from __future__ import annotations
 
 import uuid
-from typing import Any, ClassVar
+from typing import Any
 
-from pydantic import Field
-
-from app.core.persistence import PersistedModel
-
-
-class AgentSession(PersistedModel):
-    """A chat session: metadata, the bound agent + its context, and the stored
-    transcript. `id` (inherited from PersistedModel) is the session id."""
-
-    collection: ClassVar[str] = "agent_session"
-    title: str = "New chat"
-    agent_id: str | None = None
-    context: dict[str, Any] = Field(default_factory=dict)
-    messages: list[dict[str, Any]] = Field(default_factory=list)  # engine-neutral {role, parts} transcript
-    active_turn: str | None = None
-    pending_user: str | None = None
-    sdk_session_id: str | None = None  # resume token (CLI session to resume)
+from app.core.models.records.agent_session import AgentSession
 
 
 def open_session_store() -> SessionStore:

@@ -31,36 +31,16 @@ from __future__ import annotations
 import json
 import re
 from pathlib import Path
-from typing import Any, ClassVar
 
 from pydantic import BaseModel, Field, ValidationError
 
 from app.core.errors import DocumentNotFound, DraftNotFoundError
 from app.core.models import Stage, validate_workflow
+from app.core.models.records.draft import Draft
 from app.core.models.schema import format_errors
-from app.core.persistence import PersistedModel
 from app.core.utils import generate_word_triplet_id
 from app.services import versioning, workspace
 from app.services.loader import stage_to_spec_dict
-
-
-class Draft(PersistedModel):
-    """One scratch document in the "draft" collection. `id` (inherited from
-    PersistedModel) is the composite `f"{project}/{draft_id}"`; `draft_id` is
-    the plain local id every caller of this module's public functions works
-    with. `stages` are validated `Stage` objects — each one individually
-    valid — but the WORKFLOW they form may still be incomplete mid-edit (a
-    dangling input, a duplicate id, a cycle) until save_version."""
-
-    collection: ClassVar[str] = "draft"
-    # Dump embedded stages in their canonical spec-dict shape (field aliases
-    # restored, unset optionals dropped) — mirrors WorkflowVersion.DUMP_OPTS,
-    # so a draft's on-disk stage shape matches a version's.
-    DUMP_OPTS: ClassVar[dict[str, Any]] = {"by_alias": True, "exclude_none": True}
-
-    draft_id: str
-    parent_version: str | None = None
-    stages: list[Stage] = Field(default_factory=list)
 
 
 class DraftView(BaseModel):

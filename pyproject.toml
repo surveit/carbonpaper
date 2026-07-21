@@ -104,11 +104,42 @@ forbidden_modules = [
 [[tool.importlinter.contracts]]
 name = "app.core.models stays pure — never imports the store"
 type = "forbidden"
-source_modules = ["app.core.models"]
+source_modules = [
+    "app.core.models.schema", "app.core.models.stage", "app.core.models.table",
+    "app.core.models.eval", "app.core.models.workflow", "app.core.models.named_schemas",
+    "app.core.models.row_model", "app.core.models.coverage", "app.core.models.stages",
+]
 forbidden_modules = ["app.core.persistence"]
 # The pure contracts (Stage, TableSchema, …) are validation-only and side-effect-free.
 # Records embed contracts, so the arrow is records → contracts; a contract importing
 # persistence would invert that and drag storage into the type layer.
+#
+# app.core.models.records is deliberately NOT in source_modules: it holds the
+# PersistedModel-backed record types (AgentSession, WorkflowVersion, Draft),
+# which by design DO reach the base store — see the contract below. Listing the
+# pure modules individually (rather than the whole app.core.models package) is
+# what carves records out; source_modules is package-recursive by default, and
+# "app.core.models" would sweep records back in.
+
+[[tool.importlinter.contracts]]
+name = "app.core.models.records may reach the base store, never the backend"
+type = "forbidden"
+source_modules = ["app.core.models.records"]
+forbidden_modules = ["app.core.sqlite_store"]
+# Records legitimately import app.core.persistence (the backend-free base) —
+# that's the one exception to the "pure contracts" rule above. They must still
+# never reach the concrete backend directly; only app.main wires SqliteKvStore
+# in (see the sqlite_store contract below), which independently forbids this
+# same edge for every module, not just records.
+
+[[tool.importlinter.contracts]]
+name = "app.core.sqlite_store imported only by the entrypoint"
+type = "protected"
+protected_modules = ["app.core.sqlite_store"]
+allowed_importers = ["app.main"]
+# The concrete SQLite backend is wired in exactly once, at startup. Nothing
+# else — not even a record — talks to it directly; everything above goes
+# through the configured DocumentStore (app.core.persistence.get_store()).
 
 [[tool.importlinter.contracts]]
 name = "app.mcp imported only by the entrypoint"
