@@ -65,8 +65,10 @@ def test_cancel_requested_before_run_starts_leaves_the_first_stage_pending(tmp_p
 
     run_dir = tmp_path / "runs" / prep["run_id"]
     assert not (run_dir / "outputs" / "load.parquet").exists()
-    # the registry entry does not leak past the run's own end
-    assert is_cancelled(tmp_path.name, prep["run_id"]) is False
+    # Cancellation is pure signalling: the run does NOT remove its own key
+    # (harmless — run ids are unique per (project, second)); it persists until
+    # the test's autouse reset. The runner never manages the registry.
+    assert is_cancelled(tmp_path.name, prep["run_id"]) is True
 
 
 def test_mid_run_cancel_preserves_the_completed_stages_output(tmp_path, monkeypatch):

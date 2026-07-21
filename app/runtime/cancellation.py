@@ -8,7 +8,11 @@ the run thread does not RECEIVE a cancellation. Instead it POLLS this
 module's shared registry, keyed by its own logical identity ``(project,
 run_id)``, at the runner's checkpoints (between stages, and mid-fan-out in the
 row driver — see app/runtime/runner.py and app/runtime/stages/execution.py).
-The web thread only ever ADDS a key to the registry.
+The web thread only ever ADDS a key to the registry; nothing removes one at
+runtime. Cancellation is pure signalling — a stopped run's key is inert (run
+ids are unique per (project, second), so it can never match a later run), so
+the registry needs no lifecycle management from the runner. reset() exists
+only to isolate tests.
 
 The key is a run's logical identity, never its persistence layout (e.g. the
 run directory path): this module knows nothing about how or where a run is
@@ -35,8 +39,8 @@ class RunCancelled(Exception):
 
 def request_cancel(project: str, run_id: str) -> None:
     """Record a cancel request for (project, run_id). Called from the web
-    thread; takes effect the next time the run thread polls is_cancelled /
-    raise_if_cancelled for this same key."""
+    thread; takes effect the next time the run thread polls is_cancelled for
+    this same key."""
     with _lock:
         _cancelled.add((project, run_id))
 
@@ -48,16 +52,10 @@ def is_cancelled(project: str, run_id: str) -> bool:
     return (project, run_id) in _cancelled
 
 
-def raise_if_cancelled(project: str, run_id: str) -> None:
-    """Raise RunCancelled if a cancel has been requested for (project,
-    run_id); otherwise return normally."""
-    if is_cancelled(project, run_id):
-        raise RunCancelled(f"Run '{run_id}' of '{project}' was cancelled")
-
-
-def clear(project: str, run_id: str) -> None:
-    """Forget (project, run_id) if present. Idempotent — clearing an absent
-    key is not an error — so a run's registry entry never leaks past the
-    run's end."""
+def reset() -> None:
+    """Clear the entire registry. For test isolation only — production code
+    never removes keys. A cancelled run leaves its (project, run_id) key in
+    place, which is harmless: run ids are unique per (project, second), so a
+    stale key can never match a later run."""
     with _lock:
-        _cancelled.discard((project, run_id))
+        _cancelled.clear()

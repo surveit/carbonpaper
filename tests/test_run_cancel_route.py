@@ -13,7 +13,7 @@ from fastapi.testclient import TestClient
 
 import app.web.loading as loading
 from app.main import app
-from app.runtime.cancellation import clear, is_cancelled
+from app.runtime.cancellation import is_cancelled
 
 PROJ = "testmeth"
 RUN = "run-0001"
@@ -41,13 +41,10 @@ def _write_manifest(examples_dir: Path, status: str) -> Path:
 
 def test_cancel_on_a_running_run_requests_cancellation_and_redirects(examples_dir, client):
     _write_manifest(examples_dir, "running")
-    try:
-        r = client.post(f"/project/{PROJ}/runs/{RUN}/cancel", follow_redirects=False)
-        assert r.status_code == 303
-        assert r.headers["location"] == f"/project/{PROJ}/runs/{RUN}"
-        assert is_cancelled(PROJ, RUN) is True
-    finally:
-        clear(PROJ, RUN)
+    r = client.post(f"/project/{PROJ}/runs/{RUN}/cancel", follow_redirects=False)
+    assert r.status_code == 303
+    assert r.headers["location"] == f"/project/{PROJ}/runs/{RUN}"
+    assert is_cancelled(PROJ, RUN) is True
 
 
 def test_cancel_on_a_terminal_run_is_a_noop_but_still_redirects(examples_dir, client):

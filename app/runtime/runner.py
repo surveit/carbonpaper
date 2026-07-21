@@ -32,7 +32,7 @@ from app.core.models import Connector, Stage, StageType, Workflow
 from app.services.loader import WorkflowLoadError
 from app.services import versioning
 
-from .cancellation import RunCancelled, clear, is_cancelled
+from .cancellation import RunCancelled, is_cancelled
 from .stages import HANDLERS, PREFLIGHTS, HaltForReview
 from .validation import Issue, validate_dataframe
 
@@ -566,9 +566,6 @@ def _execute_stages(
                 record["status"] = "awaiting_review"
                 record["rows"] = halt.pending_count
                 record["queue_path"] = str(halt.queue_path.relative_to(run_dir))
-                record["elapsed_ms"] = int((time.perf_counter() - t0) * 1000)
-                record["finished_at"] = datetime.now().isoformat(timespec="seconds")
-                records_by_id[sid] = record
                 halted = halt
                 halt_at_index = idx
                 break
@@ -577,9 +574,6 @@ def _execute_stages(
                 # handler.execute (see execution.py::_run_row_mapper). This
                 # stage made no output — it is marked cancelled, not ok.
                 record["status"] = "cancelled"
-                record["elapsed_ms"] = int((time.perf_counter() - t0) * 1000)
-                record["finished_at"] = datetime.now().isoformat(timespec="seconds")
-                records_by_id[sid] = record
                 cancelled = True
                 cancel_at_index = idx
                 break
@@ -660,13 +654,12 @@ def _execute_stages(
             }
             outputs_so_far[sid] = pd.DataFrame()
         finally:
-            # awaiting_review / cancelled records finalize themselves (above)
-            # so their own custom fields aren't clobbered by a second,
-            # slightly-later timestamp here.
-            if record["status"] not in ("awaiting_review", "cancelled"):
-                record["elapsed_ms"] = int((time.perf_counter() - t0) * 1000)
-                record["finished_at"] = datetime.now().isoformat(timespec="seconds")
-                records_by_id[sid] = record
+            # Every terminal status (ok, error, awaiting_review, cancelled)
+            # finalizes its timing here — `record` is already in records_by_id
+            # by reference, so the except branches above set only their
+            # distinguishing fields (status, halt queue info).
+            record["elapsed_ms"] = int((time.perf_counter() - t0) * 1000)
+            record["finished_at"] = datetime.now().isoformat(timespec="seconds")
             flush("running")  # persist this stage's result for the live page
 
     # If halted, mark remaining stages as pending so the workflow can render
@@ -687,15 +680,6 @@ def _execute_stages(
                 "started_at": None,
                 "finished_at": None,
             }
-
-    # If cancelled, mark not-yet-run stages pending from cancel_at_index on.
-    # The between-stage path's own stage never got a record (not-yet-started
-    # stays pending); the mid-stage path's already has one (status
-    # "cancelled", set above) and is left alone by the `not in` guard.
-    if cancelled:
-        for stage in ordered[cancel_at_index:]:
-            if stage.id not in records_by_id:
-                records_by_id[stage.id] = _pending_stub(stage)
 
     # Emit stages in topological order so the manifest reads top-to-bottom.
     manifest["stages"] = [records_by_id[s.id] for s in ordered if s.id in records_by_id]
@@ -724,15 +708,6 @@ def _execute_stages(
     (run_dir / "manifest.json").write_text(
         json.dumps(manifest, indent=2, default=str), encoding="utf-8"
     )
-
-    # The registry entry must not outlive the run: clear() fires on the normal
-    # completion path and on the halt/cancel paths (both `break` out of the loop
-    # and fall through to this single return). A hard crash mid-write would skip
-    # it, leaking one completed run's (project, run_id) key — harmless, since run
-    # ids are per-second timestamps that already collide on run_dir.
-    identity = _read_run_identity(ctx)
-    if identity is not None:
-        clear(*identity)
     return manifest
 
 
