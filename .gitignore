@@ -11,8 +11,11 @@ Thumbs.db
 build/
 
 # Process-wide document store (SQLite; app/core/persistence.py), configured at
-# app startup (app/main.py lifespan). Path is overridable via CW_DB_PATH.
-data/
+# app startup (app/main.py lifespan) to <repo_root>/data/app.db by default. Path
+# is overridable via CW_DB_PATH. Anchored to the repo root (leading /) so it
+# doesn't also match a same-named dir elsewhere in the tree, e.g. the committed
+# app/seeds/data/ fixtures.
+/data/
 
 # Example methodology content + scratch pipelines. Generated run outputs land
 # here, and lint/typecheck skip these dirs (ruff respects .gitignore).

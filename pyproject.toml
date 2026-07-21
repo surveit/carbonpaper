@@ -49,15 +49,17 @@ allowed_importers = ["app.main"]
 # app.services.workspace and app.web re-exports them so routers are unaffected.
 
 [[tool.importlinter.contracts]]
-name = "app.services imported only by web, runtime, evals, compiler, mcp, agents"
+name = "app.services imported only by web, runtime, evals, compiler, mcp, agents, seeds"
 type = "protected"
 protected_modules = ["app.services"]
-allowed_importers = ["app.web", "app.runtime", "app.evals", "app.compiler", "app.mcp", "app.agents"]
+allowed_importers = ["app.web", "app.runtime", "app.evals", "app.compiler", "app.mcp", "app.agents", "app.seeds"]
 # Domain logic the upper layers lean on. As a declared whitelist, a new importer is
 # a deliberate edit, not an accident. (services → compiler is fine — compilation and
 # generation wrap it — which is why app.compiler lists app.services below.) app.agents
 # is the hydrated editing agent, a top-level interface like app.web / app.mcp: it reads
-# and edits projects through app.services.compilation / app.services.project.
+# and edits projects through app.services.compilation / app.services.project. app.seeds'
+# capture scripts compose the project export/import seam the same way — never sqlite3,
+# app.core.persistence, or app.core.frames directly.
 
 [[tool.importlinter.contracts]]
 name = "app.compiler imported only by the entrypoint and services"
@@ -127,7 +129,6 @@ allowed_importers = ["app.main"]
 # app.main registers it on the shared engine, nothing else imports it. It leans
 # on app.core.agent (the engine) + app.services (to read/edit projects).
 
-# NB: "app.runtime.cancellation is a stdlib-only leaf" is enforced as an AST
-# allowlist in app/runtime/_arch_tests/test_cancellation_is_a_stdlib_leaf.py
-# (check_imports_are_stdlib_only), not a forbidden contract here — the allowlist
-# is self-maintaining (no sibling list to extend) and catches relative imports.
+# NB: "app.seeds reaches the store through services" is enforced as an AST allowlist
+# in app/seeds/_arch_tests/test_seed_reaches_store_via_services.py (check_no_import),
+# not a forbidden contract here — same as the cancellation stdlib-leaf rule.

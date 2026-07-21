@@ -7,6 +7,7 @@ the node-review store; imports nothing from the web layer."""
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from typing import Any
 
@@ -15,7 +16,15 @@ from app.services.loader import load_compiled_dir, stage_to_spec_dict
 
 # The projects storage root, defined once: examples/<name>/ working copies live
 # here. Both app.services and app.web read it; app.web.config re-exports it.
-EXAMPLES_DIR = Path(__file__).resolve().parents[2] / "examples"
+# CW_EXAMPLES_DIR overrides the default — used to point the workspace at a temp
+# dir (a standalone CLI run, or a subprocess test); unset, it's the repo's
+# examples/. Read once at import; in-process callers still pass examples_dir
+# explicitly or monkeypatch this attribute.
+EXAMPLES_DIR = (
+    Path(os.environ["CW_EXAMPLES_DIR"])
+    if os.environ.get("CW_EXAMPLES_DIR")
+    else Path(__file__).resolve().parents[2] / "examples"
+)
 
 
 def resolve_project_dir(name: str, examples_dir: Path | None = None) -> Path:
