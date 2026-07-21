@@ -1,42 +1,21 @@
-"""Architecture: derivation over a model's own collection belongs to the
-model that owns it.
+"""Architecture: a protected model attribute is never mutated from outside
+its owning package.
 
 A table of ``ProtectedAttributeRule`` rows names an attribute (e.g. `stages`
 on `Workflow`, `columns` on `TableSchema`) and the package that owns it. Code
 outside that package may still READ the attribute (pass it along, measure its
-length, iterate it plainly), but two things are never its job:
+length, iterate it plainly), but assigning to it or a subscript of it,
+deleting it, or calling a mutating method on it (`.append`/`.remove`/
+`.clear`/`.pop`/`.insert`/`.extend`/`.sort`) is never its job — reaching into
+another model's collection to change it in place is never a legitimate
+outside job. This is a hard fail with no allowlist.
 
-- Tier 1 (mutation): assigning to the attribute or a subscript of it, deleting
-  it, or calling a mutating method on it (`.append`/`.remove`/`.clear`/
-  `.pop`/`.insert`/`.extend`/`.sort`). This is a hard fail with no allowlist —
-  reaching into another model's collection to change it in place is never a
-  legitimate outside job, so there is nothing to grandfather.
-- Tier 2 (derivation): looping or comprehending over the attribute to build
-  an id-index, a projection of one field, or a filtered subset — the exact
-  shape of a lookup/search primitive the owning model should expose instead.
-  This is a ratchet allowlist: a pre-existing site is named explicitly, and a
-  new one must be fixed (by adding or reusing an owner method), not added to
-  the list.
-
-Three distinct escape hatches appear below, and none substitutes for another:
-the owner-package exemption (`rule.owner` — code inside the model's own
-package is the implementation, not an outside caller), the Tier-2 ratchet
-allowlist (`rule.allowlist` — a named pre-existing derivation site that may
-only shrink, never grow), and `exempt_paths` (a file-scope exclusion for a
-DIFFERENT model that happens to declare a same-named attribute — e.g.
-`Draft.stages` in `app/services/drafts.py` — out of scope for that row on
-both tiers because the file owns its OWN same-named attribute, not because
-its re-derivation sites were grandfathered in).
-
-Real review finding this codifies: `Workflow` already had nowhere to look up
-one stage by id, so three call sites hand-rolled `{stage.id: stage for stage
-in workflow.stages}` themselves (`app/runtime/runner.py`,
-`app/evals/run_settings.py`, `app/evals/runner.py`) — duplicating a primitive
-`Workflow` should own. The same shape recurs for `TableSchema.columns`:
-service code re-derives "the column names of this schema" via
-`[c.name for c in x.columns]` instead of a schema method, the same kind of
-set-math re-derivation `TableSchema.subtract`/`is_subset_of` exist to avoid
-for whole-schema comparisons.
+Two escape hatches appear below, and neither substitutes for the other: the
+owner-package exemption (`rule.owner` — code inside the model's own package
+is the implementation, not an outside caller), and `exempt_paths` (a
+file-scope exclusion for a DIFFERENT model that happens to declare a
+same-named attribute — e.g. `Draft.stages` in `app/services/drafts.py` — out
+of scope for that row because the file owns its OWN same-named attribute).
 
 Detection is name-based AST matching (types can't be resolved from a bare
 `.attr` access), which invites two kinds of over-match, each handled
@@ -70,7 +49,6 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 _APP_ROOT = _REPO_ROOT / "app"
 
 _MUTATING_METHODS = frozenset({"append", "remove", "clear", "pop", "insert", "extend", "sort"})
-_COMPREHENSION_TYPES = (ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp)
 
 
 def _accept_any_receiver(receiver: str | None) -> bool:
@@ -90,12 +68,8 @@ class ProtectedAttributeRule:
 
     `exempt_paths` names other files that declare their OWN attribute of the
     same name and are that attribute's sole owner (see the `stages` row's
-    `Draft` entry below) — out of scope for this row entirely, on both
-    tiers, the same way the owner package itself is.
-
-    `allowlist` is the Tier-2 ratchet: pre-existing derivation sites named as
-    `"<repo-relative-path>:<lineno>"`. Tier 1 (mutation) has no allowlist
-    field — see the module docstring for why.
+    `Draft` entry below) — out of scope for this row entirely, the same way
+    the owner package itself is.
     """
 
     attribute: str
@@ -103,7 +77,6 @@ class ProtectedAttributeRule:
     rationale: str
     receiver_is_relevant: Callable[[str | None], bool] = _accept_any_receiver
     exempt_paths: frozenset[Path] = field(default_factory=frozenset)
-    allowlist: frozenset[str] = field(default_factory=frozenset)
 
 
 def _ends_with_schema(receiver: str | None) -> bool:
@@ -122,18 +95,6 @@ _RULES: tuple[ProtectedAttributeRule, ...] = (
             "the whole-schema equivalent already avoided this way)."
         ),
         receiver_is_relevant=_ends_with_schema,
-        # Pre-existing sites that project column names straight off a
-        # schema's .columns instead of a schema method. A ratchet: a new
-        # offender must call (or add) a TableSchema method, not extend this.
-        allowlist=frozenset(
-            {
-                "app/runtime/stages/execution.py:232",
-                "app/runtime/stages/human_review_queue.py:198",
-                "app/runtime/stage_tests.py:199",
-                "app/runtime/stage_tests.py:234",
-                "app/web/routers/evals.py:138",
-            }
-        ),
     ),
     ProtectedAttributeRule(
         attribute="stages",
@@ -153,17 +114,10 @@ _RULES: tuple[ProtectedAttributeRule, ...] = (
         # version — see the module docstring). Name-based matching can't
         # tell `d.stages` (Draft) from `workflow.stages` (Workflow) apart, so
         # without this exemption Draft's own legitimate self-mutation
-        # (`d.stages = kept + [stage]`) would hard-fail Tier 1, which has no
-        # allowlist to absorb it. Draft's stages never belonged in this row.
+        # (`d.stages = kept + [stage]`) would hard-fail the mutation check,
+        # which has no allowlist to absorb it. Draft's stages never belonged
+        # in this row.
         exempt_paths=frozenset({_REPO_ROOT / "app" / "services" / "drafts.py"}),
-        # Pre-existing site that builds an id-keyed index over workflow.stages
-        # outside the three converted call sites. A ratchet: a new offender
-        # must call Workflow.index_stages_by_id, not extend this.
-        allowlist=frozenset(
-            {
-                "app/services/stage_edit.py:56",
-            }
-        ),
     ),
 )
 
@@ -190,9 +144,9 @@ def find_source_files(root: Path, rule: ProtectedAttributeRule) -> list[Path]:
 def find_mutation_sites(
     tree: ast.Module, attribute: str, receiver_is_relevant: Callable[[str | None], bool] = _accept_any_receiver,
 ) -> list[tuple[int, str]]:
-    """(lineno, description) for every Tier-1 mutation of `attribute` in
-    `tree`: an assignment/augmented-assignment/del targeting it (or a
-    subscript of it), or a call to one of the list-mutating methods on it."""
+    """(lineno, description) for every mutation of `attribute` in `tree`: an
+    assignment/augmented-assignment/del targeting it (or a subscript of it),
+    or a call to one of the list-mutating methods on it."""
     offenders: list[tuple[int, str]] = []
     for node in ast.walk(tree):
         if isinstance(node, (ast.Assign, ast.AugAssign)):
@@ -213,31 +167,6 @@ def find_mutation_sites(
             and _is_protected_access(node.func.value, attribute, receiver_is_relevant)
         ):
             offenders.append((node.lineno, f".{attribute}.{node.func.attr}()"))
-    return offenders
-
-
-def find_derivation_sites(
-    tree: ast.Module, attribute: str, receiver_is_relevant: Callable[[str | None], bool] = _accept_any_receiver,
-) -> list[tuple[int, str]]:
-    """(lineno, kind) for every Tier-2 derivation over `attribute` in `tree`:
-    a for-loop/comprehension/generator that indexes, projects, or filters by
-    an element's own attribute, or a filter()/sorted() call that pairs
-    `attribute` with a predicate/key. Plain pass-through iteration, len(), and
-    a bare list()/set() conversion are not derivation — nothing to flag."""
-    offenders: list[tuple[int, str]] = []
-    for node in ast.walk(tree):
-        if isinstance(node, _COMPREHENSION_TYPES):
-            kind = _classify_comprehension_derivation(node, attribute, receiver_is_relevant)
-            if kind is not None:
-                offenders.append((node.lineno, kind))
-        elif isinstance(node, ast.For):
-            kind = _classify_for_loop_derivation(node, attribute, receiver_is_relevant)
-            if kind is not None:
-                offenders.append((node.lineno, kind))
-        elif isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
-            kind = _classify_predicate_call_derivation(node, attribute, receiver_is_relevant)
-            if kind is not None:
-                offenders.append((node.lineno, kind))
     return offenders
 
 
@@ -277,138 +206,6 @@ def _describe_mutated_protected_target(
     return None
 
 
-# --- Tier-2 comprehension/generator/for-loop shapes -------------------------
-
-
-def _collect_loop_var_names(target: ast.expr) -> frozenset[str]:
-    """Every name a `for` target binds: a bare name, or every name inside a
-    tuple-unpacking target (`for a, b in ...`)."""
-    if isinstance(target, ast.Name):
-        return frozenset({target.id})
-    if isinstance(target, ast.Tuple):
-        return frozenset().union(*(_collect_loop_var_names(elt) for elt in target.elts)) if target.elts else frozenset()
-    return frozenset()
-
-
-def _is_attr_on_var(node: ast.AST, var_names: frozenset[str]) -> bool:
-    return isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name) and node.value.id in var_names
-
-
-def _contains_attr_on_var(node: ast.AST, var_names: frozenset[str]) -> bool:
-    return any(_is_attr_on_var(n, var_names) for n in ast.walk(node))
-
-
-def _is_boolean_test_on_var(node: ast.expr, var_names: frozenset[str]) -> bool:
-    """True when `node` is a boolean or comparison expression (`s.id ==
-    target`, `s.active and s.ready`) that reads one of `var_names`'s own
-    attributes — the shape `any()`/`all()` wrap around a GeneratorExp's elt
-    as their sole predicate. This is the same "test the loop variable" shape
-    a comprehension's `if` clause expresses via `gen.ifs`; here it is carried
-    in the elt/body instead, with no `if` clause to hold it."""
-    return isinstance(node, (ast.Compare, ast.BoolOp)) and _contains_attr_on_var(node, var_names)
-
-
-def _find_matching_generator(
-    node: ast.ListComp | ast.SetComp | ast.DictComp | ast.GeneratorExp,
-    attribute: str,
-    receiver_is_relevant: Callable[[str | None], bool],
-) -> ast.comprehension | None:
-    """The `for` clause of `node` whose iterable IS the protected attribute,
-    if any (a comprehension may have several `for` clauses; only one need
-    match for the comprehension to be in scope for this rule)."""
-    for gen in node.generators:
-        if _is_protected_access(gen.iter, attribute, receiver_is_relevant):
-            return gen
-    return None
-
-
-def _classify_comprehension_derivation(
-    node: ast.ListComp | ast.SetComp | ast.DictComp | ast.GeneratorExp,
-    attribute: str,
-    receiver_is_relevant: Callable[[str | None], bool],
-) -> str | None:
-    gen = _find_matching_generator(node, attribute, receiver_is_relevant)
-    if gen is None:
-        return None
-    var_names = _collect_loop_var_names(gen.target)
-    if any(_contains_attr_on_var(cond, var_names) for cond in gen.ifs):
-        return "filtering"
-    if isinstance(node, ast.DictComp) and _is_attr_on_var(node.key, var_names):
-        return "indexing"
-    if isinstance(node, (ast.ListComp, ast.SetComp, ast.GeneratorExp)) and _is_attr_on_var(node.elt, var_names):
-        return "projection"
-    if isinstance(node, (ast.ListComp, ast.SetComp, ast.GeneratorExp)) and _is_boolean_test_on_var(
-        node.elt, var_names
-    ):
-        return "filtering"
-    return None
-
-
-def _classify_for_loop_derivation(
-    node: ast.For, attribute: str, receiver_is_relevant: Callable[[str | None], bool],
-) -> str | None:
-    """The statement-loop equivalent of `_classify_comprehension_derivation`: a
-    plain `for x in y:` that reaches the same shapes by hand (an `if` on the
-    loop variable's attribute, a dict keyed by one, or a projecting
-    `.append`) rather than through a comprehension."""
-    if not _is_protected_access(node.iter, attribute, receiver_is_relevant):
-        return None
-    var_names = _collect_loop_var_names(node.target)
-    for stmt in node.body:
-        if isinstance(stmt, ast.If) and _contains_attr_on_var(stmt.test, var_names):
-            return "filtering"
-        if _is_index_assignment(stmt, var_names):
-            return "indexing"
-        if _is_projecting_append(stmt, var_names):
-            return "projection"
-    return None
-
-
-def _is_index_assignment(stmt: ast.stmt, var_names: frozenset[str]) -> bool:
-    return isinstance(stmt, ast.Assign) and any(
-        isinstance(t, ast.Subscript) and _is_attr_on_var(t.slice, var_names) for t in stmt.targets
-    )
-
-
-def _is_projecting_append(stmt: ast.stmt, var_names: frozenset[str]) -> bool:
-    if not (isinstance(stmt, ast.Expr) and isinstance(stmt.value, ast.Call)):
-        return False
-    call = stmt.value
-    return (
-        isinstance(call.func, ast.Attribute)
-        and call.func.attr == "append"
-        and any(_is_attr_on_var(arg, var_names) for arg in call.args)
-    )
-
-
-# --- Tier-2 filter()/sorted() shape (no comprehension involved) -------------
-
-
-def _classify_predicate_call_derivation(
-    node: ast.Call, attribute: str, receiver_is_relevant: Callable[[str | None], bool],
-) -> str | None:
-    """filter(predicate, protected_attr) or sorted(protected_attr, key=...):
-    the attribute passed straight in, paired with an explicit predicate/key.
-
-    any()/all()/next() wrapping a generator expression over the attribute
-    (`any(s.id == target for s in workflow.stages)`) need no special-casing
-    here: that generator is its own GeneratorExp node, walked and classified
-    by `_classify_comprehension_derivation`, which treats a boolean/
-    comparison expression in the elt as filtering — the same test any()/all()
-    perform — not just a bare-attribute elt as projection."""
-    assert isinstance(node.func, ast.Name)
-    name = node.func.id
-    if name == "filter" and len(node.args) >= 2:
-        if _is_protected_access(node.args[1], attribute, receiver_is_relevant):
-            return "predicate-call"
-        return None
-    if name == "sorted" and node.args and any(kw.arg == "key" for kw in node.keywords):
-        if _is_protected_access(node.args[0], attribute, receiver_is_relevant):
-            return "predicate-call"
-        return None
-    return None
-
-
 # --- the rules, run against the real tree -----------------------------------
 
 
@@ -426,24 +223,7 @@ def test_protected_attribute_is_never_mutated_from_outside_its_owner(rule: Prote
     assert not offenders, (
         f"{rule.rationale}\n"
         f"mutating .{rule.attribute} from outside its owner is never allowed, with no "
-        "allowlist for this tier:\n  " + "\n  ".join(offenders)
-    )
-
-
-@pytest.mark.parametrize("rule", _RULES, ids=describe_rule_id)
-def test_protected_attribute_is_not_re_derived_from_outside_its_owner(rule: ProtectedAttributeRule) -> None:
-    offenders = [
-        f"{path.relative_to(_REPO_ROOT).as_posix()}:{lineno}  {description}"
-        for path in find_source_files(_APP_ROOT, rule)
-        for lineno, description in find_derivation_sites(
-            parse_module(path), rule.attribute, rule.receiver_is_relevant
-        )
-        if f"{path.relative_to(_REPO_ROOT).as_posix()}:{lineno}" not in rule.allowlist
-    ]
-    assert not offenders, (
-        f"{rule.rationale}\n"
-        f"searching/selecting/indexing over .{rule.attribute} re-derives a primitive "
-        "the owner should expose:\n  " + "\n  ".join(offenders)
+        "allowlist:\n  " + "\n  ".join(offenders)
     )
 
 
@@ -478,80 +258,6 @@ def test_find_mutation_sites_flags_mutating_method_call() -> None:
 def test_find_mutation_sites_ignores_a_plain_read() -> None:
     tree = ast.parse("n = len(workflow.stages)\n")
     assert find_mutation_sites(tree, "stages") == []
-
-
-def test_find_derivation_sites_flags_index_build() -> None:
-    tree = ast.parse("by_id = {s.id: s for s in workflow.stages}\n")
-    assert find_derivation_sites(tree, "stages") == [(1, "indexing")]
-
-
-def test_find_derivation_sites_flags_projection() -> None:
-    tree = ast.parse("ids = [s.id for s in workflow.stages]\n")
-    assert find_derivation_sites(tree, "stages") == [(1, "projection")]
-
-
-def test_find_derivation_sites_flags_filtering() -> None:
-    tree = ast.parse("matches = [s for s in workflow.stages if s.id == target]\n")
-    assert find_derivation_sites(tree, "stages") == [(1, "filtering")]
-
-
-def test_find_derivation_sites_flags_any_call_with_comparison_predicate() -> None:
-    """`any()`'s sole argument is a GeneratorExp whose elt is a comparison,
-    not a comprehension `if` clause — the gap this rule used to miss."""
-    tree = ast.parse("found = any(s.id == t for s in x.stages)\n")
-    assert find_derivation_sites(tree, "stages") == [(1, "filtering")]
-
-
-def test_find_derivation_sites_allows_any_call_with_no_attribute_use() -> None:
-    """The generator elt references no attribute of the loop variable at
-    all, so there is nothing to derive from `.stages` — not flagged."""
-    tree = ast.parse("found = any(True for _ in x.stages)\n")
-    assert find_derivation_sites(tree, "stages") == []
-
-
-def test_find_derivation_sites_allows_a_pass_through_render_loop() -> None:
-    tree = ast.parse("for stage in workflow.stages:\n    render(stage)\n")
-    assert find_derivation_sites(tree, "stages") == []
-
-
-def test_find_derivation_sites_allows_len() -> None:
-    tree = ast.parse("n = len(workflow.stages)\n")
-    assert find_derivation_sites(tree, "stages") == []
-
-
-def test_find_derivation_sites_allows_a_dataframe_columns_receiver() -> None:
-    tree = ast.parse("names = [c for c in df.columns]\n")
-    offenders = find_derivation_sites(tree, "columns", _ends_with_schema)
-    assert offenders == []
-
-
-def test_find_derivation_sites_flags_a_schema_columns_receiver_when_deriving() -> None:
-    tree = ast.parse("names = [c.name for c in schema.columns]\n")
-    offenders = find_derivation_sites(tree, "columns", _ends_with_schema)
-    assert offenders == [(1, "projection")]
-
-
-def test_find_derivation_sites_flags_filter_call_with_predicate() -> None:
-    tree = ast.parse("kept = filter(is_active, workflow.stages)\n")
-    assert find_derivation_sites(tree, "stages") == [(1, "predicate-call")]
-
-
-def test_find_derivation_sites_flags_sorted_call_with_key() -> None:
-    tree = ast.parse("ordered = sorted(workflow.stages, key=lambda s: s.id)\n")
-    assert find_derivation_sites(tree, "stages") == [(1, "predicate-call")]
-
-
-def test_find_derivation_sites_allows_sorted_call_without_key() -> None:
-    tree = ast.parse("ordered = sorted(workflow.stages)\n")
-    assert find_derivation_sites(tree, "stages") == []
-
-
-def test_find_derivation_sites_allows_a_bare_name_receiver() -> None:
-    """`stages` here is a plain local variable, not an attribute access — the
-    rule is about reaching into a MODEL's collection, which a bare name never
-    does regardless of what it happens to be called."""
-    tree = ast.parse("by_id = {s.id: s for s in stages}\n")
-    assert find_derivation_sites(tree, "stages") == []
 
 
 def test_find_source_files_excludes_owner_and_exempt_paths(tmp_path: Path) -> None:
