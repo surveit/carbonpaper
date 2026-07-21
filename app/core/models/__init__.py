@@ -72,6 +72,7 @@ from app.core.models.eval import (
     EvalRun,
     EvalRunSettings,
     ExpectedOutput,
+    ScoringMetric,
     StageOutputOverride,
 )
 # NOTE: the compiled-stage loader lives in app.services.loader (it does
@@ -193,7 +194,7 @@ __all__ = [
     # general
     "TableRef",
     # eval contract
-    "StageOutputOverride", "ExpectedOutput", "CodeScorer", "EvalConfig",
+    "StageOutputOverride", "ExpectedOutput", "ScoringMetric", "CodeScorer", "EvalConfig",
     "EvalRunSettings", "EvalRun",
     # compat vocabularies (rendered by prompt.py / read by compiler.py)
     "SCALAR_COLUMN_TYPES", "SCHEMA_KINDS", "JOIN_TYPES", "CONNECTOR_KINDS",

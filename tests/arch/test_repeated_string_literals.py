@@ -62,7 +62,6 @@ _PYTHON_ENTRYPOINT_IDIOM = "__main__"
 # module-level constant), not added here.
 _ALLOWLIST: frozenset[str] = frozenset(
     {
-        "abs_tol",
         "approved",
         "assistant",
         "modify",
