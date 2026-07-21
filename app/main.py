@@ -29,10 +29,9 @@ from starlette.routing import Route
 from app.core.persistence import SqliteKvStore, configure_store, is_store_configured
 from app.seeds.seed import seed_demo_data_if_enabled
 from app.web.config import STATIC_DIR
-from app.web.routers import admin, evals, project, node_review, review, runs
+from app.web.routers import admin, editing, evals, project, node_review, review, runs
 
 from app.web.chat_router import router as chat_router
-from app.compiler.router import router as compiler_router
 from app.mcp.server import handle_streamable_http, run_session_manager
 
 # Importing the editing agent's config registers the "editing" agent with the
@@ -73,7 +72,7 @@ app.include_router(node_review.router)
 app.include_router(admin.router)
 
 # The compiler's chat-driven editing entry ('Edit with agent' -> a chat session).
-app.include_router(compiler_router)
+app.include_router(editing.router)
 
 # Interactive, multi-turn chat surface (streaming + persistence). Separate from
 # the row-mapped llm_transform path; HTTP routes in app/web/chat_router.py, the

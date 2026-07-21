@@ -1,4 +1,4 @@
-"""The compiler subsystem's web entry for chat-driven editing.
+"""editing.py (router) — the compiler subsystem's chat-driven editing entry.
 
 The 'Edit with agent' control on a project posts here; this opens a chat session
 bound to the "editing" agent, carrying the project as its context, and redirects
