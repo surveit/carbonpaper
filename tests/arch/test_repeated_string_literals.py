@@ -60,12 +60,7 @@ _PYTHON_ENTRYPOINT_IDIOM = "__main__"
 # Pre-existing values flagged by this rule on the real tree. A ratchet: new
 # entries are forbidden — a new offender must be named (Enum member or
 # module-level constant), not added here.
-_ALLOWLIST: frozenset[str] = frozenset(
-    {
-        "assistant",
-        "text",
-    }
-)
+_ALLOWLIST: frozenset[str] = frozenset()
 
 
 @dataclass(frozen=True)

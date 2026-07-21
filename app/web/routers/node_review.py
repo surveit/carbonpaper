@@ -18,7 +18,7 @@ from typing import Any
 from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
-from app.core.agent.store import open_session_store
+from app.core.agent.store import MessageRole, PartType, open_session_store
 from app.services import generation, node_review, stage_edit, versioning
 from app.services import project as project_service
 from app.services.errors import WorkflowLoadError
@@ -250,10 +250,11 @@ def _find_derivation_failure(messages: list[dict]) -> str | None:
     """The persisted derivation-failure text among a session's messages (see
     `_persist_derivation_failure`), or None if none of them report one."""
     for message in messages:
-        if message.get("role") != "assistant":
+        if message.get("role") != MessageRole.assistant:
             continue
         text = "".join(
-            part.get("text", "") for part in message.get("parts", []) if part.get("type") == "text"
+            part.get("text", "") for part in message.get("parts", [])
+            if part.get("type") == PartType.text
         )
         if text.startswith("derivation failed: "):
             return text
