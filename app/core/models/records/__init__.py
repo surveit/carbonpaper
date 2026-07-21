@@ -10,14 +10,18 @@ Split across modules:
   - agent_session.py    — AgentSession, one chat session's metadata + transcript
   - workflow_version.py — WorkflowVersion, a frozen workflow snapshot
   - draft.py             — Draft, a disposable in-progress workflow edit
+  - workflow_run.py      — WorkflowRun, one run's manifest (+ StageRun and its
+                            sub-models)
 
 Each record is wrapped by an owning service (app.core.agent.store,
-app.services.versioning, app.services.drafts respectively), which imports its
-record from the modules here rather than defining it, so callers of that
-service see no change.
+app.services.versioning, app.services.drafts respectively) except
+WorkflowRun, which is its own API (see workflow_run.py) — those services
+import their record from the modules here rather than defining it, so callers
+of that service see no change.
 """
 from app.core.models.records.agent_session import AgentSession
 from app.core.models.records.draft import Draft
+from app.core.models.records.workflow_run import StageRun, WorkflowRun
 from app.core.models.records.workflow_version import WorkflowVersion
 
-__all__ = ["AgentSession", "Draft", "WorkflowVersion"]
+__all__ = ["AgentSession", "Draft", "StageRun", "WorkflowRun", "WorkflowVersion"]

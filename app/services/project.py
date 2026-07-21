@@ -32,6 +32,7 @@ from pydantic import BaseModel
 
 from app.core.errors import ProjectExistsError
 from app.core.models import Coverage
+from app.core.models.records.workflow_run import WorkflowRun
 from app.services import node_review, stage_edit, versioning, workspace
 from app.services.loader import load_compiled_dir, stage_to_json
 from app.services.stage_edit import EditStageResult
@@ -159,40 +160,20 @@ def _load_compiled_stages(pdir: Path) -> list[dict[str, Any]]:
 
 
 def _runs_summary(pdir: Path) -> RunsSummary:
-    """Summarise the project's runs/ dir into a RunsSummary (n / awaiting_review /
-    latest_status).
-
-    Mirrors loading.list_runs exactly: a run is a child dir of runs/ WITH a readable
-    manifest.json; dirs lacking one (partial / legacy-output-only) are not counted,
+    """Summarise the project's runs into a RunsSummary (n / awaiting_review /
+    latest_status), sourced from the document store's "workflow_run" collection
+    — mirrors loading.list_runs' source exactly (WorkflowRun.list_for_project),
     so n is the count of real runs, never inflated. `awaiting_review` counts runs
-    whose status is 'awaiting_review' (halted at a human_review_queue) — the driver
-    of the "review the run" rung of the ladder. `latest_status` is the newest run's
-    status (runs are timestamp-id'd, so the max id is newest); None when there are
-    no runs. A corrupt manifest is counted (status 'corrupt') rather than hidden."""
-    runs_dir = pdir / "runs"
-    if not runs_dir.is_dir():
+    whose status is 'awaiting_review' (halted at a human_review_queue) — the
+    driver of the "review the run" rung of the ladder. `latest_status` is the
+    newest run's status (list_for_project is newest-first); None when there are
+    no runs. A stored run document that fails the WorkflowRun contract raises
+    ValidationError (list_for_project) rather than being silently hidden."""
+    runs = WorkflowRun.list_for_project(pdir.name)
+    if not runs:
         return RunsSummary(n=0, awaiting_review=0, latest_status=None)
-    statuses: list[tuple[str, str]] = []  # (run_id, status)
-    awaiting = 0
-    for run in runs_dir.iterdir():
-        if not run.is_dir():
-            continue
-        manifest_path = run / "manifest.json"
-        if not manifest_path.exists():
-            continue
-        try:
-            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-            status = manifest.get("status", "unknown")
-        except json.JSONDecodeError:
-            status = "corrupt"
-        statuses.append((run.name, status))
-        if status == "awaiting_review":
-            awaiting += 1
-    if not statuses:
-        return RunsSummary(n=0, awaiting_review=0, latest_status=None)
-    # Newest run by id (run ids are strftime timestamps → lexical max is chronological).
-    latest_status = max(statuses, key=lambda t: t[0])[1]
-    return RunsSummary(n=len(statuses), awaiting_review=awaiting, latest_status=latest_status)
+    awaiting = sum(1 for r in runs if r.status == "awaiting_review")
+    return RunsSummary(n=len(runs), awaiting_review=awaiting, latest_status=runs[0].status)
 
 
 # ─── Project identity (meta) ──────────────────────────────────────────────────

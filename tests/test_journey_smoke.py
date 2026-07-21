@@ -24,6 +24,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 import app.web.routers.runs as runs_router
+from app.core.models.records.workflow_run import WorkflowRun
 from app.main import app
 from app.services.project import create_project
 from app.services.versioning import list_versions
@@ -68,10 +69,8 @@ def test_offline_journey_reaches_a_published_artifact(journey_project, tmp_path)
     assert status["terminal"] is True
 
     # The manifest records the binding's provenance: a run-supplied path, hashed.
-    manifest = json.loads(
-        (journey_project / "runs" / run_id / "manifest.json").read_text(encoding="utf-8")
-    )
-    binding = manifest["input_bindings"]["load"]
+    manifest = WorkflowRun.load(f"{journey_project.name}/{run_id}")
+    binding = manifest.input_bindings["load"]
     assert binding["source"] == "run"
     assert binding["sha256"]
 

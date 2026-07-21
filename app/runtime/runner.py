@@ -3,13 +3,15 @@ Workflow runner.
 
 Topologically orders stages, runs each one through its type-specific handler,
 validates the input + output schema, and persists per-stage outputs as parquet
-(plus a manifest.json summarising the run).
+(plus the run's manifest, saved to the document store's "workflow_run"
+collection as a WorkflowRun record — see app.core.models.records.workflow_run).
 
 Run output layout:
     examples/<project>/runs/<run_id>/
-        manifest.json
         outputs/<stage_id>.parquet
         artifacts/<...>           # for publish stages
+The manifest itself is not a file here; it is a `WorkflowRun` document keyed
+`<project>/<run_id>`.
 """
 
 from __future__ import annotations
@@ -27,13 +29,25 @@ import pandas as pd
 import pyarrow.lib as pa_lib
 from pydantic import ValidationError as PydanticValidationError
 
-from app.core.errors import MissingInputBindingError, NoVersionToRunError, SubsetRunError
+from app.core.errors import (
+    DocumentNotFound,
+    MissingInputBindingError,
+    NoVersionToRunError,
+    SubsetRunError,
+)
 from app.core.models import Connector, Stage, StageType, Workflow
+from app.core.models.records.workflow_run import (
+    StageError,
+    StageRun,
+    ValidationIssue,
+    ValidationReport,
+    WorkflowRun,
+)
 from app.services.loader import WorkflowLoadError
 from app.services import versioning
 
 from .stages import HANDLERS, PREFLIGHTS, HaltForReview
-from .validation import Issue, validate_dataframe
+from .validation import Issue, ValidationReport as RawValidationReport, validate_dataframe
 
 
 def topological_sort(stages: list[Stage]) -> list[Stage]:
@@ -294,37 +308,35 @@ def prepare_run(
         "dropped_columns": {},
         "limits": limits,
         "offsets": offsets,
+        # The persist target _execute_stages' flush() and final write call —
+        # injected here (rather than hardcoded there) because _execute_stages
+        # also runs subset/eval runs, whose manifest must stay ephemeral (see
+        # _subset_ctx's no-op persist_manifest below).
+        "persist_manifest": lambda wr: wr.save(),
     }
-    manifest: dict[str, Any] = {
-        "run_id": run_id,
-        "started_at": datetime.now().isoformat(timespec="seconds"),
-        "project": project_dir.name,
-        "workflow_version": workflow_version,
-        "limit_overrides": limits,
-        "offset_overrides": offsets,
+    manifest = WorkflowRun(
+        id=f"{project_dir.name}/{run_id}",
+        run_id=run_id,
+        started_at=datetime.now().isoformat(timespec="seconds"),
+        project=project_dir.name,
+        workflow_version=workflow_version,
+        limit_overrides=limits,
+        offset_overrides=offsets,
         # The run's bindings verbatim (generic bookkeeping a resume replays),
         # alongside the stage-owned preflight provenance records.
-        "run_bindings": {sid: dict(params) for sid, params in (bindings or {}).items()},
-        "input_bindings": input_records,
-        "status": "running",
-        "stages": [
-            {"stage_id": s.id, "type": s.type, "name": s.name,
-             "status": "pending", "input_validation": [], "output_validation": None,
-             "elapsed_ms": 0, "rows": 0, "error": None,
-             "started_at": None, "finished_at": None}
-            for s in ordered
-        ],
-    }
-    (run_dir / "manifest.json").write_text(
-        json.dumps(manifest, indent=2, default=str), encoding="utf-8"
+        run_bindings={sid: dict(params) for sid, params in (bindings or {}).items()},
+        input_bindings=input_records,
+        status="running",
+        stages=[StageRun(stage_id=s.id, type=s.type, name=s.name) for s in ordered],
     )
+    manifest.save()
     return {"run_id": run_id, "run_dir": run_dir, "ctx": ctx,
             "ordered": ordered, "manifest": manifest}
 
 
-def run_prepared(prep: dict[str, Any]) -> dict[str, Any]:
+def run_prepared(prep: dict[str, Any]) -> WorkflowRun:
     """Execute a run previously set up by prepare_run(). Suitable for running in
-    a background thread (the manifest is updated on disk as stages complete)."""
+    a background thread (the manifest is persisted to the store as stages complete)."""
     return _execute_stages(prep["ordered"], prep["ctx"], prep["manifest"],
                            prep["run_dir"], outputs_so_far={})
 
@@ -336,10 +348,10 @@ def execute_run(
     limits: dict[str, int] | None = None,
     offsets: dict[str, int] | None = None,
     bindings: Mapping[str, Mapping[str, Any]] | None = None,
-) -> dict[str, Any]:
-    """Run the workflow once (synchronous). Returns the manifest dict. `version_id`
-    pins the run to a workflow version (None -> newest published; none published ->
-    NoVersionToRunError); see prepare_run / resolve_version_id.
+) -> WorkflowRun:
+    """Run the workflow once (synchronous). Returns the run's WorkflowRun record.
+    `version_id` pins the run to a workflow version (None -> newest published; none
+    published -> NoVersionToRunError); see prepare_run / resolve_version_id.
     `limits`/`offsets` are per-run row slicing overrides; `bindings` is the
     per-run connector-param override; see prepare_run."""
     return run_prepared(
@@ -384,37 +396,40 @@ def _subset_ctx(repo_root: Path, run_dir: Path) -> dict[str, Any]:
     # and it halts a subset run anyway) fails loudly on the missing key rather than
     # reading a fabricated wrong directory.
     return {"repo_root": repo_root, "run_dir": run_dir,
-            "queue_stats": {}, "limits": {}, "offsets": {}}
+            "queue_stats": {}, "limits": {}, "offsets": {},
+            # A subset run's manifest is returned in-memory (run_subset's return
+            # value) and never re-read from disk, so it never reaches the store.
+            "persist_manifest": lambda wr: None}
 
 
-def _subset_manifest(run_dir: Path, ordered: list[Stage]) -> dict[str, Any]:
-    return {
-        "run_id": run_dir.name,
-        "started_at": datetime.now().isoformat(timespec="seconds"),
-        "status": "running",
-        "stages": [{"stage_id": s.id, "type": s.type, "name": s.name,
-                    "status": "pending", "input_validation": [], "output_validation": None,
-                    "elapsed_ms": 0, "rows": 0, "error": None,
-                    "started_at": None, "finished_at": None}
-                   for s in ordered],
-    }
+def _subset_manifest(run_dir: Path, ordered: list[Stage]) -> WorkflowRun:
+    # No project (see WorkflowRun.project) and an id of just the run dir's own
+    # name: a subset run is keyed on the Workflow + run_dir, not a project tree,
+    # and this manifest is never saved (_subset_ctx's persist_manifest is a
+    # no-op) so the id is never used as a store key.
+    return WorkflowRun(
+        id=run_dir.name,
+        run_id=run_dir.name,
+        started_at=datetime.now().isoformat(timespec="seconds"),
+        status="running",
+        stages=[StageRun(stage_id=s.id, type=s.type, name=s.name) for s in ordered],
+    )
 
 
-def _raise_if_run_failed(manifest: dict[str, Any]) -> None:
+def _raise_if_run_failed(manifest: WorkflowRun) -> None:
     """Turn a non-clean manifest into a SubsetRunError naming the cause. Reads the
     same status/stage records `_execute_stages` writes — the manifest is the run's
     result of record, so failure detection lives with it, not in each caller."""
-    status = manifest.get("status")
+    status = manifest.status
     if status in ("ok", "warnings"):
         return
     if status == "awaiting_review":
         raise SubsetRunError(
-            f"run halted for human review at {manifest.get('halted_at')!r}")
-    for stage in manifest.get("stages", []):
-        if stage.get("status") == "error":
-            error = stage.get("error") or {}
-            raise SubsetRunError(
-                f"stage {stage['stage_id']!r} errored: {error.get('message', 'unknown error')}")
+            f"run halted for human review at {manifest.halted_at!r}")
+    for stage in manifest.stages:
+        if stage.status == "error":
+            message = stage.error.message if stage.error else "unknown error"
+            raise SubsetRunError(f"stage {stage.stage_id!r} errored: {message}")
     raise SubsetRunError(f"run did not complete (status {status!r})")
 
 
@@ -426,13 +441,24 @@ def _summarize_row_errors(row_errors: list[dict[str, Any]]) -> str:
     return f"{len(row_errors)} row(s) failed generation: {head}{more}"
 
 
+def _build_validation_report(rep: RawValidationReport) -> ValidationReport:
+    """Convert `validate_dataframe`'s dataclass report into the manifest's
+    typed record — the shape a StageRun's `input_validation`/
+    `output_validation` store."""
+    return ValidationReport(
+        stage_id=rep.stage_id, phase=rep.phase, rows=rep.rows, ok=rep.ok,
+        issues=[ValidationIssue(severity=i.severity, column=i.column, message=i.message)
+                for i in rep.issues],
+    )
+
+
 def _execute_stages(
     ordered: list[Stage],
     ctx: dict[str, Any],
-    manifest: dict[str, Any],
+    manifest: WorkflowRun,
     run_dir: Path,
     outputs_so_far: dict[str, pd.DataFrame],
-) -> dict[str, Any]:
+) -> WorkflowRun:
     """Execute ordered stages, honoring HaltForReview.
 
     Stages whose ids are already in `outputs_so_far` are skipped (their
@@ -445,34 +471,25 @@ def _execute_stages(
 
     # Carry over any existing records (from a previously halted manifest
     # we're resuming). Build an index for upsert behavior.
-    records_by_id: dict[str, dict[str, Any]] = {
-        r["stage_id"]: r for r in manifest.get("stages", [])
-    }
+    records_by_id: dict[str, StageRun] = {r.stage_id: r for r in manifest.stages}
 
-    def _pending_stub(s: Stage) -> dict[str, Any]:
-        return {
-            "stage_id": s.id, "type": s.type, "name": s.name,
-            "status": "pending", "input_validation": [], "output_validation": None,
-            "elapsed_ms": 0, "rows": 0, "error": None,
-            "started_at": None, "finished_at": None,
-        }
+    def _pending_stub(s: Stage) -> StageRun:
+        return StageRun(stage_id=s.id, type=s.type, name=s.name)
 
     def flush(status: str = "running") -> None:
-        """Write the manifest mid-run so the run page can show live progress
+        """Persist the manifest mid-run so the run page can show live progress
         (stages light up as they start/finish) instead of the whole pipeline
-        running silently and updating only at the very end."""
-        m = dict(manifest)
-        m["stages"] = [records_by_id.get(s.id) or _pending_stub(s) for s in ordered]
-        m["status"] = status
-        m["queue_stats"] = ctx.get("queue_stats", {})
-        m["dropped_columns"] = ctx.get("dropped_columns", {})
-        m["updated_at"] = datetime.now().isoformat(timespec="seconds")
-        try:
-            (run_dir / "manifest.json").write_text(
-                json.dumps(m, indent=2, default=str), encoding="utf-8"
-            )
-        except OSError:
-            pass
+        running silently and updating only at the very end. Persists through
+        `ctx["persist_manifest"]` — a project run saves to the store
+        (validating the manifest's shape by construction, so a malformed
+        manifest fails loudly here rather than being written silently); a
+        subset run's persist_manifest is a no-op, so its manifest stays
+        ephemeral."""
+        manifest.stages = [records_by_id.get(s.id) or _pending_stub(s) for s in ordered]
+        manifest.status = status
+        manifest.queue_stats = ctx.get("queue_stats", {})
+        manifest.dropped_columns = ctx.get("dropped_columns", {})
+        ctx["persist_manifest"](manifest)
 
     flush("running")  # initial: all stages pending
 
@@ -481,21 +498,17 @@ def _execute_stages(
         stype = stage.type
 
         # Skip stages already produced (resume path).
-        if sid in outputs_so_far and records_by_id.get(sid, {}).get("status") in ("ok", "validation_warnings"):
+        existing = records_by_id.get(sid)
+        if sid in outputs_so_far and existing is not None and existing.status in ("ok", "validation_warnings"):
             continue
 
-        record: dict[str, Any] = {
-            "stage_id": sid,
-            "type": stype,
-            "name": stage.name,
-            "started_at": datetime.now().isoformat(timespec="seconds"),
-            "status": "running",
-            "input_validation": [],
-            "output_validation": None,
-            "elapsed_ms": 0,
-            "rows": 0,
-            "error": None,
-        }
+        record = StageRun(
+            stage_id=sid,
+            type=stype,
+            name=stage.name,
+            started_at=datetime.now().isoformat(timespec="seconds"),
+            status="running",
+        )
         t0 = time.perf_counter()
         records_by_id[sid] = record
         flush("running")  # show this stage as running
@@ -512,7 +525,7 @@ def _execute_stages(
                     rep = validate_dataframe(
                         df, ref.table_schema, stage_id=sid, phase=f"input:{ref.id}",
                     )
-                    record["input_validation"].append(rep.to_dict())
+                    record.input_validation.append(_build_validation_report(rep))
 
             handler = HANDLERS.get(stype)
             if handler is None:
@@ -521,11 +534,11 @@ def _execute_stages(
             try:
                 output = handler.execute(stage, inputs_for_stage, ctx)
             except HaltForReview as halt:
-                record["status"] = "awaiting_review"
-                record["rows"] = halt.pending_count
-                record["queue_path"] = str(halt.queue_path.relative_to(run_dir))
-                record["elapsed_ms"] = int((time.perf_counter() - t0) * 1000)
-                record["finished_at"] = datetime.now().isoformat(timespec="seconds")
+                record.status = "awaiting_review"
+                record.rows = halt.pending_count
+                record.queue_path = str(halt.queue_path.relative_to(run_dir))
+                record.elapsed_ms = int((time.perf_counter() - t0) * 1000)
+                record.finished_at = datetime.now().isoformat(timespec="seconds")
                 records_by_id[sid] = record
                 halted = halt
                 halt_at_index = idx
@@ -541,13 +554,13 @@ def _execute_stages(
             # page the expensive LLM fan-out.
             offset = (ctx.get("offsets") or {}).get(sid)
             if isinstance(offset, int) and offset > 0 and len(output) > 0:
-                record.setdefault("notes", []).append(
+                record.notes.append(
                     f"offset={offset}: dropped first {min(offset, len(output))} of {len(output)} row(s)"
                 )
                 output = output.iloc[offset:].reset_index(drop=True).copy()
             limit = (ctx.get("limits") or {}).get(sid, stage.limit)
             if isinstance(limit, int) and limit >= 0 and len(output) > limit:
-                record.setdefault("notes", []).append(
+                record.notes.append(
                     f"limit={limit}: truncated from {len(output)} to {limit} row(s)"
                 )
                 output = output.head(limit).copy()
@@ -562,7 +575,7 @@ def _execute_stages(
                           f"row {row_error['row']}: generation failed: {row_error['message']}")
                     for row_error in row_errors
                 ]
-            record["output_validation"] = out_rep.to_dict()
+            record.output_validation = _build_validation_report(out_rep)
 
             output_path = run_dir / "outputs" / f"{sid}.parquet"
             try:
@@ -576,40 +589,38 @@ def _execute_stages(
                 # the per-stage handler below and lands in the manifest.
                 output_path = run_dir / "outputs" / f"{sid}.csv"
                 output.to_csv(output_path, index=False)
-                record.setdefault("notes", []).append(
-                    f"Wrote CSV instead of parquet: {exc}"
-                )
+                record.notes.append(f"Wrote CSV instead of parquet: {exc}")
 
             outputs_so_far[sid] = output
             if row_errors:
-                record["status"] = "error"
-                record["error"] = {
-                    "type": "RowGenerationError",
-                    "message": _summarize_row_errors(row_errors),
-                    "traceback": None,
-                }
+                record.status = "error"
+                record.error = StageError(
+                    type="RowGenerationError",
+                    message=_summarize_row_errors(row_errors),
+                    traceback=None,
+                )
             else:
-                record["status"] = "ok" if out_rep.ok and all(
-                    v["ok"] for v in record["input_validation"]
+                record.status = "ok" if out_rep.ok and all(
+                    v.ok for v in record.input_validation
                 ) else "validation_warnings"
-            record["rows"] = int(len(output))
-            record["output_path"] = str(output_path.relative_to(run_dir))
+            record.rows = int(len(output))
+            record.output_path = str(output_path.relative_to(run_dir))
 
         except Exception as exc:  # noqa: BLE001 — the runner's contract is
             # to record ANY stage failure (a handler can raise ValueError,
             # RuntimeError, a pandas/pyarrow error, etc.) in the manifest and
             # continue/halt rather than crash the whole run.
-            record["status"] = "error"
-            record["error"] = {
-                "type": type(exc).__name__,
-                "message": str(exc),
-                "traceback": traceback.format_exc(limit=8),
-            }
+            record.status = "error"
+            record.error = StageError(
+                type=type(exc).__name__,
+                message=str(exc),
+                traceback=traceback.format_exc(limit=8),
+            )
             outputs_so_far[sid] = pd.DataFrame()
         finally:
-            if record["status"] != "awaiting_review":
-                record["elapsed_ms"] = int((time.perf_counter() - t0) * 1000)
-                record["finished_at"] = datetime.now().isoformat(timespec="seconds")
+            if record.status != "awaiting_review":
+                record.elapsed_ms = int((time.perf_counter() - t0) * 1000)
+                record.finished_at = datetime.now().isoformat(timespec="seconds")
                 records_by_id[sid] = record
             flush("running")  # persist this stage's result for the live page
 
@@ -617,54 +628,41 @@ def _execute_stages(
     # them greyed out.
     if halted is not None:
         for stage in ordered[halt_at_index + 1:]:
-            sid = stage.id
-            records_by_id[sid] = {
-                "stage_id": sid,
-                "type": stage.type,
-                "name": stage.name,
-                "status": "pending",
-                "input_validation": [],
-                "output_validation": None,
-                "elapsed_ms": 0,
-                "rows": 0,
-                "error": None,
-                "started_at": None,
-                "finished_at": None,
-            }
+            records_by_id[stage.id] = _pending_stub(stage)
 
     # Emit stages in topological order so the manifest reads top-to-bottom.
-    manifest["stages"] = [records_by_id[s.id] for s in ordered if s.id in records_by_id]
-    manifest["finished_at"] = datetime.now().isoformat(timespec="seconds")
-    manifest["queue_stats"] = ctx.get("queue_stats", {})
-    manifest["dropped_columns"] = ctx.get("dropped_columns", {})
+    manifest.stages = [records_by_id[s.id] for s in ordered if s.id in records_by_id]
+    manifest.finished_at = datetime.now().isoformat(timespec="seconds")
+    manifest.queue_stats = ctx.get("queue_stats", {})
+    manifest.dropped_columns = ctx.get("dropped_columns", {})
 
     if halted is not None:
-        manifest["status"] = "awaiting_review"
-        manifest["halted_at"] = halted.stage_id
+        manifest.status = "awaiting_review"
+        manifest.halted_at = halted.stage_id
     else:
-        manifest["status"] = (
-            "ok" if all(s["status"] == "ok" for s in manifest["stages"])
-            else "errors" if any(s["status"] == "error" for s in manifest["stages"])
+        manifest.status = (
+            "ok" if all(s.status == "ok" for s in manifest.stages)
+            else "errors" if any(s.status == "error" for s in manifest.stages)
             else "warnings"
         )
-        manifest.pop("halted_at", None)
+        manifest.halted_at = None
 
-    (run_dir / "manifest.json").write_text(
-        json.dumps(manifest, indent=2, default=str), encoding="utf-8"
-    )
+    ctx["persist_manifest"](manifest)
 
     return manifest
 
 
-def resume_run(project_dir: Path, run_id: str, repo_root: Path) -> dict[str, Any]:
+def resume_run(project_dir: Path, run_id: str, repo_root: Path) -> WorkflowRun:
     """Resume a previously halted run. Loads existing outputs from disk,
     re-runs the halted queue stage (decisions now exist), continues
-    downstream, updates the same manifest in place."""
+    downstream, updates the same manifest in place (in the store)."""
     run_dir = project_dir / "runs" / run_id
-    manifest_path = run_dir / "manifest.json"
-    if not manifest_path.exists():
-        raise FileNotFoundError(f"No manifest at {manifest_path}")
-    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    try:
+        manifest = WorkflowRun.load(f"{project_dir.name}/{run_id}")
+    except DocumentNotFound as exc:
+        raise FileNotFoundError(
+            f"No run '{run_id}' for project '{project_dir.name}'"
+        ) from exc
 
     # Stay pinned to the SAME workflow snapshot the run started on. We read the
     # version off the existing manifest and reload the version's stages — never
@@ -672,30 +670,29 @@ def resume_run(project_dir: Path, run_id: str, repo_root: Path) -> dict[str, Any
     # than the halted run did. A run that carries no workflow_version is a pre-
     # versioning (legacy) run we cannot safely resume under the version model;
     # fail loudly rather than guessing which snapshot it meant.
-    workflow_version = manifest.get("workflow_version")
+    workflow_version = manifest.workflow_version
     if not workflow_version:
         raise ValueError(
             f"Run {run_id} of '{project_dir.name}' has no 'workflow_version' in "
-            f"its manifest ({manifest_path}); cannot resume a versioned run "
-            f"without its pinned workflow version."
+            f"its manifest; cannot resume a versioned run without its pinned "
+            f"workflow version."
         )
     stages = versioning.load_version_stages(project_dir, workflow_version)
     # Replay this run's bindings (recorded verbatim by prepare_run) onto the
     # freshly-reloaded stages. Without this, a stage that had not yet executed
     # when the run halted would resume on its workflow-authored params (or fail
     # if it authors none) while the manifest still claims `source: "run"` — a
-    # false provenance record. Manifests from before this feature carry no
-    # `run_bindings` key; `.get(..., {})` keeps those resuming exactly as
-    # before.
-    stages, _ = apply_run_bindings(stages, manifest.get("run_bindings", {}))
+    # false provenance record. run_bindings defaults to {} (see WorkflowRun),
+    # which keeps a run predating this feature resuming exactly as before.
+    stages, _ = apply_run_bindings(stages, manifest.run_bindings)
     ordered = topological_sort(stages)
 
     # Reload outputs from disk for stages that completed successfully.
     outputs_so_far: dict[str, pd.DataFrame] = {}
-    for record in manifest.get("stages", []):
-        if record.get("status") not in ("ok", "validation_warnings"):
+    for record in manifest.stages:
+        if record.status not in ("ok", "validation_warnings"):
             continue
-        op = record.get("output_path")
+        op = record.output_path
         if not op:
             continue
         path = run_dir / op
@@ -703,9 +700,9 @@ def resume_run(project_dir: Path, run_id: str, repo_root: Path) -> dict[str, Any
             continue
         try:
             if path.suffix == ".parquet":
-                outputs_so_far[record["stage_id"]] = pd.read_parquet(path)
+                outputs_so_far[record.stage_id] = pd.read_parquet(path)
             else:
-                outputs_so_far[record["stage_id"]] = pd.read_csv(path)
+                outputs_so_far[record.stage_id] = pd.read_csv(path)
         except (pa_lib.ArrowException, pd.errors.ParserError, OSError, ValueError):
             # A prior output file that's missing/corrupt/unreadable is
             # treated as not-yet-produced; the stage simply re-runs.
@@ -715,15 +712,16 @@ def resume_run(project_dir: Path, run_id: str, repo_root: Path) -> dict[str, Any
         "repo_root": repo_root,
         "run_dir": run_dir,
         "project_dir": project_dir,
-        "queue_stats": manifest.get("queue_stats", {}),
-        "dropped_columns": manifest.get("dropped_columns", {}),
+        "queue_stats": manifest.queue_stats,
+        "dropped_columns": manifest.dropped_columns,
         # Re-apply the run's per-stage row slicing so stages that resume after
         # a halt honor the same limits/offsets the run started with.
-        "limits": manifest.get("limit_overrides") or {},
-        "offsets": manifest.get("offset_overrides") or {},
+        "limits": manifest.limit_overrides or {},
+        "offsets": manifest.offset_overrides or {},
+        "persist_manifest": lambda wr: wr.save(),
     }
 
-    manifest["resumed_at"] = datetime.now().isoformat(timespec="seconds")
+    manifest.resumed_at = datetime.now().isoformat(timespec="seconds")
     return _execute_stages(ordered, ctx, manifest, run_dir, outputs_so_far)
 
 
@@ -754,12 +752,12 @@ def main() -> int:
         print(exc)
         return 1
     print(json.dumps(
-        {"run_id": manifest["run_id"], "workflow_version": manifest["workflow_version"],
-         "status": manifest["status"],
-         "stages": [(s["stage_id"], s["status"], s["rows"]) for s in manifest["stages"]]},
+        {"run_id": manifest.run_id, "workflow_version": manifest.workflow_version,
+         "status": manifest.status,
+         "stages": [(s.stage_id, s.status, s.rows) for s in manifest.stages]},
         indent=2,
     ))
-    return 0 if manifest["status"] == "ok" else 1
+    return 0 if manifest.status == "ok" else 1
 
 
 if __name__ == "__main__":

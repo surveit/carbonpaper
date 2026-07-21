@@ -94,6 +94,19 @@ def test_unpublished_only_project_is_not_ready(examples_root):
     assert ">Live<" not in r.text
 
 
+def test_project_with_a_run_reports_n_runs(examples_root):
+    """n_runs is sourced from the store's "workflow_run" collection
+    (WorkflowRun.list_for_project), not a runs/*/manifest.json directory scan —
+    a run recorded there must be reflected on the card."""
+    from app.core.models.records.workflow_run import WorkflowRun
+
+    proj = _make_document_only_project(examples_root, name="ran")
+    WorkflowRun(id=f"{proj.name}/20260101T000000", run_id="20260101T000000",
+                project=proj.name, status="ok").save()
+    [card] = list_projects()
+    assert card["n_runs"] == 1
+
+
 def test_half_written_version_snapshot_fails_the_listing_loudly(examples_root):
     """A stored document that fails the WorkflowVersion contract fails project
     listing LOUDLY (list_versions raises WorkflowLoadError) — the dashboard must

@@ -7,20 +7,21 @@ needs to be recorded: the tracer just reads row i at each stage. At any stage
 that reshapes rows the walk stops — the ancestry beyond it isn't positionally
 recoverable (recorded lineage is issue #58).
 
-Self-contained on the run directory: reads manifest.json (stage type, parent
-edges, row counts) and outputs/<stage>.parquet (row values). It never reads the
-compiled DAG, so it is unaffected by later edits to the methodology.
+Self-contained on the run directory: reads the run's manifest (stage type,
+parent edges, row counts) from the document store, and
+outputs/<stage>.parquet (row values) off disk. It never reads the compiled
+DAG, so it is unaffected by later edits to the methodology.
 """
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import pandas as pd
 
-from app.core.errors import RowOutOfRange, StageNotInRun
+from app.core.errors import DocumentNotFound, RowOutOfRange, StageNotInRun
+from app.core.models.records.workflow_run import StageRun, WorkflowRun
 from app.core.models.stage import StageType, is_grain_and_order_preserving
 
 
@@ -75,23 +76,27 @@ class Trace:
     end: TraceEnd
 
 
-def _load_manifest(run_dir: Path) -> dict[str, Any]:
-    path = Path(run_dir) / "manifest.json"
-    if not path.exists():
-        raise FileNotFoundError(f"no manifest.json in {run_dir}")
-    return json.loads(path.read_text(encoding="utf-8"))
+def _load_manifest(run_dir: Path) -> WorkflowRun:
+    """The run's WorkflowRun record, from the document store. `project`/
+    `run_id` are derived from `run_dir`'s layout (`<project_dir>/runs/<run_id>`
+    — the same convention `app.web.loading.load_manifest` derives from)."""
+    run_dir = Path(run_dir)
+    project = run_dir.parent.parent.name
+    try:
+        return WorkflowRun.load(f"{project}/{run_dir.name}")
+    except DocumentNotFound as exc:
+        raise FileNotFoundError(f"no run manifest for {run_dir}") from exc
 
 
-def _stages_by_id(manifest: dict[str, Any]) -> dict[str, dict[str, Any]]:
-    return {s["stage_id"]: s for s in manifest.get("stages", [])}
+def _stages_by_id(manifest: WorkflowRun) -> dict[str, StageRun]:
+    return {s.stage_id: s for s in manifest.stages}
 
 
-def _parents(stage_record: dict[str, Any]) -> list[str]:
+def _parents(stage_record: StageRun) -> list[str]:
     parents: list[str] = []
-    for entry in stage_record.get("input_validation") or []:
-        phase = entry.get("phase", "")
-        if phase.startswith("input:"):
-            parents.append(phase.split(":", 1)[1])
+    for entry in stage_record.input_validation:
+        if entry.phase.startswith("input:"):
+            parents.append(entry.phase.split(":", 1)[1])
     return parents
 
 
@@ -103,8 +108,8 @@ def _origin(stage_type: str) -> str:
     }.get(stage_type, "other")
 
 
-def _read_output(run_dir: Path, stage_record: dict[str, Any]) -> pd.DataFrame | None:
-    rel = stage_record.get("output_path")
+def _read_output(run_dir: Path, stage_record: StageRun) -> pd.DataFrame | None:
+    rel = stage_record.output_path
     if not rel:
         return None
     path = Path(run_dir) / rel
@@ -161,7 +166,7 @@ def trace_row(run_dir: Path, stage_id: str, row_ordinal: int) -> Trace:
 
     while end is None:
         record = by_id[sid]
-        stage_type = record.get("type", "")
+        stage_type = record.type
         df = _read_output(run_dir, record)
         if df is None:
             end = TraceEnd(False, sid, "this stage's output file is missing from the run")
@@ -206,7 +211,7 @@ def trace_row(run_dir: Path, stage_id: str, row_ordinal: int) -> Trace:
                 sid, r = parent_id, r  # same ordinal — the whole point
 
     return Trace(
-        run_id=manifest.get("run_id", run_dir.name),
+        run_id=manifest.run_id,
         start_stage=stage_id,
         start_row=row_ordinal,
         steps=steps,
