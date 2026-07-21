@@ -616,7 +616,9 @@ def _execute_stages(
                 # to the next stage without touching the output-processing block.
                 record["status"] = StageStatus.AWAITING_REVIEW
                 record["rows"] = halt.pending_count
-                record["queue_path"] = str(halt.queue_path.relative_to(run_dir))
+                # Manifest paths are POSIX-style so the persisted JSON is
+                # identical on every platform.
+                record["queue_path"] = halt.queue_path.relative_to(run_dir).as_posix()
                 halted_stage_ids.append(sid)
                 blocked.add(sid)
                 continue
@@ -698,7 +700,9 @@ def _execute_stages(
                     v["ok"] for v in record["input_validation"]
                 ) else StageStatus.VALIDATION_WARNINGS
             record["rows"] = int(len(output))
-            record["output_path"] = str(output_path.relative_to(run_dir))
+            # Manifest paths are POSIX-style so the persisted JSON is
+            # identical on every platform.
+            record["output_path"] = output_path.relative_to(run_dir).as_posix()
 
         except Exception as exc:  # noqa: BLE001 — the runner's contract is
             # to record ANY stage failure (a handler can raise ValueError,

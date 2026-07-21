@@ -258,10 +258,35 @@ def test_legacy_scalar_halted_at_manifest_renders_one_queue_link(tmp_path, monke
     assert page.status_code == 200
     # One review-queue link for the whole "review" id — not one per character
     # ("queue/r", "queue/e", ...). Match through the href's closing quote:
-    # the page also embeds the raw manifest JSON, whose queue-file path
-    # ("queue/review.parquet" on POSIX) would otherwise add a false match.
+    # the page also embeds the raw manifest JSON, whose POSIX queue-file path
+    # ("queue/review.parquet") would otherwise add a false match.
     assert page.text.count('queue/review"') == 1
     assert 'queue/r"' not in page.text
+
+
+def test_manifest_paths_are_posix_on_every_platform(tmp_path, monkeypatch):
+    """`output_path` and `queue_path` are persisted POSIX-style: the manifest
+    is a portable JSON record, so identical runs must serialize identically
+    regardless of the OS's native path separator."""
+    monkeypatch.setattr(loading, "EXAMPLES_DIR", tmp_path)
+    project_dir = tmp_path / "posix_paths"
+    _write_stage(project_dir, "01_load.json", _load_items_stage(project_dir))
+    _write_stage(project_dir, "02_review.json", _queue_stage("review", "load"))
+    _seed_version(project_dir)
+
+    halted = run_prepared(prepare_run(project_dir, repo_root=project_dir))
+
+    manifest_path = project_dir / "runs" / halted["run_id"] / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    persisted = {
+        (record["stage_id"], key): record[key]
+        for record in manifest["stages"]
+        for key in ("output_path", "queue_path")
+        if key in record
+    }
+    assert persisted  # the run produced at least one persisted path
+    for (stage_id, key), value in persisted.items():
+        assert "\\" not in value, f"{stage_id}.{key} is not POSIX: {value!r}"
 
 
 # ── Resume clears the stale halt marker ──────────────────────────────────────
