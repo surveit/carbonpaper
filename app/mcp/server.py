@@ -17,8 +17,10 @@ from mcp.server.fastmcp import FastMCP
 from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
 from starlette.types import Receive, Scope, Send
 
+from app.runtime.stage_tests import WorkflowTestReport, run_workflow_tests
 from app.services import data_model as data_model_service
 from app.services import generation
+from app.services import loader
 from app.services import project as project_service
 from app.services import workspace
 
@@ -28,7 +30,14 @@ pipeline. Authoring order: create_project → generate_data_model → the human
 approves the data model in the web UI → generate_workflow → refine with
 edit_stage / add_stage. Generation runs in the background: poll
 get_project_status until the data model / workflow appears. Approval is
-human-only and happens in the web UI, never through these tools."""
+human-only and happens in the web UI, never through these tools.
+
+Once a workflow exists, derive and run per-stage tests:
+generate_stage_tests(project_id, stage_id) derives one python-transform stage's
+tests from the methodology (background; read_stage to see them once done), and
+run_tests(project_id, stage_id?) runs the authored tests against the stage's
+current code — omit stage_id to run every python-transform stage, or pass one to
+scope it. Loop edit_stage → run_tests until a stage's tests pass."""
 
 mcp = FastMCP(
     name="glassbox",
@@ -152,6 +161,45 @@ async def generate_workflow(project_id: str) -> dict[str, Any]:
         "watch": f"/chat/{session_id}",
         "poll": "get_project_status",
     }
+
+
+@mcp.tool()
+async def generate_stage_tests(project_id: str, stage_id: str) -> dict[str, Any]:
+    """Derive tests for one python-transform stage FROM THE METHODOLOGY. The
+    derivation is code-blind by construction: the deriver only ever sees the
+    methodology document plus the data model / stage schemas, never the stage's
+    code or any existing tests — so calling this right after generating or
+    editing the code cannot anchor the tests on the implementation (that would
+    assert the code equals itself). Starts a background turn and returns
+    immediately; on completion the derived suite REPLACES the stage's tests
+    wholesale. Fails loudly if the stage is not a python transform or has no
+    output schema."""
+    pdir = _resolve_existing_project(project_id)
+    model = project_service.project_meta(pdir).model or "sonnet"
+    session_id = generation.start_stage_test_generation(pdir, stage_id=stage_id, model=model)
+    return {
+        "status": "started",
+        "watch": f"/chat/{session_id}",
+        "poll": "get_project_status",
+        "note": "read_stage to see the derived tests once done",
+    }
+
+
+@mcp.tool()
+def run_tests(project_id: str, stage_id: str | None = None) -> dict[str, Any]:
+    """Run a stage's authored tests against its CURRENT code and report the
+    result. Omit `stage_id` to run every python-transform stage that has tests,
+    or pass one to scope the run to that stage. Use this after regenerating code
+    with edit_stage to see which tests the new code fails — the report carries a
+    summary plus, per test, its status and any cell diffs, and lists
+    `untested_python_stages` (python transforms with no tests, a coverage gap).
+    This does NOT edit tests: a failing test means the code disagrees with the
+    frozen test, and the fix is to the code (or to re-derive via
+    generate_stage_tests), never to bend the test to the code."""
+    pdir = _resolve_existing_project(project_id)
+    stages = loader.load_workflow(pdir)
+    report: WorkflowTestReport = run_workflow_tests(stages, stage_id)
+    return report.model_dump(mode="json")
 
 
 @mcp.tool()
