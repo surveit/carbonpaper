@@ -4,6 +4,7 @@ with the templates. No I/O — stages in, diagram source out."""
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from typing import Any
 
 from app.core.models import Stage
@@ -174,23 +175,50 @@ REVIEW_STROKE = {
     "edited_stale": ("#cc8a00", "3px"),   # approved then edited → amber
 }
 
+# A stage whose compiled file failed to load (bad JSON, or JSON that fails Stage
+# validation — see app.services.project._load_compiled_stages / _error+_issues)
+# is not a belief question, it's a LOAD failure: no amount of node-review trust
+# applies to a spec that couldn't be parsed. This wins over both run status and
+# belief stroke — see the precedence in build_mermaid_graph — and over the type
+# fill too (klass becomes "invalid", not the stage's own type class), so it reads
+# as broken at a glance rather than as an ordinary, healthy node.
+INVALID_STROKE = ("#a80000", "4px")
 
-def _node_view(s: Stage | dict[str, Any]) -> dict[str, Any]:
-    """Read the label/edge fields a node needs off EITHER a typed Stage or a raw
-    draft dict, into a uniform dict. The workflow view passes validated Stages; the
-    project shell's workflow section passes draft dicts straight off disk (which may
-    not yet validate) — both render the same graph. `input_ids` normalises the
-    `inputs` shorthand (bare id string or {id: ...}) the Stage model also accepts."""
+
+@dataclass(frozen=True)
+class NodeView:
+    """The label/edge fields one graph node needs, read off EITHER a typed Stage
+    or a raw draft dict (see _node_view) into one uniform shape. The workflow view
+    passes validated Stages; the project shell's workflow section passes draft
+    dicts straight off disk (which may not yet validate) — both render off this
+    same shape. `input_ids` normalises the `inputs` shorthand (bare id string or
+    {id: ...}) the Stage model also accepts. `issues` is only ever non-empty on a
+    draft dict carrying the loader's `_issues` bookkeeping key — a validated Stage
+    has none by construction."""
+    id: str
+    name: str
+    type: str
+    has_notes: bool
+    has_eval: bool
+    has_review: bool
+    has_error: bool
+    issues: list[str] = field(default_factory=list)
+    input_ids: list[str] = field(default_factory=list)
+
+
+def _node_view(s: Stage | dict[str, Any]) -> NodeView:
+    """Build a NodeView from either a typed Stage or a raw draft dict."""
     if isinstance(s, Stage):
-        return {
-            "id": s.id,
-            "name": s.name,
-            "type": s.type,
-            "has_notes": bool(s.compiler_notes),
-            "has_eval": s.eval is not None,
-            "has_review": s.review is not None,
-            "input_ids": s.input_ids,
-        }
+        return NodeView(
+            id=s.id,
+            name=s.name,
+            type=s.type,
+            has_notes=bool(s.compiler_notes),
+            has_eval=s.eval is not None,
+            has_review=s.review is not None,
+            has_error=False,
+            input_ids=s.input_ids,
+        )
     input_ids: list[str] = []
     for inp in s.get("inputs") or []:
         if isinstance(inp, str):
@@ -198,15 +226,17 @@ def _node_view(s: Stage | dict[str, Any]) -> dict[str, Any]:
         elif isinstance(inp, dict) and inp.get("id"):
             input_ids.append(str(inp["id"]))
     sid = s.get("id") or s.get("_filename") or "?"
-    return {
-        "id": sid,
-        "name": s.get("name") or sid,
-        "type": s.get("type") or "?",
-        "has_notes": bool(s.get("compiler_notes")),
-        "has_eval": bool(s.get("eval")),
-        "has_review": bool(s.get("review")),
-        "input_ids": input_ids,
-    }
+    return NodeView(
+        id=sid,
+        name=s.get("name") or sid,
+        type=s.get("type") or "?",
+        has_notes=bool(s.get("compiler_notes")),
+        has_eval=bool(s.get("eval")),
+        has_review=bool(s.get("review")),
+        has_error=bool(s.get("_error")),
+        issues=list(s.get("_issues") or []),
+        input_ids=input_ids,
+    )
 
 
 def build_mermaid_graph(
@@ -225,6 +255,12 @@ def build_mermaid_graph(
     the type fill is unchanged, so stroke encodes trust while fill encodes type.
     When both are given, run status takes precedence (a live run's colour wins
     over the standing belief). When both are None, behaves exactly as before.
+
+    A node that failed to load (NodeView.has_error — see _node_view) wins over
+    BOTH: its fill becomes the dedicated `invalid` classDef and its stroke is
+    INVALID_STROKE, regardless of status_by_id/review_by_id, with a ⛔ glyph and
+    an issue count in place of the type line — a broken stage renders visibly
+    red before a reviewer invests in reading the rest of the graph (issue #162).
     """
     status_glyph = {
         "ok": "✓",
@@ -245,21 +281,27 @@ def build_mermaid_graph(
     nodes = [_node_view(s) for s in stages]
     lines = ["flowchart LR"]
     for n in nodes:
-        sid = n["id"]
-        name = n["name"]
-        stype = n["type"]
+        sid = n.id
+        name = n.name
+        stype = n.type
         glyph = TYPE_GLYPH.get(stype, "")
-        klass = TYPE_CLASS.get(stype, "custom")
-        notes_indicator = "⚠ " if n["has_notes"] else ""
-        eval_indicator = "📊" if n["has_eval"] else ""
-        review_indicator = "👤" if n["has_review"] else ""
-        small_line = f"{stype}".replace("_", " ")
+        klass = "invalid" if n.has_error else TYPE_CLASS.get(stype, "custom")
+        notes_indicator = "⚠ " if n.has_notes else ""
+        eval_indicator = "📊" if n.has_eval else ""
+        review_indicator = "👤" if n.has_review else ""
         flags = " ".join(filter(None, [eval_indicator, review_indicator]))
         status = (status_by_id or {}).get(sid)
         status_prefix = f"{status_glyph.get(status, '')} " if status else ""
+        if n.has_error:
+            n_issues = len(n.issues) or 1
+            small_line = f"⛔ invalid — {n_issues} issue{'s' if n_issues != 1 else ''}"
+            label_prefix = "⛔ "
+        else:
+            small_line = f"{stype}".replace("_", " ")
+            label_prefix = f"{status_prefix}{notes_indicator}{glyph} "
         # Use HTML in mermaid label
         label = (
-            f'"<b>{status_prefix}{notes_indicator}{glyph} {name}</b>'
+            f'"<b>{label_prefix}{name}</b>'
             f'<br/><span style=\'font-size:10px;color:#888\'>{small_line}</span>'
             + (f"<br/><span style='font-size:11px'>{flags}</span>" if flags else "")
             + '"'
@@ -268,10 +310,13 @@ def build_mermaid_graph(
         lines.append(
             f'    click {sid} call loadStage("{sid}") "Open stage"'
         )
-        # Stroke override: run status (if any) wins, else node-review belief.
-        # Colour = BELIEF/STATUS, layered over the type class's fill.
+        # Stroke override precedence: a load failure wins outright (it isn't a
+        # belief/status question), else run status (if any), else node-review
+        # belief. Colour = INVALID/STATUS/BELIEF, layered over the fill.
         stroke_spec: tuple[str, str] | None = None
-        if status and status in status_stroke:
+        if n.has_error:
+            stroke_spec = INVALID_STROKE
+        elif status and status in status_stroke:
             stroke_spec = status_stroke[status]
         else:
             belief = (review_by_id or {}).get(sid)
@@ -281,8 +326,8 @@ def build_mermaid_graph(
             stroke, width = stroke_spec
             lines.append(f"    style {sid} stroke:{stroke},stroke-width:{width}")
     for n in nodes:
-        sid = n["id"]
-        for upstream in n["input_ids"]:
+        sid = n.id
+        for upstream in n.input_ids:
             lines.append(f"    {upstream} --> {sid}")
     lines += [
         "    classDef input fill:#e8f4f8,stroke:#3a8ca8,color:#000",
@@ -293,5 +338,6 @@ def build_mermaid_graph(
         "    classDef human fill:#fce8f4,stroke:#c0399a,color:#000",
         "    classDef publish fill:#e8f8e8,stroke:#3aa83a,color:#000",
         "    classDef custom fill:#fde8e8,stroke:#cc3333,color:#000",
+        "    classDef invalid fill:#f8d7da,stroke:#a80000,color:#5a0000",
     ]
     return "\n".join(lines)

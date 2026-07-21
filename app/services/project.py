@@ -133,10 +133,21 @@ def _load_compiled_stages(pdir: Path) -> list[dict[str, Any]]:
     inject _filename/_order, surface a parse error as an _error stage rather than
     dropping it). Returns [] when there is no compiled/ workflow yet. Used for
     counting stages and computing approval coverage — so the count and coverage
-    here match exactly what the workflow page loads."""
+    here match exactly what the workflow page loads.
+
+    A file that parses as JSON but fails Stage validation (a dropped connector
+    kind, a bad field, …) is ALSO marked `_error` + `_issues` — cross-checked
+    against the tolerant loader (app.services.loader.load_compiled_dir), the same
+    per-file validation the strict loader enforces — so a stage that merely looks
+    like valid JSON doesn't render as an ordinary, healthy node on the workflow
+    page. `_issues` joins CANONICAL_IGNORE_KEYS in node_review so it never leaks
+    into the approval content hash."""
     compiled_dir = pdir / "compiled"
     if not compiled_dir.is_dir():
         return []
+    issues_by_filename = {
+        e.filename: e.issues for e in load_compiled_dir(compiled_dir) if e.issues
+    }
     stages: list[dict[str, Any]] = []
     for json_file in sorted(compiled_dir.glob("*.json")):
         try:
@@ -151,6 +162,10 @@ def _load_compiled_stages(pdir: Path) -> list[dict[str, Any]]:
             }
         data["_filename"] = json_file.name
         data["_order"] = json_file.stem.split("_", 1)[0]
+        file_issues = issues_by_filename.get(json_file.name)
+        if file_issues:
+            data["_error"] = True
+            data["_issues"] = list(file_issues)
         stages.append(data)
     return stages
 

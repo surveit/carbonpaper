@@ -400,6 +400,13 @@ async def project_workflow(request: Request, project_name: str):
             "coverage": coverage,
             "type_class": TYPE_CLASS,
             "type_glyph": TYPE_GLYPH,
+            # Per-file validation issues from the tolerant loader (see
+            # app.web.loading.load_stages / StageListing) — [] when every compiled
+            # file validates. Drives the load-issues panel above the graph; each
+            # broken stage ALSO renders red in the graph itself (build_mermaid_graph
+            # marks it via _error/_issues on its draft dict — see
+            # project._load_compiled_stages).
+            "load_issues": listing.issues,
         },
     )
 

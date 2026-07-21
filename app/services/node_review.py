@@ -36,7 +36,8 @@ the node edit box that still carries keys an older loader injected:
 
     _filename  — the source file name
     _order     — the numeric filename prefix
-    _error     — set when a stage failed to parse
+    _error     — set when a stage failed to parse or failed Stage validation
+    _issues    — the validation issue strings, when _error is set
 
 These are listed in CANONICAL_IGNORE_KEYS below. **If a loader ever injects a
 new bookkeeping key, it MUST be added to CANONICAL_IGNORE_KEYS** — otherwise that
@@ -57,7 +58,7 @@ import pandas as pd
 # be excluded from the canonical form before hashing. See the module docstring:
 # this set is the invariant — extend it whenever a loader gains a new injected
 # key, or cosmetic reloads will break approvals.
-CANONICAL_IGNORE_KEYS: set[str] = {"_filename", "_order", "_error"}
+CANONICAL_IGNORE_KEYS: set[str] = {"_filename", "_order", "_error", "_issues"}
 
 # Columns of the node-decision store, in order. Mirrors the row-decisions store
 # in app/main.py (content_hash + decision + reviewer + reviewed_at) plus the

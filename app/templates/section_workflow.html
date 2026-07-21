@@ -23,6 +23,13 @@
     coverage    = node_review.coverage_for(stages, decisions) | None
     type_class  = TYPE_CLASS
     type_glyph  = TYPE_GLYPH
+    load_issues = per-file validation issues (list of CompiledStageFile: filename +
+                  issues) from the tolerant loader — [] when the working copy
+                  validates cleanly. Non-empty means SOME compiled file failed to
+                  load; those stages render red (⛔) in the graph above (see
+                  build_mermaid_graph / NodeView.has_error) and are listed here so
+                  the reviewer can read WHY without clicking through (a broken
+                  node's review panel 404s — there's no valid Stage to show).
 
   Reused (unchanged) routes: node review /node/{id}/review-partial,/decide,/edit;
   /review/status; create version POST /version; run POST /run; (re)generate POST
@@ -100,7 +107,27 @@
         <span class="belief-chip belief-unreviewed">unreviewed</span>
         <span class="belief-chip belief-rejected">rejected</span>
         <span class="belief-chip belief-stale">edited · stale</span>
+        <span class="belief-chip belief-invalid">⛔ invalid — failed to load</span>
       </div>
+
+      {% if load_issues %}
+      {# One or more compiled files failed to load — build_mermaid_graph already
+         flags each as an ⛔ red node above; this panel is WHY, grouped one entry
+         per broken file (its own issue text already collapses any cascade a
+         version-save would otherwise fan out downstream — see WorkflowLoadError /
+         group_dangling_inputs). #}
+      <div class="load-issues">
+        <strong>{{ load_issues|length }} compiled file{{ 's' if load_issues|length != 1 else '' }}
+          failed to load — {{ load_issues|length }} of the graph's nodes render ⛔ invalid below:</strong>
+        <ul>
+        {% for entry in load_issues %}
+          <li><code>{{ entry.filename }}</code>
+            <ul>{% for issue in entry.issues %}<li>{{ issue }}</li>{% endfor %}</ul>
+          </li>
+        {% endfor %}
+        </ul>
+      </div>
+      {% endif %}
 
       {% if stages and mermaid %}
       <div class="diagram-block">
