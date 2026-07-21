@@ -65,8 +65,9 @@ def find_banned_vocabulary_uses(
     """(lineno, name) for every identifier or string-literal dict key in
     `tree` whose word segments include one of `banned_tokens`.
 
-    Identifiers checked: function/class/variable/parameter names and
-    attribute access (`x.attr`). Dict keys checked: a subscript (`x["k"]`), a
+    Identifiers checked: function/class/variable/parameter names, attribute
+    access (`x.attr`), and call-site keyword-argument names (`foo(k=1)`).
+    Dict keys checked: a subscript (`x["k"]`), a
     `.get("k", ...)` first argument, and a dict-literal key. Set
     `match_identifiers=False` to check only dict keys — appropriate when the
     banned token also names a stdlib/generic concept (e.g. ``pathlib.Path``)
@@ -114,6 +115,8 @@ def _extract_identifier(node: ast.AST) -> tuple[str, int] | None:
         return node.id, node.lineno
     if isinstance(node, ast.Attribute):
         return node.attr, node.lineno
+    if isinstance(node, ast.keyword) and node.arg is not None:
+        return node.arg, node.lineno
     return None
 
 
@@ -149,7 +152,12 @@ def _iter_string_dict_keys(tree: ast.Module) -> Iterator[tuple[int, str]]:
 @dataclass(frozen=True)
 class LayerVocabularyRule:
     """One row: an infrastructure target (file or package) and the app-domain
-    vocabulary it must never mention."""
+    vocabulary it must never mention.
+
+    Set ``match_identifiers=False`` when a banned token also names a stdlib
+    or common-word concept (e.g. ``pathlib.Path``, the "path" row below) that
+    would otherwise swamp the identifier check with unrelated hits; dict-key
+    matching still applies."""
 
     target: Path
     banned_tokens: frozenset[str]
@@ -215,11 +223,11 @@ _RULES: tuple[LayerVocabularyRule, ...] = (
 )
 
 
-def _rule_id(rule: LayerVocabularyRule) -> str:
+def describe_rule_id(rule: LayerVocabularyRule) -> str:
     return rule.target.relative_to(_REPO_ROOT).as_posix()
 
 
-@pytest.mark.parametrize("rule", _RULES, ids=_rule_id)
+@pytest.mark.parametrize("rule", _RULES, ids=describe_rule_id)
 def test_infra_target_stays_free_of_banned_vocabulary(rule: LayerVocabularyRule) -> None:
     offenders = [
         f"{path.relative_to(_REPO_ROOT).as_posix()}:{lineno}  {name!r}"
@@ -286,6 +294,16 @@ def test_find_banned_vocabulary_uses_flags_get_call_key() -> None:
 def test_find_banned_vocabulary_uses_flags_subscript_key() -> None:
     tree = ast.parse('value = params["path"]\n')
     assert find_banned_vocabulary_uses(tree, frozenset({"path"})) == [(1, "path")]
+
+
+def test_find_banned_vocabulary_uses_flags_call_keyword_argument_name() -> None:
+    tree = ast.parse("foo(workflow_id=1)\n")
+    assert find_banned_vocabulary_uses(tree, frozenset({"workflow"})) == [(1, "workflow_id")]
+
+
+def test_find_banned_vocabulary_uses_ignores_clean_call_keyword_argument_name() -> None:
+    tree = ast.parse("foo(record_id=1)\n")
+    assert find_banned_vocabulary_uses(tree, frozenset({"workflow"})) == []
 
 
 def test_find_banned_vocabulary_uses_can_skip_identifiers() -> None:
