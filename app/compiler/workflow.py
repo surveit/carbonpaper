@@ -16,7 +16,7 @@ callback; persisting it is the caller's job.
 from __future__ import annotations
 
 import json
-from typing import Callable
+from typing import Callable, Optional
 
 from app.compiler.workflow_prompt import WORKFLOW_SYSTEM_PROMPT
 from app.core.agent.agent import Agent
@@ -33,22 +33,29 @@ def start_workflow_generation_agent(
     model: str,
     data_model: SchemaLibrary | None,
     on_answer: Callable[[Workflow | None], None],
+    post_validate: Optional[Callable[[Workflow], None]] = None,
 ) -> str:
     """Start the workflow-generation agent as a LIVE chat turn and return the session id.
 
     Creates a view-only session (the framing prompt shown as the user's message) and streams
     the agent on the shared TurnManager, so the compile is watchable at /chat/<sid> while it
     happens and persists when it ends. Compiles ONLY the workflow, grounding it in `data_model`
-    (the approved schemas) when given. When the turn finishes, `on_answer` is called with the
-    submitted Workflow — or None if none was submitted. Must be called from the server event
-    loop (it starts a turn there)."""
+    (the approved schemas) when given. `post_validate`, when supplied, is a SECOND gate each
+    submitted workflow must clear inside the agent loop before it is accepted — the closed-loop
+    check that runs every generated python stage against schema-derived torture rows and bounces
+    one that throws, so the agent repairs it before the turn finishes (app.runtime.torture_rows,
+    wired in by the caller, which is the layer allowed to reach the runtime). When the turn
+    finishes, `on_answer` is called with the submitted Workflow — or None if none was submitted.
+    Must be called from the server event loop (it starts a turn there)."""
     store = open_session_store()
     session_id = store.create(
         title=f"Generation · workflow · {project_name}",
         agent_id=None,  # view-only: rendered + streamed, but no agent to continue it
         context={"project_id": project_name, "phase": "workflow"},
     )
-    agent = build_workflow_agent(document, data_model=data_model, model=model)
+    agent = build_workflow_agent(
+        document, data_model=data_model, model=model, post_validate=post_validate
+    )
     # Show the framing prompt as the user's message so the live view doesn't lose it.
     store.set_pending_user(session_id, agent.task)
 
@@ -66,19 +73,31 @@ def start_workflow_generation_agent(
 
 
 def build_workflow_agent(
-    document: str, *, data_model: SchemaLibrary | None = None, model: str = "sonnet"
+    document: str,
+    *,
+    data_model: SchemaLibrary | None = None,
+    model: str = "sonnet",
+    post_validate: Optional[Callable[[Workflow], None]] = None,
 ) -> Agent[Workflow]:
     """Configure the workflow agent for `document`: it distils the process into typed stages
     and SUBMITS them as a `Workflow` via submit_answer — validated (each stage's own invariants
     + the cross-stage graph checks), so a schema-invalid draft comes back as a tool error the
     agent corrects until the workflow is clean. When `data_model` (the approved schemas) is
-    given, it grounds the task as the nouns the workflow imports and generates. Read `.answer`
+    given, it grounds the task as the nouns the workflow imports and generates.
+
+    `post_validate`, when supplied, is a SECOND gate every submitted workflow must clear before
+    it is accepted — the closed-loop torture-row check that EXECUTES each generated python stage
+    against schema-derived edge rows and raises (with the traceback) on any stage that throws, so
+    representation bugs the static checks cannot see are fixed inside the same agent loop. It is
+    injected rather than imported here because it reaches into app.runtime, which app.compiler may
+    not import; the caller (app.web) supplies app.runtime.torture_rows.torture_gate. Read `.answer`
     after the run/turn for the validated Workflow (None if nothing valid was submitted)."""
     return Agent(
         system_prompt=WORKFLOW_SYSTEM_PROMPT,
         target_schema=Workflow,
         task=_build_initial_message(document, data_model),
         model=model,
+        post_validate=post_validate,
     )
 
 

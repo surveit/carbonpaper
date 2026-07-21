@@ -50,8 +50,11 @@ def captured(monkeypatch):
     redirects to /chat/<id>) instead of spawning a real compile turn."""
     box: dict = {}
 
-    def fake(project_dir, *, document, model, data_model):
-        box.update(document=document, model=model, data_model=data_model)
+    def fake(project_dir, *, document, model, data_model, post_validate=None):
+        box.update(
+            document=document, model=model, data_model=data_model,
+            post_validate=post_validate,
+        )
         return "sess-abc"
 
     monkeypatch.setattr(generation, "start_workflow_generation", fake)
@@ -96,3 +99,13 @@ def test_passes_none_when_no_data_model(demo, captured):
     shutil.rmtree(demo / "schemas")
     client.post("/project/demo/generate-workflow", follow_redirects=False)
     assert captured["data_model"] is None
+
+
+def test_wires_the_torture_row_gate(demo, captured):
+    # Closing the generation loop (#167): the route hands down the torture-row gate
+    # so each generated python stage is EXECUTED against schema-derived edge rows
+    # inside the agent loop before the workflow is accepted.
+    from app.runtime.torture_rows import torture_gate
+
+    client.post("/project/demo/generate-workflow", follow_redirects=False)
+    assert captured["post_validate"] is torture_gate

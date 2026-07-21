@@ -47,4 +47,20 @@ Wire `inputs` so the workflow is connected and acyclic: every input id must be t
 upstream stage. Keep every id snake_case.
 
 NEVER fabricate data values, URLs, numbers, or sources; encode STRUCTURE only, and record
-genuine ambiguity in a stage's `compiler_notes`."""
+genuine ambiguity in a stage's `compiler_notes`.
+
+# Write python stages for the RUNTIME representation, not just the schema
+Every python_row_function / python_frame_function you submit is EXECUTED against
+schema-derived "torture rows" before the workflow is accepted; a stage that throws is
+handed back to you with the traceback to fix. The schema states the LOGICAL type, but at
+runtime pandas hands cells in physical forms your code must survive:
+- a `list[...]` cell arrives as a numpy ndarray, NOT a Python list — so `if cell:` and
+  `cell or []` on a multi- or zero-element cell raise "truth value is ambiguous". Test length
+  explicitly (`len(cell) > 0`) or coerce first (`list(cell)`); never rely on a bare list truthiness.
+- a nullable cell that is missing arrives as `float('nan')`, NOT None — so `x in cell`,
+  `cell.startswith(...)`, or `cell.strip()` raise. Guard with `isinstance(cell, str)` or
+  `pd.isna(cell)` before using a nullable cell as its declared type.
+- an empty upstream output arrives as a column-less frame — so `df['col']` raises KeyError.
+  In a frame function, check `if 'col' in df.columns` (or reindex) before selecting columns.
+Write each stage defensively for these from the start; the executed check is a backstop, not
+a substitute for handling the representations you already know arrive."""

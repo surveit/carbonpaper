@@ -14,7 +14,7 @@ captured from the tool call and returned — it is never echoed back into the co
 """
 from __future__ import annotations
 
-from typing import Any, Generic, TypeVar
+from typing import Any, Callable, Generic, TypeVar
 
 from pydantic import BaseModel, ValidationError
 
@@ -36,6 +36,14 @@ class Agent(Generic[Model]):
     input schema is `target_schema`; `run()` returns the captured instance, or raises
     GenerationError if the agent never submits a valid one within `max_attempts`.
 
+    `post_validate` is an optional SECOND gate the submitted (already schema-valid)
+    answer must clear before it is captured: a callable that raises `ValueError` when
+    the answer is unacceptable for a reason the Pydantic schema cannot express — e.g.
+    the workflow agent runs each generated python stage against schema-derived torture
+    rows and rejects one that throws. A raised `ValueError` becomes the same kind of
+    tool error a schema rejection does, so the agent repairs it IN THE SAME LOOP; the
+    answer is captured only when it clears both gates.
+
     One Agent runs once (it holds the run's capture state).
     """
 
@@ -47,12 +55,14 @@ class Agent(Generic[Model]):
         task: str,
         model: str = CLI_MODEL,
         max_attempts: int = 4,
+        post_validate: Callable[[Model], None] | None = None,
     ) -> None:
         self._system_prompt = system_prompt
         self._target_schema = target_schema
         self._task = task
         self._model = model
         self._max_attempts = max_attempts
+        self._post_validate = post_validate
         # Per-run capture state, written by submit_answer during the run.
         self._answer: Model | None = None
         self._attempts = 0
@@ -97,13 +107,26 @@ class Agent(Generic[Model]):
         # tool result carrying these issues, which the agent then corrects and re-submits.
         self._attempts += 1
         try:
-            self._answer = self._target_schema.model_validate(fields)
+            candidate = self._target_schema.model_validate(fields)
         except ValidationError as err:
             self._last_issues = format_errors(err)
             raise ValueError(
                 "Submission rejected — fix these and call submit_answer again:\n"
                 + "\n".join(f"- {issue}" for issue in self._last_issues)
             ) from err
+        if self._post_validate is not None:
+            # The second gate: a reason the schema cannot express (e.g. a generated
+            # stage that throws on its torture rows). A ValueError here carries its
+            # own agent-facing message and is left to propagate — the registry's tool
+            # wrapper turns it into the same is_error result a schema rejection does,
+            # so the agent repairs and resubmits. The answer is captured only after
+            # BOTH gates pass, so a rejected submission is never recorded.
+            try:
+                self._post_validate(candidate)
+            except ValueError as err:
+                self._last_issues = [str(err)]
+                raise
+        self._answer = candidate
         return "Accepted — recorded. You are done; do not restate it."
 
     def build_engine(self) -> ClaudeAgentSdkEngine:

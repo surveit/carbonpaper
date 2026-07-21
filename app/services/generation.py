@@ -28,7 +28,7 @@ from __future__ import annotations
 import json
 import logging
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable, Optional
 
 from pydantic import BaseModel
 
@@ -68,10 +68,15 @@ def start_workflow_generation(
     document: str,
     model: str,
     data_model: SchemaLibrary | None,
+    post_validate: Optional[Callable[[Workflow], None]] = None,
 ) -> str:
     """Run the WORKFLOW agent as a LIVE chat turn and return its session id (the caller lands
     the user on /chat/<sid>). Compiles ONLY the workflow — schemas/ is untouched — grounding it
-    in `data_model` (the approved schemas) when given. Must be called from the server event
+    in `data_model` (the approved schemas) when given. `post_validate`, when supplied, is the
+    closed-loop torture-row gate the caller passes down: every submitted workflow must clear it
+    (each generated python stage EXECUTES cleanly against schema-derived edge rows) before the
+    turn finishes. It is threaded through as an opaque callable — this layer stays runtime-free;
+    app.web supplies app.runtime.torture_rows.torture_gate. Must be called from the server event
     loop."""
     name = project_dir.name
     return start_workflow_generation_agent(
@@ -80,6 +85,7 @@ def start_workflow_generation(
         model=model,
         data_model=data_model,
         on_answer=lambda answer: _finish_workflow(project_dir, name, answer),
+        post_validate=post_validate,
     )
 
 
