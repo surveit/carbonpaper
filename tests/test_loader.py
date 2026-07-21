@@ -72,6 +72,46 @@ def test_strict_load_catches_cross_stage_issues(tmp_path):
     assert any("missing_upstream" in i for i in exc.value.issues)
 
 
+def test_strict_load_folds_cascading_dangling_inputs_into_root_cause(tmp_path):
+    """One invalid upstream stage whose downstream consumers all dangle collapses
+    to ONE root-cause issue line, not one line per cascaded consumer (issue #162:
+    4 root causes must read as 4 problems, not N reported lines)."""
+    _write(tmp_path, "01_bad.json", INVALID)  # id="bad" — fails path validation
+    for i in range(4):
+        _write(tmp_path, f"0{i + 2}_down{i}.json", {
+            "id": f"down{i}", "name": f"Down{i}", "type": "python_frame_function",
+            "inputs": [{"id": "bad"}],
+            "function": {"kind": "inline", "code": "def transform(row): return row"},
+        })
+    with pytest.raises(WorkflowLoadError) as exc:
+        load_workflow(tmp_path)
+    issues = exc.value.issues
+    # The broken file's own error, ONE line — not 1 (file) + 4 (one per dangling
+    # downstream consumer).
+    assert len(issues) == 1
+    assert "01_bad.json" in issues[0]
+    for i in range(4):
+        assert f"down{i}" in issues[0]
+
+
+def test_strict_load_groups_dangling_inputs_with_no_matching_file(tmp_path):
+    """Multiple stages referencing the SAME unknown id (nothing failed to load —
+    the id is simply wrong) still collapse to one line, not one per consumer."""
+    for i in range(3):
+        _write(tmp_path, f"0{i + 1}_down{i}.json", {
+            "id": f"down{i}", "name": f"Down{i}", "type": "python_frame_function",
+            "inputs": [{"id": "ghost"}],
+            "function": {"kind": "inline", "code": "def transform(row): return row"},
+        })
+    with pytest.raises(WorkflowLoadError) as exc:
+        load_workflow(tmp_path)
+    issues = exc.value.issues
+    assert len(issues) == 1
+    assert "ghost" in issues[0]
+    for i in range(3):
+        assert f"down{i}" in issues[0]
+
+
 def test_strict_load_rejects_missing_or_empty_compiled_dir(tmp_path):
     """A typo'd project path must fail loudly, not produce a valid 0-stage workflow."""
     with pytest.raises(WorkflowLoadError, match="no compiled stage files"):

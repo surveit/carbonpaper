@@ -13,6 +13,7 @@ surfaces every problem, not just the first.
 """
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any
 
 from pydantic import ValidationError, model_validator
@@ -38,6 +39,57 @@ def validate_inputs_resolve(stages: list[Stage]) -> list[str]:
             if upstream not in ids:
                 issues.append(f"`{s.id}`: input `{upstream}` references no stage")
     return issues
+
+
+@dataclass(frozen=True)
+class DanglingInputGroup:
+    """Every downstream stage whose `inputs:` names the SAME missing upstream id.
+
+    `validate_inputs_resolve` reports one line per (stage, missing-input) PAIR —
+    correct as an enumeration of every bad edge, but when the missing id is a
+    single stage that got dropped from the loaded set (a bad file, or just a
+    typo'd id), each of its downstream consumers reports its own dangling-input
+    line for what is really ONE root cause. Grouping by the missing id turns
+    that fan-out back into one entry a reader can act on.
+    """
+
+    upstream: str
+    consumers: list[str]
+
+    def as_issue(self) -> str:
+        """A standalone report line, for a missing id with no other known cause
+        (nothing upstream failed to load — the referenced id is simply wrong)."""
+        who = ", ".join(f"`{c}`" for c in self.consumers)
+        return (
+            f"input `{self.upstream}` does not exist — referenced by "
+            f"{len(self.consumers)} downstream stage{'s' if len(self.consumers) != 1 else ''}: {who}"
+        )
+
+    def as_cascade_note(self) -> str:
+        """A clause to append to the root-cause line explaining that this id's
+        own failure is WHY it's missing, naming who it broke downstream."""
+        who = ", ".join(f"`{c}`" for c in self.consumers)
+        return (
+            f"dropped from the loaded workflow, breaking "
+            f"{len(self.consumers)} downstream stage{'s' if len(self.consumers) != 1 else ''}: {who}"
+        )
+
+
+def group_dangling_inputs(stages: list[Stage]) -> list[DanglingInputGroup]:
+    """The dangling inputs of `stages`, grouped by the missing upstream id they
+    name rather than one entry per (stage, missing-input) pair — see
+    `DanglingInputGroup`. Sorted by upstream id, each group's consumers sorted,
+    so the result (and any report built from it) is deterministic."""
+    ids = {s.id for s in stages}
+    missing: dict[str, list[str]] = {}
+    for s in stages:
+        for upstream in s.input_ids:
+            if upstream not in ids:
+                missing.setdefault(upstream, []).append(s.id)
+    return [
+        DanglingInputGroup(upstream=upstream, consumers=sorted(consumers))
+        for upstream, consumers in sorted(missing.items())
+    ]
 
 
 def detect_cycle(stages: list[Stage]) -> list[str]:

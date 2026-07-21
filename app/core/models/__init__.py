@@ -41,7 +41,9 @@ from app.core.models.stage import (
 )
 from app.core.models.stages.stage_tests import StageTest
 from app.core.models.workflow import (
+    DanglingInputGroup,
     Workflow,
+    group_dangling_inputs,
     validate_inputs_resolve,
     validate_unique_ids,
     detect_cycle,
@@ -183,6 +185,7 @@ __all__ = [
     "InputRef", "Stage", "StageTest", "validate_stage",
     "Workflow", "parse_workflow", "validate_workflow", "validate_workflow_draft",
     "validate_unique_ids", "validate_inputs_resolve", "detect_cycle",
+    "DanglingInputGroup", "group_dangling_inputs",
     "SchemaKind", "NamedColumn", "NamedSchema", "SchemaLibrary",
     "parse_schema_library", "validate_schema_library", "validate_named_schema",
     "validate_unique_schema_names", "validate_references_resolve", "parse_reference",

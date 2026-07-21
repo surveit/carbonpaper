@@ -60,6 +60,43 @@ def test_validate_inputs_resolve_reports_all_dangling():
     assert all("references no stage" in i for i in issues)
 
 
+def test_group_dangling_inputs_collapses_shared_missing_id():
+    """N stages all missing the SAME upstream id group into ONE entry (issue
+    #162's de-cascade) — validate_inputs_resolve's one-line-per-pair stays
+    unchanged for callers that want every edge; this is the grouped view."""
+    stages = [
+        Stage.model_validate(S(id=f"s{i}", type="python_frame_function",
+                               inputs=[{"id": "ghost"}],
+                               function={"kind": "inline", "code": "def transform(row): return row"}))
+        for i in range(3)
+    ]
+    groups = m.group_dangling_inputs(stages)
+    assert len(groups) == 1
+    assert groups[0].upstream == "ghost"
+    assert groups[0].consumers == ["s0", "s1", "s2"]
+
+
+def test_group_dangling_inputs_keeps_distinct_missing_ids_separate():
+    """A single stage missing two DIFFERENT upstream ids still reports two groups
+    — grouping is by missing id, not by consumer (matches
+    test_validate_inputs_resolve_reports_all_dangling's expectation of 2)."""
+    s = Stage.model_validate(S(id="b", type="join",
+                               inputs=[{"id": "ghost1"}, {"id": "ghost2"}],
+                               join={"keys": [{"left": "x", "right": "y"}]}))
+    groups = m.group_dangling_inputs([s])
+    assert {g.upstream for g in groups} == {"ghost1", "ghost2"}
+    assert all(g.consumers == ["b"] for g in groups)
+
+
+def test_group_dangling_inputs_empty_when_clean(tmp_path):
+    stages = [
+        Stage.model_validate(S(id="load", type="input_data",
+                               connector={"kind": "file",
+                                          "params": {"path": str(tmp_path / "d.csv"), "format": "csv"}})),
+    ]
+    assert m.group_dangling_inputs(stages) == []
+
+
 def test_detect_cycle_reports_cycle():
     a = Stage.model_validate(S(id="a", type="python_frame_function", inputs=[{"id": "b"}], function={"kind": "inline", "code": "def transform(row): return row"}))
     b = Stage.model_validate(S(id="b", type="python_frame_function", inputs=[{"id": "a"}], function={"kind": "inline", "code": "def transform(row): return row"}))

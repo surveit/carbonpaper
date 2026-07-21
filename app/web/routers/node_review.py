@@ -267,7 +267,14 @@ async def create_version_route(project: str, message: str = Form(...)):
     """Snapshot the working copy's {compiled/, schemas/} into a new immutable
     version + freeze approval coverage at creation time. The parent is the latest
     existing version (None for the very first version). The JS redirects to the
-    versions list on success."""
+    versions list on success.
+
+    create_version_from_disk strict-loads the working copy first (WorkflowLoadError,
+    saving nothing, if it doesn't validate) — surfaced here as a 400 with the
+    DE-CASCADED issue list (see loader.load_workflow_object / group_dangling_inputs)
+    rather than an unhandled 500, so this — the first place an invalid working copy
+    used to hit a validation cliff (issue #162) — reports its root causes instead of
+    crashing."""
     project_dir = EXAMPLES_DIR / project
     if not project_dir.is_dir():
         raise HTTPException(status_code=404, detail=f"No project '{project}'")
@@ -291,6 +298,8 @@ async def create_version_route(project: str, message: str = Form(...)):
         )
     except FileNotFoundError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except WorkflowLoadError as exc:
+        return JSONResponse({"ok": False, "issues": exc.issues}, status_code=400)
     return JSONResponse({"ok": True, "version": version.model_dump(mode="json")})
 
 

@@ -27,17 +27,28 @@ from typing import Any
 
 from pydantic import ValidationError
 
-from app.core.models.workflow import Workflow, validate_workflow
+from app.core.models.workflow import (
+    Workflow,
+    detect_cycle,
+    group_dangling_inputs,
+    validate_unique_ids,
+)
 from app.core.models.schema import format_errors
 from app.core.models.stage import Stage
 
 
 @dataclass
 class CompiledStageFile:
-    """One compiled file: its parsed Stage (None if invalid) and any issues."""
+    """One compiled file: its parsed Stage (None if invalid) and any issues.
+    `raw_id` is the file's `id` field read straight off the parsed JSON, kept even
+    when the stage fails Stage validation (most schema errors leave `id` itself
+    fine) — it's what lets a downstream dangling-input cascade be matched back to
+    the file that caused it. None when the file wasn't even valid JSON, or wasn't
+    a JSON object, or had no `id`."""
     filename: str
     stage: Stage | None = None
     issues: list[str] = field(default_factory=list)
+    raw_id: str | None = None
 
 
 class WorkflowLoadError(Exception):
@@ -66,6 +77,8 @@ def load_compiled_dir(compiled_dir: Path) -> list[CompiledStageFile]:
         if not data:
             entry.issues.append("file contains no stage object")
             continue
+        if isinstance(data, dict) and isinstance(data.get("id"), str):
+            entry.raw_id = data["id"]
         try:
             entry.stage = Stage.model_validate(data)
         except ValidationError as err:
@@ -79,14 +92,38 @@ def load_workflow_object(project_dir: Path) -> Workflow:
     cross-stage graph problems), and raise WorkflowLoadError if the dir is empty or
     anything is invalid — so the runner and version snapshotter refuse to execute or
     freeze an unloadable workflow. The single strict entry point; `load_workflow`
-    (the list accessor) delegates here."""
+    (the list accessor) delegates here.
+
+    A stage dropped by a bad file (see CompiledStageFile.raw_id) leaves every
+    downstream stage that names it as an input dangling — DE-CASCADED here rather
+    than reported once per downstream consumer: `group_dangling_inputs` groups
+    those by the missing id, and a group whose id matches a broken file's raw_id is
+    folded into that file's OWN issue line (the file's error already explains why
+    the id is gone) instead of appended as a separate problem. A group with no
+    matching file — a plain typo'd id, nothing failed to load — still reports as
+    one line, not one per consumer. The result: a handful of root causes reads as
+    a handful of lines, not one line per cascaded symptom."""
     compiled_dir = project_dir / "compiled"
     entries = load_compiled_dir(compiled_dir)
-    issues = [f"{e.filename}: {i}" for e in entries for i in e.issues]
+    stages = [e.stage for e in entries if e.stage is not None]
+    dangling_by_upstream = {g.upstream: g for g in group_dangling_inputs(stages)}
+
+    issues: list[str] = []
+    for e in entries:
+        if not e.issues:
+            continue
+        line = f"{e.filename}: {'; '.join(e.issues)}"
+        group = dangling_by_upstream.pop(e.raw_id, None) if e.raw_id else None
+        if group is not None:
+            line += f" ({group.as_cascade_note()})"
+        issues.append(line)
     if not entries:
         issues.append(f"no compiled stage files found in {compiled_dir}")
-    stages = [e.stage for e in entries if e.stage is not None]
-    issues += validate_workflow(stages)
+    issues += validate_unique_ids(stages)
+    # Whatever's left named no broken file — an id that's simply wrong.
+    issues += [g.as_issue() for g in dangling_by_upstream.values()]
+    issues += detect_cycle(stages)
+
     if issues:
         raise WorkflowLoadError(compiled_dir, issues)
     return Workflow(stages=stages)
