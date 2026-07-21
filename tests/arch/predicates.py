@@ -6,6 +6,8 @@ never import the modules they inspect.
 """
 from __future__ import annotations
 
+import ast
+import sys
 from pathlib import Path
 
 from arch._helpers import (
@@ -60,6 +62,31 @@ def check_no_import(paths: list[Path], module: str, *, allow: set[str]) -> list[
         imported = find_imported_modules(parse_module(path))
         if any(name == module or name.startswith(f"{module}.") for name in imported):
             offenders.append(posix)
+    return offenders
+
+
+def check_imports_are_stdlib_only(paths: list[Path]) -> list[str]:
+    """Files that import anything outside the standard library: any relative
+    import (level > 0 — always an in-project import) or any absolute import
+    whose top-level module is not in ``sys.stdlib_module_names``. Pins a module
+    as a stdlib-only leaf that depends on nothing else in the project (or any
+    third party), so it stays independent of every other layer. Unlike a
+    ``forbidden`` import-linter contract (which must enumerate the modules to
+    deny), this is an allowlist: self-maintaining — nothing to extend when a new
+    sibling module appears — and it catches relative and absolute in-project
+    imports alike."""
+    offenders: list[str] = []
+    for path in paths:
+        for node in ast.walk(parse_module(path)):
+            if isinstance(node, ast.ImportFrom):
+                if node.level:  # relative: `from . / .. import ...`
+                    offenders.append(f"{path.name}:{node.lineno}  relative import")
+                elif node.module and node.module.split(".")[0] not in sys.stdlib_module_names:
+                    offenders.append(f"{path.name}:{node.lineno}  from {node.module} import ...")
+            elif isinstance(node, ast.Import):
+                for alias in node.names:
+                    if alias.name.split(".")[0] not in sys.stdlib_module_names:
+                        offenders.append(f"{path.name}:{node.lineno}  import {alias.name}")
     return offenders
 
 
