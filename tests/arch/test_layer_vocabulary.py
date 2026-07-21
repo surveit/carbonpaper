@@ -9,17 +9,23 @@ or a package directory) and the domain vocabulary it must never mention:
   workflow, stage, methodology, eval); knowing one would tie a reusable layer
   to a single caller.
 - ``app/runtime/runner.py`` orchestrates a run generically: it must not touch
-  connector-param keys like ``"path"`` — those belong to the stage modules
-  that read them (``stages/input_data.py``) and to the ``Connector`` model
-  that validates them. Absorbs the token-ban half of the old
-  ``test_runner_binding_agnostic.py``; the remaining param keys it checked
-  (format/file/list_columns/parse_dates) stay in that file, since this table
-  only carries "path".
+  the connector-binding dict key spelled exactly ``"path"`` — that key
+  belongs to the stage modules that read it (``stages/input_data.py``) and
+  to the ``Connector`` model that validates it. Absorbs the token-ban half of
+  the old ``test_runner_binding_agnostic.py``; the remaining param keys it
+  checked (format/file/list_columns/parse_dates) stay in that file, since
+  this table only carries "path".
 
-Matching is AST-based and word-segment-aware: a banned token must match a
-whole segment of a snake_case/CamelCase identifier or string-literal dict key
-("path" matches "file_path", not "pathway"). Docstrings and comments are not
-identifiers or dict keys, so they are exempt without special-casing.
+Matching is AST-based. By default it is word-segment-aware: a banned token
+must match a whole segment of a snake_case/CamelCase identifier or
+string-literal dict key ("path" matches "file_path", not "pathway") — this is
+what the generic-infra rows above use, since they need to catch compounds
+like "project_id". A row may instead set ``exact_key_match=True`` to require
+a dict key to equal the banned token exactly rather than merely contain it as
+one segment — the runner's "path" row uses this so its own unrelated
+manifest keys ("output_path", "queue_path") are never flagged. Docstrings and
+comments are not identifiers or dict keys, so they are exempt without
+special-casing.
 """
 from __future__ import annotations
 
@@ -61,6 +67,7 @@ def find_banned_vocabulary_uses(
     banned_tokens: frozenset[str],
     *,
     match_identifiers: bool = True,
+    exact_key_match: bool = False,
 ) -> list[tuple[int, str]]:
     """(lineno, name) for every identifier or string-literal dict key in
     `tree` whose word segments include one of `banned_tokens`.
@@ -71,12 +78,17 @@ def find_banned_vocabulary_uses(
     `.get("k", ...)` first argument, and a dict-literal key. Set
     `match_identifiers=False` to check only dict keys — appropriate when the
     banned token also names a stdlib/generic concept (e.g. ``pathlib.Path``)
-    that would otherwise swamp the identifier check with unrelated hits.
+    that would otherwise swamp the identifier check with unrelated hits. Set
+    `exact_key_match=True` to require a dict key to equal a banned token
+    exactly rather than merely contain it as one word segment — appropriate
+    when the banned token is a specific dict-key spelling (e.g. a
+    connector-binding key literally spelled ``"path"``) rather than a domain
+    noun that should also catch compounds like ``"project_id"``.
     """
     offenders: list[tuple[int, str]] = []
     if match_identifiers:
         offenders.extend(_find_banned_identifiers(tree, banned_tokens))
-    offenders.extend(_find_banned_string_dict_keys(tree, banned_tokens))
+    offenders.extend(_find_banned_string_dict_keys(tree, banned_tokens, exact_key_match=exact_key_match))
     return offenders
 
 
@@ -107,10 +119,13 @@ def _extract_identifier(node: ast.AST) -> tuple[str, int] | None:
     return None
 
 
-def _find_banned_string_dict_keys(tree: ast.Module, banned_tokens: frozenset[str]) -> list[tuple[int, str]]:
+def _find_banned_string_dict_keys(
+    tree: ast.Module, banned_tokens: frozenset[str], *, exact_key_match: bool = False,
+) -> list[tuple[int, str]]:
     offenders: list[tuple[int, str]] = []
     for lineno, key in _iter_string_dict_keys(tree):
-        if banned_tokens & set(split_into_word_segments(key)):
+        matched = key in banned_tokens if exact_key_match else bool(banned_tokens & set(split_into_word_segments(key)))
+        if matched:
             offenders.append((lineno, key))
     return offenders
 
@@ -144,12 +159,19 @@ class LayerVocabularyRule:
     Set ``match_identifiers=False`` when a banned token also names a stdlib
     or common-word concept (e.g. ``pathlib.Path``, the "path" row below) that
     would otherwise swamp the identifier check with unrelated hits; dict-key
-    matching still applies."""
+    matching still applies.
+
+    Set ``exact_key_match=True`` when a banned token names one specific
+    dict-key spelling (e.g. the connector-binding key literally spelled
+    "path") rather than a domain noun that should also catch compounds — the
+    default word-segment matching would otherwise flag the runner's own
+    unrelated keys that happen to end in the same word (e.g. "output_path")."""
 
     target: Path
     banned_tokens: frozenset[str]
     rationale: str
     match_identifiers: bool = True
+    exact_key_match: bool = False
     # Pre-existing offenders that are not the leak this rule targets (see the
     # row's rationale for why). A ratchet: new entries are forbidden — a new
     # offender must be fixed, not added here.
@@ -191,9 +213,9 @@ _RULES: tuple[LayerVocabularyRule, ...] = (
         banned_tokens=frozenset({"path"}),
         rationale=(
             "runner.py orchestrates a run generically; a connector-param key "
-            "like \"path\" belongs to the stage modules that read it "
-            "(stages/input_data.py) and the Connector model that validates it, "
-            "not the orchestrator."
+            "spelled exactly \"path\" belongs to the stage modules that read "
+            "it (stages/input_data.py) and the Connector model that "
+            "validates it, not the orchestrator."
         ),
         # Identifiers are excluded here: this file imports pathlib.Path (a
         # stdlib type, not a domain noun) and uses local path-bookkeeping
@@ -201,11 +223,11 @@ _RULES: tuple[LayerVocabularyRule, ...] = (
         # its own manifest-writing, unrelated to connector-param semantics —
         # the token ban only targets dict keys read off a params mapping.
         match_identifiers=False,
-        # "output_path"/"queue_path" are the runner's own manifest/queue
-        # bookkeeping keys (where it wrote a completed stage's output, where a
-        # halted stage's review queue file lives) — they end in the banned
-        # segment "path" by coincidence of English, not a connector-param leak.
-        allowlist=frozenset({"output_path", "queue_path"}),
+        # The banned key is the connector-binding dict key spelled exactly
+        # "path", not the word segment "path" — an exact match so the
+        # runner's own manifest/queue bookkeeping keys ("output_path",
+        # "queue_path") are never flagged in the first place.
+        exact_key_match=True,
     ),
 )
 
@@ -220,7 +242,10 @@ def test_infra_target_stays_free_of_banned_vocabulary(rule: LayerVocabularyRule)
         f"{path.relative_to(_REPO_ROOT).as_posix()}:{lineno}  {name!r}"
         for path in find_source_files_under(rule.target)
         for lineno, name in find_banned_vocabulary_uses(
-            parse_module(path), rule.banned_tokens, match_identifiers=rule.match_identifiers
+            parse_module(path),
+            rule.banned_tokens,
+            match_identifiers=rule.match_identifiers,
+            exact_key_match=rule.exact_key_match,
         )
         if name not in rule.allowlist
     ]
@@ -307,3 +332,27 @@ def test_find_banned_vocabulary_uses_still_flags_keys_when_identifiers_skipped()
 def test_find_banned_vocabulary_uses_ignores_clean_snippet() -> None:
     tree = ast.parse("def load_record(store):\n    return store.get('id')\n")
     assert find_banned_vocabulary_uses(tree, frozenset({"workflow", "project"})) == []
+
+
+def test_find_banned_vocabulary_uses_exact_key_match_flags_the_literal_key() -> None:
+    tree = ast.parse('value = params["path"]\n')
+    offenders = find_banned_vocabulary_uses(
+        tree, frozenset({"path"}), match_identifiers=False, exact_key_match=True
+    )
+    assert offenders == [(1, "path")]
+
+
+def test_find_banned_vocabulary_uses_exact_key_match_flags_a_dict_literal_key() -> None:
+    tree = ast.parse('d = {"path": "/tmp/x"}\n')
+    offenders = find_banned_vocabulary_uses(
+        tree, frozenset({"path"}), match_identifiers=False, exact_key_match=True
+    )
+    assert offenders == [(1, "path")]
+
+
+def test_find_banned_vocabulary_uses_exact_key_match_ignores_a_compound_key() -> None:
+    tree = ast.parse('value = params["output_path"]\n')
+    offenders = find_banned_vocabulary_uses(
+        tree, frozenset({"path"}), match_identifiers=False, exact_key_match=True
+    )
+    assert offenders == []
