@@ -29,6 +29,13 @@ Two known limitations:
   of scope: the operand actually compared is the container, not the string
   constants inside it, so this rule's ``ast.Constant`` check on the immediate
   operand never sees them.
+
+One structural exclusion, applied before a literal is even recorded as a site
+(not via the allowlist below): ``"__main__"``, as compared by
+``if __name__ == "__main__":``. That comparison is Python's own module-entry-
+point idiom — identical by convention in every script that has one, never an
+app concept that could drift between two call sites — so it is excluded by
+value rather than frozen into the allowlist.
 """
 from __future__ import annotations
 
@@ -45,18 +52,16 @@ _APP_ROOT = _REPO_ROOT / "app"
 _COMPARISON_OPS = (ast.Eq, ast.NotEq, ast.In, ast.NotIn)
 _MIN_LITERAL_LENGTH = 2
 
+# Python's own module-entry-point idiom (`if __name__ == "__main__":`) is
+# excluded structurally, not via the allowlist below — see the module
+# docstring.
+_PYTHON_ENTRYPOINT_IDIOM = "__main__"
+
 # Pre-existing values flagged by this rule on the real tree. A ratchet: new
 # entries are forbidden — a new offender must be named (Enum member or
-# module-level constant), not added here. Full sites for each value are in
-# the task report; the one exception below is a language idiom, not app
-# vocabulary that could drift.
-#
-# - "__main__": `if __name__ == "__main__":` is Python's own module-entry-
-#   point idiom, identical by convention in every script that has one — not
-#   an app concept that could drift between two call sites.
+# module-level constant), not added here.
 _ALLOWLIST: frozenset[str] = frozenset(
     {
-        "__main__",
         ".parquet",
         "abs_tol",
         "approved",
@@ -118,6 +123,7 @@ class _ComparisonLiteralVisitor(ast.NodeVisitor):
                     isinstance(operand, ast.Constant)
                     and isinstance(operand.value, str)
                     and len(operand.value) >= _MIN_LITERAL_LENGTH
+                    and operand.value != _PYTHON_ENTRYPOINT_IDIOM
                 ):
                     self.sites.append(LiteralComparisonSite(operand.value, operand.lineno, scope))
         self.generic_visit(node)
@@ -210,6 +216,11 @@ def test_find_compared_string_literals_excludes_empty_string() -> None:
 
 def test_find_compared_string_literals_excludes_single_character_literal() -> None:
     tree = ast.parse('def go(sep):\n    return sep == ","\n')
+    assert find_compared_string_literals(tree) == []
+
+
+def test_find_compared_string_literals_excludes_python_entrypoint_idiom() -> None:
+    tree = ast.parse('if __name__ == "__main__":\n    pass\n')
     assert find_compared_string_literals(tree) == []
 
 
