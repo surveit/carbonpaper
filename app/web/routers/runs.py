@@ -262,10 +262,11 @@ def _artifact_links(project: str, run_id: str, run_dir: Path, manifest: dict) ->
     linking to the files it actually wrote under artifacts/ (preferring a
     browsable index.html) rather than a hardcoded guess. Empty for in-progress or
     never-published runs, so the page shows no banner."""
-    if manifest.get("status") in ("running", None):
+    if manifest.get("status") in (RunStatus.RUNNING, None):
         return []
     has_ok_publish = any(
-        s.get("type") == "publish" and s.get("status") in ("ok", "validation_warnings")
+        s.get("type") == "publish"
+        and s.get("status") in (StageStatus.OK, StageStatus.VALIDATION_WARNINGS)
         for s in manifest.get("stages", [])
     )
     artifacts_root = run_dir / "artifacts"
