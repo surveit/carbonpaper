@@ -14,6 +14,7 @@ import pandas as pd
 from fastapi import HTTPException
 
 from app.core.errors import NoVersionToRunError
+from app.core.frames import PARQUET_SUFFIX
 from app.core.models import Stage, StageType
 from app.core.run_status import StageStatus
 from app.runtime.runner import resolve_version_id
@@ -259,7 +260,7 @@ MAX_TABLE_ROWS = 5000
 
 def read_table(path: Path) -> pd.DataFrame:
     """Read a stage output file (parquet or csv) into a DataFrame."""
-    return pd.read_parquet(path) if path.suffix == ".parquet" else pd.read_csv(path)
+    return pd.read_parquet(path) if path.suffix == PARQUET_SUFFIX else pd.read_csv(path)
 
 
 def manifest_stage(run_dir: Path, stage_id: str) -> dict[str, Any]:

@@ -28,6 +28,7 @@ import pyarrow.lib as pa_lib
 from pydantic import ValidationError as PydanticValidationError
 
 from app.core.errors import MissingInputBindingError, NoVersionToRunError, SubsetRunError
+from app.core.frames import PARQUET_SUFFIX
 from app.core.models import Connector, Stage, StageType, Workflow
 from app.core.run_status import RunStatus, StageStatus
 from app.services.errors import WorkflowLoadError
@@ -805,7 +806,7 @@ def resume_run(project_dir: Path, run_id: str, repo_root: Path) -> dict[str, Any
         if not path.exists():
             continue
         try:
-            if path.suffix == ".parquet":
+            if path.suffix == PARQUET_SUFFIX:
                 outputs_so_far[record["stage_id"]] = pd.read_parquet(path)
             else:
                 outputs_so_far[record["stage_id"]] = pd.read_csv(path)

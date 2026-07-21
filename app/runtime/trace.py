@@ -21,6 +21,7 @@ from typing import Any
 import pandas as pd
 
 from app.core.errors import RowOutOfRange, StageNotInRun
+from app.core.frames import PARQUET_SUFFIX
 from app.core.models.stage import StageType, is_grain_and_order_preserving
 
 
@@ -110,7 +111,7 @@ def _read_output(run_dir: Path, stage_record: dict[str, Any]) -> pd.DataFrame | 
     path = Path(run_dir) / rel
     if not path.exists():
         return None
-    return pd.read_parquet(path) if path.suffix == ".parquet" else pd.read_csv(path)
+    return pd.read_parquet(path) if path.suffix == PARQUET_SUFFIX else pd.read_csv(path)
 
 
 def _scalar(value: Any) -> Any:
