@@ -20,7 +20,7 @@ from typing import Any
 
 import pandas as pd
 
-from app.core.models import Column, STR_COLUMN_TYPE, TableSchema
+from app.core.models import Column, RANGE_UNBOUNDED_MARKER, STR_COLUMN_TYPE, TableSchema
 
 
 # Map our type vocabulary to permissive pandas dtype checks.
@@ -113,8 +113,8 @@ def validate_dataframe(
             if len(non_null) and len(col_range) == 2:
                 lo, hi = col_range
                 # strings like "+inf" → sentinel; treat as unbounded
-                lo_v = -math.inf if (isinstance(lo, str) and "inf" in lo) else lo
-                hi_v = math.inf if (isinstance(hi, str) and "inf" in hi) else hi
+                lo_v = -math.inf if (isinstance(lo, str) and RANGE_UNBOUNDED_MARKER in lo) else lo
+                hi_v = math.inf if (isinstance(hi, str) and RANGE_UNBOUNDED_MARKER in hi) else hi
                 try:
                     bad = ((non_null < lo_v) | (non_null > hi_v)).sum()
                     if bad:

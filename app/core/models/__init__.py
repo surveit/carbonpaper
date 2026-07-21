@@ -15,6 +15,7 @@ from app.core.models.schema import (
     Column,
     JSON_COLUMN_TYPE,
     LIST_JSON_COLUMN_TYPE,
+    RANGE_UNBOUNDED_MARKER,
     STR_COLUMN_TYPE,
     SourceRef,
     TableSchema,
@@ -199,4 +200,5 @@ __all__ = [
     "NODE_TYPES", "NODE_TYPE_NAMES",
     # individual column-type comparison handles
     "STR_COLUMN_TYPE", "JSON_COLUMN_TYPE", "LIST_JSON_COLUMN_TYPE",
+    "RANGE_UNBOUNDED_MARKER",
 ]

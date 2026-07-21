@@ -81,11 +81,18 @@ class SourceRef(_Base):
     lines: Optional[list[int]] = None
 
 
+# The substring a `range` bound string carries to mean "unbounded on this
+# side" (e.g. "+inf", "-inf") — recognized here and by the matching check in
+# app/runtime/validation.py when it validates row data against a declared
+# range.
+RANGE_UNBOUNDED_MARKER = "inf"
+
+
 def _is_range_bound(v: Any) -> bool:
     """Whether `v` is a valid `range` element: a non-bool number, or a string
-    containing "inf" (the unbounded-on-this-side sentinel)."""
+    containing RANGE_UNBOUNDED_MARKER (the unbounded-on-this-side sentinel)."""
     if isinstance(v, str):
-        return "inf" in v
+        return RANGE_UNBOUNDED_MARKER in v
     return isinstance(v, (int, float)) and not isinstance(v, bool)
 
 
