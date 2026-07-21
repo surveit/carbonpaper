@@ -113,6 +113,15 @@ forbidden_modules = ["app.core.persistence"]
 # persistence would invert that and drag storage into the type layer.
 
 [[tool.importlinter.contracts]]
+name = "app.core does not import the domain models"
+type = "forbidden"
+source_modules = ["app.core"]
+forbidden_modules = ["app.models"]
+# app.core (llm, agent, persistence, errors, frames, utils) is generic infrastructure
+# and must sit below the domain layer. app.models (Stage, TableSchema, Workflow, …)
+# sits above it, so a dependency from app.core back onto app.models would be a cycle.
+
+[[tool.importlinter.contracts]]
 name = "app.mcp imported only by the entrypoint"
 type = "protected"
 protected_modules = ["app.mcp"]
