@@ -6,12 +6,6 @@
     "complexity": 21
   },
   {
-    "path": "app/runtime/runner.py",
-    "line": 481,
-    "function": "_execute_stages",
-    "complexity": 36
-  },
-  {
     "path": "app/runtime/validation.py",
     "line": 78,
     "function": "validate_dataframe",
