@@ -1,25 +1,17 @@
-"""Architecture: a cyclomatic-complexity ratchet on ``app/``.
+"""Architecture: a hard cyclomatic-complexity ceiling on ``app/``.
 
 Cyclomatic complexity above 20 (radon grade D or worse) is a function too
-tangled to review confidently — this rule blocks new ones and only lets
-existing ones shrink. Today's offenders are grandfathered in the committed
-``complexity_baseline.json`` next to this test; the ratchet enforces three
-things:
-
-1. A violating function (complexity > 20) not recorded in the baseline is a
-   new offender — decompose it.
-2. A baselined function whose measured complexity no longer matches its
-   recorded value is a drift: higher is a regression (decompose it back
-   down), lower is an improvement that has not been locked in (update the
-   recorded value so the baseline actually shrinks).
-3. A baseline entry for a function that no longer exists, or that now
-   measures at or under 20, is stale — remove the entry. A baseline that
-   only ever grows is not a ratchet.
+tangled to review confidently. There is no exception list: every function in
+``app/`` must measure at or under the threshold — the only remedy for a
+violator is decomposing it.
 
 Scope is every ``.py`` file under ``app/``, including ``_arch_tests/``
 subdirs — unlike ``arch.scope``, which exempts them (they hold other rules'
 own inline fixtures, not code this rule needs to skip). Nothing under
-``tests/`` is scanned, matching every other arch rule.
+``tests/`` is scanned, matching every other arch rule. `_SOURCE_EXEMPT_PARTS`
+otherwise mirrors ``arch.scope``'s shared exemptions (``_vendor/``,
+``node_modules/``, ``venv/``, dot-directories, ...), so third-party or
+vendored code is never held to this rule.
 
 Complexity is measured with radon as a library (``radon.complexity.cc_visit``),
 not a subprocess, so a worktree with no radon on PATH still runs this test via
@@ -28,10 +20,12 @@ the installed dependency. A method's qualified name is radon's own
 ``.<name>``, so a closure nested two levels deep reads as
 ``outer.<inner>.<innermost>`` — ``cc_visit`` does not flatten closures the way
 it flattens methods, so this module walks ``.closures`` itself, recursively.
+Two blocks that resolve to the same qualified name (a platform-conditional
+``def foo(): ... / def foo(): ...``, or ``@typing.overload`` stubs) fail loud
+via `index_by_identity` rather than silently comparing only one of them.
 """
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -43,7 +37,6 @@ from arch.scope import _EXEMPT_PARTS
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _APP_ROOT = _REPO_ROOT / "app"
-_BASELINE_PATH = Path(__file__).resolve().parent / "complexity_baseline.json"
 _COMPLEXITY_THRESHOLD = 20
 
 # arch.scope's shared exemptions (tests/, __pycache__/, _vendor/, node_modules/,
@@ -60,8 +53,7 @@ class FunctionComplexity:
 
     ``path`` is repo-relative with forward slashes (identical on Windows and
     CI Linux); ``function`` is the qualified name described in the module
-    docstring. The same shape serves both a live measurement and a baseline
-    entry, so the two compare field-for-field.
+    docstring.
     """
 
     path: str
@@ -73,9 +65,9 @@ class FunctionComplexity:
 def find_app_source_files(root: Path) -> list[Path]:
     """Every ``.py`` file under `root`, except a dot-directory or one of
     `_SOURCE_EXEMPT_PARTS` (``arch.scope``'s own exemptions, so third-party
-    code vendored under ``app/_vendor/`` is never demanded a baseline entry)
-    — the one difference from ``arch.scope`` is that ``_arch_tests/`` stays
-    in scope here (see the module docstring). A part is checked on the path
+    code vendored under ``app/_vendor/`` is never held to this rule) — the
+    one difference from ``arch.scope`` is that ``_arch_tests/`` stays in
+    scope here (see the module docstring). A part is checked on the path
     relative to `root`, not the absolute path: this worktree can itself live
     under a dot-directory (e.g. a git worktree under ``.claude/``), and
     checking the absolute path would spuriously exempt everything under it."""
@@ -93,8 +85,7 @@ def find_app_source_files(root: Path) -> list[Path]:
 
 def measure_function_complexities(paths: list[Path], repo_root: Path) -> list[FunctionComplexity]:
     """Every function, method, and closure in `paths`, at its measured
-    complexity — not just violators, so a caller can also look up whether a
-    baselined function has dropped below the threshold."""
+    complexity."""
     measurements: list[FunctionComplexity] = []
     for path in paths:
         rel_path = path.relative_to(repo_root).as_posix()
@@ -105,26 +96,12 @@ def measure_function_complexities(paths: list[Path], repo_root: Path) -> list[Fu
     return measurements
 
 
-def find_ratchet_violations(
-    measurements: list[FunctionComplexity],
-    baseline: dict[tuple[str, str], FunctionComplexity],
-) -> list[str]:
-    """Human-readable offender lines for the three ratchet rules in the
-    module docstring, run over `measurements` against `baseline`."""
+def find_functions_over_threshold(measurements: list[FunctionComplexity]) -> list[str]:
+    """Human-readable offender lines for every function in `measurements`
+    whose complexity exceeds `_COMPLEXITY_THRESHOLD` — there is no exception
+    list, so this is the whole rule."""
     by_key = index_by_identity(measurements, source="the measured functions")
-    violator_keys = {key for key, m in by_key.items() if m.complexity > _COMPLEXITY_THRESHOLD}
-    baseline_keys = set(baseline)
-
-    offenders = [_describe_new_violation(by_key[key]) for key in sorted(violator_keys - baseline_keys)]
-    offenders += [
-        _describe_drift(by_key[key], baseline[key])
-        for key in sorted(violator_keys & baseline_keys)
-        if by_key[key].complexity != baseline[key].complexity
-    ]
-    offenders += [
-        _describe_stale_entry(baseline[key], by_key.get(key)) for key in sorted(baseline_keys - violator_keys)
-    ]
-    return offenders
+    return [_describe_violation(by_key[key]) for key in sorted(by_key) if by_key[key].complexity > _COMPLEXITY_THRESHOLD]
 
 
 def index_by_identity(measurements: list[FunctionComplexity], *, source: str) -> dict[tuple[str, str], FunctionComplexity]:
@@ -133,8 +110,8 @@ def index_by_identity(measurements: list[FunctionComplexity], *, source: str) ->
     that resolve to the same qualified name — ``@typing.overload`` stubs, or
     a platform-conditional ``def foo(): ... / def foo(): ...`` under
     ``if``/``else`` — would otherwise collapse into one dict entry and drop
-    the other's complexity unnoticed, which would let a real violator slip
-    past ratchet rule 1 (a new violator must always fail)."""
+    the other's complexity unnoticed, which could let a real violator slip
+    past silently instead of failing loud."""
     by_key: dict[tuple[str, str], FunctionComplexity] = {}
     for m in measurements:
         key = (m.path, m.function)
@@ -150,32 +127,13 @@ def index_by_identity(measurements: list[FunctionComplexity], *, source: str) ->
     return by_key
 
 
-def load_baseline(path: Path) -> dict[tuple[str, str], FunctionComplexity]:
-    """The committed baseline as ``{(path, function): entry}``. A missing
-    file reads as an empty baseline — the legitimate starting state before
-    any function was ever grandfathered in — rather than an error. A
-    baseline entry's ``line`` is not part of its identity (only `path` and
-    `function` are, so the entry stays matched across an unrelated line
-    shift elsewhere in the file); it can go stale and is informational only.
-    Raises loudly (see `index_by_identity`) on two entries for the same
-    identity rather than silently keeping the last one."""
-    if not path.exists():
-        return {}
-    entries = json.loads(path.read_text(encoding="utf-8"))
-    return index_by_identity(
-        [FunctionComplexity(**entry) for entry in entries], source=f"baseline {path}"
-    )
-
-
 def test_functions_do_not_exceed_the_complexity_ratchet() -> None:
-    baseline = load_baseline(_BASELINE_PATH)
     measurements = measure_function_complexities(find_app_source_files(_APP_ROOT), _REPO_ROOT)
-    offenders = find_ratchet_violations(measurements, baseline)
+    offenders = find_functions_over_threshold(measurements)
     assert not offenders, (
-        f"cyclomatic complexity ratchet: a function over complexity {_COMPLEXITY_THRESHOLD} must be "
-        "decomposed, or — if pre-existing — recorded exactly in tests/arch/complexity_baseline.json; "
-        "the baseline may only shrink, never grow, and every entry must match today's measured "
-        f"complexity for a function still above {_COMPLEXITY_THRESHOLD}:\n  " + "\n  ".join(offenders)
+        f"cyclomatic complexity ratchet: every function in app/ must measure at or under "
+        f"complexity {_COMPLEXITY_THRESHOLD}, with no exception list — decompose it:\n  "
+        + "\n  ".join(offenders)
     )
 
 
@@ -195,33 +153,10 @@ def _measure_function_and_closures(func: Function, rel_path: str, parent: str | 
 # --- offender messages --------------------------------------------------------
 
 
-def _describe_new_violation(m: FunctionComplexity) -> str:
+def _describe_violation(m: FunctionComplexity) -> str:
     return (
-        f"{m.path}:{m.line}  {m.function}  complexity={m.complexity} (> {_COMPLEXITY_THRESHOLD}, "
-        "not in the baseline) — decompose it; the baseline must never grow"
-    )
-
-
-def _describe_drift(current: FunctionComplexity, recorded: FunctionComplexity) -> str:
-    if current.complexity > recorded.complexity:
-        verdict = f"regressed from {recorded.complexity} — decompose it back down"
-    else:
-        verdict = (
-            f"improved from {recorded.complexity} — update complexity_baseline.json to "
-            f"{current.complexity} so the improvement locks in"
-        )
-    return f"{current.path}:{current.line}  {current.function}  complexity={current.complexity} ({verdict})"
-
-
-def _describe_stale_entry(recorded: FunctionComplexity, current: FunctionComplexity | None) -> str:
-    reason = (
-        "the function no longer exists"
-        if current is None
-        else f"it now measures {current.complexity} (<= {_COMPLEXITY_THRESHOLD})"
-    )
-    return (
-        f"{recorded.path}:{recorded.line}  {recorded.function}  baseline complexity="
-        f"{recorded.complexity} ({reason}) — remove the stale baseline entry"
+        f"{m.path}:{m.line}  {m.function}  complexity={m.complexity} "
+        f"(> {_COMPLEXITY_THRESHOLD}) — decompose it"
     )
 
 
@@ -246,7 +181,7 @@ def test_find_app_source_files_excludes_pycache(tmp_path: Path) -> None:
 
 def test_find_app_source_files_excludes_vendor_but_includes_arch_tests(tmp_path: Path) -> None:
     """Third-party code vendored under `_vendor/` (one of `arch.scope`'s
-    shared exemptions) must never be demanded a baseline entry, while
+    shared exemptions) must never be held to this rule, while
     `_arch_tests/` — this rule's one deliberate difference from
     `arch.scope` — stays in scope."""
     (tmp_path / "_vendor").mkdir()
@@ -370,76 +305,18 @@ def test_measure_function_complexities_surfaces_both_blocks_of_a_platform_condit
     assert [(m.function, m.line) for m in measurements] == [("foo", 2), ("foo", 7)]
 
 
-def test_load_baseline_reads_a_missing_file_as_empty(tmp_path: Path) -> None:
-    assert load_baseline(tmp_path / "missing.json") == {}
-
-
-def test_load_baseline_keys_entries_by_path_and_function(tmp_path: Path) -> None:
-    baseline_path = tmp_path / "baseline.json"
-    baseline_path.write_text(json.dumps([{"path": "app/a.py", "line": 3, "function": "go", "complexity": 25}]))
-    assert load_baseline(baseline_path) == {("app/a.py", "go"): FunctionComplexity("app/a.py", 3, "go", 25)}
-
-
-def test_load_baseline_raises_on_two_entries_for_the_same_identity(tmp_path: Path) -> None:
-    baseline_path = tmp_path / "baseline.json"
-    baseline_path.write_text(
-        json.dumps(
-            [
-                {"path": "app/a.py", "line": 3, "function": "go", "complexity": 25},
-                {"path": "app/a.py", "line": 30, "function": "go", "complexity": 26},
-            ]
-        )
-    )
-    with pytest.raises(ValueError, match="app/a.py:go"):
-        load_baseline(baseline_path)
-
-
 def _make_measurement(path: str = "a.py", line: int = 1, function: str = "go", complexity: int = 25) -> FunctionComplexity:
     return FunctionComplexity(path=path, line=line, function=function, complexity=complexity)
 
 
-def test_find_ratchet_violations_flags_an_unbaselined_violator() -> None:
-    offenders = find_ratchet_violations([_make_measurement(complexity=25)], {})
+def test_find_functions_over_threshold_flags_a_violator() -> None:
+    offenders = find_functions_over_threshold([_make_measurement(complexity=25)])
     assert len(offenders) == 1
     assert "a.py:1" in offenders[0] and "decompose" in offenders[0]
 
 
-def test_find_ratchet_violations_passes_a_violator_matching_the_baseline_exactly() -> None:
-    measurement = _make_measurement(complexity=25)
-    baseline = {("a.py", "go"): measurement}
-    assert find_ratchet_violations([measurement], baseline) == []
-
-
-def test_find_ratchet_violations_ignores_a_function_at_or_below_threshold_with_no_baseline() -> None:
-    assert find_ratchet_violations([_make_measurement(complexity=_COMPLEXITY_THRESHOLD)], {}) == []
-
-
-def test_find_ratchet_violations_flags_a_regression_above_the_recorded_value() -> None:
-    baseline = {("a.py", "go"): _make_measurement(complexity=25)}
-    offenders = find_ratchet_violations([_make_measurement(complexity=30)], baseline)
-    assert len(offenders) == 1
-    assert "regressed" in offenders[0]
-
-
-def test_find_ratchet_violations_flags_an_improvement_below_the_recorded_value() -> None:
-    baseline = {("a.py", "go"): _make_measurement(complexity=25)}
-    offenders = find_ratchet_violations([_make_measurement(complexity=22)], baseline)
-    assert len(offenders) == 1
-    assert "improved" in offenders[0] and "lock" in offenders[0]
-
-
-def test_find_ratchet_violations_flags_a_stale_entry_when_the_function_is_gone() -> None:
-    baseline = {("a.py", "go"): _make_measurement(complexity=25)}
-    offenders = find_ratchet_violations([], baseline)
-    assert len(offenders) == 1
-    assert "no longer exists" in offenders[0] and "remove" in offenders[0]
-
-
-def test_find_ratchet_violations_flags_a_stale_entry_when_now_below_threshold() -> None:
-    baseline = {("a.py", "go"): _make_measurement(complexity=25)}
-    offenders = find_ratchet_violations([_make_measurement(complexity=15)], baseline)
-    assert len(offenders) == 1
-    assert f"<= {_COMPLEXITY_THRESHOLD}" in offenders[0] and "remove" in offenders[0]
+def test_find_functions_over_threshold_ignores_a_function_at_or_below_threshold() -> None:
+    assert find_functions_over_threshold([_make_measurement(complexity=_COMPLEXITY_THRESHOLD)]) == []
 
 
 def test_index_by_identity_raises_on_two_measurements_for_the_same_identity() -> None:
@@ -473,16 +350,15 @@ def test_index_by_identity_keeps_two_different_functions_in_the_same_file() -> N
     assert set(index_by_identity(distinct, source="test")) == {("a.py", "go"), ("a.py", "stop")}
 
 
-def test_find_ratchet_violations_raises_on_two_measurements_for_the_same_identity() -> None:
+def test_find_functions_over_threshold_raises_on_two_measurements_for_the_same_identity() -> None:
     """The bug this guards: without a loud raise, a dict comprehension keyed
     by (path, function) would silently keep only the LAST of two same-named
     blocks — e.g. a platform-conditional `def foo(): / def foo():` under
     `if`/`else` — and a genuinely violating one could be the one dropped,
-    letting ratchet rule 1 (a new violator must always fail) slip past
-    silently instead of failing loud."""
+    letting it slip past silently instead of failing loud."""
     duplicates = [
         _make_measurement(path="a.py", function="go", line=1, complexity=25),
         _make_measurement(path="a.py", function="go", line=10, complexity=5),
     ]
     with pytest.raises(ValueError, match="a.py:go"):
-        find_ratchet_violations(duplicates, {})
+        find_functions_over_threshold(duplicates)
