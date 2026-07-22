@@ -64,17 +64,16 @@ def test_test_violating_input_schema_is_malformed_not_code_bug():
     assert "null" in (result.message or "").lower()
 
 
-def test_nan_output_does_not_match_expected_none():
-    # None and NaN are distinct values; a test may treat them differently.
+def test_nan_output_matches_expected_none():
+    # Null and NaN are one absence: a float column stores an expected None as
+    # NaN, so a NaN result must satisfy a test that expected None.
     stage = _row_stage(
         "def transform(row):\n    return {**row, 'doubled': float('nan')}\n",
         [{"name": "expects_none_gets_nan", "inputs": {"load": [{"amount": 1.0}]},
           "expected": [{"amount": 1.0, "doubled": None}]}],
     )
     [result] = run_stage_tests(stage)
-    assert result.status == "mismatch"
-    [diff] = result.diffs
-    assert diff.column == "doubled" and diff.expected is None
+    assert result.status == "passed"
 
 
 def test_nan_output_matches_expected_nan():
@@ -86,6 +85,20 @@ def test_nan_output_matches_expected_nan():
     )
     [result] = run_stage_tests(stage)
     assert result.status == "passed"
+
+
+def test_present_value_does_not_match_absent_expected():
+    # The conflation is only null≡NaN; a present value must still fail a test
+    # that expected an absence.
+    stage = _row_stage(
+        "def transform(row):\n    return {**row, 'doubled': 4.0}\n",
+        [{"name": "expects_none_gets_value", "inputs": {"load": [{"amount": 1.0}]},
+          "expected": [{"amount": 1.0, "doubled": None}]}],
+    )
+    [result] = run_stage_tests(stage)
+    assert result.status == "mismatch"
+    [diff] = result.diffs
+    assert diff.column == "doubled" and diff.actual == 4.0
 
 
 def test_none_output_matches_expected_none():
