@@ -405,3 +405,41 @@ def test_prompt_template_field_names_str_format_map_and_single_brace():
     desc = m.LLMConfig.model_fields["prompt_template"].description or ""
     assert "str.format_map" in desc
     assert "{column_name}" in desc
+
+
+# ── schema-derived output deliverability ─────────────────────────────────────
+def test_output_schema_issues_raise_at_stage_construction():
+    """The deliverability check is a Stage model validator: an undeliverable
+    declared column fails construction, naming the column."""
+    spec = {
+        "id": "totals",
+        "name": "Totals",
+        "type": "aggregate",
+        "inputs": [{"id": "rows"}],
+        "aggregate": {
+            "group_by": ["company"],
+            "aggregations": [{"output_column": "n", "formula": "count"}],
+        },
+        "output_schema": {"columns": [{"name": "undeclared_extra", "type": "str"}]},
+    }
+    with pytest.raises(ValidationError, match="undeclared_extra"):
+        m.Stage.model_validate(spec)
+
+
+def test_output_schema_issues_surface_in_draft_validation():
+    """The compiler's non-fatal channel reports the same issue as a string
+    instead of raising — the submit/re-fire loop feeds it back to the model."""
+    from app.models.workflow import validate_workflow_draft
+
+    issues = validate_workflow_draft([{
+        "id": "totals",
+        "name": "Totals",
+        "type": "aggregate",
+        "inputs": [{"id": "rows"}],
+        "aggregate": {
+            "group_by": ["company"],
+            "aggregations": [{"output_column": "n", "formula": "count"}],
+        },
+        "output_schema": {"columns": [{"name": "undeclared_extra", "type": "str"}]},
+    }])
+    assert any("undeclared_extra" in issue for issue in issues)
