@@ -67,33 +67,55 @@ def build_schema_er_diagram(schemas: list[dict[str, Any]]) -> str:
     explicit column `references` (schema or schema.column) — a real graph, not a
     PK-name-collision heuristic. An empty-column schema still renders as an entity so
     the reader sees it exists."""
-    lines = ["erDiagram"]
     names = {s.get("name") for s in schemas if s.get("name")}
-
+    lines = ["erDiagram"]
     for s in schemas:
-        sid = s.get("name")
-        if not sid:
-            continue
-        cols = s.get("columns") or []
-        pk_set = set(s.get("primary_key") or [])
-        lines.append(f"    {sid} {{")
-        if not cols:
-            lines.append(f"        any _ \"({s.get('kind', '')})\"")
-        for col in cols:
-            name = col.get("name", "")
-            if not name:
-                continue
-            t = _safe_mermaid_type(col.get("type", "str"))
-            marker = "PK" if name in pk_set else ("FK" if col.get("references") else "")
-            label = col.get("description") or ""
-            comment = f' "{label.replace(chr(34), chr(39))[:48]}"' if label else ""
-            line = f"        {t} {name}"
-            if marker:
-                line += f" {marker}"
-            lines.append(line + comment)
-        lines.append("    }")
+        lines.extend(_render_er_entity_block(s))
+    lines.extend(_collect_er_fk_edges(schemas, names))
+    return "\n".join(lines)
 
-    # FK edges: a referencing column draws an edge from the target schema to this one.
+
+def _render_er_entity_block(s: dict[str, Any]) -> list[str]:
+    """One schema's `erDiagram` entity block: its `{ ... }` braces, an `any`
+    placeholder row if it declares no columns, else one row per column."""
+    sid = s.get("name")
+    if not sid:
+        return []
+    cols = s.get("columns") or []
+    pk_set = set(s.get("primary_key") or [])
+    lines = [f"    {sid} {{"]
+    if not cols:
+        lines.append(f"        any _ \"({s.get('kind', '')})\"")
+    for col in cols:
+        line = _render_er_column_row(col, pk_set)
+        if line is not None:
+            lines.append(line)
+    lines.append("    }")
+    return lines
+
+
+def _render_er_column_row(col: dict[str, Any], pk_set: set[Any]) -> str | None:
+    """One column's row inside an entity block — type, name, PK/FK marker,
+    and a truncated, quote-escaped description comment — or `None` for a
+    column with no name."""
+    name = col.get("name", "")
+    if not name:
+        return None
+    t = _safe_mermaid_type(col.get("type", "str"))
+    marker = "PK" if name in pk_set else ("FK" if col.get("references") else "")
+    label = col.get("description") or ""
+    comment = f' "{label.replace(chr(34), chr(39))[:48]}"' if label else ""
+    line = f"        {t} {name}"
+    if marker:
+        line += f" {marker}"
+    return line + comment
+
+
+def _collect_er_fk_edges(schemas: list[dict[str, Any]], names: set[Any]) -> list[str]:
+    """One deduplicated `erDiagram` edge per referencing column: a referencing
+    column draws an edge from the target schema to this one, skipping a
+    reference to an unknown schema or to the referencing schema itself."""
+    edges: list[str] = []
     seen_edges: set[str] = set()
     for s in schemas:
         sid = s.get("name")
@@ -107,8 +129,8 @@ def build_schema_er_diagram(schemas: list[dict[str, Any]]) -> str:
             edge = f"    {target} ||--o{{ {sid} : {col.get('name')}"
             if edge not in seen_edges:
                 seen_edges.add(edge)
-                lines.append(edge)
-    return "\n".join(lines)
+                edges.append(edge)
+    return edges
 
 
 def build_schema_table_graph(schemas: list[dict[str, Any]]) -> str:
