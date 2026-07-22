@@ -9,7 +9,8 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from app.models import Stage
+from app.models import InputRef, JoinConfig, Stage
+from app.models.stages.join import find_join_column_issues
 
 
 def _join_stage(*, left_columns, right_columns, key_left, key_right, select=None):
@@ -57,6 +58,34 @@ def test_select_referencing_absent_column_is_rejected_by_output_check():
         Stage.model_validate(_join_stage(
             left_columns=["a"], right_columns=["b"], key_left="a", key_right="b", select=["ghost"],
         ))
+
+
+def test_find_join_column_issues_ignores_select():
+    """The config-column check (find_join_column_issues) never inspects
+    `select` — a select entry the merge can't produce is rejected by the
+    separate output-schema check (find_join_output_issues), not this one.
+    Built via Stage.model_construct, bypassing Stage's own validators
+    entirely, so the bad select never reaches the output-schema check that
+    would otherwise reject the whole Stage at construction time (see
+    test_select_referencing_absent_column_is_rejected_by_output_check
+    above, which goes through that check instead)."""
+    stage = Stage.model_construct(
+        id="j",
+        name="j",
+        type="join",
+        inputs=[
+            InputRef.model_validate(
+                {"id": "L", "schema": {"columns": [{"name": "a", "type": "str", "nullable": False}]}}
+            ),
+            InputRef.model_validate(
+                {"id": "R", "schema": {"columns": [{"name": "b", "type": "str", "nullable": False}]}}
+            ),
+        ],
+        join=JoinConfig.model_validate(
+            {"type": "inner", "keys": [{"left": "a", "right": "b"}], "select": ["ghost"]}
+        ),
+    )
+    assert find_join_column_issues(stage) == []
 
 
 def test_side_with_no_edge_schema_is_skipped():

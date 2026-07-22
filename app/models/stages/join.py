@@ -8,7 +8,6 @@ from typing import TYPE_CHECKING
 
 from app.models.stages.shared import (
     COLUMN_ISSUE,
-    OUTPUT_UNPRODUCIBLE_ISSUE,
     find_declared_vs_derived_issues,
     resolve_input_columns,
 )
@@ -16,6 +15,11 @@ from app.models.stages.shared import (
 if TYPE_CHECKING:
     from app.models.schema import TableSchema
     from app.models.stage import JoinConfig, Stage
+
+SELECT_UNPRODUCIBLE_ISSUE = (
+    "stage '{sid}': join.select references column '{col}' that the merge "
+    "cannot produce (producible columns: {cols})"
+)
 
 
 def find_join_column_issues(stage: "Stage") -> list[str]:
@@ -52,9 +56,7 @@ def find_join_output_issues(stage: "Stage") -> list[str]:
         return []
     merged = derive_join_output_types(join, left, right)
     issues = [
-        OUTPUT_UNPRODUCIBLE_ISSUE.format(
-            sid=stage.id, col=entry, handle="join", cols=sorted(merged),
-        )
+        SELECT_UNPRODUCIBLE_ISSUE.format(sid=stage.id, col=entry, cols=sorted(merged))
         for entry in join.select or []
         if entry not in merged
     ]
