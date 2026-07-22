@@ -30,3 +30,6 @@ scripts/
 
 # agent chat session scratch (dev-only, never committed)
 app/agent/_sessions/
+
+# Agent-tool worktree scratch dirs (isolated checkouts for background agents)
+.claude/worktrees/
