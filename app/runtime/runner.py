@@ -549,7 +549,9 @@ def _execute_stages(
         ):
             continue
 
-        outcome = _run_stage(stage, ctx, outputs_so_far, blocked, records_by_id, manifest, ordered, run_dir)
+        outcome, joins_blocked = _run_stage(stage, ctx, outputs_so_far, records_by_id, manifest, ordered, run_dir)
+        if joins_blocked:
+            blocked.add(sid)
         if outcome is _StageOutcome.HALTED:
             halted_stage_ids.append(sid)
         elif outcome is _StageOutcome.CANCELLED:
@@ -668,18 +670,17 @@ def _record_halt(record: dict[str, Any], halt: HaltForReview, run_dir: Path) -> 
     record["queue_path"] = halt.queue_path.relative_to(run_dir).as_posix()
 
 
-def _record_stage_error(record: dict[str, Any], exc: Exception, blocked: set[str]) -> None:
+def _record_stage_error(record: dict[str, Any], exc: Exception) -> None:
     """Record any stage failure (a handler can raise ValueError, RuntimeError,
-    a pandas/pyarrow error, etc.) in the manifest and join `blocked`, so its
-    transitive downstream is skipped and never marked `ok` on this stage's
-    absent output."""
+    a pandas/pyarrow error, etc.) in the manifest. This outcome always joins
+    the caller's `blocked` set, so its transitive downstream is skipped and
+    never marked `ok` on this stage's absent output."""
     record["status"] = StageStatus.ERROR
     record["error"] = {
         "type": type(exc).__name__,
         "message": str(exc),
         "traceback": traceback.format_exc(limit=8),
     }
-    blocked.add(record["stage_id"])
 
 
 def _apply_row_slicing(
@@ -730,16 +731,16 @@ def _finalize_stage_output(
     output: pd.DataFrame | None,
     outputs_so_far: dict[str, pd.DataFrame],
     run_dir: Path,
-    blocked: set[str],
-) -> None:
+) -> bool:
     """Trim, validate, and persist a stage's raw handler output, then decide
-    its terminal status. A per-row generation failure is a stage error, so it
-    blocks its downstream exactly like a raised exception: join `blocked` so
-    every transitive consumer is skipped rather than run on this stage's
-    partial frame and marked `ok`. The partial output file stays on disk for
-    inspection; the stage's own `error` status keeps a resume from reusing
-    it. Otherwise the status is `ok`/`validation_warnings` from the output
-    and input validation reports."""
+    its terminal status. A per-row generation failure is a stage error,
+    recorded exactly like a raised exception — the partial output file stays
+    on disk for inspection, and the stage's own `error` status keeps a resume
+    from reusing it. Otherwise the status is `ok`/`validation_warnings` from
+    the output and input validation reports. Returns True (a row-generation
+    error) if the caller must join this stage to `blocked`, so every
+    transitive consumer is skipped rather than run on this stage's partial
+    frame and marked `ok`; False otherwise."""
     sid = stage.id
     if output is None:
         output = pd.DataFrame()
@@ -771,7 +772,6 @@ def _finalize_stage_output(
             "message": _summarize_row_errors(row_errors),
             "traceback": None,
         }
-        blocked.add(sid)
     else:
         record["status"] = StageStatus.OK if out_rep.ok and all(
             v["ok"] for v in record["input_validation"]
@@ -780,29 +780,34 @@ def _finalize_stage_output(
     # Manifest paths are POSIX-style so the persisted JSON is identical on
     # every platform.
     record["output_path"] = output_path.relative_to(run_dir).as_posix()
+    return bool(row_errors)
 
 
 def _run_stage(
     stage: Stage,
     ctx: dict[str, Any],
     outputs_so_far: dict[str, pd.DataFrame],
-    blocked: set[str],
     records_by_id: dict[str, dict[str, Any]],
     manifest: dict[str, Any],
     ordered: list[Stage],
     run_dir: Path,
-) -> _StageOutcome:
+) -> tuple[_StageOutcome, bool]:
     """Run one stage end to end: gather its inputs, invoke its handler,
     process and persist its output, and record the outcome (ok, warnings,
     error, halt, or a mid-stage cancel) into `records_by_id[stage.id]` —
     flushing the manifest once the stage starts and again once it settles, so
-    the run page shows it live."""
+    the run page shows it live. Returns `(outcome, joins_blocked)`:
+    `joins_blocked` is True for a halt, a general exception, and a
+    row-generation error alike — every outcome except a clean ok/warnings or
+    a cancel — so the caller can add this stage to its own `blocked` set
+    itself, keeping that decision visible at the loop."""
     sid = stage.id
     record = _start_stage_record(stage)
     t0 = time.perf_counter()
     records_by_id[sid] = record
     _flush_manifest(manifest, records_by_id, ordered, ctx, run_dir, RunStatus.RUNNING)
 
+    joins_blocked = False
     try:
         inputs_for_stage = _gather_stage_inputs(stage, outputs_so_far, record)
         handler = _resolve_handler(stage.type)
@@ -810,19 +815,19 @@ def _run_stage(
             output = handler.execute(stage, inputs_for_stage, ctx)
         except HaltForReview as halt:
             _record_halt(record, halt, run_dir)
-            blocked.add(sid)
-            return _StageOutcome.HALTED
+            return _StageOutcome.HALTED, True
         except RunCancelled:
             # Mid-stage cancel: the row driver unwound out of
             # handler.execute (see execution.py::_run_row_mapper). This
             # stage made no output — it is marked cancelled, not ok.
             record["status"] = StageStatus.CANCELLED
-            return _StageOutcome.CANCELLED
-        _finalize_stage_output(stage, ctx, record, output, outputs_so_far, run_dir, blocked)
+            return _StageOutcome.CANCELLED, False
+        joins_blocked = _finalize_stage_output(stage, ctx, record, output, outputs_so_far, run_dir)
     except Exception as exc:  # noqa: BLE001 — the runner's contract is to
         # record ANY stage failure in the manifest and keep running
         # independent forks rather than crash the whole run.
-        _record_stage_error(record, exc, blocked)
+        _record_stage_error(record, exc)
+        joins_blocked = True
     finally:
         # Every terminal status (ok, error, awaiting_review, cancelled)
         # finalizes its timing here — `record` is already in records_by_id
@@ -832,7 +837,7 @@ def _run_stage(
         record["finished_at"] = datetime.now().isoformat(timespec="seconds")
         _flush_manifest(manifest, records_by_id, ordered, ctx, run_dir, RunStatus.RUNNING)
 
-    return _StageOutcome.RAN
+    return _StageOutcome.RAN, joins_blocked
 
 
 def _finalize_run_manifest(
