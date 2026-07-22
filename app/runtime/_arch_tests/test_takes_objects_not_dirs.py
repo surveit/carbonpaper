@@ -43,9 +43,6 @@ class RuntimeObjectRule:
     #   Open PR #111 removes the runner's version reads (the runner will be
     #   handed an already-resolved Workflow instead); merging it empties these
     #   four rows.
-    # - app/runtime/preview.py: run_stage_preview reads the run's project
-    #   directory to load sibling stage outputs from disk for the in-memory
-    #   preview; not part of PR #111, still an open violation to fix.
     allowlist: frozenset[tuple[str, str, str]] = field(default_factory=frozenset)
 
 
@@ -62,7 +59,6 @@ _RULE = RuntimeObjectRule(
             ("app/runtime/runner.py", "prepare_run", "project_dir"),
             ("app/runtime/runner.py", "execute_run", "project_dir"),
             ("app/runtime/runner.py", "resume_run", "project_dir"),
-            ("app/runtime/preview.py", "run_stage_preview", "project_dir"),
         }
     ),
 )

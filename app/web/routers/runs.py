@@ -552,7 +552,6 @@ async def run_stage_scratch_preview(
             stage_def=stage_def,
             run_dir=run_dir,
             repo_root=REPO_ROOT,
-            project_dir=EXAMPLES_DIR / project,
             output_by_id=output_by_id,
             selected_indices=indices,
         )
