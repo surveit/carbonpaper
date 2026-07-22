@@ -15,7 +15,7 @@ def _handle_by_type(root: Path) -> dict[str, dict]:
     return {
         "input_data": {"connector": {"kind": "file",
                                       "params": {"path": str(root / "data" / "items.csv"), "format": "csv"}}},
-        "llm_transform": {"llm": {"prompt_template": "score {row}"}},
+        "llm_transform": {"llm": {"prompt_template": "score {doc_id}"}},
     }
 
 

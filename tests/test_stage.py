@@ -63,8 +63,8 @@ def test_valid_llm_transform():
                                           "primary_key": ["id"]}}],
         output_schema={"columns": [{"name": "id", "type": "str"}, {"name": "out", "type": "str"}],
                        "primary_key": ["id"]},
-        llm={"prompt_template": "do {x}", "tools": ["WebSearch"]}))
-    assert s.llm.prompt_template == "do {x}"
+        llm={"prompt_template": "do {id}", "tools": ["WebSearch"]}))
+    assert s.llm.prompt_template == "do {id}"
 
 
 def test_missing_handle_block_raises():

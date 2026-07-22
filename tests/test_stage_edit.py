@@ -22,7 +22,7 @@ _OUT_SCHEMA = {
 _VALID = {
     "id": "score", "name": "Score rows", "type": "llm_transform",
     "inputs": [{"id": "load", "schema": _IN_SCHEMA}],
-    "llm": {"model": "claude-sonnet-4-6", "prompt_template": "score {row}"},
+    "llm": {"model": "claude-sonnet-4-6", "prompt_template": "score {doc_id}"},
     "output_schema": _OUT_SCHEMA,
 }
 
@@ -103,7 +103,7 @@ def test_patch_changes_only_named_field_and_preserves_the_rest(tmp_path: Path) -
     # everything not named in the patch is preserved verbatim — the fidelity guarantee
     assert after["name"] == "Score rows"
     assert after["llm"]["model"] == "claude-sonnet-4-6"
-    assert after["llm"]["prompt_template"] == "score {row}"
+    assert after["llm"]["prompt_template"] == "score {doc_id}"
 
 
 def test_patch_deep_merges_nested_object(tmp_path: Path) -> None:
@@ -113,7 +113,7 @@ def test_patch_deep_merges_nested_object(tmp_path: Path) -> None:
     after = _score(pdir)
     assert after["llm"]["model"] == "opus"
     # the sibling key inside llm is NOT dropped (deep merge, not whole-object replace)
-    assert after["llm"]["prompt_template"] == "score {row}"
+    assert after["llm"]["prompt_template"] == "score {doc_id}"
 
 
 def test_patch_null_deletes_a_field(tmp_path: Path) -> None:
@@ -172,7 +172,7 @@ def test_add_stage_creates_new_stage_referencing_existing_input(tmp_path: Path) 
     pdir = _seed_load(tmp_path)
     new = {"id": "score", "name": "Score", "type": "llm_transform",
            "inputs": [{"id": "load", "schema": _IN_SCHEMA}],
-           "llm": {"model": "claude-sonnet-4-6", "prompt_template": "score {row}"},
+           "llm": {"model": "claude-sonnet-4-6", "prompt_template": "score {doc_id}"},
            "output_schema": _OUT_SCHEMA}
     result = stage_edit.add_stage_spec(pdir, json.dumps(new))
     assert result.ok is True and not result.issues
@@ -186,7 +186,7 @@ def test_add_stage_rejects_dangling_input(tmp_path: Path) -> None:
     # so validation passes and the referential check is what rejects it
     new = {"id": "score", "name": "Score", "type": "llm_transform",
            "inputs": [{"id": "does_not_exist", "schema": _IN_SCHEMA}],
-           "llm": {"model": "claude-sonnet-4-6", "prompt_template": "score {row}"},
+           "llm": {"model": "claude-sonnet-4-6", "prompt_template": "score {doc_id}"},
            "output_schema": _OUT_SCHEMA}
     result = stage_edit.add_stage_spec(pdir, json.dumps(new))
     assert result.ok is False
