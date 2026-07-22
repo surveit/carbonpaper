@@ -13,6 +13,7 @@
     <h2><code>{{ stage.stage_id }}</code></h2>
     <p class="stage-id">{{ stage.name }}</p>
     <p class="muted">{{ stage.elapsed_ms }} ms · {{ "{:,}".format(stage.rows or 0) }} row{% if (stage.rows or 0) != 1 %}s{% endif %}
+        {% if stage.llm_usage %}{% set u = stage.llm_usage %} · <span title="Token usage and estimated cost of this stage's model calls (input + output tokens summed over every row and retry; cost is the CLI's estimate).">{{ "{:,}".format(u.input_tokens) }} in / {{ "{:,}".format(u.output_tokens) }} out tokens · ~${{ "%.4f"|format(u.cost_usd) }} ({{ u.calls }} call{% if u.calls != 1 %}s{% endif %})</span>{% endif %}
         {% if stage.finished_at %} · finished <code>{{ stage.finished_at }}</code>{% endif %}</p>
 </div>
 

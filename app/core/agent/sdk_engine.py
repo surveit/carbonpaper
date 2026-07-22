@@ -33,6 +33,7 @@ from claude_agent_sdk import (
 
 # `CLI_PATH` is the located Claude Code CLI (the SDK does not always find it on
 # PATH on Windows — app.core.llm_sdk probes the known install locations).
+from app.core.agent.usage import LlmUsage
 from app.core.llm_sdk import CLI_PATH as _CLI_PATH
 
 CLI_MODEL = os.environ.get("CW_CHAT_CLI_MODEL", "sonnet")
@@ -41,6 +42,25 @@ CLI_MODEL = os.environ.get("CW_CHAT_CLI_MODEL", "sonnet")
 # tool as f"mcp__{MCP_SERVER_NAME}__{tool_name}". Kept here (not in registry) so
 # this module and the registry's server-builder agree without a circular import.
 MCP_SERVER_NAME = "tools"
+
+
+def _usage_from_result(msg: Any) -> LlmUsage:
+    """Token/cost usage for one completed CLI turn, read from its ResultMessage.
+
+    `msg.usage` is the provider usage block (a raw dict) and `msg.total_cost_usd`
+    is the CLI's cost estimate (present on subscription auth too). Both are read
+    defensively — a missing field becomes 0, never a fabricated number — and
+    `calls` counts this as one model call so callers can sum across attempts."""
+    usage = getattr(msg, "usage", None) or {}
+    cost = getattr(msg, "total_cost_usd", None)
+    return LlmUsage(
+        # A usage block missing a token field means the turn reported none of
+        # that kind; 0 is the true count, not a stand-in for an unknown value.
+        input_tokens=int(usage.get("input_tokens", 0) or 0),   # data-default-ok: absent = zero tokens reported
+        output_tokens=int(usage.get("output_tokens", 0) or 0),  # data-default-ok: absent = zero tokens reported
+        cost_usd=float(cost or 0.0),
+        calls=1,
+    )
 
 
 def _stringify(content: Any) -> str:
@@ -84,6 +104,10 @@ class ClaudeAgentSdkEngine:
         # tool loop — e.g. app.core.agent.agent.Agent's submit-and-retry — sets this so a
         # model that never produces a valid answer cannot loop forever.
         self._max_turns = max_turns
+        # Token/cost usage from the most recent stream_turn's terminal
+        # ResultMessage (None until one arrives). Read by the headless Agent to
+        # attribute spend to the caller.
+        self.last_usage: LlmUsage | None = None
 
     def _options(self, resume: str | None) -> ClaudeAgentOptions:
         # max_turns caps assistant turns when the caller set one (a bounded headless
@@ -165,6 +189,7 @@ class ClaudeAgentSdkEngine:
                 # (do NOT break — breaking aclose()s a still-running generator).
                 # Capture the session id to resume next turn (conversation memory).
                 session_id = getattr(msg, "session_id", None)
+                self.last_usage = _usage_from_result(msg)
                 # A turn can end in-band with an error (permission denial on a
                 # tool, max_turns exhausted) without query() raising. Surface it
                 # loudly rather than ending on a silent, empty answer.

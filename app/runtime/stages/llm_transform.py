@@ -13,10 +13,11 @@ from __future__ import annotations
 
 from typing import Any, Callable
 
+from app.core.agent.usage import LlmUsage
 from app.models import Stage
 
 from ..llm import backend_status, call_llm
-from .execution import ROW_ERROR_KEY, Row
+from .execution import ROW_ERROR_KEY, ROW_USAGE_KEY, Row
 
 
 def make_llm_row_mapper(stage: Stage, ctx: dict[str, Any]) -> Callable[[Row], Row]:
@@ -35,8 +36,13 @@ def make_llm_row_mapper(stage: Stage, ctx: dict[str, Any]) -> Callable[[Row], Ro
     ctx.setdefault("llm_backend", {})[stage.id] = backend_status()
 
     def map_row(row: Row) -> Row:
+        # Per-attempt usage lands here (success or failure); the row carries its
+        # summed usage out under ROW_USAGE_KEY for the driver to aggregate. Like
+        # ROW_ERROR_KEY, it is an undeclared column and the output projection
+        # drops it, so it never reaches stage output.
+        usages: list[LlmUsage] = []
         try:
-            reply = call_llm(stage.id, llm, row, reply_model=reply_model)
+            reply = call_llm(stage.id, llm, row, reply_model=reply_model, usage_out=usages)
         except Exception as exc:  # noqa: BLE001 — per-row supervisor: tag the row
             # with the ROW_ERROR_KEY sentinel so the map completes (one bad row
             # does not abort the stage); the row driver collects these off the
@@ -44,7 +50,8 @@ def make_llm_row_mapper(stage: Stage, ctx: dict[str, Any]) -> Callable[[Row], Ro
             # output issues. Falls back to the exception's type name when its
             # message is empty (e.g. a bare TimeoutError), so a message-less
             # failure still reads as a failure rather than an empty-string cell.
-            return {**row, ROW_ERROR_KEY: str(exc) or type(exc).__name__}
-        return {**row, **reply}
+            return {**row, ROW_ERROR_KEY: str(exc) or type(exc).__name__,
+                    ROW_USAGE_KEY: LlmUsage.summed(usages)}
+        return {**row, **reply, ROW_USAGE_KEY: LlmUsage.summed(usages)}
 
     return map_row

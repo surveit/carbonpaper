@@ -666,6 +666,12 @@ def _execute_stages(
                 ]
             record["output_validation"] = out_rep.to_dict()
 
+            usage = (ctx.get("llm_usage") or {}).get(sid)
+            if usage is not None:
+                # Dump to a plain dict here: the manifest is JSON, and this is
+                # the one boundary where the typed LlmUsage becomes storage.
+                record["llm_usage"] = usage.model_dump()
+
             output_path = run_dir / "outputs" / f"{sid}.parquet"
             try:
                 output.to_parquet(output_path, index=False)

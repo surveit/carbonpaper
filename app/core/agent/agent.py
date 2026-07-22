@@ -20,6 +20,7 @@ from pydantic import BaseModel, ValidationError
 
 from app.core.agent.registry import build_mcp_server
 from app.core.agent.sdk_engine import CLI_MODEL, ClaudeAgentSdkEngine
+from app.core.agent.usage import LlmUsage
 from app.core.errors import GenerationError
 from app.core.utils import format_errors
 
@@ -57,6 +58,9 @@ class Agent(Generic[Model]):
         self._answer: Model | None = None
         self._attempts = 0
         self._last_issues: list[str] = ["(agent submitted nothing)"]
+        # Token/cost usage of this run's CLI turn, captured from the engine after
+        # run() (None until then). Lets a caller attribute spend to this agent.
+        self._last_usage: LlmUsage | None = None
 
     async def run(self) -> Model:
         """Run the agent HEADLESSLY and return the validated `target_schema` it submits.
@@ -67,6 +71,8 @@ class Agent(Generic[Model]):
         await engine.stream_turn(
             self._task, message_history=None, emit=_ignore_event, resume=None
         )
+        # getattr, not attribute access: a custom engine need not track usage.
+        self._last_usage = getattr(engine, "last_usage", None)
         if self._answer is None:
             raise GenerationError(
                 f"agent submitted no valid {self._target_schema.__name__} in "
@@ -85,6 +91,13 @@ class Agent(Generic[Model]):
         """The validated answer captured by submit_answer, or None if none has been
         submitted. Read after driving the agent as a live turn to persist its result."""
         return self._answer
+
+    @property
+    def last_usage(self) -> LlmUsage | None:
+        """Token/cost usage of this run's CLI turn, or None if the turn produced
+        no ResultMessage (e.g. it timed out). Set even when run() raises, so a
+        failed attempt's spend is still attributable."""
+        return self._last_usage
 
     def submit_answer(self, **fields: Any) -> str:
         """Submit your completed answer as this tool's arguments, matching this tool's

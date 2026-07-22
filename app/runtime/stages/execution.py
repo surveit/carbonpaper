@@ -31,6 +31,8 @@ import pandas as pd
 from app.models import Stage
 from app.models.stage import StageType, is_grain_and_order_preserving
 
+from app.core.agent.usage import LlmUsage
+
 from ..cancellation import consume_cancel
 from ..errors import RunCancelled
 
@@ -42,6 +44,16 @@ Row = dict[str, Any]
 # assembled frame so the runner can surface them as error-severity output issues
 # — a failed row is a reported error, not a silently dropped column.
 ROW_ERROR_KEY = "_error"
+
+# Sentinel column carrying a row's token/cost usage dict (an llm_transform
+# attaches one per row). The driver sums these into ctx['llm_usage'][stage_id];
+# the output projection drops the column so usage never reaches stage output.
+ROW_USAGE_KEY = "_usage"
+
+# Internal per-row sentinel columns a mapper may attach. They are machinery, not
+# stage output: the projection drops them but does NOT report them as dropped
+# user columns (they were collected into ctx by the driver, not discarded).
+_INTERNAL_ROW_COLUMNS = frozenset({ROW_ERROR_KEY, ROW_USAGE_KEY})
 
 
 class StageHandler(ABC):
@@ -188,6 +200,7 @@ def _run_row_mapper(
         out_rows.append(result)
     df = pd.DataFrame(out_rows)
     _collect_row_errors(df, stage, ctx)
+    _collect_row_usage(df, stage, ctx)
     if handler.project_output_to_declared:
         df = _project_onto_declared_columns(df, stage, ctx)
     return df
@@ -223,6 +236,16 @@ def _collect_row_errors(df: pd.DataFrame, stage: Stage, ctx: dict[str, Any]) -> 
         ctx.setdefault("row_errors", {})[stage.id] = errors
 
 
+def _collect_row_usage(df: pd.DataFrame, stage: Stage, ctx: dict[str, Any]) -> None:
+    """Sum every row's `ROW_USAGE_KEY` usage dict into ctx['llm_usage'][stage.id]
+    — the stage's total token/cost spend. No column means a non-LLM stage (or a
+    stage where usage was never reported): nothing is recorded, never a zero."""
+    if ROW_USAGE_KEY not in df.columns:
+        return
+    parts = [value for value in df[ROW_USAGE_KEY] if isinstance(value, LlmUsage)]
+    ctx.setdefault("llm_usage", {})[stage.id] = LlmUsage.summed(parts)
+
+
 def _project_onto_declared_columns(
     df: pd.DataFrame, stage: Stage, ctx: dict[str, Any]
 ) -> pd.DataFrame:
@@ -233,7 +256,8 @@ def _project_onto_declared_columns(
     if not declared:
         return df
     keep = [c for c in declared if c in df.columns]
-    dropped = [str(c) for c in df.columns if c not in keep]
+    dropped = [str(c) for c in df.columns
+               if c not in keep and c not in _INTERNAL_ROW_COLUMNS]
     if dropped:
         ctx.setdefault("dropped_columns", {})[stage.id] = dropped
     return df[keep]

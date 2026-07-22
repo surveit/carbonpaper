@@ -21,6 +21,7 @@ from typing import Any
 from pydantic import BaseModel
 
 from app.core.agent.agent import Agent
+from app.core.agent.usage import LlmUsage
 from app.core.errors import LLMError
 from app.core.llm_sdk import run_sync
 from app.models import LLMConfig
@@ -63,13 +64,19 @@ def call_llm(
     *,
     reply_model: type[BaseModel],
     model: str | None = None,
+    usage_out: list[LlmUsage] | None = None,
 ) -> dict[str, Any]:
     """Single-row LLM call; returns the reply as a plain dict.
 
     A structured-output Agent must submit a valid `reply_model` instance
     (validated by construction, retried in-loop on rejection). When no agent
     backend is available this raises — there is no fallback, so a fabricated
-    answer can never masquerade as a real model reply."""
+    answer can never masquerade as a real model reply.
+
+    If `usage_out` is given, each attempt's token/cost usage is appended to it —
+    including a failed attempt's, since those tokens were still spent. Kept as an
+    out-param rather than the return value so the reply-dict contract (and the
+    tests that mock it) are unchanged."""
     require_agent_backend()
 
     if not llm_config.prompt_template:
@@ -97,14 +104,26 @@ def call_llm(
         )
         try:
             answer = run_sync(asyncio.wait_for(agent.run(), timeout=DEFAULT_TIMEOUT_S))
+            _record_usage(usage_out, agent)
             return answer.model_dump(mode="json")
         except Exception as exc:  # noqa: BLE001 — retry any backend failure up to
-            # max_retries, then re-raise the last so the caller records it.
+            # max_retries, then re-raise the last so the caller records it. The
+            # attempt still spent tokens (a rejected schema, a mid-turn drop), so
+            # record its usage before retrying.
+            _record_usage(usage_out, agent)
             last_exc = exc
             if attempt + 1 < attempts:
                 time.sleep(min(4.0, 1.0 * (attempt + 1)))
     assert last_exc is not None  # attempts >= 1, so the loop ran and set this
     raise last_exc
+
+
+def _record_usage(usage_out: list[LlmUsage] | None, agent: Agent[BaseModel]) -> None:
+    """Append this attempt's usage to the sink, if both are present. A turn that
+    produced no ResultMessage (e.g. a timeout) leaves agent.last_usage None —
+    nothing is recorded rather than a fabricated zero."""
+    if usage_out is not None and agent.last_usage is not None:
+        usage_out.append(agent.last_usage)
 
 
 def backend_status() -> dict[str, Any]:
