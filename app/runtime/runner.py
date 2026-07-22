@@ -22,7 +22,7 @@ import time
 import traceback
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Iterable, Mapping
+from typing import Any, Iterable, Mapping, NotRequired, TypedDict
 
 import pandas as pd
 import pyarrow.lib as pa_lib
@@ -464,6 +464,19 @@ def _find_blocking_upstream(stage: Stage, blocked: set[str]) -> list[str]:
     return [input_id for input_id in stage.input_ids if input_id in blocked]
 
 
+def _stage_output_already_produced(
+    sid: str, outputs_so_far: dict[str, pd.DataFrame], records_by_id: dict[str, StageRecord]
+) -> bool:
+    """True when `sid`'s output was computed in a prior partial run (the
+    resume path) and its last recorded status is a completion the loop can
+    trust to skip re-running it, rather than a stale record from before a
+    halt/cancel/error."""
+    if sid not in outputs_so_far:
+        return False
+    record = records_by_id.get(sid)
+    return record is not None and record["status"] in (StageStatus.OK, StageStatus.VALIDATION_WARNINGS)
+
+
 def _final_run_status(stage_statuses: Iterable[str]) -> RunStatus:
     """A non-cancelled run's overall status from its stages' statuses, error-first:
     any errored stage -> errors; else any halted stage -> awaiting_review; else
@@ -514,7 +527,7 @@ def _execute_stages(
 
     # Carry over any existing records (from a previously halted manifest
     # we're resuming). Build an index for upsert behavior.
-    records_by_id: dict[str, dict[str, Any]] = {
+    records_by_id: dict[str, StageRecord] = {
         r["stage_id"]: r for r in manifest.get("stages", [])
     }
     _flush_manifest(manifest, records_by_id, ordered, ctx, run_dir, RunStatus.RUNNING)
@@ -544,9 +557,7 @@ def _execute_stages(
             continue
 
         # Skip stages already produced (resume path).
-        if sid in outputs_so_far and records_by_id.get(sid, {}).get("status") in (
-            StageStatus.OK, StageStatus.VALIDATION_WARNINGS
-        ):
+        if _stage_output_already_produced(sid, outputs_so_far, records_by_id):
             continue
 
         outcome, joins_blocked = _run_stage(stage, ctx, outputs_so_far, records_by_id, manifest, ordered, run_dir)
@@ -579,7 +590,48 @@ class _StageOutcome(enum.Enum):
     CANCELLED = "cancelled"
 
 
-def _build_pending_stage_record(stage: Stage) -> dict[str, Any]:
+class StageErrorInfo(TypedDict):
+    """A stage's `error` field once it has failed: the exception's type name,
+    a human-readable message, and its traceback — `None` for a
+    row-generation error, which has no single exception to format."""
+
+    type: str
+    message: str
+    traceback: str | None
+
+
+class StageRecord(TypedDict):
+    """One stage's manifest record, as written verbatim into
+    `manifest["stages"]` and read back by the web layer — a plain
+    TypedDict-typed dict, not a dataclass/model, since it is JSON on disk.
+    `input_validation`/`output_validation` hold `ValidationReport.to_dict()`
+    output (app.runtime.validation); that report's own fields are untyped
+    (`dict[str, Any]`) in its own module, so `dict[str, object]` here is as
+    precise a type as its actual contents support without retyping
+    `ValidationReport` itself. `finished_at`, `output_path`, `queue_path`, and
+    `notes` are added only at specific points in a stage's lifecycle
+    (`_start_stage_record`'s initial dict omits `finished_at`;
+    `_finalize_stage_output` adds `output_path`; `_record_halt` adds
+    `queue_path`; `_apply_row_slicing`/`_persist_stage_output` add `notes` on
+    the first trim/fallback) and are absent before then."""
+
+    stage_id: str
+    type: StageType
+    name: str
+    status: StageStatus
+    input_validation: list[dict[str, object]]
+    output_validation: dict[str, object] | None
+    elapsed_ms: int
+    rows: int
+    error: StageErrorInfo | None
+    started_at: str | None
+    finished_at: NotRequired[str | None]
+    output_path: NotRequired[str]
+    queue_path: NotRequired[str]
+    notes: NotRequired[list[str]]
+
+
+def _build_pending_stage_record(stage: Stage) -> StageRecord:
     """A stage's manifest record before it has started, or once it has been
     marked blocked: `pending` status, no output, no timing."""
     return {
@@ -592,7 +644,7 @@ def _build_pending_stage_record(stage: Stage) -> dict[str, Any]:
 
 def _flush_manifest(
     manifest: dict[str, Any],
-    records_by_id: dict[str, dict[str, Any]],
+    records_by_id: dict[str, StageRecord],
     ordered: list[Stage],
     ctx: dict[str, Any],
     run_dir: Path,
@@ -615,7 +667,7 @@ def _flush_manifest(
         pass
 
 
-def _start_stage_record(stage: Stage) -> dict[str, Any]:
+def _start_stage_record(stage: Stage) -> StageRecord:
     """A stage's manifest record at the moment it starts running."""
     return {
         "stage_id": stage.id,
@@ -632,7 +684,7 @@ def _start_stage_record(stage: Stage) -> dict[str, Any]:
 
 
 def _gather_stage_inputs(
-    stage: Stage, outputs_so_far: dict[str, pd.DataFrame], record: dict[str, Any]
+    stage: Stage, outputs_so_far: dict[str, pd.DataFrame], record: StageRecord
 ) -> dict[str, pd.DataFrame]:
     """This stage's input dataframes, keyed by producer id, rejecting exact
     duplicate rows and recording an input-schema validation report for every
@@ -661,7 +713,7 @@ def _resolve_handler(stage_type: StageType) -> StageHandler:
     return handler
 
 
-def _record_halt(record: dict[str, Any], halt: HaltForReview, run_dir: Path) -> None:
+def _record_halt(record: StageRecord, halt: HaltForReview, run_dir: Path) -> None:
     """Fork-blocking, not loop-ending: this stage awaits review and blocks
     its downstream, while independent forks keep running."""
     record["status"] = StageStatus.AWAITING_REVIEW
@@ -671,7 +723,7 @@ def _record_halt(record: dict[str, Any], halt: HaltForReview, run_dir: Path) -> 
     record["queue_path"] = halt.queue_path.relative_to(run_dir).as_posix()
 
 
-def _record_stage_error(record: dict[str, Any], exc: Exception) -> None:
+def _record_stage_error(record: StageRecord, exc: Exception) -> None:
     """Record any stage failure (a handler can raise ValueError, RuntimeError,
     a pandas/pyarrow error, etc.) in the manifest. This outcome always joins
     the caller's `blocked` set, so its transitive downstream is skipped and
@@ -685,7 +737,7 @@ def _record_stage_error(record: dict[str, Any], exc: Exception) -> None:
 
 
 def _apply_row_slicing(
-    output: pd.DataFrame, stage: Stage, ctx: dict[str, Any], record: dict[str, Any]
+    output: pd.DataFrame, stage: Stage, ctx: dict[str, Any], record: StageRecord
 ) -> pd.DataFrame:
     """Offset then cap `output`'s rows, in the handler's emitted order. Offset
     (per-run only, from --offset stage=M) drops the first M rows; the cap
@@ -708,7 +760,7 @@ def _apply_row_slicing(
     return output
 
 
-def _persist_stage_output(output: pd.DataFrame, sid: str, run_dir: Path, record: dict[str, Any]) -> Path:
+def _persist_stage_output(output: pd.DataFrame, sid: str, run_dir: Path, record: StageRecord) -> Path:
     """Write `output` as the stage's parquet artifact, falling back to CSV
     (noting the fallback on `record`) for a column whose dtype/shape parquet
     can't represent — mixed-type object columns, nested Python values. A
@@ -728,7 +780,7 @@ def _persist_stage_output(output: pd.DataFrame, sid: str, run_dir: Path, record:
 def _finalize_stage_output(
     stage: Stage,
     ctx: dict[str, Any],
-    record: dict[str, Any],
+    record: StageRecord,
     output: pd.DataFrame | None,
     outputs_so_far: dict[str, pd.DataFrame],
     run_dir: Path,
@@ -782,7 +834,7 @@ def _run_stage(
     stage: Stage,
     ctx: dict[str, Any],
     outputs_so_far: dict[str, pd.DataFrame],
-    records_by_id: dict[str, dict[str, Any]],
+    records_by_id: dict[str, StageRecord],
     manifest: dict[str, Any],
     ordered: list[Stage],
     run_dir: Path,
@@ -837,7 +889,7 @@ def _run_stage(
 
 def _finalize_run_manifest(
     manifest: dict[str, Any],
-    records_by_id: dict[str, dict[str, Any]],
+    records_by_id: dict[str, StageRecord],
     ordered: list[Stage],
     ctx: dict[str, Any],
     run_dir: Path,
