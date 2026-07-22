@@ -22,6 +22,7 @@ from typing import Any
 from pydantic import BaseModel
 
 from app.core.agent.agent import Agent
+from app.core.agent.usage import LlmUsage
 from app.core.errors import LLMError
 from app.core.llm_sdk import run_sync
 from app.models import LLMConfig
@@ -42,24 +43,6 @@ SYSTEM_PROMPT = (
     "task input you are given. Produce the required output by calling the "
     "submit_answer tool exactly once; its input schema is the required reply."
 )
-
-
-# A usage record is {input_tokens, output_tokens, cost_usd, calls} — plain
-# dicts (not a model) so they ride hidden row columns and land in the JSON
-# manifest unchanged. EMPTY_USAGE is the additive identity.
-EMPTY_USAGE: dict[str, Any] = {
-    "input_tokens": 0, "output_tokens": 0, "cost_usd": 0.0, "calls": 0,
-}
-
-
-def sum_usage(parts: list[dict[str, Any]]) -> dict[str, Any]:
-    """Field-wise sum of usage records (empty -> EMPTY_USAGE). Used to fold a
-    row's per-attempt usage, and a stage's per-row usage, into one total."""
-    total = dict(EMPTY_USAGE)
-    for part in parts:
-        for key in total:
-            total[key] += part.get(key, 0)  # data-default-ok: absent field adds 0 to the sum
-    return total
 
 
 def render_prompt(template: str, row: dict[str, Any]) -> str:
@@ -87,7 +70,7 @@ def call_llm(
     *,
     reply_model: type[BaseModel],
     model: str | None = None,
-    usage_out: list[dict[str, Any]] | None = None,
+    usage_out: list[LlmUsage] | None = None,
 ) -> dict[str, Any]:
     """Single-row LLM call; returns the reply as a plain dict.
 
@@ -141,7 +124,7 @@ def call_llm(
     raise last_exc
 
 
-def _record_usage(usage_out: list[dict[str, Any]] | None, agent: Agent[BaseModel]) -> None:
+def _record_usage(usage_out: list[LlmUsage] | None, agent: Agent[BaseModel]) -> None:
     """Append this attempt's usage to the sink, if both are present. A turn that
     produced no ResultMessage (e.g. a timeout) leaves agent.last_usage None —
     nothing is recorded rather than a fabricated zero."""

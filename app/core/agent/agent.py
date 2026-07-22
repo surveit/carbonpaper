@@ -20,6 +20,7 @@ from pydantic import BaseModel, ValidationError
 
 from app.core.agent.registry import build_mcp_server
 from app.core.agent.sdk_engine import CLI_MODEL, ClaudeAgentSdkEngine
+from app.core.agent.usage import LlmUsage
 from app.core.errors import GenerationError
 from app.core.utils import format_errors
 
@@ -59,7 +60,7 @@ class Agent(Generic[Model]):
         self._last_issues: list[str] = ["(agent submitted nothing)"]
         # Token/cost usage of this run's CLI turn, captured from the engine after
         # run() (None until then). Lets a caller attribute spend to this agent.
-        self._last_usage: dict[str, Any] | None = None
+        self._last_usage: LlmUsage | None = None
 
     async def run(self) -> Model:
         """Run the agent HEADLESSLY and return the validated `target_schema` it submits.
@@ -92,11 +93,10 @@ class Agent(Generic[Model]):
         return self._answer
 
     @property
-    def last_usage(self) -> dict[str, Any] | None:
-        """Token/cost usage of this run's CLI turn (input_tokens, output_tokens,
-        cost_usd, calls), or None if the turn produced no ResultMessage (e.g. it
-        timed out). Set even when run() raises, so a failed attempt's spend is
-        still attributable."""
+    def last_usage(self) -> LlmUsage | None:
+        """Token/cost usage of this run's CLI turn, or None if the turn produced
+        no ResultMessage (e.g. it timed out). Set even when run() raises, so a
+        failed attempt's spend is still attributable."""
         return self._last_usage
 
     def submit_answer(self, **fields: Any) -> str:

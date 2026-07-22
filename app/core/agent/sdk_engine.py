@@ -33,6 +33,7 @@ from claude_agent_sdk import (
 
 # `CLI_PATH` is the located Claude Code CLI (the SDK does not always find it on
 # PATH on Windows — app.core.llm_sdk probes the known install locations).
+from app.core.agent.usage import LlmUsage
 from app.core.llm_sdk import CLI_PATH as _CLI_PATH
 
 CLI_MODEL = os.environ.get("CW_CHAT_CLI_MODEL", "sonnet")
@@ -43,24 +44,23 @@ CLI_MODEL = os.environ.get("CW_CHAT_CLI_MODEL", "sonnet")
 MCP_SERVER_NAME = "tools"
 
 
-def _usage_from_result(msg: Any) -> dict[str, Any]:
+def _usage_from_result(msg: Any) -> LlmUsage:
     """Token/cost usage for one completed CLI turn, read from its ResultMessage.
 
-    `msg.usage` is the provider usage block (a dict) and `msg.total_cost_usd`
+    `msg.usage` is the provider usage block (a raw dict) and `msg.total_cost_usd`
     is the CLI's cost estimate (present on subscription auth too). Both are read
     defensively — a missing field becomes 0, never a fabricated number — and
     `calls` counts this as one model call so callers can sum across attempts."""
     usage = getattr(msg, "usage", None) or {}
     cost = getattr(msg, "total_cost_usd", None)
-    return {
+    return LlmUsage(
         # A usage block missing a token field means the turn reported none of
-        # that kind; 0 is the true count and the sum identity, not a stand-in
-        # for an unknown analytic value.
-        "input_tokens": int(usage.get("input_tokens", 0) or 0),   # data-default-ok: absent = zero tokens reported
-        "output_tokens": int(usage.get("output_tokens", 0) or 0),  # data-default-ok: absent = zero tokens reported
-        "cost_usd": float(cost or 0.0),
-        "calls": 1,
-    }
+        # that kind; 0 is the true count, not a stand-in for an unknown value.
+        input_tokens=int(usage.get("input_tokens", 0) or 0),   # data-default-ok: absent = zero tokens reported
+        output_tokens=int(usage.get("output_tokens", 0) or 0),  # data-default-ok: absent = zero tokens reported
+        cost_usd=float(cost or 0.0),
+        calls=1,
+    )
 
 
 def _stringify(content: Any) -> str:
@@ -107,7 +107,7 @@ class ClaudeAgentSdkEngine:
         # Token/cost usage from the most recent stream_turn's terminal
         # ResultMessage (None until one arrives). Read by the headless Agent to
         # attribute spend to the caller.
-        self.last_usage: dict[str, Any] | None = None
+        self.last_usage: LlmUsage | None = None
 
     def _options(self, resume: str | None) -> ClaudeAgentOptions:
         # max_turns caps assistant turns when the caller set one (a bounded headless

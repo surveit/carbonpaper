@@ -13,9 +13,10 @@ from __future__ import annotations
 
 from typing import Any, Callable
 
+from app.core.agent.usage import LlmUsage
 from app.models import Stage
 
-from ..llm import backend_status, call_llm, sum_usage
+from ..llm import backend_status, call_llm
 from .execution import ROW_ERROR_KEY, ROW_USAGE_KEY, Row
 
 
@@ -39,7 +40,7 @@ def make_llm_row_mapper(stage: Stage, ctx: dict[str, Any]) -> Callable[[Row], Ro
         # summed usage out under ROW_USAGE_KEY for the driver to aggregate. Like
         # ROW_ERROR_KEY, it is an undeclared column and the output projection
         # drops it, so it never reaches stage output.
-        usages: list[dict[str, Any]] = []
+        usages: list[LlmUsage] = []
         try:
             reply = call_llm(stage.id, llm, row, reply_model=reply_model, usage_out=usages)
         except Exception as exc:  # noqa: BLE001 — per-row supervisor: tag the row
@@ -50,7 +51,7 @@ def make_llm_row_mapper(stage: Stage, ctx: dict[str, Any]) -> Callable[[Row], Ro
             # message is empty (e.g. a bare TimeoutError), so a message-less
             # failure still reads as a failure rather than an empty-string cell.
             return {**row, ROW_ERROR_KEY: str(exc) or type(exc).__name__,
-                    ROW_USAGE_KEY: sum_usage(usages)}
-        return {**row, **reply, ROW_USAGE_KEY: sum_usage(usages)}
+                    ROW_USAGE_KEY: LlmUsage.summed(usages)}
+        return {**row, **reply, ROW_USAGE_KEY: LlmUsage.summed(usages)}
 
     return map_row

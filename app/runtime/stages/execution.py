@@ -31,9 +31,10 @@ import pandas as pd
 from app.models import Stage
 from app.models.stage import StageType, is_grain_and_order_preserving
 
+from app.core.agent.usage import LlmUsage
+
 from ..cancellation import consume_cancel
 from ..errors import RunCancelled
-from ..llm import sum_usage
 
 # One row of a stage's input or output: column label → cell value.
 Row = dict[str, Any]
@@ -241,8 +242,8 @@ def _collect_row_usage(df: pd.DataFrame, stage: Stage, ctx: dict[str, Any]) -> N
     stage where usage was never reported): nothing is recorded, never a zero."""
     if ROW_USAGE_KEY not in df.columns:
         return
-    parts = [value for value in df[ROW_USAGE_KEY] if isinstance(value, dict)]
-    ctx.setdefault("llm_usage", {})[stage.id] = sum_usage(parts)
+    parts = [value for value in df[ROW_USAGE_KEY] if isinstance(value, LlmUsage)]
+    ctx.setdefault("llm_usage", {})[stage.id] = LlmUsage.summed(parts)
 
 
 def _project_onto_declared_columns(

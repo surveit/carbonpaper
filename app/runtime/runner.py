@@ -668,7 +668,9 @@ def _execute_stages(
 
             usage = (ctx.get("llm_usage") or {}).get(sid)
             if usage is not None:
-                record["llm_usage"] = usage
+                # Dump to a plain dict here: the manifest is JSON, and this is
+                # the one boundary where the typed LlmUsage becomes storage.
+                record["llm_usage"] = usage.model_dump()
 
             output_path = run_dir / "outputs" / f"{sid}.parquet"
             try:
