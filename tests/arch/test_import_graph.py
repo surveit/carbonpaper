@@ -263,6 +263,9 @@ class _TarjanState:
     _next_index: int = 0
 
     def connect(self, node: str) -> None:
+        # Recurses one frame per edge on the current DFS path, so depth is
+        # bounded by the longest simple import chain in app/ — nowhere near
+        # Python's default recursion limit for a 124-module graph.
         self.index[node] = self._next_index
         self.lowlink[node] = self._next_index
         self._next_index += 1
@@ -360,6 +363,35 @@ def test_find_import_cycles_flags_a_longer_cycle() -> None:
 def test_find_import_cycles_passes_a_dag() -> None:
     edges = [ImportEdge("app.a", "app.b"), ImportEdge("app.b", "app.c"), ImportEdge("app.a", "app.c")]
     assert find_import_cycles(edges) == []
+
+
+def test_find_import_cycles_reports_one_path_per_disjoint_cycle() -> None:
+    # Two unrelated cycles, each its own strongly connected component — both
+    # must be reported, one path each, neither swallowing the other.
+    edges = [
+        ImportEdge("app.a", "app.b"),
+        ImportEdge("app.b", "app.a"),
+        ImportEdge("app.x", "app.y"),
+        ImportEdge("app.y", "app.x"),
+    ]
+    cycles = find_import_cycles(edges)
+    assert len(cycles) == 2
+    assert ("app.a", "app.b", "app.a") in cycles
+    assert ("app.x", "app.y", "app.x") in cycles
+
+
+def test_find_import_cycles_reports_a_self_loop_within_a_larger_scc() -> None:
+    # app.a self-imports AND forms a 2-cycle with app.b, so both belong to
+    # one strongly connected component. _trace_cycle_within's self-loop check
+    # on the component's starting node (app.a, alphabetically first) fires
+    # before the DFS walk runs — this exercises that early-return branch
+    # rather than the general walk exercised by the tests above.
+    edges = [
+        ImportEdge("app.a", "app.a"),
+        ImportEdge("app.a", "app.b"),
+        ImportEdge("app.b", "app.a"),
+    ]
+    assert find_import_cycles(edges) == [("app.a", "app.a")]
 
 
 def test_find_fan_in_violations_flags_a_non_core_module_over_the_ceiling() -> None:
