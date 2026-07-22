@@ -129,6 +129,7 @@ def test_read_run_result_reports_status_usage_and_failing_seeds(tmp_path, monkey
     assert result["run_url"] == f"/project/trail/runs/{run_id}"
     assert result["total_usage"]["cost_usd"] == 0.5
     assert result["seeds_checked"] is True
+    assert result["staleness_checked"] is True
     assert any("E1" in m for m in result["failing_seeds"])
     assert any("E2" in m for m in result["failing_seeds"])
 
@@ -145,7 +146,57 @@ def test_read_run_result_without_positive_stage_skips_seed_check(tmp_path, monke
 
     result = server.read_run_result(project_id="trail", run_id=run_id)
     assert result["seeds_checked"] is False
+    assert result["staleness_checked"] is False
     assert result["failing_seeds"] == []
+
+
+def test_read_run_result_staleness_not_checked_when_key_column_absent_from_corpus(
+    tmp_path, monkeypatch
+):
+    """`positive_column` names a column that the run's own connector output does
+    not have — seeds are still graded for pass/fail (`seeds_checked` True), but
+    staleness against the corpus cannot be assessed, so `staleness_checked` must
+    be False rather than silently reading as "checked and clean"."""
+    monkeypatch.setattr(workspace, "EXAMPLES_DIR", tmp_path)
+    pdir = tmp_path / "trail"
+    pdir.mkdir()
+    version_id = _make_version(pdir, [
+        {"id": "load", "name": "Load", "type": "input_data", "connector": {"kind": "file"}},
+    ])
+    run_id = "20260722T140000"
+    _write_manifest(pdir, run_id, {
+        "run_id": run_id,
+        "status": "ok",
+        "workflow_version": version_id,
+        "stages": [
+            {"stage_id": "load", "status": "ok", "rows": 3},
+            {"stage_id": "flag", "status": "ok", "rows": 1},
+        ],
+    })
+    # The corpus has no "entity_id" column — only "other_key".
+    _write_output(pdir, run_id, "load",
+                  pd.DataFrame({"other_key": ["E1", "E2", "E3"], "amount": [1, 2, 3]}))
+    _write_output(pdir, run_id, "flag",
+                  pd.DataFrame({"entity_id": ["E2"], "amount": [2]}))
+
+    server.record_seeds(project_id="trail", key_column="other_key", seeds_json=json.dumps([
+        {"row_key": "E1", "outcome": "must_catch"},
+    ]))
+
+    result = server.read_run_result(
+        project_id="trail", run_id=run_id,
+        positive_column="entity_id", positive_stage_id="flag",
+    )
+    assert result["seeds_checked"] is True
+    assert result["staleness_checked"] is False
+
+
+def test_mcp_tools_registered():
+    """The authoring-loop tools must be present in the FastMCP tool registry, so
+    an MCP client can actually discover and call them."""
+    registered = {tool.name for tool in server.mcp._tool_manager.list_tools()}
+    expected = {"record_seeds", "smoke_run", "read_run_result", "start_full_run"}
+    assert expected <= registered
 
 
 def test_start_full_run_is_unsliced(tmp_path, monkeypatch):

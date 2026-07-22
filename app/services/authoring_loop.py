@@ -97,8 +97,10 @@ def read_run_result(
     rows, `positive_column` the column in it holding the corpus key. The flagged
     keys are compared against the recorded seeds (`find_failing_seeds`), with
     staleness checked against the run's own input corpus. Without both fields, or
-    with no seeds recorded, `failing_seeds` is `[]` and `seeds_checked` is
-    False."""
+    with no seeds recorded, `failing_seeds` is `[]` and `seeds_checked` is False.
+    `staleness_checked` is False whenever the staleness comparison itself did not
+    run — including when `positive_column` is absent from the run's corpus — so a
+    seed that could not be checked for staleness never reads as silently clean."""
     manifest = read_run_manifest(project_dir, run_id)
     stages = [
         {
@@ -109,7 +111,7 @@ def read_run_result(
         }
         for stage in manifest.stages
     ]
-    failing_seeds, seeds_checked = _grade_seeds(
+    failing_seeds, seeds_checked, staleness_checked = _grade_seeds(
         project_dir, run_id, positive_column, positive_stage_id
     )
     return {
@@ -119,6 +121,7 @@ def read_run_result(
         "run_url": f"/project/{Path(project_dir).name}/runs/{run_id}",
         "failing_seeds": failing_seeds,
         "seeds_checked": seeds_checked,
+        "staleness_checked": staleness_checked,
     }
 
 
@@ -155,34 +158,35 @@ def _start_run(
 
 def _grade_seeds(
     project_dir: Path, run_id: str, positive_column: str, positive_stage_id: str
-) -> tuple[list[str], bool]:
+) -> tuple[list[str], bool, bool]:
     """Grade the recorded seeds against this run, or report the check was not
-    run. Returns (failing_seed_messages, seeds_checked). The check runs only with
-    both a positive stage/column and recorded seeds; the flagged keys are the
-    distinct values of `positive_column` in the named stage's output, and
-    staleness is checked against the run's first connector output under the same
-    key column."""
+    run. Returns (failing_seed_messages, seeds_checked, staleness_checked). The
+    check runs only with both a positive stage/column and recorded seeds; the
+    flagged keys are the distinct values of `positive_column` in the named
+    stage's output, and staleness is checked against the run's first connector
+    output under the same key column."""
     seeds = seed_rows.load_seeds(project_dir)
     if not (positive_column and positive_stage_id and seeds):
-        return [], False
+        return [], False, False
     positive_frame = _stage_output(project_dir, run_id, positive_stage_id)
     positive_keys = set(positive_frame[positive_column].astype(str))
     corpus = _first_connector_output(project_dir, run_id)
-    stale_messages = _stale_messages(seeds, corpus, positive_column)
+    stale_messages, staleness_checked = _stale_messages(seeds, corpus, positive_column)
     failing = seed_rows.find_failing_seeds(seeds, positive_keys, stale_messages)
-    return failing, True
+    return failing, True, staleness_checked
 
 
 def _stale_messages(
     seeds: list[SeedRow], corpus: DataFrame, key_column: str
-) -> list[str]:
+) -> tuple[list[str], bool]:
     """Staleness against the run's own corpus, keyed by `key_column` (the same
     column the positive stage carries the corpus key in). If that column is not
     in the corpus frame the run cannot have keyed rows by it, so staleness is not
-    checkable and no drift is asserted."""
+    checkable and no drift is asserted — signalled by a False second element
+    rather than folding silently into an empty stale-messages list."""
     if key_column not in corpus.columns:
-        return []
-    return seed_rows.find_stale_seeds(seeds, corpus, key_column)
+        return [], False
+    return seed_rows.find_stale_seeds(seeds, corpus, key_column), True
 
 
 def _connector_stage_ids(project_dir: Path, version_id: str) -> list[str]:
