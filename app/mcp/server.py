@@ -18,6 +18,7 @@ from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
 from starlette.types import Receive, Scope, Send
 
 from app.runtime.stage_tests import WorkflowTestReport, run_workflow_tests
+from app.services import authoring_loop
 from app.services import data_model as data_model_service
 from app.services import generation
 from app.services import loader
@@ -250,6 +251,58 @@ def add_stage(project_id: str, stage_json: str) -> dict[str, Any]:
     returned. The new node lands 'unreviewed' (amber) for a human to approve."""
     result = project_service.add_stage(project_id, stage_json)
     return {"ok": result.ok, "issues": result.issues}
+
+
+@mcp.tool()
+def record_seeds(project_id: str, seeds_json: str, key_column: str) -> dict[str, Any]:
+    """Record the corpus rows you assert the pipeline MUST or MUST NOT flag —
+    the authoring loop's ground truth. `seeds_json` is a JSON array of
+    `{"row_key", "outcome", "note"?}` objects, `outcome` being `must_catch` or
+    `must_not_catch`; `key_column` is the corpus column whose value each
+    `row_key` names. Each seed is hashed against the latest run's input corpus so
+    a later edit to that row reads as stale. Fails loudly if the project has no
+    run yet (smoke_run first) or a row_key is absent from the corpus."""
+    pdir = _resolve_existing_project(project_id)
+    return authoring_loop.record_seeds(pdir, seeds_json, key_column)
+
+
+@mcp.tool()
+def smoke_run(project_id: str, version_id: str, limit: int, offset: int = 0) -> dict[str, Any]:
+    """Start a SAMPLED run of a published version: cap every connector stage to
+    `limit` rows (after dropping the first `offset`), so you can exercise the
+    whole pipeline cheaply before the full corpus. Returns the run id and its web
+    run-page URL on start, or `{ok: False, error}` when the run tool is not wired
+    to start runs yet. Stop here and let the human review the smoke run's output
+    page before start_full_run."""
+    pdir = _resolve_existing_project(project_id)
+    return authoring_loop.smoke_run(pdir, version_id, limit, offset)
+
+
+@mcp.tool()
+def read_run_result(
+    project_id: str,
+    run_id: str,
+    positive_column: str = "",
+    positive_stage_id: str = "",
+) -> dict[str, Any]:
+    """Read a finished run: overall status, each stage's status/row-count/model
+    usage, the run-total usage, and the web run-page URL. Name `positive_stage_id`
+    (the stage whose output lists the flagged rows) and `positive_column` (the
+    corpus-key column in it) to also grade the recorded seeds — `failing_seeds`
+    lists each unmet must/must-not-catch expectation. Without both, or with no
+    seeds recorded, `failing_seeds` is empty and `seeds_checked` is false."""
+    pdir = _resolve_existing_project(project_id)
+    return authoring_loop.read_run_result(pdir, run_id, positive_column, positive_stage_id)
+
+
+@mcp.tool()
+def start_full_run(project_id: str, version_id: str) -> dict[str, Any]:
+    """Start the FULL, unsliced run of a published version — no per-connector row
+    limits. Use this only after the human has reviewed the smoke run and is ready
+    to commit to the whole corpus. Returns the run id and web run-page URL, or
+    `{ok: False, error}` when the run tool is not wired to start runs yet."""
+    pdir = _resolve_existing_project(project_id)
+    return authoring_loop.start_full_run(pdir, version_id)
 
 
 def _resolve_existing_project(project_id: str) -> Path:
