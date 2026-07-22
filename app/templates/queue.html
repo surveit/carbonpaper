@@ -43,26 +43,15 @@
         {% if item.row.get('query_id') %}· <code>{{ item.row.query_id }}</code>{% endif %}
         {% if item.row.get('benchmark_id') %}· <code>{{ item.row.benchmark_id }}</code>{% endif %}
     </header>
-    {# ── What the model saw (the INPUT) — so the score is reviewable ── #}
-    {% set mi = item.model_input or {} %}
-    {% set quote = mi.get('quote') or item.row.get('quote') %}
-    {% if quote %}
-    <div class="model-input"><span class="mi-label">Scored text</span>
-        <blockquote>{{ quote }}</blockquote></div>
-    {% endif %}
-    {% if mi.get('benchmark_text') %}
-    <div class="model-input"><span class="mi-label">Benchmark / rubric</span>
-        <p class="benchmark-text">{{ mi.benchmark_text }}</p></div>
-    {% endif %}
-    {% if item.rendered_prompt %}
-    <details class="model-input-prompt"><summary>📝 exact prompt the model received</summary>
-        <pre class="prompt-rendered">{{ item.rendered_prompt }}</pre></details>
-    {% elif item.model_input %}
-    <details class="model-input-prompt"><summary>model input — all fields</summary>
-        <pre>{{ item.model_input | tojson(indent=2) }}</pre></details>
-    {% elif not quote %}
-    <p class="muted mi-missing"><em>⚠ Could not recover the model input for this item — reviewing blind. (Upstream output missing or keys didn't join.)</em></p>
-    {% endif %}
+    {# ── The item's own data — always present, human_review_queue is a generic
+       gate, not an LLM-specific one; nothing to "recover" here. ── #}
+    <table class="row-table">
+        {% for k, v in item.row.items() %}
+        {% if v is not none and v != "" %}
+        <tr><th>{{ k }}</th><td>{{ v }}</td></tr>
+        {% endif %}
+        {% endfor %}
+    </table>
 
     {% if item.row.get('reasoning') %}
     <p class="reasoning"><strong>Model output — reasoning:</strong> {{ item.row.reasoning }}</p>
@@ -93,10 +82,6 @@
             <button type="button" class="btn modify {% if item.prior_decision and item.prior_decision.decision == 'modify' %}selected{% endif %}" data-action="modify">Save</button>
         </span>
     </div>
-    <details class="raw-row">
-        <summary>raw row</summary>
-        <pre>{{ item.row | tojson(indent=2) }}</pre>
-    </details>
 </article>
 {% endfor %}
 </div>

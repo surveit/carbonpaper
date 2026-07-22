@@ -28,6 +28,10 @@ from app.core.utils import format_errors
 Model = TypeVar("Model", bound=BaseModel)
 
 
+def _ignore_event(_event: dict[str, Any]) -> None:
+    """Drop a stream event — a headless run has nowhere to forward it."""
+
+
 class Agent(Generic[Model]):
     """A headless agent that produces a validated `target_schema` instance.
 
@@ -138,5 +142,3 @@ class Agent(Generic[Model]):
         )
 
 
-def _ignore_event(_event: dict[str, Any]) -> None:
-    """Drop a stream event — a headless run has nowhere to forward it."""

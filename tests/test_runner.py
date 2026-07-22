@@ -71,34 +71,41 @@ def test_limit_truncates_and_is_recorded(tmp_path):
     assert on_disk["status"] == "ok"
 
 
-def test_per_run_limit_and_offset_slice_and_are_recorded(tmp_path):
+def test_per_run_limit_slices_and_is_recorded(tmp_path):
     # 5 rows, static `limit: 2` in the stage YAML. The per-run cap wins over
-    # the static one, and the offset drops rows BEFORE the cap is applied:
-    # offset 1 drops row 0, then limit 3 keeps rows 1-3.
+    # the static one: limit 3 keeps the first 3 rows. (limit truncates the TAIL,
+    # so output ordinals are unchanged — unlike --offset, which is disabled.)
     _make_project(tmp_path)
     _seed_version(tmp_path)
-    manifest = execute_run(tmp_path, repo_root=tmp_path,
-                           limits={"load": 3}, offsets={"load": 1})
+    manifest = execute_run(tmp_path, repo_root=tmp_path, limits={"load": 3})
 
     [rec] = manifest["stages"]
     assert rec["rows"] == 3                                   # not the static 2
     out = pd.read_parquet(
         tmp_path / "runs" / manifest["run_id"] / "outputs" / "load.parquet")
-    assert list(out["val"]) == [1, 2, 3]
+    assert list(out["val"]) == [0, 1, 2]
 
     # The slice is part of the run's provenance: recorded on the manifest
     # and noted on the stage record, never silent.
     assert manifest["limit_overrides"] == {"load": 3}
-    assert manifest["offset_overrides"] == {"load": 1}
     notes = rec.get("notes", [])
-    assert any(n.startswith("offset=1") for n in notes)
     assert any(n.startswith("limit=3") for n in notes)
 
     on_disk = json.loads(
         (tmp_path / "runs" / manifest["run_id"] / "manifest.json")
         .read_text(encoding="utf-8"))
     assert on_disk["limit_overrides"] == {"load": 3}
-    assert on_disk["offset_overrides"] == {"load": 1}
+
+
+def test_per_run_offset_is_rejected(tmp_path):
+    # --offset is disabled: dropping leading rows reindexes a stage's output, so
+    # output row r no longer maps to input/trace row r, breaking row-level
+    # lineage + LLM trace capture. It fails loud rather than producing mismatched
+    # traces. (Full removal of the flag/slicing is a separate PR.)
+    _make_project(tmp_path)
+    _seed_version(tmp_path)
+    with pytest.raises(ValueError, match="offset is disabled"):
+        execute_run(tmp_path, repo_root=tmp_path, offsets={"load": 1})
 
 
 def test_per_run_override_for_unknown_stage_id_fails_loudly(tmp_path):
