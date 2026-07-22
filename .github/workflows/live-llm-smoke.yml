@@ -1,0 +1,38 @@
+# Tier-2 smoke: the journey with a real llm_transform stage, run alongside CI
+# on every push/PR as its own named check — so a red here reads "live backend
+# problem", distinct from a unit regression in the `test` job.
+#
+# Auth: CLAUDE_CODE_OAUTH_TOKEN, a one-year token from `claude setup-token`
+# on a Claude subscription — the SDK reads it (non-bare mode). Do NOT also set
+# ANTHROPIC_API_KEY: it outranks the OAuth token in the CLI's auth precedence
+# and would silently bill the metered API instead of the subscription.
+# Spend is bounded by the test itself anyway (tests/test_journey_live_llm.py:
+# 1 row x 3 attempts max, small model, one-line prompt).
+name: live-llm-smoke
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  live-llm:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - run: python -m pip install -r requirements-dev.txt
+      - run: npm install -g @anthropic-ai/claude-code
+      - run: python -m pytest -m live_llm tests/test_journey_live_llm.py
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}

@@ -1,0 +1,37 @@
+# Tier-3 smoke: live workflow generation from a tiny fixture methodology, then
+# assert the output validates and versions under the CURRENT models. Catches
+# generator drift (the palm_oil class: relative paths, removed connector
+# kinds, double-braced prompts) before a human discovers it by dogfooding.
+#
+# Nightly + manual dispatch, NOT per-push: a generation turn takes minutes,
+# and generator drift moves with compiler-prompt/model changes, not with every
+# commit. Never merge-blocking. Auth: the same CLAUDE_CODE_OAUTH_TOKEN
+# subscription secret as live-llm-smoke (do NOT also set ANTHROPIC_API_KEY — it
+# outranks the OAuth token and would bill the metered API instead).
+name: generation-smoke
+
+on:
+  schedule:
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  generation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - run: python -m pip install -r requirements-dev.txt
+      - run: npm install -g @anthropic-ai/claude-code
+      - run: python -m pytest -m live_generation tests/test_generation_live_smoke.py
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
