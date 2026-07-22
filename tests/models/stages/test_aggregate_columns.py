@@ -17,12 +17,16 @@ def _aggregate_stage(*, group_by, edge_columns, value_column=None, where=None, f
         aggregation["value_column"] = value_column
     if where is not None:
         aggregation["where"] = where
+    # output_schema's first column is named after group_by[0] (never a
+    # generic placeholder): the aggregate handle emits each group_by column
+    # under its own name, so a declared column must match it to be
+    # deliverable — see test_aggregate_output_schema.py.
     return {
         "id": "agg", "type": "aggregate", "name": "agg",
         "inputs": [{"id": "src", "schema": {
             "columns": [{"name": c, "type": "str", "nullable": False} for c in edge_columns],
         }}],
-        "output_schema": {"columns": [{"name": "g", "type": "str", "nullable": False},
+        "output_schema": {"columns": [{"name": group_by[0], "type": "str", "nullable": False},
                                       {"name": "n", "type": "int", "nullable": False}]},
         "aggregate": {"group_by": group_by, "aggregations": [aggregation]},
     }
@@ -73,7 +77,7 @@ def test_no_edge_schema_declared_is_skipped_not_flagged():
     flagged."""
     stage = {
         "id": "agg", "type": "aggregate", "name": "agg", "inputs": ["src"],
-        "output_schema": {"columns": [{"name": "g", "type": "str", "nullable": False},
+        "output_schema": {"columns": [{"name": "nope", "type": "str", "nullable": False},
                                       {"name": "n", "type": "int", "nullable": False}]},
         "aggregate": {"group_by": ["nope"], "aggregations": [{"output_column": "n", "formula": "count"}]},
     }
