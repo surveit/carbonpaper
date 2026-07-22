@@ -30,6 +30,13 @@ mypy_path = "tests"
 module = ["pyarrow", "pyarrow.*"]
 ignore_missing_imports = true
 
+# radon ships no py.typed marker and no types-radon stub package exists on
+# PyPI, so mypy can't analyze `radon.complexity`/`radon.visitors` (used by
+# tests/arch/test_complexity_ratchet.py). Scope the exemption to radon only.
+[[tool.mypy.overrides]]
+module = ["radon", "radon.*"]
+ignore_missing_imports = true
+
 # Architecture boundaries, enforced by import-linter (`PYTHONPATH=. lint-imports`).
 # Expressed as a WHITELIST: each restricted module is `protected` and declares the
 # only modules allowed to import it — a new cross-layer import is denied by default
