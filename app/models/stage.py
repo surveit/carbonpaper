@@ -571,6 +571,21 @@ class Stage(_Base):
             raise ValueError("; ".join(issues))
         return self
 
+    @model_validator(mode="after")
+    def _output_schema_deliverable(self) -> "Stage":
+        """A declared output_schema must be deliverable by this stage's own
+        handle: for the types whose output is fixed by config (join, aggregate),
+        every declared column must be producible by name, with the declared type
+        matching the derivation where it can be known (see
+        app.models.stages.find_output_schema_issues). EDGE-ONLY and per-stage,
+        like _config_columns_resolve; same lazy import, same reason."""
+        from app.models.stages import find_output_schema_issues
+
+        issues = find_output_schema_issues(self)
+        if issues:
+            raise ValueError("; ".join(issues))
+        return self
+
     @property
     def is_grain_and_order_preserving(self) -> bool:
         """Does one input row map to exactly one output row, IN THE SAME ORDER?

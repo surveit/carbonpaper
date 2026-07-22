@@ -8,6 +8,7 @@ import pandas as pd
 
 from app.core.predicate import parse_predicate
 from app.models import Stage
+from app.models.stages.aggregate import AGG_FORMULA_COUNT, AGG_FORMULA_LIST
 
 
 def handle_aggregate(stage: Stage, inputs: dict[str, pd.DataFrame], ctx: dict[str, Any]) -> pd.DataFrame:
@@ -28,7 +29,7 @@ def handle_aggregate(stage: Stage, inputs: dict[str, pd.DataFrame], ctx: dict[st
         if where:
             slice_df = rows.query(parse_predicate(where).pandas_expr)
 
-        if formula == "count":
+        if formula == AGG_FORMULA_COUNT:
             series = slice_df.groupby(group_by, dropna=False).size().rename(out)
         else:
             if op.value_column is None:
@@ -38,7 +39,7 @@ def handle_aggregate(stage: Stage, inputs: dict[str, pd.DataFrame], ctx: dict[st
                 series = slice_df.groupby(group_by, dropna=False)[value].agg(formula).rename(out)
             elif formula == "first":
                 series = slice_df.groupby(group_by, dropna=False)[value].first().rename(out)
-            elif formula == "list":
+            elif formula == AGG_FORMULA_LIST:
                 series = slice_df.groupby(group_by, dropna=False)[value].apply(list).rename(out)
             else:
                 raise ValueError(f"Unknown aggregation formula: {formula}")

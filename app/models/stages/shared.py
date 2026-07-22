@@ -1,6 +1,8 @@
-"""Shared helpers for per-stage-type config-column validation: resolving the
-column names a stage's input edge declares, and turning a resolved check —
-direct or via a where/filter predicate — into a human-readable issue string.
+"""Shared helpers for per-stage-type column validation, on both the input and
+output side: resolving the column names a stage's input edge declares,
+turning a resolved check — direct or via a where/filter predicate — into a
+human-readable issue string, and comparing a declared output_schema against
+the columns a handle can actually derive.
 
 `from __future__ import annotations` plus `TYPE_CHECKING` below: `Stage` is
 needed only for a type hint (attribute access on it needs no import at all),
@@ -8,12 +10,13 @@ never at runtime, since `app.models.stage` imports this package back for
 its own model validator."""
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Mapping
 
 from app.core.errors import PredicateError
 from app.core.predicate import parse_predicate
 
 if TYPE_CHECKING:
+    from app.models.schema import TableSchema
     from app.models.stage import Stage
 
 COLUMN_ISSUE = (
@@ -49,3 +52,39 @@ def find_predicate_column_issues(
         for col in sorted(referenced)
         if col not in cols
     ]
+
+
+OUTPUT_UNPRODUCIBLE_ISSUE = (
+    "stage '{sid}': output_schema declares column '{col}' that the {handle} handle "
+    "cannot produce (producible columns: {cols})"
+)
+OUTPUT_TYPE_ISSUE = (
+    "stage '{sid}': output_schema declares column '{col}' as {declared!r} but the "
+    "{handle} handle produces {derived!r}"
+)
+
+
+def find_declared_vs_derived_issues(
+    stage_id: str, handle_word: str, declared: "TableSchema", derived: Mapping[str, str | None]
+) -> list[str]:
+    """Issues for a declared output schema against the columns a handle can
+    actually produce: `derived` maps each producible column name to its derived
+    type, or None where the type is unknowable (e.g. the input edge declares no
+    schema). Every declared column must be producible by name; where the derived
+    type is known, the declared `type` must equal it. Nullability/enum/range are
+    deliberately NOT compared — they are claims about data, not about what the
+    handle can produce."""
+    issues: list[str] = []
+    for column in declared.columns:
+        if column.name not in derived:
+            issues.append(OUTPUT_UNPRODUCIBLE_ISSUE.format(
+                sid=stage_id, col=column.name, handle=handle_word, cols=sorted(derived),
+            ))
+            continue
+        derived_type = derived[column.name]
+        if derived_type is not None and column.type != derived_type:
+            issues.append(OUTPUT_TYPE_ISSUE.format(
+                sid=stage_id, col=column.name, handle=handle_word,
+                declared=column.type, derived=derived_type,
+            ))
+    return issues
