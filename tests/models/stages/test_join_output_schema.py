@@ -60,6 +60,7 @@ def test_select_entry_not_derivable_rejected():
     # rejects it instead.
     msg = _issues(_join_stage(select=["facility_id", "amount_typo"]))
     assert "amount_typo" in msg
+    assert "join.select" in msg
 
 
 def test_declared_column_absent_from_merge_rejected():
