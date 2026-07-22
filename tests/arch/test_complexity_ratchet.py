@@ -39,10 +39,19 @@ import pytest
 from radon.complexity import cc_visit
 from radon.visitors import Function
 
+from arch.scope import _EXEMPT_PARTS
+
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _APP_ROOT = _REPO_ROOT / "app"
 _BASELINE_PATH = Path(__file__).resolve().parent / "complexity_baseline.json"
 _COMPLEXITY_THRESHOLD = 20
+
+# arch.scope's shared exemptions (tests/, __pycache__/, _vendor/, node_modules/,
+# venv/, ...), minus "_arch_tests" — this rule is the one exception that keeps
+# scanning _arch_tests/ (see the module docstring). Reused rather than
+# duplicated so a new shared exemption (e.g. a future vendoring convention)
+# does not have to be added here too.
+_SOURCE_EXEMPT_PARTS = _EXEMPT_PARTS - {"_arch_tests"}
 
 
 @dataclass(frozen=True)
@@ -62,10 +71,21 @@ class FunctionComplexity:
 
 
 def find_app_source_files(root: Path) -> list[Path]:
-    """Every ``.py`` file under `root`, including ``_arch_tests/`` subdirs
-    (see the module docstring for why this rule does not use
-    ``arch.scope``'s exemptions). Excludes only ``__pycache__``."""
-    files = [path for path in sorted(root.rglob("*.py")) if "__pycache__" not in path.parts]
+    """Every ``.py`` file under `root`, except a dot-directory or one of
+    `_SOURCE_EXEMPT_PARTS` (``arch.scope``'s own exemptions, so third-party
+    code vendored under ``app/_vendor/`` is never demanded a baseline entry)
+    — the one difference from ``arch.scope`` is that ``_arch_tests/`` stays
+    in scope here (see the module docstring). A part is checked on the path
+    relative to `root`, not the absolute path: this worktree can itself live
+    under a dot-directory (e.g. a git worktree under ``.claude/``), and
+    checking the absolute path would spuriously exempt everything under it."""
+    files = [
+        path
+        for path in sorted(root.rglob("*.py"))
+        if not any(
+            part.startswith(".") or part in _SOURCE_EXEMPT_PARTS for part in path.relative_to(root).parts
+        )
+    ]
     if not files:
         raise ValueError(f"complexity ratchet governs no source files under {root}")
     return files
@@ -122,7 +142,9 @@ def index_by_identity(measurements: list[FunctionComplexity], *, source: str) ->
             raise ValueError(
                 f"{source}: two entries for {m.path}:{m.function} (lines {by_key[key].line} "
                 f"and {m.line}) — the complexity ratchet keys by (path, function) and cannot "
-                "tell them apart; give one of them a distinct name"
+                "tell them apart; give one of them a distinct name, or — for @typing.overload "
+                "stubs, where a distinct name is not an option — amend this checker's identity "
+                "key in tests/arch/test_complexity_ratchet.py"
             )
         by_key[key] = m
     return by_key
@@ -150,10 +172,10 @@ def test_functions_do_not_exceed_the_complexity_ratchet() -> None:
     measurements = measure_function_complexities(find_app_source_files(_APP_ROOT), _REPO_ROOT)
     offenders = find_ratchet_violations(measurements, baseline)
     assert not offenders, (
-        "cyclomatic complexity ratchet: a function over complexity 20 must be decomposed, "
-        "or — if pre-existing — recorded exactly in tests/arch/complexity_baseline.json; the "
-        "baseline may only shrink, never grow, and every entry must match today's measured "
-        "complexity for a function still above 20:\n  " + "\n  ".join(offenders)
+        f"cyclomatic complexity ratchet: a function over complexity {_COMPLEXITY_THRESHOLD} must be "
+        "decomposed, or — if pre-existing — recorded exactly in tests/arch/complexity_baseline.json; "
+        "the baseline may only shrink, never grow, and every entry must match today's measured "
+        f"complexity for a function still above {_COMPLEXITY_THRESHOLD}:\n  " + "\n  ".join(offenders)
     )
 
 
@@ -175,8 +197,8 @@ def _measure_function_and_closures(func: Function, rel_path: str, parent: str | 
 
 def _describe_new_violation(m: FunctionComplexity) -> str:
     return (
-        f"{m.path}:{m.line}  {m.function}  complexity={m.complexity} (> 20, not in the "
-        "baseline) — decompose it; the baseline must never grow"
+        f"{m.path}:{m.line}  {m.function}  complexity={m.complexity} (> {_COMPLEXITY_THRESHOLD}, "
+        "not in the baseline) — decompose it; the baseline must never grow"
     )
 
 
@@ -192,7 +214,11 @@ def _describe_drift(current: FunctionComplexity, recorded: FunctionComplexity) -
 
 
 def _describe_stale_entry(recorded: FunctionComplexity, current: FunctionComplexity | None) -> str:
-    reason = "the function no longer exists" if current is None else f"it now measures {current.complexity} (<= 20)"
+    reason = (
+        "the function no longer exists"
+        if current is None
+        else f"it now measures {current.complexity} (<= {_COMPLEXITY_THRESHOLD})"
+    )
     return (
         f"{recorded.path}:{recorded.line}  {recorded.function}  baseline complexity="
         f"{recorded.complexity} ({reason}) — remove the stale baseline entry"
@@ -213,6 +239,41 @@ def test_find_app_source_files_includes_arch_tests_subdir(tmp_path: Path) -> Non
 def test_find_app_source_files_excludes_pycache(tmp_path: Path) -> None:
     (tmp_path / "__pycache__").mkdir()
     (tmp_path / "__pycache__" / "mod.py").write_text("")
+    (tmp_path / "mod.py").write_text("")
+    files = find_app_source_files(tmp_path)
+    assert [path.name for path in files] == ["mod.py"]
+
+
+def test_find_app_source_files_excludes_vendor_but_includes_arch_tests(tmp_path: Path) -> None:
+    """Third-party code vendored under `_vendor/` (one of `arch.scope`'s
+    shared exemptions) must never be demanded a baseline entry, while
+    `_arch_tests/` — this rule's one deliberate difference from
+    `arch.scope` — stays in scope."""
+    (tmp_path / "_vendor").mkdir()
+    (tmp_path / "_vendor" / "third_party.py").write_text("")
+    (tmp_path / "_arch_tests").mkdir()
+    (tmp_path / "_arch_tests" / "test_x.py").write_text("")
+    (tmp_path / "mod.py").write_text("")
+    files = find_app_source_files(tmp_path)
+    assert {path.name for path in files} == {"test_x.py", "mod.py"}
+
+
+def test_find_app_source_files_ignores_a_dot_directory_in_the_scanned_root_prefix(tmp_path: Path) -> None:
+    """Exemptions are checked on the path relative to `root`, not the
+    absolute path: this repo's own worktrees live under `.claude/`, so a
+    `root` whose absolute prefix contains a dot-directory must not
+    spuriously exempt everything underneath it (the same concern
+    `arch.scope`'s module docstring documents for its own scan)."""
+    root = tmp_path / ".claude" / "worktrees" / "x" / "app"
+    root.mkdir(parents=True)
+    (root / "mod.py").write_text("")
+    files = find_app_source_files(root)
+    assert [path.name for path in files] == ["mod.py"]
+
+
+def test_find_app_source_files_excludes_a_dot_directory_inside_the_scanned_tree(tmp_path: Path) -> None:
+    (tmp_path / ".hidden").mkdir()
+    (tmp_path / ".hidden" / "mod.py").write_text("")
     (tmp_path / "mod.py").write_text("")
     files = find_app_source_files(tmp_path)
     assert [path.name for path in files] == ["mod.py"]
@@ -378,7 +439,7 @@ def test_find_ratchet_violations_flags_a_stale_entry_when_now_below_threshold() 
     baseline = {("a.py", "go"): _make_measurement(complexity=25)}
     offenders = find_ratchet_violations([_make_measurement(complexity=15)], baseline)
     assert len(offenders) == 1
-    assert "<= 20" in offenders[0] and "remove" in offenders[0]
+    assert f"<= {_COMPLEXITY_THRESHOLD}" in offenders[0] and "remove" in offenders[0]
 
 
 def test_index_by_identity_raises_on_two_measurements_for_the_same_identity() -> None:
@@ -388,6 +449,20 @@ def test_index_by_identity_raises_on_two_measurements_for_the_same_identity() ->
     ]
     with pytest.raises(ValueError, match="a.py:go"):
         index_by_identity(duplicates, source="test")
+
+
+def test_index_by_identity_raise_offers_a_remedy_for_the_unrenamable_overload_case() -> None:
+    """`@typing.overload` stubs are named as an expected trigger for this
+    collision, and a stub cannot simply be renamed — the message must offer
+    a remedy that is actually possible for that case, not just "give it a
+    distinct name"."""
+    duplicates = [
+        _make_measurement(path="a.py", function="go", line=1, complexity=25),
+        _make_measurement(path="a.py", function="go", line=10, complexity=30),
+    ]
+    with pytest.raises(ValueError, match="distinct name") as excinfo:
+        index_by_identity(duplicates, source="test")
+    assert "overload" in str(excinfo.value)
 
 
 def test_index_by_identity_keeps_two_different_functions_in_the_same_file() -> None:
