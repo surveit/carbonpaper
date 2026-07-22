@@ -90,82 +90,95 @@ def validate_dataframe(
     columns: list[Column] = list(schema.columns)
     declared_names = [c.name for c in columns]
 
-    # 1. Every declared column present
-    for col in columns:
-        name = col.name
-        if name and name not in df.columns:
-            report.issues.append(Issue("error", name, f"Missing column '{name}'"))
+    report.issues.extend(_find_missing_declared_columns(df, columns))
 
-    # 2. Type / nullability / range — only check columns that exist
     for col in columns:
         name = col.name
         if name not in df.columns:
             continue
-
         series = df[name]
-        col_type = col.type
-        nullable = col.nullable
-        col_range = col.range
+        report.issues.extend(_find_nullability_issues(series, col))
+        report.issues.extend(_find_numeric_range_issues(series, col))
+        report.issues.extend(_find_enum_issues(series, col))
 
-        # Nullability
-        if not nullable:
-            null_n = series.isna().sum()
-            if null_n > 0:
-                report.issues.append(
-                    Issue("error", name, f"{null_n} null value(s) in non-nullable column")
-                )
+    report.issues.extend(_find_duplicate_primary_keys(df, schema.primary_key))
+    report.issues.extend(_find_undeclared_columns(df, declared_names))
 
-        # Range
-        if col_range and col_type in {"int", "float"}:
-            non_null = series.dropna()
-            if len(non_null) and len(col_range) == 2:
-                lo, hi = col_range
-                # strings like "+inf" → sentinel; treat as unbounded
-                lo_v = -math.inf if (isinstance(lo, str) and RANGE_UNBOUNDED_MARKER in lo) else lo
-                hi_v = math.inf if (isinstance(hi, str) and RANGE_UNBOUNDED_MARKER in hi) else hi
-                try:
-                    bad = ((non_null < lo_v) | (non_null > hi_v)).sum()
-                    if bad:
-                        report.issues.append(
-                            Issue(
-                                "warning", name,
-                                f"{bad} value(s) outside range [{lo}, {hi}]",
-                            )
-                        )
-                except TypeError:
-                    pass  # mixed types — the type check below will catch it
+    return report
 
-        # Enum (categorical strings): values must be in the declared vocabulary
-        if col.enum and col_type == STR_COLUMN_TYPE:
-            non_null = series.dropna()
-            if len(non_null):
-                allowed = set(col.enum)
-                bad = (~non_null.astype(str).isin(allowed)).sum()
-                if bad:
-                    report.issues.append(
-                        Issue(
-                            "warning", name,
-                            f"{bad} value(s) outside enum {sorted(allowed)[:8]}{'…' if len(allowed) > 8 else ''}",
-                        )
-                    )
 
-    # 3. Primary key uniqueness
-    pk = schema.primary_key
-    if pk and all(c in df.columns for c in pk):
-        dupe = df.duplicated(subset=pk).sum()
-        if dupe:
-            report.issues.append(
-                Issue("error", ",".join(pk), f"Primary key duplicated on {dupe} row(s)")
+def _find_missing_declared_columns(df: pd.DataFrame, columns: list[Column]) -> list[Issue]:
+    issues: list[Issue] = []
+    for col in columns:
+        name = col.name
+        if name and name not in df.columns:
+            issues.append(Issue("error", name, f"Missing column '{name}'"))
+    return issues
+
+
+def _find_nullability_issues(series: pd.Series, col: Column) -> list[Issue]:
+    if col.nullable:
+        return []
+    null_n = series.isna().sum()
+    if null_n > 0:
+        return [Issue("error", col.name, f"{null_n} null value(s) in non-nullable column")]
+    return []
+
+
+def _find_numeric_range_issues(series: pd.Series, col: Column) -> list[Issue]:
+    col_range = col.range
+    if not (col_range and col.type in {"int", "float"}):
+        return []
+    non_null = series.dropna()
+    if not (len(non_null) and len(col_range) == 2):
+        return []
+    lo, hi = col_range
+    # strings like "+inf" → sentinel; treat as unbounded
+    lo_v = -math.inf if (isinstance(lo, str) and RANGE_UNBOUNDED_MARKER in lo) else lo
+    hi_v = math.inf if (isinstance(hi, str) and RANGE_UNBOUNDED_MARKER in hi) else hi
+    try:
+        bad = ((non_null < lo_v) | (non_null > hi_v)).sum()
+        if bad:
+            return [Issue("warning", col.name, f"{bad} value(s) outside range [{lo}, {hi}]")]
+    except TypeError:
+        pass  # mixed types — the type check below will catch it
+    return []
+
+
+def _find_enum_issues(series: pd.Series, col: Column) -> list[Issue]:
+    if not (col.enum and col.type == STR_COLUMN_TYPE):
+        return []
+    non_null = series.dropna()
+    if not len(non_null):
+        return []
+    allowed = set(col.enum)
+    bad = (~non_null.astype(str).isin(allowed)).sum()
+    if bad:
+        return [
+            Issue(
+                "warning", col.name,
+                f"{bad} value(s) outside enum {sorted(allowed)[:8]}{'…' if len(allowed) > 8 else ''}",
             )
+        ]
+    return []
 
-    # 4. Extra columns warning (informational)
+
+def _find_duplicate_primary_keys(df: pd.DataFrame, pk: list[str] | None) -> list[Issue]:
+    if not (pk and all(c in df.columns for c in pk)):
+        return []
+    dupe = df.duplicated(subset=pk).sum()
+    if dupe:
+        return [Issue("error", ",".join(pk), f"Primary key duplicated on {dupe} row(s)")]
+    return []
+
+
+def _find_undeclared_columns(df: pd.DataFrame, declared_names: list[str]) -> list[Issue]:
     extras = [c for c in df.columns if c not in declared_names]
     if extras:
-        report.issues.append(
+        return [
             Issue(
                 "warning", None,
                 f"{len(extras)} undeclared column(s) present (will be passed through): {extras[:8]}",
             )
-        )
-
-    return report
+        ]
+    return []
