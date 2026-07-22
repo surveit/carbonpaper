@@ -1,8 +1,9 @@
 """Tests for the join stage's config-column check (app/models/stages/
 join.py, wired into Stage._config_columns_resolve): each key's `.left` must
-resolve against input 0's edge schema and `.right` against input 1's — no
-`select`/`_r`-suffix check (that surface is gone; only the structured key
-check remains)."""
+resolve against input 0's edge schema and `.right` against input 1's. The
+config-column check itself has no `select`/`_r`-suffix check — but `select`
+IS validated separately, by the output-schema check (find_join_output_issues,
+see test_join_output_schema.py); this file covers only the join-key check."""
 from __future__ import annotations
 
 import pytest
@@ -48,12 +49,14 @@ def test_right_key_missing_rejected():
         Stage.model_validate(_join_stage(left_columns=["a"], right_columns=["b"], key_left="a", key_right="ghost"))
 
 
-def test_select_is_not_checked():
-    """`select` naming a column absent from either side is no longer a
-    config-column issue — only the structured join-key check runs."""
-    Stage.model_validate(_join_stage(
-        left_columns=["a"], right_columns=["b"], key_left="a", key_right="b", select=["ghost"],
-    ))
+def test_select_referencing_absent_column_is_rejected_by_output_check():
+    """The join stage's own config-column check never looked at `select` —
+    but `select` naming a column the merge can't produce IS rejected, by the
+    separate output-schema check (find_join_output_issues)."""
+    with pytest.raises(ValidationError):
+        Stage.model_validate(_join_stage(
+            left_columns=["a"], right_columns=["b"], key_left="a", key_right="b", select=["ghost"],
+        ))
 
 
 def test_side_with_no_edge_schema_is_skipped():

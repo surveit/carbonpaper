@@ -10,7 +10,7 @@ from app.models.stages.aggregate import (
     find_aggregate_output_issues,
 )
 from app.models.stages.human_review_queue import find_queue_filter_column_issues
-from app.models.stages.join import find_join_column_issues
+from app.models.stages.join import find_join_column_issues, find_join_output_issues
 from app.models.stages.llm_transform import find_llm_prompt_column_issues
 from app.models.stages.publish import find_publish_column_issues
 
@@ -44,6 +44,7 @@ def find_config_column_issues(stage: "Stage") -> list[str]:
 # have a derivation to check a declared output_schema against.
 _OUTPUT_VALIDATORS: dict[str, Callable[["Stage"], list[str]]] = {
     "aggregate": find_aggregate_output_issues,
+    "join": find_join_output_issues,
 }
 
 
