@@ -613,7 +613,9 @@ class StageRecord(TypedDict):
     (`_start_stage_record`'s initial dict omits `finished_at`;
     `_finalize_stage_output` adds `output_path`; `_record_halt` adds
     `queue_path`; `_apply_row_slicing`/`_persist_stage_output` add `notes` on
-    the first trim/fallback) and are absent before then."""
+    the first trim/fallback; `_finalize_stage_output` adds `llm_usage` — the
+    dumped `LlmUsage` model — when the stage recorded any) and are absent
+    before then."""
 
     stage_id: str
     type: StageType
@@ -629,6 +631,7 @@ class StageRecord(TypedDict):
     output_path: NotRequired[str]
     queue_path: NotRequired[str]
     notes: NotRequired[list[str]]
+    llm_usage: NotRequired[dict[str, object]]
 
 
 def _build_pending_stage_record(stage: Stage) -> StageRecord:
