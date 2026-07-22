@@ -132,6 +132,15 @@ def _document_path(pdir: Path) -> Path | None:
     return None
 
 
+def document_path(pdir: Path) -> Path | None:
+    """Public alias for the source-document probe (see _document_path): the
+    project's canonical authored methodology file, or None when it has none. This
+    is the single point sibling services resolve the prose through, so the
+    candidate-order convention lives in exactly one place (e.g. the methodology-
+    amendment flow appends published amendments to THIS file)."""
+    return _document_path(Path(pdir))
+
+
 # ─── Stage loading (counts / coverage) ────────────────────────────────────────
 
 
@@ -397,6 +406,7 @@ __all__ = [
     "RunsSummary",
     "ProjectMeta",
     "ProjectState",
+    "document_path",
     "project_meta",
     "write_project_meta",
     "project_state",
