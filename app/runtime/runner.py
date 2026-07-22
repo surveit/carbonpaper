@@ -14,6 +14,7 @@ Run output layout:
 
 from __future__ import annotations
 
+import enum
 import hashlib
 import json
 import sys
@@ -21,7 +22,7 @@ import time
 import traceback
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Iterable, Mapping
+from typing import Any, Iterable, Mapping, NotRequired, TypedDict
 
 import pandas as pd
 import pyarrow.lib as pa_lib
@@ -36,7 +37,7 @@ from app.services import versioning
 
 from .cancellation import consume_cancel
 from .errors import RunCancelled
-from .stages import HANDLERS, PREFLIGHTS, HaltForReview
+from .stages import HANDLERS, PREFLIGHTS, HaltForReview, StageHandler
 from .validation import Issue, validate_dataframe
 
 
@@ -463,6 +464,19 @@ def _find_blocking_upstream(stage: Stage, blocked: set[str]) -> list[str]:
     return [input_id for input_id in stage.input_ids if input_id in blocked]
 
 
+def _stage_output_already_produced(
+    sid: str, outputs_so_far: dict[str, pd.DataFrame], records_by_id: dict[str, StageRecord]
+) -> bool:
+    """True when `sid`'s output was computed in a prior partial run (the
+    resume path) and its last recorded status is a completion the loop can
+    trust to skip re-running it, rather than a stale record from before a
+    halt/cancel/error."""
+    if sid not in outputs_so_far:
+        return False
+    record = records_by_id.get(sid)
+    return record is not None and record["status"] in (StageStatus.OK, StageStatus.VALIDATION_WARNINGS)
+
+
 def _final_run_status(stage_statuses: Iterable[str]) -> RunStatus:
     """A non-cancelled run's overall status from its stages' statuses, error-first:
     any errored stage -> errors; else any halted stage -> awaiting_review; else
@@ -513,36 +527,10 @@ def _execute_stages(
 
     # Carry over any existing records (from a previously halted manifest
     # we're resuming). Build an index for upsert behavior.
-    records_by_id: dict[str, dict[str, Any]] = {
+    records_by_id: dict[str, StageRecord] = {
         r["stage_id"]: r for r in manifest.get("stages", [])
     }
-
-    def _pending_stub(s: Stage) -> dict[str, Any]:
-        return {
-            "stage_id": s.id, "type": s.type, "name": s.name,
-            "status": StageStatus.PENDING, "input_validation": [], "output_validation": None,
-            "elapsed_ms": 0, "rows": 0, "error": None,
-            "started_at": None, "finished_at": None,
-        }
-
-    def flush(status: RunStatus = RunStatus.RUNNING) -> None:
-        """Write the manifest mid-run so the run page can show live progress
-        (stages light up as they start/finish) instead of the whole pipeline
-        running silently and updating only at the very end."""
-        m = dict(manifest)
-        m["stages"] = [records_by_id.get(s.id) or _pending_stub(s) for s in ordered]
-        m["status"] = status
-        m["queue_stats"] = ctx.get("queue_stats", {})
-        m["dropped_columns"] = ctx.get("dropped_columns", {})
-        m["updated_at"] = datetime.now().isoformat(timespec="seconds")
-        try:
-            (run_dir / "manifest.json").write_text(
-                json.dumps(m, indent=2, default=str), encoding="utf-8"
-            )
-        except OSError:
-            pass
-
-    flush(RunStatus.RUNNING)  # initial: all stages pending
+    _flush_manifest(manifest, records_by_id, ordered, ctx, run_dir, RunStatus.RUNNING)
 
     for idx, stage in enumerate(ordered):
         # Between-stage cancel checkpoint: before this stage starts (even
@@ -555,7 +543,6 @@ def _execute_stages(
             break
 
         sid = stage.id
-        stype = stage.type
 
         # A stage whose any input-producer errored, halted, or is itself
         # blocked cannot run on real inputs. It stays pending, joins the
@@ -563,191 +550,374 @@ def _execute_stages(
         # so a resume cannot reuse it. Checked before the resume-skip so a
         # newly-blocked upstream overrides a prior `ok` output on disk.
         if _find_blocking_upstream(stage, blocked):
-            records_by_id[sid] = _pending_stub(stage)
+            records_by_id[sid] = _build_pending_stage_record(stage)
             blocked.add(sid)
             outputs_so_far.pop(sid, None)
-            flush(RunStatus.RUNNING)
+            _flush_manifest(manifest, records_by_id, ordered, ctx, run_dir, RunStatus.RUNNING)
             continue
 
         # Skip stages already produced (resume path).
-        if sid in outputs_so_far and records_by_id.get(sid, {}).get("status") in (
-            StageStatus.OK, StageStatus.VALIDATION_WARNINGS
-        ):
+        if _stage_output_already_produced(sid, outputs_so_far, records_by_id):
             continue
 
-        record: dict[str, Any] = {
-            "stage_id": sid,
-            "type": stype,
-            "name": stage.name,
-            "started_at": datetime.now().isoformat(timespec="seconds"),
-            "status": StageStatus.RUNNING,
-            "input_validation": [],
-            "output_validation": None,
-            "elapsed_ms": 0,
-            "rows": 0,
-            "error": None,
-        }
-        t0 = time.perf_counter()
-        records_by_id[sid] = record
-        flush(RunStatus.RUNNING)  # show this stage as running
-
-        try:
-            inputs_for_stage: dict[str, pd.DataFrame] = {}
-            for ref in stage.inputs:
-                if ref.id not in outputs_so_far:
-                    raise RuntimeError(f"Upstream stage '{ref.id}' has no output yet")
-                df = outputs_so_far[ref.id]
-                _reject_duplicate_input_rows(df, ref.id, sid)
-                inputs_for_stage[ref.id] = df
-                if ref.table_schema is not None:
-                    rep = validate_dataframe(
-                        df, ref.table_schema, stage_id=sid, phase=f"input:{ref.id}",
-                    )
-                    record["input_validation"].append(rep.to_dict())
-
-            handler = HANDLERS.get(stype)
-            if handler is None:
-                raise ValueError(f"No handler for stage type '{stype}'")
-
-            try:
-                output = handler.execute(stage, inputs_for_stage, ctx)
-            except HaltForReview as halt:
-                # Fork-blocking, not loop-ending: this stage awaits review and
-                # blocks its downstream, but independent forks keep running.
-                # `continue` runs the finally below (timing + flush), then moves
-                # to the next stage without touching the output-processing block.
-                record["status"] = StageStatus.AWAITING_REVIEW
-                record["rows"] = halt.pending_count
-                # Manifest paths are POSIX-style so the persisted JSON is
-                # identical on every platform.
-                record["queue_path"] = halt.queue_path.relative_to(run_dir).as_posix()
-                halted_stage_ids.append(sid)
-                blocked.add(sid)
-                continue
-            except RunCancelled:
-                # Mid-stage cancel: the row driver unwound out of
-                # handler.execute (see execution.py::_run_row_mapper). This
-                # stage made no output — it is marked cancelled, not ok.
-                record["status"] = StageStatus.CANCELLED
-                cancelled = True
-                cancel_at_index = idx
-                break
-
-            if output is None:
-                output = pd.DataFrame()
-
-            # Generic row slicing, in the handler's emitted order. Offset
-            # (per-run only, from --offset stage=M) drops the first M rows;
-            # then the cap keeps the first N. A per-run cap (--limit stage=N)
-            # wins over the stage's static `limit:`. Used to throttle /
-            # page the expensive LLM fan-out.
-            offset = (ctx.get("offsets") or {}).get(sid)
-            if isinstance(offset, int) and offset > 0 and len(output) > 0:
-                record.setdefault("notes", []).append(
-                    f"offset={offset}: dropped first {min(offset, len(output))} of {len(output)} row(s)"
-                )
-                output = output.iloc[offset:].reset_index(drop=True).copy()
-            limit = (ctx.get("limits") or {}).get(sid, stage.limit)
-            if isinstance(limit, int) and limit >= 0 and len(output) > limit:
-                record.setdefault("notes", []).append(
-                    f"limit={limit}: truncated from {len(output)} to {limit} row(s)"
-                )
-                output = output.head(limit).copy()
-
-            out_rep = validate_dataframe(
-                output, stage.output_schema, stage_id=sid, phase="output",
-            )
-            row_errors = (ctx.get("row_errors") or {}).get(sid, [])
-            if row_errors:
-                out_rep.issues[0:0] = [
-                    Issue("error", None,
-                          f"row {row_error['row']}: generation failed: {row_error['message']}")
-                    for row_error in row_errors
-                ]
-            record["output_validation"] = out_rep.to_dict()
-
-            usage = (ctx.get("llm_usage") or {}).get(sid)
-            if usage is not None:
-                # Dump to a plain dict here: the manifest is JSON, and this is
-                # the one boundary where the typed LlmUsage becomes storage.
-                record["llm_usage"] = usage.model_dump()
-
-            output_path = run_dir / "outputs" / f"{sid}.parquet"
-            try:
-                output.to_parquet(output_path, index=False)
-            except (pa_lib.ArrowException, ValueError, TypeError) as exc:
-                # A column whose dtype/shape parquet can't represent (mixed-type
-                # object columns, nested Python values) falls back to CSV, which
-                # stringifies them, rather than losing the stage output; the
-                # fallback is recorded, never silent. A disk/OS error is NOT
-                # caught: it would fail identically for CSV, so it propagates to
-                # the per-stage handler below and lands in the manifest.
-                output_path = run_dir / "outputs" / f"{sid}.csv"
-                output.to_csv(output_path, index=False)
-                record.setdefault("notes", []).append(
-                    f"Wrote CSV instead of parquet: {exc}"
-                )
-
-            outputs_so_far[sid] = output
-            if row_errors:
-                # A per-row generation failure is a stage error, so it blocks its
-                # downstream exactly like a raised exception: join the blocked set
-                # so every transitive consumer is skipped rather than run on this
-                # stage's partial frame and marked `ok`. The partial output file
-                # stays on disk for inspection; the stage's own `error` status
-                # keeps a resume from reusing it, and `blocked` protects the rest.
-                record["status"] = StageStatus.ERROR
-                record["error"] = {
-                    "type": "RowGenerationError",
-                    "message": _summarize_row_errors(row_errors),
-                    "traceback": None,
-                }
-                blocked.add(sid)
-            else:
-                record["status"] = StageStatus.OK if out_rep.ok and all(
-                    v["ok"] for v in record["input_validation"]
-                ) else StageStatus.VALIDATION_WARNINGS
-            record["rows"] = int(len(output))
-            # Manifest paths are POSIX-style so the persisted JSON is
-            # identical on every platform.
-            record["output_path"] = output_path.relative_to(run_dir).as_posix()
-
-        except Exception as exc:  # noqa: BLE001 — the runner's contract is
-            # to record ANY stage failure (a handler can raise ValueError,
-            # RuntimeError, a pandas/pyarrow error, etc.) in the manifest and
-            # keep running independent forks rather than crash the whole run.
-            # The stage joins the blocked set, so its transitive downstream is
-            # skipped and never marked `ok` on this stage's absent output.
-            record["status"] = StageStatus.ERROR
-            record["error"] = {
-                "type": type(exc).__name__,
-                "message": str(exc),
-                "traceback": traceback.format_exc(limit=8),
-            }
+        outcome, joins_blocked = _run_stage(stage, ctx, outputs_so_far, records_by_id, manifest, ordered, run_dir)
+        if joins_blocked:
             blocked.add(sid)
-        finally:
-            # Every terminal status (ok, error, awaiting_review, cancelled)
-            # finalizes its timing here — `record` is already in records_by_id
-            # by reference, so the except branches above set only their
-            # distinguishing fields (status, halt queue info).
-            record["elapsed_ms"] = int((time.perf_counter() - t0) * 1000)
-            record["finished_at"] = datetime.now().isoformat(timespec="seconds")
-            flush(RunStatus.RUNNING)  # persist this stage's result for the live page
+        if outcome is _StageOutcome.HALTED:
+            halted_stage_ids.append(sid)
+        elif outcome is _StageOutcome.CANCELLED:
+            cancelled = True
+            cancel_at_index = idx
+            break
 
-    # Emit stages in topological order so the manifest reads top-to-bottom.
-    # Blocked downstream stages were marked `pending` inline, so no post-loop
-    # fill is needed.
+    return _finalize_run_manifest(
+        manifest, records_by_id, ordered, ctx, run_dir, cancelled, cancel_at_index, halted_stage_ids
+    )
+
+
+# --- _execute_stages helpers -------------------------------------------------
+
+
+class _StageOutcome(enum.Enum):
+    """What `_run_stage` learned about the stage it just ran, for the loop to
+    act on. `RAN` covers `ok`, `validation_warnings`, and `error` alike —
+    none of those need anything beyond letting the loop move to the next
+    stage. `HALTED` additionally needs the loop to remember this stage id for
+    `halted_at`. `CANCELLED` needs the loop to stop."""
+
+    RAN = "ran"
+    HALTED = "halted"
+    CANCELLED = "cancelled"
+
+
+class StageErrorInfo(TypedDict):
+    """A stage's `error` field once it has failed: the exception's type name,
+    a human-readable message, and its traceback — `None` for a
+    row-generation error, which has no single exception to format."""
+
+    type: str
+    message: str
+    traceback: str | None
+
+
+class StageRecord(TypedDict):
+    """One stage's manifest record, as written verbatim into
+    `manifest["stages"]` and read back by the web layer — a plain
+    TypedDict-typed dict, not a dataclass/model, since it is JSON on disk.
+    `input_validation`/`output_validation` hold `ValidationReport.to_dict()`
+    output (app.runtime.validation); that report's own fields are untyped
+    (`dict[str, Any]`) in its own module, so `dict[str, object]` here is as
+    precise a type as its actual contents support without retyping
+    `ValidationReport` itself. `finished_at`, `output_path`, `queue_path`, and
+    `notes` are added only at specific points in a stage's lifecycle
+    (`_start_stage_record`'s initial dict omits `finished_at`;
+    `_finalize_stage_output` adds `output_path`; `_record_halt` adds
+    `queue_path`; `_apply_row_slicing`/`_persist_stage_output` add `notes` on
+    the first trim/fallback; `_finalize_stage_output` adds `llm_usage` — the
+    dumped `LlmUsage` model — when the stage recorded any) and are absent
+    before then."""
+
+    stage_id: str
+    type: StageType
+    name: str
+    status: StageStatus
+    input_validation: list[dict[str, object]]
+    output_validation: dict[str, object] | None
+    elapsed_ms: int
+    rows: int
+    error: StageErrorInfo | None
+    started_at: str | None
+    finished_at: NotRequired[str | None]
+    output_path: NotRequired[str]
+    queue_path: NotRequired[str]
+    notes: NotRequired[list[str]]
+    llm_usage: NotRequired[dict[str, object]]
+
+
+def _build_pending_stage_record(stage: Stage) -> StageRecord:
+    """A stage's manifest record before it has started, or once it has been
+    marked blocked: `pending` status, no output, no timing."""
+    return {
+        "stage_id": stage.id, "type": stage.type, "name": stage.name,
+        "status": StageStatus.PENDING, "input_validation": [], "output_validation": None,
+        "elapsed_ms": 0, "rows": 0, "error": None,
+        "started_at": None, "finished_at": None,
+    }
+
+
+def _flush_manifest(
+    manifest: dict[str, Any],
+    records_by_id: dict[str, StageRecord],
+    ordered: list[Stage],
+    ctx: dict[str, Any],
+    run_dir: Path,
+    status: RunStatus,
+) -> None:
+    """Write the manifest mid-run so the run page can show live progress
+    (stages light up as they start/finish) instead of the whole pipeline
+    running silently and updating only at the very end."""
+    m = dict(manifest)
+    m["stages"] = [records_by_id.get(s.id) or _build_pending_stage_record(s) for s in ordered]
+    m["status"] = status
+    m["queue_stats"] = ctx.get("queue_stats", {})
+    m["dropped_columns"] = ctx.get("dropped_columns", {})
+    m["updated_at"] = datetime.now().isoformat(timespec="seconds")
+    try:
+        (run_dir / "manifest.json").write_text(
+            json.dumps(m, indent=2, default=str), encoding="utf-8"
+        )
+    except OSError:
+        pass
+
+
+def _start_stage_record(stage: Stage) -> StageRecord:
+    """A stage's manifest record at the moment it starts running."""
+    return {
+        "stage_id": stage.id,
+        "type": stage.type,
+        "name": stage.name,
+        "started_at": datetime.now().isoformat(timespec="seconds"),
+        "status": StageStatus.RUNNING,
+        "input_validation": [],
+        "output_validation": None,
+        "elapsed_ms": 0,
+        "rows": 0,
+        "error": None,
+    }
+
+
+def _gather_stage_inputs(
+    stage: Stage, outputs_so_far: dict[str, pd.DataFrame], record: StageRecord
+) -> dict[str, pd.DataFrame]:
+    """This stage's input dataframes, keyed by producer id, rejecting exact
+    duplicate rows and recording an input-schema validation report for every
+    input that declares one. Raises if an upstream output is missing — the
+    caller's exception handling turns that into this stage's own error."""
+    sid = stage.id
+    inputs_for_stage: dict[str, pd.DataFrame] = {}
+    for ref in stage.inputs:
+        if ref.id not in outputs_so_far:
+            raise RuntimeError(f"Upstream stage '{ref.id}' has no output yet")
+        df = outputs_so_far[ref.id]
+        _reject_duplicate_input_rows(df, ref.id, sid)
+        inputs_for_stage[ref.id] = df
+        if ref.table_schema is not None:
+            rep = validate_dataframe(
+                df, ref.table_schema, stage_id=sid, phase=f"input:{ref.id}",
+            )
+            record["input_validation"].append(rep.to_dict())
+    return inputs_for_stage
+
+def _resolve_handler(stage_type: StageType) -> StageHandler:
+    handler = HANDLERS.get(stage_type)
+    if handler is None:
+        raise ValueError(f"No handler for stage type '{stage_type}'")
+    return handler
+
+
+def _record_halt(record: StageRecord, halt: HaltForReview, run_dir: Path) -> None:
+    """Fork-blocking, not loop-ending: this stage awaits review and blocks
+    its downstream, while independent forks keep running."""
+    record["status"] = StageStatus.AWAITING_REVIEW
+    record["rows"] = halt.pending_count
+    # Manifest paths are POSIX-style so the persisted JSON is identical on
+    # every platform.
+    record["queue_path"] = halt.queue_path.relative_to(run_dir).as_posix()
+
+
+def _record_stage_error(record: StageRecord, exc: Exception) -> None:
+    """Record any stage failure (a handler can raise ValueError, RuntimeError,
+    a pandas/pyarrow error, etc.) in the manifest. This outcome always joins
+    the caller's `blocked` set, so its transitive downstream is skipped and
+    never marked `ok` on this stage's absent output."""
+    record["status"] = StageStatus.ERROR
+    record["error"] = {
+        "type": type(exc).__name__,
+        "message": str(exc),
+        "traceback": traceback.format_exc(limit=8),
+    }
+
+
+def _apply_row_slicing(
+    output: pd.DataFrame, stage: Stage, ctx: dict[str, Any], record: StageRecord
+) -> pd.DataFrame:
+    """Offset then cap `output`'s rows, in the handler's emitted order. Offset
+    (per-run only, from --offset stage=M) drops the first M rows; the cap
+    (--limit stage=N, else the stage's static `limit:`) then keeps the first
+    N. Used to throttle/page the expensive LLM fan-out. Each trim actually
+    taken is recorded as a note on `record`."""
+    sid = stage.id
+    offset = (ctx.get("offsets") or {}).get(sid)
+    if isinstance(offset, int) and offset > 0 and len(output) > 0:
+        record.setdefault("notes", []).append(
+            f"offset={offset}: dropped first {min(offset, len(output))} of {len(output)} row(s)"
+        )
+        output = output.iloc[offset:].reset_index(drop=True).copy()
+    limit = (ctx.get("limits") or {}).get(sid, stage.limit)
+    if isinstance(limit, int) and limit >= 0 and len(output) > limit:
+        record.setdefault("notes", []).append(
+            f"limit={limit}: truncated from {len(output)} to {limit} row(s)"
+        )
+        output = output.head(limit).copy()
+    return output
+
+
+def _persist_stage_output(output: pd.DataFrame, sid: str, run_dir: Path, record: StageRecord) -> Path:
+    """Write `output` as the stage's parquet artifact, falling back to CSV
+    (noting the fallback on `record`) for a column whose dtype/shape parquet
+    can't represent — mixed-type object columns, nested Python values. A
+    disk/OS error is NOT caught here: it would fail identically for CSV, so
+    it propagates to the stage's own error handling rather than silently
+    degrading the output."""
+    output_path = run_dir / "outputs" / f"{sid}.parquet"
+    try:
+        output.to_parquet(output_path, index=False)
+    except (pa_lib.ArrowException, ValueError, TypeError) as exc:
+        output_path = run_dir / "outputs" / f"{sid}.csv"
+        output.to_csv(output_path, index=False)
+        record.setdefault("notes", []).append(f"Wrote CSV instead of parquet: {exc}")
+    return output_path
+
+
+def _finalize_stage_output(
+    stage: Stage,
+    ctx: dict[str, Any],
+    record: StageRecord,
+    output: pd.DataFrame | None,
+    outputs_so_far: dict[str, pd.DataFrame],
+    run_dir: Path,
+) -> bool:
+    """Trim, validate, and persist a stage's raw handler output, then decide
+    its terminal status. A per-row generation failure is a stage error,
+    recorded exactly like a raised exception — the partial output file stays
+    on disk for inspection, and the stage's own `error` status keeps a resume
+    from reusing it. Otherwise the status is `ok`/`validation_warnings` from
+    the output and input validation reports. Returns True (a row-generation
+    error) if the caller must join this stage to `blocked`, so every
+    transitive consumer is skipped rather than run on this stage's partial
+    frame and marked `ok`; False otherwise."""
+    sid = stage.id
+    if output is None:
+        output = pd.DataFrame()
+    output = _apply_row_slicing(output, stage, ctx, record)
+
+    out_rep = validate_dataframe(output, stage.output_schema, stage_id=sid, phase="output")
+    row_errors = (ctx.get("row_errors") or {}).get(sid, [])
+    if row_errors:
+        out_rep.issues[0:0] = [
+            Issue("error", None,
+                  f"row {row_error['row']}: generation failed: {row_error['message']}")
+            for row_error in row_errors
+        ]
+    record["output_validation"] = out_rep.to_dict()
+
+    usage = (ctx.get("llm_usage") or {}).get(sid)
+    if usage is not None:
+        # Dump to a plain dict here: the manifest is JSON, and this is
+        # the one boundary where the typed LlmUsage becomes storage.
+        record["llm_usage"] = usage.model_dump()
+
+    output_path = _persist_stage_output(output, sid, run_dir, record)
+    outputs_so_far[sid] = output
+
+    if row_errors:
+        record["status"] = StageStatus.ERROR
+        record["error"] = {
+            "type": "RowGenerationError",
+            "message": _summarize_row_errors(row_errors),
+            "traceback": None,
+        }
+    else:
+        record["status"] = StageStatus.OK if out_rep.ok and all(
+            v["ok"] for v in record["input_validation"]
+        ) else StageStatus.VALIDATION_WARNINGS
+    record["rows"] = int(len(output))
+    # Manifest paths are POSIX-style so the persisted JSON is identical on
+    # every platform.
+    record["output_path"] = output_path.relative_to(run_dir).as_posix()
+    return bool(row_errors)
+
+
+def _run_stage(
+    stage: Stage,
+    ctx: dict[str, Any],
+    outputs_so_far: dict[str, pd.DataFrame],
+    records_by_id: dict[str, StageRecord],
+    manifest: dict[str, Any],
+    ordered: list[Stage],
+    run_dir: Path,
+) -> tuple[_StageOutcome, bool]:
+    """Run one stage end to end: gather its inputs, invoke its handler,
+    process and persist its output, and record the outcome (ok, warnings,
+    error, halt, or a mid-stage cancel) into `records_by_id[stage.id]` —
+    flushing the manifest once the stage starts and again once it settles, so
+    the run page shows it live. Returns `(outcome, joins_blocked)`:
+    `joins_blocked` is True for a halt, a general exception, and a
+    row-generation error alike — every outcome except a clean ok/warnings or
+    a cancel — so the caller can add this stage to its own `blocked` set
+    itself, keeping that decision visible at the loop."""
+    sid = stage.id
+    record = _start_stage_record(stage)
+    t0 = time.perf_counter()
+    records_by_id[sid] = record
+    _flush_manifest(manifest, records_by_id, ordered, ctx, run_dir, RunStatus.RUNNING)
+
+    joins_blocked = False
+    try:
+        inputs_for_stage = _gather_stage_inputs(stage, outputs_so_far, record)
+        handler = _resolve_handler(stage.type)
+        try:
+            output = handler.execute(stage, inputs_for_stage, ctx)
+        except HaltForReview as halt:
+            _record_halt(record, halt, run_dir)
+            return _StageOutcome.HALTED, True
+        except RunCancelled:
+            # Mid-stage cancel: the row driver unwound out of
+            # handler.execute (see execution.py::_run_row_mapper). This
+            # stage made no output — it is marked cancelled, not ok.
+            record["status"] = StageStatus.CANCELLED
+            return _StageOutcome.CANCELLED, False
+        joins_blocked = _finalize_stage_output(stage, ctx, record, output, outputs_so_far, run_dir)
+    except Exception as exc:  # noqa: BLE001 — the runner's contract is to
+        # record ANY stage failure in the manifest and keep running
+        # independent forks rather than crash the whole run.
+        _record_stage_error(record, exc)
+        joins_blocked = True
+    finally:
+        # Every terminal status (ok, error, awaiting_review, cancelled)
+        # finalizes its timing here — `record` is already in records_by_id
+        # by reference, so the branches above set only their distinguishing
+        # fields (status, halt queue info).
+        record["elapsed_ms"] = int((time.perf_counter() - t0) * 1000)
+        record["finished_at"] = datetime.now().isoformat(timespec="seconds")
+        _flush_manifest(manifest, records_by_id, ordered, ctx, run_dir, RunStatus.RUNNING)
+
+    return _StageOutcome.RAN, joins_blocked
+
+
+def _finalize_run_manifest(
+    manifest: dict[str, Any],
+    records_by_id: dict[str, StageRecord],
+    ordered: list[Stage],
+    ctx: dict[str, Any],
+    run_dir: Path,
+    cancelled: bool,
+    cancel_at_index: int,
+    halted_stage_ids: list[str],
+) -> dict[str, Any]:
+    """Assemble and persist the run's final manifest once the loop has
+    stopped, in topological order (blocked downstream stages were already
+    marked `pending` inline, so no post-loop fill is needed). A cancel is a
+    hard stop: it keeps the cancelled outcome regardless of any error/halt a
+    stage recorded before the cancel arrived, and carries no `halted_at`, so
+    a cancelled run never shows the review banner for a halt that happened
+    earlier in the same run."""
     manifest["stages"] = [records_by_id[s.id] for s in ordered if s.id in records_by_id]
     manifest["finished_at"] = datetime.now().isoformat(timespec="seconds")
     manifest["queue_stats"] = ctx.get("queue_stats", {})
     manifest["dropped_columns"] = ctx.get("dropped_columns", {})
 
     if cancelled:
-        # A cancel is a hard stop: a run stopped by request is neither a clean
-        # completion nor a failure, so it keeps the cancelled outcome regardless
-        # of any error/halt a stage recorded before the cancel arrived — and
-        # carries no `halted_at`, so a cancelled run never shows the review
-        # banner for a halt that happened earlier in the same run.
         manifest["status"] = RunStatus.CANCELLED
         manifest["cancelled_at"] = ordered[cancel_at_index].id
         manifest.pop("halted_at", None)

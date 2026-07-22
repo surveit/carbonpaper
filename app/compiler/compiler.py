@@ -137,61 +137,98 @@ def _extract_json_object(text: str) -> dict[str, Any]:
 
     last_decode_err: str | None = None
 
-    try:
-        obj = json.loads(text)
-        if isinstance(obj, dict):
+    for attempt in (
+        _try_parse_json_object,
+        _try_parse_fenced_json_object,
+        _try_parse_balanced_brace_json_object,
+    ):
+        obj, err = attempt(text)
+        if obj is not None:
             return obj
-    except json.JSONDecodeError as exc:
-        last_decode_err = str(exc)
-
-    # Strip code fences if present.
-    fenced = re.search(r"```(?:json)?\s*(.*?)```", text, re.DOTALL)
-    if fenced:
-        inner = fenced.group(1).strip()
-        try:
-            obj = json.loads(inner)
-            if isinstance(obj, dict):
-                return obj
-        except json.JSONDecodeError as exc:
-            last_decode_err = str(exc)
-
-    # Balanced-brace scan for the first top-level JSON object.
-    start = text.find("{")
-    if start != -1:
-        depth = 0
-        in_str = False
-        esc = False
-        for i in range(start, len(text)):
-            ch = text[i]
-            if in_str:
-                if esc:
-                    esc = False
-                elif ch == "\\":
-                    esc = True
-                elif ch == '"':
-                    in_str = False
-                continue
-            if ch == '"':
-                in_str = True
-            elif ch == "{":
-                depth += 1
-            elif ch == "}":
-                depth -= 1
-                if depth == 0:
-                    candidate = text[start:i + 1]
-                    try:
-                        obj = json.loads(candidate)
-                        if isinstance(obj, dict):
-                            return obj
-                    except json.JSONDecodeError as exc:
-                        last_decode_err = str(exc)
-                    break
+        last_decode_err = err or last_decode_err
 
     reason = last_decode_err or "no JSON object found in the output"
     raise ValueError(
         f"Could not parse JSON from the LLM output ({reason}).\n"
         "First 400 chars:\n" + text[:400]
     )
+
+
+def _try_parse_json_object(text: str) -> tuple[dict[str, Any] | None, str | None]:
+    """`text` itself as a JSON object: `(obj, None)` on success, `(None,
+    decoder reason)` on a parse failure, `(None, None)` if it parses but is
+    not a JSON object (e.g. a list)."""
+    try:
+        obj = json.loads(text)
+        if isinstance(obj, dict):
+            return obj, None
+    except json.JSONDecodeError as exc:
+        return None, str(exc)
+    return None, None
+
+
+def _try_parse_fenced_json_object(text: str) -> tuple[dict[str, Any] | None, str | None]:
+    """The contents of the first ```json fenced block in `text`, as a JSON
+    object. `(None, None)` if `text` has no fenced block."""
+    fenced = re.search(r"```(?:json)?\s*(.*?)```", text, re.DOTALL)
+    if not fenced:
+        return None, None
+    inner = fenced.group(1).strip()
+    try:
+        obj = json.loads(inner)
+        if isinstance(obj, dict):
+            return obj, None
+    except json.JSONDecodeError as exc:
+        return None, str(exc)
+    return None, None
+
+
+def _try_parse_balanced_brace_json_object(text: str) -> tuple[dict[str, Any] | None, str | None]:
+    """The first top-level `{...}` substring in `text`, as a JSON object.
+    `(None, None)` if `text` has no `{`, or the braces never balance."""
+    start = text.find("{")
+    if start == -1:
+        return None, None
+    candidate = _find_balanced_brace_span(text, start)
+    if candidate is None:
+        return None, None
+    try:
+        obj = json.loads(candidate)
+        if isinstance(obj, dict):
+            return obj, None
+    except json.JSONDecodeError as exc:
+        return None, str(exc)
+    return None, None
+
+
+def _find_balanced_brace_span(text: str, start: int) -> str | None:
+    """`text[start:]`'s first top-level `{...}` substring — the span from
+    `start` to the `}` that brings the brace depth back to zero, tracking
+    quoted-string state (including escaped quotes) so a brace inside a
+    string value does not affect the depth count. `None` if the depth never
+    returns to zero."""
+    depth = 0
+    in_str = False
+    esc = False
+    for i in range(start, len(text)):
+        ch = text[i]
+        if in_str:
+            if esc:
+                esc = False
+            elif ch == "\\":
+                esc = True
+            elif ch == '"':
+                in_str = False
+            continue
+        if ch == '"':
+            in_str = True
+        elif ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                return text[start:i + 1]
+    return None
 
 
 # ─────────────────────────────────────────────────────────────────────────────
