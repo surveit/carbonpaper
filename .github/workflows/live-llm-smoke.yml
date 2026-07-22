@@ -36,3 +36,15 @@ jobs:
       - run: python -m pytest -m live_llm tests/test_journey_live_llm.py
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+      # A red here without the run directory is undiagnosable from the log
+      # alone (the failure message carries the manifest's stage records, but
+      # transcripts and queue snapshots only exist on disk) — keep the whole
+      # pytest tmp tree for the post-mortem.
+      - name: Upload run evidence on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-llm-run-evidence
+          path: /tmp/pytest-of-*/pytest-*/
+          if-no-files-found: warn
+          retention-days: 14

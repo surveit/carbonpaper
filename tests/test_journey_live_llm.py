@@ -29,7 +29,7 @@ import app.web.routers.runs as runs_router
 from app.main import app
 from app.services.project import create_project
 from app.services.versioning import list_versions
-from tests.test_journey_smoke import _point_examples_dir_at
+from tests.test_journey_smoke import _point_examples_dir_at, assert_run_ok
 
 client = TestClient(app)
 
@@ -70,7 +70,7 @@ def test_live_llm_journey_reaches_a_published_artifact(live_project, tmp_path):
     run_id = resp.headers["location"].rstrip("/").rsplit("/", 1)[-1]
 
     status = client.get(f"/project/{PROJECT}/runs/{run_id}/status").json()
-    assert status["status"] == "ok", status
+    assert_run_ok(status, live_project, run_id)
 
     # The live signal: a real reply arrived for EVERY row. The column is
     # nullable, so a blanked row would still leave the run `ok` — count the

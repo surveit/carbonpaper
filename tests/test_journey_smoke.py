@@ -33,6 +33,30 @@ client = TestClient(app)
 PROJECT = "smoke_journey"
 
 
+def assert_run_ok(status: dict, project_dir, run_id: str) -> None:
+    """Assert the run finished `ok`; on anything else, fail with the
+    manifest's per-stage problem records spelled out in full. The bare
+    `assert ..., status` form is useless in CI: pytest truncates the status
+    dict's repr, so the one line that says WHICH stage failed and WHY never
+    reaches the log."""
+    if status.get("status") == "ok":
+        return
+    detail = "manifest.json not found"
+    manifest_path = project_dir / "runs" / run_id / "manifest.json"
+    if manifest_path.exists():
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        problems = [
+            record for record in manifest.get("stages", [])
+            if record and record.get("status") not in ("ok", "pending")
+        ]
+        detail = json.dumps(problems, indent=2, default=str)
+    pytest.fail(
+        f"run {run_id} finished {status.get('status')!r}, not 'ok'\n"
+        f"status: {json.dumps(status, indent=2, default=str)}\n"
+        f"non-ok stage records:\n{detail}"
+    )
+
+
 def test_offline_journey_reaches_a_published_artifact(journey_project, tmp_path):
     # Version the working copy through the web endpoint.
     resp = client.post(f"/project/{PROJECT}/version", data={"message": "first version"})
@@ -64,7 +88,7 @@ def test_offline_journey_reaches_a_published_artifact(journey_project, tmp_path)
 
     # The run completed: every stage ok.
     status = client.get(f"/project/{PROJECT}/runs/{run_id}/status").json()
-    assert status["status"] == "ok", status
+    assert_run_ok(status, journey_project, run_id)
     assert status["terminal"] is True
 
     # The manifest records the binding's provenance: a run-supplied path, hashed.
