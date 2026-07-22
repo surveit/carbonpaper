@@ -99,6 +99,13 @@ class MissingInputBindingError(Exception):
     stage."""
 
 
+class SeedRowNotFoundError(Exception):
+    """A seed was recorded against a `row_key` that does not exist in the corpus
+    key column. Raised (loudly, naming the key) rather than silently dropping the
+    seed — a seed the user named must resolve to a real corpus row, or the whole
+    must/must-not expectation is meaningless."""
+
+
 class PredicateError(ValueError):
     """A `where`/`filter` expression (aggregate.where, human_review_queue.filter)
     falls outside the closed grammar `app.core.predicate.parse_predicate`
