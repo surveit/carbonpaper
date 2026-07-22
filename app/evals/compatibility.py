@@ -10,7 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Sequence
 
-from app.core.models import (EvalConfig, EvalRunSettings, ScoringMetric, Stage,
+from app.models import (EvalConfig, EvalRunSettings, ScoringMetric, Stage,
                         TableSchema, Workflow, validate_workflow)
 from app.evals.dataset_columns import get_injected_columns
 from app.evals.run_settings import resolve_eval_run_settings

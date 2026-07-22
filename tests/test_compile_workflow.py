@@ -13,8 +13,8 @@ from app.compiler import workflow as wf
 from app.compiler.workflow_prompt import WORKFLOW_SYSTEM_PROMPT
 from app.core.agent.store import SessionStore
 from app.core.agent.turns import TurnManager
-from app.core.models import parse_schema_library
-from app.core.models.workflow import Workflow
+from app.models import parse_schema_library
+from app.models.workflow import Workflow
 
 def _stage(tmp_path):
     return {

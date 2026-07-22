@@ -17,8 +17,9 @@ from typing import Any
 
 from pydantic import ValidationError, model_validator
 
-from app.core.models.schema import _Base, format_errors
-from app.core.models.stage import Stage
+from app.models.schema import _Base
+from app.models.stage import Stage
+from app.core.utils import format_errors
 
 
 def validate_unique_ids(stages: list[Stage]) -> list[str]:

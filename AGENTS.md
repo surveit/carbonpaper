@@ -13,7 +13,7 @@ code map → `docs/architecture.md`; quickstart → `README.md`.
 
 ## Repo layout
 ```
-app/core/models/    stage-type schemas (Pydantic) — source of truth; loader rejects invalid workflows
+app/models/    stage-type schemas (Pydantic) — source of truth; loader rejects invalid workflows
 app/runtime/   the Runner (executor, stages/, LLM backends)   → app/runtime/AGENTS.md
 app/compiler/  prose → LLM → workflow engine (python -m app.compiler)
 app/web/       FastAPI routers + diagrams (thin app/main.py)  → app/AGENTS.md

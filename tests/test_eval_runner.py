@@ -14,8 +14,8 @@ from fastapi.testclient import TestClient
 import app.web.routers.evals as evals_router
 from app.core.errors import EvalNotScorableError
 from app.main import app
-from app.core.models import EvalConfig, ExpectedOutput, FileFormat, Stage, TableRef
-from app.core.models.schema import TableSchema
+from app.models import EvalConfig, ExpectedOutput, FileFormat, Stage, TableRef
+from app.models.schema import TableSchema
 from app.evals.runner import run_eval
 from app.evals.store import load_eval_run, save_eval_config
 from app.services.versioning import WorkflowVersion

@@ -10,8 +10,8 @@ import pandas as pd
 import pytest
 from pydantic import ValidationError
 
-from app.core.models import Stage
-from app.core.models.stage import StageType
+from app.models import Stage
+from app.models.stage import StageType
 from app.runtime.stages import HANDLERS
 from app.runtime.stages import llm_transform as lt
 

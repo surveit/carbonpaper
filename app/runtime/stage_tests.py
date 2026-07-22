@@ -1,6 +1,6 @@
 """Run a python transform's authored tests against its actual code.
 
-A test (app.core.models.stages.stage_tests.StageTest) is a claim about what
+A test (app.models.stages.stage_tests.StageTest) is a claim about what
 given input rows must produce, authored from the methodology. This module holds
 the stage's code to those claims: it executes each test through the SAME
 handler registry the real runner uses — fidelity comes from sharing the
@@ -32,9 +32,9 @@ from typing import Any, Literal
 import pandas as pd
 from pydantic import BaseModel
 
-from app.core.models import Stage, TableSchema
-from app.core.models.stage import StageType
-from app.core.models.stages.stage_tests import STAGE_TEST_TYPES, StageTest
+from app.models import Stage, TableSchema
+from app.models.stage import StageType
+from app.models.stages.stage_tests import STAGE_TEST_TYPES, StageTest
 from app.runtime.stages import HANDLERS
 from app.runtime.validation import Severity, validate_dataframe
 

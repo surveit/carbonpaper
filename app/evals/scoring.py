@@ -23,7 +23,7 @@ from typing import Any
 import pandas as pd
 
 from app.core.errors import EvalGrainViolationError
-from app.core.models import EvalConfig, ScoringMetric, Stage
+from app.models import EvalConfig, ScoringMetric, Stage
 from app.evals.dataset_columns import (
     deconflict_column_names,
     get_output_columns_from_stage,

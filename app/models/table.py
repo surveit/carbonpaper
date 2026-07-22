@@ -7,8 +7,8 @@ eval contract to name a table.
 """
 from __future__ import annotations
 
-from app.core.models.schema import TableSchema, _Base
-from app.core.models.stage import FileFormat
+from app.models.schema import TableSchema, _Base
+from app.models.stage import FileFormat
 
 
 class TableRef(_Base):

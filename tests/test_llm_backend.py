@@ -10,7 +10,7 @@ import pytest
 from pydantic import BaseModel
 
 from app.core.errors import LLMError
-from app.core.models import LLMConfig
+from app.models import LLMConfig
 from app.runtime import llm as llm_module
 from app.runtime import options
 

@@ -13,7 +13,7 @@ from typing import Any
 
 import pandas as pd
 
-from app.core.models import Stage
+from app.models import Stage
 
 
 def preflight_input_data(stage: Stage) -> tuple[list[str], dict[str, Any] | None]:

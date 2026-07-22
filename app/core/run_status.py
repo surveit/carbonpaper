@@ -2,7 +2,7 @@
 values a run's manifest records (see app.runtime.runner).
 
 Both are `enum.StrEnum`, not the `class X(str, Enum)` pattern used for the
-workflow-contract vocabularies in app.core.models (StageType, ConnectorKind,
+workflow-contract vocabularies in app.models (StageType, ConnectorKind,
 ...). That distinction matters here specifically: these values are rendered
 as bare strings on paths only StrEnum gets right — Jinja builds CSS classes
 with `status-{{ status }}`, the run-page poller reads `status` straight off

@@ -2,8 +2,8 @@
 
 The pieces both the workflow (`stage.py`) and the named data model (`named_schemas.py`)
 build on: the model base, the column-type vocabulary, `Column`, `TableSchema` (an
-anonymous schema that can be declared inline), the `SourceRef` provenance handle,
-and the error formatter. They live *below* both modules — `stage.py` and
+anonymous schema that can be declared inline), and the `SourceRef` provenance
+handle. They live *below* both modules — `stage.py` and
 `named_schemas.py` import from here, never the other way around — so `NamedColumn`
 and `NamedSchema` can extend `Column`/`TableSchema` without `named_schemas.py`
 depending on `stage.py`.
@@ -17,7 +17,6 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
-    ValidationError,
     field_validator,
     model_validator,
 )
@@ -48,7 +47,7 @@ STRUCTURED_COLUMN_TYPES: set[str] = {"json"}
 _LIST_RE = re.compile(r"^list\[(.+)\]$")
 
 # Named handles for the column-type values compared individually below (and by
-# app.core.models.row_model / app.runtime.validation) — as opposed to the
+# app.models.row_model / app.runtime.validation) — as opposed to the
 # scalar/structured *sets* above, which are membership-tested as a whole.
 STR_COLUMN_TYPE = "str"
 JSON_COLUMN_TYPE = "json"
@@ -428,17 +427,6 @@ class TableSchema(_Base):
         front (e.g. as an agent tool's input schema)."""
         # Local import: the builder needs Column/`_LIST_RE` from this module,
         # so importing it at module scope would be circular.
-        from app.core.models.row_model import build_row_model
+        from app.models.row_model import build_row_model
 
         return build_row_model(name, self.columns)
-
-
-# ── Error formatting ─────────────────────────────────────────────────────────
-def format_errors(err: ValidationError) -> list[str]:
-    """Pydantic errors → human-readable issue strings."""
-    out: list[str] = []
-    for e in err.errors():
-        loc = ".".join(str(p) for p in e.get("loc", ()) if p != "stages")
-        msg = e.get("msg", "invalid")
-        out.append(f"{loc}: {msg}" if loc else msg)
-    return out

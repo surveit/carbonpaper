@@ -143,7 +143,7 @@ def _write_compiled_workflow(pdir: Path) -> None:
          "inputs": [{"id": "load", "schema": _IN_SCHEMA}], "output_schema": _OUT_SCHEMA,
          "function": {"kind": "inline", "code": _DOUBLE}},
     ]
-    from app.core.models import Stage
+    from app.models import Stage
     for spec in stages:
         write_stage(compiled / f"{spec['id']}.json", Stage.model_validate(spec))
 

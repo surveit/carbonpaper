@@ -42,7 +42,7 @@ FeatureCollection); `python_row_function`/`python_frame_function`
   row driver under bounded parallelism.
 
 `validation.py` — DATA validation of a dataframe against an `output_schema` (columns, types,
-ranges, nullability, PK uniqueness), distinct from the stage schemas in `app/core/models/`.
+ranges, nullability, PK uniqueness), distinct from the stage schemas in `app/models/`.
 
 ## Run / debug
 ```

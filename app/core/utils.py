@@ -7,6 +7,8 @@ from __future__ import annotations
 
 import random
 
+from pydantic import ValidationError
+
 _ADJECTIVES = ("amber", "brisk", "calm", "dusky", "eager", "fresh", "glad", "keen",
                "lucid", "mellow", "noble", "plain", "quiet", "rapid", "solid", "tidy")
 _ANIMALS = ("badger", "crane", "finch", "gecko", "heron", "ibis", "lynx", "marmot",
@@ -28,3 +30,14 @@ def generate_word_triplet_id(taken: set[str], rng: random.Random | None = None) 
         if candidate not in taken:
             return candidate
     raise RuntimeError("Word-triplet id space exhausted")
+
+
+# ── Error formatting ─────────────────────────────────────────────────────────
+def format_errors(err: ValidationError) -> list[str]:
+    """Pydantic errors → human-readable issue strings."""
+    out: list[str] = []
+    for e in err.errors():
+        loc = ".".join(str(p) for p in e.get("loc", ()) if p != "stages")
+        msg = e.get("msg", "invalid")
+        out.append(f"{loc}: {msg}" if loc else msg)
+    return out

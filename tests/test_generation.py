@@ -10,8 +10,8 @@ from pathlib import Path
 from typing import Any
 
 import app.services.generation as generation
-from app.core.models import parse_schema_library
-from app.core.models.workflow import Workflow
+from app.models import parse_schema_library
+from app.models.workflow import Workflow
 
 _DM = parse_schema_library([{
     "name": "documents", "title": "Documents", "kind": "input",

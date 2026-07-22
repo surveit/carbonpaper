@@ -15,7 +15,7 @@ from typing import Any, Optional
 
 from pydantic import BaseModel, ConfigDict, model_validator
 
-from app.core.models.schema import _Base
+from app.models.schema import _Base
 
 # The stage types whose handlers can execute a test.
 STAGE_TEST_TYPES = frozenset({"python_row_function", "python_frame_function"})

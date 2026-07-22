@@ -15,8 +15,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.core.models import Stage
-from app.core.models.stage import StageType
+from app.models import Stage
+from app.models.stage import StageType
 from app.web.loading import resolve_function_code
 
 

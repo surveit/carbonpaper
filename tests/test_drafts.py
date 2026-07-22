@@ -47,7 +47,7 @@ def test_create_draft_seeded_from_version(examples: Path) -> None:
 
 
 # A valid Stage whose `inputs` name a stage id absent from the draft: Stage
-# validation is per-stage only (see app.core.models.workflow.check_inputs_resolve
+# validation is per-stage only (see app.models.workflow.check_inputs_resolve
 # for the cross-stage check), so this parses and stores fine even though the
 # input never resolves.
 _DANGLING_INPUT_STAGE = dict(

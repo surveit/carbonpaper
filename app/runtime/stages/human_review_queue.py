@@ -9,7 +9,7 @@ from typing import Any
 import pandas as pd
 import pyarrow.lib as pa_lib
 
-from app.core.models import RowReviewDecision, Stage
+from app.models import RowReviewDecision, Stage
 
 from ..errors import HaltForReview
 from ._shared import _translate_where

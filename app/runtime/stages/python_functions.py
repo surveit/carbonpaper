@@ -13,7 +13,7 @@ from typing import Any, Callable
 
 import pandas as pd
 
-from app.core.models import FunctionKind, Stage
+from app.models import FunctionKind, Stage
 
 from .execution import Row
 

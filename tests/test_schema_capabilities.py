@@ -1,4 +1,4 @@
-"""Tests for the schema capabilities in app/core/models/schema.py: Column.enum, the
+"""Tests for the schema capabilities in app/models/schema.py: Column.enum, the
 recursive json/list[json] shape (Column.fields / Column.value_type),
 TableSchema.subtract (strict=True and strict=False) / is_subset_of, and
 TableSchema.to_prompt."""
@@ -7,7 +7,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from app.core import models as m
+from app import models as m
 
 
 # ── Column.enum ──────────────────────────────────────────────────────────────
@@ -270,7 +270,7 @@ def test_spec_column_fields_derived_from_model():
     """The fields subtract compares for spec-equality are DERIVED from the
     Column model (every field except the prose ones), so a newly added schema
     capability is compared automatically instead of being silently ignored."""
-    from app.core.models import schema as sch
+    from app.models import schema as sch
     prose = {"name", "description", "source"}
     assert set(sch._SPEC_COLUMN_FIELDS) == set(m.Column.model_fields) - prose
 

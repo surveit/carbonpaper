@@ -5,7 +5,7 @@ covering end-to-end is that round trip (carried through actual JSON text —
 model_dump_json / model_validate_json, the form a real caller uses)."""
 from __future__ import annotations
 
-from app.core.models import (
+from app.models import (
     Connector,
     ConnectorKind,
     NamedColumn,

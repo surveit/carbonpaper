@@ -2,10 +2,10 @@
 agents as prompt guidance — not only as a validation error after the fact. These
 guard that the NODE_TYPES `notes` for human_review_queue is rendered into the batch
 compiler's contract AND the interactive editing agent's system prompt, from the one
-source (app.core.models.NODE_TYPES) so the two prompts can't drift."""
+source (app.models.NODE_TYPES) so the two prompts can't drift."""
 from __future__ import annotations
 
-from app.core import models as m
+from app import models as m
 
 
 def test_human_review_queue_note_states_the_hash_requirement():

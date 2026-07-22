@@ -36,9 +36,9 @@ from app.compiler.data_model import start_data_model_generation_agent
 from app.compiler.stage_tests import start_stage_test_derivation_agent
 from app.compiler.workflow import start_workflow_generation_agent
 from app.core.errors import GenerationError
-from app.core.models.named_schemas import SchemaLibrary
-from app.core.models.stages.stage_tests import STAGE_TEST_TYPES
-from app.core.models.workflow import Workflow
+from app.models.named_schemas import SchemaLibrary
+from app.models.stages.stage_tests import STAGE_TEST_TYPES
+from app.models.workflow import Workflow
 from app.services import data_model
 from app.services.compilation import regenerate_workflow
 from app.services.loader import load_workflow, stage_to_spec_dict

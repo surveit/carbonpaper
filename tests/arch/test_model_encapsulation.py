@@ -88,7 +88,7 @@ _RULES: tuple[ProtectedAttributeRule, ...] = (
         attribute="columns",
         owner=_REPO_ROOT / "app" / "core" / "models",
         rationale=(
-            "TableSchema.columns is app/core/models' to search, project, or "
+            "TableSchema.columns is app/models' to search, project, or "
             "filter — a caller that needs 'the column names of this schema' "
             "or 'the columns matching X' is re-deriving a primitive the "
             "schema should expose (see TableSchema.subtract/is_subset_of for "
@@ -100,7 +100,7 @@ _RULES: tuple[ProtectedAttributeRule, ...] = (
         attribute="stages",
         owner=_REPO_ROOT / "app" / "core" / "models",
         rationale=(
-            "Workflow.stages is app/core/models' to index, project, or "
+            "Workflow.stages is app/models' to index, project, or "
             "filter — a caller that needs 'the stage with this id' or 'the "
             "ids of these stages' is re-deriving a primitive Workflow should "
             "expose (see Workflow.index_stages_by_id, added for exactly the "

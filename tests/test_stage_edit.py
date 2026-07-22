@@ -5,7 +5,7 @@ import pytest
 
 from app.services import loader, node_review, stage_edit
 
-# A strictly-1:1 llm_transform (app/core/models/stage.py): its input and output
+# A strictly-1:1 llm_transform (app/models/stage.py): its input and output
 # schemas share a primary_key and the output is additive (keeps every input
 # column, adds at least one).
 _IN_SCHEMA = {
@@ -67,7 +67,7 @@ def test_id_mismatch_rejected(tmp_path: Path) -> None:
 def test_edit_after_approval_drops_to_edited_stale(tmp_path: Path) -> None:
     pdir = _seed(tmp_path)
     # Approve the CURRENT spec (hash it the same way the service does), then edit it.
-    from app.core.models import Stage
+    from app.models import Stage
     original_hash = node_review.node_content_hash(loader.stage_to_spec_dict(Stage.model_validate(_VALID)))
     node_review.record_node_decision(pdir, stage_id="score", content_hash=original_hash,
                                      decision="approve", reviewer="human")

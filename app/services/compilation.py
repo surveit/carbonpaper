@@ -15,7 +15,7 @@ from typing import Any
 
 from app.compiler import compile_methodology
 from app.core.errors import RegenerateWithoutSnapshotError
-from app.core.models.workflow import validate_workflow_draft
+from app.models.workflow import validate_workflow_draft
 from app.services import versioning, workspace
 
 

@@ -14,7 +14,7 @@ import pandas as pd
 import pytest
 
 from app.core.errors import MissingInputBindingError
-from app.core.models import Stage
+from app.models import Stage
 from app.runtime.runner import apply_run_bindings, validate_stages_ready, execute_run
 from app.runtime.stages.input_data import read_input_data
 from app.services import versioning

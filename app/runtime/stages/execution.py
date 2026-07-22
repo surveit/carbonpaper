@@ -17,7 +17,7 @@ whose `execute` fixes the calling convention:
 Preservation is carried by the shape CLASS — RowMap/Source preserve, Frame does
 not — so a handler cannot separately declare itself preserving; it either is a
 row-driven shape or it is not. Which shape a type registers under must agree with
-the core fact (app.core.models is_grain_and_order_preserving); validate_registry_matches_model
+the core fact (app.models is_grain_and_order_preserving); validate_registry_matches_model
 holds the two equal when the registry module is imported.
 """
 from __future__ import annotations
@@ -28,8 +28,8 @@ from typing import Any, Callable
 
 import pandas as pd
 
-from app.core.models import Stage
-from app.core.models.stage import StageType, is_grain_and_order_preserving
+from app.models import Stage
+from app.models.stage import StageType, is_grain_and_order_preserving
 
 from ..cancellation import consume_cancel
 from ..errors import RunCancelled

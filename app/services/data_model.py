@@ -7,8 +7,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from app.core.models import parse_schema_library
-from app.core.models.named_schemas import SchemaLibrary
+from app.models import parse_schema_library
+from app.models.named_schemas import SchemaLibrary
 from app.services import node_review, workspace
 
 

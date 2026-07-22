@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from app.core.models import TableSchema
+from app.models import TableSchema
 from app.runtime.validation import validate_dataframe
 
 

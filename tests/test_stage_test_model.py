@@ -2,8 +2,8 @@
 import pytest
 from pydantic import ValidationError
 
-from app.core.models import Stage, StageTest
-from app.core.models.stages.stage_tests import build_stage_tests_model
+from app.models import Stage, StageTest
+from app.models.stages.stage_tests import build_stage_tests_model
 from app.services.loader import stage_to_spec_dict
 
 _IN_SCHEMA = {"columns": [{"name": "amount", "type": "float", "nullable": False}]}

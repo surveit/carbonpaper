@@ -2,7 +2,7 @@
 import pytest
 
 from app.compiler.stage_tests import build_stage_test_deriver, render_derivation_task
-from app.core.models import Stage
+from app.models import Stage
 
 _CODE = "def transform(row):\n    return {**row, 'doubled': row['amount'] * 2}\n"
 

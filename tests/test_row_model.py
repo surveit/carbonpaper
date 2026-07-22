@@ -6,7 +6,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from app.core.models import TableSchema
+from app.models import TableSchema
 
 
 def _model(cols):
@@ -104,6 +104,6 @@ def test_description_carried_into_json_schema():
 
 def test_scalar_vocabulary_matches_schema_layer():
     # row_model's python-type map must cover exactly the schema layer's scalars
-    from app.core.models.row_model import _SCALAR_PY_TYPES
-    from app.core.models.schema import SCALAR_COLUMN_TYPES
+    from app.models.row_model import _SCALAR_PY_TYPES
+    from app.models.schema import SCALAR_COLUMN_TYPES
     assert set(_SCALAR_PY_TYPES) == SCALAR_COLUMN_TYPES

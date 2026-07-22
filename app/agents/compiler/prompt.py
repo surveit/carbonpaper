@@ -5,7 +5,7 @@ so the prompt names no specific project."""
 
 from __future__ import annotations
 
-from app.core.models import NODE_TYPES
+from app.models import NODE_TYPES
 
 _SYSTEM_PROMPT = (
     "You help a journalist author and refine a project — a workflow of typed "

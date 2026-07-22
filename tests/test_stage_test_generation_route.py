@@ -25,7 +25,7 @@ from fastapi.testclient import TestClient
 import app.compiler.stage_tests as compiler_stage_tests
 from app.core.agent.store import SessionStore
 from app.core.agent.turns import TurnManager
-from app.core.models.stages.stage_tests import build_stage_tests_model
+from app.models.stages.stage_tests import build_stage_tests_model
 from app.main import app
 
 _IN_SCHEMA = {"columns": [{"name": "amount", "type": "float", "nullable": False}]}

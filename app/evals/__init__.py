@@ -8,6 +8,6 @@
   - scoring.py          — compare a target's output to the dataset's expected columns
 
 Depends on app.runtime (to execute a stage subset), app.services (versioning),
-and app.core.models. Nothing in those layers imports app.evals. The eval MODELS live in
-app.core.models.eval; the eval WEB routes in app.web.routers.evals.
+and app.models. Nothing in those layers imports app.evals. The eval MODELS live in
+app.models.eval; the eval WEB routes in app.web.routers.evals.
 """

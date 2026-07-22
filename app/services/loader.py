@@ -27,9 +27,9 @@ from typing import Any
 
 from pydantic import ValidationError
 
-from app.core.models.workflow import Workflow, validate_workflow
-from app.core.models.schema import format_errors
-from app.core.models.stage import Stage
+from app.models.workflow import Workflow, validate_workflow
+from app.models.stage import Stage
+from app.core.utils import format_errors
 
 from .errors import WorkflowLoadError
 

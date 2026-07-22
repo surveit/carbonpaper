@@ -20,7 +20,7 @@ import pandas as pd
 
 from app.core.errors import EvalGrainViolationError, EvalNotScorableError, SubsetRunError
 from app.evals.scoring import score_expected_outputs
-from app.core.models import (
+from app.models import (
     EvalConfig, EvalRun, EvalRunSettings, FileFormat, Stage, TableRef, Workflow,
 )
 from app.runtime.runner import run_subset

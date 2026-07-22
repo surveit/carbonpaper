@@ -15,7 +15,7 @@ import app.web.loading as loading
 import app.web.routers.evals as evals_router
 import app.web.routers.project as project_router
 from app.main import app
-from app.core.models import (
+from app.models import (
     EvalConfig,
     EvalRun,
     EvalRunSettings,
@@ -23,7 +23,7 @@ from app.core.models import (
     FileFormat,
     TableRef,
 )
-from app.core.models.schema import TableSchema
+from app.models.schema import TableSchema
 from app.core.persistence import get_store
 from app.evals.store import save_eval_config, save_eval_run
 from app.services.versioning import WorkflowVersion
