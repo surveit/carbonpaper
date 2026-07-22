@@ -1143,3 +1143,136 @@ td.row-num, th.row-num { text-align: right; color: #98a1b3; font-variant-numeric
 .eval-touch-list li { display: flex; align-items: center; gap: 8px; padding: 4px 0; }
 .eval-role { color: #666; font-size: .85rem; }
 .quiet-warning { color: #888; font-size: .9rem; }
+
+/* ── Eval authoring form (#72: visual polish for the PR #59 form) ──
+   Purely presentational -- groups the existing fields/ids into the same
+   white-card-on-page-background language used elsewhere (.right-pane,
+   .queue-card, .run-stage), with the standard label/input treatment. No
+   field name, id, or JS hook changes. */
+#eval-form { max-width: 900px; }
+
+#eval-form section.eval-section {
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 20px 24px 24px;
+    margin: 0 0 20px;
+}
+#eval-form section.eval-section h2 { margin: 0 0 6px; }
+#eval-form section.eval-section > .lede { margin-bottom: 16px; }
+#eval-form .eval-section-basics { padding-bottom: 4px; }
+
+#eval-form .field { margin: 0 0 18px; }
+#eval-form .field:last-child { margin-bottom: 0; }
+#eval-form .field label {
+    display: block;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    color: var(--muted);
+    margin: 0 0 6px;
+}
+#eval-form .field-hint { margin: 6px 0 0; font-size: 12px; color: var(--muted); }
+
+#eval-form input[type="text"],
+#eval-form input[type="number"],
+#eval-form input[type="file"],
+#eval-form select,
+#eval-form textarea {
+    font: inherit;
+    font-size: 14px;
+    padding: 8px 10px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: white;
+    color: var(--fg);
+    box-sizing: border-box;
+}
+#eval-form input[type="text"],
+#eval-form input[type="number"],
+#eval-form textarea,
+#eval-form select {
+    width: 100%;
+    max-width: 480px;
+}
+#eval-form input:focus,
+#eval-form select:focus,
+#eval-form textarea:focus {
+    outline: 2px solid var(--accent);
+    outline-offset: -1px;
+    border-color: var(--accent);
+}
+#eval-form input:disabled { background: var(--code-bg); color: var(--muted); }
+#eval-form textarea { min-height: 70px; resize: vertical; font-family: inherit; }
+
+/* Graph picker: the mermaid card keeps the shared .dag styling; this is the
+   status bar underneath it (override/target picks + clear). */
+#eval-form .pick-summary {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px 20px;
+    margin: 14px 0 0;
+    padding: 10px 14px;
+    background: var(--code-bg);
+    border-radius: 5px;
+    font-size: 13px;
+}
+#eval-form .pick-kv { display: flex; align-items: center; gap: 6px; }
+#eval-form .pick-kv strong {
+    font-size: 11px; text-transform: uppercase; letter-spacing: 0.4px;
+    color: var(--muted); font-weight: 600;
+}
+#eval-form .pick-value {
+    font-family: "SFMono-Regular", "Consolas", "Liberation Mono", Menlo, monospace;
+    font-size: 12.5px;
+}
+#eval-form .pick-summary .btn { margin-left: auto; }
+#eval-form #override-required-columns { margin-top: 10px; }
+#eval-form #override-required-columns .lede { margin: 0; }
+
+/* Expected/check rows */
+#eval-form #expected-rows { display: flex; flex-direction: column; gap: 8px; margin: 12px 0; }
+#eval-form .expected-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+}
+#eval-form .expected-row select { width: auto; max-width: none; flex: 1 1 220px; }
+#eval-form .expected-row select[name="expected_metric"] { flex: 0 1 130px; }
+#eval-form .expected-row input[name="expected_tolerance"] {
+    width: auto; max-width: none; flex: 0 0 110px;
+}
+#eval-form .expected-row input[name="expected_tolerance"][hidden] { display: none; }
+#eval-form .expected-row .remove-expected-row {
+    margin-left: auto;
+    flex: none;
+    padding: 6px 12px;
+    font-size: 13px;
+    color: #802020;
+    border-color: #e3b6b6;
+}
+#eval-form .expected-row .remove-expected-row:hover { background: #fde8e8; }
+#eval-form #add-expected-row { margin-top: 4px; }
+
+/* Cases section */
+#eval-form #cases-schema-container { margin: 10px 0; }
+#eval-form #cases-schema-container .lede { margin: 0; }
+#eval-form #download-template-btn { margin: 0 0 20px; }
+#eval-form .eval-upload-fields { display: flex; flex-direction: column; gap: 16px; margin-top: 16px; }
+#eval-form .eval-upload-fields .field { margin: 0; }
+
+#eval-form .save-row { margin: 24px 0 0; }
+#eval-form .save-row .btn.primary { padding: 10px 22px; font-size: 15px; }
+
+@media (max-width: 640px) {
+    #eval-form .expected-row { flex-wrap: wrap; }
+    #eval-form .expected-row select,
+    #eval-form .expected-row input[name="expected_tolerance"] { flex: 1 1 45%; }
+    #eval-form .expected-row .remove-expected-row { margin-left: 0; flex-basis: 100%; }
+}

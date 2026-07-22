@@ -37,89 +37,99 @@
       action="{% if mode == 'create' %}/methodology/{{ methodology }}/evals/new{% else %}/methodology/{{ methodology }}/evals/{{ eval_id }}/edit{% endif %}"
       id="eval-form">
 
-    <p>
-        <label for="f-id">id</label><br>
-        {% if mode == "create" %}
-        <input type="text" id="f-id" name="id" value="{{ values.id }}" required>
-        {% else %}
-        <input type="text" id="f-id" value="{{ values.id }}" disabled>
-        {% endif %}
-    </p>
-
-    <p>
-        <label for="f-name">name</label><br>
-        <input type="text" id="f-name" name="name" value="{{ values.name }}" required>
-    </p>
-
-    <p>
-        <label for="f-description">description</label><br>
-        <textarea id="f-description" name="description">{{ values.description }}</textarea>
-    </p>
-
-    <h2>Pick override and target on the workflow</h2>
-    <p class="lede">Click a node to set it as the <strong>override</strong> stage (where the eval injects the cases table). Nodes not reachable from it dim out. Click a non-dimmed node to set it as the <strong>target</strong> stage (what the eval checks). <button type="button" class="btn" id="clear-picks">clear</button></p>
-
-    <div class="dag" id="eval-pick-dag">
-        <pre class="mermaid">
-{{ mermaid }}
-        </pre>
-    </div>
-
-    <p>
-        <strong>override:</strong> <span id="pick-override-label">{{ values.override_stage or "— none —" }}</span>
-        &nbsp;&nbsp;
-        <strong>target:</strong> <span id="pick-target-label">{{ values.target_stage or "— none —" }}</span>
-    </p>
-    <input type="hidden" id="f-override" name="override_stage" value="{{ values.override_stage }}">
-    <input type="hidden" id="f-target" name="target_stage" value="{{ values.target_stage }}">
-    <div id="override-required-columns"></div>
-
-    <h2>Expected columns</h2>
-    <div id="expected-rows">
-        {% for row in values.expected_rows %}
-        <div class="expected-row">
-            <select name="expected_actual">
-                <option value="">— actual —</option>
-                {% if row.actual %}<option value="{{ row.actual }}" selected>{{ row.actual }}</option>{% endif %}
-            </select>
-            <select name="expected_metric">
-                <option value="exact" {% if row.metric == "exact" %}selected{% endif %}>exact</option>
-                <option value="abs_tol" {% if row.metric == "abs_tol" %}selected{% endif %}>abs_tol</option>
-                <option value="sign" {% if row.metric == "sign" %}selected{% endif %}>sign</option>
-            </select>
-            <input type="number" name="expected_tolerance" value="{{ row.tolerance }}" step="any">
-            <button type="button" class="btn remove-expected-row">remove</button>
+    <section class="eval-section eval-section-basics">
+        <div class="field">
+            <label for="f-id">id</label>
+            {% if mode == "create" %}
+            <input type="text" id="f-id" name="id" value="{{ values.id }}" required>
+            {% else %}
+            <input type="text" id="f-id" value="{{ values.id }}" disabled>
+            {% endif %}
         </div>
-        {% endfor %}
-    </div>
-    <button type="button" class="btn" id="add-expected-row">+ add expected column</button>
 
-    <h2>Cases file</h2>
-    <p class="lede">The cases file your picks require -- the override's injected input columns plus, for each check, a column holding the value you expect, named after the column it grades (renamed only if that name clashes with an injected input).</p>
-    <div id="cases-schema-container"><p class="lede">Pick override/target and add expected columns to see the required cases-file schema.</p></div>
-    <p><button type="button" class="btn" id="download-template-btn" disabled>Download template</button></p>
+        <div class="field">
+            <label for="f-name">name</label>
+            <input type="text" id="f-name" name="name" value="{{ values.name }}" required>
+        </div>
 
-    <p>
-        <label for="f-file">upload a file</label><br>
-        <input type="file" id="f-file" name="file" accept=".csv,.parquet,.json">
-        <br><span class="lede">Optional — you can attach cases later.</span>
-    </p>
-    <p>
-        <label for="f-path">or an existing repo-relative path</label><br>
-        <input type="text" id="f-path" name="path_input" value="{{ values.table_path }}">
-    </p>
-    <input type="hidden" id="f-table-path" name="table_path" value="{{ values.table_path }}">
+        <div class="field">
+            <label for="f-description">description</label>
+            <textarea id="f-description" name="description">{{ values.description }}</textarea>
+        </div>
+    </section>
 
-    <p>
-        <label for="f-table-format">format</label><br>
-        <select id="f-table-format" name="table_format">
-            <option value="csv" {% if values.table_format == "csv" %}selected{% endif %}>csv</option>
-            <option value="parquet" {% if values.table_format == "parquet" %}selected{% endif %}>parquet</option>
-            <option value="json" {% if values.table_format == "json" %}selected{% endif %}>json</option>
-        </select>
-    </p>
+    <section class="eval-section eval-section-graph">
+        <h2>Pick override and target on the workflow</h2>
+        <p class="lede">Click a node to set it as the <strong>override</strong> stage (where the eval injects the cases table). Nodes not reachable from it dim out. Click a non-dimmed node to set it as the <strong>target</strong> stage (what the eval checks).</p>
 
-    <p><button type="submit" class="btn primary">save</button></p>
+        <div class="dag" id="eval-pick-dag">
+            <pre class="mermaid">
+{{ mermaid }}
+            </pre>
+        </div>
+
+        <div class="pick-summary">
+            <div class="pick-kv"><strong>override</strong><span class="pick-value" id="pick-override-label">{{ values.override_stage or "— none —" }}</span></div>
+            <div class="pick-kv"><strong>target</strong><span class="pick-value" id="pick-target-label">{{ values.target_stage or "— none —" }}</span></div>
+            <button type="button" class="btn" id="clear-picks">clear</button>
+        </div>
+        <input type="hidden" id="f-override" name="override_stage" value="{{ values.override_stage }}">
+        <input type="hidden" id="f-target" name="target_stage" value="{{ values.target_stage }}">
+        <div id="override-required-columns"></div>
+    </section>
+
+    <section class="eval-section eval-section-expected">
+        <h2>Expected columns</h2>
+        <div id="expected-rows">
+            {% for row in values.expected_rows %}
+            <div class="expected-row">
+                <select name="expected_actual">
+                    <option value="">— actual —</option>
+                    {% if row.actual %}<option value="{{ row.actual }}" selected>{{ row.actual }}</option>{% endif %}
+                </select>
+                <select name="expected_metric">
+                    <option value="exact" {% if row.metric == "exact" %}selected{% endif %}>exact</option>
+                    <option value="abs_tol" {% if row.metric == "abs_tol" %}selected{% endif %}>abs_tol</option>
+                    <option value="sign" {% if row.metric == "sign" %}selected{% endif %}>sign</option>
+                </select>
+                <input type="number" name="expected_tolerance" value="{{ row.tolerance }}" step="any">
+                <button type="button" class="btn remove-expected-row">remove</button>
+            </div>
+            {% endfor %}
+        </div>
+        <button type="button" class="btn" id="add-expected-row">+ add expected column</button>
+    </section>
+
+    <section class="eval-section eval-section-cases">
+        <h2>Cases file</h2>
+        <p class="lede">The cases file your picks require -- the override's injected input columns plus, for each check, a column holding the value you expect, named after the column it grades (renamed only if that name clashes with an injected input).</p>
+        <div id="cases-schema-container"><p class="lede">Pick override/target and add expected columns to see the required cases-file schema.</p></div>
+        <p><button type="button" class="btn" id="download-template-btn" disabled>Download template</button></p>
+
+        <div class="eval-upload-fields">
+            <div class="field">
+                <label for="f-file">upload a file</label>
+                <input type="file" id="f-file" name="file" accept=".csv,.parquet,.json">
+                <p class="field-hint">Optional — you can attach cases later.</p>
+            </div>
+            <div class="field">
+                <label for="f-path">or an existing repo-relative path</label>
+                <input type="text" id="f-path" name="path_input" value="{{ values.table_path }}">
+            </div>
+            <input type="hidden" id="f-table-path" name="table_path" value="{{ values.table_path }}">
+
+            <div class="field">
+                <label for="f-table-format">format</label>
+                <select id="f-table-format" name="table_format">
+                    <option value="csv" {% if values.table_format == "csv" %}selected{% endif %}>csv</option>
+                    <option value="parquet" {% if values.table_format == "parquet" %}selected{% endif %}>parquet</option>
+                    <option value="json" {% if values.table_format == "json" %}selected{% endif %}>json</option>
+                </select>
+            </div>
+        </div>
+    </section>
+
+    <p class="save-row"><button type="submit" class="btn primary">save</button></p>
 </form>
 
 {# Template row cloned by JS when adding an expected-column row. Kept outside
