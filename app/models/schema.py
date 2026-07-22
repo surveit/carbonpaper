@@ -48,9 +48,10 @@ SCALAR_COLUMN_TYPES: set[str] = {"str", "int", "float", "bool", "datetime", "dat
 STRUCTURED_COLUMN_TYPES: set[str] = {"json"}
 _LIST_RE = re.compile(r"^list\[(.+)\]$")
 
-# Named handles for the column-type values compared individually below (and by
-# app.models.row_model / app.runtime.validation) — as opposed to the
-# scalar/structured *sets* above, which are membership-tested as a whole.
+# Named handles for the column-type values compared individually below (by
+# _annotation_for/_render_column in this module, and by app.runtime.validation)
+# — as opposed to the scalar/structured *sets* above, which are membership-tested
+# as a whole.
 STR_COLUMN_TYPE = "str"
 JSON_COLUMN_TYPE = "json"
 LIST_JSON_COLUMN_TYPE = "list[json]"
