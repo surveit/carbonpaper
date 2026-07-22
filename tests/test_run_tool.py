@@ -84,6 +84,15 @@ def test_run_manifest_parses_real_shape_and_totals_usage(tmp_path: Path) -> None
     assert total.calls == 10
 
 
+def test_run_manifest_accepts_cancelled_status() -> None:
+    # `cancelled` is a real terminal status the runner writes (RunStatus enum);
+    # the manifest Literal must admit it, so a cancelled run parses.
+    manifest_data = _sample_manifest()
+    manifest_data["status"] = "cancelled"
+    manifest = RunManifest.model_validate(manifest_data)
+    assert manifest.status == "cancelled"
+
+
 def test_read_run_manifest_reads_on_disk_run(tmp_path: Path) -> None:
     _write_manifest(tmp_path, "run_abc", _sample_manifest())
 

@@ -38,7 +38,7 @@ class RunManifest(BaseModel):
 
     run_id: str
     status: Literal[
-        "running", "ok", "warnings", "errors", "awaiting_review", "corrupt"
+        "running", "ok", "warnings", "errors", "awaiting_review", "cancelled"
     ]
     workflow_version: str
     stages: list[StageRunRecord]
