@@ -8,6 +8,11 @@ grounding is per-request and lives in the task, not here.
 """
 from __future__ import annotations
 
+from app.compiler.node_contract_notes import (
+    HUMAN_REVIEW_QUEUE_CONTRACT_NOTE,
+    LLM_TRANSFORM_TOOL_CALLING_NOTE,
+)
+
 WORKFLOW_SYSTEM_PROMPT = """\
 You are a METHODOLOGY COMPILER. Read an UNSTRUCTURED account of one research process — a
 captured agent/tool transcript, working notes, or prose — and DISTILL it into a reusable
@@ -27,9 +32,10 @@ shape. In one line each:
   (dedup, pivot, multi-input merge).
 - llm_transform — a step that needs judgment or reads unstructured text into structure.
   Its prompt_template is rendered with Python's str.format_map: inject a column as {column_name}.
+  """ + LLM_TRANSFORM_TOOL_CALLING_NOTE + """
 - join — combines rows from upstream stages on a key.
 - aggregate — collapses rows into group summaries.
-- human_review_queue — routes items to a person to decide.
+- human_review_queue — routes items to a person to decide. """ + HUMAN_REVIEW_QUEUE_CONTRACT_NOTE + """
 - publish — renders the final output.
 Describe each stage you emit in one sentence and let the type follow from what the step is;
 do not prescribe a type from the situation.

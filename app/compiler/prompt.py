@@ -16,6 +16,10 @@ from __future__ import annotations
 import json
 
 from app import models
+from app.compiler.node_contract_notes import (
+    HUMAN_REVIEW_QUEUE_CONTRACT_NOTE,
+    LLM_TRANSFORM_TOOL_CALLING_NOTE,
+)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -32,6 +36,8 @@ SYSTEM_PROMPT = (
     "you. Put the LLM (llm_transform) only at the FEW genuine judgment points; "
     "everything mechanical (building queries, downloading, parsing, joining, "
     "aggregating, rendering) must be a deterministic node type.\n\n"
+    f"{LLM_TRANSFORM_TOOL_CALLING_NOTE}\n\n"
+    f"{HUMAN_REVIEW_QUEUE_CONTRACT_NOTE}\n\n"
     "Respond with raw JSON exactly matching the requested shape — no prose, no "
     "markdown, no code fences. Never fabricate data values, URLs, numbers, or "
     "sources; when the input is ambiguous, encode your best STRUCTURAL guess in "
