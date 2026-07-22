@@ -105,6 +105,35 @@ def test_run_status_counts_include_a_cancelled_stage(examples_dir, client):
     assert counts["pending"] == 1
 
 
+def test_run_detail_page_offers_resume_for_a_cancelled_run(examples_dir, client):
+    """POST /resume works on a cancelled run (it re-runs every not-complete
+    stage and reuses completed outputs), so the run page must offer it —
+    the resume bar is gated on errored stages OR a cancelled run, and a
+    cancelled run has no errored stages."""
+    _write_one_stage_project(examples_dir)
+    _write_status_manifest(examples_dir, [
+        ("load", "ok"),
+        ("score", "cancelled"),
+        ("publish", "pending"),
+    ])
+
+    page = client.get(f"/project/{PROJ}/runs/{RUN}")
+    assert page.status_code == 200
+    assert f'action="/project/{PROJ}/runs/{RUN}/resume"' in page.text
+    assert "Resume cancelled run" in page.text
+    # The errored-run wording stays reserved for runs with failed stages.
+    assert "Re-run failed stage" not in page.text
+
+
+def test_run_detail_page_hides_resume_for_a_completed_run(examples_dir, client):
+    _write_one_stage_project(examples_dir)
+    _write_manifest(examples_dir, "ok")
+
+    page = client.get(f"/project/{PROJ}/runs/{RUN}")
+    assert page.status_code == 200
+    assert f'action="/project/{PROJ}/runs/{RUN}/resume"' not in page.text
+
+
 def test_run_detail_page_shows_cancel_button_only_while_running(examples_dir, client):
     _write_one_stage_project(examples_dir)
     _write_manifest(examples_dir, "running")

@@ -59,12 +59,20 @@
     <span id="al-cancelled" class="alert cancelled" {% if not cancelled %}hidden{% endif %}>✖ <b>{{ cancelled }}</b> cancelled</span>
 </div>
 
-{% if err and not is_running %}
+{% if (err or manifest.status == 'cancelled') and not is_running %}
 <div class="rerun-bar">
     <form action="/project/{{ project }}/runs/{{ run_id }}/resume" method="post">
+        {% if err %}
         <button type="submit" class="btn primary">↻ Re-run failed stage{% if err != 1 %}s{% endif %}</button>
+        {% else %}
+        <button type="submit" class="btn primary">↻ Resume cancelled run</button>
+        {% endif %}
     </form>
+    {% if err %}
     <span class="muted">Re-runs the failed stage{% if err != 1 %}s{% endif %} + everything downstream. Completed stages are kept (their outputs are reused — no re-running, no new LLM calls).</span>
+    {% else %}
+    <span class="muted">Continues from where the run was cancelled. Completed stages are kept (their outputs are reused — no re-running, no new LLM calls).</span>
+    {% endif %}
 </div>
 {% endif %}
 
