@@ -92,6 +92,27 @@ def test_sum_of_int_declared_str_rejected():
     assert "total" in msg and "int" in msg
 
 
+def test_sum_of_str_declared_str_accepted():
+    # pandas sum of a string column concatenates, so sum over str derives str.
+    stage = Stage.model_validate(_aggregate_stage(
+        output_columns=[{"name": "all_regions", "type": "str"}],
+        aggregations=[
+            {"output_column": "all_regions", "formula": "sum", "value_column": "region"},
+        ],
+    ))
+    assert stage.id == "totals"
+
+
+def test_sum_of_str_declared_int_rejected():
+    msg = _issues(_aggregate_stage(
+        output_columns=[{"name": "all_regions", "type": "int"}],
+        aggregations=[
+            {"output_column": "all_regions", "formula": "sum", "value_column": "region"},
+        ],
+    ))
+    assert "all_regions" in msg and "str" in msg
+
+
 def test_list_op_declared_list_of_value_type_accepted():
     stage = Stage.model_validate(_aggregate_stage(
         output_columns=[{"name": "regions", "type": "list[str]"}],

@@ -84,8 +84,9 @@ def derive_aggregate_output_types(
     (None = unknowable): every group_by column carries its edge type through
     unchanged, and each aggregation's output column follows its formula —
     count->int and mean->float unconditionally; sum->the value column's type
-    when numeric (int/float); min/max/first->the value column's type;
-    list->list[<value column's type>]."""
+    for int/float and for str (pandas sum of strings concatenates them);
+    min/max/first->the value column's type; list->list[<value column's
+    type>]."""
     def edge_type(name: str | None) -> str | None:
         if name is None or edge is None:
             return None
@@ -100,7 +101,9 @@ def derive_aggregate_output_types(
         elif op.formula == "mean":
             derived[op.output_column] = "float"
         elif op.formula == "sum":
-            derived[op.output_column] = value_type if value_type in ("int", "float") else None
+            derived[op.output_column] = (
+                value_type if value_type in ("int", "float", "str") else None
+            )
         elif op.formula == AGG_FORMULA_LIST:
             derived[op.output_column] = f"list[{value_type}]" if value_type else None
         else:  # min / max / first: the value column's own type
