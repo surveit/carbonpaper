@@ -84,7 +84,6 @@ def run_stage_preview(
     stage_def: Stage,
     run_dir: Path,
     repo_root: Path,
-    project_dir: Path,
     output_by_id: dict[str, str | None],
     selected_indices: list[int],
 ) -> dict[str, Any]:
@@ -132,13 +131,15 @@ def run_stage_preview(
         )
     inputs[first_id] = base_df.iloc[valid].reset_index(drop=True)
 
-    # Ephemeral context. We pass the real run_dir/project_dir for read-only
-    # path resolution, but a pure handler (python/llm/join/aggregate) never
-    # writes — and we never call the runner, so no manifest/output is touched.
+    # Ephemeral context. We pass the real run_dir for read-only path resolution,
+    # but a pure handler (python/llm/join/aggregate) never writes — and we never
+    # call the runner, so no manifest/output is touched. No project_dir: none of
+    # PREVIEWABLE_TYPES' handlers read one (only human_review_queue/publish do,
+    # and both are refused above); resolving a project id to its on-disk layout
+    # is this function's caller's job, not the runtime's.
     ctx: dict[str, Any] = {
         "repo_root": repo_root,
         "run_dir": run_dir,
-        "project_dir": project_dir,
         "queue_stats": {},
         "_scratch_preview": True,
     }
