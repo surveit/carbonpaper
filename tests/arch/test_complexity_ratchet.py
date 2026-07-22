@@ -91,7 +91,7 @@ def find_ratchet_violations(
 ) -> list[str]:
     """Human-readable offender lines for the three ratchet rules in the
     module docstring, run over `measurements` against `baseline`."""
-    by_key = {(m.path, m.function): m for m in measurements}
+    by_key = index_by_identity(measurements, source="the measured functions")
     violator_keys = {key for key, m in by_key.items() if m.complexity > _COMPLEXITY_THRESHOLD}
     baseline_keys = set(baseline)
 
@@ -107,14 +107,42 @@ def find_ratchet_violations(
     return offenders
 
 
+def index_by_identity(measurements: list[FunctionComplexity], *, source: str) -> dict[tuple[str, str], FunctionComplexity]:
+    """`measurements` keyed by ``(path, function)``, raising loudly on a
+    duplicate identity instead of silently keeping the last one. Two blocks
+    that resolve to the same qualified name — ``@typing.overload`` stubs, or
+    a platform-conditional ``def foo(): ... / def foo(): ...`` under
+    ``if``/``else`` — would otherwise collapse into one dict entry and drop
+    the other's complexity unnoticed, which would let a real violator slip
+    past ratchet rule 1 (a new violator must always fail)."""
+    by_key: dict[tuple[str, str], FunctionComplexity] = {}
+    for m in measurements:
+        key = (m.path, m.function)
+        if key in by_key:
+            raise ValueError(
+                f"{source}: two entries for {m.path}:{m.function} (lines {by_key[key].line} "
+                f"and {m.line}) — the complexity ratchet keys by (path, function) and cannot "
+                "tell them apart; give one of them a distinct name"
+            )
+        by_key[key] = m
+    return by_key
+
+
 def load_baseline(path: Path) -> dict[tuple[str, str], FunctionComplexity]:
     """The committed baseline as ``{(path, function): entry}``. A missing
     file reads as an empty baseline — the legitimate starting state before
-    any function was ever grandfathered in — rather than an error."""
+    any function was ever grandfathered in — rather than an error. A
+    baseline entry's ``line`` is not part of its identity (only `path` and
+    `function` are, so the entry stays matched across an unrelated line
+    shift elsewhere in the file); it can go stale and is informational only.
+    Raises loudly (see `index_by_identity`) on two entries for the same
+    identity rather than silently keeping the last one."""
     if not path.exists():
         return {}
     entries = json.loads(path.read_text(encoding="utf-8"))
-    return {(entry["path"], entry["function"]): FunctionComplexity(**entry) for entry in entries}
+    return index_by_identity(
+        [FunctionComplexity(**entry) for entry in entries], source=f"baseline {path}"
+    )
 
 
 def test_functions_do_not_exceed_the_complexity_ratchet() -> None:
@@ -258,6 +286,29 @@ def test_measure_function_complexities_qualifies_a_closure_inside_a_method(tmp_p
     assert {m.function for m in measurements} == {"Foo.bar", "Foo.bar.<inner>"}
 
 
+def test_measure_function_complexities_surfaces_both_blocks_of_a_platform_conditional_duplicate_name(
+    tmp_path: Path,
+) -> None:
+    """Two ``def foo():`` under ``if``/``else`` (or, equivalently,
+    ``@typing.overload`` stubs) both resolve to the same qualified name —
+    radon reports both as separate blocks rather than collapsing them, so the
+    measurement layer must surface both too; it is `index_by_identity`
+    downstream that must then refuse to silently pick one."""
+    file = tmp_path / "m.py"
+    file.write_text(
+        "if True:\n"
+        "    def foo(x):\n"
+        "        if x:\n"
+        "            return 1\n"
+        "        return 2\n"
+        "else:\n"
+        "    def foo(x):\n"
+        "        return 3\n"
+    )
+    measurements = measure_function_complexities([file], tmp_path)
+    assert [(m.function, m.line) for m in measurements] == [("foo", 2), ("foo", 7)]
+
+
 def test_load_baseline_reads_a_missing_file_as_empty(tmp_path: Path) -> None:
     assert load_baseline(tmp_path / "missing.json") == {}
 
@@ -266,6 +317,20 @@ def test_load_baseline_keys_entries_by_path_and_function(tmp_path: Path) -> None
     baseline_path = tmp_path / "baseline.json"
     baseline_path.write_text(json.dumps([{"path": "app/a.py", "line": 3, "function": "go", "complexity": 25}]))
     assert load_baseline(baseline_path) == {("app/a.py", "go"): FunctionComplexity("app/a.py", 3, "go", 25)}
+
+
+def test_load_baseline_raises_on_two_entries_for_the_same_identity(tmp_path: Path) -> None:
+    baseline_path = tmp_path / "baseline.json"
+    baseline_path.write_text(
+        json.dumps(
+            [
+                {"path": "app/a.py", "line": 3, "function": "go", "complexity": 25},
+                {"path": "app/a.py", "line": 30, "function": "go", "complexity": 26},
+            ]
+        )
+    )
+    with pytest.raises(ValueError, match="app/a.py:go"):
+        load_baseline(baseline_path)
 
 
 def _make_measurement(path: str = "a.py", line: int = 1, function: str = "go", complexity: int = 25) -> FunctionComplexity:
@@ -314,3 +379,35 @@ def test_find_ratchet_violations_flags_a_stale_entry_when_now_below_threshold() 
     offenders = find_ratchet_violations([_make_measurement(complexity=15)], baseline)
     assert len(offenders) == 1
     assert "<= 20" in offenders[0] and "remove" in offenders[0]
+
+
+def test_index_by_identity_raises_on_two_measurements_for_the_same_identity() -> None:
+    duplicates = [
+        _make_measurement(path="a.py", function="go", line=1, complexity=25),
+        _make_measurement(path="a.py", function="go", line=10, complexity=30),
+    ]
+    with pytest.raises(ValueError, match="a.py:go"):
+        index_by_identity(duplicates, source="test")
+
+
+def test_index_by_identity_keeps_two_different_functions_in_the_same_file() -> None:
+    distinct = [
+        _make_measurement(path="a.py", function="go", complexity=25),
+        _make_measurement(path="a.py", function="stop", complexity=25),
+    ]
+    assert set(index_by_identity(distinct, source="test")) == {("a.py", "go"), ("a.py", "stop")}
+
+
+def test_find_ratchet_violations_raises_on_two_measurements_for_the_same_identity() -> None:
+    """The bug this guards: without a loud raise, a dict comprehension keyed
+    by (path, function) would silently keep only the LAST of two same-named
+    blocks — e.g. a platform-conditional `def foo(): / def foo():` under
+    `if`/`else` — and a genuinely violating one could be the one dropped,
+    letting ratchet rule 1 (a new violator must always fail) slip past
+    silently instead of failing loud."""
+    duplicates = [
+        _make_measurement(path="a.py", function="go", line=1, complexity=25),
+        _make_measurement(path="a.py", function="go", line=10, complexity=5),
+    ]
+    with pytest.raises(ValueError, match="a.py:go"):
+        find_ratchet_violations(duplicates, {})
