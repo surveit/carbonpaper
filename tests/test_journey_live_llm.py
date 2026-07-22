@@ -28,6 +28,7 @@ from fastapi.testclient import TestClient
 import app.web.routers.runs as runs_router
 from app.main import app
 from app.services.project import create_project
+from app.services.versioning import list_versions
 from tests.test_journey_smoke import _point_examples_dir_at
 
 client = TestClient(app)
@@ -56,6 +57,13 @@ def test_live_llm_journey_reaches_a_published_artifact(live_project, tmp_path):
     resp = client.post(f"/project/{PROJECT}/version", data={"message": "live smoke"})
     assert resp.status_code == 200, resp.text
     assert resp.json()["ok"] is True, resp.text
+
+    # Publish it — a run pins a PUBLISHED version, so the human-approval step is
+    # part of the journey: author -> version -> publish -> run -> artifact.
+    version_id = list_versions(tmp_path / PROJECT)[0].version_id
+    resp = client.post(f"/project/{PROJECT}/versions/{version_id}/publish",
+                       follow_redirects=False)
+    assert resp.status_code == 303, resp.text
 
     resp = client.post(f"/project/{PROJECT}/run", data={}, follow_redirects=False)
     assert resp.status_code == 303, resp.text
