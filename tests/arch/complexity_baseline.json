@@ -1,0 +1,38 @@
+[
+  {
+    "path": "app/compiler/compiler.py",
+    "line": 126,
+    "function": "_extract_json_object",
+    "complexity": 21
+  },
+  {
+    "path": "app/runtime/runner.py",
+    "line": 481,
+    "function": "_execute_stages",
+    "complexity": 36
+  },
+  {
+    "path": "app/runtime/stages/human_review_queue.py",
+    "line": 43,
+    "function": "handle_human_review_queue",
+    "complexity": 28
+  },
+  {
+    "path": "app/runtime/validation.py",
+    "line": 78,
+    "function": "validate_dataframe",
+    "complexity": 32
+  },
+  {
+    "path": "app/web/diagrams.py",
+    "line": 65,
+    "function": "build_schema_er_diagram",
+    "complexity": 23
+  },
+  {
+    "path": "app/web/routers/review.py",
+    "line": 32,
+    "function": "queue_page",
+    "complexity": 43
+  }
+]

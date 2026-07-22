@@ -7,5 +7,6 @@ httpx>=0.27              # fastapi.testclient (starlette TestClient) transport
 ruff==0.15.20
 mypy==2.1.0
 import-linter==2.13       # architecture-boundary contracts in pyproject [tool.importlinter]
+radon==6.0.1              # cyclomatic-complexity ratchet in tests/arch/test_complexity_ratchet.py
 pandas-stubs==3.0.3.260530
 types-PyYAML==6.0.12.20250516  # stubs for `import yaml` in app/services/eval_store.py
