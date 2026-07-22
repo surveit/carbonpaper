@@ -15,7 +15,6 @@ CW_LLM_PARALLEL).
 from __future__ import annotations
 
 import asyncio
-import json
 import time
 from typing import Any
 
@@ -45,21 +44,16 @@ SYSTEM_PROMPT = (
 
 
 def render_prompt(template: str, row: dict[str, Any]) -> str:
-    """Render the prompt template safely. Missing placeholders are left
-    as-is so we can still call the LLM rather than KeyError out."""
-    class _Defaults(dict[str, Any]):
-        def __missing__(self, key: str) -> str:
-            return "{" + key + "}"
+    """Render the prompt by injecting row columns as {column}. A placeholder
+    naming a column not in the row, or a malformed template, is a loud error —
+    the model must never be called with a half-rendered prompt."""
     try:
-        return template.format_map(_Defaults(row))
-    except (ValueError, IndexError, KeyError):
-        # last-ditch: a malformed template (bad or positional placeholder) still
-        # calls the LLM — append a JSON dump of the row so the model has access
-        return template + "\n\n[row data]:\n" + json.dumps(
-            {k: (str(v)[:1000] if not isinstance(v, (int, float, bool, type(None))) else v)
-             for k, v in row.items()},
-            indent=2,
-        )
+        return template.format_map(row)
+    except (KeyError, ValueError, IndexError) as exc:
+        raise LLMError(
+            f"prompt template could not be rendered ({type(exc).__name__}: {exc}); "
+            f"a {{placeholder}} must name a row column, and literal braces must be escaped as {{{{ }}}}"
+        ) from exc
 
 
 def call_llm(

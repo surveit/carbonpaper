@@ -97,3 +97,13 @@ class MissingInputBindingError(Exception):
     exist. Raised before the run directory is created — a run never starts on
     inputs that would have to be guessed. The message names every unready
     stage."""
+
+
+class PredicateError(ValueError):
+    """A `where`/`filter` expression (aggregate.where, human_review_queue.filter)
+    falls outside the closed grammar `app.core.predicate.parse_predicate`
+    accepts — unparseable as Python, or built from a construct the grammar
+    does not admit (a bare function call, arithmetic, subscripting, and the
+    like). Raised at parse time, before either save-time column validation or
+    runtime evaluation acts on the expression, so a rejected filter never
+    reaches `pandas.eval`/`.query()` unchecked."""

@@ -238,7 +238,6 @@ class AggregateConfig(_Base):
     """aggregate handle."""
     group_by: list[str]
     aggregations: list[AggregationOp]
-    having: Optional[str] = None
 
 
 class RowReviewDecision(str, Enum):
@@ -543,6 +542,33 @@ class Stage(_Base):
                         f"human_review_queue '{self.id}' hash_columns {missing} are not "
                         f"in the upstream schema (which declares {sorted(declared)})"
                     )
+        return self
+
+    @model_validator(mode="after")
+    def _config_columns_resolve(self) -> "Stage":
+        """Every column this stage's config directly names (a join key, an
+        aggregate group_by/value_column, publish.one_file_per, an llm prompt
+        {placeholder}) or references via a where/filter predicate (aggregate
+        `where`, human_review_queue `filter`) must resolve against that
+        reference's own input edge — `inputs[index].table_schema`, per
+        `app.models.stages.shared.resolve_input_columns`. EDGE-ONLY: this says
+        nothing about what an upstream producer itself declares, so it holds
+        for a single stage in isolation, independent of the rest of any
+        workflow. A reference whose edge declares no schema at all is skipped,
+        not flagged — unresolvable means unknowable, never wrong.
+
+        Runs after `_handle_for_type`, so the type-matched handle block (join/
+        aggregate/publish/llm/queue) this dispatches on is already guaranteed
+        present. Lazy-imports the dispatch, rather than importing it at module
+        level like every other import in this file: `app.models.stages`
+        needs `Stage` back only for a type hint, but a module-level import
+        here would run while this module (which defines `Stage`) is still
+        mid-import."""
+        from app.models.stages import find_config_column_issues
+
+        issues = find_config_column_issues(self)
+        if issues:
+            raise ValueError("; ".join(issues))
         return self
 
     @property

@@ -6,9 +6,8 @@ from typing import Any
 
 import pandas as pd
 
+from app.core.predicate import parse_predicate
 from app.models import Stage
-
-from ._shared import _translate_where
 
 
 def handle_aggregate(stage: Stage, inputs: dict[str, pd.DataFrame], ctx: dict[str, Any]) -> pd.DataFrame:
@@ -27,7 +26,7 @@ def handle_aggregate(stage: Stage, inputs: dict[str, pd.DataFrame], ctx: dict[st
         where = op.where
         slice_df = rows
         if where:
-            slice_df = rows.query(_translate_where(where))
+            slice_df = rows.query(parse_predicate(where).pandas_expr)
 
         if formula == "count":
             series = slice_df.groupby(group_by, dropna=False).size().rename(out)

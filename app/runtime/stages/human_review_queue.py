@@ -9,10 +9,10 @@ from typing import Any
 import pandas as pd
 import pyarrow.lib as pa_lib
 
+from app.core.predicate import parse_predicate
 from app.models import RowReviewDecision, Stage
 
 from ..errors import HaltForReview
-from ._shared import _translate_where
 
 
 def _content_hash(row: pd.Series, columns: list[str]) -> str:
@@ -61,22 +61,28 @@ def handle_human_review_queue(stage: Stage, inputs: dict[str, pd.DataFrame], ctx
 
     # Partition rows: those subject to review vs. those passing through.
     if flt:
+        # A PredicateError here means `flt` falls outside the closed grammar
+        # parse_predicate enforces (bad grammar) — let it propagate loud rather
+        # than folding it into the eval-time except below, so a bad-grammar
+        # filter fails at parse rather than being misreported as an eval failure.
+        parsed = parse_predicate(flt)
         try:
             # eval of a comparison yields a bool Series; the explicit dtype=bool
             # conversion makes that a checked fact (anything else lands in the
-            # except below and is recorded as a filter_error).
+            # except below and is raised as a loud error).
             queueable_mask = pd.Series(
-                src.eval(_translate_where(flt)), index=src.index, dtype=bool
+                src.eval(parsed.pandas_expr), index=src.index, dtype=bool
             )
-        except (SyntaxError, ValueError, TypeError, KeyError, AttributeError, NameError):
-            # `flt` is an arbitrary author-supplied expression (queue.filter
-            # in the stage YAML); a malformed one must not crash the run —
-            # everything falls through to the queue instead, and the
-            # specific error is recorded below for the author to fix.
-            queueable_mask = pd.Series([False] * len(src), index=src.index)
-            ctx.setdefault("queue_stats", {}).setdefault(sid, {})[
-                "filter_error"
-            ] = f"could not evaluate `{flt}`"
+        except (SyntaxError, ValueError, TypeError, KeyError, AttributeError, NameError) as exc:
+            # `flt` parses under our grammar but references a column absent
+            # from this run's actual frame (or another eval-time problem); a
+            # malformed reference must halt the run rather than silently
+            # routing every row to passthrough (which would skip human review
+            # unnoticed).
+            raise ValueError(
+                f"human_review_queue '{sid}' filter could not be evaluated: `{flt}` "
+                f"({type(exc).__name__}: {exc}). A filter must reference existing input columns."
+            ) from exc
     else:
         queueable_mask = pd.Series([True] * len(src), index=src.index)
 

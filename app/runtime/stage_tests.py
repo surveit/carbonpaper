@@ -13,10 +13,11 @@ Statuses:
   malformed — the test itself violates the stage's declared schemas; a bad
               test is its own failure kind, never reported as a code bug
 
-Comparison: cells compare on the output_schema's columns. None and NaN are
-distinct values — a cell matches iff the values are equal, where None equals
-only None and float NaN equals float NaN (a plain `==` would make NaN unequal
-to itself). An omitted column in a row is a claim of None. Both sides compare
+Comparison: cells compare on the output_schema's columns. Null and NaN are one
+absence — a cell matches iff the values are equal, where None and float NaN
+count as the same absent value (a pandas frame stores a null as NaN in a
+numeric column and as None in an object column, so the two cannot be told
+apart). An omitted column in a row is a claim of absence. Both sides compare
 as a multiset of rows: each is sorted into the same value-based order first,
 so no test pins an ordering (a python_row_function test is one row in → one
 row out, where order is vacuous; python_frame_function is not
@@ -269,15 +270,20 @@ def _select_cells(row: dict[str, Any], columns: list[str]) -> dict[str, Any]:
 
 
 def _values_equal(expected: Any, actual: Any) -> bool:
-    """Cell equality with None and NaN as distinct values: None equals only
-    None, float NaN equals float NaN (a plain `==` would make NaN unequal to
-    itself), anything else compares by `==`."""
-    if expected is None or actual is None:
-        return expected is None and actual is None
-    if isinstance(expected, float) and isinstance(actual, float):
-        if math.isnan(expected) or math.isnan(actual):
-            return math.isnan(expected) and math.isnan(actual)
+    """Cell equality treating null and NaN as one absence: two absent cells are
+    equal, an absent and a present cell are not, and two present cells compare
+    by `==`. A pandas frame stores a null as NaN in a numeric column and as None
+    in an object column, so the runtime cannot tell the two apart — a test that
+    expects a null therefore matches either."""
+    if _is_absent(expected) or _is_absent(actual):
+        return _is_absent(expected) and _is_absent(actual)
     return bool(expected == actual)
+
+
+def _is_absent(value: Any) -> bool:
+    """A cell is absent when it is None or float NaN — the two forms a null
+    takes in a pandas frame, which do not survive as distinct values."""
+    return value is None or (isinstance(value, float) and math.isnan(value))
 
 
 def _sort_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
