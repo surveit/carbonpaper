@@ -666,6 +666,10 @@ def _execute_stages(
                 ]
             record["output_validation"] = out_rep.to_dict()
 
+            usage = (ctx.get("llm_usage") or {}).get(sid)
+            if usage is not None:
+                record["llm_usage"] = usage
+
             output_path = run_dir / "outputs" / f"{sid}.parquet"
             try:
                 output.to_parquet(output_path, index=False)

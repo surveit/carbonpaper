@@ -44,6 +44,24 @@ SYSTEM_PROMPT = (
 )
 
 
+# A usage record is {input_tokens, output_tokens, cost_usd, calls} — plain
+# dicts (not a model) so they ride hidden row columns and land in the JSON
+# manifest unchanged. EMPTY_USAGE is the additive identity.
+EMPTY_USAGE: dict[str, Any] = {
+    "input_tokens": 0, "output_tokens": 0, "cost_usd": 0.0, "calls": 0,
+}
+
+
+def sum_usage(parts: list[dict[str, Any]]) -> dict[str, Any]:
+    """Field-wise sum of usage records (empty -> EMPTY_USAGE). Used to fold a
+    row's per-attempt usage, and a stage's per-row usage, into one total."""
+    total = dict(EMPTY_USAGE)
+    for part in parts:
+        for key in total:
+            total[key] += part.get(key, 0)  # data-default-ok: absent field adds 0 to the sum
+    return total
+
+
 def render_prompt(template: str, row: dict[str, Any]) -> str:
     """Render the prompt template safely. Missing placeholders are left
     as-is so we can still call the LLM rather than KeyError out."""
@@ -69,13 +87,19 @@ def call_llm(
     *,
     reply_model: type[BaseModel],
     model: str | None = None,
+    usage_out: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Single-row LLM call; returns the reply as a plain dict.
 
     A structured-output Agent must submit a valid `reply_model` instance
     (validated by construction, retried in-loop on rejection). When no agent
     backend is available this raises — there is no fallback, so a fabricated
-    answer can never masquerade as a real model reply."""
+    answer can never masquerade as a real model reply.
+
+    If `usage_out` is given, each attempt's token/cost usage is appended to it —
+    including a failed attempt's, since those tokens were still spent. Kept as an
+    out-param rather than the return value so the reply-dict contract (and the
+    tests that mock it) are unchanged."""
     require_agent_backend()
 
     if not llm_config.prompt_template:
@@ -103,14 +127,26 @@ def call_llm(
         )
         try:
             answer = run_sync(asyncio.wait_for(agent.run(), timeout=DEFAULT_TIMEOUT_S))
+            _record_usage(usage_out, agent)
             return answer.model_dump(mode="json")
         except Exception as exc:  # noqa: BLE001 — retry any backend failure up to
-            # max_retries, then re-raise the last so the caller records it.
+            # max_retries, then re-raise the last so the caller records it. The
+            # attempt still spent tokens (a rejected schema, a mid-turn drop), so
+            # record its usage before retrying.
+            _record_usage(usage_out, agent)
             last_exc = exc
             if attempt + 1 < attempts:
                 time.sleep(min(4.0, 1.0 * (attempt + 1)))
     assert last_exc is not None  # attempts >= 1, so the loop ran and set this
     raise last_exc
+
+
+def _record_usage(usage_out: list[dict[str, Any]] | None, agent: Agent[BaseModel]) -> None:
+    """Append this attempt's usage to the sink, if both are present. A turn that
+    produced no ResultMessage (e.g. a timeout) leaves agent.last_usage None —
+    nothing is recorded rather than a fabricated zero."""
+    if usage_out is not None and agent.last_usage is not None:
+        usage_out.append(agent.last_usage)
 
 
 def backend_status() -> dict[str, Any]:
