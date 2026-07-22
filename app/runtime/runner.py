@@ -36,7 +36,6 @@ from app.services import versioning
 
 from .cancellation import consume_cancel
 from .errors import RunCancelled
-from .run_log import RunLog
 from .stages import HANDLERS, PREFLIGHTS, HaltForReview
 from .validation import Issue, validate_dataframe
 
@@ -285,22 +284,6 @@ def prepare_run(
                 f"stages are {[s.id for s in ordered]}"
             )
 
-    # --offset is DISABLED. Dropping the first M rows post-hoc reindexes a
-    # stage's output (iloc[M:].reset_index), so output row r no longer came from
-    # input row r. That breaks the positional row-preservation the lineage
-    # tracer and per-row LLM trace capture depend on: a trace file named r.json
-    # would describe a different row than the one shown at output ordinal r.
-    # We don't use offset, so it's rejected here rather than silently producing
-    # mismatched traces. (`--limit` truncates the TAIL, leaving output ordinals
-    # unchanged, so it stays.) Removing the flag + slicing code entirely is a
-    # separate PR; this just makes it unreachable.
-    if any(isinstance(v, int) and v > 0 for v in offsets.values()):
-        raise ValueError(
-            "--offset is disabled: dropping leading rows breaks row-level "
-            "lineage/trace correspondence (output row r would no longer map to "
-            "trace r). Use --limit to cap rows instead."
-        )
-
     runs_dir = project_dir / "runs"
     run_id = datetime.now().strftime("%Y%m%dT%H%M%S")
     run_dir = runs_dir / run_id
@@ -523,16 +506,6 @@ def _execute_stages(
     `pending`); or mid-stage, via RunCancelled unwinding out of
     handler.execute (that stage's own record is marked `cancelled`).
     Stages already completed keep their `ok` record and on-disk output."""
-    # Per-run event log (runs/<id>/events.jsonl): stage/row lifecycle events the
-    # run page tails live over SSE and re-reads to investigate a finished run.
-    # Created here so EVERY entry path (run_prepared, execute_run, run_subset,
-    # resume_run) gets logging regardless of the ctx it built. Closed before the
-    # single return below.
-    run_log = RunLog(run_dir / "events.jsonl")
-    ctx["run_log"] = run_log
-    run_log.emit({"kind": "run_start", "run_id": manifest.get("run_id"),
-                  "stage_count": len(ordered)})
-
     halted_stage_ids: list[str] = []
     blocked: set[str] = set()
     cancelled = False
@@ -617,8 +590,6 @@ def _execute_stages(
         t0 = time.perf_counter()
         records_by_id[sid] = record
         flush(RunStatus.RUNNING)  # show this stage as running
-        run_log.emit({"kind": "stage_start", "stage": sid, "type": stype,
-                      "name": stage.name})
 
         try:
             inputs_for_stage: dict[str, pd.DataFrame] = {}
@@ -762,13 +733,6 @@ def _execute_stages(
             record["elapsed_ms"] = int((time.perf_counter() - t0) * 1000)
             record["finished_at"] = datetime.now().isoformat(timespec="seconds")
             flush(RunStatus.RUNNING)  # persist this stage's result for the live page
-            run_log.emit({
-                # record carries "rows"/"elapsed_ms" from its creation above, so
-                # index them directly (no fabricated numeric fallback).
-                "kind": "stage_done", "stage": sid, "status": record["status"],
-                "rows": record["rows"], "elapsed_ms": record["elapsed_ms"],
-                "error": (record.get("error") or {}).get("message"),
-            })
 
     # Emit stages in topological order so the manifest reads top-to-bottom.
     # Blocked downstream stages were marked `pending` inline, so no post-loop
@@ -799,10 +763,6 @@ def _execute_stages(
     (run_dir / "manifest.json").write_text(
         json.dumps(manifest, indent=2, default=str), encoding="utf-8"
     )
-
-    # close() emits the terminal `run_done` marker the SSE tailer stops on, then
-    # flushes and joins the writer thread.
-    run_log.close()
     return manifest
 
 

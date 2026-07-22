@@ -13,11 +13,6 @@ from app.compiler.node_contract_notes import (
     LLM_TRANSFORM_TOOL_CALLING_NOTE,
 )
 
-# Plain string with placeholder tokens, not an f-string: the prompt legitimately
-# contains a literal single-brace example ({column_name}) that str.format_map itself
-# uses — an f-string would need it double-escaped ({{column_name}}), which reads as
-# if the model should emit DOUBLE braces (it renders right, but it's misleading to a
-# human reading the source). .replace() sidesteps that entirely.
 WORKFLOW_SYSTEM_PROMPT = """\
 You are a METHODOLOGY COMPILER. Read an UNSTRUCTURED account of one research process — a
 captured agent/tool transcript, working notes, or prose — and DISTILL it into a reusable
@@ -37,10 +32,10 @@ shape. In one line each:
   (dedup, pivot, multi-input merge).
 - llm_transform — a step that needs judgment or reads unstructured text into structure.
   Its prompt_template is rendered with Python's str.format_map: inject a column as {column_name}.
-  __LLM_TRANSFORM_TOOL_CALLING_NOTE__
+  """ + LLM_TRANSFORM_TOOL_CALLING_NOTE + """
 - join — combines rows from upstream stages on a key.
 - aggregate — collapses rows into group summaries.
-- human_review_queue — routes items to a person to decide. __HUMAN_REVIEW_QUEUE_CONTRACT_NOTE__
+- human_review_queue — routes items to a person to decide. """ + HUMAN_REVIEW_QUEUE_CONTRACT_NOTE + """
 - publish — renders the final output.
 Describe each stage you emit in one sentence and let the type follow from what the step is;
 do not prescribe a type from the situation.
@@ -59,9 +54,3 @@ upstream stage. Keep every id snake_case.
 
 NEVER fabricate data values, URLs, numbers, or sources; encode STRUCTURE only, and record
 genuine ambiguity in a stage's `compiler_notes`."""
-
-WORKFLOW_SYSTEM_PROMPT = (
-    WORKFLOW_SYSTEM_PROMPT
-    .replace("__LLM_TRANSFORM_TOOL_CALLING_NOTE__", LLM_TRANSFORM_TOOL_CALLING_NOTE)
-    .replace("__HUMAN_REVIEW_QUEUE_CONTRACT_NOTE__", HUMAN_REVIEW_QUEUE_CONTRACT_NOTE)
-)

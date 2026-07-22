@@ -11,9 +11,7 @@ from __future__ import annotations
 LLM_TRANSFORM_TOOL_CALLING_NOTE = (
     "At runtime the model answers ONLY by calling submit_answer — a prose answer is "
     "silently discarded even if correct — so every prompt_template must end with an "
-    "explicit instruction to call submit_answer with the verdict, never explain it as "
-    "text. Cheaper/faster models follow this less reliably; prefer a stronger model for "
-    "a nuanced judgment stage."
+    "explicit instruction to call submit_answer with the verdict, never explain it as text."
 )
 
 HUMAN_REVIEW_QUEUE_CONTRACT_NOTE = (

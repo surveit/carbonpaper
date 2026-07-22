@@ -5,8 +5,6 @@ resume."""
 
 from __future__ import annotations
 
-import asyncio
-import json
 import threading
 import traceback
 from pathlib import Path
@@ -14,17 +12,11 @@ from typing import Any
 
 from fastapi import APIRouter, File, Form, HTTPException, Request, Response, UploadFile
 from fastapi.datastructures import FormData
-from fastapi.responses import (
-    HTMLResponse,
-    JSONResponse,
-    RedirectResponse,
-    StreamingResponse,
-)
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from starlette.concurrency import run_in_threadpool
 
 from app.core.errors import MissingInputBindingError, NoVersionToRunError, RowOutOfRange, StageNotInRun
 from app.core.run_status import RunStatus, StageStatus
-from app.models import StageType
 from app.services.errors import WorkflowLoadError
 from app.services.loader import load_workflow
 from app.services.versioning import list_versions
@@ -32,7 +24,6 @@ from app.runtime.cancellation import request_cancel
 from app.runtime.errors import PreviewError
 from app.runtime.preview import PREVIEWABLE_TYPES, run_stage_preview
 from app.runtime.runner import prepare_run, resume_run, run_prepared
-from app.runtime.run_log import RUN_DONE, read_events_since
 from app.runtime.trace import trace_row, trace_to_dict
 from app.web.trace_view import build_trace_view
 from app.web.config import EXAMPLES_DIR, REPO_ROOT, templates
@@ -294,50 +285,6 @@ def _artifact_links(project: str, run_id: str, run_dir: Path, manifest: dict) ->
         }
         for f in files
     ]
-
-
-@router.get("/project/{project}/runs/{run_id}/events")
-async def stream_run_events(project: str, run_id: str, request: Request,
-                            from_seq: int = 0):
-    """SSE tail of the run's events.jsonl — stage/row lifecycle events streamed
-    as the run writes them, ending on the terminal `run_done` marker.
-
-    The same endpoint serves a FINISHED run: it drains the file and ends, so the
-    live feed and after-the-fact investigation are one code path. `from_seq`
-    resumes the stream after a reconnect (each event carries a monotonic `seq`).
-    File-tailing — not asyncio wakeups — is deliberate: the run and its LLM rows
-    execute on worker threads with no access to the server loop, and a file
-    crosses that boundary for free."""
-    run_dir = runs_dir(project) / run_id
-    events_path = run_dir / "events.jsonl"
-
-    async def gen():
-        cursor = from_seq
-        idle_after_terminal = 0
-        while True:
-            if await request.is_disconnected():
-                return
-            new = read_events_since(events_path, cursor)
-            for ev in new:
-                cursor = int(ev.get("seq", cursor)) + 1
-                yield f"data: {json.dumps(ev)}\n\n"
-                if ev.get("kind") == RUN_DONE:
-                    return
-            # Fallback stop: if the writer never wrote run_done (e.g. a crash mid
-            # run), end once the manifest is terminal AND a couple of polls have
-            # added nothing — so a client never hangs on an interrupted run.
-            manifest = load_manifest(run_dir)
-            if manifest.get("status") not in ("running", None):
-                idle_after_terminal = 0 if new else idle_after_terminal + 1
-                if idle_after_terminal >= 2:
-                    yield "event: done\ndata: {}\n\n"
-                    return
-            await asyncio.sleep(0.5)
-
-    return StreamingResponse(
-        gen(), media_type="text/event-stream",
-        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
-    )
 
 
 @router.get("/project/{project}/runs/{run_id}", response_class=HTMLResponse)

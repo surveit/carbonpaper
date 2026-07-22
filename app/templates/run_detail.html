@@ -103,70 +103,7 @@
     <div class="empty-state"><h2>Select a stage</h2><p>Click any node in the workflow to load its run details.</p></div>
 </div>
 
-{# ── Run log: live-tailed lifecycle events (stage/row start·done·error),
-      streamed over SSE from runs/<id>/events.jsonl. Opens for a live run AND a
-      finished one — the endpoint drains the file then ends either way, so this
-      is also how you investigate a past run. ── #}
-<details class="run-log-panel" id="run-log-panel" open>
-    <summary>Run log <span id="run-log-count" class="muted"></span></summary>
-    <div class="run-log-toolbar">
-        <label><input type="checkbox" id="run-log-errors-only"> errors only</label>
-        <button type="button" id="run-log-clear" class="btn">clear view</button>
-        <span id="run-log-state" class="muted"></span>
-    </div>
-    <pre id="run-log" class="run-log"></pre>
-</details>
-
 <details class="raw-yaml"><summary>Raw manifest</summary><pre>{{ manifest | tojson(indent=2) }}</pre></details>
-
-<script>
-(function () {
-  const PROJECT = {{ project | tojson }};
-  const RUN_ID = {{ run_id | tojson }};
-  const url = `/project/${encodeURIComponent(PROJECT)}/runs/${encodeURIComponent(RUN_ID)}/events?from_seq=0`;
-  const pre = document.getElementById('run-log');
-  const countEl = document.getElementById('run-log-count');
-  const stateEl = document.getElementById('run-log-state');
-  const errorsOnly = document.getElementById('run-log-errors-only');
-  const events = [];
-
-  const esc = s => String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
-  function fmt(ev) {
-    const ts = (ev.ts || '').slice(11, 23);        // HH:MM:SS.mmm
-    const loc = [ev.stage, ev.row != null ? `row ${ev.row}` : null].filter(Boolean).join(' · ');
-    const tail = ev.text ? ` — ${ev.text}` : (ev.status ? ` — ${ev.status}` : '');
-    const line = esc(`${ts}  ${(ev.kind || '').padEnd(11)} ${loc}${tail}`);
-    // A per-row event links to that row's lineage/trace — prompt, thinking,
-    // answer for an LLM stage. Opens in a new tab so the live feed keeps running.
-    if (ev.stage != null && ev.row != null) {
-      const u = `/project/${encodeURIComponent(PROJECT)}/runs/${encodeURIComponent(RUN_ID)}/stage/${encodeURIComponent(ev.stage)}/row/${ev.row}/trace/view`;
-      return `<a class="run-log-row" href="${u}" target="_blank" rel="noopener">${line}</a>`;
-    }
-    return `<span>${line}</span>`;
-  }
-  function render() {
-    const only = errorsOnly.checked;
-    const shown = only ? events.filter(e => e.kind === 'row_error' || e.kind === 'stage_done' && e.status === 'error') : events;
-    pre.innerHTML = shown.map(fmt).join('\n');
-    countEl.textContent = `· ${events.length} event${events.length !== 1 ? 's' : ''}`;
-    const nearBottom = pre.scrollHeight - pre.scrollTop - pre.clientHeight < 60;
-    if (nearBottom) pre.scrollTop = pre.scrollHeight;
-  }
-  errorsOnly.addEventListener('change', render);
-  document.getElementById('run-log-clear').addEventListener('click', () => { pre.textContent = ''; });
-
-  stateEl.textContent = 'connecting…';
-  const es = new EventSource(url);
-  es.onmessage = (m) => {
-    let ev; try { ev = JSON.parse(m.data); } catch (_) { return; }
-    if (ev.kind === 'run_done') { es.close(); stateEl.textContent = 'complete'; return; }
-    events.push(ev); render();
-    stateEl.textContent = 'live';
-  };
-  es.addEventListener('done', () => { es.close(); stateEl.textContent = 'complete'; });
-  es.onerror = () => { stateEl.textContent = 'disconnected'; };
-})();
-</script>
 
 <script>
 (function () {

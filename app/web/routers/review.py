@@ -1,5 +1,5 @@
-"""Human-review queue: render the reviewer UI for one queue stage and persist
-reviewer decisions."""
+"""Human-review queue: render the reviewer UI for one queue stage (recovering
+the model input so the score is reviewable) and persist reviewer decisions."""
 
 from __future__ import annotations
 
@@ -11,6 +11,7 @@ from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 
 from app.models import RowReviewDecision
+from app.runtime.llm import render_prompt
 from app.web.config import templates
 from app.web.loading import (
     decisions_path,
@@ -20,6 +21,7 @@ from app.web.loading import (
     load_manifest,
     load_stages,
     queue_snapshot,
+    read_table,
     runs_dir,
 )
 
@@ -49,20 +51,60 @@ async def queue_page(request: Request, project: str, run_id: str, stage_id: str)
                 "reviewed_at": row.get("reviewed_at"),
             }
 
-    # The item's own data is already the queue's input row (score/verdict + every
-    # column carried through from further upstream) — human_review_queue is a
-    # generic gate, not an LLM-specific one, so this is ALWAYS there; no join
-    # needed to "recover" it. Rendered as a plain table in the template.
+    # ── Recover the MODEL INPUT so the score is reviewable, not just visible. ──
+    # The queue snapshot holds the scoring stage's OUTPUT (score + reasoning + ids);
+    # the thing the model actually judged (the quote, the benchmark) lives in the
+    # scoring stage's INPUT, one stage upstream. Join it back + render the prompt.
+    output_by_id = {s.get("stage_id"): s.get("output_path") for s in manifest.get("stages", [])}
+    scored_ids = stage_def.input_ids
+    scored_def = find_stage(stages, scored_ids[0]) if scored_ids else None
+    prompt_template = scored_def.llm.prompt_template if scored_def and scored_def.llm else None
+
+    input_lookup: dict[tuple, dict[str, Any]] = {}
+    join_keys: list[str] = []
+    if scored_def and scored_def.input_ids:
+        scored_in_id = scored_def.input_ids[0]
+        scored_in = scored_def.inputs[0] if scored_def.inputs else None
+        pk = scored_in.table_schema.primary_key if scored_in and scored_in.table_schema else None
+        in_path = output_by_id.get(scored_in_id)
+        in_df = None
+        if in_path:
+            p = run_dir / in_path
+            if p.exists():
+                try:
+                    in_df = read_table(p)
+                except Exception:  # noqa: BLE001
+                    in_df = None
+        if in_df is not None:
+            cols = list(in_df.columns)
+            join_keys = [k for k in (pk or []) if k in cols] or \
+                [c for c in ("evidence_id", "entity_id", "doc_id", "id") if c in cols]
+            if join_keys:
+                for _, r in in_df.iterrows():
+                    key = tuple(str(r[k]) for k in join_keys)
+                    input_lookup[key] = {str(k): display_cell(v) for k, v in r.items()}
+
     items: list[dict[str, Any]] = []
     if snapshot is not None:
         for _, row in snapshot.iterrows():
             h = row["content_hash"]
             existing = decision_by_hash.get(h)
+            model_input = None
+            rendered_prompt = None
+            if input_lookup and join_keys and all(k in row.index for k in join_keys):
+                model_input = input_lookup.get(tuple(str(row[k]) for k in join_keys))
+                if model_input and prompt_template:
+                    try:
+                        rendered_prompt = render_prompt(prompt_template, model_input)
+                    except Exception:  # noqa: BLE001
+                        rendered_prompt = None
             items.append({
                 "content_hash": h,
                 "row": {k: display_cell(v) for k, v in row.items()
                         if k not in ("content_hash", "decision", "modified_score",
                                      "reviewer", "reviewed_at")},
+                "model_input": model_input,
+                "rendered_prompt": rendered_prompt,
                 "prior_decision": existing,
             })
 

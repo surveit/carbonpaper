@@ -168,43 +168,11 @@ def _run_row_mapper(
         {str(k): v for k, v in record.items()} for record in src.to_dict("records")
     ]
 
-    # Per-row lifecycle events for the run log, keyed by the STABLE input index
-    # (assigned here, before any fan-out — not completion order) so the run page
-    # can demux the interleaved parallel stream back into one story per row. A
-    # None log (a caller that built no ctx log) makes every emit a cheap no-op.
-    log = ctx.get("run_log")
-    sid = stage.id
-
-    def run_row(index: int, record: Row) -> Row | None:
-        if log is not None:
-            log.emit({"kind": "row_start", "stage": sid, "row": index})
-        try:
-            result = map_row(record)
-        except Exception as exc:  # noqa: BLE001 — a raising mapper (e.g. a python
-            # transform) is logged as a row error and re-raised unchanged; the
-            # runner's own per-stage handling is untouched.
-            if log is not None:
-                log.emit({"kind": "row_error", "stage": sid, "row": index,
-                          "text": f"{type(exc).__name__}: {exc}"})
-            raise
-        # The LLM row mapper does NOT raise on a failed row — it tags the row with
-        # ROW_ERROR_KEY and returns it. Surface that as a row_error too, so a
-        # swallowed generation failure still shows in the log.
-        err = result.get(ROW_ERROR_KEY) if isinstance(result, dict) else None
-        failed = err is not None and not (isinstance(err, float) and pd.isna(err))
-        if log is not None:
-            if failed:
-                log.emit({"kind": "row_error", "stage": sid, "row": index,
-                          "text": str(err)})
-            else:
-                log.emit({"kind": "row_ok", "stage": sid, "row": index})
-        return result
-
     results: list[Row | None] = [None] * len(records)
     if handler.parallelism > 1 and len(records) > 1:
         with ThreadPoolExecutor(max_workers=handler.parallelism) as pool:
             futures = {
-                pool.submit(run_row, index, record): index
+                pool.submit(map_row, record): index
                 for index, record in enumerate(records)
             }
             for future in as_completed(futures):
@@ -220,7 +188,7 @@ def _run_row_mapper(
         for index, record in enumerate(records):
             if _consume_cancel(ctx):
                 raise RunCancelled(f"stage {stage.id}: cancelled")
-            results[index] = run_row(index, record)
+            results[index] = map_row(record)
 
     out_rows: list[Row] = []
     for index, result in enumerate(results):
@@ -230,22 +198,7 @@ def _run_row_mapper(
                 f"got {type(result).__name__} for row {index}"
             )
         out_rows.append(result)
-    if out_rows:
-        df = pd.DataFrame(out_rows)
-    else:
-        # pd.DataFrame([]) has zero COLUMNS, not just zero rows — every downstream
-        # stage's code that does df['some_column'] would KeyError on a genuinely
-        # columnless frame even though "no rows survived this stage" is a normal,
-        # expected outcome (e.g. everything got filtered out upstream). Fall back to
-        # the REAL upstream columns (always correct, whatever they are) plus whatever
-        # new columns this stage's own output_schema adds beyond the input — rather
-        # than the declared output_schema alone, which a stage can under-declare for
-        # a passthrough-heavy row-mapped stage without it ever being caught (a
-        # non-empty run tolerates undeclared-but-present columns as a warning, so
-        # the gap only bites on the empty-input case this fallback exists for).
-        declared = [c.name for c in stage.output_schema.columns] if stage.output_schema else []
-        added = [c for c in declared if c not in src.columns]
-        df = pd.DataFrame(columns=list(src.columns) + added)
+    df = pd.DataFrame(out_rows)
     _collect_row_errors(df, stage, ctx)
     _collect_row_usage(df, stage, ctx)
     if handler.project_output_to_declared:

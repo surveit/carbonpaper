@@ -15,10 +15,8 @@ CW_LLM_PARALLEL).
 from __future__ import annotations
 
 import asyncio
-import json
-import logging
 import time
-from typing import Any, Callable
+from typing import Any
 
 from pydantic import BaseModel
 
@@ -39,8 +37,6 @@ from .options import (
 # Frames the calling convention only. Epistemic guidance (when a value is
 # unknowable, how to weigh sources) is compiler-authored prompt content, not
 # the runtime's voice.
-_log = logging.getLogger(__name__)
-
 SYSTEM_PROMPT = (
     "You are executing one transform step of a data pipeline. Work from the "
     "task input you are given. Produce the required output by calling the "
@@ -100,11 +96,6 @@ def call_llm(
     attempts = max(1, (llm_config.max_retries or 0) + 1)
     last_exc: Exception | None = None
     for attempt in range(attempts):
-        t0 = time.time()
-        _log.info(
-            "stage=%s attempt=%d/%d model=%s timeout=%ds starting",
-            stage_id, attempt + 1, attempts, model_name, DEFAULT_TIMEOUT_S,
-        )
         agent: Agent[BaseModel] = Agent(
             system_prompt=SYSTEM_PROMPT,
             target_schema=reply_model,
@@ -114,10 +105,6 @@ def call_llm(
         try:
             answer = run_sync(asyncio.wait_for(agent.run(), timeout=DEFAULT_TIMEOUT_S))
             _record_usage(usage_out, agent)
-            _log.info(
-                "stage=%s attempt=%d/%d model=%s SUCCESS in %.1fs",
-                stage_id, attempt + 1, attempts, model_name, time.time() - t0,
-            )
             return answer.model_dump(mode="json")
         except Exception as exc:  # noqa: BLE001 — retry any backend failure up to
             # max_retries, then re-raise the last so the caller records it. The
@@ -125,15 +112,9 @@ def call_llm(
             # record its usage before retrying.
             _record_usage(usage_out, agent)
             last_exc = exc
-            _log.warning(
-                "stage=%s attempt=%d/%d model=%s FAILED after %.1fs: %s: %s",
-                stage_id, attempt + 1, attempts, model_name, time.time() - t0,
-                type(exc).__name__, exc,
-            )
             if attempt + 1 < attempts:
                 time.sleep(min(4.0, 1.0 * (attempt + 1)))
     assert last_exc is not None  # attempts >= 1, so the loop ran and set this
-    _log.error("stage=%s giving up after %d attempt(s): %s", stage_id, attempts, last_exc)
     raise last_exc
 
 
