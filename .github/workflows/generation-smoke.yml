@@ -3,10 +3,11 @@
 # generator drift (the palm_oil class: relative paths, removed connector
 # kinds, double-braced prompts) before a human discovers it by dogfooding.
 #
-# Nightly + manual dispatch, NOT per-push: a generation turn takes minutes and
-# real tokens, and generator drift moves with compiler-prompt/model changes,
-# not with every commit. Never merge-blocking. Uses the same spend-capped
-# ANTHROPIC_API_KEY as live-llm-smoke.
+# Nightly + manual dispatch, NOT per-push: a generation turn takes minutes,
+# and generator drift moves with compiler-prompt/model changes, not with every
+# commit. Never merge-blocking. Auth: the same CLAUDE_CODE_OAUTH_TOKEN
+# subscription secret as live-llm-smoke (do NOT also set ANTHROPIC_API_KEY — it
+# outranks the OAuth token and would bill the metered API instead).
 name: generation-smoke
 
 on:
@@ -33,4 +34,4 @@ jobs:
       - run: npm install -g @anthropic-ai/claude-code
       - run: python -m pytest -m live_generation tests/test_generation_live_smoke.py
         env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}

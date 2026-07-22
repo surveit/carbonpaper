@@ -2,10 +2,12 @@
 # on every push/PR as its own named check — so a red here reads "live backend
 # problem", distinct from a unit regression in the `test` job.
 #
-# Token spend is bounded by the test itself (tests/test_journey_live_llm.py:
-# 1 row x 3 attempts max, small model, one-line prompt — a fraction of a cent
-# per run). ANTHROPIC_API_KEY should be a dedicated key with a spend cap set
-# in the Anthropic console, so a misbehaving run is capped twice.
+# Auth: CLAUDE_CODE_OAUTH_TOKEN, a one-year token from `claude setup-token`
+# on a Claude subscription — the SDK reads it (non-bare mode). Do NOT also set
+# ANTHROPIC_API_KEY: it outranks the OAuth token in the CLI's auth precedence
+# and would silently bill the metered API instead of the subscription.
+# Spend is bounded by the test itself anyway (tests/test_journey_live_llm.py:
+# 1 row x 3 attempts max, small model, one-line prompt).
 name: live-llm-smoke
 
 on:
@@ -33,4 +35,4 @@ jobs:
       - run: npm install -g @anthropic-ai/claude-code
       - run: python -m pytest -m live_llm tests/test_journey_live_llm.py
         env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
