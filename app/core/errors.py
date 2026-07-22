@@ -106,6 +106,21 @@ class SeedRowNotFoundError(Exception):
     must/must-not expectation is meaningless."""
 
 
+class RunToolUnavailableError(Exception):
+    """A run start was requested through the authoring-loop run seam, but no run
+    tool that can START runs is wired in yet — only the reading side is stubbed.
+    Raised (loudly, naming the pending external run tool) by
+    `app.services.run_tool.StubRunTool.start_run` rather than silently doing
+    nothing or fabricating a run id."""
+
+
+class RunNotFoundError(Exception):
+    """No run exists at `<project>/runs/<run_id>/manifest.json` — the run id is
+    unknown or its manifest is missing. Raised (loudly, naming the path) by
+    `app.services.run_tool.read_run_manifest` rather than returning a fabricated
+    empty manifest."""
+
+
 class PredicateError(ValueError):
     """A `where`/`filter` expression (aggregate.where, human_review_queue.filter)
     falls outside the closed grammar `app.core.predicate.parse_predicate`
