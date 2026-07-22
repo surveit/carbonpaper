@@ -31,6 +31,31 @@ def test_extract_empty_raises():
         compiler._extract_json_object("   ")
 
 
+def test_extract_no_brace_at_all_reports_default_reason():
+    # A parseable-but-non-dict JSON value with no '{' anywhere: json.loads
+    # succeeds (so no decoder error is captured) but returns a list, and the
+    # brace scan finds nothing to fall back to — the default "no JSON object
+    # found" reason, not a decoder error string, must be on the first line.
+    with pytest.raises(ValueError) as ei:
+        compiler._extract_json_object("[1, 2, 3]")
+    first_line = str(ei.value).splitlines()[0]
+    assert "no JSON object found in the output" in first_line
+
+
+def test_extract_balanced_scan_ignores_braces_inside_a_quoted_string():
+    # The brace-depth scan must track quoted-string state so a '}' inside a
+    # string value does not close the object early.
+    text = 'prose {"note": "a } b", "x": 1} tail'
+    assert compiler._extract_json_object(text) == {"note": "a } b", "x": 1}
+
+
+def test_extract_balanced_scan_handles_escaped_quote_inside_a_string():
+    # An escaped quote (\") inside a string value must not be read as the
+    # string's closing quote, which would desync the brace-depth tracking.
+    text = 'prose {"note": "a \\" b", "x": 1} tail'
+    assert compiler._extract_json_object(text) == {"note": 'a " b', "x": 1}
+
+
 def test_extract_failure_reports_decoder_reason_on_first_line():
     # A truncated object: the decoder reason should be on the FIRST line so the
     # retry loop can hand it back; the raw snippet is on later lines only.
