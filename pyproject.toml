@@ -82,6 +82,19 @@ allowed_importers = ["app.evals", "app.web", "app.mcp"]
 # status/review helpers stay runtime-free.
 
 [[tool.importlinter.contracts]]
+name = "run execution seam — services never drives the runner"
+type = "forbidden"
+source_modules = ["app.services"]
+forbidden_modules = ["app.runtime"]
+# The authoring-loop tools (app.services.run_tool and the seed/loop helpers that
+# join it) mediate runs through the top-level interfaces, never by importing the
+# runner themselves — status/review helpers in app.services stay runtime-free.
+# Whole-package source so every current and future services module is covered
+# without editing this contract as the tool modules land. app.mcp is deliberately
+# NOT a source: app.mcp.server imports app.runtime.stage_tests so glassbox
+# run_tests can drive a stage's authored tests — a blanket forbid would break that.
+
+[[tool.importlinter.contracts]]
 name = "app.evals is a leaf — imported only by web"
 type = "protected"
 protected_modules = ["app.evals"]
