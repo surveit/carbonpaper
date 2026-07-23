@@ -7,6 +7,7 @@ from __future__ import annotations
 import json
 import shutil
 from dataclasses import dataclass
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
@@ -397,6 +398,8 @@ def display_cell(v: Any) -> Any:
     array-likes explicitly before the null check."""
     if isinstance(v, (list, tuple)):
         return ", ".join(str(x) for x in v) if len(v) else ""
+    if isinstance(v, (pd.Timestamp, datetime, date)):  # not JSON-serializable for the UI's tojson
+        return "" if pd.isna(v) else v.isoformat()
     if hasattr(v, "tolist") and not isinstance(v, str):  # numpy array from parquet
         seq = v.tolist()
         return ", ".join(str(x) for x in seq) if len(seq) else ""

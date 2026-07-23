@@ -32,7 +32,7 @@
   <div class="actions wf-actions">
     <a href="/project/{{ state.name }}/workflow/versions" class="btn">← All versions</a>
     {% if version.published %}
-    <span class="muted">✓ published {{ version.published_at or '' }}</span>
+    <span class="muted">✓ published {{ version.published_at | friendly_time }}</span>
     <form action="/project/{{ state.name }}/workflow/version/{{ version.version_id }}/run" method="post" style="display:inline">
       <button type="submit" class="btn primary">▶ Run this version</button>
     </form>

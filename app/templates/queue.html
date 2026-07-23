@@ -77,7 +77,7 @@
         {% if item.prior_decision.modified_score is not none and item.prior_decision.modified_score == item.prior_decision.modified_score %}
           · score → <code>{{ item.prior_decision.modified_score }}</code>
         {% endif %}
-        <span class="muted">by {{ item.prior_decision.reviewer }} at {{ item.prior_decision.reviewed_at }}</span>
+        <span class="muted">by {{ item.prior_decision.reviewer }} at {{ item.prior_decision.reviewed_at | friendly_time }}</span>
     </p>
     {% endif %}
     <div class="decision-controls">

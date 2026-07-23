@@ -110,7 +110,7 @@
     {% for r in runs %}
     <tr>
       <td><a href="/project/{{ project }}/evals/{{ config.id }}/runs/{{ r.id }}"><code>{{ r.id }}</code></a></td>
-      <td>{{ r.started_at or '—' }}</td>
+      <td>{% if r.started_at %}{{ r.started_at | friendly_time }}{% else %}—{% endif %}</td>
       <td><code>{{ r.workflow_version }}</code></td>
       <td>{{ r.status }}</td>
     </tr>

@@ -30,7 +30,7 @@
 
 <div class="run-topbar">
     <h1>Run <code>{{ run_id }}</code></h1>
-    <p class="stage-id">started <code>{{ manifest.started_at }}</code>{% if manifest.finished_at %} · finished <code>{{ manifest.finished_at }}</code>{% endif %}</p>
+    <p class="stage-id">started {{ manifest.started_at | friendly_time }}{% if manifest.finished_at %} · finished {{ manifest.finished_at | friendly_time }}{% endif %}</p>
     <p class="stage-id ran-against">ran against workflow version
         {% if manifest.workflow_version %}<a href="/project/{{ project }}/workflow/version/{{ manifest.workflow_version }}"><code>{{ manifest.workflow_version }}</code></a>{% else %}<span class="muted">(unversioned)</span>{% endif %}
     </p>
