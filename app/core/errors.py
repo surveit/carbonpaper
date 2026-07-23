@@ -99,6 +99,13 @@ class MissingInputBindingError(Exception):
     stage."""
 
 
+class RunNotFoundError(Exception):
+    """No run exists for a (project, run_id): the run directory has no
+    manifest.json — a bad/expired run id, not an internal fault. Raised (loudly)
+    by the run service's status read rather than returning an empty or fabricated
+    manifest for a run that never happened."""
+
+
 class PredicateError(ValueError):
     """A `where`/`filter` expression (aggregate.where, human_review_queue.filter)
     falls outside the closed grammar `app.core.predicate.parse_predicate`

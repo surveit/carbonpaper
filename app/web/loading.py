@@ -20,7 +20,7 @@ from app.core.errors import NoVersionToRunError
 from app.core.frames import PARQUET_SUFFIX
 from app.models import Stage, StageType
 from app.core.run_status import StageStatus
-from app.runtime.runner import resolve_version_id
+from app.services.run import resolve_version
 from app.services.loader import CompiledStageFile, load_compiled_dir
 from app.services.versioning import list_versions, load_version_stages
 from app.services.workspace import load_schemas
@@ -35,7 +35,7 @@ def list_projects() -> list[dict[str, Any]]:
     SET UP, or is it READY TO RUN? — so alongside the authored-what flags
     (has_document / has_schemas / has_workflow) each card carries `is_ready`:
     True iff at least one PUBLISHED version exists, because a run pins a
-    published version (app.runtime.runner.resolve_version_id) and an
+    published version (app.services.run.resolve_version) and an
     unpublished, agent-minted draft is not runnable. Sorted by name.
 
     Every flag and count is read off disk — a card never advertises a
@@ -138,11 +138,11 @@ def list_file_inputs(project_dir: Path, version_id: str | None = None) -> list[d
     """File-kind input stages of the version a triggered run will execute, each
     with its workflow-authored absolute path ('' when the stage authors none —
     the run form must collect one). `version_id` selects which version to read;
-    None resolves to the latest (resolve_version_id's default), so the run form's
+    None resolves to the latest (resolve_version's default), so the run form's
     prefill and the run's binding provenance both speak about the SAME version.
     [] when the project has no versions yet."""
     try:
-        version_id = resolve_version_id(project_dir, version_id)
+        version_id = resolve_version(project_dir, version_id)
     except NoVersionToRunError:
         return []
     stages = load_version_stages(project_dir, version_id)

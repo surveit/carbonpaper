@@ -10,6 +10,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 import app.web.routers.runs as runs_router
+import app.services.run as run_service
 from app.main import app
 from app.services import versioning
 from app.services.versioning import create_version_from_disk
@@ -30,7 +31,7 @@ def project(tmp_path, monkeypatch):
     vid = create_version_from_disk(proj, message="seed", reviewer="test").version_id
     versioning.publish_version(proj, vid, reviewer="human")
     monkeypatch.setattr(runs_router, "EXAMPLES_DIR", tmp_path)
-    monkeypatch.setattr(runs_router, "run_in_background",
+    monkeypatch.setattr(run_service, "_run_in_background",
                         lambda target, *args: target(*args))
     return proj
 

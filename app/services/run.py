@@ -2,7 +2,100 @@
 app.runtime.runner's production run-lifecycle entry points (prepare_run /
 run_prepared / resume_run / resolve_version_id).
 
-Filled in by the run-service task; kept as a resolvable module here so the
-import-linter contracts that name it (allowed importer of app.runtime, sole
-importer of app.runtime.runner) resolve."""
+The web run UI and any other run driver reach production runs through these
+functions rather than importing the runner directly, so "what starts a
+production run" has a single named door (enforced by the import-linter contract
+"production run entry points reached only by the run service"). The runner still
+owns the run mechanics; this seam adds the background-thread launch and the
+manifest status read the drivers need, and attaches no run vocabulary of its own
+beyond what prepare_run already defines."""
 from __future__ import annotations
+
+import json
+import threading
+import traceback
+from pathlib import Path
+from typing import Any, Mapping
+
+from app.core.errors import RunNotFoundError
+from app.runtime.runner import (
+    prepare_run,
+    resolve_version_id,
+    resume_run,
+    run_prepared,
+)
+
+
+def start_run(
+    project_dir: Path,
+    repo_root: Path,
+    *,
+    version_id: str | None = None,
+    bindings: Mapping[str, Mapping[str, Any]] | None = None,
+    limits: dict[str, int] | None = None,
+    offsets: dict[str, int] | None = None,
+) -> str:
+    """Set up a run (writes the initial `running` manifest) and launch its
+    execution on a background daemon thread, returning the run id immediately so
+    a caller can redirect to the run page and poll. prepare_run does the
+    version-resolution, binding, and preflight work up front, so its loud
+    failures (NoVersionToRunError / MissingInputBindingError / ValueError /
+    WorkflowLoadError) surface here, before any thread starts and before a run
+    dir exists. See prepare_run for `version_id` / `bindings` / `limits` /
+    `offsets` semantics — this seam adds none of its own."""
+    prep = prepare_run(
+        project_dir,
+        repo_root,
+        version_id=version_id,
+        limits=limits,
+        offsets=offsets,
+        bindings=bindings,
+    )
+    _run_in_background(run_prepared, prep)
+    return str(prep["run_id"])
+
+
+def resume(project_dir: Path, run_id: str, repo_root: Path) -> None:
+    """Resume a halted or errored run on a background daemon thread. Re-runs
+    every not-yet-complete stage and reuses completed upstream outputs (see
+    resume_run); launched in the background so the caller can redirect and poll.
+    The caller validates the workflow / run existence synchronously first — this
+    only handles the background launch."""
+    _run_in_background(resume_run, project_dir, run_id, repo_root)
+
+
+def read_run_status(project_dir: Path, run_id: str) -> dict[str, Any]:
+    """A run's manifest.json as a dict. Raises RunNotFoundError if the run has no
+    manifest — a bad/expired run id, surfaced loudly rather than as an empty or
+    fabricated status."""
+    manifest_path = project_dir / "runs" / run_id / "manifest.json"
+    if not manifest_path.exists():
+        raise RunNotFoundError(
+            f"no run '{run_id}' for project '{project_dir.name}' "
+            f"(no manifest at {manifest_path})"
+        )
+    manifest: dict[str, Any] = json.loads(manifest_path.read_text(encoding="utf-8"))
+    return manifest
+
+
+def resolve_version(project_dir: Path, version_id: str | None) -> str:
+    """The published workflow version a run would pin to (None -> newest
+    published). Raises NoVersionToRunError if `version_id` names an unpublished
+    or missing version, or if the project has no published version. A thin,
+    side-effect-free pass-through to the runner's resolver so callers outside the
+    runtime (e.g. the web layer's project listing) never import the runner."""
+    return resolve_version_id(project_dir, version_id)
+
+
+def _run_in_background(target: Any, *args: Any) -> None:
+    """Run a (possibly slow, LLM-driven) execution off the caller's thread so a
+    web request can return and poll live progress. Errors are recorded on the
+    manifest by the runner itself; this just keeps a dying thread from failing
+    silently by printing its traceback."""
+    def _wrapped() -> None:
+        try:
+            target(*args)
+        except Exception:  # noqa: BLE001
+            traceback.print_exc()
+
+    threading.Thread(target=_wrapped, daemon=True).start()
