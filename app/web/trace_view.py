@@ -38,7 +38,11 @@ def _transform_of(stage: Stage | None) -> dict[str, Any]:
         # for an inline ref — never a partial snippet or a bare reference.
         return {"kind": "python", "detail": resolve_function_code(stage)}
     if stage_type == StageType.llm_transform.value:
-        return {"kind": "llm", "detail": stage.llm.prompt_template if stage.llm else None}
+        llm_detail = (
+            {"instructions": stage.llm.prompt_instructions, "data_template": stage.llm.prompt_data_template}
+            if stage.llm else None
+        )
+        return {"kind": "llm", "detail": llm_detail}
     if stage_type == StageType.join_.value:
         pairs = (stage.join.keys or stage.join.on) if stage.join else None
         detail = ", ".join(f"{k.left}={k.right}" for k in pairs) if pairs else None

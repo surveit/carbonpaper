@@ -64,7 +64,7 @@ def test_valid_llm_transform():
         output_schema={"columns": [{"name": "id", "type": "str"}, {"name": "out", "type": "str"}],
                        "primary_key": ["id"]},
         llm={"prompt_template": "do {id}", "tools": ["WebSearch"]}))
-    assert s.llm.prompt_template == "do {id}"
+    assert s.llm.prompt_data_template == "do {id}"
 
 
 def test_missing_handle_block_raises():
@@ -398,10 +398,85 @@ def test_llm_transform_accepts_single_brace_input_column():
         output_schema={"columns": [{"name": "content", "type": "str"},
                                    {"name": "out", "type": "str"}], "primary_key": ["content"]},
         llm={"prompt_template": "Analyze {content} now"}))
-    assert s.llm.prompt_template == "Analyze {content} now"
+    assert s.llm.prompt_data_template == "Analyze {content} now"
 
 
 def test_prompt_template_field_names_str_format_map_and_single_brace():
-    desc = m.LLMConfig.model_fields["prompt_template"].description or ""
+    desc = m.LLMConfig.model_fields["prompt_data_template"].description or ""
     assert "str.format_map" in desc
     assert "{column_name}" in desc
+
+
+def test_llm_config_accepts_old_prompt_template_key_via_alias():
+    """Old stored JSON with the pre-split key `prompt_template` must still load,
+    landing in prompt_data_template with prompt_instructions defaulting to ""."""
+    cfg = m.LLMConfig.model_validate({"prompt_template": "do {id}"})
+    assert cfg.prompt_data_template == "do {id}"
+    assert cfg.prompt_instructions == ""
+
+
+def test_llm_config_accepts_new_prompt_data_template_key():
+    cfg = m.LLMConfig.model_validate({"prompt_data_template": "do {id}"})
+    assert cfg.prompt_data_template == "do {id}"
+
+
+def test_llm_config_prompt_instructions_optional_and_settable():
+    cfg = m.LLMConfig.model_validate(
+        {"prompt_instructions": "Be terse.", "prompt_data_template": "do {id}"}
+    )
+    assert cfg.prompt_instructions == "Be terse."
+    assert cfg.prompt_data_template == "do {id}"
+
+
+def test_llm_config_model_dump_emits_field_name_not_alias():
+    cfg = m.LLMConfig.model_validate({"prompt_template": "do {id}"})
+    dumped = cfg.model_dump()
+    assert "prompt_data_template" in dumped
+    assert "prompt_template" not in dumped
+
+
+def test_data_template_required():
+    """prompt_data_template (or its old alias prompt_template) stayed required
+    after the field split — neither key present must raise."""
+    with pytest.raises(ValidationError):
+        m.LLMConfig.model_validate({"prompt_instructions": "Be terse."})
+
+
+def test_double_brace_checks_data_template_not_instructions():
+    # {{text}} in prompt_data_template is the mistake the validator exists to catch.
+    with pytest.raises(ValidationError, match="double-brace"):
+        m.Stage.model_validate(S(
+            id="extract", type="llm_transform",
+            inputs=[{"id": "load", "schema": {
+                "columns": [{"name": "text", "type": "str"}], "primary_key": ["text"]}}],
+            output_schema={"columns": [{"name": "text", "type": "str"},
+                                       {"name": "out", "type": "str"}], "primary_key": ["text"]},
+            llm={"prompt_template": "Analyze {{text}} now"}))
+
+    # The SAME {{text}} placed only in prompt_instructions, with a valid
+    # single-braced prompt_data_template, must NOT raise — the validator only
+    # inspects the per-row template, never the instructions.
+    s = m.Stage.model_validate(S(
+        id="extract", type="llm_transform",
+        inputs=[{"id": "load", "schema": {
+            "columns": [{"name": "text", "type": "str"}], "primary_key": ["text"]}}],
+        output_schema={"columns": [{"name": "text", "type": "str"},
+                                   {"name": "out", "type": "str"}], "primary_key": ["text"]},
+        llm={"prompt_instructions": "Never echo {{text}} verbatim.",
+             "prompt_template": "Analyze {text} now"}))
+    assert s.llm is not None
+
+
+def test_both_fields_round_trip():
+    cfg = m.LLMConfig.model_validate({
+        "prompt_instructions": "Be terse and cite sources.",
+        "prompt_data_template": "Summarize {id}: {content}",
+    })
+    dumped = cfg.model_dump()
+    assert dumped["prompt_instructions"] == "Be terse and cite sources."
+    assert dumped["prompt_data_template"] == "Summarize {id}: {content}"
+    assert "prompt_template" not in dumped
+
+    reloaded = m.LLMConfig.model_validate(dumped)
+    assert reloaded.prompt_instructions == cfg.prompt_instructions
+    assert reloaded.prompt_data_template == cfg.prompt_data_template

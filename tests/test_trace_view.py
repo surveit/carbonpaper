@@ -71,6 +71,31 @@ def test_edges_connect_consecutive_and_carry_the_source_row():
     assert edge["data_row"] == {"facility_id": "a"}  # the row flowing forward
 
 
+def test_trace_shows_instructions_and_data():
+    stages = _stages()
+    stages["score"] = _stage({
+        "id": "score", "type": "llm_transform", "name": "Score",
+        "inputs": [{"id": "enrich", "schema": {
+            "columns": [{"name": "facility_id", "type": "str"}, {"name": "score", "type": "int"}],
+            "primary_key": ["facility_id"]}}],
+        "output_schema": {
+            "columns": [{"name": "facility_id", "type": "str"}, {"name": "score", "type": "int"},
+                        {"name": "rating", "type": "int", "nullable": False}],
+            "primary_key": ["facility_id"]},
+        "llm": {"prompt_instructions": "Rate for relevance.",
+                "prompt_data_template": "Score: {score}"},
+    })
+    trace = _trace()
+    trace["steps"].insert(0, {
+        "stage_id": "score", "stage_type": "llm_transform", "row_ordinal": 0,
+        "row": {"facility_id": "a", "score": 1, "rating": 5}, "columns_new": ["rating"],
+        "origin": "computed",
+    })
+    view = build_trace_view(trace, stages)
+    detail = view["nodes"][-1]["transform"]["detail"]
+    assert detail == {"instructions": "Rate for relevance.", "data_template": "Score: {score}"}
+
+
 def test_clean_origin_is_not_truncated():
     view = build_trace_view(_trace(), _stages())
     assert view["upstream"]["truncated"] is False

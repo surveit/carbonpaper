@@ -130,7 +130,7 @@ def _load_scored_stage(stages: list[Stage], stage_def: Stage) -> Stage | None:
 
 
 def _resolve_prompt_template(scored_def: Stage | None) -> str | None:
-    return scored_def.llm.prompt_template if scored_def and scored_def.llm else None
+    return scored_def.llm.prompt_data_template if scored_def and scored_def.llm else None
 
 
 def _read_table_or_none(path: Path) -> pd.DataFrame | None:

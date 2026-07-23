@@ -16,10 +16,7 @@ from __future__ import annotations
 import json
 
 from app import models
-from app.compiler.node_contract_notes import (
-    HUMAN_REVIEW_QUEUE_CONTRACT_NOTE,
-    LLM_TRANSFORM_TOOL_CALLING_NOTE,
-)
+from app.compiler.node_contract_notes import HUMAN_REVIEW_QUEUE_CONTRACT_NOTE
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -36,7 +33,6 @@ SYSTEM_PROMPT = (
     "you. Put the LLM (llm_transform) only at the FEW genuine judgment points; "
     "everything mechanical (building queries, downloading, parsing, joining, "
     "aggregating, rendering) must be a deterministic node type.\n\n"
-    f"{LLM_TRANSFORM_TOOL_CALLING_NOTE}\n\n"
     f"{HUMAN_REVIEW_QUEUE_CONTRACT_NOTE}\n\n"
     "Respond with raw JSON exactly matching the requested shape — no prose, no "
     "markdown, no code fences. Never fabricate data values, URLs, numbers, or "
@@ -104,7 +100,13 @@ _EXAMPLE_STAGE = {
         "temperature": 0.0,
         "response_format": "json",
         "tools": ["WebSearch"],
-        "prompt_template": "Find the authoritative most-recent doc for {name}. Return JSON ...",
+        "prompt_instructions": (
+            "You are locating the authoritative most-recent document for a facility. "
+            "Prefer primary regulatory filings over secondary summaries; when several "
+            "candidates conflict, favor the most recently dated one. Return the located "
+            "document's url and date."
+        ),
+        "prompt_data_template": "Find the authoritative most-recent doc for {name}.",
     },
     "output_schema": {
         "primary_key": ["facility_id", "url"],

@@ -125,7 +125,7 @@ NODE_TYPES: dict[str, dict[str, _Any]] = {
         "handle": "llm",
         "requires_inputs": True,
         "min_inputs": 1,
-        "required": ["prompt_template"],
+        "required": ["prompt_data_template"],
         "optional": ["model", "temperature", "response_format", "max_retries",
                      "rubric", "tools"],
     },

@@ -40,7 +40,7 @@ def test_reply_model_is_the_subtracted_spec(monkeypatch):
 
     def fake_call(stage_id, llm_config, row, *, reply_model, **kw):
         captured["fields"] = set(reply_model.model_fields)
-        captured["template"] = llm_config.prompt_template
+        captured["template"] = llm_config.prompt_data_template
         return {"score": 5}
 
     monkeypatch.setattr(lt, "call_llm", fake_call)

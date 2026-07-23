@@ -62,8 +62,9 @@ def _load_quotes_stage(root):
 def _score_stage():
     """llm_transform: scores each quote. output_schema is additive (a stage
     invariant — app/models/stage.py's _llm_transform_one_to_one), so `quote`
-    survives onto the queued row; the prompt_template references `{quote}` so
-    a successful model-input recovery can render the exact prompt sent."""
+    survives onto the queued row; the prompt_data_template references
+    `{quote}` so a successful model-input recovery can render the exact
+    prompt sent."""
     return {"id": "score", "name": "Score quotes", "type": "llm_transform",
             "inputs": [{"id": "load", "schema": {
                 "columns": [{"name": "id", "type": "str"}, {"name": "quote", "type": "str"}],
@@ -72,7 +73,8 @@ def _score_stage():
                 "columns": [{"name": "id", "type": "str"}, {"name": "quote", "type": "str"},
                             {"name": "score", "type": "int", "nullable": False}],
                 "primary_key": ["id"]},
-            "llm": {"prompt_template": "Rate this: {quote}"}}
+            "llm": {"prompt_instructions": "Score each quote for tone.",
+                    "prompt_data_template": "Rate this: {quote}"}}
 
 
 def _review_stage():
