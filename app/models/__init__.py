@@ -107,8 +107,8 @@ CONNECTOR_KINDS: set[str] = {
 }
 
 # ── The seven node types and their handle-block contract ─────────────────────
-# prompt._node_type_contract() iterates this to render the contract to the LLM:
-# type -> {summary, handle, required, optional, min_inputs, requires_inputs,
+# app.compiler.workflow_prompt renders this into the workflow compiler's system
+# prompt: type -> {summary, handle, required, optional, min_inputs, requires_inputs,
 # also_requires?}. The Stage model does not expose this rendering shape, so the
 # spec is kept here as plain data purely for prompt rendering.
 NODE_TYPES: dict[str, dict[str, _Any]] = {

@@ -1,5 +1,4 @@
 """Compiler authoring-prompt content: llm_transform's prompt/data split."""
-from app.compiler import prompt as compiler_prompt
 from app.compiler import workflow_prompt
 from app.compiler.workflow_prompt import WORKFLOW_SYSTEM_PROMPT
 from app import models
@@ -36,13 +35,3 @@ def test_hrq_line_has_both_notes() -> None:
     hrq_line = next(line for line in lines if line.startswith("- human_review_queue —"))
     assert "hash_columns" in hrq_line
     assert "decision" in hrq_line or "output columns are FIXED" in hrq_line
-
-
-def test_compiler_fewshot_uses_split() -> None:
-    text = repr(compiler_prompt._EXAMPLE_STAGE) + "\n" + compiler_prompt.build_compile_prompt(
-        "irrelevant input", "example"
-    )
-    assert "prompt_instructions" in text
-    assert "prompt_data_template" in text
-    assert '"prompt_template"' not in text
-    assert "'prompt_template'" not in text
