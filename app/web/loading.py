@@ -378,6 +378,43 @@ def queue_snapshot(project: str, run_id: str, stage_id: str) -> pd.DataFrame | N
     return None
 
 
+@dataclass
+class QueueFingerprints:
+    """The fingerprints a halted queue stage's snapshot carries off to the
+    side, never as snapshot columns: `stage_fingerprint` (shared by every
+    pending row of that halt) and `input_fingerprints` (one per row,
+    POSITIONALLY aligned to the snapshot's row order)."""
+    stage_fingerprint: str
+    input_fingerprints: list[str]
+
+
+def load_queue_fingerprints(project: str, run_id: str, stage_id: str) -> QueueFingerprints | None:
+    """The sidecar `<stage_id>.fingerprints.json` a halted human_review_queue
+    stage writes beside its snapshot (app.runtime.stages.human_review_queue).
+    None if no run has halted at this stage yet (no such sidecar).
+
+    Raises ValueError if the snapshot exists but its row count doesn't match
+    `input_fingerprints`' length: positional alignment between the two files
+    is not something to guess at silently when it can't be verified."""
+    run_dir = runs_dir(project) / run_id
+    path = run_dir / "queue" / f"{stage_id}.fingerprints.json"
+    if not path.exists():
+        return None
+    data = json.loads(path.read_text(encoding="utf-8"))
+    fingerprints = QueueFingerprints(
+        stage_fingerprint=data["stage_fingerprint"],
+        input_fingerprints=data["input_fingerprints"],
+    )
+    snapshot = queue_snapshot(project, run_id, stage_id)
+    if snapshot is not None and len(snapshot) != len(fingerprints.input_fingerprints):
+        raise ValueError(
+            f"queue fingerprints sidecar for stage '{stage_id}' in run '{run_id}' "
+            f"names {len(fingerprints.input_fingerprints)} row(s) but the "
+            f"snapshot has {len(snapshot)} — alignment cannot be trusted"
+        )
+    return fingerprints
+
+
 def display_cell(v: Any) -> Any:
     """Scalar-safe cell formatting for the reviewer UI. pd.isna() raises on
     list/array-valued cells (e.g. an evidence_urls JSON column), so handle

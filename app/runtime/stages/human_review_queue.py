@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import NoReturn
 
 import pandas as pd
@@ -20,11 +21,14 @@ def handle_human_review_queue(stage: Stage, inputs: dict[str, pd.DataFrame], ctx
 
     1. Apply the queue filter to upstream output → items needing review.
     2. Fingerprint the stage definition once (`stage_fp`) and every queueable
-       row (`input_fp`, over its original upstream columns).
+       row (`input_fingerprints_by_index`, over its original upstream
+       columns) — index-aligned, never burned onto the row itself.
     3. Look up this stage definition's cached decisions from `ctx.stage_cache`
-       and apply the ones whose `input_fingerprint` matches a queued row:
+       and split queueable rows by whether their fingerprint matches one:
          - items with a cached decision get it applied
-         - items without are written to runs/<id>/queue/<stage>.parquet
+         - items without are written to runs/<id>/queue/<stage>.parquet, a
+           PURE snapshot of their original upstream columns, alongside a
+           `<stage>.fingerprints.json` sidecar naming the fingerprints.
     4. If ANY items lack decisions, raise HaltForReview so the runner can
        stop downstream execution and mark the run awaiting_review.
     5. Otherwise return a dataframe with final_score populated (ai if
@@ -39,17 +43,21 @@ def handle_human_review_queue(stage: Stage, inputs: dict[str, pd.DataFrame], ctx
     queueable, passthrough = _partition_reviewable_rows(src, queue_cfg.filter, ctx, sid)
 
     stage_fp = stage.compute_definition_fingerprint()
-    queueable = _fingerprint_queueable_rows(queueable, stage_fp)
+    input_fingerprints_by_index = _compute_input_fingerprints(queueable)
     entries = stage_cache.find_entries(project, sid, stage_fp)
-    queueable = _apply_cached_decisions(queueable, entries)
-    pending, decided = _split_pending_and_decided(queueable)
+    entries_by_fingerprint = {entry.input_fingerprint: entry for entry in entries}
+
+    pending, decided = _split_pending_and_decided(
+        queueable, input_fingerprints_by_index, entries_by_fingerprint
+    )
 
     _record_queue_stats(ctx, sid, queueable, passthrough, pending, decided)
 
     if len(pending):
-        _snapshot_pending_and_halt(ctx, sid, pending)
+        pending_fingerprints = input_fingerprints_by_index.loc[pending.index].tolist()
+        _snapshot_pending_and_halt(ctx, sid, pending, stage_fp, pending_fingerprints)
 
-    decided = _apply_decided_rows(decided)
+    decided = _apply_decided_rows(decided, entries_by_fingerprint, input_fingerprints_by_index)
     passthrough = _finalize_passthrough_rows(passthrough)
     out = _combine_decided_and_passthrough(decided, passthrough)
     return _project_onto_output_schema(out, stage, ctx, sid)
@@ -110,48 +118,32 @@ def _partition_reviewable_rows(
     return src[queueable_mask].copy(), src[~queueable_mask].copy()
 
 
-def _fingerprint_queueable_rows(queueable: pd.DataFrame, stage_fingerprint: str) -> pd.DataFrame:
-    """Stamp every queued row with its own `input_fingerprint` — computed via
-    `compute_row_fingerprint` over the row's ORIGINAL upstream columns, before
-    this function adds any bookkeeping column of its own — and the constant
-    `stage_fingerprint` for this stage definition. Both columns survive onto
-    the pending-item snapshot (`_snapshot_pending_and_halt`) and are exactly
-    the pair `find_entries`/`StageCache.put` key a cache entry by."""
-    if len(queueable):
-        queueable["input_fingerprint"] = queueable.apply(
-            lambda row: compute_row_fingerprint(row.to_dict()), axis=1
-        )
-    queueable["stage_fingerprint"] = stage_fingerprint
-    return queueable
+def _compute_input_fingerprints(queueable: pd.DataFrame) -> pd.Series:
+    """`input_fingerprint` per row of `queueable`, computed via
+    `compute_row_fingerprint` over each row's ORIGINAL upstream columns —
+    index-aligned WITH `queueable`, never assigned back onto it as a column.
+    A queued row's snapshot (`_snapshot_pending_and_halt`) must carry only its
+    original upstream columns, so this fingerprint lives only in this Series
+    and, for pending rows, in the sidecar file written alongside the
+    snapshot."""
+    if not len(queueable):
+        return pd.Series([], index=queueable.index, dtype=object)
+    fingerprints = queueable.apply(lambda row: compute_row_fingerprint(row.to_dict()), axis=1)
+    assert isinstance(fingerprints, pd.Series)
+    return fingerprints
 
 
-def _apply_cached_decisions(queueable: pd.DataFrame, entries: list[StageCacheEntry]) -> pd.DataFrame:
-    """Left-join cached human decisions onto `queueable` by input_fingerprint;
-    when there is nothing to join (no queued rows, or no cache entries for
-    this stage definition), make sure the decision columns exist so
-    downstream code can rely on their presence."""
-    if len(queueable) and entries:
-        decisions = pd.DataFrame([
-            {
-                "input_fingerprint": entry.input_fingerprint,
-                "decision": entry.human.decision,
-                "modified_score": entry.human.modified_score,
-                "reviewer": entry.human.reviewer,
-                "reviewed_at": entry.human.reviewed_at,
-            }
-            for entry in entries
-        ])
-        return queueable.merge(decisions, on="input_fingerprint", how="left")
-    for col in ["decision", "modified_score", "reviewer", "reviewed_at"]:
-        if col not in queueable.columns:
-            queueable[col] = pd.NA
-    return queueable
-
-
-def _split_pending_and_decided(queueable: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
-    pending = queueable[queueable["decision"].isna()]
-    decided = queueable[queueable["decision"].notna()]
-    return pending, decided
+def _split_pending_and_decided(
+    queueable: pd.DataFrame,
+    input_fingerprints_by_index: pd.Series,
+    entries_by_fingerprint: dict[str, StageCacheEntry],
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """`queueable` split by whether its row's fingerprint (looked up in
+    `input_fingerprints_by_index`, never a dataframe column) names a cached
+    decision. Both halves keep exactly `queueable`'s own columns — no
+    decision-placeholder column is ever seeded, pending or decided."""
+    decided_mask = input_fingerprints_by_index.isin(entries_by_fingerprint.keys())
+    return queueable[~decided_mask], queueable[decided_mask]
 
 
 def _record_queue_stats(
@@ -172,14 +164,25 @@ def _record_queue_stats(
     ctx.queue_stats[sid] = stats
 
 
-def _snapshot_pending_and_halt(ctx: RunContext, sid: str, pending: pd.DataFrame) -> NoReturn:
-    """Persist the pending items for the reviewer UI, then halt the run."""
+def _snapshot_pending_and_halt(
+    ctx: RunContext,
+    sid: str,
+    pending: pd.DataFrame,
+    stage_fingerprint: str,
+    input_fingerprints: list[str],
+) -> NoReturn:
+    """Persist the pending items for the reviewer UI, then halt the run.
+
+    The snapshot (`<stage>.parquet`, or `.csv` on a parquet-incompatible
+    dtype) is written PURE — exactly `pending`'s own upstream columns, no
+    fingerprint or decision-bookkeeping column ever added to it. The
+    fingerprints those rows carry are never row data; they live in a sidecar
+    `<stage>.fingerprints.json`, `input_fingerprints` POSITIONALLY aligned to
+    the snapshot's row order, alongside the one `stage_fingerprint` every
+    pending row of this halt shares."""
     queue_dir = ctx.run_dir / "queue"
     queue_dir.mkdir(parents=True, exist_ok=True)
     queue_path = queue_dir / f"{sid}.parquet"
-    # Persist a snapshot — everything needed for the reviewer UI plus the
-    # input_fingerprint/stage_fingerprint pair so a decision recorded against
-    # this snapshot can be cached against the same key.
     try:
         pending.to_parquet(queue_path, index=False)
     except (pa_lib.ArrowException, ValueError, TypeError):
@@ -191,6 +194,14 @@ def _snapshot_pending_and_halt(ctx: RunContext, sid: str, pending: pd.DataFrame)
         # queue snapshot.
         queue_path = queue_dir / f"{sid}.csv"
         pending.to_csv(queue_path, index=False)
+    fingerprints_path = queue_dir / f"{sid}.fingerprints.json"
+    fingerprints_path.write_text(
+        json.dumps({
+            "stage_fingerprint": stage_fingerprint,
+            "input_fingerprints": input_fingerprints,
+        }),
+        encoding="utf-8",
+    )
     raise HaltForReview(
         stage_id=sid,
         pending_count=int(len(pending)),
@@ -198,14 +209,17 @@ def _snapshot_pending_and_halt(ctx: RunContext, sid: str, pending: pd.DataFrame)
     )
 
 
-def _apply_review_decision(row: pd.Series) -> pd.Series:
-    """One decided row's human-reviewed score columns, derived from its stored
-    `decision`."""
+def _apply_review_decision(row: pd.Series, entry: StageCacheEntry) -> pd.Series:
+    """One decided row's human-reviewed score columns, derived from the
+    cached decision that matched it (never from a dataframe column — the
+    decision lives on `entry`, not on `row`)."""
     ai = row.get("score")
-    decision = row.get("decision")
+    decision = entry.human.decision
+    final: object
+    human: object
     if decision == RowReviewDecision.modify:
-        final = row.get("modified_score")
-        human = row.get("modified_score")
+        final = entry.human.modified_score
+        human = entry.human.modified_score
     elif decision == RowReviewDecision.reject:
         final = pd.NA
         human = pd.NA
@@ -216,19 +230,33 @@ def _apply_review_decision(row: pd.Series) -> pd.Series:
     row["human_score"] = human
     row["final_score"] = final
     row["review_notes"] = f"decision={decision}"
+    row["reviewer_id"] = entry.human.reviewer
+    row["reviewed_at"] = entry.human.reviewed_at
+    row["decision"] = decision
     return row
 
 
-def _apply_decided_rows(decided: pd.DataFrame) -> pd.DataFrame:
+def _apply_decided_rows(
+    decided: pd.DataFrame,
+    entries_by_fingerprint: dict[str, StageCacheEntry],
+    input_fingerprints_by_index: pd.Series,
+) -> pd.DataFrame:
     """All items have decisions — apply them and drop rejected rows (final_score
-    is NA) from the output."""
+    is NA) from the output. `decided`'s rows and `input_fingerprints_by_index`
+    (reindexed to `decided`'s own index) stay in the same order, so zipping
+    them pairs each row with the cached entry that matched it."""
     if not len(decided):
         return decided
-    decided = decided.apply(_apply_review_decision, axis=1)
-    # Row-wise _apply_review_decision returns Series rows, so apply(axis=1)
-    # builds a DataFrame — the stubs can't see that, so check it at runtime.
-    assert isinstance(decided, pd.DataFrame)
-    return decided[decided["decision"] != RowReviewDecision.reject].copy()
+
+    matched_entries = [
+        entries_by_fingerprint[fp] for fp in input_fingerprints_by_index.loc[decided.index]
+    ]
+    applied = [
+        _apply_review_decision(row, entry)
+        for (_, row), entry in zip(decided.iterrows(), matched_entries)
+    ]
+    result = pd.DataFrame(applied)
+    return result[result["decision"] != RowReviewDecision.reject].copy()
 
 
 def _finalize_passthrough_rows(passthrough: pd.DataFrame) -> pd.DataFrame:
@@ -245,8 +273,6 @@ def _finalize_passthrough_rows(passthrough: pd.DataFrame) -> pd.DataFrame:
 
 
 def _combine_decided_and_passthrough(decided: pd.DataFrame, passthrough: pd.DataFrame) -> pd.DataFrame:
-    if "reviewer" in decided.columns:
-        decided = decided.rename(columns={"reviewer": "reviewer_id"})
     return pd.concat([decided, passthrough], ignore_index=True, sort=False)
 
 

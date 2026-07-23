@@ -23,9 +23,11 @@ from app.services.stage_cache import (
 )
 from app.web.config import templates
 from app.web.loading import (
+    QueueFingerprints,
     display_cell,
     find_stage,
     load_manifest,
+    load_queue_fingerprints,
     load_stages,
     queue_snapshot,
     read_table,
@@ -33,16 +35,6 @@ from app.web.loading import (
 )
 
 router = APIRouter()
-
-# Bookkeeping columns the human_review_queue handler stamps onto every queued
-# row (app.runtime.stages.human_review_queue): the two fingerprint columns
-# used for joining, plus the decision placeholder columns the handler seeds
-# as NA pending a reviewer decision. None of them are part of the upstream
-# row a reviewer decided against.
-_SNAPSHOT_BOOKKEEPING_COLUMNS = (
-    "input_fingerprint", "stage_fingerprint",
-    "decision", "modified_score", "reviewer", "reviewed_at",
-)
 
 
 @router.get("/project/{project}/runs/{run_id}/queue/{stage_id}", response_class=HTMLResponse)
@@ -57,11 +49,14 @@ async def queue_page(request: Request, project: str, run_id: str, stage_id: str)
         raise HTTPException(status_code=404, detail=f"No queue stage '{stage_id}'")
 
     snapshot = queue_snapshot(project, run_id, stage_id)
-    decision_by_fingerprint = _load_prior_decisions(project, stage_id, snapshot)
+    fingerprints = load_queue_fingerprints(project, run_id, stage_id)
+    decision_by_fingerprint = _load_prior_decisions(project, stage_id, fingerprints)
     input_lookup, join_keys, prompt_template = _load_model_input_lookup(
         stage_def, stages, manifest, run_dir
     )
-    items = _build_review_items(snapshot, decision_by_fingerprint, input_lookup, join_keys, prompt_template)
+    items = _build_review_items(
+        snapshot, fingerprints, decision_by_fingerprint, input_lookup, join_keys, prompt_template
+    )
 
     reviewed_count = sum(1 for i in items if i["prior_decision"] is not None)
     total = len(items)
@@ -94,15 +89,16 @@ async def queue_decide(
 ):
     """Persist a reviewer's decision as a `StageCacheEntry` keyed by this
     stage's definition fingerprint and this row's `input_fingerprint`. The
-    row's fingerprints come from the halted-queue snapshot alone — never
-    recomputed from live stages — so a fingerprint the snapshot can't vouch
-    for 404s rather than being trusted."""
+    row is resolved by POSITION in the halted-queue sidecar's fingerprint
+    list — never recomputed from live stages — so a fingerprint the sidecar
+    can't vouch for 404s rather than being trusted."""
     _validate_decision(decision)
     mod_val = _validate_modified_score(decision, modified_score)
 
-    snapshot = queue_snapshot(project, run_id, stage_id)
-    row = _find_snapshot_row(snapshot, input_fingerprint)
-    entry = _build_cache_entry(project, stage_id, run_id, row, decision, mod_val)
+    stage_fingerprint, row = _resolve_queue_row(project, run_id, stage_id, input_fingerprint)
+    entry = _build_cache_entry(
+        project, stage_id, run_id, stage_fingerprint, input_fingerprint, row, decision, mod_val
+    )
     StageCacheEntry.for_mode(CacheMode.PRODUCTION).put(entry)
 
     return JSONResponse({"ok": True, "input_fingerprint": input_fingerprint, "decision": decision})
@@ -128,17 +124,24 @@ def _validate_modified_score(decision: str, modified_score: str | None) -> float
         raise HTTPException(status_code=400, detail="modified_score must be numeric")
 
 
-def _find_snapshot_row(snapshot: pd.DataFrame | None, input_fingerprint: str) -> pd.Series:
-    """The queued row named by `input_fingerprint`, read off the halted-queue
-    snapshot — the only source a decision's fingerprints may come from. 404 if
-    the snapshot is missing or no row matches: never trust a fingerprint the
-    snapshot can't vouch for."""
-    if snapshot is not None:
-        matches = snapshot[snapshot["input_fingerprint"] == input_fingerprint]
-        if len(matches):
-            row = matches.iloc[0]
-            assert isinstance(row, pd.Series)
-            return row
+def _resolve_queue_row(
+    project: str, run_id: str, stage_id: str, input_fingerprint: str
+) -> tuple[str, pd.Series]:
+    """The `(stage_fingerprint, row)` a decision names: `input_fingerprint`'s
+    POSITION in the sidecar's `input_fingerprints` list, read off the same
+    position in the halted-queue snapshot — the only source a decision's
+    fingerprints may come from. 404 if there's no snapshot/sidecar for this
+    stage, or no position matches: never trust a fingerprint the sidecar
+    can't vouch for."""
+    fingerprints = load_queue_fingerprints(project, run_id, stage_id)
+    snapshot = queue_snapshot(project, run_id, stage_id)
+    if fingerprints is not None and snapshot is not None:
+        if input_fingerprint in fingerprints.input_fingerprints:
+            position = fingerprints.input_fingerprints.index(input_fingerprint)
+            if position < len(snapshot):
+                row = snapshot.iloc[position]
+                assert isinstance(row, pd.Series)
+                return fingerprints.stage_fingerprint, row
     raise HTTPException(
         status_code=404,
         detail=f"No queued row with input_fingerprint '{input_fingerprint}'",
@@ -146,17 +149,14 @@ def _find_snapshot_row(snapshot: pd.DataFrame | None, input_fingerprint: str) ->
 
 
 def _build_cache_entry(
-    project: str, stage_id: str, run_id: str, row: pd.Series,
-    decision: str, mod_val: float | None,
+    project: str, stage_id: str, run_id: str,
+    stage_fingerprint: str, input_fingerprint: str,
+    row: pd.Series, decision: str, mod_val: float | None,
 ) -> StageCacheEntry:
-    """A `StageCacheEntry` for this reviewer decision: fingerprints copied
-    verbatim off `row` (version-pinned at run time, never recomputed here),
-    `frozen_input` the snapshot row minus its own bookkeeping columns."""
-    stage_fingerprint = str(row["stage_fingerprint"])
-    input_fingerprint = str(row["input_fingerprint"])
-    frozen_input = to_json_safe_row({
-        str(k): v for k, v in row.items() if str(k) not in _SNAPSHOT_BOOKKEEPING_COLUMNS
-    })
+    """A `StageCacheEntry` for this reviewer decision: fingerprints are the
+    ones the sidecar named (never recomputed here), `frozen_input` the
+    snapshot row itself — already pure, with no bookkeeping column to strip."""
+    frozen_input = to_json_safe_row({str(k): v for k, v in row.items()})
     return StageCacheEntry(
         id=build_cache_id(project, stage_id, stage_fingerprint, input_fingerprint),
         project=project,
@@ -177,29 +177,19 @@ def _build_cache_entry(
 # --- queue_page helpers -------------------------------------------------------
 
 
-def _resolve_stage_fingerprint(snapshot: pd.DataFrame | None) -> str | None:
-    """The stage-definition fingerprint every row of a halted-queue snapshot
-    carries (a constant column), or None if there's no snapshot to read one
-    off."""
-    if snapshot is None or not len(snapshot):
-        return None
-    return str(snapshot["stage_fingerprint"].iloc[0])
-
-
 def _load_prior_decisions(
-    project: str, stage_id: str, snapshot: pd.DataFrame | None
+    project: str, stage_id: str, fingerprints: QueueFingerprints | None
 ) -> dict[str, dict[str, Any]]:
     """Prior reviewer decisions for this queue stage, keyed by the
     input_fingerprint they were recorded against, read from the stage-result
-    cache and scoped to the snapshot's own stage_fingerprint — so an edited
+    cache and scoped to the sidecar's own stage_fingerprint — so an edited
     stage definition (a different fingerprint) never surfaces another
-    version's decisions. No snapshot means no stage_fingerprint to scope by,
+    version's decisions. No sidecar means no stage_fingerprint to scope by,
     so no prior decisions are looked up."""
-    stage_fingerprint = _resolve_stage_fingerprint(snapshot)
-    if stage_fingerprint is None:
+    if fingerprints is None:
         return {}
     entries = StageCacheEntry.for_mode(CacheMode.PRODUCTION).find_entries(
-        project, stage_id, stage_fingerprint
+        project, stage_id, fingerprints.stage_fingerprint
     )
     return {
         entry.input_fingerprint: {
@@ -303,33 +293,37 @@ def _render_model_prompt(model_input: dict[str, Any] | None, prompt_template: st
 
 def _build_review_item(
     row: pd.Series,
+    input_fingerprint: str,
     decision_by_fingerprint: dict[str, dict[str, Any]],
     input_lookup: dict[tuple[str, ...], dict[str, Any]],
     join_keys: list[str],
     prompt_template: str | None,
 ) -> dict[str, Any]:
-    fp = row["input_fingerprint"]
     model_input = _find_model_input(row, input_lookup, join_keys)
     return {
-        "input_fingerprint": fp,
-        "row": {k: display_cell(v) for k, v in row.items()
-                if k not in _SNAPSHOT_BOOKKEEPING_COLUMNS},
+        "input_fingerprint": input_fingerprint,
+        "row": {k: display_cell(v) for k, v in row.items()},
         "model_input": model_input,
         "rendered_prompt": _render_model_prompt(model_input, prompt_template),
-        "prior_decision": decision_by_fingerprint.get(fp),
+        "prior_decision": decision_by_fingerprint.get(input_fingerprint),
     }
 
 
 def _build_review_items(
     snapshot: pd.DataFrame | None,
+    fingerprints: QueueFingerprints | None,
     decision_by_fingerprint: dict[str, dict[str, Any]],
     input_lookup: dict[tuple[str, ...], dict[str, Any]],
     join_keys: list[str],
     prompt_template: str | None,
 ) -> list[dict[str, Any]]:
-    if snapshot is None:
+    """One review item per snapshot row, zipped POSITIONALLY with the
+    sidecar's `input_fingerprints` — the two lists are index-independent
+    (the snapshot carries no fingerprint column), so position is the only
+    correspondence between them."""
+    if snapshot is None or fingerprints is None:
         return []
     return [
-        _build_review_item(row, decision_by_fingerprint, input_lookup, join_keys, prompt_template)
-        for _, row in snapshot.iterrows()
+        _build_review_item(row, fp, decision_by_fingerprint, input_lookup, join_keys, prompt_template)
+        for (_, row), fp in zip(snapshot.iterrows(), fingerprints.input_fingerprints)
     ]

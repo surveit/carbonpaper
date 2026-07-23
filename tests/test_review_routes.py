@@ -10,6 +10,10 @@ pattern tests/test_run_loop_semantics.py and tests/runtime/test_hrq_cache.py
 use for human_review_queue halts — so the queue snapshot these routes read is
 genuine runner output, not a hand-assembled fixture. The llm_transform stage's
 model call is mocked (deterministic score, no live LLM) where a test needs one.
+
+The snapshot itself carries no fingerprint columns: fingerprints live in the
+sidecar `<stage>.fingerprints.json` beside it, POSITIONALLY aligned to the
+snapshot's row order (app.runtime.stages.human_review_queue).
 """
 from __future__ import annotations
 
@@ -91,10 +95,20 @@ def _review_stage():
             "queue": {}}
 
 
+def _read_fingerprints(run_dir, stage_id: str = "review") -> dict:
+    """The sidecar `<stage_id>.fingerprints.json` a halted queue stage writes
+    beside its snapshot."""
+    path = run_dir / "queue" / f"{stage_id}.fingerprints.json"
+    parsed: dict = json.loads(path.read_text(encoding="utf-8"))
+    return parsed
+
+
 def _build_and_halt(tmp_path, monkeypatch):
     """Builds load -> score (llm_transform, mocked) -> review
     (human_review_queue) and runs it for real. The run halts at `review` with
-    both rows snapshotted. Returns (project_dir, run_id, run_dir, snapshot)."""
+    both rows snapshotted. Returns (project_dir, run_id, run_dir, snapshot,
+    fingerprints) — fingerprints is the sidecar dict, its `input_fingerprints`
+    list POSITIONALLY aligned to `snapshot`'s row order."""
     monkeypatch.setattr(loading, "EXAMPLES_DIR", tmp_path)
     monkeypatch.setattr(
         lt, "call_llm", lambda stage_id, llm_config, row, **kw: {"score": 1}
@@ -112,20 +126,22 @@ def _build_and_halt(tmp_path, monkeypatch):
 
     run_dir = project_dir / "runs" / manifest["run_id"]
     snapshot = pd.read_parquet(run_dir / "queue" / "review.parquet")
-    return project_dir, manifest["run_id"], run_dir, snapshot
+    fingerprints = _read_fingerprints(run_dir)
+    return project_dir, manifest["run_id"], run_dir, snapshot, fingerprints
 
 
 def _put_cached_decision(
-    project: str, stage_id: str, run_id: str, row: pd.Series,
+    project: str, stage_id: str, run_id: str,
+    stage_fingerprint: str, input_fingerprint: str, row: pd.Series,
     decision: str, modified_score: float | None = None,
 ) -> None:
     """Seed a prior decision directly through the cache seam (StageCache.put)
     — never a raw store write, and never the HTTP endpoint (used by tests that
     only care about queue_page's rendering of an already-cached decision)."""
     entry = StageCacheEntry(
-        id=build_cache_id(project, stage_id, row["stage_fingerprint"], row["input_fingerprint"]),
+        id=build_cache_id(project, stage_id, stage_fingerprint, input_fingerprint),
         project=project, stage_id=stage_id,
-        stage_fingerprint=row["stage_fingerprint"], input_fingerprint=row["input_fingerprint"],
+        stage_fingerprint=stage_fingerprint, input_fingerprint=input_fingerprint,
         source_run_id=run_id,
         frozen_input={"id": row["id"], "quote": row["quote"], "score": int(row["score"])},
         human=HumanDecision(decision=decision, modified_score=modified_score,
@@ -138,10 +154,13 @@ def _put_cached_decision(
 
 
 def test_happy_path_renders_items_with_fingerprint_prior_decision_and_counts(tmp_path, monkeypatch):
-    _project_dir, run_id, _run_dir, snapshot = _build_and_halt(tmp_path, monkeypatch)
-    first_fp, second_fp = snapshot["input_fingerprint"].tolist()
-    first_row = snapshot[snapshot["input_fingerprint"] == first_fp].iloc[0]
-    _put_cached_decision(PROJECT, "review", run_id, first_row, RowReviewDecision.approve)
+    _project_dir, run_id, _run_dir, snapshot, fingerprints = _build_and_halt(tmp_path, monkeypatch)
+    first_fp, second_fp = fingerprints["input_fingerprints"]
+    first_row = snapshot.iloc[0]
+    _put_cached_decision(
+        PROJECT, "review", run_id, fingerprints["stage_fingerprint"], first_fp,
+        first_row, RowReviewDecision.approve,
+    )
 
     client = TestClient(app)
     r = client.get(f"/project/{PROJECT}/runs/{run_id}/queue/review")
@@ -162,7 +181,7 @@ def test_happy_path_renders_items_with_fingerprint_prior_decision_and_counts(tmp
 
 
 def test_model_input_recovery_renders_the_exact_rendered_prompt(tmp_path, monkeypatch):
-    _project_dir, run_id, _run_dir, _snapshot = _build_and_halt(tmp_path, monkeypatch)
+    _project_dir, run_id, _run_dir, _snapshot, _fingerprints = _build_and_halt(tmp_path, monkeypatch)
 
     client = TestClient(app)
     html = client.get(f"/project/{PROJECT}/runs/{run_id}/queue/review").text
@@ -179,7 +198,7 @@ def test_model_input_recovery_renders_the_exact_rendered_prompt(tmp_path, monkey
 
 
 def test_degrades_gracefully_when_upstream_scored_input_is_missing(tmp_path, monkeypatch):
-    _project_dir, run_id, run_dir, snapshot = _build_and_halt(tmp_path, monkeypatch)
+    _project_dir, run_id, run_dir, _snapshot, fingerprints = _build_and_halt(tmp_path, monkeypatch)
 
     manifest = json.loads((run_dir / "manifest.json").read_text(encoding="utf-8"))
     load_record = next(s for s in manifest["stages"] if s["stage_id"] == "load")
@@ -191,7 +210,7 @@ def test_degrades_gracefully_when_upstream_scored_input_is_missing(tmp_path, mon
     assert r.status_code == 200  # missing upstream output does not break the page
     html = r.text
     # Items still render — both fingerprints present.
-    for fp in snapshot["input_fingerprint"]:
+    for fp in fingerprints["input_fingerprints"]:
         assert f'data-input-fingerprint="{fp}"' in html
     # No rendered prompt (needs model_input) and no raw model-input dump (also
     # needs model_input): both of queue_page's model_input-gated blocks are
@@ -204,7 +223,7 @@ def test_degrades_gracefully_when_upstream_scored_input_is_missing(tmp_path, mon
 
 
 def test_404_when_the_stage_id_is_not_a_human_review_queue_stage(tmp_path, monkeypatch):
-    _project_dir, run_id, _run_dir, _snapshot = _build_and_halt(tmp_path, monkeypatch)
+    _project_dir, run_id, _run_dir, _snapshot, _fingerprints = _build_and_halt(tmp_path, monkeypatch)
 
     client = TestClient(app)
     r = client.get(f"/project/{PROJECT}/runs/{run_id}/queue/load")  # `load` is input_data
@@ -216,8 +235,8 @@ def test_404_when_the_stage_id_is_not_a_human_review_queue_stage(tmp_path, monke
 
 
 def test_decide_400_on_unknown_decision(tmp_path, monkeypatch):
-    _project_dir, run_id, _run_dir, snapshot = _build_and_halt(tmp_path, monkeypatch)
-    fp = snapshot["input_fingerprint"].iloc[0]
+    _project_dir, run_id, _run_dir, _snapshot, fingerprints = _build_and_halt(tmp_path, monkeypatch)
+    fp = fingerprints["input_fingerprints"][0]
 
     client = TestClient(app)
     r = client.post(
@@ -228,8 +247,8 @@ def test_decide_400_on_unknown_decision(tmp_path, monkeypatch):
 
 
 def test_decide_400_when_modify_has_no_score(tmp_path, monkeypatch):
-    _project_dir, run_id, _run_dir, snapshot = _build_and_halt(tmp_path, monkeypatch)
-    fp = snapshot["input_fingerprint"].iloc[0]
+    _project_dir, run_id, _run_dir, _snapshot, fingerprints = _build_and_halt(tmp_path, monkeypatch)
+    fp = fingerprints["input_fingerprints"][0]
 
     client = TestClient(app)
     r = client.post(
@@ -240,7 +259,7 @@ def test_decide_400_when_modify_has_no_score(tmp_path, monkeypatch):
 
 
 def test_decide_404_on_unknown_fingerprint_and_writes_nothing(tmp_path, monkeypatch):
-    _project_dir, run_id, _run_dir, _snapshot = _build_and_halt(tmp_path, monkeypatch)
+    _project_dir, run_id, _run_dir, _snapshot, _fingerprints = _build_and_halt(tmp_path, monkeypatch)
 
     client = TestClient(app)
     r = client.post(
@@ -249,6 +268,14 @@ def test_decide_404_on_unknown_fingerprint_and_writes_nothing(tmp_path, monkeypa
     )
     assert r.status_code == 404
     assert not StageCacheEntry.list(prefix=f"{PROJECT}/review/")
+
+
+# ── 6. Snapshot pureness: exactly the upstream columns, no bookkeeping ──────
+
+
+def test_snapshot_columns_are_exactly_the_upstream_columns(tmp_path, monkeypatch):
+    _project_dir, _run_id, _run_dir, snapshot, _fingerprints = _build_and_halt(tmp_path, monkeypatch)
+    assert set(snapshot.columns) == {"id", "quote", "score"}
 
 
 # ── 7. End-to-end capstone: decide all three verdicts, then resume ──────────
@@ -291,7 +318,9 @@ def test_e2e_decide_approve_modify_and_reject_then_resume_completes(tmp_path, mo
     run_dir = project_dir / "runs" / run_id
     snapshot = pd.read_parquet(run_dir / "queue" / "review.parquet")
     assert len(snapshot) == 3
-    fp_by_id = dict(zip(snapshot["id"], snapshot["input_fingerprint"]))
+    fingerprints = _read_fingerprints(run_dir)
+    stage_fingerprint = fingerprints["stage_fingerprint"]
+    fp_by_id = dict(zip(snapshot["id"], fingerprints["input_fingerprints"]))
 
     client = TestClient(app)
     verdicts = {
@@ -308,12 +337,9 @@ def test_e2e_decide_approve_modify_and_reject_then_resume_completes(tmp_path, mo
         body = r.json()
         assert body == {"ok": True, "input_fingerprint": fp_by_id[row_id], "decision": form["decision"]}
 
-    # frozen_input is the upstream row the reviewer saw (id, score) alone —
-    # never the fingerprint columns or the handler's decision-bookkeeping
-    # placeholders (decision, modified_score, reviewer, reviewed_at), even
-    # though the snapshot row `_build_cache_entry` reads from carries all of
-    # those as columns.
-    stage_fingerprint = snapshot["stage_fingerprint"].iloc[0]
+    # frozen_input is the upstream row the reviewer saw (id, score) alone — the
+    # snapshot row `_build_cache_entry` reads from carries only those columns
+    # to begin with, since the snapshot is pure.
     for row_id, fp in fp_by_id.items():
         entry = StageCacheEntry.load(build_cache_id(project, "review", stage_fingerprint, fp))
         assert set(entry.frozen_input) == {"id", "score"}

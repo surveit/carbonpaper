@@ -4,6 +4,10 @@ to a prior human decision by fingerprinting the row and the stage definition
 (app.services.stage_cache), never by re-reading a legacy decisions/*.parquet
 file. Every entry these tests seed goes through the seam (`StageCache.put`),
 never a raw store write.
+
+Fingerprints never live on the snapshot itself: they're read from the sidecar
+`<stage>.fingerprints.json` written alongside it, POSITIONALLY aligned to the
+snapshot's row order.
 """
 from __future__ import annotations
 
@@ -55,25 +59,45 @@ def _src(rows: int = 2) -> pd.DataFrame:
     return pd.DataFrame({"id": [f"r{i}" for i in range(rows)], "score": list(range(rows))})
 
 
-def _halt_and_read_snapshot(stage: Stage, inputs: dict[str, pd.DataFrame], ctx) -> pd.DataFrame:
+def _read_fingerprints(queue_path) -> dict:
+    """The sidecar `<stage>.fingerprints.json` beside a halted queue's own
+    snapshot file — same stem, whichever extension the snapshot landed on."""
+    sidecar = queue_path.parent / f"{queue_path.stem}.fingerprints.json"
+    parsed: dict = json.loads(sidecar.read_text(encoding="utf-8"))
+    return parsed
+
+
+def _halt_and_read_snapshot(
+    stage: Stage, inputs: dict[str, pd.DataFrame], ctx
+) -> tuple[pd.DataFrame, dict]:
     with pytest.raises(HaltForReview) as exc_info:
         handle_human_review_queue(stage, inputs, ctx)
-    return pd.read_parquet(exc_info.value.queue_path)
+    queue_path = exc_info.value.queue_path
+    return pd.read_parquet(queue_path), _read_fingerprints(queue_path)
 
 
-def _put_approval(row: pd.Series, run_id: str, *, project: str = PROJECT) -> None:
-    """Cache an `approve` decision for one row of a halted snapshot, through
-    the seam (StageCache.put) — never a raw store write."""
+def _put_approval(
+    row: pd.Series, input_fingerprint: str, stage_fingerprint: str, run_id: str,
+    *, project: str = PROJECT,
+) -> None:
+    """Cache an `approve` decision for one row of a halted snapshot, matched to
+    it by the sidecar's fingerprints — through the seam (StageCache.put),
+    never a raw store write."""
     entry = StageCacheEntry(
-        id=build_cache_id(project, "review", row["stage_fingerprint"], row["input_fingerprint"]),
+        id=build_cache_id(project, "review", stage_fingerprint, input_fingerprint),
         project=project, stage_id="review",
-        stage_fingerprint=row["stage_fingerprint"], input_fingerprint=row["input_fingerprint"],
+        stage_fingerprint=stage_fingerprint, input_fingerprint=input_fingerprint,
         source_run_id=run_id,
         frozen_input={"id": row["id"], "score": int(row["score"])},
         human=HumanDecision(decision=RowReviewDecision.approve, modified_score=None,
                              reviewer="local", reviewed_at="2026-07-01T00:00:00"),
     )
     StageCache().put(entry)
+
+
+def _approve_every_row(snapshot: pd.DataFrame, fingerprints: dict, run_id: str, *, project: str = PROJECT) -> None:
+    for (_, row), fp in zip(snapshot.iterrows(), fingerprints["input_fingerprints"]):
+        _put_approval(row, fp, fingerprints["stage_fingerprint"], run_id, project=project)
 
 
 # ── 1. Decided rows are reused across runs ──────────────────────────────────
@@ -83,10 +107,9 @@ def test_decided_rows_reused_across_runs(tmp_path):
     stage = _stage()
     src = _src(2)
 
-    snapshot = _halt_and_read_snapshot(stage, {"scored": src}, _ctx(tmp_path, run_id="run1"))
+    snapshot, fingerprints = _halt_and_read_snapshot(stage, {"scored": src}, _ctx(tmp_path, run_id="run1"))
     assert len(snapshot) == 2
-    for _, row in snapshot.iterrows():
-        _put_approval(row, run_id="run1")
+    _approve_every_row(snapshot, fingerprints, "run1")
 
     out = handle_human_review_queue(stage, {"scored": src.copy()}, _ctx(tmp_path, run_id="run2"))
     assert len(out) == 2
@@ -101,14 +124,13 @@ def test_definition_change_invalidates_decisions(tmp_path):
     stage = _stage()
     src = _src(2)
 
-    snapshot = _halt_and_read_snapshot(stage, {"scored": src}, _ctx(tmp_path, run_id="run1"))
-    for _, row in snapshot.iterrows():
-        _put_approval(row, run_id="run1")
+    snapshot, fingerprints = _halt_and_read_snapshot(stage, {"scored": src}, _ctx(tmp_path, run_id="run1"))
+    _approve_every_row(snapshot, fingerprints, "run1")
 
     # Byte-identical input rows, but `reviewer_instructions` changed — the
     # stage's definition fingerprint changes, so no cached decision matches.
     changed_stage = _stage(reviewer_instructions="look twice")
-    new_snapshot = _halt_and_read_snapshot(
+    new_snapshot, _new_fingerprints = _halt_and_read_snapshot(
         changed_stage, {"scored": src.copy()}, _ctx(tmp_path, run_id="run2")
     )
     assert len(new_snapshot) == 2  # every row re-halts
@@ -122,14 +144,13 @@ def test_row_change_invalidates_only_that_row(tmp_path):
     stage = _stage()
     src = _src(2)
 
-    snapshot = _halt_and_read_snapshot(stage, {"scored": src}, _ctx(tmp_path, run_id="run1"))
-    for _, row in snapshot.iterrows():
-        _put_approval(row, run_id="run1")
+    snapshot, fingerprints = _halt_and_read_snapshot(stage, {"scored": src}, _ctx(tmp_path, run_id="run1"))
+    _approve_every_row(snapshot, fingerprints, "run1")
 
     changed_src = src.copy()
     changed_src.loc[changed_src["id"] == "r1", "score"] = 999  # only r1's value changes
 
-    new_snapshot = _halt_and_read_snapshot(
+    new_snapshot, _new_fingerprints = _halt_and_read_snapshot(
         stage, {"scored": changed_src}, _ctx(tmp_path, run_id="run2")
     )
     assert list(new_snapshot["id"]) == ["r1"]  # r0 reused its cached decision; r1 pending
@@ -140,10 +161,12 @@ def test_row_change_invalidates_only_that_row(tmp_path):
 
 def test_miss_never_falls_back(tmp_path):
     stage = _stage()
-    snapshot = _halt_and_read_snapshot(stage, {"scored": _src(1)}, _ctx(tmp_path))
+    snapshot, fingerprints = _halt_and_read_snapshot(stage, {"scored": _src(1)}, _ctx(tmp_path))
     assert len(snapshot) == 1
-    assert snapshot["decision"].isna().all()
-    # A pending row has no reviewed output populated from any default.
+    assert len(fingerprints["input_fingerprints"]) == 1
+    # A pending row has no reviewed output populated from any default, and the
+    # snapshot carries no bookkeeping column at all.
+    assert "decision" not in snapshot.columns
     assert "final_score" not in snapshot.columns
 
 
@@ -163,23 +186,33 @@ def test_fingerprints_stable_across_parquet_round_trip(tmp_path):
 
 
 def test_input_fingerprint_matches_original_row_before_any_bookkeeping_stamped(tmp_path):
-    """`input_fingerprint` on a halted snapshot row must equal
+    """The sidecar's `input_fingerprint` for a halted snapshot row must equal
     `compute_row_fingerprint` of that row's ORIGINAL upstream dict, recomputed
     independently here from `src` — never a value that shifts once the
-    handler stamps `stage_fingerprint`/`decision`/`modified_score`/`reviewer`/
-    `reviewed_at` onto the snapshot row. Fingerprinting happens on the
-    upstream row before any bookkeeping column is added, so those later
-    columns must never change the key a cached decision is matched on."""
+    handler applies a cached decision. Fingerprinting happens on the upstream
+    row before any bookkeeping is added, so a later column can never change
+    the key a cached decision is matched on."""
     stage = _stage()
     src = _src(3)
     expected_by_id = {
         row["id"]: compute_row_fingerprint(row.to_dict()) for _, row in src.iterrows()
     }
 
-    snapshot = _halt_and_read_snapshot(stage, {"scored": src}, _ctx(tmp_path))
+    snapshot, fingerprints = _halt_and_read_snapshot(stage, {"scored": src}, _ctx(tmp_path))
     assert len(snapshot) == 3
-    for _, row in snapshot.iterrows():
-        assert row["input_fingerprint"] == expected_by_id[row["id"]]
+    for (_, row), fp in zip(snapshot.iterrows(), fingerprints["input_fingerprints"]):
+        assert fp == expected_by_id[row["id"]]
+
+
+def test_snapshot_columns_match_original_upstream_columns_exactly(tmp_path):
+    """The pending snapshot is written PURE: exactly the pending rows'
+    original upstream columns, no fingerprint or decision-bookkeeping column
+    ever added."""
+    stage = _stage()
+    src = _src(2)
+
+    snapshot, _fingerprints = _halt_and_read_snapshot(stage, {"scored": src}, _ctx(tmp_path))
+    assert list(snapshot.columns) == list(src.columns)
 
 
 # ── 6. A legacy decisions/*.parquet on disk is never read ───────────────────
@@ -194,7 +227,7 @@ def test_legacy_decisions_parquet_never_read(tmp_path):
     }]).to_parquet(decisions_dir / "review.parquet", index=False)
 
     stage = _stage()
-    snapshot = _halt_and_read_snapshot(stage, {"scored": _src(2)}, _ctx(tmp_path))
+    snapshot, _fingerprints = _halt_and_read_snapshot(stage, {"scored": _src(2)}, _ctx(tmp_path))
     assert len(snapshot) == 2  # every row still pending — the legacy file was never consulted
 
 
@@ -257,9 +290,9 @@ def test_resume_reattaches_cached_decisions_written_via_the_seam(tmp_path):
     run_dir = project_dir / "runs" / run_id
     snapshot = pd.read_parquet(run_dir / "queue" / "review.parquet")
     assert len(snapshot) == 2
+    fingerprints = _read_fingerprints(run_dir / "queue" / "review.parquet")
 
-    for _, row in snapshot.iterrows():
-        _put_approval(row, run_id=run_id, project=project_dir.name)
+    _approve_every_row(snapshot, fingerprints, run_id, project=project_dir.name)
 
     resumed = runner.resume_run(project_dir, run_id, project_dir)
     assert resumed["status"] == "ok"
