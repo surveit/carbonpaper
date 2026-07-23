@@ -210,7 +210,7 @@ def _consume_cancel(ctx: dict[str, Any]) -> bool:
     """Consume this run's cancel message if one is pending — read-once, so a
     True means one was pending and is now gone. Identity is (project, run_id)
     read off ctx; False when either is absent: a subset/eval run's ctx carries
-    neither key (see runner._subset_ctx), so those runs are never cancellable."""
+    neither key (see executor._subset_ctx), so those runs are never cancellable."""
     project, run_id = ctx.get("project"), ctx.get("run_id")
     if not isinstance(project, str) or not isinstance(run_id, str):
         return False

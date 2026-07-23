@@ -24,6 +24,7 @@ import json
 import pandas as pd
 from fastapi.testclient import TestClient
 
+import app.runtime.executor as executor
 import app.runtime.runner as runner
 import app.web.loading as loading
 from app.main import app
@@ -362,7 +363,7 @@ def test_cancel_after_a_halt_clears_halted_at_and_reports_cancelled(tmp_path, mo
         calls["n"] += 1
         return calls["n"] > 2  # nothing at load's/review's checkpoints, then a message
 
-    monkeypatch.setattr(runner, "consume_cancel", fake_consume_cancel)
+    monkeypatch.setattr(executor, "consume_cancel", fake_consume_cancel)
 
     manifest = run_prepared(prepare_run(tmp_path, repo_root=tmp_path))
 

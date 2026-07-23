@@ -106,7 +106,7 @@ def test_row_driver_sequential_branch_raises_run_cancelled_when_pre_requested():
 
 def test_row_driver_ignores_cancellation_when_ctx_has_no_run_identity():
     # A subset/eval run's ctx carries no project/run_id (see
-    # runner._subset_ctx) — cancellation must never apply to it, even if the
+    # executor._subset_ctx) — cancellation must never apply to it, even if the
     # same run_id happens to be cancelled elsewhere.
     request_cancel("some-project", "some-run")
     handler = RowMapHandler(make_mapper=lambda stage, ctx: lambda row: dict(row))

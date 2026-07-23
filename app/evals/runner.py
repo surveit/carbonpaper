@@ -2,7 +2,7 @@
 
 Ties the pieces together: check the config still fits the workflow, inject the eval
 dataset as the override stage's output, run the grain-preserving stage subset to the
-target (app.runtime.runner.run_subset), score the target's output against the
+target (app.runtime.executor.run_subset), score the target's output against the
 dataset's expected columns (app.evals.scoring), and write an EvalRun.
 
 v1 scores DECLARATIVELY only — a path that isn't grain-preserving is recorded as
@@ -23,7 +23,7 @@ from app.evals.scoring import score_expected_outputs
 from app.models import (
     EvalConfig, EvalRun, EvalRunSettings, FileFormat, Stage, TableRef, Workflow,
 )
-from app.runtime.runner import run_subset
+from app.runtime.executor import run_subset
 from app.evals.compatibility import CompatibilityReport, validate_eval_compatibility
 from app.evals.dataset_columns import (
     deconflict_column_names,
