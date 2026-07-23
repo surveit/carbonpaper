@@ -107,10 +107,11 @@ _EXAMPLE_STAGE = {
         "prompt_instructions": (
             "You are locating the authoritative most-recent document for a facility. "
             "Prefer primary regulatory filings over secondary summaries; when several "
-            "candidates conflict, favor the most recently dated one. Call submit_answer "
-            "with the verdict, never explain it as text."
+            "candidates conflict, favor the most recently dated one. Return the located "
+            "document's url and date. Call submit_answer with the verdict, never explain "
+            "it as text."
         ),
-        "prompt_data_template": "Find the authoritative most-recent doc for {name}. Return JSON ...",
+        "prompt_data_template": "Find the authoritative most-recent doc for {name}.",
     },
     "output_schema": {
         "primary_key": ["facility_id", "url"],
