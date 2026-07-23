@@ -73,10 +73,24 @@ def run_subset(
     run_dir: Path,
     repo_root: Path,
     queue_auto_approve: bool = False,
+    project: str | None = None,
+    workflow_version: str | None = None,
 ) -> dict[str, pd.DataFrame]:
     """Run only `stage_ids` of `workflow`, with `injected_outputs` seeded as the
     outputs of stages OUTSIDE the subset (their upstream is cut off — the output is
     given, not computed). Returns the outputs of every executed stage.
+
+    Owns its run manifest as a first-class, live-updated artifact: it mints the
+    manifest here (create_run_manifest, the single source of the manifest shape)
+    and drives it through the same `_execute_stages` engine a production run uses,
+    which flushes the manifest to disk per stage. So if a mid-frontier stage
+    errors, the manifest on disk already records the completed stages as ok and the
+    failing stage's error before this raises — partial work is preserved for a
+    caller to read back, not lost to a save-at-the-end.
+
+    `project`/`workflow_version` are the run's logical identity, recorded in the
+    manifest when a caller knows them and left None otherwise (never fabricated).
+    The run_id is `run_dir.name`.
 
     Any input of a subset stage that names a stage outside the subset must appear in
     `injected_outputs`, or `_execute_stages` fails on it. Raises SubsetRunError if an
@@ -93,10 +107,15 @@ def run_subset(
         raise SubsetRunError(f"subset names stage(s) not in the workflow: {missing}")
     ordered = topological_sort([by_id[sid] for sid in stage_ids])
     (run_dir / "outputs").mkdir(parents=True, exist_ok=True)
+    manifest = create_run_manifest(
+        ordered, run_id=run_dir.name, project=project,
+        workflow_version=workflow_version, run_bindings={}, input_bindings={},
+        limits={}, offsets={})
+    write_manifest(run_dir, manifest)
     outputs: dict[str, pd.DataFrame] = dict(injected_outputs)
     manifest = _execute_stages(
         ordered, _subset_ctx(repo_root, run_dir, queue_auto_approve),
-        _subset_manifest(run_dir, ordered), run_dir, outputs)
+        manifest, run_dir, outputs)
     _raise_if_run_failed(manifest)
     return outputs
 
@@ -108,15 +127,6 @@ def _subset_ctx(repo_root: Path, run_dir: Path, queue_auto_approve: bool) -> Run
     # fabricated wrong directory — unless `queue_auto_approve` tells that handler to
     # pass rows through in memory, in which case it never reaches for project scope.
     return RunContext.for_non_production(repo_root, run_dir, queue_auto_approve=queue_auto_approve)
-
-
-def _subset_manifest(run_dir: Path, ordered: list[Stage]) -> dict[str, Any]:
-    return {
-        "run_id": run_dir.name,
-        "started_at": datetime.now().isoformat(timespec="seconds"),
-        "status": RunStatus.RUNNING,
-        "stages": [_build_pending_stage_record(s) for s in ordered],
-    }
 
 
 def _raise_if_run_failed(manifest: dict[str, Any]) -> None:
@@ -283,18 +293,21 @@ def create_run_manifest(
     ordered: list[Stage],
     *,
     run_id: str,
-    project: str,
-    workflow_version: str,
+    project: str | None,
+    workflow_version: str | None,
     run_bindings: dict[str, dict[str, Any]],
     input_bindings: dict[str, dict[str, Any]],
     limits: dict[str, int],
     offsets: dict[str, int],
 ) -> dict[str, Any]:
-    """The initial production run manifest — every stage pending, status running.
-    The single source of the run-manifest shape: prepare_run mints it here and
-    persists it with write_manifest rather than hand-building the dict, so the
-    shape lives with the engine that later updates it (_flush_manifest /
-    _finalize_run_manifest)."""
+    """The initial run manifest — every stage pending, status running. The single
+    source of the run-manifest shape: every caller mints it here and persists it
+    with write_manifest rather than hand-building the dict, so the shape lives with
+    the engine that later updates it (_flush_manifest / _finalize_run_manifest).
+
+    `project`/`workflow_version` are None for a subset run (run_subset) that was
+    not told its logical identity — recorded honestly as None rather than a
+    fabricated placeholder. A production run always supplies both."""
     return {
         "run_id": run_id,
         "started_at": datetime.now().isoformat(timespec="seconds"),

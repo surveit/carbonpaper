@@ -263,6 +263,53 @@ def test_run_subset_surfaces_the_real_row_failure_message(tmp_path, monkeypatch)
     assert "unknown error" not in message
 
 
+def test_run_subset_preserves_partial_work_in_the_manifest_on_a_mid_frontier_error(tmp_path):
+    # run_subset owns a live manifest: when a mid-frontier stage errors, the
+    # manifest on disk at that moment must already show the completed upstream
+    # stage as ok and the failing stage's error — partial work is preserved for a
+    # caller (workflow test / eval) to read back, not lost to a save-at-the-end.
+    load = Stage.model_validate({
+        "id": "load", "name": "Load items", "type": "input_data",
+        "connector": {"kind": "file"},
+    })
+    clean = Stage.model_validate({
+        "id": "clean", "name": "Clean rows", "type": "python_row_function",
+        "inputs": [{"id": "load", "schema": {
+            "columns": [{"name": "id", "type": "str"}, {"name": "text", "type": "str"}]}}],
+        "output_schema": {
+            "columns": [{"name": "id", "type": "str"}, {"name": "text", "type": "str"}]},
+        "function": {"kind": "inline", "code": "def transform(row): return row"},
+    })
+    boom = Stage.model_validate({
+        "id": "score", "name": "Score rows", "type": "python_row_function",
+        "inputs": [{"id": "clean", "schema": {
+            "columns": [{"name": "id", "type": "str"}, {"name": "text", "type": "str"}]}}],
+        "output_schema": {
+            "columns": [{"name": "id", "type": "str"}, {"name": "score", "type": "int"}]},
+        "function": {"kind": "inline",
+                     "code": "def transform(row):\n    raise ValueError('kaboom')"},
+    })
+    workflow = Workflow(stages=[load, clean, boom])
+    injected = {"load": pd.DataFrame({"id": ["r1"], "text": ["hi"]})}
+    run_dir = tmp_path / "runs" / "partial"
+
+    with pytest.raises(SubsetRunError):
+        run_subset(
+            workflow, injected_outputs=injected, stage_ids=["clean", "score"],
+            run_dir=run_dir, repo_root=tmp_path)
+
+    manifest = json.loads((run_dir / "manifest.json").read_text(encoding="utf-8"))
+    records = {r["stage_id"]: r for r in manifest["stages"]}
+    assert records["clean"]["status"] == "ok"          # completed upstream preserved
+    assert records["score"]["status"] == "error"       # failing stage's error recorded
+    assert records["score"]["error"] is not None
+    assert "kaboom" in records["score"]["error"]["message"]
+    assert manifest["status"] == "errors"
+    # Identity not supplied to this subset run — recorded honestly, not fabricated.
+    assert manifest["project"] is None
+    assert manifest["workflow_version"] is None
+
+
 def test_raise_if_run_failed_lists_halted_stages_as_readable_text():
     """`halted_at` is a list of stage ids (see app/runtime/runner.py's
     _execute_stages). _raise_if_run_failed's message must read them out

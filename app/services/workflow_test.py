@@ -13,13 +13,13 @@ project_dir, so no cross-run state (e.g. the decisions store) is reachable.
 `workflow_tests/` is naming hygiene — no special semantics attach to the
 directory.
 
-Manifest shape: the persisted manifest is the production run-manifest shape,
-minted through executor.create_run_manifest (the single source of that shape).
-run_subset finalizes its own manifest onto disk as it runs (real observed
-per-stage statuses and the final run status); this seam reads that finalized
-manifest back and overlays its observed `stages`/`status` onto the production
-skeleton before the final write, so the recorded statuses are the engine's own —
-never synthesized here.
+Manifest shape: the persisted manifest is the production run-manifest shape, and
+run_subset owns it — it mints the manifest (executor.create_run_manifest, the
+single source of that shape) and live-updates it on disk per stage as it runs. This
+seam passes run_subset the project name and version so the recorded identity is
+complete, then reads nothing back: the manifest on disk is the engine's own
+observation, including the partial record (completed stages ok, the failing stage's
+error) left behind when a mid-frontier stage errors.
 
 A human_review_queue stage mid-frontier auto-approves in memory: this seam runs
 the subset with `queue_auto_approve=True`, so the queue handler passes every row
@@ -39,7 +39,6 @@ still refuses to run against anything but a stored immutable version — never t
 working copy, never a fabricated one."""
 from __future__ import annotations
 
-import json
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -48,12 +47,7 @@ import pandas as pd
 
 from app.core.errors import NoWorkflowTestSourceError, NoWorkflowTestVersionError, SubsetRunError
 from app.models import Stage, StageType, Workflow
-from app.runtime.executor import (
-    create_run_manifest,
-    run_subset,
-    topological_sort,
-    write_manifest,
-)
+from app.runtime.executor import run_subset, topological_sort
 from app.runtime.stages.input_data import read_input_data
 from app.services.versioning import list_versions, load_version, load_version_stages
 from app.services.workspace import repo_root, resolve_project_dir
@@ -92,18 +86,11 @@ def run_workflow_test(
 
     workflow_test_id = _mint_workflow_test_id()
     workflow_test_dir = project_dir / "workflow_tests" / workflow_test_id
-    manifest = create_run_manifest(
-        frontier, run_id=workflow_test_id, project=project_dir.name,
-        workflow_version=version, run_bindings={}, input_bindings={},
-        limits={}, offsets={})
-    workflow_test_dir.mkdir(parents=True, exist_ok=True)
-    write_manifest(workflow_test_dir, manifest)
 
     stage_ids = [stage.id for stage in frontier]
-    ok, error, outputs = _run_frontier(workflow, injected, stage_ids, workflow_test_dir, repo_root())
-
-    _overlay_observed_outcome(manifest, workflow_test_dir)
-    write_manifest(workflow_test_dir, manifest)
+    ok, error, outputs = _run_frontier(
+        workflow, injected, stage_ids, workflow_test_dir, repo_root(),
+        project=project_dir.name, workflow_version=version)
 
     return {
         "ok": ok,
@@ -138,16 +125,25 @@ def _run_frontier(
     stage_ids: list[str],
     workflow_test_dir: Path,
     repo_root: Path,
+    *,
+    project: str,
+    workflow_version: str,
 ) -> tuple[bool, str | None, dict[str, pd.DataFrame]]:
     """Execute the frontier subset, translating run_subset's clean-or-loud
     contract into a workflow-test verdict: normal return -> (True, None, outputs); a
     SubsetRunError (a stage errored) -> (False, its message, {}). A mid-frontier
     human_review_queue auto-approves in memory (queue_auto_approve=True) rather
-    than halting, so it never produces a SubsetRunError on its own."""
+    than halting, so it never produces a SubsetRunError on its own.
+
+    run_subset owns and live-updates the manifest under `workflow_test_dir` (passed
+    `project`/`workflow_version` so the recorded identity is complete); this seam
+    reads none of it back — the manifest on disk is run_subset's own observation,
+    including the partial record left behind when a mid-frontier stage errors."""
     try:
         outputs = run_subset(
             workflow, injected_outputs=injected, stage_ids=stage_ids,
-            run_dir=workflow_test_dir, repo_root=repo_root, queue_auto_approve=True)
+            run_dir=workflow_test_dir, repo_root=repo_root, queue_auto_approve=True,
+            project=project, workflow_version=workflow_version)
     except SubsetRunError as exc:
         return False, str(exc), {}
     return True, None, outputs
@@ -187,19 +183,6 @@ def _last_stage_row_count(
     if not frontier:
         return None
     return int(len(outputs[frontier[-1].id]))
-
-
-def _overlay_observed_outcome(manifest: dict[str, Any], workflow_test_dir: Path) -> None:
-    """Overlay the per-stage statuses and final run status that run_subset
-    finalized onto disk onto the production-shape `manifest`, so the recorded
-    outcome is the engine's own observation, not one synthesized here. Copies the
-    run-outcome fields run_subset writes (`stages`, `status`, and the optional
-    `halted_at`/`finished_at`/`queue_stats`/`dropped_columns`) when present."""
-    finalized = json.loads((workflow_test_dir / "manifest.json").read_text(encoding="utf-8"))
-    for field in ("stages", "status", "halted_at", "finished_at",
-                  "queue_stats", "dropped_columns"):
-        if field in finalized:
-            manifest[field] = finalized[field]
 
 
 def _mint_workflow_test_id() -> str:
