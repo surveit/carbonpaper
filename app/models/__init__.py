@@ -119,6 +119,10 @@ NODE_TYPES: dict[str, dict[str, _Any]] = {
         "min_inputs": 0,
         "required": ["kind"],
         "optional": ["params", "refresh", "notes"],
+        "notes": (
+            "NEVER include a file path — where data physically lives is not "
+            "part of the methodology; the user binds a file when starting a run."
+        ),
     },
     "llm_transform": {
         "summary": "Row-by-row LLM call producing structured output.",

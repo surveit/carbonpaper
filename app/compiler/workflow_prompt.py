@@ -32,14 +32,15 @@ _NODE_TYPE_NOTES: dict[str, str] = {
 
 def _render_stage_catalogue() -> str:
     """Render the stage-type catalogue from `models.NODE_TYPES`: one line each
-    (`- <name> — <summary>`), plus a curated note where one exists, so the
-    catalogue can never drift from the real node-type set."""
+    (`- <name> — <summary>`), with a curated note appended where one exists, so
+    the catalogue can never drift from the real node-type set."""
     lines: list[str] = []
     for name, spec in models.NODE_TYPES.items():
-        lines.append(f"- {name} — {spec['summary']}")
-        note = _NODE_TYPE_NOTES.get(name)
+        note = _NODE_TYPE_NOTES.get(name) or spec.get("notes")
+        line = f"- {name} — {spec['summary']}"
         if note:
-            lines.append(f"  {note}")
+            line += f" {note}"
+        lines.append(line)
     return "\n".join(lines)
 
 
