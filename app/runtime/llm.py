@@ -79,13 +79,18 @@ def call_llm(
     tests that mock it) are unchanged."""
     require_agent_backend()
 
-    if not llm_config.prompt_template:
-        raise LLMError(f"stage {stage_id}: llm_transform has no prompt_template")
+    if not llm_config.prompt_data_template:
+        raise LLMError(f"stage {stage_id}: llm_transform has no prompt_data_template")
     if llm_config.tools:
         raise LLMError(
             f"stage {stage_id}: llm.tools is not supported by the agent backend"
         )
-    prompt = render_prompt(llm_config.prompt_template, input_row)
+    task = render_prompt(llm_config.prompt_data_template, input_row)
+    system_prompt = (
+        SYSTEM_PROMPT
+        if not llm_config.prompt_instructions
+        else SYSTEM_PROMPT + "\n\n" + llm_config.prompt_instructions
+    )
     model_name = str(model or llm_config.model or DEFAULT_MODEL)
 
     # Honor llm_config.max_retries for TRANSIENT backend failures (a dropped CLI
@@ -97,9 +102,9 @@ def call_llm(
     last_exc: Exception | None = None
     for attempt in range(attempts):
         agent: Agent[BaseModel] = Agent(
-            system_prompt=SYSTEM_PROMPT,
+            system_prompt=system_prompt,
             target_schema=reply_model,
-            task=prompt,
+            task=task,
             model=model_name,
         )
         try:
