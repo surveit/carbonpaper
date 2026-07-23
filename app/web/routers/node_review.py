@@ -25,7 +25,7 @@ from app.services.errors import WorkflowLoadError
 from app.services.loader import stage_to_json, stage_to_spec_dict
 from app.models import Stage
 from app.models.stages.stage_tests import STAGE_TEST_TYPES, StageTest
-from app.runtime.stage_tests import StageTestResult, find_failing_stage_tests, run_one_stage_tests
+from app.runtime.stage_tests import StageTestResult, find_failing_stage_tests, run_tests_for_stage
 from app.web.config import EXAMPLES_DIR, templates
 from app.web.diagrams import TYPE_CLASS, TYPE_GLYPH, build_mermaid_graph
 from app.web.loading import find_stage, load_stages, resolve_function_code
@@ -96,7 +96,7 @@ def _shape_test_views(stage: Stage) -> list[dict[str, Any]]:
     _stage_tests.html ([] for stages without tests)."""
     if not stage.tests:
         return []
-    results = run_one_stage_tests(stage)
+    results = run_tests_for_stage(stage)
     return [
         _shape_one_test(test, result)
         for test, result in zip(stage.tests, results)

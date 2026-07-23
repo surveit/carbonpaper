@@ -109,7 +109,7 @@ def run_stage_tests(
     )
 
 
-def run_one_stage_tests(stage: Stage) -> list[StageTestResult]:
+def run_tests_for_stage(stage: Stage) -> list[StageTestResult]:
     """Execute each of `stage.tests` through the stage's registered handler
     and compare to its expected rows. Raises ValueError for stage types whose
     tests cannot execute (the model forbids authoring them there anyway)."""
@@ -129,7 +129,7 @@ def find_failing_stage_tests(stages: list[Stage]) -> list[str]:
     for stage in stages:
         if not stage.tests:
             continue
-        for result in run_one_stage_tests(stage):
+        for result in run_tests_for_stage(stage):
             if result.status != STATUS_PASSED:
                 detail = result.message or f"{len(result.diffs)} differing cell(s)"
                 failures.append(
@@ -161,7 +161,7 @@ def _find_stage(stages: list[Stage], stage_id: str) -> Stage:
 
 def _run_one_stage(stage: Stage) -> StageTestRun:
     return StageTestRun(
-        stage_id=stage.id, stage_type=stage.type, results=run_one_stage_tests(stage)
+        stage_id=stage.id, stage_type=stage.type, results=run_tests_for_stage(stage)
     )
 
 
