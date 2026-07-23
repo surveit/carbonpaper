@@ -15,6 +15,8 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 
+import app.web.config as web_config
+
 from app.core.llm_sdk import CLI_PATH
 
 from app.core.agent.registry import build_engine
@@ -27,6 +29,7 @@ TEMPLATES_DIR = Path(__file__).resolve().parent / "chat_templates"
 
 router = APIRouter()
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
+templates.env.filters["friendly_time"] = web_config.friendly_time
 _store = open_session_store()
 _turns = default_turn_manager()
 

@@ -71,7 +71,7 @@
     <span class="gate-by" id="dm-state-by">
       {% if dm_state == 'edited_stale' %}was approved by{% else %}approved by{% endif %}
       {{ approval.matched_decision.reviewer }}
-      {% if approval.matched_decision.reviewed_at %}at {{ approval.matched_decision.reviewed_at }}{% endif %}
+      {% if approval.matched_decision.reviewed_at %}at {{ approval.matched_decision.reviewed_at | friendly_time }}{% endif %}
     </span>
     {% else %}
     <span class="gate-by" id="dm-state-by"></span>

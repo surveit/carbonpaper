@@ -12,8 +12,8 @@
 <ul>
   <li><strong>eval:</strong> <a href="/project/{{ project }}/evals/{{ config.id }}">{{ config.name }}</a></li>
   <li><strong>workflow version:</strong> <code>{{ run.workflow_version }}</code></li>
-  <li><strong>started:</strong> {{ run.started_at or '—' }}</li>
-  <li><strong>finished:</strong> {{ run.finished_at or '—' }}</li>
+  <li><strong>started:</strong> {% if run.started_at %}{{ run.started_at | friendly_time }}{% else %}—{% endif %}</li>
+  <li><strong>finished:</strong> {% if run.finished_at %}{{ run.finished_at | friendly_time }}{% else %}—{% endif %}</li>
 </ul>
 
 <h2>Executing stages</h2>

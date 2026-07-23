@@ -16,7 +16,7 @@
         {% for r in runs %}
         <tr>
             <td><a href="/project/{{ project }}/runs/{{ r.run_id }}"><code>{{ r.run_id }}</code></a></td>
-            <td>{{ r.started_at }}</td>
+            <td>{{ r.started_at | friendly_time }}</td>
             <td>{% if r.workflow_version %}<code>{{ r.workflow_version }}</code>{% else %}<span class="muted">(unversioned)</span>{% endif %}</td>
             <td><span class="run-status status-{{ r.status }}">{{ r.status }}</span></td>
             <td>

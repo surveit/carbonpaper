@@ -25,11 +25,12 @@
     {% for s in sessions %}
       <li>
         <a href="/chat/{{ s.session_id }}">{{ s.title }}</a>
-        <div class="muted">{{ s.session_id }} · {{ s.created_at }}</div>
+        <div class="muted">{{ s.session_id }} · {{ s.created_at | friendly_time }}</div>
       </li>
     {% else %}
       <li class="muted">No sessions yet.</li>
     {% endfor %}
   </ul>
+<script src="/static/friendly-time.js"></script>
 </body>
 </html>

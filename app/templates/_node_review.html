@@ -44,7 +44,7 @@
     <code class="nr-hash" data-role="hash">{{ review.current_hash }}</code>
     {% if review.matched_decision %}
     <span class="muted nr-by">{% if state == 'edited_stale' %}was approved by{% else %}by{% endif %}
-      {{ review.matched_decision.reviewer }}{% if review.matched_decision.reviewed_at %} at {{ review.matched_decision.reviewed_at }}{% endif %}{% if review.matched_decision.note %} — “{{ review.matched_decision.note }}”{% endif %}</span>
+      {{ review.matched_decision.reviewer }}{% if review.matched_decision.reviewed_at %} at {{ review.matched_decision.reviewed_at | friendly_time }}{% endif %}{% if review.matched_decision.note %} — “{{ review.matched_decision.note }}”{% endif %}</span>
     {% endif %}
     <span class="nr-scope muted">Node review — do we trust <em>how this step is modeled?</em> Colours the workflow; does not halt a run.</span>
   </div>

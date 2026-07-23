@@ -50,7 +50,7 @@
           <span class="muted">(unversioned)</span>
         {% endif %}
       </td>
-      <td>{{ r.started_at }}</td>
+      <td>{{ r.started_at | friendly_time }}</td>
       <td><span class="run-status status-{{ r.status }}">{{ r.status }}</span></td>
       <td>
         {{ r.stages_ok }}/{{ r.stages_total }} ok
