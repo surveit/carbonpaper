@@ -555,7 +555,8 @@
       },
       "connector": null,
       "llm": {
-        "prompt_template": "You are a policy analyst triaging federal lobbying disclosures.\n\nFiling context:\n- Client: {client}\n- Registrant: {registrant}\n- Period: {filing_period}\n\nSpecific issues lobbied (verbatim from the disclosure):\n{specific_issues}\n\nReturn a JSON object with exactly these three fields:\n\n1. \"policy_area\": the single best-fit category from this fixed list — choose exactly one:\n   Health | Energy & Environment | Finance & Taxation | Technology | Defense | Transportation | Agriculture | Other\n\n2. \"targets_specific_bill\": true if the text names a specific piece of legislation (e.g. a bill number such as H.R. 3684 or S. 1234, or a named Act), false otherwise.\n\n3. \"primary_ask\": a single plain-language sentence (no jargon) summarising what the client appears to want from government.",
+        "prompt_instructions": "You are a policy analyst triaging federal lobbying disclosures.\n\nReturn a JSON object with exactly these three fields:\n\n1. \"policy_area\": the single best-fit category from this fixed list — choose exactly one:\n   Health | Energy & Environment | Finance & Taxation | Technology | Defense | Transportation | Agriculture | Other\n\n2. \"targets_specific_bill\": true if the text names a specific piece of legislation (e.g. a bill number such as H.R. 3684 or S. 1234, or a named Act), false otherwise.\n\n3. \"primary_ask\": a single plain-language sentence (no jargon) summarising what the client appears to want from government.",
+        "prompt_data_template": "Filing context:\n- Client: {client}\n- Registrant: {registrant}\n- Period: {filing_period}\n\nSpecific issues lobbied (verbatim from the disclosure):\n{specific_issues}",
         "model": null,
         "temperature": 0.0,
         "max_retries": 8,

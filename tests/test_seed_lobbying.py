@@ -64,3 +64,22 @@ def test_committed_lobbying_fixture_imports_and_validates_cleanly(tmp_path):
     sibling_csv = _FIXTURE_PATH.with_suffix(".csv")
     assert sibling_csv.is_file()
     assert not (project_dir / "input").exists()
+
+
+def test_seed_lobbying_issue_triage_loads():
+    """The classify_issues llm_transform stage's prompt is split into a
+    row-invariant prompt_instructions and a per-row prompt_data_template
+    (the cacheable-prefix / per-row split): the fixed policy-area rubric
+    lives in prompt_instructions with no per-row placeholders, while the
+    filing-specific context and issue text — with the original {client},
+    {registrant}, {filing_period}, {specific_issues} placeholders — live in
+    prompt_data_template."""
+    wf = WorkflowFile.model_validate_json(_FIXTURE_PATH.read_text(encoding="utf-8"))
+    classify_stage = next(stage for stage in wf.stages if stage.id == "classify_issues")
+
+    assert classify_stage.llm is not None
+    assert classify_stage.llm.prompt_instructions.strip() != ""
+
+    data_template = classify_stage.llm.prompt_data_template
+    for placeholder in ("{client}", "{registrant}", "{filing_period}", "{specific_issues}"):
+        assert placeholder in data_template
