@@ -1,4 +1,4 @@
-"""Unit tests for scripts/import_graph_report.py: propagation-cost math on
+"""Unit tests for tools/import_graph_report.py: propagation-cost math on
 synthetic graphs with a known-by-hand answer, fan-extreme selection, markdown
 rendering, and the JSON round-trip that carries metrics between the two
 checkouts the CI job compares.
@@ -18,7 +18,7 @@ pytest session, `sys.modules["app"]` is cached, and Python's import system
 resolves `find_spec("app")` from that cached entry regardless of later
 `sys.path` changes — so `_make_root_importable` cannot redirect an
 already-imported `app` within one process. This is also exactly how the CI
-job uses `--root`: two separate `python scripts/import_graph_report.py`
+job uses `--root`: two separate `python tools/import_graph_report.py`
 process invocations (one per checkout), never two calls in one process — so
 the subprocess tests exercise the script the way it is actually invoked,
 not a workaround for the caching gap.
@@ -33,7 +33,7 @@ from pathlib import Path
 import grimp
 import pytest
 
-from scripts.import_graph_report import (
+from tools.import_graph_report import (
     FanExtremeReport,
     ImportGraphMetricError,
     ImportGraphMetricsReport,
@@ -43,7 +43,7 @@ from scripts.import_graph_report import (
     render_comment_body,
 )
 
-_SCRIPT_PATH = Path(__file__).resolve().parent.parent / "scripts" / "import_graph_report.py"
+_SCRIPT_PATH = Path(__file__).resolve().parent.parent / "tools" / "import_graph_report.py"
 
 
 def _run_script(*args: str) -> subprocess.CompletedProcess[str]:
