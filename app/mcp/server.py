@@ -17,12 +17,40 @@ from mcp.server.fastmcp import FastMCP
 from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
 from starlette.types import Receive, Scope, Send
 
+from app.core.errors import (
+    MissingInputBindingError,
+    NoSmokeVersionError,
+    NoVersionToRunError,
+    RunNotFoundError,
+)
 from app.runtime.stage_tests import WorkflowTestReport, run_workflow_tests
 from app.services import data_model as data_model_service
 from app.services import generation
 from app.services import loader
 from app.services import project as project_service
+from app.services import run as run_service
+from app.services import smoke as smoke_service
 from app.services import workspace
+from app.services.errors import WorkflowLoadError
+
+# This module is app/mcp/server.py, so three parents up is the repo root — the
+# same derivation app.web.config.REPO_ROOT uses, resolved here rather than
+# imported (app.web is a protected top-level interface the MCP surface must not
+# import). It is the root file connectors and table refs resolve relative paths
+# against.
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+
+# Domain failures a run/smoke tool turns into {ok: False, error: str(exc)} — a
+# loud, honest verdict rather than a traceback or a fabricated run id/status.
+# Anything outside this set propagates as a genuine internal fault.
+_RUN_TOOL_ERRORS = (
+    NoVersionToRunError,
+    MissingInputBindingError,
+    WorkflowLoadError,
+    RunNotFoundError,
+    NoSmokeVersionError,
+    ValueError,
+)
 
 INSTRUCTIONS = """\
 glassbox turns an investigation methodology (prose) into a reviewable, runnable data
@@ -250,6 +278,59 @@ def add_stage(project_id: str, stage_json: str) -> dict[str, Any]:
     returned. The new node lands 'unreviewed' (amber) for a human to approve."""
     result = project_service.add_stage(project_id, stage_json)
     return {"ok": result.ok, "issues": result.issues}
+
+
+@mcp.tool()
+def run_workflow(project_id: str, version_id: str | None = None) -> dict[str, Any]:
+    """Start a REAL production run of the project's published workflow and return
+    its `run_id` immediately — the run executes in the background. This is a run
+    of record: it writes a manifest under the project's runs/ dir and produces the
+    workflow's published artifacts. `version_id` pins a specific published version
+    (omit for the newest published one); an unpublished or missing version is a
+    loud error, never a silent fallback. Poll get_run_status(project_id, run_id)
+    for live progress and the final status. On a pre-run failure (nothing
+    published, an unbound input) returns {ok: False, error} and starts no run."""
+    pdir = _resolve_existing_project(project_id)
+    try:
+        run_id = run_service.start_run(pdir, REPO_ROOT, version_id=version_id)
+    except _RUN_TOOL_ERRORS as exc:
+        return {"ok": False, "error": str(exc)}
+    return {"run_id": run_id, "status": run_service.read_run_status(pdir, run_id)["status"]}
+
+
+@mcp.tool()
+def get_run_status(project_id: str, run_id: str) -> dict[str, Any]:
+    """The current manifest of one production run as a dict: its overall status
+    (running / ok / errors / halted), per-stage statuses, and run metadata. Poll
+    this after run_workflow to follow progress and see the outcome. An unknown or
+    expired run_id returns {ok: False, error} rather than a fabricated status."""
+    pdir = _resolve_existing_project(project_id)
+    try:
+        return run_service.read_run_status(pdir, run_id)
+    except _RUN_TOOL_ERRORS as exc:
+        return {"ok": False, "error": str(exc)}
+
+
+@mcp.tool()
+def smoke_run(
+    project_id: str, version_id: str | None = None, limit: int = 20, offset: int = 0,
+) -> dict[str, Any]:
+    """Run a NON-production smoke check: sample the first `limit` rows (from
+    `offset`) of the workflow's bound source and run the frontier over just that
+    sample, so an author can watch the pipeline execute on real data before
+    publishing. It is NOT a run of record — it writes only under the project's
+    separate smoke_runs/ dir, produces no published artifacts, and carries no
+    cross-run state. Accepts any stored version, published or not (omit
+    `version_id` for the newest). Returns the verdict
+    {ok, smoke_run_id, version_id, stages_run, rows_out, error}: `ok` False on any
+    stage error, with `error` naming what failed and `rows_out` None (never a
+    fabricated count). A project with no stored version is a loud error."""
+    pdir = _resolve_existing_project(project_id)
+    try:
+        return smoke_service.run_smoke(
+            pdir, REPO_ROOT, version_id=version_id, limit=limit, offset=offset)
+    except _RUN_TOOL_ERRORS as exc:
+        return {"ok": False, "error": str(exc)}
 
 
 def _resolve_existing_project(project_id: str) -> Path:

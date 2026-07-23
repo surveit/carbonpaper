@@ -69,8 +69,9 @@ def run_smoke(
     sample, writing a production-shape manifest under
     `<project_dir>/smoke_runs/<smoke_run_id>/`. Returns
     `{ok, smoke_run_id, version_id, stages_run, rows_out, error}` — `ok` is True
-    when the frontier ran clean, False on any stage error or a human-review halt
-    (the halt named in `error`); `rows_out` is the last executed stage's output
+    when the frontier ran clean, False on any stage error (a mid-frontier queue
+    stage errors rather than halts — see module docstring); `rows_out` is the
+    last executed stage's output
     row count when ok, else None (never a fabricated count).
 
     Version resolution accepts any stored version, published or not (see
