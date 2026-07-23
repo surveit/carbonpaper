@@ -34,6 +34,15 @@ def test_output_schema_documents_llm_transform_additive_rule():
     assert "primary_key" in d
 
 
+def test_output_schema_documents_join_aggregate_may_omit():
+    # the platform fills a schema-less join/aggregate output_schema at save
+    # time (app.models.stages.fill_output_schema) — the generator may omit it.
+    d = _desc(Stage, "output_schema")
+    assert "join" in d
+    assert "aggregate" in d
+    assert "omit" in d
+
+
 def test_function_code_documents_the_three_signatures():
     # the runtime calls fn(row) / fn(*frames) / fn(*frames, output_dir=...) — #3, #6
     d = _desc(PythonFunction, "code")

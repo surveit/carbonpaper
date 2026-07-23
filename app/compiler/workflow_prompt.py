@@ -33,8 +33,10 @@ shape. In one line each:
 - llm_transform — a step that needs judgment or reads unstructured text into structure.
   Its prompt_template is rendered with Python's str.format_map: inject a column as {column_name}.
   """ + LLM_TRANSFORM_TOOL_CALLING_NOTE + """
-- join — combines rows from upstream stages on a key.
-- aggregate — collapses rows into group summaries.
+- join — combines rows from upstream stages on a key. Omit output_schema — the platform
+  computes it from the handle and input schemas when the workflow is saved.
+- aggregate — collapses rows into group summaries. Omit output_schema — the platform
+  computes it from the handle and input schemas when the workflow is saved.
 - human_review_queue — routes items to a person to decide. """ + HUMAN_REVIEW_QUEUE_CONTRACT_NOTE + """
 - publish — renders the final output.
 Describe each stage you emit in one sentence and let the type follow from what the step is;

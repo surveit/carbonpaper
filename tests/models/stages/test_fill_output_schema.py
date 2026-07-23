@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from app.models.stage import Stage
 from app.models.stages import fill_output_schema
+from app.models.workflow import validate_workflow_draft
 
 
 def _aggregate_stage(*, output_schema=None, edge_schema="default"):
@@ -115,3 +116,58 @@ def test_fill_ignores_non_fillable_types():
     assert publish_stage.output_schema is None
 
     assert fill_output_schema(publish_stage) is publish_stage
+
+
+def test_draft_omitting_output_schema_on_join_aggregate_is_valid():
+    """The generator is told it may omit output_schema on a join/aggregate
+    stage — the platform fills it at save time via fill_output_schema — so a
+    draft that omits both must validate cleanly (pins the generator's
+    permission to omit, not the fill itself)."""
+    facilities_schema = {
+        "columns": [
+            {"name": "facility_id", "type": "str", "nullable": False},
+            {"name": "name", "type": "str", "nullable": False},
+        ],
+    }
+    filings_schema = {
+        "columns": [
+            {"name": "facility_id", "type": "str", "nullable": False},
+            {"name": "amount", "type": "int", "nullable": False},
+        ],
+    }
+    stages = [
+        {
+            "id": "facilities", "name": "Facilities", "type": "input_data",
+            "connector": {"kind": "file"}, "output_schema": facilities_schema,
+        },
+        {
+            "id": "filings", "name": "Filings", "type": "input_data",
+            "connector": {"kind": "file"}, "output_schema": filings_schema,
+        },
+        {
+            "id": "enrich", "name": "Join facilities to filings", "type": "join",
+            "inputs": [
+                {"id": "facilities", "schema": facilities_schema},
+                {"id": "filings", "schema": filings_schema},
+            ],
+            "join": {"type": "inner", "keys": [{"left": "facility_id", "right": "facility_id"}]},
+        },
+        {
+            "id": "totals", "name": "Totals", "type": "aggregate",
+            "inputs": [{"id": "enrich", "schema": {
+                "columns": [
+                    {"name": "facility_id", "type": "str", "nullable": False},
+                    {"name": "name", "type": "str", "nullable": False},
+                    {"name": "amount", "type": "int", "nullable": False},
+                ],
+            }}],
+            "aggregate": {
+                "group_by": ["facility_id"],
+                "aggregations": [
+                    {"output_column": "total", "formula": "sum", "value_column": "amount"},
+                ],
+            },
+        },
+    ]
+
+    assert validate_workflow_draft(stages) == []

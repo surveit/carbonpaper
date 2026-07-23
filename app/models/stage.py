@@ -342,7 +342,9 @@ class Stage(_Base):
             "Columns this stage outputs, with an optional primary_key. For an llm_transform "
             "this must be strictly ADDITIVE and 1:1: declare the SAME primary_key as its "
             "single input's schema, keep every input column unchanged, and add at least one "
-            "new column (one input row -> one output row)."
+            "new column (one input row -> one output row). For a join or aggregate stage, "
+            "OMIT this field — the platform computes it from the handle and input schemas "
+            "when the workflow is saved."
         ),
     )
 
