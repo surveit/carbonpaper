@@ -8,12 +8,13 @@ from __future__ import annotations
 from app import models as m
 
 
-def test_human_review_queue_note_states_the_hash_requirement():
+def test_human_review_queue_note_states_the_fingerprint_matching():
     note = m.NODE_TYPES["human_review_queue"].get("notes")
     assert note, "human_review_queue must carry a `notes` explanation"
-    # both ways to satisfy the requirement, stated for the authoring agent
-    assert "hash_columns" in note
-    assert "primary_key" in note
+    # the authoring agent needs to know editing filter/reviewer_instructions
+    # invalidates every decision cached for this stage
+    assert "fingerprint" in note
+    assert "reviewer_instructions" in note
 
 
 def test_note_reaches_the_batch_compiler_prompt():

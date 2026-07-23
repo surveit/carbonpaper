@@ -49,7 +49,7 @@ from pydantic import Field, ValidationError
 from app.core.errors import DocumentNotFound
 from app.models import Coverage, Stage
 from app.models.workflow import parse_workflow
-from app.core.persistence import PersistedModel, get_store
+from app.core.persistence import PersistedModel, PersistenceScope, get_store
 from app.core.utils import format_errors
 from app.services import node_review
 from app.services.errors import WorkflowLoadError
@@ -75,6 +75,7 @@ class WorkflowVersion(PersistedModel):
     version runnable — see the module docstring."""
 
     collection: ClassVar[str] = "workflow_version"
+    SCOPE: ClassVar[PersistenceScope] = PersistenceScope.PROJECT_READ
     # Dump the embedded stages in their canonical spec-dict shape (field aliases
     # restored, unset optionals dropped) — the same convention stage_to_spec_dict
     # uses, so a version's on-disk stage shape matches the working copy's.

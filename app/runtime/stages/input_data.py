@@ -15,6 +15,8 @@ import pandas as pd
 
 from app.models import Stage
 
+from ..context import RunContext
+
 
 def preflight_input_data(stage: Stage) -> tuple[list[str], dict[str, Any] | None]:
     """Run-readiness + provenance for one input stage, checked at prepare time
@@ -40,7 +42,7 @@ def preflight_input_data(stage: Stage) -> tuple[list[str], dict[str, Any] | None
                 "bytes": path.stat().st_size}
 
 
-def read_input_data(stage: Stage, ctx: dict[str, Any]) -> pd.DataFrame:
+def read_input_data(stage: Stage, ctx: RunContext) -> pd.DataFrame:
     connector = stage.connector
     assert connector is not None  # Stage validation: input_data carries connector
     params = connector.params

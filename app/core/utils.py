@@ -5,6 +5,7 @@ here may import an app subsystem — these helpers take plain values and return
 plain values."""
 from __future__ import annotations
 
+import hashlib
 import random
 
 from pydantic import ValidationError
@@ -30,6 +31,17 @@ def generate_word_triplet_id(taken: set[str], rng: random.Random | None = None) 
         if candidate not in taken:
             return candidate
     raise RuntimeError("Word-triplet id space exhausted")
+
+
+# ── Content hashing ──────────────────────────────────────────────────────────
+def compute_short_hash(text: str) -> str:
+    """sha1(text.encode("utf-8")).hexdigest()[:16] — the one hashing
+    convention every content-addressed id in this codebase shares (a stage
+    definition, a cache row, a node spec). `hashlib` requires bytes, so this
+    is the single site that encodes; every caller passes an already-canonical
+    string (typically `json.dumps(..., sort_keys=True)`) and never encodes
+    itself."""
+    return hashlib.sha1(text.encode("utf-8")).hexdigest()[:16]
 
 
 # ── Error formatting ─────────────────────────────────────────────────────────

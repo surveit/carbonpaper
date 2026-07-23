@@ -6,10 +6,11 @@ strict about the fields declared here.
 """
 from __future__ import annotations
 
+import json
 import re
 from enum import Enum
 from pathlib import Path
-from typing import Any, Literal, Optional
+from typing import Any, ClassVar, Literal, Optional
 
 from pydantic import AliasChoices, Field, ValidationError, field_validator, model_validator
 
@@ -23,7 +24,7 @@ from app.models.schema import (
 from app.models.stages.code import validate_inline_function_code
 from app.models.stages.stage_tests import StageTest, validate_stage_tests
 from app.core.prompt_template import find_template_fields
-from app.core.utils import format_errors
+from app.core.utils import compute_short_hash, format_errors
 
 # ── Enumerated vocabularies ──────────────────────────────────────────────────
 class StageType(str, Enum):
@@ -110,6 +111,11 @@ class PublishFormat(str, Enum):
 # ── Executable-handle blocks (each self-validates) ───────────────────────────
 class Connector(_Base):
     """input_data handle."""
+    # Every field changes what this stage computes (which file, what params) —
+    # see Stage.compute_definition_fingerprint.
+    FINGERPRINT_FIELDS: ClassVar[frozenset[str]] = frozenset({"kind", "params", "refresh", "notes"})
+    INCIDENTAL_FIELDS: ClassVar[frozenset[str]] = frozenset()
+
     kind: ConnectorKind
     params: dict[str, Any] = Field(
         default_factory=dict,
@@ -141,6 +147,14 @@ class Connector(_Base):
 
 class LLMConfig(_Base):
     """llm_transform handle."""
+    # Every field changes what this stage computes (the prompt, the model, the
+    # sampling/response knobs) — see Stage.compute_definition_fingerprint.
+    FINGERPRINT_FIELDS: ClassVar[frozenset[str]] = frozenset({
+        "prompt_instructions", "prompt_data_template", "model", "temperature",
+        "max_retries", "response_format", "rubric", "tools",
+    })
+    INCIDENTAL_FIELDS: ClassVar[frozenset[str]] = frozenset()
+
     prompt_instructions: str = ""
     prompt_data_template: str = Field(
         validation_alias=AliasChoices("prompt_data_template", "prompt_template"),
@@ -163,6 +177,13 @@ class PythonFunction(_Base):
     """Handle for python_row_function / python_frame_function (and publish). The
     row-vs-frame distinction lives in the stage `type`, not here — the runtime
     reads the type to decide whether to invoke this per row or per frame."""
+    # Every field changes what this stage computes (the code/module it runs) —
+    # see Stage.compute_definition_fingerprint.
+    FINGERPRINT_FIELDS: ClassVar[frozenset[str]] = frozenset({
+        "kind", "code", "module", "function", "requirements",
+    })
+    INCIDENTAL_FIELDS: ClassVar[frozenset[str]] = frozenset()
+
     kind: FunctionKind
     code: Optional[str] = Field(
         default=None,
@@ -218,6 +239,11 @@ class JoinConfig(_Base):
     collapses into one column (there is no `<key>_r`). `select` and the
     stage's `output_schema` may only name these producible columns — anything
     else is rejected when the stage is saved."""
+    # Every field changes what this stage computes (join type, keys, kept
+    # columns) — see Stage.compute_definition_fingerprint.
+    FINGERPRINT_FIELDS: ClassVar[frozenset[str]] = frozenset({"type", "keys", "on", "select"})
+    INCIDENTAL_FIELDS: ClassVar[frozenset[str]] = frozenset()
+
     type: JoinType = JoinType.inner
     keys: Optional[list[JoinKey]] = None
     on: Optional[list[JoinKey]] = None
@@ -255,26 +281,39 @@ class AggregationOp(_Base):
 
 class AggregateConfig(_Base):
     """aggregate handle."""
+    # Every field changes what this stage computes (grouping, aggregations) —
+    # see Stage.compute_definition_fingerprint.
+    FINGERPRINT_FIELDS: ClassVar[frozenset[str]] = frozenset({"group_by", "aggregations"})
+    INCIDENTAL_FIELDS: ClassVar[frozenset[str]] = frozenset()
+
     group_by: list[str]
     aggregations: list[AggregationOp]
 
 
 class RowReviewDecision(str, Enum):
-    """A reviewer's verdict on one human_review_queue row, persisted in the
-    queue's decisions store: `approve` keeps the AI score as final, `modify`
-    substitutes a human-entered score, `reject` drops the row from the
-    stage's output."""
+    """A reviewer's verdict on one human_review_queue row, cached against that
+    row's fingerprint (app.services.stage_cache.StageCacheEntry): `approve`
+    keeps the AI score as final, `modify` substitutes a human-entered score,
+    `reject` drops the row from the stage's output."""
     approve = "approve"
     modify = "modify"
     reject = "reject"
 
 
 class QueueConfig(_Base):
-    """human_review_queue handle. `hash_columns` is optional ONLY when the upstream
-    input schema declares a primary_key (the runner content-hashes on that PK when
-    absent); a stage with neither is rejected — see Stage._queue_has_resolvable_hash."""
+    """human_review_queue handle. A queued row is matched to a cached human
+    decision by fingerprinting the row itself (app.services.stage_cache) — no
+    column configuration is needed to enable that matching."""
+    # `filter`/`reviewer_instructions` change what the human is asked; routing,
+    # conflict_resolution, and estimated_volume_per_week describe how a
+    # decision is routed, not what is asked — see
+    # Stage.compute_definition_fingerprint.
+    FINGERPRINT_FIELDS: ClassVar[frozenset[str]] = frozenset({"filter", "reviewer_instructions"})
+    INCIDENTAL_FIELDS: ClassVar[frozenset[str]] = frozenset({
+        "routing", "conflict_resolution", "estimated_volume_per_week",
+    })
+
     filter: Optional[str] = None
-    hash_columns: Optional[list[str]] = None
     reviewer_instructions: Optional[str] = None
     routing: Optional[str] = None
     conflict_resolution: Optional[str] = None
@@ -283,6 +322,13 @@ class QueueConfig(_Base):
 
 class PublishConfig(_Base):
     """publish handle (runs alongside a `function` block)."""
+    # Every field changes what this stage computes (format, destination,
+    # template, layout) — see Stage.compute_definition_fingerprint.
+    FINGERPRINT_FIELDS: ClassVar[frozenset[str]] = frozenset({
+        "format", "destination", "template", "one_file_per", "cross_link",
+    })
+    INCIDENTAL_FIELDS: ClassVar[frozenset[str]] = frozenset()
+
     format: Optional[PublishFormat] = None
     destination: Optional[str] = None
     template: Optional[str] = None
@@ -385,20 +431,31 @@ class Stage(_Base):
     def input_ids(self) -> list[str]:
         return [ref.id for ref in self.inputs]
 
-    def resolve_hash_columns(self) -> list[str]:
-        """The columns whose values identify a queued row, so a human_review_queue
-        can re-match a stored human decision across re-runs: the queue's explicit
-        `hash_columns`, else the single upstream input's declared `primary_key`,
-        else `[]`. The runtime content-hashes each queued row over exactly these
-        columns; an empty result is rejected at build time by
-        `_queue_has_resolvable_hash`."""
-        if self.queue and self.queue.hash_columns:
-            return list(self.queue.hash_columns)
-        if self.inputs:
-            upstream = self.inputs[0].table_schema
-            if upstream is not None and upstream.primary_key:
-                return list(upstream.primary_key)
-        return []
+    def compute_definition_fingerprint(self) -> str:
+        """sha1[:16] over the canonical JSON of the output-determining subset of
+        this stage: {"type", "handle": <the type's handle block>, "output_schema"}.
+        Every other Stage field (id, name, source, inputs, review, limit,
+        compiler_notes, eval, tests) is incidental — it does not change what
+        this stage computes — and stays out of the fingerprint. The handle
+        block itself is trimmed to its class's own `FINGERPRINT_FIELDS` (every
+        handle config class declares `FINGERPRINT_FIELDS`/`INCIDENTAL_FIELDS`
+        explicitly, exhaustively over its own fields — see e.g. QueueConfig,
+        whose `routing`/`conflict_resolution`/`estimated_volume_per_week`
+        route or match a decision without changing what the human is asked)."""
+        spec = _TYPE_SPEC[self.type]
+        handle = getattr(self, spec["handle"])
+        handle_dump = handle.model_dump(mode="json", exclude_none=True)
+        handle_dump = {
+            key: value for key, value in handle_dump.items()
+            if key in type(handle).FINGERPRINT_FIELDS
+        }
+        output_dump = (
+            self.output_schema.model_dump(mode="json", exclude_none=True)
+            if self.output_schema is not None else None
+        )
+        canonical = {"type": self.type, "handle": handle_dump, "output_schema": output_dump}
+        payload = json.dumps(canonical, sort_keys=True, separators=(",", ":"), default=str)
+        return compute_short_hash(payload)
 
     @field_validator("id")
     @classmethod
@@ -505,41 +562,6 @@ class Stage(_Base):
                 f"escaped literal and never injects the value. Use single braces "
                 f"around the column name."
             )
-        return self
-
-    @model_validator(mode="after")
-    def _queue_has_resolvable_hash(self) -> "Stage":
-        """A human_review_queue matches each queued row to a stored human decision
-        by hashing a stable set of columns (`resolve_hash_columns`): the queue's
-        `hash_columns`, else the upstream input's `primary_key`. With neither, the
-        runtime cannot hash a row and would raise mid-run — so require a resolvable
-        source here, at build time, where the author (or the compiler agent) sees it.
-
-        Additionally, when `hash_columns` are named explicitly AND the upstream
-        schema is declared, the named columns must exist in it — otherwise the
-        runtime drops them at hash time. (The primary_key fallback needs no such
-        check: TableSchema already enforces primary_key ⊆ columns.)
-
-        A single stage's invariant, enforced on the stage — like
-        `_llm_transform_one_to_one`; cross-stage checks live in the workflow."""
-        if self.type != StageType.human_review_queue:
-            return self
-        if not self.resolve_hash_columns():
-            raise ValueError(
-                f"human_review_queue '{self.id}' cannot match human decisions across "
-                "runs: set queue.hash_columns, or declare a primary_key on its input "
-                "schema"
-            )
-        if self.queue and self.queue.hash_columns and self.inputs:
-            upstream = self.inputs[0].table_schema
-            if upstream is not None:
-                declared = {column.name for column in upstream.columns}
-                missing = [c for c in self.queue.hash_columns if c not in declared]
-                if missing:
-                    raise ValueError(
-                        f"human_review_queue '{self.id}' hash_columns {missing} are not "
-                        f"in the upstream schema (which declares {sorted(declared)})"
-                    )
         return self
 
     @model_validator(mode="after")

@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import asyncio
 import time
-from typing import Any
+from typing import Any, TypedDict
 
 from pydantic import BaseModel
 
@@ -131,7 +131,19 @@ def _record_usage(usage_out: list[LlmUsage] | None, agent: Agent[BaseModel]) -> 
         usage_out.append(agent.last_usage)
 
 
-def backend_status() -> dict[str, Any]:
+class LlmBackendStatus(TypedDict):
+    """`backend_status()`'s return shape, and the value type of
+    `RunContext.llm_backend` (app.runtime.context) — one per stage that ran an
+    llm_transform."""
+
+    backend: str | None
+    backend_error: str | None
+    claude_cli: str | None
+    model_default: str
+    parallel_default: int
+
+
+def backend_status() -> LlmBackendStatus:
     """For UI/diagnostics: report whether the agent backend is available."""
     try:
         require_agent_backend()

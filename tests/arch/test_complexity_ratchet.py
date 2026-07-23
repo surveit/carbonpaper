@@ -20,12 +20,18 @@ the installed dependency. A method's qualified name is radon's own
 ``.<name>``, so a closure nested two levels deep reads as
 ``outer.<inner>.<innermost>`` — ``cc_visit`` does not flatten closures the way
 it flattens methods, so this module walks ``.closures`` itself, recursively.
-Two blocks that resolve to the same qualified name (a platform-conditional
-``def foo(): ... / def foo(): ...``, or ``@typing.overload`` stubs) fail loud
-via `index_by_identity` rather than silently comparing only one of them.
+Two blocks that resolve to the same qualified name (e.g. a platform-conditional
+``def foo(): ... / def foo(): ...`` under ``if``/``else``) fail loud via
+`index_by_identity` rather than silently comparing only one of them.
+``@typing.overload`` stubs are the one expected same-name collision: an
+overload group's stub bodies are always the trivial ``...``, never a
+complexity violator, so `measure_function_complexities` excludes them (via
+`find_overload_stub_lines`) before `index_by_identity` ever sees them — only
+the real implementation is measured.
 """
 from __future__ import annotations
 
+import ast
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -85,15 +91,44 @@ def find_app_source_files(root: Path) -> list[Path]:
 
 def measure_function_complexities(paths: list[Path], repo_root: Path) -> list[FunctionComplexity]:
     """Every function, method, and closure in `paths`, at its measured
-    complexity."""
+    complexity — except an `@typing.overload` stub (see `find_overload_stub_lines`),
+    which is never included: its body is always the trivial `...`, so admitting
+    it would only create a same-name collision for `index_by_identity` to
+    (correctly) reject, without protecting against anything."""
     measurements: list[FunctionComplexity] = []
     for path in paths:
         rel_path = path.relative_to(repo_root).as_posix()
         text = path.read_text(encoding="utf-8")
+        overload_lines = find_overload_stub_lines(text)
         for block in cc_visit(text):
             if isinstance(block, Function):
-                measurements.extend(_measure_function_and_closures(block, rel_path, parent=None))
+                measurements.extend(
+                    _measure_function_and_closures(block, rel_path, parent=None, overload_lines=overload_lines)
+                )
     return measurements
+
+
+def find_overload_stub_lines(text: str) -> set[int]:
+    """Line numbers of every function/method def in `text` decorated with
+    `overload` — bare (`@overload`) or dotted (`@typing.overload`). radon's own
+    `Function.lineno` for a def is the same line ast reports here (the `def`
+    line, not the decorator), so a caller can match these lines against radon's
+    measurements directly."""
+    tree = ast.parse(text)
+    return {
+        node.lineno
+        for node in ast.walk(tree)
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and _has_overload_decorator(node)
+    }
+
+
+def _has_overload_decorator(node: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
+    for decorator in node.decorator_list:
+        if isinstance(decorator, ast.Name) and decorator.id == "overload":
+            return True
+        if isinstance(decorator, ast.Attribute) and decorator.attr == "overload":
+            return True
+    return False
 
 
 def find_functions_over_threshold(measurements: list[FunctionComplexity]) -> list[str]:
@@ -140,13 +175,21 @@ def test_functions_do_not_exceed_the_complexity_ratchet() -> None:
 # --- qualified-name walk -----------------------------------------------------
 
 
-def _measure_function_and_closures(func: Function, rel_path: str, parent: str | None) -> list[FunctionComplexity]:
+def _measure_function_and_closures(
+    func: Function, rel_path: str, parent: str | None, overload_lines: set[int]
+) -> list[FunctionComplexity]:
     """`func` and every closure nested inside it, recursively, each as a
-    `FunctionComplexity`."""
+    `FunctionComplexity` — except `func` itself when its line is one of
+    `overload_lines` (an `@typing.overload` stub), which is dropped."""
     name = func.fullname if parent is None else f"{parent}.<{func.name}>"
-    measurements = [FunctionComplexity(rel_path, func.lineno, name, func.complexity)]
+    measurements = (
+        [] if func.lineno in overload_lines
+        else [FunctionComplexity(rel_path, func.lineno, name, func.complexity)]
+    )
     for closure in func.closures:
-        measurements.extend(_measure_function_and_closures(closure, rel_path, parent=name))
+        measurements.extend(
+            _measure_function_and_closures(closure, rel_path, parent=name, overload_lines=overload_lines)
+        )
     return measurements
 
 
@@ -265,6 +308,60 @@ def test_measure_function_complexities_qualifies_nested_closures_recursively(tmp
     )
     measurements = measure_function_complexities([file], tmp_path)
     assert {m.function for m in measurements} == {"outer", "outer.<inner>", "outer.<inner>.<innermost>"}
+
+
+def test_find_overload_stub_lines_detects_bare_overload(tmp_path: Path) -> None:
+    text = (
+        "from typing import overload\n"
+        "@overload\n"
+        "def go(x: int) -> int: ...\n"
+        "@overload\n"
+        "def go(x: str) -> str: ...\n"
+        "def go(x):\n"
+        "    return x\n"
+    )
+    assert find_overload_stub_lines(text) == {3, 5}
+
+
+def test_find_overload_stub_lines_detects_dotted_overload(tmp_path: Path) -> None:
+    text = (
+        "import typing\n"
+        "@typing.overload\n"
+        "def go(x: int) -> int: ...\n"
+        "def go(x):\n"
+        "    return x\n"
+    )
+    assert find_overload_stub_lines(text) == {3}
+
+
+def test_find_overload_stub_lines_ignores_undecorated_functions() -> None:
+    assert find_overload_stub_lines("def go(x):\n    return x\n") == set()
+
+
+def test_measure_function_complexities_excludes_overload_stubs_but_keeps_the_implementation(
+    tmp_path: Path,
+) -> None:
+    """The bug this guards: an `@typing.overload` group's stubs and its real
+    implementation all resolve to the same qualified name, which would
+    otherwise make `index_by_identity` raise on every overloaded method in
+    app/ — a false positive this measurement-layer exclusion prevents by never
+    handing the (trivial, always-`...`-bodied) stubs to it in the first
+    place."""
+    file = tmp_path / "m.py"
+    file.write_text(
+        "from typing import overload\n"
+        "class Foo:\n"
+        "    @overload\n"
+        "    def go(self, x: int) -> int: ...\n"
+        "    @overload\n"
+        "    def go(self, x: str) -> str: ...\n"
+        "    def go(self, x):\n"
+        "        if x:\n"
+        "            return 1\n"
+        "        return 2\n"
+    )
+    measurements = measure_function_complexities([file], tmp_path)
+    assert [(m.function, m.line) for m in measurements] == [("Foo.go", 7)]
 
 
 def test_measure_function_complexities_qualifies_a_closure_inside_a_method(tmp_path: Path) -> None:

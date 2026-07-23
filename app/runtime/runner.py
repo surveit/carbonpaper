@@ -36,6 +36,7 @@ from app.core.run_status import RunStatus, StageStatus
 from app.services.errors import WorkflowLoadError
 from app.services import versioning
 
+from .context import RunContext
 from .executor import _execute_stages, create_run_manifest, topological_sort, write_manifest
 from .stages import PREFLIGHTS
 
@@ -232,20 +233,12 @@ def prepare_run(
     (run_dir / "outputs").mkdir(parents=True, exist_ok=True)
     (run_dir / "artifacts").mkdir(parents=True, exist_ok=True)
 
-    ctx: dict[str, Any] = {
-        "repo_root": repo_root,
-        "run_dir": run_dir,
-        "project_dir": project_dir,
-        # This run's logical identity for cancellation's checkpoints (see
-        # app.runtime.cancellation) — read by _execute_stages, never by name
-        # of anything on disk. run_dir above stays I/O-only.
-        "project": project_dir.name,
-        "run_id": run_id,
-        "queue_stats": {},
-        "dropped_columns": {},
-        "limits": limits,
-        "offsets": offsets,
-    }
+    # This run's logical identity for cancellation's checkpoints (see
+    # app.runtime.cancellation) — read by _execute_stages, never by name of
+    # anything on disk. run_dir above stays I/O-only.
+    ctx = RunContext.for_production(
+        repo_root, run_dir, project_dir.name, run_id, limits=limits, offsets=offsets,
+    )
     # The manifest's shape and persistence belong to the executor — it mints the
     # initial record here and rewrites the same file as stages run. prepare only
     # supplies the run-level metadata: run_bindings is the run's bindings verbatim
@@ -347,22 +340,18 @@ def resume_run(project_dir: Path, run_id: str, repo_root: Path) -> dict[str, Any
             # treated as not-yet-produced; the stage simply re-runs.
             pass
 
-    ctx: dict[str, Any] = {
-        "repo_root": repo_root,
-        "run_dir": run_dir,
-        "project_dir": project_dir,
-        # This run's logical identity for cancellation's checkpoints — see the
-        # matching comment in prepare_run. Stamped here too so a resumed run
-        # is cancellable, not just a fresh one.
-        "project": project_dir.name,
-        "run_id": run_id,
-        "queue_stats": manifest.get("queue_stats", {}),
-        "dropped_columns": manifest.get("dropped_columns", {}),
+    # This run's logical identity for cancellation's checkpoints — see the
+    # matching comment in prepare_run. Stamped here too so a resumed run is
+    # cancellable, not just a fresh one.
+    ctx = RunContext.for_production(
+        repo_root, run_dir, project_dir.name, run_id,
         # Re-apply the run's per-stage row slicing so stages that resume after
         # a halt honor the same limits/offsets the run started with.
-        "limits": manifest.get("limit_overrides") or {},
-        "offsets": manifest.get("offset_overrides") or {},
-    }
+        limits=manifest.get("limit_overrides") or {},
+        offsets=manifest.get("offset_overrides") or {},
+        queue_stats=manifest.get("queue_stats", {}),
+        dropped_columns=manifest.get("dropped_columns", {}),
+    )
 
     manifest["resumed_at"] = datetime.now().isoformat(timespec="seconds")
     # Drop the halt marker the halted run left behind: the run is no longer

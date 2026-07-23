@@ -3,8 +3,8 @@ never allowed to leak into stage output.
 
 The chain: call_llm reports per-attempt usage through a `usage_out` sink ->
 the llm_transform mapper attaches the row's summed usage under ROW_USAGE_KEY ->
-the row driver sums those into ctx['llm_usage'][stage_id] AND the projection
-drops the hidden column -> the runner writes ctx['llm_usage'] onto the stage's
+the row driver sums those into ctx.llm_usage[stage_id] AND the projection
+drops the hidden column -> the runner writes ctx.llm_usage onto the stage's
 manifest record. The stage panel renders it.
 """
 from __future__ import annotations
@@ -16,6 +16,7 @@ from app.core.agent.usage import LlmUsage
 from app.models import Stage
 from app.models.stage import StageType
 from app.runtime.stages import HANDLERS
+from conftest import make_run_context
 
 
 def test_summed_adds_fields_and_counts_calls():
@@ -57,7 +58,7 @@ def _fake_call_llm(reply, per_call_usage: LlmUsage):
 def test_row_usage_key_never_reaches_stage_output(monkeypatch):
     monkeypatch.setattr(lt, "call_llm", _fake_call_llm(
         {"score": 5}, LlmUsage(input_tokens=10, output_tokens=4, cost_usd=0.001, calls=1)))
-    ctx: dict = {}
+    ctx = make_run_context()
     out = HANDLERS[StageType.llm_transform].execute(
         _llm_stage(), {"load": pd.DataFrame({"id": ["r1", "r2"], "text": ["a", "b"]})}, ctx)
     assert lt.ROW_USAGE_KEY not in out.columns
@@ -67,10 +68,10 @@ def test_row_usage_key_never_reaches_stage_output(monkeypatch):
 def test_row_usage_sums_across_rows_into_ctx(monkeypatch):
     monkeypatch.setattr(lt, "call_llm", _fake_call_llm(
         {"score": 5}, LlmUsage(input_tokens=10, output_tokens=4, cost_usd=0.001, calls=1)))
-    ctx: dict = {}
+    ctx = make_run_context()
     HANDLERS[StageType.llm_transform].execute(
         _llm_stage(), {"load": pd.DataFrame({"id": ["r1", "r2", "r3"], "text": ["a", "b", "c"]})}, ctx)
-    assert ctx["llm_usage"]["classify"] == LlmUsage(
+    assert ctx.llm_usage["classify"] == LlmUsage(
         input_tokens=30, output_tokens=12, cost_usd=0.003, calls=3)
 
 
@@ -130,8 +131,8 @@ def test_failed_row_still_records_the_tokens_it_spent(monkeypatch):
             usage_out.append(LlmUsage(input_tokens=8, output_tokens=0, cost_usd=0.0005, calls=1))
         raise RuntimeError("boom")
     monkeypatch.setattr(lt, "call_llm", _call)
-    ctx: dict = {}
+    ctx = make_run_context()
     HANDLERS[StageType.llm_transform].execute(
         _llm_stage(), {"load": pd.DataFrame({"id": ["r1"], "text": ["a"]})}, ctx)
-    assert ctx["llm_usage"]["classify"] == LlmUsage(
+    assert ctx.llm_usage["classify"] == LlmUsage(
         input_tokens=8, output_tokens=0, cost_usd=0.0005, calls=1)

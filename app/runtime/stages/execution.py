@@ -34,6 +34,7 @@ from app.models.stage import StageType, is_grain_and_order_preserving
 from app.core.agent.usage import LlmUsage
 
 from ..cancellation import consume_cancel
+from ..context import RowError, RunContext
 from ..errors import RunCancelled
 
 # One row of a stage's input or output: column label → cell value.
@@ -46,7 +47,7 @@ Row = dict[str, Any]
 ROW_ERROR_KEY = "_error"
 
 # Sentinel column carrying a row's token/cost usage dict (an llm_transform
-# attaches one per row). The driver sums these into ctx['llm_usage'][stage_id];
+# attaches one per row). The driver sums these into ctx.llm_usage[stage_id];
 # the output projection drops the column so usage never reaches stage output.
 ROW_USAGE_KEY = "_usage"
 
@@ -63,7 +64,7 @@ class StageHandler(ABC):
 
     @abstractmethod
     def execute(
-        self, stage: Stage, inputs: dict[str, pd.DataFrame], ctx: dict[str, Any]
+        self, stage: Stage, inputs: dict[str, pd.DataFrame], ctx: RunContext
     ) -> pd.DataFrame | None: ...
 
 
@@ -82,7 +83,7 @@ class RowMapHandler(StageHandler):
 
     def __init__(
         self,
-        make_mapper: Callable[[Stage, dict[str, Any]], Callable[[Row], Row]],
+        make_mapper: Callable[[Stage, RunContext], Callable[[Row], Row]],
         parallelism: int = 1,
         project_output_to_declared: bool = False,
     ) -> None:
@@ -91,7 +92,7 @@ class RowMapHandler(StageHandler):
         self.project_output_to_declared = project_output_to_declared
 
     def execute(
-        self, stage: Stage, inputs: dict[str, pd.DataFrame], ctx: dict[str, Any]
+        self, stage: Stage, inputs: dict[str, pd.DataFrame], ctx: RunContext
     ) -> pd.DataFrame:
         return _run_row_mapper(self, stage, inputs, ctx)
 
@@ -99,11 +100,11 @@ class RowMapHandler(StageHandler):
 class SourceHandler(StageHandler):
     """Originates rows from outside the run; takes no upstream frames."""
 
-    def __init__(self, read: Callable[[Stage, dict[str, Any]], pd.DataFrame]) -> None:
+    def __init__(self, read: Callable[[Stage, RunContext], pd.DataFrame]) -> None:
         self.read = read
 
     def execute(
-        self, stage: Stage, inputs: dict[str, pd.DataFrame], ctx: dict[str, Any]
+        self, stage: Stage, inputs: dict[str, pd.DataFrame], ctx: RunContext
     ) -> pd.DataFrame:
         return self.read(stage, ctx)
 
@@ -113,12 +114,12 @@ class FrameHandler(StageHandler):
 
     def __init__(
         self,
-        apply: Callable[[Stage, dict[str, pd.DataFrame], dict[str, Any]], pd.DataFrame | None],
+        apply: Callable[[Stage, dict[str, pd.DataFrame], RunContext], pd.DataFrame | None],
     ) -> None:
         self.apply = apply
 
     def execute(
-        self, stage: Stage, inputs: dict[str, pd.DataFrame], ctx: dict[str, Any]
+        self, stage: Stage, inputs: dict[str, pd.DataFrame], ctx: RunContext
     ) -> pd.DataFrame | None:
         return self.apply(stage, inputs, ctx)
 
@@ -148,7 +149,7 @@ def _run_row_mapper(
     handler: RowMapHandler,
     stage: Stage,
     inputs: dict[str, pd.DataFrame],
-    ctx: dict[str, Any],
+    ctx: RunContext,
 ) -> pd.DataFrame:
     """Map the stage's per-row function over its single input, in input order.
 
@@ -206,52 +207,53 @@ def _run_row_mapper(
     return df
 
 
-def _consume_cancel(ctx: dict[str, Any]) -> bool:
+def _consume_cancel(ctx: RunContext) -> bool:
     """Consume this run's cancel message if one is pending — read-once, so a
-    True means one was pending and is now gone. Identity is (project, run_id)
-    read off ctx; False when either is absent: a subset/eval run's ctx carries
-    neither key (see executor._subset_ctx), so those runs are never cancellable."""
-    project, run_id = ctx.get("project"), ctx.get("run_id")
-    if not isinstance(project, str) or not isinstance(run_id, str):
+    True means one was pending and is now gone. False when `ctx.identity` is
+    None: a subset/eval run's ctx carries no identity (see
+    executor._subset_ctx), so those runs are never cancellable."""
+    if ctx.identity is None:
         return False
-    return consume_cancel(project, run_id)
+    return consume_cancel(ctx.identity.project, ctx.identity.run_id)
 
 
-def _collect_row_errors(df: pd.DataFrame, stage: Stage, ctx: dict[str, Any]) -> None:
+def _collect_row_errors(df: pd.DataFrame, stage: Stage, ctx: RunContext) -> None:
     """Record EVERY row carrying the `ROW_ERROR_KEY` sentinel, keyed by stage id on
-    ctx. `pd.isna` alone is the test: it distinguishes a successful row (NaN — the
-    mapper never set the sentinel) from a failed row (any string, including the
-    empty string a message-less exception stringifies to). The runner surfaces
-    these as error-severity output issues and marks the stage `error`; the stage
-    keeps EVERY row (a failed row simply carries null/missing generated columns),
-    so one failed row does not abort the stage."""
+    `ctx.row_errors`. `pd.isna` alone is the test: it distinguishes a successful row
+    (NaN — the mapper never set the sentinel) from a failed row (any string,
+    including the empty string a message-less exception stringifies to). The
+    runner surfaces these as error-severity output issues and marks the stage
+    `error`; the stage keeps EVERY row (a failed row simply carries
+    null/missing generated columns), so one failed row does not abort the
+    stage."""
     if ROW_ERROR_KEY not in df.columns:
         return
-    errors = [
+    errors: list[RowError] = [
         {"row": position, "message": str(value)}
         for position, value in enumerate(df[ROW_ERROR_KEY])
         if not pd.isna(value)
     ]
     if errors:
-        ctx.setdefault("row_errors", {})[stage.id] = errors
+        ctx.row_errors[stage.id] = errors
 
 
-def _collect_row_usage(df: pd.DataFrame, stage: Stage, ctx: dict[str, Any]) -> None:
-    """Sum every row's `ROW_USAGE_KEY` usage dict into ctx['llm_usage'][stage.id]
-    — the stage's total token/cost spend. No column means a non-LLM stage (or a
-    stage where usage was never reported): nothing is recorded, never a zero."""
+def _collect_row_usage(df: pd.DataFrame, stage: Stage, ctx: RunContext) -> None:
+    """Sum every row's `ROW_USAGE_KEY` usage dict into
+    `ctx.llm_usage[stage.id]` — the stage's total token/cost spend. No column
+    means a non-LLM stage (or a stage where usage was never reported): nothing
+    is recorded, never a zero."""
     if ROW_USAGE_KEY not in df.columns:
         return
     parts = [value for value in df[ROW_USAGE_KEY] if isinstance(value, LlmUsage)]
-    ctx.setdefault("llm_usage", {})[stage.id] = LlmUsage.summed(parts)
+    ctx.llm_usage[stage.id] = LlmUsage.summed(parts)
 
 
 def _project_onto_declared_columns(
-    df: pd.DataFrame, stage: Stage, ctx: dict[str, Any]
+    df: pd.DataFrame, stage: Stage, ctx: RunContext
 ) -> pd.DataFrame:
     """Project onto exactly the columns output_schema declares, in declared
     order. Column selection only — row count and order are untouched. Dropped
-    columns are recorded on ctx, never silently discarded."""
+    columns are recorded on `ctx.dropped_columns`, never silently discarded."""
     declared = [c.name for c in stage.output_schema.columns] if stage.output_schema else []
     if not declared:
         return df
@@ -259,5 +261,5 @@ def _project_onto_declared_columns(
     dropped = [str(c) for c in df.columns
                if c not in keep and c not in _INTERNAL_ROW_COLUMNS]
     if dropped:
-        ctx.setdefault("dropped_columns", {})[stage.id] = dropped
+        ctx.dropped_columns[stage.id] = dropped
     return df[keep]

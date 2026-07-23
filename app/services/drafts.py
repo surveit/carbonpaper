@@ -37,7 +37,7 @@ from pydantic import BaseModel, Field, ValidationError
 
 from app.core.errors import DocumentNotFound, DraftNotFoundError
 from app.models import Stage, validate_workflow
-from app.core.persistence import PersistedModel
+from app.core.persistence import PersistedModel, PersistenceScope
 from app.core.utils import format_errors, generate_word_triplet_id
 from app.services import versioning, workspace
 from app.services.loader import stage_to_spec_dict
@@ -52,6 +52,7 @@ class Draft(PersistedModel):
     dangling input, a duplicate id, a cycle) until save_version."""
 
     collection: ClassVar[str] = "draft"
+    SCOPE: ClassVar[PersistenceScope] = PersistenceScope.PROJECT_READ
     # Dump embedded stages in their canonical spec-dict shape (field aliases
     # restored, unset optionals dropped) — mirrors WorkflowVersion.DUMP_OPTS,
     # so a draft's on-disk stage shape matches a version's.

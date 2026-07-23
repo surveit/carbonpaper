@@ -94,12 +94,12 @@ def _score_stage(stage_id, input_id, name="Score"):
 
 
 def _queue_stage(stage_id, input_id, name="Review"):
-    """A human_review_queue with no prior decisions on disk — it halts."""
+    """A human_review_queue with no cached decisions yet — it halts."""
     return {"id": stage_id, "name": name, "type": "human_review_queue",
             "inputs": [{"id": input_id, "schema": {
                 "columns": [{"name": "id", "type": "str"}, {"name": "val", "type": "int"}],
                 "primary_key": ["id"]}}],
-            "queue": {"hash_columns": ["id"]}}
+            "queue": {}}
 
 
 def _stage_status(manifest, stage_id):

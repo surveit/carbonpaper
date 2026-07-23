@@ -28,6 +28,7 @@ from __future__ import annotations
 import json
 import math
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Literal
 
 import pandas as pd
@@ -36,6 +37,7 @@ from pydantic import BaseModel
 from app.models import Stage, TableSchema
 from app.models.stage import StageType
 from app.models.stages.stage_tests import STAGE_TEST_TYPES, StageTest
+from app.runtime.context import RunContext
 from app.runtime.stages import HANDLERS
 from app.runtime.validation import Severity, validate_dataframe
 
@@ -182,8 +184,12 @@ def _run_one_test(stage: Stage, test: StageTest) -> StageTestResult:
     malformed = _validate_test_against_schemas(stage, test, input_frames)
     if malformed:
         return StageTestResult(test.name, "malformed", message=malformed)
+    # Ephemeral context: authored tests run only python_row_function /
+    # python_frame_function (STAGE_TEST_TYPES), neither of which reads
+    # repo_root/run_dir or needs project scope — no identity, no cache.
+    ctx = RunContext.for_non_production(Path("."), Path("."))
     try:
-        actual = HANDLERS[StageType(stage.type)].execute(stage, input_frames, ctx={})
+        actual = HANDLERS[StageType(stage.type)].execute(stage, input_frames, ctx)
     except Exception as exc:  # noqa: BLE001 — the function is authored code; any raise IS the result
         return StageTestResult(
             test.name, "error", message=f"{type(exc).__name__}: {exc}"
