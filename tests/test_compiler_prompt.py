@@ -33,5 +33,8 @@ def test_workflow_prompt_catalogue_covers_node_types() -> None:
 def test_hrq_line_has_both_notes() -> None:
     lines = WORKFLOW_SYSTEM_PROMPT.splitlines()
     hrq_line = next(line for line in lines if line.startswith("- human_review_queue —"))
-    assert "hash_columns" in hrq_line
+    # Both notes must reach the one catalogue line: the row-identity/matching note
+    # (rows are matched to a cached decision by fingerprinting the row) AND the
+    # output-columns contract note.
+    assert "fingerprint" in hrq_line
     assert "decision" in hrq_line or "output columns are FIXED" in hrq_line
