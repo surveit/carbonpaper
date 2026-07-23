@@ -451,7 +451,8 @@ class Stage(_Base):
                 "primary_key on both its input and output schemas"
             )
 
-        issues = _find_one_to_one_issues(input_schema, output_schema)
+        issues = _find_primary_key_issues(input_schema, output_schema)
+        issues.extend(_find_additive_shape_issues(input_schema, output_schema))
         if issues:
             raise ValueError("llm_transform not strictly 1:1: " + "; ".join(issues))
         return self
@@ -582,15 +583,6 @@ class Stage(_Base):
 # ── llm_transform's 1:1 contract ─────────────────────────────────────────────
 # Helpers for Stage._llm_transform_one_to_one: it has already confirmed
 # `input_schema`/`output_schema` are both declared before calling these.
-
-
-def _find_one_to_one_issues(input_schema: TableSchema, output_schema: TableSchema) -> list[str]:
-    """Every way `output_schema` fails to be `input_schema` plus at least one
-    new column, on a matching primary_key. [] means the pair is strictly
-    1:1."""
-    issues = _find_primary_key_issues(input_schema, output_schema)
-    issues.extend(_find_additive_shape_issues(input_schema, output_schema))
-    return issues
 
 
 def _find_primary_key_issues(input_schema: TableSchema, output_schema: TableSchema) -> list[str]:

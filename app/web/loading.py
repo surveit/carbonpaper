@@ -59,7 +59,7 @@ def _build_project_card(p: Path) -> dict[str, Any] | None:
     creation markers (document/workflow/schemas) and so is not a project."""
     compiled_dir = p / "compiled"
     schemas_dir = p / "schemas"
-    n_stages = _count_compiled_stages(compiled_dir)
+    n_stages = len(list(compiled_dir.glob("*.json"))) if compiled_dir.is_dir() else 0
     has_workflow = n_stages > 0
     has_schemas = schemas_dir.is_dir() and any(schemas_dir.glob("*.json"))
     n_schemas = len(load_schemas(p)) if has_schemas else 0
@@ -77,10 +77,6 @@ def _build_project_card(p: Path) -> dict[str, Any] | None:
         "n_schemas": n_schemas,
         "n_runs": n_runs,
     }
-
-
-def _count_compiled_stages(compiled_dir: Path) -> int:
-    return len(list(compiled_dir.glob("*.json"))) if compiled_dir.is_dir() else 0
 
 
 def _count_runs_with_manifest(rdir: Path) -> int:
