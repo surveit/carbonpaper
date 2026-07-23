@@ -109,8 +109,6 @@ def regenerate_workflow_from_conversation(
             parent_version=parent,
         )
     result = compile_methodology(conversation, name)
-    if result["validation"]:
-        return {"ok": False, "issues": result["validation"]}
     draft_issues = validate_workflow_draft(result["stages"])
     if draft_issues:
         return {"ok": False, "issues": draft_issues}

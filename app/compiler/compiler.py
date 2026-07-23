@@ -32,7 +32,7 @@ from pathlib import Path
 from typing import Any
 
 from app import models
-from app.compiler.workflow import _workflow_result, build_workflow_agent
+from app.compiler.workflow import workflow_result, build_workflow_agent
 from app.core.errors import CompilationError, GenerationError
 from app.core.llm_sdk import run_sync
 
@@ -97,7 +97,7 @@ def compile_methodology(
         raise CompilationError(
             f"compile of '{name}' produced no workflow: {exc}"
         ) from exc
-    result = _workflow_result(workflow, name)
+    result = workflow_result(workflow, name)
     result["prompt"] = ""
     result["raw_llm"] = ""
     return result

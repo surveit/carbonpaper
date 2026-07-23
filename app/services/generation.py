@@ -33,7 +33,7 @@ from pydantic import BaseModel
 
 from app.compiler.data_model import start_data_model_generation_agent
 from app.compiler.stage_tests import start_stage_test_derivation_agent
-from app.compiler.workflow import _workflow_result, start_workflow_generation_agent
+from app.compiler.workflow import workflow_result, start_workflow_generation_agent
 from app.core.errors import GenerationError
 from app.models.named_schemas import SchemaLibrary
 from app.models.stages.stage_tests import STAGE_TEST_TYPES
@@ -134,7 +134,7 @@ def _finish_workflow(project_dir: Path, name: str, answer: Workflow | None) -> N
     (schemas/ untouched); otherwise the failure was already streamed to the live turn."""
     if answer is None:
         return
-    regenerate_workflow(_workflow_result(answer, name), project_dir)
+    regenerate_workflow(workflow_result(answer, name), project_dir)
 
 
 def _finish_stage_tests(project_dir: Path, stage_id: str, answer: BaseModel | None) -> None:

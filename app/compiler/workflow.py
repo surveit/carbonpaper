@@ -120,7 +120,7 @@ def _render_data_model_reference(data_model: SchemaLibrary) -> str:
     )
 
 
-def _workflow_result(workflow: Workflow, name: str) -> dict[str, Any]:
+def workflow_result(workflow: Workflow, name: str) -> dict[str, Any]:
     """Shape a validated Workflow into the dict write_methodology persists: the stages in
     canonical on-disk form, with a clean validation list (the agent only submits a workflow that
     already validates). The agent carries the shape through the tool, so there is no prose
