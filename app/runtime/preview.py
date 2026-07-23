@@ -33,6 +33,7 @@ import pyarrow
 from app.core.frames import PARQUET_SUFFIX
 from app.models import Stage
 
+from .context import RunContext
 from .errors import PreviewError
 from .stages import HANDLERS
 
@@ -84,7 +85,6 @@ def run_stage_preview(
     stage_def: Stage,
     run_dir: Path,
     repo_root: Path,
-    project_dir: Path,
     output_by_id: dict[str, str | None],
     selected_indices: list[int],
 ) -> dict[str, Any]:
@@ -132,16 +132,13 @@ def run_stage_preview(
         )
     inputs[first_id] = base_df.iloc[valid].reset_index(drop=True)
 
-    # Ephemeral context. We pass the real run_dir/project_dir for read-only
-    # path resolution, but a pure handler (python/llm/join/aggregate) never
-    # writes — and we never call the runner, so no manifest/output is touched.
-    ctx: dict[str, Any] = {
-        "repo_root": repo_root,
-        "run_dir": run_dir,
-        "project_dir": project_dir,
-        "queue_stats": {},
-        "_scratch_preview": True,
-    }
+    # Ephemeral context: no identity/stage_cache (this run has no project
+    # scope), and a pure handler (python/llm/join/aggregate) never writes — we
+    # never call the runner, so no manifest/output is touched.
+    ctx = RunContext(
+        repo_root=repo_root, run_dir=run_dir, identity=None, stage_cache=None,
+        limits={}, offsets={},
+    )
 
     output = handler.execute(stage_def, inputs, ctx)
     if output is None:

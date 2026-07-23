@@ -12,7 +12,12 @@ the app's own startup wiring, so `app.main`'s lifespan — guarded by
 """
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
+
+from app.runtime.context import RunContext, RunIdentity
+from app.services.stage_cache import ReadOnlyStageCache
 
 
 @pytest.fixture(autouse=True)
@@ -35,3 +40,34 @@ def reset_cancellation_registry():
     reset()
     yield
     reset()
+
+
+@pytest.fixture(autouse=True)
+def reset_decisions_dir_registry():
+    """The TRANSITIONAL project-dir registry human_review_queue uses to
+    resolve its decisions directory (app.runtime.stages.human_review_queue)
+    is process-global and production never removes keys, so reset it around
+    each test to keep runs independent."""
+    from app.runtime.stages.human_review_queue import reset_project_dirs
+    reset_project_dirs()
+    yield
+    reset_project_dirs()
+
+
+def make_run_context(
+    *,
+    repo_root: Path = Path("."),
+    run_dir: Path = Path("."),
+    identity: RunIdentity | None = None,
+    stage_cache: ReadOnlyStageCache | None = None,
+    limits: dict[str, int] | None = None,
+    offsets: dict[str, int] | None = None,
+) -> RunContext:
+    """A RunContext for tests that only care about a few of its fields —
+    telemetry accumulators (queue_stats, dropped_columns, row_errors,
+    llm_usage, llm_backend) always start empty via RunContext's own
+    defaults."""
+    return RunContext(
+        repo_root=repo_root, run_dir=run_dir, identity=identity, stage_cache=stage_cache,
+        limits=dict(limits or {}), offsets=dict(offsets or {}),
+    )

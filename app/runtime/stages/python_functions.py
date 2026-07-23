@@ -15,6 +15,7 @@ import pandas as pd
 
 from app.models import FunctionKind, Stage
 
+from ..context import RunContext
 from .execution import Row
 
 
@@ -38,7 +39,7 @@ def _load_python_function(stage: Stage) -> Callable[..., Any]:
     raise ValueError(f"Unknown function kind for stage {stage.id}: {fn_spec.kind}")
 
 
-def handle_python_frame_function(stage: Stage, inputs: dict[str, pd.DataFrame], ctx: dict[str, Any]) -> pd.DataFrame:
+def handle_python_frame_function(stage: Stage, inputs: dict[str, pd.DataFrame], ctx: RunContext) -> pd.DataFrame:
     """Whole-frame transform: the function sees the full input frame(s) and may
     reshape them (group-by, pivot, dedup, multi-input merge)."""
     fn = _load_python_function(stage)
@@ -47,7 +48,7 @@ def handle_python_frame_function(stage: Stage, inputs: dict[str, pd.DataFrame], 
     return fn(*args)
 
 
-def make_python_row_mapper(stage: Stage, ctx: dict[str, Any]) -> Callable[[Row], Row]:
+def make_python_row_mapper(stage: Stage, ctx: RunContext) -> Callable[[Row], Row]:
     """Resolve the stage's function once; the runtime maps it over the single
     input's rows — one dict in, one dict out. The function never sees the
     frame, so it cannot fan out, fan in, or reorder."""

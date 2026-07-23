@@ -11,16 +11,17 @@ shape at construction time."""
 
 from __future__ import annotations
 
-from typing import Any, Callable
+from typing import Callable
 
 from app.core.agent.usage import LlmUsage
 from app.models import Stage
 
+from ..context import RunContext
 from ..llm import backend_status, call_llm
 from .execution import ROW_ERROR_KEY, ROW_USAGE_KEY, Row
 
 
-def make_llm_row_mapper(stage: Stage, ctx: dict[str, Any]) -> Callable[[Row], Row]:
+def make_llm_row_mapper(stage: Stage, ctx: RunContext) -> Callable[[Row], Row]:
     llm = stage.llm
     assert llm is not None  # Stage validation: llm_transform carries llm
 
@@ -33,7 +34,7 @@ def make_llm_row_mapper(stage: Stage, ctx: dict[str, Any]) -> Callable[[Row], Ro
     reply_model = reply_spec.to_pydantic_model(f"{stage.id}_reply")
 
     # Record which backend handled this stage so the UI/manifest can label it.
-    ctx.setdefault("llm_backend", {})[stage.id] = backend_status()
+    ctx.llm_backend[stage.id] = backend_status()
 
     def map_row(row: Row) -> Row:
         # Per-attempt usage lands here (success or failure); the row carries its

@@ -2,14 +2,16 @@
 
 from __future__ import annotations
 
-from typing import Any, Literal
+from typing import Literal
 
 import pandas as pd
 
 from app.models import JoinType, Stage
 
+from ..context import RunContext
 
-def handle_join(stage: Stage, inputs: dict[str, pd.DataFrame], ctx: dict[str, Any]) -> pd.DataFrame:
+
+def handle_join(stage: Stage, inputs: dict[str, pd.DataFrame], ctx: RunContext) -> pd.DataFrame:
     join_cfg = stage.join
     assert join_cfg is not None  # Stage validation: join carries join_cfg
     left = inputs[stage.inputs[0].id]

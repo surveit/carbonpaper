@@ -19,6 +19,7 @@ from app.runtime.runner import apply_run_bindings, validate_stages_ready, execut
 from app.runtime.stages.input_data import read_input_data
 from app.services import versioning
 from app.services.versioning import create_version_from_disk
+from conftest import make_run_context
 
 
 def _input_stage(stage_id: str, path: str | None) -> Stage:
@@ -205,4 +206,4 @@ def test_read_input_data_names_the_stage_when_no_path_is_bound(tmp_path):
     # names the stage and explains why, not a bare KeyError.
     stage = _input_stage("load_lobbying_filings", None)
     with pytest.raises(ValueError, match="load_lobbying_filings"):
-        read_input_data(stage, ctx={})
+        read_input_data(stage, ctx=make_run_context())

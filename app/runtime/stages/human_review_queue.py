@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 from pathlib import Path
-from typing import Any, NoReturn
+from typing import NoReturn
 
 import pandas as pd
 import pyarrow.lib as pa_lib
@@ -12,10 +12,36 @@ import pyarrow.lib as pa_lib
 from app.core.predicate import parse_predicate
 from app.models import RowReviewDecision, Stage
 
+from ..context import QueueStats, RunContext
 from ..errors import HaltForReview
 
+# TRANSITIONAL bridge (removed once decisions storage moves onto the
+# stage-result cache, see app.services.stage_cache): RunContext carries no
+# project directory, so a production entry point (prepare_run/resume_run)
+# stashes the project's own directory here, keyed by project name, before
+# executing. `_decisions_path` reads it back through `ctx.identity` — the one
+# piece of project scope RunContext does carry. A run re-registers its own
+# project on every prepare/resume, overwriting any earlier entry for that
+# name, so this holds at most one directory per distinct project name ever
+# run in this process — not one per run.
+_project_dirs: dict[str, Path] = {}
 
-def handle_human_review_queue(stage: Stage, inputs: dict[str, pd.DataFrame], ctx: dict[str, Any]) -> pd.DataFrame:
+
+def register_project_dir(project: str, directory: Path) -> None:
+    """Stash `directory` (the project's own directory on disk) for `project`
+    so `_decisions_path` can resolve the project's decisions directory from a
+    RunContext that carries no project directory of its own. Called once per
+    production run (prepare_run / resume_run) before it executes any stage."""
+    _project_dirs[project] = directory
+
+
+def reset_project_dirs() -> None:
+    """Empty the registry. For test isolation only — production has no reason
+    to clear it (see the module docstring above)."""
+    _project_dirs.clear()
+
+
+def handle_human_review_queue(stage: Stage, inputs: dict[str, pd.DataFrame], ctx: RunContext) -> pd.DataFrame:
     """Real review-queue semantics:
 
     1. Apply the queue filter to upstream output → items needing review.
@@ -69,14 +95,19 @@ def _content_hash(row: pd.Series, columns: list[str]) -> str:
     return hashlib.sha1("|".join(parts).encode("utf-8")).hexdigest()[:16]
 
 
-def _decisions_path(ctx: dict[str, Any], stage_id: str) -> Path:
-    project_dir: Path = ctx["project_dir"]
+def _decisions_path(ctx: RunContext, stage_id: str) -> Path:
+    if ctx.identity is None:
+        raise RuntimeError(
+            "human_review_queue needs a production run identity to resolve "
+            "its decisions directory; a subset/preview run carries none"
+        )
+    project_dir = _project_dirs[ctx.identity.project]
     d = project_dir / "decisions"
     d.mkdir(parents=True, exist_ok=True)
     return d / f"{stage_id}.parquet"
 
 
-def _load_decisions(ctx: dict[str, Any], stage_id: str) -> pd.DataFrame:
+def _load_decisions(ctx: RunContext, stage_id: str) -> pd.DataFrame:
     p = _decisions_path(ctx, stage_id)
     if not p.exists():
         return pd.DataFrame(
@@ -87,7 +118,7 @@ def _load_decisions(ctx: dict[str, Any], stage_id: str) -> pd.DataFrame:
 
 
 def _partition_reviewable_rows(
-    src: pd.DataFrame, flt: str | None, ctx: dict[str, Any], sid: str
+    src: pd.DataFrame, flt: str | None, ctx: RunContext, sid: str
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Split `src` into rows subject to review (the queue filter matched, or
     there is no filter) and rows that pass straight through."""
@@ -160,7 +191,7 @@ def _split_pending_and_decided(queueable: pd.DataFrame) -> tuple[pd.DataFrame, p
 
 
 def _record_queue_stats(
-    ctx: dict[str, Any],
+    ctx: RunContext,
     sid: str,
     queueable: pd.DataFrame,
     passthrough: pd.DataFrame,
@@ -168,17 +199,18 @@ def _record_queue_stats(
     decided: pd.DataFrame,
 ) -> None:
     """Stats for the manifest."""
-    ctx.setdefault("queue_stats", {})[sid] = {
+    stats: QueueStats = {
         "items_queued_total": int(len(queueable)),
         "items_passed_through": int(len(passthrough)),
         "items_pending": int(len(pending)),
         "items_decided": int(len(decided)),
     }
+    ctx.queue_stats[sid] = stats
 
 
-def _snapshot_pending_and_halt(ctx: dict[str, Any], sid: str, pending: pd.DataFrame) -> NoReturn:
+def _snapshot_pending_and_halt(ctx: RunContext, sid: str, pending: pd.DataFrame) -> NoReturn:
     """Persist the pending items for the reviewer UI, then halt the run."""
-    queue_dir = ctx["run_dir"] / "queue"
+    queue_dir = ctx.run_dir / "queue"
     queue_dir.mkdir(parents=True, exist_ok=True)
     queue_path = queue_dir / f"{sid}.parquet"
     # Persist a snapshot — everything needed for the reviewer UI plus
@@ -254,18 +286,18 @@ def _combine_decided_and_passthrough(decided: pd.DataFrame, passthrough: pd.Data
 
 
 def _project_onto_output_schema(
-    out: pd.DataFrame, stage: Stage, ctx: dict[str, Any], sid: str
+    out: pd.DataFrame, stage: Stage, ctx: RunContext, sid: str
 ) -> pd.DataFrame:
     """Project onto exactly the columns output_schema declares — a column
     carried through from upstream that the stage wants downstream earns its
     place by being declared. Columns on the frame that the schema doesn't
-    declare are dropped, and the drop is recorded on ctx rather than silently
-    discarded."""
+    declare are dropped, and the drop is recorded on `ctx.dropped_columns`
+    rather than silently discarded."""
     declared = [c.name for c in stage.output_schema.columns] if stage.output_schema else []
     if not declared:
         return out
     keep = [c for c in declared if c in out.columns]
     dropped = [c for c in out.columns if c not in keep]
     if dropped:
-        ctx.setdefault("dropped_columns", {})[sid] = dropped
+        ctx.dropped_columns[sid] = dropped
     return out[keep]

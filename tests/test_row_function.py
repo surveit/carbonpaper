@@ -8,6 +8,7 @@ from pydantic import ValidationError
 
 from app.models import Stage
 from app.runtime.stages import HANDLERS
+from conftest import make_run_context
 
 
 def _stage(code, inputs=("src",)):
@@ -19,7 +20,7 @@ def _stage(code, inputs=("src",)):
 
 
 def _run(stage, frames):
-    return HANDLERS[stage.type].execute(stage, frames, {})
+    return HANDLERS[stage.type].execute(stage, frames, make_run_context())
 
 
 def test_row_function_maps_per_row():

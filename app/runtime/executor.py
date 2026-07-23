@@ -38,6 +38,7 @@ from app.models import Stage, StageType, Workflow
 from app.core.run_status import RunStatus, StageStatus
 
 from .cancellation import consume_cancel
+from .context import RowError, RunContext, RunIdentity
 from .errors import RunCancelled
 from .stages import HANDLERS, HaltForReview, StageHandler
 from .validation import Issue, validate_dataframe
@@ -94,13 +95,15 @@ def run_subset(
     return outputs
 
 
-def _subset_ctx(repo_root: Path, run_dir: Path) -> dict[str, Any]:
-    # No project_dir: a subset run is keyed on the Workflow + run_dir, not a project
-    # tree. A handler that needs project-relative state (only human_review_queue does,
-    # and it halts a subset run anyway) fails loudly on the missing key rather than
-    # reading a fabricated wrong directory.
-    return {"repo_root": repo_root, "run_dir": run_dir,
-            "queue_stats": {}, "limits": {}, "offsets": {}}
+def _subset_ctx(repo_root: Path, run_dir: Path) -> RunContext:
+    # No identity/stage_cache: a subset run is keyed on the Workflow + run_dir, not a
+    # project tree, and has no cross-run cache access. A handler that needs project
+    # scope (only human_review_queue does, and it halts a subset run anyway) fails
+    # loudly rather than reading a fabricated wrong directory.
+    return RunContext(
+        repo_root=repo_root, run_dir=run_dir, identity=None, stage_cache=None,
+        limits={}, offsets={},
+    )
 
 
 def _subset_manifest(run_dir: Path, ordered: list[Stage]) -> dict[str, Any]:
@@ -132,7 +135,7 @@ def _raise_if_run_failed(manifest: dict[str, Any]) -> None:
 
 def _execute_stages(
     ordered: list[Stage],
-    ctx: dict[str, Any],
+    ctx: RunContext,
     manifest: dict[str, Any],
     run_dir: Path,
     outputs_so_far: dict[str, pd.DataFrame],
@@ -152,7 +155,7 @@ def _execute_stages(
     any stage errored, else `awaiting_review` if any halted, else the usual
     ok/warnings; `halted_at` lists every halted stage.
 
-    On a cancel request (polled via ctx's `project`/`run_id` — see
+    On a cancel request (polled via `ctx.identity` — see
     app.runtime.cancellation) the loop stops dead and manifest status is
     `cancelled`: between stages, before the next one starts (it stays
     `pending`); or mid-stage, via RunCancelled unwinding out of
@@ -325,7 +328,7 @@ def _flush_manifest(
     manifest: dict[str, Any],
     records_by_id: dict[str, StageRecord],
     ordered: list[Stage],
-    ctx: dict[str, Any],
+    ctx: RunContext,
     run_dir: Path,
     status: RunStatus,
 ) -> None:
@@ -335,8 +338,8 @@ def _flush_manifest(
     m = dict(manifest)
     m["stages"] = [records_by_id.get(s.id) or _build_pending_stage_record(s) for s in ordered]
     m["status"] = status
-    m["queue_stats"] = ctx.get("queue_stats", {})
-    m["dropped_columns"] = ctx.get("dropped_columns", {})
+    m["queue_stats"] = ctx.queue_stats
+    m["dropped_columns"] = ctx.dropped_columns
     m["updated_at"] = datetime.now().isoformat(timespec="seconds")
     try:
         write_manifest(run_dir, m)
@@ -413,7 +416,7 @@ def _record_stage_error(record: StageRecord, exc: Exception) -> None:
 
 
 def _apply_row_slicing(
-    output: pd.DataFrame, stage: Stage, ctx: dict[str, Any], record: StageRecord
+    output: pd.DataFrame, stage: Stage, ctx: RunContext, record: StageRecord
 ) -> pd.DataFrame:
     """Offset then cap `output`'s rows, in the handler's emitted order. Offset
     (per-run only, from --offset stage=M) drops the first M rows; the cap
@@ -421,13 +424,13 @@ def _apply_row_slicing(
     N. Used to throttle/page the expensive LLM fan-out. Each trim actually
     taken is recorded as a note on `record`."""
     sid = stage.id
-    offset = (ctx.get("offsets") or {}).get(sid)
+    offset = ctx.offsets.get(sid)
     if isinstance(offset, int) and offset > 0 and len(output) > 0:
         record.setdefault("notes", []).append(
             f"offset={offset}: dropped first {min(offset, len(output))} of {len(output)} row(s)"
         )
         output = output.iloc[offset:].reset_index(drop=True).copy()
-    limit = (ctx.get("limits") or {}).get(sid, stage.limit)
+    limit = ctx.limits.get(sid, stage.limit)
     if isinstance(limit, int) and limit >= 0 and len(output) > limit:
         record.setdefault("notes", []).append(
             f"limit={limit}: truncated from {len(output)} to {limit} row(s)"
@@ -455,7 +458,7 @@ def _persist_stage_output(output: pd.DataFrame, sid: str, run_dir: Path, record:
 
 def _finalize_stage_output(
     stage: Stage,
-    ctx: dict[str, Any],
+    ctx: RunContext,
     record: StageRecord,
     output: pd.DataFrame | None,
     outputs_so_far: dict[str, pd.DataFrame],
@@ -476,7 +479,7 @@ def _finalize_stage_output(
     output = _apply_row_slicing(output, stage, ctx, record)
 
     out_rep = validate_dataframe(output, stage.output_schema, stage_id=sid, phase="output")
-    row_errors = (ctx.get("row_errors") or {}).get(sid, [])
+    row_errors = ctx.row_errors.get(sid, [])
     if row_errors:
         out_rep.issues[0:0] = [
             Issue("error", None,
@@ -485,7 +488,7 @@ def _finalize_stage_output(
         ]
     record["output_validation"] = out_rep.to_dict()
 
-    usage = (ctx.get("llm_usage") or {}).get(sid)
+    usage = ctx.llm_usage.get(sid)
     if usage is not None:
         # Dump to a plain dict here: the manifest is JSON, and this is
         # the one boundary where the typed LlmUsage becomes storage.
@@ -514,7 +517,7 @@ def _finalize_stage_output(
 
 def _run_stage(
     stage: Stage,
-    ctx: dict[str, Any],
+    ctx: RunContext,
     outputs_so_far: dict[str, pd.DataFrame],
     records_by_id: dict[str, StageRecord],
     manifest: dict[str, Any],
@@ -573,7 +576,7 @@ def _finalize_run_manifest(
     manifest: dict[str, Any],
     records_by_id: dict[str, StageRecord],
     ordered: list[Stage],
-    ctx: dict[str, Any],
+    ctx: RunContext,
     run_dir: Path,
     cancelled: bool,
     cancel_at_index: int,
@@ -588,8 +591,8 @@ def _finalize_run_manifest(
     earlier in the same run."""
     manifest["stages"] = [records_by_id[s.id] for s in ordered if s.id in records_by_id]
     manifest["finished_at"] = datetime.now().isoformat(timespec="seconds")
-    manifest["queue_stats"] = ctx.get("queue_stats", {})
-    manifest["dropped_columns"] = ctx.get("dropped_columns", {})
+    manifest["queue_stats"] = ctx.queue_stats
+    manifest["dropped_columns"] = ctx.dropped_columns
 
     if cancelled:
         manifest["status"] = RunStatus.CANCELLED
@@ -611,7 +614,7 @@ def _finalize_run_manifest(
 # --- loop decision helpers ---------------------------------------------------
 
 
-def _summarize_row_errors(row_errors: list[dict[str, Any]]) -> str:
+def _summarize_row_errors(row_errors: list[RowError]) -> str:
     """One-line summary of per-row generation failures for the stage's error
     record — the per-row detail lives in output_validation issues."""
     head = "; ".join(f"row {e['row']}: {e['message']}" for e in row_errors[:3])
@@ -619,23 +622,20 @@ def _summarize_row_errors(row_errors: list[dict[str, Any]]) -> str:
     return f"{len(row_errors)} row(s) failed generation: {head}{more}"
 
 
-def _read_run_identity(ctx: dict[str, Any]) -> tuple[str, str] | None:
-    """This run's logical (project, run_id) identity, read off ctx — the keys
-    prepare_run/resume_run stamp for cancellation's checkpoints. None when
-    either is absent: a subset/eval run's ctx (built by _subset_ctx) carries
-    neither key, so those runs are simply not cancellable."""
-    project, run_id = ctx.get("project"), ctx.get("run_id")
-    if not isinstance(project, str) or not isinstance(run_id, str):
-        return None
-    return project, run_id
+def _read_run_identity(ctx: RunContext) -> RunIdentity | None:
+    """This run's logical identity, carried on `ctx.identity` by
+    prepare_run/resume_run for cancellation's checkpoints. None for a
+    subset/eval run's ctx (built by _subset_ctx), which carries no identity —
+    those runs are simply not cancellable."""
+    return ctx.identity
 
 
-def _consume_cancel(ctx: dict[str, Any]) -> bool:
+def _consume_cancel(ctx: RunContext) -> bool:
     """Consume this run's cancel message if one is pending — read-once, so a
     True means one was pending and is now gone (see _read_run_identity for when
     a run is cancellable at all)."""
     identity = _read_run_identity(ctx)
-    return identity is not None and consume_cancel(*identity)
+    return identity is not None and consume_cancel(identity.project, identity.run_id)
 
 
 def _find_blocking_upstream(stage: Stage, blocked: set[str]) -> list[str]:

@@ -11,6 +11,7 @@ import pytest
 from app.models import Stage
 from app.models.stage import StageType
 from app.runtime.cancellation import request_cancel
+from app.runtime.context import RunIdentity
 from app.runtime.errors import RunCancelled
 from app.runtime.stages.execution import (
     FrameHandler,
@@ -18,6 +19,8 @@ from app.runtime.stages.execution import (
     SourceHandler,
     validate_registry_matches_model,
 )
+from app.services.stage_cache import CacheMode, StageCacheEntry
+from conftest import make_run_context
 
 
 def _row_stage(output_schema=None):
@@ -41,7 +44,7 @@ def _two_input_stage():
 
 def test_row_driver_maps_in_input_order():
     handler = RowMapHandler(make_mapper=lambda stage, ctx: lambda row: {"x": row["x"], "y": row["x"] * 10})
-    out = handler.execute(_row_stage(), {"src": pd.DataFrame({"x": [1, 2, 3]})}, {})
+    out = handler.execute(_row_stage(), {"src": pd.DataFrame({"x": [1, 2, 3]})}, make_run_context())
     assert list(out["x"]) == [1, 2, 3]
     assert list(out["y"]) == [10, 20, 30]
 
@@ -56,7 +59,7 @@ def test_row_driver_preserves_order_under_parallelism():
         return map_row
 
     handler = RowMapHandler(make_mapper=make_mapper, parallelism=4)
-    out = handler.execute(_row_stage(), {"src": pd.DataFrame({"x": list(range(8))})}, {})
+    out = handler.execute(_row_stage(), {"src": pd.DataFrame({"x": list(range(8))})}, make_run_context())
     assert list(out["x"]) == list(range(8))
 
 
@@ -79,7 +82,10 @@ def test_row_driver_parallel_branch_raises_run_cancelled_when_pre_requested():
         return map_row
 
     handler = RowMapHandler(make_mapper=make_mapper, parallelism=2)
-    ctx: dict = {"project": "p-parallel", "run_id": "r-parallel"}
+    ctx = make_run_context(
+        identity=RunIdentity(project="p-parallel", run_id="r-parallel"),
+        stage_cache=StageCacheEntry.for_mode(CacheMode.PRODUCTION),
+    )
     request_cancel("p-parallel", "r-parallel")
     records = list(range(200))
     with pytest.raises(RunCancelled):
@@ -97,7 +103,10 @@ def test_row_driver_sequential_branch_raises_run_cancelled_when_pre_requested():
         return map_row
 
     handler = RowMapHandler(make_mapper=make_mapper)  # parallelism=1 -> sequential branch
-    ctx: dict = {"project": "p-seq", "run_id": "r-seq"}
+    ctx = make_run_context(
+        identity=RunIdentity(project="p-seq", run_id="r-seq"),
+        stage_cache=StageCacheEntry.for_mode(CacheMode.PRODUCTION),
+    )
     request_cancel("p-seq", "r-seq")
     with pytest.raises(RunCancelled):
         handler.execute(_row_stage(), {"src": pd.DataFrame({"x": [1, 2, 3]})}, ctx)
@@ -110,33 +119,33 @@ def test_row_driver_ignores_cancellation_when_ctx_has_no_run_identity():
     # same run_id happens to be cancelled elsewhere.
     request_cancel("some-project", "some-run")
     handler = RowMapHandler(make_mapper=lambda stage, ctx: lambda row: dict(row))
-    out = handler.execute(_row_stage(), {"src": pd.DataFrame({"x": [1, 2]})}, {})
+    out = handler.execute(_row_stage(), {"src": pd.DataFrame({"x": [1, 2]})}, make_run_context())
     assert len(out) == 2  # ran to completion, unaffected
 
 
 def test_row_driver_is_one_to_one():
     handler = RowMapHandler(make_mapper=lambda stage, ctx: lambda row: dict(row))
-    out = handler.execute(_row_stage(), {"src": pd.DataFrame({"x": [1, 2]})}, {})
+    out = handler.execute(_row_stage(), {"src": pd.DataFrame({"x": [1, 2]})}, make_run_context())
     assert len(out) == 2
 
 
 def test_row_driver_rejects_non_dict_result():
     handler = RowMapHandler(make_mapper=lambda stage, ctx: lambda row: 42)
     with pytest.raises(ValueError, match="one dict per row"):
-        handler.execute(_row_stage(), {"src": pd.DataFrame({"x": [1]})}, {})
+        handler.execute(_row_stage(), {"src": pd.DataFrame({"x": [1]})}, make_run_context())
 
 
 def test_row_driver_rejects_multiple_inputs():
     handler = RowMapHandler(make_mapper=lambda stage, ctx: lambda row: dict(row))
     frames = {"a": pd.DataFrame({"x": [1]}), "b": pd.DataFrame({"x": [1]})}
     with pytest.raises(ValueError, match="exactly one input"):
-        handler.execute(_two_input_stage(), frames, {})
+        handler.execute(_two_input_stage(), frames, make_run_context())
 
 
 def test_row_driver_empty_input():
     handler = RowMapHandler(make_mapper=lambda stage, ctx: lambda row: dict(row))
     out = handler.execute(_row_stage(),
-                          {"src": pd.DataFrame({"x": pd.Series([], dtype="int64")})}, {})
+                          {"src": pd.DataFrame({"x": pd.Series([], dtype="int64")})}, make_run_context())
     assert len(out) == 0
 
 
@@ -151,10 +160,10 @@ def test_row_driver_collects_row_errors_without_dropping_the_stage():
         return map_row
 
     handler = RowMapHandler(make_mapper=make_mapper)
-    ctx: dict = {}
+    ctx = make_run_context()
     out = handler.execute(_row_stage(), {"src": pd.DataFrame({"x": [1, 2, 3]})}, ctx)
     assert len(out) == 3                                    # stage completes, all rows kept
-    assert ctx["row_errors"]["t"] == [{"row": 1, "message": "boom"}]
+    assert ctx.row_errors["t"] == [{"row": 1, "message": "boom"}]
 
 
 def test_row_driver_collects_multiple_row_errors_in_ascending_row_order():
@@ -168,11 +177,11 @@ def test_row_driver_collects_multiple_row_errors_in_ascending_row_order():
         return map_row
 
     handler = RowMapHandler(make_mapper=make_mapper)
-    ctx: dict = {}
+    ctx = make_run_context()
     # Rows at positions 0 and 2 of a 3-row input fail; position 1 succeeds.
     out = handler.execute(_row_stage(), {"src": pd.DataFrame({"x": [10, 20, 30]})}, ctx)
     assert len(out) == 3
-    assert ctx["row_errors"]["t"] == [
+    assert ctx.row_errors["t"] == [
         {"row": 0, "message": "boom-10"},
         {"row": 2, "message": "boom-30"},
     ]
@@ -184,22 +193,22 @@ def test_row_driver_projects_to_declared_columns():
         make_mapper=lambda stage, ctx: lambda row: {"x": row["x"], "score": 1, "extra": "drop me"},
         project_output_to_declared=True,
     )
-    ctx: dict = {}
+    ctx = make_run_context()
     out = handler.execute(_row_stage(output_schema=schema),
                           {"src": pd.DataFrame({"x": [1]})}, ctx)
     assert list(out.columns) == ["x", "score"]
-    assert ctx["dropped_columns"]["t"] == ["extra"]
+    assert ctx.dropped_columns["t"] == ["extra"]
 
 
 def test_source_handler_reads_without_frames():
     handler = SourceHandler(read=lambda stage, ctx: pd.DataFrame({"k": ["a"]}))
-    out = handler.execute(_row_stage(), {}, {})
+    out = handler.execute(_row_stage(), {}, make_run_context())
     assert list(out["k"]) == ["a"]
 
 
 def test_frame_handler_receives_frames():
     handler = FrameHandler(apply=lambda stage, inputs, ctx: inputs["src"].head(1))
-    out = handler.execute(_row_stage(), {"src": pd.DataFrame({"x": [1, 2]})}, {})
+    out = handler.execute(_row_stage(), {"src": pd.DataFrame({"x": [1, 2]})}, make_run_context())
     assert len(out) == 1
 
 

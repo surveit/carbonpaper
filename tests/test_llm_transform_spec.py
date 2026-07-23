@@ -14,6 +14,7 @@ from app.models import Stage
 from app.models.stage import StageType
 from app.runtime.stages import HANDLERS
 from app.runtime.stages import llm_transform as lt
+from conftest import make_run_context
 
 
 def _stage():
@@ -32,7 +33,7 @@ def _stage():
 
 def _run(stage, frames, ctx=None):
     return HANDLERS[StageType.llm_transform].execute(
-        stage, frames, ctx if ctx is not None else {})
+        stage, frames, ctx if ctx is not None else make_run_context())
 
 
 def test_reply_model_is_the_subtracted_spec(monkeypatch):
@@ -72,10 +73,10 @@ def test_backend_error_surfaces_as_row_error_not_raised(monkeypatch):
         raise RuntimeError("backend down")
 
     monkeypatch.setattr(lt, "call_llm", boom)
-    ctx: dict = {}
+    ctx = make_run_context()
     out = _run(_stage(), {"load": pd.DataFrame({"id": ["r1"], "text": ["hi"]})}, ctx)
     assert len(out) == 1                                    # not raised; stage completes
-    assert ctx["row_errors"]["score"] == [{"row": 0, "message": "backend down"}]
+    assert ctx.row_errors["score"] == [{"row": 0, "message": "backend down"}]
 
 
 def test_timeout_with_empty_message_is_captured_and_labeled(monkeypatch):
@@ -86,7 +87,7 @@ def test_timeout_with_empty_message_is_captured_and_labeled(monkeypatch):
         raise asyncio.TimeoutError()
 
     monkeypatch.setattr(lt, "call_llm", boom)
-    ctx: dict = {}
+    ctx = make_run_context()
     out = _run(_stage(), {"load": pd.DataFrame({"id": ["r1"], "text": ["hi"]})}, ctx)
     assert len(out) == 1                                    # not raised; stage completes
-    assert ctx["row_errors"]["score"] == [{"row": 0, "message": "TimeoutError"}]
+    assert ctx.row_errors["score"] == [{"row": 0, "message": "TimeoutError"}]

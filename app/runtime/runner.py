@@ -35,9 +35,12 @@ from app.models import Connector, Stage, StageType
 from app.core.run_status import RunStatus, StageStatus
 from app.services.errors import WorkflowLoadError
 from app.services import versioning
+from app.services.stage_cache import CacheMode, StageCacheEntry
 
+from .context import RunContext, RunIdentity
 from .executor import _execute_stages, create_run_manifest, topological_sort, write_manifest
 from .stages import PREFLIGHTS
+from .stages.human_review_queue import register_project_dir
 
 
 def resolve_version_id(project_dir: Path, version_id: str | None) -> str:
@@ -232,20 +235,19 @@ def prepare_run(
     (run_dir / "outputs").mkdir(parents=True, exist_ok=True)
     (run_dir / "artifacts").mkdir(parents=True, exist_ok=True)
 
-    ctx: dict[str, Any] = {
-        "repo_root": repo_root,
-        "run_dir": run_dir,
-        "project_dir": project_dir,
-        # This run's logical identity for cancellation's checkpoints (see
-        # app.runtime.cancellation) — read by _execute_stages, never by name
-        # of anything on disk. run_dir above stays I/O-only.
-        "project": project_dir.name,
-        "run_id": run_id,
-        "queue_stats": {},
-        "dropped_columns": {},
-        "limits": limits,
-        "offsets": offsets,
-    }
+    # This run's logical identity for cancellation's checkpoints (see
+    # app.runtime.cancellation) — read by _execute_stages, never by name of
+    # anything on disk. run_dir above stays I/O-only.
+    identity = RunIdentity(project=project_dir.name, run_id=run_id)
+    # TRANSITIONAL (see app.runtime.stages.human_review_queue): RunContext
+    # carries no project directory, so the queue handler resolves its
+    # decisions directory through this registry instead, keyed by identity.
+    register_project_dir(identity.project, project_dir)
+    ctx = RunContext(
+        repo_root=repo_root, run_dir=run_dir, identity=identity,
+        stage_cache=StageCacheEntry.for_mode(CacheMode.PRODUCTION),
+        limits=limits, offsets=offsets,
+    )
     # The manifest's shape and persistence belong to the executor — it mints the
     # initial record here and rewrites the same file as stages run. prepare only
     # supplies the run-level metadata: run_bindings is the run's bindings verbatim
@@ -347,22 +349,24 @@ def resume_run(project_dir: Path, run_id: str, repo_root: Path) -> dict[str, Any
             # treated as not-yet-produced; the stage simply re-runs.
             pass
 
-    ctx: dict[str, Any] = {
-        "repo_root": repo_root,
-        "run_dir": run_dir,
-        "project_dir": project_dir,
-        # This run's logical identity for cancellation's checkpoints — see the
-        # matching comment in prepare_run. Stamped here too so a resumed run
-        # is cancellable, not just a fresh one.
-        "project": project_dir.name,
-        "run_id": run_id,
-        "queue_stats": manifest.get("queue_stats", {}),
-        "dropped_columns": manifest.get("dropped_columns", {}),
+    # This run's logical identity for cancellation's checkpoints — see the
+    # matching comment in prepare_run. Stamped here too so a resumed run is
+    # cancellable, not just a fresh one.
+    identity = RunIdentity(project=project_dir.name, run_id=run_id)
+    # TRANSITIONAL (see app.runtime.stages.human_review_queue): re-register on
+    # every resume, same as prepare_run — the queue handler resolves its
+    # decisions directory through this registry, not through RunContext.
+    register_project_dir(identity.project, project_dir)
+    ctx = RunContext(
+        repo_root=repo_root, run_dir=run_dir, identity=identity,
+        stage_cache=StageCacheEntry.for_mode(CacheMode.PRODUCTION),
         # Re-apply the run's per-stage row slicing so stages that resume after
         # a halt honor the same limits/offsets the run started with.
-        "limits": manifest.get("limit_overrides") or {},
-        "offsets": manifest.get("offset_overrides") or {},
-    }
+        limits=manifest.get("limit_overrides") or {},
+        offsets=manifest.get("offset_overrides") or {},
+        queue_stats=manifest.get("queue_stats", {}),
+        dropped_columns=manifest.get("dropped_columns", {}),
+    )
 
     manifest["resumed_at"] = datetime.now().isoformat(timespec="seconds")
     # Drop the halt marker the halted run left behind: the run is no longer
