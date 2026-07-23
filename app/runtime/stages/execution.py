@@ -96,6 +96,46 @@ class RowMapHandler(StageHandler):
         return _run_row_mapper(self, stage, inputs, ctx)
 
 
+class LLMTransformHandler(RowMapHandler):
+    """llm_transform's handler. `batch_size` picks between two SEPARATE execution
+    functions — never a mode folded into one — because they differ in more than
+    speed:
+
+    - batch_size == 1 → `_run_row_mapper` (the inherited per-row path): grain,
+      order, AND per-row independence hold by construction — the mapper never
+      sees the frame.
+    - batch_size  > 1 → `run_batches`: N rows per call, rejoined by a runtime-
+      assigned batch row number. Grain and order still hold (one pre-allocated
+      slot per input row, filled by index, assembled in order — and `run_batches`
+      VERIFIES this before returning). Per-row INDEPENDENCE does not: the model
+      sees a whole chunk in one prompt, so a row's answer can be influenced by
+      its batch-mates.
+
+    Subclassing RowMapHandler keeps `_PRESERVING_SHAPES` membership honest for the
+    property the registry invariant is about — grain and order, which BOTH paths
+    keep. It deliberately does not claim per-row independence; batch_size>1 trades
+    that for cost, which is why it is opt-in and defaults to 1.
+    """
+
+    def __init__(
+        self,
+        make_mapper: Callable[[Stage, dict[str, Any]], Callable[[Row], Row]],
+        run_batches: Callable[[Stage, dict[str, pd.DataFrame], dict[str, Any], int], pd.DataFrame],
+        parallelism: int = 1,
+        project_output_to_declared: bool = False,
+    ) -> None:
+        super().__init__(make_mapper, parallelism, project_output_to_declared)
+        self.run_batches = run_batches
+
+    def execute(
+        self, stage: Stage, inputs: dict[str, pd.DataFrame], ctx: dict[str, Any]
+    ) -> pd.DataFrame:
+        assert stage.llm is not None  # Stage validation: an llm_transform always carries llm
+        if stage.llm.batch_size > 1:
+            return self.run_batches(stage, inputs, ctx, self.parallelism)
+        return _run_row_mapper(self, stage, inputs, ctx)
+
+
 class SourceHandler(StageHandler):
     """Originates rows from outside the run; takes no upstream frames."""
 
