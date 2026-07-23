@@ -97,6 +97,18 @@ jobs:
       - run: python tools/import_graph_report.py > head-metrics.json
       - run: python tools/import_graph_report.py --root base > base-metrics.json
       - run: python tools/import_graph_report.py --markdown head-metrics.json base-metrics.json > comment-body.md
+      # Raw data lives alongside the cooked report: the comment shows the
+      # rendered table, but the JSON these two invocations produced is kept
+      # too so it can be re-sliced without recomputing. Short retention —
+      # this is a debugging aid for the PR under review, not a permanent record.
+      - name: Upload raw metrics JSON
+        uses: actions/upload-artifact@v4
+        with:
+          name: import-graph-metrics
+          path: |
+            head-metrics.json
+            base-metrics.json
+          retention-days: 14
       - name: Upsert PR comment
         uses: actions/github-script@v7
         with:

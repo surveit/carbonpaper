@@ -131,6 +131,15 @@ def is_core_module(module: str) -> bool:
     )
 
 
+def describe_core_package_prefixes() -> tuple[str, ...]:
+    """The core-package prefixes `is_core_module` exempts from the fan-in
+    ceiling, exposed as a public accessor so other consumers (e.g. the
+    import-graph CI report) can name them without re-typing the list — the
+    module-level constant itself stays private since nothing but
+    `is_core_module` needs to iterate it directly."""
+    return _CORE_PACKAGE_PREFIXES
+
+
 def compute_fan_in(edges: list[ImportEdge]) -> dict[str, ModuleDegree]:
     """Fan-in per module: how many distinct app modules import it directly,
     and which ones."""
@@ -437,3 +446,9 @@ def test_is_core_module_rejects_everything_else() -> None:
     assert not is_core_module("app.web.routers.runs")
     # not a prefix match past the dot boundary
     assert not is_core_module("app.modelsomething")
+
+
+def test_describe_core_package_prefixes_matches_what_is_core_module_checks() -> None:
+    prefixes = describe_core_package_prefixes()
+    assert prefixes == ("app.models", "app.core")
+    assert all(is_core_module(prefix) for prefix in prefixes)
