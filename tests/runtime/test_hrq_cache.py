@@ -22,14 +22,8 @@ from app.runtime.context import RunIdentity
 from app.runtime.errors import HaltForReview
 from app.runtime.runner import prepare_run, run_prepared
 from app.runtime.stages.human_review_queue import handle_human_review_queue
-from app.services import versioning
-from app.services.stage_cache import (
-    HumanDecision,
-    StageCache,
-    StageCacheEntry,
-    build_cache_id,
-    compute_row_fingerprint,
-)
+from app.services import review, versioning
+from app.services.stage_cache import StageCache, compute_row_fingerprint
 from app.services.versioning import create_version_from_disk
 from conftest import make_run_context
 
@@ -81,18 +75,16 @@ def _put_approval(
     *, project: str = PROJECT,
 ) -> None:
     """Cache an `approve` decision for one row of a halted snapshot, matched to
-    it by the sidecar's fingerprints — through the seam (StageCache.put),
-    never a raw store write."""
-    entry = StageCacheEntry(
-        id=build_cache_id(project, "review", stage_fingerprint, input_fingerprint),
-        project=project, stage_id="review",
+    it by the sidecar's fingerprints — built through the real review service
+    (record_decision → the production cache seam), never a hand-assembled
+    entry or a raw store write."""
+    review.record_decision(
+        project=project, stage_id="review", run_id=run_id,
         stage_fingerprint=stage_fingerprint, input_fingerprint=input_fingerprint,
-        source_run_id=run_id,
-        frozen_input={"id": row["id"], "score": int(row["score"])},
-        human=HumanDecision(decision=RowReviewDecision.approve, modified_score=None,
-                             reviewer="local", reviewed_at="2026-07-01T00:00:00"),
+        frozen_row={"id": row["id"], "score": int(row["score"])},
+        verdict=RowReviewDecision.approve, modified_score=None,
+        reviewer="local", reviewed_at="2026-07-01T00:00:00",
     )
-    StageCache().put(entry)
 
 
 def _approve_every_row(snapshot: pd.DataFrame, fingerprints: dict, run_id: str, *, project: str = PROJECT) -> None:
@@ -114,7 +106,7 @@ def test_decided_rows_reused_across_runs(tmp_path):
     out = handle_human_review_queue(stage, {"scored": src.copy()}, _ctx(tmp_path, run_id="run2"))
     assert len(out) == 2
     assert sorted(out["final_score"].tolist()) == [0, 1]
-    assert (out["decision"] == RowReviewDecision.approve).all()
+    assert (out["decision"] == "approve").all()
 
 
 # ── 2. Editing the stage definition invalidates every cached decision ──────

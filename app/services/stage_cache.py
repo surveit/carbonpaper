@@ -1,11 +1,17 @@
 """stage_cache.py — the content-addressed stage-result cache.
 
-A cache entry is one human review decision, keyed by the exact
+A cache entry is one stage's output for one input row, keyed by the exact
 (stage-definition fingerprint, input-row fingerprint) pair that produced it:
 `Stage.compute_definition_fingerprint()` (app/models/stage.py) identifies WHAT
 the stage computes, `compute_row_fingerprint` identifies WHICH row it saw.
 Re-running the same stage definition against the same row resolves to the
 same cache entry, whether the run that first recorded it is long gone.
+
+The payload is generic: an `output_row` (or None as a tombstone, meaning the
+stage dropped that row), plus `provenance` audit fields the cache stores
+verbatim and never interprets. What the output MEANS — and any verdict or
+column vocabulary behind it — lives above this seam (app.services.review),
+never here.
 
 `StageCacheEntry` is the only PersistedModel carrying
 `SCOPE = PersistenceScope.PROJECT_READ_WRITE` (see app.core.persistence.PersistenceScope):
@@ -23,20 +29,22 @@ from typing import ClassVar, Literal, overload
 import json
 import math
 
+import numpy as np
 import pandas as pd
 from pydantic import BaseModel, ConfigDict
 
 from app.core.persistence import JsonDict, PersistedModel, PersistenceScope
 from app.core.run_status import RunMode
 from app.core.utils import compute_short_hash
-from app.models import RowReviewDecision
 
 
-class HumanDecision(BaseModel):
-    """A reviewer's verdict on one cached row, embedded in a StageCacheEntry.
-    Strict config mirrors PersistedModel's own (app.core.persistence) exactly,
-    so an embedded record validates and serializes under the same rules as the
-    document that carries it."""
+class CacheProvenance(BaseModel):
+    """Who or what produced a cache entry's output, and when — audit fields the
+    cache stores verbatim and never interprets. `note` is a free-form label the
+    writer attaches; the entry's meaning lives above this seam. Strict config
+    mirrors PersistedModel's own (app.core.persistence) exactly, so an embedded
+    record validates and serializes under the same rules as the document that
+    carries it."""
     model_config = ConfigDict(
         extra="forbid",
         use_enum_values=True,
@@ -44,23 +52,25 @@ class HumanDecision(BaseModel):
         populate_by_name=True,
     )
 
-    decision: RowReviewDecision
-    modified_score: float | None
-    reviewer: str
-    reviewed_at: str
+    author: str
+    recorded_at: str
+    note: str
 
 
 class StageCacheEntry(PersistedModel):
-    """One cached human review decision. `id` is
+    """One cached stage output for one input key. `id` is
     `build_cache_id(project, stage_id, stage_fingerprint, input_fingerprint)`.
-    `frozen_input` is the sanctioned dynamic boundary (app.core.persistence.JsonDict):
-    the exact upstream row the reviewer saw, an arbitrary shape this module does
-    not otherwise constrain — kept for auditability, not for hashing (the row's
-    identity is `input_fingerprint`, computed once by the caller via
-    `compute_row_fingerprint` before the entry is built)."""
+    `output_row` is the stage's output for that key — an output row, or None as
+    a tombstone (the stage dropped the row). `frozen_input` and `output_row`
+    are the sanctioned dynamic boundary (app.core.persistence.JsonDict):
+    arbitrary row shapes this module does not otherwise constrain. `frozen_input`
+    is the exact upstream row the stage saw, kept for auditability, not for
+    hashing (the row's identity is `input_fingerprint`, computed once by the
+    caller via `compute_row_fingerprint` before the entry is built)."""
 
     collection: ClassVar[str] = "stage_cache"
     SCOPE: ClassVar[PersistenceScope] = PersistenceScope.PROJECT_READ_WRITE
+    SCHEMA_VERSION: ClassVar[int] = 2
 
     project: str
     stage_id: str
@@ -68,7 +78,8 @@ class StageCacheEntry(PersistedModel):
     input_fingerprint: str
     source_run_id: str
     frozen_input: JsonDict
-    human: HumanDecision
+    output_row: JsonDict | None
+    provenance: CacheProvenance
 
     @overload
     @classmethod
@@ -110,15 +121,31 @@ def compute_row_fingerprint(row: Mapping[str, object]) -> str:
 def to_json_safe_row(row: Mapping[str, object]) -> JsonDict:
     """`row` reduced to JSON-native types for storage as a `StageCacheEntry`'s
     `frozen_input`: every null form collapses to JSON null (the same
-    `_collapse_null_forms` step `compute_row_fingerprint` hashes under), and
-    any remaining non-JSON-native value (a numpy scalar, a pandas Timestamp,
-    ...) is stringified via `default=str` on the round trip through
-    `json.dumps`/`json.loads`. Using the same normalization `compute_row_fingerprint`
-    hashes under means a stored `frozen_input` and the `input_fingerprint`
-    computed for the same row describe that row consistently."""
+    `_collapse_null_forms` step `compute_row_fingerprint` hashes under), a numpy
+    numeric scalar becomes its JSON-native Python equivalent (`np.int64(1)` ->
+    the number 1, not the string "1"), and any other non-JSON-native value (a
+    pandas Timestamp, ...) is stringified — see `_to_json_native`, the
+    `json.dumps` default. Preserving numbers as numbers matters because the
+    frozen row is read back as a stage's output (app.services.review), where a
+    stringified score would corrupt the numeric column it feeds."""
     canonical = {key: _collapse_null_forms(value) for key, value in row.items()}
-    safe: JsonDict = json.loads(json.dumps(canonical, default=str))
+    safe: JsonDict = json.loads(json.dumps(canonical, default=_to_json_native))
     return safe
+
+
+def _to_json_native(value: object) -> object:
+    """`json.dumps` default for `to_json_safe_row`: a numpy scalar becomes its
+    Python equivalent via `.item()` (so a numeric cell survives as a JSON
+    number), keeping the result only when that equivalent is itself JSON-native;
+    everything else — a pandas Timestamp, a numpy datetime, an arbitrary object
+    — is stringified. `compute_row_fingerprint` keeps its own `default=str`, so
+    fingerprints are unaffected by this."""
+    if isinstance(value, np.generic):
+        native = value.item()
+        if native is None or isinstance(native, (bool, int, float, str)):
+            return native
+        return str(native)
+    return str(value)
 
 
 def _collapse_null_forms(value: object) -> object:
@@ -178,7 +205,7 @@ class StageCache(ReadOnlyStageCache):
 
 
 __all__ = [
-    "HumanDecision",
+    "CacheProvenance",
     "StageCacheEntry",
     "build_cache_id",
     "to_json_safe_row",

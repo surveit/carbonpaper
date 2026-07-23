@@ -13,10 +13,11 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 
 from app.core.errors import ReviewValidationError
+from app.core.persistence import JsonDict
 from app.core.run_status import RunMode
 from app.models import RowReviewDecision
 from app.services.stage_cache import (
-    HumanDecision,
+    CacheProvenance,
     StageCacheEntry,
     build_cache_id,
     to_json_safe_row,
@@ -68,15 +69,27 @@ def load_prior_decisions(
     entries = StageCacheEntry.for_mode(RunMode.PRODUCTION).find_entries(
         project, stage_id, stage_fingerprint
     )
-    return {
-        entry.input_fingerprint: PriorDecision(
-            decision=entry.human.decision,
-            modified_score=entry.human.modified_score,
-            reviewer=entry.human.reviewer,
-            reviewed_at=entry.human.reviewed_at,
-        )
-        for entry in entries
-    }
+    return {entry.input_fingerprint: _summarize_prior_decision(entry) for entry in entries}
+
+
+def _summarize_prior_decision(entry: StageCacheEntry) -> PriorDecision:
+    """A generic cache entry read back as the reviewer decision it records. The
+    verdict label is `provenance.note` — reliable even for a tombstone, whose
+    `output_row` is None; the modified score is the `final_score` the output row
+    carries, but only for a `modify` (an `approve` kept the AI score, never a
+    human override)."""
+    is_modify = entry.provenance.note == RowReviewDecision.modify.value
+    modified_score = (
+        entry.output_row["final_score"]
+        if entry.output_row is not None and is_modify
+        else None
+    )
+    return PriorDecision(
+        decision=entry.provenance.note,
+        modified_score=modified_score,
+        reviewer=entry.provenance.author,
+        reviewed_at=entry.provenance.recorded_at,
+    )
 
 
 def _parse_verdict_label(decision: str) -> RowReviewDecision:
@@ -104,10 +117,15 @@ def _build_cache_entry(
     verdict: RowReviewDecision, modified_score: float | None,
     reviewer: str, reviewed_at: str,
 ) -> StageCacheEntry:
-    """A `StageCacheEntry` for this reviewer decision: fingerprints are the ones
-    the caller resolved (never recomputed here), `frozen_input` the reviewed row
-    itself, reduced to JSON-native types for storage."""
-    frozen_input = to_json_safe_row({str(k): v for k, v in frozen_row.items()})
+    """A `StageCacheEntry` for this reviewer decision, generalized to the cache's
+    payload: fingerprints are the ones the caller resolved (never recomputed
+    here), `frozen_input` the reviewed row reduced to JSON-native types, and
+    `output_row` the review stage's output for it (None as a tombstone for a
+    `reject`). The verdict itself survives only as `provenance.note`, so the
+    cache stores no review vocabulary."""
+    frozen_safe = to_json_safe_row({str(k): v for k, v in frozen_row.items()})
+    output_row = _build_output_row(frozen_safe, verdict, modified_score, reviewer, reviewed_at)
+    provenance = CacheProvenance(author=reviewer, recorded_at=reviewed_at, note=verdict.value)
     return StageCacheEntry(
         id=build_cache_id(project, stage_id, stage_fingerprint, input_fingerprint),
         project=project,
@@ -115,11 +133,28 @@ def _build_cache_entry(
         stage_fingerprint=stage_fingerprint,
         input_fingerprint=input_fingerprint,
         source_run_id=run_id,
-        frozen_input=frozen_input,
-        human=HumanDecision(
-            decision=verdict,
-            modified_score=modified_score,
-            reviewer=reviewer,
-            reviewed_at=reviewed_at,
-        ),
+        frozen_input=frozen_safe,
+        output_row=output_row,
+        provenance=provenance,
     )
+
+
+def _build_output_row(
+    frozen_safe: JsonDict, verdict: RowReviewDecision, modified_score: float | None,
+    reviewer: str, reviewed_at: str,
+) -> JsonDict | None:
+    """The review stage's output row for one reviewed input: the frozen input
+    plus the score columns the verdict produces. A `reject` drops the row, so
+    its output is None (a tombstone); `approve` keeps the AI score as final,
+    `modify` substitutes the human-entered score."""
+    if verdict == RowReviewDecision.reject:
+        return None
+    ai = frozen_safe.get("score")
+    human = modified_score if verdict == RowReviewDecision.modify else ai
+    return {
+        **frozen_safe,
+        "ai_score": ai, "human_score": human, "final_score": human,
+        "review_notes": f"decision={verdict.value}",
+        "reviewer_id": reviewer, "reviewed_at": reviewed_at,
+        "decision": verdict.value,
+    }
