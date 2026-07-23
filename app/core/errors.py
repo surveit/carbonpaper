@@ -64,6 +64,13 @@ class SubsetRunError(Exception):
     eval runner translate it into their own outcome, e.g. an `error` eval run.)"""
 
 
+class NoSmokeSourceError(Exception):
+    """A smoke run was requested on a workflow with no input_data stage to sample
+    from — there is no bound source to slice a preview off, so nothing can be
+    seeded and the frontier cannot run. Raised (loudly) rather than smoke-running
+    an empty injection that every downstream stage would then error on."""
+
+
 class LLMError(Exception):
     """A live-LLM call failed, or no LLM backend is available."""
 
