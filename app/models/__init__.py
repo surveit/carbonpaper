@@ -132,6 +132,15 @@ NODE_TYPES: dict[str, dict[str, _Any]] = {
         "required": ["prompt_data_template"],
         "optional": ["model", "temperature", "response_format", "max_retries",
                      "rubric", "tools"],
+        "notes": (
+            "Author it as TWO fields: prompt_instructions is the row-invariant guidance "
+            "(role, methodology, how to weigh evidence/sources) and MUST NOT depend on "
+            "any row value — the same instructions run over every input row, so keeping "
+            "them byte-stable and separate from per-row data lets the runtime cache that "
+            "prefix, cutting latency (and cost on a per-token backend). "
+            "prompt_data_template is the minimal per-row input framing, rendered with "
+            "Python's str.format_map: inject a column as {column_name}."
+        ),
     },
     "python_row_function": {
         "summary": "Deterministic Python run once per row: one row in → one row out (cannot fan rows out/in or reorder).",

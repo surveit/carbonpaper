@@ -15,31 +15,22 @@ from __future__ import annotations
 from app import models
 from app.compiler.node_contract_notes import HUMAN_REVIEW_QUEUE_CONTRACT_NOTE
 
-_LLM_TRANSFORM_SPLIT_NOTE = (
-    "Author it as TWO fields: prompt_instructions is the row-invariant guidance (role, "
-    "methodology, how to weigh evidence/sources) and MUST NOT depend on any row value — "
-    "the same instructions run over every input row, so keeping them byte-stable and "
-    "separate from per-row data lets the runtime cache that prefix, cutting latency (and "
-    "cost on a per-token backend). prompt_data_template is the minimal per-row input "
-    "framing, rendered with Python's str.format_map: inject a column as {column_name}."
-)
-
 _NODE_TYPE_NOTES: dict[str, str] = {
-    "llm_transform": _LLM_TRANSFORM_SPLIT_NOTE,
     "human_review_queue": HUMAN_REVIEW_QUEUE_CONTRACT_NOTE,
 }
 
 
 def _render_stage_catalogue() -> str:
     """Render the stage-type catalogue from `models.NODE_TYPES`: one line each
-    (`- <name> — <summary>`), with a curated note appended where one exists, so
-    the catalogue can never drift from the real node-type set."""
+    (`- <name> — <summary>`), with the model's own note and any local contract
+    note both appended where present, so the catalogue can never drift from the
+    real node-type set and no per-type guidance is silently dropped."""
     lines: list[str] = []
     for name, spec in models.NODE_TYPES.items():
-        note = _NODE_TYPE_NOTES.get(name) or spec.get("notes")
+        notes = [n for n in (spec.get("notes"), _NODE_TYPE_NOTES.get(name)) if n]
         line = f"- {name} — {spec['summary']}"
-        if note:
-            line += f" {note}"
+        if notes:
+            line += " " + " ".join(notes)
         lines.append(line)
     return "\n".join(lines)
 

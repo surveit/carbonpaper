@@ -31,6 +31,13 @@ def test_workflow_prompt_catalogue_covers_node_types() -> None:
         assert f"- {name} —" in WORKFLOW_SYSTEM_PROMPT
 
 
+def test_hrq_line_has_both_notes() -> None:
+    lines = WORKFLOW_SYSTEM_PROMPT.splitlines()
+    hrq_line = next(line for line in lines if line.startswith("- human_review_queue —"))
+    assert "hash_columns" in hrq_line
+    assert "decision" in hrq_line or "output columns are FIXED" in hrq_line
+
+
 def test_compiler_fewshot_uses_split() -> None:
     text = repr(compiler_prompt._EXAMPLE_STAGE) + "\n" + compiler_prompt.build_compile_prompt(
         "irrelevant input", "example"
