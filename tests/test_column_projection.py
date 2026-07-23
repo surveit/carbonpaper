@@ -16,7 +16,6 @@ from app.models.stage import StageType
 from app.runtime.context import RunContext, RunIdentity
 from app.runtime.stages import HANDLERS, handle_human_review_queue
 from app.runtime.stages import llm_transform as lt
-from app.runtime.stages.human_review_queue import register_project_dir
 from app.services.stage_cache import CacheMode, StageCacheEntry
 from conftest import make_run_context
 
@@ -74,7 +73,7 @@ def test_llm_transform_declared_input_column_rides_through(monkeypatch):
 
 
 def _queue_stage(output_schema=None, flt=None):
-    queue = {"hash_columns": ["entity_id"]}
+    queue = {}
     if flt is not None:
         queue["filter"] = flt
     kw = {
@@ -98,10 +97,8 @@ def _src_scored():
 
 def _queue_test_ctx(tmp_path, project: str) -> RunContext:
     """A production-shaped ctx for a direct handle_human_review_queue call:
-    identity + a registered project dir, so `_decisions_path` (the
-    TRANSITIONAL bridge in human_review_queue.py) can resolve a decisions
-    directory the same way prepare_run/resume_run would."""
-    register_project_dir(project, tmp_path)
+    identity + a writable stage cache, the project scope the handler's own
+    guard (`_require_project_scope`) requires."""
     identity = RunIdentity(project=project, run_id="r1")
     return make_run_context(
         run_dir=tmp_path, identity=identity,

@@ -262,21 +262,20 @@ class AggregateConfig(_Base):
 
 
 class RowReviewDecision(str, Enum):
-    """A reviewer's verdict on one human_review_queue row, persisted in the
-    queue's decisions store: `approve` keeps the AI score as final, `modify`
-    substitutes a human-entered score, `reject` drops the row from the
-    stage's output."""
+    """A reviewer's verdict on one human_review_queue row, cached against that
+    row's fingerprint (app.services.stage_cache.StageCacheEntry): `approve`
+    keeps the AI score as final, `modify` substitutes a human-entered score,
+    `reject` drops the row from the stage's output."""
     approve = "approve"
     modify = "modify"
     reject = "reject"
 
 
 class QueueConfig(_Base):
-    """human_review_queue handle. `hash_columns` is optional ONLY when the upstream
-    input schema declares a primary_key (the runner content-hashes on that PK when
-    absent); a stage with neither is rejected — see Stage._queue_has_resolvable_hash."""
+    """human_review_queue handle. A queued row is matched to a cached human
+    decision by fingerprinting the row itself (app.services.stage_cache) — no
+    column configuration is needed to enable that matching."""
     filter: Optional[str] = None
-    hash_columns: Optional[list[str]] = None
     reviewer_instructions: Optional[str] = None
     routing: Optional[str] = None
     conflict_resolution: Optional[str] = None
@@ -327,10 +326,9 @@ _TYPE_SPEC: dict[str, dict[str, Any]] = {
 }
 
 # human_review_queue handle fields that determine what the human reviewer is
-# asked. routing, conflict_resolution, estimated_volume_per_week, and
-# hash_columns describe how a decision is routed or matched back to a row, not
-# what is asked, so compute_definition_fingerprint trims the queue handle down
-# to just these two before hashing it.
+# asked. routing, conflict_resolution, and estimated_volume_per_week describe
+# how a decision is routed, not what is asked, so compute_definition_fingerprint
+# trims the queue handle down to just these two before hashing it.
 _QUEUE_FINGERPRINT_FIELDS = ("filter", "reviewer_instructions")
 
 
@@ -418,21 +416,6 @@ class Stage(_Base):
         canonical = {"type": self.type, "handle": handle_dump, "output_schema": output_dump}
         payload = json.dumps(canonical, sort_keys=True, separators=(",", ":"), default=str)
         return hashlib.sha1(payload.encode("utf-8")).hexdigest()[:16]
-
-    def resolve_hash_columns(self) -> list[str]:
-        """The columns whose values identify a queued row, so a human_review_queue
-        can re-match a stored human decision across re-runs: the queue's explicit
-        `hash_columns`, else the single upstream input's declared `primary_key`,
-        else `[]`. The runtime content-hashes each queued row over exactly these
-        columns; an empty result is rejected at build time by
-        `_queue_has_resolvable_hash`."""
-        if self.queue and self.queue.hash_columns:
-            return list(self.queue.hash_columns)
-        if self.inputs:
-            upstream = self.inputs[0].table_schema
-            if upstream is not None and upstream.primary_key:
-                return list(upstream.primary_key)
-        return []
 
     @field_validator("id")
     @classmethod
@@ -539,41 +522,6 @@ class Stage(_Base):
                 f"escaped literal and never injects the value. Use single braces "
                 f"around the column name."
             )
-        return self
-
-    @model_validator(mode="after")
-    def _queue_has_resolvable_hash(self) -> "Stage":
-        """A human_review_queue matches each queued row to a stored human decision
-        by hashing a stable set of columns (`resolve_hash_columns`): the queue's
-        `hash_columns`, else the upstream input's `primary_key`. With neither, the
-        runtime cannot hash a row and would raise mid-run — so require a resolvable
-        source here, at build time, where the author (or the compiler agent) sees it.
-
-        Additionally, when `hash_columns` are named explicitly AND the upstream
-        schema is declared, the named columns must exist in it — otherwise the
-        runtime drops them at hash time. (The primary_key fallback needs no such
-        check: TableSchema already enforces primary_key ⊆ columns.)
-
-        A single stage's invariant, enforced on the stage — like
-        `_llm_transform_one_to_one`; cross-stage checks live in the workflow."""
-        if self.type != StageType.human_review_queue:
-            return self
-        if not self.resolve_hash_columns():
-            raise ValueError(
-                f"human_review_queue '{self.id}' cannot match human decisions across "
-                "runs: set queue.hash_columns, or declare a primary_key on its input "
-                "schema"
-            )
-        if self.queue and self.queue.hash_columns and self.inputs:
-            upstream = self.inputs[0].table_schema
-            if upstream is not None:
-                declared = {column.name for column in upstream.columns}
-                missing = [c for c in self.queue.hash_columns if c not in declared]
-                if missing:
-                    raise ValueError(
-                        f"human_review_queue '{self.id}' hash_columns {missing} are not "
-                        f"in the upstream schema (which declares {sorted(declared)})"
-                    )
         return self
 
     @model_validator(mode="after")

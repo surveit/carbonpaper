@@ -78,14 +78,14 @@ def _score_stage():
 
 
 def _review_stage():
-    """human_review_queue reviewing `score`'s output; no prior decisions on
-    disk, so the run halts and snapshots both rows."""
+    """human_review_queue reviewing `score`'s output; no cached decisions yet,
+    so the run halts and snapshots both rows."""
     return {"id": "review", "name": "Review scores", "type": "human_review_queue",
             "inputs": [{"id": "score", "schema": {
                 "columns": [{"name": "id", "type": "str"}, {"name": "quote", "type": "str"},
                             {"name": "score", "type": "int"}],
                 "primary_key": ["id"]}}],
-            "queue": {"hash_columns": ["id"]}}
+            "queue": {}}
 
 
 def _build_and_halt(tmp_path, monkeypatch):
@@ -125,7 +125,7 @@ def _write_decision(stage_id: str, content_hash: str, decision: str, run_id: str
 
 def test_happy_path_renders_items_with_hash_prior_decision_and_counts(tmp_path, monkeypatch):
     run_id, _run_dir, snapshot = _build_and_halt(tmp_path, monkeypatch)
-    first_hash, second_hash = snapshot["content_hash"].tolist()
+    first_hash, second_hash = snapshot["input_fingerprint"].tolist()
     _write_decision("review", first_hash, "approve", run_id)
 
     client = TestClient(app)
@@ -176,7 +176,7 @@ def test_degrades_gracefully_when_upstream_scored_input_is_missing(tmp_path, mon
     assert r.status_code == 200  # missing upstream output does not break the page
     html = r.text
     # Items still render — both content hashes present.
-    for content_hash in snapshot["content_hash"]:
+    for content_hash in snapshot["input_fingerprint"]:
         assert f'data-content-hash="{content_hash}"' in html
     # No rendered prompt (needs model_input) and no raw model-input dump (also
     # needs model_input): both of queue_page's model_input-gated blocks are

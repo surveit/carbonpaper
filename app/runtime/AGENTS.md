@@ -21,14 +21,14 @@ validate the output, write `outputs/<stage>.parquet`, append to `manifest.json`.
   unknown ids fail loudly.
 - **Halt + resume:** `human_review_queue` raises `HaltForReview`; the run marks
   `awaiting_review` and persists the pending queue. `resume_run(...)` reloads completed
-  outputs and continues once decisions exist.
+  outputs and continues once cached decisions exist for the pending rows.
 
 ## `stages/` — one module per stage type (`HANDLERS`)
 `input_data` connector `file` (csv/parquet/json/geojson; `_read_geojson` flattens a
 FeatureCollection); `python_row_function`/`python_frame_function`
 (`function: {kind: module|inline}`, row variant mapped per row); `join`; `aggregate`;
 `llm_transform` (row-mapped, bounded parallelism);
-`human_review_queue` (content-hash → prior decisions or halt);
+`human_review_queue` (row fingerprint → cached decision or halt);
 `publish` (a `function` module that writes artifacts).
 
 ## LLM backend (`llm_transform`)

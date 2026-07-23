@@ -159,12 +159,14 @@ NODE_TYPES: dict[str, dict[str, _Any]] = {
         "requires_inputs": True,
         "min_inputs": 1,
         "required": [],
-        "optional": ["filter", "hash_columns", "reviewer_instructions",
+        "optional": ["filter", "reviewer_instructions",
                      "routing", "conflict_resolution", "estimated_volume_per_week"],
         "notes": (
-            "Requires a stable row identity to re-match human decisions across "
-            "re-runs: set hash_columns, or ensure the upstream input's schema "
-            "declares a primary_key (a stage with neither is rejected)."
+            "Reviewed rows are matched to a cached human decision by "
+            "fingerprinting the row itself — no column configuration is needed. "
+            "Editing `filter` or `reviewer_instructions` changes the stage's "
+            "definition fingerprint, so every previously cached decision for "
+            "this stage stops matching and every row is asked again."
         ),
     },
     "publish": {

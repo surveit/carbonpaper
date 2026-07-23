@@ -23,7 +23,6 @@ def _row_function_stage(**overrides):
 def _queue_stage(**queue_overrides):
     queue = {
         "filter": "score > 0.5",
-        "hash_columns": ["id"],
         "reviewer_instructions": "check it",
         "routing": "team-a",
         "conflict_resolution": "escalate",
@@ -74,7 +73,6 @@ def test_compute_definition_fingerprint_for_queue_ignores_routing_metadata():
     base = _queue_stage()
     changed = _queue_stage(
         routing="team-b", conflict_resolution="auto", estimated_volume_per_week=999,
-        hash_columns=["other"],
     )
     assert base.compute_definition_fingerprint() == changed.compute_definition_fingerprint()
 

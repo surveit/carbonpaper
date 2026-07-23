@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
-from pathlib import Path
 from typing import NoReturn
 
 import pandas as pd
@@ -11,43 +9,21 @@ import pyarrow.lib as pa_lib
 
 from app.core.predicate import parse_predicate
 from app.models import RowReviewDecision, Stage
+from app.services.stage_cache import ReadOnlyStageCache, StageCacheEntry, compute_row_fingerprint
 
 from ..context import QueueStats, RunContext
 from ..errors import HaltForReview
-
-# TRANSITIONAL bridge (removed once decisions storage moves onto the
-# stage-result cache, see app.services.stage_cache): RunContext carries no
-# project directory, so a production entry point (prepare_run/resume_run)
-# stashes the project's own directory here, keyed by project name, before
-# executing. `_decisions_path` reads it back through `ctx.identity` — the one
-# piece of project scope RunContext does carry. A run re-registers its own
-# project on every prepare/resume, overwriting any earlier entry for that
-# name, so this holds at most one directory per distinct project name ever
-# run in this process — not one per run.
-_project_dirs: dict[str, Path] = {}
-
-
-def register_project_dir(project: str, directory: Path) -> None:
-    """Stash `directory` (the project's own directory on disk) for `project`
-    so `_decisions_path` can resolve the project's decisions directory from a
-    RunContext that carries no project directory of its own. Called once per
-    production run (prepare_run / resume_run) before it executes any stage."""
-    _project_dirs[project] = directory
-
-
-def reset_project_dirs() -> None:
-    """Empty the registry. For test isolation only — production has no reason
-    to clear it (see the module docstring above)."""
-    _project_dirs.clear()
 
 
 def handle_human_review_queue(stage: Stage, inputs: dict[str, pd.DataFrame], ctx: RunContext) -> pd.DataFrame:
     """Real review-queue semantics:
 
     1. Apply the queue filter to upstream output → items needing review.
-    2. Hash each item by `queue.hash_columns` (default: upstream PK).
-    3. Match against the global decisions store keyed by content_hash:
-         - items with prior decisions get them applied
+    2. Fingerprint the stage definition once (`stage_fp`) and every queueable
+       row (`input_fp`, over its original upstream columns).
+    3. Look up this stage definition's cached decisions from `ctx.stage_cache`
+       and apply the ones whose `input_fingerprint` matches a queued row:
+         - items with a cached decision get it applied
          - items without are written to runs/<id>/queue/<stage>.parquet
     4. If ANY items lack decisions, raise HaltForReview so the runner can
        stop downstream execution and mark the run awaiting_review.
@@ -57,20 +33,15 @@ def handle_human_review_queue(stage: Stage, inputs: dict[str, pd.DataFrame], ctx
     sid = stage.id
     queue_cfg = stage.queue
     assert queue_cfg is not None  # Stage validation: human_review_queue carries queue_cfg
+    project, stage_cache = _require_project_scope(ctx, sid)
     src = inputs[stage.inputs[0].id].copy()
 
     queueable, passthrough = _partition_reviewable_rows(src, queue_cfg.filter, ctx, sid)
 
-    hash_cols = stage.resolve_hash_columns()
-    # Stage validation guarantees a human_review_queue resolves a non-empty hash
-    # source — queue.hash_columns or the upstream primary_key (see
-    # Stage._queue_has_resolvable_hash) — so this documents the invariant rather
-    # than handling a reachable case.
-    assert hash_cols, f"queue stage '{sid}' has no resolvable hash columns"
-    queueable = _hash_queueable_rows(queueable, hash_cols, sid)
-
-    decisions = _load_decisions(ctx, sid)
-    queueable = _apply_prior_decisions(queueable, decisions)
+    stage_fp = stage.compute_definition_fingerprint()
+    queueable = _fingerprint_queueable_rows(queueable, stage_fp)
+    entries = stage_cache.find_entries(project, sid, stage_fp)
+    queueable = _apply_cached_decisions(queueable, entries)
     pending, decided = _split_pending_and_decided(queueable)
 
     _record_queue_stats(ctx, sid, queueable, passthrough, pending, decided)
@@ -87,34 +58,22 @@ def handle_human_review_queue(stage: Stage, inputs: dict[str, pd.DataFrame], ctx
 # --- handle_human_review_queue helpers -----------------------------------------
 
 
-def _content_hash(row: pd.Series, columns: list[str]) -> str:
-    """Stable hash of the listed column values for one row. Used to match
-    queue items across re-runs so prior human decisions can be reapplied
-    even when upstream non-determinism shuffles primary keys."""
-    parts = [str(row.get(c, "")) for c in columns]
-    return hashlib.sha1("|".join(parts).encode("utf-8")).hexdigest()[:16]
-
-
-def _decisions_path(ctx: RunContext, stage_id: str) -> Path:
-    if ctx.identity is None:
-        raise RuntimeError(
-            "human_review_queue needs a production run identity to resolve "
-            "its decisions directory; a subset/preview run carries none"
+def _require_project_scope(ctx: RunContext, sid: str) -> tuple[str, ReadOnlyStageCache]:
+    """The (project, cache) pair a queue stage needs to look up cached
+    decisions: `ctx.identity.project` and `ctx.stage_cache`, typed down to
+    `ReadOnlyStageCache` — this handler only ever reads, so mypy proves it
+    never calls a write method (`ReadOnlyStageCache` has none). Raises loudly
+    if either is absent: a human_review_queue stage always runs inside a
+    project-scoped (production) run; a subset/preview run's context (which
+    carries neither) cannot resolve a cache key and must not be silently let
+    through."""
+    if ctx.identity is None or ctx.stage_cache is None:
+        raise ValueError(
+            f"human_review_queue '{sid}' requires a project-scoped (production) "
+            "run: RunContext.identity and RunContext.stage_cache must both be "
+            "set, but this run carries neither."
         )
-    project_dir = _project_dirs[ctx.identity.project]
-    d = project_dir / "decisions"
-    d.mkdir(parents=True, exist_ok=True)
-    return d / f"{stage_id}.parquet"
-
-
-def _load_decisions(ctx: RunContext, stage_id: str) -> pd.DataFrame:
-    p = _decisions_path(ctx, stage_id)
-    if not p.exists():
-        return pd.DataFrame(
-            columns=["content_hash", "decision", "modified_score",
-                     "reviewer", "reviewed_at", "source_run_id"]
-        )
-    return pd.read_parquet(p)
+    return ctx.identity.project, ctx.stage_cache
 
 
 def _partition_reviewable_rows(
@@ -151,33 +110,38 @@ def _partition_reviewable_rows(
     return src[queueable_mask].copy(), src[~queueable_mask].copy()
 
 
-def _hash_queueable_rows(queueable: pd.DataFrame, hash_cols: list[str], sid: str) -> pd.DataFrame:
-    """Content-hash every queued row over `hash_cols`, after checking those
-    columns are actually present on the upstream frame — the stage model only
-    checks them when the upstream schema is DECLARED, whereas this checks the
-    ACTUAL frame."""
-    missing = [c for c in hash_cols if c not in queueable.columns]
-    if missing:
-        raise ValueError(
-            f"Queue stage '{sid}': hash columns missing from upstream: {missing}"
-        )
+def _fingerprint_queueable_rows(queueable: pd.DataFrame, stage_fingerprint: str) -> pd.DataFrame:
+    """Stamp every queued row with its own `input_fingerprint` — computed via
+    `compute_row_fingerprint` over the row's ORIGINAL upstream columns, before
+    this function adds any bookkeeping column of its own — and the constant
+    `stage_fingerprint` for this stage definition. Both columns survive onto
+    the pending-item snapshot (`_snapshot_pending_and_halt`) and are exactly
+    the pair `find_entries`/`StageCache.put` key a cache entry by."""
     if len(queueable):
-        queueable["content_hash"] = queueable.apply(
-            lambda r: _content_hash(r, hash_cols), axis=1
+        queueable["input_fingerprint"] = queueable.apply(
+            lambda row: compute_row_fingerprint(row.to_dict()), axis=1
         )
+    queueable["stage_fingerprint"] = stage_fingerprint
     return queueable
 
 
-def _apply_prior_decisions(queueable: pd.DataFrame, decisions: pd.DataFrame) -> pd.DataFrame:
-    """Left-join prior human decisions onto `queueable` by content_hash; when
-    there is nothing to join (no queued rows, or none decided yet), make sure
-    the decision columns exist so downstream code can rely on their presence."""
-    if len(queueable) and len(decisions):
-        return queueable.merge(
-            decisions[["content_hash", "decision", "modified_score",
-                       "reviewer", "reviewed_at"]],
-            on="content_hash", how="left",
-        )
+def _apply_cached_decisions(queueable: pd.DataFrame, entries: list[StageCacheEntry]) -> pd.DataFrame:
+    """Left-join cached human decisions onto `queueable` by input_fingerprint;
+    when there is nothing to join (no queued rows, or no cache entries for
+    this stage definition), make sure the decision columns exist so
+    downstream code can rely on their presence."""
+    if len(queueable) and entries:
+        decisions = pd.DataFrame([
+            {
+                "input_fingerprint": entry.input_fingerprint,
+                "decision": entry.human.decision,
+                "modified_score": entry.human.modified_score,
+                "reviewer": entry.human.reviewer,
+                "reviewed_at": entry.human.reviewed_at,
+            }
+            for entry in entries
+        ])
+        return queueable.merge(decisions, on="input_fingerprint", how="left")
     for col in ["decision", "modified_score", "reviewer", "reviewed_at"]:
         if col not in queueable.columns:
             queueable[col] = pd.NA
@@ -213,8 +177,9 @@ def _snapshot_pending_and_halt(ctx: RunContext, sid: str, pending: pd.DataFrame)
     queue_dir = ctx.run_dir / "queue"
     queue_dir.mkdir(parents=True, exist_ok=True)
     queue_path = queue_dir / f"{sid}.parquet"
-    # Persist a snapshot — everything needed for the reviewer UI plus
-    # the content_hash so decisions can be recorded against it.
+    # Persist a snapshot — everything needed for the reviewer UI plus the
+    # input_fingerprint/stage_fingerprint pair so a decision recorded against
+    # this snapshot can be cached against the same key.
     try:
         pending.to_parquet(queue_path, index=False)
     except (pa_lib.ArrowException, ValueError, TypeError):

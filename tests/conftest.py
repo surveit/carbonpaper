@@ -42,18 +42,6 @@ def reset_cancellation_registry():
     reset()
 
 
-@pytest.fixture(autouse=True)
-def reset_decisions_dir_registry():
-    """The TRANSITIONAL project-dir registry human_review_queue uses to
-    resolve its decisions directory (app.runtime.stages.human_review_queue)
-    is process-global and production never removes keys, so reset it around
-    each test to keep runs independent."""
-    from app.runtime.stages.human_review_queue import reset_project_dirs
-    reset_project_dirs()
-    yield
-    reset_project_dirs()
-
-
 def make_run_context(
     *,
     repo_root: Path = Path("."),

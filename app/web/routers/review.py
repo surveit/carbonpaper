@@ -218,13 +218,16 @@ def _build_review_item(
     join_keys: list[str],
     prompt_template: str | None,
 ) -> dict[str, Any]:
-    h = row["content_hash"]
+    # The pending-queue snapshot key column is `input_fingerprint` (see
+    # app.runtime.stages.human_review_queue), exposed to this page and its
+    # template under the pre-existing `content_hash` name.
+    h = row["input_fingerprint"]
     model_input = _find_model_input(row, input_lookup, join_keys)
     return {
         "content_hash": h,
         "row": {k: display_cell(v) for k, v in row.items()
-                if k not in ("content_hash", "decision", "modified_score",
-                             "reviewer", "reviewed_at")},
+                if k not in ("input_fingerprint", "stage_fingerprint", "decision",
+                             "modified_score", "reviewer", "reviewed_at")},
         "model_input": model_input,
         "rendered_prompt": _render_model_prompt(model_input, prompt_template),
         "prior_decision": decision_by_hash.get(h),
