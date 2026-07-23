@@ -133,7 +133,7 @@ def _build_and_halt(tmp_path, monkeypatch):
 def _put_cached_decision(
     project: str, stage_id: str, run_id: str,
     stage_fingerprint: str, input_fingerprint: str, row: pd.Series,
-    decision: str, modified_score: float | None = None,
+    decision: RowReviewDecision, modified_score: float | None = None,
 ) -> None:
     """Seed a prior decision directly through the cache seam (StageCache.put)
     — never a raw store write, and never the HTTP endpoint (used by tests that
