@@ -12,15 +12,11 @@ import pandas as pd
 from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 
-from app.core.run_status import RunMode
-from app.models import RowReviewDecision, Stage
+from app.core.errors import ReviewValidationError
+from app.models import Stage
 from app.runtime.llm import render_prompt
-from app.services.stage_cache import (
-    HumanDecision,
-    StageCacheEntry,
-    build_cache_id,
-    to_json_safe_row,
-)
+from app.services import review
+from app.services.review import PriorDecision
 from app.web.config import templates
 from app.web.loading import (
     QueueFingerprints,
@@ -50,7 +46,10 @@ async def queue_page(request: Request, project: str, run_id: str, stage_id: str)
 
     snapshot = queue_snapshot(project, run_id, stage_id)
     fingerprints = load_queue_fingerprints(project, run_id, stage_id)
-    decision_by_fingerprint = _load_prior_decisions(project, stage_id, fingerprints)
+    decision_by_fingerprint = (
+        review.load_prior_decisions(project, stage_id, fingerprints.stage_fingerprint)
+        if fingerprints else {}
+    )
     input_lookup, join_keys, prompt_template = _load_model_input_lookup(
         stage_def, stages, manifest, run_dir
     )
@@ -92,36 +91,24 @@ async def queue_decide(
     row is resolved by POSITION in the halted-queue sidecar's fingerprint
     list — never recomputed from live stages — so a fingerprint the sidecar
     can't vouch for 404s rather than being trusted."""
-    _validate_decision(decision)
-    mod_val = _validate_modified_score(decision, modified_score)
+    try:
+        verdict, mod_val = review.parse_verdict(decision, modified_score)
+    except ReviewValidationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     stage_fingerprint, row = _resolve_queue_row(project, run_id, stage_id, input_fingerprint)
-    entry = _build_cache_entry(
-        project, stage_id, run_id, stage_fingerprint, input_fingerprint, row, decision, mod_val
+    review.record_decision(
+        project=project, stage_id=stage_id, run_id=run_id,
+        stage_fingerprint=stage_fingerprint, input_fingerprint=input_fingerprint,
+        frozen_row={str(k): v for k, v in row.items()},
+        verdict=verdict, modified_score=mod_val,
+        reviewer="local", reviewed_at=datetime.now().isoformat(timespec="seconds"),
     )
-    StageCacheEntry.for_mode(RunMode.PRODUCTION).put(entry)
 
     return JSONResponse({"ok": True, "input_fingerprint": input_fingerprint, "decision": decision})
 
 
 # --- queue_decide helpers ------------------------------------------------------
-
-
-def _validate_decision(decision: str) -> None:
-    if decision not in (RowReviewDecision.approve, RowReviewDecision.reject,
-                        RowReviewDecision.modify):
-        raise HTTPException(status_code=400, detail=f"unknown decision '{decision}'")
-
-
-def _validate_modified_score(decision: str, modified_score: str | None) -> float | None:
-    if decision != RowReviewDecision.modify:
-        return None
-    if not modified_score:
-        raise HTTPException(status_code=400, detail="modify requires modified_score")
-    try:
-        return float(modified_score)
-    except ValueError:
-        raise HTTPException(status_code=400, detail="modified_score must be numeric")
 
 
 def _resolve_queue_row(
@@ -148,58 +135,7 @@ def _resolve_queue_row(
     )
 
 
-def _build_cache_entry(
-    project: str, stage_id: str, run_id: str,
-    stage_fingerprint: str, input_fingerprint: str,
-    row: pd.Series, decision: str, mod_val: float | None,
-) -> StageCacheEntry:
-    """A `StageCacheEntry` for this reviewer decision: fingerprints are the
-    ones the sidecar named (never recomputed here), `frozen_input` the
-    snapshot row itself — already pure, with no bookkeeping column to strip."""
-    frozen_input = to_json_safe_row({str(k): v for k, v in row.items()})
-    return StageCacheEntry(
-        id=build_cache_id(project, stage_id, stage_fingerprint, input_fingerprint),
-        project=project,
-        stage_id=stage_id,
-        stage_fingerprint=stage_fingerprint,
-        input_fingerprint=input_fingerprint,
-        source_run_id=run_id,
-        frozen_input=frozen_input,
-        human=HumanDecision(
-            decision=RowReviewDecision(decision),
-            modified_score=mod_val,
-            reviewer="local",
-            reviewed_at=datetime.now().isoformat(timespec="seconds"),
-        ),
-    )
-
-
 # --- queue_page helpers -------------------------------------------------------
-
-
-def _load_prior_decisions(
-    project: str, stage_id: str, fingerprints: QueueFingerprints | None
-) -> dict[str, dict[str, Any]]:
-    """Prior reviewer decisions for this queue stage, keyed by the
-    input_fingerprint they were recorded against, read from the stage-result
-    cache and scoped to the sidecar's own stage_fingerprint — so an edited
-    stage definition (a different fingerprint) never surfaces another
-    version's decisions. No sidecar means no stage_fingerprint to scope by,
-    so no prior decisions are looked up."""
-    if fingerprints is None:
-        return {}
-    entries = StageCacheEntry.for_mode(RunMode.PRODUCTION).find_entries(
-        project, stage_id, fingerprints.stage_fingerprint
-    )
-    return {
-        entry.input_fingerprint: {
-            "decision": entry.human.decision,
-            "modified_score": entry.human.modified_score,
-            "reviewer": entry.human.reviewer,
-            "reviewed_at": entry.human.reviewed_at,
-        }
-        for entry in entries
-    }
 
 
 def _load_scored_stage(stages: list[Stage], stage_def: Stage) -> Stage | None:
@@ -294,7 +230,7 @@ def _render_model_prompt(model_input: dict[str, Any] | None, prompt_template: st
 def _build_review_item(
     row: pd.Series,
     input_fingerprint: str,
-    decision_by_fingerprint: dict[str, dict[str, Any]],
+    decision_by_fingerprint: dict[str, PriorDecision],
     input_lookup: dict[tuple[str, ...], dict[str, Any]],
     join_keys: list[str],
     prompt_template: str | None,
@@ -312,7 +248,7 @@ def _build_review_item(
 def _build_review_items(
     snapshot: pd.DataFrame | None,
     fingerprints: QueueFingerprints | None,
-    decision_by_fingerprint: dict[str, dict[str, Any]],
+    decision_by_fingerprint: dict[str, PriorDecision],
     input_lookup: dict[tuple[str, ...], dict[str, Any]],
     join_keys: list[str],
     prompt_template: str | None,
