@@ -11,15 +11,14 @@ same cache entry, whether the run that first recorded it is long gone.
 `SCOPE = PersistenceScope.PROJECT_READ_WRITE` (see app.core.persistence.PersistenceScope):
 the one deliberate channel that lets run activity write something that outlives
 the run. `for_mode` is the view that grants or withholds that write: a
-production run gets `StageCache` (read + write); a non-production run — an
-eval or a smoke run *(planned)* — gets `ReadOnlyStageCache`, which structurally
-has no `put` method, so the capability is simply absent rather than gated by a
-flag or an exception.
+`RunMode.PRODUCTION` run gets `StageCache` (read + write); a
+`RunMode.NON_PRODUCTION` run — an eval or a smoke run *(planned)* — gets
+`ReadOnlyStageCache`, which structurally has no `put` method, so the capability
+is simply absent rather than gated by a flag or an exception.
 """
 from __future__ import annotations
 
 from collections.abc import Mapping
-from enum import Enum
 from typing import ClassVar, Literal, overload
 import json
 import math
@@ -28,17 +27,9 @@ import pandas as pd
 from pydantic import BaseModel, ConfigDict
 
 from app.core.persistence import JsonDict, PersistedModel, PersistenceScope
+from app.core.run_status import RunMode
 from app.core.utils import compute_short_hash
 from app.models import RowReviewDecision
-
-
-class CacheMode(str, Enum):
-    """Which accessor `StageCacheEntry.for_mode` grants: PRODUCTION gets
-    read+write (StageCache), NON_PRODUCTION gets read-only (ReadOnlyStageCache).
-    Both an eval run and a smoke run are NON_PRODUCTION consumers *(planned)*:
-    neither may write a cache entry outliving its own run."""
-    PRODUCTION = "production"
-    NON_PRODUCTION = "non_production"
 
 
 class HumanDecision(BaseModel):
@@ -81,16 +72,16 @@ class StageCacheEntry(PersistedModel):
 
     @overload
     @classmethod
-    def for_mode(cls, mode: Literal[CacheMode.PRODUCTION]) -> "StageCache": ...
+    def for_mode(cls, mode: Literal[RunMode.PRODUCTION]) -> "StageCache": ...
     @overload
     @classmethod
-    def for_mode(cls, mode: Literal[CacheMode.NON_PRODUCTION]) -> "ReadOnlyStageCache": ...
+    def for_mode(cls, mode: Literal[RunMode.NON_PRODUCTION]) -> "ReadOnlyStageCache": ...
     @classmethod
-    def for_mode(cls, mode: CacheMode) -> "StageCache | ReadOnlyStageCache":
+    def for_mode(cls, mode: RunMode) -> "StageCache | ReadOnlyStageCache":
         """The accessor `mode` is granted: `StageCache` (read+write) for
-        `CacheMode.PRODUCTION`, `ReadOnlyStageCache` (read only — no `put`) for
-        `CacheMode.NON_PRODUCTION`."""
-        if mode == CacheMode.PRODUCTION:
+        `RunMode.PRODUCTION`, `ReadOnlyStageCache` (read only — no `put`) for
+        `RunMode.NON_PRODUCTION`."""
+        if mode == RunMode.PRODUCTION:
             return StageCache()
         return ReadOnlyStageCache()
 
@@ -172,7 +163,7 @@ class ReadOnlyStageCache:
 
 class StageCache(ReadOnlyStageCache):
     """Read+write accessor over the stage-result cache — granted only to a
-    production run via `StageCacheEntry.for_mode(CacheMode.PRODUCTION)`."""
+    production run via `StageCacheEntry.for_mode(RunMode.PRODUCTION)`."""
 
     def put(self, entry: StageCacheEntry) -> None:
         expected_id = build_cache_id(
@@ -187,7 +178,6 @@ class StageCache(ReadOnlyStageCache):
 
 
 __all__ = [
-    "CacheMode",
     "HumanDecision",
     "StageCacheEntry",
     "build_cache_id",

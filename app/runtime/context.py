@@ -18,7 +18,8 @@ from pathlib import Path
 from typing import TypedDict
 
 from app.core.agent.usage import LlmUsage
-from app.services.stage_cache import CacheMode, ReadOnlyStageCache, StageCacheEntry
+from app.core.run_status import RunMode
+from app.services.stage_cache import ReadOnlyStageCache, StageCacheEntry
 
 from .llm import LlmBackendStatus
 
@@ -115,13 +116,13 @@ class RunContext:
     ) -> "RunContext":
         """A production run's context: full project scope — `identity`
         (`project`, `run_id`) and a read+write stage-result cache
-        (`StageCacheEntry.for_mode(CacheMode.PRODUCTION)`). `queue_stats`/
+        (`StageCacheEntry.for_mode(RunMode.PRODUCTION)`). `queue_stats`/
         `dropped_columns` default to fresh dicts (a new run); a resumed run
         passes in the prior run's values so telemetry survives the resume."""
         return cls(
             repo_root=repo_root, run_dir=run_dir,
             identity=RunIdentity(project=project, run_id=run_id),
-            stage_cache=StageCacheEntry.for_mode(CacheMode.PRODUCTION),
+            stage_cache=StageCacheEntry.for_mode(RunMode.PRODUCTION),
             limits=dict(limits or {}), offsets=dict(offsets or {}),
             queue_stats=dict(queue_stats or {}), dropped_columns=dict(dropped_columns or {}),
         )

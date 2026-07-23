@@ -12,10 +12,10 @@ import pandas as pd
 from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 
+from app.core.run_status import RunMode
 from app.models import RowReviewDecision, Stage
 from app.runtime.llm import render_prompt
 from app.services.stage_cache import (
-    CacheMode,
     HumanDecision,
     StageCacheEntry,
     build_cache_id,
@@ -99,7 +99,7 @@ async def queue_decide(
     entry = _build_cache_entry(
         project, stage_id, run_id, stage_fingerprint, input_fingerprint, row, decision, mod_val
     )
-    StageCacheEntry.for_mode(CacheMode.PRODUCTION).put(entry)
+    StageCacheEntry.for_mode(RunMode.PRODUCTION).put(entry)
 
     return JSONResponse({"ok": True, "input_fingerprint": input_fingerprint, "decision": decision})
 
@@ -188,7 +188,7 @@ def _load_prior_decisions(
     so no prior decisions are looked up."""
     if fingerprints is None:
         return {}
-    entries = StageCacheEntry.for_mode(CacheMode.PRODUCTION).find_entries(
+    entries = StageCacheEntry.for_mode(RunMode.PRODUCTION).find_entries(
         project, stage_id, fingerprints.stage_fingerprint
     )
     return {
