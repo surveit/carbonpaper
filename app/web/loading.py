@@ -44,35 +44,48 @@ def list_projects() -> list[dict[str, Any]]:
     (mirrors list_runs), so the count is real runs, never inflated."""
     if not EXAMPLES_DIR.exists():
         return []
-    out: list[dict[str, Any]] = []
+    cards: list[dict[str, Any]] = []
     for p in sorted(EXAMPLES_DIR.iterdir()):
         if not p.is_dir():
             continue
-        compiled_dir = p / "compiled"
-        schemas_dir = p / "schemas"
-        n_stages = len(list(compiled_dir.glob("*.json"))) if compiled_dir.is_dir() else 0
-        has_workflow = n_stages > 0
-        has_schemas = schemas_dir.is_dir() and any(schemas_dir.glob("*.json"))
-        n_schemas = len(load_schemas(p)) if has_schemas else 0
-        rdir = p / "runs"
-        n_runs = (
-            sum(1 for r in rdir.iterdir() if r.is_dir() and (r / "manifest.json").exists())
-            if rdir.is_dir() else 0
-        )
-        has_document = (p / "document.md").is_file() or (p / "project.json").is_file()
-        if not (has_workflow or has_schemas or has_document):
-            continue
-        out.append({
-            "name": p.name,
-            "has_document": has_document,
-            "has_workflow": has_workflow,
-            "has_schemas": has_schemas,
-            "is_ready": any(v.published for v in list_versions(p)),
-            "n_stages": n_stages,
-            "n_schemas": n_schemas,
-            "n_runs": n_runs,
-        })
-    return out
+        card = _build_project_card(p)
+        if card is not None:
+            cards.append(card)
+    return cards
+
+
+def _build_project_card(p: Path) -> dict[str, Any] | None:
+    """One project dir's dashboard card, or None if `p` carries none of the
+    creation markers (document/workflow/schemas) and so is not a project."""
+    compiled_dir = p / "compiled"
+    schemas_dir = p / "schemas"
+    n_stages = len(list(compiled_dir.glob("*.json"))) if compiled_dir.is_dir() else 0
+    has_workflow = n_stages > 0
+    has_schemas = schemas_dir.is_dir() and any(schemas_dir.glob("*.json"))
+    n_schemas = len(load_schemas(p)) if has_schemas else 0
+    n_runs = _count_runs_with_manifest(p / "runs")
+    has_document = (p / "document.md").is_file() or (p / "project.json").is_file()
+    if not (has_workflow or has_schemas or has_document):
+        return None
+    return {
+        "name": p.name,
+        "has_document": has_document,
+        "has_workflow": has_workflow,
+        "has_schemas": has_schemas,
+        "is_ready": any(v.published for v in list_versions(p)),
+        "n_stages": n_stages,
+        "n_schemas": n_schemas,
+        "n_runs": n_runs,
+    }
+
+
+def _count_runs_with_manifest(rdir: Path) -> int:
+    """Real runs only: a run dir counts iff it carries a manifest.json
+    (mirrors list_runs), so an in-progress or abandoned run dir is never
+    counted."""
+    if not rdir.is_dir():
+        return 0
+    return sum(1 for r in rdir.iterdir() if r.is_dir() and (r / "manifest.json").exists())
 
 
 @dataclass

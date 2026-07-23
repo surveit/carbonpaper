@@ -146,20 +146,45 @@ def build_schema_table_graph(schemas: list[dict[str, Any]]) -> str:
     names = {s.get("name") for s in schemas if s.get("name")}
 
     for s in schemas:
-        sid = s.get("name")
-        if not sid:
-            continue
-        klass = SCHEMA_KIND_CLASS.get(s.get("kind", ""), "custom")
-        title = (s.get("title") or "").strip().replace('"', "'")[:48]
-        label = f'"<b>{sid}</b>'
-        if title and title != sid:
-            label += f"<br/><span style='font-size:10px;color:#888'>{title}</span>"
-        label += '"'
-        lines.append(f"    {sid}[{label}]:::{klass}")
-        lines.append(f'    click {sid} call focusSchema("{sid}") "Open columns"')
+        lines.extend(_render_table_node_block(s))
+    lines.extend(_collect_table_fk_edges(schemas, names))
 
-    # FK edges: referenced schema --> the schema whose column carries the key.
-    # Same extraction as the ER view, deduped at table level.
+    # Same kind-fill palette as the workflow graph's classDefs, keyed through
+    # SCHEMA_KIND_CLASS so a node here matches the kind's .type-tag chip.
+    lines += [
+        "    classDef input fill:#e8f4f8,stroke:#3a8ca8,color:#000",
+        "    classDef aggregate fill:#f0f0e6,stroke:#888533,color:#000",
+        "    classDef python fill:#eef2f7,stroke:#4a5e85,color:#000",
+        "    classDef human fill:#fce8f4,stroke:#c0399a,color:#000",
+        "    classDef custom fill:#fde8e8,stroke:#cc3333,color:#000",
+    ]
+    return "\n".join(lines)
+
+
+def _render_table_node_block(s: dict[str, Any]) -> list[str]:
+    """One schema's flowchart node + click handler: name + title (dropped
+    when identical to the name), coloured by kind. [] for a nameless
+    schema."""
+    sid = s.get("name")
+    if not sid:
+        return []
+    klass = SCHEMA_KIND_CLASS.get(s.get("kind", ""), "custom")
+    title = (s.get("title") or "").strip().replace('"', "'")[:48]
+    label = f'"<b>{sid}</b>'
+    if title and title != sid:
+        label += f"<br/><span style='font-size:10px;color:#888'>{title}</span>"
+    label += '"'
+    return [
+        f"    {sid}[{label}]:::{klass}",
+        f'    click {sid} call focusSchema("{sid}") "Open columns"',
+    ]
+
+
+def _collect_table_fk_edges(schemas: list[dict[str, Any]], names: set[Any]) -> list[str]:
+    """One deduplicated table-level edge per referencing column: referenced
+    schema --> the schema whose column carries the key. Same extraction as
+    the ER view's `_collect_er_fk_edges`, drawn at table granularity."""
+    edges: list[str] = []
     seen_edges: set[str] = set()
     for s in schemas:
         sid = s.get("name")
@@ -173,18 +198,8 @@ def build_schema_table_graph(schemas: list[dict[str, Any]]) -> str:
             edge = f"    {target} --> {sid}"
             if edge not in seen_edges:
                 seen_edges.add(edge)
-                lines.append(edge)
-
-    # Same kind-fill palette as the workflow graph's classDefs, keyed through
-    # SCHEMA_KIND_CLASS so a node here matches the kind's .type-tag chip.
-    lines += [
-        "    classDef input fill:#e8f4f8,stroke:#3a8ca8,color:#000",
-        "    classDef aggregate fill:#f0f0e6,stroke:#888533,color:#000",
-        "    classDef python fill:#eef2f7,stroke:#4a5e85,color:#000",
-        "    classDef human fill:#fce8f4,stroke:#c0399a,color:#000",
-        "    classDef custom fill:#fde8e8,stroke:#cc3333,color:#000",
-    ]
-    return "\n".join(lines)
+                edges.append(edge)
+    return edges
 
 
 # Node-review BELIEF → stroke colour. Distinct from the type fill (classDef) and
@@ -249,65 +264,10 @@ def build_mermaid_graph(
     When both are given, run status takes precedence (a live run's colour wins
     over the standing belief). When both are None, behaves exactly as before.
     """
-    # Keyed by StageStatus but typed `dict[str, ...]`: status_by_id (below) carries
-    # plain strings read back off the JSON manifest, and a StrEnum member hashes/
-    # equals its bare string, so lookups by that plain string still hit.
-    status_glyph: dict[str, str] = {
-        StageStatus.OK: "✓",
-        StageStatus.RUNNING: "⟳",
-        StageStatus.VALIDATION_WARNINGS: "⚠",
-        StageStatus.ERROR: "✗",
-        StageStatus.AWAITING_REVIEW: "👤",
-        StageStatus.CANCELLED: "✖",
-        StageStatus.PENDING: "…",
-    }
-    status_stroke: dict[str, tuple[str, str]] = {
-        StageStatus.OK: ("#2a8a2a", "3px"),                 # complete → green
-        StageStatus.RUNNING: ("#e0a800", "3px"),            # in progress → yellow
-        StageStatus.VALIDATION_WARNINGS: ("#cc8a00", "3px"),
-        StageStatus.ERROR: ("#cc2a2a", "3px"),              # errored → red
-        StageStatus.AWAITING_REVIEW: ("#2a6ac8", "4px"),
-        StageStatus.CANCELLED: ("#8a8a8a", "3px"),          # cancelled → grey
-        StageStatus.PENDING: ("#cfcfcf", "1px"),
-    }
     nodes = [_node_view(s) for s in stages]
     lines = ["flowchart LR"]
     for n in nodes:
-        sid = n["id"]
-        name = n["name"]
-        stype = n["type"]
-        glyph = TYPE_GLYPH.get(stype, "")
-        klass = TYPE_CLASS.get(stype, "custom")
-        notes_indicator = "⚠ " if n["has_notes"] else ""
-        eval_indicator = "📊" if n["has_eval"] else ""
-        review_indicator = "👤" if n["has_review"] else ""
-        small_line = f"{stype}".replace("_", " ")
-        flags = " ".join(filter(None, [eval_indicator, review_indicator]))
-        status = (status_by_id or {}).get(sid)
-        status_prefix = f"{status_glyph.get(status, '')} " if status else ""
-        # Use HTML in mermaid label
-        label = (
-            f'"<b>{status_prefix}{notes_indicator}{glyph} {name}</b>'
-            f'<br/><span style=\'font-size:10px;color:#888\'>{small_line}</span>'
-            + (f"<br/><span style='font-size:11px'>{flags}</span>" if flags else "")
-            + '"'
-        )
-        lines.append(f"    {sid}[{label}]:::{klass}")
-        lines.append(
-            f'    click {sid} call loadStage("{sid}") "Open stage"'
-        )
-        # Stroke override: run status (if any) wins, else node-review belief.
-        # Colour = BELIEF/STATUS, layered over the type class's fill.
-        stroke_spec: tuple[str, str] | None = None
-        if status and status in status_stroke:
-            stroke_spec = status_stroke[status]
-        else:
-            belief = (review_by_id or {}).get(sid)
-            if belief and belief in REVIEW_STROKE:
-                stroke_spec = REVIEW_STROKE[belief]
-        if stroke_spec is not None:
-            stroke, width = stroke_spec
-            lines.append(f"    style {sid} stroke:{stroke},stroke-width:{width}")
+        lines.extend(_render_workflow_node_lines(n, status_by_id or {}, review_by_id or {}))
     for n in nodes:
         sid = n["id"]
         for upstream in n["input_ids"]:
@@ -323,3 +283,81 @@ def build_mermaid_graph(
         "    classDef custom fill:#fde8e8,stroke:#cc3333,color:#000",
     ]
     return "\n".join(lines)
+
+
+# Keyed by StageStatus but typed `dict[str, ...]`: status_by_id (below) carries
+# plain strings read back off the JSON manifest, and a StrEnum member hashes/
+# equals its bare string, so lookups by that plain string still hit.
+_STATUS_GLYPH: dict[str, str] = {
+    StageStatus.OK: "✓",
+    StageStatus.RUNNING: "⟳",
+    StageStatus.VALIDATION_WARNINGS: "⚠",
+    StageStatus.ERROR: "✗",
+    StageStatus.AWAITING_REVIEW: "👤",
+    StageStatus.CANCELLED: "✖",
+    StageStatus.PENDING: "…",
+}
+_STATUS_STROKE: dict[str, tuple[str, str]] = {
+    StageStatus.OK: ("#2a8a2a", "3px"),                 # complete → green
+    StageStatus.RUNNING: ("#e0a800", "3px"),            # in progress → yellow
+    StageStatus.VALIDATION_WARNINGS: ("#cc8a00", "3px"),
+    StageStatus.ERROR: ("#cc2a2a", "3px"),              # errored → red
+    StageStatus.AWAITING_REVIEW: ("#2a6ac8", "4px"),
+    StageStatus.CANCELLED: ("#8a8a8a", "3px"),          # cancelled → grey
+    StageStatus.PENDING: ("#cfcfcf", "1px"),
+}
+
+
+def _render_workflow_node_lines(
+    n: dict[str, Any], status_by_id: dict[str, str], review_by_id: dict[str, str]
+) -> list[str]:
+    """One node's flowchart declaration, click handler, and (if a run status
+    or node-review belief applies) a stroke-override `style` line."""
+    sid = n["id"]
+    stype = n["type"]
+    status = status_by_id.get(sid)
+    label = _build_workflow_node_label(n, status)
+    lines = [
+        f"    {sid}[{label}]:::{TYPE_CLASS.get(stype, 'custom')}",
+        f'    click {sid} call loadStage("{sid}") "Open stage"',
+    ]
+    stroke_line = _resolve_stroke_line(sid, status, review_by_id.get(sid))
+    if stroke_line is not None:
+        lines.append(stroke_line)
+    return lines
+
+
+def _build_workflow_node_label(n: dict[str, Any], status: str | None) -> str:
+    """The `"<b>...</b><br/>..."` HTML label for one node: status glyph
+    (if any), notes/type glyphs, name, small type-name subtitle, and an
+    eval/review flags line (only when at least one flag is set)."""
+    name = n["name"]
+    stype = n["type"]
+    glyph = TYPE_GLYPH.get(stype, "")
+    notes_indicator = "⚠ " if n["has_notes"] else ""
+    eval_indicator = "📊" if n["has_eval"] else ""
+    review_indicator = "👤" if n["has_review"] else ""
+    small_line = f"{stype}".replace("_", " ")
+    flags = " ".join(filter(None, [eval_indicator, review_indicator]))
+    status_prefix = f"{_STATUS_GLYPH.get(status, '')} " if status else ""
+    return (
+        f'"<b>{status_prefix}{notes_indicator}{glyph} {name}</b>'
+        f'<br/><span style=\'font-size:10px;color:#888\'>{small_line}</span>'
+        + (f"<br/><span style='font-size:11px'>{flags}</span>" if flags else "")
+        + '"'
+    )
+
+
+def _resolve_stroke_line(sid: str, status: str | None, belief: str | None) -> str | None:
+    """The `style {sid} stroke:...` override line, or None for the type
+    class's default stroke. Run status (if it carries a stroke) wins over
+    node-review belief."""
+    stroke_spec: tuple[str, str] | None = None
+    if status and status in _STATUS_STROKE:
+        stroke_spec = _STATUS_STROKE[status]
+    elif belief and belief in REVIEW_STROKE:
+        stroke_spec = REVIEW_STROKE[belief]
+    if stroke_spec is None:
+        return None
+    stroke, width = stroke_spec
+    return f"    style {sid} stroke:{stroke},stroke-width:{width}"

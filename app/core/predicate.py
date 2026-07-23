@@ -96,59 +96,83 @@ def _validate_node(node: ast.AST, expr: str) -> None:
     function call, arithmetic, subscripting, a comprehension, ...) is rejected
     by name by the final `else` rather than silently admitted."""
     if isinstance(node, ast.BoolOp):
-        if not isinstance(node.op, (ast.And, ast.Or)):
-            raise PredicateError(
-                f"filter is not valid: {expr!r} (boolean operator `{type(node.op).__name__}` is not supported)"
-            )
-        for value in node.values:
-            _validate_node(value, expr)
+        _validate_bool_op(node, expr)
     elif isinstance(node, ast.BinOp):
-        if not isinstance(node.op, (ast.BitAnd, ast.BitOr)):
-            raise PredicateError(
-                f"filter is not valid: {expr!r} (operator `{type(node.op).__name__}` is not supported; "
-                "only AND/OR combine sub-expressions)"
-            )
-        _validate_node(node.left, expr)
-        _validate_node(node.right, expr)
+        _validate_bin_op(node, expr)
     elif isinstance(node, ast.UnaryOp):
-        if not isinstance(node.op, ast.Not):
-            raise PredicateError(
-                f"filter is not valid: {expr!r} (unary operator `{type(node.op).__name__}` is not supported; "
-                "only NOT is)"
-            )
-        _validate_node(node.operand, expr)
+        _validate_unary_op(node, expr)
     elif isinstance(node, ast.Compare):
-        for op in node.ops:
-            if not isinstance(op, _COMPARE_OPS):
-                raise PredicateError(
-                    f"filter is not valid: {expr!r} (comparison `{type(op).__name__}` is not supported)"
-                )
-        _validate_node(node.left, expr)
-        for comparator in node.comparators:
-            _validate_node(comparator, expr)
+        _validate_compare(node, expr)
     elif isinstance(node, ast.Name):
-        if not isinstance(node.ctx, ast.Load):
-            raise PredicateError(
-                f"filter is not valid: {expr!r} (name `{node.id}` is not a plain read reference)"
-            )
+        _validate_name(node, expr)
     elif isinstance(node, ast.Constant):
         pass
     elif isinstance(node, ast.Attribute):
         _validate_node(node.value, expr)
     elif isinstance(node, ast.Call):
-        if not isinstance(node.func, ast.Attribute):
-            raise PredicateError(
-                f"filter is not valid: {expr!r} (a function call is not supported; only a method call on "
-                "a column, like col.isna() or col.str.contains(...), is)"
-            )
-        if node.keywords:
-            raise PredicateError(
-                f"filter is not valid: {expr!r} (keyword arguments in a method call are not supported)"
-            )
-        _validate_node(node.func, expr)
-        for arg in node.args:
-            _validate_node(arg, expr)
+        _validate_call(node, expr)
     else:
         raise PredicateError(
             f"filter is not valid: {expr!r} (`{type(node).__name__}` is not supported in a filter expression)"
         )
+
+
+def _validate_bool_op(node: ast.BoolOp, expr: str) -> None:
+    if not isinstance(node.op, (ast.And, ast.Or)):
+        raise PredicateError(
+            f"filter is not valid: {expr!r} (boolean operator `{type(node.op).__name__}` is not supported)"
+        )
+    for value in node.values:
+        _validate_node(value, expr)
+
+
+def _validate_bin_op(node: ast.BinOp, expr: str) -> None:
+    if not isinstance(node.op, (ast.BitAnd, ast.BitOr)):
+        raise PredicateError(
+            f"filter is not valid: {expr!r} (operator `{type(node.op).__name__}` is not supported; "
+            "only AND/OR combine sub-expressions)"
+        )
+    _validate_node(node.left, expr)
+    _validate_node(node.right, expr)
+
+
+def _validate_unary_op(node: ast.UnaryOp, expr: str) -> None:
+    if not isinstance(node.op, ast.Not):
+        raise PredicateError(
+            f"filter is not valid: {expr!r} (unary operator `{type(node.op).__name__}` is not supported; "
+            "only NOT is)"
+        )
+    _validate_node(node.operand, expr)
+
+
+def _validate_compare(node: ast.Compare, expr: str) -> None:
+    for op in node.ops:
+        if not isinstance(op, _COMPARE_OPS):
+            raise PredicateError(
+                f"filter is not valid: {expr!r} (comparison `{type(op).__name__}` is not supported)"
+            )
+    _validate_node(node.left, expr)
+    for comparator in node.comparators:
+        _validate_node(comparator, expr)
+
+
+def _validate_name(node: ast.Name, expr: str) -> None:
+    if not isinstance(node.ctx, ast.Load):
+        raise PredicateError(
+            f"filter is not valid: {expr!r} (name `{node.id}` is not a plain read reference)"
+        )
+
+
+def _validate_call(node: ast.Call, expr: str) -> None:
+    if not isinstance(node.func, ast.Attribute):
+        raise PredicateError(
+            f"filter is not valid: {expr!r} (a function call is not supported; only a method call on "
+            "a column, like col.isna() or col.str.contains(...), is)"
+        )
+    if node.keywords:
+        raise PredicateError(
+            f"filter is not valid: {expr!r} (keyword arguments in a method call are not supported)"
+        )
+    _validate_node(node.func, expr)
+    for arg in node.args:
+        _validate_node(arg, expr)

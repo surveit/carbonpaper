@@ -57,6 +57,33 @@ def test_self_and_unresolved_references_draw_no_edge():
     assert "-->" not in src
 
 
+def test_title_identical_to_name_suppresses_the_subtitle_span():
+    schemas = [{"name": "a", "kind": "reference", "title": "a",
+                "columns": [{"name": "id", "type": "str"}]}]
+    src = build_schema_table_graph(schemas)
+    assert src.count("<b>a</b>") == 1
+    assert "<span" not in src
+
+
+def test_schema_with_no_name_draws_no_node():
+    schemas = [{"kind": "reference", "columns": [{"name": "id", "type": "str"}]}]
+    src = build_schema_table_graph(schemas)
+    assert src == "\n".join([
+        "flowchart LR",
+        "    classDef input fill:#e8f4f8,stroke:#3a8ca8,color:#000",
+        "    classDef aggregate fill:#f0f0e6,stroke:#888533,color:#000",
+        "    classDef python fill:#eef2f7,stroke:#4a5e85,color:#000",
+        "    classDef human fill:#fce8f4,stroke:#c0399a,color:#000",
+        "    classDef custom fill:#fde8e8,stroke:#cc3333,color:#000",
+    ])
+
+
+def test_unrecognized_kind_gets_the_custom_class():
+    schemas = [{"name": "a", "kind": "weird", "columns": [{"name": "id", "type": "str"}]}]
+    src = build_schema_table_graph(schemas)
+    assert ":::custom" in src
+
+
 def test_no_fabricated_edges_without_references():
     """A table that reads another without storing its key (e.g. a roll-up) gets
     no edge — the graph under-claims rather than inventing dataflow."""

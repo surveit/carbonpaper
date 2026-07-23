@@ -43,3 +43,20 @@ def test_arithmetic_rejected():
 def test_backtick_rejected():
     with pytest.raises(PredicateError):
         parse_predicate("`weird name` == 1")
+
+
+def test_unary_minus_rejected():
+    """Only NOT is an allowed unary operator; arithmetic negation is not."""
+    with pytest.raises(PredicateError):
+        parse_predicate("-score > 0")
+
+
+def test_is_comparison_rejected():
+    """Our dialect has no identity test — only Eq/NotEq/Lt/LtE/Gt/GtE."""
+    with pytest.raises(PredicateError):
+        parse_predicate("a is b")
+
+
+def test_method_call_with_keyword_argument_rejected():
+    with pytest.raises(PredicateError):
+        parse_predicate("claim_id.str.contains('x', regex=True)")
