@@ -66,7 +66,7 @@ class StageTestResult:
     message: str | None = None
 
 
-# ─── Typed run report (JSON-serialisable; the MCP run_tests tool returns this) ─
+# ─── Typed run report (JSON-serialisable; the MCP run_stage_tests tool returns this) ─
 # StageTestResult is one test's outcome; these models aggregate a run of them
 # into a report a caller (an authoring agent) reads. StageTestRun embeds the
 # StageTestResult dataclasses directly — Pydantic serialises them under

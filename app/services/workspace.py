@@ -16,7 +16,7 @@ from app.services.loader import load_compiled_dir, stage_to_spec_dict
 
 # The repository root — the base file connectors and table refs resolve relative
 # paths against. This module (app/services/workspace.py) is two parents below the
-# root. Owned here so the run seams (app.services.run / app.services.test_run)
+# root. Owned here so the run seams (app.services.run / app.services.workflow_test)
 # share ONE derivation of it instead of each re-deriving `parents[2]`; app.web
 # derives its own copy for the web layer's non-run uses.
 REPO_ROOT = Path(__file__).resolve().parents[2]

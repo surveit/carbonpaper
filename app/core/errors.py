@@ -64,17 +64,18 @@ class SubsetRunError(Exception):
     eval runner translate it into their own outcome, e.g. an `error` eval run.)"""
 
 
-class NoTestRunSourceError(Exception):
-    """A test run was requested on a workflow with no input_data stage to sample
-    from — there is no bound source to slice a preview off, so nothing can be
-    seeded and the frontier cannot run. Raised (loudly) rather than test-running
-    an empty injection that every downstream stage would then error on."""
+class NoWorkflowTestSourceError(Exception):
+    """A workflow test was requested on a workflow with no input_data stage to
+    sample from — there is no bound source to slice a preview off, so nothing can
+    be seeded and the frontier cannot run. Raised (loudly) rather than
+    workflow-testing an empty injection that every downstream stage would then
+    error on."""
 
 
-class NoTestRunVersionError(Exception):
-    """A test run was requested on a project with no stored workflow version to
-    sample against. Unlike a production run (which pins a PUBLISHED version), a
-    test run accepts any stored immutable version — but there must be at least
+class NoWorkflowTestVersionError(Exception):
+    """A workflow test was requested on a project with no stored workflow version
+    to sample against. Unlike a production run (which pins a PUBLISHED version), a
+    workflow test accepts any stored immutable version — but there must be at least
     one. Raised (loudly, naming the project) rather than falling back to the
     working copy or fabricating a version."""
 

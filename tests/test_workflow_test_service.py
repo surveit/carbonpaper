@@ -1,7 +1,7 @@
-"""Tests for the test-run seam (app/services/test_run.py): sample a published
-version's bound source, run the frontier (source-exclusive, publish-excluded)
-over the sample, and record a production-shape manifest under test_runs/ — never
-under runs/.
+"""Tests for the workflow-test seam (app/services/workflow_test.py): sample a
+published version's bound source, run the frontier (source-exclusive,
+publish-excluded) over the sample, and record a production-shape manifest under
+workflow_tests/ — never under runs/.
 
 Builds a tiny `demo` project pinned to a published version, no shipped data and
 no LLM: `classify` is a deterministic python_row_function, so the whole loop runs
@@ -13,10 +13,10 @@ import json
 import pandas as pd
 import pytest
 
-from app.core.errors import NoTestRunSourceError, NoTestRunVersionError
+from app.core.errors import NoWorkflowTestSourceError, NoWorkflowTestVersionError
 from app.models import Stage
 from app.services import workspace
-from app.services.test_run import start_test_run
+from app.services.workflow_test import run_workflow_test
 from app.services.versioning import WorkflowVersion
 
 
@@ -75,7 +75,7 @@ _QUEUE = {
 
 def _seed(demo, stage_dicts, *, version_id="v1", published=False, created_at="2026-07-10T00:00:00"):
     """Save a version for the `demo` project with `stage_dicts`. Unpublished by
-    default: a test run must work on an unpublished candidate."""
+    default: a workflow test must work on an unpublished candidate."""
     WorkflowVersion(
         id=f"{demo.name}/{version_id}", version_id=version_id, created_at=created_at,
         message="seed", reviewer="test", published=published,
@@ -86,7 +86,7 @@ def _seed(demo, stage_dicts, *, version_id="v1", published=False, created_at="20
 @pytest.fixture
 def demo(tmp_path, monkeypatch):
     """A `demo` project dir with a 4-row source file bound at an absolute path,
-    reachable by name through the workspace (pointed at tmp_path). The test-run
+    reachable by name through the workspace (pointed at tmp_path). The workflow-test
     service takes the project NAME `demo` and resolves it to this directory."""
     monkeypatch.setattr(workspace, "EXAMPLES_DIR", tmp_path)
     demo = tmp_path / "demo"
@@ -96,11 +96,11 @@ def demo(tmp_path, monkeypatch):
     return demo
 
 
-def test_test_run_runs_frontier_over_the_sample(demo):
+def test_workflow_test_runs_frontier_over_the_sample(demo):
     """The frontier (classify) runs over the injected sample; the result is ok,
     names the executed stage, and reports its output row count."""
     _seed(demo, [_load_stage(demo), _CLASSIFY])
-    result = start_test_run("demo")
+    result = run_workflow_test("demo")
     assert result["ok"] is True
     assert result["error"] is None
     assert result["version_id"] == "v1"
@@ -108,21 +108,22 @@ def test_test_run_runs_frontier_over_the_sample(demo):
     assert result["rows_out"] == 4
 
 
-def test_test_run_limit_and_offset_slice_the_sample(demo):
+def test_workflow_test_limit_and_offset_slice_the_sample(demo):
     """limit/offset page the source sample before the frontier runs; a 1:1
     transform carries the sliced count straight through to rows_out."""
     _seed(demo, [_load_stage(demo), _CLASSIFY])
-    result = start_test_run("demo", limit=2, offset=1)
+    result = run_workflow_test("demo", limit=2, offset=1)
     assert result["ok"] is True
     assert result["rows_out"] == 2
 
 
-def test_test_run_writes_production_shape_manifest_under_test_runs_not_runs(demo):
-    """The manifest lands under test_runs/<id>/, carries the production run-manifest
-    fields (project + workflow_version), and no runs/ dir is ever created."""
+def test_workflow_test_writes_production_shape_manifest_under_workflow_tests_not_runs(demo):
+    """The manifest lands under workflow_tests/<id>/, carries the production
+    run-manifest fields (project + workflow_version), and no runs/ dir is ever
+    created."""
     _seed(demo, [_load_stage(demo), _CLASSIFY])
-    result = start_test_run("demo")
-    manifest_path = demo / "test_runs" / result["test_run_id"] / "manifest.json"
+    result = run_workflow_test("demo")
+    manifest_path = demo / "workflow_tests" / result["workflow_test_id"] / "manifest.json"
     assert manifest_path.exists()
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     assert manifest["project"] == "demo"
@@ -131,36 +132,36 @@ def test_test_run_writes_production_shape_manifest_under_test_runs_not_runs(demo
     assert not (demo / "runs").exists()
 
 
-def test_test_run_excludes_publish_from_the_frontier(demo):
-    """A publish stage is never run by a test run — it is not in stages_run and
+def test_workflow_test_excludes_publish_from_the_frontier(demo):
+    """A publish stage is never run by a workflow test — it is not in stages_run and
     writes no artifacts."""
     _seed(demo, [_load_stage(demo), _CLASSIFY, _PUBLISH])
-    result = start_test_run("demo")
+    result = run_workflow_test("demo")
     assert result["ok"] is True
     assert "publish_report" not in result["stages_run"]
     assert result["stages_run"] == ["classify"]
 
 
-def test_test_run_reports_a_stage_error_as_failure(demo):
-    """A frontier stage that errors makes the test run fail: ok False, no
+def test_workflow_test_reports_a_stage_error_as_failure(demo):
+    """A frontier stage that errors makes the workflow test fail: ok False, no
     row count, and the error names the offending stage."""
     _seed(demo, [_load_stage(demo), _BOOM])
-    result = start_test_run("demo")
+    result = run_workflow_test("demo")
     assert result["ok"] is False
     assert result["rows_out"] is None
     assert "boom" in result["error"]
     manifest = json.loads(
-        (demo / "test_runs" / result["test_run_id"] / "manifest.json").read_text("utf-8"))
+        (demo / "workflow_tests" / result["workflow_test_id"] / "manifest.json").read_text("utf-8"))
     assert manifest["status"] == "errors"
 
 
-def test_test_run_auto_approves_a_queue_stage_in_memory(demo):
-    """A mid-frontier human_review_queue auto-approves on a test run: the subset
+def test_workflow_test_auto_approves_a_queue_stage_in_memory(demo):
+    """A mid-frontier human_review_queue auto-approves on a workflow test: the subset
     runs with queue_auto_approve, so every sampled row passes straight through
     (ok, real row count) and NOTHING is written under the project's queue or
     decisions storage — no reviewer, no halt, no disk state."""
     _seed(demo, [_load_stage(demo), _QUEUE])
-    result = start_test_run("demo")
+    result = run_workflow_test("demo")
     assert result["ok"] is True
     assert result["error"] is None
     assert result["stages_run"] == ["review"]
@@ -169,10 +170,10 @@ def test_test_run_auto_approves_a_queue_stage_in_memory(demo):
     # state — those dirs must not exist after the run.
     assert not (demo / "decisions").exists()
     assert not (demo / "queue").exists()
-    assert not (demo / "test_runs" / result["test_run_id"] / "queue").exists()
+    assert not (demo / "workflow_tests" / result["workflow_test_id"] / "queue").exists()
 
 
-def test_test_run_raises_when_no_source_stage(demo):
+def test_workflow_test_raises_when_no_source_stage(demo):
     """A workflow with no input_data stage has nothing to sample — raise loudly
     rather than run over an empty injection."""
     # A lone python_frame_function with no upstream input_data source: it
@@ -189,32 +190,32 @@ def test_test_run_raises_when_no_source_stage(demo):
         message="seed", reviewer="test", published=True,
         stages=[Stage.model_validate(standalone)],
     ).save()
-    with pytest.raises(NoTestRunSourceError):
-        start_test_run("demo")
+    with pytest.raises(NoWorkflowTestSourceError):
+        run_workflow_test("demo")
 
 
-def test_test_run_runs_an_explicit_unpublished_version(demo):
-    """A test run evaluates a candidate BEFORE it is published, so an explicit
+def test_workflow_test_runs_an_explicit_unpublished_version(demo):
+    """A workflow test evaluates a candidate BEFORE it is published, so an explicit
     unpublished version_id runs (unlike a production run, which requires publish)."""
     _seed(demo, [_load_stage(demo), _CLASSIFY], version_id="v1", published=False)
-    result = start_test_run("demo", version_id="v1")
+    result = run_workflow_test("demo", version_id="v1")
     assert result["ok"] is True
     assert result["version_id"] == "v1"
 
 
-def test_test_run_default_picks_newest_version_even_when_unpublished(demo):
+def test_workflow_test_default_picks_newest_version_even_when_unpublished(demo):
     """version_id=None resolves to the newest stored version regardless of publish
     state — a newer unpublished draft wins over an older published version."""
     _seed(demo, [_load_stage(demo), _CLASSIFY],
           version_id="20260101T000000", published=True, created_at="2026-01-01T00:00:00")
     _seed(demo, [_load_stage(demo), _CLASSIFY],
           version_id="20260201T000000", published=False, created_at="2026-02-01T00:00:00")
-    result = start_test_run("demo")
+    result = run_workflow_test("demo")
     assert result["version_id"] == "20260201T000000"
 
 
-def test_test_run_raises_when_no_versions_exist(demo):
+def test_workflow_test_raises_when_no_versions_exist(demo):
     """A project with no stored version has nothing to run — raise loudly,
     naming the project, rather than falling back to the working copy."""
-    with pytest.raises(NoTestRunVersionError, match="demo"):
-        start_test_run("demo")
+    with pytest.raises(NoWorkflowTestVersionError, match="demo"):
+        run_workflow_test("demo")

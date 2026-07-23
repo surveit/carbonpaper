@@ -19,8 +19,8 @@ from starlette.types import Receive, Scope, Send
 
 from app.core.errors import (
     MissingInputBindingError,
-    NoTestRunVersionError,
     NoVersionToRunError,
+    NoWorkflowTestVersionError,
     RunNotFoundError,
 )
 from app.runtime.stage_tests import WorkflowTestReport, run_workflow_tests
@@ -29,11 +29,11 @@ from app.services import generation
 from app.services import loader
 from app.services import project as project_service
 from app.services import run as run_service
-from app.services import test_run as test_run_service
+from app.services import workflow_test as workflow_test_service
 from app.services import workspace
 from app.services.errors import WorkflowLoadError
 
-# Domain failures a run/test-run tool turns into {ok: False, error: str(exc)} — a
+# Domain failures a run/workflow-test tool turns into {ok: False, error: str(exc)} — a
 # loud, honest verdict rather than a traceback or a fabricated run id/status.
 # Anything outside this set propagates as a genuine internal fault.
 _RUN_TOOL_ERRORS = (
@@ -41,7 +41,7 @@ _RUN_TOOL_ERRORS = (
     MissingInputBindingError,
     WorkflowLoadError,
     RunNotFoundError,
-    NoTestRunVersionError,
+    NoWorkflowTestVersionError,
     ValueError,
 )
 
@@ -56,9 +56,9 @@ human-only and happens in the web UI, never through these tools.
 Once a workflow exists, derive and run per-stage tests:
 generate_stage_tests(project_id, stage_id) derives one python-transform stage's
 tests from the methodology (background; read_stage to see them once done), and
-run_tests(project_id, stage_id?) runs the authored tests against the stage's
+run_stage_tests(project_id, stage_id?) runs the authored tests against the stage's
 current code — omit stage_id to run every python-transform stage, or pass one to
-scope it. Loop edit_stage → run_tests until a stage's tests pass."""
+scope it. Loop edit_stage → run_stage_tests until a stage's tests pass."""
 
 mcp = FastMCP(
     name="glassbox",
@@ -207,7 +207,7 @@ async def generate_stage_tests(project_id: str, stage_id: str) -> dict[str, Any]
 
 
 @mcp.tool()
-def run_tests(project_id: str, stage_id: str | None = None) -> dict[str, Any]:
+def run_stage_tests(project_id: str, stage_id: str | None = None) -> dict[str, Any]:
     """Run a stage's authored tests against its CURRENT code and report the
     result. Omit `stage_id` to run every python-transform stage that has tests,
     or pass one to scope the run to that stage. Use this after regenerating code
@@ -305,22 +305,22 @@ def get_run_status(project_id: str, run_id: str) -> dict[str, Any]:
 
 
 @mcp.tool()
-def test_run(
+def run_workflow_test(
     project_id: str, version_id: str | None = None, limit: int = 20, offset: int = 0,
 ) -> dict[str, Any]:
-    """Run a NON-production test run: sample the first `limit` rows (from
+    """Run a NON-production workflow test: sample the first `limit` rows (from
     `offset`) of the workflow's bound source and run the frontier over just that
     sample, so an author can watch the pipeline execute on real data before
     publishing. It is NOT a run of record — it writes only under the project's
-    separate test_runs/ dir, produces no published artifacts, and carries no
+    separate workflow_tests/ dir, produces no published artifacts, and carries no
     cross-run state. Accepts any stored version, published or not (omit
     `version_id` for the newest). Returns the verdict
-    {ok, test_run_id, version_id, stages_run, rows_out, error}: `ok` False on any
-    stage error, with `error` naming what failed and `rows_out` None (never a
+    {ok, workflow_test_id, version_id, stages_run, rows_out, error}: `ok` False on
+    any stage error, with `error` naming what failed and `rows_out` None (never a
     fabricated count). A project with no stored version is a loud error."""
     _resolve_existing_project(project_id)  # loud if the project doesn't exist
     try:
-        return test_run_service.start_test_run(
+        return workflow_test_service.run_workflow_test(
             project_id, version_id=version_id, limit=limit, offset=offset)
     except _RUN_TOOL_ERRORS as exc:
         return {"ok": False, "error": str(exc)}
