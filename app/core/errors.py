@@ -122,6 +122,11 @@ class RunNotFoundError(Exception):
     manifest for a run that never happened."""
 
 
+class ReviewValidationError(ValueError):
+    """A submitted review verdict is invalid (unknown verdict, or `modify`
+    without a numeric score)."""
+
+
 class PredicateError(ValueError):
     """A `where`/`filter` expression (aggregate.where, human_review_queue.filter)
     falls outside the closed grammar `app.core.predicate.parse_predicate`
