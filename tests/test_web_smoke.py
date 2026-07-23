@@ -204,3 +204,19 @@ def test_new_project_page_shows_mcp_connect():
     assert resp.status_code == 200
     assert "claude mcp add" in resp.text
     assert "glassbox" in resp.text
+
+
+def test_display_cell_serializes_datetimes():
+    """Queue/table cells can hold pd.Timestamp (e.g. a run's `timestamp` or
+    `reviewed_at` column); display_cell must hand the template something the
+    Jinja `tojson` filter can serialize, or the review-queue page 500s."""
+    import datetime as dt
+
+    import pandas as pd
+
+    assert loading.display_cell(pd.Timestamp("2026-07-23 10:00:00")) == "2026-07-23T10:00:00"
+    assert loading.display_cell(dt.datetime(2026, 7, 23, 10, 0)) == "2026-07-23T10:00:00"
+    assert loading.display_cell(dt.date(2026, 7, 23)) == "2026-07-23"
+    assert loading.display_cell(pd.NaT) == ""
+    # the whole row must round-trip through json, as the template's tojson does
+    json.dumps({"ts": loading.display_cell(pd.Timestamp.now())})
