@@ -29,7 +29,7 @@ import app.web.routers.runs as runs_router
 from app.main import app
 from app.services.project import create_project
 from app.services.versioning import list_versions
-from tests.test_journey_smoke import _point_examples_dir_at, assert_run_ok
+from test_journey_smoke import _point_examples_dir_at, assert_run_ok
 
 client = TestClient(app)
 
@@ -120,19 +120,20 @@ def _workflow_stages(source_path: str) -> list[dict]:
                     {"name": "about_money", "type": "bool", "nullable": True}],
         "primary_key": ["claim_id"],
     }
+    llm = {
+        "prompt_template": (
+            'Statement: "{text}"\n'
+            "Is this statement about money, payment, or revenue?"
+        ),
+        "max_retries": MAX_RETRIES,
+    }
+    assert llm["max_retries"] == MAX_RETRIES  # budget bound survives edits
     classify = {
         "id": "classify", "name": "Classify claims", "type": "llm_transform",
         "inputs": [{"id": "load", "schema": load_schema}],
         "output_schema": classified_schema,
-        "llm": {
-            "prompt_template": (
-                'Statement: "{text}"\n'
-                "Is this statement about money, payment, or revenue?"
-            ),
-            "max_retries": MAX_RETRIES,
-        },
+        "llm": llm,
     }
-    assert classify["llm"]["max_retries"] == MAX_RETRIES  # budget bound survives edits
     return [
         {
             "id": "load", "name": "Load claims", "type": "input_data",

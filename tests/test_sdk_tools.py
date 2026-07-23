@@ -93,11 +93,12 @@ def test_handler_surfaces_tool_error_not_fabricated_value(examples_root: Path) -
 def test_draft_round_trip_creates_an_unpublished_version(examples_root: Path) -> None:
     _server, _allowed, tools = _build("congresswatch")
     by_name = {t.name: t for t in tools}
+    connector = {"kind": "file"}
     stage = {
         "id": "load",
         "name": "Load rows",
         "type": "input_data",
-        "connector": {"kind": "file"},
+        "connector": connector,
     }
 
     created = _call(by_name["create_draft"], {"project_id": "congresswatch"})
@@ -131,7 +132,7 @@ def test_draft_round_trip_creates_an_unpublished_version(examples_root: Path) ->
     assert read_stage["id"] == stage["id"]
     assert read_stage["name"] == stage["name"]
     assert read_stage["type"] == stage["type"]
-    assert read_stage["connector"]["kind"] == stage["connector"]["kind"]
+    assert read_stage["connector"]["kind"] == connector["kind"]
 
     saved = _call(
         by_name["save_version"],

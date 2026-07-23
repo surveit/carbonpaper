@@ -15,12 +15,7 @@ import app.compiler.data_model as data_model
 import app.services.generation as generation
 from app.core.agent.store import SessionStore
 from app.core.agent.turns import TurnManager
-
-
-class _FakeLibrary:
-    """Stands in for a SchemaLibrary: _persist_schemas only reads `.schemas`."""
-
-    schemas: list[Any] = []
+from app.models.named_schemas import SchemaLibrary
 
 
 # ── the completion hook (_finish_data_model): persist the schemas, nothing more ──────
@@ -29,7 +24,7 @@ def test_finish_persists_schemas_on_success(tmp_path: Path):
     project_dir = tmp_path / "demo"
     project_dir.mkdir()
 
-    generation._finish_data_model(project_dir, _FakeLibrary())
+    generation._finish_data_model(project_dir, SchemaLibrary(schemas=[]))
 
     assert (project_dir / "schemas").exists()  # schemas persisted; the workflow is NOT auto-built
 
@@ -65,7 +60,7 @@ class _FakeAgent:
         class _Engine:
             async def stream_turn(self, prompt: str, *, message_history: Any, emit: Any, resume: Any):
                 emit({"kind": "text", "text": "authored"})
-                agent._answer = _FakeLibrary()  # the submit_answer tool would set this
+                agent._answer = SchemaLibrary(schemas=[])  # the submit_answer tool would set this
                 return [{"role": "assistant", "parts": [{"type": "text", "text": "authored"}]}], None
 
         return _Engine()

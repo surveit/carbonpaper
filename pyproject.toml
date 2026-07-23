@@ -14,12 +14,14 @@ select = ["E4", "E7", "E9", "F", "BLE"]
 
 [tool.mypy]
 python_version = "3.12"
-files = ["app", "tools"]
-mypy_path = "tests"
-# Colocated arch tests live under app/ (in _arch_tests/ folders) but import the
-# `arch` toolkit from tests/arch/. pytest.ini puts tests/ on sys.path via
-# `pythonpath = . tests`; this is the mypy mirror, so `from arch import ...`
-# resolves statically — and pulls the toolkit into the type-checked set.
+files = ["app", "tools", "tests"]
+# `tests` is checked directly (in `files`), which also puts its root on mypy's
+# module search path: the colocated arch tests under app/ (in _arch_tests/
+# folders) can `from arch import ...` because tests/arch/ is a package, and the
+# tests/ tree's top-level modules (test_*.py) resolve by basename — mirroring
+# pytest.ini's `pythonpath = . tests`. Listing `tests` in `mypy_path` as well
+# would make mypy see each file under two names (test_x AND tests.test_x) and
+# fail with "Source file found twice under different module names".
 # No blanket ignore_missing_imports: pandas-stubs and types-PyYAML are installed
 # via requirements-dev.txt, and the other deps ship their own types.
 

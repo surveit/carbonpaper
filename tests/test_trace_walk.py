@@ -7,7 +7,7 @@ import pytest
 
 from app.core.errors import RowOutOfRange, StageNotInRun
 from app.runtime.trace import trace_row
-from tests.test_trace_helpers import write_run
+from test_trace_helpers import write_run
 
 
 def _chain(tmp_path, second_type: str):
