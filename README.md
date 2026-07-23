@@ -1,4 +1,4 @@
-# prototype_one — reviewable AI workflows
+# glassbox — reviewable AI workflows
 
 Run data/OSINT pipelines as **workflows of typed, schema-validated stages** with
 human-review gates and fully persisted runs — testable and reviewable, not a black box.
