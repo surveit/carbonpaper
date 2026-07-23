@@ -78,6 +78,19 @@ def find_aggregate_output_issues(stage: "Stage") -> list[str]:
     return find_declared_vs_derived_issues(stage.id, "aggregate", stage.output_schema, derived)
 
 
+def fill_aggregate_output_columns(stage: "Stage") -> list[Column] | None:
+    """The fully-specified output columns this aggregate stage's own handle
+    would emit, for the auto-fill seam (app.models.stages.fill_output_schema)
+    to use when `stage` declares no output_schema at all. Thin adapter over
+    `derive_aggregate_output_columns`: unwraps `stage.aggregate` and the
+    single input's edge schema, the same way `find_aggregate_output_issues`
+    does for the check-a-declared-schema side. None unless every output
+    column is derivable."""
+    aggregate = stage.aggregate
+    assert aggregate is not None  # Stage._handle_for_type guarantees this for type="aggregate"
+    return derive_aggregate_output_columns(aggregate, stage.inputs[0].table_schema)
+
+
 def derive_aggregate_output_columns(
     aggregate: "AggregateConfig", edge: "TableSchema | None"
 ) -> list[Column] | None:

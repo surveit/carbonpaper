@@ -95,6 +95,19 @@ def _carry_column(
     return source.model_copy(update=update) if update else source.model_copy()
 
 
+def fill_join_output_columns(stage: "Stage") -> list[Column] | None:
+    """The fully-specified output columns this join stage's own handle would
+    emit, for the auto-fill seam (app.models.stages.fill_output_schema) to use
+    when `stage` declares no output_schema at all. Thin adapter over
+    `derive_join_output_columns`: unwraps `stage.join` and both inputs' edge
+    schemas, the same way `find_join_output_issues` does for the
+    check-a-declared-schema side. None unless every output column is
+    derivable."""
+    join = stage.join
+    assert join is not None  # Stage._handle_for_type guarantees this for type="join"
+    return derive_join_output_columns(join, stage.inputs[0].table_schema, stage.inputs[1].table_schema)
+
+
 def derive_join_output_columns(
     join: "JoinConfig", left: "TableSchema | None", right: "TableSchema | None"
 ) -> list[Column] | None:
