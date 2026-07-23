@@ -1,21 +1,21 @@
 """
-versioning.py â€” immutable, committable snapshots of a workflow.
+versioning.py — immutable, committable snapshots of a workflow.
 
 A "version" is a `WorkflowVersion` document in the store's "workflow_version" collection: a frozen
-copy of a project's authored artifacts â€” its compiled stages (typed, embedded
-verbatim) and its schemas/ data model (embedded raw) â€” taken at a point in time,
+copy of a project's authored artifacts — its compiled stages (typed, embedded
+verbatim) and its schemas/ data model (embedded raw) — taken at a point in time,
 plus who created it, why, its parent, and the approval coverage AT creation time.
 Runs are pinned to a version and read its embedded stages, so a run is
 reproducible against the exact workflow it executed, never "whatever the working
 copy happened to be".
 
-Each version's document id is `f"{project_dir.name}/{version_id}"` â€” project-scoped,
-like every other collection in the store â€” so listing or loading against a project
+Each version's document id is `f"{project_dir.name}/{version_id}"` — project-scoped,
+like every other collection in the store — so listing or loading against a project
 with no versions yet returns empty results rather than requiring any scaffolding to
 exist first. `version_id` uses the SAME timestamp scheme as run ids
 (datetime.now().strftime('%Y%m%dT%H%M%S')) so versions and runs sort and read
 consistently; it is the local "id" every caller of this module's public functions
-works with â€” never the composite store id.
+works with — never the composite store id.
 
 A version is born UNPUBLISHED (`published=False`): creating a snapshot and
 approving it for runs are separate acts. `publish_version` is the only way a
@@ -26,7 +26,7 @@ unpublished, the same as the field's default.
 
 `create_version_from_stages` is the ONE place a WorkflowVersion is written:
 it strict-parses the given stage dicts, embeds the project's current schemas,
-freezes approval coverage, and saves â€” nothing is written on a validation
+freezes approval coverage, and saves — nothing is written on a validation
 failure. `create_version_from_disk` (snapshot the working copy) is a thin
 adapter over it: it strict-loads compiled/ into stage dicts and delegates.
 
@@ -58,7 +58,7 @@ from app.services.workspace import load_schemas
 
 
 def _no_coverage() -> Coverage:
-    # The zero-stage shape coverage_for itself returns for an empty stage list â€”
+    # The zero-stage shape coverage_for itself returns for an empty stage list —
     # a WorkflowVersion constructed without an explicit `coverage=` (every
     # in-repo case is a test seeding a version directly) is born carrying it.
     return Coverage(approved=0, rejected=0, edited_stale=0, unreviewed=0,
@@ -72,12 +72,12 @@ class WorkflowVersion(PersistedModel):
     works with. `stages` and `schemas` are the frozen artifacts; `coverage` is
     approval coverage computed against `stages` at creation time. `published`
     (plus `published_at`/`published_by`) records the approval act that makes a
-    version runnable â€” see the module docstring."""
+    version runnable — see the module docstring."""
 
     collection: ClassVar[str] = "workflow_version"
     SCOPE: ClassVar[PersistenceScope] = PersistenceScope.PROJECT_READ
     # Dump the embedded stages in their canonical spec-dict shape (field aliases
-    # restored, unset optionals dropped) â€” the same convention stage_to_spec_dict
+    # restored, unset optionals dropped) — the same convention stage_to_spec_dict
     # uses, so a version's on-disk stage shape matches the working copy's.
     DUMP_OPTS: ClassVar[dict[str, Any]] = {"by_alias": True, "exclude_none": True}
 
@@ -103,7 +103,7 @@ def create_version_from_stages(
 ) -> WorkflowVersion:
     """The single write chokepoint for a WorkflowVersion: strict-parse `stages`
     (raw spec dicts) as a whole Workflow, embed the project's CURRENT schemas,
-    freeze approval coverage against the live node_decisions store, and save â€”
+    freeze approval coverage against the live node_decisions store, and save —
     born unpublished. Returns the saved WorkflowVersion.
 
     `stages` is parsed via app.models.workflow.parse_workflow, which raises
@@ -115,12 +115,12 @@ def create_version_from_stages(
     node_decisions store, so the recorded coverage is exactly what was believed
     about these specs at this instant. schemas/ is read via
     workspace.load_schemas, which returns [] when the project has no schema
-    library yet â€” a project with no data model still versions cleanly (the
+    library yet — a project with no data model still versions cleanly (the
     absence is truthful, not an error).
 
     version_id has 1-second resolution; two versions minted within the same
     wall-clock second for the same project collide on doc id, and the second
-    save simply overwrites the first â€” an accepted same-second clobber, not
+    save simply overwrites the first — an accepted same-second clobber, not
     guarded against."""
     project_dir = Path(project_dir)
     workflow = parse_workflow(stages)
@@ -162,7 +162,7 @@ def create_version_from_disk(
     document. Returns the saved WorkflowVersion. A thin adapter over create_version_from_stages:
     the working copy is strict-loaded first, through the same loader the
     runner uses (WorkflowLoadError, saving nothing, if it is not a valid
-    workflow), then handed to create_version_from_stages as spec dicts â€” the
+    workflow), then handed to create_version_from_stages as spec dicts — the
     single write chokepoint."""
     project_dir = Path(project_dir)
     compiled_src = project_dir / "compiled"
@@ -173,7 +173,7 @@ def create_version_from_disk(
 
     # Validate BEFORE writing anything: a version is, by invariant, a loadable
     # workflow. On failure load_workflow raises WorkflowLoadError and we save
-    # nothing â€” an invalid workflow can never be immortalised as a version. (The
+    # nothing — an invalid workflow can never be immortalised as a version. (The
     # run-path strict load then only guards on-read corruption of an
     # already-valid snapshot.)
     stages = load_workflow(project_dir)
@@ -188,7 +188,7 @@ def create_version_from_disk(
 
 def publish_version(project_dir: Path, version_id: str, *, reviewer: str) -> WorkflowVersion:
     """Mark a version published: the metadata-only act that makes it eligible to
-    run (see app.runtime.runner.resolve_version_id). Idempotent â€” publishing an
+    run (see app.runtime.runner.resolve_version_id). Idempotent — publishing an
     already-published version returns it unchanged, keeping the FIRST
     published_at/published_by rather than overwriting them with the second
     caller's. Fails loudly (FileNotFoundError) if no such version is stored, or
@@ -211,7 +211,7 @@ def publish_version(project_dir: Path, version_id: str, *, reviewer: str) -> Wor
 
 
 def _invalid_version_document(doc_id: str, exc: ValidationError) -> WorkflowLoadError:
-    """A stored version document no longer validates â€” store corruption, or a
+    """A stored version document no longer validates — store corruption, or a
     version written under older model rules (e.g. a repo-relative path from
     before absolute paths were enforced). One error type meaning "this workflow
     doesn't validate", raised LOUDLY wherever the document is read: never a
@@ -223,7 +223,7 @@ def _invalid_version_document(doc_id: str, exc: ValidationError) -> WorkflowLoad
 def list_versions(project_dir: Path) -> list[WorkflowVersion]:
     """All versions for a project, NEWEST-FIRST. A stored document that fails
     the WorkflowVersion contract raises WorkflowLoadError (see
-    _invalid_version_document) â€” the whole listing fails rather than quietly
+    _invalid_version_document) — the whole listing fails rather than quietly
     presenting a store with an invalid document in it as healthy. No versions
     stored yet -> []."""
     name = Path(project_dir).name
@@ -254,7 +254,7 @@ def load_version(project_dir: Path, version_id: str) -> WorkflowVersion:
 
 
 def load_version_stages(project_dir: Path, version_id: str) -> list[Stage]:
-    """This version's frozen stages, as typed Stage objects â€” already valid
+    """This version's frozen stages, as typed Stage objects — already valid
     (embedded from a strict load at creation time), so WorkflowVersion.load's pydantic
     validation is the on-read integrity check and no re-load through the
     working-copy loader is needed. Fails loudly if the version is missing rather

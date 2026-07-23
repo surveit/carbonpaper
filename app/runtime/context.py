@@ -104,15 +104,20 @@ class RunContext:
         run_id: str,
         limits: dict[str, int] | None = None,
         offsets: dict[str, int] | None = None,
+        queue_stats: dict[str, QueueStats] | None = None,
+        dropped_columns: dict[str, list[str]] | None = None,
     ) -> "RunContext":
         """A production run's context: full project scope — `identity`
         (`project`, `run_id`) and a read+write stage-result cache
-        (`StageCacheEntry.for_mode(CacheMode.PRODUCTION)`)."""
+        (`StageCacheEntry.for_mode(CacheMode.PRODUCTION)`). `queue_stats`/
+        `dropped_columns` default to fresh dicts (a new run); a resumed run
+        passes in the prior run's values so telemetry survives the resume."""
         return cls(
             repo_root=repo_root, run_dir=run_dir,
             identity=RunIdentity(project=project, run_id=run_id),
             stage_cache=StageCacheEntry.for_mode(CacheMode.PRODUCTION),
             limits=dict(limits or {}), offsets=dict(offsets or {}),
+            queue_stats=dict(queue_stats or {}), dropped_columns=dict(dropped_columns or {}),
         )
 
     @classmethod

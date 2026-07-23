@@ -6,7 +6,6 @@ strict about the fields declared here.
 """
 from __future__ import annotations
 
-import hashlib
 import json
 import re
 from enum import Enum
@@ -25,7 +24,7 @@ from app.models.schema import (
 from app.models.stages.code import validate_inline_function_code
 from app.models.stages.stage_tests import StageTest, validate_stage_tests
 from app.core.prompt_template import find_template_fields
-from app.core.utils import format_errors
+from app.core.utils import compute_short_hash, format_errors
 
 # ── Enumerated vocabularies ──────────────────────────────────────────────────
 class StageType(str, Enum):
@@ -456,7 +455,7 @@ class Stage(_Base):
         )
         canonical = {"type": self.type, "handle": handle_dump, "output_schema": output_dump}
         payload = json.dumps(canonical, sort_keys=True, separators=(",", ":"), default=str)
-        return hashlib.sha1(payload.encode("utf-8")).hexdigest()[:16]
+        return compute_short_hash(payload)
 
     @field_validator("id")
     @classmethod

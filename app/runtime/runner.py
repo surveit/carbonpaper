@@ -349,9 +349,9 @@ def resume_run(project_dir: Path, run_id: str, repo_root: Path) -> dict[str, Any
         # a halt honor the same limits/offsets the run started with.
         limits=manifest.get("limit_overrides") or {},
         offsets=manifest.get("offset_overrides") or {},
+        queue_stats=manifest.get("queue_stats", {}),
+        dropped_columns=manifest.get("dropped_columns", {}),
     )
-    ctx.queue_stats = manifest.get("queue_stats", {})
-    ctx.dropped_columns = manifest.get("dropped_columns", {})
 
     manifest["resumed_at"] = datetime.now().isoformat(timespec="seconds")
     # Drop the halt marker the halted run left behind: the run is no longer
