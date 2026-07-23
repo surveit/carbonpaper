@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from app.models.schema import Column
 from app.models.stages.shared import (
     COLUMN_ISSUE,
     find_declared_vs_derived_issues,
@@ -77,7 +78,48 @@ def find_aggregate_output_issues(stage: "Stage") -> list[str]:
     return find_declared_vs_derived_issues(stage.id, "aggregate", stage.output_schema, derived)
 
 
+def derive_aggregate_output_columns(
+    aggregate: "AggregateConfig", edge: "TableSchema | None"
+) -> list[Column] | None:
+    """The fully-specified output columns the aggregate handle emits, or None
+    unless every one of them is derivable: each `group_by` entry carries its
+    edge `Column` verbatim (type, nullable, enum, range, prose all included);
+    each aggregation's output column is a fresh `Column` named after
+    `op.output_column`, always `nullable=True`, typed per
+    `_partial_aggregate_output_types`'s formula rules. None when a `group_by`
+    entry has no edge column to carry (including when `edge` itself is
+    absent), or any aggregation's type is unknowable."""
+    columns: list[Column] = []
+    for name in aggregate.group_by:
+        source = edge.column_for_name(name) if edge is not None else None
+        if source is None:
+            return None
+        columns.append(source.model_copy())
+
+    types = _partial_aggregate_output_types(aggregate, edge)
+    for op in aggregate.aggregations:
+        op_type = types[op.output_column]
+        if op_type is None:
+            return None
+        columns.append(Column(name=op.output_column, type=op_type, nullable=True))
+    return columns
+
+
 def derive_aggregate_output_types(
+    aggregate: "AggregateConfig", edge: "TableSchema | None"
+) -> dict[str, str | None]:
+    """The columns the aggregate handle emits, each mapped to its derived type
+    (None = unknowable). Wraps `derive_aggregate_output_columns`: when every
+    output column is fully derivable, its name/type pairs are the answer;
+    otherwise falls back to `_partial_aggregate_output_types`, which derives a
+    type by name alone wherever it can, even with a partly-unknown edge."""
+    columns = derive_aggregate_output_columns(aggregate, edge)
+    if columns is not None:
+        return {c.name: c.type for c in columns}
+    return _partial_aggregate_output_types(aggregate, edge)
+
+
+def _partial_aggregate_output_types(
     aggregate: "AggregateConfig", edge: "TableSchema | None"
 ) -> dict[str, str | None]:
     """The columns the aggregate handle emits, each mapped to its derived type
