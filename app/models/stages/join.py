@@ -102,7 +102,11 @@ def fill_join_output_columns(stage: "Stage") -> list[Column] | None:
     `derive_join_output_columns`: unwraps `stage.join` and both inputs' edge
     schemas, the same way `find_join_output_issues` does for the
     check-a-declared-schema side. None unless every output column is
-    derivable."""
+    derivable. Note a corner this fill doesn't correct for: a collapsed
+    same-name join key always carries the LEFT side's `nullable`, so under
+    a right/outer join a right-only row's key can be NaN at runtime even
+    though the filled column claims non-nullable — a warning, not a fill
+    failure."""
     join = stage.join
     assert join is not None  # Stage._handle_for_type guarantees this for type="join"
     return derive_join_output_columns(join, stage.inputs[0].table_schema, stage.inputs[1].table_schema)
@@ -120,8 +124,12 @@ def derive_join_output_columns(
     (renamed `<name>_r` on a right/left name collision), forced
     `nullable=True` when its own side can go unmatched under `join.type`
     (right columns under left/outer, left columns under right/outer). None
-    when either edge is absent, or `select` names a column the merge cannot
-    produce."""
+    when either edge is absent, `select` names a column the merge cannot
+    produce, or the merge's own name-collision handling still leaves two
+    output columns sharing a name (e.g. left already has both `x` and
+    `x_r`, and right's `x` is then suffixed into a second `x_r`) — the
+    TableSchema this feeds into rejects duplicate names outright, so that
+    case is "not derivable" here too."""
     if left is None or right is None:
         return None
     keys = join.keys or join.on or []
@@ -139,6 +147,10 @@ def derive_join_output_columns(
             continue
         new_name = column.name if column.name not in left_names else f"{column.name}_r"
         columns.append(_carry_column(column, new_name=new_name, force_nullable=right_optional))
+
+    names = [c.name for c in columns]
+    if len(names) != len(set(names)):
+        return None
 
     if not join.select:
         return columns

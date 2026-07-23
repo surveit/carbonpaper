@@ -96,6 +96,47 @@ def test_write_methodology_leaves_unparseable_stage_untouched(tmp_path: Path):
     assert on_disk == broken
 
 
+def _aggregate_stage_duplicate_output_name() -> dict:
+    # AggregationOp.output_column ("company") collides with the group_by
+    # column of the same name — fully Stage-parseable, but its derived
+    # output columns would carry two Columns both named "company", which
+    # TableSchema's validator rejects. The fill must decline instead of
+    # raising and losing the whole write (regenerate_workflow deletes the
+    # existing compiled/ files before this runs).
+    return {
+        "id": "totals_dup", "name": "Totals dup", "type": "aggregate",
+        "inputs": [{"id": "facilities", "schema": {
+            "columns": [
+                {"name": "company", "type": "str", "nullable": False},
+                {"name": "amount", "type": "int", "nullable": False},
+            ],
+        }}],
+        "aggregate": {
+            "group_by": ["company"],
+            "aggregations": [
+                {"output_column": "company", "formula": "count"},
+            ],
+        },
+    }
+
+
+def test_write_methodology_survives_duplicate_name_stage(tmp_path: Path):
+    other = _join_stage_no_schema()
+    dup = _aggregate_stage_duplicate_output_name()
+    result = _result([other, dup])
+
+    write_methodology(result, tmp_path)
+
+    # The collision stage is written untouched (no output_schema filled in),
+    # and — crucially — the raise from TableSchema's duplicate-name check
+    # never propagates and abandons the rest of the write.
+    dup_data = json.loads((tmp_path / "compiled" / "02_totals_dup.json").read_text(encoding="utf-8"))
+    assert "output_schema" not in dup_data
+
+    join_data = json.loads((tmp_path / "compiled" / "01_enrich.json").read_text(encoding="utf-8"))
+    assert "output_schema" in join_data
+
+
 def test_create_version_does_not_fill(tmp_path: Path):
     facilities = {
         "id": "facilities", "name": "Facilities", "type": "input_data",

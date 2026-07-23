@@ -101,9 +101,13 @@ def derive_aggregate_output_columns(
     `op.output_column`, always `nullable=True`, typed per
     `_partial_aggregate_output_types`'s formula rules. None = not every output
     column is fully derivable: a `group_by` entry with no edge column to carry
-    (which an absent `edge` forces whenever `group_by` is non-empty) or any
-    aggregation whose type is unknowable. A bare `count` with no `group_by`
-    needs no value type either, so it derives even with `edge=None`."""
+    (which an absent `edge` forces whenever `group_by` is non-empty), any
+    aggregation whose type is unknowable, or an aggregation `output_column`
+    that collides with a `group_by` name -- TableSchema rejects duplicate
+    column names outright, so a collision counts as "not derivable" here
+    too, consistent with the all-or-nothing contract. A bare `count` with
+    no `group_by` needs no value type either, so it derives even with
+    `edge=None`."""
     columns: list[Column] = []
     for name in aggregate.group_by:
         source = edge.column_for_name(name) if edge is not None else None
@@ -112,7 +116,10 @@ def derive_aggregate_output_columns(
         columns.append(source.model_copy())
 
     types = _partial_aggregate_output_types(aggregate, edge)
+    group_by_names = set(aggregate.group_by)
     for op in aggregate.aggregations:
+        if op.output_column in group_by_names:
+            return None
         op_type = types[op.output_column]
         if op_type is None:
             return None

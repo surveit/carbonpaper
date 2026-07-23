@@ -127,6 +127,35 @@ def test_join_missing_edge_means_no_fill():
     assert derive_join_output_columns(join, _LEFT, None) is None
 
 
+def test_aggregate_duplicate_output_name_means_no_fill():
+    # op.output_column collides with a group_by name: the dict on the
+    # check side (find_aggregate_output_issues) would silently dedup this,
+    # but the fill side must decline rather than hand TableSchema two
+    # same-named Column objects (its validator rejects duplicates outright).
+    aggregate = AggregateConfig(
+        group_by=["company"],
+        aggregations=[AggregationOp(output_column="company", formula="count")],
+    )
+    assert derive_aggregate_output_columns(aggregate, _AGG_EDGE) is None
+
+
+def test_join_suffix_collision_means_no_fill():
+    # Left declares both "x" and its would-be suffixed name "x_r"; right also
+    # declares "x". The right "x" collides with left's own "x_r" and would
+    # produce two Column objects both named "x_r".
+    left = TableSchema(columns=[
+        Column(name="facility_id", type="str", nullable=False),
+        Column(name="x", type="str", nullable=False),
+        Column(name="x_r", type="str", nullable=False),
+    ])
+    right = TableSchema(columns=[
+        Column(name="facility_id", type="str", nullable=False),
+        Column(name="x", type="int", nullable=False),
+    ])
+    join = JoinConfig(type="inner", keys=_KEYS)
+    assert derive_join_output_columns(join, left, right) is None
+
+
 def test_types_wrappers_agree_with_columns():
     aggregate = AggregateConfig(
         group_by=["company"],

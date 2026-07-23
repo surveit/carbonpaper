@@ -77,14 +77,16 @@ def _fill_stage_dict(spec: dict[str, Any]) -> dict[str, Any]:
     """`spec` itself, unless it strict-parses as a Stage whose
     fill_output_schema (app.models.stages) derives an output_schema it
     lacks — in which case the filled stage's canonical spec dict
-    (stage_to_spec_dict). A spec that fails Stage parsing is returned
-    untouched: a draft may be invalid, and filling it is a bonus on an
-    already-valid stage, never a gate on writing the draft."""
+    (stage_to_spec_dict). A spec that fails Stage parsing, OR whose fill
+    derivation itself raises (e.g. a derived output would carry two
+    same-named columns, which TableSchema's own construction rejects), is
+    returned untouched: filling is a bonus on an already-valid stage, never
+    a gate on writing the draft."""
     try:
         stage = Stage.model_validate(spec)
+        filled = fill_output_schema(stage)
     except ValidationError:
         return spec
-    filled = fill_output_schema(stage)
     return stage_to_spec_dict(filled) if filled is not stage else spec
 
 
