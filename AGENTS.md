@@ -1,4 +1,4 @@
-# glassbox — reviewable AI workflows
+# carbonpaper — reviewable AI workflows
 
 **Workflows of typed, schema-validated stages** with human-review gates and persisted
 runs. Vocabulary (locked): **project** = the container
