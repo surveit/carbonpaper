@@ -23,7 +23,7 @@ from app.core.errors import (
     NoWorkflowTestVersionError,
     RunNotFoundError,
 )
-from app.runtime.stage_tests import WorkflowTestReport, run_workflow_tests
+from app.runtime import stage_tests
 from app.services import data_model as data_model_service
 from app.services import generation
 from app.services import loader
@@ -219,7 +219,7 @@ def run_stage_tests(project_id: str, stage_id: str | None = None) -> dict[str, A
     generate_stage_tests), never to bend the test to the code."""
     pdir = _resolve_existing_project(project_id)
     stages = loader.load_workflow(pdir)
-    report: WorkflowTestReport = run_workflow_tests(stages, stage_id)
+    report: stage_tests.StageTestsReport = stage_tests.run_stage_tests(stages, stage_id)
     return report.model_dump(mode="json")
 
 

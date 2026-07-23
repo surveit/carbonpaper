@@ -1,8 +1,8 @@
-"""run_workflow_tests: aggregate a workflow's stage tests into a typed report."""
+"""run_stage_tests: aggregate every stage's authored tests into a typed report."""
 import pytest
 
 from app.models import Stage
-from app.runtime.stage_tests import run_workflow_tests
+from app.runtime.stage_tests import run_stage_tests
 
 _IN_SCHEMA = {"columns": [{"name": "amount", "type": "float", "nullable": False}]}
 _OUT_SCHEMA = {"columns": [
@@ -65,7 +65,7 @@ def _workflow() -> list[Stage]:
 
 
 def test_all_stages_run_aggregates_counts():
-    report = run_workflow_tests(_workflow())
+    report = run_stage_tests(_workflow())
     # double (2 tests) + passthrough (1 test) run; untested has no tests, load is non-python.
     assert report.summary.stages_run == 2
     assert report.summary.tests_total == 3
@@ -75,19 +75,19 @@ def test_all_stages_run_aggregates_counts():
 
 
 def test_untested_python_stage_is_listed_not_run():
-    report = run_workflow_tests(_workflow())
+    report = run_stage_tests(_workflow())
     assert report.untested_python_stages == ["untested"]
 
 
 def test_single_stage_id_scopes_the_run():
-    report = run_workflow_tests(_workflow(), stage_id="double")
+    report = run_stage_tests(_workflow(), stage_id="double")
     assert [run.stage_id for run in report.stages] == ["double"]
     assert report.summary.tests_total == 2
     assert report.untested_python_stages == []
 
 
 def test_mismatch_surfaces_cell_diffs_in_outcome():
-    report = run_workflow_tests(_workflow(), stage_id="double")
+    report = run_stage_tests(_workflow(), stage_id="double")
     [run] = report.stages
     failing = next(o for o in run.results if o.name == "wrong")
     assert failing.status == "mismatch"
@@ -97,9 +97,9 @@ def test_mismatch_surfaces_cell_diffs_in_outcome():
 
 def test_unknown_stage_id_raises():
     with pytest.raises(ValueError, match="no stage 'nope'"):
-        run_workflow_tests(_workflow(), stage_id="nope")
+        run_stage_tests(_workflow(), stage_id="nope")
 
 
 def test_non_python_stage_id_raises():
     with pytest.raises(ValueError, match="does not carry runnable tests"):
-        run_workflow_tests(_workflow(), stage_id="load")
+        run_stage_tests(_workflow(), stage_id="load")

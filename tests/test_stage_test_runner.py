@@ -1,6 +1,6 @@
-"""run_stage_tests: execution through the real handlers + canonical comparison."""
+"""run_one_stage_tests: execution through the real handlers + canonical comparison."""
 from app.models import Stage
-from app.runtime.stage_tests import find_failing_stage_tests, run_stage_tests
+from app.runtime.stage_tests import find_failing_stage_tests, run_one_stage_tests
 
 _IN_SCHEMA = {"columns": [{"name": "amount", "type": "float", "nullable": False}]}
 _OUT_SCHEMA = {"columns": [
@@ -27,7 +27,7 @@ def test_matching_test_passes():
         "name": "doubles_two", "inputs": {"load": [{"amount": 2.0}]},
         "expected": [{"amount": 2.0, "doubled": 4.0}],
     }])
-    [result] = run_stage_tests(stage)
+    [result] = run_one_stage_tests(stage)
     assert result.status == "passed" and not result.diffs
 
 
@@ -36,7 +36,7 @@ def test_wrong_expected_value_is_mismatch_with_cell_diff():
         "name": "expects_wrong_value", "inputs": {"load": [{"amount": 2.0}]},
         "expected": [{"amount": 2.0, "doubled": 5.0}],
     }])
-    [result] = run_stage_tests(stage)
+    [result] = run_one_stage_tests(stage)
     assert result.status == "mismatch"
     [diff] = result.diffs
     assert diff.column == "doubled" and diff.expected == 5.0 and diff.actual == 4.0
@@ -48,7 +48,7 @@ def test_raising_function_is_error_with_exception_text():
         [{"name": "raises", "inputs": {"load": [{"amount": 1.0}]},
           "expected": [{"amount": 1.0, "doubled": 2.0}]}],
     )
-    [result] = run_stage_tests(stage)
+    [result] = run_one_stage_tests(stage)
     assert result.status == "error"
     assert "KeyError" in (result.message or "")
 
@@ -59,7 +59,7 @@ def test_test_violating_input_schema_is_malformed_not_code_bug():
         "name": "null_amount", "inputs": {"load": [{"amount": None}]},
         "expected": [{"amount": None, "doubled": None}],
     }])
-    [result] = run_stage_tests(stage)
+    [result] = run_one_stage_tests(stage)
     assert result.status == "malformed"
     assert "null" in (result.message or "").lower()
 
@@ -72,7 +72,7 @@ def test_nan_output_matches_expected_none():
         [{"name": "expects_none_gets_nan", "inputs": {"load": [{"amount": 1.0}]},
           "expected": [{"amount": 1.0, "doubled": None}]}],
     )
-    [result] = run_stage_tests(stage)
+    [result] = run_one_stage_tests(stage)
     assert result.status == "passed"
 
 
@@ -83,7 +83,7 @@ def test_nan_output_matches_expected_nan():
         [{"name": "expects_nan_gets_nan", "inputs": {"load": [{"amount": 1.0}]},
           "expected": [{"amount": 1.0, "doubled": float("nan")}]}],
     )
-    [result] = run_stage_tests(stage)
+    [result] = run_one_stage_tests(stage)
     assert result.status == "passed"
 
 
@@ -95,7 +95,7 @@ def test_present_value_does_not_match_absent_expected():
         [{"name": "expects_none_gets_value", "inputs": {"load": [{"amount": 1.0}]},
           "expected": [{"amount": 1.0, "doubled": None}]}],
     )
-    [result] = run_stage_tests(stage)
+    [result] = run_one_stage_tests(stage)
     assert result.status == "mismatch"
     [diff] = result.diffs
     assert diff.column == "doubled" and diff.actual == 4.0
@@ -107,7 +107,7 @@ def test_none_output_matches_expected_none():
         [{"name": "expects_none_gets_none", "inputs": {"load": [{"amount": 1.0}]},
           "expected": [{"amount": 1.0, "doubled": None}]}],
     )
-    [result] = run_stage_tests(stage)
+    [result] = run_one_stage_tests(stage)
     assert result.status == "passed"
 
 
@@ -131,7 +131,7 @@ def test_frame_function_output_order_does_not_matter():
           "inputs": {"load": [{"amount": 1.0}, {"amount": 2.0}]},
           "expected": [{"amount": 1.0}, {"amount": 2.0}]}],
     )
-    [result] = run_stage_tests(stage)
+    [result] = run_one_stage_tests(stage)
     assert result.status == "passed"
 
 
@@ -162,7 +162,7 @@ def test_omitted_column_in_expected_row_claims_none():
             "expected": [{"amount": 1.0, "label": "x"}, {"amount": 2.0}],
         }],
     })
-    [result] = run_stage_tests(stage)
+    [result] = run_one_stage_tests(stage)
     assert result.status == "passed"
 
 
@@ -171,7 +171,7 @@ def test_frame_function_empty_input_test_runs():
         "def transform(df):\n    return df\n",
         [{"name": "empty_in_empty_out", "inputs": {"load": []}, "expected": []}],
     )
-    [result] = run_stage_tests(stage)
+    [result] = run_one_stage_tests(stage)
     assert result.status == "passed"
 
 
@@ -182,7 +182,7 @@ def test_row_count_mismatch_reported():
           "inputs": {"load": [{"amount": 1.0}, {"amount": 2.0}]},
           "expected": [{"amount": 1.0}, {"amount": 2.0}]}],
     )
-    [result] = run_stage_tests(stage)
+    [result] = run_one_stage_tests(stage)
     assert result.status == "mismatch"
     assert "2 row(s)" in (result.message or "") and "1" in (result.message or "")
 
@@ -197,7 +197,7 @@ def test_frame_function_returning_none_is_error_not_crash():
           "inputs": {"load": [{"amount": 1.0}]},
           "expected": [{"amount": 1.0}]}],
     )
-    [result] = run_stage_tests(stage)
+    [result] = run_one_stage_tests(stage)
     assert result.status == "error"
     assert "NoneType" in (result.message or "")
 
@@ -209,7 +209,7 @@ def test_frame_function_returning_non_dataframe_is_error_not_crash():
           "inputs": {"load": [{"amount": 1.0}]},
           "expected": [{"amount": 1.0}]}],
     )
-    [result] = run_stage_tests(stage)
+    [result] = run_one_stage_tests(stage)
     assert result.status == "error"
     assert "dict" in (result.message or "")
 
@@ -254,7 +254,7 @@ def test_multi_input_frame_test_passes():
         },
         "expected": [{"id": "a", "amount": 1.0, "label": "widget"}],
     }])
-    [result] = run_stage_tests(stage)
+    [result] = run_one_stage_tests(stage)
     assert result.status == "passed" and not result.diffs
 
 
@@ -281,7 +281,7 @@ def test_multi_input_frame_positional_order_is_declared_order():
             "expected": [{"id": "from_left"}],
         }],
     })
-    [result] = run_stage_tests(stage)
+    [result] = run_one_stage_tests(stage)
     assert result.status == "passed" and not result.diffs
 
 
