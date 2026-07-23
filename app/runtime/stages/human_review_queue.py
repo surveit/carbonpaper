@@ -9,7 +9,7 @@ import pandas as pd
 import pyarrow.lib as pa_lib
 
 from app.core.predicate import parse_predicate
-from app.models import RowReviewDecision, Stage
+from app.models import Stage
 from app.services.stage_cache import ReadOnlyStageCache, StageCacheEntry, compute_row_fingerprint
 
 from ..context import QueueStats, RunContext
@@ -36,8 +36,11 @@ def handle_human_review_queue(stage: Stage, inputs: dict[str, pd.DataFrame], ctx
            `<stage>.fingerprints.json` sidecar naming the fingerprints.
     4. If ANY items lack decisions, raise HaltForReview so the runner can
        stop downstream execution and mark the run awaiting_review.
-    5. Otherwise return a dataframe with final_score populated (ai if
-       approved, human override if modified; rejected rows dropped).
+    5. Otherwise replace each decided row with its cached output row, dropping
+       any whose cached output is a tombstone (the row was dropped upstream of
+       this seam), and concat with the passthrough rows. The cached output is
+       built and interpreted above this handler (app.services.review); this
+       handler only replays it.
     """
     sid = stage.id
     queue_cfg = stage.queue
@@ -245,54 +248,20 @@ def _snapshot_pending_and_halt(
     )
 
 
-def _apply_review_decision(row: pd.Series, entry: StageCacheEntry) -> pd.Series:
-    """One decided row's human-reviewed score columns, derived from the
-    cached decision that matched it (never from a dataframe column — the
-    decision lives on `entry`, not on `row`)."""
-    ai = row.get("score")
-    decision = entry.human.decision
-    final: object
-    human: object
-    if decision == RowReviewDecision.modify:
-        final = entry.human.modified_score
-        human = entry.human.modified_score
-    elif decision == RowReviewDecision.reject:
-        final = pd.NA
-        human = pd.NA
-    else:  # approve
-        final = ai
-        human = ai
-    row["ai_score"] = ai
-    row["human_score"] = human
-    row["final_score"] = final
-    row["review_notes"] = f"decision={decision}"
-    row["reviewer_id"] = entry.human.reviewer
-    row["reviewed_at"] = entry.human.reviewed_at
-    row["decision"] = decision
-    return row
-
-
 def _apply_decided_rows(
     decided: pd.DataFrame,
     entries_by_fingerprint: dict[str, StageCacheEntry],
     input_fingerprints_by_index: pd.Series,
 ) -> pd.DataFrame:
-    """All items have decisions — apply them and drop rejected rows (final_score
-    is NA) from the output. `decided`'s rows and `input_fingerprints_by_index`
-    (reindexed to `decided`'s own index) stay in the same order, so zipping
-    them pairs each row with the cached entry that matched it."""
+    """All items have cached output — replace each decided row with its cached
+    output row, dropping rows whose cached output is a tombstone (`output_row
+    is None`). The entry carries the stage's output for that input; this
+    handler neither builds nor interprets it."""
     if not len(decided):
         return decided
-
-    matched_entries = [
-        entries_by_fingerprint[fp] for fp in input_fingerprints_by_index.loc[decided.index]
-    ]
-    applied = [
-        _apply_review_decision(row, entry)
-        for (_, row), entry in zip(decided.iterrows(), matched_entries)
-    ]
-    result = pd.DataFrame(applied)
-    return result[result["decision"] != RowReviewDecision.reject].copy()
+    matched = [entries_by_fingerprint[fp] for fp in input_fingerprints_by_index.loc[decided.index]]
+    kept = [entry.output_row for entry in matched if entry.output_row is not None]
+    return pd.DataFrame(kept)
 
 
 def _finalize_passthrough_rows(passthrough: pd.DataFrame) -> pd.DataFrame:

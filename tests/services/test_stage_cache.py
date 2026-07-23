@@ -5,12 +5,12 @@ from __future__ import annotations
 
 import pandas as pd
 import pytest
+from pydantic import ValidationError
 
-from app.core.persistence import PersistedModel
+from app.core.persistence import PersistedModel, get_store
 from app.core.run_status import RunMode
-from app.models import RowReviewDecision
 from app.services.stage_cache import (
-    HumanDecision,
+    CacheProvenance,
     ReadOnlyStageCache,
     StageCache,
     StageCacheEntry,
@@ -27,11 +27,11 @@ def _entry(**overrides):
         "input_fingerprint": "if1",
         "source_run_id": "run1",
         "frozen_input": {"id": "r1", "score": 0.4},
-        "human": HumanDecision(
-            decision=RowReviewDecision.approve,
-            modified_score=None,
-            reviewer="alice",
-            reviewed_at="2026-07-22T10:00:00",
+        "output_row": {"id": "r1", "score": 0.4, "final_score": 0.4},
+        "provenance": CacheProvenance(
+            author="alice",
+            recorded_at="2026-07-22T10:00:00",
+            note="approve",
         ),
     }
     fields.update(overrides)
@@ -72,11 +72,24 @@ def test_build_cache_id_joins_the_four_parts_with_slashes():
     assert build_cache_id("proj", "stage1", "sf123", "if456") == "proj/stage1/sf123/if456"
 
 
-# ── HumanDecision ─────────────────────────────────────────────────────────────
+# ── CacheProvenance ───────────────────────────────────────────────────────────
 
-def test_human_decision_config_mirrors_persisted_model():
+def test_cache_provenance_config_mirrors_persisted_model():
     for key in ("extra", "use_enum_values", "validate_default", "populate_by_name"):
-        assert HumanDecision.model_config.get(key) == PersistedModel.model_config.get(key)
+        assert CacheProvenance.model_config.get(key) == PersistedModel.model_config.get(key)
+
+
+# ── old-shape entries fail loudly on load ────────────────────────────────────
+
+def test_old_shape_entry_fails_loudly_on_load():
+    old = {"id": build_cache_id("p", "review", "sf", "if"), "project": "p", "stage_id": "review",
+           "stage_fingerprint": "sf", "input_fingerprint": "if", "source_run_id": "r",
+           "frozen_input": {"id": "a", "score": 1},
+           "human": {"decision": "approve", "modified_score": None, "reviewer": "local",
+                     "reviewed_at": "2026-07-01T00:00:00"}}
+    get_store().write("stage_cache", old["id"], old, schema_version=1)
+    with pytest.raises(ValidationError):
+        StageCacheEntry.load_or_none(old["id"])
 
 
 # ── StageCache / ReadOnlyStageCache ──────────────────────────────────────────
@@ -86,7 +99,7 @@ def test_stage_cache_put_then_get_roundtrips():
     cache.put(_entry())
     got = cache.get("proj", "review", "sf1", "if1")
     assert got is not None
-    assert got.human.reviewer == "alice"
+    assert got.provenance.author == "alice"
 
 
 def test_stage_cache_get_missing_returns_none():

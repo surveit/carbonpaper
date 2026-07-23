@@ -27,13 +27,8 @@ import app.web.loading as loading
 from app.main import app
 from app.runtime.runner import prepare_run, run_prepared
 from app.runtime.stages import llm_transform as lt
-from app.services import versioning
-from app.services.stage_cache import (
-    HumanDecision,
-    StageCache,
-    StageCacheEntry,
-    build_cache_id,
-)
+from app.services import review, versioning
+from app.services.stage_cache import StageCacheEntry, build_cache_id
 from app.services.versioning import create_version_from_disk
 from app.models import RowReviewDecision
 
@@ -135,19 +130,17 @@ def _put_cached_decision(
     stage_fingerprint: str, input_fingerprint: str, row: pd.Series,
     decision: RowReviewDecision, modified_score: float | None = None,
 ) -> None:
-    """Seed a prior decision directly through the cache seam (StageCache.put)
-    — never a raw store write, and never the HTTP endpoint (used by tests that
-    only care about queue_page's rendering of an already-cached decision)."""
-    entry = StageCacheEntry(
-        id=build_cache_id(project, stage_id, stage_fingerprint, input_fingerprint),
-        project=project, stage_id=stage_id,
+    """Seed a prior decision through the real review service (record_decision →
+    the production cache seam) — never a hand-assembled entry, a raw store
+    write, or the HTTP endpoint (used by tests that only care about
+    queue_page's rendering of an already-cached decision)."""
+    review.record_decision(
+        project=project, stage_id=stage_id, run_id=run_id,
         stage_fingerprint=stage_fingerprint, input_fingerprint=input_fingerprint,
-        source_run_id=run_id,
-        frozen_input={"id": row["id"], "quote": row["quote"], "score": int(row["score"])},
-        human=HumanDecision(decision=decision, modified_score=modified_score,
-                             reviewer="local", reviewed_at="2026-07-01T00:00:00"),
+        frozen_row={"id": row["id"], "quote": row["quote"], "score": int(row["score"])},
+        verdict=decision, modified_score=modified_score,
+        reviewer="local", reviewed_at="2026-07-01T00:00:00",
     )
-    StageCache().put(entry)
 
 
 # ── 1. Happy path: snapshot + prior decisions from the cache ────────────────
