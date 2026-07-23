@@ -71,6 +71,14 @@ class NoSmokeSourceError(Exception):
     an empty injection that every downstream stage would then error on."""
 
 
+class NoSmokeVersionError(Exception):
+    """A smoke run was requested on a project with no stored workflow version to
+    sample against. Unlike a production run (which pins a PUBLISHED version), a
+    smoke run accepts any stored immutable version — but there must be at least
+    one. Raised (loudly, naming the project) rather than falling back to the
+    working copy or fabricating a version."""
+
+
 class LLMError(Exception):
     """A live-LLM call failed, or no LLM backend is available."""
 

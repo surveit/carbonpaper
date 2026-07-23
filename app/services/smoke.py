@@ -25,7 +25,17 @@ subset ctx carries no project_dir (run-scoping — the decisions store is
 unreachable), so the queue handler raises on the missing key before it can reach
 its own HaltForReview, and run_subset surfaces that as a SubsetRunError. A smoke
 run reports it as a failure ({ok: False}) whose message names the queue stage. It
-never reads through the queue either way."""
+never reads through the queue either way.
+
+Version resolution divergence from production: a production run pins a PUBLISHED
+version only (app.runtime.runner.resolve_version_id) — publication is the human's
+sign-off that a version is fit to run for real. A smoke run resolves its own
+version and requires NO publication, because it is the tool the author uses to
+evaluate a candidate BEFORE deciding whether to publish: publishing is the
+outcome of the gate smoke feeds, so gating smoke on it would be circular (evals
+score unpublished versions for the same reason). Smoke still refuses to run
+against anything but a stored immutable version — never the working copy, never a
+fabricated one."""
 from __future__ import annotations
 
 import json
@@ -35,7 +45,7 @@ from typing import Any
 
 import pandas as pd
 
-from app.core.errors import NoSmokeSourceError, SubsetRunError
+from app.core.errors import NoSmokeSourceError, NoSmokeVersionError, SubsetRunError
 from app.models import Stage, StageType, Workflow
 from app.runtime.executor import (
     create_run_manifest,
@@ -44,8 +54,7 @@ from app.runtime.executor import (
     write_manifest,
 )
 from app.runtime.stages.input_data import read_input_data
-from app.services.run import resolve_version
-from app.services.versioning import load_version_stages
+from app.services.versioning import list_versions, load_version, load_version_stages
 
 
 def run_smoke(
@@ -64,10 +73,10 @@ def run_smoke(
     (the halt named in `error`); `rows_out` is the last executed stage's output
     row count when ok, else None (never a fabricated count).
 
-    Version resolution is the production run service's — a smoke run pins a
-    published version, same as a real run. Raises NoSmokeSourceError if the
-    workflow has no input_data stage to sample from."""
-    version = resolve_version(project_dir, version_id)
+    Version resolution accepts any stored version, published or not (see
+    _resolve_smoke_version and the module docstring). Raises NoSmokeSourceError if
+    the resolved workflow has no input_data stage to sample from."""
+    version = _resolve_smoke_version(project_dir, version_id)
     stages = load_version_stages(project_dir, version)
     # Sample the source(s) before building the Workflow, so a sourceless workflow
     # fails on the missing source rather than on downstream graph validation.
@@ -98,6 +107,23 @@ def run_smoke(
         "rows_out": _last_stage_row_count(frontier, outputs) if ok else None,
         "error": error,
     }
+
+
+def _resolve_smoke_version(project_dir: Path, version_id: str | None) -> str:
+    """The version a smoke run samples — any stored immutable version, published
+    or not (unlike a production run; see the module docstring). An explicit
+    `version_id` must name an EXISTING version (load_version raises loudly if
+    missing); None resolves to the newest stored version regardless of publish
+    state. Raises NoSmokeVersionError, naming the project, when None is given and
+    the project has no stored version — never the working copy, never fabricated."""
+    if version_id is not None:
+        load_version(project_dir, version_id)  # loud FileNotFoundError if missing
+        return version_id
+    versions = list_versions(project_dir)  # newest-first
+    if not versions:
+        raise NoSmokeVersionError(
+            f"project '{project_dir.name}' has no stored workflow version to smoke-run")
+    return versions[0].version_id
 
 
 def _run_frontier(

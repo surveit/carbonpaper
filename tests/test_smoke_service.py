@@ -13,7 +13,7 @@ import json
 import pandas as pd
 import pytest
 
-from app.core.errors import NoSmokeSourceError
+from app.core.errors import NoSmokeSourceError, NoSmokeVersionError
 from app.models import Stage
 from app.services.smoke import run_smoke
 from app.services.versioning import WorkflowVersion
@@ -72,11 +72,12 @@ _QUEUE = {
 }
 
 
-def _seed(demo, stage_dicts):
-    """Save a published version `v1` for the `demo` project with `stage_dicts`."""
+def _seed(demo, stage_dicts, *, version_id="v1", published=False, created_at="2026-07-10T00:00:00"):
+    """Save a version for the `demo` project with `stage_dicts`. Unpublished by
+    default: a smoke run must work on an unpublished candidate."""
     WorkflowVersion(
-        id=f"{demo.name}/v1", version_id="v1", created_at="2026-07-10T00:00:00",
-        message="seed", reviewer="test", published=True,
+        id=f"{demo.name}/{version_id}", version_id=version_id, created_at=created_at,
+        message="seed", reviewer="test", published=published,
         stages=[Stage.model_validate(s) for s in stage_dicts],
     ).save()
 
@@ -178,4 +179,31 @@ def test_smoke_raises_when_no_source_stage(demo):
         stages=[Stage.model_validate(standalone)],
     ).save()
     with pytest.raises(NoSmokeSourceError):
+        run_smoke(demo, demo)
+
+
+def test_smoke_runs_an_explicit_unpublished_version(demo):
+    """A smoke run evaluates a candidate BEFORE it is published, so an explicit
+    unpublished version_id runs (unlike a production run, which requires publish)."""
+    _seed(demo, [_load_stage(demo), _CLASSIFY], version_id="v1", published=False)
+    result = run_smoke(demo, demo, version_id="v1")
+    assert result["ok"] is True
+    assert result["version_id"] == "v1"
+
+
+def test_smoke_default_picks_newest_version_even_when_unpublished(demo):
+    """version_id=None resolves to the newest stored version regardless of publish
+    state — a newer unpublished draft wins over an older published version."""
+    _seed(demo, [_load_stage(demo), _CLASSIFY],
+          version_id="20260101T000000", published=True, created_at="2026-01-01T00:00:00")
+    _seed(demo, [_load_stage(demo), _CLASSIFY],
+          version_id="20260201T000000", published=False, created_at="2026-02-01T00:00:00")
+    result = run_smoke(demo, demo)
+    assert result["version_id"] == "20260201T000000"
+
+
+def test_smoke_raises_when_no_versions_exist(demo):
+    """A project with no stored version has nothing to smoke-run — raise loudly,
+    naming the project, rather than falling back to the working copy."""
+    with pytest.raises(NoSmokeVersionError, match="demo"):
         run_smoke(demo, demo)
