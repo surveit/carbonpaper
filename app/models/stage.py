@@ -6,6 +6,8 @@ strict about the fields declared here.
 """
 from __future__ import annotations
 
+import hashlib
+import json
 import re
 from enum import Enum
 from pathlib import Path
@@ -324,6 +326,13 @@ _TYPE_SPEC: dict[str, dict[str, Any]] = {
     "publish":               {"handle": "publish",   "also_requires": ["function"], "requires_inputs": True, "min_inputs": 1},
 }
 
+# human_review_queue handle fields that determine what the human reviewer is
+# asked. routing, conflict_resolution, estimated_volume_per_week, and
+# hash_columns describe how a decision is routed or matched back to a row, not
+# what is asked, so compute_definition_fingerprint trims the queue handle down
+# to just these two before hashing it.
+_QUEUE_FINGERPRINT_FIELDS = ("filter", "reviewer_instructions")
+
 
 class Stage(_Base):
     """One node in the workflow. Exactly one handle block is required,
@@ -384,6 +393,31 @@ class Stage(_Base):
     @property
     def input_ids(self) -> list[str]:
         return [ref.id for ref in self.inputs]
+
+    def compute_definition_fingerprint(self) -> str:
+        """sha1[:16] over the canonical JSON of the output-determining subset of
+        this stage: {"type", "handle": <the type's handle block>, "output_schema"}.
+        Every other Stage field (id, name, source, inputs, review, limit,
+        compiler_notes, eval, tests) is incidental — it does not change what
+        this stage computes — and stays out of the fingerprint. For
+        human_review_queue the queue handle is further trimmed to
+        `_QUEUE_FINGERPRINT_FIELDS` (`filter`, `reviewer_instructions`): the
+        queue's other fields route or match a decision, not change what the
+        human is asked."""
+        spec = _TYPE_SPEC[self.type]
+        handle_dump = getattr(self, spec["handle"]).model_dump(mode="json", exclude_none=True)
+        if self.type == StageType.human_review_queue:
+            handle_dump = {
+                key: value for key, value in handle_dump.items()
+                if key in _QUEUE_FINGERPRINT_FIELDS
+            }
+        output_dump = (
+            self.output_schema.model_dump(mode="json", exclude_none=True)
+            if self.output_schema is not None else None
+        )
+        canonical = {"type": self.type, "handle": handle_dump, "output_schema": output_dump}
+        payload = json.dumps(canonical, sort_keys=True, separators=(",", ":"), default=str)
+        return hashlib.sha1(payload.encode("utf-8")).hexdigest()[:16]
 
     def resolve_hash_columns(self) -> list[str]:
         """The columns whose values identify a queued row, so a human_review_queue
