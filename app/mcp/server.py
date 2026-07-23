@@ -308,16 +308,16 @@ def get_run_status(project_id: str, run_id: str) -> dict[str, Any]:
 def run_workflow_test(
     project_id: str, version_id: str | None = None, limit: int = 20, offset: int = 0,
 ) -> dict[str, Any]:
-    """Run a NON-production workflow test: sample the first `limit` rows (from
+    """Run a NON-production workflow test: take the first `limit` rows (from
     `offset`) of the workflow's bound source and run the frontier over just that
-    sample, so an author can watch the pipeline execute on real data before
+    slice, so an author can watch the pipeline execute on real data before
     publishing. It is NOT a run of record — it writes only under the project's
-    separate workflow_tests/ dir, produces no published artifacts, and carries no
-    cross-run state. Accepts any stored version, published or not (omit
-    `version_id` for the newest). Returns the verdict
-    {ok, workflow_test_id, version_id, stages_run, rows_out, error}: `ok` False on
-    any stage error, with `error` naming what failed and `rows_out` None (never a
-    fabricated count). A project with no stored version is a loud error."""
+    separate workflow_tests/ dir (publish stages run, but their artifacts land
+    run-scoped there) and carries no cross-run state. Accepts any stored version,
+    published or not (omit `version_id` for the newest). Returns the verdict
+    {ok, workflow_test_id, version_id, stages_run, error}: `ok` False on any stage
+    error, with `error` naming what failed. Per-stage row counts are in the
+    manifest. A project with no stored version is a loud error."""
     _resolve_existing_project(project_id)  # loud if the project doesn't exist
     try:
         return workflow_test_service.run_workflow_test(

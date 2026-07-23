@@ -1,7 +1,7 @@
-"""Tests for the workflow-test seam (app/services/workflow_test.py): sample a
-published version's bound source, run the frontier (source-exclusive,
-publish-excluded) over the sample, and record a production-shape manifest under
-workflow_tests/ — never under runs/.
+"""Tests for the workflow-test seam (app/services/workflow_test.py): take a slice
+of a version's bound source, run the frontier (source-exclusive, publish included)
+over that slice, and record a production-shape manifest under workflow_tests/ —
+never under runs/.
 
 Builds a tiny `demo` project pinned to a published version, no shipped data and
 no LLM: `classify` is a deterministic python_row_function, so the whole loop runs
@@ -58,7 +58,11 @@ _PUBLISH = {
     "id": "publish_report", "type": "publish", "name": "Publish",
     "inputs": [{"id": "classify"}],
     "function": {"kind": "inline", "code":
-                 "def transform(df, output_dir):\n    return df"},
+                 "def transform(df, output_dir):\n"
+                 "    import os\n"
+                 "    path = os.path.join(output_dir, 'report.json')\n"
+                 "    df.to_json(path, orient='records')\n"
+                 "    return df"},
     "publish": {"format": "json"},
 }
 
@@ -96,25 +100,24 @@ def demo(tmp_path, monkeypatch):
     return demo
 
 
-def test_workflow_test_runs_frontier_over_the_sample(demo):
-    """The frontier (classify) runs over the injected sample; the result is ok,
-    names the executed stage, and reports its output row count."""
+def test_workflow_test_runs_frontier_over_the_slice(demo):
+    """The frontier (classify) runs over the injected slice; the result is ok and
+    names the executed stage."""
     _seed(demo, [_load_stage(demo), _CLASSIFY])
     result = run_workflow_test("demo")
     assert result["ok"] is True
     assert result["error"] is None
     assert result["version_id"] == "v1"
     assert result["stages_run"] == ["classify"]
-    assert result["rows_out"] == 4
 
 
-def test_workflow_test_limit_and_offset_slice_the_sample(demo):
-    """limit/offset page the source sample before the frontier runs; a 1:1
-    transform carries the sliced count straight through to rows_out."""
+def test_workflow_test_limit_and_offset_slice_the_source(demo):
+    """limit/offset page the source before the frontier runs; the frontier still
+    runs clean over the smaller slice."""
     _seed(demo, [_load_stage(demo), _CLASSIFY])
     result = run_workflow_test("demo", limit=2, offset=1)
     assert result["ok"] is True
-    assert result["rows_out"] == 2
+    assert result["stages_run"] == ["classify"]
 
 
 def test_workflow_test_writes_production_shape_manifest_under_workflow_tests_not_runs(demo):
@@ -132,23 +135,27 @@ def test_workflow_test_writes_production_shape_manifest_under_workflow_tests_not
     assert not (demo / "runs").exists()
 
 
-def test_workflow_test_excludes_publish_from_the_frontier(demo):
-    """A publish stage is never run by a workflow test — it is not in stages_run and
-    writes no artifacts."""
+def test_workflow_test_runs_publish_scoped_to_the_workflow_test_dir(demo):
+    """A publish stage RUNS in a workflow test — it is in stages_run and its
+    artifact lands run-scoped under workflow_tests/<id>/, never in a project-level
+    build dir or under runs/."""
     _seed(demo, [_load_stage(demo), _CLASSIFY, _PUBLISH])
     result = run_workflow_test("demo")
     assert result["ok"] is True
-    assert "publish_report" not in result["stages_run"]
-    assert result["stages_run"] == ["classify"]
+    assert result["stages_run"] == ["classify", "publish_report"]
+    workflow_test_dir = demo / "workflow_tests" / result["workflow_test_id"]
+    artifacts = list(workflow_test_dir.rglob("report.json"))
+    assert len(artifacts) == 1
+    assert not (demo / "build").exists()
+    assert not (demo / "runs").exists()
 
 
 def test_workflow_test_reports_a_stage_error_as_failure(demo):
-    """A frontier stage that errors makes the workflow test fail: ok False, no
-    row count, and the error names the offending stage."""
+    """A frontier stage that errors makes the workflow test fail: ok False and the
+    error names the offending stage."""
     _seed(demo, [_load_stage(demo), _BOOM])
     result = run_workflow_test("demo")
     assert result["ok"] is False
-    assert result["rows_out"] is None
     assert "boom" in result["error"]
     manifest = json.loads(
         (demo / "workflow_tests" / result["workflow_test_id"] / "manifest.json").read_text("utf-8"))
@@ -157,15 +164,14 @@ def test_workflow_test_reports_a_stage_error_as_failure(demo):
 
 def test_workflow_test_auto_approves_a_queue_stage_in_memory(demo):
     """A mid-frontier human_review_queue auto-approves on a workflow test: the subset
-    runs with queue_auto_approve, so every sampled row passes straight through
-    (ok, real row count) and NOTHING is written under the project's queue or
-    decisions storage — no reviewer, no halt, no disk state."""
+    runs with queue_auto_approve, so every row passes straight through (ok) and
+    NOTHING is written under the project's queue or decisions storage — no reviewer,
+    no halt, no disk state."""
     _seed(demo, [_load_stage(demo), _QUEUE])
     result = run_workflow_test("demo")
     assert result["ok"] is True
     assert result["error"] is None
     assert result["stages_run"] == ["review"]
-    assert result["rows_out"] == 4
     # The auto-approve path never reaches for project-relative queue/decisions
     # state — those dirs must not exist after the run.
     assert not (demo / "decisions").exists()
@@ -174,7 +180,7 @@ def test_workflow_test_auto_approves_a_queue_stage_in_memory(demo):
 
 
 def test_workflow_test_raises_when_no_source_stage(demo):
-    """A workflow with no input_data stage has nothing to sample — raise loudly
+    """A workflow with no input_data stage has no source to slice — raise loudly
     rather than run over an empty injection."""
     # A lone python_frame_function with no upstream input_data source: it
     # validates as a Stage on its own, and is enough to exercise the guard, which

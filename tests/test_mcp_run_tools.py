@@ -123,9 +123,8 @@ def test_get_run_status_missing_run_translates_to_error(tmp_path, monkeypatch):
 
 
 def test_run_workflow_test_delegates_and_reports_verdict(tmp_path, monkeypatch):
-    """run_workflow_test runs the frontier over the sample and returns the
-    workflow-test verdict (ok True, the executed stage, its row count) — never a
-    production run."""
+    """run_workflow_test runs the frontier over the slice and returns the
+    workflow-test verdict (ok True, the executed stage) — never a production run."""
     from app.mcp import server
     from app.services import workspace
 
@@ -135,7 +134,7 @@ def test_run_workflow_test_delegates_and_reports_verdict(tmp_path, monkeypatch):
     result = server.run_workflow_test(project_id="demo", limit=2, offset=1)
     assert result["ok"] is True
     assert result["stages_run"] == ["classify"]
-    assert result["rows_out"] == 2
+    assert "rows_out" not in result
     assert "workflow_test_id" in result
     assert not (tmp_path / "demo" / "runs").exists()
 
