@@ -36,7 +36,7 @@ from app.core.run_status import RunStatus, StageStatus
 from app.services.errors import WorkflowLoadError
 from app.services import versioning
 
-from .executor import _execute_stages, topological_sort
+from .executor import _execute_stages, create_run_manifest, topological_sort, write_manifest
 from .stages import PREFLIGHTS
 
 
@@ -246,29 +246,22 @@ def prepare_run(
         "limits": limits,
         "offsets": offsets,
     }
-    manifest: dict[str, Any] = {
-        "run_id": run_id,
-        "started_at": datetime.now().isoformat(timespec="seconds"),
-        "project": project_dir.name,
-        "workflow_version": workflow_version,
-        "limit_overrides": limits,
-        "offset_overrides": offsets,
-        # The run's bindings verbatim (generic bookkeeping a resume replays),
-        # alongside the stage-owned preflight provenance records.
-        "run_bindings": {sid: dict(params) for sid, params in (bindings or {}).items()},
-        "input_bindings": input_records,
-        "status": RunStatus.RUNNING,
-        "stages": [
-            {"stage_id": s.id, "type": s.type, "name": s.name,
-             "status": StageStatus.PENDING, "input_validation": [], "output_validation": None,
-             "elapsed_ms": 0, "rows": 0, "error": None,
-             "started_at": None, "finished_at": None}
-            for s in ordered
-        ],
-    }
-    (run_dir / "manifest.json").write_text(
-        json.dumps(manifest, indent=2, default=str), encoding="utf-8"
+    # The manifest's shape and persistence belong to the executor — it mints the
+    # initial record here and rewrites the same file as stages run. prepare only
+    # supplies the run-level metadata: run_bindings is the run's bindings verbatim
+    # (generic bookkeeping a resume replays), alongside the stage-owned preflight
+    # provenance records in input_bindings.
+    manifest = create_run_manifest(
+        ordered,
+        run_id=run_id,
+        project=project_dir.name,
+        workflow_version=workflow_version,
+        run_bindings={sid: dict(params) for sid, params in (bindings or {}).items()},
+        input_bindings=input_records,
+        limits=limits,
+        offsets=offsets,
     )
+    write_manifest(run_dir, manifest)
     return {"run_id": run_id, "run_dir": run_dir, "ctx": ctx,
             "ordered": ordered, "manifest": manifest}
 

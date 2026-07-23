@@ -108,11 +108,7 @@ def _subset_manifest(run_dir: Path, ordered: list[Stage]) -> dict[str, Any]:
         "run_id": run_dir.name,
         "started_at": datetime.now().isoformat(timespec="seconds"),
         "status": RunStatus.RUNNING,
-        "stages": [{"stage_id": s.id, "type": s.type, "name": s.name,
-                    "status": StageStatus.PENDING, "input_validation": [], "output_validation": None,
-                    "elapsed_ms": 0, "rows": 0, "error": None,
-                    "started_at": None, "finished_at": None}
-                   for s in ordered],
+        "stages": [_build_pending_stage_record(s) for s in ordered],
     }
 
 
@@ -276,6 +272,44 @@ class StageRecord(TypedDict):
     llm_usage: NotRequired[dict[str, object]]
 
 
+def create_run_manifest(
+    ordered: list[Stage],
+    *,
+    run_id: str,
+    project: str,
+    workflow_version: str,
+    run_bindings: dict[str, dict[str, Any]],
+    input_bindings: dict[str, dict[str, Any]],
+    limits: dict[str, int],
+    offsets: dict[str, int],
+) -> dict[str, Any]:
+    """The initial production run manifest — every stage pending, status running.
+    The single source of the run-manifest shape: prepare_run mints it here and
+    persists it with write_manifest rather than hand-building the dict, so the
+    shape lives with the engine that later updates it (_flush_manifest /
+    _finalize_run_manifest)."""
+    return {
+        "run_id": run_id,
+        "started_at": datetime.now().isoformat(timespec="seconds"),
+        "project": project,
+        "workflow_version": workflow_version,
+        "limit_overrides": limits,
+        "offset_overrides": offsets,
+        "run_bindings": run_bindings,
+        "input_bindings": input_bindings,
+        "status": RunStatus.RUNNING,
+        "stages": [_build_pending_stage_record(s) for s in ordered],
+    }
+
+
+def write_manifest(run_dir: Path, manifest: dict[str, Any]) -> None:
+    """The single writer of run_dir/manifest.json. The initial write (prepare_run),
+    every mid-run flush, and finalization all persist through here."""
+    (run_dir / "manifest.json").write_text(
+        json.dumps(manifest, indent=2, default=str), encoding="utf-8"
+    )
+
+
 def _build_pending_stage_record(stage: Stage) -> StageRecord:
     """A stage's manifest record before it has started, or once it has been
     marked blocked: `pending` status, no output, no timing."""
@@ -305,9 +339,7 @@ def _flush_manifest(
     m["dropped_columns"] = ctx.get("dropped_columns", {})
     m["updated_at"] = datetime.now().isoformat(timespec="seconds")
     try:
-        (run_dir / "manifest.json").write_text(
-            json.dumps(m, indent=2, default=str), encoding="utf-8"
-        )
+        write_manifest(run_dir, m)
     except OSError:
         pass
 
@@ -572,9 +604,7 @@ def _finalize_run_manifest(
             record["status"] for record in manifest["stages"]
         )
 
-    (run_dir / "manifest.json").write_text(
-        json.dumps(manifest, indent=2, default=str), encoding="utf-8"
-    )
+    write_manifest(run_dir, manifest)
     return manifest
 
 
