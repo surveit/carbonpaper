@@ -155,3 +155,125 @@ def test_parse_workflow_rejects_ineligible_llm_transform():
         "primary_key": ["id"]})
     with pytest.raises(ValidationError, match="adds no columns"):
         m.parse_workflow([bad])
+
+
+# ── Edge schema conformance (validate_edge_schemas) ───────────────────────────
+# A downstream stage's declared input schema (`inputs[i].schema`) is a REQUIREMENT
+# — possibly a projection — that the upstream stage's declared output_schema must
+# satisfy. Checked at save time as a cross-stage graph invariant.
+def _producer(**over):
+    """input_data stage `up` declaring an output_schema of {id, text, score}."""
+    base = dict(
+        id="up", type="input_data",
+        connector={"kind": "file"},
+        output_schema={"columns": [{"name": "id", "type": "str"},
+                                   {"name": "text", "type": "str"},
+                                   {"name": "score", "type": "int"}]},
+    )
+    base.update(over)
+    return S(**base)
+
+
+def _consumer(input_schema, **over):
+    """python_frame_function `down` consuming `up`, declaring `input_schema`."""
+    base = dict(
+        id="down", type="python_frame_function",
+        inputs=[{"id": "up", "schema": input_schema}],
+        function={"kind": "inline", "code": "def transform(df): return df"},
+    )
+    base.update(over)
+    return S(**base)
+
+
+def test_check_edge_schemas_clean_when_input_is_exact_copy():
+    stages = m.parse_workflow([
+        _producer(),
+        _consumer({"columns": [{"name": "id", "type": "str"},
+                               {"name": "text", "type": "str"},
+                               {"name": "score", "type": "int"}]}),
+    ]).stages
+    assert m.validate_edge_schemas(stages) == []
+
+
+def test_check_edge_schemas_clean_when_input_is_a_projection():
+    # A projection naming only the columns the stage consumes is fine (subsumption,
+    # not identity) — `down` needs just `score`, `up` produces it.
+    stages = m.parse_workflow([
+        _producer(),
+        _consumer({"columns": [{"name": "score", "type": "int"}]}),
+    ]).stages
+    assert m.validate_edge_schemas(stages) == []
+
+
+def test_check_edge_schemas_flags_phantom_column():
+    # `down` requires `quote`, which `up` does not produce — the #36 phantom.
+    stages = [
+        Stage.model_validate(_producer()),
+        Stage.model_validate(_consumer({"columns": [{"name": "quote", "type": "str"}]})),
+    ]
+    issues = m.validate_edge_schemas(stages)
+    assert len(issues) == 1
+    assert "down" in issues[0] and "up" in issues[0] and "quote" in issues[0]
+
+
+def test_check_edge_schemas_clean_when_producer_non_null_feeds_nullable_requirement():
+    # The review-queue pattern: producer emits `score` non-null; the consumer's
+    # input schema requires it only as nullable — a compatible (safe) edge.
+    stages = m.parse_workflow([
+        _producer(output_schema={"columns": [
+            {"name": "id", "type": "str"},
+            {"name": "score", "type": "int", "nullable": False}]}),
+        _consumer({"columns": [{"name": "score", "type": "int", "nullable": True}]}),
+    ]).stages
+    assert m.validate_edge_schemas(stages) == []
+
+
+def test_check_edge_schemas_flags_required_non_null_fed_by_nullable_producer():
+    stages = [
+        Stage.model_validate(_producer(output_schema={"columns": [
+            {"name": "id", "type": "str"},
+            {"name": "score", "type": "int", "nullable": True}]})),
+        Stage.model_validate(_consumer(
+            {"columns": [{"name": "score", "type": "int", "nullable": False}]})),
+    ]
+    issues = m.validate_edge_schemas(stages)
+    assert len(issues) == 1
+    assert "score" in issues[0] and "nullable" in issues[0]
+
+
+def test_check_edge_schemas_flags_type_disagreement():
+    stages = [
+        Stage.model_validate(_producer()),
+        Stage.model_validate(_consumer({"columns": [{"name": "score", "type": "str"}]})),
+    ]
+    issues = m.validate_edge_schemas(stages)
+    assert len(issues) == 1
+    assert "score" in issues[0] and "type" in issues[0]
+
+
+def test_check_edge_schemas_skips_edge_without_declared_input_schema():
+    stages = m.parse_workflow([
+        _producer(),
+        S(id="down", type="python_frame_function", inputs=[{"id": "up"}],
+          function={"kind": "inline", "code": "def transform(df): return df"}),
+    ]).stages
+    assert m.validate_edge_schemas(stages) == []
+
+
+def test_check_edge_schemas_skips_when_upstream_has_no_output_schema():
+    # Unresolvable means unknowable, never wrong: no upstream output_schema → skip.
+    stages = m.parse_workflow([
+        _producer(output_schema=None),
+        _consumer({"columns": [{"name": "anything", "type": "str"}]}),
+    ]).stages
+    assert m.validate_edge_schemas(stages) == []
+
+
+def test_parse_workflow_rejects_nonconformant_edge():
+    """The save gate (parse_workflow → Workflow model validator → graph_issues)
+    rejects a workflow whose edge is non-conformant."""
+    with pytest.raises(ValidationError, match="quote"):
+        m.parse_workflow([
+            _producer(),
+            _consumer({"columns": [{"name": "quote", "type": "str"}]}),
+        ])
