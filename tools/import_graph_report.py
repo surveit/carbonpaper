@@ -9,8 +9,8 @@ never merge-blocking — so a metric this script can't derive must fail loudly
 someone's PR comment.
 
 Usage:
-    python scripts/import_graph_report.py [--root PATH] > metrics.json
-    python scripts/import_graph_report.py --markdown HEAD_JSON BASE_JSON
+    python tools/import_graph_report.py [--root PATH] > metrics.json
+    python tools/import_graph_report.py --markdown HEAD_JSON BASE_JSON
 
 `--root` points at the repository root whose `app` package should be
 scanned (default: this script's own repo root). The CI job runs this same

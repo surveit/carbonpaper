@@ -14,7 +14,7 @@ select = ["E4", "E7", "E9", "F", "BLE"]
 
 [tool.mypy]
 python_version = "3.12"
-files = ["app", "scripts"]
+files = ["app", "tools"]
 mypy_path = "tests"
 # Colocated arch tests live under app/ (in _arch_tests/ folders) but import the
 # `arch` toolkit from tests/arch/. pytest.ini puts tests/ on sys.path via
