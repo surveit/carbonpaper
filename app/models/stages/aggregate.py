@@ -86,9 +86,11 @@ def derive_aggregate_output_columns(
     edge `Column` verbatim (type, nullable, enum, range, prose all included);
     each aggregation's output column is a fresh `Column` named after
     `op.output_column`, always `nullable=True`, typed per
-    `_partial_aggregate_output_types`'s formula rules. None when a `group_by`
-    entry has no edge column to carry (including when `edge` itself is
-    absent), or any aggregation's type is unknowable."""
+    `_partial_aggregate_output_types`'s formula rules. None = not every output
+    column is fully derivable: a `group_by` entry with no edge column to carry
+    (which an absent `edge` forces whenever `group_by` is non-empty) or any
+    aggregation whose type is unknowable. A bare `count` with no `group_by`
+    needs no value type either, so it derives even with `edge=None`."""
     columns: list[Column] = []
     for name in aggregate.group_by:
         source = edge.column_for_name(name) if edge is not None else None

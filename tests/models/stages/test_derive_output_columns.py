@@ -73,6 +73,18 @@ def test_aggregate_no_edge_schema_means_no_fill():
     assert derive_aggregate_output_columns(aggregate, None) is None
 
 
+def test_bare_count_without_group_by_derives_without_edge():
+    # No group_by column needs carrying, and count's int derivation needs no
+    # value type, so this is fully derivable even with no edge schema at all.
+    aggregate = AggregateConfig(
+        group_by=[],
+        aggregations=[AggregationOp(output_column="n", formula="count")],
+    )
+    columns = derive_aggregate_output_columns(aggregate, None)
+    assert columns is not None
+    assert [(c.name, c.type, c.nullable) for c in columns] == [("n", "int", True)]
+
+
 def test_join_right_columns_nullable_under_left_join():
     join = JoinConfig(type="left", keys=_KEYS)
     columns = derive_join_output_columns(join, _LEFT, _RIGHT)
