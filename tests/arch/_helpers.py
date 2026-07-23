@@ -84,6 +84,60 @@ def find_dict_key_uses(tree: ast.Module, keys: set[str]) -> list[tuple[int, str]
     return uses
 
 
+def find_subclasses_of(tree: ast.Module, base_name: str) -> list[ast.ClassDef]:
+    """`ClassDef` nodes in `tree` with a base named `base_name`: a plain name
+    base (`class Foo(Bar):`) or a dotted-attribute base (`class Foo(pkg.Bar):`)
+    both match on the base's simple (rightmost) name."""
+    return [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.ClassDef)
+        and any(_base_name_matches(base, base_name) for base in node.bases)
+    ]
+
+
+def _base_name_matches(base: ast.expr, name: str) -> bool:
+    if isinstance(base, ast.Name):
+        return base.id == name
+    if isinstance(base, ast.Attribute):
+        return base.attr == name
+    return False
+
+
+def find_class_body_assignment(
+    node: ast.ClassDef, name: str
+) -> ast.Assign | ast.AnnAssign | None:
+    """The class-body statement directly inside `node` that assigns `name` a
+    value — plain (`SCOPE = ...`) or annotated (`SCOPE: T = ...`). A bare
+    annotation with no value (`SCOPE: T`) does not count: it declares a type
+    but assigns nothing, so it would not satisfy the attribute at runtime
+    either."""
+    for stmt in node.body:
+        if (
+            isinstance(stmt, ast.AnnAssign)
+            and isinstance(stmt.target, ast.Name)
+            and stmt.target.id == name
+            and stmt.value is not None
+        ):
+            return stmt
+        if isinstance(stmt, ast.Assign) and any(
+            isinstance(target, ast.Name) and target.id == name for target in stmt.targets
+        ):
+            return stmt
+    return None
+
+
+def find_class_body_function(
+    node: ast.ClassDef, name: str
+) -> ast.FunctionDef | ast.AsyncFunctionDef | None:
+    """The function or method named `name` defined directly inside `node`'s
+    body, or None if the class body never defines it."""
+    for stmt in node.body:
+        if isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef)) and stmt.name == name:
+            return stmt
+    return None
+
+
 def find_numeric_get_defaults(tree: ast.Module) -> list[tuple[int, int]]:
     """(lineno, end_lineno) of each `x.get(key, <int/float literal>)` call.
 

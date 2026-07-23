@@ -18,7 +18,7 @@ from typing import Any, ClassVar
 
 from pydantic import Field
 
-from app.core.persistence import PersistedModel
+from app.core.persistence import PersistedModel, PersistenceScope
 
 
 class MessageRole(str, Enum):
@@ -40,6 +40,7 @@ class AgentSession(PersistedModel):
     transcript. `id` (inherited from PersistedModel) is the session id."""
 
     collection: ClassVar[str] = "agent_session"
+    SCOPE: ClassVar[PersistenceScope] = PersistenceScope.AUTHORED
     title: str = "New chat"
     agent_id: str | None = None
     context: dict[str, Any] = Field(default_factory=dict)

@@ -21,6 +21,7 @@ from __future__ import annotations
 import json
 import sqlite3
 from datetime import datetime
+from enum import Enum
 from typing import Any, ClassVar, Iterator, Protocol, Self
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -180,11 +181,43 @@ def _now_iso() -> str:
     return datetime.now().isoformat(timespec="seconds")
 
 
+class PersistenceScope(str, Enum):
+    """Permission profile for RUN ACTIVITY against project-scoped storage — not
+    the authoring surface, which always has full project-scope read/write
+    directly (a version, draft, or chat session is written by a human or an
+    authoring agent, never by run code). This enum constrains only what code
+    executing INSIDE a run may touch:
+
+    - RUN: run-scope read/write only, no project-scope access at all — the
+      record is produced by one run and is meaningless outside it.
+    - AUTHORED: project-scope read at most, from a run — never write. A run
+      may read a human-authored artifact (e.g. the version it executes) but
+      never write one.
+    - CROSS_RUN: project-scope read AND write — the only profile that grants
+      run activity a write outliving the run. A model carrying this scope
+      must define `for_mode`, the view that revokes that write for a
+      non-production run (consumed by the eval/smoke run path *(planned)*).
+
+    Design invariant: exactly one PersistedModel subclass may carry
+    SCOPE = CROSS_RUN — the single deliberate cross-run channel; broadening it
+    would blur the line this scope exists to hold. No subclass declares it as
+    of this commit; both the "every subclass declares SCOPE" rule and the
+    "CROSS_RUN implies for_mode" rule are enforced by the arch tests in
+    app/_arch_tests/test_persisted_models_declare_scope.py.
+    """
+
+    RUN = "run"
+    CROSS_RUN = "cross_run"
+    AUTHORED = "authored"
+
+
 class PersistedModel(BaseModel):
     """Base for every stored record. A subclass sets `collection` (the table name)
     and carries an `id` (its primary key); save()/load()/list() go through the
     configured DocumentStore, so nothing above this class touches storage. The
-    body is serialized as JSON.
+    body is serialized as JSON. Every subclass also declares `SCOPE` — see
+    `PersistenceScope` — with no base-class default, so an unannotated
+    subclass fails at `save()` with a plain `AttributeError`.
 
     `created_at`/`updated_at` are stamped automatically, so a subclass never
     hand-rolls them: on a fresh construct (no stored value yet) both
@@ -208,6 +241,7 @@ class PersistedModel(BaseModel):
     created_at: str = Field(default_factory=_now_iso)
     updated_at: str = Field(default_factory=_now_iso)
     collection: ClassVar[str]
+    SCOPE: ClassVar[PersistenceScope]
     SCHEMA_VERSION: ClassVar[int] = 1
     # Extra model_dump kwargs a subclass needs to preserve exact on-disk shape
     # (e.g. {"by_alias": True, "exclude_none": True} for a stage-bearing record).
