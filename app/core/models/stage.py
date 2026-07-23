@@ -153,6 +153,18 @@ class LLMConfig(_Base):
     response_format: Literal["json", "text"] = "json"
     rubric: Optional[dict[str, Any]] = None
     tools: Optional[list[str]] = None
+    batch_size: int = Field(
+        default=1,
+        ge=1,
+        description=(
+            "Rows sent per model call. 1 (default) calls the model once per row. "
+            ">1 packs that many input rows into one call, amortizing the prompt/"
+            "harness overhead; the runtime carries each row's primary key into the "
+            "request and rejoins the replies by it (ID in, ID out), so the stage "
+            "stays strictly one-row-out-per-row-in. Requires a primary key on the "
+            "input schema."
+        ),
+    )
 
 
 class PythonFunction(_Base):

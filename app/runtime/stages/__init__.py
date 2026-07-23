@@ -22,6 +22,7 @@ from ._shared import HaltForReview
 from .aggregate import handle_aggregate
 from .execution import (
     FrameHandler,
+    LLMTransformHandler,
     Row,
     RowMapHandler,
     SourceHandler,
@@ -31,7 +32,7 @@ from .execution import (
 from .human_review_queue import handle_human_review_queue
 from .input_data import preflight_input_data, read_input_data
 from .join import handle_join
-from .llm_transform import make_llm_row_mapper
+from .llm_transform import make_llm_row_mapper, run_llm_batches
 from .publish import handle_publish
 from .python_functions import handle_python_frame_function, make_python_row_mapper
 
@@ -48,8 +49,9 @@ HANDLERS: dict[StageType, StageHandler] = {
     StageType.python_frame_function: FrameHandler(handle_python_frame_function),
     StageType.join_: FrameHandler(handle_join),
     StageType.aggregate: FrameHandler(handle_aggregate),
-    StageType.llm_transform: RowMapHandler(
+    StageType.llm_transform: LLMTransformHandler(
         make_llm_row_mapper,
+        run_llm_batches,
         parallelism=DEFAULT_PARALLEL,
         project_output_to_declared=True,
     ),
@@ -68,6 +70,7 @@ __all__ = [
     "HaltForReview",
     "FrameHandler",
     "Row",
+    "LLMTransformHandler",
     "RowMapHandler",
     "SourceHandler",
     "StageHandler",

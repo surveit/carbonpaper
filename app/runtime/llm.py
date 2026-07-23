@@ -110,9 +110,36 @@ def call_llm(
         )
     prompt = render_prompt(llm_config.prompt_template, input_row)
     model_name = str(model or llm_config.model or DEFAULT_MODEL)
+    return _generate(llm_config, prompt, model_name, reply_model)
+
+
+def call_llm_batch(
+    stage_id: str,
+    llm_config: LLMConfig,
+    batch_prompt: str,
+    *,
+    batch_model: type[BaseModel],
+    model: str | None = None,
+) -> dict[str, Any]:
+    """Batched sibling of `call_llm`: one call for a whole chunk of rows, returning
+    a validated `batch_model` instance (a `{"results": [...]}` wrapper) as a dict.
+    The caller (the runtime batch driver) builds `batch_prompt` and `batch_model`
+    so the reply carries each row's primary key, and rejoins by it. Same backends,
+    same no-fabrication guarantee as `call_llm`."""
+    if not llm_config.prompt_template:
+        raise LLMError(f"stage {stage_id}: llm_transform has no prompt_template")
+    model_name = str(model or llm_config.model or DEFAULT_MODEL)
+    return _generate(llm_config, batch_prompt, model_name, batch_model)
+
+
+def _generate(
+    llm_config: LLMConfig, prompt: str, model_name: str, target_model: type[BaseModel]
+) -> dict[str, Any]:
+    """Dispatch to the selected backend (LLM_BACKEND): produce a validated
+    `target_model` instance from `prompt`, dumped to a dict."""
     if LLM_BACKEND == "api":
-        return _call_api(llm_config, prompt, model_name, reply_model)
-    return _call_agent(llm_config, prompt, model_name, reply_model)
+        return _call_api(llm_config, prompt, model_name, target_model)
+    return _call_agent(llm_config, prompt, model_name, target_model)
 
 
 def _retry(max_retries: int | None, attempt: Callable[[], dict[str, Any]]) -> dict[str, Any]:
@@ -167,7 +194,7 @@ def _call_api(
     def attempt() -> dict[str, Any]:
         response = client.messages.parse(
             model=api_model,
-            max_tokens=2048,
+            max_tokens=8192,  # headroom for batched replies (a list of per-row objects)
             system=API_SYSTEM_PROMPT,
             messages=[{"role": "user", "content": prompt}],
             output_format=reply_model,

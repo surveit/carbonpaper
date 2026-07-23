@@ -81,6 +81,39 @@ class RowMapHandler(StageHandler):
         return _run_row_mapper(self, stage, inputs, ctx)
 
 
+class LLMTransformHandler(RowMapHandler):
+    """llm_transform's handler. `batch_size` (on the stage's llm config) picks the
+    execution shape without changing the stage's contract — both paths return
+    exactly one row per input row, in input order, so this stays a preserving
+    shape (a RowMapHandler subclass):
+
+    - batch_size == 1 → the inherited per-row mapper (one model call per row).
+    - batch_size  > 1 → `run_batches`: pack that many rows per call, and rejoin
+      each reply to its row by primary key. Grain and order are held the same
+      way the row mapper holds them — one result slot per input row, filled by
+      input index, assembled in order — so a dropped/duplicated/unknown id is a
+      loud per-row error, never a silent reshape.
+    """
+
+    def __init__(
+        self,
+        make_mapper: Callable[[Stage, dict[str, Any]], Callable[[Row], Row]],
+        run_batches: Callable[[Stage, dict[str, pd.DataFrame], dict[str, Any], int], pd.DataFrame],
+        parallelism: int = 1,
+        project_output_to_declared: bool = False,
+    ) -> None:
+        super().__init__(make_mapper, parallelism, project_output_to_declared)
+        self.run_batches = run_batches
+
+    def execute(
+        self, stage: Stage, inputs: dict[str, pd.DataFrame], ctx: dict[str, Any]
+    ) -> pd.DataFrame:
+        batch_size = stage.llm.batch_size if stage.llm else 1
+        if batch_size > 1:
+            return self.run_batches(stage, inputs, ctx, self.parallelism)
+        return _run_row_mapper(self, stage, inputs, ctx)
+
+
 class SourceHandler(StageHandler):
     """Originates rows from outside the run; takes no upstream frames."""
 
