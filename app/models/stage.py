@@ -451,29 +451,7 @@ class Stage(_Base):
                 "primary_key on both its input and output schemas"
             )
 
-        issues: list[str] = []
-        input_pk, output_pk = input_schema.primary_key, output_schema.primary_key
-        if not input_pk:
-            issues.append("input schema declares no primary_key")
-        if not output_pk:
-            issues.append("output_schema declares no primary_key")
-        if input_pk and output_pk and set(input_pk) != set(output_pk):
-            issues.append(
-                f"input primary_key {input_pk} != output primary_key {output_pk}"
-            )
-
-        if not input_schema.is_subset_of(output_schema):
-            issues.append(
-                "output must keep every input column unchanged (a transform is "
-                f"additive: output ⊇ input); input columns "
-                f"{[c.name for c in input_schema.columns]} vs output columns "
-                f"{[c.name for c in output_schema.columns]}"
-            )
-
-        input_names = {c.name for c in input_schema.columns}
-        if not any(c.name not in input_names for c in output_schema.columns):
-            issues.append("output_schema adds no columns beyond the input")
-
+        issues = _find_one_to_one_issues(input_schema, output_schema)
         if issues:
             raise ValueError("llm_transform not strictly 1:1: " + "; ".join(issues))
         return self
@@ -599,6 +577,49 @@ class Stage(_Base):
                                  rows (and it is terminal — nothing downstream).
         """
         return is_grain_and_order_preserving(self.type)
+
+
+# ── llm_transform's 1:1 contract ─────────────────────────────────────────────
+# Helpers for Stage._llm_transform_one_to_one: it has already confirmed
+# `input_schema`/`output_schema` are both declared before calling these.
+
+
+def _find_one_to_one_issues(input_schema: TableSchema, output_schema: TableSchema) -> list[str]:
+    """Every way `output_schema` fails to be `input_schema` plus at least one
+    new column, on a matching primary_key. [] means the pair is strictly
+    1:1."""
+    issues = _find_primary_key_issues(input_schema, output_schema)
+    issues.extend(_find_additive_shape_issues(input_schema, output_schema))
+    return issues
+
+
+def _find_primary_key_issues(input_schema: TableSchema, output_schema: TableSchema) -> list[str]:
+    issues: list[str] = []
+    input_pk, output_pk = input_schema.primary_key, output_schema.primary_key
+    if not input_pk:
+        issues.append("input schema declares no primary_key")
+    if not output_pk:
+        issues.append("output_schema declares no primary_key")
+    if input_pk and output_pk and set(input_pk) != set(output_pk):
+        issues.append(
+            f"input primary_key {input_pk} != output primary_key {output_pk}"
+        )
+    return issues
+
+
+def _find_additive_shape_issues(input_schema: TableSchema, output_schema: TableSchema) -> list[str]:
+    issues: list[str] = []
+    if not input_schema.is_subset_of(output_schema):
+        issues.append(
+            "output must keep every input column unchanged (a transform is "
+            f"additive: output ⊇ input); input columns "
+            f"{[c.name for c in input_schema.columns]} vs output columns "
+            f"{[c.name for c in output_schema.columns]}"
+        )
+    input_names = {c.name for c in input_schema.columns}
+    if not any(c.name not in input_names for c in output_schema.columns):
+        issues.append("output_schema adds no columns beyond the input")
+    return issues
 
 
 def validate_stage(stage: dict[str, Any]) -> list[str]:
