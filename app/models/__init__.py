@@ -129,8 +129,16 @@ NODE_TYPES: dict[str, dict[str, _Any]] = {
         "optional": ["model", "temperature", "response_format", "max_retries",
                      "rubric", "tools"],
     },
-    "python_transform": {
-        "summary": "Arbitrary Python over upstream dataframes.",
+    "python_row_function": {
+        "summary": "Deterministic Python run once per row: one row in → one row out (cannot fan rows out/in or reorder).",
+        "handle": "function",
+        "requires_inputs": True,
+        "min_inputs": 1,
+        "required": ["kind"],
+        "optional": ["module", "function", "code", "requirements"],
+    },
+    "python_frame_function": {
+        "summary": "Deterministic Python over the whole dataframe(s); may reshape (dedup, pivot, multi-input merge).",
         "handle": "function",
         "requires_inputs": True,
         "min_inputs": 1,
