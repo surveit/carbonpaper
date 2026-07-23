@@ -343,8 +343,9 @@ class Stage(_Base):
             "this must be strictly ADDITIVE and 1:1: declare the SAME primary_key as its "
             "single input's schema, keep every input column unchanged, and add at least one "
             "new column (one input row -> one output row). For a join or aggregate stage, "
-            "OMIT this field — the platform computes it from the handle and input schemas "
-            "when the workflow is saved."
+            "this field may be OMITTED: when the generator produces the workflow, the "
+            "platform fills in the derived schema from the handle and input schemas "
+            "wherever one is derivable."
         ),
     )
 
