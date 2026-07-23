@@ -18,7 +18,7 @@ Replies are rejoined to rows by a batch-local ROW NUMBER the runtime assigns
 control, so the model can't mangle it and the rejoin does not depend on the
 primary key existing or being unique (the runtime enforces neither). The columns
 `output_schema` adds beyond the input schema are the reply spec, compiled by
-`TableSchema.to_pydantic_model` into the per-item reply model.
+`TableSchema.to_pydantic_model` into the per-item reply schema.
 """
 
 from __future__ import annotations
@@ -108,7 +108,7 @@ def run_llm_batches(
     assert stage.output_schema is not None and stage.inputs[0].table_schema is not None
     # The schema one chunk's reply must satisfy: a list of per-item objects, each
     # the item's row number plus the reply spec — `{"results": [{row_number, ...}]}`.
-    batch_reply_model = _build_batch_reply_model(stage)
+    batch_reply_schema = _build_batch_reply_schema(stage)
     ctx.setdefault("llm_backend", {})[stage.id] = backend_status()
 
     src = inputs[stage.inputs[0].id]
@@ -122,7 +122,7 @@ def run_llm_batches(
     if parallelism > 1 and len(chunks) > 1:
         with ThreadPoolExecutor(max_workers=parallelism) as pool:
             futures = [
-                pool.submit(_process_chunk, stage, llm, batch_reply_model, start, chunk)
+                pool.submit(_process_chunk, stage, llm, batch_reply_schema, start, chunk)
                 for start, chunk in chunks
             ]
             for future in as_completed(futures):
@@ -130,7 +130,7 @@ def run_llm_batches(
                     results[index] = row
     else:
         for start, chunk in chunks:
-            for index, row in _process_chunk(stage, llm, batch_reply_model, start, chunk):
+            for index, row in _process_chunk(stage, llm, batch_reply_schema, start, chunk):
                 results[index] = row
 
     # Grain + order guarantee, verified not assumed: exactly one row per input,
@@ -148,8 +148,8 @@ def run_llm_batches(
     return _project_onto_declared_columns(df, stage, ctx)
 
 
-def _build_batch_reply_model(stage: Stage) -> type:
-    """The pydantic model one chunk's reply must match: `{"results": [<item>, ...]}`
+def _build_batch_reply_schema(stage: Stage) -> type:
+    """The schema one chunk's reply must match: `{"results": [<item>, ...]}`
     where each item is the batch row number (the rejoin handle) plus the reply
     spec (output − input). The input primary key is NOT part of it — the row
     number is the only handle."""
@@ -164,12 +164,12 @@ def _build_batch_reply_model(stage: Stage) -> type:
         ),
     )
     item_schema = TableSchema(columns=[number_column, *reply_spec.columns], primary_key=None)
-    item_model = item_schema.to_pydantic_model(f"{stage.id}_batch_item")
-    return create_model(f"{stage.id}_batch", results=(list[item_model], ...))  # type: ignore[valid-type]
+    item_reply = item_schema.to_pydantic_model(f"{stage.id}_batch_item")
+    return create_model(f"{stage.id}_batch", results=(list[item_reply], ...))  # type: ignore[valid-type]
 
 
 def _process_chunk(
-    stage: Stage, llm: Any, batch_reply_model: type, start: int, chunk: list[Row]
+    stage: Stage, llm: Any, batch_reply_schema: type, start: int, chunk: list[Row]
 ) -> list[tuple[int, Row]]:
     """Process one chunk, THROWING THE REPLY BACK TO THE MODEL on any anomaly.
 
@@ -190,7 +190,7 @@ def _process_chunk(
         try:
             reply = call_llm_batch(
                 stage.id, llm, instructions=llm.prompt_instructions, task=task,
-                batch_model=batch_reply_model, usage_out=usages,
+                reply_schema=batch_reply_schema, usage_out=usages,
             )
         except Exception as exc:  # noqa: BLE001 — a chunk that never returns is thrown back, then errored
             problem = str(exc) or type(exc).__name__
