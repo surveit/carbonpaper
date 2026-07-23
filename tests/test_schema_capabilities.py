@@ -326,6 +326,77 @@ def test_subtract_strict_false_lists_absent_column():
     assert a.is_subset_of(b) is False
 
 
+# ── TableSchema.find_unsatisfied_columns ─────────────────────────────────────
+# The requirement→producer direction: `self` names the columns a consumer needs,
+# the argument names what a producer emits. Returns one reason per column the
+# producer fails to satisfy ([] ⇒ producer supplies every required column).
+def test_find_unsatisfied_columns_empty_when_producer_covers_every_column():
+    required = _ts(columns=[{"name": "id", "type": "str"}])
+    producer = _ts(columns=[{"name": "id", "type": "str"}, {"name": "score", "type": "int"}])
+    assert required.find_unsatisfied_columns(producer) == []
+
+
+def test_find_unsatisfied_columns_flags_column_absent_from_producer():
+    required = _ts(columns=[{"name": "id", "type": "str"}, {"name": "quote", "type": "str"}])
+    producer = _ts(columns=[{"name": "id", "type": "str"}])
+    reasons = required.find_unsatisfied_columns(producer)
+    assert len(reasons) == 1
+    assert "quote" in reasons[0] and "absent" in reasons[0]
+
+
+def test_find_unsatisfied_columns_flags_type_difference():
+    required = _ts(columns=[{"name": "score", "type": "str"}])
+    producer = _ts(columns=[{"name": "score", "type": "int"}])
+    reasons = required.find_unsatisfied_columns(producer)
+    assert len(reasons) == 1
+    assert "score" in reasons[0] and "type" in reasons[0]
+
+
+def test_find_unsatisfied_columns_flags_required_non_null_fed_by_nullable_producer():
+    # The UNSAFE direction: consumer requires non-null, producer may emit null.
+    required = _ts(columns=[{"name": "score", "type": "int", "nullable": False}])
+    producer = _ts(columns=[{"name": "score", "type": "int", "nullable": True}])
+    reasons = required.find_unsatisfied_columns(producer)
+    assert len(reasons) == 1
+    assert "nullable" in reasons[0]
+
+
+def test_find_unsatisfied_columns_allows_nullable_requirement_fed_by_non_null_producer():
+    # The SAFE direction: a producer that never emits null satisfies a nullable
+    # requirement (stronger guarantee than needed) — nullability is compatible,
+    # not identical.
+    required = _ts(columns=[{"name": "score", "type": "int", "nullable": True}])
+    producer = _ts(columns=[{"name": "score", "type": "int", "nullable": False}])
+    assert required.find_unsatisfied_columns(producer) == []
+
+
+def test_find_unsatisfied_columns_ignores_prose_difference():
+    required = _ts(columns=[{"name": "id", "type": "str", "description": "consumer note"}])
+    producer = _ts(columns=[{"name": "id", "type": "str", "description": "producer note"}])
+    assert required.find_unsatisfied_columns(producer) == []
+
+
+def test_find_unsatisfied_columns_reports_every_offending_column():
+    required = _ts(columns=[
+        {"name": "id", "type": "str"},
+        {"name": "quote", "type": "str"},
+        {"name": "score", "type": "str"},
+    ])
+    producer = _ts(columns=[{"name": "id", "type": "str"}, {"name": "score", "type": "int"}])
+    reasons = required.find_unsatisfied_columns(producer)
+    assert len(reasons) == 2  # quote absent + score type-differs — all at once, not just the first
+
+
+def test_is_subset_of_uses_exact_nullability():
+    # is_subset_of demands a spec-preserving subset — nullability EXACT, so the
+    # safe-direction nullability difference find_unsatisfied_columns tolerates is
+    # still not a subset.
+    nullable = _ts(columns=[{"name": "score", "type": "int", "nullable": True}])
+    non_null = _ts(columns=[{"name": "score", "type": "int", "nullable": False}])
+    assert nullable.is_subset_of(non_null) is False
+    assert nullable.find_unsatisfied_columns(non_null) == []
+
+
 def test_subtract_strict_false_lists_column_with_differing_spec():
     a = _ts(columns=[{"name": "id", "type": "str"}])
     b = _ts(columns=[{"name": "id", "type": "int"}])

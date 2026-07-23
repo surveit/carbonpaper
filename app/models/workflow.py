@@ -70,11 +70,47 @@ def detect_cycle(stages: list[Stage]) -> list[str]:
     return found
 
 
+def validate_edge_schemas(stages: list[Stage]) -> list[str]:
+    """One issue per workflow edge whose declared input schema the upstream stage
+    does not supply. A downstream stage may declare, on each input, the schema it
+    expects that upstream to satisfy (`inputs[i].schema`). That declaration is a
+    REQUIREMENT — possibly a projection naming only the columns the stage consumes
+    — and every column it names must appear in the upstream stage's `output_schema`
+    with a matching spec and compatible nullability (subsumption, not identity;
+    see `TableSchema.find_unsatisfied_columns`). Reports every offending column
+    across every edge, so one pass surfaces them all.
+
+    An edge is skipped, never flagged, when: the input declares no schema (nothing
+    to check); the named upstream stage is missing (`validate_inputs_resolve`
+    already reports that — this does not double-report); or the upstream declares
+    no `output_schema` (unknowable — a reference we cannot check is never wrong,
+    the same rule `Stage._config_columns_resolve` follows)."""
+    by_id = {s.id: s for s in stages}
+    issues: list[str] = []
+    for stage in stages:
+        for ref in stage.inputs:
+            required = ref.table_schema
+            if required is None:
+                continue
+            upstream = by_id.get(ref.id)
+            if upstream is None or upstream.output_schema is None:
+                continue
+            for reason in required.find_unsatisfied_columns(upstream.output_schema):
+                issues.append(f"`{stage.id}`: input from `{ref.id}` — {reason}")
+    return issues
+
+
 def graph_issues(stages: list[Stage]) -> list[str]:
     """Every cross-stage problem in the workflow graph: duplicate ids, dangling
-    inputs, and a cycle. The single source of truth both the strict model
-    validator and the non-fatal `validate_workflow` build on."""
-    return validate_unique_ids(stages) + validate_inputs_resolve(stages) + detect_cycle(stages)
+    inputs, a cycle, and any edge whose declared input schema the upstream stage's
+    output_schema does not supply. The single source of truth both the strict
+    model validator and the non-fatal `validate_workflow` build on."""
+    return (
+        validate_unique_ids(stages)
+        + validate_inputs_resolve(stages)
+        + detect_cycle(stages)
+        + validate_edge_schemas(stages)
+    )
 
 
 class Workflow(_Base):
@@ -104,7 +140,8 @@ def parse_workflow(stages: list[dict[str, Any]]) -> Workflow:
 def validate_workflow(stages: list[Stage]) -> list[str]:
     """Cross-stage checks on already-parsed stages, as human-readable issue
     strings — every problem, not just the first: unique ids, inputs resolve,
-    acyclic. Per-stage invariants (e.g. llm_transform being strictly 1:1) are
+    acyclic, and every edge's declared input schema supplied by its upstream
+    output_schema. Per-stage invariants (e.g. llm_transform being strictly 1:1) are
     already enforced by `Stage` construction, so any `list[Stage]` reaching here
     is stage-valid; this is the remaining, whole-graph seam `load_workflow` (and
     hence `create_version_from_disk`) enforces, so an invalid workflow is never versioned

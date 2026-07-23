@@ -11,7 +11,7 @@ depending on `stage.py`.
 from __future__ import annotations
 
 import re
-from typing import Any, Optional, Sequence
+from typing import Any, Literal, Optional, Sequence
 
 from pydantic import (
     BaseModel,
@@ -399,7 +399,40 @@ class TableSchema(_Base):
         (the subtrahend must be a subset of the minuend when `strict=True`) and
         by `Stage`'s 1:1 validator (a transform's input must be a subset of its
         output)."""
-        return not self.subtract(other, strict=False).columns
+        return not self.find_unsatisfied_columns(other, nullability="exact")
+
+    def find_unsatisfied_columns(
+        self, producer: "TableSchema", nullability: Literal["compatible", "exact"] = "compatible"
+    ) -> list[str]:
+        """One human-readable reason per column of this schema that `producer`
+        does not supply. `self` names the columns a consumer requires; `producer`
+        names what an upstream supplies. A column is unsatisfied when `producer`
+        does not declare it, or declares it with a differing spec (prose aside,
+        per `_column_spec_differences`). All offending columns are reported, not
+        just the first.
+
+        `nullability` governs how the two columns' `nullable` flags must relate:
+          - "compatible" (default): a non-null producer column satisfies a
+            nullable requirement — the producer's guarantee is stronger than
+            needed. Only the unsafe direction is flagged: a required non-null
+            column fed by a producer that may emit null.
+          - "exact": the flags must be identical (`is_subset_of` uses this — a
+            spec-preserving subset differs on no field at all)."""
+        producer_by_name = {c.name: c for c in producer.columns}
+        reasons: list[str] = []
+        for required in self.columns:
+            supplied = producer_by_name.get(required.name)
+            if supplied is None:
+                reasons.append(f"column {required.name!r} absent from producer")
+                continue
+            diffs = _column_spec_differences(required, supplied)
+            if nullability == "compatible" and "nullable" in diffs:
+                diffs = [d for d in diffs if d != "nullable"]
+                if required.nullable is False and supplied.nullable is True:
+                    diffs.append("nullable (producer may emit null; column is required non-null)")
+            if diffs:
+                reasons.append(f"column {required.name!r} differs on {', '.join(diffs)}")
+        return reasons
 
     def to_prompt(self) -> str:
         """Render this schema as instructions for an LLM reply: one line per
