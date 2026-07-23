@@ -72,6 +72,7 @@ def run_subset(
     stage_ids: list[str],
     run_dir: Path,
     repo_root: Path,
+    queue_auto_approve: bool = False,
 ) -> dict[str, pd.DataFrame]:
     """Run only `stage_ids` of `workflow`, with `injected_outputs` seeded as the
     outputs of stages OUTSIDE the subset (their upstream is cut off — the output is
@@ -80,7 +81,12 @@ def run_subset(
     Any input of a subset stage that names a stage outside the subset must appear in
     `injected_outputs`, or `_execute_stages` fails on it. Raises SubsetRunError if an
     executed stage errors or the run halts for review, so a caller gets a clean output
-    set or a loud failure — never a half-populated dict."""
+    set or a loud failure — never a half-populated dict.
+
+    `queue_auto_approve` seeds the ctx flag of the same name: when set, a
+    human_review_queue stage passes every row through in memory (approving all,
+    no disk) instead of reaching for the decisions store. Off by default, so an
+    ordinary subset run's queue stage behaves exactly as before."""
     by_id = workflow.index_stages_by_id()
     missing = [sid for sid in stage_ids if sid not in by_id]
     if missing:
@@ -89,18 +95,19 @@ def run_subset(
     (run_dir / "outputs").mkdir(parents=True, exist_ok=True)
     outputs: dict[str, pd.DataFrame] = dict(injected_outputs)
     manifest = _execute_stages(
-        ordered, _subset_ctx(repo_root, run_dir), _subset_manifest(run_dir, ordered),
-        run_dir, outputs)
+        ordered, _subset_ctx(repo_root, run_dir, queue_auto_approve),
+        _subset_manifest(run_dir, ordered), run_dir, outputs)
     _raise_if_run_failed(manifest)
     return outputs
 
 
-def _subset_ctx(repo_root: Path, run_dir: Path) -> RunContext:
+def _subset_ctx(repo_root: Path, run_dir: Path, queue_auto_approve: bool) -> RunContext:
     # No identity/stage_cache: a subset run is keyed on the Workflow + run_dir, not a
     # project tree, and has no cross-run cache access. A handler that needs project
-    # scope (only human_review_queue does, and it halts a subset run anyway) fails
-    # loudly rather than reading a fabricated wrong directory.
-    return RunContext.for_non_production(repo_root, run_dir)
+    # scope (only human_review_queue does) fails loudly rather than reading a
+    # fabricated wrong directory — unless `queue_auto_approve` tells that handler to
+    # pass rows through in memory, in which case it never reaches for project scope.
+    return RunContext.for_non_production(repo_root, run_dir, queue_auto_approve=queue_auto_approve)
 
 
 def _subset_manifest(run_dir: Path, ordered: list[Stage]) -> dict[str, Any]:

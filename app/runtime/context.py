@@ -69,6 +69,11 @@ class RunContext:
 
     Run input overrides:
       limits, offsets — per-stage row-slicing overrides for this run.
+      queue_auto_approve — when set, a human_review_queue stage passes every
+                           row through as approved, in memory (no stage-cache
+                           decision lookup, no queue snapshot, no halt). Only a
+                           non-production run ever sets it; production leaves it
+                           False so the real review path is unchanged.
 
     Telemetry accumulators (stages write into these; the manifest reads
     them back): queue_stats, dropped_columns, row_errors, llm_usage,
@@ -81,6 +86,7 @@ class RunContext:
     stage_cache: ReadOnlyStageCache | None
     limits: dict[str, int]
     offsets: dict[str, int]
+    queue_auto_approve: bool = False
     queue_stats: dict[str, QueueStats] = field(default_factory=dict)
     dropped_columns: dict[str, list[str]] = field(default_factory=dict)
     row_errors: dict[str, list[RowError]] = field(default_factory=dict)
@@ -127,12 +133,16 @@ class RunContext:
         run_dir: Path,
         limits: dict[str, int] | None = None,
         offsets: dict[str, int] | None = None,
+        queue_auto_approve: bool = False,
     ) -> "RunContext":
         """A run with no project scope (a subset run, a preview, an authored-
-        test run): no `identity`, no stage-result cache."""
+        test run): no `identity`, no stage-result cache. `queue_auto_approve`
+        lets such a run pass a human_review_queue stage through in memory
+        (it carries no project scope to resolve cached decisions against)."""
         return cls(
             repo_root=repo_root, run_dir=run_dir, identity=None, stage_cache=None,
             limits=dict(limits or {}), offsets=dict(offsets or {}),
+            queue_auto_approve=queue_auto_approve,
         )
 
 

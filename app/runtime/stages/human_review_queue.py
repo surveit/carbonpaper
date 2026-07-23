@@ -15,6 +15,11 @@ from app.services.stage_cache import ReadOnlyStageCache, StageCacheEntry, comput
 from ..context import QueueStats, RunContext
 from ..errors import HaltForReview
 
+# The upstream AI score column a queue stage reviews. Named once so the two sites
+# that test for its presence (auto-approve and passthrough finalization) can't
+# drift apart.
+_SCORE_COLUMN = "score"
+
 
 def handle_human_review_queue(stage: Stage, inputs: dict[str, pd.DataFrame], ctx: RunContext) -> pd.DataFrame:
     """Real review-queue semantics:
@@ -37,8 +42,18 @@ def handle_human_review_queue(stage: Stage, inputs: dict[str, pd.DataFrame], ctx
     sid = stage.id
     queue_cfg = stage.queue
     assert queue_cfg is not None  # Stage validation: human_review_queue carries queue_cfg
-    project, stage_cache = _require_project_scope(ctx, sid)
     src = inputs[stage.inputs[0].id].copy()
+
+    # Checked FIRST, before any reach for project scope / the decisions cache: when
+    # the caller asked for in-memory auto-approval, every row is approved and returned
+    # without a stage-cache decision lookup, queue snapshot, or halt. A non-production
+    # (subset/preview) run carries no project scope, so this is also the only way such
+    # a run can pass a queue stage. Production ctx never sets the flag, so production
+    # behavior is unchanged.
+    if ctx.queue_auto_approve:
+        return _auto_approve_all(src, stage, ctx, sid)
+
+    project, stage_cache = _require_project_scope(ctx, sid)
 
     queueable, passthrough = _partition_reviewable_rows(src, queue_cfg.filter, ctx, sid)
 
@@ -82,6 +97,27 @@ def _require_project_scope(ctx: RunContext, sid: str) -> tuple[str, ReadOnlyStag
             "set, but this run carries neither."
         )
     return ctx.identity.project, ctx.stage_cache
+
+
+def _auto_approve_all(
+    src: pd.DataFrame, stage: Stage, ctx: RunContext, sid: str
+) -> pd.DataFrame:
+    """Pass every row through as approved, entirely in memory — no stage-cache
+    decision lookup, no queue snapshot, no halt. Each row gets the same reviewer
+    columns an 'approve' decision produces (final/human score = ai score), then the
+    frame is projected onto the output schema exactly as the real path's output would
+    be, so the stage's recorded row count is its real one. No human reviewed these
+    rows, so reviewer_id/reviewed_at stay null."""
+    approved = src.copy()
+    ai = approved[_SCORE_COLUMN] if _SCORE_COLUMN in approved.columns else pd.NA
+    approved["ai_score"] = ai
+    approved["human_score"] = ai
+    approved["final_score"] = ai
+    approved["review_notes"] = f"decision={RowReviewDecision.approve}"
+    approved["reviewer_id"] = pd.NA
+    approved["reviewed_at"] = pd.NA
+    approved["decision"] = RowReviewDecision.approve
+    return _project_onto_output_schema(approved, stage, ctx, sid)
 
 
 def _partition_reviewable_rows(
@@ -262,9 +298,9 @@ def _apply_decided_rows(
 def _finalize_passthrough_rows(passthrough: pd.DataFrame) -> pd.DataFrame:
     """Pass-through rows keep their AI score as final; the reviewer columns are
     filled with the pass-through-specific values (no human ever reviewed them)."""
-    if len(passthrough) and "score" in passthrough.columns:
-        passthrough["ai_score"] = passthrough["score"]
-        passthrough["final_score"] = passthrough["score"]
+    if len(passthrough) and _SCORE_COLUMN in passthrough.columns:
+        passthrough["ai_score"] = passthrough[_SCORE_COLUMN]
+        passthrough["final_score"] = passthrough[_SCORE_COLUMN]
     passthrough["human_score"] = pd.NA
     passthrough["reviewer_id"] = passthrough.get("reviewer", pd.NA)
     passthrough["reviewed_at"] = pd.NA
