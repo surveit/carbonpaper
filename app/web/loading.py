@@ -1,6 +1,9 @@
 """Filesystem access for the web layer: read compiled stage JSON, run
-manifests, stage outputs, review decisions, and queue snapshots off disk, plus
-small pure helpers for the stage-dict shape they return."""
+manifests, stage outputs, and queue snapshots off disk, plus small pure
+helpers for the stage-dict shape they return. Reviewer decisions themselves
+are no longer read from disk here — they live in the stage-result cache
+(app.services.stage_cache); this module only counts rows in the pre-cache
+legacy decisions file for a one-line reviewer notice."""
 
 from __future__ import annotations
 
@@ -365,22 +368,18 @@ def load_output_preview(run_dir: Path, rel_path: str | None) -> dict[str, Any] |
     }
 
 
-# ─── Review decisions & queue snapshots ──────────────────────────────────────
+# ─── Queue snapshots & the legacy decisions notice ───────────────────────────
 
-def decisions_path(project: str, stage_id: str) -> Path:
-    d = EXAMPLES_DIR / project / "decisions"
-    d.mkdir(parents=True, exist_ok=True)
-    return d / f"{stage_id}.parquet"
-
-
-def load_decisions_df(project: str, stage_id: str) -> pd.DataFrame:
-    p = decisions_path(project, stage_id)
-    if not p.exists():
-        return pd.DataFrame(
-            columns=["content_hash", "decision", "modified_score",
-                     "reviewer", "reviewed_at", "source_run_id"]
-        )
-    return pd.read_parquet(p)
+def find_legacy_decisions_note(project: str, stage_id: str) -> int:
+    """Row count of the pre-cache EXAMPLES_DIR/<project>/decisions/<stage_id>.parquet
+    file, or 0 if it doesn't exist. This file predates the stage-result cache
+    (app.services.stage_cache) and is never read for its values — only
+    counted, so `queue_page` can show a reviewer a one-line notice that
+    decisions in that old format exist without applying them."""
+    path = EXAMPLES_DIR / project / "decisions" / f"{stage_id}.parquet"
+    if not path.exists():
+        return 0
+    return len(pd.read_parquet(path))
 
 
 def queue_snapshot(project: str, run_id: str, stage_id: str) -> pd.DataFrame | None:

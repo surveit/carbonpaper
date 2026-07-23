@@ -113,6 +113,20 @@ def compute_row_fingerprint(row: Mapping[str, object]) -> str:
     return hashlib.sha1(payload.encode("utf-8")).hexdigest()[:16]
 
 
+def canonicalize_row_for_cache(row: Mapping[str, object]) -> JsonDict:
+    """`row` reduced to JSON-native types for storage as a `StageCacheEntry`'s
+    `frozen_input`: every null form normalizes to JSON null (the same
+    `_normalize_row_value` step `compute_row_fingerprint` hashes under), and
+    any remaining non-JSON-native value (a numpy scalar, a pandas Timestamp,
+    ...) is stringified via `default=str` on the round trip through
+    `json.dumps`/`json.loads`. Using the same normalization `compute_row_fingerprint`
+    hashes under means a stored `frozen_input` and the `input_fingerprint`
+    computed for the same row describe that row consistently."""
+    canonical = {key: _normalize_row_value(value) for key, value in row.items()}
+    safe: JsonDict = json.loads(json.dumps(canonical, default=str))
+    return safe
+
+
 def _normalize_row_value(value: object) -> object:
     """`value`, or None if `value` is one of the null forms a pandas row cell
     can carry: plain `None`, `float('nan')`, `pd.NA`, or `pd.NaT`. Each form is
@@ -172,6 +186,7 @@ __all__ = [
     "HumanDecision",
     "StageCacheEntry",
     "build_cache_id",
+    "canonicalize_row_for_cache",
     "compute_row_fingerprint",
     "ReadOnlyStageCache",
     "StageCache",

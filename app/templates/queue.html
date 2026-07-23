@@ -29,6 +29,10 @@
 </details>
 {% endif %}
 
+{% if legacy_decisions_rows > 0 %}
+<p class="legacy-notice">⚠ {{ legacy_decisions_rows }} prior decision(s) from the pre-cache format exist and are not applied — the rows reappear below for review.</p>
+{% endif %}
+
 {% if not items %}
 <p class="muted"><em>No items to review.</em></p>
 {% endif %}
@@ -36,7 +40,7 @@
 <div class="queue-items">
 {% for item in items %}
 <article class="queue-card {% if item.prior_decision %}decided decided-{{ item.prior_decision.decision }}{% endif %}"
-         data-content-hash="{{ item.content_hash }}">
+         data-input-fingerprint="{{ item.input_fingerprint }}">
     <header>
         <span class="ai-score score-{{ item.row.get('score', '0') }}">AI score: {{ item.row.get('score', '?') }}</span>
         {% if item.row.get('entity_id') %}<code>{{ item.row.entity_id }}</code>{% endif %}
@@ -110,7 +114,7 @@
 
   async function submitDecision(card, decision, modifiedScore) {
     const fd = new FormData();
-    fd.append('content_hash', card.dataset.contentHash);
+    fd.append('input_fingerprint', card.dataset.inputFingerprint);
     fd.append('decision', decision);
     if (modifiedScore !== undefined && modifiedScore !== null && modifiedScore !== '') {
       fd.append('modified_score', modifiedScore);
