@@ -41,8 +41,10 @@
             {% endif %}
         </dd>
     </dl>
-    <h3>prompt template</h3>
-    <pre class="prompt">{{ stage.llm.prompt_template }}</pre>
+    <h3>prompt instructions</h3>
+    <pre class="prompt">{{ stage.llm.prompt_instructions }}</pre>
+    <h3>prompt data template</h3>
+    <pre class="prompt">{{ stage.llm.prompt_data_template }}</pre>
     {% if llm_example %}
     <details {% if llm_example.error %}{% else %}open{% endif %}>
         <summary>Example rendered prompt (first input row{% if llm_example.source_id %} from <code>{{ llm_example.source_id }}</code>{% endif %})</summary>

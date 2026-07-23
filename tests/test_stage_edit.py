@@ -103,7 +103,7 @@ def test_patch_changes_only_named_field_and_preserves_the_rest(tmp_path: Path) -
     # everything not named in the patch is preserved verbatim — the fidelity guarantee
     assert after["name"] == "Score rows"
     assert after["llm"]["model"] == "claude-sonnet-4-6"
-    assert after["llm"]["prompt_template"] == "score {doc_id}"
+    assert after["llm"]["prompt_data_template"] == "score {doc_id}"
 
 
 def test_patch_deep_merges_nested_object(tmp_path: Path) -> None:
@@ -113,7 +113,7 @@ def test_patch_deep_merges_nested_object(tmp_path: Path) -> None:
     after = _score(pdir)
     assert after["llm"]["model"] == "opus"
     # the sibling key inside llm is NOT dropped (deep merge, not whole-object replace)
-    assert after["llm"]["prompt_template"] == "score {doc_id}"
+    assert after["llm"]["prompt_data_template"] == "score {doc_id}"
 
 
 def test_patch_null_deletes_a_field(tmp_path: Path) -> None:
