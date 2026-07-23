@@ -77,8 +77,6 @@ def call_llm(
     including a failed attempt's, since those tokens were still spent. Kept as an
     out-param rather than the return value so the reply-dict contract (and the
     tests that mock it) are unchanged."""
-    require_agent_backend()
-
     if not llm_config.prompt_data_template:
         raise LLMError(f"stage {stage_id}: llm_transform has no prompt_data_template")
     if llm_config.tools:
@@ -86,24 +84,62 @@ def call_llm(
             f"stage {stage_id}: llm.tools is not supported by the agent backend"
         )
     task = render_prompt(llm_config.prompt_data_template, input_row)
-    system_prompt = (
-        SYSTEM_PROMPT
-        if not llm_config.prompt_instructions
-        else SYSTEM_PROMPT + "\n\n" + llm_config.prompt_instructions
-    )
     model_name = str(model or llm_config.model or DEFAULT_MODEL)
+    return _run_agent(
+        _compose_system(llm_config.prompt_instructions), task, reply_model, model_name,
+        llm_config.max_retries, usage_out,
+    )
 
-    # Honor llm_config.max_retries for TRANSIENT backend failures (a dropped CLI
-    # connection, a timeout) — distinct from the Agent's own in-loop retry on
-    # schema rejection. max_retries=N allows N+1 total attempts; a fresh Agent is
-    # built each attempt, and the LAST failure is re-raised so the caller still
-    # records a real error rather than a fabricated reply.
-    attempts = max(1, (llm_config.max_retries or 0) + 1)
+
+def call_llm_batch(
+    stage_id: str,
+    llm_config: LLMConfig,
+    *,
+    instructions: str,
+    task: str,
+    reply_schema: type[BaseModel],
+    model: str | None = None,
+    usage_out: list[LlmUsage] | None = None,
+) -> dict[str, Any]:
+    """Invoke the agent on a whole chunk at once — the SAME agent backend, retries,
+    and usage recording as the per-row `call_llm` (both go through `_run_agent`);
+    it is not a separate invocation mechanism. The caller (the batch driver)
+    pre-builds `task` (the numbered chunk rows + the copy-the-number contract) and
+    `instructions`, and passes a list-of-items `reply_schema`. Returns the
+    validated `{"results": [...]}` as a plain dict."""
+    model_name = str(model or llm_config.model or DEFAULT_MODEL)
+    return _run_agent(
+        _compose_system(instructions), task, reply_schema, model_name,
+        llm_config.max_retries, usage_out,
+    )
+
+
+def _compose_system(instructions: str) -> str:
+    """The agent's base system prompt plus the stage's row-invariant
+    `prompt_instructions`, if any — the stable prefix shared across rows/chunks."""
+    return SYSTEM_PROMPT if not instructions else SYSTEM_PROMPT + "\n\n" + instructions
+
+
+def _run_agent(
+    system_prompt: str,
+    task: str,
+    target_schema: type[BaseModel],
+    model_name: str,
+    max_retries: int,
+    usage_out: list[LlmUsage] | None,
+) -> dict[str, Any]:
+    """Run the structured-output Agent to a validated `target_schema`, dumped to a
+    dict. `max_retries` handles TRANSIENT backend failures (a dropped CLI
+    connection, a timeout) — a fresh Agent per attempt, every attempt's usage
+    (success or failure) recorded, and the LAST failure re-raised so the caller
+    records a real error rather than a fabricated reply."""
+    require_agent_backend()
+    attempts = max(1, (max_retries or 0) + 1)
     last_exc: Exception | None = None
     for attempt in range(attempts):
         agent: Agent[BaseModel] = Agent(
             system_prompt=system_prompt,
-            target_schema=reply_model,
+            target_schema=target_schema,
             task=task,
             model=model_name,
         )
@@ -111,10 +147,7 @@ def call_llm(
             answer = run_sync(asyncio.wait_for(agent.run(), timeout=DEFAULT_TIMEOUT_S))
             _record_usage(usage_out, agent)
             return answer.model_dump(mode="json")
-        except Exception as exc:  # noqa: BLE001 — retry any backend failure up to
-            # max_retries, then re-raise the last so the caller records it. The
-            # attempt still spent tokens (a rejected schema, a mid-turn drop), so
-            # record its usage before retrying.
+        except Exception as exc:  # noqa: BLE001 — retry any backend failure, record its usage, re-raise the last
             _record_usage(usage_out, agent)
             last_exc = exc
             if attempt + 1 < attempts:
