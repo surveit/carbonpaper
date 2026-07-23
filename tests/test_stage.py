@@ -72,6 +72,89 @@ def test_missing_handle_block_raises():
         m.Stage.model_validate(S(id="x", type="llm_transform", inputs=[{"id": "a"}]))
 
 
+# ── llm_transform's 1:1 contract (_llm_transform_one_to_one) ──────────────────
+def test_llm_transform_rejects_more_than_one_input():
+    with pytest.raises(ValidationError, match="exactly one input, has 2"):
+        m.Stage.model_validate(S(
+            id="extract", type="llm_transform",
+            inputs=[{"id": "a"}, {"id": "b"}],
+            output_schema={"columns": [{"name": "id", "type": "str"}], "primary_key": ["id"]},
+            llm={"prompt_template": "do it"}))
+
+
+def test_llm_transform_rejects_input_with_no_declared_schema():
+    with pytest.raises(ValidationError, match="declares no input schema"):
+        m.Stage.model_validate(S(
+            id="extract", type="llm_transform",
+            inputs=[{"id": "a"}],
+            output_schema={"columns": [{"name": "id", "type": "str"}], "primary_key": ["id"]},
+            llm={"prompt_template": "do it"}))
+
+
+def test_llm_transform_rejects_missing_output_schema():
+    with pytest.raises(ValidationError, match="declares no output_schema"):
+        m.Stage.model_validate(S(
+            id="extract", type="llm_transform",
+            inputs=[{"id": "a", "schema": {"columns": [{"name": "id", "type": "str"}],
+                                           "primary_key": ["id"]}}],
+            llm={"prompt_template": "do it"}))
+
+
+def test_llm_transform_rejects_input_schema_with_no_primary_key():
+    with pytest.raises(ValidationError, match="input schema declares no primary_key"):
+        m.Stage.model_validate(S(
+            id="extract", type="llm_transform",
+            inputs=[{"id": "a", "schema": {
+                "columns": [{"name": "id", "type": "str"}, {"name": "text", "type": "str"}]}}],
+            output_schema={"columns": [{"name": "id", "type": "str"}, {"name": "text", "type": "str"},
+                                       {"name": "score", "type": "int"}], "primary_key": ["id"]},
+            llm={"prompt_template": "do {id}"}))
+
+
+def test_llm_transform_rejects_output_schema_with_no_primary_key():
+    with pytest.raises(ValidationError, match="output_schema declares no primary_key"):
+        m.Stage.model_validate(S(
+            id="extract", type="llm_transform",
+            inputs=[{"id": "a", "schema": {"columns": [{"name": "id", "type": "str"}],
+                                           "primary_key": ["id"]}}],
+            output_schema={"columns": [{"name": "id", "type": "str"},
+                                       {"name": "score", "type": "int"}]},
+            llm={"prompt_template": "do {id}"}))
+
+
+def test_llm_transform_rejects_mismatched_primary_keys():
+    with pytest.raises(ValidationError, match=r"input primary_key \['id'\] != output primary_key \['other'\]"):
+        m.Stage.model_validate(S(
+            id="extract", type="llm_transform",
+            inputs=[{"id": "a", "schema": {"columns": [{"name": "id", "type": "str"}],
+                                           "primary_key": ["id"]}}],
+            output_schema={"columns": [{"name": "id", "type": "str"}, {"name": "other", "type": "str"},
+                                       {"name": "score", "type": "int"}], "primary_key": ["other"]},
+            llm={"prompt_template": "do {id}"}))
+
+
+def test_llm_transform_rejects_output_that_drops_an_input_column():
+    with pytest.raises(ValidationError, match="output must keep every input column unchanged"):
+        m.Stage.model_validate(S(
+            id="extract", type="llm_transform",
+            inputs=[{"id": "a", "schema": {
+                "columns": [{"name": "id", "type": "str"}, {"name": "text", "type": "str"}],
+                "primary_key": ["id"]}}],
+            output_schema={"columns": [{"name": "id", "type": "str"}, {"name": "score", "type": "int"}],
+                           "primary_key": ["id"]},
+            llm={"prompt_template": "do {id}"}))
+
+
+def test_llm_transform_rejects_output_that_adds_no_columns():
+    with pytest.raises(ValidationError, match="adds no columns beyond the input"):
+        m.Stage.model_validate(S(
+            id="extract", type="llm_transform",
+            inputs=[{"id": "a", "schema": {"columns": [{"name": "id", "type": "str"}],
+                                           "primary_key": ["id"]}}],
+            output_schema={"columns": [{"name": "id", "type": "str"}], "primary_key": ["id"]},
+            llm={"prompt_template": "do {id}"}))
+
+
 def test_publish_also_requires_function():
     with pytest.raises(ValidationError):
         m.Stage.model_validate(S(id="p", type="publish", inputs=[{"id": "a"}], publish={"format": "json"}))
