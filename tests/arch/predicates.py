@@ -121,7 +121,7 @@ def find_production_run_imports(paths: list[Path]) -> list[str]:
     that mint a run record under ``runs/``. Only ``app.runtime.runner`` itself is
     flagged: ``app.runtime.executor`` (the shared execution engine, including its
     manifest helpers) is the sanctioned surface a non-production run — an eval or
-    a smoke run — reaches instead, so importing it is fine and never flagged.
+    a test run — reaches instead, so importing it is fine and never flagged.
     Matches both ``import app.runtime.runner`` and ``from app.runtime.runner
     import ...``."""
     offenders: list[str] = []

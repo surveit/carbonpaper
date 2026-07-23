@@ -1,11 +1,11 @@
-"""The MCP run surface: the run_workflow / get_run_status / smoke_run tools.
+"""The MCP run surface: the run_workflow / get_run_status / test_run tools.
 
-Thin wrappers over app.services.run / app.services.smoke. Tests call the tool
+Thin wrappers over app.services.run / app.services.test_run. Tests call the tool
 functions directly against a tmp workspace (the EXAMPLES_DIR idiom from
 tests/test_mcp_server.py) and assert the delegate contract plus the loud-error
 translation to {ok: False, error}. The run happy path reuses the file-connector
-project idiom from tests/test_run_service.py; the smoke delegate reuses the demo
-fixtures from tests/test_smoke_service.py."""
+project idiom from tests/test_run_service.py; the test-run delegate reuses the demo
+fixtures from tests/test_test_run_service.py."""
 from __future__ import annotations
 
 import json
@@ -55,9 +55,9 @@ _CLASSIFY = {
 }
 
 
-def _make_smoke_project(root):
+def _make_test_run_project(root):
     """A `demo` project with a bound 4-row source and one deterministic stage,
-    seeded as an unpublished version (smoke runs work on unpublished candidates)."""
+    seeded as an unpublished version (test runs work on unpublished candidates)."""
     (root / "data").mkdir(parents=True)
     pd.DataFrame({"doc_id": ["a", "b", "c", "d"], "score": [1, -1, 2, -3]}).to_csv(
         root / "data" / "rows.csv", index=False)
@@ -122,20 +122,20 @@ def test_get_run_status_missing_run_translates_to_error(tmp_path, monkeypatch):
     assert result["error"]
 
 
-def test_smoke_run_delegates_and_reports_verdict(tmp_path, monkeypatch):
-    """smoke_run runs the frontier over the sample and returns the smoke verdict
+def test_test_run_delegates_and_reports_verdict(tmp_path, monkeypatch):
+    """test_run runs the frontier over the sample and returns the test-run verdict
     (ok True, the executed stage, its row count) — never a production run."""
     from app.mcp import server
     from app.services import workspace
 
     monkeypatch.setattr(workspace, "EXAMPLES_DIR", tmp_path)
-    _make_smoke_project(tmp_path / "demo")
+    _make_test_run_project(tmp_path / "demo")
 
-    result = server.smoke_run(project_id="demo", limit=2, offset=1)
+    result = server.test_run(project_id="demo", limit=2, offset=1)
     assert result["ok"] is True
     assert result["stages_run"] == ["classify"]
     assert result["rows_out"] == 2
-    assert "smoke_run_id" in result
+    assert "test_run_id" in result
     assert not (tmp_path / "demo" / "runs").exists()
 
 
@@ -144,4 +144,4 @@ def test_run_tools_are_registered(tmp_path, monkeypatch):
     from app.mcp import server
 
     names = {tool.name for tool in server.mcp._tool_manager.list_tools()}
-    assert {"run_workflow", "get_run_status", "smoke_run"} <= names
+    assert {"run_workflow", "get_run_status", "test_run"} <= names

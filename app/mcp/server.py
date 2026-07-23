@@ -19,7 +19,7 @@ from starlette.types import Receive, Scope, Send
 
 from app.core.errors import (
     MissingInputBindingError,
-    NoSmokeVersionError,
+    NoTestRunVersionError,
     NoVersionToRunError,
     RunNotFoundError,
 )
@@ -29,7 +29,7 @@ from app.services import generation
 from app.services import loader
 from app.services import project as project_service
 from app.services import run as run_service
-from app.services import smoke as smoke_service
+from app.services import test_run as test_run_service
 from app.services import workspace
 from app.services.errors import WorkflowLoadError
 
@@ -40,7 +40,7 @@ from app.services.errors import WorkflowLoadError
 # against.
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 
-# Domain failures a run/smoke tool turns into {ok: False, error: str(exc)} — a
+# Domain failures a run/test-run tool turns into {ok: False, error: str(exc)} — a
 # loud, honest verdict rather than a traceback or a fabricated run id/status.
 # Anything outside this set propagates as a genuine internal fault.
 _RUN_TOOL_ERRORS = (
@@ -48,7 +48,7 @@ _RUN_TOOL_ERRORS = (
     MissingInputBindingError,
     WorkflowLoadError,
     RunNotFoundError,
-    NoSmokeVersionError,
+    NoTestRunVersionError,
     ValueError,
 )
 
@@ -312,22 +312,22 @@ def get_run_status(project_id: str, run_id: str) -> dict[str, Any]:
 
 
 @mcp.tool()
-def smoke_run(
+def test_run(
     project_id: str, version_id: str | None = None, limit: int = 20, offset: int = 0,
 ) -> dict[str, Any]:
-    """Run a NON-production smoke check: sample the first `limit` rows (from
+    """Run a NON-production test run: sample the first `limit` rows (from
     `offset`) of the workflow's bound source and run the frontier over just that
     sample, so an author can watch the pipeline execute on real data before
     publishing. It is NOT a run of record — it writes only under the project's
-    separate smoke_runs/ dir, produces no published artifacts, and carries no
+    separate test_runs/ dir, produces no published artifacts, and carries no
     cross-run state. Accepts any stored version, published or not (omit
     `version_id` for the newest). Returns the verdict
-    {ok, smoke_run_id, version_id, stages_run, rows_out, error}: `ok` False on any
+    {ok, test_run_id, version_id, stages_run, rows_out, error}: `ok` False on any
     stage error, with `error` naming what failed and `rows_out` None (never a
     fabricated count). A project with no stored version is a loud error."""
     pdir = _resolve_existing_project(project_id)
     try:
-        return smoke_service.run_smoke(
+        return test_run_service.start_test_run(
             pdir, REPO_ROOT, version_id=version_id, limit=limit, offset=offset)
     except _RUN_TOOL_ERRORS as exc:
         return {"ok": False, "error": str(exc)}

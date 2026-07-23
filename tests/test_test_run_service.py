@@ -1,6 +1,6 @@
-"""Tests for the smoke-run seam (app/services/smoke.py): sample a published
+"""Tests for the test-run seam (app/services/test_run.py): sample a published
 version's bound source, run the frontier (source-exclusive, publish-excluded)
-over the sample, and record a production-shape manifest under smoke_runs/ — never
+over the sample, and record a production-shape manifest under test_runs/ — never
 under runs/.
 
 Builds a tiny `demo` project pinned to a published version, no shipped data and
@@ -13,9 +13,9 @@ import json
 import pandas as pd
 import pytest
 
-from app.core.errors import NoSmokeSourceError, NoSmokeVersionError
+from app.core.errors import NoTestRunSourceError, NoTestRunVersionError
 from app.models import Stage
-from app.services.smoke import run_smoke
+from app.services.test_run import start_test_run
 from app.services.versioning import WorkflowVersion
 
 
@@ -74,7 +74,7 @@ _QUEUE = {
 
 def _seed(demo, stage_dicts, *, version_id="v1", published=False, created_at="2026-07-10T00:00:00"):
     """Save a version for the `demo` project with `stage_dicts`. Unpublished by
-    default: a smoke run must work on an unpublished candidate."""
+    default: a test run must work on an unpublished candidate."""
     WorkflowVersion(
         id=f"{demo.name}/{version_id}", version_id=version_id, created_at=created_at,
         message="seed", reviewer="test", published=published,
@@ -92,11 +92,11 @@ def demo(tmp_path):
     return demo
 
 
-def test_smoke_runs_frontier_over_the_sample(demo):
+def test_test_run_runs_frontier_over_the_sample(demo):
     """The frontier (classify) runs over the injected sample; the result is ok,
     names the executed stage, and reports its output row count."""
     _seed(demo, [_load_stage(demo), _CLASSIFY])
-    result = run_smoke(demo, demo)
+    result = start_test_run(demo, demo)
     assert result["ok"] is True
     assert result["error"] is None
     assert result["version_id"] == "v1"
@@ -104,21 +104,21 @@ def test_smoke_runs_frontier_over_the_sample(demo):
     assert result["rows_out"] == 4
 
 
-def test_smoke_limit_and_offset_slice_the_sample(demo):
+def test_test_run_limit_and_offset_slice_the_sample(demo):
     """limit/offset page the source sample before the frontier runs; a 1:1
     transform carries the sliced count straight through to rows_out."""
     _seed(demo, [_load_stage(demo), _CLASSIFY])
-    result = run_smoke(demo, demo, limit=2, offset=1)
+    result = start_test_run(demo, demo, limit=2, offset=1)
     assert result["ok"] is True
     assert result["rows_out"] == 2
 
 
-def test_smoke_writes_production_shape_manifest_under_smoke_runs_not_runs(demo):
-    """The manifest lands under smoke_runs/<id>/, carries the production run-manifest
+def test_test_run_writes_production_shape_manifest_under_test_runs_not_runs(demo):
+    """The manifest lands under test_runs/<id>/, carries the production run-manifest
     fields (project + workflow_version), and no runs/ dir is ever created."""
     _seed(demo, [_load_stage(demo), _CLASSIFY])
-    result = run_smoke(demo, demo)
-    manifest_path = demo / "smoke_runs" / result["smoke_run_id"] / "manifest.json"
+    result = start_test_run(demo, demo)
+    manifest_path = demo / "test_runs" / result["test_run_id"] / "manifest.json"
     assert manifest_path.exists()
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     assert manifest["project"] == "demo"
@@ -127,43 +127,43 @@ def test_smoke_writes_production_shape_manifest_under_smoke_runs_not_runs(demo):
     assert not (demo / "runs").exists()
 
 
-def test_smoke_excludes_publish_from_the_frontier(demo):
-    """A publish stage is never run by a smoke run — it is not in stages_run and
+def test_test_run_excludes_publish_from_the_frontier(demo):
+    """A publish stage is never run by a test run — it is not in stages_run and
     writes no artifacts."""
     _seed(demo, [_load_stage(demo), _CLASSIFY, _PUBLISH])
-    result = run_smoke(demo, demo)
+    result = start_test_run(demo, demo)
     assert result["ok"] is True
     assert "publish_report" not in result["stages_run"]
     assert result["stages_run"] == ["classify"]
 
 
-def test_smoke_reports_a_stage_error_as_failure(demo):
-    """A frontier stage that errors makes the smoke run fail: ok False, no
+def test_test_run_reports_a_stage_error_as_failure(demo):
+    """A frontier stage that errors makes the test run fail: ok False, no
     row count, and the error names the offending stage."""
     _seed(demo, [_load_stage(demo), _BOOM])
-    result = run_smoke(demo, demo)
+    result = start_test_run(demo, demo)
     assert result["ok"] is False
     assert result["rows_out"] is None
     assert "boom" in result["error"]
     manifest = json.loads(
-        (demo / "smoke_runs" / result["smoke_run_id"] / "manifest.json").read_text("utf-8"))
+        (demo / "test_runs" / result["test_run_id"] / "manifest.json").read_text("utf-8"))
     assert manifest["status"] == "errors"
 
 
-def test_smoke_reports_a_queue_stage_as_failure(demo):
+def test_test_run_reports_a_queue_stage_as_failure(demo):
     """A mid-frontier human_review_queue fails the subset run loudly — the subset
     ctx has no project_dir, so the queue handler raises before it can halt. The
-    smoke run reports that as a failure naming the queue stage (no read-through)."""
+    test run reports that as a failure naming the queue stage (no read-through)."""
     _seed(demo, [_load_stage(demo), _QUEUE])
-    result = run_smoke(demo, demo)
+    result = start_test_run(demo, demo)
     assert result["ok"] is False
     assert result["rows_out"] is None
     assert "review" in result["error"]
 
 
-def test_smoke_raises_when_no_source_stage(demo):
+def test_test_run_raises_when_no_source_stage(demo):
     """A workflow with no input_data stage has nothing to sample — raise loudly
-    rather than smoke-run an empty injection."""
+    rather than run over an empty injection."""
     # A lone python_frame_function with no upstream input_data source: it
     # validates as a Stage on its own, and is enough to exercise the guard, which
     # runs before workflow graph validation.
@@ -178,32 +178,32 @@ def test_smoke_raises_when_no_source_stage(demo):
         message="seed", reviewer="test", published=True,
         stages=[Stage.model_validate(standalone)],
     ).save()
-    with pytest.raises(NoSmokeSourceError):
-        run_smoke(demo, demo)
+    with pytest.raises(NoTestRunSourceError):
+        start_test_run(demo, demo)
 
 
-def test_smoke_runs_an_explicit_unpublished_version(demo):
-    """A smoke run evaluates a candidate BEFORE it is published, so an explicit
+def test_test_run_runs_an_explicit_unpublished_version(demo):
+    """A test run evaluates a candidate BEFORE it is published, so an explicit
     unpublished version_id runs (unlike a production run, which requires publish)."""
     _seed(demo, [_load_stage(demo), _CLASSIFY], version_id="v1", published=False)
-    result = run_smoke(demo, demo, version_id="v1")
+    result = start_test_run(demo, demo, version_id="v1")
     assert result["ok"] is True
     assert result["version_id"] == "v1"
 
 
-def test_smoke_default_picks_newest_version_even_when_unpublished(demo):
+def test_test_run_default_picks_newest_version_even_when_unpublished(demo):
     """version_id=None resolves to the newest stored version regardless of publish
     state — a newer unpublished draft wins over an older published version."""
     _seed(demo, [_load_stage(demo), _CLASSIFY],
           version_id="20260101T000000", published=True, created_at="2026-01-01T00:00:00")
     _seed(demo, [_load_stage(demo), _CLASSIFY],
           version_id="20260201T000000", published=False, created_at="2026-02-01T00:00:00")
-    result = run_smoke(demo, demo)
+    result = start_test_run(demo, demo)
     assert result["version_id"] == "20260201T000000"
 
 
-def test_smoke_raises_when_no_versions_exist(demo):
-    """A project with no stored version has nothing to smoke-run — raise loudly,
+def test_test_run_raises_when_no_versions_exist(demo):
+    """A project with no stored version has nothing to run — raise loudly,
     naming the project, rather than falling back to the working copy."""
-    with pytest.raises(NoSmokeVersionError, match="demo"):
-        run_smoke(demo, demo)
+    with pytest.raises(NoTestRunVersionError, match="demo"):
+        start_test_run(demo, demo)
