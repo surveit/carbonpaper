@@ -433,3 +433,50 @@ def test_llm_config_model_dump_emits_field_name_not_alias():
     dumped = cfg.model_dump()
     assert "prompt_data_template" in dumped
     assert "prompt_template" not in dumped
+
+
+def test_data_template_required():
+    """prompt_data_template (or its old alias prompt_template) stayed required
+    after the field split — neither key present must raise."""
+    with pytest.raises(ValidationError):
+        m.LLMConfig.model_validate({"prompt_instructions": "Be terse."})
+
+
+def test_double_brace_checks_data_template_not_instructions():
+    # {{text}} in prompt_data_template is the mistake the validator exists to catch.
+    with pytest.raises(ValidationError, match="double-brace"):
+        m.Stage.model_validate(S(
+            id="extract", type="llm_transform",
+            inputs=[{"id": "load", "schema": {
+                "columns": [{"name": "text", "type": "str"}], "primary_key": ["text"]}}],
+            output_schema={"columns": [{"name": "text", "type": "str"},
+                                       {"name": "out", "type": "str"}], "primary_key": ["text"]},
+            llm={"prompt_template": "Analyze {{text}} now"}))
+
+    # The SAME {{text}} placed only in prompt_instructions, with a valid
+    # single-braced prompt_data_template, must NOT raise — the validator only
+    # inspects the per-row template, never the instructions.
+    s = m.Stage.model_validate(S(
+        id="extract", type="llm_transform",
+        inputs=[{"id": "load", "schema": {
+            "columns": [{"name": "text", "type": "str"}], "primary_key": ["text"]}}],
+        output_schema={"columns": [{"name": "text", "type": "str"},
+                                   {"name": "out", "type": "str"}], "primary_key": ["text"]},
+        llm={"prompt_instructions": "Never echo {{text}} verbatim.",
+             "prompt_template": "Analyze {text} now"}))
+    assert s.llm is not None
+
+
+def test_both_fields_round_trip():
+    cfg = m.LLMConfig.model_validate({
+        "prompt_instructions": "Be terse and cite sources.",
+        "prompt_data_template": "Summarize {id}: {content}",
+    })
+    dumped = cfg.model_dump()
+    assert dumped["prompt_instructions"] == "Be terse and cite sources."
+    assert dumped["prompt_data_template"] == "Summarize {id}: {content}"
+    assert "prompt_template" not in dumped
+
+    reloaded = m.LLMConfig.model_validate(dumped)
+    assert reloaded.prompt_instructions == cfg.prompt_instructions
+    assert reloaded.prompt_data_template == cfg.prompt_data_template
