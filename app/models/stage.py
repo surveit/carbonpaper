@@ -11,7 +11,7 @@ import json
 import re
 from enum import Enum
 from pathlib import Path
-from typing import Any, Literal, Optional
+from typing import Any, ClassVar, Literal, Optional
 
 from pydantic import AliasChoices, Field, ValidationError, field_validator, model_validator
 
@@ -112,6 +112,11 @@ class PublishFormat(str, Enum):
 # ── Executable-handle blocks (each self-validates) ───────────────────────────
 class Connector(_Base):
     """input_data handle."""
+    # Every field changes what this stage computes (which file, what params) —
+    # see Stage.compute_definition_fingerprint.
+    FINGERPRINT_FIELDS: ClassVar[frozenset[str]] = frozenset({"kind", "params", "refresh", "notes"})
+    INCIDENTAL_FIELDS: ClassVar[frozenset[str]] = frozenset()
+
     kind: ConnectorKind
     params: dict[str, Any] = Field(
         default_factory=dict,
@@ -143,6 +148,14 @@ class Connector(_Base):
 
 class LLMConfig(_Base):
     """llm_transform handle."""
+    # Every field changes what this stage computes (the prompt, the model, the
+    # sampling/response knobs) — see Stage.compute_definition_fingerprint.
+    FINGERPRINT_FIELDS: ClassVar[frozenset[str]] = frozenset({
+        "prompt_instructions", "prompt_data_template", "model", "temperature",
+        "max_retries", "response_format", "rubric", "tools",
+    })
+    INCIDENTAL_FIELDS: ClassVar[frozenset[str]] = frozenset()
+
     prompt_instructions: str = ""
     prompt_data_template: str = Field(
         validation_alias=AliasChoices("prompt_data_template", "prompt_template"),
@@ -165,6 +178,13 @@ class PythonFunction(_Base):
     """Handle for python_row_function / python_frame_function (and publish). The
     row-vs-frame distinction lives in the stage `type`, not here — the runtime
     reads the type to decide whether to invoke this per row or per frame."""
+    # Every field changes what this stage computes (the code/module it runs) —
+    # see Stage.compute_definition_fingerprint.
+    FINGERPRINT_FIELDS: ClassVar[frozenset[str]] = frozenset({
+        "kind", "code", "module", "function", "requirements",
+    })
+    INCIDENTAL_FIELDS: ClassVar[frozenset[str]] = frozenset()
+
     kind: FunctionKind
     code: Optional[str] = Field(
         default=None,
@@ -220,6 +240,11 @@ class JoinConfig(_Base):
     collapses into one column (there is no `<key>_r`). `select` and the
     stage's `output_schema` may only name these producible columns — anything
     else is rejected when the stage is saved."""
+    # Every field changes what this stage computes (join type, keys, kept
+    # columns) — see Stage.compute_definition_fingerprint.
+    FINGERPRINT_FIELDS: ClassVar[frozenset[str]] = frozenset({"type", "keys", "on", "select"})
+    INCIDENTAL_FIELDS: ClassVar[frozenset[str]] = frozenset()
+
     type: JoinType = JoinType.inner
     keys: Optional[list[JoinKey]] = None
     on: Optional[list[JoinKey]] = None
@@ -257,6 +282,11 @@ class AggregationOp(_Base):
 
 class AggregateConfig(_Base):
     """aggregate handle."""
+    # Every field changes what this stage computes (grouping, aggregations) —
+    # see Stage.compute_definition_fingerprint.
+    FINGERPRINT_FIELDS: ClassVar[frozenset[str]] = frozenset({"group_by", "aggregations"})
+    INCIDENTAL_FIELDS: ClassVar[frozenset[str]] = frozenset()
+
     group_by: list[str]
     aggregations: list[AggregationOp]
 
@@ -275,6 +305,15 @@ class QueueConfig(_Base):
     """human_review_queue handle. A queued row is matched to a cached human
     decision by fingerprinting the row itself (app.services.stage_cache) — no
     column configuration is needed to enable that matching."""
+    # `filter`/`reviewer_instructions` change what the human is asked; routing,
+    # conflict_resolution, and estimated_volume_per_week describe how a
+    # decision is routed, not what is asked — see
+    # Stage.compute_definition_fingerprint.
+    FINGERPRINT_FIELDS: ClassVar[frozenset[str]] = frozenset({"filter", "reviewer_instructions"})
+    INCIDENTAL_FIELDS: ClassVar[frozenset[str]] = frozenset({
+        "routing", "conflict_resolution", "estimated_volume_per_week",
+    })
+
     filter: Optional[str] = None
     reviewer_instructions: Optional[str] = None
     routing: Optional[str] = None
@@ -284,6 +323,13 @@ class QueueConfig(_Base):
 
 class PublishConfig(_Base):
     """publish handle (runs alongside a `function` block)."""
+    # Every field changes what this stage computes (format, destination,
+    # template, layout) — see Stage.compute_definition_fingerprint.
+    FINGERPRINT_FIELDS: ClassVar[frozenset[str]] = frozenset({
+        "format", "destination", "template", "one_file_per", "cross_link",
+    })
+    INCIDENTAL_FIELDS: ClassVar[frozenset[str]] = frozenset()
+
     format: Optional[PublishFormat] = None
     destination: Optional[str] = None
     template: Optional[str] = None
@@ -324,12 +370,6 @@ _TYPE_SPEC: dict[str, dict[str, Any]] = {
     "human_review_queue":    {"handle": "queue",     "requires_inputs": True,  "min_inputs": 1},
     "publish":               {"handle": "publish",   "also_requires": ["function"], "requires_inputs": True, "min_inputs": 1},
 }
-
-# human_review_queue handle fields that determine what the human reviewer is
-# asked. routing, conflict_resolution, and estimated_volume_per_week describe
-# how a decision is routed, not what is asked, so compute_definition_fingerprint
-# trims the queue handle down to just these two before hashing it.
-_QUEUE_FINGERPRINT_FIELDS = ("filter", "reviewer_instructions")
 
 
 class Stage(_Base):
@@ -397,18 +437,19 @@ class Stage(_Base):
         this stage: {"type", "handle": <the type's handle block>, "output_schema"}.
         Every other Stage field (id, name, source, inputs, review, limit,
         compiler_notes, eval, tests) is incidental — it does not change what
-        this stage computes — and stays out of the fingerprint. For
-        human_review_queue the queue handle is further trimmed to
-        `_QUEUE_FINGERPRINT_FIELDS` (`filter`, `reviewer_instructions`): the
-        queue's other fields route or match a decision, not change what the
-        human is asked."""
+        this stage computes — and stays out of the fingerprint. The handle
+        block itself is trimmed to its class's own `FINGERPRINT_FIELDS` (every
+        handle config class declares `FINGERPRINT_FIELDS`/`INCIDENTAL_FIELDS`
+        explicitly, exhaustively over its own fields — see e.g. QueueConfig,
+        whose `routing`/`conflict_resolution`/`estimated_volume_per_week`
+        route or match a decision without changing what the human is asked)."""
         spec = _TYPE_SPEC[self.type]
-        handle_dump = getattr(self, spec["handle"]).model_dump(mode="json", exclude_none=True)
-        if self.type == StageType.human_review_queue:
-            handle_dump = {
-                key: value for key, value in handle_dump.items()
-                if key in _QUEUE_FINGERPRINT_FIELDS
-            }
+        handle = getattr(self, spec["handle"])
+        handle_dump = handle.model_dump(mode="json", exclude_none=True)
+        handle_dump = {
+            key: value for key, value in handle_dump.items()
+            if key in type(handle).FINGERPRINT_FIELDS
+        }
         output_dump = (
             self.output_schema.model_dump(mode="json", exclude_none=True)
             if self.output_schema is not None else None
