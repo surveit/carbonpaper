@@ -11,19 +11,27 @@ from pydantic import ValidationError
 from app.models import Stage
 
 
-def _aggregate_stage(*, group_by, edge_columns, value_column=None, where=None, formula="count"):
+def _aggregate_stage(*, group_by, edge_columns, value_column=None, where=None, formula="count",
+                     output_n_type="int"):
     aggregation = {"output_column": "n", "formula": formula}
     if value_column is not None:
         aggregation["value_column"] = value_column
     if where is not None:
         aggregation["where"] = where
+    # output_schema's first column is named after group_by[0] (never a
+    # generic placeholder): the aggregate handle emits each group_by column
+    # under its own name, so a declared column must match it to be
+    # deliverable — see test_aggregate_output_schema.py.
     return {
         "id": "agg", "type": "aggregate", "name": "agg",
         "inputs": [{"id": "src", "schema": {
             "columns": [{"name": c, "type": "str", "nullable": False} for c in edge_columns],
         }}],
-        "output_schema": {"columns": [{"name": "g", "type": "str", "nullable": False},
-                                      {"name": "n", "type": "int", "nullable": False}]},
+        # The aggregated column's declared type must match the formula's
+        # derivation: count derives int; sum over these all-str edge columns
+        # derives str (concatenation) — see derive_aggregate_output_types.
+        "output_schema": {"columns": [{"name": group_by[0], "type": "str", "nullable": False},
+                                      {"name": "n", "type": output_n_type, "nullable": False}]},
         "aggregate": {"group_by": group_by, "aggregations": [aggregation]},
     }
 
@@ -47,6 +55,7 @@ def test_value_column_missing_rejected():
 def test_value_column_present_ok():
     Stage.model_validate(_aggregate_stage(
         group_by=["a"], edge_columns=["a", "n"], value_column="n", formula="sum",
+        output_n_type="str",  # sum over a str edge column derives str
     ))
 
 
@@ -73,7 +82,7 @@ def test_no_edge_schema_declared_is_skipped_not_flagged():
     flagged."""
     stage = {
         "id": "agg", "type": "aggregate", "name": "agg", "inputs": ["src"],
-        "output_schema": {"columns": [{"name": "g", "type": "str", "nullable": False},
+        "output_schema": {"columns": [{"name": "nope", "type": "str", "nullable": False},
                                       {"name": "n", "type": "int", "nullable": False}]},
         "aggregate": {"group_by": ["nope"], "aggregations": [{"output_column": "n", "formula": "count"}]},
     }

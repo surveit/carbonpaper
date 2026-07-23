@@ -210,11 +210,26 @@ class JoinKey(_Base):
 
 
 class JoinConfig(_Base):
-    """join handle. `keys` OR `on` is accepted."""
+    """join handle. `keys` OR `on` is accepted.
+
+    The merged output contains: every LEFT column under its own name; each
+    RIGHT column under its own name unless a left column shares it, in which
+    case it appears as `<name>_r`; a key pair with the SAME name on both sides
+    collapses into one column (there is no `<key>_r`). `select` and the
+    stage's `output_schema` may only name these producible columns — anything
+    else is rejected when the stage is saved."""
     type: JoinType = JoinType.inner
     keys: Optional[list[JoinKey]] = None
     on: Optional[list[JoinKey]] = None
-    select: Optional[list[str]] = None
+    select: Optional[list[str]] = Field(
+        default=None,
+        description=(
+            "Columns to keep, applied after the merge. Each entry must be a "
+            "producible merged column: a left column name, an uncollided right "
+            "column name, or `<name>_r` for a right column whose name a left "
+            "column shares."
+        ),
+    )
 
     @model_validator(mode="after")
     def _need_keys_or_on(self) -> "JoinConfig":
@@ -550,6 +565,21 @@ class Stage(_Base):
         from app.models.stages import find_config_column_issues
 
         issues = find_config_column_issues(self)
+        if issues:
+            raise ValueError("; ".join(issues))
+        return self
+
+    @model_validator(mode="after")
+    def _output_schema_deliverable(self) -> "Stage":
+        """A declared output_schema must be deliverable by this stage's own
+        handle: for the types whose output is fixed by config (join, aggregate),
+        every declared column must be producible by name, with the declared type
+        matching the derivation where it can be known (see
+        app.models.stages.find_output_schema_issues). EDGE-ONLY and per-stage,
+        like _config_columns_resolve; same lazy import, same reason."""
+        from app.models.stages import find_output_schema_issues
+
+        issues = find_output_schema_issues(self)
         if issues:
             raise ValueError("; ".join(issues))
         return self
