@@ -8,10 +8,7 @@ grounding is per-request and lives in the task, not here.
 """
 from __future__ import annotations
 
-from app.compiler.node_contract_notes import (
-    HUMAN_REVIEW_QUEUE_CONTRACT_NOTE,
-    LLM_TRANSFORM_TOOL_CALLING_NOTE,
-)
+from app.compiler.node_contract_notes import HUMAN_REVIEW_QUEUE_CONTRACT_NOTE
 
 WORKFLOW_SYSTEM_PROMPT = """\
 You are a METHODOLOGY COMPILER. Read an UNSTRUCTURED account of one research process — a
@@ -37,7 +34,6 @@ shape. In one line each:
   per-row data lets the runtime cache that prefix, cutting latency (and cost on a per-token
   backend). prompt_data_template is the minimal per-row input framing, rendered with Python's
   str.format_map: inject a column as {column_name}.
-  """ + LLM_TRANSFORM_TOOL_CALLING_NOTE + """
 - join — combines rows from upstream stages on a key.
 - aggregate — collapses rows into group summaries.
 - human_review_queue — routes items to a person to decide. """ + HUMAN_REVIEW_QUEUE_CONTRACT_NOTE + """
