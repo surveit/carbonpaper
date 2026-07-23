@@ -3,12 +3,15 @@ synthetic graphs with a known-by-hand answer, fan-extreme selection, markdown
 rendering, and the JSON round-trip that carries metrics between the two
 checkouts the CI job compares.
 
-Propagation cost is cross-checked two independent ways before it ever
-reaches these tests (see `compute_propagation_cost_percent`'s own
-forward/backward grimp traversal check) — on top of that, this file
-additionally cross-checks grimp's `find_upstream_modules` against a manual
-BFS reimplementation, so the metric never rests on trusting grimp alone
-either.
+Propagation cost's own `compute_propagation_cost_percent` cross-checks
+grimp's forward and backward traversal against each other before either
+total is trusted — but both directions are grimp's own graph traversal, so
+that only catches the two directions disagreeing with each other, not grimp
+being wrong in a way both share. The genuinely independent verification is
+here: `test_grimp_find_upstream_modules_matches_a_manual_bfs_on_a_diamond`
+cross-checks grimp's `find_upstream_modules` against a from-scratch manual
+BFS reimplementation that shares no code with either grimp or
+`compute_propagation_cost_percent`.
 
 Tests that point `compute_import_graph_metrics` at a *different* `app`
 package than the real repo's run the script as a subprocess
@@ -32,6 +35,7 @@ from pathlib import Path
 
 import grimp
 import pytest
+from arch.test_import_graph import ModuleDegree
 
 from tools.import_graph_report import (
     FanExtremeReport,
@@ -166,8 +170,6 @@ def test_compute_propagation_cost_percent_fails_loudly_on_a_cross_check_mismatch
 
 
 def test_find_fan_extreme_picks_the_single_maximum() -> None:
-    from arch.test_import_graph import ModuleDegree
-
     degrees = {
         "app.a": ModuleDegree("app.a", degree=2, neighbors=("x", "y")),
         "app.b": ModuleDegree("app.b", degree=5, neighbors=("x", "y", "z", "w", "v")),
@@ -177,8 +179,6 @@ def test_find_fan_extreme_picks_the_single_maximum() -> None:
 
 
 def test_find_fan_extreme_returns_every_module_tied_for_the_maximum() -> None:
-    from arch.test_import_graph import ModuleDegree
-
     degrees = {
         "app.a": ModuleDegree("app.a", degree=3, neighbors=("x", "y", "z")),
         "app.b": ModuleDegree("app.b", degree=3, neighbors=("x", "y", "z")),
@@ -189,8 +189,6 @@ def test_find_fan_extreme_returns_every_module_tied_for_the_maximum() -> None:
 
 
 def test_find_fan_extreme_respects_the_exclude_predicate() -> None:
-    from arch.test_import_graph import ModuleDegree
-
     degrees = {
         "app.models.schema": ModuleDegree("app.models.schema", degree=50, neighbors=()),
         "app.services.hub": ModuleDegree("app.services.hub", degree=5, neighbors=()),
@@ -200,8 +198,6 @@ def test_find_fan_extreme_respects_the_exclude_predicate() -> None:
 
 
 def test_find_fan_extreme_returns_none_when_everything_is_excluded() -> None:
-    from arch.test_import_graph import ModuleDegree
-
     degrees = {"app.models.schema": ModuleDegree("app.models.schema", degree=50, neighbors=())}
     assert find_fan_extreme(degrees, exclude=lambda _module: True) is None
 
@@ -253,6 +249,23 @@ def test_compute_import_graph_metrics_fails_loudly_when_app_is_not_importable(tm
     assert result.returncode != 0
     assert "grimp could not build the import graph" in result.stderr
     assert "Could not find package 'app'" in result.stderr
+
+
+def test_cli_rejects_root_and_markdown_together(tmp_path: Path) -> None:
+    # --root selects which checkout to compute metrics for; --markdown
+    # instead renders from two already-computed JSON files and never touches
+    # a checkout. Combining them is a contradictory invocation, so argparse
+    # must reject it loudly rather than silently picking one and ignoring
+    # the other.
+    head_json = tmp_path / "head.json"
+    base_json = tmp_path / "base.json"
+    head_json.write_text("{}", encoding="utf-8")
+    base_json.write_text("{}", encoding="utf-8")
+
+    result = _run_script("--root", str(tmp_path), "--markdown", str(head_json), str(base_json))
+
+    assert result.returncode != 0
+    assert "not allowed with argument" in result.stderr
 
 
 def test_compute_import_graph_metrics_on_the_real_repo_matches_the_arch_gate() -> None:
@@ -334,6 +347,15 @@ def test_render_comment_body_shows_an_increase_with_an_up_arrow() -> None:
 def test_render_comment_body_ends_with_the_legend() -> None:
     body = render_comment_body(head=_sample_metrics(), base=_sample_metrics())
     assert body.rstrip().splitlines()[-1].startswith("_Δ = head vs base")
+
+
+def test_render_comment_body_legend_names_the_arch_modules_core_prefixes() -> None:
+    from arch.test_import_graph import describe_core_package_prefixes
+
+    body = render_comment_body(head=_sample_metrics(), base=_sample_metrics())
+    legend = body.rstrip().splitlines()[-1]
+    for prefix in describe_core_package_prefixes():
+        assert f"`{prefix}`" in legend
 
 
 def test_render_comment_body_shows_fan_extreme_holders() -> None:

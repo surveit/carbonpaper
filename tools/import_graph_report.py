@@ -143,16 +143,20 @@ def compute_propagation_cost_percent(graph: ReachabilityGraph, modules: frozense
     directly or transitively) — the standard "propagation cost" coupling
     metric.
 
-    Computed two independent ways from grimp's own traversal, per grimp
-    3.15's verified API (`ImportGraph.find_upstream_modules` /
-    `find_downstream_modules`), and cross-checked against each other rather
-    than trusting either alone: once via forward traversal
-    (`find_upstream_modules(a)` — the modules `a` reaches) summed over every
-    `a`, and once via backward traversal (`find_downstream_modules(b)` — the
-    modules that reach `b`) summed over every `b`. Both sums count the same
-    set of reachable ordered pairs, so they must agree; a mismatch means the
-    two traversal directions disagree about reachability and this fails
-    loudly instead of reporting a number that can't be trusted.
+    Computed via grimp's own traversal two ways — forward
+    (`find_upstream_modules(a)`, the modules `a` reaches) summed over every
+    `a`, and backward (`find_downstream_modules(b)`, the modules that reach
+    `b`) summed over every `b` — and cross-checked against each other before
+    either total is trusted. Both sums count the same set of reachable
+    ordered pairs, so they must agree; a mismatch fails loudly instead of
+    reporting a number that can't be trusted. This is a same-library
+    consistency check (both directions are grimp's own graph traversal, so a
+    bug shared by both would pass it); the genuinely independent
+    verification — grimp's reachable-set traversal cross-checked against a
+    from-scratch manual BFS reimplementation on a synthetic graph — lives in
+    `tests/test_import_graph_report.py`
+    (`test_grimp_find_upstream_modules_matches_a_manual_bfs_on_a_diamond`),
+    not here.
     """
     forward_total = sum(len(graph.find_upstream_modules(module)) for module in modules)
     backward_total = sum(len(graph.find_downstream_modules(module)) for module in modules)
@@ -215,12 +219,6 @@ def _make_root_importable(root: Path) -> None:
 # --- markdown rendering -------------------------------------------------------
 
 
-_LEGEND = (
-    "_Δ = head vs base. ▲/▼/= = increased/decreased/unchanged. "
-    "pp = percentage points. Core (fan-in exempt) = `app.models`, `app.core`._"
-)
-
-
 def render_comment_body(head: ImportGraphMetricsReport, base: ImportGraphMetricsReport) -> str:
     """The full PR-comment markdown: HTML marker (so the CI job can find and
     edit this same comment on later pushes), the headline propagation-cost
@@ -235,8 +233,23 @@ def render_comment_body(head: ImportGraphMetricsReport, base: ImportGraphMetrics
             "",
             *_render_table(head, base),
             "",
-            _LEGEND,
+            _render_legend(),
         ]
+    )
+
+
+def _render_legend() -> str:
+    """The table's one-line legend, naming the same core-package prefixes
+    `is_core_module` exempts from the fan-in ceiling — imported from
+    `tests/arch/test_import_graph.py` rather than re-typed, so this text can
+    never drift from what the exemption actually checks."""
+    _make_tests_dir_importable()
+    from arch.test_import_graph import describe_core_package_prefixes
+
+    core_prefixes = ", ".join(f"`{prefix}`" for prefix in describe_core_package_prefixes())
+    return (
+        "_Δ = head vs base. ▲/▼/= = increased/decreased/unchanged. "
+        f"pp = percentage points. Core (fan-in exempt) = {core_prefixes}._"
     )
 
 
@@ -342,13 +355,20 @@ class _Args:
 
 def _parse_args(argv: list[str] | None) -> _Args:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
+    # A mutually exclusive group: --root selects which checkout to compute
+    # metrics for, --markdown instead renders from two already-computed JSON
+    # snapshots and never touches a checkout, so combining them is a
+    # contradictory invocation, not a silently-ignored one — argparse itself
+    # rejects it (exit 2) rather than this script picking one and dropping
+    # the other.
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument(
         "--root",
         type=Path,
-        default=_REPO_ROOT,
+        default=None,
         help="Repository root containing the `app` package to analyze (default: this script's own repo root).",
     )
-    parser.add_argument(
+    mode.add_argument(
         "--markdown",
         nargs=2,
         metavar=("HEAD_JSON", "BASE_JSON"),
@@ -361,7 +381,8 @@ def _parse_args(argv: list[str] | None) -> _Args:
     if raw_markdown is not None:
         head_json, base_json = raw_markdown
         markdown = (head_json, base_json)
-    return _Args(root=namespace.root, markdown=markdown)
+    root: Path = namespace.root if namespace.root is not None else _REPO_ROOT
+    return _Args(root=root, markdown=markdown)
 
 
 if __name__ == "__main__":
