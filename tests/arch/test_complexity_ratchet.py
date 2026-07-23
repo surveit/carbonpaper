@@ -1,7 +1,7 @@
 """Architecture: a hard cyclomatic-complexity ceiling on ``app/``.
 
-Cyclomatic complexity above 20 (radon grade D or worse) is a function too
-tangled to review confidently. There is no exception list: every function in
+Cyclomatic complexity above 15 is a function too tangled to review
+confidently. There is no exception list: every function in
 ``app/`` must measure at or under the threshold — the only remedy for a
 violator is decomposing it.
 
@@ -37,7 +37,7 @@ from arch.scope import _EXEMPT_PARTS
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _APP_ROOT = _REPO_ROOT / "app"
-_COMPLEXITY_THRESHOLD = 20
+_COMPLEXITY_THRESHOLD = 15
 
 # arch.scope's shared exemptions (tests/, __pycache__/, _vendor/, node_modules/,
 # venv/, ...), minus "_arch_tests" — this rule is the one exception that keeps
