@@ -13,10 +13,15 @@ import json
 from pathlib import Path
 from typing import Any
 
+from pydantic import ValidationError
+
 from app.compiler import compile_methodology
 from app.core.errors import RegenerateWithoutSnapshotError
+from app.models.stage import Stage
+from app.models.stages import fill_output_schema
 from app.models.workflow import validate_workflow_draft
 from app.services import versioning, workspace
+from app.services.loader import stage_to_spec_dict
 
 
 def write_methodology(result: dict[str, Any], out_dir: str | Path) -> dict[str, Any]:
@@ -28,8 +33,10 @@ def write_methodology(result: dict[str, Any], out_dir: str | Path) -> dict[str, 
 
     Stages are written as JSON — the on-disk format the loader
     (app.services.loader) reads. The compiler emits raw draft dicts (which may
-    be invalid; the manifest records that), so they are dumped as-is rather than
-    round-tripped through the typed Stage model."""
+    be invalid; the manifest records that), so each is parsed only far enough
+    to fill a schema-less join/aggregate's output_schema (see
+    `_fill_stage_dict`) before being written; a dict that fails Stage parsing
+    is written as-is, unfilled."""
     out_dir = Path(out_dir)
     compiled = out_dir / "compiled"
     compiled.mkdir(parents=True, exist_ok=True)
@@ -40,7 +47,7 @@ def write_methodology(result: dict[str, Any], out_dir: str | Path) -> dict[str, 
         fname = f"{i:02d}_{sid}.json"
         fpath = compiled / fname
         fpath.write_text(
-            json.dumps(stage, indent=2, ensure_ascii=False), encoding="utf-8"
+            json.dumps(_fill_stage_dict(stage), indent=2, ensure_ascii=False), encoding="utf-8"
         )
         written.append(str(fpath))
 
@@ -64,6 +71,21 @@ def write_methodology(result: dict[str, Any], out_dir: str | Path) -> dict[str, 
         "methodology_raw": str(raw_md),
         "audit": str(audit_path),
     }
+
+
+def _fill_stage_dict(spec: dict[str, Any]) -> dict[str, Any]:
+    """`spec` itself, unless it strict-parses as a Stage whose
+    fill_output_schema (app.models.stages) derives an output_schema it
+    lacks — in which case the filled stage's canonical spec dict
+    (stage_to_spec_dict). A spec that fails Stage parsing is returned
+    untouched: a draft may be invalid, and filling it is a bonus on an
+    already-valid stage, never a gate on writing the draft."""
+    try:
+        stage = Stage.model_validate(spec)
+    except ValidationError:
+        return spec
+    filled = fill_output_schema(stage)
+    return stage_to_spec_dict(filled) if filled is not stage else spec
 
 
 def regenerate_workflow(result: dict[str, Any], project_dir: str | Path) -> dict[str, Any]:
