@@ -187,10 +187,7 @@ def _run_one_test(stage: Stage, test: StageTest) -> StageTestResult:
     # Ephemeral context: authored tests run only python_row_function /
     # python_frame_function (STAGE_TEST_TYPES), neither of which reads
     # repo_root/run_dir or needs project scope — no identity, no cache.
-    ctx = RunContext(
-        repo_root=Path("."), run_dir=Path("."), identity=None, stage_cache=None,
-        limits={}, offsets={},
-    )
+    ctx = RunContext.for_non_production(Path("."), Path("."))
     try:
         actual = HANDLERS[StageType(stage.type)].execute(stage, input_frames, ctx)
     except Exception as exc:  # noqa: BLE001 — the function is authored code; any raise IS the result

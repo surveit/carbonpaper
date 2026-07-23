@@ -100,10 +100,7 @@ def _subset_ctx(repo_root: Path, run_dir: Path) -> RunContext:
     # project tree, and has no cross-run cache access. A handler that needs project
     # scope (only human_review_queue does, and it halts a subset run anyway) fails
     # loudly rather than reading a fabricated wrong directory.
-    return RunContext(
-        repo_root=repo_root, run_dir=run_dir, identity=None, stage_cache=None,
-        limits={}, offsets={},
-    )
+    return RunContext.for_non_production(repo_root, run_dir)
 
 
 def _subset_manifest(run_dir: Path, ordered: list[Stage]) -> dict[str, Any]:

@@ -46,13 +46,14 @@ approval. This set is the single point of truth for that contract.
 
 from __future__ import annotations
 
-import hashlib
 import json
 from enum import Enum
 from pathlib import Path
 from typing import Any
 
 import pandas as pd
+
+from app.core.utils import compute_short_hash
 
 # Loader-injected bookkeeping keys that are NOT part of the stage spec and must
 # be excluded from the canonical form before hashing. See the module docstring:
@@ -95,18 +96,17 @@ def canonical_node_spec(stage: dict[str, Any]) -> dict[str, Any]:
 
 
 def node_content_hash(stage: dict[str, Any]) -> str:
-    """Stable sha1 (first 16 hex chars) of the canonical stage spec.
+    """Stable hash (app.core.utils.compute_short_hash) of the canonical stage
+    spec.
 
     Hashes the LOADED dict, not file text: json.dumps with sort_keys=True makes
     key order irrelevant, the tight separators drop incidental whitespace, and
-    default=str lets any non-JSON-native scalar (e.g. a date) serialize. Mirrors
-    app.runtime.stages.human_review_queue._content_hash (sha1 hexdigest, 16
-    chars) so the node store and the row store share one hashing convention."""
+    default=str lets any non-JSON-native scalar (e.g. a date) serialize."""
     canonical = canonical_node_spec(stage)
     payload = json.dumps(
         canonical, sort_keys=True, separators=(",", ":"), default=str
     )
-    return hashlib.sha1(payload.encode("utf-8")).hexdigest()[:16]
+    return compute_short_hash(payload)
 
 
 def node_decisions_path(project_dir: Path) -> Path:

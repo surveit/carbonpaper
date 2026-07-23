@@ -4,11 +4,12 @@
 receive. Its fields are exactly today's ctx keys minus `project_dir` — a
 handler cannot reach a project's on-disk directory through `RunContext`,
 because nothing here names one. `identity`/`stage_cache` are the one pair of
-fields a caller chooses at construction time: a production run
-(`app.runtime.runner.prepare_run`/`resume_run`) grants both; a non-production
-run (`_subset_ctx`, `run_stage_preview`) grants neither. The two co-vary by
-construction (see `RunContext.__post_init__`) — there is no state where a run
-has cache access but no identity, or the reverse.
+fields a caller chooses at construction time: `RunContext.for_production`
+grants both (a production run — `app.runtime.runner.prepare_run`/`resume_run`);
+`RunContext.for_non_production` grants neither (a subset run, a preview, an
+authored-test run). The two co-vary by construction (see
+`RunContext.__post_init__`) — there is no state where a run has cache access
+but no identity, or the reverse.
 """
 from __future__ import annotations
 
@@ -17,7 +18,7 @@ from pathlib import Path
 from typing import TypedDict
 
 from app.core.agent.usage import LlmUsage
-from app.services.stage_cache import ReadOnlyStageCache
+from app.services.stage_cache import CacheMode, ReadOnlyStageCache, StageCacheEntry
 
 from .llm import LlmBackendStatus
 
@@ -93,6 +94,41 @@ class RunContext:
                 "set or both be None — a run either has project scope (both) "
                 "or it doesn't (neither)"
             )
+
+    @classmethod
+    def for_production(
+        cls,
+        repo_root: Path,
+        run_dir: Path,
+        project: str,
+        run_id: str,
+        limits: dict[str, int] | None = None,
+        offsets: dict[str, int] | None = None,
+    ) -> "RunContext":
+        """A production run's context: full project scope — `identity`
+        (`project`, `run_id`) and a read+write stage-result cache
+        (`StageCacheEntry.for_mode(CacheMode.PRODUCTION)`)."""
+        return cls(
+            repo_root=repo_root, run_dir=run_dir,
+            identity=RunIdentity(project=project, run_id=run_id),
+            stage_cache=StageCacheEntry.for_mode(CacheMode.PRODUCTION),
+            limits=dict(limits or {}), offsets=dict(offsets or {}),
+        )
+
+    @classmethod
+    def for_non_production(
+        cls,
+        repo_root: Path,
+        run_dir: Path,
+        limits: dict[str, int] | None = None,
+        offsets: dict[str, int] | None = None,
+    ) -> "RunContext":
+        """A run with no project scope (a subset run, a preview, an authored-
+        test run): no `identity`, no stage-result cache."""
+        return cls(
+            repo_root=repo_root, run_dir=run_dir, identity=None, stage_cache=None,
+            limits=dict(limits or {}), offsets=dict(offsets or {}),
+        )
 
 
 __all__ = ["RunIdentity", "RunContext", "QueueStats", "RowError"]

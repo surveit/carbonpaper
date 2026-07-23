@@ -35,9 +35,8 @@ from app.models import Connector, Stage, StageType
 from app.core.run_status import RunStatus, StageStatus
 from app.services.errors import WorkflowLoadError
 from app.services import versioning
-from app.services.stage_cache import CacheMode, StageCacheEntry
 
-from .context import RunContext, RunIdentity
+from .context import RunContext
 from .executor import _execute_stages, create_run_manifest, topological_sort, write_manifest
 from .stages import PREFLIGHTS
 
@@ -237,11 +236,8 @@ def prepare_run(
     # This run's logical identity for cancellation's checkpoints (see
     # app.runtime.cancellation) — read by _execute_stages, never by name of
     # anything on disk. run_dir above stays I/O-only.
-    identity = RunIdentity(project=project_dir.name, run_id=run_id)
-    ctx = RunContext(
-        repo_root=repo_root, run_dir=run_dir, identity=identity,
-        stage_cache=StageCacheEntry.for_mode(CacheMode.PRODUCTION),
-        limits=limits, offsets=offsets,
+    ctx = RunContext.for_production(
+        repo_root, run_dir, project_dir.name, run_id, limits=limits, offsets=offsets,
     )
     # The manifest's shape and persistence belong to the executor — it mints the
     # initial record here and rewrites the same file as stages run. prepare only
@@ -347,17 +343,15 @@ def resume_run(project_dir: Path, run_id: str, repo_root: Path) -> dict[str, Any
     # This run's logical identity for cancellation's checkpoints — see the
     # matching comment in prepare_run. Stamped here too so a resumed run is
     # cancellable, not just a fresh one.
-    identity = RunIdentity(project=project_dir.name, run_id=run_id)
-    ctx = RunContext(
-        repo_root=repo_root, run_dir=run_dir, identity=identity,
-        stage_cache=StageCacheEntry.for_mode(CacheMode.PRODUCTION),
+    ctx = RunContext.for_production(
+        repo_root, run_dir, project_dir.name, run_id,
         # Re-apply the run's per-stage row slicing so stages that resume after
         # a halt honor the same limits/offsets the run started with.
         limits=manifest.get("limit_overrides") or {},
         offsets=manifest.get("offset_overrides") or {},
-        queue_stats=manifest.get("queue_stats", {}),
-        dropped_columns=manifest.get("dropped_columns", {}),
     )
+    ctx.queue_stats = manifest.get("queue_stats", {})
+    ctx.dropped_columns = manifest.get("dropped_columns", {})
 
     manifest["resumed_at"] = datetime.now().isoformat(timespec="seconds")
     # Drop the halt marker the halted run left behind: the run is no longer

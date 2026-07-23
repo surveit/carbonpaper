@@ -251,28 +251,6 @@ def test_decide_404_on_unknown_fingerprint_and_writes_nothing(tmp_path, monkeypa
     assert not StageCacheEntry.list(prefix=f"{PROJECT}/review/")
 
 
-# ── 6. Legacy decisions notice: counted, never applied ──────────────────────
-
-
-def test_legacy_decisions_notice_counts_rows_but_does_not_apply_them(tmp_path, monkeypatch):
-    _project_dir, run_id, _run_dir, snapshot = _build_and_halt(tmp_path, monkeypatch)
-    legacy_dir = tmp_path / PROJECT / "decisions"
-    legacy_dir.mkdir(parents=True)
-    pd.DataFrame([{
-        "content_hash": "whatever", "decision": "approve", "modified_score": None,
-        "reviewer": "local", "reviewed_at": "2026-07-01T00:00:00", "source_run_id": "run0",
-    }]).to_parquet(legacy_dir / "review.parquet", index=False)
-
-    client = TestClient(app)
-    html = client.get(f"/project/{PROJECT}/runs/{run_id}/queue/review").text
-
-    assert "1 prior decision(s) from the pre-cache format" in html
-    # Not applied: both rows still render as undecided (no decided-approve class).
-    assert "decided-approve" not in html
-    for fp in snapshot["input_fingerprint"]:
-        assert f'data-input-fingerprint="{fp}"' in html
-
-
 # ── 7. End-to-end capstone: decide all three verdicts, then resume ──────────
 
 

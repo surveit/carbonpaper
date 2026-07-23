@@ -19,12 +19,11 @@ from app.services.stage_cache import (
     HumanDecision,
     StageCacheEntry,
     build_cache_id,
-    canonicalize_row_for_cache,
+    to_json_safe_row,
 )
 from app.web.config import templates
 from app.web.loading import (
     display_cell,
-    find_legacy_decisions_note,
     find_stage,
     load_manifest,
     load_stages,
@@ -80,7 +79,6 @@ async def queue_page(request: Request, project: str, run_id: str, stage_id: str)
             "total": total,
             "all_reviewed": total > 0 and reviewed_count == total,
             "manifest_status": manifest.get("status"),
-            "legacy_decisions_rows": find_legacy_decisions_note(project, stage_id),
         },
     )
 
@@ -156,7 +154,7 @@ def _build_cache_entry(
     `frozen_input` the snapshot row minus its own bookkeeping columns."""
     stage_fingerprint = str(row["stage_fingerprint"])
     input_fingerprint = str(row["input_fingerprint"])
-    frozen_input = canonicalize_row_for_cache({
+    frozen_input = to_json_safe_row({
         str(k): v for k, v in row.items() if str(k) not in _SNAPSHOT_BOOKKEEPING_COLUMNS
     })
     return StageCacheEntry(

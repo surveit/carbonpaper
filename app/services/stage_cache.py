@@ -21,7 +21,6 @@ from __future__ import annotations
 from collections.abc import Mapping
 from enum import Enum
 from typing import ClassVar, Literal, overload
-import hashlib
 import json
 import math
 
@@ -29,6 +28,7 @@ import pandas as pd
 from pydantic import BaseModel, ConfigDict
 
 from app.core.persistence import JsonDict, PersistedModel, PersistenceScope
+from app.core.utils import compute_short_hash
 from app.models import RowReviewDecision
 
 
@@ -102,35 +102,40 @@ def build_cache_id(project: str, stage_id: str, stage_fingerprint: str, input_fi
 
 
 def compute_row_fingerprint(row: Mapping[str, object]) -> str:
-    """sha1[:16] over the canonical JSON of `row`: every null form a pandas row
-    cell can carry (None, float('nan'), pd.NA, pd.NaT — see
-    `_normalize_row_value`) is mapped to JSON null first, so two rows that
+    """compute_short_hash over the canonical JSON of `row`: every null form a
+    pandas row cell can carry (None, float('nan'), pd.NA, pd.NaT — see
+    `_collapse_null_forms`) is mapped to JSON null first, so two rows that
     differ only in which null form they carry hash identically. Column order
     does not matter — json.dumps(sort_keys=True) makes key order irrelevant
-    regardless of the input mapping's own order."""
-    canonical = {key: _normalize_row_value(value) for key, value in row.items()}
+    regardless of the input mapping's own order. This construction defends
+    against exactly two instability sources that would otherwise change a
+    row's identity for free: null-form representation drift across a storage
+    round trip, and column order."""
+    canonical = {key: _collapse_null_forms(value) for key, value in row.items()}
     payload = json.dumps(canonical, sort_keys=True, separators=(",", ":"), default=str)
-    return hashlib.sha1(payload.encode("utf-8")).hexdigest()[:16]
+    return compute_short_hash(payload)
 
 
-def canonicalize_row_for_cache(row: Mapping[str, object]) -> JsonDict:
+def to_json_safe_row(row: Mapping[str, object]) -> JsonDict:
     """`row` reduced to JSON-native types for storage as a `StageCacheEntry`'s
-    `frozen_input`: every null form normalizes to JSON null (the same
-    `_normalize_row_value` step `compute_row_fingerprint` hashes under), and
+    `frozen_input`: every null form collapses to JSON null (the same
+    `_collapse_null_forms` step `compute_row_fingerprint` hashes under), and
     any remaining non-JSON-native value (a numpy scalar, a pandas Timestamp,
     ...) is stringified via `default=str` on the round trip through
     `json.dumps`/`json.loads`. Using the same normalization `compute_row_fingerprint`
     hashes under means a stored `frozen_input` and the `input_fingerprint`
     computed for the same row describe that row consistently."""
-    canonical = {key: _normalize_row_value(value) for key, value in row.items()}
+    canonical = {key: _collapse_null_forms(value) for key, value in row.items()}
     safe: JsonDict = json.loads(json.dumps(canonical, default=str))
     return safe
 
 
-def _normalize_row_value(value: object) -> object:
-    """`value`, or None if `value` is one of the null forms a pandas row cell
-    can carry: plain `None`, `float('nan')`, `pd.NA`, or `pd.NaT`. Each form is
-    tested individually — an identity check for None/pd.NA/pd.NaT, an explicit
+def _collapse_null_forms(value: object) -> object:
+    """`value`, or None if `value` is one of the four pandas null forms a row
+    cell can carry: plain `None`, `float('nan')`, `pd.NA`, or `pd.NaT` — all
+    become None so a parquet round trip can't shift a row's identity;
+    everything else passes through unchanged. Each form is tested
+    individually — an identity check for None/pd.NA/pd.NaT, an explicit
     isinstance+isnan for a float nan — rather than via a single `pd.isna` call:
     pandas-stubs' `isna` overloads do not accept a bare `object` argument, and
     calling it on an array-valued cell (list/tuple/dict/set) would return an
@@ -186,7 +191,7 @@ __all__ = [
     "HumanDecision",
     "StageCacheEntry",
     "build_cache_id",
-    "canonicalize_row_for_cache",
+    "to_json_safe_row",
     "compute_row_fingerprint",
     "ReadOnlyStageCache",
     "StageCache",
