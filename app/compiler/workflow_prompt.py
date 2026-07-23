@@ -31,7 +31,12 @@ shape. In one line each:
 - python_frame_function — deterministic code over the whole frame(s) that may reshape it
   (dedup, pivot, multi-input merge).
 - llm_transform — a step that needs judgment or reads unstructured text into structure.
-  Its prompt_template is rendered with Python's str.format_map: inject a column as {column_name}.
+  Author it as TWO fields: prompt_instructions is the row-invariant guidance (role,
+  methodology, how to weigh evidence/sources) and MUST NOT depend on any row value — the
+  same instructions run over every input row, so keeping them byte-stable and separate from
+  per-row data lets the runtime cache that prefix, cutting latency (and cost on a per-token
+  backend). prompt_data_template is the minimal per-row input framing, rendered with Python's
+  str.format_map: inject a column as {column_name}.
   """ + LLM_TRANSFORM_TOOL_CALLING_NOTE + """
 - join — combines rows from upstream stages on a key.
 - aggregate — collapses rows into group summaries.
