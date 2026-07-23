@@ -124,6 +124,27 @@ def call_llm(
     )
 
 
+def call_llm_batch(
+    stage_id: str,
+    llm_config: LLMConfig,
+    *,
+    instructions: str,
+    task: str,
+    batch_model: type[BaseModel],
+    model: str | None = None,
+    usage_out: list[LlmUsage] | None = None,
+) -> dict[str, Any]:
+    """Invoke the model on a whole chunk at once. This is NOT a new invocation
+    mechanism — it goes through the very same `_generate` seam (and thus the same
+    backend, retries, and usage recording) as the per-row `call_llm`. The only
+    differences are the caller's: `target_model` is a list-of-items model rather
+    than a single-row reply, and `task`/`instructions` are pre-built by the batch
+    driver (the numbered chunk rows + the copy-the-number contract). Returns the
+    validated `{"results": [...]}` as a plain dict."""
+    model_name = str(model or llm_config.model or DEFAULT_MODEL)
+    return _generate(llm_config, instructions, task, model_name, batch_model, usage_out)
+
+
 def _generate(
     llm_config: LLMConfig,
     instructions: str,

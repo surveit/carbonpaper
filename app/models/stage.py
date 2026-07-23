@@ -157,6 +157,19 @@ class LLMConfig(_Base):
     response_format: Literal["json", "text"] = "json"
     rubric: Optional[dict[str, Any]] = None
     tools: Optional[list[str]] = None
+    batch_size: int = Field(
+        default=1,
+        ge=1,
+        description=(
+            "Rows sent per model call. 1 (default) calls the model once per row. "
+            ">1 packs that many input rows into one call, amortizing the prompt/"
+            "harness overhead; the runtime tags each row with a batch-local row "
+            "number and rejoins the replies by it, so the stage stays strictly "
+            "one-row-out-per-row-in — but the model sees a whole chunk at once, so "
+            "batch_size>1 relaxes per-row independence (a row's answer can be "
+            "influenced by its batch-mates)."
+        ),
+    )
 
 
 class PythonFunction(_Base):
