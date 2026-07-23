@@ -2,7 +2,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from arch import check_no_fabricated_numbers, check_no_raw_disk
+from arch import (
+    check_no_fabricated_numbers,
+    check_no_raw_disk,
+    find_production_run_imports,
+)
 
 
 def test_check_no_raw_disk_flags_open_and_write(tmp_path: Path) -> None:
@@ -43,3 +47,18 @@ def test_check_no_fabricated_numbers_ignores_bool_default(tmp_path: Path) -> Non
     ok = tmp_path / "ok.py"
     ok.write_text("def go(d):\n    return d.get('flag', False)\n")
     assert check_no_fabricated_numbers([ok]) == []
+
+
+def test_predicate_flags_production_run_import(tmp_path: Path) -> None:
+    """find_production_run_imports flags app.runtime.runner (both `import` and
+    `from` forms) but leaves the sanctioned app.runtime.executor surface alone."""
+    from_form = tmp_path / "from_form.py"
+    from_form.write_text("from app.runtime.runner import prepare_run\n")
+    import_form = tmp_path / "import_form.py"
+    import_form.write_text("import app.runtime.runner\n")
+    clean = tmp_path / "clean.py"
+    clean.write_text("from app.runtime.executor import run_subset\n")
+
+    assert find_production_run_imports([from_form]) == [from_form.as_posix()]
+    assert find_production_run_imports([import_form]) == [import_form.as_posix()]
+    assert find_production_run_imports([clean]) == []

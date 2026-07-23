@@ -82,13 +82,16 @@ allowed_importers = ["app.main", "app.services"]
 name = "app.runtime imported only by evals, web, mcp"
 type = "protected"
 protected_modules = ["app.runtime"]
-allowed_importers = ["app.evals", "app.web", "app.mcp"]
+allowed_importers = ["app.evals", "app.web", "app.mcp", "app.services.run", "app.services.smoke"]
 # The runner is driven by the top-level interfaces: web, evals, and mcp (the glassbox
 # authoring surface, a top-level runtime driver like app.web — its run_tests tool runs a
 # stage's authored tests against its current code). app.core.agent sits below the runtime
 # (llm.py imports app.core.agent.agent.Agent as the reply backend) rather than the other
-# way round, so it is not an importer here. app.services must not reach into it —
-# status/review helpers stay runtime-free.
+# way round, so it is not an importer here. app.services stays out of the runtime EXCEPT
+# the two named run seams: app.services.run (the production run seam — the sole importer of
+# app.runtime.runner, see the contract below) and app.services.smoke (the smoke-run seam,
+# which reaches only app.runtime.executor). Every other service module stays runtime-free —
+# status/review helpers must not reach in.
 
 [[tool.importlinter.contracts]]
 name = "app.evals is a leaf — imported only by web"
@@ -148,16 +151,18 @@ allowed_importers = ["app.main"]
 # on app.core.agent (the engine) + app.services (to read/edit projects).
 
 [[tool.importlinter.contracts]]
-name = "production run entry points reached only by the run UI"
+name = "production run entry points reached only by the run service"
 type = "protected"
 protected_modules = ["app.runtime.runner"]
-allowed_importers = ["app.web.loading", "app.web.routers.runs"]
+allowed_importers = ["app.services.run"]
 # app.runtime.runner holds the production run-lifecycle entry points (prepare_run,
-# execute_run, run_prepared, resume_run) — the only functions that create a production
-# run record under runs/. A non-production run (an eval, or a smoke run) reaches the
-# shared execution engine through app.runtime.executor (run_subset / _execute_stages),
-# never these entry points, so it can never mint a production run. Only the web run UI
-# (app.web.routers.runs) and its version resolver (app.web.loading) may import them.
+# execute_run, run_prepared, resume_run, resolve_version_id) — the only functions that
+# create a production run record under runs/. A non-production run (an eval, or a smoke
+# run) reaches the shared execution engine through app.runtime.executor (run_subset /
+# _execute_stages), never these entry points, so it can never mint a production run.
+# app.services.run is the SOLE importer: the web run UI (app.web.routers.runs) and its
+# version resolver (app.web.loading) drive runs through that service seam rather than
+# importing the runner directly, so this stays a single named door into production runs.
 
 # NB: "app.seeds reaches the store through services" is enforced as an AST allowlist
 # in app/seeds/_arch_tests/test_seed_reaches_store_via_services.py (check_no_import),

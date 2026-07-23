@@ -20,6 +20,8 @@ from arch._helpers import (
     parse_module,
 )
 
+_PRODUCTION_RUN_MODULE = "app.runtime.runner"
+
 _DISK_BUILTINS = {"open"}
 _DISK_METHODS = {
     "open",
@@ -110,6 +112,27 @@ def check_no_fabricated_numbers(paths: list[Path]) -> list[str]:
         for start, end in find_numeric_get_defaults(parse_module(path)):
             if not any(_DATA_DEFAULT_OK in line for line in lines[start - 1 : end]):
                 offenders.append(f"{path}:{start}  {lines[start - 1].strip()}")
+    return offenders
+
+
+def find_production_run_imports(paths: list[Path]) -> list[str]:
+    """Files that import ``app.runtime.runner`` — the production run-lifecycle
+    entry points (prepare_run / run_prepared / resume_run / resolve_version_id)
+    that mint a run record under ``runs/``. Only ``app.runtime.runner`` itself is
+    flagged: ``app.runtime.executor`` (the shared execution engine, including its
+    manifest helpers) is the sanctioned surface a non-production run — an eval or
+    a smoke run — reaches instead, so importing it is fine and never flagged.
+    Matches both ``import app.runtime.runner`` and ``from app.runtime.runner
+    import ...``."""
+    offenders: list[str] = []
+    for path in paths:
+        imported = find_imported_modules(parse_module(path))
+        if any(
+            name == _PRODUCTION_RUN_MODULE
+            or name.startswith(f"{_PRODUCTION_RUN_MODULE}.")
+            for name in imported
+        ):
+            offenders.append(path.as_posix())
     return offenders
 
 
