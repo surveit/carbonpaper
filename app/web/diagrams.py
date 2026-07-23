@@ -146,20 +146,45 @@ def build_schema_table_graph(schemas: list[dict[str, Any]]) -> str:
     names = {s.get("name") for s in schemas if s.get("name")}
 
     for s in schemas:
-        sid = s.get("name")
-        if not sid:
-            continue
-        klass = SCHEMA_KIND_CLASS.get(s.get("kind", ""), "custom")
-        title = (s.get("title") or "").strip().replace('"', "'")[:48]
-        label = f'"<b>{sid}</b>'
-        if title and title != sid:
-            label += f"<br/><span style='font-size:10px;color:#888'>{title}</span>"
-        label += '"'
-        lines.append(f"    {sid}[{label}]:::{klass}")
-        lines.append(f'    click {sid} call focusSchema("{sid}") "Open columns"')
+        lines.extend(_render_table_node_block(s))
+    lines.extend(_collect_table_fk_edges(schemas, names))
 
-    # FK edges: referenced schema --> the schema whose column carries the key.
-    # Same extraction as the ER view, deduped at table level.
+    # Same kind-fill palette as the workflow graph's classDefs, keyed through
+    # SCHEMA_KIND_CLASS so a node here matches the kind's .type-tag chip.
+    lines += [
+        "    classDef input fill:#e8f4f8,stroke:#3a8ca8,color:#000",
+        "    classDef aggregate fill:#f0f0e6,stroke:#888533,color:#000",
+        "    classDef python fill:#eef2f7,stroke:#4a5e85,color:#000",
+        "    classDef human fill:#fce8f4,stroke:#c0399a,color:#000",
+        "    classDef custom fill:#fde8e8,stroke:#cc3333,color:#000",
+    ]
+    return "\n".join(lines)
+
+
+def _render_table_node_block(s: dict[str, Any]) -> list[str]:
+    """One schema's flowchart node + click handler: name + title (dropped
+    when identical to the name), coloured by kind. [] for a nameless
+    schema."""
+    sid = s.get("name")
+    if not sid:
+        return []
+    klass = SCHEMA_KIND_CLASS.get(s.get("kind", ""), "custom")
+    title = (s.get("title") or "").strip().replace('"', "'")[:48]
+    label = f'"<b>{sid}</b>'
+    if title and title != sid:
+        label += f"<br/><span style='font-size:10px;color:#888'>{title}</span>"
+    label += '"'
+    return [
+        f"    {sid}[{label}]:::{klass}",
+        f'    click {sid} call focusSchema("{sid}") "Open columns"',
+    ]
+
+
+def _collect_table_fk_edges(schemas: list[dict[str, Any]], names: set[Any]) -> list[str]:
+    """One deduplicated table-level edge per referencing column: referenced
+    schema --> the schema whose column carries the key. Same extraction as
+    the ER view's `_collect_er_fk_edges`, drawn at table granularity."""
+    edges: list[str] = []
     seen_edges: set[str] = set()
     for s in schemas:
         sid = s.get("name")
@@ -173,18 +198,8 @@ def build_schema_table_graph(schemas: list[dict[str, Any]]) -> str:
             edge = f"    {target} --> {sid}"
             if edge not in seen_edges:
                 seen_edges.add(edge)
-                lines.append(edge)
-
-    # Same kind-fill palette as the workflow graph's classDefs, keyed through
-    # SCHEMA_KIND_CLASS so a node here matches the kind's .type-tag chip.
-    lines += [
-        "    classDef input fill:#e8f4f8,stroke:#3a8ca8,color:#000",
-        "    classDef aggregate fill:#f0f0e6,stroke:#888533,color:#000",
-        "    classDef python fill:#eef2f7,stroke:#4a5e85,color:#000",
-        "    classDef human fill:#fce8f4,stroke:#c0399a,color:#000",
-        "    classDef custom fill:#fde8e8,stroke:#cc3333,color:#000",
-    ]
-    return "\n".join(lines)
+                edges.append(edge)
+    return edges
 
 
 # Node-review BELIEF → stroke colour. Distinct from the type fill (classDef) and
