@@ -37,6 +37,15 @@ ignore_missing_imports = true
 module = ["radon", "radon.*"]
 ignore_missing_imports = true
 
+# `anthropic` is an OPTIONAL dependency — only the Messages API backend
+# (CW_LLM_BACKEND=api) needs it, and it's imported lazily inside
+# app.runtime.llm._api_client behind an importlib.util.find_spec guard, so the
+# agent backend runs without it installed. It isn't in requirements, so mypy
+# can't see its stubs; scope the exemption to anthropic only.
+[[tool.mypy.overrides]]
+module = ["anthropic", "anthropic.*"]
+ignore_missing_imports = true
+
 # Architecture boundaries, enforced by import-linter (`PYTHONPATH=. lint-imports`).
 # Expressed as a WHITELIST: each restricted module is `protected` and declares the
 # only modules allowed to import it — a new cross-layer import is denied by default
