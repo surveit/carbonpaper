@@ -20,12 +20,12 @@ manifest back and overlays its observed `stages`/`status` onto the production
 skeleton before the final write, so the recorded statuses are the engine's own —
 never synthesized here.
 
-A human_review_queue stage mid-frontier makes a subset run fail loudly: the
-subset ctx carries no project_dir (run-scoping — the decisions store is
-unreachable), so the queue handler raises on the missing key before it can reach
-its own HaltForReview, and run_subset surfaces that as a SubsetRunError. A test
-run reports it as a failure ({ok: False}) whose message names the queue stage. It
-never reads through the queue either way.
+A human_review_queue stage mid-frontier auto-approves in memory: this seam runs
+the subset with `queue_auto_approve=True`, so the queue handler passes every row
+through as approved without touching the decisions store, the queue snapshot, or
+halting. A queue-bearing workflow therefore test-runs to completion (its rows
+flow to downstream stages) rather than blocking on human review, which a test run
+has no reviewer for.
 
 Version resolution divergence from production: a production run pins a PUBLISHED
 version only (app.runtime.runner.resolve_version_id) — publication is the human's
@@ -55,11 +55,11 @@ from app.runtime.executor import (
 )
 from app.runtime.stages.input_data import read_input_data
 from app.services.versioning import list_versions, load_version, load_version_stages
+from app.services.workspace import repo_root, resolve_project_dir
 
 
 def start_test_run(
-    project_dir: Path,
-    repo_root: Path,
+    project: str,
     *,
     version_id: str | None = None,
     limit: int = 20,
@@ -67,16 +67,19 @@ def start_test_run(
 ) -> dict[str, Any]:
     """Sample the resolved version's bound source and run its frontier over the
     sample, writing a production-shape manifest under
-    `<project_dir>/test_runs/<test_run_id>/`. Returns
+    `<project_dir>/test_runs/<test_run_id>/`. Resolves `project` (a project name)
+    to its directory and the repo root internally — a caller hands a name, never a
+    path. Returns
     `{ok, test_run_id, version_id, stages_run, rows_out, error}` — `ok` is True
     when the frontier ran clean, False on any stage error (a mid-frontier queue
-    stage errors rather than halts — see module docstring); `rows_out` is the
-    last executed stage's output
-    row count when ok, else None (never a fabricated count).
+    stage auto-approves in memory rather than halting — see module docstring);
+    `rows_out` is the last executed stage's output row count when ok, else None
+    (never a fabricated count).
 
     Version resolution accepts any stored version, published or not (see
     _resolve_test_run_version and the module docstring). Raises NoTestRunSourceError
     if the resolved workflow has no input_data stage to sample from."""
+    project_dir = resolve_project_dir(project)
     version = _resolve_test_run_version(project_dir, version_id)
     stages = load_version_stages(project_dir, version)
     # Sample the source(s) before building the Workflow, so a sourceless workflow
@@ -95,7 +98,7 @@ def start_test_run(
     write_manifest(test_run_dir, manifest)
 
     stage_ids = [stage.id for stage in frontier]
-    ok, error, outputs = _run_frontier(workflow, injected, stage_ids, test_run_dir, repo_root)
+    ok, error, outputs = _run_frontier(workflow, injected, stage_ids, test_run_dir, repo_root())
 
     _overlay_observed_outcome(manifest, test_run_dir)
     write_manifest(test_run_dir, manifest)
@@ -136,12 +139,13 @@ def _run_frontier(
 ) -> tuple[bool, str | None, dict[str, pd.DataFrame]]:
     """Execute the frontier subset, translating run_subset's clean-or-loud
     contract into a test-run verdict: normal return -> (True, None, outputs); a
-    SubsetRunError (a stage errored, or a mid-frontier human_review_queue halted)
-    -> (False, its message, {})."""
+    SubsetRunError (a stage errored) -> (False, its message, {}). A mid-frontier
+    human_review_queue auto-approves in memory (queue_auto_approve=True) rather
+    than halting, so it never produces a SubsetRunError on its own."""
     try:
         outputs = run_subset(
             workflow, injected_outputs=injected, stage_ids=stage_ids,
-            run_dir=test_run_dir, repo_root=repo_root)
+            run_dir=test_run_dir, repo_root=repo_root, queue_auto_approve=True)
     except SubsetRunError as exc:
         return False, str(exc), {}
     return True, None, outputs

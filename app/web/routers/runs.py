@@ -61,9 +61,9 @@ async def trigger_run(request: Request, project: str):
     try:
         form = await request.form()
         version_id = str(form.get("version_id") or "").strip() or None
-        bindings = _collect_bindings(form, project_dir, version_id)
+        bindings = _collect_bindings(form, project, version_id)
         limits = _collect_limits(form)
-        run_id = run_service.start_run(project_dir, REPO_ROOT, version_id=version_id,
+        run_id = run_service.start_run(project, version_id=version_id,
                                        bindings=bindings, limits=limits)
     except (NoVersionToRunError, MissingInputBindingError, ValueError) as exc:
         # ValueError here is binding/limit/offset validation failures raised by
@@ -90,7 +90,7 @@ async def trigger_run_of_version(project: str, version_id: str):
     if not project_dir.is_dir():
         raise HTTPException(status_code=404, detail=f"No project '{project}'")
     try:
-        run_id = run_service.start_run(project_dir, REPO_ROOT, version_id=version_id)
+        run_id = run_service.start_run(project, version_id=version_id)
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except NoVersionToRunError as exc:
@@ -107,7 +107,7 @@ async def trigger_run_of_version(project: str, version_id: str):
 
 
 def _collect_bindings(
-    form: FormData, project_dir: Path, version_id: str | None = None
+    form: FormData, project: str, version_id: str | None = None
 ) -> dict[str, dict[str, str]]:
     """Read `binding__<stage_id>` form fields into run bindings (each a
     connector-params dict, {"path": ...}). A field whose value equals the
@@ -116,7 +116,7 @@ def _collect_bindings(
     version's authored paths to compare against (None -> latest), so a run pinned
     to an older version judges provenance against THAT version, not the latest."""
     authored = {fi["stage_id"]: fi["path"]
-                for fi in list_file_inputs(project_dir, version_id)}
+                for fi in list_file_inputs(project, version_id)}
     bindings: dict[str, dict[str, str]] = {}
     for key, value in form.items():
         if not key.startswith("binding__"):
@@ -159,7 +159,7 @@ async def run_inputs(project: str, version_id: str | None = None):
     project_dir = EXAMPLES_DIR / project
     if not project_dir.is_dir():
         raise HTTPException(status_code=404, detail=f"No project '{project}'")
-    return JSONResponse(list_file_inputs(project_dir, version_id))
+    return JSONResponse(list_file_inputs(project, version_id))
 
 
 @router.post("/project/{project}/upload-input")
@@ -207,7 +207,7 @@ async def runs_index(request: Request, project: str):
             # so the run form's version picker offers only those — never an
             # unpublished version the run would then reject.
             "versions": [v for v in list_versions(pdir) if v.published],
-            "file_inputs": list_file_inputs(pdir),
+            "file_inputs": list_file_inputs(project),
         },
     )
 
@@ -582,7 +582,7 @@ async def resume_run_route(project: str, run_id: str):
                              "issues": exc.issues}, status_code=400)
     # Resume re-runs the queue stage + downstream (LLM-heavy) — do it in the
     # background and redirect immediately so the page can poll progress.
-    run_service.resume(project_dir, run_id, REPO_ROOT)
+    run_service.resume(project, run_id)
     return RedirectResponse(
         url=f"/project/{project}/runs/{run_id}",
         status_code=303,

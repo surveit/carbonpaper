@@ -23,7 +23,7 @@ from app.core.run_status import StageStatus
 from app.services.run import resolve_version
 from app.services.loader import CompiledStageFile, load_compiled_dir
 from app.services.versioning import list_versions, load_version_stages
-from app.services.workspace import load_schemas
+from app.services.workspace import load_schemas, resolve_project_dir
 from app.web.config import EXAMPLES_DIR, REPO_ROOT
 
 
@@ -134,7 +134,7 @@ def find_stage(stages: list[Stage], stage_id: str) -> Stage | None:
     return next((s for s in stages if s.id == stage_id), None)
 
 
-def list_file_inputs(project_dir: Path, version_id: str | None = None) -> list[dict[str, Any]]:
+def list_file_inputs(project: str, version_id: str | None = None) -> list[dict[str, Any]]:
     """File-kind input stages of the version a triggered run will execute, each
     with its workflow-authored absolute path ('' when the stage authors none —
     the run form must collect one). `version_id` selects which version to read;
@@ -142,10 +142,10 @@ def list_file_inputs(project_dir: Path, version_id: str | None = None) -> list[d
     prefill and the run's binding provenance both speak about the SAME version.
     [] when the project has no versions yet."""
     try:
-        version_id = resolve_version(project_dir, version_id)
+        version_id = resolve_version(project, version_id)
     except NoVersionToRunError:
         return []
-    stages = load_version_stages(project_dir, version_id)
+    stages = load_version_stages(resolve_project_dir(project), version_id)
     return [
         {"stage_id": s.id, "name": s.name,
          "path": str((s.connector.params or {}).get("path") or "")}

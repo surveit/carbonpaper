@@ -15,6 +15,7 @@ import pytest
 
 from app.core.errors import NoTestRunSourceError, NoTestRunVersionError
 from app.models import Stage
+from app.services import workspace
 from app.services.test_run import start_test_run
 from app.services.versioning import WorkflowVersion
 
@@ -83,8 +84,11 @@ def _seed(demo, stage_dicts, *, version_id="v1", published=False, created_at="20
 
 
 @pytest.fixture
-def demo(tmp_path):
-    """A `demo` project dir with a 4-row source file bound at an absolute path."""
+def demo(tmp_path, monkeypatch):
+    """A `demo` project dir with a 4-row source file bound at an absolute path,
+    reachable by name through the workspace (pointed at tmp_path). The test-run
+    service takes the project NAME `demo` and resolves it to this directory."""
+    monkeypatch.setattr(workspace, "EXAMPLES_DIR", tmp_path)
     demo = tmp_path / "demo"
     (demo / "data").mkdir(parents=True)
     pd.DataFrame({"doc_id": ["a", "b", "c", "d"], "score": [1, -1, 2, -3]}).to_csv(
@@ -96,7 +100,7 @@ def test_test_run_runs_frontier_over_the_sample(demo):
     """The frontier (classify) runs over the injected sample; the result is ok,
     names the executed stage, and reports its output row count."""
     _seed(demo, [_load_stage(demo), _CLASSIFY])
-    result = start_test_run(demo, demo)
+    result = start_test_run("demo")
     assert result["ok"] is True
     assert result["error"] is None
     assert result["version_id"] == "v1"
@@ -108,7 +112,7 @@ def test_test_run_limit_and_offset_slice_the_sample(demo):
     """limit/offset page the source sample before the frontier runs; a 1:1
     transform carries the sliced count straight through to rows_out."""
     _seed(demo, [_load_stage(demo), _CLASSIFY])
-    result = start_test_run(demo, demo, limit=2, offset=1)
+    result = start_test_run("demo", limit=2, offset=1)
     assert result["ok"] is True
     assert result["rows_out"] == 2
 
@@ -117,7 +121,7 @@ def test_test_run_writes_production_shape_manifest_under_test_runs_not_runs(demo
     """The manifest lands under test_runs/<id>/, carries the production run-manifest
     fields (project + workflow_version), and no runs/ dir is ever created."""
     _seed(demo, [_load_stage(demo), _CLASSIFY])
-    result = start_test_run(demo, demo)
+    result = start_test_run("demo")
     manifest_path = demo / "test_runs" / result["test_run_id"] / "manifest.json"
     assert manifest_path.exists()
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -131,7 +135,7 @@ def test_test_run_excludes_publish_from_the_frontier(demo):
     """A publish stage is never run by a test run — it is not in stages_run and
     writes no artifacts."""
     _seed(demo, [_load_stage(demo), _CLASSIFY, _PUBLISH])
-    result = start_test_run(demo, demo)
+    result = start_test_run("demo")
     assert result["ok"] is True
     assert "publish_report" not in result["stages_run"]
     assert result["stages_run"] == ["classify"]
@@ -141,7 +145,7 @@ def test_test_run_reports_a_stage_error_as_failure(demo):
     """A frontier stage that errors makes the test run fail: ok False, no
     row count, and the error names the offending stage."""
     _seed(demo, [_load_stage(demo), _BOOM])
-    result = start_test_run(demo, demo)
+    result = start_test_run("demo")
     assert result["ok"] is False
     assert result["rows_out"] is None
     assert "boom" in result["error"]
@@ -150,15 +154,22 @@ def test_test_run_reports_a_stage_error_as_failure(demo):
     assert manifest["status"] == "errors"
 
 
-def test_test_run_reports_a_queue_stage_as_failure(demo):
-    """A mid-frontier human_review_queue fails the subset run loudly — the subset
-    ctx has no project_dir, so the queue handler raises before it can halt. The
-    test run reports that as a failure naming the queue stage (no read-through)."""
+def test_test_run_auto_approves_a_queue_stage_in_memory(demo):
+    """A mid-frontier human_review_queue auto-approves on a test run: the subset
+    runs with queue_auto_approve, so every sampled row passes straight through
+    (ok, real row count) and NOTHING is written under the project's queue or
+    decisions storage — no reviewer, no halt, no disk state."""
     _seed(demo, [_load_stage(demo), _QUEUE])
-    result = start_test_run(demo, demo)
-    assert result["ok"] is False
-    assert result["rows_out"] is None
-    assert "review" in result["error"]
+    result = start_test_run("demo")
+    assert result["ok"] is True
+    assert result["error"] is None
+    assert result["stages_run"] == ["review"]
+    assert result["rows_out"] == 4
+    # The auto-approve path never reaches for project-relative queue/decisions
+    # state — those dirs must not exist after the run.
+    assert not (demo / "decisions").exists()
+    assert not (demo / "queue").exists()
+    assert not (demo / "test_runs" / result["test_run_id"] / "queue").exists()
 
 
 def test_test_run_raises_when_no_source_stage(demo):
@@ -179,14 +190,14 @@ def test_test_run_raises_when_no_source_stage(demo):
         stages=[Stage.model_validate(standalone)],
     ).save()
     with pytest.raises(NoTestRunSourceError):
-        start_test_run(demo, demo)
+        start_test_run("demo")
 
 
 def test_test_run_runs_an_explicit_unpublished_version(demo):
     """A test run evaluates a candidate BEFORE it is published, so an explicit
     unpublished version_id runs (unlike a production run, which requires publish)."""
     _seed(demo, [_load_stage(demo), _CLASSIFY], version_id="v1", published=False)
-    result = start_test_run(demo, demo, version_id="v1")
+    result = start_test_run("demo", version_id="v1")
     assert result["ok"] is True
     assert result["version_id"] == "v1"
 
@@ -198,7 +209,7 @@ def test_test_run_default_picks_newest_version_even_when_unpublished(demo):
           version_id="20260101T000000", published=True, created_at="2026-01-01T00:00:00")
     _seed(demo, [_load_stage(demo), _CLASSIFY],
           version_id="20260201T000000", published=False, created_at="2026-02-01T00:00:00")
-    result = start_test_run(demo, demo)
+    result = start_test_run("demo")
     assert result["version_id"] == "20260201T000000"
 
 
@@ -206,4 +217,4 @@ def test_test_run_raises_when_no_versions_exist(demo):
     """A project with no stored version has nothing to run — raise loudly,
     naming the project, rather than falling back to the working copy."""
     with pytest.raises(NoTestRunVersionError, match="demo"):
-        start_test_run(demo, demo)
+        start_test_run("demo")

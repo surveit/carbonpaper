@@ -14,7 +14,6 @@ from __future__ import annotations
 import json
 import threading
 import traceback
-from pathlib import Path
 from typing import Any, Mapping
 
 from app.core.errors import RunNotFoundError
@@ -24,11 +23,11 @@ from app.runtime.runner import (
     resume_run,
     run_prepared,
 )
+from app.services.workspace import repo_root, resolve_project_dir
 
 
 def start_run(
-    project_dir: Path,
-    repo_root: Path,
+    project: str,
     *,
     version_id: str | None = None,
     bindings: Mapping[str, Mapping[str, Any]] | None = None,
@@ -37,15 +36,17 @@ def start_run(
 ) -> str:
     """Set up a run (writes the initial `running` manifest) and launch its
     execution on a background daemon thread, returning the run id immediately so
-    a caller can redirect to the run page and poll. prepare_run does the
-    version-resolution, binding, and preflight work up front, so its loud
-    failures (NoVersionToRunError / MissingInputBindingError / ValueError /
-    WorkflowLoadError) surface here, before any thread starts and before a run
-    dir exists. See prepare_run for `version_id` / `bindings` / `limits` /
-    `offsets` semantics — this seam adds none of its own."""
+    a caller can redirect to the run page and poll. Resolves `project` (a project
+    name) to its directory and the repo root internally — a caller hands a name,
+    never a path. prepare_run does the version-resolution, binding, and preflight
+    work up front, so its loud failures (NoVersionToRunError /
+    MissingInputBindingError / ValueError / WorkflowLoadError) surface here,
+    before any thread starts and before a run dir exists. See prepare_run for
+    `version_id` / `bindings` / `limits` / `offsets` semantics — this seam adds
+    none of its own."""
     prep = prepare_run(
-        project_dir,
-        repo_root,
+        resolve_project_dir(project),
+        repo_root(),
         version_id=version_id,
         limits=limits,
         offsets=offsets,
@@ -55,36 +56,38 @@ def start_run(
     return str(prep["run_id"])
 
 
-def resume(project_dir: Path, run_id: str, repo_root: Path) -> None:
+def resume(project: str, run_id: str) -> None:
     """Resume a halted or errored run on a background daemon thread. Re-runs
     every not-yet-complete stage and reuses completed upstream outputs (see
     resume_run); launched in the background so the caller can redirect and poll.
-    The caller validates the workflow / run existence synchronously first — this
-    only handles the background launch."""
-    _run_in_background(resume_run, project_dir, run_id, repo_root)
+    Resolves the project name to its directory and the repo root internally. The
+    caller validates the workflow / run existence synchronously first — this only
+    handles the background launch."""
+    _run_in_background(resume_run, resolve_project_dir(project), run_id, repo_root())
 
 
-def read_run_status(project_dir: Path, run_id: str) -> dict[str, Any]:
+def read_run_status(project: str, run_id: str) -> dict[str, Any]:
     """A run's manifest.json as a dict. Raises RunNotFoundError if the run has no
     manifest — a bad/expired run id, surfaced loudly rather than as an empty or
     fabricated status."""
-    manifest_path = project_dir / "runs" / run_id / "manifest.json"
+    manifest_path = resolve_project_dir(project) / "runs" / run_id / "manifest.json"
     if not manifest_path.exists():
         raise RunNotFoundError(
-            f"no run '{run_id}' for project '{project_dir.name}' "
+            f"no run '{run_id}' for project '{project}' "
             f"(no manifest at {manifest_path})"
         )
     manifest: dict[str, Any] = json.loads(manifest_path.read_text(encoding="utf-8"))
     return manifest
 
 
-def resolve_version(project_dir: Path, version_id: str | None) -> str:
+def resolve_version(project: str, version_id: str | None) -> str:
     """The published workflow version a run would pin to (None -> newest
     published). Raises NoVersionToRunError if `version_id` names an unpublished
     or missing version, or if the project has no published version. A thin,
-    side-effect-free pass-through to the runner's resolver so callers outside the
-    runtime (e.g. the web layer's project listing) never import the runner."""
-    return resolve_version_id(project_dir, version_id)
+    side-effect-free pass-through to the runner's resolver (resolving the project
+    name to its directory) so callers outside the runtime (e.g. the web layer's
+    project listing) never import the runner."""
+    return resolve_version_id(resolve_project_dir(project), version_id)
 
 
 def _run_in_background(target: Any, *args: Any) -> None:

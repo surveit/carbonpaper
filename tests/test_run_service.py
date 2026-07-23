@@ -14,7 +14,12 @@ import pytest
 import app.services.run as run_service
 from app.core.errors import NoVersionToRunError, RunNotFoundError
 from app.services import versioning
+from app.services import workspace
 from app.services.versioning import create_version_from_disk, list_versions
+
+# The run service takes a project NAME and resolves it under the workspace root;
+# every test drives that one project.
+_PROJECT = "proj"
 
 
 @pytest.fixture(autouse=True)
@@ -23,6 +28,14 @@ def _synchronous_background(monkeypatch):
     finished manifest without racing a daemon thread."""
     monkeypatch.setattr(run_service, "_run_in_background",
                         lambda target, *args: target(*args))
+
+
+@pytest.fixture
+def project_dir(tmp_path, monkeypatch):
+    """A workspace pointed at tmp_path with one project dir `proj/`; the service
+    resolves the name `proj` to this directory."""
+    monkeypatch.setattr(workspace, "EXAMPLES_DIR", tmp_path)
+    return tmp_path / _PROJECT
 
 
 def _make_project(root):
@@ -45,49 +58,49 @@ def _seed_version(root):
     return vid
 
 
-def test_start_run_returns_run_id_and_writes_ok_manifest(tmp_path):
+def test_start_run_returns_run_id_and_writes_ok_manifest(project_dir):
     """start_run mints a run id, executes the pinned version, and the on-disk
     manifest reflects the finished run."""
-    _make_project(tmp_path)
-    _seed_version(tmp_path)
-    run_id = run_service.start_run(tmp_path, tmp_path)
-    manifest_path = tmp_path / "runs" / run_id / "manifest.json"
+    _make_project(project_dir)
+    _seed_version(project_dir)
+    run_id = run_service.start_run(_PROJECT)
+    manifest_path = project_dir / "runs" / run_id / "manifest.json"
     assert manifest_path.exists()
     assert json.loads(manifest_path.read_text(encoding="utf-8"))["status"] == "ok"
 
 
-def test_start_run_pins_requested_version(tmp_path):
+def test_start_run_pins_requested_version(project_dir):
     """A version_id passed to start_run is the version recorded on the run."""
-    _make_project(tmp_path)
-    vid = _seed_version(tmp_path)
-    run_id = run_service.start_run(tmp_path, tmp_path, version_id=vid)
-    status = run_service.read_run_status(tmp_path, run_id)
+    _make_project(project_dir)
+    vid = _seed_version(project_dir)
+    run_id = run_service.start_run(_PROJECT, version_id=vid)
+    status = run_service.read_run_status(_PROJECT, run_id)
     assert status["workflow_version"] == vid
 
 
-def test_read_run_status_returns_manifest_dict(tmp_path):
+def test_read_run_status_returns_manifest_dict(project_dir):
     """read_run_status returns the started run's manifest as a dict."""
-    _make_project(tmp_path)
-    _seed_version(tmp_path)
-    run_id = run_service.start_run(tmp_path, tmp_path)
-    status = run_service.read_run_status(tmp_path, run_id)
+    _make_project(project_dir)
+    _seed_version(project_dir)
+    run_id = run_service.start_run(_PROJECT)
+    status = run_service.read_run_status(_PROJECT, run_id)
     assert status["run_id"] == run_id
     assert status["status"] == "ok"
 
 
-def test_read_run_status_missing_run_raises(tmp_path):
+def test_read_run_status_missing_run_raises(project_dir):
     """A run id with no manifest fails loudly, not with an empty/fabricated status."""
-    _make_project(tmp_path)
+    _make_project(project_dir)
     with pytest.raises(RunNotFoundError):
-        run_service.read_run_status(tmp_path, "20990101T000000")
+        run_service.read_run_status(_PROJECT, "20990101T000000")
 
 
-def test_resolve_version_defaults_to_latest_published_and_raises_when_none(tmp_path):
+def test_resolve_version_defaults_to_latest_published_and_raises_when_none(project_dir):
     """resolve_version(None) returns the newest published version; a project with
     no published version raises NoVersionToRunError."""
-    _make_project(tmp_path)
+    _make_project(project_dir)
     with pytest.raises(NoVersionToRunError):
-        run_service.resolve_version(tmp_path, None)
-    vid = _seed_version(tmp_path)
-    assert run_service.resolve_version(tmp_path, None) == vid
-    assert list_versions(tmp_path)[0].version_id == vid
+        run_service.resolve_version(_PROJECT, None)
+    vid = _seed_version(project_dir)
+    assert run_service.resolve_version(_PROJECT, None) == vid
+    assert list_versions(project_dir)[0].version_id == vid

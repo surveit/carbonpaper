@@ -33,13 +33,6 @@ from app.services import test_run as test_run_service
 from app.services import workspace
 from app.services.errors import WorkflowLoadError
 
-# This module is app/mcp/server.py, so three parents up is the repo root — the
-# same derivation app.web.config.REPO_ROOT uses, resolved here rather than
-# imported (app.web is a protected top-level interface the MCP surface must not
-# import). It is the root file connectors and table refs resolve relative paths
-# against.
-REPO_ROOT = Path(__file__).resolve().parent.parent.parent
-
 # Domain failures a run/test-run tool turns into {ok: False, error: str(exc)} — a
 # loud, honest verdict rather than a traceback or a fabricated run id/status.
 # Anything outside this set propagates as a genuine internal fault.
@@ -290,12 +283,12 @@ def run_workflow(project_id: str, version_id: str | None = None) -> dict[str, An
     loud error, never a silent fallback. Poll get_run_status(project_id, run_id)
     for live progress and the final status. On a pre-run failure (nothing
     published, an unbound input) returns {ok: False, error} and starts no run."""
-    pdir = _resolve_existing_project(project_id)
+    _resolve_existing_project(project_id)  # loud if the project doesn't exist
     try:
-        run_id = run_service.start_run(pdir, REPO_ROOT, version_id=version_id)
+        run_id = run_service.start_run(project_id, version_id=version_id)
     except _RUN_TOOL_ERRORS as exc:
         return {"ok": False, "error": str(exc)}
-    return {"run_id": run_id, "status": run_service.read_run_status(pdir, run_id)["status"]}
+    return {"run_id": run_id, "status": run_service.read_run_status(project_id, run_id)["status"]}
 
 
 @mcp.tool()
@@ -304,9 +297,9 @@ def get_run_status(project_id: str, run_id: str) -> dict[str, Any]:
     (running / ok / errors / halted), per-stage statuses, and run metadata. Poll
     this after run_workflow to follow progress and see the outcome. An unknown or
     expired run_id returns {ok: False, error} rather than a fabricated status."""
-    pdir = _resolve_existing_project(project_id)
+    _resolve_existing_project(project_id)  # loud if the project doesn't exist
     try:
-        return run_service.read_run_status(pdir, run_id)
+        return run_service.read_run_status(project_id, run_id)
     except _RUN_TOOL_ERRORS as exc:
         return {"ok": False, "error": str(exc)}
 
@@ -325,10 +318,10 @@ def test_run(
     {ok, test_run_id, version_id, stages_run, rows_out, error}: `ok` False on any
     stage error, with `error` naming what failed and `rows_out` None (never a
     fabricated count). A project with no stored version is a loud error."""
-    pdir = _resolve_existing_project(project_id)
+    _resolve_existing_project(project_id)  # loud if the project doesn't exist
     try:
         return test_run_service.start_test_run(
-            pdir, REPO_ROOT, version_id=version_id, limit=limit, offset=offset)
+            project_id, version_id=version_id, limit=limit, offset=offset)
     except _RUN_TOOL_ERRORS as exc:
         return {"ok": False, "error": str(exc)}
 

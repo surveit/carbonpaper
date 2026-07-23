@@ -118,7 +118,7 @@ def test_trigger_run_returns_400_on_invalid_dag(monkeypatch):
     """The run route surfaces a load failure as a 400 with the issue list."""
     from app.services.loader import WorkflowLoadError
 
-    def _boom(project_dir, repo_root, **kwargs):
+    def _boom(project, **kwargs):
         raise WorkflowLoadError(Path("compiled"), ["01_bad.json: params.path missing"])
 
     monkeypatch.setattr(run_service, "start_run", _boom)
