@@ -9,8 +9,9 @@ from pathlib import Path
 
 import pytest
 
+from app.core.run_status import RunMode
 from app.runtime.context import RunContext, RunIdentity
-from app.services.stage_cache import CacheMode, StageCacheEntry
+from app.services.stage_cache import StageCacheEntry
 
 
 def _make(**overrides: object) -> RunContext:
@@ -40,7 +41,7 @@ def test_run_context_accepts_no_identity_and_no_cache() -> None:
 
 def test_run_context_accepts_identity_with_cache() -> None:
     identity = RunIdentity(project="p", run_id="r1")
-    ctx = _make(identity=identity, stage_cache=StageCacheEntry.for_mode(CacheMode.PRODUCTION))
+    ctx = _make(identity=identity, stage_cache=StageCacheEntry.for_mode(RunMode.PRODUCTION))
     assert ctx.identity == identity
     assert ctx.stage_cache is not None
 
@@ -52,7 +53,7 @@ def test_run_context_rejects_identity_without_cache() -> None:
 
 def test_run_context_rejects_cache_without_identity() -> None:
     with pytest.raises(ValueError, match="both be set or both be None"):
-        _make(identity=None, stage_cache=StageCacheEntry.for_mode(CacheMode.PRODUCTION))
+        _make(identity=None, stage_cache=StageCacheEntry.for_mode(RunMode.PRODUCTION))
 
 
 def test_run_context_telemetry_accumulators_default_empty_and_independent() -> None:

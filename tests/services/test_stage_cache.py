@@ -7,9 +7,9 @@ import pandas as pd
 import pytest
 
 from app.core.persistence import PersistedModel
+from app.core.run_status import RunMode
 from app.models import RowReviewDecision
 from app.services.stage_cache import (
-    CacheMode,
     HumanDecision,
     ReadOnlyStageCache,
     StageCache,
@@ -114,12 +114,12 @@ def test_find_entries_scopes_by_stage_fingerprint_prefix():
 # ── for_mode ──────────────────────────────────────────────────────────────────
 
 def test_for_mode_production_returns_a_writable_cache():
-    accessor = StageCacheEntry.for_mode(CacheMode.PRODUCTION)
+    accessor = StageCacheEntry.for_mode(RunMode.PRODUCTION)
     assert isinstance(accessor, StageCache)
 
 
 def test_for_mode_non_production_returns_a_read_only_view_without_put():
-    accessor = StageCacheEntry.for_mode(CacheMode.NON_PRODUCTION)
+    accessor = StageCacheEntry.for_mode(RunMode.NON_PRODUCTION)
     assert isinstance(accessor, ReadOnlyStageCache)
     assert not isinstance(accessor, StageCache)
     assert not hasattr(accessor, "put")
