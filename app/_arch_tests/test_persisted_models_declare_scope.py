@@ -1,13 +1,13 @@
 """Architecture: every `PersistedModel` subclass declares its permission scope.
 
 `app.core.persistence.PersistenceScope` is a permission profile for run
-activity (see its docstring): `RUN`, `AUTHORED`, or `CROSS_RUN`. The base
-class carries no default for `SCOPE` — nothing at runtime reads `SCOPE`, so
-an omitted declaration is a modeling gap only this arch test catches, at
-review time; there is no runtime check. A second test enforces the sharper
-rule for the one scope that grants a run a write outliving it: a class
-carrying `SCOPE = PersistenceScope.CROSS_RUN` must also define `for_mode`,
-the view that revokes that write for a non-production run.
+activity (see its docstring): `RUN`, `PROJECT_READ`, or `PROJECT_READ_WRITE`.
+The base class carries no default for `SCOPE` — nothing at runtime reads
+`SCOPE`, so an omitted declaration is a modeling gap only this arch test
+catches, at review time; there is no runtime check. A second test enforces
+the sharper rule for the one scope that grants a run a write outliving it: a
+class carrying `SCOPE = PersistenceScope.PROJECT_READ_WRITE` must also define
+`for_mode`, the view that revokes that write for a non-production run.
 
 Scope is all of `app/` (this test sits at its root); detection is AST-only —
 neither test imports the modules it inspects.
@@ -27,7 +27,7 @@ from arch._helpers import (
 
 _PERSISTED_MODEL = "PersistedModel"
 _SCOPE_ATTR = "SCOPE"
-_CROSS_RUN_ATTR = "CROSS_RUN"
+_PROJECT_READ_WRITE_ATTR = "PROJECT_READ_WRITE"
 _FOR_MODE_METHOD = "for_mode"
 
 
@@ -43,28 +43,28 @@ def find_undeclared_scope_offenders(paths: list[Path]) -> list[str]:
     return offenders
 
 
-def find_cross_run_missing_for_mode_offenders(paths: list[Path]) -> list[str]:
+def find_project_read_write_missing_for_mode_offenders(paths: list[Path]) -> list[str]:
     """"<path>:<lineno>  class <name>" for every PersistedModel subclass whose
-    `SCOPE` is assigned `PersistenceScope.CROSS_RUN` but whose class body
-    never defines `for_mode`."""
+    `SCOPE` is assigned `PersistenceScope.PROJECT_READ_WRITE` but whose class
+    body never defines `for_mode`."""
     offenders: list[str] = []
     for path in paths:
         tree = parse_module(path)
         for node in find_subclasses_of(tree, _PERSISTED_MODEL):
             scope_stmt = find_class_body_assignment(node, _SCOPE_ATTR)
-            if scope_stmt is None or not _assigns_cross_run(scope_stmt):
+            if scope_stmt is None or not _assigns_project_read_write(scope_stmt):
                 continue
             if find_class_body_function(node, _FOR_MODE_METHOD) is None:
                 offenders.append(f"{path.name}:{node.lineno}  class {node.name}")
     return offenders
 
 
-def _assigns_cross_run(stmt: ast.Assign | ast.AnnAssign) -> bool:
+def _assigns_project_read_write(stmt: ast.Assign | ast.AnnAssign) -> bool:
     """True if a `find_class_body_assignment` hit's value is an attribute
-    access ending in `CROSS_RUN` (`PersistenceScope.CROSS_RUN`, or any dotted
-    path ending there) — a name-based match, since AST can't resolve the
-    attribute to the real enum member."""
-    return isinstance(stmt.value, ast.Attribute) and stmt.value.attr == _CROSS_RUN_ATTR
+    access ending in `PROJECT_READ_WRITE` (`PersistenceScope.PROJECT_READ_WRITE`,
+    or any dotted path ending there) — a name-based match, since AST can't
+    resolve the attribute to the real enum member."""
+    return isinstance(stmt.value, ast.Attribute) and stmt.value.attr == _PROJECT_READ_WRITE_ATTR
 
 
 def test_persisted_models_declare_scope() -> None:
@@ -76,11 +76,11 @@ def test_persisted_models_declare_scope() -> None:
     )
 
 
-def test_cross_run_models_define_for_mode() -> None:
-    offenders = find_cross_run_missing_for_mode_offenders(find_governed_files(__file__))
+def test_project_read_write_models_define_for_mode() -> None:
+    offenders = find_project_read_write_missing_for_mode_offenders(find_governed_files(__file__))
     assert not offenders, (
-        "a PersistedModel with SCOPE = PersistenceScope.CROSS_RUN grants run "
-        "activity a write that outlives the run, so it must also define "
+        "a PersistedModel with SCOPE = PersistenceScope.PROJECT_READ_WRITE grants "
+        "run activity a write that outlives the run, so it must also define "
         "for_mode, the view that revokes that write:\n  " + "\n  ".join(offenders)
     )
 
@@ -107,7 +107,7 @@ def test_find_undeclared_scope_offenders_accepts_a_declared_scope(tmp_path: Path
     target = _write(
         tmp_path,
         "class Foo(PersistedModel):\n"
-        "    SCOPE: ClassVar[PersistenceScope] = PersistenceScope.AUTHORED\n",
+        "    SCOPE: ClassVar[PersistenceScope] = PersistenceScope.PROJECT_READ\n",
     )
     assert find_undeclared_scope_offenders([target]) == []
 
@@ -132,58 +132,58 @@ def test_find_undeclared_scope_offenders_ignores_a_non_persisted_model_class(
     assert find_undeclared_scope_offenders([target]) == []
 
 
-def test_find_cross_run_missing_for_mode_offenders_flags_cross_run_without_for_mode(
+def test_find_project_read_write_missing_for_mode_offenders_flags_project_read_write_without_for_mode(
     tmp_path: Path,
 ) -> None:
     target = _write(
         tmp_path,
         "class Foo(PersistedModel):\n"
-        "    SCOPE: ClassVar[PersistenceScope] = PersistenceScope.CROSS_RUN\n",
+        "    SCOPE: ClassVar[PersistenceScope] = PersistenceScope.PROJECT_READ_WRITE\n",
     )
-    assert find_cross_run_missing_for_mode_offenders([target]) == ["models.py:1  class Foo"]
+    assert find_project_read_write_missing_for_mode_offenders([target]) == ["models.py:1  class Foo"]
 
 
-def test_find_cross_run_missing_for_mode_offenders_accepts_cross_run_with_for_mode(
+def test_find_project_read_write_missing_for_mode_offenders_accepts_project_read_write_with_for_mode(
     tmp_path: Path,
 ) -> None:
     target = _write(
         tmp_path,
         "class Foo(PersistedModel):\n"
-        "    SCOPE: ClassVar[PersistenceScope] = PersistenceScope.CROSS_RUN\n"
+        "    SCOPE: ClassVar[PersistenceScope] = PersistenceScope.PROJECT_READ_WRITE\n"
         "    def for_mode(self, mode):\n"
         "        pass\n",
     )
-    assert find_cross_run_missing_for_mode_offenders([target]) == []
+    assert find_project_read_write_missing_for_mode_offenders([target]) == []
 
 
-def test_find_cross_run_missing_for_mode_offenders_ignores_run_scope(tmp_path: Path) -> None:
+def test_find_project_read_write_missing_for_mode_offenders_ignores_run_scope(tmp_path: Path) -> None:
     target = _write(
         tmp_path,
         "class Foo(PersistedModel):\n"
         "    SCOPE: ClassVar[PersistenceScope] = PersistenceScope.RUN\n",
     )
-    assert find_cross_run_missing_for_mode_offenders([target]) == []
+    assert find_project_read_write_missing_for_mode_offenders([target]) == []
 
 
-def test_find_cross_run_missing_for_mode_offenders_ignores_a_class_missing_scope(
+def test_find_project_read_write_missing_for_mode_offenders_ignores_a_class_missing_scope(
     tmp_path: Path,
 ) -> None:
     """A class that never declares SCOPE at all is `test_persisted_models_
-    declare_scope`'s offender, not this test's — it has no CROSS_RUN
+    declare_scope`'s offender, not this test's — it has no PROJECT_READ_WRITE
     assignment to react to."""
     target = _write(tmp_path, "class Foo(PersistedModel):\n    pass\n")
-    assert find_cross_run_missing_for_mode_offenders([target]) == []
+    assert find_project_read_write_missing_for_mode_offenders([target]) == []
 
 
-def test_assigns_cross_run_matches_the_enum_attribute() -> None:
-    tree = ast.parse("SCOPE = PersistenceScope.CROSS_RUN\n")
+def test_assigns_project_read_write_matches_the_enum_attribute() -> None:
+    tree = ast.parse("SCOPE = PersistenceScope.PROJECT_READ_WRITE\n")
     (stmt,) = tree.body
     assert isinstance(stmt, ast.Assign)
-    assert _assigns_cross_run(stmt) is True
+    assert _assigns_project_read_write(stmt) is True
 
 
-def test_assigns_cross_run_rejects_a_different_attribute() -> None:
-    tree = ast.parse("SCOPE = PersistenceScope.AUTHORED\n")
+def test_assigns_project_read_write_rejects_a_different_attribute() -> None:
+    tree = ast.parse("SCOPE = PersistenceScope.PROJECT_READ\n")
     (stmt,) = tree.body
     assert isinstance(stmt, ast.Assign)
-    assert _assigns_cross_run(stmt) is False
+    assert _assigns_project_read_write(stmt) is False

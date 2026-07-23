@@ -8,7 +8,7 @@ Re-running the same stage definition against the same row resolves to the
 same cache entry, whether the run that first recorded it is long gone.
 
 `StageCacheEntry` is the only PersistedModel carrying
-`SCOPE = PersistenceScope.CROSS_RUN` (see app.core.persistence.PersistenceScope):
+`SCOPE = PersistenceScope.PROJECT_READ_WRITE` (see app.core.persistence.PersistenceScope):
 the one deliberate channel that lets run activity write something that outlives
 the run. `for_mode` is the view that grants or withholds that write: a
 production run gets `StageCache` (read + write); a non-production run — an
@@ -69,7 +69,7 @@ class StageCacheEntry(PersistedModel):
     `compute_row_fingerprint` before the entry is built)."""
 
     collection: ClassVar[str] = "stage_cache"
-    SCOPE: ClassVar[PersistenceScope] = PersistenceScope.CROSS_RUN
+    SCOPE: ClassVar[PersistenceScope] = PersistenceScope.PROJECT_READ_WRITE
 
     project: str
     stage_id: str

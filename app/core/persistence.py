@@ -182,33 +182,36 @@ def _now_iso() -> str:
 
 
 class PersistenceScope(str, Enum):
-    """Permission profile for RUN ACTIVITY against project-scoped storage — not
-    the authoring surface, which always has full project-scope read/write
-    directly (a version, draft, or chat session is written by a human or an
-    authoring agent, never by run code). This enum constrains only what code
-    executing INSIDE a run may touch:
+    """Permission profile FOR RUN ACTIVITY over the two storage scopes every
+    caller already knows: a run's own directory-lifetime, and the project. The
+    authoring surface (a human or an authoring agent writing a version, a
+    draft, or a chat session) always has full project-scope read/write
+    directly — this enum constrains only what code executing INSIDE a run may
+    touch:
 
-    - RUN: run-scope read/write only, no project-scope access at all — the
-      record is produced by one run and is meaningless outside it.
-    - AUTHORED: project-scope read at most, from a run — never write. A run
-      may read a human-authored artifact (e.g. the version it executes) but
-      never write one.
-    - CROSS_RUN: project-scope read AND write — the only profile that grants
-      run activity a write outliving the run. A model carrying this scope
-      must define `for_mode`, the view that revokes that write for a
+    - RUN: run-scope only, no project-scope access at all — the record is
+      produced by one run and is meaningless outside it.
+    - PROJECT_READ: run activity may read the project scope, never write. A
+      run may read a human-authored artifact (e.g. the version it executes)
+      but never write one.
+    - PROJECT_READ_WRITE: run activity may read AND write the project scope —
+      the only profile that grants a write outliving the run. The only model
+      carrying it is the stage-result cache; any model carrying it must
+      define `for_mode`, the view that revokes that write for a
       non-production run (consumed by the eval/smoke run path *(planned)*).
 
     Design invariant: exactly one PersistedModel subclass may carry
-    SCOPE = CROSS_RUN — the single deliberate cross-run channel; broadening it
-    would blur the line this scope exists to hold. StageCacheEntry
-    (app.services.stage_cache) is that one subclass; both the "every subclass
-    declares SCOPE" rule and the "CROSS_RUN implies for_mode" rule are enforced
-    by the arch tests in app/_arch_tests/test_persisted_models_declare_scope.py.
+    SCOPE = PROJECT_READ_WRITE — the single deliberate channel that lets run
+    activity write something outliving the run; broadening it would blur the
+    line this scope exists to hold. StageCacheEntry (app.services.stage_cache)
+    is that one subclass; both the "every subclass declares SCOPE" rule and
+    the "PROJECT_READ_WRITE implies for_mode" rule are enforced by the arch
+    tests in app/_arch_tests/test_persisted_models_declare_scope.py.
     """
 
     RUN = "run"
-    CROSS_RUN = "cross_run"
-    AUTHORED = "authored"
+    PROJECT_READ = "project_read"
+    PROJECT_READ_WRITE = "project_read_write"
 
 
 class PersistedModel(BaseModel):

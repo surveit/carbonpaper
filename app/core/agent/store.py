@@ -1,8 +1,8 @@
 """Chat session store (axis-1 persistence).
 
 Each session is an `AgentSession` record in the process-wide document store (see
-app.core.persistence): metadata plus one engine-agnostic transcript — a list of
-``{role, parts}`` messages (part types ``text|thinking|tool_call|tool_result``) —
+app.core.persistence): metadata plus one engine-agnostic transcript â€” a list of
+``{role, parts}`` messages (part types ``text|thinking|tool_call|tool_result``) â€”
 plus the resume token that carries the agent's cross-turn memory. `SessionStore`
 is a stateless adapter over that record: every method loads, mutates, and saves
 through the configured store.
@@ -40,7 +40,7 @@ class AgentSession(PersistedModel):
     transcript. `id` (inherited from PersistedModel) is the session id."""
 
     collection: ClassVar[str] = "agent_session"
-    SCOPE: ClassVar[PersistenceScope] = PersistenceScope.AUTHORED
+    SCOPE: ClassVar[PersistenceScope] = PersistenceScope.PROJECT_READ
     title: str = "New chat"
     agent_id: str | None = None
     context: dict[str, Any] = Field(default_factory=dict)
@@ -60,7 +60,7 @@ def open_session_store() -> SessionStore:
 class SessionStore:
     """Stateless adapter over `AgentSession`: every method loads, mutates, and
     saves a record through the process-wide document store (app.core.persistence)
-    — the store instance itself holds no state of its own."""
+    â€” the store instance itself holds no state of its own."""
 
     def create(
         self,
@@ -96,7 +96,7 @@ class SessionStore:
         return []
 
     def save_messages(self, sid: str, messages: list[dict[str, Any]]) -> None:
-        """Persist the engine's neutral ``{role, parts}`` transcript verbatim — it
+        """Persist the engine's neutral ``{role, parts}`` transcript verbatim â€” it
         is already plain JSON."""
         session = AgentSession.load(sid)
         session.messages = messages
@@ -143,7 +143,7 @@ def _render_history_bubbles(messages: list[dict]) -> list[dict]:
     renders.
 
     The template's history loop only reads ``role``, ``text``, ``thinking`` and
-    ``tools[].name/.args`` — tool results have no history slot and are not
+    ``tools[].name/.args`` â€” tool results have no history slot and are not
     rendered on reload.
     """
     bubbles: list[dict] = []
