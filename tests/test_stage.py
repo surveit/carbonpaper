@@ -64,7 +64,7 @@ def test_valid_llm_transform():
         output_schema={"columns": [{"name": "id", "type": "str"}, {"name": "out", "type": "str"}],
                        "primary_key": ["id"]},
         llm={"prompt_template": "do {id}", "tools": ["WebSearch"]}))
-    assert s.llm.prompt_template == "do {id}"
+    assert s.llm.prompt_data_template == "do {id}"
 
 
 def test_missing_handle_block_raises():
@@ -398,10 +398,38 @@ def test_llm_transform_accepts_single_brace_input_column():
         output_schema={"columns": [{"name": "content", "type": "str"},
                                    {"name": "out", "type": "str"}], "primary_key": ["content"]},
         llm={"prompt_template": "Analyze {content} now"}))
-    assert s.llm.prompt_template == "Analyze {content} now"
+    assert s.llm.prompt_data_template == "Analyze {content} now"
 
 
 def test_prompt_template_field_names_str_format_map_and_single_brace():
-    desc = m.LLMConfig.model_fields["prompt_template"].description or ""
+    desc = m.LLMConfig.model_fields["prompt_data_template"].description or ""
     assert "str.format_map" in desc
     assert "{column_name}" in desc
+
+
+def test_llm_config_accepts_old_prompt_template_key_via_alias():
+    """Old stored JSON with the pre-split key `prompt_template` must still load,
+    landing in prompt_data_template with prompt_instructions defaulting to ""."""
+    cfg = m.LLMConfig.model_validate({"prompt_template": "do {id}"})
+    assert cfg.prompt_data_template == "do {id}"
+    assert cfg.prompt_instructions == ""
+
+
+def test_llm_config_accepts_new_prompt_data_template_key():
+    cfg = m.LLMConfig.model_validate({"prompt_data_template": "do {id}"})
+    assert cfg.prompt_data_template == "do {id}"
+
+
+def test_llm_config_prompt_instructions_optional_and_settable():
+    cfg = m.LLMConfig.model_validate(
+        {"prompt_instructions": "Be terse.", "prompt_data_template": "do {id}"}
+    )
+    assert cfg.prompt_instructions == "Be terse."
+    assert cfg.prompt_data_template == "do {id}"
+
+
+def test_llm_config_model_dump_emits_field_name_not_alias():
+    cfg = m.LLMConfig.model_validate({"prompt_template": "do {id}"})
+    dumped = cfg.model_dump()
+    assert "prompt_data_template" in dumped
+    assert "prompt_template" not in dumped

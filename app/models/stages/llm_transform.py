@@ -24,6 +24,6 @@ def find_llm_prompt_column_issues(stage: "Stage") -> list[str]:
         return []
     return [
         COLUMN_ISSUE.format(sid=stage.id, field=f"llm prompt {{{field}}}", col=field, cols=sorted(cols))
-        for field in sorted(find_template_fields(llm.prompt_template))
+        for field in sorted(find_template_fields(llm.prompt_data_template))
         if field not in cols
     ]

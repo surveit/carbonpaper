@@ -11,7 +11,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Literal, Optional
 
-from pydantic import Field, ValidationError, field_validator, model_validator
+from pydantic import AliasChoices, Field, ValidationError, field_validator, model_validator
 
 from app.core.llm.options import LLMModel
 from app.models.schema import (
@@ -141,10 +141,14 @@ class Connector(_Base):
 
 class LLMConfig(_Base):
     """llm_transform handle."""
-    prompt_template: str = Field(
+    prompt_instructions: str = ""
+    prompt_data_template: str = Field(
+        validation_alias=AliasChoices("prompt_data_template", "prompt_template"),
         description=(
             "Sent to the model once per input row, rendered with Python's "
-            "str.format_map over the row — inject a column as {column_name}."
+            "str.format_map over the row — inject a column as {column_name}. "
+            "Row-invariant guidance belongs in prompt_instructions instead, so "
+            "this stays a stable, cacheable prompt prefix across many rows."
         ),
     )
     model: Optional[LLMModel] = None
@@ -480,9 +484,9 @@ class Stage(_Base):
 
     @model_validator(mode="after")
     def _llm_prompt_no_double_braced_input(self) -> "Stage":
-        """An llm_transform's prompt_template is rendered with str.format_map, where
-        `{{col}}` is an escaped literal (renders as the text `{col}`) — never the
-        row's value. Double-bracing a REAL input column is therefore always a
+        """An llm_transform's prompt_data_template is rendered with str.format_map,
+        where `{{col}}` is an escaped literal (renders as the text `{col}`) — never
+        the row's value. Double-bracing a REAL input column is therefore always a
         mistake: the author meant to inject it, but the data silently never reaches
         the model. Reject exactly that. A prompt that injects nothing is unusual but
         allowed, so this does not require any injection — only that a named input
@@ -493,7 +497,7 @@ class Stage(_Base):
         input_schema = self.inputs[0].table_schema if self.inputs else None
         if input_schema is None:
             return self
-        template = self.llm.prompt_template
+        template = self.llm.prompt_data_template
         injected = find_template_fields(template)
         double_braced = [
             column.name for column in input_schema.columns
@@ -502,7 +506,7 @@ class Stage(_Base):
         ]
         if double_braced:
             raise ValueError(
-                f"llm_transform prompt_template double-braces input column(s) "
+                f"llm_transform prompt_data_template double-braces input column(s) "
                 f"{sorted(double_braced)}: str.format_map treats double braces as an "
                 f"escaped literal and never injects the value. Use single braces "
                 f"around the column name."
