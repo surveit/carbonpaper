@@ -33,7 +33,7 @@ from typing import Any
 
 from app import models
 from app.compiler.workflow import _workflow_result, build_workflow_agent
-from app.core.errors import CompilationError
+from app.core.errors import CompilationError, GenerationError
 from app.core.llm_sdk import run_sync
 
 
@@ -91,11 +91,12 @@ def compile_methodology(
     CompilationError if no workflow was submitted — never returns a fabricated or
     empty-stage result."""
     agent = build_workflow_agent(input_text, model=model)
-    workflow = run_sync(asyncio.wait_for(agent.run(), timeout=timeout_s))
-    if workflow is None:
+    try:
+        workflow = run_sync(asyncio.wait_for(agent.run(), timeout=timeout_s))
+    except (GenerationError, asyncio.TimeoutError) as exc:
         raise CompilationError(
-            f"compile of '{name}' produced no workflow: the agent submitted nothing"
-        )
+            f"compile of '{name}' produced no workflow: {exc}"
+        ) from exc
     result = _workflow_result(workflow, name)
     result["prompt"] = ""
     result["raw_llm"] = ""
