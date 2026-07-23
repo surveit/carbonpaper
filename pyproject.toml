@@ -145,6 +145,18 @@ allowed_importers = ["app.main"]
 # app.main registers it on the shared engine, nothing else imports it. It leans
 # on app.core.agent (the engine) + app.services (to read/edit projects).
 
+[[tool.importlinter.contracts]]
+name = "production run entry points reached only by the run UI"
+type = "protected"
+protected_modules = ["app.runtime.runner"]
+allowed_importers = ["app.web.loading", "app.web.routers.runs"]
+# app.runtime.runner holds the production run-lifecycle entry points (prepare_run,
+# execute_run, run_prepared, resume_run) — the only functions that create a production
+# run record under runs/. A non-production run (an eval, or a smoke run) reaches the
+# shared execution engine through app.runtime.executor (run_subset / _execute_stages),
+# never these entry points, so it can never mint a production run. Only the web run UI
+# (app.web.routers.runs) and its version resolver (app.web.loading) may import them.
+
 # NB: "app.seeds reaches the store through services" is enforced as an AST allowlist
 # in app/seeds/_arch_tests/test_seed_reaches_store_via_services.py (check_no_import),
 # not a forbidden contract here — same as the cancellation stdlib-leaf rule.

@@ -9,7 +9,7 @@ manifest shape matches what a live run would produce. A fourth test shows a
 cancelled run is not terminal: it can be resumed and run to completion, because
 the cancel message was consumed (not left as a lingering flag). See
 app/runtime/cancellation.py for the request/consume design and
-app/runtime/runner.py::_execute_stages for the checkpoints under test.
+app/runtime/executor.py::_execute_stages for the checkpoints under test.
 """
 from __future__ import annotations
 
@@ -17,6 +17,7 @@ import json
 
 import pandas as pd
 
+import app.runtime.executor as executor
 import app.runtime.runner as runner
 import app.runtime.stages.execution as execution
 from app.runtime.cancellation import consume_cancel, request_cancel
@@ -88,7 +89,7 @@ def test_mid_run_cancel_preserves_the_completed_stages_output(tmp_path, monkeypa
         calls["n"] += 1
         return calls["n"] > 1  # nothing at stage 1's checkpoint, a message from stage 2's on
 
-    monkeypatch.setattr(runner, "consume_cancel", fake_consume_cancel)
+    monkeypatch.setattr(executor, "consume_cancel", fake_consume_cancel)
 
     manifest = run_prepared(prep)
 
@@ -146,7 +147,7 @@ def _three_stage_llm_project(root):
 def test_mid_stage_cancel_marks_the_running_stage_cancelled_not_pending(tmp_path, monkeypatch):
     """Cancellation arrives DURING 'score's row-mapper fan-out, not between
     stages: execution.py's consume_cancel binding is forced True so the row
-    driver raises RunCancelled mid-fan-out, while runner.py's own consume_cancel
+    driver raises RunCancelled mid-fan-out, while executor.py's own consume_cancel
     binding stays real (no message was requested) so 'score' starts rather than
     being skipped by the between-stage checkpoint above. Exercises the runner's
     `except RunCancelled:` branch: the stage that was RUNNING is recorded

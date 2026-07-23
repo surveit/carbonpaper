@@ -20,7 +20,8 @@ import pytest
 
 from app.core.errors import NoVersionToRunError, SubsetRunError
 from app.models import Stage, Workflow
-from app.runtime.runner import _raise_if_run_failed, execute_run, resume_run, run_subset
+from app.runtime.runner import execute_run, resume_run
+from app.runtime.executor import _raise_if_run_failed, run_subset
 from app.runtime.stages import llm_transform as lt
 from app.services.loader import WorkflowLoadError
 from app.services import versioning
