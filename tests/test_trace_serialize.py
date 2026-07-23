@@ -6,7 +6,7 @@ import json
 import pandas as pd
 
 from app.runtime.trace import trace_row, trace_to_dict
-from tests.test_trace_helpers import write_run
+from test_trace_helpers import write_run
 
 
 def test_trace_to_dict_is_json_roundtrippable(tmp_path):

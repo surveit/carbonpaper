@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 
 import app.web.loading as loading
 from app.main import app
-from tests.test_trace_helpers import write_run
+from test_trace_helpers import write_run
 
 
 def _project_run(tmp_path, monkeypatch):

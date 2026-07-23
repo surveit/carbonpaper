@@ -80,7 +80,7 @@ def test_unknown_stage_type_gets_the_custom_class_and_no_glyph() -> None:
 
 
 def test_edges_are_drawn_from_input_ids() -> None:
-    stages = [
+    stages: list[dict[str, object]] = [
         {"id": "a", "name": "A", "type": "input_data"},
         {"id": "b", "name": "B", "type": "aggregate", "inputs": ["a"]},
     ]

@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 
 from app.runtime.trace import _new_columns, _read_output, _row_dict
-from tests.test_trace_helpers import write_run
+from test_trace_helpers import write_run
 
 
 def test_read_output_returns_none_when_file_missing(tmp_path):

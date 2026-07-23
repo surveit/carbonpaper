@@ -6,11 +6,13 @@ that currently lives only in a validator is also stated in the relevant field's 
 """
 from __future__ import annotations
 
+from pydantic import BaseModel
+
 from app.models.schema import Column
 from app.models.stage import Connector, PythonFunction, Stage
 
 
-def _desc(model: type, field: str) -> str:
+def _desc(model: type[BaseModel], field: str) -> str:
     s = model.model_json_schema()
     # A self-referential model (e.g. Column.fields: list[Column]) returns a $ref wrapper.
     props = s.get("properties") or s["$defs"][model.__name__]["properties"]

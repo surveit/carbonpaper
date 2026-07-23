@@ -14,7 +14,7 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 from app.services.project import create_project
-from tests.test_journey_smoke import _point_examples_dir_at
+from test_journey_smoke import _point_examples_dir_at
 
 client = TestClient(app)
 

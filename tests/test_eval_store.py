@@ -58,7 +58,7 @@ def _run(**over):
 # ── save / list / load roundtrip ─────────────────────────────────────────────
 def test_save_list_load_roundtrip(tmp_path: Path):
     config = _config()
-    assert save_eval_config(tmp_path, config) is None
+    save_eval_config(tmp_path, config)
 
     entries = list_eval_configs(tmp_path)
     assert len(entries) == 1
@@ -154,7 +154,7 @@ def test_save_dataset_upload_rejects_non_slugish_filenames(tmp_path: Path, bad_n
 # ── save / load eval run roundtrip ────────────────────────────────────────────
 def test_save_load_eval_run_roundtrip(tmp_path: Path):
     run = _run()
-    assert save_eval_run(tmp_path, run) is None
+    save_eval_run(tmp_path, run)
 
     loaded = load_eval_run(tmp_path, "run-1")
     assert loaded == run
