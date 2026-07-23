@@ -2,9 +2,9 @@
 
 `app.core.persistence.PersistenceScope` is a permission profile for run
 activity (see its docstring): `RUN`, `AUTHORED`, or `CROSS_RUN`. The base
-class carries no default for `SCOPE` — a subclass that omits it is a modeling
-gap the arch test catches at review time, ahead of the plain `AttributeError`
-`save()` would raise on it at runtime. A second test enforces the sharper
+class carries no default for `SCOPE` — nothing at runtime reads `SCOPE`, so
+an omitted declaration is a modeling gap only this arch test catches, at
+review time; there is no runtime check. A second test enforces the sharper
 rule for the one scope that grants a run a write outliving it: a class
 carrying `SCOPE = PersistenceScope.CROSS_RUN` must also define `for_mode`,
 the view that revokes that write for a non-production run.

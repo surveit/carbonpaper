@@ -328,6 +328,16 @@ def test_e2e_decide_approve_modify_and_reject_then_resume_completes(tmp_path, mo
         body = r.json()
         assert body == {"ok": True, "input_fingerprint": fp_by_id[row_id], "decision": form["decision"]}
 
+    # frozen_input is the upstream row the reviewer saw (id, score) alone —
+    # never the fingerprint columns or the handler's decision-bookkeeping
+    # placeholders (decision, modified_score, reviewer, reviewed_at), even
+    # though the snapshot row `_build_cache_entry` reads from carries all of
+    # those as columns.
+    stage_fingerprint = snapshot["stage_fingerprint"].iloc[0]
+    for row_id, fp in fp_by_id.items():
+        entry = StageCacheEntry.load(build_cache_id(project, "review", stage_fingerprint, fp))
+        assert set(entry.frozen_input) == {"id", "score"}
+
     resumed = runner.resume_run(project_dir, run_id, project_dir)
     assert resumed["status"] == "ok"
 

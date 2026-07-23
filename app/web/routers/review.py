@@ -36,9 +36,14 @@ from app.web.loading import (
 router = APIRouter()
 
 # Bookkeeping columns the human_review_queue handler stamps onto every queued
-# row (app.runtime.stages.human_review_queue) — carried on the snapshot for
-# joining, but not part of the row a reviewer decided against.
-_SNAPSHOT_BOOKKEEPING_COLUMNS = ("input_fingerprint", "stage_fingerprint")
+# row (app.runtime.stages.human_review_queue): the two fingerprint columns
+# used for joining, plus the decision placeholder columns the handler seeds
+# as NA pending a reviewer decision. None of them are part of the upstream
+# row a reviewer decided against.
+_SNAPSHOT_BOOKKEEPING_COLUMNS = (
+    "input_fingerprint", "stage_fingerprint",
+    "decision", "modified_score", "reviewer", "reviewed_at",
+)
 
 
 @router.get("/project/{project}/runs/{run_id}/queue/{stage_id}", response_class=HTMLResponse)
@@ -310,8 +315,7 @@ def _build_review_item(
     return {
         "input_fingerprint": fp,
         "row": {k: display_cell(v) for k, v in row.items()
-                if k not in ("input_fingerprint", "stage_fingerprint", "decision",
-                             "modified_score", "reviewer", "reviewed_at")},
+                if k not in _SNAPSHOT_BOOKKEEPING_COLUMNS},
         "model_input": model_input,
         "rendered_prompt": _render_model_prompt(model_input, prompt_template),
         "prior_decision": decision_by_fingerprint.get(fp),

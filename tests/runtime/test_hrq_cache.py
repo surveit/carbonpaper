@@ -162,6 +162,26 @@ def test_fingerprints_stable_across_parquet_round_trip(tmp_path):
     assert original == roundtripped
 
 
+def test_input_fingerprint_matches_original_row_before_any_bookkeeping_stamped(tmp_path):
+    """`input_fingerprint` on a halted snapshot row must equal
+    `compute_row_fingerprint` of that row's ORIGINAL upstream dict, recomputed
+    independently here from `src` — never a value that shifts once the
+    handler stamps `stage_fingerprint`/`decision`/`modified_score`/`reviewer`/
+    `reviewed_at` onto the snapshot row. Fingerprinting happens on the
+    upstream row before any bookkeeping column is added, so those later
+    columns must never change the key a cached decision is matched on."""
+    stage = _stage()
+    src = _src(3)
+    expected_by_id = {
+        row["id"]: compute_row_fingerprint(row.to_dict()) for _, row in src.iterrows()
+    }
+
+    snapshot = _halt_and_read_snapshot(stage, {"scored": src}, _ctx(tmp_path))
+    assert len(snapshot) == 3
+    for _, row in snapshot.iterrows():
+        assert row["input_fingerprint"] == expected_by_id[row["id"]]
+
+
 # ── 6. A legacy decisions/*.parquet on disk is never read ───────────────────
 
 

@@ -216,8 +216,11 @@ class PersistedModel(BaseModel):
     and carries an `id` (its primary key); save()/load()/list() go through the
     configured DocumentStore, so nothing above this class touches storage. The
     body is serialized as JSON. Every subclass also declares `SCOPE` — see
-    `PersistenceScope` — with no base-class default, so an unannotated
-    subclass fails at `save()` with a plain `AttributeError`.
+    `PersistenceScope` — with no base-class default. Nothing at runtime reads
+    `SCOPE`; the sole enforcement is the AST arch test
+    `test_persisted_models_declare_scope` in
+    `app/_arch_tests/test_persisted_models_declare_scope.py`, which flags an
+    undeclared subclass at review time.
 
     `created_at`/`updated_at` are stamped automatically, so a subclass never
     hand-rolls them: on a fresh construct (no stored value yet) both
