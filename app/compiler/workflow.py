@@ -16,7 +16,7 @@ callback; persisting it is the caller's job.
 from __future__ import annotations
 
 import json
-from typing import Callable
+from typing import Any, Callable
 
 from app.compiler.workflow_prompt import WORKFLOW_SYSTEM_PROMPT
 from app.core.agent.agent import Agent
@@ -24,6 +24,7 @@ from app.core.agent.store import open_session_store
 from app.core.agent.turns import default_turn_manager
 from app.models.named_schemas import SchemaLibrary
 from app.models.workflow import Workflow
+from app.services.loader import stage_to_spec_dict
 
 
 def start_workflow_generation_agent(
@@ -117,3 +118,18 @@ def _render_data_model_reference(data_model: SchemaLibrary) -> str:
         "canonical entities, and note where you diverge from or extend them, and why.\n\n"
         f"{schemas_json}"
     )
+
+
+def _workflow_result(workflow: Workflow, name: str) -> dict[str, Any]:
+    """Shape a validated Workflow into the dict write_methodology persists: the stages in
+    canonical on-disk form, with a clean validation list (the agent only submits a workflow that
+    already validates). The agent carries the shape through the tool, so there is no prose
+    methodology_raw write-up and no top-level compiler_notes — any per-stage notes ride along on
+    each stage."""
+    return {
+        "name": name,
+        "stages": [stage_to_spec_dict(s) for s in workflow.stages],
+        "methodology_raw": "",
+        "compiler_notes": None,
+        "validation": [],
+    }
