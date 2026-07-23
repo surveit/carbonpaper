@@ -115,16 +115,15 @@ def compute_row_fingerprint(row: Mapping[str, object]) -> str:
 
 def _normalize_row_value(value: object) -> object:
     """`value`, or None if `value` is one of the null forms a pandas row cell
-    can carry: plain `None`, `float('nan')`, `pd.NA`, or `pd.NaT`. Container
-    values (list/tuple/dict/set) are returned unchanged rather than tested
-    against these forms: `pd.isna` on an array-like input returns an
-    elementwise array, whose truth value is ambiguous in a plain `if`, so a
-    cell holding one of these types is never itself treated as a scalar
-    null — and pandas-stubs' `isna` overloads do not accept a bare `object`
-    argument regardless, which is why each null form is checked explicitly
-    here instead of delegating to a single `pd.isna` call."""
-    if isinstance(value, (list, tuple, dict, set)):
-        return value
+    can carry: plain `None`, `float('nan')`, `pd.NA`, or `pd.NaT`. Each form is
+    tested individually — an identity check for None/pd.NA/pd.NaT, an explicit
+    isinstance+isnan for a float nan — rather than via a single `pd.isna` call:
+    pandas-stubs' `isna` overloads do not accept a bare `object` argument, and
+    calling it on an array-valued cell (list/tuple/dict/set) would return an
+    elementwise array whose truth value is ambiguous in a plain `if`. None of
+    the checks here ask pd.isna anything, so an array-valued cell simply
+    matches none of them and falls through to the final `return value`
+    unchanged."""
     if value is None or value is pd.NA or value is pd.NaT:
         return None
     if isinstance(value, float) and math.isnan(value):

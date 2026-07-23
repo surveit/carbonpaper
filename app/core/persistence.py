@@ -200,10 +200,10 @@ class PersistenceScope(str, Enum):
 
     Design invariant: exactly one PersistedModel subclass may carry
     SCOPE = CROSS_RUN — the single deliberate cross-run channel; broadening it
-    would blur the line this scope exists to hold. No subclass declares it as
-    of this commit; both the "every subclass declares SCOPE" rule and the
-    "CROSS_RUN implies for_mode" rule are enforced by the arch tests in
-    app/_arch_tests/test_persisted_models_declare_scope.py.
+    would blur the line this scope exists to hold. StageCacheEntry
+    (app.services.stage_cache) is that one subclass; both the "every subclass
+    declares SCOPE" rule and the "CROSS_RUN implies for_mode" rule are enforced
+    by the arch tests in app/_arch_tests/test_persisted_models_declare_scope.py.
     """
 
     RUN = "run"

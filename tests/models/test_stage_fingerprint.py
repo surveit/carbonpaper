@@ -89,3 +89,16 @@ def test_compute_definition_fingerprint_for_queue_reacts_to_reviewer_instruction
     base = _queue_stage()
     changed = _queue_stage(reviewer_instructions="check twice")
     assert base.compute_definition_fingerprint() != changed.compute_definition_fingerprint()
+
+
+def test_compute_definition_fingerprint_survives_a_stored_round_trip():
+    # A version-embedded stage is dumped/reloaded through
+    # model_dump(mode="json", by_alias=True, exclude_none=True) —
+    # app.services.loader.stage_to_spec_dict's exact dump options, the shape
+    # a WorkflowVersion stores. Round-tripping a queue stage through that dump
+    # (a rich handle block, QueueConfig, plus output_schema's nested Column
+    # list) must reproduce the same fingerprint.
+    stage = _queue_stage()
+    dumped = stage.model_dump(mode="json", by_alias=True, exclude_none=True)
+    reloaded = Stage.model_validate(dumped)
+    assert stage.compute_definition_fingerprint() == reloaded.compute_definition_fingerprint()
