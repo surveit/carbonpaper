@@ -5,12 +5,46 @@ schema (derived from `Workflow`), which the provider renders. This prompt carrie
 role + the methodology guidance (how to distill a research process into typed stages);
 the tool + `Workflow` validation enforce the shape and re-fire on issues. The data-model
 grounding is per-request and lives in the task, not here.
+
+The stage-type catalogue below is rendered from `models.NODE_TYPES` — the same source
+`prompt.py`'s one-shot compiler renders from — so the two prompts cannot drift apart on
+what stage types exist or what each one means.
 """
 from __future__ import annotations
 
+from app import models
 from app.compiler.node_contract_notes import HUMAN_REVIEW_QUEUE_CONTRACT_NOTE
 
-WORKFLOW_SYSTEM_PROMPT = """\
+_LLM_TRANSFORM_SPLIT_NOTE = (
+    "Author it as TWO fields: prompt_instructions is the row-invariant guidance (role, "
+    "methodology, how to weigh evidence/sources) and MUST NOT depend on any row value — "
+    "the same instructions run over every input row, so keeping them byte-stable and "
+    "separate from per-row data lets the runtime cache that prefix, cutting latency (and "
+    "cost on a per-token backend). prompt_data_template is the minimal per-row input "
+    "framing, rendered with Python's str.format_map: inject a column as {column_name}."
+)
+
+_NODE_TYPE_NOTES: dict[str, str] = {
+    "llm_transform": _LLM_TRANSFORM_SPLIT_NOTE,
+    "human_review_queue": HUMAN_REVIEW_QUEUE_CONTRACT_NOTE,
+}
+
+
+def _render_stage_catalogue() -> str:
+    """Render the stage-type catalogue from `models.NODE_TYPES`: one line each
+    (`- <name> — <summary>`), plus a curated note where one exists, so the
+    catalogue can never drift from the real node-type set."""
+    lines: list[str] = []
+    for name, spec in models.NODE_TYPES.items():
+        lines.append(f"- {name} — {spec['summary']}")
+        note = _NODE_TYPE_NOTES.get(name)
+        if note:
+            lines.append(f"  {note}")
+    return "\n".join(lines)
+
+
+def _build_workflow_system_prompt() -> str:
+    return f"""\
 You are a METHODOLOGY COMPILER. Read an UNSTRUCTURED account of one research process — a
 captured agent/tool transcript, working notes, or prose — and DISTILL it into a reusable
 WORKFLOW of typed stages that would reproduce this CLASS of research deterministically.
@@ -20,24 +54,8 @@ issues and call it again.
 
 # The stage types
 Express each step as one typed stage; the submit_answer schema defines each type's exact
-shape. In one line each:
-- input_data — brings a known starting dataset into the workflow; declare its schema and connector kind, and NEVER include a file path (where data
-  physically lives is not part of the methodology — the user binds a file when starting a run).
-- python_row_function — deterministic code run per row, one row in → one row out (preferred
-  for mechanism; it cannot fan rows out or in).
-- python_frame_function — deterministic code over the whole frame(s) that may reshape it
-  (dedup, pivot, multi-input merge).
-- llm_transform — a step that needs judgment or reads unstructured text into structure.
-  Author it as TWO fields: prompt_instructions is the row-invariant guidance (role,
-  methodology, how to weigh evidence/sources) and MUST NOT depend on any row value — the
-  same instructions run over every input row, so keeping them byte-stable and separate from
-  per-row data lets the runtime cache that prefix, cutting latency (and cost on a per-token
-  backend). prompt_data_template is the minimal per-row input framing, rendered with Python's
-  str.format_map: inject a column as {column_name}.
-- join — combines rows from upstream stages on a key.
-- aggregate — collapses rows into group summaries.
-- human_review_queue — routes items to a person to decide. """ + HUMAN_REVIEW_QUEUE_CONTRACT_NOTE + """
-- publish — renders the final output.
+shape.
+{_render_stage_catalogue()}
 Describe each stage you emit in one sentence and let the type follow from what the step is;
 do not prescribe a type from the situation.
 
@@ -55,3 +73,6 @@ upstream stage. Keep every id snake_case.
 
 NEVER fabricate data values, URLs, numbers, or sources; encode STRUCTURE only, and record
 genuine ambiguity in a stage's `compiler_notes`."""
+
+
+WORKFLOW_SYSTEM_PROMPT = _build_workflow_system_prompt()
