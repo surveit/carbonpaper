@@ -26,15 +26,13 @@ from pathlib import Path
 from typing import Any, Mapping
 
 import pandas as pd
-import pyarrow.lib as pa_lib
 from pydantic import ValidationError as PydanticValidationError
 
 from app.core.errors import MissingInputBindingError, NoVersionToRunError
-from app.core.frames import PARQUET_SUFFIX
 from app.models import Connector, Stage, StageType
 from app.core.run_status import RunStatus, StageStatus
 from app.services.errors import WorkflowLoadError
-from app.services import versioning
+from app.services import run_store, versioning
 
 from .context import RunContext
 from .executor import _execute_stages, create_run_manifest, topological_sort, write_manifest
@@ -290,10 +288,11 @@ def resume_run(project_dir: Path, run_id: str, repo_root: Path) -> dict[str, Any
     re-runs the halted queue stage (decisions now exist), continues
     downstream, updates the same manifest in place."""
     run_dir = project_dir / "runs" / run_id
-    manifest_path = run_dir / "manifest.json"
-    if not manifest_path.exists():
-        raise FileNotFoundError(f"No manifest at {manifest_path}")
-    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest = run_store.load_manifest(project_dir.name, run_id)
+    if manifest is None:
+        raise FileNotFoundError(
+            f"No manifest for run {run_id} of '{project_dir.name}'"
+        )
 
     # Stay pinned to the SAME workflow snapshot the run started on. We read the
     # version off the existing manifest and reload the version's stages — never
@@ -305,7 +304,7 @@ def resume_run(project_dir: Path, run_id: str, repo_root: Path) -> dict[str, Any
     if not workflow_version:
         raise ValueError(
             f"Run {run_id} of '{project_dir.name}' has no 'workflow_version' in "
-            f"its manifest ({manifest_path}); cannot resume a versioned run "
+            f"its manifest; cannot resume a versioned run "
             f"without its pinned workflow version."
         )
     stages = versioning.load_version_stages(project_dir, workflow_version)
@@ -319,7 +318,10 @@ def resume_run(project_dir: Path, run_id: str, repo_root: Path) -> dict[str, Any
     stages, _ = apply_run_bindings(stages, manifest.get("run_bindings", {}))
     ordered = topological_sort(stages)
 
-    # Reload outputs from disk for stages that completed successfully.
+    # Reload outputs from the run's frames for stages that completed
+    # successfully. A prior output that's missing/corrupt/unreadable is treated
+    # as not-yet-produced (read_output_frame_or_none returns None); the stage
+    # simply re-runs.
     outputs_so_far: dict[str, pd.DataFrame] = {}
     for record in manifest.get("stages", []):
         if record.get("status") not in (StageStatus.OK, StageStatus.VALIDATION_WARNINGS):
@@ -327,18 +329,9 @@ def resume_run(project_dir: Path, run_id: str, repo_root: Path) -> dict[str, Any
         op = record.get("output_path")
         if not op:
             continue
-        path = run_dir / op
-        if not path.exists():
-            continue
-        try:
-            if path.suffix == PARQUET_SUFFIX:
-                outputs_so_far[record["stage_id"]] = pd.read_parquet(path)
-            else:
-                outputs_so_far[record["stage_id"]] = pd.read_csv(path)
-        except (pa_lib.ArrowException, pd.errors.ParserError, OSError, ValueError):
-            # A prior output file that's missing/corrupt/unreadable is
-            # treated as not-yet-produced; the stage simply re-runs.
-            pass
+        reloaded = run_store.read_output_frame_or_none(run_dir, op)
+        if reloaded is not None:
+            outputs_so_far[record["stage_id"]] = reloaded
 
     # This run's logical identity for cancellation's checkpoints — see the
     # matching comment in prepare_run. Stamped here too so a resumed run is

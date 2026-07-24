@@ -16,9 +16,11 @@ number or unsourced claim defeats the purpose. Two rules recur in the code:
 - **workflow** — the executable stage graph it compiles into (`compiled/*.json`, one
   validated `Stage` per file; a DAG of typed stages, every edge schema-validated).
 
-A project dir also holds `code/`, `data/`, `runs/<id>/` (outputs + `manifest.json`),
-and `decisions/` — runtime data, not source. Versions are documents in the store
-(the `workflow_version` collection), not a project subdir.
+A project dir also holds `code/`, `data/`, `runs/<id>/` (a run's stage-output +
+queue-snapshot frames and publish `artifacts/`), and `decisions/` — runtime data,
+not source. A run's **manifest** is a document in the store (the `run_manifest`
+collection, a RUN-scoped `RunManifest`), not a file under `runs/<id>/`; likewise
+versions are documents (the `workflow_version` collection), not a project subdir.
 
 ## The three features
 | Feature | Code | Status |

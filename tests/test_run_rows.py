@@ -7,7 +7,6 @@ Routes under test:
 from __future__ import annotations
 
 import io
-import json
 from pathlib import Path
 
 import pandas as pd
@@ -16,6 +15,7 @@ from fastapi.testclient import TestClient
 
 import app.web.loading as loading
 from app.main import app
+from app.services import run_store
 
 PROJ = "testmeth"
 RUN = "run-0001"
@@ -25,7 +25,8 @@ STAGE = "stage_a"
 def _write_run(
     examples_dir: Path, df: pd.DataFrame, fmt: str = "parquet"
 ) -> Path:
-    """Lay out examples/<PROJ>/runs/<RUN>/ with a manifest + one stage output."""
+    """Lay out examples/<PROJ>/runs/<RUN>/ with one stage output frame, and
+    persist the run's manifest document."""
     run_dir = examples_dir / PROJ / "runs" / RUN
     (run_dir / "outputs").mkdir(parents=True)
     output_rel = f"outputs/{STAGE}.{fmt}"
@@ -33,9 +34,10 @@ def _write_run(
         df.to_parquet(run_dir / output_rel, index=False)
     else:
         df.to_csv(run_dir / output_rel, index=False)
-    manifest = {
+    run_store.persist_manifest({
         "run_id": RUN,
-        "status": "complete",
+        "project": PROJ,
+        "status": "ok",
         "stages": [
             {
                 "stage_id": STAGE,
@@ -44,8 +46,7 @@ def _write_run(
                 "output_path": output_rel,
             }
         ],
-    }
-    (run_dir / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+    })
     return run_dir
 
 
@@ -154,9 +155,10 @@ def test_rows_404_when_output_file_missing(examples_dir, client):
 
 
 def test_rows_rejects_output_path_outside_run_dir(examples_dir, client):
-    run_dir = _write_run(examples_dir, _df(2))
-    manifest = json.loads((run_dir / "manifest.json").read_text(encoding="utf-8"))
+    _write_run(examples_dir, _df(2))
+    manifest = run_store.load_manifest(PROJ, RUN)
+    assert manifest is not None
     manifest["stages"][0]["output_path"] = "../../../../etc/passwd"
-    (run_dir / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+    run_store.persist_manifest(manifest)
     r = client.get(f"/project/{PROJ}/runs/{RUN}/stage/{STAGE}/rows")
     assert r.status_code == 404

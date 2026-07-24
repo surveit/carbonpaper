@@ -11,6 +11,7 @@ from fastapi.testclient import TestClient
 
 import app.web.routers.runs as runs_router
 from app.main import app
+from app.services import run_store
 from app.services.versioning import create_version_from_disk, list_versions, publish_version
 
 client = TestClient(app)
@@ -44,8 +45,10 @@ def project_two_versions(tmp_path, monkeypatch):
 
 
 def _manifest(proj):
-    run_dir = sorted((proj / "runs").iterdir())[-1]
-    return json.loads((run_dir / "manifest.json").read_text(encoding="utf-8"))
+    run_id = sorted((proj / "runs").iterdir())[-1].name
+    manifest = run_store.load_manifest(proj.name, run_id)
+    assert manifest is not None
+    return manifest
 
 
 def test_posted_version_id_pins_the_run(project_two_versions):

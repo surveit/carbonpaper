@@ -25,6 +25,7 @@ from fastapi.testclient import TestClient
 
 import app.web.routers.runs as runs_router
 from app.main import app
+from app.services import run_store
 from app.services.project import create_project
 from app.services.versioning import list_versions
 
@@ -41,10 +42,9 @@ def assert_run_ok(status: dict, project_dir, run_id: str) -> None:
     reaches the log."""
     if status.get("status") == "ok":
         return
-    detail = "manifest.json not found"
-    manifest_path = project_dir / "runs" / run_id / "manifest.json"
-    if manifest_path.exists():
-        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    detail = "run manifest not found"
+    manifest = run_store.load_manifest(project_dir.name, run_id)
+    if manifest is not None:
         problems = [
             record for record in manifest.get("stages", [])
             if record and record.get("status") not in ("ok", "pending")
@@ -92,9 +92,8 @@ def test_offline_journey_reaches_a_published_artifact(journey_project, tmp_path)
     assert status["terminal"] is True
 
     # The manifest records the binding's provenance: a run-supplied path, hashed.
-    manifest = json.loads(
-        (journey_project / "runs" / run_id / "manifest.json").read_text(encoding="utf-8")
-    )
+    manifest = run_store.load_manifest(journey_project.name, run_id)
+    assert manifest is not None
     binding = manifest["input_bindings"]["load"]
     assert binding["source"] == "run"
     assert binding["sha256"]

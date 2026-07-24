@@ -25,8 +25,10 @@ per-file issues. Typed `Stage` objects flow end-to-end.
 `runner.py` — `execute_run`/`prepare_run`/`run_prepared`/`resume_run`; every run pins to a
 PUBLISHED workflow version (`resolve_version_id`, defaulting to the newest published one) —
 never the working copy, never a draft, never an unpublished version. Per stage: validate
-inputs, reject duplicate rows, dispatch, validate output, write `outputs/<stage>.parquet`,
-flush `manifest.json` mid-run; halt-on-review + resume; per-run `--limit`/`--offset`;
+inputs, reject duplicate rows, dispatch, validate output, persist the stage-output
+frame and flush the run manifest mid-run (both through `app.services.run_store` — the
+manifest is a RUN-scoped `RunManifest` document, the frame goes through `FrameStore`);
+halt-on-review + resume; per-run `--limit`/`--offset`;
 `field_checks`. `stages/` — one module per type. `llm.py`/`options.py` — the agent
 backend (no fallback). `preview.py` — scratch re-runs.
 

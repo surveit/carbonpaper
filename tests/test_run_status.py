@@ -25,7 +25,7 @@ import app.web.loading as loading
 from app.core.run_status import RunStatus, StageStatus
 from app.main import app
 from app.runtime.runner import execute_run
-from app.services import versioning
+from app.services import run_store, versioning
 from app.services.versioning import create_version_from_disk
 
 # The exact value sets, derived by grepping every `record["status"]` /
@@ -109,13 +109,14 @@ def test_a_real_run_produces_enum_statuses_that_round_trip_to_bare_strings(tmp_p
     assert manifest["stages"][0]["status"] == StageStatus.OK
     assert isinstance(manifest["stages"][0]["status"], StageStatus)
 
-    # On disk — what templates/JS actually read — it round-trips to a bare
-    # JSON string, with no trace of the enum class name.
-    run_dir = tmp_path / "runs" / manifest["run_id"]
-    raw_text = (run_dir / "manifest.json").read_text(encoding="utf-8")
-    on_disk = json.loads(raw_text)
-    assert on_disk["status"] == "ok"
-    assert on_disk["stages"][0]["status"] == "ok"
+    # Persisted (as its RUN-scoped document) — what templates/JS actually read
+    # once loaded back — it round-trips to a bare JSON string, with no trace of
+    # the enum class name.
+    persisted = run_store.load_manifest(tmp_path.name, manifest["run_id"])
+    assert persisted is not None
+    assert persisted["status"] == "ok"
+    assert persisted["stages"][0]["status"] == "ok"
+    raw_text = json.dumps(persisted)
     assert "RunStatus" not in raw_text
     assert "StageStatus" not in raw_text
 

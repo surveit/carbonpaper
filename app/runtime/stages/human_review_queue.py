@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
-import json
 from typing import NoReturn
 
 import pandas as pd
-import pyarrow.lib as pa_lib
 
 from app.core.predicate import parse_predicate
 from app.models import RowReviewDecision, Stage
+from app.services import run_store
 from app.services.stage_cache import ReadOnlyStageCache, StageCacheEntry, compute_row_fingerprint
 
 from ..context import QueueStats, RunContext
@@ -173,35 +172,17 @@ def _snapshot_pending_and_halt(
 ) -> NoReturn:
     """Persist the pending items for the reviewer UI, then halt the run.
 
-    The snapshot (`<stage>.parquet`, or `.csv` on a parquet-incompatible
-    dtype) is written PURE — exactly `pending`'s own upstream columns, no
-    fingerprint or decision-bookkeeping column ever added to it. The
-    fingerprints those rows carry are never row data; they live in a sidecar
-    `<stage>.fingerprints.json`, `input_fingerprints` POSITIONALLY aligned to
-    the snapshot's row order, alongside the one `stage_fingerprint` every
+    Both the snapshot and its fingerprints go through the run-frame seam
+    (`app.services.run_store`), never a raw file write here: the snapshot is a
+    frame (persisted via `FrameStore`, `<stage>.parquet` or `.csv` on a
+    parquet-incompatible dtype) written PURE — exactly `pending`'s own upstream
+    columns, no fingerprint or decision-bookkeeping column ever added to it.
+    The fingerprints those rows carry are never row data; they live in a
+    sidecar the seam writes alongside it, `input_fingerprints` POSITIONALLY
+    aligned to the snapshot's row order, with the one `stage_fingerprint` every
     pending row of this halt shares."""
-    queue_dir = ctx.run_dir / "queue"
-    queue_dir.mkdir(parents=True, exist_ok=True)
-    queue_path = queue_dir / f"{sid}.parquet"
-    try:
-        pending.to_parquet(queue_path, index=False)
-    except (pa_lib.ArrowException, ValueError, TypeError):
-        # A column whose dtype/shape parquet can't represent (mixed-type
-        # object columns, nested Python values) — CSV stringifies those and
-        # succeeds. A disk/OS error (ENOSPC, permission) is deliberately NOT
-        # caught here: it would fail identically for CSV, so it propagates
-        # (and is recorded by the runner) rather than silently degrading the
-        # queue snapshot.
-        queue_path = queue_dir / f"{sid}.csv"
-        pending.to_csv(queue_path, index=False)
-    fingerprints_path = queue_dir / f"{sid}.fingerprints.json"
-    fingerprints_path.write_text(
-        json.dumps({
-            "stage_fingerprint": stage_fingerprint,
-            "input_fingerprints": input_fingerprints,
-        }),
-        encoding="utf-8",
-    )
+    queue_path = run_store.save_queue_snapshot(ctx.run_dir, sid, pending)
+    run_store.save_queue_fingerprints(ctx.run_dir, sid, stage_fingerprint, input_fingerprints)
     raise HaltForReview(
         stage_id=sid,
         pending_count=int(len(pending)),

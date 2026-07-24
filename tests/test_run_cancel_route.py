@@ -14,6 +14,7 @@ from fastapi.testclient import TestClient
 import app.web.loading as loading
 from app.main import app
 from app.runtime.cancellation import consume_cancel
+from app.services import run_store
 
 PROJ = "testmeth"
 RUN = "run-0001"
@@ -31,12 +32,9 @@ def client() -> TestClient:
 
 
 def _write_manifest(examples_dir: Path, status: str) -> Path:
-    run_dir = examples_dir / PROJ / "runs" / RUN
-    run_dir.mkdir(parents=True, exist_ok=True)
-    (run_dir / "manifest.json").write_text(
-        json.dumps({"run_id": RUN, "status": status, "stages": []}), encoding="utf-8"
-    )
-    return run_dir
+    # The run's manifest is its RUN-scoped document, not a JSON file.
+    run_store.persist_manifest({"run_id": RUN, "project": PROJ, "status": status, "stages": []})
+    return examples_dir / PROJ / "runs" / RUN
 
 
 def test_cancel_on_a_running_run_requests_cancellation_and_redirects(examples_dir, client):
@@ -72,16 +70,13 @@ def _write_one_stage_project(examples_dir: Path) -> None:
 
 
 def _write_status_manifest(examples_dir: Path, stage_statuses: list[tuple[str, str]]) -> Path:
-    """Write a manifest whose stages carry the given (stage_id, status) pairs,
+    """Persist a manifest whose stages carry the given (stage_id, status) pairs,
     for exercising run_status's per-status counts."""
-    run_dir = examples_dir / PROJ / "runs" / RUN
-    run_dir.mkdir(parents=True, exist_ok=True)
     stages = [{"stage_id": sid, "status": status} for sid, status in stage_statuses]
-    (run_dir / "manifest.json").write_text(
-        json.dumps({"run_id": RUN, "status": "cancelled", "stages": stages}),
-        encoding="utf-8",
+    run_store.persist_manifest(
+        {"run_id": RUN, "project": PROJ, "status": "cancelled", "stages": stages}
     )
-    return run_dir
+    return examples_dir / PROJ / "runs" / RUN
 
 
 def test_run_status_counts_include_a_cancelled_stage(examples_dir, client):
