@@ -28,7 +28,6 @@ from __future__ import annotations
 import json
 import math
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import Any, Literal
 
 import pandas as pd
@@ -186,8 +185,11 @@ def _run_one_test(stage: Stage, test: StageTest) -> StageTestResult:
         return StageTestResult(test.name, "malformed", message=malformed)
     # Ephemeral context: authored tests run only python_row_function /
     # python_frame_function (STAGE_TEST_TYPES), neither of which reads
-    # repo_root/run_dir or needs project scope — no identity, no cache.
-    ctx = RunContext.for_non_production(Path("."), Path("."))
+    # repo_root/run_dir or needs project scope — so both are None (no run on
+    # disk), no identity, no cache. A stage reaching for run disk under this
+    # context fails loudly via require_run_dir rather than touching a fabricated
+    # path.
+    ctx = RunContext.for_non_production(None, None)
     try:
         actual = HANDLERS[StageType(stage.type)].execute(stage, input_frames, ctx)
     except Exception as exc:  # noqa: BLE001 — the function is authored code; any raise IS the result

@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import asyncio
 import time
-from typing import Any, TypedDict
+from typing import Any
 
 from pydantic import BaseModel
 
@@ -27,9 +27,7 @@ from app.core.llm_sdk import run_sync
 from app.models import LLMConfig
 
 from .options import (
-    CLAUDE_BIN,
     DEFAULT_MODEL,
-    DEFAULT_PARALLEL,
     DEFAULT_TIMEOUT_S,
     require_agent_backend,
 )
@@ -162,31 +160,3 @@ def _record_usage(usage_out: list[LlmUsage] | None, agent: Agent[BaseModel]) -> 
     nothing is recorded rather than a fabricated zero."""
     if usage_out is not None and agent.last_usage is not None:
         usage_out.append(agent.last_usage)
-
-
-class LlmBackendStatus(TypedDict):
-    """`backend_status()`'s return shape, and the value type of
-    `RunContext.llm_backend` (app.runtime.context) — one per stage that ran an
-    llm_transform."""
-
-    backend: str | None
-    backend_error: str | None
-    claude_cli: str | None
-    model_default: str
-    parallel_default: int
-
-
-def backend_status() -> LlmBackendStatus:
-    """For UI/diagnostics: report whether the agent backend is available."""
-    try:
-        require_agent_backend()
-        backend, backend_error = "agent", None
-    except LLMError as exc:
-        backend, backend_error = None, str(exc)
-    return {
-        "backend": backend,
-        "backend_error": backend_error,
-        "claude_cli": CLAUDE_BIN,
-        "model_default": DEFAULT_MODEL,
-        "parallel_default": DEFAULT_PARALLEL,
-    }
