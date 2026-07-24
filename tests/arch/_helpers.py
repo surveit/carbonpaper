@@ -56,26 +56,6 @@ def find_imported_modules(tree: ast.Module) -> set[str]:
     return modules
 
 
-def find_imported_names(tree: ast.Module) -> set[str]:
-    """The names a module's imports bind, as written at the source: the member
-    name of each `from X import name` (the `name` itself, ignoring any `as`
-    alias — `from m import Foo as Bar` yields "Foo"), plus the dotted module
-    name of each plain `import a.b` ("a.b"). Aliasing cannot hide the imported
-    name, so a rule that bans importing a given symbol catches the aliased form
-    too. This is distinct from `find_imported_modules`, which returns the module
-    a name is imported FROM (the `X` in `from X import name`); this returns the
-    bound member name (`name`) instead."""
-    names: set[str] = set()
-    for node in ast.walk(tree):
-        if isinstance(node, ast.ImportFrom):
-            for alias in node.names:
-                names.add(alias.name)
-        elif isinstance(node, ast.Import):
-            for alias in node.names:
-                names.add(alias.name)
-    return names
-
-
 def find_dict_key_uses(tree: ast.Module, keys: set[str]) -> list[tuple[int, str]]:
     """(lineno, key) of each place the module reads or writes one of `keys` as a
     dict key: a subscript (`x["path"]`), a `.get("path", ...)` first argument, or

@@ -7,9 +7,16 @@ from __future__ import annotations
 import pytest
 
 from app.core.errors import ReviewValidationError
+from app.core.run_status import RunMode
 from app.models import RowReviewDecision
 from app.services import review
-from app.services.stage_cache import StageCacheEntry, build_cache_id
+from app.services.stage_cache import StageCacheEntry
+
+
+def _load_entry(input_fingerprint: str):
+    return StageCacheEntry.for_mode(RunMode.PRODUCTION).get(
+        "proj", "review", "sf1", input_fingerprint
+    )
 
 
 def test_record_decision_writes_the_output_row_the_modify_verdict_produces():
@@ -21,7 +28,8 @@ def test_record_decision_writes_the_output_row_the_modify_verdict_produces():
         reviewer="local", reviewed_at="2026-07-22T10:00:00",
     )
 
-    entry = StageCacheEntry.load(build_cache_id("proj", "review", "sf1", "if1"))
+    entry = _load_entry("if1")
+    assert entry is not None
     assert entry.output_row is not None
     assert entry.output_row["decision"] == "modify"
     assert entry.output_row["final_score"] == 42.0
@@ -38,7 +46,8 @@ def test_record_decision_reject_writes_a_tombstone():
         reviewer="local", reviewed_at="2026-07-22T10:00:00",
     )
 
-    entry = StageCacheEntry.load(build_cache_id("proj", "review", "sf1", "if2"))
+    entry = _load_entry("if2")
+    assert entry is not None
     assert entry.output_row is None  # a reject drops the row
 
 
@@ -52,4 +61,4 @@ def test_record_decision_rejects_modify_without_a_score():
             reviewer="local", reviewed_at="2026-07-22T10:00:00",
         )
     # Nothing was written for the rejected input.
-    assert StageCacheEntry.load_or_none(build_cache_id("proj", "review", "sf1", "if3")) is None
+    assert _load_entry("if3") is None
