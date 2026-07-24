@@ -1,7 +1,7 @@
-"""Shared node-type facts both compiler prompts (prompt.py's one-shot CLI
-compiler and workflow_prompt.py's live chat-driven compiler) must teach the
-authoring model — kept in ONE place so the two prompts can't silently drift
-apart on the same underlying facts about the runtime.
+"""Shared node-type facts the compiler-facing prompts (workflow_prompt.py's
+chat-driven compiler and the editing agent's prompt) must teach the authoring
+model — kept in ONE place so the prompts can't silently drift apart on the
+same underlying facts about the runtime.
 
 These are runtime CONTRACTS, not authoring style — discovered by actually
 running compiled workflows and finding the compiler's assumptions didn't match

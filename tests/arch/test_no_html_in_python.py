@@ -12,9 +12,9 @@ tag list: ``<html``, ``<div``, ``<table``, ``<body``, ``<span``, ``<ul``,
 ``<li``, ``<form``, ``<button``. Matching is case-insensitive and requires a
 non-identifier character (or end of string) right after the tag name, so
 ``<li`` matches ``<li>``/``<li class=...>`` but not ``<list ...>`` — a
-compiler prompt file (``app/compiler/prompt.py``) legitimately writes the
-placeholder ``<list of stage dicts as above>``, and a naive substring search
-would misflag it. The tag list is intentionally narrow and never matches a
+compiler prompt file may legitimately write a placeholder like
+``<list of stage dicts as above>``, and a naive substring search would
+misflag it. The tag list is intentionally narrow and never matches a
 generic ``<word>`` pattern such as ``<example>`` or ``<methodology>``, which
 compiler prompt files use as XML-ish delimiters, not as HTML.
 

@@ -107,8 +107,8 @@ CONNECTOR_KINDS: set[str] = {
 }
 
 # ── The seven node types and their handle-block contract ─────────────────────
-# prompt._node_type_contract() iterates this to render the contract to the LLM:
-# type -> {summary, handle, required, optional, min_inputs, requires_inputs,
+# app.compiler.workflow_prompt renders this into the workflow compiler's system
+# prompt: type -> {summary, handle, required, optional, min_inputs, requires_inputs,
 # also_requires?}. The Stage model does not expose this rendering shape, so the
 # spec is kept here as plain data purely for prompt rendering.
 NODE_TYPES: dict[str, dict[str, _Any]] = {
@@ -119,6 +119,10 @@ NODE_TYPES: dict[str, dict[str, _Any]] = {
         "min_inputs": 0,
         "required": ["kind"],
         "optional": ["params", "refresh", "notes"],
+        "notes": (
+            "NEVER include a file path — where data physically lives is not "
+            "part of the methodology; the user binds a file when starting a run."
+        ),
     },
     "llm_transform": {
         "summary": "Row-by-row LLM call producing structured output.",
@@ -128,9 +132,26 @@ NODE_TYPES: dict[str, dict[str, _Any]] = {
         "required": ["prompt_data_template"],
         "optional": ["model", "temperature", "response_format", "max_retries",
                      "rubric", "tools"],
+        "notes": (
+            "Author it as TWO fields: prompt_instructions is the row-invariant guidance "
+            "(role, methodology, how to weigh evidence/sources) and MUST NOT depend on "
+            "any row value — the same instructions run over every input row, so keeping "
+            "them byte-stable and separate from per-row data lets the runtime cache that "
+            "prefix, cutting latency (and cost on a per-token backend). "
+            "prompt_data_template is the minimal per-row input framing, rendered with "
+            "Python's str.format_map: inject a column as {column_name}."
+        ),
     },
-    "python_transform": {
-        "summary": "Arbitrary Python over upstream dataframes.",
+    "python_row_function": {
+        "summary": "Deterministic Python run once per row: one row in → one row out (cannot fan rows out/in or reorder).",
+        "handle": "function",
+        "requires_inputs": True,
+        "min_inputs": 1,
+        "required": ["kind"],
+        "optional": ["module", "function", "code", "requirements"],
+    },
+    "python_frame_function": {
+        "summary": "Deterministic Python over the whole dataframe(s); may reshape (dedup, pivot, multi-input merge).",
         "handle": "function",
         "requires_inputs": True,
         "min_inputs": 1,
