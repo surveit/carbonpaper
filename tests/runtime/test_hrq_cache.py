@@ -71,7 +71,7 @@ def _halt_and_read_snapshot(
 
 
 def _put_approval(
-    row: pd.Series, input_fingerprint: str, stage_fingerprint: str, run_id: str,
+    row: pd.Series, input_fingerprint: str, stage_fingerprint: str,
     *, project: str = PROJECT,
 ) -> None:
     """Cache an `approve` decision for one row of a halted snapshot, matched to
@@ -79,7 +79,7 @@ def _put_approval(
     (record_decision → the production cache seam), never a hand-assembled
     entry or a raw store write."""
     review.record_decision(
-        project=project, stage_id="review", run_id=run_id,
+        project=project, stage_id="review",
         stage_fingerprint=stage_fingerprint, input_fingerprint=input_fingerprint,
         frozen_row={"id": row["id"], "score": int(row["score"])},
         verdict=RowReviewDecision.approve, modified_score=None,
@@ -87,9 +87,9 @@ def _put_approval(
     )
 
 
-def _approve_every_row(snapshot: pd.DataFrame, fingerprints: dict, run_id: str, *, project: str = PROJECT) -> None:
+def _approve_every_row(snapshot: pd.DataFrame, fingerprints: dict, *, project: str = PROJECT) -> None:
     for (_, row), fp in zip(snapshot.iterrows(), fingerprints["input_fingerprints"]):
-        _put_approval(row, fp, fingerprints["stage_fingerprint"], run_id, project=project)
+        _put_approval(row, fp, fingerprints["stage_fingerprint"], project=project)
 
 
 # ── 1. Decided rows are reused across runs ──────────────────────────────────
@@ -101,7 +101,7 @@ def test_decided_rows_reused_across_runs(tmp_path):
 
     snapshot, fingerprints = _halt_and_read_snapshot(stage, {"scored": src}, _ctx(tmp_path, run_id="run1"))
     assert len(snapshot) == 2
-    _approve_every_row(snapshot, fingerprints, "run1")
+    _approve_every_row(snapshot, fingerprints)
 
     out = handle_human_review_queue(stage, {"scored": src.copy()}, _ctx(tmp_path, run_id="run2"))
     assert len(out) == 2
@@ -117,7 +117,7 @@ def test_definition_change_invalidates_decisions(tmp_path):
     src = _src(2)
 
     snapshot, fingerprints = _halt_and_read_snapshot(stage, {"scored": src}, _ctx(tmp_path, run_id="run1"))
-    _approve_every_row(snapshot, fingerprints, "run1")
+    _approve_every_row(snapshot, fingerprints)
 
     # Byte-identical input rows, but `reviewer_instructions` changed — the
     # stage's definition fingerprint changes, so no cached decision matches.
@@ -137,7 +137,7 @@ def test_row_change_invalidates_only_that_row(tmp_path):
     src = _src(2)
 
     snapshot, fingerprints = _halt_and_read_snapshot(stage, {"scored": src}, _ctx(tmp_path, run_id="run1"))
-    _approve_every_row(snapshot, fingerprints, "run1")
+    _approve_every_row(snapshot, fingerprints)
 
     changed_src = src.copy()
     changed_src.loc[changed_src["id"] == "r1", "score"] = 999  # only r1's value changes
@@ -284,7 +284,7 @@ def test_resume_reattaches_cached_decisions_written_via_the_seam(tmp_path):
     assert len(snapshot) == 2
     fingerprints = _read_fingerprints(run_dir / "queue" / "review.parquet")
 
-    _approve_every_row(snapshot, fingerprints, run_id, project=project_dir.name)
+    _approve_every_row(snapshot, fingerprints, project=project_dir.name)
 
     resumed = runner.resume_run(project_dir, run_id, project_dir)
     assert resumed["status"] == "ok"

@@ -7,10 +7,9 @@ import pandas as pd
 import pytest
 from pydantic import ValidationError
 
-from app.core.persistence import PersistedModel, get_store
+from app.core.persistence import get_store
 from app.core.run_status import RunMode
 from app.services.stage_cache import (
-    CacheProvenance,
     ReadOnlyStageCache,
     StageCache,
     StageCacheEntry,
@@ -25,14 +24,8 @@ def _entry(**overrides):
         "stage_id": "review",
         "stage_fingerprint": "sf1",
         "input_fingerprint": "if1",
-        "source_run_id": "run1",
         "frozen_input": {"id": "r1", "score": 0.4},
         "output_row": {"id": "r1", "score": 0.4, "final_score": 0.4},
-        "provenance": CacheProvenance(
-            author="alice",
-            recorded_at="2026-07-22T10:00:00",
-            note="approve",
-        ),
     }
     fields.update(overrides)
     fields["id"] = build_cache_id(
@@ -72,16 +65,13 @@ def test_build_cache_id_joins_the_four_parts_with_slashes():
     assert build_cache_id("proj", "stage1", "sf123", "if456") == "proj/stage1/sf123/if456"
 
 
-# ── CacheProvenance ───────────────────────────────────────────────────────────
-
-def test_cache_provenance_config_mirrors_persisted_model():
-    for key in ("extra", "use_enum_values", "validate_default", "populate_by_name"):
-        assert CacheProvenance.model_config.get(key) == PersistedModel.model_config.get(key)
-
-
 # ── old-shape entries fail loudly on load ────────────────────────────────────
 
 def test_old_shape_entry_fails_loudly_on_load():
+    # The SHIPPED v1 shape: an embedded `human` block and `source_run_id`, no
+    # `output_row`. `extra="forbid"` rejects the extra keys and the missing
+    # `output_row` field is required, so the load raises rather than silently
+    # coercing a stale document.
     old = {"id": build_cache_id("p", "review", "sf", "if"), "project": "p", "stage_id": "review",
            "stage_fingerprint": "sf", "input_fingerprint": "if", "source_run_id": "r",
            "frozen_input": {"id": "a", "score": 1},
@@ -99,7 +89,8 @@ def test_stage_cache_put_then_get_roundtrips():
     cache.put(_entry())
     got = cache.get("proj", "review", "sf1", "if1")
     assert got is not None
-    assert got.provenance.author == "alice"
+    assert got.output_row == {"id": "r1", "score": 0.4, "final_score": 0.4}
+    assert got.frozen_input == {"id": "r1", "score": 0.4}
 
 
 def test_stage_cache_get_missing_returns_none():

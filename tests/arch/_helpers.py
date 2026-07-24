@@ -62,7 +62,9 @@ def find_imported_names(tree: ast.Module) -> set[str]:
     alias — `from m import Foo as Bar` yields "Foo"), plus the dotted module
     name of each plain `import a.b` ("a.b"). Aliasing cannot hide the imported
     name, so a rule that bans importing a given symbol catches the aliased form
-    too."""
+    too. This is distinct from `find_imported_modules`, which returns the module
+    a name is imported FROM (the `X` in `from X import name`); this returns the
+    bound member name (`name`) instead."""
     names: set[str] = set()
     for node in ast.walk(tree):
         if isinstance(node, ast.ImportFrom):
