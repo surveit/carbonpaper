@@ -19,6 +19,7 @@ from fastapi import HTTPException
 from app.core.errors import NoVersionToRunError
 from app.core.frames import PARQUET_SUFFIX
 from app.models import Stage, StageType
+from app.runtime.manifest import load_manifest_model
 from app.core.run_status import StageStatus
 from app.services.run import resolve_version
 from app.services.loader import CompiledStageFile, load_compiled_dir
@@ -224,18 +225,14 @@ def runs_dir(project: str) -> Path:
 def load_manifest(run_dir: Path) -> dict[str, Any]:
     """A run's manifest.json as a dict, or 404 if the run doesn't exist.
 
-    Normalizes `halted_at` to a list so every consumer sees one shape: legacy
-    (pre-fork-aware) manifests persisted it as a scalar stage id string, which a
-    template `{% for %}` would iterate character-by-character. A single id is
-    wrapped into a one-element list here."""
-    manifest_path = run_dir / "manifest.json"
-    if not manifest_path.exists():
+    Parses through the typed `RunManifest`, so every consumer sees one shape:
+    the model normalizes a legacy (pre-fork-aware) scalar `halted_at` stage-id
+    string into a one-element list (a template `{% for %}` would otherwise
+    iterate a bare string character-by-character), and re-serializes with unset
+    optional fields omitted — the same shape the executor persisted."""
+    if not (run_dir / "manifest.json").exists():
         raise HTTPException(status_code=404, detail="Run not found")
-    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    halted_at = manifest.get("halted_at")
-    if isinstance(halted_at, str):
-        manifest["halted_at"] = [halted_at]
-    return manifest
+    return load_manifest_model(run_dir).to_dict()
 
 
 def list_runs(project: str) -> list[dict[str, Any]]:

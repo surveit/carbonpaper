@@ -37,7 +37,12 @@ from app.services.errors import WorkflowLoadError
 from app.services import versioning
 
 from .context import RunContext
-from .executor import _execute_stages, create_run_manifest, topological_sort, write_manifest
+from .executor import _execute_stages, topological_sort
+from .manifest import (
+    create_run_manifest,
+    load_manifest_model,
+    write_manifest,
+)
 from .stages import PREFLIGHTS
 
 
@@ -261,9 +266,12 @@ def prepare_run(
 
 def run_prepared(prep: dict[str, Any]) -> dict[str, Any]:
     """Execute a run previously set up by prepare_run(). Suitable for running in
-    a background thread (the manifest is updated on disk as stages complete)."""
-    return _execute_stages(prep["ordered"], prep["ctx"], prep["manifest"],
-                           prep["run_dir"], outputs_so_far={})
+    a background thread (the manifest is updated on disk as stages complete).
+    Returns the final manifest as a plain JSON-native dict — the same shape a
+    reader parses off disk."""
+    manifest = _execute_stages(prep["ordered"], prep["ctx"], prep["manifest"],
+                               prep["run_dir"], outputs_so_far={})
+    return manifest.to_dict()
 
 
 def execute_run(
@@ -290,10 +298,7 @@ def resume_run(project_dir: Path, run_id: str, repo_root: Path) -> dict[str, Any
     re-runs the halted queue stage (decisions now exist), continues
     downstream, updates the same manifest in place."""
     run_dir = project_dir / "runs" / run_id
-    manifest_path = run_dir / "manifest.json"
-    if not manifest_path.exists():
-        raise FileNotFoundError(f"No manifest at {manifest_path}")
-    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest = load_manifest_model(run_dir)
 
     # Stay pinned to the SAME workflow snapshot the run started on. We read the
     # version off the existing manifest and reload the version's stages — never
@@ -301,40 +306,37 @@ def resume_run(project_dir: Path, run_id: str, repo_root: Path) -> dict[str, Any
     # than the halted run did. A run that carries no workflow_version is a pre-
     # versioning (legacy) run we cannot safely resume under the version model;
     # fail loudly rather than guessing which snapshot it meant.
-    workflow_version = manifest.get("workflow_version")
+    workflow_version = manifest.workflow_version
     if not workflow_version:
         raise ValueError(
             f"Run {run_id} of '{project_dir.name}' has no 'workflow_version' in "
-            f"its manifest ({manifest_path}); cannot resume a versioned run "
-            f"without its pinned workflow version."
+            f"its manifest ({run_dir / 'manifest.json'}); cannot resume a versioned "
+            f"run without its pinned workflow version."
         )
     stages = versioning.load_version_stages(project_dir, workflow_version)
     # Replay this run's bindings (recorded verbatim by prepare_run) onto the
     # freshly-reloaded stages. Without this, a stage that had not yet executed
     # when the run halted would resume on its workflow-authored params (or fail
     # if it authors none) while the manifest still claims `source: "run"` — a
-    # false provenance record. Manifests from before this feature carry no
-    # `run_bindings` key; `.get(..., {})` keeps those resuming exactly as
-    # before.
-    stages, _ = apply_run_bindings(stages, manifest.get("run_bindings", {}))
+    # false provenance record.
+    stages, _ = apply_run_bindings(stages, manifest.run_bindings)
     ordered = topological_sort(stages)
 
     # Reload outputs from disk for stages that completed successfully.
     outputs_so_far: dict[str, pd.DataFrame] = {}
-    for record in manifest.get("stages", []):
-        if record.get("status") not in (StageStatus.OK, StageStatus.VALIDATION_WARNINGS):
+    for record in manifest.stages:
+        if record.status not in (StageStatus.OK, StageStatus.VALIDATION_WARNINGS):
             continue
-        op = record.get("output_path")
-        if not op:
+        if not record.output_path:
             continue
-        path = run_dir / op
+        path = run_dir / record.output_path
         if not path.exists():
             continue
         try:
             if path.suffix == PARQUET_SUFFIX:
-                outputs_so_far[record["stage_id"]] = pd.read_parquet(path)
+                outputs_so_far[record.stage_id] = pd.read_parquet(path)
             else:
-                outputs_so_far[record["stage_id"]] = pd.read_csv(path)
+                outputs_so_far[record.stage_id] = pd.read_csv(path)
         except (pa_lib.ArrowException, pd.errors.ParserError, OSError, ValueError):
             # A prior output file that's missing/corrupt/unreadable is
             # treated as not-yet-produced; the stage simply re-runs.
@@ -347,21 +349,21 @@ def resume_run(project_dir: Path, run_id: str, repo_root: Path) -> dict[str, Any
         repo_root, run_dir, project_dir.name, run_id,
         # Re-apply the run's per-stage row slicing so stages that resume after
         # a halt honor the same limits/offsets the run started with.
-        limits=manifest.get("limit_overrides") or {},
-        offsets=manifest.get("offset_overrides") or {},
+        limits=manifest.limit_overrides,
+        offsets=manifest.offset_overrides,
     )
     # The run's telemetry (queue_stats/dropped_columns) already lives on the
     # loaded manifest, not the context; a resumed run keeps accumulating onto
-    # that same manifest via the executor's per-stage drain.
+    # that same manifest via the executor's per-stage merge.
 
-    manifest["resumed_at"] = datetime.now().isoformat(timespec="seconds")
+    manifest.resumed_at = datetime.now().isoformat(timespec="seconds")
     # Drop the halt marker the halted run left behind: the run is no longer
     # halted — it is resuming — so a mid-run flush() (which persists status
     # `running`) must not carry `halted_at`, or the run page would show the
     # "halted for review" banner and queue links while the stage re-runs. The
     # loop re-adds `halted_at` if a stage halts again; otherwise it stays gone.
-    manifest.pop("halted_at", None)
-    return _execute_stages(ordered, ctx, manifest, run_dir, outputs_so_far)
+    manifest.unset("halted_at")
+    return _execute_stages(ordered, ctx, manifest, run_dir, outputs_so_far).to_dict()
 
 
 # CLI entrypoint for ad-hoc runs

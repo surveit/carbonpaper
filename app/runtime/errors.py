@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from .context import StageAccumulation
+from .manifest import StageContribution
 
 
 class HaltForReview(Exception):
@@ -11,9 +11,9 @@ class HaltForReview(Exception):
     without human decisions. The runner catches this, marks the run as
     awaiting_review, and stops executing downstream stages.
 
-    Carries the stage's `accumulation` (its queue stats) because the halt fires
+    Carries the stage's `contribution` (its queue stats) because the halt fires
     before the handler returns a frame — so this exception is the return path
-    the executor drains into the manifest, exactly as it drains a returned
+    the executor merges into the manifest, exactly as it merges a returned
     frame's `.attrs` on the non-halt path."""
 
     def __init__(
@@ -21,7 +21,7 @@ class HaltForReview(Exception):
         stage_id: str,
         pending_count: int,
         queue_path: Path,
-        accumulation: StageAccumulation,
+        contribution: StageContribution,
     ):
         super().__init__(
             f"Stage '{stage_id}' has {pending_count} item(s) awaiting review"
@@ -29,7 +29,7 @@ class HaltForReview(Exception):
         self.stage_id = stage_id
         self.pending_count = pending_count
         self.queue_path = queue_path
-        self.accumulation = accumulation
+        self.contribution = contribution
 
 
 class PreviewError(Exception):

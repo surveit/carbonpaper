@@ -33,7 +33,8 @@ from app.core.agent.usage import LlmUsage
 from app.models import Stage
 from app.models.schema import Column, TableSchema
 
-from ..context import ACCUMULATION_ATTR, RunContext, StageAccumulation
+from ..context import RunContext
+from ..manifest import CONTRIBUTION_ATTR, StageContribution
 from ..llm import call_llm, call_llm_batch, render_prompt
 from .execution import (
     ROW_ERROR_KEY,
@@ -138,13 +139,13 @@ def run_llm_batches(
         )
 
     df = pd.DataFrame(results)
-    accumulation = StageAccumulation()
-    _collect_row_errors(df, accumulation)
-    _collect_row_usage(df, accumulation)
-    df = _project_onto_declared_columns(df, stage, accumulation)
-    # Report usage/errors/drops on the returned frame; the executor drains it
+    contribution = StageContribution()
+    _collect_row_errors(df, contribution)
+    _collect_row_usage(df, contribution)
+    df = _project_onto_declared_columns(df, stage, contribution)
+    # Report usage/errors/drops on the returned frame; the executor merges it
     # into the manifest. Nothing accumulates in the (frozen) context.
-    df.attrs[ACCUMULATION_ATTR] = accumulation
+    df.attrs[CONTRIBUTION_ATTR] = contribution
     return df
 
 

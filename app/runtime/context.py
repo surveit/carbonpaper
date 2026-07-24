@@ -1,4 +1,4 @@
-"""The frozen run context and the per-stage accumulation channel.
+"""The frozen run context.
 
 `RunContext` is the immutable identity + config a run is executed under. It is
 built once — by `RunContext.for_production` (a production run:
@@ -6,7 +6,8 @@ built once — by `RunContext.for_production` (a production run:
 (a subset run, a preview, an authored-test run) — and threaded read-only through
 the executor, the row driver, and every stage handler. Nothing mutates it
 mid-run: the run's growing state (per-stage token usage, dropped-column notes,
-queue stats, row-generation errors) lives on the manifest, not here.
+queue stats, row-generation errors) lives on the manifest, not here — a handler
+reports it back as a `StageContribution` (app.runtime.manifest).
 
 `mode` is stamped at construction and never changes: a production run cannot
 carry `queue_auto_approve` (the in-memory queue bypass evals/workflow-test use),
@@ -18,22 +19,16 @@ auto-approving a production review queue.
 stage-result cache); `for_non_production` grants neither. They co-vary by
 construction — there is no state with cache access but no identity, or the
 reverse — enforced by the validator so a hand-built context can't violate it.
-
-`StageAccumulation` is how a handler reports that growing state back to the
-engine: the handler attaches one to its output frame's `.attrs` (or, when the
-queue stage halts before returning a frame, to the `HaltForReview` it raises),
-and the executor drains it into the manifest.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal, TypedDict
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, model_validator
 
-from app.core.agent.usage import LlmUsage
 from app.core.stage_cache import ReadOnlyStageCache, StageCacheEntry
 
 RunMode = Literal["production", "non_production"]
@@ -167,46 +162,8 @@ class RunContext(BaseModel):
         )
 
 
-class QueueStats(TypedDict):
-    """One human_review_queue stage's tallies, recorded on the manifest under
-    `queue_stats[stage_id]`."""
-
-    items_queued_total: int
-    items_passed_through: int
-    items_pending: int
-    items_decided: int
-
-
-class RowError(TypedDict):
-    """One row's generation failure: its 0-based position and the message."""
-
-    row: int
-    message: str
-
-
-# The `.attrs` key a stage's output frame carries its StageAccumulation under.
-ACCUMULATION_ATTR = "run_accumulation"
-
-
-@dataclass
-class StageAccumulation:
-    """The growing run state one stage produces, reported to the engine via its
-    output frame's `.attrs` (drained into the manifest by the executor). Empty
-    for a stage that produces none. Not stage data — token usage, per-row
-    generation errors, dropped-column notes, and queue tallies."""
-
-    llm_usage: LlmUsage | None = None
-    row_errors: list[RowError] = field(default_factory=list)
-    dropped_columns: list[str] = field(default_factory=list)
-    queue_stats: QueueStats | None = None
-
-
 __all__ = [
     "RunMode",
     "RunIdentity",
     "RunContext",
-    "QueueStats",
-    "RowError",
-    "ACCUMULATION_ATTR",
-    "StageAccumulation",
 ]
