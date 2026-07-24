@@ -2,15 +2,14 @@
 (app.core.stage_cache): enforce the one domain rule (a `modify` carries a
 score), build the review stage's output row for the verdict, and write it.
 
-The write goes through the production cache accessor
-(`StageCacheEntry.for_mode(RunMode.PRODUCTION)`): recording a decision is the
+The write goes through the read+write cache accessor
+(`StageCacheEntry.read_write()`): recording a decision is the
 one sanctioned way run activity persists something that outlives the run."""
 from __future__ import annotations
 
 from collections.abc import Mapping
 
 from app.core.errors import ReviewValidationError
-from app.core.run_status import RunMode
 from app.models import RowReviewDecision
 from app.core.stage_cache import StageCacheEntry
 
@@ -23,13 +22,13 @@ def record_decision(
     reviewer: str, reviewed_at: str,
 ) -> None:
     """Build the output row one reviewed row produces and record it through the
-    production cache accessor, passing the raw frozen row and the resolved
+    read+write cache accessor, passing the raw frozen row and the resolved
     fingerprints. A `modify` verdict must carry a `modified_score` (the one
     domain rule), else ReviewValidationError."""
     if verdict == RowReviewDecision.modify and modified_score is None:
         raise ReviewValidationError("modify requires modified_score")
     output_row = _build_output_row(frozen_row, verdict, modified_score, reviewer, reviewed_at)
-    StageCacheEntry.for_mode(RunMode.PRODUCTION).record(
+    StageCacheEntry.read_write().record(
         project=project, stage_id=stage_id,
         stage_fingerprint=stage_fingerprint, input_fingerprint=input_fingerprint,
         input_row=frozen_row, output_row=output_row,

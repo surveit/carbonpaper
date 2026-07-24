@@ -14,7 +14,6 @@ from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 
 from app.core.errors import ReviewValidationError
-from app.core.run_status import RunMode
 from app.models import RowReviewDecision, Stage
 from app.runtime.llm import render_prompt
 from app.services import review
@@ -157,8 +156,8 @@ def _load_decided_entries(
     project: str, stage_id: str, stage_fingerprint: str
 ) -> dict[str, StageCacheEntry]:
     """Cached decisions for this stage definition, keyed by `input_fingerprint`:
-    the production cache's entries for (project, stage, stage_fingerprint)."""
-    entries = StageCacheEntry.for_mode(RunMode.PRODUCTION).find_entries(
+    the read-only cache view's entries for (project, stage, stage_fingerprint)."""
+    entries = StageCacheEntry.read_only().find_entries(
         project, stage_id, stage_fingerprint
     )
     return {entry.input_fingerprint: entry for entry in entries}

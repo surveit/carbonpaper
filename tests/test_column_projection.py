@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import pandas as pd
 
-from app.core.run_status import RunMode
 from app.models import Stage
 from app.models.stage import StageType
 from app.runtime.context import RunContext, RunIdentity
@@ -103,7 +102,7 @@ def _queue_test_ctx(tmp_path, project: str) -> RunContext:
     identity = RunIdentity(project=project, run_id="r1")
     return make_run_context(
         run_dir=tmp_path, identity=identity,
-        stage_cache=StageCacheEntry.for_mode(RunMode.PRODUCTION),
+        stage_cache=StageCacheEntry.read_write(),
     )
 
 

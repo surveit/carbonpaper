@@ -9,7 +9,6 @@ import pytest
 from pydantic import ValidationError
 
 from app.core.persistence import get_store
-from app.core.run_status import RunMode
 from app.core.stage_cache import (
     ReadOnlyStageCache,
     StageCache,
@@ -142,15 +141,15 @@ def test_find_entries_scopes_by_stage_fingerprint_prefix():
     assert {e.input_fingerprint for e in found} == {"if1", "if2"}
 
 
-# ── for_mode ──────────────────────────────────────────────────────────────────
+# ── read_only / read_write ────────────────────────────────────────────────────
 
-def test_for_mode_production_returns_a_writable_cache():
-    accessor = StageCacheEntry.for_mode(RunMode.PRODUCTION)
+def test_read_write_returns_a_writable_cache():
+    accessor = StageCacheEntry.read_write()
     assert isinstance(accessor, StageCache)
 
 
-def test_for_mode_non_production_returns_a_read_only_view_without_record():
-    accessor = StageCacheEntry.for_mode(RunMode.NON_PRODUCTION)
+def test_read_only_returns_a_view_without_record():
+    accessor = StageCacheEntry.read_only()
     assert isinstance(accessor, ReadOnlyStageCache)
     assert not isinstance(accessor, StageCache)
     assert not hasattr(accessor, "record")
