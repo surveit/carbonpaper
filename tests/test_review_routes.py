@@ -264,6 +264,7 @@ def test_decide_400_when_modify_has_no_score(tmp_path, monkeypatch):
         data={"input_fingerprint": fp, "decision": "modify"},
     )
     assert r.status_code == 400
+    assert not StageCacheEntry.list(prefix=f"{PROJECT}/review/")
 
 
 def test_decide_404_on_unknown_fingerprint_and_writes_nothing(tmp_path, monkeypatch):
