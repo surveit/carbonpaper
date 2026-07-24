@@ -3,19 +3,33 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from .context import StageAccumulation
+
 
 class HaltForReview(Exception):
     """Raised by handle_human_review_queue when there are pending items
     without human decisions. The runner catches this, marks the run as
-    awaiting_review, and stops executing downstream stages."""
+    awaiting_review, and stops executing downstream stages.
 
-    def __init__(self, stage_id: str, pending_count: int, queue_path: Path):
+    Carries the stage's `accumulation` (its queue stats) because the halt fires
+    before the handler returns a frame — so this exception is the return path
+    the executor drains into the manifest, exactly as it drains a returned
+    frame's `.attrs` on the non-halt path."""
+
+    def __init__(
+        self,
+        stage_id: str,
+        pending_count: int,
+        queue_path: Path,
+        accumulation: StageAccumulation,
+    ):
         super().__init__(
             f"Stage '{stage_id}' has {pending_count} item(s) awaiting review"
         )
         self.stage_id = stage_id
         self.pending_count = pending_count
         self.queue_path = queue_path
+        self.accumulation = accumulation
 
 
 class PreviewError(Exception):

@@ -12,7 +12,7 @@ from app.core.predicate import parse_predicate
 from app.models import RowReviewDecision, Stage
 from app.core.stage_cache import ReadOnlyStageCache, StageCacheEntry, compute_row_fingerprint
 
-from ..context import QueueStats, RunContext
+from ..context import ACCUMULATION_ATTR, QueueStats, RunContext, StageAccumulation
 from ..errors import HaltForReview
 
 # The upstream AI score column a queue stage reviews. Named once so the two sites
@@ -45,6 +45,7 @@ def handle_human_review_queue(stage: Stage, inputs: dict[str, pd.DataFrame], ctx
     queue_cfg = stage.queue
     assert queue_cfg is not None  # Stage validation: human_review_queue carries queue_cfg
     src = inputs[stage.inputs[0].id].copy()
+    accumulation = StageAccumulation()
 
     # Checked FIRST, before any reach for project scope / the decisions cache: when
     # the caller asked for in-memory auto-approval, every row is approved and returned
@@ -53,11 +54,11 @@ def handle_human_review_queue(stage: Stage, inputs: dict[str, pd.DataFrame], ctx
     # a run can pass a queue stage. Production ctx never sets the flag, so production
     # behavior is unchanged.
     if ctx.queue_auto_approve:
-        return _auto_approve_all(src, stage, ctx, sid)
+        return _auto_approve_all(src, stage, accumulation)
 
     project, stage_cache = _require_project_scope(ctx, sid)
 
-    queueable, passthrough = _partition_reviewable_rows(src, queue_cfg.filter, ctx, sid)
+    queueable, passthrough = _partition_reviewable_rows(src, queue_cfg.filter, sid)
 
     stage_fp = stage.compute_definition_fingerprint()
     input_fingerprints_by_index = _compute_input_fingerprints(queueable)
@@ -68,16 +69,16 @@ def handle_human_review_queue(stage: Stage, inputs: dict[str, pd.DataFrame], ctx
         queueable, input_fingerprints_by_index, entries_by_fingerprint
     )
 
-    _record_queue_stats(ctx, sid, queueable, passthrough, pending, decided)
+    _record_queue_stats(accumulation, queueable, passthrough, pending, decided)
 
     if len(pending):
         pending_fingerprints = input_fingerprints_by_index.loc[pending.index].tolist()
-        _snapshot_pending_and_halt(ctx, sid, pending, stage_fp, pending_fingerprints)
+        _snapshot_pending_and_halt(ctx, sid, pending, stage_fp, pending_fingerprints, accumulation)
 
     decided = _collect_cached_output_rows(decided, entries_by_fingerprint, input_fingerprints_by_index)
     passthrough = _finalize_passthrough_rows(passthrough)
     out = _combine_decided_and_passthrough(decided, passthrough)
-    return _project_onto_output_schema(out, stage, ctx, sid)
+    return _project_onto_output_schema(out, stage, accumulation)
 
 
 # --- handle_human_review_queue helpers -----------------------------------------
@@ -102,7 +103,7 @@ def _require_project_scope(ctx: RunContext, sid: str) -> tuple[str, ReadOnlyStag
 
 
 def _auto_approve_all(
-    src: pd.DataFrame, stage: Stage, ctx: RunContext, sid: str
+    src: pd.DataFrame, stage: Stage, accumulation: StageAccumulation
 ) -> pd.DataFrame:
     """Pass every row through as approved, entirely in memory — no stage-cache
     decision lookup, no queue snapshot, no halt. Each row gets the same reviewer
@@ -119,11 +120,11 @@ def _auto_approve_all(
     approved["reviewer_id"] = pd.NA
     approved["reviewed_at"] = pd.NA
     approved["decision"] = RowReviewDecision.approve
-    return _project_onto_output_schema(approved, stage, ctx, sid)
+    return _project_onto_output_schema(approved, stage, accumulation)
 
 
 def _partition_reviewable_rows(
-    src: pd.DataFrame, flt: str | None, ctx: RunContext, sid: str
+    src: pd.DataFrame, flt: str | None, sid: str
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Split `src` into rows subject to review (the queue filter matched, or
     there is no filter) and rows that pass straight through."""
@@ -185,21 +186,21 @@ def _split_pending_and_decided(
 
 
 def _record_queue_stats(
-    ctx: RunContext,
-    sid: str,
+    accumulation: StageAccumulation,
     queueable: pd.DataFrame,
     passthrough: pd.DataFrame,
     pending: pd.DataFrame,
     decided: pd.DataFrame,
 ) -> None:
-    """Stats for the manifest."""
+    """Record this stage's queue tallies onto `accumulation`; the executor drains
+    them onto the manifest under `queue_stats[stage_id]`."""
     stats: QueueStats = {
         "items_queued_total": int(len(queueable)),
         "items_passed_through": int(len(passthrough)),
         "items_pending": int(len(pending)),
         "items_decided": int(len(decided)),
     }
-    ctx.queue_stats[sid] = stats
+    accumulation.queue_stats = stats
 
 
 def _snapshot_pending_and_halt(
@@ -208,6 +209,7 @@ def _snapshot_pending_and_halt(
     pending: pd.DataFrame,
     stage_fingerprint: str,
     input_fingerprints: list[str],
+    accumulation: StageAccumulation,
 ) -> NoReturn:
     """Persist the pending items for the reviewer UI, then halt the run.
 
@@ -218,7 +220,7 @@ def _snapshot_pending_and_halt(
     `<stage>.fingerprints.json`, `input_fingerprints` POSITIONALLY aligned to
     the snapshot's row order, alongside the one `stage_fingerprint` every
     pending row of this halt shares."""
-    queue_dir = ctx.run_dir / "queue"
+    queue_dir = ctx.require_run_dir() / "queue"
     queue_dir.mkdir(parents=True, exist_ok=True)
     queue_path = queue_dir / f"{sid}.parquet"
     try:
@@ -244,6 +246,7 @@ def _snapshot_pending_and_halt(
         stage_id=sid,
         pending_count=int(len(pending)),
         queue_path=queue_path,
+        accumulation=accumulation,
     )
 
 
@@ -281,18 +284,22 @@ def _combine_decided_and_passthrough(decided: pd.DataFrame, passthrough: pd.Data
 
 
 def _project_onto_output_schema(
-    out: pd.DataFrame, stage: Stage, ctx: RunContext, sid: str
+    out: pd.DataFrame, stage: Stage, accumulation: StageAccumulation
 ) -> pd.DataFrame:
     """Project onto exactly the columns output_schema declares — a column
     carried through from upstream that the stage wants downstream earns its
     place by being declared. Columns on the frame that the schema doesn't
-    declare are dropped, and the drop is recorded on `ctx.dropped_columns`
-    rather than silently discarded."""
+    declare are dropped, and the drop is recorded on `accumulation` rather than
+    silently discarded. Attaches the accumulation to the returned frame so the
+    executor can drain it into the manifest."""
     declared = [c.name for c in stage.output_schema.columns] if stage.output_schema else []
     if not declared:
+        out.attrs[ACCUMULATION_ATTR] = accumulation
         return out
     keep = [c for c in declared if c in out.columns]
-    dropped = [c for c in out.columns if c not in keep]
+    dropped = [str(c) for c in out.columns if c not in keep]
     if dropped:
-        ctx.dropped_columns[sid] = dropped
-    return out[keep]
+        accumulation.dropped_columns = dropped
+    result = out[keep]
+    result.attrs[ACCUMULATION_ATTR] = accumulation
+    return result

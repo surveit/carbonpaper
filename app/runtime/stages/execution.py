@@ -34,7 +34,7 @@ from app.models.stage import StageType, is_grain_and_order_preserving
 from app.core.agent.usage import LlmUsage
 
 from ..cancellation import consume_cancel
-from ..context import RowError, RunContext
+from ..context import ACCUMULATION_ATTR, RowError, RunContext, StageAccumulation
 from ..errors import RunCancelled
 
 # One row of a stage's input or output: column label → cell value.
@@ -47,13 +47,14 @@ Row = dict[str, Any]
 ROW_ERROR_KEY = "_error"
 
 # Sentinel column carrying a row's token/cost usage dict (an llm_transform
-# attaches one per row). The driver sums these into ctx.llm_usage[stage_id];
+# attaches one per row). The driver sums these onto the stage's StageAccumulation;
 # the output projection drops the column so usage never reaches stage output.
 ROW_USAGE_KEY = "_usage"
 
 # Internal per-row sentinel columns a mapper may attach. They are machinery, not
 # stage output: the projection drops them but does NOT report them as dropped
-# user columns (they were collected into ctx by the driver, not discarded).
+# user columns (they were collected onto the accumulation by the driver, not
+# discarded).
 _INTERNAL_ROW_COLUMNS = frozenset({ROW_ERROR_KEY, ROW_USAGE_KEY})
 
 
@@ -240,10 +241,15 @@ def _run_row_mapper(
             )
         out_rows.append(result)
     df = pd.DataFrame(out_rows)
-    _collect_row_errors(df, stage, ctx)
-    _collect_row_usage(df, stage, ctx)
+    accumulation = StageAccumulation()
+    _collect_row_errors(df, accumulation)
+    _collect_row_usage(df, accumulation)
     if handler.project_output_to_declared:
-        df = _project_onto_declared_columns(df, stage, ctx)
+        df = _project_onto_declared_columns(df, stage, accumulation)
+    # Report this stage's usage/errors/drops back to the engine on the frame it
+    # returns; the executor drains it into the manifest. Nothing accumulates in
+    # the (frozen) context.
+    df.attrs[ACCUMULATION_ATTR] = accumulation
     return df
 
 
@@ -257,43 +263,39 @@ def _consume_cancel(ctx: RunContext) -> bool:
     return consume_cancel(ctx.identity.project, ctx.identity.run_id)
 
 
-def _collect_row_errors(df: pd.DataFrame, stage: Stage, ctx: RunContext) -> None:
-    """Record EVERY row carrying the `ROW_ERROR_KEY` sentinel, keyed by stage id on
-    `ctx.row_errors`. `pd.isna` alone is the test: it distinguishes a successful row
-    (NaN — the mapper never set the sentinel) from a failed row (any string,
-    including the empty string a message-less exception stringifies to). The
-    runner surfaces these as error-severity output issues and marks the stage
-    `error`; the stage keeps EVERY row (a failed row simply carries
-    null/missing generated columns), so one failed row does not abort the
-    stage."""
+def _collect_row_errors(df: pd.DataFrame, accumulation: StageAccumulation) -> None:
+    """Record EVERY row carrying the `ROW_ERROR_KEY` sentinel onto `accumulation`.
+    `pd.isna` alone is the test: it distinguishes a successful row (NaN — the
+    mapper never set the sentinel) from a failed row (any string, including the
+    empty string a message-less exception stringifies to). The runner surfaces
+    these as error-severity output issues and marks the stage `error`; the stage
+    keeps EVERY row (a failed row simply carries null/missing generated columns),
+    so one failed row does not abort the stage."""
     if ROW_ERROR_KEY not in df.columns:
         return
-    errors: list[RowError] = [
-        {"row": position, "message": str(value)}
+    accumulation.row_errors = [
+        RowError(row=position, message=str(value))
         for position, value in enumerate(df[ROW_ERROR_KEY])
         if not pd.isna(value)
     ]
-    if errors:
-        ctx.row_errors[stage.id] = errors
 
 
-def _collect_row_usage(df: pd.DataFrame, stage: Stage, ctx: RunContext) -> None:
-    """Sum every row's `ROW_USAGE_KEY` usage dict into
-    `ctx.llm_usage[stage.id]` — the stage's total token/cost spend. No column
-    means a non-LLM stage (or a stage where usage was never reported): nothing
-    is recorded, never a zero."""
+def _collect_row_usage(df: pd.DataFrame, accumulation: StageAccumulation) -> None:
+    """Sum every row's `ROW_USAGE_KEY` usage dict onto `accumulation.llm_usage` —
+    the stage's total token/cost spend. No column means a non-LLM stage (or a
+    stage where usage was never reported): nothing is recorded, never a zero."""
     if ROW_USAGE_KEY not in df.columns:
         return
     parts = [value for value in df[ROW_USAGE_KEY] if isinstance(value, LlmUsage)]
-    ctx.llm_usage[stage.id] = LlmUsage.summed(parts)
+    accumulation.llm_usage = LlmUsage.summed(parts)
 
 
 def _project_onto_declared_columns(
-    df: pd.DataFrame, stage: Stage, ctx: RunContext
+    df: pd.DataFrame, stage: Stage, accumulation: StageAccumulation
 ) -> pd.DataFrame:
     """Project onto exactly the columns output_schema declares, in declared
     order. Column selection only — row count and order are untouched. Dropped
-    columns are recorded on `ctx.dropped_columns`, never silently discarded."""
+    columns are recorded on `accumulation`, never silently discarded."""
     declared = [c.name for c in stage.output_schema.columns] if stage.output_schema else []
     if not declared:
         return df
@@ -301,5 +303,5 @@ def _project_onto_declared_columns(
     dropped = [str(c) for c in df.columns
                if c not in keep and c not in _INTERNAL_ROW_COLUMNS]
     if dropped:
-        ctx.dropped_columns[stage.id] = dropped
+        accumulation.dropped_columns = dropped
     return df[keep]

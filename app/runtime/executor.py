@@ -38,7 +38,13 @@ from app.models import Stage, StageType, Workflow
 from app.core.run_status import RunStatus, StageStatus
 
 from .cancellation import consume_cancel
-from .context import RowError, RunContext, RunIdentity
+from .context import (
+    ACCUMULATION_ATTR,
+    RowError,
+    RunContext,
+    RunIdentity,
+    StageAccumulation,
+)
 from .errors import RunCancelled
 from .stages import HANDLERS, HaltForReview, StageHandler
 from .validation import Issue, validate_dataframe
@@ -185,7 +191,7 @@ def _execute_stages(
     records_by_id: dict[str, StageRecord] = {
         r["stage_id"]: r for r in manifest.get("stages", [])
     }
-    _flush_manifest(manifest, records_by_id, ordered, ctx, run_dir, RunStatus.RUNNING)
+    _flush_manifest(manifest, records_by_id, ordered, run_dir, RunStatus.RUNNING)
 
     for idx, stage in enumerate(ordered):
         # Between-stage cancel checkpoint: before this stage starts (even
@@ -208,7 +214,7 @@ def _execute_stages(
             records_by_id[sid] = _build_pending_stage_record(stage)
             blocked.add(sid)
             outputs_so_far.pop(sid, None)
-            _flush_manifest(manifest, records_by_id, ordered, ctx, run_dir, RunStatus.RUNNING)
+            _flush_manifest(manifest, records_by_id, ordered, run_dir, RunStatus.RUNNING)
             continue
 
         # Skip stages already produced (resume path).
@@ -226,7 +232,7 @@ def _execute_stages(
             break
 
     return _finalize_run_manifest(
-        manifest, records_by_id, ordered, ctx, run_dir, cancelled, cancel_at_index, halted_stage_ids
+        manifest, records_by_id, ordered, run_dir, cancelled, cancel_at_index, halted_stage_ids
     )
 
 
@@ -317,6 +323,11 @@ def create_run_manifest(
         "offset_overrides": offsets,
         "run_bindings": run_bindings,
         "input_bindings": input_bindings,
+        # The run's growing side-record, accumulated live as stages settle (see
+        # _drain_stage_accumulation). Held on the manifest — the run's single
+        # living record — rather than on the frozen run context.
+        "queue_stats": {},
+        "dropped_columns": {},
         "status": RunStatus.RUNNING,
         "stages": [_build_pending_stage_record(s) for s in ordered],
     }
@@ -345,18 +356,20 @@ def _flush_manifest(
     manifest: dict[str, Any],
     records_by_id: dict[str, StageRecord],
     ordered: list[Stage],
-    ctx: RunContext,
     run_dir: Path,
     status: RunStatus,
 ) -> None:
     """Write the manifest mid-run so the run page can show live progress
     (stages light up as they start/finish) instead of the whole pipeline
-    running silently and updating only at the very end."""
+    running silently and updating only at the very end. The accumulated
+    queue_stats/dropped_columns already live on `manifest` (drained per stage
+    by _drain_stage_accumulation), so this just persists them; setdefault keeps
+    a resumed pre-accumulator manifest from missing the keys."""
     m = dict(manifest)
     m["stages"] = [records_by_id.get(s.id) or _build_pending_stage_record(s) for s in ordered]
     m["status"] = status
-    m["queue_stats"] = ctx.queue_stats
-    m["dropped_columns"] = ctx.dropped_columns
+    m.setdefault("queue_stats", {})
+    m.setdefault("dropped_columns", {})
     m["updated_at"] = datetime.now().isoformat(timespec="seconds")
     try:
         write_manifest(run_dir, m)
@@ -480,6 +493,7 @@ def _finalize_stage_output(
     output: pd.DataFrame | None,
     outputs_so_far: dict[str, pd.DataFrame],
     run_dir: Path,
+    manifest: dict[str, Any],
 ) -> bool:
     """Trim, validate, and persist a stage's raw handler output, then decide
     its terminal status. A per-row generation failure is a stage error,
@@ -491,12 +505,20 @@ def _finalize_stage_output(
     transitive consumer is skipped rather than run on this stage's partial
     frame and marked `ok`; False otherwise."""
     sid = stage.id
+    # Read the stage's accumulation off the handler's frame BEFORE any slicing
+    # (which builds a new frame and drops `.attrs`), then drain usage into this
+    # record and queue_stats/dropped_columns into the manifest.
+    accumulation = _read_stage_accumulation(output)
+    row_errors = _drain_stage_accumulation(accumulation, sid, manifest, record)
+
     if output is None:
         output = pd.DataFrame()
+    # Drop the accumulation channel so it never reaches the persisted parquet
+    # (its metadata isn't JSON-serializable) — it has been drained above.
+    output.attrs.pop(ACCUMULATION_ATTR, None)
     output = _apply_row_slicing(output, stage, ctx, record)
 
     out_rep = validate_dataframe(output, stage.output_schema, stage_id=sid, phase="output")
-    row_errors = ctx.row_errors.get(sid, [])
     if row_errors:
         out_rep.issues[0:0] = [
             Issue("error", None,
@@ -504,12 +526,6 @@ def _finalize_stage_output(
             for row_error in row_errors
         ]
     record["output_validation"] = out_rep.to_dict()
-
-    usage = ctx.llm_usage.get(sid)
-    if usage is not None:
-        # Dump to a plain dict here: the manifest is JSON, and this is
-        # the one boundary where the typed LlmUsage becomes storage.
-        record["llm_usage"] = usage.model_dump()
 
     output_path = _persist_stage_output(output, sid, run_dir, record)
     outputs_so_far[sid] = output
@@ -530,6 +546,38 @@ def _finalize_stage_output(
     # every platform.
     record["output_path"] = output_path.relative_to(run_dir).as_posix()
     return bool(row_errors)
+
+
+def _read_stage_accumulation(output: pd.DataFrame | None) -> StageAccumulation:
+    """The StageAccumulation a handler attached to its output frame's `.attrs`,
+    or an empty one when there is no frame (a stage that produced nothing) or no
+    accumulation (a handler that reported none)."""
+    if output is None:
+        return StageAccumulation()
+    attached = output.attrs.get(ACCUMULATION_ATTR)
+    if isinstance(attached, StageAccumulation):
+        return attached
+    return StageAccumulation()
+
+
+def _drain_stage_accumulation(
+    accumulation: StageAccumulation,
+    sid: str,
+    manifest: dict[str, Any],
+    record: StageRecord,
+) -> list[RowError]:
+    """Fold one stage's accumulation into the run's living record: its token
+    usage onto the stage record (the one boundary where the typed LlmUsage
+    becomes JSON storage), its dropped-column and queue tallies onto the
+    manifest's maps. Returns the row-generation errors for the caller to fold
+    into the output validation report and terminal status."""
+    if accumulation.llm_usage is not None:
+        record["llm_usage"] = accumulation.llm_usage.model_dump()
+    if accumulation.dropped_columns:
+        manifest.setdefault("dropped_columns", {})[sid] = accumulation.dropped_columns
+    if accumulation.queue_stats is not None:
+        manifest.setdefault("queue_stats", {})[sid] = accumulation.queue_stats
+    return accumulation.row_errors
 
 
 def _run_stage(
@@ -554,7 +602,7 @@ def _run_stage(
     record = _start_stage_record(stage)
     t0 = time.perf_counter()
     records_by_id[sid] = record
-    _flush_manifest(manifest, records_by_id, ordered, ctx, run_dir, RunStatus.RUNNING)
+    _flush_manifest(manifest, records_by_id, ordered, run_dir, RunStatus.RUNNING)
 
     joins_blocked = False
     try:
@@ -563,6 +611,10 @@ def _run_stage(
         try:
             output = handler.execute(stage, inputs_for_stage, ctx)
         except HaltForReview as halt:
+            # The halt fires before a frame is returned, so its accumulation
+            # (the stage's queue_stats) rides the exception; drain it into the
+            # manifest exactly as a returned frame's would be.
+            _drain_stage_accumulation(halt.accumulation, sid, manifest, record)
             _record_halt(record, halt, run_dir)
             return _StageOutcome.HALTED, True
         except RunCancelled:
@@ -571,7 +623,8 @@ def _run_stage(
             # stage made no output — it is marked cancelled, not ok.
             record["status"] = StageStatus.CANCELLED
             return _StageOutcome.CANCELLED, False
-        joins_blocked = _finalize_stage_output(stage, ctx, record, output, outputs_so_far, run_dir)
+        joins_blocked = _finalize_stage_output(
+            stage, ctx, record, output, outputs_so_far, run_dir, manifest)
     except Exception as exc:  # noqa: BLE001 — the runner's contract is to
         # record ANY stage failure in the manifest and keep running
         # independent forks rather than crash the whole run.
@@ -584,7 +637,7 @@ def _run_stage(
         # fields (status, halt queue info).
         record["elapsed_ms"] = int((time.perf_counter() - t0) * 1000)
         record["finished_at"] = datetime.now().isoformat(timespec="seconds")
-        _flush_manifest(manifest, records_by_id, ordered, ctx, run_dir, RunStatus.RUNNING)
+        _flush_manifest(manifest, records_by_id, ordered, run_dir, RunStatus.RUNNING)
 
     return _StageOutcome.RAN, joins_blocked
 
@@ -593,7 +646,6 @@ def _finalize_run_manifest(
     manifest: dict[str, Any],
     records_by_id: dict[str, StageRecord],
     ordered: list[Stage],
-    ctx: RunContext,
     run_dir: Path,
     cancelled: bool,
     cancel_at_index: int,
@@ -608,8 +660,11 @@ def _finalize_run_manifest(
     earlier in the same run."""
     manifest["stages"] = [records_by_id[s.id] for s in ordered if s.id in records_by_id]
     manifest["finished_at"] = datetime.now().isoformat(timespec="seconds")
-    manifest["queue_stats"] = ctx.queue_stats
-    manifest["dropped_columns"] = ctx.dropped_columns
+    # queue_stats/dropped_columns already live on the manifest, accumulated as
+    # stages settled (_drain_stage_accumulation); ensure the keys exist for a
+    # resumed pre-accumulator manifest.
+    manifest.setdefault("queue_stats", {})
+    manifest.setdefault("dropped_columns", {})
 
     if cancelled:
         manifest["status"] = RunStatus.CANCELLED

@@ -14,10 +14,25 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pandas as pd
 import pytest
 
-from app.runtime.context import RunContext, RunIdentity
+from app.runtime.context import (
+    ACCUMULATION_ATTR,
+    RunContext,
+    RunIdentity,
+    RunMode,
+    StageAccumulation,
+)
 from app.core.stage_cache import ReadOnlyStageCache
+
+
+def accumulation_of(frame: pd.DataFrame) -> StageAccumulation:
+    """The StageAccumulation a handler attached to its output frame's `.attrs`.
+    A handler reports its usage/errors/dropped-columns/queue tallies here (the
+    executor drains it into the manifest), so a direct-handler test reads them
+    off the returned frame rather than off the context."""
+    return frame.attrs[ACCUMULATION_ATTR]
 
 
 @pytest.fixture(autouse=True)
@@ -51,11 +66,14 @@ def make_run_context(
     limits: dict[str, int] | None = None,
     offsets: dict[str, int] | None = None,
 ) -> RunContext:
-    """A RunContext for tests that only care about a few of its fields —
-    telemetry accumulators (queue_stats, dropped_columns, row_errors,
-    llm_usage, llm_backend) always start empty via RunContext's own
-    defaults."""
+    """A RunContext for tests that only care about a few of its fields. `mode`
+    follows project scope: an `identity` (with its `stage_cache`) makes it a
+    production run, otherwise non-production. A stage's telemetry is reported on
+    its output frame's `.attrs`, not on the context, so there is nothing to seed
+    here."""
+    mode: RunMode = "production" if identity is not None else "non_production"
     return RunContext(
-        repo_root=repo_root, run_dir=run_dir, identity=identity, stage_cache=stage_cache,
+        mode=mode, repo_root=repo_root, run_dir=run_dir,
+        identity=identity, stage_cache=stage_cache,
         limits=dict(limits or {}), offsets=dict(offsets or {}),
     )

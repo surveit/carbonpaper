@@ -14,7 +14,7 @@ from app.models import Stage
 from app.models.stage import StageType
 from app.runtime.stages import HANDLERS
 from app.runtime.stages import llm_transform as lt
-from conftest import make_run_context
+from conftest import accumulation_of, make_run_context
 
 
 def _stage():
@@ -76,7 +76,7 @@ def test_backend_error_surfaces_as_row_error_not_raised(monkeypatch):
     ctx = make_run_context()
     out = _run(_stage(), {"load": pd.DataFrame({"id": ["r1"], "text": ["hi"]})}, ctx)
     assert len(out) == 1                                    # not raised; stage completes
-    assert ctx.row_errors["score"] == [{"row": 0, "message": "backend down"}]
+    assert accumulation_of(out).row_errors == [{"row": 0, "message": "backend down"}]
 
 
 def test_timeout_with_empty_message_is_captured_and_labeled(monkeypatch):
@@ -90,4 +90,4 @@ def test_timeout_with_empty_message_is_captured_and_labeled(monkeypatch):
     ctx = make_run_context()
     out = _run(_stage(), {"load": pd.DataFrame({"id": ["r1"], "text": ["hi"]})}, ctx)
     assert len(out) == 1                                    # not raised; stage completes
-    assert ctx.row_errors["score"] == [{"row": 0, "message": "TimeoutError"}]
+    assert accumulation_of(out).row_errors == [{"row": 0, "message": "TimeoutError"}]
