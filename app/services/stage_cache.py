@@ -7,11 +7,9 @@ the stage computes, `compute_row_fingerprint` identifies WHICH row it saw.
 Re-running the same stage definition against the same row resolves to the
 same cache entry, whether the run that first recorded it is long gone.
 
-The payload is generic: an `output_row` (or None as a tombstone, meaning the
-stage dropped that row), plus `provenance` audit fields the cache stores
-verbatim and never interprets. What the output MEANS — and any verdict or
-column vocabulary behind it — lives above this seam (app.services.review),
-never here.
+The payload is generic: an `output_row`, or None as a tombstone meaning the
+stage dropped that row. What the output MEANS — and any verdict or column
+vocabulary behind it — lives above this seam, never here.
 
 `StageCacheEntry` is the only PersistedModel carrying
 `SCOPE = PersistenceScope.PROJECT_READ_WRITE` (see app.core.persistence.PersistenceScope):
@@ -31,30 +29,10 @@ import math
 
 import numpy as np
 import pandas as pd
-from pydantic import BaseModel, ConfigDict
 
 from app.core.persistence import JsonDict, PersistedModel, PersistenceScope
 from app.core.run_status import RunMode
 from app.core.utils import compute_short_hash
-
-
-class CacheProvenance(BaseModel):
-    """Who or what produced a cache entry's output, and when — audit fields the
-    cache stores verbatim and never interprets. `note` is a free-form label the
-    writer attaches; the entry's meaning lives above this seam. Strict config
-    mirrors PersistedModel's own (app.core.persistence) exactly, so an embedded
-    record validates and serializes under the same rules as the document that
-    carries it."""
-    model_config = ConfigDict(
-        extra="forbid",
-        use_enum_values=True,
-        validate_default=True,
-        populate_by_name=True,
-    )
-
-    author: str
-    recorded_at: str
-    note: str
 
 
 class StageCacheEntry(PersistedModel):
@@ -76,10 +54,8 @@ class StageCacheEntry(PersistedModel):
     stage_id: str
     stage_fingerprint: str
     input_fingerprint: str
-    source_run_id: str
     frozen_input: JsonDict
     output_row: JsonDict | None
-    provenance: CacheProvenance
 
     @overload
     @classmethod
@@ -126,8 +102,8 @@ def to_json_safe_row(row: Mapping[str, object]) -> JsonDict:
     the number 1, not the string "1"), and any other non-JSON-native value (a
     pandas Timestamp, ...) is stringified — see `_to_json_native`, the
     `json.dumps` default. Preserving numbers as numbers matters because the
-    frozen row is read back as a stage's output (app.services.review), where a
-    stringified score would corrupt the numeric column it feeds."""
+    frozen row is read back as a stage's output, where a stringified score
+    would corrupt the numeric column it feeds."""
     canonical = {key: _collapse_null_forms(value) for key, value in row.items()}
     safe: JsonDict = json.loads(json.dumps(canonical, default=_to_json_native))
     return safe
@@ -205,7 +181,6 @@ class StageCache(ReadOnlyStageCache):
 
 
 __all__ = [
-    "CacheProvenance",
     "StageCacheEntry",
     "build_cache_id",
     "to_json_safe_row",

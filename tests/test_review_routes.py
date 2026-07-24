@@ -126,7 +126,7 @@ def _build_and_halt(tmp_path, monkeypatch):
 
 
 def _put_cached_decision(
-    project: str, stage_id: str, run_id: str,
+    project: str, stage_id: str,
     stage_fingerprint: str, input_fingerprint: str, row: pd.Series,
     decision: RowReviewDecision, modified_score: float | None = None,
 ) -> None:
@@ -135,7 +135,7 @@ def _put_cached_decision(
     write, or the HTTP endpoint (used by tests that only care about
     queue_page's rendering of an already-cached decision)."""
     review.record_decision(
-        project=project, stage_id=stage_id, run_id=run_id,
+        project=project, stage_id=stage_id,
         stage_fingerprint=stage_fingerprint, input_fingerprint=input_fingerprint,
         frozen_row={"id": row["id"], "quote": row["quote"], "score": int(row["score"])},
         verdict=decision, modified_score=modified_score,
@@ -151,7 +151,7 @@ def test_happy_path_renders_items_with_fingerprint_prior_decision_and_counts(tmp
     first_fp, second_fp = fingerprints["input_fingerprints"]
     first_row = snapshot.iloc[0]
     _put_cached_decision(
-        PROJECT, "review", run_id, fingerprints["stage_fingerprint"], first_fp,
+        PROJECT, "review", fingerprints["stage_fingerprint"], first_fp,
         first_row, RowReviewDecision.approve,
     )
 
@@ -224,19 +224,34 @@ def test_404_when_the_stage_id_is_not_a_human_review_queue_stage(tmp_path, monke
     assert r.status_code == 404
 
 
-# ── 5. queue_decide validation: unchanged (400s), unknown fingerprint 404s ──
+# ── 5. queue_decide validation: FastAPI 422s malformed input, ReviewValidation-
+#      Error 400s the modify-without-score domain rule, unknown fingerprint 404s ─
 
 
-def test_decide_400_on_unknown_decision(tmp_path, monkeypatch):
+def test_decide_422_on_unknown_decision(tmp_path, monkeypatch):
     _project_dir, run_id, _run_dir, _snapshot, fingerprints = _build_and_halt(tmp_path, monkeypatch)
     fp = fingerprints["input_fingerprints"][0]
 
     client = TestClient(app)
     r = client.post(
         f"/project/{PROJECT}/runs/{run_id}/queue/review/decide",
-        data={"input_fingerprint": fp, "decision": "shrug"},
+        data={"input_fingerprint": fp, "decision": "shrug"},  # not a RowReviewDecision value
     )
-    assert r.status_code == 400
+    assert r.status_code == 422  # FastAPI rejects the unknown enum value
+    assert not StageCacheEntry.list(prefix=f"{PROJECT}/review/")  # nothing written
+
+
+def test_decide_422_on_non_numeric_modified_score(tmp_path, monkeypatch):
+    _project_dir, run_id, _run_dir, _snapshot, fingerprints = _build_and_halt(tmp_path, monkeypatch)
+    fp = fingerprints["input_fingerprints"][0]
+
+    client = TestClient(app)
+    r = client.post(
+        f"/project/{PROJECT}/runs/{run_id}/queue/review/decide",
+        data={"input_fingerprint": fp, "decision": "modify", "modified_score": "not-a-number"},
+    )
+    assert r.status_code == 422  # FastAPI rejects the non-float modified_score
+    assert not StageCacheEntry.list(prefix=f"{PROJECT}/review/")  # nothing written
 
 
 def test_decide_400_when_modify_has_no_score(tmp_path, monkeypatch):

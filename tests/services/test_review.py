@@ -1,7 +1,7 @@
-"""Tests for app/services/review.py: the decision layer behind the reviewer
-web route — verdict validation (parse_verdict), cache writes (record_decision),
-and prior-decision loading (load_prior_decisions), all through the production
-stage-result cache accessor."""
+"""Tests for app/services/review.py: recording a reviewer verdict as a
+stage-result cache entry (record_decision), through the production
+stage-result cache accessor. The one domain rule — a `modify` carries a score —
+lives here; verdict/score coercion is FastAPI's job at the web boundary."""
 from __future__ import annotations
 
 import pytest
@@ -9,54 +9,47 @@ import pytest
 from app.core.errors import ReviewValidationError
 from app.models import RowReviewDecision
 from app.services import review
-from app.services.review import PriorDecision
+from app.services.stage_cache import StageCacheEntry, build_cache_id
 
 
-# ── parse_verdict ─────────────────────────────────────────────────────────────
-
-@pytest.mark.parametrize("verdict", ["approve", "reject"])
-def test_parse_verdict_non_modify_returns_verdict_and_no_score(verdict):
-    parsed, score = review.parse_verdict(verdict, None)
-    assert parsed == RowReviewDecision(verdict)
-    assert score is None
-
-
-def test_parse_verdict_modify_parses_the_numeric_score():
-    parsed, score = review.parse_verdict("modify", "99")
-    assert parsed == RowReviewDecision.modify
-    assert score == 99.0
-
-
-def test_parse_verdict_rejects_an_unknown_verdict():
-    with pytest.raises(ReviewValidationError):
-        review.parse_verdict("shrug", None)
-
-
-@pytest.mark.parametrize("bad_score", [None, "", "not-a-number"])
-def test_parse_verdict_rejects_modify_without_a_numeric_score(bad_score):
-    with pytest.raises(ReviewValidationError):
-        review.parse_verdict("modify", bad_score)
-
-
-# ── record_decision → load_prior_decisions ───────────────────────────────────
-
-def test_record_decision_then_load_prior_decisions_roundtrips():
+def test_record_decision_writes_the_output_row_the_modify_verdict_produces():
     review.record_decision(
-        project="proj", stage_id="review", run_id="run1",
+        project="proj", stage_id="review",
         stage_fingerprint="sf1", input_fingerprint="if1",
         frozen_row={"id": "a", "score": 1},
         verdict=RowReviewDecision.modify, modified_score=42.0,
         reviewer="local", reviewed_at="2026-07-22T10:00:00",
     )
 
-    prior = review.load_prior_decisions("proj", "review", "sf1")
-    assert set(prior) == {"if1"}
-    decision = prior["if1"]
-    assert isinstance(decision, PriorDecision)
-    assert decision.decision == "modify"
-    assert decision.modified_score == 42.0
-    assert decision.reviewer == "local"
-    assert decision.reviewed_at == "2026-07-22T10:00:00"
+    entry = StageCacheEntry.load(build_cache_id("proj", "review", "sf1", "if1"))
+    assert entry.output_row is not None
+    assert entry.output_row["decision"] == "modify"
+    assert entry.output_row["final_score"] == 42.0
+    assert entry.output_row["reviewer_id"] == "local"
+    assert entry.output_row["reviewed_at"] == "2026-07-22T10:00:00"
 
-    # A different stage_fingerprint scopes out this decision entirely.
-    assert review.load_prior_decisions("proj", "review", "sf-other") == {}
+
+def test_record_decision_reject_writes_a_tombstone():
+    review.record_decision(
+        project="proj", stage_id="review",
+        stage_fingerprint="sf1", input_fingerprint="if2",
+        frozen_row={"id": "b", "score": 1},
+        verdict=RowReviewDecision.reject, modified_score=None,
+        reviewer="local", reviewed_at="2026-07-22T10:00:00",
+    )
+
+    entry = StageCacheEntry.load(build_cache_id("proj", "review", "sf1", "if2"))
+    assert entry.output_row is None  # a reject drops the row
+
+
+def test_record_decision_rejects_modify_without_a_score():
+    with pytest.raises(ReviewValidationError):
+        review.record_decision(
+            project="proj", stage_id="review",
+            stage_fingerprint="sf1", input_fingerprint="if3",
+            frozen_row={"id": "c", "score": 1},
+            verdict=RowReviewDecision.modify, modified_score=None,
+            reviewer="local", reviewed_at="2026-07-22T10:00:00",
+        )
+    # Nothing was written for the rejected input.
+    assert StageCacheEntry.load_or_none(build_cache_id("proj", "review", "sf1", "if3")) is None
