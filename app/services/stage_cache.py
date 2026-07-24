@@ -17,8 +17,8 @@ the one deliberate channel that lets run activity write something that outlives
 the run. `for_mode` is the view that grants or withholds that write: a
 `RunMode.PRODUCTION` run gets `StageCache` (read + write); a
 `RunMode.NON_PRODUCTION` run — an eval or a smoke run *(planned)* — gets
-`ReadOnlyStageCache`, which structurally has no `put` method, so the capability
-is simply absent rather than gated by a flag or an exception.
+`ReadOnlyStageCache`, which structurally has no `record` method, so the
+capability is simply absent rather than gated by a flag or an exception.
 """
 from __future__ import annotations
 
@@ -37,14 +37,14 @@ from app.core.utils import compute_short_hash
 
 class StageCacheEntry(PersistedModel):
     """One cached stage output for one input key. `id` is
-    `build_cache_id(project, stage_id, stage_fingerprint, input_fingerprint)`.
+    `_build_cache_id(project, stage_id, stage_fingerprint, input_fingerprint)`.
     `output_row` is the stage's output for that key — an output row, or None as
     a tombstone (the stage dropped the row). `frozen_input` and `output_row`
     are the sanctioned dynamic boundary (app.core.persistence.JsonDict):
     arbitrary row shapes this module does not otherwise constrain. `frozen_input`
     is the exact upstream row the stage saw, kept for auditability, not for
-    hashing (the row's identity is `input_fingerprint`, computed once by the
-    caller via `compute_row_fingerprint` before the entry is built)."""
+    hashing: the row's identity is `input_fingerprint`, a value stored as given
+    rather than recomputed from `frozen_input`."""
 
     collection: ClassVar[str] = "stage_cache"
     SCOPE: ClassVar[PersistenceScope] = PersistenceScope.PROJECT_READ_WRITE
@@ -73,7 +73,7 @@ class StageCacheEntry(PersistedModel):
         return ReadOnlyStageCache()
 
 
-def build_cache_id(project: str, stage_id: str, stage_fingerprint: str, input_fingerprint: str) -> str:
+def _build_cache_id(project: str, stage_id: str, stage_fingerprint: str, input_fingerprint: str) -> str:
     """The composite store id for one cache entry:
     `<project>/<stage_id>/<stage_fingerprint>/<input_fingerprint>`."""
     return f"{project}/{stage_id}/{stage_fingerprint}/{input_fingerprint}"
@@ -94,9 +94,9 @@ def compute_row_fingerprint(row: Mapping[str, object]) -> str:
     return compute_short_hash(payload)
 
 
-def to_json_safe_row(row: Mapping[str, object]) -> JsonDict:
+def _to_json_safe_row(row: Mapping[str, object]) -> JsonDict:
     """`row` reduced to JSON-native types for storage as a `StageCacheEntry`'s
-    `frozen_input`: every null form collapses to JSON null (the same
+    `frozen_input` or `output_row`: every null form collapses to JSON null (the same
     `_collapse_null_forms` step `compute_row_fingerprint` hashes under), a numpy
     numeric scalar becomes its JSON-native Python equivalent (`np.int64(1)` ->
     the number 1, not the string "1"), and any other non-JSON-native value (a
@@ -110,7 +110,7 @@ def to_json_safe_row(row: Mapping[str, object]) -> JsonDict:
 
 
 def _to_json_native(value: object) -> object:
-    """`json.dumps` default for `to_json_safe_row`: a numpy scalar becomes its
+    """`json.dumps` default for `_to_json_safe_row`: a numpy scalar becomes its
     Python equivalent via `.item()` (so a numeric cell survives as a JSON
     number), keeping the result only when that equivalent is itself JSON-native;
     everything else — a pandas Timestamp, a numpy datetime, an arbitrary object
@@ -146,15 +146,15 @@ def _collapse_null_forms(value: object) -> object:
 
 class ReadOnlyStageCache:
     """Read-only view over the stage-result cache: `get` and `find_entries`
-    only. `put` is not defined here, so an instance of this class cannot write
-    a cache entry — the capability is structurally absent, not withheld by a
-    runtime check."""
+    only. `record` is not defined here, so an instance of this class cannot
+    write a cache entry — the capability is structurally absent, not withheld
+    by a runtime check."""
 
     def get(
         self, project: str, stage_id: str, stage_fingerprint: str, input_fingerprint: str
     ) -> StageCacheEntry | None:
         return StageCacheEntry.load_or_none(
-            build_cache_id(project, stage_id, stage_fingerprint, input_fingerprint)
+            _build_cache_id(project, stage_id, stage_fingerprint, input_fingerprint)
         )
 
     def find_entries(
@@ -168,22 +168,35 @@ class StageCache(ReadOnlyStageCache):
     """Read+write accessor over the stage-result cache — granted only to a
     production run via `StageCacheEntry.for_mode(RunMode.PRODUCTION)`."""
 
-    def put(self, entry: StageCacheEntry) -> None:
-        expected_id = build_cache_id(
-            entry.project, entry.stage_id, entry.stage_fingerprint, entry.input_fingerprint
-        )
-        if entry.id != expected_id:
-            raise ValueError(
-                f"StageCacheEntry.id {entry.id!r} does not match "
-                f"build_cache_id(...) of its own fields ({expected_id!r})"
-            )
-        entry.save()
+    def record(
+        self,
+        *,
+        project: str,
+        stage_id: str,
+        stage_fingerprint: str,
+        input_fingerprint: str,
+        input_row: Mapping[str, object],
+        output_row: Mapping[str, object] | None,
+    ) -> None:
+        """Build one cache entry from the given parts and save it. The id is
+        `_build_cache_id` of the four key parts; `input_row` and `output_row`
+        are each reduced to JSON-native types (`_to_json_safe_row`), with a
+        None `output_row` stored as a tombstone. `stage_fingerprint` and
+        `input_fingerprint` are stored exactly as passed — not recomputed from
+        `input_row`."""
+        StageCacheEntry(
+            id=_build_cache_id(project, stage_id, stage_fingerprint, input_fingerprint),
+            project=project,
+            stage_id=stage_id,
+            stage_fingerprint=stage_fingerprint,
+            input_fingerprint=input_fingerprint,
+            frozen_input=_to_json_safe_row(input_row),
+            output_row=None if output_row is None else _to_json_safe_row(output_row),
+        ).save()
 
 
 __all__ = [
     "StageCacheEntry",
-    "build_cache_id",
-    "to_json_safe_row",
     "compute_row_fingerprint",
     "ReadOnlyStageCache",
     "StageCache",

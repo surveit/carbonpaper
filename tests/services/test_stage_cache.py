@@ -3,6 +3,7 @@ cache — compute_row_fingerprint, StageCacheEntry, and its two accessors
 (StageCache read+write, ReadOnlyStageCache read-only)."""
 from __future__ import annotations
 
+import numpy as np
 import pandas as pd
 import pytest
 from pydantic import ValidationError
@@ -13,25 +14,9 @@ from app.services.stage_cache import (
     ReadOnlyStageCache,
     StageCache,
     StageCacheEntry,
-    build_cache_id,
+    _build_cache_id,
     compute_row_fingerprint,
 )
-
-
-def _entry(**overrides):
-    fields = {
-        "project": "proj",
-        "stage_id": "review",
-        "stage_fingerprint": "sf1",
-        "input_fingerprint": "if1",
-        "frozen_input": {"id": "r1", "score": 0.4},
-        "output_row": {"id": "r1", "score": 0.4, "final_score": 0.4},
-    }
-    fields.update(overrides)
-    fields["id"] = build_cache_id(
-        fields["project"], fields["stage_id"], fields["stage_fingerprint"], fields["input_fingerprint"]
-    )
-    return StageCacheEntry(**fields)
 
 
 # ── compute_row_fingerprint ──────────────────────────────────────────────────
@@ -59,10 +44,10 @@ def test_compute_row_fingerprint_guards_array_valued_cells():
     assert compute_row_fingerprint({"a": [1, 2, 3]}) == compute_row_fingerprint({"a": [1, 2, 3]})
 
 
-# ── build_cache_id ────────────────────────────────────────────────────────────
+# ── _build_cache_id ───────────────────────────────────────────────────────────
 
 def test_build_cache_id_joins_the_four_parts_with_slashes():
-    assert build_cache_id("proj", "stage1", "sf123", "if456") == "proj/stage1/sf123/if456"
+    assert _build_cache_id("proj", "stage1", "sf123", "if456") == "proj/stage1/sf123/if456"
 
 
 # ── old-shape entries fail loudly on load ────────────────────────────────────
@@ -72,7 +57,7 @@ def test_old_shape_entry_fails_loudly_on_load():
     # `output_row`. `extra="forbid"` rejects the extra keys and the missing
     # `output_row` field is required, so the load raises rather than silently
     # coercing a stale document.
-    old = {"id": build_cache_id("p", "review", "sf", "if"), "project": "p", "stage_id": "review",
+    old = {"id": _build_cache_id("p", "review", "sf", "if"), "project": "p", "stage_id": "review",
            "stage_fingerprint": "sf", "input_fingerprint": "if", "source_run_id": "r",
            "frozen_input": {"id": "a", "score": 1},
            "human": {"decision": "approve", "modified_score": None, "reviewer": "local",
@@ -84,13 +69,59 @@ def test_old_shape_entry_fails_loudly_on_load():
 
 # ── StageCache / ReadOnlyStageCache ──────────────────────────────────────────
 
-def test_stage_cache_put_then_get_roundtrips():
+def test_stage_cache_record_then_get_roundtrips():
     cache = StageCache()
-    cache.put(_entry())
+    cache.record(
+        project="proj", stage_id="review", stage_fingerprint="sf1", input_fingerprint="if1",
+        input_row={"id": "r1", "score": 0.4},
+        output_row={"id": "r1", "score": 0.4, "final_score": 0.4},
+    )
     got = cache.get("proj", "review", "sf1", "if1")
     assert got is not None
     assert got.output_row == {"id": "r1", "score": 0.4, "final_score": 0.4}
     assert got.frozen_input == {"id": "r1", "score": 0.4}
+
+
+def test_stage_cache_record_tombstone_stores_none_output():
+    cache = StageCache()
+    cache.record(
+        project="proj", stage_id="review", stage_fingerprint="sf1", input_fingerprint="ift",
+        input_row={"id": "r1", "score": 0.4}, output_row=None,
+    )
+    got = cache.get("proj", "review", "sf1", "ift")
+    assert got is not None
+    assert got.output_row is None
+
+
+def test_record_json_safes_both_rows():
+    # A raw row can carry numpy scalars; record stores JSON-native values so a
+    # numeric cell survives as a number, not a stringified one.
+    cache = StageCache()
+    cache.record(
+        project="proj", stage_id="review", stage_fingerprint="sf1", input_fingerprint="ifn",
+        input_row={"id": "r1", "score": np.int64(3)},
+        output_row={"id": "r1", "final_score": np.float64(4.5)},
+    )
+    got = cache.get("proj", "review", "sf1", "ifn")
+    assert got is not None
+    assert got.frozen_input == {"id": "r1", "score": 3}
+    assert got.output_row == {"id": "r1", "final_score": 4.5}
+
+
+def test_record_stores_under_the_passed_fingerprint_not_a_recomputed_one():
+    # The id is built from the passed input_fingerprint, never recomputed from
+    # input_row — a deliberately mismatched fingerprint proves it: the entry is
+    # retrievable under the passed fingerprint and absent under the row's own.
+    cache = StageCache()
+    row = {"id": "r1", "score": 0.4}
+    pinned = "pinned-fingerprint"
+    assert pinned != compute_row_fingerprint(row)
+    cache.record(
+        project="proj", stage_id="review", stage_fingerprint="sf1", input_fingerprint=pinned,
+        input_row=row, output_row={"id": "r1", "final_score": 0.4},
+    )
+    assert cache.get("proj", "review", "sf1", pinned) is not None
+    assert cache.get("proj", "review", "sf1", compute_row_fingerprint(row)) is None
 
 
 def test_stage_cache_get_missing_returns_none():
@@ -98,19 +129,15 @@ def test_stage_cache_get_missing_returns_none():
     assert cache.get("proj", "review", "sf1", "absent") is None
 
 
-def test_stage_cache_put_rejects_id_mismatch():
-    cache = StageCache()
-    entry = _entry()
-    entry.id = "wrong/id/here/nope"
-    with pytest.raises(ValueError):
-        cache.put(entry)
-
-
 def test_find_entries_scopes_by_stage_fingerprint_prefix():
     cache = StageCache()
-    cache.put(_entry(input_fingerprint="if1"))
-    cache.put(_entry(input_fingerprint="if2"))
-    cache.put(_entry(stage_fingerprint="sf-other", input_fingerprint="if3"))
+    output = {"id": "r1", "score": 0.4, "final_score": 0.4}
+    cache.record(project="proj", stage_id="review", stage_fingerprint="sf1",
+                 input_fingerprint="if1", input_row={"id": "r1"}, output_row=output)
+    cache.record(project="proj", stage_id="review", stage_fingerprint="sf1",
+                 input_fingerprint="if2", input_row={"id": "r1"}, output_row=output)
+    cache.record(project="proj", stage_id="review", stage_fingerprint="sf-other",
+                 input_fingerprint="if3", input_row={"id": "r1"}, output_row=output)
     found = cache.find_entries("proj", "review", "sf1")
     assert {e.input_fingerprint for e in found} == {"if1", "if2"}
 
@@ -122,8 +149,8 @@ def test_for_mode_production_returns_a_writable_cache():
     assert isinstance(accessor, StageCache)
 
 
-def test_for_mode_non_production_returns_a_read_only_view_without_put():
+def test_for_mode_non_production_returns_a_read_only_view_without_record():
     accessor = StageCacheEntry.for_mode(RunMode.NON_PRODUCTION)
     assert isinstance(accessor, ReadOnlyStageCache)
     assert not isinstance(accessor, StageCache)
-    assert not hasattr(accessor, "put")
+    assert not hasattr(accessor, "record")
