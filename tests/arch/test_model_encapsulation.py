@@ -117,7 +117,18 @@ _RULES: tuple[ProtectedAttributeRule, ...] = (
         # (`d.stages = kept + [stage]`) would hard-fail the mutation check,
         # which has no allowlist to absorb it. Draft's stages never belonged
         # in this row.
-        exempt_paths=frozenset({_REPO_ROOT / "app" / "services" / "drafts.py"}),
+        # app/runtime/manifest.py's `RunManifest` is likewise a SEPARATE Pydantic
+        # model with its own `stages: list[StageRecord]` field (the run's live
+        # record — see the module docstring), whose sole lifecycle manager is that
+        # module: its `settle_stages` method assigns `self.stages` when the executor
+        # hands back the settled records. Name-based matching can't tell
+        # `manifest.stages` (RunManifest) from `workflow.stages` (Workflow) apart, so
+        # this legitimate self-mutation is exempted exactly as Draft's is. RunManifest's
+        # stages never belonged in this row.
+        exempt_paths=frozenset({
+            _REPO_ROOT / "app" / "services" / "drafts.py",
+            _REPO_ROOT / "app" / "runtime" / "manifest.py",
+        }),
     ),
 )
 

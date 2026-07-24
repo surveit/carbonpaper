@@ -33,6 +33,8 @@ def write_run(tmp_path: Path, stages: list[dict], run_id: str = "T1") -> Path:
         records.append({
             "stage_id": spec["id"],
             "type": spec["type"],
+            "name": spec["id"],
+            "status": "ok",
             "rows": len(spec["df"]),
             "output_path": rel,
             "input_validation": [
@@ -40,7 +42,9 @@ def write_run(tmp_path: Path, stages: list[dict], run_id: str = "T1") -> Path:
             ],
         })
     (run_dir / "manifest.json").write_text(
-        json.dumps({"run_id": run_id, "stages": records}), encoding="utf-8"
+        json.dumps({"run_id": run_id, "started_at": run_id, "project": tmp_path.parent.name,
+                    "workflow_version": run_id, "status": "ok", "stages": records}),
+        encoding="utf-8",
     )
     return run_dir
 

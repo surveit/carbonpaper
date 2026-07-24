@@ -34,7 +34,9 @@ def _write_manifest(examples_dir: Path, status: str) -> Path:
     run_dir = examples_dir / PROJ / "runs" / RUN
     run_dir.mkdir(parents=True, exist_ok=True)
     (run_dir / "manifest.json").write_text(
-        json.dumps({"run_id": RUN, "status": status, "stages": []}), encoding="utf-8"
+        json.dumps({"run_id": RUN, "started_at": RUN, "project": PROJ,
+                    "workflow_version": RUN, "status": status, "stages": []}),
+        encoding="utf-8",
     )
     return run_dir
 
@@ -76,9 +78,11 @@ def _write_status_manifest(examples_dir: Path, stage_statuses: list[tuple[str, s
     for exercising run_status's per-status counts."""
     run_dir = examples_dir / PROJ / "runs" / RUN
     run_dir.mkdir(parents=True, exist_ok=True)
-    stages = [{"stage_id": sid, "status": status} for sid, status in stage_statuses]
+    stages = [{"stage_id": sid, "type": "input_data", "name": sid, "status": status}
+              for sid, status in stage_statuses]
     (run_dir / "manifest.json").write_text(
-        json.dumps({"run_id": RUN, "status": "cancelled", "stages": stages}),
+        json.dumps({"run_id": RUN, "started_at": RUN, "project": PROJ,
+                    "workflow_version": RUN, "status": "cancelled", "stages": stages}),
         encoding="utf-8",
     )
     return run_dir

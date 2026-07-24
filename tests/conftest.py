@@ -18,21 +18,20 @@ import pandas as pd
 import pytest
 
 from app.runtime.context import (
-    ACCUMULATION_ATTR,
     RunContext,
     RunIdentity,
     RunMode,
-    StageAccumulation,
 )
+from app.runtime.manifest import CONTRIBUTION_ATTR, StageContribution
 from app.core.stage_cache import ReadOnlyStageCache
 
 
-def accumulation_of(frame: pd.DataFrame) -> StageAccumulation:
-    """The StageAccumulation a handler attached to its output frame's `.attrs`.
+def contribution_of(frame: pd.DataFrame) -> StageContribution:
+    """The StageContribution a handler attached to its output frame's `.attrs`.
     A handler reports its usage/errors/dropped-columns/queue tallies here (the
-    executor drains it into the manifest), so a direct-handler test reads them
+    executor merges it into the manifest), so a direct-handler test reads them
     off the returned frame rather than off the context."""
-    return frame.attrs[ACCUMULATION_ATTR]
+    return frame.attrs[CONTRIBUTION_ATTR]
 
 
 @pytest.fixture(autouse=True)

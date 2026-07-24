@@ -3,7 +3,7 @@ never allowed to leak into stage output.
 
 The chain: call_llm reports per-attempt usage through a `usage_out` sink ->
 the llm_transform mapper attaches the row's summed usage under ROW_USAGE_KEY ->
-the row driver sums those onto the stage's StageAccumulation AND the projection
+the row driver sums those onto the stage's StageContribution AND the projection
 drops the hidden column -> the executor drains that usage onto the stage's
 manifest record. The stage panel renders it.
 """
@@ -16,7 +16,7 @@ from app.core.agent.usage import LlmUsage
 from app.models import Stage
 from app.models.stage import StageType
 from app.runtime.stages import HANDLERS
-from conftest import accumulation_of, make_run_context
+from conftest import contribution_of, make_run_context
 
 
 def test_summed_adds_fields_and_counts_calls():
@@ -71,7 +71,7 @@ def test_row_usage_sums_across_rows_into_ctx(monkeypatch):
     ctx = make_run_context()
     out = HANDLERS[StageType.llm_transform].execute(
         _llm_stage(), {"load": pd.DataFrame({"id": ["r1", "r2", "r3"], "text": ["a", "b", "c"]})}, ctx)
-    assert accumulation_of(out).llm_usage == LlmUsage(
+    assert contribution_of(out).llm_usage == LlmUsage(
         input_tokens=30, output_tokens=12, cost_usd=0.003, calls=3)
 
 
@@ -134,5 +134,5 @@ def test_failed_row_still_records_the_tokens_it_spent(monkeypatch):
     ctx = make_run_context()
     out = HANDLERS[StageType.llm_transform].execute(
         _llm_stage(), {"load": pd.DataFrame({"id": ["r1"], "text": ["a"]})}, ctx)
-    assert accumulation_of(out).llm_usage == LlmUsage(
+    assert contribution_of(out).llm_usage == LlmUsage(
         input_tokens=8, output_tokens=0, cost_usd=0.0005, calls=1)

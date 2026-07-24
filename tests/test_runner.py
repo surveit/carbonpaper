@@ -22,6 +22,7 @@ from app.core.errors import NoVersionToRunError, SubsetRunError
 from app.models import Stage, Workflow
 from app.runtime.runner import execute_run, resume_run
 from app.runtime.executor import _raise_if_run_failed, run_subset
+from app.runtime.manifest import RunManifest
 from app.runtime.stages import llm_transform as lt
 from app.services.loader import WorkflowLoadError
 from app.services import versioning
@@ -314,11 +315,12 @@ def test_raise_if_run_failed_lists_halted_stages_as_readable_text():
     """`halted_at` is a list of stage ids (see app/runtime/runner.py's
     _execute_stages). _raise_if_run_failed's message must read them out
     comma-joined, not as Python's list repr (`['review_a', 'review_b']`)."""
-    manifest = {
-        "status": "awaiting_review",
-        "halted_at": ["review_a", "review_b"],
-        "stages": [],
-    }
+    manifest = RunManifest(
+        run_id="r", started_at="t", project=None, workflow_version=None,
+        limit_overrides={}, offset_overrides={}, run_bindings={}, input_bindings={},
+        queue_stats={}, dropped_columns={}, status="awaiting_review",
+        stages=[], halted_at=["review_a", "review_b"],
+    )
 
     with pytest.raises(SubsetRunError) as exc_info:
         _raise_if_run_failed(manifest)
@@ -466,7 +468,8 @@ def test_resume_reapplies_run_bindings_for_a_pending_input_stage(tmp_path):
     run_dir = tmp_path / "runs" / run_id
     (run_dir / "outputs").mkdir(parents=True)
     manifest = {
-        "run_id": run_id, "project": tmp_path.name, "workflow_version": version_id,
+        "run_id": run_id, "started_at": run_id, "project": tmp_path.name,
+        "workflow_version": version_id,
         "status": "awaiting_review",
         "run_bindings": {"load": {"path": str(bound_csv)}},
         "input_bindings": {

@@ -15,7 +15,7 @@ tolerated, or if the retry didn't actually re-call the model.
 from __future__ import annotations
 
 import pandas as pd
-from conftest import accumulation_of, make_run_context
+from conftest import contribution_of, make_run_context
 
 from app.models import Stage
 from app.models.stage import StageType
@@ -74,7 +74,7 @@ def test_matched_by_row_number_not_reply_order(monkeypatch):
         {"row_number": 1, "label": "L1"}]})
     assert list(out["post_id"]) == ["a", "b", "c"]         # input order preserved
     assert labels == {"a": "L0", "b": "L1", "c": "L2"}     # matched by number, not position
-    assert not accumulation_of(out).row_errors
+    assert not contribution_of(out).row_errors
 
 
 def test_missing_number_fails_whole_chunk(monkeypatch):
@@ -83,7 +83,7 @@ def test_missing_number_fails_whole_chunk(monkeypatch):
     out, labels, ctx = _run(monkeypatch, lambda *a, **k: {"results": [
         {"row_number": 0, "label": "L0"}, {"row_number": 2, "label": "L2"}]})
     assert all(pd.isna(v) for v in labels.values())        # nothing trusted
-    errors = accumulation_of(out).row_errors
+    errors = contribution_of(out).row_errors
     assert [e["row"] for e in errors] == [0, 1, 2]         # every row flagged
     assert "missing=[1]" in errors[0]["message"]
 
@@ -95,7 +95,7 @@ def test_extra_unknown_number_fails_whole_chunk(monkeypatch):
         {"row_number": 0, "label": "L0"}, {"row_number": 1, "label": "L1"},
         {"row_number": 2, "label": "L2"}, {"row_number": 3, "label": "Lz"}]})
     assert all(pd.isna(v) for v in labels.values())
-    errors = accumulation_of(out).row_errors
+    errors = contribution_of(out).row_errors
     assert [e["row"] for e in errors] == [0, 1, 2]
     assert "unknown=[3]" in errors[0]["message"]
 
@@ -107,7 +107,7 @@ def test_duplicate_number_same_length_fails_whole_chunk(monkeypatch):
         {"row_number": 0, "label": "L0"}, {"row_number": 0, "label": "L0-DUP"},
         {"row_number": 2, "label": "L2"}]})
     assert all(pd.isna(v) for v in labels.values())
-    msg = accumulation_of(out).row_errors[0]["message"]
+    msg = contribution_of(out).row_errors[0]["message"]
     assert "duplicate=[0]" in msg and "missing=[1]" in msg
 
 
@@ -129,7 +129,7 @@ def test_anomaly_is_thrown_back_and_recovers_on_retry(monkeypatch):
     out, labels, ctx = _run(monkeypatch, fake, max_retries=1)
     assert calls["n"] == 2                                 # it re-called the model
     assert labels == {"a": "L0", "b": "L1", "c": "L2"}     # recovered
-    assert not accumulation_of(out).row_errors
+    assert not contribution_of(out).row_errors
 
 
 def test_grain_and_order_preserved_across_chunks(monkeypatch):
@@ -137,4 +137,4 @@ def test_grain_and_order_preserved_across_chunks(monkeypatch):
     # rows, in input order.
     out, labels, ctx = _run(monkeypatch, _clean, batch_size=2)
     assert list(out["post_id"]) == ["a", "b", "c"]         # count + order preserved
-    assert not accumulation_of(out).row_errors
+    assert not contribution_of(out).row_errors

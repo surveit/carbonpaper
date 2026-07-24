@@ -35,10 +35,15 @@ def _write_run(
         df.to_csv(run_dir / output_rel, index=False)
     manifest = {
         "run_id": RUN,
-        "status": "complete",
+        "started_at": RUN,
+        "project": PROJ,
+        "workflow_version": RUN,
+        "status": "ok",
         "stages": [
             {
                 "stage_id": STAGE,
+                "type": "input_data",
+                "name": STAGE,
                 "status": "ok",
                 "rows": len(df),
                 "output_path": output_rel,
