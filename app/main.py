@@ -26,6 +26,7 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from starlette.routing import Route
 
+from app.core.frames import FrameStore, configure_frame_store, is_frame_store_configured
 from app.core.persistence import SqliteKvStore, configure_store, is_store_configured
 from app.seeds.seed import seed_demo_data_if_enabled
 from app.web.config import STATIC_DIR
@@ -49,6 +50,14 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         db_path = os.environ.get("CW_DB_PATH", "data/app.db")
         Path(db_path).parent.mkdir(parents=True, exist_ok=True)
         configure_store(SqliteKvStore(db_path))
+    # The frame store is the tabular counterpart, holding the cross-run payloads
+    # that outlive a run (today: the stage-result cache's whole-frame outputs).
+    # Same guard so a pre-configured store (the test suite's tmp-dir fixture)
+    # wins over the on-disk default.
+    if not is_frame_store_configured():
+        frames_path = os.environ.get("CW_FRAMES_PATH", "data/frames")
+        Path(frames_path).mkdir(parents=True, exist_ok=True)
+        configure_frame_store(FrameStore(Path(frames_path)))
     # Opt-in demo data: CW_SEED_DEMO=1 seeds the committed example bundles into
     # the workspace (seed-if-absent, never destructive); a normal boot leaves
     # this env var unset, so it does nothing. All seeding logic lives in

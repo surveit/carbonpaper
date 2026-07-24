@@ -32,6 +32,15 @@ def fresh_store():
 
 
 @pytest.fixture(autouse=True)
+def fresh_frame_store(tmp_path):
+    """A fresh, isolated frame store per test — the tabular counterpart to
+    `fresh_store`, rooted under this test's own tmp dir so the stage-result
+    cache's whole-frame payloads never leak between tests or touch on disk."""
+    from app.core.frames import FrameStore, configure_frame_store
+    configure_frame_store(FrameStore(tmp_path / "frame_store"))
+
+
+@pytest.fixture(autouse=True)
 def reset_cancellation_registry():
     """The cancel registry is process-global and production never removes keys
     (see app.runtime.cancellation), so reset it around each test to keep runs

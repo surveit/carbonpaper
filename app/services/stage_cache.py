@@ -27,9 +27,16 @@ import math
 import pandas as pd
 from pydantic import BaseModel, ConfigDict
 
+from app.core.frames import get_frame_store
 from app.core.persistence import JsonDict, PersistedModel, PersistenceScope
 from app.core.utils import compute_short_hash
 from app.models import RowReviewDecision
+
+# The frame-store collection the whole-frame payloads live under. A cached
+# python_frame_function output is too big to inline in a `StageCacheEntry`
+# document, so it goes through the frame seam (app.core.frames.FrameStore),
+# keyed by the SAME `build_cache_id` as a document entry would be.
+STAGE_CACHE_FRAMES_COLLECTION = "stage_cache_frames"
 
 
 class CacheMode(str, Enum):
@@ -116,6 +123,30 @@ def compute_row_fingerprint(row: Mapping[str, object]) -> str:
     return compute_short_hash(payload)
 
 
+def compute_frame_fingerprint(frame: pd.DataFrame) -> str:
+    """`compute_short_hash` over the WHOLE frame's content — the input identity
+    of a whole-frame stage (`python_frame_function`), which sees the entire
+    frame at once rather than one row. Every cell is canonicalized the same way
+    `compute_row_fingerprint` canonicalizes one row cell (`_collapse_null_forms`
+    maps every pandas null form to JSON null, so a parquet round trip can't
+    shift the frame's identity), and BOTH column order and row order are part of
+    the payload: a whole-frame transform may index positionally or depend on
+    row order, so a reordering is a genuinely different input that must resolve
+    to a different key rather than a stale cache hit. `sort_keys=True` makes the
+    per-cell dict key order irrelevant; the ordered `columns` list carries the
+    column order separately, and the ordered `rows` list carries the row order."""
+    columns = [str(c) for c in frame.columns]
+    rows = [
+        {column: _collapse_null_forms(value) for column, value in zip(columns, record)}
+        for record in frame.itertuples(index=False, name=None)
+    ]
+    payload = json.dumps(
+        {"columns": columns, "rows": rows},
+        sort_keys=True, separators=(",", ":"), default=str,
+    )
+    return compute_short_hash(payload)
+
+
 def to_json_safe_row(row: Mapping[str, object]) -> JsonDict:
     """`row` reduced to JSON-native types for storage as a `StageCacheEntry`'s
     `frozen_input`: every null form collapses to JSON null (the same
@@ -169,10 +200,44 @@ class ReadOnlyStageCache:
         prefix = f"{project}/{stage_id}/{stage_fingerprint}/"
         return StageCacheEntry.list(prefix=prefix)
 
+    def get_frame(
+        self, project: str, stage_id: str, stage_fingerprint: str, input_fingerprint: str
+    ) -> pd.DataFrame | None:
+        """The cached whole-frame payload for `(stage definition, whole input)`,
+        or None on a miss. The frame is the entry — a whole-frame stage caches
+        its entire output frame under one key over its entire input, stored
+        through the frame seam (`app.core.frames.FrameStore`) rather than inline
+        in a document, because a frame is too big to carry as a document field.
+        Reading is available to every accessor, read-only or not; only writing
+        (`StageCache.put_frame`) is withheld from a non-production run."""
+        return get_frame_store().load_frame(
+            STAGE_CACHE_FRAMES_COLLECTION,
+            build_cache_id(project, stage_id, stage_fingerprint, input_fingerprint),
+        )
+
 
 class StageCache(ReadOnlyStageCache):
     """Read+write accessor over the stage-result cache — granted only to a
     production run via `StageCacheEntry.for_mode(CacheMode.PRODUCTION)`."""
+
+    def put_frame(
+        self,
+        project: str,
+        stage_id: str,
+        stage_fingerprint: str,
+        input_fingerprint: str,
+        frame: pd.DataFrame,
+    ) -> None:
+        """Write a whole-frame stage's output `frame` into the cache under
+        `build_cache_id(...)` — the sole write channel for a cached frame
+        payload, structurally absent on `ReadOnlyStageCache` exactly as `put`
+        is. The payload goes through the frame seam, keyed identically to how
+        `get_frame` reads it back."""
+        get_frame_store().save_frame(
+            STAGE_CACHE_FRAMES_COLLECTION,
+            build_cache_id(project, stage_id, stage_fingerprint, input_fingerprint),
+            frame,
+        )
 
     def put(self, entry: StageCacheEntry) -> None:
         expected_id = build_cache_id(
@@ -190,9 +255,11 @@ __all__ = [
     "CacheMode",
     "HumanDecision",
     "StageCacheEntry",
+    "STAGE_CACHE_FRAMES_COLLECTION",
     "build_cache_id",
     "to_json_safe_row",
     "compute_row_fingerprint",
+    "compute_frame_fingerprint",
     "ReadOnlyStageCache",
     "StageCache",
 ]

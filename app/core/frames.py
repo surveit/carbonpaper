@@ -46,3 +46,27 @@ class FrameStore:
 
     def delete(self, collection: str, id: str) -> None:
         self._path(collection, id).unlink(missing_ok=True)
+
+
+_frame_store: FrameStore | None = None
+
+
+def configure_frame_store(store: FrameStore) -> None:
+    """Install the process-wide frame store — the tabular counterpart to
+    `app.core.persistence.configure_store`. App startup calls this once with a
+    FrameStore rooted at CW_FRAMES_PATH (default `data/frames`); each test
+    installs one rooted at a fresh tmp dir. It holds the cross-run tabular
+    payloads that outlive a single run — today, the stage-result cache's
+    whole-frame outputs (`app.services.stage_cache`)."""
+    global _frame_store
+    _frame_store = store
+
+
+def get_frame_store() -> FrameStore:
+    if _frame_store is None:
+        raise RuntimeError("frame store not configured; call configure_frame_store() first")
+    return _frame_store
+
+
+def is_frame_store_configured() -> bool:
+    return _frame_store is not None
