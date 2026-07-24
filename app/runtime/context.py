@@ -19,7 +19,7 @@ from typing import TypedDict
 
 from app.core.agent.usage import LlmUsage
 from app.core.run_status import RunMode
-from app.services.stage_cache import ReadOnlyStageCache, StageCacheEntry
+from app.core.stage_cache import ReadOnlyStageCache, StageCacheEntry
 
 from .llm import LlmBackendStatus
 

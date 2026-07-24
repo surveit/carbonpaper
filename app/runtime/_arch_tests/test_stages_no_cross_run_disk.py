@@ -1,5 +1,5 @@
 """Architecture: run activity holds no project-scope write capability of its
-own; the cache seam's accessors (`app.services.stage_cache`) are the only
+own; the cache seam's accessors (`app.core.stage_cache`) are the only
 channel a stage handler may use to persist something that outlives its own
 run. `run_dir` writes (the per-run manifest, stage outputs, the pending-queue
 snapshot) remain legitimate — those are the run's OWN directory, not

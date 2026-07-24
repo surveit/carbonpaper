@@ -20,7 +20,7 @@ from app.runtime.stages.execution import (
     SourceHandler,
     validate_registry_matches_model,
 )
-from app.services.stage_cache import StageCacheEntry
+from app.core.stage_cache import StageCacheEntry
 from conftest import make_run_context
 
 

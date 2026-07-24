@@ -11,7 +11,7 @@ import pytest
 
 from app.core.run_status import RunMode
 from app.runtime.context import RunContext, RunIdentity
-from app.services.stage_cache import StageCacheEntry
+from app.core.stage_cache import StageCacheEntry
 
 
 def _make(**overrides: object) -> RunContext:

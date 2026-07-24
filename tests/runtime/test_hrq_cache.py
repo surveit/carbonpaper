@@ -1,7 +1,7 @@
 """Behavior tests for handle_human_review_queue's cache-backed decision
 matching (app/runtime/stages/human_review_queue.py): a queued row is matched
 to a prior human decision by fingerprinting the row and the stage definition
-(app.services.stage_cache), never by re-reading a legacy decisions/*.parquet
+(app.core.stage_cache), never by re-reading a legacy decisions/*.parquet
 file. Every entry these tests seed goes through the seam (`StageCache.put`),
 never a raw store write.
 
@@ -23,7 +23,7 @@ from app.runtime.errors import HaltForReview
 from app.runtime.runner import prepare_run, run_prepared
 from app.runtime.stages.human_review_queue import handle_human_review_queue
 from app.services import review, versioning
-from app.services.stage_cache import StageCache, compute_row_fingerprint
+from app.core.stage_cache import StageCache, compute_row_fingerprint
 from app.services.versioning import create_version_from_disk
 from conftest import make_run_context
 

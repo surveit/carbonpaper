@@ -4,7 +4,7 @@ from app.runtime.context import RunIdentity
 from app.runtime.stages.human_review_queue import handle_human_review_queue
 from app.core.run_status import RunMode
 from app.models import Stage
-from app.services.stage_cache import StageCacheEntry
+from app.core.stage_cache import StageCacheEntry
 from conftest import make_run_context
 
 

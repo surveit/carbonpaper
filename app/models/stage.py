@@ -316,7 +316,7 @@ class RowReviewDecision(str, Enum):
 
 class QueueConfig(_Base):
     """human_review_queue handle. A queued row is matched to a cached human
-    decision by fingerprinting the row itself (app.services.stage_cache) — no
+    decision by fingerprinting the row itself (app.core.stage_cache) — no
     column configuration is needed to enable that matching."""
     # `filter`/`reviewer_instructions` change what the human is asked; routing,
     # conflict_resolution, and estimated_volume_per_week describe how a

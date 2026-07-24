@@ -1,7 +1,7 @@
 """Behavior tests for the reviewer web routes (app/web/routers/review.py):
 `queue_page` (GET) and `queue_decide` (POST) for one human_review_queue stage.
 
-Both routes go through the stage-result cache (app.services.stage_cache),
+Both routes go through the stage-result cache (app.core.stage_cache),
 never a `decisions/*.parquet` file: `queue_page`'s prior decisions come from
 `StageCacheEntry.find_entries`, and `queue_decide` writes a `StageCacheEntry`
 via `StageCache.record`. Projects are built on disk and run through the real
@@ -29,7 +29,7 @@ from app.runtime.runner import prepare_run, run_prepared
 from app.runtime.stages import llm_transform as lt
 from app.core.run_status import RunMode
 from app.services import review, versioning
-from app.services.stage_cache import StageCacheEntry
+from app.core.stage_cache import StageCacheEntry
 from app.services.versioning import create_version_from_disk
 from app.models import RowReviewDecision
 
