@@ -67,7 +67,7 @@ def test_mcp_lists_the_authoring_tools(client):
         "edit_stage",
         "add_stage",
         "generate_stage_tests",
-        "run_tests",
+        "run_stage_tests",
     } <= names
 
 
@@ -123,7 +123,7 @@ _DOUBLE = "def transform(row):\n    return {**row, 'doubled': row['amount'] * 2}
 def _write_compiled_workflow(pdir: Path) -> None:
     """A minimal 3-stage compiled workflow: an input_data source, a
     python_row_function with one passing + one failing test, and an untested
-    python transform (the coverage gap run_tests should surface)."""
+    python transform (the coverage gap run_stage_tests should surface)."""
     from app.services.loader import write_stage
 
     compiled = pdir / "compiled"
@@ -148,7 +148,7 @@ def _write_compiled_workflow(pdir: Path) -> None:
         write_stage(compiled / f"{spec['id']}.json", Stage.model_validate(spec))
 
 
-def test_run_tests_reports_summary_diffs_and_coverage(tmp_path, monkeypatch):
+def test_run_stage_tests_reports_summary_diffs_and_coverage(tmp_path, monkeypatch):
     from app.mcp import server
     from app.services import workspace
 
@@ -156,7 +156,7 @@ def test_run_tests_reports_summary_diffs_and_coverage(tmp_path, monkeypatch):
     pdir = tmp_path / "trail"
     _write_compiled_workflow(pdir)
 
-    report = server.run_tests(project_id="trail")
+    report = server.run_stage_tests(project_id="trail")
     assert set(report) == {"summary", "stages", "untested_python_stages"}
     assert report["untested_python_stages"] == ["untested"]
     assert report["summary"]["failed"] == 1
@@ -166,7 +166,7 @@ def test_run_tests_reports_summary_diffs_and_coverage(tmp_path, monkeypatch):
     assert failing["diffs"][0]["column"] == "doubled"
 
 
-def test_run_tests_scopes_to_one_stage(tmp_path, monkeypatch):
+def test_run_stage_tests_scopes_to_one_stage(tmp_path, monkeypatch):
     from app.mcp import server
     from app.services import workspace
 
@@ -174,7 +174,7 @@ def test_run_tests_scopes_to_one_stage(tmp_path, monkeypatch):
     pdir = tmp_path / "trail"
     _write_compiled_workflow(pdir)
 
-    report = server.run_tests(project_id="trail", stage_id="double")
+    report = server.run_stage_tests(project_id="trail", stage_id="double")
     assert report["summary"]["tests_total"] == 2
 
 

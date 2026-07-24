@@ -23,7 +23,7 @@ import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
 
-import app.web.routers.runs as runs_router
+import app.services.run as run_service
 from app.main import app
 from app.services.project import create_project
 from app.services.versioning import list_versions
@@ -119,7 +119,7 @@ def journey_project(tmp_path, monkeypatch):
     _point_examples_dir_at(monkeypatch, tmp_path)
     # Run synchronously: the background thread is not the seam under test, and
     # the poll loop it exists for would only slow this test down.
-    monkeypatch.setattr(runs_router, "run_in_background", lambda target, *args: target(*args))
+    monkeypatch.setattr(run_service, "_run_in_background", lambda target, *args: target(*args))
 
     authored = tmp_path / "authored.csv"
     pd.DataFrame({"name": ["a", "b"], "val": [1, 2]}).to_csv(authored, index=False)

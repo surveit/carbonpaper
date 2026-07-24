@@ -25,7 +25,7 @@ import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
 
-import app.web.routers.runs as runs_router
+import app.services.run as run_service
 from app.main import app
 from app.services.project import create_project
 from app.services.versioning import list_versions
@@ -91,7 +91,7 @@ def test_live_llm_journey_reaches_a_published_artifact(live_project, tmp_path):
 @pytest.fixture
 def live_project(tmp_path, monkeypatch):
     _point_examples_dir_at(monkeypatch, tmp_path)
-    monkeypatch.setattr(runs_router, "run_in_background", lambda target, *args: target(*args))
+    monkeypatch.setattr(run_service, "_run_in_background", lambda target, *args: target(*args))
 
     source = tmp_path / "claims.csv"
     frame = pd.DataFrame({

@@ -64,6 +64,22 @@ class SubsetRunError(Exception):
     eval runner translate it into their own outcome, e.g. an `error` eval run.)"""
 
 
+class NoWorkflowTestSourceError(Exception):
+    """A workflow test was requested on a workflow with no input_data stage to
+    sample from — there is no bound source to slice a preview off, so nothing can
+    be seeded and the frontier cannot run. Raised (loudly) rather than
+    workflow-testing an empty injection that every downstream stage would then
+    error on."""
+
+
+class NoWorkflowTestVersionError(Exception):
+    """A workflow test was requested on a project with no stored workflow version
+    to sample against. Unlike a production run (which pins a PUBLISHED version), a
+    workflow test accepts any stored immutable version — but there must be at least
+    one. Raised (loudly, naming the project) rather than falling back to the
+    working copy or fabricating a version."""
+
+
 class LLMError(Exception):
     """A live-LLM call failed, or no LLM backend is available."""
 
@@ -97,6 +113,13 @@ class MissingInputBindingError(Exception):
     exist. Raised before the run directory is created — a run never starts on
     inputs that would have to be guessed. The message names every unready
     stage."""
+
+
+class RunNotFoundError(Exception):
+    """No run exists for a (project, run_id): the run directory has no
+    manifest.json — a bad/expired run id, not an internal fault. Raised (loudly)
+    by the run service's status read rather than returning an empty or fabricated
+    manifest for a run that never happened."""
 
 
 class PredicateError(ValueError):

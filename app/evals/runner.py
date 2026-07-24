@@ -85,7 +85,8 @@ def _score_run(
     try:
         outputs = run_subset(
             workflow, stage_ids=settings.frontier, run_dir=run_dir, repo_root=repo_root,
-            injected_outputs=_build_injected_outputs(repo_root, config, override, target, dataset))
+            injected_outputs=_build_injected_outputs(repo_root, config, override, target, dataset),
+            project=project_dir.name, workflow_version=version)
         score = score_expected_outputs(config, override, target, dataset,
                                        outputs[config.target_stage])
     except (SubsetRunError, EvalGrainViolationError) as exc:

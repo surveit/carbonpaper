@@ -14,6 +14,13 @@ from typing import Any
 from app.services import node_review
 from app.services.loader import load_compiled_dir, stage_to_spec_dict
 
+# The repository root — the base file connectors and table refs resolve relative
+# paths against. This module (app/services/workspace.py) is two parents below the
+# root. Owned here so the run seams (app.services.run / app.services.workflow_test)
+# share ONE derivation of it instead of each re-deriving `parents[2]`; app.web
+# derives its own copy for the web layer's non-run uses.
+REPO_ROOT = Path(__file__).resolve().parents[2]
+
 # The projects storage root, defined once: examples/<name>/ working copies live
 # here. Both app.services and app.web read it; app.web.config re-exports it.
 # CW_EXAMPLES_DIR overrides the default — used to point the workspace at a temp
@@ -23,8 +30,15 @@ from app.services.loader import load_compiled_dir, stage_to_spec_dict
 EXAMPLES_DIR = (
     Path(os.environ["CW_EXAMPLES_DIR"])
     if os.environ.get("CW_EXAMPLES_DIR")
-    else Path(__file__).resolve().parents[2] / "examples"
+    else REPO_ROOT / "examples"
 )
+
+
+def repo_root() -> Path:
+    """The repository root the run seams resolve connector/table-ref relative
+    paths against — a single owned derivation (see REPO_ROOT) rather than each
+    caller re-deriving it from its own `__file__`."""
+    return REPO_ROOT
 
 
 def resolve_project_dir(name: str, examples_dir: Path | None = None) -> Path:

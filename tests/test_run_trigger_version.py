@@ -10,6 +10,8 @@ import pytest
 from fastapi.testclient import TestClient
 
 import app.web.routers.runs as runs_router
+import app.services.run as run_service
+from app.services import workspace
 from app.main import app
 from app.services.versioning import create_version_from_disk, list_versions, publish_version
 
@@ -38,7 +40,8 @@ def project_two_versions(tmp_path, monkeypatch):
     publish_version(proj, v1.version_id, reviewer="test")
     publish_version(proj, v2.version_id, reviewer="test")
     monkeypatch.setattr(runs_router, "EXAMPLES_DIR", tmp_path)
-    monkeypatch.setattr(runs_router, "run_in_background",
+    monkeypatch.setattr(workspace, "EXAMPLES_DIR", tmp_path)
+    monkeypatch.setattr(run_service, "_run_in_background",
                         lambda target, *args: target(*args))
     return proj
 
@@ -101,6 +104,7 @@ def test_run_picker_offers_only_published_versions(tmp_path, monkeypatch):
     unpublished = create_version_from_disk(proj, message="draft", reviewer="test").version_id
     publish_version(proj, published, reviewer="test")  # only the older one
     monkeypatch.setattr(runs_router, "EXAMPLES_DIR", tmp_path)
+    monkeypatch.setattr(workspace, "EXAMPLES_DIR", tmp_path)
 
     resp = client.get("/project/demo/runs")
     assert resp.status_code == 200
@@ -116,6 +120,7 @@ def test_run_form_hidden_when_no_published_version(tmp_path, monkeypatch):
     _seed_load_stage(proj)
     create_version_from_disk(proj, message="unpublished", reviewer="test")  # never published
     monkeypatch.setattr(runs_router, "EXAMPLES_DIR", tmp_path)
+    monkeypatch.setattr(workspace, "EXAMPLES_DIR", tmp_path)
 
     resp = client.get("/project/demo/runs")
     assert resp.status_code == 200
@@ -151,7 +156,8 @@ def project_versions_diff_paths(tmp_path, monkeypatch):
     publish_version(proj, v1.version_id, reviewer="test")
     publish_version(proj, v2.version_id, reviewer="test")
     monkeypatch.setattr(runs_router, "EXAMPLES_DIR", tmp_path)
-    monkeypatch.setattr(runs_router, "run_in_background",
+    monkeypatch.setattr(workspace, "EXAMPLES_DIR", tmp_path)
+    monkeypatch.setattr(run_service, "_run_in_background",
                         lambda target, *args: target(*args))
     return proj
 

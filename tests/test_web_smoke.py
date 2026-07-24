@@ -14,6 +14,7 @@ import app.web.loading as loading
 import app.web.routers.project as project_router
 import app.web.routers.node_review as node_review_router
 import app.web.routers.runs as runs_router
+import app.services.run as run_service
 from app.main import app
 from app.services import node_review
 
@@ -117,10 +118,10 @@ def test_trigger_run_returns_400_on_invalid_dag(monkeypatch):
     """The run route surfaces a load failure as a 400 with the issue list."""
     from app.services.loader import WorkflowLoadError
 
-    def _boom(project_dir, repo_root, **kwargs):
+    def _boom(project, **kwargs):
         raise WorkflowLoadError(Path("compiled"), ["01_bad.json: params.path missing"])
 
-    monkeypatch.setattr(runs_router, "prepare_run", _boom)
+    monkeypatch.setattr(run_service, "start_run", _boom)
     r = client.post("/project/demo/run")
     assert r.status_code == 400
     assert "01_bad.json: params.path missing" in r.json()["issues"]

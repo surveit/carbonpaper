@@ -17,12 +17,33 @@ from mcp.server.fastmcp import FastMCP
 from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
 from starlette.types import Receive, Scope, Send
 
-from app.runtime.stage_tests import WorkflowTestReport, run_workflow_tests
+from app.core.errors import (
+    MissingInputBindingError,
+    NoVersionToRunError,
+    NoWorkflowTestVersionError,
+    RunNotFoundError,
+)
+from app.runtime import stage_tests
 from app.services import data_model as data_model_service
 from app.services import generation
 from app.services import loader
 from app.services import project as project_service
+from app.services import run as run_service
+from app.services import workflow_test as workflow_test_service
 from app.services import workspace
+from app.services.errors import WorkflowLoadError
+
+# Domain failures a run/workflow-test tool turns into {ok: False, error: str(exc)} — a
+# loud, honest verdict rather than a traceback or a fabricated run id/status.
+# Anything outside this set propagates as a genuine internal fault.
+_RUN_TOOL_ERRORS = (
+    NoVersionToRunError,
+    MissingInputBindingError,
+    WorkflowLoadError,
+    RunNotFoundError,
+    NoWorkflowTestVersionError,
+    ValueError,
+)
 
 INSTRUCTIONS = """\
 glassbox turns an investigation methodology (prose) into a reviewable, runnable data
@@ -35,9 +56,9 @@ human-only and happens in the web UI, never through these tools.
 Once a workflow exists, derive and run per-stage tests:
 generate_stage_tests(project_id, stage_id) derives one python-transform stage's
 tests from the methodology (background; read_stage to see them once done), and
-run_tests(project_id, stage_id?) runs the authored tests against the stage's
+run_stage_tests(project_id, stage_id?) runs the authored tests against the stage's
 current code — omit stage_id to run every python-transform stage, or pass one to
-scope it. Loop edit_stage → run_tests until a stage's tests pass."""
+scope it. Loop edit_stage → run_stage_tests until a stage's tests pass."""
 
 mcp = FastMCP(
     name="glassbox",
@@ -186,7 +207,7 @@ async def generate_stage_tests(project_id: str, stage_id: str) -> dict[str, Any]
 
 
 @mcp.tool()
-def run_tests(project_id: str, stage_id: str | None = None) -> dict[str, Any]:
+def run_stage_tests(project_id: str, stage_id: str | None = None) -> dict[str, Any]:
     """Run a stage's authored tests against its CURRENT code and report the
     result. Omit `stage_id` to run every python-transform stage that has tests,
     or pass one to scope the run to that stage. Use this after regenerating code
@@ -198,7 +219,7 @@ def run_tests(project_id: str, stage_id: str | None = None) -> dict[str, Any]:
     generate_stage_tests), never to bend the test to the code."""
     pdir = _resolve_existing_project(project_id)
     stages = loader.load_workflow(pdir)
-    report: WorkflowTestReport = run_workflow_tests(stages, stage_id)
+    report: stage_tests.StageTestsReport = stage_tests.run_stage_tests(stages, stage_id)
     return report.model_dump(mode="json")
 
 
@@ -250,6 +271,59 @@ def add_stage(project_id: str, stage_json: str) -> dict[str, Any]:
     returned. The new node lands 'unreviewed' (amber) for a human to approve."""
     result = project_service.add_stage(project_id, stage_json)
     return {"ok": result.ok, "issues": result.issues}
+
+
+@mcp.tool()
+def run_workflow(project_id: str, version_id: str | None = None) -> dict[str, Any]:
+    """Start a REAL production run of the project's published workflow and return
+    its `run_id` immediately — the run executes in the background. This is a run
+    of record: it writes a manifest under the project's runs/ dir and produces the
+    workflow's published artifacts. `version_id` pins a specific published version
+    (omit for the newest published one); an unpublished or missing version is a
+    loud error, never a silent fallback. Poll get_run_status(project_id, run_id)
+    for live progress and the final status. On a pre-run failure (nothing
+    published, an unbound input) returns {ok: False, error} and starts no run."""
+    _resolve_existing_project(project_id)  # loud if the project doesn't exist
+    try:
+        run_id = run_service.start_run(project_id, version_id=version_id)
+    except _RUN_TOOL_ERRORS as exc:
+        return {"ok": False, "error": str(exc)}
+    return {"run_id": run_id, "status": run_service.read_run_status(project_id, run_id)["status"]}
+
+
+@mcp.tool()
+def get_run_status(project_id: str, run_id: str) -> dict[str, Any]:
+    """The current manifest of one production run as a dict: its overall status
+    (running / ok / errors / halted), per-stage statuses, and run metadata. Poll
+    this after run_workflow to follow progress and see the outcome. An unknown or
+    expired run_id returns {ok: False, error} rather than a fabricated status."""
+    _resolve_existing_project(project_id)  # loud if the project doesn't exist
+    try:
+        return run_service.read_run_status(project_id, run_id)
+    except _RUN_TOOL_ERRORS as exc:
+        return {"ok": False, "error": str(exc)}
+
+
+@mcp.tool()
+def run_workflow_test(
+    project_id: str, version_id: str | None = None, limit: int = 20, offset: int = 0,
+) -> dict[str, Any]:
+    """Run a NON-production workflow test: take the first `limit` rows (from
+    `offset`) of the workflow's bound source and run the frontier over just that
+    slice, so an author can watch the pipeline execute on real data before
+    publishing. It is NOT a run of record — it writes only under the project's
+    separate workflow_tests/ dir (publish stages run, but their artifacts land
+    run-scoped there) and carries no cross-run state. Accepts any stored version,
+    published or not (omit `version_id` for the newest). Returns the verdict
+    {ok, workflow_test_id, version_id, stages_run, error}: `ok` False on any stage
+    error, with `error` naming what failed. Per-stage row counts are in the
+    manifest. A project with no stored version is a loud error."""
+    _resolve_existing_project(project_id)  # loud if the project doesn't exist
+    try:
+        return workflow_test_service.run_workflow_test(
+            project_id, version_id=version_id, limit=limit, offset=offset)
+    except _RUN_TOOL_ERRORS as exc:
+        return {"ok": False, "error": str(exc)}
 
 
 def _resolve_existing_project(project_id: str) -> Path:

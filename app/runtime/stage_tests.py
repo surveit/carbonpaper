@@ -66,7 +66,7 @@ class StageTestResult:
     message: str | None = None
 
 
-# ─── Typed run report (JSON-serialisable; the MCP run_tests tool returns this) ─
+# ─── Typed run report (JSON-serialisable; the MCP run_stage_tests tool returns this) ─
 # StageTestResult is one test's outcome; these models aggregate a run of them
 # into a report a caller (an authoring agent) reads. StageTestRun embeds the
 # StageTestResult dataclasses directly — Pydantic serialises them under
@@ -85,15 +85,15 @@ class TestRunSummary(BaseModel):
     failed: int
 
 
-class WorkflowTestReport(BaseModel):
+class StageTestsReport(BaseModel):
     summary: TestRunSummary
     stages: list[StageTestRun]
     untested_python_stages: list[str]
 
 
-def run_workflow_tests(
+def run_stage_tests(
     stages: list[Stage], stage_id: str | None = None
-) -> WorkflowTestReport:
+) -> StageTestsReport:
     """Run authored stage tests against their current code and report the result.
 
     With `stage_id` None, run every python-transform stage that carries tests;
@@ -104,12 +104,12 @@ def run_workflow_tests(
     targets = _select_target_stages(stages, stage_id)
     runs = [_run_one_stage(stage) for stage in targets if stage.tests]
     untested = [stage.id for stage in targets if not stage.tests]
-    return WorkflowTestReport(
+    return StageTestsReport(
         summary=_summarize(runs), stages=runs, untested_python_stages=untested
     )
 
 
-def run_stage_tests(stage: Stage) -> list[StageTestResult]:
+def run_tests_for_stage(stage: Stage) -> list[StageTestResult]:
     """Execute each of `stage.tests` through the stage's registered handler
     and compare to its expected rows. Raises ValueError for stage types whose
     tests cannot execute (the model forbids authoring them there anyway)."""
@@ -129,7 +129,7 @@ def find_failing_stage_tests(stages: list[Stage]) -> list[str]:
     for stage in stages:
         if not stage.tests:
             continue
-        for result in run_stage_tests(stage):
+        for result in run_tests_for_stage(stage):
             if result.status != STATUS_PASSED:
                 detail = result.message or f"{len(result.diffs)} differing cell(s)"
                 failures.append(
@@ -161,7 +161,7 @@ def _find_stage(stages: list[Stage], stage_id: str) -> Stage:
 
 def _run_one_stage(stage: Stage) -> StageTestRun:
     return StageTestRun(
-        stage_id=stage.id, stage_type=stage.type, results=run_stage_tests(stage)
+        stage_id=stage.id, stage_type=stage.type, results=run_tests_for_stage(stage)
     )
 
 
