@@ -27,7 +27,7 @@ import app.web.loading as loading
 from app.main import app
 from app.runtime.runner import prepare_run, run_prepared
 from app.runtime.stages import llm_transform as lt
-from app.services import versioning
+from app.services import run_store, versioning
 from app.services.stage_cache import (
     HumanDecision,
     StageCache,
@@ -200,7 +200,8 @@ def test_model_input_recovery_renders_the_exact_rendered_prompt(tmp_path, monkey
 def test_degrades_gracefully_when_upstream_scored_input_is_missing(tmp_path, monkeypatch):
     _project_dir, run_id, run_dir, _snapshot, fingerprints = _build_and_halt(tmp_path, monkeypatch)
 
-    manifest = json.loads((run_dir / "manifest.json").read_text(encoding="utf-8"))
+    manifest = run_store.load_manifest(PROJECT, run_id)
+    assert manifest is not None
     load_record = next(s for s in manifest["stages"] if s["stage_id"] == "load")
     (run_dir / load_record["output_path"]).unlink()  # the frame model_input would join against
 

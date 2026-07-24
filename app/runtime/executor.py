@@ -23,7 +23,6 @@ from __future__ import annotations
 
 import enum
 import hashlib
-import json
 import time
 import traceback
 from datetime import datetime
@@ -31,11 +30,11 @@ from pathlib import Path
 from typing import Any, Iterable, NotRequired, TypedDict
 
 import pandas as pd
-import pyarrow.lib as pa_lib
 
 from app.core.errors import SubsetRunError
 from app.models import Stage, StageType, Workflow
 from app.core.run_status import RunStatus, StageStatus
+from app.services import run_store
 
 from .cancellation import consume_cancel
 from .context import RowError, RunContext, RunIdentity
@@ -303,11 +302,16 @@ def create_run_manifest(
 
 
 def write_manifest(run_dir: Path, manifest: dict[str, Any]) -> None:
-    """The single writer of run_dir/manifest.json. The initial write (prepare_run),
-    every mid-run flush, and finalization all persist through here."""
-    (run_dir / "manifest.json").write_text(
-        json.dumps(manifest, indent=2, default=str), encoding="utf-8"
-    )
+    """The single writer of a run's manifest. The initial write (prepare_run),
+    every mid-run flush, and finalization all persist through here — into the
+    document store as a RUN-scoped ``RunManifest`` document (via
+    ``app.services.run_store``), keyed by ``<project>/<run_id>``. A
+    non-production run (a subset/eval) carries no ``project`` and so persists
+    nothing here: its manifest is scratch the caller reads in memory.
+
+    ``run_dir`` is retained in the signature — the run's frames still live under
+    it — but the manifest itself is no longer a file inside it."""
+    run_store.persist_manifest(manifest)
 
 
 def _build_pending_stage_record(stage: Stage) -> StageRecord:
@@ -436,21 +440,16 @@ def _apply_row_slicing(
     return output
 
 
-def _persist_stage_output(output: pd.DataFrame, sid: str, run_dir: Path, record: StageRecord) -> Path:
-    """Write `output` as the stage's parquet artifact, falling back to CSV
-    (noting the fallback on `record`) for a column whose dtype/shape parquet
-    can't represent — mixed-type object columns, nested Python values. A
-    disk/OS error is NOT caught here: it would fail identically for CSV, so
-    it propagates to the stage's own error handling rather than silently
-    degrading the output."""
-    output_path = run_dir / "outputs" / f"{sid}.parquet"
-    try:
-        output.to_parquet(output_path, index=False)
-    except (pa_lib.ArrowException, ValueError, TypeError) as exc:
-        output_path = run_dir / "outputs" / f"{sid}.csv"
-        output.to_csv(output_path, index=False)
-        record.setdefault("notes", []).append(f"Wrote CSV instead of parquet: {exc}")
-    return output_path
+def _persist_stage_output(output: pd.DataFrame, sid: str, run_dir: Path, record: StageRecord) -> str:
+    """Persist `output` as the stage's frame through the run-frame seam
+    (`app.services.run_store`), which writes it under the run's `outputs/`
+    directory via `FrameStore` — falling back to CSV (noting the fallback on
+    `record`) for a column whose dtype/shape parquet can't represent. Returns
+    the frame's path relative to `run_dir` (POSIX)."""
+    saved = run_store.save_output_frame(run_dir, sid, output)
+    if saved.fallback_note is not None:
+        record.setdefault("notes", []).append(saved.fallback_note)
+    return saved.rel_path
 
 
 def _finalize_stage_output(
@@ -491,7 +490,7 @@ def _finalize_stage_output(
         # the one boundary where the typed LlmUsage becomes storage.
         record["llm_usage"] = usage.model_dump()
 
-    output_path = _persist_stage_output(output, sid, run_dir, record)
+    output_rel_path = _persist_stage_output(output, sid, run_dir, record)
     outputs_so_far[sid] = output
 
     if row_errors:
@@ -506,9 +505,9 @@ def _finalize_stage_output(
             v["ok"] for v in record["input_validation"]
         ) else StageStatus.VALIDATION_WARNINGS
     record["rows"] = int(len(output))
-    # Manifest paths are POSIX-style so the persisted JSON is identical on
+    # Manifest paths are POSIX-style so the persisted manifest is identical on
     # every platform.
-    record["output_path"] = output_path.relative_to(run_dir).as_posix()
+    record["output_path"] = output_rel_path
     return bool(row_errors)
 
 

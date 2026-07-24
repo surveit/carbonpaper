@@ -17,6 +17,7 @@ from starlette.concurrency import run_in_threadpool
 
 from app.core.errors import MissingInputBindingError, NoVersionToRunError, RowOutOfRange, StageNotInRun
 from app.core.run_status import RunStatus, StageStatus
+from app.services import run_store
 from app.services.errors import WorkflowLoadError
 from app.services.loader import load_workflow
 from app.services.versioning import list_versions
@@ -233,7 +234,7 @@ async def run_status(project: str, run_id: str):
     """Lightweight JSON for the live poller: current status, per-stage statuses,
     counts, and a freshly-built mermaid graph. Lets the run page update progress
     in place (no full-page reload) so it stays clickable while running."""
-    manifest = load_manifest(runs_dir(project) / run_id)
+    manifest = load_manifest(project, run_id)
     mstages = manifest.get("stages", [])
     status_by_id = {s["stage_id"]: s.get("status", "") for s in mstages}
     mermaid = build_mermaid_graph(load_stages(project).stages, project, status_by_id=status_by_id)
@@ -290,7 +291,7 @@ def _artifact_links(project: str, run_id: str, run_dir: Path, manifest: dict) ->
 @router.get("/project/{project}/runs/{run_id}", response_class=HTMLResponse)
 async def run_detail(request: Request, project: str, run_id: str):
     run_dir = runs_dir(project) / run_id
-    manifest = load_manifest(run_dir)
+    manifest = load_manifest(project, run_id)
     stages = load_stages(project).stages
     status_by_id = {s["stage_id"]: s.get("status", "") for s in manifest.get("stages", [])}
     mermaid = build_mermaid_graph(stages, project, status_by_id=status_by_id)
@@ -320,7 +321,7 @@ async def run_stage_partial(
 ):
     """Per-run stage detail panel — status, validation, preview, error trace."""
     run_dir = runs_dir(project) / run_id
-    manifest = load_manifest(run_dir)
+    manifest = load_manifest(project, run_id)
     stage_record = next(
         (s for s in manifest.get("stages", []) if s.get("stage_id") == stage_id),
         None,
@@ -378,7 +379,7 @@ async def run_stage_rows(
     """Full table of one stage's output, capped at MAX_TABLE_ROWS rendered rows.
     The page links to the uncapped CSV download."""
     run_dir = runs_dir(project) / run_id
-    stage_record = manifest_stage(run_dir, stage_id)
+    stage_record = manifest_stage(project, run_id, stage_id)
     table = load_output_table(run_dir, stage_record.get("output_path"))
     return templates.TemplateResponse(
         request,
@@ -398,7 +399,7 @@ async def run_stage_rows(
 async def run_stage_rows_csv(project: str, run_id: str, stage_id: str):
     """One stage's complete output as a CSV download (no row cap)."""
     run_dir = runs_dir(project) / run_id
-    stage_record = manifest_stage(run_dir, stage_id)
+    stage_record = manifest_stage(project, run_id, stage_id)
     df = read_output_df(run_dir, stage_record.get("output_path"))
     filename = f"{project}__{run_id}__{stage_id}.csv"
     return Response(
@@ -419,7 +420,7 @@ async def run_stage_lineage_panel(
     schema, and the output trimmed to `row`. Reuses `_stage_executable.html`
     and `schema_table` — not the whole run-detail panel."""
     run_dir = runs_dir(project) / run_id
-    manifest = load_manifest(run_dir)
+    manifest = load_manifest(project, run_id)
     stage_record = next(
         (s for s in manifest.get("stages", []) if s.get("stage_id") == stage_id),
         None,
@@ -456,9 +457,9 @@ async def run_stage_row_trace(project: str, run_id: str, stage_id: str, row: int
     stages, as JSON. 404 if the run/stage is absent, 400 if the row ordinal is
     out of range."""
     run_dir = runs_dir(project) / run_id
-    load_manifest(run_dir)  # 404s if the run doesn't exist
+    manifest = load_manifest(project, run_id)  # 404s if the run doesn't exist
     try:
-        trace = trace_row(run_dir, stage_id, row)
+        trace = trace_row(run_dir, stage_id, row, manifest=manifest)
     except StageNotInRun as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except RowOutOfRange as exc:
@@ -476,9 +477,9 @@ async def run_stage_row_trace_view(
     """The row's show-your-work as a read-only HTML page: a numbered story and a
     graph toggle on top; clicking a stage loads the row-trimmed panel below."""
     run_dir = runs_dir(project) / run_id
-    load_manifest(run_dir)
+    manifest = load_manifest(project, run_id)
     try:
-        trace = trace_row(run_dir, stage_id, row)
+        trace = trace_row(run_dir, stage_id, row, manifest=manifest)
     except StageNotInRun as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except RowOutOfRange as exc:
@@ -524,7 +525,7 @@ async def run_stage_scratch_preview(
     stage's first upstream input.
     """
     run_dir = runs_dir(project) / run_id
-    manifest = load_manifest(run_dir)
+    manifest = load_manifest(project, run_id)
 
     try:
         body = await request.json()
@@ -586,8 +587,7 @@ async def resume_run_route(project: str, run_id: str):
     project_dir = EXAMPLES_DIR / project
     if not project_dir.is_dir():
         raise HTTPException(status_code=404, detail=f"No project '{project}'")
-    run_dir = runs_dir(project) / run_id
-    if not (run_dir / "manifest.json").exists():
+    if not run_store.manifest_exists(project, run_id):
         raise HTTPException(status_code=404, detail="Run not found")
     # Validate the compiled workflow synchronously so load errors surface as a 400
     # here rather than being swallowed on the background thread below.
@@ -612,8 +612,7 @@ async def cancel_run_route(project: str, run_id: str):
     no-op on a run that is already terminal — cancelling only means something
     while the run is still `running` — but redirects back either way, same as
     resume, so the page's poller/reload handles the rest."""
-    run_dir = runs_dir(project) / run_id
-    manifest = load_manifest(run_dir)  # 404s if the run doesn't exist
+    manifest = load_manifest(project, run_id)  # 404s if the run doesn't exist
     if manifest.get("status") == RunStatus.RUNNING:
         request_cancel(project, run_id)
     return RedirectResponse(

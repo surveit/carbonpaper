@@ -41,7 +41,7 @@ router = APIRouter()
 async def queue_page(request: Request, project: str, run_id: str, stage_id: str):
     """Reviewer UI for one queue stage in one run."""
     run_dir = runs_dir(project) / run_id
-    manifest = load_manifest(run_dir)
+    manifest = load_manifest(project, run_id)
 
     stages = load_stages(project).stages
     stage_def = find_stage(stages, stage_id)

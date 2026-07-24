@@ -17,6 +17,7 @@ import app.web.loading as loading
 import app.web.routers.project as project_router
 from app.core.persistence import get_store
 from app.main import app
+from app.services import run_store
 from app.services.versioning import WorkflowVersion
 from app.web.loading import list_projects
 
@@ -123,12 +124,12 @@ def test_card_counts_compiled_stages_schemas_and_runs_with_a_manifest(examples_r
     (schemas_dir / "claim.json").write_text(
         json.dumps({"name": "claim", "columns": []}), encoding="utf-8"
     )
-    runs_dir = proj / "runs"
-    finished_run = runs_dir / "20260101T000000"
-    finished_run.mkdir(parents=True)
-    (finished_run / "manifest.json").write_text("{}", encoding="utf-8")
-    unfinished_run = runs_dir / "20260102T000000"
-    unfinished_run.mkdir()  # no manifest.json — not yet a real run
+    # A run counts iff it has a manifest document. One finished run is persisted;
+    # a bare run dir with no manifest document is not yet a real run.
+    run_store.persist_manifest(
+        {"run_id": "20260101T000000", "project": proj.name, "status": "ok", "stages": []}
+    )
+    (proj / "runs" / "20260102T000000").mkdir(parents=True)  # no manifest — not a real run
 
     [card] = list_projects()
     assert card["n_stages"] == 2

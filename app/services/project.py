@@ -40,7 +40,7 @@ from pydantic import BaseModel
 from app.core.errors import ProjectExistsError
 from app.models import Coverage, SchemaLibrary, Stage
 from app.core.run_status import RunStatus
-from app.services import data_model, node_review, stage_edit, versioning, workspace
+from app.services import data_model, node_review, run_store, stage_edit, versioning, workspace
 from app.services.loader import load_compiled_dir, stage_to_json, write_stage
 from app.services.stage_edit import EditStageResult
 
@@ -167,40 +167,23 @@ def _load_compiled_stages(pdir: Path) -> list[dict[str, Any]]:
 
 
 def _runs_summary(pdir: Path) -> RunsSummary:
-    """Summarise the project's runs/ dir into a RunsSummary (n / awaiting_review /
-    latest_status).
+    """Summarise the project's runs into a RunsSummary (n / awaiting_review /
+    latest_status), read through the run-persistence service
+    (app.services.run_store) rather than by scanning runs/<id>/ for manifests.
 
-    Mirrors loading.list_runs exactly: a run is a child dir of runs/ WITH a readable
-    manifest.json; dirs lacking one (partial / legacy-output-only) are not counted,
-    so n is the count of real runs, never inflated. `awaiting_review` counts runs
-    whose status is 'awaiting_review' (halted at a human_review_queue) — the driver
-    of the "review the run" rung of the ladder. `latest_status` is the newest run's
-    status (runs are timestamp-id'd, so the max id is newest); None when there are
-    no runs. A corrupt manifest is counted (status 'corrupt') rather than hidden."""
-    runs_dir = pdir / "runs"
-    if not runs_dir.is_dir():
+    A run is one with a manifest document, so n is the count of real runs,
+    never inflated. `awaiting_review` counts runs whose status is
+    'awaiting_review' (halted at a human_review_queue) — the driver of the
+    "review the run" rung of the ladder. `latest_status` is the newest run's
+    status (list_run_manifests yields newest first); None when there are no
+    runs."""
+    manifests = run_store.list_run_manifests(pdir.name)
+    if not manifests:
         return RunsSummary(n=0, awaiting_review=0, latest_status=None)
-    statuses: list[tuple[str, str]] = []  # (run_id, status)
-    awaiting = 0
-    for run in runs_dir.iterdir():
-        if not run.is_dir():
-            continue
-        manifest_path = run / "manifest.json"
-        if not manifest_path.exists():
-            continue
-        try:
-            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-            status = manifest.get("status", "unknown")
-        except json.JSONDecodeError:
-            status = "corrupt"
-        statuses.append((run.name, status))
-        if status == RunStatus.AWAITING_REVIEW:
-            awaiting += 1
-    if not statuses:
-        return RunsSummary(n=0, awaiting_review=0, latest_status=None)
-    # Newest run by id (run ids are strftime timestamps → lexical max is chronological).
-    latest_status = max(statuses, key=lambda t: t[0])[1]
-    return RunsSummary(n=len(statuses), awaiting_review=awaiting, latest_status=latest_status)
+    awaiting = sum(1 for m in manifests if m.get("status") == RunStatus.AWAITING_REVIEW)
+    # list_run_manifests is newest-first (run ids are strftime timestamps).
+    latest_status = manifests[0].get("status", "unknown")
+    return RunsSummary(n=len(manifests), awaiting_review=awaiting, latest_status=latest_status)
 
 
 # ─── Project identity (meta) ──────────────────────────────────────────────────

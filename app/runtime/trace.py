@@ -142,8 +142,18 @@ def _not_preserving_message(stage_type: str) -> str:
             "across it needs recording (issue #58)")
 
 
-def trace_row(run_dir: Path, stage_id: str, row_ordinal: int) -> Trace:
+def trace_row(
+    run_dir: Path, stage_id: str, row_ordinal: int, *, manifest: dict[str, Any] | None = None
+) -> Trace:
     """Trace one row's ancestry backward through row-preserving stages.
+
+    Row VALUES are read from the run's own frames under ``run_dir`` (the tracer
+    is self-contained on the run directory for its tabular reads). The MANIFEST
+    — stage types, parent edges, row counts — is normally handed in by the
+    caller (the web layer loads it from the run-persistence service,
+    ``app.services.run_store``); when omitted it is read from a
+    ``manifest.json`` in ``run_dir`` (a run-dir-local fixture), so a caller
+    holding only a directory can still trace it.
 
     Returns a `Trace` whose `steps` run newest-first from `(stage_id,
     row_ordinal)` to either an `input_data` origin or the first stage that
@@ -151,7 +161,8 @@ def trace_row(run_dir: Path, stage_id: str, row_ordinal: int) -> Trace:
     stage id or row ordinal (caller/param errors), never for a traceable state.
     """
     run_dir = Path(run_dir)
-    manifest = _load_manifest(run_dir)
+    if manifest is None:
+        manifest = _load_manifest(run_dir)
     by_id = _stages_by_id(manifest)
     if stage_id not in by_id:
         raise StageNotInRun(f"stage {stage_id!r} not in run {run_dir.name}")

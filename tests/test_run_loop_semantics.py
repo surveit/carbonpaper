@@ -30,7 +30,7 @@ import app.web.loading as loading
 from app.main import app
 from app.runtime.runner import prepare_run, run_prepared
 from app.runtime.stages import llm_transform as lt
-from app.services import versioning
+from app.services import run_store, versioning
 from app.services.versioning import create_version_from_disk
 
 
@@ -231,11 +231,12 @@ def test_multi_halt_run_renders_the_full_halted_at_list_through_the_web_layer(
 
 # ── Legacy scalar halted_at manifests ────────────────────────────────────────
 
-def test_legacy_scalar_halted_at_manifest_renders_one_queue_link(tmp_path, monkeypatch):
-    """A pre-fork-aware manifest persisted `halted_at` as a scalar stage-id
-    string. load_manifest normalizes it to a one-element list so run_detail.html
-    renders a single review-queue link, not one per character (a `{% for %}`
-    over a string iterates characters)."""
+def test_halted_at_is_a_list_and_renders_one_queue_link(tmp_path, monkeypatch):
+    """`halted_at` is structurally a list on the RUN-scoped manifest document, so
+    run_detail.html renders a single review-queue link per halted stage — not one
+    per character. The pre-fork-aware scalar-string shape (which a `{% for %}`
+    over a string would iterate character-by-character) is no longer
+    representable: the RunManifest document types halted_at as list[str]."""
     monkeypatch.setattr(loading, "EXAMPLES_DIR", tmp_path)
     project_dir = tmp_path / "legacy_halt"
     _write_stage(project_dir, "01_load.json", _load_items_stage(project_dir))
@@ -245,14 +246,8 @@ def test_legacy_scalar_halted_at_manifest_renders_one_queue_link(tmp_path, monke
     halted = run_prepared(prepare_run(project_dir, repo_root=project_dir))
     run_id = halted["run_id"]
 
-    # Rewrite the on-disk manifest to the legacy scalar shape.
-    manifest_path = project_dir / "runs" / run_id / "manifest.json"
-    on_disk = json.loads(manifest_path.read_text(encoding="utf-8"))
-    on_disk["halted_at"] = "review"
-    manifest_path.write_text(json.dumps(on_disk), encoding="utf-8")
-
-    normalized = loading.load_manifest(project_dir / "runs" / run_id)
-    assert normalized["halted_at"] == ["review"]
+    manifest = loading.load_manifest("legacy_halt", run_id)
+    assert manifest["halted_at"] == ["review"]
 
     client = TestClient(app)
     page = client.get(f"/project/legacy_halt/runs/{run_id}")
@@ -277,13 +272,13 @@ def test_manifest_paths_are_posix_on_every_platform(tmp_path, monkeypatch):
 
     halted = run_prepared(prepare_run(project_dir, repo_root=project_dir))
 
-    manifest_path = project_dir / "runs" / halted["run_id"] / "manifest.json"
-    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest = run_store.load_manifest("posix_paths", halted["run_id"])
+    assert manifest is not None
     persisted = {
         (record["stage_id"], key): record[key]
         for record in manifest["stages"]
         for key in ("output_path", "queue_path")
-        if key in record
+        if record.get(key)
     }
     assert persisted  # the run produced at least one persisted path
     for (stage_id, key), value in persisted.items():
@@ -374,11 +369,10 @@ def test_cancel_after_a_halt_clears_halted_at_and_reports_cancelled(tmp_path, mo
     assert _stage_status(manifest, "review") == "awaiting_review"
     assert _stage_status(manifest, "good_tail") == "pending"
 
-    on_disk = json.loads(
-        (tmp_path / "runs" / manifest["run_id"] / "manifest.json").read_text(encoding="utf-8")
-    )
-    assert on_disk["status"] == "cancelled"
-    assert "halted_at" not in on_disk
+    persisted = run_store.load_manifest(tmp_path.name, manifest["run_id"])
+    assert persisted is not None
+    assert persisted["status"] == "cancelled"
+    assert "halted_at" not in persisted
 
 
 # ── Resume after error is not stale ──────────────────────────────────────────

@@ -14,6 +14,7 @@ from app.runtime.trace import (
     _parents,
     _stages_by_id,
 )
+from app.services import run_store
 
 
 def write_run(tmp_path: Path, stages: list[dict], run_id: str = "T1") -> Path:
@@ -39,9 +40,15 @@ def write_run(tmp_path: Path, stages: list[dict], run_id: str = "T1") -> Path:
                 {"phase": f"input:{p}", "ok": True} for p in spec.get("parents", [])
             ],
         })
-    (run_dir / "manifest.json").write_text(
-        json.dumps({"run_id": run_id, "stages": records}), encoding="utf-8"
-    )
+    manifest = {"run_id": run_id, "stages": records}
+    # A run-dir-local manifest.json is kept so the low-level `_load_manifest`
+    # reader (and any caller holding only a directory) still works. When the run
+    # lives under a project's runs/ tree, also persist it as its RUN-scoped
+    # document so the web layer — which reads runs through app.services.run_store
+    # — finds it.
+    (run_dir / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+    if run_dir.parent.name == "runs":
+        run_store.persist_manifest({**manifest, "project": run_dir.parent.parent.name})
     return run_dir
 
 

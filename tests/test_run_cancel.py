@@ -23,7 +23,7 @@ import app.runtime.stages.execution as execution
 from app.runtime.cancellation import consume_cancel, request_cancel
 from app.runtime.runner import prepare_run, run_prepared
 from app.runtime.stages import llm_transform as lt
-from app.services import versioning
+from app.services import run_store, versioning
 from app.services.versioning import create_version_from_disk
 
 
@@ -103,9 +103,10 @@ def test_mid_run_cancel_preserves_the_completed_stages_output(tmp_path, monkeypa
     assert (run_dir / "outputs" / "load.parquet").exists()
     assert not (run_dir / "outputs" / "consume.parquet").exists()
 
-    on_disk = json.loads((run_dir / "manifest.json").read_text(encoding="utf-8"))
-    assert on_disk["status"] == "cancelled"
-    assert on_disk["cancelled_at"] == "consume"
+    persisted = run_store.load_manifest(tmp_path.name, prep["run_id"])
+    assert persisted is not None
+    assert persisted["status"] == "cancelled"
+    assert persisted["cancelled_at"] == "consume"
 
 
 def _three_stage_llm_project(root):
@@ -176,9 +177,10 @@ def test_mid_stage_cancel_marks_the_running_stage_cancelled_not_pending(tmp_path
     assert not (run_dir / "outputs" / "score.parquet").exists()
     assert not (run_dir / "outputs" / "downstream.parquet").exists()
 
-    on_disk = json.loads((run_dir / "manifest.json").read_text(encoding="utf-8"))
-    assert on_disk["status"] == "cancelled"
-    assert on_disk["cancelled_at"] == "score"
+    persisted = run_store.load_manifest(tmp_path.name, prep["run_id"])
+    assert persisted is not None
+    assert persisted["status"] == "cancelled"
+    assert persisted["cancelled_at"] == "score"
 
 
 def test_a_cancelled_run_can_be_resumed_and_runs_to_completion(tmp_path):

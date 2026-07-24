@@ -1,12 +1,12 @@
-"""Filesystem access for the web layer: read compiled stage JSON, run
-manifests, stage outputs, and queue snapshots off disk, plus small pure
-helpers for the stage-dict shape they return. Reviewer decisions themselves
-are not read from disk here — they live in the stage-result cache
-(app.services.stage_cache)."""
+"""Filesystem access for the web layer: read compiled stage JSON, plus small
+pure helpers for the stage-dict shape they return. A run's own products — its
+manifest, stage outputs, and queue snapshots — are read through the designated
+run-persistence service (app.services.run_store), not by constructing paths
+under runs/<id>/ here. Reviewer decisions themselves live in the stage-result
+cache (app.services.stage_cache)."""
 
 from __future__ import annotations
 
-import json
 import shutil
 from dataclasses import dataclass
 from datetime import date, datetime
@@ -21,7 +21,9 @@ from app.core.frames import PARQUET_SUFFIX
 from app.models import Stage, StageType
 from app.core.run_status import StageStatus
 from app.runtime.runner import resolve_version_id
+from app.services import run_store
 from app.services.loader import CompiledStageFile, load_compiled_dir
+from app.services.run_store import RunQueueFingerprints as QueueFingerprints
 from app.services.versioning import list_versions, load_version_stages
 from app.services.workspace import load_schemas
 from app.web.config import EXAMPLES_DIR, REPO_ROOT
@@ -66,7 +68,7 @@ def _build_project_card(p: Path) -> dict[str, Any] | None:
     has_workflow = n_stages > 0
     has_schemas = schemas_dir.is_dir() and any(schemas_dir.glob("*.json"))
     n_schemas = len(load_schemas(p)) if has_schemas else 0
-    n_runs = _count_runs_with_manifest(p / "runs")
+    n_runs = run_store.count_runs(p.name)
     has_document = (p / "document.md").is_file() or (p / "project.json").is_file()
     if not (has_workflow or has_schemas or has_document):
         return None
@@ -82,13 +84,6 @@ def _build_project_card(p: Path) -> dict[str, Any] | None:
     }
 
 
-def _count_runs_with_manifest(rdir: Path) -> int:
-    """Real runs only: a run dir counts iff it carries a manifest.json
-    (mirrors list_runs), so an in-progress or abandoned run dir is never
-    counted."""
-    if not rdir.is_dir():
-        return 0
-    return sum(1 for r in rdir.iterdir() if r.is_dir() and (r / "manifest.json").exists())
 
 
 @dataclass
@@ -221,49 +216,34 @@ def runs_dir(project: str) -> Path:
     return EXAMPLES_DIR / project / "runs"
 
 
-def load_manifest(run_dir: Path) -> dict[str, Any]:
-    """A run's manifest.json as a dict, or 404 if the run doesn't exist.
-
-    Normalizes `halted_at` to a list so every consumer sees one shape: legacy
-    (pre-fork-aware) manifests persisted it as a scalar stage id string, which a
-    template `{% for %}` would iterate character-by-character. A single id is
-    wrapped into a one-element list here."""
-    manifest_path = run_dir / "manifest.json"
-    if not manifest_path.exists():
+def load_manifest(project: str, run_id: str) -> dict[str, Any]:
+    """A run's manifest as a dict (from its RUN-scoped document via
+    app.services.run_store), or 404 if the run doesn't exist."""
+    manifest = run_store.load_manifest(project, run_id)
+    if manifest is None:
         raise HTTPException(status_code=404, detail="Run not found")
-    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    halted_at = manifest.get("halted_at")
-    if isinstance(halted_at, str):
-        manifest["halted_at"] = [halted_at]
     return manifest
 
 
 def list_runs(project: str) -> list[dict[str, Any]]:
-    rdir = runs_dir(project)
-    if not rdir.is_dir():
-        return []
+    """The project's runs (newest first) as compact row dicts for the runs
+    index, read through the run-persistence service rather than by scanning
+    runs/<id>/ for manifest files."""
     entries = []
-    for run in sorted(rdir.iterdir(), reverse=True):
-        if not run.is_dir():
-            continue
-        manifest_path = run / "manifest.json"
-        if manifest_path.exists():
-            try:
-                manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-            except json.JSONDecodeError:
-                manifest = {"run_id": run.name, "status": "corrupt"}
-            entries.append({
-                "run_id": run.name,
-                "status": manifest.get("status", "unknown"),
-                "started_at": manifest.get("started_at"),
-                "finished_at": manifest.get("finished_at"),
-                # None for legacy (pre-versioning) runs; the template renders
-                # "(unversioned)" — a displayed truth, not a fabricated id.
-                "workflow_version": manifest.get("workflow_version"),
-                "stages_total": len(manifest.get("stages", [])),
-                "stages_ok": sum(1 for s in manifest.get("stages", []) if s.get("status") == StageStatus.OK),
-                "stages_error": sum(1 for s in manifest.get("stages", []) if s.get("status") == StageStatus.ERROR),
-            })
+    for manifest in run_store.list_run_manifests(project):
+        stages = manifest.get("stages", [])
+        entries.append({
+            "run_id": manifest.get("run_id"),
+            "status": manifest.get("status", "unknown"),
+            "started_at": manifest.get("started_at"),
+            "finished_at": manifest.get("finished_at"),
+            # None for legacy (pre-versioning) runs; the template renders
+            # "(unversioned)" — a displayed truth, not a fabricated id.
+            "workflow_version": manifest.get("workflow_version"),
+            "stages_total": len(stages),
+            "stages_ok": sum(1 for s in stages if s.get("status") == StageStatus.OK),
+            "stages_error": sum(1 for s in stages if s.get("status") == StageStatus.ERROR),
+        })
     return entries
 
 
@@ -279,9 +259,9 @@ def read_table(path: Path) -> pd.DataFrame:
     return pd.read_parquet(path) if path.suffix == PARQUET_SUFFIX else pd.read_csv(path)
 
 
-def manifest_stage(run_dir: Path, stage_id: str) -> dict[str, Any]:
+def manifest_stage(project: str, run_id: str, stage_id: str) -> dict[str, Any]:
     """The manifest record for one stage of a run; 404 if run or stage missing."""
-    manifest = load_manifest(run_dir)
+    manifest = load_manifest(project, run_id)
     stage_record = next(
         (s for s in manifest.get("stages", []) if s.get("stage_id") == stage_id),
         None,
@@ -368,51 +348,24 @@ def load_output_preview(run_dir: Path, rel_path: str | None) -> dict[str, Any] |
 
 
 # ─── Queue snapshots ──────────────────────────────────────────────────────────
+# The pending-queue snapshot and its fingerprints sidecar are read through the
+# run-persistence service (app.services.run_store), which owns the run-frame
+# seam. `QueueFingerprints` is re-exported (imported above) as
+# run_store.RunQueueFingerprints so existing callers keep the same name.
+
 
 def queue_snapshot(project: str, run_id: str, stage_id: str) -> pd.DataFrame | None:
-    run_dir = runs_dir(project) / run_id
-    for ext in (".parquet", ".csv"):
-        p = run_dir / "queue" / f"{stage_id}{ext}"
-        if p.exists():
-            return read_table(p)
-    return None
+    """A halted queue stage's pending-rows snapshot frame, or None."""
+    return run_store.load_queue_snapshot(runs_dir(project) / run_id, stage_id)
 
 
-@dataclass
-class QueueFingerprints:
-    """The fingerprints a halted queue stage's snapshot carries off to the
-    side, never as snapshot columns: `stage_fingerprint` (shared by every
-    pending row of that halt) and `input_fingerprints` (one per row,
-    POSITIONALLY aligned to the snapshot's row order)."""
-    stage_fingerprint: str
-    input_fingerprints: list[str]
-
-
-def load_queue_fingerprints(project: str, run_id: str, stage_id: str) -> QueueFingerprints | None:
-    """The sidecar `<stage_id>.fingerprints.json` a halted human_review_queue
-    stage writes beside its snapshot (app.runtime.stages.human_review_queue).
-    None if no run has halted at this stage yet (no such sidecar).
-
-    Raises ValueError if the snapshot exists but its row count doesn't match
-    `input_fingerprints`' length: positional alignment between the two files
-    is not something to guess at silently when it can't be verified."""
-    run_dir = runs_dir(project) / run_id
-    path = run_dir / "queue" / f"{stage_id}.fingerprints.json"
-    if not path.exists():
-        return None
-    data = json.loads(path.read_text(encoding="utf-8"))
-    fingerprints = QueueFingerprints(
-        stage_fingerprint=data["stage_fingerprint"],
-        input_fingerprints=data["input_fingerprints"],
-    )
-    snapshot = queue_snapshot(project, run_id, stage_id)
-    if snapshot is not None and len(snapshot) != len(fingerprints.input_fingerprints):
-        raise ValueError(
-            f"queue fingerprints sidecar for stage '{stage_id}' in run '{run_id}' "
-            f"names {len(fingerprints.input_fingerprints)} row(s) but the "
-            f"snapshot has {len(snapshot)} — alignment cannot be trusted"
-        )
-    return fingerprints
+def load_queue_fingerprints(
+    project: str, run_id: str, stage_id: str
+) -> QueueFingerprints | None:
+    """The fingerprints sidecar a halted human_review_queue stage wrote beside
+    its snapshot. None if no run has halted at this stage yet; raises ValueError
+    if the snapshot's row count doesn't match the sidecar's fingerprint list."""
+    return run_store.load_queue_fingerprints(runs_dir(project) / run_id, stage_id)
 
 
 def display_cell(v: Any) -> Any:
