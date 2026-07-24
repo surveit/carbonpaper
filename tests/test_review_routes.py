@@ -27,7 +27,6 @@ import app.web.loading as loading
 from app.main import app
 from app.runtime.runner import prepare_run, run_prepared
 from app.runtime.stages import llm_transform as lt
-from app.core.run_status import RunMode
 from app.services import review, versioning
 from app.core.stage_cache import StageCacheEntry
 from app.services.versioning import create_version_from_disk
@@ -351,7 +350,7 @@ def test_e2e_decide_approve_modify_and_reject_then_resume_completes(tmp_path, mo
     # snapshot row the decision was recorded from carries only those columns to
     # begin with, since the snapshot is pure.
     for row_id, fp in fp_by_id.items():
-        entry = StageCacheEntry.for_mode(RunMode.PRODUCTION).get(project, "review", stage_fingerprint, fp)
+        entry = StageCacheEntry.read_only().get(project, "review", stage_fingerprint, fp)
         assert entry is not None
         assert set(entry.frozen_input) == {"id", "score"}
 

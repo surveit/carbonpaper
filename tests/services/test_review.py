@@ -7,14 +7,13 @@ from __future__ import annotations
 import pytest
 
 from app.core.errors import ReviewValidationError
-from app.core.run_status import RunMode
 from app.models import RowReviewDecision
 from app.services import review
 from app.core.stage_cache import StageCacheEntry
 
 
 def _load_entry(input_fingerprint: str):
-    return StageCacheEntry.for_mode(RunMode.PRODUCTION).get(
+    return StageCacheEntry.read_only().get(
         "proj", "review", "sf1", input_fingerprint
     )
 

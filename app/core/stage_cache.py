@@ -14,16 +14,17 @@ vocabulary behind it — lives above this seam, never here.
 `StageCacheEntry` is the only PersistedModel carrying
 `SCOPE = PersistenceScope.PROJECT_READ_WRITE` (see app.core.persistence.PersistenceScope):
 the one deliberate channel that lets run activity write something that outlives
-the run. `for_mode` is the view that grants or withholds that write: a
-`RunMode.PRODUCTION` run gets `StageCache` (read + write); a
-`RunMode.NON_PRODUCTION` run — an eval or a smoke run *(planned)* — gets
-`ReadOnlyStageCache`, which structurally has no `record` method, so the
-capability is simply absent rather than gated by a flag or an exception.
+the run. Two accessors express the two capabilities over it: `read_only`
+returns a `ReadOnlyStageCache` (`get`/`find_entries` only), the safe default
+view every cross-run channel must offer; `read_write` returns a `StageCache`
+(its subclass), which adds `record`. The write capability is a distinct type,
+structurally absent from the read-only view rather than gated by a flag or an
+exception.
 """
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import ClassVar, Literal, overload
+from typing import ClassVar
 import json
 import math
 
@@ -31,7 +32,6 @@ import numpy as np
 import pandas as pd
 
 from app.core.persistence import JsonDict, PersistedModel, PersistenceScope
-from app.core.run_status import RunMode
 from app.core.utils import compute_short_hash
 
 
@@ -57,20 +57,15 @@ class StageCacheEntry(PersistedModel):
     frozen_input: JsonDict
     output_row: JsonDict | None
 
-    @overload
     @classmethod
-    def for_mode(cls, mode: Literal[RunMode.PRODUCTION]) -> "StageCache": ...
-    @overload
-    @classmethod
-    def for_mode(cls, mode: Literal[RunMode.NON_PRODUCTION]) -> "ReadOnlyStageCache": ...
-    @classmethod
-    def for_mode(cls, mode: RunMode) -> "StageCache | ReadOnlyStageCache":
-        """The accessor `mode` is granted: `StageCache` (read+write) for
-        `RunMode.PRODUCTION`, `ReadOnlyStageCache` (read only — no `put`) for
-        `RunMode.NON_PRODUCTION`."""
-        if mode == RunMode.PRODUCTION:
-            return StageCache()
+    def read_only(cls) -> "ReadOnlyStageCache":
+        """A read-only view over the cache: `get`/`find_entries`, no `record`."""
         return ReadOnlyStageCache()
+
+    @classmethod
+    def read_write(cls) -> "StageCache":
+        """A read+write accessor over the cache: `get`/`find_entries` plus `record`."""
+        return StageCache()
 
 
 def _build_cache_id(project: str, stage_id: str, stage_fingerprint: str, input_fingerprint: str) -> str:
@@ -165,8 +160,8 @@ class ReadOnlyStageCache:
 
 
 class StageCache(ReadOnlyStageCache):
-    """Read+write accessor over the stage-result cache — granted only to a
-    production run via `StageCacheEntry.for_mode(RunMode.PRODUCTION)`."""
+    """Read+write accessor over the stage-result cache: the read-only view's
+    `get`/`find_entries` plus `record`."""
 
     def record(
         self,

@@ -7,7 +7,8 @@ The base class carries no default for `SCOPE` — nothing at runtime reads
 catches, at review time; there is no runtime check. A second test enforces
 the sharper rule for the one scope that grants a run a write outliving it: a
 class carrying `SCOPE = PersistenceScope.PROJECT_READ_WRITE` must also define
-`for_mode`, the view that revokes that write for a non-production run.
+`read_only`, the safe read-only view every such cross-run writable channel
+must offer.
 
 Scope is all of `app/` (this test sits at its root); detection is AST-only —
 neither test imports the modules it inspects.
@@ -28,7 +29,7 @@ from arch._helpers import (
 _PERSISTED_MODEL = "PersistedModel"
 _SCOPE_ATTR = "SCOPE"
 _PROJECT_READ_WRITE_ATTR = "PROJECT_READ_WRITE"
-_FOR_MODE_METHOD = "for_mode"
+_READ_ONLY_METHOD = "read_only"
 
 
 def find_undeclared_scope_offenders(paths: list[Path]) -> list[str]:
@@ -43,10 +44,10 @@ def find_undeclared_scope_offenders(paths: list[Path]) -> list[str]:
     return offenders
 
 
-def find_project_read_write_missing_for_mode_offenders(paths: list[Path]) -> list[str]:
+def find_project_read_write_missing_read_only_offenders(paths: list[Path]) -> list[str]:
     """"<path>:<lineno>  class <name>" for every PersistedModel subclass whose
     `SCOPE` is assigned `PersistenceScope.PROJECT_READ_WRITE` but whose class
-    body never defines `for_mode`."""
+    body never defines `read_only`."""
     offenders: list[str] = []
     for path in paths:
         tree = parse_module(path)
@@ -54,7 +55,7 @@ def find_project_read_write_missing_for_mode_offenders(paths: list[Path]) -> lis
             scope_stmt = find_class_body_assignment(node, _SCOPE_ATTR)
             if scope_stmt is None or not _assigns_project_read_write(scope_stmt):
                 continue
-            if find_class_body_function(node, _FOR_MODE_METHOD) is None:
+            if find_class_body_function(node, _READ_ONLY_METHOD) is None:
                 offenders.append(f"{path.name}:{node.lineno}  class {node.name}")
     return offenders
 
@@ -76,12 +77,13 @@ def test_persisted_models_declare_scope() -> None:
     )
 
 
-def test_project_read_write_models_define_for_mode() -> None:
-    offenders = find_project_read_write_missing_for_mode_offenders(find_governed_files(__file__))
+def test_project_read_write_models_define_read_only() -> None:
+    offenders = find_project_read_write_missing_read_only_offenders(find_governed_files(__file__))
     assert not offenders, (
         "a PersistedModel with SCOPE = PersistenceScope.PROJECT_READ_WRITE grants "
         "run activity a write that outlives the run, so it must also define "
-        "for_mode, the view that revokes that write:\n  " + "\n  ".join(offenders)
+        "read_only, the safe read-only view every such channel must offer:\n  "
+        + "\n  ".join(offenders)
     )
 
 
@@ -132,7 +134,7 @@ def test_find_undeclared_scope_offenders_ignores_a_non_persisted_model_class(
     assert find_undeclared_scope_offenders([target]) == []
 
 
-def test_find_project_read_write_missing_for_mode_offenders_flags_project_read_write_without_for_mode(
+def test_find_project_read_write_missing_read_only_offenders_flags_project_read_write_without_read_only(
     tmp_path: Path,
 ) -> None:
     target = _write(
@@ -140,39 +142,39 @@ def test_find_project_read_write_missing_for_mode_offenders_flags_project_read_w
         "class Foo(PersistedModel):\n"
         "    SCOPE: ClassVar[PersistenceScope] = PersistenceScope.PROJECT_READ_WRITE\n",
     )
-    assert find_project_read_write_missing_for_mode_offenders([target]) == ["models.py:1  class Foo"]
+    assert find_project_read_write_missing_read_only_offenders([target]) == ["models.py:1  class Foo"]
 
 
-def test_find_project_read_write_missing_for_mode_offenders_accepts_project_read_write_with_for_mode(
+def test_find_project_read_write_missing_read_only_offenders_accepts_project_read_write_with_read_only(
     tmp_path: Path,
 ) -> None:
     target = _write(
         tmp_path,
         "class Foo(PersistedModel):\n"
         "    SCOPE: ClassVar[PersistenceScope] = PersistenceScope.PROJECT_READ_WRITE\n"
-        "    def for_mode(self, mode):\n"
+        "    def read_only(self):\n"
         "        pass\n",
     )
-    assert find_project_read_write_missing_for_mode_offenders([target]) == []
+    assert find_project_read_write_missing_read_only_offenders([target]) == []
 
 
-def test_find_project_read_write_missing_for_mode_offenders_ignores_run_scope(tmp_path: Path) -> None:
+def test_find_project_read_write_missing_read_only_offenders_ignores_run_scope(tmp_path: Path) -> None:
     target = _write(
         tmp_path,
         "class Foo(PersistedModel):\n"
         "    SCOPE: ClassVar[PersistenceScope] = PersistenceScope.RUN\n",
     )
-    assert find_project_read_write_missing_for_mode_offenders([target]) == []
+    assert find_project_read_write_missing_read_only_offenders([target]) == []
 
 
-def test_find_project_read_write_missing_for_mode_offenders_ignores_a_class_missing_scope(
+def test_find_project_read_write_missing_read_only_offenders_ignores_a_class_missing_scope(
     tmp_path: Path,
 ) -> None:
     """A class that never declares SCOPE at all is `test_persisted_models_
     declare_scope`'s offender, not this test's — it has no PROJECT_READ_WRITE
     assignment to react to."""
     target = _write(tmp_path, "class Foo(PersistedModel):\n    pass\n")
-    assert find_project_read_write_missing_for_mode_offenders([target]) == []
+    assert find_project_read_write_missing_read_only_offenders([target]) == []
 
 
 def test_assigns_project_read_write_matches_the_enum_attribute() -> None:

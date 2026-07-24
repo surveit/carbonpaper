@@ -197,15 +197,15 @@ class PersistenceScope(str, Enum):
     - PROJECT_READ_WRITE: run activity may read AND write the project scope —
       the only profile that grants a write outliving the run. The only model
       carrying it is the stage-result cache; any model carrying it must
-      define `for_mode`, the view that revokes that write for a
-      non-production run (consumed by the eval/smoke run path *(planned)*).
+      define `read_only`, the safe read-only view every such cross-run
+      writable channel must offer.
 
     Design invariant: exactly one PersistedModel subclass may carry
     SCOPE = PROJECT_READ_WRITE — the single deliberate channel that lets run
     activity write something outliving the run; broadening it would blur the
     line this scope exists to hold. StageCacheEntry (app.core.stage_cache)
     is that one subclass; both the "every subclass declares SCOPE" rule and
-    the "PROJECT_READ_WRITE implies for_mode" rule are enforced by the arch
+    the "PROJECT_READ_WRITE implies read_only" rule are enforced by the arch
     tests in app/_arch_tests/test_persisted_models_declare_scope.py.
     """
 

@@ -8,7 +8,6 @@ import time
 import pandas as pd
 import pytest
 
-from app.core.run_status import RunMode
 from app.models import Stage
 from app.models.stage import StageType
 from app.runtime.cancellation import request_cancel
@@ -85,7 +84,7 @@ def test_row_driver_parallel_branch_raises_run_cancelled_when_pre_requested():
     handler = RowMapHandler(make_mapper=make_mapper, parallelism=2)
     ctx = make_run_context(
         identity=RunIdentity(project="p-parallel", run_id="r-parallel"),
-        stage_cache=StageCacheEntry.for_mode(RunMode.PRODUCTION),
+        stage_cache=StageCacheEntry.read_write(),
     )
     request_cancel("p-parallel", "r-parallel")
     records = list(range(200))
@@ -106,7 +105,7 @@ def test_row_driver_sequential_branch_raises_run_cancelled_when_pre_requested():
     handler = RowMapHandler(make_mapper=make_mapper)  # parallelism=1 -> sequential branch
     ctx = make_run_context(
         identity=RunIdentity(project="p-seq", run_id="r-seq"),
-        stage_cache=StageCacheEntry.for_mode(RunMode.PRODUCTION),
+        stage_cache=StageCacheEntry.read_write(),
     )
     request_cancel("p-seq", "r-seq")
     with pytest.raises(RunCancelled):

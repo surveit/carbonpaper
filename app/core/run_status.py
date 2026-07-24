@@ -1,8 +1,7 @@
 """Workflow-run enums: the per-stage and overall-run `status` a run's manifest
-records — StageStatus and RunStatus (see app.runtime.runner) — and RunMode, the
-mode a run executes under, chosen before it starts.
+records — StageStatus and RunStatus (see app.runtime.runner).
 
-All three are `enum.StrEnum`, not the `class X(str, Enum)` pattern used for the
+Both are `enum.StrEnum`, not the `class X(str, Enum)` pattern used for the
 workflow-contract vocabularies in app.models (StageType, ConnectorKind,
 ...). For the status enums that distinction is load-bearing: their values are
 rendered as bare strings on paths only StrEnum gets right — Jinja builds CSS
@@ -42,12 +41,3 @@ class RunStatus(enum.StrEnum):
     ERRORS = "errors"
     AWAITING_REVIEW = "awaiting_review"
     CANCELLED = "cancelled"
-
-
-class RunMode(enum.StrEnum):
-    """The mode a run executes under: a PRODUCTION run versus a NON_PRODUCTION
-    run — an eval or a smoke run *(planned)*. Distinct from RunStatus, which is
-    a run's outcome; this is the mode chosen before the run starts."""
-
-    PRODUCTION = "production"
-    NON_PRODUCTION = "non_production"
