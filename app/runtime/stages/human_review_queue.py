@@ -9,7 +9,7 @@ import pandas as pd
 import pyarrow.lib as pa_lib
 
 from app.core.predicate import parse_predicate
-from app.models import Stage
+from app.models import RowReviewDecision, Stage
 from app.services.stage_cache import ReadOnlyStageCache, StageCacheEntry, compute_row_fingerprint
 
 from ..context import QueueStats, RunContext
