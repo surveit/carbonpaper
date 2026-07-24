@@ -203,7 +203,7 @@ class PersistenceScope(str, Enum):
     Design invariant: exactly one PersistedModel subclass may carry
     SCOPE = PROJECT_READ_WRITE — the single deliberate channel that lets run
     activity write something outliving the run; broadening it would blur the
-    line this scope exists to hold. StageCacheEntry (app.services.stage_cache)
+    line this scope exists to hold. StageCacheEntry (app.core.stage_cache)
     is that one subclass; both the "every subclass declares SCOPE" rule and
     the "PROJECT_READ_WRITE implies for_mode" rule are enforced by the arch
     tests in app/_arch_tests/test_persisted_models_declare_scope.py.

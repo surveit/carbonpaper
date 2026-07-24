@@ -10,7 +10,7 @@ from app.core.errors import ReviewValidationError
 from app.core.run_status import RunMode
 from app.models import RowReviewDecision
 from app.services import review
-from app.services.stage_cache import StageCacheEntry
+from app.core.stage_cache import StageCacheEntry
 
 
 def _load_entry(input_fingerprint: str):

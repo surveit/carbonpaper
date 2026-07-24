@@ -1,4 +1,4 @@
-"""Tests for app/services/stage_cache.py: the content-addressed stage-result
+"""Tests for app/core/stage_cache.py: the content-addressed stage-result
 cache — compute_row_fingerprint, StageCacheEntry, and its two accessors
 (StageCache read+write, ReadOnlyStageCache read-only)."""
 from __future__ import annotations
@@ -10,7 +10,7 @@ from pydantic import ValidationError
 
 from app.core.persistence import get_store
 from app.core.run_status import RunMode
-from app.services.stage_cache import (
+from app.core.stage_cache import (
     ReadOnlyStageCache,
     StageCache,
     StageCacheEntry,

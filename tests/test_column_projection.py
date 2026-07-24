@@ -17,7 +17,7 @@ from app.models.stage import StageType
 from app.runtime.context import RunContext, RunIdentity
 from app.runtime.stages import HANDLERS, handle_human_review_queue
 from app.runtime.stages import llm_transform as lt
-from app.services.stage_cache import StageCacheEntry
+from app.core.stage_cache import StageCacheEntry
 from conftest import make_run_context
 
 

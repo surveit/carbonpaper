@@ -1,5 +1,5 @@
 """Record a reviewer's verdict on one queued row as a stage-result cache entry
-(app.services.stage_cache): enforce the one domain rule (a `modify` carries a
+(app.core.stage_cache): enforce the one domain rule (a `modify` carries a
 score), build the review stage's output row for the verdict, and write it.
 
 The write goes through the production cache accessor
@@ -12,7 +12,7 @@ from collections.abc import Mapping
 from app.core.errors import ReviewValidationError
 from app.core.run_status import RunMode
 from app.models import RowReviewDecision
-from app.services.stage_cache import StageCacheEntry
+from app.core.stage_cache import StageCacheEntry
 
 
 def record_decision(

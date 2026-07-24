@@ -1,6 +1,6 @@
 """Human-review queue: render the reviewer UI for one queue stage (recovering
 the model input so the score is reviewable) and persist reviewer decisions
-into the stage-result cache (app.services.stage_cache)."""
+into the stage-result cache (app.core.stage_cache)."""
 
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ from app.core.run_status import RunMode
 from app.models import RowReviewDecision, Stage
 from app.runtime.llm import render_prompt
 from app.services import review
-from app.services.stage_cache import StageCacheEntry
+from app.core.stage_cache import StageCacheEntry
 from app.web.config import templates
 from app.web.loading import (
     QueueFingerprints,

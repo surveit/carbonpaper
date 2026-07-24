@@ -17,7 +17,7 @@ from pathlib import Path
 import pytest
 
 from app.runtime.context import RunContext, RunIdentity
-from app.services.stage_cache import ReadOnlyStageCache
+from app.core.stage_cache import ReadOnlyStageCache
 
 
 @pytest.fixture(autouse=True)
