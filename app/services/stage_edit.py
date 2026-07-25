@@ -4,8 +4,12 @@ Extracted from the node-edit route so the route and the editing agent's tools
 share ONE writer. It never touches disk itself: it loads the current workflow
 through the loader (`Stage` objects, not raw files), applies the change to the
 in-memory stage set, validates the whole resulting workflow, and only if that is
-clean persists the one stage through `write_stage`. The loader is the sole disk
-interface, both directions.
+clean persists the one stage through `write_stage`. Every change is validated
+against the whole resulting workflow before anything is written.
+
+Removal is the one direct disk touch: there is no stage to write, so once the
+reduced workflow validates clean the stage's file — located through the loader's
+`find_stage_file` — is unlinked here.
 """
 
 from __future__ import annotations
@@ -146,3 +150,23 @@ def add_stage_spec(project_dir: Path, spec_text: str) -> EditStageResult:
             issues=[f"stage '{stage_id}' already exists — use edit_stage to change it"],
         )
     return _apply(project_dir, specs, stage_id, spec)
+
+
+def remove_stage_spec(project_dir: Path, stage_id: str) -> EditStageResult:
+    """Delete stage `stage_id` from the workflow. The REDUCED workflow is validated
+    first, so a removal another stage still inputs from is rejected (its dangling
+    input fails the graph check) and nothing is unlinked. Removing the last stage
+    is allowed. Raises FileNotFoundError if the stage does not exist."""
+    specs = _current_specs(project_dir)
+    if stage_id not in specs:
+        raise FileNotFoundError(f"no stage '{stage_id}' in {project_dir.name}")
+
+    resulting = {k: v for k, v in specs.items() if k != stage_id}
+    issues = validate_workflow_draft(list(resulting.values()))
+    if issues:
+        return EditStageResult(ok=False, issues=issues)
+
+    target = find_stage_file(project_dir / "compiled", stage_id)
+    if target is not None:
+        target.unlink()
+    return EditStageResult(ok=True)

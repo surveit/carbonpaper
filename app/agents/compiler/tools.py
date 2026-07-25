@@ -78,6 +78,16 @@ def make_editing_tools(ctx: EditingContext) -> list[Callable[..., Any]]:
         result = project_service.add_stage(project_id, stage_json)
         return {"ok": result.ok, "issues": result.issues}
 
+    def remove_stage(project_id: str, stage_id: str) -> dict[str, Any]:
+        """Delete one stage from a project's workflow — the undo for a stage you
+        added. The workflow WITHOUT the stage is validated first: if another stage
+        still lists it in `inputs`, the removal is refused, nothing is deleted, and
+        the issues are returned (remove or repoint the downstream stage first).
+        Removing the last remaining stage is allowed. This edits the project's
+        workflow directly — use remove_draft_stage for a stage in a draft."""
+        result = project_service.remove_stage(project_id, stage_id)
+        return {"ok": result.ok, "issues": result.issues}
+
     def compile_workflow(
         project_id: str, conversation: str, confirm_overwrite: bool = False
     ) -> dict[str, Any]:
@@ -142,6 +152,7 @@ def make_editing_tools(ctx: EditingContext) -> list[Callable[..., Any]]:
         read_stage,
         edit_stage,
         add_stage,
+        remove_stage,
         compile_workflow,
         create_draft,
         read_draft,
@@ -189,6 +200,14 @@ TOOL_SCHEMAS: dict[str, ToolInputSchema] = {
             "(new and unique), name, type, the type's handle block (connector / "
             "llm / function / ...), output_schema, and inputs. Every id in inputs "
             "must already be a stage in this workflow, or it is rejected.",
+        ],
+    },
+    "remove_stage": {
+        "project_id": Annotated[str, "The project id (call get_current_project first)."],
+        "stage_id": Annotated[
+            str,
+            "The id of the stage to delete from the workflow. Refused if another "
+            "stage still lists it in its inputs.",
         ],
     },
     "compile_workflow": {
@@ -256,6 +275,7 @@ TOOL_LABELS: dict[str, str] = {
     "read_stage": "Reading a stage",
     "edit_stage": "Editing a stage",
     "add_stage": "Adding a stage",
+    "remove_stage": "Removing a stage",
     "compile_workflow": "Rebuilding the workflow from scratch",
     "create_draft": "Starting a draft",
     "read_draft": "Reading the draft",

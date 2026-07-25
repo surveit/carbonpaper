@@ -435,6 +435,12 @@ def add_stage(name: str, stage_json: str, examples_dir: Path | None = None) -> E
     return stage_edit.add_stage_spec(workspace.resolve_project_dir(name, examples_dir), stage_json)
 
 
+def remove_stage(name: str, stage_id: str, examples_dir: Path | None = None) -> EditStageResult:
+    """Delete one stage from a project's workflow (the reduced workflow is validated
+    first; nothing is deleted when another stage still inputs from it)."""
+    return stage_edit.remove_stage_spec(workspace.resolve_project_dir(name, examples_dir), stage_id)
+
+
 # ─── Portable WorkflowFile: project export / import ──────────────────────────
 
 class WorkflowFile(BaseModel):

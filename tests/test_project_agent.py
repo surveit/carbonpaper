@@ -14,6 +14,7 @@ _EXPECTED_TOOL_NAMES = {
     "read_stage",
     "edit_stage",
     "add_stage",
+    "remove_stage",
     "compile_workflow",
     "create_draft",
     "read_draft",

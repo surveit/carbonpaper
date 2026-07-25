@@ -274,6 +274,17 @@ def add_stage(project_id: str, stage_json: str) -> dict[str, Any]:
 
 
 @mcp.tool()
+def remove_stage(project_id: str, stage_id: str) -> dict[str, Any]:
+    """Delete one stage from the workflow — the undo for a stage you added. The
+    workflow WITHOUT the stage is validated first: if another stage still lists it
+    in `inputs`, the removal is refused, nothing is deleted, and the issues are
+    returned (remove or repoint the downstream stage first). Removing the last
+    remaining stage is allowed."""
+    result = project_service.remove_stage(project_id, stage_id)
+    return {"ok": result.ok, "issues": result.issues}
+
+
+@mcp.tool()
 def run_workflow(project_id: str, version_id: str | None = None) -> dict[str, Any]:
     """Start a REAL production run of the project's published workflow and return
     its `run_id` immediately — the run executes in the background. This is a run

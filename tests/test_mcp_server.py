@@ -66,6 +66,7 @@ def test_mcp_lists_the_authoring_tools(client):
         "read_stage",
         "edit_stage",
         "add_stage",
+        "remove_stage",
         "generate_stage_tests",
         "run_stage_tests",
     } <= names
@@ -196,6 +197,24 @@ def test_generate_stage_tests_kicks_the_derivation_turn(tmp_path, monkeypatch):
     assert out["status"] == "started"
     assert out["watch"] == "/chat/sess-tests"
     assert seen["stage_id"] == "double"
+
+
+def test_mcp_remove_stage_returns_ok_and_issues(tmp_path, monkeypatch):
+    from app.mcp import server
+    from app.services import workspace
+
+    monkeypatch.setattr(workspace, "EXAMPLES_DIR", tmp_path)
+    pdir = tmp_path / "trail"
+    _write_compiled_workflow(pdir)
+
+    removed = server.remove_stage(project_id="trail", stage_id="untested")
+    assert removed == {"ok": True, "issues": []}
+    assert not (pdir / "compiled" / "untested.json").exists()
+
+    # `double` still inputs from `load`, so removing `load` is refused with issues.
+    refused = server.remove_stage(project_id="trail", stage_id="load")
+    assert refused["ok"] is False and refused["issues"]
+    assert (pdir / "compiled" / "load.json").exists()
 
 
 def test_read_tools_reject_unknown_project(tmp_path, monkeypatch):
