@@ -431,8 +431,15 @@ def edit_stage(name: str, stage_id: str, changes_json: str, examples_dir: Path |
 
 def add_stage(name: str, stage_json: str, examples_dir: Path | None = None) -> EditStageResult:
     """Add a new stage to a project's workflow (validated before it writes; nothing
-    written on failure)."""
+    written on failure). A project with no workflow yet is a valid target — this is
+    how the first stage of an incrementally authored workflow lands."""
     return stage_edit.add_stage_spec(workspace.resolve_project_dir(name, examples_dir), stage_json)
+
+
+def remove_stage(name: str, stage_id: str, examples_dir: Path | None = None) -> EditStageResult:
+    """Delete one stage from a project's workflow (the workflow minus the stage is
+    validated first; nothing is deleted if the removal would break the graph)."""
+    return stage_edit.remove_stage_spec(workspace.resolve_project_dir(name, examples_dir), stage_id)
 
 
 # ─── Portable WorkflowFile: project export / import ──────────────────────────
@@ -514,6 +521,7 @@ __all__ = [
     "read_stage",
     "edit_stage",
     "add_stage",
+    "remove_stage",
     "WorkflowFile",
     "export_project",
     "import_project",

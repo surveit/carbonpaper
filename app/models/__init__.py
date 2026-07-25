@@ -106,11 +106,13 @@ CONNECTOR_KINDS: set[str] = {
     "file", "http", "scrape", "api", "manual_upload", "sql",
 }
 
-# ── The seven node types and their handle-block contract ─────────────────────
-# app.compiler.workflow_prompt renders this into the workflow compiler's system
-# prompt: type -> {summary, handle, required, optional, min_inputs, requires_inputs,
+# ── The eight node types and their handle-block contract ─────────────────────
+# app.agents.compiler.prompt renders this into the editing agent's system prompt:
+# type -> {summary, handle, required, optional, min_inputs, requires_inputs,
 # also_requires?}. The Stage model does not expose this rendering shape, so the
-# spec is kept here as plain data purely for prompt rendering.
+# spec is kept here as plain data purely for prompt rendering. `notes` carries the
+# per-type facts an authoring model must know that the schema alone cannot state —
+# including runtime CONTRACTS discovered by actually running compiled workflows.
 NODE_TYPES: dict[str, dict[str, _Any]] = {
     "input_data": {
         "summary": "Declares a source dataset with a typed schema.",
@@ -187,7 +189,14 @@ NODE_TYPES: dict[str, dict[str, _Any]] = {
             "fingerprinting the row itself — no column configuration is needed. "
             "Editing `filter` or `reviewer_instructions` changes the stage's "
             "definition fingerprint, so every previously cached decision for "
-            "this stage stops matching and every row is asked again."
+            "this stage stops matching and every row is asked again. "
+            "This type's output columns are FIXED by the runtime regardless of what "
+            "output_schema declares: only `decision` (approve/modify/reject), `ai_score`, "
+            "`human_score`, `final_score`, `review_notes`, `reviewer_id`, `reviewed_at`, plus "
+            "passthrough columns are ever populated — declare exactly those (never invented "
+            "names like \"review_decision\") and filter downstream on `decision == \"approve\"`. "
+            "Unlike python_frame_function, undeclared upstream columns are silently dropped, so "
+            "declare every column a later stage needs to read."
         ),
     },
     "publish": {

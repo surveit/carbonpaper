@@ -1,19 +1,19 @@
 """
-app.compiler — the prose → LLM → workflow authoring engine.
+app.compiler — the GENERATION BRIDGES onto the app.core.agent spine.
 
-Public surface:
-  - `read_input` / `compile_methodology`  — the one-shot BATCH compile (from
-    .compiler): prose → LLM → a workflow dict.
+Public surface: none. Each module here builds one headless `Agent[T]` and runs it
+as a chat turn on the shared spine, handing the submitted, schema-validated object
+back through a callback:
+  - `data_model`  — prose → the project's named schemas (`SchemaLibrary`).
+  - `stage_tests` — methodology + one stage → that stage's derived test suite.
 
-The LLM call, the validation pass, and the prompt builders are internal to the
-package. Persisting a batch compile as a first-class object (manifest /
-what-happened / workflow on disk, plus the index/detail loaders) is a separate
-concern owned by `app.services.compilation`. The command-line entry point is
-`app.compiler.__main__` (`python -m app.compiler`).
+app.compiler is the only allowed importer of the agent spine below app.services, so
+`app.services.generation` delegates here rather than reaching into the spine itself;
+persisting whatever an agent submits is the caller's job, never this package's.
+
+There is deliberately NO prose → whole-workflow compiler. A workflow's stages are
+authored one at a time through `app.services.stage_edit`, each write re-validating
+the entire resulting workflow, so no code path can overwrite or reset a draft.
 """
 
 from __future__ import annotations
-
-from app.compiler.compiler import compile_methodology, read_input
-
-__all__ = ["read_input", "compile_methodology"]

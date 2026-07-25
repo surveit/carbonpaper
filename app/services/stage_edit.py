@@ -1,11 +1,16 @@
 """stage_edit.py — the single validated writer for one compiled stage.
 
-Extracted from the node-edit route so the route and the editing agent's tools
-share ONE writer. It never touches disk itself: it loads the current workflow
-through the loader (`Stage` objects, not raw files), applies the change to the
-in-memory stage set, validates the whole resulting workflow, and only if that is
-clean persists the one stage through `write_stage`. The loader is the sole disk
-interface, both directions.
+Extracted from the node-edit route so the route, the editing agent's tools and the
+MCP authoring tools share ONE writer. It never touches disk itself: it loads the
+current workflow through the loader (`Stage` objects, not raw files), applies the
+change to the in-memory stage set, validates the whole resulting workflow, and only
+if that is clean persists (or deletes) the one stage through the loader. The loader
+is the sole disk interface, both directions.
+
+Every entry point here changes exactly ONE stage — add, patch, replace, remove —
+and each re-validates the WHOLE resulting workflow before writing. There is no
+whole-workflow writer: a draft is only ever reached one validated stage at a time,
+so no code path can overwrite or reset a workflow that already has stages.
 """
 
 from __future__ import annotations
@@ -19,6 +24,7 @@ from app.models.workflow import validate_workflow_draft
 from app.services import node_review
 from app.services.loader import (
     find_stage_file,
+    load_compiled_dir,
     load_workflow_object,
     stage_to_spec_dict,
     write_stage,
@@ -48,10 +54,15 @@ def _merge_patch(target: object, patch: object) -> object:
 
 def _current_specs(project_dir: Path) -> dict[str, dict]:
     """The workflow's current stages as ``{id: canonical spec dict}``, read through
-    the loader as one in-memory ``Workflow`` object. The workflow being edited is
-    always a valid, non-empty one (you edit only after it compiles), so the strict
-    loader is right here — an unloadable workflow raises rather than letting an edit
-    proceed against a silently-partial view of it."""
+    the loader as one in-memory ``Workflow`` object.
+
+    An EMPTY workflow (no ``compiled/`` dir, or no stage files in it) is the
+    legitimate starting point of incremental authoring — the first ``add_stage``
+    writes into it — so it reads as ``{}`` rather than raising. Once stage files
+    DO exist the strict loader applies: an unloadable workflow raises rather than
+    letting an edit proceed against a silently-partial view of it."""
+    if not load_compiled_dir(project_dir / "compiled"):
+        return {}
     workflow = load_workflow_object(project_dir)
     return {stage.id: stage_to_spec_dict(stage) for stage in workflow.stages}
 
@@ -83,6 +94,9 @@ def _apply(project_dir: Path, specs: dict[str, dict], stage_id: str, candidate: 
     target = find_stage_file(project_dir / "compiled", stage_id) or (
         project_dir / "compiled" / f"{stage_id}.json"
     )
+    # The first stage of an incrementally authored workflow lands in a compiled/
+    # dir that does not exist yet.
+    target.parent.mkdir(parents=True, exist_ok=True)
     write_stage(target, validated_stage)
     return EditStageResult(ok=True)
 
@@ -146,3 +160,36 @@ def add_stage_spec(project_dir: Path, spec_text: str) -> EditStageResult:
             issues=[f"stage '{stage_id}' already exists — use edit_stage to change it"],
         )
     return _apply(project_dir, specs, stage_id, spec)
+
+
+def remove_stage_spec(project_dir: Path, stage_id: str) -> EditStageResult:
+    """Delete `stage_id` from the workflow — the undo of the authoring loop.
+
+    The same validated-writer pattern as add/edit, run backwards: the workflow
+    MINUS this stage is validated first, and only a clean result deletes the file.
+    A stage some remaining stage still inputs from therefore cannot be removed —
+    `validate_inputs_resolve` reports the dangling edge and nothing is deleted, so
+    a removal can never leave the draft broken (remove or re-point the dependents
+    first). Removing the last stage is allowed: an empty workflow is the same
+    legitimate empty draft `add_stage` starts from.
+
+    Raises FileNotFoundError if `stage_id` is not a stage in this workflow — a
+    typo'd id is loud, never a silent no-op that reads as a successful delete."""
+    specs = _current_specs(project_dir)
+    if stage_id not in specs:
+        raise FileNotFoundError(f"no stage '{stage_id}' in {project_dir.name}")
+
+    remaining = {sid: spec for sid, spec in specs.items() if sid != stage_id}
+    issues = validate_workflow_draft(list(remaining.values()))
+    if issues:
+        return EditStageResult(ok=False, issues=issues)
+
+    target = find_stage_file(project_dir / "compiled", stage_id)
+    if target is None:
+        # specs were read from these very files, so this cannot happen unless the
+        # dir changed underneath us — raise rather than report a delete we didn't do.
+        raise FileNotFoundError(
+            f"no compiled file holds stage '{stage_id}' in {project_dir.name}"
+        )
+    target.unlink()
+    return EditStageResult(ok=True)

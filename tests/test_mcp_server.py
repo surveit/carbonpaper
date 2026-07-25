@@ -60,15 +60,40 @@ def test_mcp_lists_the_authoring_tools(client):
         "create_project",
         "get_project_status",
         "generate_data_model",
-        "generate_workflow",
         "read_data_model",
         "describe_workflow",
         "read_stage",
         "edit_stage",
         "add_stage",
+        "remove_stage",
         "generate_stage_tests",
         "run_stage_tests",
     } <= names
+
+
+def test_mcp_exposes_no_whole_workflow_generation_tool(client):
+    """#243: the workflow is authored one validated stage at a time. A tool that
+    generated (or regenerated) the WHOLE workflow could reset a non-empty draft, so
+    none is exposed — the stage writers are the only way a workflow changes."""
+    client.post("/mcp", json=INITIALIZED, headers=HEADERS)
+    resp = client.post("/mcp", json=LIST_TOOLS, headers=HEADERS)
+    names = {t["name"] for t in resp.json()["result"]["tools"]}
+    assert "generate_workflow" not in names
+    assert not {name for name in names if "regenerate" in name or "compile" in name}
+
+
+def test_mcp_instructions_carry_the_incremental_loop(client):
+    """The `instructions` string is the client-agnostic carrier of the loop: any MCP
+    client (not just Claude Code) learns from it that IT is the compiler, that stages
+    go in one at a time in dependency order, and that review stays human."""
+    resp = client.post("/mcp", json=INITIALIZE, headers=HEADERS)
+    instructions = resp.json()["result"]["instructions"].lower()
+    assert "add_stage" in instructions and "remove_stage" in instructions
+    assert "one" in instructions and "stage at a time" in instructions
+    assert "dependency order" in instructions
+    assert "read_stage" in instructions          # ground on the real upstreams
+    assert "generate_workflow" not in instructions
+    assert "human" in instructions               # approval stays human-only
 
 
 def test_create_project_tool_and_status(tmp_path, monkeypatch):
@@ -196,6 +221,39 @@ def test_generate_stage_tests_kicks_the_derivation_turn(tmp_path, monkeypatch):
     assert out["status"] == "started"
     assert out["watch"] == "/chat/sess-tests"
     assert seen["stage_id"] == "double"
+
+
+def test_remove_stage_tool_deletes_and_refuses_by_the_graph(tmp_path, monkeypatch):
+    """The undo tool: the leaf `untested` comes out cleanly, while `load` — which
+    both transforms still input from — is refused with the dangling edges named
+    and nothing deleted."""
+    from app.mcp import server
+    from app.services import workspace
+
+    monkeypatch.setattr(workspace, "EXAMPLES_DIR", tmp_path)
+    pdir = tmp_path / "trail"
+    _write_compiled_workflow(pdir)
+
+    assert server.remove_stage(project_id="trail", stage_id="untested") == {
+        "ok": True, "issues": [],
+    }
+    assert not (pdir / "compiled" / "untested.json").exists()
+
+    before = sorted(p.name for p in (pdir / "compiled").glob("*.json"))
+    refused = server.remove_stage(project_id="trail", stage_id="load")
+    assert refused["ok"] is False
+    assert any("load" in issue for issue in refused["issues"])
+    assert sorted(p.name for p in (pdir / "compiled").glob("*.json")) == before
+
+
+def test_remove_stage_tool_is_loud_on_an_unknown_stage(tmp_path, monkeypatch):
+    from app.mcp import server
+    from app.services import workspace
+
+    monkeypatch.setattr(workspace, "EXAMPLES_DIR", tmp_path)
+    _write_compiled_workflow(tmp_path / "trail")
+    with pytest.raises(FileNotFoundError):
+        server.remove_stage(project_id="trail", stage_id="no_such_stage")
 
 
 def test_read_tools_reject_unknown_project(tmp_path, monkeypatch):

@@ -6,7 +6,12 @@ directories only through workspace.resolve_project_dir (which refuses names
 escaping the workspace); any further path use stays inside that resolved
 directory. Generation tools start LIVE chat turns on the server event loop and
 return immediately; callers poll get_project_status. Failures raise — FastMCP
-surfaces the exception message as a tool error — never a fabricated success."""
+surfaces the exception message as a tool error — never a fabricated success.
+
+The WORKFLOW is authored incrementally by the CLIENT: add_stage / edit_stage /
+remove_stage each re-validate the whole resulting workflow and write at most one
+stage. There is deliberately NO whole-workflow generate/regenerate tool — no tool
+here can overwrite or reset a workflow that already has stages."""
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
@@ -24,7 +29,6 @@ from app.core.errors import (
     RunNotFoundError,
 )
 from app.runtime import stage_tests
-from app.services import data_model as data_model_service
 from app.services import generation
 from app.services import loader
 from app.services import project as project_service
@@ -47,18 +51,49 @@ _RUN_TOOL_ERRORS = (
 
 INSTRUCTIONS = """\
 glassbox turns an investigation methodology (prose) into a reviewable, runnable data
-pipeline. Authoring order: create_project → generate_data_model → the human
-approves the data model in the web UI → generate_workflow → refine with
-edit_stage / add_stage. Generation runs in the background: poll
-get_project_status until the data model / workflow appears. Approval is
-human-only and happens in the web UI, never through these tools.
+pipeline. YOU are the compiler: there is no one-shot "generate the workflow" call.
+The workflow is authored INCREMENTALLY — one whole, validated stage at a time — and
+no tool here can overwrite or reset a workflow that already has stages.
 
-Once a workflow exists, derive and run per-stage tests:
-generate_stage_tests(project_id, stage_id) derives one python-transform stage's
-tests from the methodology (background; read_stage to see them once done), and
-run_stage_tests(project_id, stage_id?) runs the authored tests against the stage's
-current code — omit stage_id to run every python-transform stage, or pass one to
-scope it. Loop edit_stage → run_stage_tests until a stage's tests pass."""
+# The authoring loop
+
+1. create_project(name, document) — the methodology prose is the project's source of
+   record. Write it first; it is what every later step grounds on.
+2. generate_data_model(project_id) — runs in the background; poll get_project_status
+   until schemas appear. A HUMAN then approves the data model in the web UI.
+3. read_data_model(project_id) — the approved nouns your stages import and generate.
+4. Author the workflow STAGE BY STAGE, in DEPENDENCY ORDER: sources first, then only
+   stages whose upstreams already exist. For each stage:
+     a. describe_workflow(project_id) — what is already there (ids, types, edges).
+     b. read_stage(project_id, <upstream id>) for EVERY producer this stage reads
+        from. Write the stage's `inputs[].schema` against the columns that upstream
+        really outputs; never guess an upstream's columns, and never copy a
+        neighbouring stage's block without reading it.
+     c. add_stage(project_id, <full stage JSON>) — the WHOLE stage (id, name, type,
+        the type's handle block, output_schema, inputs), never a fragment.
+5. Repair as you go: edit_stage (a JSON Merge Patch of ONLY the fields that change)
+   and remove_stage (the undo). Both re-validate the whole workflow.
+6. Per python-transform stage: generate_stage_tests, then run_stage_tests. Loop
+   edit_stage → run_stage_tests until the stage's tests pass. Fix the CODE, never
+   bend a test to the code.
+7. run_workflow_test to watch the pipeline execute over a slice of real data;
+   run_workflow for a production run of a published version.
+
+# What a write means here
+
+Every write re-validates the ENTIRE resulting workflow — each stage's own
+invariants, the graph (unique ids, inputs resolve, acyclic), and edge conformance:
+an input schema its upstream does not actually supply is refused, naming the
+columns. On {"ok": false} nothing was written, so there is nothing to undo — read
+`issues`, fix the stage JSON, and call again. A tool that raises has written
+nothing either; a failure is never reported as success.
+
+# What stays human
+
+Every stage you add lands `unreviewed` (amber) and every stage you edit drops to
+`edited_stale`, for a human to approve in the web UI. You cannot approve, version,
+or publish anything. Never fabricate a column, source, model, or value — if you
+lack it, ask."""
 
 mcp = FastMCP(
     name="glassbox",
@@ -121,8 +156,8 @@ async def run_session_manager() -> AsyncIterator[None]:
 @mcp.tool()
 def list_projects() -> list[str]:
     """List the names of every project in the workspace that has an authored
-    workflow. A just-created project appears here only after its workflow is
-    generated — use get_project_status(project_id) to inspect one before that."""
+    workflow. A just-created project appears here only once its FIRST stage has
+    been added — use get_project_status(project_id) to inspect one before that."""
     return project_service.list_projects()
 
 
@@ -131,7 +166,8 @@ def create_project(name: str, document: str) -> dict[str, Any]:
     """Create a NEW project from a methodology document (prose describing how the
     investigation finds, verifies, and surfaces its claims). Writes the document
     as the project's source of record. Returns the project_id (the sanitized
-    name). Fails loudly if the name is taken — never overwrites. Next step:
+    name). Fails loudly if the name is taken — never overwrites. The project starts
+    with an EMPTY workflow you then author one stage at a time. Next step:
     generate_data_model(project_id)."""
     project_id = project_service.create_project(name, document, source="mcp")
     return {"project_id": project_id, "next": "generate_data_model"}
@@ -153,34 +189,18 @@ async def generate_data_model(project_id: str) -> dict[str, Any]:
     document. Starts a live generation turn in the background and returns
     immediately — poll get_project_status until schemas appear, and tell the user
     they can watch it stream at the returned `watch` path in the web UI. The
-    human then reviews/approves the data model in the web UI before the workflow
-    is generated."""
+    human then reviews/approves the data model in the web UI; read it back with
+    read_data_model and author the workflow yourself, stage by stage, with
+    add_stage."""
     pdir = _resolve_existing_project(project_id)
     document = _read_document(pdir, project_id)
     model = project_service.project_meta(pdir).model or "sonnet"
     session_id = generation.start_generation(pdir, document=document, model=model)
-    return {"status": "started", "watch": f"/chat/{session_id}", "poll": "get_project_status"}
-
-
-@mcp.tool()
-async def generate_workflow(project_id: str) -> dict[str, Any]:
-    """Generate the project's WORKFLOW from its methodology document, grounded on
-    the data model ONLY if a human has approved it in the web UI (an unapproved
-    model is not passed — approve first for a grounded workflow). Never touches
-    the schemas. Starts a live generation turn in the background and returns
-    immediately — poll get_project_status until the workflow appears."""
-    pdir = _resolve_existing_project(project_id)
-    document = _read_document(pdir, project_id)
-    model = project_service.project_meta(pdir).model or "sonnet"
-    data_model = data_model_service.load_data_model(pdir, approved_only=True)
-    session_id = generation.start_workflow_generation(
-        pdir, document=document, model=model, data_model=data_model
-    )
     return {
         "status": "started",
-        "grounded_on_approved_data_model": data_model is not None,
         "watch": f"/chat/{session_id}",
         "poll": "get_project_status",
+        "next": "the human approves the data model, then author stages with add_stage",
     }
 
 
@@ -234,15 +254,20 @@ def read_data_model(project_id: str) -> list[dict[str, Any]]:
 @mcp.tool()
 def describe_workflow(project_id: str) -> dict[str, Any]:
     """Summarize a project's workflow: each stage's id, type, name, upstream input
-    ids, and review state. Read this before editing so you know the current
-    shape. Does not return full stage specs — use read_stage for one."""
+    ids, and review state. Read this before every add/edit/remove so you know the
+    current shape — an empty `stages` list is a project whose workflow you have not
+    started authoring yet, not an error. Does not return full stage specs — use
+    read_stage for one."""
     _resolve_existing_project(project_id)
     return project_service.describe_workflow(project_id)
 
 
 @mcp.tool()
 def read_stage(project_id: str, stage_id: str) -> str:
-    """Return the JSON of one stage from the workflow. Read before editing."""
+    """Return the JSON of one stage from the workflow. Read every UPSTREAM producer
+    before authoring a stage that reads from it — its `output_schema` is the only
+    truthful source for the columns your new stage may declare on that input — and
+    read a stage before editing it."""
     return project_service.read_stage(project_id, stage_id)
 
 
@@ -252,24 +277,44 @@ def edit_stage(project_id: str, stage_id: str, changes_json: str) -> dict[str, A
     ONLY the fields to change (a JSON Merge Patch): {"limit": 100} sets limit;
     {"llm": {"model": "opus"}} changes only llm.model and leaves the rest of the
     llm block intact; {"name": null} deletes a field. Fields you do not mention
-    are preserved exactly. Validated first; if invalid, nothing is written and
-    the issues are returned. A successful edit drops the node to 'edited_stale'
-    (amber) for a human to re-approve — you cannot approve it yourself. You
-    cannot change a stage's id this way."""
+    are preserved exactly. The WHOLE resulting workflow is validated first; if
+    invalid, nothing is written and the issues are returned — fix the patch and
+    call again. A successful edit drops the node to 'edited_stale' (amber) for a
+    human to re-approve — you cannot approve it yourself. You cannot change a
+    stage's id this way (add_stage the new one, then remove_stage the old)."""
     result = project_service.edit_stage(project_id, stage_id, changes_json)
     return {"ok": result.ok, "issues": result.issues}
 
 
 @mcp.tool()
 def add_stage(project_id: str, stage_json: str) -> dict[str, Any]:
-    """Create a NEW stage in the workflow. `stage_json` is a full stage as JSON:
-    id (new and unique — use edit_stage to change an existing one), name, type,
-    the type's handle block (e.g. connector / llm / function), output_schema, and
-    inputs. Every id listed in `inputs` must ALREADY be a stage in this workflow —
-    a dangling input is rejected. read_stage on a similar existing stage shows the
-    shape. Validated first; if invalid, nothing is written and the issues are
-    returned. The new node lands 'unreviewed' (amber) for a human to approve."""
+    """Create a NEW stage in the workflow — the one way a workflow grows, called
+    once per stage in dependency order. `stage_json` is a FULL stage as JSON, never
+    a fragment: id (new and unique — use edit_stage to change an existing one),
+    name, type, the type's handle block (e.g. connector / llm / function),
+    output_schema, and inputs. Every id listed in `inputs` must ALREADY be a stage
+    in this workflow — author sources first, dependents after — and read_stage each
+    of those upstreams before you declare the columns you read from them. The WHOLE
+    resulting workflow is validated, including edge conformance (an input schema
+    the upstream's output_schema does not supply is refused, naming the columns);
+    if invalid, nothing is written and the issues are returned — repair the stage
+    JSON and call again. The new node lands 'unreviewed' (amber) for a human to
+    approve. Next step: generate_stage_tests + run_stage_tests for a python
+    transform, or add_stage for the next stage down the graph."""
     result = project_service.add_stage(project_id, stage_json)
+    return {"ok": result.ok, "issues": result.issues}
+
+
+@mcp.tool()
+def remove_stage(project_id: str, stage_id: str) -> dict[str, Any]:
+    """Delete one stage from the workflow — the undo of the authoring loop. The
+    workflow MINUS this stage is validated first: if any remaining stage still
+    lists it in `inputs`, the removal is refused with those dangling edges as
+    `issues` and NOTHING is deleted (remove or re-point the dependents first, then
+    retry). Removing the last stage is allowed — that just returns the project to
+    an empty workflow you can author into again. An unknown stage_id is a loud
+    error, never a silent no-op."""
+    result = project_service.remove_stage(project_id, stage_id)
     return {"ok": result.ok, "issues": result.issues}
 
 

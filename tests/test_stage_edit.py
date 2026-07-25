@@ -201,3 +201,90 @@ def test_add_stage_rejects_duplicate_id(tmp_path: Path) -> None:
            "connector": {"kind": "file"}}
     result = stage_edit.add_stage_spec(pdir, json.dumps(dup))
     assert result.ok is False and any("already exists" in i for i in result.issues)
+
+
+# ─── the EMPTY draft: incremental authoring starts from nothing ──────────────
+# With the one-shot generator gone (#243), `add_stage` is the only way a workflow
+# comes into existence — so a project with no compiled/ dir at all must accept the
+# first stage rather than raising on the strict loader.
+
+
+def test_add_stage_writes_the_first_stage_of_an_empty_project(tmp_path: Path) -> None:
+    pdir = tmp_path / "fresh"
+    pdir.mkdir()
+    first = {"id": "load", "name": "Load", "type": "input_data",
+             "connector": {"kind": "file"}}
+    result = stage_edit.add_stage_spec(pdir, json.dumps(first))
+    assert result.ok is True and not result.issues
+    assert (pdir / "compiled" / "load.json").exists()
+
+
+def test_add_stage_into_an_empty_project_still_rejects_a_dangling_input(tmp_path: Path) -> None:
+    pdir = tmp_path / "fresh"
+    pdir.mkdir()
+    orphan = {"id": "score", "name": "Score", "type": "llm_transform",
+              "inputs": [{"id": "load", "schema": _IN_SCHEMA}],
+              "llm": {"model": "claude-sonnet-4-6", "prompt_template": "score {doc_id}"},
+              "output_schema": _OUT_SCHEMA}
+    result = stage_edit.add_stage_spec(pdir, json.dumps(orphan))
+    assert result.ok is False and any("load" in i for i in result.issues)
+    assert not (pdir / "compiled").exists()
+
+
+def test_edit_of_a_workflow_whose_files_do_not_load_still_raises(tmp_path: Path) -> None:
+    """The empty-draft tolerance is scoped to 'no stage files at all'. A compiled/
+    dir holding an UNLOADABLE stage must still raise, so an edit never proceeds
+    against a silently-partial view of the workflow."""
+    from app.services.errors import WorkflowLoadError
+
+    pdir = tmp_path / "broken"
+    (pdir / "compiled").mkdir(parents=True)
+    (pdir / "compiled" / "01_bad.json").write_text(
+        json.dumps({"id": "bad", "name": "Bad", "type": "not_a_real_type"}), encoding="utf-8"
+    )
+    with pytest.raises(WorkflowLoadError):
+        stage_edit.add_stage_spec(
+            pdir,
+            json.dumps({"id": "load", "name": "Load", "type": "input_data",
+                        "connector": {"kind": "file"}}),
+        )
+
+
+# ─── remove_stage_spec: the undo, validated the same way ─────────────────────
+
+
+def test_remove_stage_deletes_the_file_when_the_graph_stays_clean(tmp_path: Path) -> None:
+    pdir = _seed(tmp_path)  # load -> score
+    result = stage_edit.remove_stage_spec(pdir, "score")
+    assert result.ok is True and not result.issues
+    assert loader.find_stage_file(pdir / "compiled", "score") is None
+    assert loader.find_stage_file(pdir / "compiled", "load") is not None
+
+
+def test_remove_stage_refuses_when_a_dependent_still_inputs_from_it(tmp_path: Path) -> None:
+    pdir = _seed(tmp_path)  # score inputs from load
+    before = {p.name: p.read_text(encoding="utf-8") for p in (pdir / "compiled").glob("*.json")}
+    result = stage_edit.remove_stage_spec(pdir, "load")
+    assert result.ok is False
+    assert any("load" in i and "score" in i for i in result.issues)
+    # nothing deleted, nothing rewritten
+    assert {p.name: p.read_text(encoding="utf-8")
+            for p in (pdir / "compiled").glob("*.json")} == before
+
+
+def test_remove_stage_can_empty_the_workflow(tmp_path: Path) -> None:
+    pdir = _seed(tmp_path)
+    assert stage_edit.remove_stage_spec(pdir, "score").ok is True
+    assert stage_edit.remove_stage_spec(pdir, "load").ok is True
+    assert list((pdir / "compiled").glob("*.json")) == []
+    # and the emptied project can be authored into again
+    assert stage_edit.add_stage_spec(
+        pdir, json.dumps({"id": "load", "name": "Load", "type": "input_data",
+                          "connector": {"kind": "file"}})
+    ).ok is True
+
+
+def test_remove_stage_missing_id_raises(tmp_path: Path) -> None:
+    pdir = _seed(tmp_path)
+    with pytest.raises(FileNotFoundError, match="no stage 'ghost'"):
+        stage_edit.remove_stage_spec(pdir, "ghost")

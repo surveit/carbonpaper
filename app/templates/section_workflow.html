@@ -7,14 +7,15 @@
       the graph — decision bar on top, then Inputs / Transform / Outputs / Spec tabs
     · Run + Create-version controls (the version LIST lives on the Versions tab)
 
-  The workflow is GENERATED automatically right after the data model (see
-  app.services.generation) in the background; this page just reads the result from
-  disk — the graph when stages are present, else a 0-state with a Generate button. No
-  live status / spinner yet (issue #95); there is no in-page build chat.
+  The workflow is AUTHORED INCREMENTALLY, one validated stage at a time, by an agent
+  driving app.services.stage_edit (the glassbox MCP tools, or "Edit with agent").
+  There is no generate/regenerate control here and no route that could rebuild the
+  whole workflow: this page only READS what has been authored so far — the graph when
+  stages are present, else a 0-state explaining how to author the first one.
 
   The data model is optional input to the workflow, so this section always renders —
-  there is no locked state. When no stages are on disk yet, it shows an empty state
-  (the workflow may still be building), not a lock.
+  there is no locked state. When no stages are on disk yet, it shows an empty state,
+  not a lock.
 
   Context the route passes:
     state       = project.project_state(mdir); section = "workflow"
@@ -25,8 +26,7 @@
     type_glyph  = TYPE_GLYPH
 
   Reused (unchanged) routes: node review /node/{id}/review-partial,/decide,/edit;
-  /review/status; create version POST /version; run POST /run; (re)generate POST
-  /generate.
+  /review/status; create version POST /version; run POST /run.
 #}
 {# The section key stays 'workflow' (internal); the VISIBLE tab title says Workflow. #}
 {% block title %}{{ state.meta.title or state.name }} · Workflow{% endblock %}
@@ -72,9 +72,6 @@
     {# Running is configured on the Runs page (pick version + set input paths), so
        version and inputs are never split across two surfaces. #}
     <a href="/project/{{ state.name }}/runs" class="btn primary">▶ Run workflow</a>
-    <form action="/project/{{ state.name }}/generate-workflow" method="post" style="display:inline;">
-      <button type="submit" class="btn" title="Recompile the workflow from the document, using the approved data model as reference. Replaces the current workflow.">↻ Regenerate workflow</button>
-    </form>
     <button type="button" class="btn" id="create-version-btn">Create version</button>
     {% endif %}
     <a href="/project/{{ state.name }}/runs" class="btn">All runs</a>
@@ -119,27 +116,26 @@
         </div>
       </div>
       {% else %}
-      {# No workflow on disk yet. Generate it from the document, using the APPROVED data
-         model as reference; an unapproved / absent data model is NOT passed (see copy). #}
+      {# No stages on disk yet. There is no "generate the workflow" button: the workflow
+         is authored one validated stage at a time by an agent (the glassbox MCP tools or
+         the in-app editing agent), so the copy points at that loop instead. #}
       <div class="wf-empty-graph">
         <div class="empty-state wf-empty-state">
           <h2>No workflow yet</h2>
-          {% if state.data_model.present and state.data_model.state == "approved" %}
-          <p class="muted">Generate the workflow from the document. This uses your
-            approved data model as reference — the compiler aligns each stage's inputs and
-            outputs to those schemas and records any deviation in its notes.</p>
-          {% elif state.data_model.present %}
-          <p class="muted">⚠ Your data model is not approved yet, so it will not be passed
-            to the workflow — generation proceeds from the document alone.
-            <a href="/project/{{ state.name }}/data_model">Approve it first</a> to anchor
-            the workflow to it, or generate now without it.</p>
-          {% else %}
-          <p class="muted">⚠ There is no data model — the workflow will be generated
-            straight from the document, with no reviewed data model to anchor to.</p>
+          <p class="muted">Workflows are authored one stage at a time. Point an MCP client
+            (Claude Code, or any other) at this server's <code>/mcp</code> endpoint and let
+            it add stages in dependency order — each one is validated against the whole
+            workflow before it lands, and arrives here <em>unreviewed</em> for you to
+            approve.</p>
+          {% if state.data_model.present and state.data_model.state != "approved" %}
+          <p class="muted">⚠ Your data model is not approved yet.
+            <a href="/project/{{ state.name }}/data_model">Approve it first</a> so the
+            stages are grounded in schemas you have signed off on.</p>
+          {% elif not state.data_model.present %}
+          <p class="muted">⚠ There is no data model yet —
+            <a href="/project/{{ state.name }}/data_model">generate and approve one</a>
+            first, so the stages have reviewed nouns to anchor to.</p>
           {% endif %}
-          <form method="post" action="/project/{{ state.name }}/generate-workflow">
-            <button type="submit" class="btn primary">Generate workflow</button>
-          </form>
         </div>
       </div>
       {% endif %}

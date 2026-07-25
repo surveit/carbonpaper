@@ -1,9 +1,10 @@
-"""Render tests for the Workflow section's Generate/Regenerate UI.
+"""Render tests for the Workflow section.
 
-The workflow "Generate" is workflow-ONLY: it posts to /generate-workflow (never the
-full-regen /generate), and its zero-state copy reflects whether the data model is
-approved (used as reference), present-but-unapproved (not passed — warn), or absent
-(warn). When a workflow already exists, a Regenerate control posts to the same route.
+Since #243 the workflow is authored INCREMENTALLY — one validated stage at a time,
+through the MCP / editing-agent tools — so the section carries NO generate or
+regenerate control and posts to no compile route. These tests pin that: the
+zero-state explains the stage-by-stage loop (and nudges toward approving the data
+model first), and a populated workflow offers run / version, never "regenerate".
 """
 from __future__ import annotations
 
@@ -66,35 +67,44 @@ def _make(tmp_path, monkeypatch, *, with_stages, with_schemas, approved):
     return proj
 
 
-def test_zero_state_button_posts_generate_workflow_not_generate(tmp_path, monkeypatch):
+def test_zero_state_offers_no_generate_route(tmp_path, monkeypatch):
     _make(tmp_path, monkeypatch, with_stages=False, with_schemas=True, approved=True)
     html = client.get("/project/demo/workflow").text
-    assert 'action="/project/demo/generate-workflow"' in html
-    assert 'action="/project/demo/generate"' not in html  # not the full data-model regen
+    # No one-shot compile route survives on this page, in either direction.
+    assert "/generate-workflow" not in html
+    assert 'action="/project/demo/generate"' not in html
 
 
-def test_zero_state_approved_uses_data_model_reference(tmp_path, monkeypatch):
+def test_zero_state_explains_the_incremental_loop(tmp_path, monkeypatch):
     _make(tmp_path, monkeypatch, with_stages=False, with_schemas=True, approved=True)
     html = client.get("/project/demo/workflow").text.lower()
-    assert "approved data model" in html
+    assert "one stage at a time" in html
+    assert "mcp" in html
 
 
-def test_zero_state_unapproved_warns_not_passed(tmp_path, monkeypatch):
+def test_zero_state_unapproved_data_model_nudges_to_approve(tmp_path, monkeypatch):
     _make(tmp_path, monkeypatch, with_stages=False, with_schemas=True, approved=False)
     html = client.get("/project/demo/workflow").text.lower()
     assert "not approved" in html
-    assert "will not be passed" in html
+    assert "/project/demo/data_model" in html
 
 
-def test_zero_state_no_data_model_warns(tmp_path, monkeypatch):
+def test_zero_state_no_data_model_points_at_the_data_model_section(tmp_path, monkeypatch):
     _make(tmp_path, monkeypatch, with_stages=False, with_schemas=False, approved=False)
     html = client.get("/project/demo/workflow").text.lower()
-    assert "no data model" in html
-    assert "/project/demo/generate-workflow" in html  # still generatable
+    assert "no data model yet" in html
+    assert "/project/demo/data_model" in html
 
 
-def test_workflow_present_has_regenerate_control(tmp_path, monkeypatch):
+def test_workflow_present_has_no_regenerate_control(tmp_path, monkeypatch):
     _make(tmp_path, monkeypatch, with_stages=True, with_schemas=True, approved=True)
     html = client.get("/project/demo/workflow").text
-    assert "/project/demo/generate-workflow" in html
-    assert "Regenerate workflow" in html
+    assert "/generate-workflow" not in html
+    assert "Regenerate workflow" not in html
+    assert "Create version" in html  # the human-only acts stay
+
+
+def test_the_generate_workflow_route_is_gone(tmp_path, monkeypatch):
+    _make(tmp_path, monkeypatch, with_stages=True, with_schemas=True, approved=True)
+    resp = client.post("/project/demo/generate-workflow", follow_redirects=False)
+    assert resp.status_code == 404

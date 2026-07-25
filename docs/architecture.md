@@ -42,10 +42,14 @@ can read it; `validate_registry_matches_model` raises at registry import if any
 type's registered shape disagrees with that core fact, and
 `tests/test_handler_registry.py` pins the same per-type equality in CI.
 
-## `app/compiler/` — prose → LLM → workflow engine
-Public surface `read_input` + `compile_methodology`. Validates the reply against the models
-and **re-asks on schema-validation failure**, not just parse failure. CLI `python -m
-app.compiler`; persistence in `app/services/compilation.py`. Authoring UI not on master yet.
+## `app/compiler/` — generation bridges onto the agent spine
+Two bridges, no public surface: `data_model.py` (prose → the project's named schemas) and
+`stage_tests.py` (methodology + one stage → that stage's derived test suite). Each builds a
+headless `Agent[T]`, runs it as a chat turn, and validates the submission against the models,
+**re-asking on schema-validation failure**, not just parse failure; persisting whatever comes
+back is the caller's job (`app/services/generation.py`). There is deliberately **no prose →
+whole-workflow compiler**: workflows are authored one validated stage at a time through
+`app/services/stage_edit.py`, driven by `app/mcp` or `app/agents`.
 
 ## `app/web/` — the web layer  → `app/AGENTS.md`
 Thin `app/main.py` (~40 lines); routes under `/project/{project}/…`. Routers: `project.py`
@@ -59,8 +63,10 @@ approval + editing + version creation + publish — the only writer to `compiled
 mermaid/ER builders.
 
 ## `app/services/` — web-independent workflow logic
-`loader.py` (canonical stage loader, above); `compilation.py` (compile persistence for
-`app/compiler`); `node_review.py` (content-hash approval over stage specs — read its
+`loader.py` (canonical stage loader, above); `stage_edit.py` (the ONE validated writer into
+`compiled/` — `add_stage_spec` / `patch_stage_spec` / `edit_stage_spec` / `remove_stage_spec`,
+each changing exactly one stage and re-validating the whole resulting workflow first, so no
+call can overwrite or reset a draft); `node_review.py` (content-hash approval over stage specs — read its
 docstring; the canonical-hash invariant must not rot); `versioning.py` (`create_version_from_stages`
 is the ONE write path for a `WorkflowVersion` document, born unpublished; `publish_version`
 is the metadata-only human-approval act a run's `resolve_version_id` requires before it

@@ -1,19 +1,35 @@
 """
 llm_sdk.py — low-level Claude Code CLI discovery + event-loop plumbing.
 
-Shared by the runtime's llm_transform dispatch (`app.runtime`), the authoring
-compiler (`app.compiler`), and the chat engine (`app.core.agent.sdk_engine`,
+Shared by the runtime's llm_transform dispatch (`app.runtime`), the generation
+bridges (`app.compiler`), and the chat engine (`app.core.agent.sdk_engine`,
 `app.web.chat_router`). None of those import each other; each imports this
-neutral base, so the CLI-location + sync-drive logic lives in exactly one
-place. Pure stdlib — no SDK import, no app imports.
+neutral base, so the CLI-location, nested-session env cleanup, and sync-drive
+logic live in exactly one place. Pure stdlib — no SDK import, no app imports.
 """
 
 from __future__ import annotations
 
 import asyncio
 import concurrent.futures
+import os
 import shutil
 from pathlib import Path
+
+# Running the authoring server from INSIDE a Claude Code session leaks that session's
+# markers into any `claude` CLI we spawn, and the child CLI then fails to start as a
+# "nested" invocation (CLIConnectionError: Failed to start Claude Code). The Agent SDK
+# strips CLAUDECODE itself but NOT the session/entrypoint markers (see subprocess_cli:
+# env = {**{os.environ - CLAUDECODE}, **options.env} — a merge, so options.env cannot
+# UNSET them). Strip them from THIS process's env once, here in the module every CLI
+# spawner already imports, so every spawned CLI gets a clean top-level env. Auth/config
+# (ANTHROPIC_BASE_URL, CLAUDE_CODE_OAUTH_*, CLAUDE_CONFIG_DIR, credentials) is
+# preserved. No-op outside Claude Code.
+for _marker in (
+    "CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT", "CLAUDE_CODE_SESSION_ID",
+    "CLAUDE_CODE_CHILD_SESSION", "CLAUDE_CODE_EXECPATH", "AI_AGENT",
+):
+    os.environ.pop(_marker, None)
 
 
 def find_cli() -> str | None:
