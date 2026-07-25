@@ -13,8 +13,7 @@ reload even to a caller who was not watching live.
 
 The turns run on the server event loop, so every `start_*` entry here must be called from an
 async context. The CLI subprocess the agents spawn runs with the Claude-Code session markers
-already stripped from os.environ (see app.compiler.compiler), imported transitively via the
-bridges.
+already stripped from os.environ (see app.core.llm_sdk, imported transitively via the bridges).
 """
 from __future__ import annotations
 

@@ -1,11 +1,15 @@
-"""Shared node-type facts the compiler-facing prompts (workflow_prompt.py's
-chat-driven compiler and the editing agent's prompt) must teach the authoring
-model — kept in ONE place so the prompts can't silently drift apart on the
-same underlying facts about the runtime.
+"""Node-type facts the workflow-authoring prompts must teach the model, kept in
+ONE place so no two prompts can drift apart on the same underlying facts about
+the runtime. Rendered into the editing agent's system prompt alongside each
+node type's own `notes` from NODE_TYPES.
 
 These are runtime CONTRACTS, not authoring style — discovered by actually
-running compiled workflows and finding the compiler's assumptions didn't match
-what the runtime handlers really do."""
+running workflows and finding the authoring assumptions didn't match what the
+runtime handlers really do.
+
+Lives in app.models (not app.compiler) so every authoring surface can reach it:
+app.compiler is protected by an import-linter contract that admits only
+app.main and app.services, which would lock out app.agents and app.mcp."""
 from __future__ import annotations
 
 HUMAN_REVIEW_QUEUE_CONTRACT_NOTE = (

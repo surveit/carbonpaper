@@ -42,10 +42,13 @@ can read it; `validate_registry_matches_model` raises at registry import if any
 type's registered shape disagrees with that core fact, and
 `tests/test_handler_registry.py` pins the same per-type equality in CI.
 
-## `app/compiler/` — prose → LLM → workflow engine
-Public surface `read_input` + `compile_methodology`. Validates the reply against the models
-and **re-asks on schema-validation failure**, not just parse failure. CLI `python -m
-app.compiler`; persistence in `app/services/compilation.py`. Authoring UI not on master yet.
+## `app/compiler/` — prose → LLM generation engines
+Two generators, each an `app.core.agent` Agent targeting a model schema: `data_model.py`
+(document → `SchemaLibrary`, the nouns a human then approves) and `stage_tests.py` (one
+python-transform stage + the document → its `StageTest` cases, derived code-blind). Both
+submit through `submit_answer`, so a schema-invalid reply is **re-asked inside the agent's
+own loop**, not just parse-checked. `app/services/generation.py` drives them and persists
+what comes back. Workflow stages are authored one at a time through `app/services/stage_edit.py`.
 
 ## `app/web/` — the web layer  → `app/AGENTS.md`
 Thin `app/main.py` (~40 lines); routes under `/project/{project}/…`. Routers: `project.py`

@@ -1,7 +1,7 @@
 """Compile a methodology document into a DATA MODEL (a SchemaLibrary).
 
-The sibling of `app.compiler.compiler.compile_methodology` (prose → workflow stages):
-this is prose → named schemas. It builds an `app.core.agent.agent.Agent` whose target schema is
+The sibling of `app.compiler.stage_tests` (a stage → its test cases): this is prose →
+named schemas. It builds an `app.core.agent.agent.Agent` whose target schema is
 `SchemaLibrary`, so the agent SUBMITS the data model through the submit_answer tool
 (validated against SchemaLibrary) rather than emitting free-text JSON.
 

@@ -15,9 +15,9 @@ code map → `docs/architecture.md`; quickstart → `README.md`.
 ```
 app/models/    stage-type schemas (Pydantic) — source of truth; loader rejects invalid workflows
 app/runtime/   the Runner (executor, stages/, LLM backends)   → app/runtime/AGENTS.md
-app/compiler/  prose → LLM → workflow engine (python -m app.compiler)
+app/compiler/  prose → LLM generation engines (data model, stage tests)
 app/web/       FastAPI routers + diagrams (thin app/main.py)  → app/AGENTS.md
-app/services/  web-independent logic (loader, compilation, node review, versioning, drafts)
+app/services/  web-independent logic (loader, generation, node review, versioning, drafts)
 app/chat/  PydanticAI chat · app/core/llm/  model menu · tests/  pytest (offline)
 ```
 
@@ -27,8 +27,8 @@ app/chat/  PydanticAI chat · app/core/llm/  model menu · tests/  pytest (offli
   available raises rather than silently substituting another.
 - **`app/services` never imports `app/web`; `{project,node_review,versioning,drafts}` never import
   `app.main`/`app.runtime`/`app.compiler`.** Services sit below the routes and the agent tools —
-  never the reverse (the compile step a workflow regenerate needs lives in
-  `app.services.compilation`, which wraps the compiler). Both enforced by import-linter.
+  never the reverse (the generation step that runs a compiler agent lives in
+  `app.services.generation`, which wraps the compiler). Both enforced by import-linter.
 - **Never `except Exception` or bare `except`.** Catch specific types — swallowing errors breaks
   fail-loudly. Enforced by Ruff `BLE001`.
 - **No `dict[str, Any]` as a stand-in for a structured value.** A dict with a known, fixed set of

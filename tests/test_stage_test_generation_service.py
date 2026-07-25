@@ -4,7 +4,7 @@ on the shared TurnManager, and on completion `_finish_stage_tests` REPLACES the 
 wholesale via app.services.stage_edit.patch_stage_spec.
 
 The agent + turn are faked; no CLI subprocess, no real LLM. Driven with asyncio.run, mirroring
-tests/test_generation_session.py and tests/test_compile_workflow.py.
+tests/test_generation_session.py.
 """
 from __future__ import annotations
 
