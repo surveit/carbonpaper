@@ -30,3 +30,20 @@ def test_note_reaches_the_editing_agent_prompt():
 
     note = m.NODE_TYPES["human_review_queue"]["notes"]
     assert note in EDITING_SYSTEM_PROMPT
+
+
+def test_publish_note_names_the_trace_link_helper():
+    note = m.NODE_TYPES["publish"].get("notes")
+    assert note, "publish must carry a `notes` explanation"
+    # the authoring agent has to know the keyword to declare and the call to make
+    assert "trace_links" in note
+    assert "build_row_trace_url" in note
+
+
+def test_publish_note_reaches_both_authoring_prompts():
+    from app.agents.compiler.prompt import EDITING_SYSTEM_PROMPT
+    from app.compiler.workflow_prompt import WORKFLOW_SYSTEM_PROMPT
+
+    note = m.NODE_TYPES["publish"]["notes"]
+    assert note in WORKFLOW_SYSTEM_PROMPT
+    assert note in EDITING_SYSTEM_PROMPT
