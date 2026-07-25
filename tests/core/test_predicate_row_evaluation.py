@@ -16,6 +16,7 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -202,6 +203,18 @@ def test_nat_read_as_the_whole_verdict_raises_predicate_error() -> None:
         evaluate_predicate(parse_predicate("t"), {"t": pd.NaT})
 
 
+def test_array_valued_cell_raises_predicate_error() -> None:
+    """A cell holding an array has no single verdict: numpy compares it
+    elementwise and then refuses to reduce that to one boolean
+    (`ValueError: The truth value of an array ... is ambiguous`). It surfaces
+    as `PredicateError` like every other row this walk cannot answer — the
+    docstring promises callers that and nothing else, and a caller catching
+    only `PredicateError` (the human_review_queue mapper does) would otherwise
+    let a bare numpy message escape with no stage id and no filter text."""
+    with pytest.raises(PredicateError, match="ndarray"):
+        evaluate_predicate(parse_predicate("a > 1"), {"a": np.array([1, 2, 3])})
+
+
 def test_str_method_on_a_non_text_cell_raises_predicate_error() -> None:
     """A `.str.*` test on a cell that is neither text nor null raises rather
     than inheriting the frame engine's verdict there: pandas turns that cell
@@ -232,7 +245,13 @@ def test_parsed_predicate_tree_matches_its_pandas_expr() -> None:
 def test_predicate_module_never_calls_eval_or_exec() -> None:
     """The row evaluator interprets the tree itself. A filter expression is
     untrusted input: handing it to `eval`/`exec`/`compile` — or back to
-    `DataFrame.eval` — would execute it instead."""
+    `DataFrame.eval` — would execute it instead.
+
+    The check is by NAME: it reads the module's source and rejects a call to
+    anything called `eval`, `exec`, `compile` or `query`, whoever owns it. So a
+    harmless same-named call — `re.compile(...)` — fails it too, and the fix
+    there is to widen this test deliberately, not to read the failure as a
+    security finding."""
     import app.core.predicate as predicate_module
 
     source = Path(predicate_module.__file__).read_text(encoding="utf-8")

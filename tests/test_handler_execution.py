@@ -148,11 +148,53 @@ def test_row_driver_rejects_multiple_inputs():
         handler.execute(_two_input_stage(), frames, make_run_context())
 
 
+def _empty_source() -> pd.DataFrame:
+    return pd.DataFrame({
+        "x": pd.Series([], dtype="int64"), "id": pd.Series([], dtype="object")
+    })
+
+
 def test_row_driver_empty_input():
+    # No row means no mapper result to name the output's columns, so the frame
+    # takes the INPUT's columns. A 0x0 frame would make a downstream stage keyed
+    # on `id` raise KeyError instead of producing an empty result.
     handler = RowMapHandler(make_mapper=lambda stage, ctx: lambda row: dict(row))
-    out = handler.execute(_row_stage(),
-                          {"src": pd.DataFrame({"x": pd.Series([], dtype="int64")})}, make_run_context())
+    ctx = make_run_context()
+    out = handler.execute(_row_stage(), {"src": _empty_source()}, ctx)
     assert len(out) == 0
+    assert list(out.columns) == ["x", "id"]
+    assert out["id"].tolist() == []      # the column is real, not just a label
+    # the substituted frame still carries the stage's contribution
+    assert contribution_of(out).dropped_columns == []
+
+
+def test_row_driver_empty_input_reports_no_dropped_columns_when_projecting():
+    # Projection sees a frame with no columns at all, so it drops nothing —
+    # an empty input must not be reported as having discarded `id`.
+    schema = {"columns": [{"name": "x", "type": "int"}]}
+    handler = RowMapHandler(
+        make_mapper=lambda stage, ctx: lambda row: dict(row),
+        project_output_to_declared=True,
+    )
+    ctx = make_run_context()
+    out = handler.execute(_row_stage(output_schema=schema), {"src": _empty_source()}, ctx)
+    assert len(out) == 0
+    assert list(out.columns) == ["x", "id"]
+    assert contribution_of(out).dropped_columns == []
+
+
+def test_row_driver_keeps_the_columns_a_mapper_named_when_every_row_is_dropped():
+    # The mapper DID name a column, so the frame keeps it rather than falling
+    # back to the input's columns.
+    def make_mapper(stage, ctx):
+        def map_row(row):
+            return {"y": row["x"] * 10, ROW_DROP_KEY: True}
+        return map_row
+
+    handler = RowMapHandler(make_mapper=make_mapper, drops_rows=True)
+    out = handler.execute(_row_stage(), {"src": pd.DataFrame({"x": [1, 2]})}, make_run_context())
+    assert len(out) == 0
+    assert list(out.columns) == ["y"]
 
 
 def test_row_driver_collects_row_errors_without_dropping_the_stage():

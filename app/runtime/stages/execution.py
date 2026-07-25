@@ -271,7 +271,9 @@ def _run_row_mapper(
 
     Grain and order hold by construction: exactly one result slot exists per
     input row, filled by input index (also under concurrency), and the output
-    frame is assembled in index order."""
+    frame is assembled in index order. A result with no rows AND no columns —
+    an empty input, or every row removed — takes the input's columns instead of
+    being handed on as a 0x0 frame."""
     if len(stage.inputs) != 1:
         raise ValueError(
             f"stage {stage.id}: a row-mapped stage takes exactly one input, "
@@ -315,7 +317,33 @@ def _run_row_mapper(
                 f"got {type(result).__name__} for row {index}"
             )
         out_rows.append(result)
-    return _finish_mapped_frame(pd.DataFrame(out_rows), handler, map_row, stage, ctx)
+    mapped = _finish_mapped_frame(pd.DataFrame(out_rows), handler, map_row, stage, ctx)
+    return _restore_input_columns_when_nothing_named_them(mapped, src)
+
+
+def _restore_input_columns_when_nothing_named_them(
+    mapped: pd.DataFrame, src: pd.DataFrame
+) -> pd.DataFrame:
+    """The mapped frame, or — when it has neither rows nor columns — an empty
+    slice of the stage's input, carrying the mapped frame's `.attrs`.
+
+    A frame assembled from no results at all is 0 rows BY 0 COLUMNS: the input
+    was empty, or every row was marked for removal, so no mapper result named a
+    single column. A downstream stage keyed on an upstream column would then
+    raise `KeyError` instead of producing an empty result, and the input's own
+    columns are the one honest shape available. A frame that still carries a
+    column is returned untouched, including one whose rows are all gone but
+    whose columns a mapper result named.
+
+    The substituted frame takes the mapped one's `.attrs` verbatim, because the
+    stage's StageContribution rides there: a stage whose rows all vanished still
+    reported usage, errors and queue counts, and swapping the frame must not
+    swallow them."""
+    if len(mapped.columns) > 0 or len(mapped) > 0:
+        return mapped
+    empty = src.iloc[0:0].copy()
+    empty.attrs = dict(mapped.attrs)
+    return empty
 
 
 def _finish_mapped_frame(

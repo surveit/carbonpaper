@@ -121,8 +121,9 @@ def evaluate_predicate(parsed: ParsedPredicate, row: Mapping[str, object]) -> bo
     Raises `PredicateError`, and nothing else, when the row cannot yield a
     verdict: a referenced column is absent, a method outside the supported set
     (`isna`, `notna`, `str.contains`, `str.startswith`, `str.endswith`) is
-    called, or the expression's value is not a true/false verdict. It never
-    guesses a verdict for something it cannot evaluate."""
+    called, a comparison has no single verdict for the cells it was given, or
+    the expression's value is not a true/false verdict. It never guesses a
+    verdict for something it cannot evaluate."""
     value = _evaluate_node(parsed.syntax_tree, row, parsed.pandas_expr)
     return _coerce_to_bool(value, parsed.pandas_expr)
 
@@ -359,9 +360,12 @@ def _compare_one_pair(left: object, op: ast.cmpop, right: object, expr: str) -> 
 
     A null operand on either side makes the verdict `True` for `!=` and
     `False` for every other operator — never a `TypeError` — matching what
-    numpy/pandas return for the same comparison against a null cell. Two
-    values Python refuses to compare (a string against a number) raise
-    `PredicateError` rather than escaping as a `TypeError`."""
+    numpy/pandas return for the same comparison against a null cell. A pair
+    with no single verdict raises `PredicateError` rather than escaping as
+    whatever the comparison itself raised: two values Python refuses to compare
+    (a string against a number) raise `TypeError`, and an array-valued cell —
+    which `_is_null` leaves to be compared — raises `ValueError`, because numpy
+    compares it elementwise and then refuses to reduce that to one boolean."""
     if _is_null(left) or _is_null(right):
         return isinstance(op, ast.NotEq)
     compare = _COMPARISONS.get(type(op))
@@ -372,7 +376,7 @@ def _compare_one_pair(left: object, op: ast.cmpop, right: object, expr: str) -> 
         )
     try:
         return bool(compare(left, right))
-    except TypeError as exc:
+    except (TypeError, ValueError) as exc:
         raise PredicateError(
             f"filter cannot be evaluated for this row: {expr!r} (comparing a "
             f"`{type(left).__name__}` with a `{type(right).__name__}` is not possible: {exc})"

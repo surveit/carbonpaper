@@ -29,7 +29,7 @@ from app.runtime.cancellation import request_cancel
 from app.runtime.context import RunIdentity
 from app.runtime.errors import HaltForReview, RunCancelled
 from app.runtime.runner import prepare_run, run_prepared
-from app.runtime.stages import HANDLERS
+from app.runtime.stages import HANDLERS, human_review_queue
 from app.services import review, versioning
 from app.core.stage_cache import StageCache, compute_row_fingerprint
 from app.services.versioning import create_version_from_disk
@@ -298,6 +298,32 @@ def test_rejected_row_is_dropped_and_the_rest_keep_input_order(tmp_path):
     assert list(out["id"]) == ["r0", "r2"]
 
 
+def test_every_row_rejected_still_produces_the_declared_columns(tmp_path):
+    """Every queued row rejected leaves the stage with no row at all — and a
+    frame assembled from no rows carries no columns either unless the driver
+    restores the input's. Without them a downstream stage keyed on `id` raises
+    KeyError instead of producing an empty result."""
+    stage = Stage.model_validate({
+        "id": "review", "name": "Review", "type": "human_review_queue",
+        "inputs": [{"id": "scored"}],
+        "output_schema": {"columns": [{"name": "id", "type": "str"},
+                                      {"name": "score", "type": "int"}]},
+        "queue": {},
+    })
+    src = _src(2)
+
+    snapshot, fingerprints = _halt_and_read_snapshot(
+        stage, {"scored": src}, _ctx(tmp_path, run_id="run1"))
+    for (_, row), fp in zip(snapshot.iterrows(), fingerprints["input_fingerprints"]):
+        _put_approval(row, fp, fingerprints["stage_fingerprint"],
+                      verdict=RowReviewDecision.reject)
+
+    out = _run_queue_stage(stage, {"scored": src.copy()}, _ctx(tmp_path, run_id="run2"))
+    assert len(out) == 0
+    assert list(out.columns) == ["id", "score"]
+    assert out["id"].tolist() == []  # a downstream join can still key on it
+
+
 def test_queue_stats_count_every_row_including_the_rejected_one(tmp_path):
     """The manifest's per-stage item counts, over a run where every outcome
     occurs. `items_decided` counts the REJECTED row too — it was decided, and
@@ -406,6 +432,29 @@ def test_cancel_mid_queue_map_marks_the_stage_cancelled(tmp_path):
     request_cancel(PROJECT, "cancel-me")
     with pytest.raises(RunCancelled):
         _run_queue_stage(_stage(), {"scored": _src(2)}, ctx)
+
+
+def test_cancelled_execution_reports_no_queue_counts(tmp_path, monkeypatch):
+    """A resumed run's manifest already carries the halted run's queue counts —
+    the executor merged them when the halt fired, and the manifest, not the
+    context, is where they live. If the queue stage then cancels, this
+    execution produced no counts of its own: the cancel raises inside the row
+    map, before the post-map step that would report any. So the stage reports
+    nothing and the halt's counts stand, rather than being replaced by the
+    zeros a re-execution starts from. A manifest reading
+    `items_queued_total: 0` for a stage that queued 2 rows is a wrong number,
+    not a missing one."""
+    reported: list[object] = []
+    monkeypatch.setattr(
+        human_review_queue._QueueRowMapper,
+        "finish_mapped_rows",
+        lambda self, stage, df, ctx, contribution: reported.append(contribution),
+    )
+
+    request_cancel(PROJECT, "cancel-resume")
+    with pytest.raises(RunCancelled):
+        _run_queue_stage(_stage(), {"scored": _src(2)}, _ctx(tmp_path, run_id="cancel-resume"))
+    assert reported == []  # nothing was ever produced for the executor to merge
 
 
 # ── Resume reattaches decisions written via the seam, from disk alone ───────
