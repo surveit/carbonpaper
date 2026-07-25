@@ -152,4 +152,10 @@ class PredicateError(ValueError):
     does not admit (a bare function call, arithmetic, subscripting, and the
     like). Raised at parse time, before either save-time column validation or
     runtime evaluation acts on the expression, so a rejected filter never
-    reaches `pandas.eval`/`.query()` unchecked."""
+    reaches `pandas.eval`/`.query()` unchecked.
+
+    Also raised by `app.core.predicate.evaluate_predicate` when a parsed
+    expression cannot yield a verdict for the row in hand: a referenced column
+    the row does not carry, a method the row-level walk does not implement, or
+    a value that is not a true/false verdict. Raised there rather than
+    returning a guessed verdict."""
