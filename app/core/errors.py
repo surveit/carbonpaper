@@ -30,6 +30,12 @@ class NoVersionToRunError(Exception):
     explicit `version_id` names a version that exists but isn't published."""
 
 
+class RunVersionUnresolvableError(Exception):
+    """A run's manifest names no `workflow_version`, or names one whose version
+    document is missing or no longer validates, so what the run executed cannot
+    be read. Its message is shown to the reader in place of the graph."""
+
+
 class RegenerateWithoutSnapshotError(Exception):
     """Raised when a from-scratch compile would overwrite reviewed work without a
     prior version snapshot and without explicit confirm_overwrite."""

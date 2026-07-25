@@ -6,6 +6,7 @@ resume."""
 from __future__ import annotations
 
 import traceback
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -14,7 +15,13 @@ from fastapi.datastructures import FormData
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from starlette.concurrency import run_in_threadpool
 
-from app.core.errors import MissingInputBindingError, NoVersionToRunError, RowOutOfRange, StageNotInRun
+from app.core.errors import (
+    MissingInputBindingError,
+    NoVersionToRunError,
+    RowOutOfRange,
+    RunVersionUnresolvableError,
+    StageNotInRun,
+)
 from app.core.run_status import RunStatus, StageStatus
 from app.services.errors import WorkflowLoadError
 from app.services.loader import load_workflow
@@ -37,6 +44,7 @@ from app.web.loading import (
     load_output_preview,
     load_output_row,
     load_output_table,
+    load_run_stages,
     load_stages,
     manifest_stage,
     read_output_df,
@@ -220,7 +228,7 @@ async def run_status(project: str, run_id: str):
     manifest = load_manifest(runs_dir(project) / run_id)
     mstages = manifest.get("stage_records", [])
     status_by_id = {s["stage_id"]: s.get("status", "") for s in mstages}
-    mermaid = build_mermaid_graph(load_stages(project).stages, project, status_by_id=status_by_id)
+    graph = build_run_graph(project, manifest, status_by_id)
 
     def _count(st: StageStatus) -> int:
         return sum(1 for s in mstages if s.get("status") == st)
@@ -237,8 +245,31 @@ async def run_status(project: str, run_id: str):
                    "awaiting": _count(StageStatus.AWAITING_REVIEW),
                    "cancelled": _count(StageStatus.CANCELLED)},
         "stages": [{"stage_id": s["stage_id"], "status": s.get("status")} for s in mstages],
-        "mermaid": mermaid,
+        "mermaid": graph.mermaid,
+        "graph_error": graph.error,
     })
+
+
+@dataclass(frozen=True)
+class RunGraph:
+    """EITHER mermaid built from the version the run pinned, OR the reason that
+    version could not be read — never both, and never a graph from elsewhere."""
+
+    mermaid: str
+    error: str | None
+
+
+def build_run_graph(
+    project: str, manifest: dict[str, Any], status_by_id: dict[str, str]
+) -> RunGraph:
+    try:
+        stages = load_run_stages(project, manifest)
+    except RunVersionUnresolvableError as exc:
+        return RunGraph(mermaid="", error=str(exc))
+    return RunGraph(
+        mermaid=build_mermaid_graph(stages, project, status_by_id=status_by_id),
+        error=None,
+    )
 
 
 def _artifact_links(project: str, run_id: str, run_dir: Path, manifest: dict) -> list[dict]:
@@ -275,9 +306,8 @@ def _artifact_links(project: str, run_id: str, run_dir: Path, manifest: dict) ->
 async def run_detail(request: Request, project: str, run_id: str):
     run_dir = runs_dir(project) / run_id
     manifest = load_manifest(run_dir)
-    stages = load_stages(project).stages
     status_by_id = {s["stage_id"]: s.get("status", "") for s in manifest.get("stage_records", [])}
-    mermaid = build_mermaid_graph(stages, project, status_by_id=status_by_id)
+    graph = build_run_graph(project, manifest, status_by_id)
     artifact_links = _artifact_links(project, run_id, run_dir, manifest)
 
     return templates.TemplateResponse(
@@ -287,7 +317,8 @@ async def run_detail(request: Request, project: str, run_id: str):
             "project": project,
             "run_id": run_id,
             "manifest": manifest,
-            "mermaid": mermaid,
+            "mermaid": graph.mermaid,
+            "graph_error": graph.error,
             "artifact_links": artifact_links,
             "type_glyph": TYPE_GLYPH,
             "type_class": TYPE_CLASS,
@@ -460,7 +491,7 @@ async def run_stage_row_trace_view(
     """The row's show-your-work as a read-only HTML page: a numbered story and a
     graph toggle on top; clicking a stage loads the row-trimmed panel below."""
     run_dir = runs_dir(project) / run_id
-    load_manifest(run_dir)
+    manifest = load_manifest(run_dir)
     try:
         trace = trace_row(run_dir, stage_id, row)
     except StageNotInRun as exc:
@@ -468,12 +499,13 @@ async def run_stage_row_trace_view(
     except RowOutOfRange as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    # Node detail comes from the compiled stages; if they can't be loaded the
-    # trace still renders (transform shows as "unknown"). NB: load_stages raising
-    # HTTPException from a loader is a layering wart worth fixing separately.
+    # Node detail and the graph both describe THIS run, so both read the version
+    # it pinned. With no resolvable version neither falls back to the working
+    # copy: the story still lists the ancestry, transforms show as "unknown",
+    # and no graph is drawn.
     try:
-        stages = load_stages(project).stages
-    except HTTPException:
+        stages = load_run_stages(project, manifest)
+    except RunVersionUnresolvableError:
         stages = []
     stages_by_id = {s.id: s for s in stages}
 

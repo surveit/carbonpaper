@@ -56,7 +56,10 @@ read-only detail with Publish/Run-this-version; the mutable editor stays at `/wo
 running one specific pinned version), `review.py` (review queue), `node_review.py` (node
 approval + editing + version creation + publish — the only writer to `compiled/`).
 `web/{config,loading,diagrams}.py` — paths + Jinja · viewer reads over the loader ·
-mermaid/ER builders.
+mermaid/ER builders. A run's graph is built from the version its manifest pinned to
+(`loading.load_run_stages`), never from `compiled/`; a manifest naming no resolvable
+version raises `RunVersionUnresolvableError` and the run page shows a
+graph-unavailable notice instead of the working copy.
 
 ## `app/services/` — web-independent workflow logic
 `loader.py` (canonical stage loader, above); `compilation.py` (compile persistence for
