@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import pandas as pd
 import pytest
+from pydantic import ValidationError
 
 from app.core.persistence import PersistedModel
 from app.models import RowReviewDecision
@@ -109,6 +110,47 @@ def test_find_entries_scopes_by_stage_fingerprint_prefix():
     cache.put(_entry(stage_fingerprint="sf-other", input_fingerprint="if3"))
     found = cache.find_entries("proj", "review", "sf1")
     assert {e.input_fingerprint for e in found} == {"if1", "if2"}
+
+
+# ── StageCacheEntry payload: human XOR llm_output ────────────────────────────
+
+def _llm_entry(**overrides):
+    fields = {
+        "project": "proj",
+        "stage_id": "score",
+        "stage_fingerprint": "sf1",
+        "input_fingerprint": "if1",
+        "source_run_id": "run1",
+        "frozen_input": {"id": "r1", "text": "hi"},
+        "llm_output": {"score": 5},
+    }
+    fields.update(overrides)
+    fields["id"] = build_cache_id(
+        fields["project"], fields["stage_id"], fields["stage_fingerprint"], fields["input_fingerprint"]
+    )
+    return StageCacheEntry(**fields)
+
+
+def test_llm_output_entry_round_trips_through_the_seam():
+    cache = StageCache()
+    cache.put(_llm_entry())
+    got = cache.get("proj", "score", "sf1", "if1")
+    assert got is not None
+    assert got.human is None
+    assert got.llm_output == {"score": 5}
+
+
+def test_entry_rejects_neither_human_nor_llm_output():
+    with pytest.raises(ValidationError, match="exactly one payload"):
+        _entry(human=None)
+
+
+def test_entry_rejects_both_human_and_llm_output():
+    with pytest.raises(ValidationError, match="exactly one payload"):
+        _llm_entry(human=HumanDecision(
+            decision=RowReviewDecision.approve, modified_score=None,
+            reviewer="alice", reviewed_at="2026-07-22T10:00:00",
+        ))
 
 
 # ── for_mode ──────────────────────────────────────────────────────────────────

@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import threading
 from datetime import datetime
 from enum import Enum
 from typing import Any, ClassVar, Iterator, Protocol, Self
@@ -57,10 +58,23 @@ def validate_id(id: str) -> str:
 
 class SqliteKvStore:
     """DocumentStore backed by one SQLite table: opaque JSON bodies keyed by
-    (collection, id). Writes are atomic; WAL mode lets readers run concurrently
-    with a writer. `db_path` is a file path or ":memory:" (tests)."""
+    (collection, id). `db_path` is a file path or ":memory:" (tests).
+
+    One `sqlite3.Connection` is shared across every caller (`check_same_thread
+    =False`), and the stage-result cache (app.services.stage_cache) is written
+    from concurrent worker threads for the first time as of llm_transform's
+    per-row caching (app/runtime/stages/llm_transform.py, run under the row
+    driver's ThreadPoolExecutor). The sqlite3 module does not itself serialize
+    overlapping execute()+commit() sequences issued by different threads on one
+    connection — interleaving them corrupts the connection's transaction state
+    (observed as `OperationalError: cannot commit - no transaction is active`)
+    even though no two threads ever touch the same row. `_lock` (one
+    `threading.Lock` per store instance) makes every method here atomic with
+    respect to every other, so a request from a second thread simply queues
+    behind the first rather than interleaving with it."""
 
     def __init__(self, db_path: str) -> None:
+        self._lock = threading.Lock()
         self._conn = sqlite3.connect(db_path, check_same_thread=False)
         self._conn.execute("PRAGMA journal_mode=WAL")
         self._conn.execute(
@@ -74,47 +88,53 @@ class SqliteKvStore:
         self._conn.commit()
 
     def write(self, collection: str, id: str, data: JsonDict, schema_version: int = 1) -> None:
-        self._conn.execute(
-            "INSERT OR REPLACE INTO documents (collection, id, data, schema_version) "
-            "VALUES (?, ?, ?, ?)",
-            (collection, id, json.dumps(data), schema_version),
-        )
-        self._conn.commit()
+        with self._lock:
+            self._conn.execute(
+                "INSERT OR REPLACE INTO documents (collection, id, data, schema_version) "
+                "VALUES (?, ?, ?, ?)",
+                (collection, id, json.dumps(data), schema_version),
+            )
+            self._conn.commit()
 
     def read(self, collection: str, id: str) -> JsonDict:
-        row = self._conn.execute(
-            "SELECT data FROM documents WHERE collection=? AND id=?", (collection, id)
-        ).fetchone()
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT data FROM documents WHERE collection=? AND id=?", (collection, id)
+            ).fetchone()
         if row is None:
             raise DocumentNotFound(f"{collection}/{id}")
         parsed: JsonDict = json.loads(row[0])
         return parsed
 
     def schema_version(self, collection: str, id: str) -> int:
-        row = self._conn.execute(
-            "SELECT schema_version FROM documents WHERE collection=? AND id=?",
-            (collection, id),
-        ).fetchone()
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT schema_version FROM documents WHERE collection=? AND id=?",
+                (collection, id),
+            ).fetchone()
         if row is None:
             raise DocumentNotFound(f"{collection}/{id}")
         return int(row[0])
 
     def exists(self, collection: str, id: str) -> bool:
-        row = self._conn.execute(
-            "SELECT 1 FROM documents WHERE collection=? AND id=?", (collection, id)
-        ).fetchone()
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT 1 FROM documents WHERE collection=? AND id=?", (collection, id)
+            ).fetchone()
         return row is not None
 
     def delete(self, collection: str, id: str) -> None:
-        self._conn.execute(
-            "DELETE FROM documents WHERE collection=? AND id=?", (collection, id)
-        )
-        self._conn.commit()
+        with self._lock:
+            self._conn.execute(
+                "DELETE FROM documents WHERE collection=? AND id=?", (collection, id)
+            )
+            self._conn.commit()
 
     def read_tolerant(self, collection: str, id: str) -> JsonDict | None:
-        row = self._conn.execute(
-            "SELECT data FROM documents WHERE collection=? AND id=?", (collection, id)
-        ).fetchone()
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT data FROM documents WHERE collection=? AND id=?", (collection, id)
+            ).fetchone()
         if row is None:
             return None
         try:
@@ -123,20 +143,26 @@ class SqliteKvStore:
             return None
         return parsed
 
-    def _scan(self, columns: str, collection: str, prefix: str) -> sqlite3.Cursor:
+    def _scan(self, columns: str, collection: str, prefix: str) -> list[tuple[Any, ...]]:
         # `columns` is an internal literal, never user input. Prefix match is an
-        # index-friendly range on the (collection, id) primary key.
-        if prefix:
-            hi = prefix[:-1] + chr(ord(prefix[-1]) + 1)
-            return self._conn.execute(
-                f"SELECT {columns} FROM documents "
-                "WHERE collection=? AND id>=? AND id<? ORDER BY id",
-                (collection, prefix, hi),
-            )
-        return self._conn.execute(
-            f"SELECT {columns} FROM documents WHERE collection=? ORDER BY id",
-            (collection,),
-        )
+        # index-friendly range on the (collection, id) primary key. Fetched
+        # eagerly (list, not the cursor itself) while `_lock` is held, so the
+        # caller can iterate the results after releasing it — a cursor is not
+        # safe to keep pulling from across the lock boundary.
+        with self._lock:
+            if prefix:
+                hi = prefix[:-1] + chr(ord(prefix[-1]) + 1)
+                cursor = self._conn.execute(
+                    f"SELECT {columns} FROM documents "
+                    "WHERE collection=? AND id>=? AND id<? ORDER BY id",
+                    (collection, prefix, hi),
+                )
+            else:
+                cursor = self._conn.execute(
+                    f"SELECT {columns} FROM documents WHERE collection=? ORDER BY id",
+                    (collection,),
+                )
+            return cursor.fetchall()
 
     def list_ids(self, collection: str, prefix: str = "") -> list[str]:
         return [row[0] for row in self._scan("id", collection, prefix)]

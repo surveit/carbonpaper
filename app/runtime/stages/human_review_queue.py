@@ -249,6 +249,7 @@ def _apply_review_decision(row: pd.Series, entry: StageCacheEntry) -> pd.Series:
     """One decided row's human-reviewed score columns, derived from the
     cached decision that matched it (never from a dataframe column — the
     decision lives on `entry`, not on `row`)."""
+    assert entry.human is not None  # a human_review_queue entry always carries one
     ai = row.get("score")
     decision = entry.human.decision
     final: object

@@ -22,12 +22,19 @@ validate the output, write `outputs/<stage>.parquet`, append to `manifest.json`.
 - **Halt + resume:** `human_review_queue` raises `HaltForReview`; the run marks
   `awaiting_review` and persists the pending queue. `resume_run(...)` reloads completed
   outputs and continues once cached decisions exist for the pending rows.
+- **Stage-result cache** (`app/services/stage_cache.py`): a production run reads/writes
+  `StageCacheEntry`s keyed by `(stage-definition fingerprint, input-row fingerprint)` —
+  `human_review_queue` reads a reviewer's decision (written by the web decide route);
+  `llm_transform` reads AND writes its own row replies (the runner itself, per row/chunk),
+  so a re-run never re-asks the model for a row it already answered, and a downstream
+  `human_review_queue`'s rows stay stable across runs instead of re-queuing on every LLM
+  re-roll.
 
 ## `stages/` — one module per stage type (`HANDLERS`)
 `input_data` connector `file` (csv/parquet/json/geojson; `_read_geojson` flattens a
 FeatureCollection); `python_row_function`/`python_frame_function`
 (`function: {kind: module|inline}`, row variant mapped per row); `join`; `aggregate`;
-`llm_transform` (row-mapped, bounded parallelism);
+`llm_transform` (row-mapped, bounded parallelism, stage-result cache read+write);
 `human_review_queue` (row fingerprint → cached decision or halt);
 `publish` (a `function` module that writes artifacts).
 
@@ -40,6 +47,10 @@ FeatureCollection); `python_row_function`/`python_frame_function`
   the reply is validated by construction rather than parsed from prose. A stage declaring
   `llm.tools` fails loudly — the agent backend doesn't support tools. Run per row by the
   row driver under bounded parallelism.
+- Cache participation (`stages/llm_transform.py: _resolve_llm_cache`): a row already cached
+  under the stage's current definition fingerprint is served without a model call, in both
+  the per-row and the batched (`batch_size>1`) path — a batched chunk packs only the rows
+  that miss.
 
 `validation.py` — DATA validation of a dataframe against an `output_schema` (columns, types,
 ranges, nullability, PK uniqueness), distinct from the stage schemas in `app/models/`.

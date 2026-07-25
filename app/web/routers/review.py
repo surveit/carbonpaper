@@ -191,15 +191,16 @@ def _load_prior_decisions(
     entries = StageCacheEntry.for_mode(CacheMode.PRODUCTION).find_entries(
         project, stage_id, fingerprints.stage_fingerprint
     )
-    return {
-        entry.input_fingerprint: {
+    result: dict[str, dict[str, Any]] = {}
+    for entry in entries:
+        assert entry.human is not None  # a human_review_queue entry always carries one
+        result[entry.input_fingerprint] = {
             "decision": entry.human.decision,
             "modified_score": entry.human.modified_score,
             "reviewer": entry.human.reviewer,
             "reviewed_at": entry.human.reviewed_at,
         }
-        for entry in entries
-    }
+    return result
 
 
 def _load_scored_stage(stages: list[Stage], stage_def: Stage) -> Stage | None:

@@ -1,11 +1,19 @@
 """stage_cache.py — the content-addressed stage-result cache.
 
-A cache entry is one human review decision, keyed by the exact
+A cache entry is one stage-produced row payload, keyed by the exact
 (stage-definition fingerprint, input-row fingerprint) pair that produced it:
 `Stage.compute_definition_fingerprint()` (app/models/stage.py) identifies WHAT
 the stage computes, `compute_row_fingerprint` identifies WHICH row it saw.
 Re-running the same stage definition against the same row resolves to the
 same cache entry, whether the run that first recorded it is long gone.
+
+`StageCacheEntry` carries exactly one of two payload shapes, mutually
+exclusive (`_exactly_one_payload`): `human` — a reviewer's verdict on a
+`human_review_queue` row, written only by the web decide route; `llm_output`
+— an `llm_transform` row's generated reply columns, written by the runner
+itself the first time a row is computed (see app.runtime.stages.llm_transform).
+Both share the same key scheme and the same accessor pair below; nothing in
+this module needs to know which kind of stage produced a given entry.
 
 `StageCacheEntry` is the only PersistedModel carrying
 `SCOPE = PersistenceScope.PROJECT_READ_WRITE` (see app.core.persistence.PersistenceScope):
@@ -25,7 +33,7 @@ import json
 import math
 
 import pandas as pd
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, model_validator
 
 from app.core.persistence import JsonDict, PersistedModel, PersistenceScope
 from app.core.utils import compute_short_hash
@@ -60,13 +68,21 @@ class HumanDecision(BaseModel):
 
 
 class StageCacheEntry(PersistedModel):
-    """One cached human review decision. `id` is
+    """One cached stage-row payload — a human_review_queue decision or an
+    llm_transform reply, never both. `id` is
     `build_cache_id(project, stage_id, stage_fingerprint, input_fingerprint)`.
     `frozen_input` is the sanctioned dynamic boundary (app.core.persistence.JsonDict):
-    the exact upstream row the reviewer saw, an arbitrary shape this module does
-    not otherwise constrain — kept for auditability, not for hashing (the row's
+    the exact upstream row that produced this entry, an arbitrary shape this module
+    does not otherwise constrain — kept for auditability, not for hashing (the row's
     identity is `input_fingerprint`, computed once by the caller via
-    `compute_row_fingerprint` before the entry is built)."""
+    `compute_row_fingerprint` before the entry is built).
+
+    `human`/`llm_output` are mutually exclusive (`_exactly_one_payload`): which
+    one is set says which kind of stage recorded this entry, so a reader never
+    has to consult `stage_id` or any other field to know how to interpret the
+    payload. `llm_output` is itself the sanctioned dynamic boundary the same
+    way `frozen_input` is — an llm_transform's added columns are shaped by that
+    stage's own output_schema, not known to this module."""
 
     collection: ClassVar[str] = "stage_cache"
     SCOPE: ClassVar[PersistenceScope] = PersistenceScope.PROJECT_READ_WRITE
@@ -77,7 +93,18 @@ class StageCacheEntry(PersistedModel):
     input_fingerprint: str
     source_run_id: str
     frozen_input: JsonDict
-    human: HumanDecision
+    human: HumanDecision | None = None
+    llm_output: JsonDict | None = None
+
+    @model_validator(mode="after")
+    def _exactly_one_payload(self) -> "StageCacheEntry":
+        if (self.human is None) == (self.llm_output is None):
+            raise ValueError(
+                "StageCacheEntry must carry exactly one payload: `human` (a "
+                "human_review_queue decision) or `llm_output` (a cached "
+                "llm_transform reply) — never both, never neither."
+            )
+        return self
 
     @overload
     @classmethod
