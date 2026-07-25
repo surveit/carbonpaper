@@ -29,7 +29,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Any, Callable
+from typing import Any, Callable, Protocol, runtime_checkable
 
 import pandas as pd
 
@@ -62,8 +62,8 @@ ROW_USAGE_KEY = "_usage"
 # Sentinel column a row mapper attaches to a row whose value could not be
 # produced synchronously: the value does not exist yet, so the run cannot be
 # carried past this stage. Distinct from ROW_ERROR_KEY, which marks a row that
-# FAILED and lets the run continue. The driver never interprets it — a handler
-# that emits it reads it back in its own `collect_row_markers`.
+# FAILED and lets the run continue. The driver never interprets it — a mapper
+# that emits it reads it back in its own `finish_mapped_rows`.
 ROW_DEFERRED_KEY = "_deferred"
 
 # Sentinel column a row mapper sets to True on a row the stage does not emit. A
@@ -79,6 +79,33 @@ ROW_DROP_KEY = "_drop"
 _INTERNAL_ROW_COLUMNS = frozenset(
     {ROW_ERROR_KEY, ROW_USAGE_KEY, ROW_DEFERRED_KEY, ROW_DROP_KEY}
 )
+
+
+@runtime_checkable
+class PostMapRowMapper(Protocol):
+    """A row mapper that also carries the step to run once its map is over.
+
+    `make_mapper` may return a plain function — one row in, one row out — or an
+    object of this shape, which additionally gets `finish_mapped_rows` once the
+    assembled frame exists, with every marker column still on it. The two halves
+    then share whatever per-execution state the object holds, instead of needing
+    a channel outside the mapper to pass it through.
+
+    `finish_mapped_rows` runs AFTER marked rows are removed, so it sees the
+    SURVIVING rows only, and before the driver strips the markers, so it is the
+    last step that sees a marker column at all. It is handed the stage's
+    `StageContribution` to report onto — the manifest fields the mapper owns —
+    and may raise, which aborts the stage."""
+
+    def __call__(self, row: Row) -> Row: ...
+
+    def finish_mapped_rows(
+        self,
+        stage: Stage,
+        df: pd.DataFrame,
+        ctx: RunContext,
+        contribution: StageContribution,
+    ) -> None: ...
 
 
 class StageHandler(ABC):
@@ -105,23 +132,19 @@ class RowMapHandler(StageHandler):
     cannot reorder or fan out rows.
 
     `make_mapper` runs once per stage execution (resolve code, render prompt
-    additions, record backend info) and returns the per-row function.
-    `parallelism` > 1 lets the driver run the mapper over rows concurrently —
-    results are written back by input index, so output order is input order
-    regardless of completion order. `project_output_to_declared` asks the driver
-    to project the assembled frame onto exactly the columns output_schema declares
-    — a column-only operation that cannot change row count or order.
+    additions, record backend info) and returns the per-row callable — a plain
+    function, or a `PostMapRowMapper`, which the driver also hands the assembled
+    frame once the map is over. `parallelism` > 1 lets the driver run the mapper
+    over rows concurrently — results are written back by input index, so output
+    order is input order regardless of completion order.
+    `project_output_to_declared` asks the driver to project the assembled frame
+    onto exactly the columns output_schema declares — a column-only operation
+    that cannot change row count or order.
 
     `drops_rows` declares that this handler's mapper may mark a row with
     ROW_DROP_KEY for the driver to remove; the handler then stops claiming
     grain-and-order preservation. Left False, a drop marker is an error rather
-    than a silent row loss. `collect_row_markers`, when given, runs once after
-    the map with the assembled frame — every marker column still on it — so the
-    handler can read back whatever its mapper attached before the driver strips
-    the markers off, and report what it found onto the stage's
-    `StageContribution`. It runs AFTER marked rows are removed, so it sees the
-    surviving rows only; a handler needing a dropped row's markers must capture
-    them in its mapper.
+    than a silent row loss.
     """
 
     def __init__(
@@ -130,15 +153,11 @@ class RowMapHandler(StageHandler):
         parallelism: int = 1,
         project_output_to_declared: bool = False,
         drops_rows: bool = False,
-        collect_row_markers: (
-            Callable[[Stage, pd.DataFrame, RunContext, StageContribution], None] | None
-        ) = None,
     ) -> None:
         self.make_mapper = make_mapper
         self.parallelism = parallelism
         self.project_output_to_declared = project_output_to_declared
         self.drops_rows = drops_rows
-        self.collect_row_markers = collect_row_markers
 
     def execute(
         self, stage: Stage, inputs: dict[str, pd.DataFrame], ctx: RunContext
@@ -296,21 +315,25 @@ def _run_row_mapper(
                 f"got {type(result).__name__} for row {index}"
             )
         out_rows.append(result)
-    return _finish_mapped_frame(pd.DataFrame(out_rows), handler, stage, ctx)
+    return _finish_mapped_frame(pd.DataFrame(out_rows), handler, map_row, stage, ctx)
 
 
 def _finish_mapped_frame(
-    df: pd.DataFrame, handler: RowMapHandler, stage: Stage, ctx: RunContext
+    df: pd.DataFrame,
+    handler: RowMapHandler,
+    map_row: Callable[[Row], Row],
+    stage: Stage,
+    ctx: RunContext,
 ) -> pd.DataFrame:
     """Turn the assembled per-row results into the stage's output frame: remove
     marked rows, collect the driver's own markers onto this stage's
-    `StageContribution`, hand the frame to the handler's marker collector if it
-    has one, then strip every marker column and — where the handler asks for it
-    — project onto the declared columns.
+    `StageContribution`, hand the frame back to the mapper where the mapper is a
+    `PostMapRowMapper`, then strip every marker column and — where the handler
+    asks for it — project onto the declared columns.
 
-    The collector's window is exact: it runs after the marked rows are already
-    gone, so it sees the SURVIVING rows only, and before the strip, so it is the
-    last step that sees a marker column at all.
+    The mapper's window is exact: `finish_mapped_rows` runs after the marked
+    rows are already gone, so it sees the SURVIVING rows only, and before the
+    strip, so it is the last step that sees a marker column at all.
 
     The contribution rides out on the returned frame's `.attrs`; the executor
     merges it into the manifest. Nothing accumulates in the (frozen) context."""
@@ -318,8 +341,8 @@ def _finish_mapped_frame(
     df = _drop_marked_rows(df, handler, stage)
     _collect_row_errors(df, contribution)
     _collect_row_usage(df, contribution)
-    if handler.collect_row_markers is not None:
-        handler.collect_row_markers(stage, df, ctx, contribution)
+    if isinstance(map_row, PostMapRowMapper):
+        map_row.finish_mapped_rows(stage, df, ctx, contribution)
     df = _strip_internal_row_columns(df)
     if handler.project_output_to_declared:
         df = _project_onto_declared_columns(df, stage, contribution)

@@ -1,9 +1,15 @@
-"""Behavior tests for handle_human_review_queue's cache-backed decision
+"""Behavior tests for the human_review_queue handler's cache-backed decision
 matching (app/runtime/stages/human_review_queue.py): a queued row is matched
 to a prior human decision by fingerprinting the row and the stage definition
 (app.core.stage_cache), never by re-reading a legacy decisions/*.parquet
 file. Every entry these tests seed goes through the seam (`StageCache.put`),
 never a raw store write.
+
+The stage is always exercised through its registered handler
+(`HANDLERS[StageType.human_review_queue].execute`), so what these tests pin is
+the whole row-driven path — the per-row mapper, the driver's assembly and row
+dropping, and the handler's own post-map collection — not a function called
+underneath it.
 
 Fingerprints never live on the snapshot itself: they're read from the sidecar
 `<stage>.fingerprints.json` written alongside it, POSITIONALLY aligned to the
@@ -18,22 +24,32 @@ import pytest
 
 import app.runtime.runner as runner
 from app.models import RowReviewDecision, Stage
+from app.models.stage import StageType
+from app.runtime.cancellation import request_cancel
 from app.runtime.context import RunIdentity
-from app.runtime.errors import HaltForReview
+from app.runtime.errors import HaltForReview, RunCancelled
 from app.runtime.runner import prepare_run, run_prepared
-from app.runtime.stages.human_review_queue import handle_human_review_queue
+from app.runtime.stages import HANDLERS
 from app.services import review, versioning
 from app.core.stage_cache import StageCache, compute_row_fingerprint
 from app.services.versioning import create_version_from_disk
-from conftest import make_run_context
+from conftest import contribution_of, make_run_context
 
 PROJECT = "hrq-cache-tests"
 
 
-def _stage(*, reviewer_instructions: str | None = None) -> Stage:
+def _run_queue_stage(stage: Stage, inputs: dict[str, pd.DataFrame], ctx) -> pd.DataFrame:
+    out = HANDLERS[StageType.human_review_queue].execute(stage, inputs, ctx)
+    assert out is not None  # a row-mapped stage always produces a frame
+    return out
+
+
+def _stage(*, reviewer_instructions: str | None = None, flt: str | None = None) -> Stage:
     queue: dict[str, str] = {}
     if reviewer_instructions is not None:
         queue["reviewer_instructions"] = reviewer_instructions
+    if flt is not None:
+        queue["filter"] = flt
     return Stage.model_validate({
         "id": "review", "name": "Review", "type": "human_review_queue",
         "inputs": [{"id": "scored"}],
@@ -65,24 +81,25 @@ def _halt_and_read_snapshot(
     stage: Stage, inputs: dict[str, pd.DataFrame], ctx
 ) -> tuple[pd.DataFrame, dict]:
     with pytest.raises(HaltForReview) as exc_info:
-        handle_human_review_queue(stage, inputs, ctx)
+        _run_queue_stage(stage, inputs, ctx)
     queue_path = exc_info.value.queue_path
     return pd.read_parquet(queue_path), _read_fingerprints(queue_path)
 
 
 def _put_approval(
     row: pd.Series, input_fingerprint: str, stage_fingerprint: str,
-    *, project: str = PROJECT,
+    *, project: str = PROJECT, verdict: RowReviewDecision = RowReviewDecision.approve,
 ) -> None:
-    """Cache an `approve` decision for one row of a halted snapshot, matched to
-    it by the sidecar's fingerprints — built through the real review service
-    (record_decision → the production cache seam), never a hand-assembled
-    entry or a raw store write."""
+    """Cache one verdict (`approve` unless told otherwise) for one row of a
+    halted snapshot, matched to it by the sidecar's fingerprints — built
+    through the real review service (record_decision → the production cache
+    seam), never a hand-assembled entry or a raw store write. The frozen row is
+    the whole snapshot row, which is what the reviewer saw."""
     review.record_decision(
         project=project, stage_id="review",
         stage_fingerprint=stage_fingerprint, input_fingerprint=input_fingerprint,
-        frozen_row={"id": row["id"], "score": int(row["score"])},
-        verdict=RowReviewDecision.approve, modified_score=None,
+        frozen_row={str(column): value for column, value in row.items()},
+        verdict=verdict, modified_score=None,
         reviewer="local", reviewed_at="2026-07-01T00:00:00",
     )
 
@@ -103,7 +120,7 @@ def test_decided_rows_reused_across_runs(tmp_path):
     assert len(snapshot) == 2
     _approve_every_row(snapshot, fingerprints)
 
-    out = handle_human_review_queue(stage, {"scored": src.copy()}, _ctx(tmp_path, run_id="run2"))
+    out = _run_queue_stage(stage, {"scored": src.copy()}, _ctx(tmp_path, run_id="run2"))
     assert len(out) == 2
     assert sorted(out["final_score"].tolist()) == [0, 1]
     assert (out["decision"] == "approve").all()
@@ -230,7 +247,137 @@ def test_hrq_requires_project_grant(tmp_path):
     stage = _stage()
     ctx = make_run_context(run_dir=tmp_path)  # identity=None, stage_cache=None
     with pytest.raises(ValueError, match="project-scoped"):
-        handle_human_review_queue(stage, {"scored": _src(1)}, ctx)
+        _run_queue_stage(stage, {"scored": _src(1)}, ctx)
+
+
+# ── 8. Row-driven shape: input order, dropping, one cache read, cancel ──────
+
+
+def _alternating_src() -> pd.DataFrame:
+    """Rows whose `flag` alternates, so the filter below selects a
+    NON-CONTIGUOUS subset — the shape that tells input order apart from
+    decided-first order."""
+    return pd.DataFrame({
+        "id": ["r0", "r1", "r2", "r3"],
+        "score": [10, 11, 12, 13],
+        "flag": ["skip", "review", "skip", "review"],
+    })
+
+
+def test_output_rows_stay_in_input_order(tmp_path):
+    """A frame whose reviewed and passed-through rows alternate comes back in
+    INPUT order — r0, r1, r2, r3 — not with the two decided rows hoisted to the
+    front."""
+    stage = _stage(flt="flag == 'review'")
+    src = _alternating_src()
+
+    snapshot, fingerprints = _halt_and_read_snapshot(
+        stage, {"scored": src}, _ctx(tmp_path, run_id="run1"))
+    assert list(snapshot["id"]) == ["r1", "r3"]  # only the filtered rows queue
+    _approve_every_row(snapshot, fingerprints)
+
+    out = _run_queue_stage(stage, {"scored": src.copy()}, _ctx(tmp_path, run_id="run2"))
+    assert list(out["id"]) == ["r0", "r1", "r2", "r3"]
+
+
+def test_rejected_row_is_dropped_and_the_rest_keep_input_order(tmp_path):
+    """A cached tombstone (a `reject` verdict) removes exactly its own row; the
+    rows around it keep their input order."""
+    stage = _stage()
+    src = _src(3)
+
+    snapshot, fingerprints = _halt_and_read_snapshot(
+        stage, {"scored": src}, _ctx(tmp_path, run_id="run1"))
+    verdicts = [RowReviewDecision.approve, RowReviewDecision.reject, RowReviewDecision.approve]
+    for (_, row), fp, verdict in zip(
+        snapshot.iterrows(), fingerprints["input_fingerprints"], verdicts
+    ):
+        _put_approval(row, fp, fingerprints["stage_fingerprint"], verdict=verdict)
+
+    out = _run_queue_stage(stage, {"scored": src.copy()}, _ctx(tmp_path, run_id="run2"))
+    assert list(out["id"]) == ["r0", "r2"]
+
+
+def test_queue_stats_count_every_row_including_the_rejected_one(tmp_path):
+    """The manifest's per-stage item counts, over a run where every outcome
+    occurs. `items_decided` counts the REJECTED row too — it was decided, and
+    it is the one row that no longer exists by the time the stage's frame is
+    assembled, so it can only be counted as the row is mapped."""
+    stage = _stage(flt="flag == 'review'")
+    src = _alternating_src()
+
+    # On the halting path the stage's contribution rides out on the halt itself
+    # — the raise is that path's only return into the manifest.
+    with pytest.raises(HaltForReview) as exc_info:
+        _run_queue_stage(stage, {"scored": src}, _ctx(tmp_path, run_id="run1"))
+    assert exc_info.value.contribution.human_review_queue_stats == {
+        "items_queued_total": 2, "items_passed_through": 2,
+        "items_pending": 2, "items_decided": 0,
+    }
+    queue_path = exc_info.value.queue_path
+    snapshot, fingerprints = pd.read_parquet(queue_path), _read_fingerprints(queue_path)
+
+    verdicts = [RowReviewDecision.approve, RowReviewDecision.reject]
+    for (_, row), fp, verdict in zip(
+        snapshot.iterrows(), fingerprints["input_fingerprints"], verdicts
+    ):
+        _put_approval(row, fp, fingerprints["stage_fingerprint"], verdict=verdict)
+
+    out = _run_queue_stage(stage, {"scored": src.copy()}, _ctx(tmp_path, run_id="run2"))
+    assert list(out["id"]) == ["r0", "r1", "r2"]  # r3 was rejected
+    assert contribution_of(out).human_review_queue_stats == {
+        "items_queued_total": 2, "items_passed_through": 2,
+        "items_pending": 0, "items_decided": 2,
+    }
+
+
+def test_cache_is_read_once_per_stage_execution(tmp_path, monkeypatch):
+    """The cached decisions are looked up ONCE for the whole stage, not once
+    per row: the lookup belongs to building the mapper, and a per-row store
+    read would make a queue stage's cost scale with its row count."""
+    cache = StageCache()
+    calls: list[tuple[str, str, str]] = []
+    find_entries = cache.find_entries
+
+    def counting_find_entries(project: str, stage_id: str, stage_fingerprint: str):
+        calls.append((project, stage_id, stage_fingerprint))
+        return find_entries(project, stage_id, stage_fingerprint)
+
+    monkeypatch.setattr(cache, "find_entries", counting_find_entries)
+    ctx = make_run_context(
+        run_dir=tmp_path,
+        identity=RunIdentity(project=PROJECT, run_id="count"),
+        stage_cache=cache,
+    )
+    with pytest.raises(HaltForReview):
+        _run_queue_stage(_stage(), {"scored": _src(3)}, ctx)
+    assert len(calls) == 1
+
+
+def test_fingerprint_matches_the_drivers_own_row_dict(tmp_path):
+    """The sidecar's fingerprints are computed over the row dicts the row
+    driver builds (`src.to_dict("records")`, str-keyed), position by position —
+    so the key a decision is filed under is the key the next run's driver
+    recomputes."""
+    src = _src(3)
+    _snapshot, fingerprints = _halt_and_read_snapshot(
+        _stage(), {"scored": src}, _ctx(tmp_path))
+
+    expected = [
+        compute_row_fingerprint({str(k): v for k, v in record.items()})
+        for record in src.to_dict("records")
+    ]
+    assert fingerprints["input_fingerprints"] == expected
+
+
+def test_cancel_mid_queue_map_marks_the_stage_cancelled(tmp_path):
+    """A cancel requested before the stage runs stops the row map with
+    RunCancelled — the run was cancelled, so it must not also be reported as
+    awaiting review."""
+    ctx = _ctx(tmp_path, run_id="cancel-me")
+    request_cancel(PROJECT, "cancel-me")
+    with pytest.raises(RunCancelled):
+        _run_queue_stage(_stage(), {"scored": _src(2)}, ctx)
 
 
 # ── Resume reattaches decisions written via the seam, from disk alone ───────

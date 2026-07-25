@@ -29,7 +29,7 @@ from .execution import (
     StageHandler,
     validate_registry_matches_model,
 )
-from .human_review_queue import handle_human_review_queue
+from .human_review_queue import make_human_review_mapper
 from .input_data import preflight_input_data, read_input_data
 from .join import handle_join
 from .llm_transform import make_llm_row_mapper, run_llm_batches
@@ -55,7 +55,12 @@ HANDLERS: dict[StageType, StageHandler] = {
         parallelism=DEFAULT_PARALLEL,
         project_output_to_declared=True,
     ),
-    StageType.human_review_queue: FrameHandler(handle_human_review_queue),
+    # parallelism stays 1: the mapper increments one shared stats dict per row.
+    StageType.human_review_queue: RowMapHandler(
+        make_human_review_mapper,
+        project_output_to_declared=True,
+        drops_rows=True,
+    ),
     StageType.publish: FrameHandler(handle_publish),
 }
 
@@ -76,7 +81,7 @@ __all__ = [
     "StageHandler",
     "validate_registry_matches_model",
     "handle_aggregate",
-    "handle_human_review_queue",
+    "make_human_review_mapper",
     "handle_join",
     "handle_publish",
     "handle_python_frame_function",

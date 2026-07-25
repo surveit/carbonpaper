@@ -64,8 +64,8 @@ def test_input_data_is_grain_and_order_preserving(tmp_path):
 
 
 def test_human_review_queue_not_grain_and_order_preserving():
-    # handle_human_review_queue drops rejected rows and concatenates
-    # decided+passthrough, so it changes both grain and order (see #106).
+    # The queue handler drops rows the reviewer rejected, so it is not 1:1
+    # (see #106).
     s = m.Stage.model_validate(S(id="rev", type="human_review_queue",
                                  inputs=[{"id": "a"}], queue={}))
     assert s.is_grain_and_order_preserving is False

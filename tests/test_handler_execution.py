@@ -269,41 +269,64 @@ def test_row_driver_accepts_a_plain_bool_drop_marker_alongside_missing_ones():
     assert list(out["x"]) == [1, 3]
 
 
+def _mark_row_with_every_marker(row):
+    return {
+        "x": row["x"],
+        ROW_ERROR_KEY: None,
+        ROW_USAGE_KEY: LlmUsage(),
+        ROW_DEFERRED_KEY: True,
+        ROW_DROP_KEY: False,
+    }
+
+
 def _marks_every_row_with_every_marker(stage, ctx):
-    def map_row(row):
-        return {
-            "x": row["x"],
-            ROW_ERROR_KEY: None,
-            ROW_USAGE_KEY: LlmUsage(),
-            ROW_DEFERRED_KEY: True,
-            ROW_DROP_KEY: False,
-        }
-    return map_row
+    return _mark_row_with_every_marker
 
 
-def test_row_driver_runs_the_handler_marker_collector_after_the_map():
-    seen: list[pd.DataFrame] = []
-    handler = RowMapHandler(
-        make_mapper=_marks_every_row_with_every_marker,
-        drops_rows=True,
-        collect_row_markers=lambda stage, df, ctx, contribution: seen.append(df.copy()),
-    )
+class _MarksEveryRowAndKeepsTheFrame:
+    """A mapper of the `PostMapRowMapper` shape: marks every row, and its own
+    post-map step keeps the frame the driver hands back to it."""
+
+    def __init__(self):
+        self.seen: list[pd.DataFrame] = []
+
+    def __call__(self, row):
+        return _mark_row_with_every_marker(row)
+
+    def finish_mapped_rows(self, stage, df, ctx, contribution):
+        self.seen.append(df.copy())
+
+
+class _MapperWhosePostMapStepRaises:
+    def __call__(self, row):
+        return dict(row)
+
+    def finish_mapped_rows(self, stage, df, ctx, contribution):
+        raise RuntimeError("post-map step said stop")
+
+
+def test_row_driver_runs_the_mappers_own_post_map_step_after_the_map():
+    mapper = _MarksEveryRowAndKeepsTheFrame()
+    handler = RowMapHandler(make_mapper=lambda stage, ctx: mapper, drops_rows=True)
     handler.execute(_row_stage(), {"src": pd.DataFrame({"x": [1, 2, 3]})}, make_run_context())
-    [collected] = seen
+    [collected] = mapper.seen
     assert len(collected) == 3  # every mapped row
     assert {ROW_ERROR_KEY, ROW_USAGE_KEY, ROW_DEFERRED_KEY, ROW_DROP_KEY} <= set(collected.columns)
 
 
-def test_row_driver_lets_a_marker_collector_raise_out_of_execute():
-    def collect_row_markers(stage, df, ctx, contribution):
-        raise RuntimeError("collector said stop")
-
-    handler = RowMapHandler(
-        make_mapper=lambda stage, ctx: lambda row: dict(row),
-        collect_row_markers=collect_row_markers,
-    )
-    with pytest.raises(RuntimeError, match="collector said stop"):
+def test_row_driver_lets_a_mappers_post_map_step_raise_out_of_execute():
+    handler = RowMapHandler(make_mapper=lambda stage, ctx: _MapperWhosePostMapStepRaises())
+    with pytest.raises(RuntimeError, match="post-map step said stop"):
         handler.execute(_row_stage(), {"src": pd.DataFrame({"x": [1]})}, make_run_context())
+
+
+def test_a_plain_closure_mapper_needs_no_post_map_step():
+    """A mapper that is just a function — llm_transform's and
+    python_row_function's shape — carries no `finish_mapped_rows`, and the
+    driver runs it to completion without one."""
+    handler = RowMapHandler(make_mapper=lambda stage, ctx: lambda row: dict(row))
+    out = handler.execute(_row_stage(), {"src": pd.DataFrame({"x": [1, 2]})}, make_run_context())
+    assert list(out["x"]) == [1, 2]
 
 
 def test_internal_marker_columns_never_reach_output_even_without_an_output_schema():

@@ -1,8 +1,9 @@
 import pandas as pd
 import pytest
 from app.runtime.context import RunIdentity
-from app.runtime.stages.human_review_queue import handle_human_review_queue
+from app.runtime.stages import HANDLERS
 from app.models import Stage
+from app.models.stage import StageType
 from app.core.stage_cache import StageCacheEntry
 from conftest import make_run_context
 
@@ -21,4 +22,4 @@ def test_bad_filter_raises_instead_of_skipping_review(tmp_path):
         stage_cache=StageCacheEntry.read_write(),
     )
     with pytest.raises(ValueError, match="filter could not be evaluated"):
-        handle_human_review_queue(stage, inputs, ctx)
+        HANDLERS[StageType.human_review_queue].execute(stage, inputs, ctx)

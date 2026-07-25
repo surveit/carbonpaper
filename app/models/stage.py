@@ -639,10 +639,11 @@ class Stage(_Base):
           - llm_transform      → yes (per-row 1:1 in emit order in v1; a fan-out LLM
                                  like doc→pieces is out of scope until fan-out evals)
           - input_data         → yes (originates the rows)
-          - human_review_queue → NO — handle_human_review_queue drops rejected rows
-                                 and concatenates decided+passthrough, changing both
-                                 grain and order. Its intended "edits in place"
-                                 contract would make it yes; closing that gap is #106.
+          - human_review_queue → NO — the runtime maps it per row, so an output row
+                                 is in its input row's position; but a row the
+                                 reviewer rejected is dropped, so it is not 1:1.
+                                 Its intended "edits in place" contract would make
+                                 it yes; that remaining gap is #106.
           - join (fan-out) / aggregate (fan-in) → NO; grain changes are deferred
           - publish            → NO — handle_publish runs an authored function whose
                                  output is a table of artifact paths, not the input
