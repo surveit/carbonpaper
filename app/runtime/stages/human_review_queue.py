@@ -15,11 +15,6 @@ from app.core.stage_cache import ReadOnlyStageCache, StageCacheEntry, compute_ro
 from ..context import QueueStats, RunContext
 from ..errors import HaltForReview
 
-# The upstream AI score column a queue stage reviews. Named once so the two sites
-# that test for its presence (auto-approve and passthrough finalization) can't
-# drift apart.
-_SCORE_COLUMN = "score"
-
 
 def handle_human_review_queue(stage: Stage, inputs: dict[str, pd.DataFrame], ctx: RunContext) -> pd.DataFrame:
     """Real review-queue semantics:
@@ -39,7 +34,10 @@ def handle_human_review_queue(stage: Stage, inputs: dict[str, pd.DataFrame], ctx
     5. Otherwise replace each decided row with its cached output row, dropping
        any whose cached output is a tombstone (the row was dropped upstream of
        this seam), and concat with the passthrough rows. The cached output is
-       built and interpreted above this seam; this handler only replays it.
+       built and interpreted above this seam (app.services.review, from the
+       stage's own output_schema); this handler only replays it and projects
+       the result onto what the schema declares — it knows no review column
+       names of its own.
     """
     sid = stage.id
     queue_cfg = stage.queue
@@ -75,7 +73,6 @@ def handle_human_review_queue(stage: Stage, inputs: dict[str, pd.DataFrame], ctx
         _snapshot_pending_and_halt(ctx, sid, pending, stage_fp, pending_fingerprints)
 
     decided = _collect_cached_output_rows(decided, entries_by_fingerprint, input_fingerprints_by_index)
-    passthrough = _finalize_passthrough_rows(passthrough)
     out = _combine_decided_and_passthrough(decided, passthrough)
     return _project_onto_output_schema(out, stage, ctx, sid)
 
@@ -105,17 +102,14 @@ def _auto_approve_all(
     src: pd.DataFrame, stage: Stage, ctx: RunContext, sid: str
 ) -> pd.DataFrame:
     """Pass every row through as approved, entirely in memory — no stage-cache
-    decision lookup, no queue snapshot, no halt. Each row gets the same reviewer
-    columns an 'approve' decision produces (final/human score = ai score), then the
-    frame is projected onto the output schema exactly as the real path's output would
-    be, so the stage's recorded row count is its real one. No human reviewed these
-    rows, so reviewer_id/reviewed_at stay null."""
+    decision lookup, no queue snapshot, no halt. Each row is stamped with the
+    verdict an approve records, then projected onto the output schema exactly as
+    the real path's output would be, so the stage's recorded row count and column
+    set are its real ones. No human reviewed these rows, so reviewer_id/reviewed_at
+    stay null — and so does every field the stage's output_schema declares for its
+    reviewer, since nobody supplied one. Auto-approval fabricates a verdict (that
+    is what it is for); it does not fabricate reviewed VALUES."""
     approved = src.copy()
-    ai = approved[_SCORE_COLUMN] if _SCORE_COLUMN in approved.columns else pd.NA
-    approved["ai_score"] = ai
-    approved["human_score"] = ai
-    approved["final_score"] = ai
-    approved["review_notes"] = f"decision={RowReviewDecision.approve}"
     approved["reviewer_id"] = pd.NA
     approved["reviewed_at"] = pd.NA
     approved["decision"] = RowReviewDecision.approve
@@ -263,20 +257,12 @@ def _collect_cached_output_rows(
     return pd.DataFrame(output_rows)
 
 
-def _finalize_passthrough_rows(passthrough: pd.DataFrame) -> pd.DataFrame:
-    """Pass-through rows keep their AI score as final; the reviewer columns are
-    filled with the pass-through-specific values (no human ever reviewed them)."""
-    if len(passthrough) and _SCORE_COLUMN in passthrough.columns:
-        passthrough["ai_score"] = passthrough[_SCORE_COLUMN]
-        passthrough["final_score"] = passthrough[_SCORE_COLUMN]
-    passthrough["human_score"] = pd.NA
-    passthrough["reviewer_id"] = passthrough.get("reviewer", pd.NA)
-    passthrough["reviewed_at"] = pd.NA
-    passthrough["review_notes"] = "below review threshold"
-    return passthrough
-
-
 def _combine_decided_and_passthrough(decided: pd.DataFrame, passthrough: pd.DataFrame) -> pd.DataFrame:
+    """The reviewed rows and the rows the queue filter let past, concatenated.
+    A pass-through row carries only its own upstream columns: no human saw it,
+    so every column the reviewer would have supplied — and every audit column
+    naming who decided it when — is genuinely absent, and the projection below
+    fills it with null rather than this handler inventing a value for it."""
     return pd.concat([decided, passthrough], ignore_index=True, sort=False)
 
 
@@ -287,7 +273,13 @@ def _project_onto_output_schema(
     carried through from upstream that the stage wants downstream earns its
     place by being declared. Columns on the frame that the schema doesn't
     declare are dropped, and the drop is recorded on `ctx.dropped_columns`
-    rather than silently discarded."""
+    rather than silently discarded.
+
+    A declared column NO row carries is materialized as null instead of being
+    left off the frame: the declaration is what the stage promises downstream,
+    and a reviewer field nobody filled (or an audit column on a pass-through
+    row) is null data, not a missing column. Any nullability the schema
+    demands is then checked, loudly, by the runtime's own frame validation."""
     declared = [c.name for c in stage.output_schema.columns] if stage.output_schema else []
     if not declared:
         return out
@@ -295,4 +287,8 @@ def _project_onto_output_schema(
     dropped = [c for c in out.columns if c not in keep]
     if dropped:
         ctx.dropped_columns[sid] = dropped
-    return out[keep]
+    projected = out[keep].copy()
+    for name in declared:
+        if name not in projected.columns:
+            projected[name] = pd.NA
+    return projected[declared]

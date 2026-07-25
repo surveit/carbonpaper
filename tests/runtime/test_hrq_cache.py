@@ -31,12 +31,20 @@ PROJECT = "hrq-cache-tests"
 
 
 def _stage(*, reviewer_instructions: str | None = None) -> Stage:
+    """A review stage whose output_schema declares one reviewer-supplied column
+    (`final_score`) alongside the two upstream columns it carries through and
+    the runtime-filled `decision`. That declaration is the only thing that makes
+    `final_score` a reviewable field — nothing in the runtime knows the name."""
     queue: dict[str, str] = {}
     if reviewer_instructions is not None:
         queue["reviewer_instructions"] = reviewer_instructions
     return Stage.model_validate({
         "id": "review", "name": "Review", "type": "human_review_queue",
         "inputs": [{"id": "scored"}],
+        "output_schema": {"columns": [
+            {"name": "id", "type": "str"}, {"name": "score", "type": "int"},
+            {"name": "final_score", "type": "int"}, {"name": "decision", "type": "str"},
+        ]},
         "queue": queue,
     })
 
@@ -71,25 +79,29 @@ def _halt_and_read_snapshot(
 
 
 def _put_approval(
-    row: pd.Series, input_fingerprint: str, stage_fingerprint: str,
+    stage: Stage, row: pd.Series, input_fingerprint: str, stage_fingerprint: str,
     *, project: str = PROJECT,
 ) -> None:
     """Cache an `approve` decision for one row of a halted snapshot, matched to
     it by the sidecar's fingerprints — built through the real review service
     (record_decision → the production cache seam), never a hand-assembled
-    entry or a raw store write."""
+    entry or a raw store write. The reviewer confirms the upstream score as the
+    stage's declared `final_score`, exactly as the queue form would submit it."""
     review.record_decision(
-        project=project, stage_id="review",
+        project=project, stage=stage,
         stage_fingerprint=stage_fingerprint, input_fingerprint=input_fingerprint,
         frozen_row={"id": row["id"], "score": int(row["score"])},
-        verdict=RowReviewDecision.approve, modified_score=None,
+        verdict=RowReviewDecision.approve,
+        submitted_fields={"final_score": str(int(row["score"]))},
         reviewer="local", reviewed_at="2026-07-01T00:00:00",
     )
 
 
-def _approve_every_row(snapshot: pd.DataFrame, fingerprints: dict, *, project: str = PROJECT) -> None:
+def _approve_every_row(
+    stage: Stage, snapshot: pd.DataFrame, fingerprints: dict, *, project: str = PROJECT
+) -> None:
     for (_, row), fp in zip(snapshot.iterrows(), fingerprints["input_fingerprints"]):
-        _put_approval(row, fp, fingerprints["stage_fingerprint"], project=project)
+        _put_approval(stage, row, fp, fingerprints["stage_fingerprint"], project=project)
 
 
 # ── 1. Decided rows are reused across runs ──────────────────────────────────
@@ -101,7 +113,7 @@ def test_decided_rows_reused_across_runs(tmp_path):
 
     snapshot, fingerprints = _halt_and_read_snapshot(stage, {"scored": src}, _ctx(tmp_path, run_id="run1"))
     assert len(snapshot) == 2
-    _approve_every_row(snapshot, fingerprints)
+    _approve_every_row(stage, snapshot, fingerprints)
 
     out = handle_human_review_queue(stage, {"scored": src.copy()}, _ctx(tmp_path, run_id="run2"))
     assert len(out) == 2
@@ -117,7 +129,7 @@ def test_definition_change_invalidates_decisions(tmp_path):
     src = _src(2)
 
     snapshot, fingerprints = _halt_and_read_snapshot(stage, {"scored": src}, _ctx(tmp_path, run_id="run1"))
-    _approve_every_row(snapshot, fingerprints)
+    _approve_every_row(stage, snapshot, fingerprints)
 
     # Byte-identical input rows, but `reviewer_instructions` changed — the
     # stage's definition fingerprint changes, so no cached decision matches.
@@ -137,7 +149,7 @@ def test_row_change_invalidates_only_that_row(tmp_path):
     src = _src(2)
 
     snapshot, fingerprints = _halt_and_read_snapshot(stage, {"scored": src}, _ctx(tmp_path, run_id="run1"))
-    _approve_every_row(snapshot, fingerprints)
+    _approve_every_row(stage, snapshot, fingerprints)
 
     changed_src = src.copy()
     changed_src.loc[changed_src["id"] == "r1", "score"] = 999  # only r1's value changes
@@ -259,6 +271,10 @@ def _review_stage_full():
             "inputs": [{"id": "load", "schema": {
                 "columns": [{"name": "id", "type": "str"}, {"name": "score", "type": "int"}],
                 "primary_key": ["id"]}}],
+            "output_schema": {"columns": [
+                {"name": "id", "type": "str"}, {"name": "score", "type": "int"},
+                {"name": "final_score", "type": "int"}, {"name": "decision", "type": "str"},
+            ]},
             "queue": {}}
 
 
@@ -271,9 +287,11 @@ def test_resume_reattaches_cached_decisions_written_via_the_seam(tmp_path):
     and let the run complete — pinning fingerprint reattachment across the
     upstream-frame reload resume_run performs from parquet."""
     project_dir = tmp_path / "resume_cache_project"
+    review_spec = _review_stage_full()
     _write_stage(project_dir, "01_load.json", _load_stage(project_dir))
-    _write_stage(project_dir, "02_review.json", _review_stage_full())
+    _write_stage(project_dir, "02_review.json", review_spec)
     _seed_version(project_dir)
+    review_stage = Stage.model_validate(review_spec)
 
     halted = run_prepared(prepare_run(project_dir, repo_root=project_dir))
     assert halted["status"] == "awaiting_review"
@@ -284,7 +302,7 @@ def test_resume_reattaches_cached_decisions_written_via_the_seam(tmp_path):
     assert len(snapshot) == 2
     fingerprints = _read_fingerprints(run_dir / "queue" / "review.parquet")
 
-    _approve_every_row(snapshot, fingerprints, project=project_dir.name)
+    _approve_every_row(review_stage, snapshot, fingerprints, project=project_dir.name)
 
     resumed = runner.resume_run(project_dir, run_id, project_dir)
     assert resumed["status"] == "ok"
