@@ -22,7 +22,7 @@ from typing import Annotated, Any, Callable
 
 from pydantic import BaseModel
 
-from app.services import compilation, drafts, project as project_service
+from app.services import drafts, project as project_service
 from app.services.drafts import DraftDetail, DraftEdit, DraftView, SaveResult
 
 
@@ -88,20 +88,6 @@ def make_editing_tools(ctx: EditingContext) -> list[Callable[..., Any]]:
         result = project_service.remove_stage(project_id, stage_id)
         return {"ok": result.ok, "issues": result.issues}
 
-    def compile_workflow(
-        project_id: str, conversation: str, confirm_overwrite: bool = False
-    ) -> dict[str, Any]:
-        """Regenerate a project's ENTIRE workflow from `conversation` — the whole
-        conversation so far, passed verbatim (do NOT summarise or paraphrase). This
-        OVERWRITES the whole workflow, so use it ONLY when the user explicitly asks
-        to rebuild it from scratch — never for a tweak (use edit_stage / add_stage
-        for those). Warn the user first: it replaces everything and takes a few
-        minutes. If any node carries review work, pass confirm_overwrite=True (a
-        version snapshot is taken first). An invalid result is returned, not written."""
-        return compilation.regenerate_workflow_from_conversation(
-            project_id, conversation, confirm_overwrite
-        )
-
     def create_draft(project_id: str, from_version: str = "") -> DraftView:
         """Start a DRAFT: a disposable scratch copy of workflow stages you edit
         freely and later freeze with save_version. Each stage you set must be
@@ -153,7 +139,6 @@ def make_editing_tools(ctx: EditingContext) -> list[Callable[..., Any]]:
         edit_stage,
         add_stage,
         remove_stage,
-        compile_workflow,
         create_draft,
         read_draft,
         set_draft_stage,
@@ -210,20 +195,6 @@ TOOL_SCHEMAS: dict[str, ToolInputSchema] = {
             "stage still lists it in its inputs.",
         ],
     },
-    "compile_workflow": {
-        "project_id": Annotated[str, "The project id (call get_current_project first)."],
-        "conversation": Annotated[
-            str,
-            "The whole conversation so far, passed VERBATIM (do not summarise). The "
-            "compiler regenerates the entire workflow from it — a full reset, so "
-            "only use it when the user explicitly asks to rebuild from scratch.",
-        ],
-        "confirm_overwrite": Annotated[
-            bool,
-            "Set true to snapshot-and-overwrite when the workflow already has "
-            "reviewed stages; omit or false otherwise.",
-        ],
-    },
     "create_draft": {
         "project_id": Annotated[str, "The project id (call get_current_project first)."],
         "from_version": Annotated[
@@ -276,7 +247,6 @@ TOOL_LABELS: dict[str, str] = {
     "edit_stage": "Editing a stage",
     "add_stage": "Adding a stage",
     "remove_stage": "Removing a stage",
-    "compile_workflow": "Rebuilding the workflow from scratch",
     "create_draft": "Starting a draft",
     "read_draft": "Reading the draft",
     "set_draft_stage": "Editing the draft",

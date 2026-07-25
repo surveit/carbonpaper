@@ -3,20 +3,13 @@ compilation.py — the compile-writer service.
 
 The compile MECHANISM (prose → draft workflow) lives in `app.compiler`. This service
 owns persisting compile results to a project's disk layout: `write_methodology` writes
-compiled stages to `<project_dir>/compiled/NN_<id>.json` + `methodology_raw.md`.
-The regenerate_* functions are full-reset writers called by the editing agent and
-generation subsystem."""
+compiled stages to `<project_dir>/compiled/NN_<id>.json` + `methodology_raw.md`."""
 
 from __future__ import annotations
 
 import json
 from pathlib import Path
 from typing import Any
-
-from app.compiler import compile_methodology
-from app.core.errors import RegenerateWithoutSnapshotError
-from app.models.workflow import validate_workflow_draft
-from app.services import versioning, workspace
 
 
 def write_methodology(result: dict[str, Any], out_dir: str | Path) -> dict[str, Any]:
@@ -64,53 +57,3 @@ def write_methodology(result: dict[str, Any], out_dir: str | Path) -> dict[str, 
         "methodology_raw": str(raw_md),
         "audit": str(audit_path),
     }
-
-
-def regenerate_workflow(result: dict[str, Any], project_dir: str | Path) -> dict[str, Any]:
-    """Replace a project's whole compiled/ workflow with `result`'s stages: remove
-    stale stage files a shrinking recompile would otherwise leave behind, then
-    write the new set. The full-reset counterpart to write_methodology's plain
-    write; the disk manipulation lives here in the compile-writer service, not in
-    the caller."""
-    compiled = Path(project_dir) / "compiled"
-    if compiled.is_dir():
-        for stale in compiled.glob("*.json"):
-            stale.unlink()
-    return write_methodology(result, project_dir)
-
-
-def regenerate_workflow_from_conversation(
-    name: str,
-    conversation: str,
-    confirm_overwrite: bool = False,
-    examples_dir: Path | None = None,
-) -> dict[str, Any]:
-    """Rebuild a project's ENTIRE workflow from `conversation` — a full reset. If any
-    node carries review work, raise RegenerateWithoutSnapshotError unless
-    confirm_overwrite is set (in which case a version snapshot is taken first). The
-    compiled draft is held to the same stage + graph validation every write obeys;
-    an invalid result is returned, not written. Called by the editing agent's
-    compile_workflow tool; lives here (not in the status model) because it drives the
-    compiler."""
-    project_dir = workspace.resolve_project_dir(name, examples_dir)
-    summary = workspace.project_workflow_summary(project_dir)
-    has_review_work = any(s["review_state"] != "unreviewed" for s in summary["stages"])
-    if has_review_work:
-        if not confirm_overwrite:
-            raise RegenerateWithoutSnapshotError(
-                f"'{name}' has reviewed stages; re-call with confirm_overwrite=True to snapshot and regenerate."
-            )
-        existing = versioning.list_versions(project_dir)
-        parent = existing[0].version_id if existing else None
-        versioning.create_version_from_disk(
-            project_dir,
-            message=f"pre-regenerate snapshot of {name}",
-            reviewer="agent",
-            parent_version=parent,
-        )
-    result = compile_methodology(conversation, name)
-    draft_issues = validate_workflow_draft(result["stages"])
-    if draft_issues:
-        return {"ok": False, "issues": draft_issues}
-    regenerate_workflow(result, project_dir)
-    return {"ok": True, "stages": [stage["id"] for stage in result["stages"]]}

@@ -36,11 +36,6 @@ class RunVersionUnresolvableError(Exception):
     be read. Its message is shown to the reader in place of the graph."""
 
 
-class RegenerateWithoutSnapshotError(Exception):
-    """Raised when a from-scratch compile would overwrite reviewed work without a
-    prior version snapshot and without explicit confirm_overwrite."""
-
-
 class GenerationError(Exception):
     """A headless agent generation could not produce a VALID artifact.
 

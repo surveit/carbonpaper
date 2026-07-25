@@ -65,7 +65,7 @@ def test_allowed_names_cover_every_tool(examples_root: Path) -> None:
     _seed(examples_root, "congresswatch")
     _server, allowed, _tools = _build("congresswatch")
     assert set(allowed) == {f"mcp__tools__{n}" for n in TOOL_SCHEMAS}
-    assert len(allowed) == 13
+    assert len(allowed) == 12
 
 
 def test_read_stage_handler_returns_text_content(examples_root: Path) -> None:
