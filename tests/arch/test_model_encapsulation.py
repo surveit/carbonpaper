@@ -117,7 +117,9 @@ _RULES: tuple[ProtectedAttributeRule, ...] = (
         # (`d.stages = kept + [stage]`) would hard-fail the mutation check,
         # which has no allowlist to absorb it. Draft's stages never belonged
         # in this row.
-        exempt_paths=frozenset({_REPO_ROOT / "app" / "services" / "drafts.py"}),
+        exempt_paths=frozenset({
+            _REPO_ROOT / "app" / "services" / "drafts.py",
+        }),
     ),
 )
 

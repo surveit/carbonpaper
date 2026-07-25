@@ -22,6 +22,7 @@ from app.core.errors import NoVersionToRunError, SubsetRunError
 from app.models import Stage, Workflow
 from app.runtime.runner import execute_run, resume_run
 from app.runtime.executor import _raise_if_run_failed, run_subset
+from app.runtime.manifest import RunManifest
 from app.runtime.stages import llm_transform as lt
 from app.services.loader import WorkflowLoadError
 from app.services import versioning
@@ -58,9 +59,9 @@ def test_limit_truncates_and_is_recorded(tmp_path):
     manifest = execute_run(tmp_path, repo_root=tmp_path)
 
     assert manifest["status"] == "ok"
-    [rec] = manifest["stages"]
+    [rec] = manifest["stage_records"]
     assert rec["status"] == "ok"
-    assert rec["rows"] == 2                                   # truncated from 5
+    assert rec["output_row_count"] == 2                                   # truncated from 5
     assert any("truncated" in n for n in rec.get("notes", []))   # not silent
 
     run_dir = tmp_path / "runs" / manifest["run_id"]
@@ -81,8 +82,8 @@ def test_per_run_limit_and_offset_slice_and_are_recorded(tmp_path):
     manifest = execute_run(tmp_path, repo_root=tmp_path,
                            limits={"load": 3}, offsets={"load": 1})
 
-    [rec] = manifest["stages"]
-    assert rec["rows"] == 3                                   # not the static 2
+    [rec] = manifest["stage_records"]
+    assert rec["output_row_count"] == 3                                   # not the static 2
     out = pd.read_parquet(
         tmp_path / "runs" / manifest["run_id"] / "outputs" / "load.parquet")
     assert list(out["val"]) == [1, 2, 3]
@@ -145,7 +146,7 @@ def test_duplicate_input_rows_fail_the_stage(tmp_path):
     _seed_version(tmp_path)
     manifest = execute_run(tmp_path, repo_root=tmp_path)
 
-    records = {r["stage_id"]: r for r in manifest["stages"]}
+    records = {r["stage_id"]: r for r in manifest["stage_records"]}
     assert records["load"]["status"] == "ok"     # producing dupes isn't the error…
     assert records["consume"]["status"] == "error"  # …feeding them to a stage is
     msg = records["consume"]["error"]["message"]
@@ -165,9 +166,9 @@ def test_distinct_input_rows_pass(tmp_path):
     _seed_version(tmp_path)
     manifest = execute_run(tmp_path, repo_root=tmp_path)
     assert manifest["status"] == "ok"
-    records = {r["stage_id"]: r for r in manifest["stages"]}
+    records = {r["stage_id"]: r for r in manifest["stage_records"]}
     assert records["consume"]["status"] == "ok"
-    assert records["consume"]["rows"] == 2
+    assert records["consume"]["output_row_count"] == 2
 
 
 def _llm_transform_project(root):
@@ -211,11 +212,11 @@ def test_llm_generation_failure_surfaces_as_error_status_not_raised(tmp_path, mo
     _seed_version(tmp_path)
     manifest = execute_run(tmp_path, repo_root=tmp_path)
 
-    records = {r["stage_id"]: r for r in manifest["stages"]}
+    records = {r["stage_id"]: r for r in manifest["stage_records"]}
     rec = records["score"]
     assert rec["status"] == "error"
-    assert rec["rows"] == 1                         # stage completed, output kept
-    issues = rec["output_validation"]["issues"]
+    assert rec["output_row_count"] == 1                         # stage completed, output kept
+    issues = rec["output_validation_report"]["issues"]
     assert any("generation failed" in i["message"] and "boom" in i["message"]
                for i in issues)
     assert rec["error"]["type"] == "RowGenerationError"
@@ -299,7 +300,7 @@ def test_run_subset_preserves_partial_work_in_the_manifest_on_a_mid_frontier_err
             run_dir=run_dir, repo_root=tmp_path)
 
     manifest = json.loads((run_dir / "manifest.json").read_text(encoding="utf-8"))
-    records = {r["stage_id"]: r for r in manifest["stages"]}
+    records = {r["stage_id"]: r for r in manifest["stage_records"]}
     assert records["clean"]["status"] == "ok"          # completed upstream preserved
     assert records["score"]["status"] == "error"       # failing stage's error recorded
     assert records["score"]["error"] is not None
@@ -314,11 +315,12 @@ def test_raise_if_run_failed_lists_halted_stages_as_readable_text():
     """`halted_at` is a list of stage ids (see app/runtime/runner.py's
     _execute_stages). _raise_if_run_failed's message must read them out
     comma-joined, not as Python's list repr (`['review_a', 'review_b']`)."""
-    manifest = {
-        "status": "awaiting_review",
-        "halted_at": ["review_a", "review_b"],
-        "stages": [],
-    }
+    manifest = RunManifest(
+        run_id="r", started_at="t", project=None, workflow_version=None,
+        limit_overrides={}, offset_overrides={}, run_bindings={}, input_bindings={},
+        human_review_queue_stats={}, dropped_columns={}, status="awaiting_review",
+        stage_records=[], halted_at=["review_a", "review_b"],
+    )
 
     with pytest.raises(SubsetRunError) as exc_info:
         _raise_if_run_failed(manifest)
@@ -466,23 +468,26 @@ def test_resume_reapplies_run_bindings_for_a_pending_input_stage(tmp_path):
     run_dir = tmp_path / "runs" / run_id
     (run_dir / "outputs").mkdir(parents=True)
     manifest = {
-        "run_id": run_id, "project": tmp_path.name, "workflow_version": version_id,
+        "run_id": run_id, "started_at": run_id, "project": tmp_path.name,
+        "workflow_version": version_id,
         "status": "awaiting_review",
         "run_bindings": {"load": {"path": str(bound_csv)}},
         "input_bindings": {
             "load": {"path": str(bound_csv), "source": "run",
                      "sha256": "unused-in-this-test", "bytes": bound_csv.stat().st_size},
         },
-        "stages": [{"stage_id": "load", "type": "input_data", "name": "Load items",
-                    "status": "pending", "input_validation": [], "output_validation": None,
-                    "elapsed_ms": 0, "rows": 0, "error": None,
+        "human_review_queue_stats": {},
+        "stage_records": [{"stage_id": "load", "type": "input_data", "name": "Load items",
+                    "status": "pending", "input_validation_report": [],
+                    "output_validation_report": None,
+                    "elapsed_ms": 0, "output_row_count": 0, "error": None,
                     "started_at": None, "finished_at": None}],
     }
     (run_dir / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
 
     result = resume_run(tmp_path, run_id, repo_root=tmp_path)
 
-    [rec] = result["stages"]
+    [rec] = result["stage_records"]
     assert rec["status"] == "ok", rec.get("error")
     out = pd.read_parquet(run_dir / "outputs" / "load.parquet")
     assert list(out["name"]) == ["bound-row"]

@@ -35,12 +35,20 @@ def _write_run(
         df.to_csv(run_dir / output_rel, index=False)
     manifest = {
         "run_id": RUN,
-        "status": "complete",
-        "stages": [
+        "started_at": RUN,
+        "project": PROJ,
+        "workflow_version": RUN,
+        "status": "ok",
+        "human_review_queue_stats": {},
+        "stage_records": [
             {
                 "stage_id": STAGE,
+                "type": "input_data",
+                "name": STAGE,
                 "status": "ok",
-                "rows": len(df),
+                "input_validation_report": [],
+                "output_validation_report": None,
+                "output_row_count": len(df),
                 "output_path": output_rel,
             }
         ],
@@ -156,7 +164,7 @@ def test_rows_404_when_output_file_missing(examples_dir, client):
 def test_rows_rejects_output_path_outside_run_dir(examples_dir, client):
     run_dir = _write_run(examples_dir, _df(2))
     manifest = json.loads((run_dir / "manifest.json").read_text(encoding="utf-8"))
-    manifest["stages"][0]["output_path"] = "../../../../etc/passwd"
+    manifest["stage_records"][0]["output_path"] = "../../../../etc/passwd"
     (run_dir / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
     r = client.get(f"/project/{PROJ}/runs/{RUN}/stage/{STAGE}/rows")
     assert r.status_code == 404

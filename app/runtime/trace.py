@@ -84,12 +84,12 @@ def _load_manifest(run_dir: Path) -> dict[str, Any]:
 
 
 def _stages_by_id(manifest: dict[str, Any]) -> dict[str, dict[str, Any]]:
-    return {s["stage_id"]: s for s in manifest.get("stages", [])}
+    return {s["stage_id"]: s for s in manifest.get("stage_records", [])}
 
 
 def _parents(stage_record: dict[str, Any]) -> list[str]:
     parents: list[str] = []
-    for entry in stage_record.get("input_validation") or []:
+    for entry in stage_record.get("input_validation_report") or []:
         phase = entry.get("phase", "")
         if phase.startswith("input:"):
             parents.append(phase.split(":", 1)[1])

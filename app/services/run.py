@@ -11,12 +11,12 @@ manifest status read the drivers need, and attaches no run vocabulary of its own
 beyond what prepare_run already defines."""
 from __future__ import annotations
 
-import json
 import threading
 import traceback
 from typing import Any, Mapping
 
 from app.core.errors import RunNotFoundError
+from app.runtime.manifest import load_manifest_model
 from app.runtime.runner import (
     prepare_run,
     resolve_version_id,
@@ -67,17 +67,18 @@ def resume(project: str, run_id: str) -> None:
 
 
 def read_run_status(project: str, run_id: str) -> dict[str, Any]:
-    """A run's manifest.json as a dict. Raises RunNotFoundError if the run has no
-    manifest — a bad/expired run id, surfaced loudly rather than as an empty or
-    fabricated status."""
-    manifest_path = resolve_project_dir(project) / "runs" / run_id / "manifest.json"
-    if not manifest_path.exists():
+    """A run's manifest.json as a dict, parsed through the typed `RunManifest`
+    (so a legacy scalar `halted_at` is normalized to a list and unset optional
+    fields stay omitted — the same shape the executor persisted). Raises
+    RunNotFoundError if the run has no manifest — a bad/expired run id, surfaced
+    loudly rather than as an empty or fabricated status."""
+    run_dir = resolve_project_dir(project) / "runs" / run_id
+    if not (run_dir / "manifest.json").exists():
         raise RunNotFoundError(
             f"no run '{run_id}' for project '{project}' "
-            f"(no manifest at {manifest_path})"
+            f"(no manifest at {run_dir / 'manifest.json'})"
         )
-    manifest: dict[str, Any] = json.loads(manifest_path.read_text(encoding="utf-8"))
-    return manifest
+    return load_manifest_model(run_dir).to_dict()
 
 
 def resolve_version(project: str, version_id: str | None) -> str:

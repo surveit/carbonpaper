@@ -206,7 +206,7 @@ def _resolve_scored_input_frame(
     """The scored stage's OWN input — DataFrame plus declared primary key — the
     frame the queue snapshot needs to join back against to recover the model
     input, or (None, pk) if that stage's output isn't on disk."""
-    output_by_id = {s.get("stage_id"): s.get("output_path") for s in manifest.get("stages", [])}
+    output_by_id = {s.get("stage_id"): s.get("output_path") for s in manifest.get("stage_records", [])}
     scored_in_id = scored_def.input_ids[0]
     scored_in = scored_def.inputs[0] if scored_def.inputs else None
     pk = scored_in.table_schema.primary_key if scored_in and scored_in.table_schema else None

@@ -20,7 +20,7 @@ from app.runtime.stages.execution import (
     validate_registry_matches_model,
 )
 from app.core.stage_cache import StageCacheEntry
-from conftest import make_run_context
+from conftest import contribution_of, make_run_context
 
 
 def _row_stage(output_schema=None):
@@ -163,7 +163,7 @@ def test_row_driver_collects_row_errors_without_dropping_the_stage():
     ctx = make_run_context()
     out = handler.execute(_row_stage(), {"src": pd.DataFrame({"x": [1, 2, 3]})}, ctx)
     assert len(out) == 3                                    # stage completes, all rows kept
-    assert ctx.row_errors["t"] == [{"row": 1, "message": "boom"}]
+    assert contribution_of(out).row_errors == [{"row": 1, "message": "boom"}]
 
 
 def test_row_driver_collects_multiple_row_errors_in_ascending_row_order():
@@ -181,7 +181,7 @@ def test_row_driver_collects_multiple_row_errors_in_ascending_row_order():
     # Rows at positions 0 and 2 of a 3-row input fail; position 1 succeeds.
     out = handler.execute(_row_stage(), {"src": pd.DataFrame({"x": [10, 20, 30]})}, ctx)
     assert len(out) == 3
-    assert ctx.row_errors["t"] == [
+    assert contribution_of(out).row_errors == [
         {"row": 0, "message": "boom-10"},
         {"row": 2, "message": "boom-30"},
     ]
@@ -197,7 +197,7 @@ def test_row_driver_projects_to_declared_columns():
     out = handler.execute(_row_stage(output_schema=schema),
                           {"src": pd.DataFrame({"x": [1]})}, ctx)
     assert list(out.columns) == ["x", "score"]
-    assert ctx.dropped_columns["t"] == ["extra"]
+    assert contribution_of(out).dropped_columns == ["extra"]
 
 
 def test_source_handler_reads_without_frames():

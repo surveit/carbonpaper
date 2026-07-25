@@ -63,7 +63,7 @@ def test_cancel_requested_before_run_starts_leaves_the_first_stage_pending(tmp_p
 
     assert manifest["status"] == "cancelled"
     assert manifest["cancelled_at"] == "load"
-    [rec] = manifest["stages"]
+    [rec] = manifest["stage_records"]
     assert rec["status"] == "pending"
 
     run_dir = tmp_path / "runs" / prep["run_id"]
@@ -95,7 +95,7 @@ def test_mid_run_cancel_preserves_the_completed_stages_output(tmp_path, monkeypa
 
     assert manifest["status"] == "cancelled"
     assert manifest["cancelled_at"] == "consume"
-    records = {r["stage_id"]: r for r in manifest["stages"]}
+    records = {r["stage_id"]: r for r in manifest["stage_records"]}
     assert records["load"]["status"] == "ok"
     assert records["consume"]["status"] == "pending"
 
@@ -166,7 +166,7 @@ def test_mid_stage_cancel_marks_the_running_stage_cancelled_not_pending(tmp_path
 
     assert manifest["status"] == "cancelled"
     assert manifest["cancelled_at"] == "score"
-    records = {r["stage_id"]: r for r in manifest["stages"]}
+    records = {r["stage_id"]: r for r in manifest["stage_records"]}
     assert records["load"]["status"] == "ok"
     assert records["score"]["status"] == "cancelled"
     assert records["downstream"]["status"] == "pending"
@@ -197,7 +197,7 @@ def test_a_cancelled_run_can_be_resumed_and_runs_to_completion(tmp_path):
     resumed = runner.resume_run(tmp_path, prep["run_id"], tmp_path)
 
     assert resumed["status"] == "ok"
-    records = {r["stage_id"]: r for r in resumed["stages"]}
+    records = {r["stage_id"]: r for r in resumed["stage_records"]}
     assert records["load"]["status"] == "ok"
     assert records["consume"]["status"] == "ok"
     run_dir = tmp_path / "runs" / prep["run_id"]

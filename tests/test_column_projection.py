@@ -6,7 +6,7 @@ column survives by being declared in output_schema. For llm_transform a column
 shared with the input schema rides through untouched (it's outside the reply
 spec, so the model is never asked for it); a column output_schema adds is what
 the model returns. Anything produced that output_schema doesn't declare is
-dropped and recorded on ctx.dropped_columns, not silently discarded."""
+dropped and recorded on the stage's contribution, not silently discarded."""
 from __future__ import annotations
 
 import pandas as pd
@@ -17,7 +17,7 @@ from app.runtime.context import RunContext, RunIdentity
 from app.runtime.stages import HANDLERS, handle_human_review_queue
 from app.runtime.stages import llm_transform as lt
 from app.core.stage_cache import StageCacheEntry
-from conftest import make_run_context
+from conftest import contribution_of, make_run_context
 
 
 def _llm_stage(input_columns, output_columns, pk=("id",)):
@@ -47,7 +47,7 @@ def test_llm_transform_drops_undeclared_columns_including_former_hardcoded_ids(m
         stage, {"load": pd.DataFrame({"id": ["r1"], "text": ["hi"]})}, ctx)
 
     assert list(out.columns) == ["id", "text", "score"]
-    dropped = ctx.dropped_columns["evidence_extraction"]
+    dropped = contribution_of(out).dropped_columns
     assert "benchmark_id" in dropped and "query_id" in dropped
 
 
@@ -69,7 +69,7 @@ def test_llm_transform_declared_input_column_rides_through(monkeypatch):
 
     assert list(out.columns) == ["id", "text", "entity_id", "score"]
     assert out.loc[0, "entity_id"] == "C:acme"                # rode through from input
-    assert "evidence_extraction" not in ctx.dropped_columns   # nothing undeclared
+    assert not contribution_of(out).dropped_columns           # nothing undeclared
 
 
 def _queue_stage(output_schema=None, flt=None):
@@ -116,7 +116,7 @@ def test_human_review_queue_keeps_only_declared_columns(tmp_path):
     out = handle_human_review_queue(stage, {"scored": _src_scored()}, ctx)
 
     assert list(out.columns) == ["evidence_id", "final_score"]
-    dropped = ctx.dropped_columns["review"]
+    dropped = contribution_of(out).dropped_columns
     for col in ("entity_id", "quote", "benchmark_id", "query_id"):
         assert col in dropped
 
@@ -134,6 +134,6 @@ def test_human_review_queue_carried_columns_survive_by_being_declared(tmp_path):
     out = handle_human_review_queue(stage, {"scored": _src_scored()}, ctx)
 
     assert list(out.columns) == ["evidence_id", "final_score", "quote"]
-    dropped = ctx.dropped_columns["review"]
+    dropped = contribution_of(out).dropped_columns
     assert "quote" not in dropped
     assert "benchmark_id" in dropped  # still dropped: not declared

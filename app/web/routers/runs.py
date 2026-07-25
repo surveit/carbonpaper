@@ -218,7 +218,7 @@ async def run_status(project: str, run_id: str):
     counts, and a freshly-built mermaid graph. Lets the run page update progress
     in place (no full-page reload) so it stays clickable while running."""
     manifest = load_manifest(runs_dir(project) / run_id)
-    mstages = manifest.get("stages", [])
+    mstages = manifest.get("stage_records", [])
     status_by_id = {s["stage_id"]: s.get("status", "") for s in mstages}
     mermaid = build_mermaid_graph(load_stages(project).stages, project, status_by_id=status_by_id)
 
@@ -253,7 +253,7 @@ def _artifact_links(project: str, run_id: str, run_dir: Path, manifest: dict) ->
     has_ok_publish = any(
         s.get("type") == "publish"
         and s.get("status") in (StageStatus.OK, StageStatus.VALIDATION_WARNINGS)
-        for s in manifest.get("stages", [])
+        for s in manifest.get("stage_records", [])
     )
     artifacts_root = run_dir / "artifacts"
     if not (has_ok_publish and artifacts_root.is_dir()):
@@ -276,7 +276,7 @@ async def run_detail(request: Request, project: str, run_id: str):
     run_dir = runs_dir(project) / run_id
     manifest = load_manifest(run_dir)
     stages = load_stages(project).stages
-    status_by_id = {s["stage_id"]: s.get("status", "") for s in manifest.get("stages", [])}
+    status_by_id = {s["stage_id"]: s.get("status", "") for s in manifest.get("stage_records", [])}
     mermaid = build_mermaid_graph(stages, project, status_by_id=status_by_id)
     artifact_links = _artifact_links(project, run_id, run_dir, manifest)
 
@@ -306,7 +306,7 @@ async def run_stage_partial(
     run_dir = runs_dir(project) / run_id
     manifest = load_manifest(run_dir)
     stage_record = next(
-        (s for s in manifest.get("stages", []) if s.get("stage_id") == stage_id),
+        (s for s in manifest.get("stage_records", []) if s.get("stage_id") == stage_id),
         None,
     )
     if stage_record is None:
@@ -318,7 +318,7 @@ async def run_stage_partial(
     stages_static = load_stages(project).stages
     stage_def = find_stage(stages_static, stage_id)
     output_by_id = {
-        s.get("stage_id"): s.get("output_path") for s in manifest.get("stages", [])
+        s.get("stage_id"): s.get("output_path") for s in manifest.get("stage_records", [])
     }
     input_previews: list[dict[str, Any]] = []
     if stage_def is not None:
@@ -405,7 +405,7 @@ async def run_stage_lineage_panel(
     run_dir = runs_dir(project) / run_id
     manifest = load_manifest(run_dir)
     stage_record = next(
-        (s for s in manifest.get("stages", []) if s.get("stage_id") == stage_id),
+        (s for s in manifest.get("stage_records", []) if s.get("stage_id") == stage_id),
         None,
     )
     if stage_record is None:
@@ -528,7 +528,7 @@ async def run_stage_scratch_preview(
         raise HTTPException(status_code=404, detail=f"No stage '{stage_id}'")
 
     output_by_id = {
-        s.get("stage_id"): s.get("output_path") for s in manifest.get("stages", [])
+        s.get("stage_id"): s.get("output_path") for s in manifest.get("stage_records", [])
     }
 
     try:

@@ -1,0 +1,79 @@
+{
+  "run_id": "20260724T164239",
+  "started_at": "2026-07-24T16:42:39",
+  "project": "err",
+  "workflow_version": "20260724T164239",
+  "limit_overrides": {},
+  "offset_overrides": {},
+  "run_bindings": {},
+  "input_bindings": {
+    "load": {
+      "path": "C:\\Users\\shuha\\AppData\\Local\\Temp\\tmpz3kmpbhv\\err\\data\\load.csv",
+      "sha256": "daa51d78d2c37d68d5ae95fcf1b2f2489b212834b68b651b7b934d0ca3caee72",
+      "bytes": 18,
+      "source": "workflow"
+    }
+  },
+  "human_review_queue_stats": {},
+  "dropped_columns": {},
+  "status": "errors",
+  "stage_records": [
+    {
+      "stage_id": "load",
+      "type": "input_data",
+      "name": "Load load",
+      "started_at": "2026-07-24T16:42:39",
+      "status": "ok",
+      "input_validation_report": [],
+      "output_validation_report": {
+        "stage_id": "load",
+        "phase": "output",
+        "rows": 2,
+        "ok": true,
+        "issues": [
+          {
+            "severity": "warning",
+            "column": null,
+            "message": "No schema declared; skipping checks."
+          }
+        ]
+      },
+      "elapsed_ms": 2,
+      "output_row_count": 2,
+      "error": null,
+      "output_path": "outputs/load.parquet",
+      "finished_at": "2026-07-24T16:42:39"
+    },
+    {
+      "stage_id": "boom",
+      "type": "python_frame_function",
+      "name": "Boom",
+      "started_at": "2026-07-24T16:42:39",
+      "status": "error",
+      "input_validation_report": [],
+      "output_validation_report": null,
+      "elapsed_ms": 2,
+      "output_row_count": 0,
+      "error": {
+        "type": "ValueError",
+        "message": "boom",
+        "traceback": "Traceback (most recent call last):\n  File \"C:\\journalism_sprint\\prototype_one_runctx_wt\\app\\runtime\\executor.py\", line 612, in _run_stage\n    output = handler.execute(stage, inputs_for_stage, ctx)\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\journalism_sprint\\prototype_one_runctx_wt\\app\\runtime\\stages\\execution.py\", line 165, in execute\n    return self.apply(stage, inputs, ctx)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\journalism_sprint\\prototype_one_runctx_wt\\app\\runtime\\stages\\python_functions.py\", line 48, in handle_python_frame_function\n    return fn(*args)\n           ^^^^^^^^^\n  File \"<string>\", line 2, in transform\nValueError: boom\n"
+      },
+      "finished_at": "2026-07-24T16:42:39"
+    },
+    {
+      "stage_id": "tail",
+      "type": "python_frame_function",
+      "name": "Tail",
+      "status": "pending",
+      "input_validation_report": [],
+      "output_validation_report": null,
+      "elapsed_ms": 0,
+      "output_row_count": 0,
+      "error": null,
+      "started_at": null,
+      "finished_at": null
+    }
+  ],
+  "finished_at": "2026-07-24T16:42:39"
+}

@@ -1,0 +1,52 @@
+{
+  "run_id": "20260724T164239",
+  "started_at": "2026-07-24T16:42:39",
+  "project": "ok",
+  "workflow_version": "20260724T164239",
+  "limit_overrides": {},
+  "offset_overrides": {},
+  "run_bindings": {},
+  "input_bindings": {
+    "load": {
+      "path": "C:\\Users\\shuha\\AppData\\Local\\Temp\\tmpz3kmpbhv\\ok\\data\\load.csv",
+      "sha256": "daa51d78d2c37d68d5ae95fcf1b2f2489b212834b68b651b7b934d0ca3caee72",
+      "bytes": 18,
+      "source": "workflow"
+    }
+  },
+  "human_review_queue_stats": {},
+  "dropped_columns": {},
+  "status": "ok",
+  "stage_records": [
+    {
+      "stage_id": "load",
+      "type": "input_data",
+      "name": "Load load",
+      "started_at": "2026-07-24T16:42:39",
+      "status": "ok",
+      "input_validation_report": [],
+      "output_validation_report": {
+        "stage_id": "load",
+        "phase": "output",
+        "rows": 1,
+        "ok": true,
+        "issues": [
+          {
+            "severity": "warning",
+            "column": null,
+            "message": "No schema declared; skipping checks."
+          }
+        ]
+      },
+      "elapsed_ms": 119,
+      "output_row_count": 1,
+      "error": null,
+      "notes": [
+        "limit=1: truncated from 2 to 1 row(s)"
+      ],
+      "output_path": "outputs/load.parquet",
+      "finished_at": "2026-07-24T16:42:39"
+    }
+  ],
+  "finished_at": "2026-07-24T16:42:39"
+}

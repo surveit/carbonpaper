@@ -34,7 +34,8 @@ from app.models import Stage
 from app.models.schema import Column, TableSchema
 
 from ..context import RunContext
-from ..llm import backend_status, call_llm, call_llm_batch, render_prompt
+from ..manifest import CONTRIBUTION_ATTR, StageContribution
+from ..llm import call_llm, call_llm_batch, render_prompt
 from .execution import (
     ROW_ERROR_KEY,
     ROW_USAGE_KEY,
@@ -62,9 +63,6 @@ def make_llm_row_mapper(stage: Stage, ctx: RunContext) -> Callable[[Row], Row]:
     assert stage.output_schema is not None and input_schema is not None
     reply_spec = stage.output_schema.subtract(input_schema)
     reply_model = reply_spec.to_pydantic_model(f"{stage.id}_reply")
-
-    # Record which backend handled this stage so the UI/manifest can label it.
-    ctx.llm_backend[stage.id] = backend_status()
 
     def map_row(row: Row) -> Row:
         # Per-attempt usage lands here (success or failure); the row carries its
@@ -108,7 +106,6 @@ def run_llm_batches(
     assert llm is not None  # Stage validation: llm_transform carries llm
     assert stage.output_schema is not None and stage.inputs[0].table_schema is not None
     batch_reply_schema = _build_batch_reply_schema(stage)
-    ctx.llm_backend[stage.id] = backend_status()
 
     src = inputs[stage.inputs[0].id]
     records: list[Row] = [
@@ -142,9 +139,14 @@ def run_llm_batches(
         )
 
     df = pd.DataFrame(results)
-    _collect_row_errors(df, stage, ctx)
-    _collect_row_usage(df, stage, ctx)
-    return _project_onto_declared_columns(df, stage, ctx)
+    contribution = StageContribution()
+    _collect_row_errors(df, contribution)
+    _collect_row_usage(df, contribution)
+    df = _project_onto_declared_columns(df, stage, contribution)
+    # Report usage/errors/drops on the returned frame; the executor merges it
+    # into the manifest. Nothing accumulates in the (frozen) context.
+    df.attrs[CONTRIBUTION_ATTR] = contribution
+    return df
 
 
 def _build_batch_reply_schema(stage: Stage) -> type:

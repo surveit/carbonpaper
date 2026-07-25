@@ -103,7 +103,7 @@ def _queue_stage(stage_id, input_id, name="Review"):
 
 
 def _stage_status(manifest, stage_id):
-    for record in manifest["stages"]:
+    for record in manifest["stage_records"]:
         if record["stage_id"] == stage_id:
             return record["status"]
     raise AssertionError(f"stage {stage_id!r} not in manifest")
@@ -281,7 +281,7 @@ def test_manifest_paths_are_posix_on_every_platform(tmp_path, monkeypatch):
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     persisted = {
         (record["stage_id"], key): record[key]
-        for record in manifest["stages"]
+        for record in manifest["stage_records"]
         for key in ("output_path", "queue_path")
         if key in record
     }

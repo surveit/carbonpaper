@@ -1,33 +1,44 @@
-"""The run context: everything a stage handler is handed alongside its inputs.
+"""The frozen run context.
 
-`RunContext` replaces the untyped `ctx: dict[str, Any]` every handler used to
-receive. Its fields are exactly today's ctx keys minus `project_dir` — a
-handler cannot reach a project's on-disk directory through `RunContext`,
-because nothing here names one. `identity`/`stage_cache` are the one pair of
-fields a caller chooses at construction time: `RunContext.for_production`
-grants both (a production run — `app.runtime.runner.prepare_run`/`resume_run`);
-`RunContext.for_non_production` grants neither (a subset run, a preview, an
-authored-test run). The two co-vary by construction (see
-`RunContext.__post_init__`) — there is no state where a run has cache access
-but no identity, or the reverse.
+`RunContext` is the immutable identity + config a run is executed under. It is
+built once — by `RunContext.for_production_run` (a production run:
+`app.runtime.runner.prepare_run`/`resume_run`), by `RunContext.for_non_production_run`
+(a subset run, a preview, an authored-test run) — and threaded read-only through
+the executor, the row driver, and every stage handler. Nothing mutates it
+mid-run: the run's growing state (per-stage token usage, dropped-column notes,
+queue stats, row-generation errors) lives on the manifest, not here — a handler
+reports it back as a `StageContribution` (app.runtime.manifest).
+
+`mode` is stamped at construction and never changes: a production run cannot
+carry `queue_auto_approve` (the in-memory queue bypass evals/workflow-test use),
+so a context that pairs the two fails loudly here rather than silently
+auto-approving a production run's review queue.
+
+`identity`/`stage_cache` are the pair a caller chooses at construction:
+`for_production_run` grants both (this run's (project, run_id) and a read+write
+stage-result cache); `for_non_production_run` grants neither. They co-vary by
+construction — there is no state with cache access but no identity, or the
+reverse — enforced by the validator so a hand-built context can't violate it.
 """
+
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
-from typing import TypedDict
+from typing import Literal
 
-from app.core.agent.usage import LlmUsage
+from pydantic import BaseModel, ConfigDict, model_validator
+
 from app.core.stage_cache import ReadOnlyStageCache, StageCacheEntry
 
-from .llm import LlmBackendStatus
+RunMode = Literal["production", "non_production"]
 
 
 @dataclass(frozen=True)
 class RunIdentity:
     """A production run's logical identity: the (project, run_id) pair
-    cancellation's checkpoints poll (`app.runtime.cancellation`) and a future
-    cache key would scope to. Carried on `RunContext.identity`; absent
+    cancellation's checkpoints poll (`app.runtime.cancellation`) and the
+    stage-result cache key scopes to. Carried on `RunContext.identity`; absent
     (`None`) for a run with no project scope — a subset run or an in-memory
     preview."""
 
@@ -35,74 +46,72 @@ class RunIdentity:
     run_id: str
 
 
-class QueueStats(TypedDict):
-    """One human_review_queue stage's item counts for one run, as recorded on
-    `RunContext.queue_stats` and read back into the run manifest."""
+class RunContext(BaseModel):
+    """Immutable identity + config for one run. `for_production_run` sets
+    `mode="production"` and grants project scope (`identity` + a read+write
+    stage-result cache); `for_non_production_run` sets `mode="non_production"`, may
+    set `queue_auto_approve`, and grants no project scope."""
 
-    items_queued_total: int
-    items_passed_through: int
-    items_pending: int
-    items_decided: int
+    model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
 
-
-class RowError(TypedDict):
-    """One row a stage's per-row function failed to produce: its 0-based
-    position in the stage's output and the failure message, as recorded on
-    `RunContext.row_errors`."""
-
-    row: int
-    message: str
-
-
-@dataclass
-class RunContext:
-    """Everything a stage handler is handed alongside its typed inputs.
-
-    Grants (chosen once, at the entry point that builds this context):
-      repo_root, run_dir — where this run reads/writes on disk.
-      identity           — this run's (project, run_id), or None for a run
-                            with no project scope.
-      stage_cache        — the stage-result cache view this run may read
-                            (and, for a production run, write via the
-                            writable `StageCache` subclass); None alongside
-                            `identity is None`.
-
-    Run input overrides:
-      limits, offsets — per-stage row-slicing overrides for this run.
-      queue_auto_approve — when set, a human_review_queue stage passes every
-                           row through as approved, in memory (no stage-cache
-                           decision lookup, no queue snapshot, no halt). Only a
-                           non-production run ever sets it; production leaves it
-                           False so the real review path is unchanged.
-
-    Telemetry accumulators (stages write into these; the manifest reads
-    them back): queue_stats, dropped_columns, row_errors, llm_usage,
-    llm_backend — one dict per existing ctx key, keyed by stage id.
-    """
-
-    repo_root: Path
-    run_dir: Path
-    identity: RunIdentity | None
-    stage_cache: ReadOnlyStageCache | None
-    limits: dict[str, int]
-    offsets: dict[str, int]
+    mode: RunMode
+    # A real run's on-disk roots. Both are None only for an in-memory harness
+    # that executes a handler outside any run (the stage-test runner) — the stage
+    # types it runs read neither. Every handler that DOES reach for run-scoped
+    # disk goes through require_run_dir() and fails loudly on None rather than
+    # touching a fabricated directory; repo_root has no reader in the runtime.
+    repo_root: Path | None
+    run_dir: Path | None
+    # This run's logical identity, read by cancellation's checkpoints and the
+    # stage-result cache key. Set for a production run; None for a subset run,
+    # which is therefore simply not cancellable and carries no cache scope.
+    identity: RunIdentity | None = None
+    # The stage-result cache view this run may read (and, for a production run,
+    # write via the writable `StageCache` subclass). None alongside
+    # `identity is None` — enforced by the validator.
+    stage_cache: ReadOnlyStageCache | None = None
+    limits: dict[str, int] = {}
+    offsets: dict[str, int] = {}
+    # In-memory queue bypass: when set, a human_review_queue stage approves every
+    # row in memory instead of reaching for the stage cache or halting. Only a
+    # non-production run may set it (see the validator).
     queue_auto_approve: bool = False
-    queue_stats: dict[str, QueueStats] = field(default_factory=dict)
-    dropped_columns: dict[str, list[str]] = field(default_factory=dict)
-    row_errors: dict[str, list[RowError]] = field(default_factory=dict)
-    llm_usage: dict[str, LlmUsage] = field(default_factory=dict)
-    llm_backend: dict[str, LlmBackendStatus] = field(default_factory=dict)
 
-    def __post_init__(self) -> None:
+    @model_validator(mode="after")
+    def _production_run_forbids_queue_auto_approve(self) -> RunContext:
+        if self.mode == "production" and self.queue_auto_approve:
+            raise ValueError(
+                "queue_auto_approve is a non-production-run bypass; a production run "
+                "must never auto-approve its human review queue in memory. Build "
+                "the context with mode='non_production' if the bypass is intended."
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _identity_and_cache_covary(self) -> RunContext:
         if (self.identity is None) != (self.stage_cache is None):
             raise ValueError(
                 "RunContext.identity and RunContext.stage_cache must both be "
                 "set or both be None — a run either has project scope (both) "
                 "or it doesn't (neither)"
             )
+        return self
+
+    def require_run_dir(self) -> Path:
+        """This run's on-disk dir, for a handler that writes run-scoped output
+        (publish artifacts, the queue snapshot). Fails loudly on the harness
+        context that carries none, so a stage reaching for run disk outside a
+        run is a clear error, not a write to a fabricated path."""
+        if self.run_dir is None:
+            raise ValueError(
+                "this run context has no run_dir — it is an in-memory harness "
+                "context (no run on disk), so a stage that writes run-scoped "
+                "output cannot execute under it."
+            )
+        return self.run_dir
 
     @classmethod
-    def for_production(
+    def for_production_run(
         cls,
         repo_root: Path,
         run_dir: Path,
@@ -110,40 +119,51 @@ class RunContext:
         run_id: str,
         limits: dict[str, int] | None = None,
         offsets: dict[str, int] | None = None,
-        queue_stats: dict[str, QueueStats] | None = None,
-        dropped_columns: dict[str, list[str]] | None = None,
-    ) -> "RunContext":
-        """A production run's context: full project scope — `identity`
-        (`project`, `run_id`) and a read+write stage-result cache
-        (`StageCacheEntry.read_write()`). `queue_stats`/
-        `dropped_columns` default to fresh dicts (a new run); a resumed run
-        passes in the prior run's values so telemetry survives the resume."""
+    ) -> RunContext:
+        """A production run's context: `mode="production"`, full project scope —
+        `identity` (`project`, `run_id`) and a read+write stage-result cache
+        (`StageCacheEntry.read_write()`). The run's growing telemetry lives on
+        the manifest, not here, so a resume replays nothing through this
+        constructor."""
         return cls(
-            repo_root=repo_root, run_dir=run_dir,
+            mode="production",
+            repo_root=repo_root,
+            run_dir=run_dir,
             identity=RunIdentity(project=project, run_id=run_id),
             stage_cache=StageCacheEntry.read_write(),
-            limits=dict(limits or {}), offsets=dict(offsets or {}),
-            queue_stats=dict(queue_stats or {}), dropped_columns=dict(dropped_columns or {}),
+            limits=dict(limits or {}),
+            offsets=dict(offsets or {}),
         )
 
     @classmethod
-    def for_non_production(
+    def for_non_production_run(
         cls,
-        repo_root: Path,
-        run_dir: Path,
+        repo_root: Path | None,
+        run_dir: Path | None,
         limits: dict[str, int] | None = None,
         offsets: dict[str, int] | None = None,
         queue_auto_approve: bool = False,
-    ) -> "RunContext":
-        """A run with no project scope (a subset run, a preview, an authored-
-        test run): no `identity`, no stage-result cache. `queue_auto_approve`
-        lets such a run pass a human_review_queue stage through in memory
-        (it carries no project scope to resolve cached decisions against)."""
+    ) -> RunContext:
+        """A run with no project scope (a subset run, a preview, an authored-test
+        run): `mode="non_production"`, no `identity`, no stage-result cache.
+        `repo_root`/`run_dir` are None for an in-memory harness that executes a
+        handler outside any run. `queue_auto_approve` lets such a run pass a
+        human_review_queue stage through in memory (it carries no project scope
+        to resolve cached decisions against)."""
         return cls(
-            repo_root=repo_root, run_dir=run_dir, identity=None, stage_cache=None,
-            limits=dict(limits or {}), offsets=dict(offsets or {}),
+            mode="non_production",
+            repo_root=repo_root,
+            run_dir=run_dir,
+            identity=None,
+            stage_cache=None,
+            limits=dict(limits or {}),
+            offsets=dict(offsets or {}),
             queue_auto_approve=queue_auto_approve,
         )
 
 
-__all__ = ["RunIdentity", "RunContext", "QueueStats", "RowError"]
+__all__ = [
+    "RunMode",
+    "RunIdentity",
+    "RunContext",
+]

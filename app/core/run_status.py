@@ -18,7 +18,7 @@ import enum
 
 class StageStatus(enum.StrEnum):
     """One stage's outcome for a single run, as recorded in
-    `manifest["stages"][i]["status"]`."""
+    `manifest["stage_records"][i]["status"]`."""
 
     PENDING = "pending"
     RUNNING = "running"

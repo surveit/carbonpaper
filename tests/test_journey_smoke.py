@@ -46,7 +46,7 @@ def assert_run_ok(status: dict, project_dir, run_id: str) -> None:
     if manifest_path.exists():
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
         problems = [
-            record for record in manifest.get("stages", [])
+            record for record in manifest.get("stage_records", [])
             if record and record.get("status") not in ("ok", "pending")
         ]
         detail = json.dumps(problems, indent=2, default=str)

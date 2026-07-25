@@ -21,7 +21,8 @@ def write_run(tmp_path: Path, stages: list[dict], run_id: str = "T1") -> Path:
 
     Each spec: {"id": str, "type": str, "parents": list[str], "df": DataFrame}.
     Writes outputs/<id>.parquet and a manifest.json whose per-stage records
-    carry `type`, `rows`, `output_path`, and one input_validation entry per
+    carry `type`, `output_row_count`, `output_path`, and one
+    input_validation_report entry per
     parent with phase "input:<parent>" — the exact shape the runner emits.
     """
     run_dir = tmp_path / run_id
@@ -33,14 +34,20 @@ def write_run(tmp_path: Path, stages: list[dict], run_id: str = "T1") -> Path:
         records.append({
             "stage_id": spec["id"],
             "type": spec["type"],
-            "rows": len(spec["df"]),
+            "name": spec["id"],
+            "status": "ok",
+            "output_row_count": len(spec["df"]),
             "output_path": rel,
-            "input_validation": [
+            "input_validation_report": [
                 {"phase": f"input:{p}", "ok": True} for p in spec.get("parents", [])
             ],
+            "output_validation_report": None,
         })
     (run_dir / "manifest.json").write_text(
-        json.dumps({"run_id": run_id, "stages": records}), encoding="utf-8"
+        json.dumps({"run_id": run_id, "started_at": run_id, "project": tmp_path.parent.name,
+                    "workflow_version": run_id, "status": "ok",
+                    "human_review_queue_stats": {}, "stage_records": records}),
+        encoding="utf-8",
     )
     return run_dir
 
@@ -59,13 +66,13 @@ def test_is_row_preserving_matches_the_model_classification():
 
 def test_parents_reads_input_phases_and_ignores_output_phase():
     record = {
-        "input_validation": [
+        "input_validation_report": [
             {"phase": "input:seeds"},
             {"phase": "input:other"},
         ],
     }
     assert _parents(record) == ["seeds", "other"]
-    assert _parents({"input_validation": []}) == []
+    assert _parents({"input_validation_report": []}) == []
     assert _parents({}) == []
 
 

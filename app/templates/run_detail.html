@@ -17,14 +17,14 @@
 {% endblock %}
 
 {% block content %}
-{% set total = manifest.stages | length %}
-{% set ok = manifest.stages | selectattr('status', 'equalto', 'ok') | list | length %}
-{% set warn = manifest.stages | selectattr('status', 'equalto', 'validation_warnings') | list | length %}
-{% set err = manifest.stages | selectattr('status', 'equalto', 'error') | list | length %}
-{% set running = manifest.stages | selectattr('status', 'equalto', 'running') | list | length %}
-{% set pending = manifest.stages | selectattr('status', 'equalto', 'pending') | list | length %}
-{% set awaiting = manifest.stages | selectattr('status', 'equalto', 'awaiting_review') | list | length %}
-{% set cancelled = manifest.stages | selectattr('status', 'equalto', 'cancelled') | list | length %}
+{% set total = manifest.stage_records | length %}
+{% set ok = manifest.stage_records | selectattr('status', 'equalto', 'ok') | list | length %}
+{% set warn = manifest.stage_records | selectattr('status', 'equalto', 'validation_warnings') | list | length %}
+{% set err = manifest.stage_records | selectattr('status', 'equalto', 'error') | list | length %}
+{% set running = manifest.stage_records | selectattr('status', 'equalto', 'running') | list | length %}
+{% set pending = manifest.stage_records | selectattr('status', 'equalto', 'pending') | list | length %}
+{% set awaiting = manifest.stage_records | selectattr('status', 'equalto', 'awaiting_review') | list | length %}
+{% set cancelled = manifest.stage_records | selectattr('status', 'equalto', 'cancelled') | list | length %}
 {% set done = ok + warn %}
 {% set is_running = manifest.status == 'running' %}
 

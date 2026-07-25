@@ -116,8 +116,9 @@ def get_source_data_with_limit_and_offset(
             "workflow has no input_data stage to read a workflow-test slice from")
     # Ephemeral context: read_input_data reads only the stage's connector params
     # (an absolute bound path), never repo_root/run_dir or project scope — so this
-    # slice read needs no real run directories.
-    ctx = RunContext.for_non_production(Path("."), Path("."))
+    # source read carries the real repo_root and no run_dir (None, the read
+    # precedes any run-dir creation) rather than a fabricated cwd sentinel.
+    ctx = RunContext.for_non_production_run(repo_root(), None)
     return {
         source.id: read_input_data(source, ctx).iloc[offset:offset + limit]
         for source in sources
