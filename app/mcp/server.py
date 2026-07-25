@@ -12,7 +12,7 @@ from __future__ import annotations
 import textwrap
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any, AsyncIterator
+from typing import Any, AsyncIterator, Callable
 
 from mcp.server.fastmcp import FastMCP
 from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
@@ -33,6 +33,7 @@ from app.services import run as run_service
 from app.services import workflow_test as workflow_test_service
 from app.services import workspace
 from app.services.errors import WorkflowLoadError
+from app.services.stage_edit import EditStageResult
 
 # Domain failures a run/workflow-test tool turns into {ok: False, error: str(exc)} — a
 # loud, honest verdict rather than a traceback or a fabricated run id/status.
@@ -45,6 +46,13 @@ _RUN_TOOL_ERRORS = (
     NoWorkflowTestVersionError,
     ValueError,
 )
+
+# Domain failures a stage-mutating tool turns into {ok: False, issues: [...]} — the
+# same refusal channel a validation failure comes back on, which is the one these
+# instructions tell a client to watch. WorkflowLoadError is a stored workflow that
+# does not load; FileNotFoundError is a stage id that is not in the workflow.
+# Anything outside this set propagates as a genuine internal fault.
+_STAGE_TOOL_ERRORS = (WorkflowLoadError, FileNotFoundError)
 
 # The two per-node-type facts an authoring client gets wrong most often, rendered from
 # app.models so this prompt and the editing agent's cannot drift apart on them, and
@@ -73,7 +81,8 @@ A stage is written, validated against the whole graph, and only then stored.
 4. Read the methodology document and read_data_model(project_id). The approved schemas are
    the vocabulary the stages carry.
 5. Plan the stages, then author them in DEPENDENCY ORDER: a stage's `inputs` may name only
-   stages that already exist in the workflow.
+   stages that already exist in the workflow. The first stage you add starts the workflow,
+   so it takes no inputs — it is the input_data stage that reads the source.
 6. Before authoring a stage, read_stage on EVERY upstream stage it will take input from.
    The upstream's output_schema is what actually flows down that edge. Write the new stage's
    declared input schema as a projection of it — only the columns this stage reads, named
@@ -294,8 +303,7 @@ def edit_stage(project_id: str, stage_id: str, changes_json: str) -> dict[str, A
     the issues are returned. A successful edit drops the node to 'edited_stale'
     (amber) for a human to re-approve — you cannot approve it yourself. You
     cannot change a stage's id this way."""
-    result = project_service.edit_stage(project_id, stage_id, changes_json)
-    return {"ok": result.ok, "issues": result.issues}
+    return _report_stage_edit(lambda: project_service.edit_stage(project_id, stage_id, changes_json))
 
 
 @mcp.tool()
@@ -315,9 +323,9 @@ def add_stage(project_id: str, stage_json: str) -> dict[str, Any]:
     named upstream, repair this stage's declared input schema against what that
     stage really outputs, and call add_stage again.
 
-    The new node lands 'unreviewed' (amber) for a human to approve."""
-    result = project_service.add_stage(project_id, stage_json)
-    return {"ok": result.ok, "issues": result.issues}
+    The new node lands 'unreviewed' (amber) for a human to approve. The FIRST stage
+    of a project starts its workflow — no other tool creates one."""
+    return _report_stage_edit(lambda: project_service.add_stage(project_id, stage_json))
 
 
 @mcp.tool()
@@ -327,7 +335,19 @@ def remove_stage(project_id: str, stage_id: str) -> dict[str, Any]:
     in `inputs`, the removal is refused, nothing is deleted, and the issues are
     returned (remove or repoint the downstream stage first). Removing the last
     remaining stage is allowed."""
-    result = project_service.remove_stage(project_id, stage_id)
+    return _report_stage_edit(lambda: project_service.remove_stage(project_id, stage_id))
+
+
+def _report_stage_edit(edit: Callable[[], EditStageResult]) -> dict[str, Any]:
+    """Run one stage-mutating service call and report it on the {ok, issues} channel
+    these instructions document. An expected refusal — a stored workflow that does not
+    load, a stage id that is not in the workflow — comes back as `issues` carrying the
+    failure's own message, not as a tool exception a client is not watching for. Any
+    other exception propagates."""
+    try:
+        result = edit()
+    except _STAGE_TOOL_ERRORS as exc:
+        return {"ok": False, "issues": [str(exc)]}
     return {"ok": result.ok, "issues": result.issues}
 
 

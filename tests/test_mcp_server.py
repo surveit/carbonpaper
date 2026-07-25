@@ -216,6 +216,71 @@ def test_mcp_remove_stage_returns_ok_and_issues(tmp_path, monkeypatch):
     assert (pdir / "compiled" / "load.json").exists()
 
 
+def test_mcp_stage_tools_report_an_unknown_stage_id_as_issues(tmp_path, monkeypatch):
+    """The documented refusal channel is {ok: False, issues}: a stage id that is not
+    in the workflow comes back on it rather than as a tool exception."""
+    from app.mcp import server
+    from app.services import workspace
+
+    monkeypatch.setattr(workspace, "EXAMPLES_DIR", tmp_path)
+    _write_compiled_workflow(tmp_path / "trail")
+
+    removed = server.remove_stage(project_id="trail", stage_id="ghost")
+    assert removed["ok"] is False and any("ghost" in i for i in removed["issues"])
+
+    edited = server.edit_stage(project_id="trail", stage_id="ghost", changes_json='{"limit": 1}')
+    assert edited["ok"] is False and any("ghost" in i for i in edited["issues"])
+
+
+def test_mcp_add_stage_reports_an_unloadable_workflow_as_issues(tmp_path, monkeypatch):
+    """A compiled/ dir that holds a broken stage file still refuses the write — and
+    the refusal reaches the client on the documented {ok: False, issues} channel."""
+    from app.mcp import server
+    from app.services import workspace
+
+    monkeypatch.setattr(workspace, "EXAMPLES_DIR", tmp_path)
+    compiled = tmp_path / "trail" / "compiled"
+    compiled.mkdir(parents=True)
+    (compiled / "broken.json").write_text('{"id": "broken", "type": "not_a_real_type"}', encoding="utf-8")
+
+    added = server.add_stage(
+        project_id="trail",
+        stage_json='{"id": "load", "name": "Load", "type": "input_data", "connector": {"kind": "file"}}',
+    )
+    assert added["ok"] is False and added["issues"]
+    assert not (compiled / "load.json").exists()
+
+
+def test_mcp_add_stage_refuses_to_invent_a_project(tmp_path, monkeypatch):
+    """add_stage creates a workflow's first stage, never the project itself: a typo'd
+    project id is loud and writes nothing under the workspace."""
+    from app.mcp import server
+    from app.services import workspace
+
+    monkeypatch.setattr(workspace, "EXAMPLES_DIR", tmp_path)
+    with pytest.raises(ValueError):
+        server.add_stage(
+            project_id="no_such_project",
+            stage_json='{"id": "load", "name": "Load", "type": "input_data", "connector": {"kind": "file"}}',
+        )
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_mcp_add_stage_creates_the_first_stage_of_a_new_project(tmp_path, monkeypatch):
+    from app.mcp import server
+    from app.services import workspace
+
+    monkeypatch.setattr(workspace, "EXAMPLES_DIR", tmp_path)
+    server.create_project(name="trail", document="Follow the filings.")
+
+    added = server.add_stage(
+        project_id="trail",
+        stage_json='{"id": "load", "name": "Load", "type": "input_data", "connector": {"kind": "file"}}',
+    )
+    assert added == {"ok": True, "issues": []}
+    assert server.describe_workflow(project_id="trail")["stages"][0]["id"] == "load"
+
+
 def test_read_tools_reject_unknown_project(tmp_path, monkeypatch):
     from app.mcp import server
     from app.services import workspace

@@ -7,6 +7,8 @@ glob `compiled/*.json`, so a format change (or the planned rename) touches only
 this file.
 
 Read:
+  - list_stage_files: which files in a compiled/ dir are stages, before any
+    parsing — how a caller tells an empty workflow from a broken one.
   - load_compiled_dir: tolerant, per-file — for the viewer, which renders
     problems rather than crashing.
   - load_workflow_object: strict — the whole workflow as one in-memory
@@ -42,9 +44,17 @@ class CompiledStageFile:
     issues: list[str] = field(default_factory=list)
 
 
+def list_stage_files(compiled_dir: Path) -> list[Path]:
+    """Every compiled stage file in `compiled_dir`, in filename order — the ONE
+    definition of which files are stages, so callers never glob the dir themselves.
+    An absent dir lists as empty: a project has no stage files until its first stage
+    is written. Says nothing about whether the files parse or validate."""
+    return sorted(compiled_dir.glob("*.json"))
+
+
 def load_compiled_dir(compiled_dir: Path) -> list[CompiledStageFile]:
     entries: list[CompiledStageFile] = []
-    for f in sorted(compiled_dir.glob("*.json")):
+    for f in list_stage_files(compiled_dir):
         entry = CompiledStageFile(filename=f.name)
         entries.append(entry)
         try:
@@ -108,7 +118,7 @@ def stage_to_json(stage: Stage) -> str:
 def find_stage_file(compiled_dir: Path, stage_id: str) -> Path | None:
     """The compiled file whose stage carries this id, or None. Reads each file
     only far enough to match the id (one stage per file, by convention)."""
-    for f in sorted(compiled_dir.glob("*.json")):
+    for f in list_stage_files(compiled_dir):
         try:
             data = json.loads(f.read_text(encoding="utf-8"))
         except json.JSONDecodeError:

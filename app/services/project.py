@@ -426,19 +426,29 @@ def read_stage(name: str, stage_id: str, examples_dir: Path | None = None) -> st
 def edit_stage(name: str, stage_id: str, changes_json: str, examples_dir: Path | None = None) -> EditStageResult:
     """Apply a JSON Merge Patch to one stage of a project's workflow (validated
     before it writes; nothing written on failure)."""
-    return stage_edit.patch_stage_spec(workspace.resolve_project_dir(name, examples_dir), stage_id, changes_json)
+    return stage_edit.patch_stage_spec(_resolve_project_dir_to_write(name, examples_dir), stage_id, changes_json)
 
 
 def add_stage(name: str, stage_json: str, examples_dir: Path | None = None) -> EditStageResult:
     """Add a new stage to a project's workflow (validated before it writes; nothing
-    written on failure)."""
-    return stage_edit.add_stage_spec(workspace.resolve_project_dir(name, examples_dir), stage_json)
+    written on failure). The first stage of a project starts its workflow."""
+    return stage_edit.add_stage_spec(_resolve_project_dir_to_write(name, examples_dir), stage_json)
 
 
 def remove_stage(name: str, stage_id: str, examples_dir: Path | None = None) -> EditStageResult:
     """Delete one stage from a project's workflow (the reduced workflow is validated
     first; nothing is deleted when another stage still inputs from it)."""
-    return stage_edit.remove_stage_spec(workspace.resolve_project_dir(name, examples_dir), stage_id)
+    return stage_edit.remove_stage_spec(_resolve_project_dir_to_write(name, examples_dir), stage_id)
+
+
+def _resolve_project_dir_to_write(name: str, examples_dir: Path | None) -> Path:
+    """The directory of an EXISTING project, for the stage writers. A name with no
+    project directory raises: writing a stage must never bring a project into being,
+    now that the first stage creates the workflow's compiled/ dir."""
+    project_dir = workspace.resolve_project_dir(name, examples_dir)
+    if not project_dir.is_dir():
+        raise ValueError(f"no project '{name}' in the workspace")
+    return project_dir
 
 
 # ─── Portable WorkflowFile: project export / import ──────────────────────────

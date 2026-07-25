@@ -4,7 +4,8 @@ Extracted from the node-edit route so the route and the editing agent's tools
 share ONE writer. It never touches disk itself: it loads the current workflow
 through the loader (`Stage` objects, not raw files), applies the change to the
 in-memory stage set, validates the whole resulting workflow, and only if that is
-clean persists the one stage through `write_stage`. Every change is validated
+clean persists the one stage through `write_stage` — creating the project's
+compiled/ dir when the stage being written is its first. Every change is validated
 against the whole resulting workflow before anything is written.
 
 Removal is the one direct disk touch: there is no stage to write, so once the
@@ -23,6 +24,7 @@ from app.models.workflow import validate_workflow_draft
 from app.services import node_review
 from app.services.loader import (
     find_stage_file,
+    list_stage_files,
     load_workflow_object,
     stage_to_spec_dict,
     write_stage,
@@ -51,11 +53,20 @@ def _merge_patch(target: object, patch: object) -> object:
 
 
 def _current_specs(project_dir: Path) -> dict[str, dict]:
-    """The workflow's current stages as ``{id: canonical spec dict}``, read through
-    the loader as one in-memory ``Workflow`` object. The workflow being edited is
-    always a valid, non-empty one (you edit only after it compiles), so the strict
-    loader is right here — an unloadable workflow raises rather than letting an edit
-    proceed against a silently-partial view of it."""
+    """The workflow's current stages as ``{id: canonical spec dict}``.
+
+    A workflow may legitimately be EMPTY — a project holds no stage files until its
+    first stage is added — and that reads as ``{}``, the starting point the first
+    ``add_stage_spec`` builds on (and against which every stage id is unknown, so
+    edit/patch/remove raise FileNotFoundError).
+
+    A workflow that HAS stage files must load cleanly: it is read through the strict
+    loader as one in-memory ``Workflow``, so anything unparseable or invalid raises
+    rather than letting an edit proceed against a partial view of it. The two cases
+    are told apart by whether ``list_stage_files`` finds any files at all — never by
+    interpreting a load failure as emptiness."""
+    if not list_stage_files(project_dir / "compiled"):
+        return {}
     workflow = load_workflow_object(project_dir)
     return {stage.id: stage_to_spec_dict(stage) for stage in workflow.stages}
 
@@ -84,9 +95,9 @@ def _apply(project_dir: Path, specs: dict[str, dict], stage_id: str, candidate: 
     validated_stage = Stage.model_validate(candidate)
     # Overwrite the stage's existing file if it has one; a new stage is named by
     # its id (file order is irrelevant — the workflow order is the input_ids DAG).
-    target = find_stage_file(project_dir / "compiled", stage_id) or (
-        project_dir / "compiled" / f"{stage_id}.json"
-    )
+    compiled_dir = project_dir / "compiled"
+    target = find_stage_file(compiled_dir, stage_id) or compiled_dir / f"{stage_id}.json"
+    compiled_dir.mkdir(parents=True, exist_ok=True)  # the first stage creates it
     write_stage(target, validated_stage)
     return EditStageResult(ok=True)
 
