@@ -241,7 +241,7 @@ def prepare_run(
     # This run's logical identity for cancellation's checkpoints (see
     # app.runtime.cancellation) — read by _execute_stages, never by name of
     # anything on disk. run_dir above stays I/O-only.
-    ctx = RunContext.for_production(
+    ctx = RunContext.for_product_run(
         repo_root, run_dir, project_dir.name, run_id, limits=limits, offsets=offsets,
     )
     # The manifest's shape and persistence belong to the executor — it mints the
@@ -324,7 +324,7 @@ def resume_run(project_dir: Path, run_id: str, repo_root: Path) -> dict[str, Any
 
     # Reload outputs from disk for stages that completed successfully.
     outputs_so_far: dict[str, pd.DataFrame] = {}
-    for record in manifest.stages:
+    for record in manifest.stage_records:
         if record.status not in (StageStatus.OK, StageStatus.VALIDATION_WARNINGS):
             continue
         if not record.output_path:
@@ -345,14 +345,14 @@ def resume_run(project_dir: Path, run_id: str, repo_root: Path) -> dict[str, Any
     # This run's logical identity for cancellation's checkpoints — see the
     # matching comment in prepare_run. Stamped here too so a resumed run is
     # cancellable, not just a fresh one.
-    ctx = RunContext.for_production(
+    ctx = RunContext.for_product_run(
         repo_root, run_dir, project_dir.name, run_id,
         # Re-apply the run's per-stage row slicing so stages that resume after
         # a halt honor the same limits/offsets the run started with.
         limits=manifest.limit_overrides,
         offsets=manifest.offset_overrides,
     )
-    # The run's telemetry (queue_stats/dropped_columns) already lives on the
+    # The run's telemetry (human_review_queue_stats/dropped_columns) already lives on the
     # loaded manifest, not the context; a resumed run keeps accumulating onto
     # that same manifest via the executor's per-stage merge.
 
@@ -362,7 +362,7 @@ def resume_run(project_dir: Path, run_id: str, repo_root: Path) -> dict[str, Any
     # `running`) must not carry `halted_at`, or the run page would show the
     # "halted for review" banner and queue links while the stage re-runs. The
     # loop re-adds `halted_at` if a stage halts again; otherwise it stays gone.
-    manifest.unset("halted_at")
+    manifest.clear_halt()
     return _execute_stages(ordered, ctx, manifest, run_dir, outputs_so_far).to_dict()
 
 
@@ -395,7 +395,8 @@ def main() -> int:
     print(json.dumps(
         {"run_id": manifest["run_id"], "workflow_version": manifest["workflow_version"],
          "status": manifest["status"],
-         "stages": [(s["stage_id"], s["status"], s["rows"]) for s in manifest["stages"]]},
+         "stage_records": [(s["stage_id"], s["status"], s["output_row_count"])
+                           for s in manifest["stage_records"]]},
         indent=2,
     ))
     return 0 if manifest["status"] == RunStatus.OK else 1

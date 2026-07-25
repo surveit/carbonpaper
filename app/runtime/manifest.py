@@ -8,10 +8,11 @@ flushed to disk live so the run page shows progress. The executor
 This module owns that shape as typed Pydantic models rather than a raw dict:
 
 - `RunManifest` — the top-level run record (identity, per-run overrides, the
-  live `queue_stats`/`dropped_columns` tallies, and the per-stage `stages`).
-- `StageRecord` — one stage's record within `manifest["stages"]`, built pending
-  (`StageRecord.pending`) or at start (`StageRecord.started`) and mutated as the
-  stage settles.
+  live `human_review_queue_stats`/`dropped_columns` tallies, and the per-stage
+  `stage_records`).
+- `StageRecord` — one stage's record within `manifest["stage_records"]`, built
+  by `StageRecord.record_with_status` (pending before the run reaches it,
+  running once it starts) and mutated as the stage settles.
 - `StageContribution` — what a stage HANDLER contributes back to the manifest:
   its token usage (onto its `StageRecord.llm_usage`), its dropped-column and
   queue tallies (onto the manifest's per-stage maps), and its per-row generation
@@ -43,7 +44,7 @@ from app.core.run_status import RunStatus, StageStatus
 
 class QueueStats(TypedDict):
     """One human_review_queue stage's tallies, recorded on the manifest under
-    `queue_stats[stage_id]`."""
+    `human_review_queue_stats[stage_id]`."""
 
     items_queued_total: int
     items_passed_through: int
@@ -66,16 +67,17 @@ class StageContribution(BaseModel):
     """What one stage's handler contributes back to the run manifest: token
     usage (folded onto the stage's `StageRecord.llm_usage`), per-row generation
     errors (returned for the executor to fold into the stage's validation report
-    and terminal status), dropped-column notes and queue tallies (folded onto the
-    manifest's per-stage `dropped_columns`/`queue_stats` maps). Empty for a stage
-    that contributes none. Not stage data — the manifest fields a handler owns."""
+    and terminal status), dropped-column notes and human-review-queue tallies
+    (folded onto the manifest's per-stage `dropped_columns`/
+    `human_review_queue_stats` maps). Empty for a stage that contributes none.
+    Not stage data — the manifest fields a handler owns."""
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     llm_usage: LlmUsage | None = None
     row_errors: list[RowError] = []
     dropped_columns: list[str] = []
-    queue_stats: QueueStats | None = None
+    human_review_queue_stats: QueueStats | None = None
 
 
 class StageErrorInfo(BaseModel):
@@ -89,8 +91,8 @@ class StageErrorInfo(BaseModel):
 
 
 class StageRecord(BaseModel):
-    """One stage's manifest record, written into `manifest["stages"]` and read
-    back by the web layer.
+    """One stage's manifest record, written into `manifest["stage_records"]` and
+    read back by the web layer.
 
     Field order is the canonical on-disk order of a stage that RAN;
     `output_path`, `queue_path`, `notes`, and `llm_usage` are set only at the
@@ -99,9 +101,18 @@ class StageRecord(BaseModel):
     the CSV fallback add `notes`) and are omitted from the JSON until then.
     `finished_at` is set to `None` up front for a pending record and to a
     timestamp once a running stage settles; it is omitted from a mid-run flush of
-    a stage that has started but not yet settled. `input_validation`/
-    `output_validation` hold `ValidationReport.to_dict()` output
-    (app.runtime.validation), whose own fields are untyped in that module."""
+    a stage that has started but not yet settled.
+
+    `input_validation_report`/`output_validation_report` each hold the dict form
+    of a `ValidationReport` (app.runtime.validation) — errors AND warnings, not
+    errors alone — whose own fields are untyped in that module. The input side is
+    a list: one report per upstream input that declares a schema.
+
+    The three fields the run's own bookkeeping always writes
+    (`input_validation_report`, `output_validation_report`, `output_row_count`)
+    carry no default: they were renamed out of an older on-disk vocabulary, and a
+    default would let a pre-rename `manifest.json` parse and then report a
+    fabricated zero/empty value. Required, such a file fails loudly at parse."""
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
@@ -110,10 +121,10 @@ class StageRecord(BaseModel):
     name: str
     started_at: str | None = None
     status: StageStatus
-    input_validation: list[dict[str, object]] = []
-    output_validation: dict[str, object] | None = None
+    input_validation_report: list[dict[str, object]]
+    output_validation_report: dict[str, object] | None
     elapsed_ms: int = 0
-    rows: int = 0
+    output_row_count: int
     error: StageErrorInfo | None = None
     llm_usage: LlmUsage | None = None
     notes: list[str] | None = None
@@ -122,24 +133,24 @@ class StageRecord(BaseModel):
     finished_at: str | None = None
 
     @classmethod
-    def pending(cls, stage: Stage) -> StageRecord:
-        """A stage's record before it has started, or once it has been marked
-        blocked: `pending` status, no output, no timing."""
-        return cls(
+    def record_with_status(cls, stage: Stage, status: StageStatus) -> StageRecord:
+        """A fresh record for `stage` in `status`: no output, no validation, no
+        elapsed time yet. A RUNNING record is stamped with `started_at` (the
+        stage is starting now); any other status — PENDING, for a stage the run
+        has not reached or has marked blocked — leaves `started_at` None, and
+        also pins `finished_at` to None so the never-started record carries the
+        key explicitly."""
+        running = status is StageStatus.RUNNING
+        record = cls(
             stage_id=stage.id, type=stage.type, name=stage.name,
-            status=StageStatus.PENDING, input_validation=[], output_validation=None,
-            elapsed_ms=0, rows=0, error=None, started_at=None, finished_at=None,
+            started_at=datetime.now().isoformat(timespec="seconds") if running else None,
+            status=status,
+            input_validation_report=[], output_validation_report=None,
+            elapsed_ms=0, output_row_count=0, error=None,
         )
-
-    @classmethod
-    def started(cls, stage: Stage) -> StageRecord:
-        """A stage's record at the moment it starts running."""
-        return cls(
-            stage_id=stage.id, type=stage.type, name=stage.name,
-            started_at=datetime.now().isoformat(timespec="seconds"),
-            status=StageStatus.RUNNING, input_validation=[], output_validation=None,
-            elapsed_ms=0, rows=0, error=None,
-        )
+        if not running:
+            record.finished_at = None
+        return record
 
     def add_note(self, note: str) -> None:
         """Append a run note (a row-slicing trim, a CSV fallback), materializing
@@ -156,7 +167,12 @@ class RunManifest(BaseModel):
     disk by `write_manifest`. The optional run-level fields (`updated_at` on a
     mid-run flush, `finished_at`/`halted_at`/`cancelled_at` at finalization,
     `resumed_at` on a resume) are set only when they apply and omitted from the
-    JSON otherwise."""
+    JSON otherwise.
+
+    This is a run-directory file artifact, not a document-store model: it lives
+    as `manifest.json` inside the run dir alongside that run's `outputs/` and
+    `artifacts/`, and is read back by path (`load_manifest_model`). It is not a
+    `PersistedModel` and has no row in the document store."""
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
@@ -164,18 +180,22 @@ class RunManifest(BaseModel):
     started_at: str
     project: str | None
     workflow_version: str | None
-    # The per-run override maps and live tallies. Defaulted so a partial or
-    # legacy manifest that predates one of them still parses on resume (the old
-    # dict readers tolerated the same via `.get(key, {})`); a freshly-minted
-    # manifest always sets every one, so `exclude_unset` still emits them.
+    # The per-run override maps. Defaulted so a partial or legacy manifest that
+    # predates one of them still parses on resume (the old dict readers tolerated
+    # the same via `.get(key, {})`); a freshly-minted manifest always sets every
+    # one, so `exclude_unset` still emits them.
     limit_overrides: dict[str, int] = {}
     offset_overrides: dict[str, int] = {}
     run_bindings: dict[str, dict[str, Any]] = {}
     input_bindings: dict[str, dict[str, Any]] = {}
-    queue_stats: dict[str, QueueStats] = {}
+    # The live human_review_queue tallies. Required, unlike the override maps
+    # above: the key was renamed out of an older on-disk vocabulary, so a default
+    # would let a pre-rename manifest parse and then report an empty tally for a
+    # run that actually queued items. `create_run_manifest` always sets it.
+    human_review_queue_stats: dict[str, QueueStats]
     dropped_columns: dict[str, list[str]] = {}
     status: RunStatus
-    stages: list[StageRecord]
+    stage_records: list[StageRecord]
     updated_at: str | None = None
     finished_at: str | None = None
     halted_at: list[str] | None = None
@@ -192,11 +212,11 @@ class RunManifest(BaseModel):
             return [value]
         return value
 
-    def settle_stages(self, records: list[StageRecord]) -> None:
+    def settle_stage_records(self, records: list[StageRecord]) -> None:
         """Replace the manifest's per-stage records with `records` — the executor
         hands back the final set in topological order once the run loop stops,
         overwriting the pending records minted at the start."""
-        self.stages = records
+        self.stage_records = records
 
     def record_dropped_columns(self, stage_id: str, columns: list[str]) -> None:
         """Record `stage_id`'s dropped output columns under `dropped_columns`,
@@ -205,24 +225,24 @@ class RunManifest(BaseModel):
         self.dropped_columns[stage_id] = columns
         self.__pydantic_fields_set__.add("dropped_columns")
 
-    def record_queue_stats(self, stage_id: str, stats: QueueStats) -> None:
-        """Record `stage_id`'s review-queue tallies under `queue_stats`, keeping
-        the field marked set (see record_dropped_columns)."""
-        self.queue_stats[stage_id] = stats
-        self.__pydantic_fields_set__.add("queue_stats")
+    def record_human_review_queue_stats(self, stage_id: str, stats: QueueStats) -> None:
+        """Record `stage_id`'s human-review-queue tallies under
+        `human_review_queue_stats`."""
+        self.human_review_queue_stats[stage_id] = stats
 
-    def unset(self, field: str) -> None:
-        """Drop an optional run-level field so `exclude_unset` serialization
-        omits it — the model equivalent of `dict.pop(field, None)`. Clears the
-        field from the model's set-fields (and resets it to None), so a run that
-        never halted, or a resume that cleared a prior halt, writes no such key."""
-        setattr(self, field, None)
-        self.__pydantic_fields_set__.discard(field)
+    def clear_halt(self) -> None:
+        """Drop the halt marker: this run is no longer awaiting review. Clears
+        `halted_at` from the model's set-fields (and resets it to None), so
+        `exclude_unset` writes no such key — a resume that is re-running the
+        halted stage, or a cancel that supersedes an earlier halt, must not leave
+        the run page showing a review banner for a halt that no longer holds."""
+        self.halted_at = None
+        self.__pydantic_fields_set__.discard("halted_at")
 
-    def stage_record(self, stage_id: str) -> StageRecord | None:
+    def find_stage_record(self, stage_id: str) -> StageRecord | None:
         """This run's record for `stage_id`, or None if the run has no such
         stage."""
-        return next((r for r in self.stages if r.stage_id == stage_id), None)
+        return next((r for r in self.stage_records if r.stage_id == stage_id), None)
 
     def to_dict(self) -> dict[str, Any]:
         """This manifest as a plain dict, with unset optional fields omitted — the
@@ -252,9 +272,10 @@ def create_run_manifest(
 
     `project`/`workflow_version` are None for a subset run (run_subset) that was
     not told its logical identity — recorded honestly as None rather than a
-    fabricated placeholder. A production run always supplies both. `queue_stats`
-    and `dropped_columns` start empty and grow live as stages settle (the
-    executor drains each stage's StageContribution into them)."""
+    fabricated placeholder. A product run always supplies both.
+    `human_review_queue_stats` and `dropped_columns` start empty and grow live as
+    stages settle (the executor drains each stage's StageContribution into
+    them)."""
     return RunManifest(
         run_id=run_id,
         started_at=datetime.now().isoformat(timespec="seconds"),
@@ -264,10 +285,12 @@ def create_run_manifest(
         offset_overrides=offsets,
         run_bindings=run_bindings,
         input_bindings=input_bindings,
-        queue_stats={},
+        human_review_queue_stats={},
         dropped_columns={},
         status=RunStatus.RUNNING,
-        stages=[StageRecord.pending(s) for s in ordered],
+        stage_records=[
+            StageRecord.record_with_status(s, StageStatus.PENDING) for s in ordered
+        ],
     )
 
 

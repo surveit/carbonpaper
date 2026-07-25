@@ -12,7 +12,7 @@
     <span class="run-status status-{{ stage.status }}">{{ stage.status }}</span>
     <h2><code>{{ stage.stage_id }}</code></h2>
     <p class="stage-id">{{ stage.name }}</p>
-    <p class="muted">{{ stage.elapsed_ms }} ms · {{ "{:,}".format(stage.rows or 0) }} row{% if (stage.rows or 0) != 1 %}s{% endif %}
+    <p class="muted">{{ stage.elapsed_ms }} ms · {{ "{:,}".format(stage.output_row_count or 0) }} row{% if (stage.output_row_count or 0) != 1 %}s{% endif %}
         {% if stage.llm_usage %}{% set u = stage.llm_usage %} · <span title="Token usage and estimated cost of this stage's model calls (input + output tokens summed over every row and retry; cost is the CLI's estimate).">{{ "{:,}".format(u.input_tokens) }} in / {{ "{:,}".format(u.output_tokens) }} out tokens · ~${{ "%.4f"|format(u.cost_usd) }} ({{ u.calls }} call{% if u.calls != 1 %}s{% endif %})</span>{% endif %}
         {% if stage.finished_at %} · finished {{ stage.finished_at | friendly_time }}{% endif %}</p>
 </div>
@@ -26,7 +26,7 @@
 {% endif %}
 {% if stage.status == 'awaiting_review' %}
 <section class="banner banner-review">
-    <p>⏸ <strong>{{ stage.rows }} item{% if stage.rows != 1 %}s{% endif %}</strong> awaiting human review. Downstream stages won't run until the queue is cleared.</p>
+    <p>⏸ <strong>{{ stage.output_row_count }} item{% if stage.output_row_count != 1 %}s{% endif %}</strong> awaiting human review. Downstream stages won't run until the queue is cleared.</p>
     <p><a href="/project/{{ project }}/runs/{{ run_id }}/queue/{{ stage.stage_id }}" class="btn primary">Open review queue →</a></p>
 </section>
 {% elif stage.status == 'pending' %}
@@ -34,8 +34,8 @@
 {% endif %}
 
 {% set in_issues = [] %}
-{% for v in stage.input_validation %}{% for i in v.issues %}{% set _ = in_issues.append(i) %}{% endfor %}{% endfor %}
-{% set out_issues = (stage.output_validation.issues if stage.output_validation else []) %}
+{% for v in stage.input_validation_report %}{% for i in v.issues %}{% set _ = in_issues.append(i) %}{% endfor %}{% endfor %}
+{% set out_issues = (stage.output_validation_report.issues if stage.output_validation_report else []) %}
 
 {# ── Tab bars ── #}
 <div class="stage-tabs">

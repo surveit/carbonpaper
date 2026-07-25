@@ -257,9 +257,9 @@ def list_runs(project: str) -> list[dict[str, Any]]:
                 # None for legacy (pre-versioning) runs; the template renders
                 # "(unversioned)" — a displayed truth, not a fabricated id.
                 "workflow_version": manifest.get("workflow_version"),
-                "stages_total": len(manifest.get("stages", [])),
-                "stages_ok": sum(1 for s in manifest.get("stages", []) if s.get("status") == StageStatus.OK),
-                "stages_error": sum(1 for s in manifest.get("stages", []) if s.get("status") == StageStatus.ERROR),
+                "stages_total": len(manifest.get("stage_records", [])),
+                "stages_ok": sum(1 for s in manifest.get("stage_records", []) if s.get("status") == StageStatus.OK),
+                "stages_error": sum(1 for s in manifest.get("stage_records", []) if s.get("status") == StageStatus.ERROR),
             })
     return entries
 
@@ -280,7 +280,7 @@ def manifest_stage(run_dir: Path, stage_id: str) -> dict[str, Any]:
     """The manifest record for one stage of a run; 404 if run or stage missing."""
     manifest = load_manifest(run_dir)
     stage_record = next(
-        (s for s in manifest.get("stages", []) if s.get("stage_id") == stage_id),
+        (s for s in manifest.get("stage_records", []) if s.get("stage_id") == stage_id),
         None,
     )
     if stage_record is None:

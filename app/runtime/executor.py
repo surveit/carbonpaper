@@ -135,7 +135,7 @@ def _subset_ctx(repo_root: Path, run_dir: Path, queue_auto_approve: bool) -> Run
     # scope (only human_review_queue does) fails loudly rather than reading a
     # fabricated wrong directory — unless `queue_auto_approve` tells that handler to
     # pass rows through in memory, in which case it never reaches for project scope.
-    return RunContext.for_non_production(repo_root, run_dir, queue_auto_approve=queue_auto_approve)
+    return RunContext.for_non_product_run(repo_root, run_dir, queue_auto_approve=queue_auto_approve)
 
 
 def _raise_if_run_failed(manifest: RunManifest) -> None:
@@ -148,7 +148,7 @@ def _raise_if_run_failed(manifest: RunManifest) -> None:
     if status == RunStatus.AWAITING_REVIEW:
         halted_at = ", ".join(manifest.halted_at or [])
         raise SubsetRunError(f"run halted for human review at {halted_at}")
-    for stage in manifest.stages:
+    for stage in manifest.stage_records:
         if stage.status == StageStatus.ERROR:
             message = stage.error.message if stage.error is not None else "unknown error"
             raise SubsetRunError(f"stage {stage.stage_id!r} errored: {message}")
@@ -191,7 +191,7 @@ def _execute_stages(
     # Carry over any existing records (from a previously halted manifest
     # we're resuming). Build an index for upsert behavior.
     records_by_id: dict[str, StageRecord] = {
-        r.stage_id: r for r in manifest.stages
+        r.stage_id: r for r in manifest.stage_records
     }
     _flush_manifest(manifest, records_by_id, ordered, run_dir, RunStatus.RUNNING)
 
@@ -213,7 +213,7 @@ def _execute_stages(
         # so a resume cannot reuse it. Checked before the resume-skip so a
         # newly-blocked upstream overrides a prior `ok` output on disk.
         if _find_blocking_upstream(stage, blocked):
-            records_by_id[sid] = StageRecord.pending(stage)
+            records_by_id[sid] = StageRecord.record_with_status(stage, StageStatus.PENDING)
             blocked.add(sid)
             outputs_so_far.pop(sid, None)
             _flush_manifest(manifest, records_by_id, ordered, run_dir, RunStatus.RUNNING)
@@ -266,10 +266,15 @@ def _flush_manifest(
     and the given `status` (and the current per-stage records) WITHOUT mutating
     the live manifest — so the final finalize-time write is not left carrying a
     mid-run `updated_at` or a `running` status. The accumulated
-    queue_stats/dropped_columns already live on `manifest` (merged per stage by
+    human_review_queue_stats/dropped_columns already live on `manifest` (merged
+    per stage by
     _merge_stage_contribution)."""
     snapshot = manifest.model_copy(update={
-        "stages": [records_by_id.get(s.id) or StageRecord.pending(s) for s in ordered],
+        "stage_records": [
+            records_by_id.get(s.id)
+            or StageRecord.record_with_status(s, StageStatus.PENDING)
+            for s in ordered
+        ],
         "status": status,
         "updated_at": datetime.now().isoformat(timespec="seconds"),
     })
@@ -298,7 +303,7 @@ def _gather_stage_inputs(
             rep = validate_dataframe(
                 df, ref.table_schema, stage_id=sid, phase=f"input:{ref.id}",
             )
-            record.input_validation.append(rep.to_dict())
+            record.input_validation_report.append(rep.to_dict())
     return inputs_for_stage
 
 def _resolve_handler(stage_type: StageType) -> StageHandler:
@@ -312,7 +317,7 @@ def _record_halt(record: StageRecord, halt: HaltForReview, run_dir: Path) -> Non
     """Fork-blocking, not loop-ending: this stage awaits review and blocks
     its downstream, while independent forks keep running."""
     record.status = StageStatus.AWAITING_REVIEW
-    record.rows = halt.pending_count
+    record.output_row_count = halt.pending_count
     # Manifest paths are POSIX-style so the persisted JSON is identical on
     # every platform.
     record.queue_path = halt.queue_path.relative_to(run_dir).as_posix()
@@ -393,7 +398,7 @@ def _finalize_stage_output(
     sid = stage.id
     # Read the stage's contribution off the handler's frame BEFORE any slicing
     # (which builds a new frame and drops `.attrs`), then merge usage into this
-    # record and queue_stats/dropped_columns into the manifest.
+    # record and human_review_queue_stats/dropped_columns into the manifest.
     contribution = _read_stage_contribution(output)
     row_errors = _merge_stage_contribution(contribution, sid, manifest, record)
 
@@ -411,7 +416,7 @@ def _finalize_stage_output(
                   f"row {row_error['row']}: generation failed: {row_error['message']}")
             for row_error in row_errors
         ]
-    record.output_validation = out_rep.to_dict()
+    record.output_validation_report = out_rep.to_dict()
 
     output_path = _persist_stage_output(output, sid, run_dir, record)
     outputs_so_far[sid] = output
@@ -425,9 +430,9 @@ def _finalize_stage_output(
         )
     else:
         record.status = StageStatus.OK if out_rep.ok and all(
-            v["ok"] for v in record.input_validation
+            v["ok"] for v in record.input_validation_report
         ) else StageStatus.VALIDATION_WARNINGS
-    record.rows = int(len(output))
+    record.output_row_count = int(len(output))
     # Manifest paths are POSIX-style so the persisted JSON is identical on
     # every platform.
     record.output_path = output_path.relative_to(run_dir).as_posix()
@@ -453,15 +458,17 @@ def _merge_stage_contribution(
     record: StageRecord,
 ) -> list[RowError]:
     """Merge one stage's contribution into the run's living record: its token
-    usage onto the stage record, its dropped-column and queue tallies onto the
+    usage onto the stage record, its dropped-column and human-review-queue
+    tallies onto the
     manifest's per-stage maps. Returns the row-generation errors for the caller
     to fold into the output validation report and terminal status."""
     if contribution.llm_usage is not None:
         record.llm_usage = contribution.llm_usage
     if contribution.dropped_columns:
         manifest.record_dropped_columns(sid, contribution.dropped_columns)
-    if contribution.queue_stats is not None:
-        manifest.record_queue_stats(sid, contribution.queue_stats)
+    if contribution.human_review_queue_stats is not None:
+        manifest.record_human_review_queue_stats(
+            sid, contribution.human_review_queue_stats)
     return contribution.row_errors
 
 
@@ -484,7 +491,7 @@ def _run_stage(
     a cancel — so the caller can add this stage to its own `blocked` set
     itself, keeping that decision visible at the loop."""
     sid = stage.id
-    record = StageRecord.started(stage)
+    record = StageRecord.record_with_status(stage, StageStatus.RUNNING)
     t0 = time.perf_counter()
     records_by_id[sid] = record
     _flush_manifest(manifest, records_by_id, ordered, run_dir, RunStatus.RUNNING)
@@ -497,7 +504,7 @@ def _run_stage(
             output = handler.execute(stage, inputs_for_stage, ctx)
         except HaltForReview as halt:
             # The halt fires before a frame is returned, so its contribution
-            # (the stage's queue_stats) rides the exception; merge it into the
+            # (the stage's human_review_queue_stats) rides the exception; merge it into the
             # manifest exactly as a returned frame's would be.
             _merge_stage_contribution(halt.contribution, sid, manifest, record)
             _record_halt(record, halt, run_dir)
@@ -543,20 +550,21 @@ def _finalize_run_manifest(
     stage recorded before the cancel arrived, and carries no `halted_at`, so
     a cancelled run never shows the review banner for a halt that happened
     earlier in the same run."""
-    manifest.settle_stages([records_by_id[s.id] for s in ordered if s.id in records_by_id])
+    manifest.settle_stage_records(
+        [records_by_id[s.id] for s in ordered if s.id in records_by_id])
     manifest.finished_at = datetime.now().isoformat(timespec="seconds")
 
     if cancelled:
         manifest.status = RunStatus.CANCELLED
         manifest.cancelled_at = ordered[cancel_at_index].id
-        manifest.unset("halted_at")
+        manifest.clear_halt()
     else:
         if halted_stage_ids:
             manifest.halted_at = halted_stage_ids
         else:
-            manifest.unset("halted_at")
+            manifest.clear_halt()
         manifest.status = _final_run_status(
-            record.status for record in manifest.stages
+            record.status for record in manifest.stage_records
         )
 
     write_manifest(run_dir, manifest)
@@ -568,7 +576,7 @@ def _finalize_run_manifest(
 
 def _summarize_row_errors(row_errors: list[RowError]) -> str:
     """One-line summary of per-row generation failures for the stage's error
-    record — the per-row detail lives in output_validation issues."""
+    record — the per-row detail lives in the output validation report's issues."""
     head = "; ".join(f"row {e['row']}: {e['message']}" for e in row_errors[:3])
     more = f" (+{len(row_errors) - 3} more)" if len(row_errors) > 3 else ""
     return f"{len(row_errors)} row(s) failed generation: {head}{more}"
