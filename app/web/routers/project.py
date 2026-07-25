@@ -204,8 +204,8 @@ async def new_project_submit(
 ):
     """Create the examples/<name>/ working copy + its project.json, persist the pasted
     document at document.md, then redirect to the project's data-model section where
-    authoring starts. The directory IS the session — the data-model / workflow streams
-    key off the project name and read document.md / write chat.jsonl in here.
+    authoring starts. The directory IS the session — the data-model stream keys off the
+    project name and reads document.md / writes chat.jsonl in here.
 
     Truthfulness: we write project.json (via project.write_project_meta) so a NEW
     project carries a real model + created_at (non-legacy); we never fabricate those
@@ -217,20 +217,20 @@ async def new_project_submit(
         raise HTTPException(status_code=400, detail=str(exc))
     project_dir = EXAMPLES_DIR / safe_name
     doc = (project_dir / "document.md").read_text(encoding="utf-8")
-    # Kick off automatic generation (data model → then workflow). The data-model phase
-    # runs as a LIVE chat turn; land the user on it so they watch the model being
-    # authored (it streams while it runs, then persists as the session's transcript).
+    # Kick off data-model generation. It runs as a LIVE chat turn; land the user on it
+    # so they watch the model being authored (it streams while it runs, then persists
+    # as the session's transcript).
     session_id = generation.start_generation(project_dir, document=doc, model=model)
     return RedirectResponse(url=f"/chat/{session_id}", status_code=303)
 
 
 @router.post("/project/{project_name}/generate")
 async def generate_project(project_name: str):
-    """(Re)kick automatic data-model → workflow generation for an EXISTING project —
-    the manual counterpart to the auto-kick on create (for a legacy project that has a
-    document but no data model, or to regenerate from scratch). Reads document.md + the
-    project's model, starts the data-model phase as a LIVE chat turn, and redirects to
-    that session so the run is watchable. 400 if there is no document to generate from."""
+    """(Re)kick data-model generation for an EXISTING project — the manual counterpart
+    to the auto-kick on create (for a legacy project that has a document but no data
+    model, or to regenerate from scratch). Reads document.md + the project's model,
+    starts the data-model phase as a LIVE chat turn, and redirects to that session so
+    the run is watchable. 400 if there is no document to generate from."""
     pdir = _project_dir(project_name)
     document_path = pdir / "document.md"
     if not document_path.is_file():

@@ -71,10 +71,10 @@ allowed_importers = ["app.web", "app.runtime", "app.evals", "app.compiler", "app
 # app.core.persistence, or app.core.frames directly.
 
 [[tool.importlinter.contracts]]
-name = "app.compiler imported only by the entrypoint and services"
+name = "app.compiler imported only by services"
 type = "protected"
 protected_modules = ["app.compiler"]
-allowed_importers = ["app.main", "app.services"]
+allowed_importers = ["app.services"]
 # app.services.generation wraps the data-model and stage-test generators by design.
 # The reusable agent spine (app.core.agent) must not import it.
 
