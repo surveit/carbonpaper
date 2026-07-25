@@ -50,9 +50,9 @@ def handle_human_review_queue(stage: Stage, inputs: dict[str, pd.DataFrame], ctx
 
     # Checked FIRST, before any reach for project scope / the decisions cache: when
     # the caller asked for in-memory auto-approval, every row is approved and returned
-    # without a stage-cache decision lookup, queue snapshot, or halt. A non-production
+    # without a stage-cache decision lookup, queue snapshot, or halt. A non-product
     # (subset/preview) run carries no project scope, so this is also the only way such
-    # a run can pass a queue stage. Production ctx never sets the flag, so production
+    # a run can pass a queue stage. A product-run ctx never sets the flag, so product-run
     # behavior is unchanged.
     if ctx.queue_auto_approve:
         return _auto_approve_all(src, stage, contribution)
@@ -70,7 +70,7 @@ def handle_human_review_queue(stage: Stage, inputs: dict[str, pd.DataFrame], ctx
         queueable, input_fingerprints_by_index, entries_by_fingerprint
     )
 
-    _record_queue_stats(contribution, queueable, passthrough, pending, decided)
+    _record_human_review_queue_stats(contribution, queueable, passthrough, pending, decided)
 
     if len(pending):
         pending_fingerprints = input_fingerprints_by_index.loc[pending.index].tolist()
@@ -91,12 +91,12 @@ def _require_project_scope(ctx: RunContext, sid: str) -> tuple[str, ReadOnlyStag
     `ReadOnlyStageCache` — this handler only ever reads, so mypy proves it
     never calls a write method (`ReadOnlyStageCache` has none). Raises loudly
     if either is absent: a human_review_queue stage always runs inside a
-    project-scoped (production) run; a subset/preview run's context (which
+    project-scoped (product) run; a subset/preview run's context (which
     carries neither) cannot resolve a cache key and must not be silently let
     through."""
     if ctx.identity is None or ctx.stage_cache is None:
         raise ValueError(
-            f"human_review_queue '{sid}' requires a project-scoped (production) "
+            f"human_review_queue '{sid}' requires a project-scoped (product) "
             "run: RunContext.identity and RunContext.stage_cache must both be "
             "set, but this run carries neither."
         )
@@ -186,7 +186,7 @@ def _split_pending_and_decided(
     return queueable[~decided_mask], queueable[decided_mask]
 
 
-def _record_queue_stats(
+def _record_human_review_queue_stats(
     contribution: StageContribution,
     queueable: pd.DataFrame,
     passthrough: pd.DataFrame,
@@ -194,14 +194,14 @@ def _record_queue_stats(
     decided: pd.DataFrame,
 ) -> None:
     """Record this stage's queue tallies onto `contribution`; the executor drains
-    them onto the manifest under `queue_stats[stage_id]`."""
+    them onto the manifest under `human_review_queue_stats[stage_id]`."""
     stats: QueueStats = {
         "items_queued_total": int(len(queueable)),
         "items_passed_through": int(len(passthrough)),
         "items_pending": int(len(pending)),
         "items_decided": int(len(decided)),
     }
-    contribution.queue_stats = stats
+    contribution.human_review_queue_stats = stats
 
 
 def _snapshot_pending_and_halt(
