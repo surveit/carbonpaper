@@ -1,24 +1,29 @@
 """Handler shapes: what the runtime hands each stage type, and the row driver.
 
-A stage type's grain-and-order guarantee is a fact about HOW the runtime invokes
-its handler, not a claim the handler makes about itself. Each shape is a class
-whose `execute` fixes the calling convention:
+A stage type's grain-and-order guarantee follows from HOW the runtime invokes its
+handler, not from anything the handler's own body chooses to do. Each shape is a
+class whose `execute` fixes the calling convention:
 
   RowMapHandler  — the runtime maps a per-row function over the single input's
                    rows and reassembles results in input order: one dict in, one
                    dict out. The mapper never sees the frame, so it cannot
-                   reorder, drop, or fan out rows — preservation holds by
-                   construction (issue #87).
+                   reorder or fan out rows — that much holds by construction
+                   (issue #87). Removing a row is possible only where the
+                   handler declares `drops_rows`; the mapper marks the row and
+                   the driver removes it.
   SourceHandler  — no upstream inputs; the handler originates rows from outside
                    the run. Trivially preserving: the rows begin here.
   FrameHandler   — the handler sees whole input frame(s) and may reshape or
                    reorder them freely; never grain-and-order preserving.
 
-Preservation is carried by the shape CLASS — RowMap/Source preserve, Frame does
-not — so a handler cannot separately declare itself preserving; it either is a
-row-driven shape or it is not. Which shape a type registers under must agree with
-the core fact (app.models is_grain_and_order_preserving); validate_registry_matches_model
-holds the two equal when the registry module is imported.
+Preservation is reported by each handler's `preserves_grain_and_order` — Source
+yes, Frame no, RowMap yes unless it declares `drops_rows`. It lives on the
+handler rather than the shape class because row removal is the one thing a
+row-driven shape can opt into, and a handler may only WEAKEN what its shape
+would otherwise guarantee, never claim more than it. Which handler a type
+registers under must agree with the core fact (app.models
+is_grain_and_order_preserving); validate_registry_matches_model holds the two
+equal when the registry module is imported.
 """
 from __future__ import annotations
 
@@ -48,15 +53,30 @@ Row = dict[str, Any]
 ROW_ERROR_KEY = "_error"
 
 # Sentinel column carrying a row's token/cost usage dict (an llm_transform
-# attaches one per row). The driver sums these onto the stage's StageContribution;
-# the output projection drops the column so usage never reaches stage output.
+# attaches one per row). The driver sums these onto the stage's StageContribution
+# and then strips the column, so usage never reaches stage output.
 ROW_USAGE_KEY = "_usage"
 
+# Sentinel column a row mapper attaches to a row whose value could not be
+# produced synchronously: the value does not exist yet, so the run cannot be
+# carried past this stage. Distinct from ROW_ERROR_KEY, which marks a row that
+# FAILED and lets the run continue. The driver never interprets it — a handler
+# that emits it reads it back in its own `collect_row_markers`.
+ROW_DEFERRED_KEY = "_deferred"
+
+# Sentinel column a row mapper sets to True on a row the stage does not emit. A
+# mapper sees one row at a time and so cannot remove a row itself; it marks the
+# row and the driver removes it — only where the handler declares `drops_rows`,
+# since removing rows forfeits grain-and-order preservation.
+ROW_DROP_KEY = "_drop"
+
 # Internal per-row sentinel columns a mapper may attach. They are machinery, not
-# stage output: the projection drops them but does NOT report them as dropped
-# user columns (they were collected onto the contribution by the driver, not
-# discarded).
-_INTERNAL_ROW_COLUMNS = frozenset({ROW_ERROR_KEY, ROW_USAGE_KEY})
+# stage output: the driver strips them off every mapped frame and does NOT
+# report them as dropped user columns (they were collected by the driver or the
+# handler's own collector, not discarded).
+_INTERNAL_ROW_COLUMNS = frozenset(
+    {ROW_ERROR_KEY, ROW_USAGE_KEY, ROW_DEFERRED_KEY, ROW_DROP_KEY}
+)
 
 
 class StageHandler(ABC):
@@ -69,10 +89,18 @@ class StageHandler(ABC):
         self, stage: Stage, inputs: dict[str, pd.DataFrame], ctx: RunContext
     ) -> pd.DataFrame | None: ...
 
+    @property
+    @abstractmethod
+    def preserves_grain_and_order(self) -> bool:
+        """Does this handler guarantee that output row i came from input row i —
+        1:1 and in the same order? Compared against the core
+        is_grain_and_order_preserving fact for the stage type this handler is
+        registered under (validate_registry_matches_model)."""
+
 
 class RowMapHandler(StageHandler):
     """Driven per row by the runtime; the mapper never sees the frame, so it
-    cannot reorder, drop, or fan out rows.
+    cannot reorder or fan out rows.
 
     `make_mapper` runs once per stage execution (resolve code, render prompt
     additions, record backend info) and returns the per-row function.
@@ -81,6 +109,15 @@ class RowMapHandler(StageHandler):
     regardless of completion order. `project_output_to_declared` asks the driver
     to project the assembled frame onto exactly the columns output_schema declares
     — a column-only operation that cannot change row count or order.
+
+    `drops_rows` declares that this handler's mapper may mark a row with
+    ROW_DROP_KEY for the driver to remove; the handler then stops claiming
+    grain-and-order preservation. Left False, a drop marker is an error rather
+    than a silent row loss. `collect_row_markers`, when given, runs once after
+    the map with the assembled frame — every marker column still on it — so the
+    handler can read back whatever its mapper attached before the driver strips
+    the markers off, and report what it found onto the stage's
+    `StageContribution`.
     """
 
     def __init__(
@@ -88,15 +125,25 @@ class RowMapHandler(StageHandler):
         make_mapper: Callable[[Stage, RunContext], Callable[[Row], Row]],
         parallelism: int = 1,
         project_output_to_declared: bool = False,
+        drops_rows: bool = False,
+        collect_row_markers: (
+            Callable[[Stage, pd.DataFrame, RunContext, StageContribution], None] | None
+        ) = None,
     ) -> None:
         self.make_mapper = make_mapper
         self.parallelism = parallelism
         self.project_output_to_declared = project_output_to_declared
+        self.drops_rows = drops_rows
+        self.collect_row_markers = collect_row_markers
 
     def execute(
         self, stage: Stage, inputs: dict[str, pd.DataFrame], ctx: RunContext
     ) -> pd.DataFrame:
         return _run_row_mapper(self, stage, inputs, ctx)
+
+    @property
+    def preserves_grain_and_order(self) -> bool:
+        return not self.drops_rows
 
 
 class LLMTransformHandler(RowMapHandler):
@@ -114,7 +161,7 @@ class LLMTransformHandler(RowMapHandler):
       sees a whole chunk in one prompt, so a row's answer can be influenced by
       its batch-mates.
 
-    Subclassing RowMapHandler keeps `_PRESERVING_SHAPES` membership honest for the
+    Subclassing RowMapHandler keeps `preserves_grain_and_order` honest for the
     property the registry invariant is about — grain and order, which BOTH paths
     keep. It deliberately does not claim per-row independence; batch_size>1 trades
     that for cost, which is why it is opt-in and defaults to 1.
@@ -150,6 +197,10 @@ class SourceHandler(StageHandler):
     ) -> pd.DataFrame:
         return self.read(stage, ctx)
 
+    @property
+    def preserves_grain_and_order(self) -> bool:
+        return True
+
 
 class FrameHandler(StageHandler):
     """Sees whole input frame(s) keyed by upstream id; may reshape them."""
@@ -165,23 +216,23 @@ class FrameHandler(StageHandler):
     ) -> pd.DataFrame | None:
         return self.apply(stage, inputs, ctx)
 
-
-# The shapes that guarantee row-by-row preservation — the runtime side of the
-# core is_grain_and_order_preserving fact.
-_PRESERVING_SHAPES = (RowMapHandler, SourceHandler)
+    @property
+    def preserves_grain_and_order(self) -> bool:
+        return False
 
 
 def validate_registry_matches_model(handlers: dict[StageType, StageHandler]) -> None:
-    """Raise unless each stage type's registered shape agrees with the core
-    is_grain_and_order_preserving fact. Called when the registry module is
-    imported, so a mis-shaped registration — a preserving type wired as a
-    FrameHandler, or the reverse — cannot start the app."""
+    """Raise unless each registered handler's `preserves_grain_and_order` agrees
+    with the core is_grain_and_order_preserving fact for its stage type. Called
+    when the registry module is imported, so a mis-shaped registration — a
+    preserving type wired as a FrameHandler, or the reverse — cannot start the
+    app."""
     for stage_type, handler in handlers.items():
-        shape_preserves = isinstance(handler, _PRESERVING_SHAPES)
-        if shape_preserves != is_grain_and_order_preserving(stage_type):
+        handler_preserves = handler.preserves_grain_and_order
+        if handler_preserves != is_grain_and_order_preserving(stage_type):
             raise RuntimeError(
                 f"stage type {stage_type.value!r} is registered as "
-                f"{type(handler).__name__} (preserving={shape_preserves}), but the "
+                f"{type(handler).__name__} (preserving={handler_preserves}), but the "
                 f"model declares grain-and-order-preserving="
                 f"{is_grain_and_order_preserving(stage_type)}"
             )
@@ -241,17 +292,59 @@ def _run_row_mapper(
                 f"got {type(result).__name__} for row {index}"
             )
         out_rows.append(result)
-    df = pd.DataFrame(out_rows)
+    return _finish_mapped_frame(pd.DataFrame(out_rows), handler, stage, ctx)
+
+
+def _finish_mapped_frame(
+    df: pd.DataFrame, handler: RowMapHandler, stage: Stage, ctx: RunContext
+) -> pd.DataFrame:
+    """Turn the assembled per-row results into the stage's output frame: remove
+    marked rows, collect the driver's own markers onto this stage's
+    `StageContribution`, hand the frame to the handler's marker collector if it
+    has one, then strip every marker column and — where the handler asks for it
+    — project onto the declared columns. The collector sees the frame while
+    every marker is still on it; nothing after it does.
+
+    The contribution rides out on the returned frame's `.attrs`; the executor
+    merges it into the manifest. Nothing accumulates in the (frozen) context."""
     contribution = StageContribution()
+    df = _drop_marked_rows(df, handler, stage)
     _collect_row_errors(df, contribution)
     _collect_row_usage(df, contribution)
+    if handler.collect_row_markers is not None:
+        handler.collect_row_markers(stage, df, ctx, contribution)
+    df = _strip_internal_row_columns(df)
     if handler.project_output_to_declared:
         df = _project_onto_declared_columns(df, stage, contribution)
-    # Report this stage's usage/errors/drops back to the engine on the frame it
-    # returns; the executor merges it into the manifest. Nothing accumulates in
-    # the (frozen) context.
     df.attrs[CONTRIBUTION_ATTR] = contribution
     return df
+
+
+def _drop_marked_rows(
+    df: pd.DataFrame, handler: RowMapHandler, stage: Stage
+) -> pd.DataFrame:
+    """Remove every row whose ROW_DROP_KEY marker is exactly True, re-indexing
+    from 0 so downstream row positions stay contiguous. A frame with no marker
+    column is returned unchanged. Raises unless the handler declares
+    `drops_rows`: a marker from one that does not is a mapper bug, and acting on
+    it would silently break the preservation the handler still claims."""
+    if ROW_DROP_KEY not in df.columns:
+        return df
+    if not handler.drops_rows:
+        raise ValueError(
+            f"stage {stage.id}: a row carries the {ROW_DROP_KEY!r} marker, but this "
+            f"handler does not declare row dropping"
+        )
+    keep = pd.Series([value is not True for value in df[ROW_DROP_KEY]], index=df.index, dtype=bool)
+    return df[keep].reset_index(drop=True)
+
+
+def _strip_internal_row_columns(df: pd.DataFrame) -> pd.DataFrame:
+    """Drop every `_INTERNAL_ROW_COLUMNS` marker present on `df`. Unconditional
+    — a marker is driver machinery, so it must never reach stage output, whether
+    or not the stage declares an output_schema."""
+    present = [column for column in df.columns if column in _INTERNAL_ROW_COLUMNS]
+    return df.drop(columns=present) if present else df
 
 
 def _consume_cancel(ctx: RunContext) -> bool:
@@ -295,14 +388,15 @@ def _project_onto_declared_columns(
     df: pd.DataFrame, stage: Stage, contribution: StageContribution
 ) -> pd.DataFrame:
     """Project onto exactly the columns output_schema declares, in declared
-    order. Column selection only — row count and order are untouched. Dropped
-    columns are recorded on `contribution`, never silently discarded."""
+    order. Column selection only — row count and order are untouched. Every
+    column it drops is recorded on `contribution`, never silently discarded —
+    and each is a user column, since the internal markers were already stripped
+    off before this runs."""
     declared = [c.name for c in stage.output_schema.columns] if stage.output_schema else []
     if not declared:
         return df
     keep = [c for c in declared if c in df.columns]
-    dropped = [str(c) for c in df.columns
-               if c not in keep and c not in _INTERNAL_ROW_COLUMNS]
+    dropped = [str(c) for c in df.columns if c not in keep]
     if dropped:
         contribution.dropped_columns = dropped
     return df[keep]

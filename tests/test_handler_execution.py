@@ -13,7 +13,12 @@ from app.models.stage import StageType
 from app.runtime.cancellation import request_cancel
 from app.runtime.context import RunIdentity
 from app.runtime.errors import RunCancelled
+from app.core.agent.usage import LlmUsage
 from app.runtime.stages.execution import (
+    ROW_DEFERRED_KEY,
+    ROW_DROP_KEY,
+    ROW_ERROR_KEY,
+    ROW_USAGE_KEY,
     FrameHandler,
     RowMapHandler,
     SourceHandler,
@@ -150,8 +155,6 @@ def test_row_driver_empty_input():
 
 
 def test_row_driver_collects_row_errors_without_dropping_the_stage():
-    from app.runtime.stages.execution import ROW_ERROR_KEY
-
     def make_mapper(stage, ctx):
         def map_row(row):
             if row["x"] == 2:
@@ -167,8 +170,6 @@ def test_row_driver_collects_row_errors_without_dropping_the_stage():
 
 
 def test_row_driver_collects_multiple_row_errors_in_ascending_row_order():
-    from app.runtime.stages.execution import ROW_ERROR_KEY
-
     def make_mapper(stage, ctx):
         def map_row(row):
             if row["x"] in (10, 30):
@@ -198,6 +199,95 @@ def test_row_driver_projects_to_declared_columns():
                           {"src": pd.DataFrame({"x": [1]})}, ctx)
     assert list(out.columns) == ["x", "score"]
     assert contribution_of(out).dropped_columns == ["extra"]
+
+
+def _marks_row_two_for_dropping(stage, ctx):
+    def map_row(row):
+        return {"x": row["x"], ROW_DROP_KEY: row["x"] == 2}
+    return map_row
+
+
+def test_row_driver_drops_rows_marked_by_a_dropping_handler():
+    handler = RowMapHandler(make_mapper=_marks_row_two_for_dropping, drops_rows=True)
+    out = handler.execute(_row_stage(), {"src": pd.DataFrame({"x": [1, 2, 3]})}, make_run_context())
+    assert list(out["x"]) == [1, 3]          # the marked row is gone, the rest in input order
+    assert list(out.index) == [0, 1]         # 0-based and contiguous for downstream row positions
+
+
+def test_row_driver_rejects_a_drop_marker_from_a_handler_that_does_not_declare_dropping():
+    handler = RowMapHandler(make_mapper=_marks_row_two_for_dropping)  # drops_rows defaults False
+    with pytest.raises(ValueError) as excinfo:
+        handler.execute(_row_stage(), {"src": pd.DataFrame({"x": [1, 2, 3]})}, make_run_context())
+    assert "t" in str(excinfo.value) and ROW_DROP_KEY in str(excinfo.value)
+
+
+def _marks_every_row_with_every_marker(stage, ctx):
+    def map_row(row):
+        return {
+            "x": row["x"],
+            ROW_ERROR_KEY: None,
+            ROW_USAGE_KEY: LlmUsage(),
+            ROW_DEFERRED_KEY: True,
+            ROW_DROP_KEY: False,
+        }
+    return map_row
+
+
+def test_row_driver_runs_the_handler_marker_collector_after_the_map():
+    seen: list[pd.DataFrame] = []
+    handler = RowMapHandler(
+        make_mapper=_marks_every_row_with_every_marker,
+        drops_rows=True,
+        collect_row_markers=lambda stage, df, ctx, contribution: seen.append(df.copy()),
+    )
+    handler.execute(_row_stage(), {"src": pd.DataFrame({"x": [1, 2, 3]})}, make_run_context())
+    [collected] = seen
+    assert len(collected) == 3  # every mapped row
+    assert {ROW_ERROR_KEY, ROW_USAGE_KEY, ROW_DEFERRED_KEY, ROW_DROP_KEY} <= set(collected.columns)
+
+
+def test_row_driver_lets_a_marker_collector_raise_out_of_execute():
+    def collect_row_markers(stage, df, ctx, contribution):
+        raise RuntimeError("collector said stop")
+
+    handler = RowMapHandler(
+        make_mapper=lambda stage, ctx: lambda row: dict(row),
+        collect_row_markers=collect_row_markers,
+    )
+    with pytest.raises(RuntimeError, match="collector said stop"):
+        handler.execute(_row_stage(), {"src": pd.DataFrame({"x": [1]})}, make_run_context())
+
+
+def test_internal_marker_columns_never_reach_output_even_without_an_output_schema():
+    # No output_schema and no projection: the strip is the ONLY thing keeping
+    # machinery columns out of stage output.
+    handler = RowMapHandler(make_mapper=_marks_every_row_with_every_marker, drops_rows=True)
+    out = handler.execute(_row_stage(), {"src": pd.DataFrame({"x": [1, 2]})}, make_run_context())
+    assert list(out.columns) == ["x"]  # user column survives, every marker is gone
+
+
+def test_marker_columns_are_not_reported_as_dropped_user_columns():
+    def make_mapper(stage, ctx):
+        def map_row(row):
+            return {**_marks_every_row_with_every_marker(stage, ctx)(row), "extra": "drop me"}
+        return map_row
+
+    schema = {"columns": [{"name": "x", "type": "int"}]}
+    handler = RowMapHandler(make_mapper=make_mapper, project_output_to_declared=True, drops_rows=True)
+    ctx = make_run_context()
+    out = handler.execute(_row_stage(output_schema=schema), {"src": pd.DataFrame({"x": [1]})}, ctx)
+    assert list(out.columns) == ["x"]
+    # the undeclared USER column only
+    assert contribution_of(out).dropped_columns == ["extra"]
+
+
+def test_dropping_handler_is_not_grain_and_order_preserving():
+    mapping = RowMapHandler(make_mapper=lambda stage, ctx: lambda row: dict(row))
+    dropping = RowMapHandler(make_mapper=_marks_row_two_for_dropping, drops_rows=True)
+    assert dropping.preserves_grain_and_order is False
+    assert mapping.preserves_grain_and_order is True
+    assert SourceHandler(read=lambda stage, ctx: pd.DataFrame()).preserves_grain_and_order is True
+    assert FrameHandler(apply=lambda stage, inputs, ctx: None).preserves_grain_and_order is False
 
 
 def test_source_handler_reads_without_frames():
