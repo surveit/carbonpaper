@@ -53,8 +53,12 @@
       <td>{{ r.started_at | friendly_time }}</td>
       <td><span class="run-status status-{{ r.status }}">{{ r.status }}</span></td>
       <td>
+        {% if r.stages_total is none %}
+        <span class="muted">(manifest unreadable)</span>
+        {% else %}
         {{ r.stages_ok }}/{{ r.stages_total }} ok
         {% if r.stages_error %}· <span class="status-error">{{ r.stages_error }} error{% if r.stages_error != 1 %}s{% endif %}</span>{% endif %}
+        {% endif %}
       </td>
     </tr>
     {% endfor %}

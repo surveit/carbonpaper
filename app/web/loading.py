@@ -15,6 +15,7 @@ from typing import Any
 
 import pandas as pd
 from fastapi import HTTPException
+from pydantic import ValidationError
 
 from app.core.errors import NoVersionToRunError
 from app.core.frames import PARQUET_SUFFIX
@@ -236,32 +237,59 @@ def load_manifest(run_dir: Path) -> dict[str, Any]:
 
 
 def list_runs(project: str) -> list[dict[str, Any]]:
+    """One index row per manifest-backed run of `project`, newest first.
+
+    Every row is parsed through the typed `RunManifest`, the same reader the run
+    pages use, so the counts a row reports are the counts that manifest actually
+    holds. A manifest this reader cannot parse — malformed JSON, or a file
+    written against an older on-disk vocabulary the model now rejects — yields a
+    `corrupt` row with None counts rather than a zero the reader never read; the
+    template shows those as unreadable. One unreadable run never takes the index
+    down with it."""
     rdir = runs_dir(project)
     if not rdir.is_dir():
         return []
-    entries = []
-    for run in sorted(rdir.iterdir(), reverse=True):
-        if not run.is_dir():
-            continue
-        manifest_path = run / "manifest.json"
-        if manifest_path.exists():
-            try:
-                manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-            except json.JSONDecodeError:
-                manifest = {"run_id": run.name, "status": "corrupt"}
-            entries.append({
-                "run_id": run.name,
-                "status": manifest.get("status", "unknown"),
-                "started_at": manifest.get("started_at"),
-                "finished_at": manifest.get("finished_at"),
-                # None for legacy (pre-versioning) runs; the template renders
-                # "(unversioned)" — a displayed truth, not a fabricated id.
-                "workflow_version": manifest.get("workflow_version"),
-                "stages_total": len(manifest.get("stage_records", [])),
-                "stages_ok": sum(1 for s in manifest.get("stage_records", []) if s.get("status") == StageStatus.OK),
-                "stages_error": sum(1 for s in manifest.get("stage_records", []) if s.get("status") == StageStatus.ERROR),
-            })
-    return entries
+    return [
+        _run_index_row(run)
+        for run in sorted(rdir.iterdir(), reverse=True)
+        if run.is_dir() and (run / "manifest.json").exists()
+    ]
+
+
+def _run_index_row(run: Path) -> dict[str, Any]:
+    try:
+        manifest = load_manifest_model(run)
+    except ValidationError:  # also how the model reports unparseable JSON
+        return _unreadable_run_row(run)
+    records = manifest.stage_records
+    return {
+        "run_id": run.name,
+        "status": manifest.status,
+        "started_at": manifest.started_at,
+        "finished_at": manifest.finished_at,
+        # None for legacy (pre-versioning) runs; the template renders
+        # "(unversioned)" — a displayed truth, not a fabricated id.
+        "workflow_version": manifest.workflow_version,
+        "stages_total": len(records),
+        "stages_ok": sum(1 for s in records if s.status == StageStatus.OK),
+        "stages_error": sum(1 for s in records if s.status == StageStatus.ERROR),
+    }
+
+
+def _unreadable_run_row(run: Path) -> dict[str, Any]:
+    """The index row for a run whose manifest could not be parsed: identity only.
+    Every field the manifest would have supplied is None — no count, timestamp,
+    or version is invented for a file that was never read."""
+    return {
+        "run_id": run.name,
+        "status": "corrupt",
+        "started_at": None,
+        "finished_at": None,
+        "workflow_version": None,
+        "stages_total": None,
+        "stages_ok": None,
+        "stages_error": None,
+    }
 
 
 # ─── Tabular output previews ─────────────────────────────────────────────────
