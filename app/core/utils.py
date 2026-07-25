@@ -35,12 +35,8 @@ def generate_word_triplet_id(taken: set[str], rng: random.Random | None = None) 
 
 # ── Content hashing ──────────────────────────────────────────────────────────
 def compute_short_hash(text: str) -> str:
-    """sha1(text.encode("utf-8")).hexdigest()[:16] — the one hashing
-    convention every content-addressed id in this codebase shares (a stage
-    definition, a cache row, a node spec). `hashlib` requires bytes, so this
-    is the single site that encodes; every caller passes an already-canonical
-    string (typically `json.dumps(..., sort_keys=True)`) and never encodes
-    itself."""
+    """The first 16 hex characters of the SHA-1 digest of `text`
+    (UTF-8 encoded): `sha1(text.encode("utf-8")).hexdigest()[:16]`."""
     return hashlib.sha1(text.encode("utf-8")).hexdigest()[:16]
 
 

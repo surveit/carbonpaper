@@ -19,7 +19,7 @@ from app.runtime.stages.execution import (
     SourceHandler,
     validate_registry_matches_model,
 )
-from app.services.stage_cache import CacheMode, StageCacheEntry
+from app.core.stage_cache import StageCacheEntry
 from conftest import make_run_context
 
 
@@ -84,7 +84,7 @@ def test_row_driver_parallel_branch_raises_run_cancelled_when_pre_requested():
     handler = RowMapHandler(make_mapper=make_mapper, parallelism=2)
     ctx = make_run_context(
         identity=RunIdentity(project="p-parallel", run_id="r-parallel"),
-        stage_cache=StageCacheEntry.for_mode(CacheMode.PRODUCTION),
+        stage_cache=StageCacheEntry.read_write(),
     )
     request_cancel("p-parallel", "r-parallel")
     records = list(range(200))
@@ -105,7 +105,7 @@ def test_row_driver_sequential_branch_raises_run_cancelled_when_pre_requested():
     handler = RowMapHandler(make_mapper=make_mapper)  # parallelism=1 -> sequential branch
     ctx = make_run_context(
         identity=RunIdentity(project="p-seq", run_id="r-seq"),
-        stage_cache=StageCacheEntry.for_mode(CacheMode.PRODUCTION),
+        stage_cache=StageCacheEntry.read_write(),
     )
     request_cancel("p-seq", "r-seq")
     with pytest.raises(RunCancelled):

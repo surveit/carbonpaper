@@ -230,7 +230,7 @@ def test_source_parses_as_sourceref(tmp_path):
 
 def test_queue_needs_no_hash_source_declared():
     # A human_review_queue row is matched to a cached decision by fingerprinting
-    # the row itself (app.services.stage_cache) — no upstream primary_key or
+    # the row itself (app.core.stage_cache) — no upstream primary_key or
     # explicit column list is required to build the stage.
     s = m.Stage.model_validate(S(
         id="rev", type="human_review_queue", inputs=[{"id": "a"}], queue={},

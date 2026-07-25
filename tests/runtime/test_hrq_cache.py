@@ -1,7 +1,7 @@
 """Behavior tests for handle_human_review_queue's cache-backed decision
 matching (app/runtime/stages/human_review_queue.py): a queued row is matched
 to a prior human decision by fingerprinting the row and the stage definition
-(app.services.stage_cache), never by re-reading a legacy decisions/*.parquet
+(app.core.stage_cache), never by re-reading a legacy decisions/*.parquet
 file. Every entry these tests seed goes through the seam (`StageCache.put`),
 never a raw store write.
 
@@ -22,14 +22,8 @@ from app.runtime.context import RunIdentity
 from app.runtime.errors import HaltForReview
 from app.runtime.runner import prepare_run, run_prepared
 from app.runtime.stages.human_review_queue import handle_human_review_queue
-from app.services import versioning
-from app.services.stage_cache import (
-    HumanDecision,
-    StageCache,
-    StageCacheEntry,
-    build_cache_id,
-    compute_row_fingerprint,
-)
+from app.services import review, versioning
+from app.core.stage_cache import StageCache, compute_row_fingerprint
 from app.services.versioning import create_version_from_disk
 from conftest import make_run_context
 
@@ -77,27 +71,25 @@ def _halt_and_read_snapshot(
 
 
 def _put_approval(
-    row: pd.Series, input_fingerprint: str, stage_fingerprint: str, run_id: str,
+    row: pd.Series, input_fingerprint: str, stage_fingerprint: str,
     *, project: str = PROJECT,
 ) -> None:
     """Cache an `approve` decision for one row of a halted snapshot, matched to
-    it by the sidecar's fingerprints — through the seam (StageCache.put),
-    never a raw store write."""
-    entry = StageCacheEntry(
-        id=build_cache_id(project, "review", stage_fingerprint, input_fingerprint),
+    it by the sidecar's fingerprints — built through the real review service
+    (record_decision → the production cache seam), never a hand-assembled
+    entry or a raw store write."""
+    review.record_decision(
         project=project, stage_id="review",
         stage_fingerprint=stage_fingerprint, input_fingerprint=input_fingerprint,
-        source_run_id=run_id,
-        frozen_input={"id": row["id"], "score": int(row["score"])},
-        human=HumanDecision(decision=RowReviewDecision.approve, modified_score=None,
-                             reviewer="local", reviewed_at="2026-07-01T00:00:00"),
+        frozen_row={"id": row["id"], "score": int(row["score"])},
+        verdict=RowReviewDecision.approve, modified_score=None,
+        reviewer="local", reviewed_at="2026-07-01T00:00:00",
     )
-    StageCache().put(entry)
 
 
-def _approve_every_row(snapshot: pd.DataFrame, fingerprints: dict, run_id: str, *, project: str = PROJECT) -> None:
+def _approve_every_row(snapshot: pd.DataFrame, fingerprints: dict, *, project: str = PROJECT) -> None:
     for (_, row), fp in zip(snapshot.iterrows(), fingerprints["input_fingerprints"]):
-        _put_approval(row, fp, fingerprints["stage_fingerprint"], run_id, project=project)
+        _put_approval(row, fp, fingerprints["stage_fingerprint"], project=project)
 
 
 # ── 1. Decided rows are reused across runs ──────────────────────────────────
@@ -109,12 +101,12 @@ def test_decided_rows_reused_across_runs(tmp_path):
 
     snapshot, fingerprints = _halt_and_read_snapshot(stage, {"scored": src}, _ctx(tmp_path, run_id="run1"))
     assert len(snapshot) == 2
-    _approve_every_row(snapshot, fingerprints, "run1")
+    _approve_every_row(snapshot, fingerprints)
 
     out = handle_human_review_queue(stage, {"scored": src.copy()}, _ctx(tmp_path, run_id="run2"))
     assert len(out) == 2
     assert sorted(out["final_score"].tolist()) == [0, 1]
-    assert (out["decision"] == RowReviewDecision.approve).all()
+    assert (out["decision"] == "approve").all()
 
 
 # ── 2. Editing the stage definition invalidates every cached decision ──────
@@ -125,7 +117,7 @@ def test_definition_change_invalidates_decisions(tmp_path):
     src = _src(2)
 
     snapshot, fingerprints = _halt_and_read_snapshot(stage, {"scored": src}, _ctx(tmp_path, run_id="run1"))
-    _approve_every_row(snapshot, fingerprints, "run1")
+    _approve_every_row(snapshot, fingerprints)
 
     # Byte-identical input rows, but `reviewer_instructions` changed — the
     # stage's definition fingerprint changes, so no cached decision matches.
@@ -145,7 +137,7 @@ def test_row_change_invalidates_only_that_row(tmp_path):
     src = _src(2)
 
     snapshot, fingerprints = _halt_and_read_snapshot(stage, {"scored": src}, _ctx(tmp_path, run_id="run1"))
-    _approve_every_row(snapshot, fingerprints, "run1")
+    _approve_every_row(snapshot, fingerprints)
 
     changed_src = src.copy()
     changed_src.loc[changed_src["id"] == "r1", "score"] = 999  # only r1's value changes
@@ -292,7 +284,7 @@ def test_resume_reattaches_cached_decisions_written_via_the_seam(tmp_path):
     assert len(snapshot) == 2
     fingerprints = _read_fingerprints(run_dir / "queue" / "review.parquet")
 
-    _approve_every_row(snapshot, fingerprints, run_id, project=project_dir.name)
+    _approve_every_row(snapshot, fingerprints, project=project_dir.name)
 
     resumed = runner.resume_run(project_dir, run_id, project_dir)
     assert resumed["status"] == "ok"

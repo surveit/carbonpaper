@@ -16,7 +16,7 @@ from app.models.stage import StageType
 from app.runtime.context import RunContext, RunIdentity
 from app.runtime.stages import HANDLERS, handle_human_review_queue
 from app.runtime.stages import llm_transform as lt
-from app.services.stage_cache import CacheMode, StageCacheEntry
+from app.core.stage_cache import StageCacheEntry
 from conftest import make_run_context
 
 
@@ -102,7 +102,7 @@ def _queue_test_ctx(tmp_path, project: str) -> RunContext:
     identity = RunIdentity(project=project, run_id="r1")
     return make_run_context(
         run_dir=tmp_path, identity=identity,
-        stage_cache=StageCacheEntry.for_mode(CacheMode.PRODUCTION),
+        stage_cache=StageCacheEntry.read_write(),
     )
 
 

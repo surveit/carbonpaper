@@ -304,10 +304,11 @@ class AggregateConfig(_Base):
 
 
 class RowReviewDecision(str, Enum):
-    """A reviewer's verdict on one human_review_queue row, cached against that
-    row's fingerprint (app.services.stage_cache.StageCacheEntry): `approve`
-    keeps the AI score as final, `modify` substitutes a human-entered score,
-    `reject` drops the row from the stage's output."""
+    """A reviewer's verdict on one human_review_queue row, validated and applied
+    at the web/service boundary (app.services.review) and recorded as the review
+    stage's output row in the cache: `approve` keeps the AI score as final,
+    `modify` substitutes a human-entered score, `reject` drops the row from the
+    stage's output."""
     approve = "approve"
     modify = "modify"
     reject = "reject"
@@ -315,7 +316,7 @@ class RowReviewDecision(str, Enum):
 
 class QueueConfig(_Base):
     """human_review_queue handle. A queued row is matched to a cached human
-    decision by fingerprinting the row itself (app.services.stage_cache) — no
+    decision by fingerprinting the row itself (app.core.stage_cache) — no
     column configuration is needed to enable that matching."""
     # `filter`/`reviewer_instructions` change what the human is asked; routing,
     # conflict_resolution, and estimated_volume_per_week describe how a

@@ -1,10 +1,10 @@
 """Behavior tests for the reviewer web routes (app/web/routers/review.py):
 `queue_page` (GET) and `queue_decide` (POST) for one human_review_queue stage.
 
-Both routes go through the stage-result cache (app.services.stage_cache),
+Both routes go through the stage-result cache (app.core.stage_cache),
 never a `decisions/*.parquet` file: `queue_page`'s prior decisions come from
 `StageCacheEntry.find_entries`, and `queue_decide` writes a `StageCacheEntry`
-via `StageCache.put`. Projects are built on disk and run through the real
+via `StageCache.record`. Projects are built on disk and run through the real
 runner (app.runtime.runner.prepare_run / run_prepared / resume_run) — the same
 pattern tests/test_run_loop_semantics.py and tests/runtime/test_hrq_cache.py
 use for human_review_queue halts — so the queue snapshot these routes read is
@@ -27,13 +27,8 @@ import app.web.loading as loading
 from app.main import app
 from app.runtime.runner import prepare_run, run_prepared
 from app.runtime.stages import llm_transform as lt
-from app.services import versioning
-from app.services.stage_cache import (
-    HumanDecision,
-    StageCache,
-    StageCacheEntry,
-    build_cache_id,
-)
+from app.services import review, versioning
+from app.core.stage_cache import StageCacheEntry
 from app.services.versioning import create_version_from_disk
 from app.models import RowReviewDecision
 
@@ -131,23 +126,21 @@ def _build_and_halt(tmp_path, monkeypatch):
 
 
 def _put_cached_decision(
-    project: str, stage_id: str, run_id: str,
+    project: str, stage_id: str,
     stage_fingerprint: str, input_fingerprint: str, row: pd.Series,
     decision: RowReviewDecision, modified_score: float | None = None,
 ) -> None:
-    """Seed a prior decision directly through the cache seam (StageCache.put)
-    — never a raw store write, and never the HTTP endpoint (used by tests that
-    only care about queue_page's rendering of an already-cached decision)."""
-    entry = StageCacheEntry(
-        id=build_cache_id(project, stage_id, stage_fingerprint, input_fingerprint),
+    """Seed a prior decision through the real review service (record_decision →
+    the production cache seam) — never a hand-assembled entry, a raw store
+    write, or the HTTP endpoint (used by tests that only care about
+    queue_page's rendering of an already-cached decision)."""
+    review.record_decision(
         project=project, stage_id=stage_id,
         stage_fingerprint=stage_fingerprint, input_fingerprint=input_fingerprint,
-        source_run_id=run_id,
-        frozen_input={"id": row["id"], "quote": row["quote"], "score": int(row["score"])},
-        human=HumanDecision(decision=decision, modified_score=modified_score,
-                             reviewer="local", reviewed_at="2026-07-01T00:00:00"),
+        frozen_row={"id": row["id"], "quote": row["quote"], "score": int(row["score"])},
+        verdict=decision, modified_score=modified_score,
+        reviewer="local", reviewed_at="2026-07-01T00:00:00",
     )
-    StageCache().put(entry)
 
 
 # ── 1. Happy path: snapshot + prior decisions from the cache ────────────────
@@ -158,7 +151,7 @@ def test_happy_path_renders_items_with_fingerprint_prior_decision_and_counts(tmp
     first_fp, second_fp = fingerprints["input_fingerprints"]
     first_row = snapshot.iloc[0]
     _put_cached_decision(
-        PROJECT, "review", run_id, fingerprints["stage_fingerprint"], first_fp,
+        PROJECT, "review", fingerprints["stage_fingerprint"], first_fp,
         first_row, RowReviewDecision.approve,
     )
 
@@ -231,19 +224,34 @@ def test_404_when_the_stage_id_is_not_a_human_review_queue_stage(tmp_path, monke
     assert r.status_code == 404
 
 
-# ── 5. queue_decide validation: unchanged (400s), unknown fingerprint 404s ──
+# ── 5. queue_decide validation: FastAPI 422s malformed input, ReviewValidation-
+#      Error 400s the modify-without-score domain rule, unknown fingerprint 404s ─
 
 
-def test_decide_400_on_unknown_decision(tmp_path, monkeypatch):
+def test_decide_422_on_unknown_decision(tmp_path, monkeypatch):
     _project_dir, run_id, _run_dir, _snapshot, fingerprints = _build_and_halt(tmp_path, monkeypatch)
     fp = fingerprints["input_fingerprints"][0]
 
     client = TestClient(app)
     r = client.post(
         f"/project/{PROJECT}/runs/{run_id}/queue/review/decide",
-        data={"input_fingerprint": fp, "decision": "shrug"},
+        data={"input_fingerprint": fp, "decision": "shrug"},  # not a RowReviewDecision value
     )
-    assert r.status_code == 400
+    assert r.status_code == 422  # FastAPI rejects the unknown enum value
+    assert not StageCacheEntry.list(prefix=f"{PROJECT}/review/")  # nothing written
+
+
+def test_decide_422_on_non_numeric_modified_score(tmp_path, monkeypatch):
+    _project_dir, run_id, _run_dir, _snapshot, fingerprints = _build_and_halt(tmp_path, monkeypatch)
+    fp = fingerprints["input_fingerprints"][0]
+
+    client = TestClient(app)
+    r = client.post(
+        f"/project/{PROJECT}/runs/{run_id}/queue/review/decide",
+        data={"input_fingerprint": fp, "decision": "modify", "modified_score": "not-a-number"},
+    )
+    assert r.status_code == 422  # FastAPI rejects the non-float modified_score
+    assert not StageCacheEntry.list(prefix=f"{PROJECT}/review/")  # nothing written
 
 
 def test_decide_400_when_modify_has_no_score(tmp_path, monkeypatch):
@@ -256,6 +264,7 @@ def test_decide_400_when_modify_has_no_score(tmp_path, monkeypatch):
         data={"input_fingerprint": fp, "decision": "modify"},
     )
     assert r.status_code == 400
+    assert not StageCacheEntry.list(prefix=f"{PROJECT}/review/")
 
 
 def test_decide_404_on_unknown_fingerprint_and_writes_nothing(tmp_path, monkeypatch):
@@ -338,10 +347,11 @@ def test_e2e_decide_approve_modify_and_reject_then_resume_completes(tmp_path, mo
         assert body == {"ok": True, "input_fingerprint": fp_by_id[row_id], "decision": form["decision"]}
 
     # frozen_input is the upstream row the reviewer saw (id, score) alone — the
-    # snapshot row `_build_cache_entry` reads from carries only those columns
-    # to begin with, since the snapshot is pure.
+    # snapshot row the decision was recorded from carries only those columns to
+    # begin with, since the snapshot is pure.
     for row_id, fp in fp_by_id.items():
-        entry = StageCacheEntry.load(build_cache_id(project, "review", stage_fingerprint, fp))
+        entry = StageCacheEntry.read_only().get(project, "review", stage_fingerprint, fp)
+        assert entry is not None
         assert set(entry.frozen_input) == {"id", "score"}
 
     resumed = runner.resume_run(project_dir, run_id, project_dir)
