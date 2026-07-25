@@ -131,12 +131,7 @@ class _QueueRowMapper:
         pending = _find_pending_reviews(df)
         if not pending:
             return
-        queue_dir = ctx.require_run_dir() / "queue"
-        queue_dir.mkdir(parents=True, exist_ok=True)
-        queue_path = _write_pending_snapshot(queue_dir, stage.id, pending)
-        _write_fingerprint_sidecar(
-            queue_dir, stage.id, stage.compute_definition_fingerprint(), pending
-        )
+        queue_path = _write_queue_files(ctx.require_run_dir() / "queue", stage, pending)
         raise HaltForReview(
             stage_id=stage.id,
             pending_count=len(pending),
@@ -276,6 +271,19 @@ def _find_pending_reviews(df: pd.DataFrame) -> list[PendingReview]:
     if ROW_DEFERRED_KEY not in df.columns:
         return []
     return [value for value in df[ROW_DEFERRED_KEY] if isinstance(value, PendingReview)]
+
+
+def _write_queue_files(
+    queue_dir: Path, stage: Stage, pending: list[PendingReview]
+) -> Path:
+    """Write the snapshot and its fingerprint sidecar into `queue_dir`,
+    creating the directory, and return the snapshot's path."""
+    queue_dir.mkdir(parents=True, exist_ok=True)
+    queue_path = _write_pending_snapshot(queue_dir, stage.id, pending)
+    _write_fingerprint_sidecar(
+        queue_dir, stage.id, stage.compute_definition_fingerprint(), pending
+    )
+    return queue_path
 
 
 def _write_pending_snapshot(queue_dir: Path, sid: str, pending: list[PendingReview]) -> Path:
