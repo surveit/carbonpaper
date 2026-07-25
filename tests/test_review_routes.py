@@ -194,7 +194,7 @@ def test_degrades_gracefully_when_upstream_scored_input_is_missing(tmp_path, mon
     _project_dir, run_id, run_dir, _snapshot, fingerprints = _build_and_halt(tmp_path, monkeypatch)
 
     manifest = json.loads((run_dir / "manifest.json").read_text(encoding="utf-8"))
-    load_record = next(s for s in manifest["stages"] if s["stage_id"] == "load")
+    load_record = next(s for s in manifest["stage_records"] if s["stage_id"] == "load")
     (run_dir / load_record["output_path"]).unlink()  # the frame model_input would join against
 
     client = TestClient(app)

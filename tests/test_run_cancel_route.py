@@ -35,7 +35,8 @@ def _write_manifest(examples_dir: Path, status: str) -> Path:
     run_dir.mkdir(parents=True, exist_ok=True)
     (run_dir / "manifest.json").write_text(
         json.dumps({"run_id": RUN, "started_at": RUN, "project": PROJ,
-                    "workflow_version": RUN, "status": status, "stages": []}),
+                    "workflow_version": RUN, "status": status,
+                    "human_review_queue_stats": {}, "stage_records": []}),
         encoding="utf-8",
     )
     return run_dir
@@ -78,11 +79,15 @@ def _write_status_manifest(examples_dir: Path, stage_statuses: list[tuple[str, s
     for exercising run_status's per-status counts."""
     run_dir = examples_dir / PROJ / "runs" / RUN
     run_dir.mkdir(parents=True, exist_ok=True)
-    stages = [{"stage_id": sid, "type": "input_data", "name": sid, "status": status}
-              for sid, status in stage_statuses]
+    stages: list[dict[str, object]] = [
+        {"stage_id": sid, "type": "input_data", "name": sid, "status": status,
+         "input_validation_report": [], "output_validation_report": None,
+         "output_row_count": 0}
+        for sid, status in stage_statuses]
     (run_dir / "manifest.json").write_text(
         json.dumps({"run_id": RUN, "started_at": RUN, "project": PROJ,
-                    "workflow_version": RUN, "status": "cancelled", "stages": stages}),
+                    "workflow_version": RUN, "status": "cancelled",
+                    "human_review_queue_stats": {}, "stage_records": stages}),
         encoding="utf-8",
     )
     return run_dir

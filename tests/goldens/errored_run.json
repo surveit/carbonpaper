@@ -14,18 +14,18 @@
       "source": "workflow"
     }
   },
-  "queue_stats": {},
+  "human_review_queue_stats": {},
   "dropped_columns": {},
   "status": "errors",
-  "stages": [
+  "stage_records": [
     {
       "stage_id": "load",
       "type": "input_data",
       "name": "Load load",
       "started_at": "2026-07-24T16:42:39",
       "status": "ok",
-      "input_validation": [],
-      "output_validation": {
+      "input_validation_report": [],
+      "output_validation_report": {
         "stage_id": "load",
         "phase": "output",
         "rows": 2,
@@ -39,7 +39,7 @@
         ]
       },
       "elapsed_ms": 2,
-      "rows": 2,
+      "output_row_count": 2,
       "error": null,
       "output_path": "outputs/load.parquet",
       "finished_at": "2026-07-24T16:42:39"
@@ -50,10 +50,10 @@
       "name": "Boom",
       "started_at": "2026-07-24T16:42:39",
       "status": "error",
-      "input_validation": [],
-      "output_validation": null,
+      "input_validation_report": [],
+      "output_validation_report": null,
       "elapsed_ms": 2,
-      "rows": 0,
+      "output_row_count": 0,
       "error": {
         "type": "ValueError",
         "message": "boom",
@@ -66,10 +66,10 @@
       "type": "python_frame_function",
       "name": "Tail",
       "status": "pending",
-      "input_validation": [],
-      "output_validation": null,
+      "input_validation_report": [],
+      "output_validation_report": null,
       "elapsed_ms": 0,
-      "rows": 0,
+      "output_row_count": 0,
       "error": null,
       "started_at": null,
       "finished_at": null

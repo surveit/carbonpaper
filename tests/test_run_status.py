@@ -106,8 +106,8 @@ def test_a_real_run_produces_enum_statuses_that_round_trip_to_bare_strings(tmp_p
     assert manifest["status"] == RunStatus.OK
     assert isinstance(manifest["status"], RunStatus)
     assert str(manifest["status"]) == "ok"
-    assert manifest["stages"][0]["status"] == StageStatus.OK
-    assert isinstance(manifest["stages"][0]["status"], StageStatus)
+    assert manifest["stage_records"][0]["status"] == StageStatus.OK
+    assert isinstance(manifest["stage_records"][0]["status"], StageStatus)
 
     # On disk — what templates/JS actually read — it round-trips to a bare
     # JSON string, with no trace of the enum class name.
@@ -115,7 +115,7 @@ def test_a_real_run_produces_enum_statuses_that_round_trip_to_bare_strings(tmp_p
     raw_text = (run_dir / "manifest.json").read_text(encoding="utf-8")
     on_disk = json.loads(raw_text)
     assert on_disk["status"] == "ok"
-    assert on_disk["stages"][0]["status"] == "ok"
+    assert on_disk["stage_records"][0]["status"] == "ok"
     assert "RunStatus" not in raw_text
     assert "StageStatus" not in raw_text
 

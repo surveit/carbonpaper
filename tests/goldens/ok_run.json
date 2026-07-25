@@ -14,18 +14,18 @@
       "source": "workflow"
     }
   },
-  "queue_stats": {},
+  "human_review_queue_stats": {},
   "dropped_columns": {},
   "status": "ok",
-  "stages": [
+  "stage_records": [
     {
       "stage_id": "load",
       "type": "input_data",
       "name": "Load load",
       "started_at": "2026-07-24T16:42:39",
       "status": "ok",
-      "input_validation": [],
-      "output_validation": {
+      "input_validation_report": [],
+      "output_validation_report": {
         "stage_id": "load",
         "phase": "output",
         "rows": 1,
@@ -39,7 +39,7 @@
         ]
       },
       "elapsed_ms": 119,
-      "rows": 1,
+      "output_row_count": 1,
       "error": null,
       "notes": [
         "limit=1: truncated from 2 to 1 row(s)"

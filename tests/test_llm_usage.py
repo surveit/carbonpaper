@@ -114,12 +114,12 @@ def test_run_manifest_records_stage_llm_usage(tmp_path, monkeypatch):
     manifest = execute_run(tmp_path, repo_root=tmp_path)
 
     assert manifest["status"] == "ok", manifest
-    record = next(r for r in manifest["stages"] if r["stage_id"] == "classify")
+    record = next(r for r in manifest["stage_records"] if r["stage_id"] == "classify")
     assert record["llm_usage"] == {
         "input_tokens": 20, "output_tokens": 8, "cost_usd": 0.002, "calls": 2,
     }
     # The non-LLM load stage carries no usage key at all (never a zero).
-    load_rec = next(r for r in manifest["stages"] if r["stage_id"] == "load")
+    load_rec = next(r for r in manifest["stage_records"] if r["stage_id"] == "load")
     assert "llm_usage" not in load_rec
 
 

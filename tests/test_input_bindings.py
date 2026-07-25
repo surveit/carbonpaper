@@ -197,7 +197,7 @@ def test_handler_ignores_repo_root_for_file_inputs(tmp_path):
     elsewhere.mkdir()
     manifest = execute_run(tmp_path, repo_root=elsewhere)
     assert manifest["status"] == "ok"
-    assert manifest["stages"][0]["rows"] == 2
+    assert manifest["stage_records"][0]["output_row_count"] == 2
 
 
 def test_read_input_data_names_the_stage_when_no_path_is_bound(tmp_path):
