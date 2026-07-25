@@ -169,6 +169,53 @@ def test_no_output_schema_is_fine():
     assert Stage.model_validate(spec).output_schema is None
 
 
+def test_two_aggregations_sharing_an_output_column_rejected():
+    # The handler outer-merges its per-aggregation frames, so both land under
+    # pandas' `_x`/`_y` names and NEITHER is deliverable under `total`.
+    msg = _issues(_aggregate_stage(
+        output_columns=[{"name": "total", "type": "int"}],
+        aggregations=[
+            {"output_column": "total", "formula": "sum", "value_column": "revenue"},
+            {"output_column": "total", "formula": "min", "value_column": "revenue"},
+        ],
+    ))
+    assert "'total'" in msg and "more than once" in msg
+
+
+def test_aggregation_shadowing_a_group_by_column_rejected():
+    msg = _issues(_aggregate_stage(
+        output_columns=[{"name": "company", "type": "int"}],
+        aggregations=[
+            {"output_column": "company", "formula": "sum", "value_column": "revenue"},
+        ],
+    ))
+    assert "'company'" in msg and "group_by" in msg
+
+
+def test_repeated_group_by_column_rejected():
+    spec = _aggregate_stage(
+        output_columns=[{"name": "company", "type": "str"}],
+        aggregations=[{"output_column": "n", "formula": "count"}],
+    )
+    spec["aggregate"]["group_by"] = ["company", "company"]
+    msg = _issues(spec)
+    assert "'company'" in msg and "more than once" in msg
+
+
+def test_collision_is_rejected_without_any_declared_output_schema():
+    # Undeliverable regardless of what the stage declares — the collision check
+    # must not be gated on output_schema being present.
+    spec = _aggregate_stage(
+        output_columns=[],
+        aggregations=[
+            {"output_column": "total", "formula": "sum", "value_column": "revenue"},
+            {"output_column": "total", "formula": "min", "value_column": "revenue"},
+        ],
+    )
+    del spec["output_schema"]
+    assert "'total'" in _issues(spec)
+
+
 def test_valid_aggregate_passes():
     stage = Stage.model_validate(_aggregate_stage(
         output_columns=[

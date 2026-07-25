@@ -28,6 +28,20 @@ if TYPE_CHECKING:
 AGG_FORMULA_COUNT = "count"
 AGG_FORMULA_LIST = "list"
 
+DUPLICATE_GROUP_BY_ISSUE = (
+    "stage '{sid}': aggregate.group_by names column '{col}' more than once; the "
+    "group-by cannot produce one column twice"
+)
+DUPLICATE_AGGREGATION_ISSUE = (
+    "stage '{sid}': aggregate.aggregations declare output_column '{col}' more than "
+    "once; the handle merges its per-aggregation results, so neither lands under "
+    "that name"
+)
+AGGREGATION_SHADOWS_GROUP_BY_ISSUE = (
+    "stage '{sid}': aggregation output_column '{col}' is also a group_by column; the "
+    "handle cannot produce both under one name"
+)
+
 
 def find_aggregate_column_issues(stage: "Stage") -> list[str]:
     """Every `group_by` entry, aggregation `value_column`, and column an
@@ -67,14 +81,47 @@ def find_aggregate_output_issues(stage: "Stage") -> list[str]:
     a name outside group_by + aggregation output columns, or a type the
     derivation contradicts. [] when the stage declares no output_schema. Name
     feasibility holds even without an edge schema; type checks apply only where
-    the derivation can know the type."""
+    the derivation can know the type.
+
+    Output-column collisions inside the config itself are checked first and
+    short-circuit: they are undeliverable regardless of what (if anything) the
+    stage declares, and they make the name→type derivation a fiction."""
     aggregate = stage.aggregate
     assert aggregate is not None  # Stage._handle_for_type guarantees this for type="aggregate"
-    if stage.output_schema is None:
-        return []
+    collisions = find_aggregate_output_collisions(stage.id, aggregate)
+    if collisions or stage.output_schema is None:
+        return collisions
     edge = stage.inputs[0].table_schema
     derived = derive_aggregate_output_types(aggregate, edge)
     return find_declared_vs_derived_issues(stage.id, "aggregate", stage.output_schema, derived)
+
+
+def find_aggregate_output_collisions(stage_id: str, aggregate: "AggregateConfig") -> list[str]:
+    """One issue per output column two parts of the config both claim: a
+    `group_by` entry repeated, two aggregations sharing an `output_column`, or an
+    aggregation shadowing a group_by column.
+
+    Each is undeliverable, and none is caught downstream today: the handle
+    groups then outer-merges its per-aggregation frames on `group_by`, so two
+    aggregations named `total` land as pandas' `total_x`/`total_y` and NEITHER
+    declared name exists, while a repeated group_by or a shadowed group_by
+    column raises `cannot insert <col>, already exists` mid-run."""
+    issues: list[str] = []
+    seen_group_by: set[str] = set()
+    for column in aggregate.group_by:
+        if column in seen_group_by:
+            issues.append(DUPLICATE_GROUP_BY_ISSUE.format(sid=stage_id, col=column))
+        seen_group_by.add(column)
+    seen_outputs: set[str] = set()
+    for op in aggregate.aggregations:
+        if op.output_column in seen_outputs:
+            issues.append(DUPLICATE_AGGREGATION_ISSUE.format(sid=stage_id, col=op.output_column))
+        elif op.output_column in seen_group_by:
+            issues.append(
+                AGGREGATION_SHADOWS_GROUP_BY_ISSUE.format(sid=stage_id, col=op.output_column)
+            )
+        seen_outputs.add(op.output_column)
+    return issues
 
 
 def derive_aggregate_output_types(
