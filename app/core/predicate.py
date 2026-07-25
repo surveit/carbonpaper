@@ -311,17 +311,27 @@ def _evaluate_bin_op(node: ast.BinOp, row: Mapping[str, object], expr: str) -> b
 def _evaluate_unary_op(node: ast.UnaryOp, row: Mapping[str, object], expr: str) -> bool:
     """`not`, over the coerced boolean of its operand.
 
-    Negating a bare column is the one place this walk answers where the frame
-    engine does not: `not col` reaches pandas as `~col`, which raises
-    `TypeError: bad operand type for unary ~` when the column holds a null,
-    and on an object-dtype boolean column (the dtype a boolean column takes
-    once a null lands in it) inverts the underlying ints instead — `~True` is
-    -2, `~False` is -1, both truthy, so every row comes back matched. Neither
-    is a verdict worth inheriting, so the walk negates the coerced boolean and
-    answers. For a null cell that means True: the filter matches, i.e. the row
-    is selected — queued for a human, where a review queue is the caller — so
-    the failure direction is selecting a row nobody needed to look at, never
-    silently dropping one."""
+    Negating a bare column is where this walk and the frame engine part
+    company, because `not col` reaches pandas as `~col`, and what that means
+    there depends entirely on the column's dtype:
+
+    - native `bool` dtype: a real negation — the one shape the two agree on;
+    - `object` dtype (what a boolean column becomes once a null lands in it,
+      and what a column of Python bools can be even with no null): `~` inverts
+      the underlying ints, `~True` is -2 and `~False` is -1, both truthy, so
+      EVERY row comes back matched;
+    - nullable `boolean` dtype: `<NA>` for the null cell, which then fails the
+      `dtype=bool` step with `cannot convert float NaN to bool`;
+    - `object` dtype holding a null: `TypeError: bad operand type for unary ~`.
+
+    None of those three is a verdict worth inheriting, so the walk negates the
+    coerced boolean and answers. Where the frame engine raises, the walk's
+    answer for a null cell is True — the filter matches, so the row is
+    selected (queued for a human, where a review queue is the caller) rather
+    than silently dropped. That direction claim is about the null cell only:
+    against the object-dtype all-match, the walk selects strictly FEWER rows
+    than the frame engine would, and neither engine announces it — see
+    `test_not_over_an_object_dtype_bool_column_silently_disagrees`."""
     if not isinstance(node.op, ast.Not):
         raise PredicateError(
             f"filter cannot be evaluated row by row: {expr!r} "

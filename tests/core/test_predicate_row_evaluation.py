@@ -39,13 +39,15 @@ _MIXED = pd.DataFrame({
     "b": pd.Series([True, False, True, None], dtype=object),
 })
 _TWO_NUMBERS = pd.DataFrame({"a": [0.5, 2.0, None, 3.0], "c": [1.0, 1.0, 1.0, None]})
-# The one frame that carries no null, because negating a bare column is the one
-# construct the frame engine has no usable verdict for once a null is in play:
-# `not col` reaches pandas as `~col`, which raises on a null cell, and on the
-# object dtype a nulled boolean column takes it inverts ints (`~True` is -2,
-# `~False` is -1, both truthy) instead of negating. A native bool column with
-# no null is the only shape where the frame engine's `not` is a real negation
-# and can therefore be agreed with; the null side of `not` is pinned instead by
+# The one frame that carries no null, because a native bool column with no null
+# is the only shape where the frame engine's `not` is a real negation and can
+# therefore be agreed with. `not col` reaches pandas as `~col`, which on every
+# other shape is either unusable or an error: on `object` dtype it inverts ints
+# (`~True` is -2, `~False` is -1, both truthy) so every row matches; on nullable
+# `boolean` dtype it yields `<NA>` for the null cell, which then fails the
+# `dtype=bool` step; on `object` dtype holding a null it raises outright. The
+# other shapes are pinned by
+# `test_not_over_an_object_dtype_bool_column_silently_disagrees` and
 # `test_not_over_a_null_column_answers_where_the_frame_engine_cannot`.
 _BOOLEANS_WITHOUT_NULLS = pd.DataFrame({"b": [True, False, True]})
 
@@ -165,6 +167,28 @@ def test_not_over_a_null_column_answers_where_the_frame_engine_cannot() -> None:
     directions available this is the safe one: a row nobody needed to look at
     is selected, rather than a row silently dropped."""
     assert evaluate_predicate(parse_predicate("not b"), {"b": None}) is True
+
+
+def test_not_over_an_object_dtype_bool_column_silently_disagrees() -> None:
+    """The one shape in this module where both engines answer and DISAGREE,
+    with no null involved and nothing announcing it.
+
+    `not b` reaches pandas as `~b`, and on an object column that inverts the
+    underlying ints — `~True` is -2, `~False` is -1 — so every row survives the
+    `dtype=bool` step as True, matching the filter. The walk negates each cell
+    and selects one row of three. Every other difference between the two
+    engines has one side raising, which announces itself; this one is silent in
+    both directions, so it is pinned here rather than left to a reader who
+    expects the engines to part company only over nulls. Both sides are
+    asserted: if a pandas release changes either, this test says so — and one
+    is already on a clock, since running it emits CPython's own
+    `DeprecationWarning: Bitwise inversion '~' on bool is deprecated and will
+    be removed in Python 3.16` (the three warnings this module contributes to
+    the suite are that, from this test)."""
+    frame = pd.DataFrame({"b": pd.Series([True, False, True], dtype=object)})
+    parsed = parse_predicate("not b")
+    assert _evaluate_row_by_row(parsed, frame) == [False, True, False]
+    assert _evaluate_by_frame(parsed, frame) == [True, True, True]
 
 
 def test_nat_read_as_the_whole_verdict_raises_predicate_error() -> None:
