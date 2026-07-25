@@ -119,6 +119,37 @@ def test_missing_either_edge_schema_skips():
     assert stage.id == "enrich"
 
 
+_COLLIDING_LEFT = {
+    "columns": [
+        {"name": "facility_id", "type": "str"},
+        {"name": "name", "type": "str"},
+        {"name": "name_r", "type": "str"},
+    ],
+}
+
+
+def test_suffix_collision_rejected():
+    # Right's `name` must be suffixed to `name_r`, which the left side already
+    # occupies: pandas refuses that merge outright (MergeError), so NOTHING is
+    # deliverable. Pinned against the real handler in
+    # tests/runtime/test_output_derivation_matches_handlers.py.
+    msg = _issues(_join_stage(left=_COLLIDING_LEFT))
+    assert "'name_r'" in msg and "cannot run" in msg
+    assert "left column 'name_r'" in msg and "right column 'name'" in msg
+
+
+def test_suffix_collision_short_circuits_other_output_issues():
+    # A merge that cannot run makes every derived column a fiction, so the
+    # collision is reported alone rather than buried under consequences of it.
+    msg = _issues(_join_stage(
+        left=_COLLIDING_LEFT,
+        select=["nonexistent"],
+        output_columns=[{"name": "also_nonexistent", "type": "str"}],
+    ))
+    assert "'name_r'" in msg
+    assert "nonexistent" not in msg
+
+
 def test_valid_join_passes():
     stage = Stage.model_validate(_join_stage(
         select=["facility_id", "name", "name_r", "amount"],
