@@ -60,7 +60,6 @@ def test_mcp_lists_the_authoring_tools(client):
         "create_project",
         "get_project_status",
         "generate_data_model",
-        "generate_workflow",
         "read_data_model",
         "describe_workflow",
         "read_stage",

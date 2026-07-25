@@ -57,7 +57,6 @@ from app.models import (
     validate_named_schema,
     validate_schema_library,
 )
-from app.services import data_model as data_model_service
 from app.services import generation, node_review, project, versioning
 from app.services.loader import stage_to_spec_dict
 from app.web.config import EXAMPLES_DIR, templates
@@ -242,32 +241,6 @@ async def generate_project(project_name: str):
     model = project.project_meta(pdir).model or "sonnet"
     session_id = generation.start_generation(
         pdir, document=document_path.read_text(encoding="utf-8"), model=model
-    )
-    return RedirectResponse(url=f"/chat/{session_id}", status_code=303)
-
-
-@router.post("/project/{project_name}/generate-workflow")
-async def generate_workflow(project_name: str):
-    """Generate the WORKFLOW ONLY, from document.md, using the project's data model as
-    reference — but only when that data model is APPROVED (an unapproved or absent data
-    model is not passed, and the compile proceeds document-only). Never regenerates the
-    data model (schemas/ is untouched). 400 if there is no document; otherwise runs the
-    workflow agent as a LIVE chat turn and redirects to /chat/<sid> so the build is
-    watchable (it lands on disk when the turn ends)."""
-    pdir = _project_dir(project_name)
-    document_path = pdir / "document.md"
-    if not document_path.is_file():
-        raise HTTPException(
-            status_code=400,
-            detail=f"examples/{project_name}/ has no document.md to generate from.",
-        )
-    model = project.project_meta(pdir).model or "sonnet"
-    data_model = data_model_service.load_data_model(pdir, approved_only=True)
-    session_id = generation.start_workflow_generation(
-        pdir,
-        document=document_path.read_text(encoding="utf-8"),
-        model=model,
-        data_model=data_model,
     )
     return RedirectResponse(url=f"/chat/{session_id}", status_code=303)
 

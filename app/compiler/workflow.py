@@ -6,64 +6,20 @@ the workflow through the submit_answer tool — validated against `Workflow` (ea
 invariants + the cross-stage graph checks) — and a schema-invalid draft comes back as a tool
 error the agent corrects IN THE SAME LOOP.
 
-`start_workflow_generation_agent` runs that agent as a LIVE chat turn on the app.core.agent spine, and is the
-bridge onto it: app.compiler is an allowed importer of app.core.agent, so the orchestration in
-app.services (generation) delegates here rather than reaching into the spine itself. When a
-`data_model` (the approved SchemaLibrary) is given, its named schemas ground the task as the
-nouns the workflow imports and generates. The submitted Workflow is handed back through a
-callback; persisting it is the caller's job.
+When a `data_model` (the approved SchemaLibrary) is given, its named schemas ground the task as
+the nouns the workflow imports and generates. Running the agent and persisting what it submits
+are the caller's job.
 """
 from __future__ import annotations
 
 import json
-from typing import Any, Callable
+from typing import Any
 
 from app.compiler.workflow_prompt import WORKFLOW_SYSTEM_PROMPT
 from app.core.agent.agent import Agent
-from app.core.agent.store import open_session_store
-from app.core.agent.turns import default_turn_manager
 from app.models.named_schemas import SchemaLibrary
 from app.models.workflow import Workflow
 from app.services.loader import stage_to_spec_dict
-
-
-def start_workflow_generation_agent(
-    *,
-    document: str,
-    project_name: str,
-    model: str,
-    data_model: SchemaLibrary | None,
-    on_answer: Callable[[Workflow | None], None],
-) -> str:
-    """Start the workflow-generation agent as a LIVE chat turn and return the session id.
-
-    Creates a view-only session (the framing prompt shown as the user's message) and streams
-    the agent on the shared TurnManager, so the compile is watchable at /chat/<sid> while it
-    happens and persists when it ends. Compiles ONLY the workflow, grounding it in `data_model`
-    (the approved schemas) when given. When the turn finishes, `on_answer` is called with the
-    submitted Workflow — or None if none was submitted. Must be called from the server event
-    loop (it starts a turn there)."""
-    store = open_session_store()
-    session_id = store.create(
-        title=f"Generation · workflow · {project_name}",
-        agent_id=None,  # view-only: rendered + streamed, but no agent to continue it
-        context={"project_id": project_name, "phase": "workflow"},
-    )
-    agent = build_workflow_agent(document, data_model=data_model, model=model)
-    # Show the framing prompt as the user's message so the live view doesn't lose it.
-    store.set_pending_user(session_id, agent.task)
-
-    async def _on_done() -> None:
-        on_answer(agent.answer)
-
-    default_turn_manager().start(
-        engine=agent.build_engine(),
-        store=store,
-        session_id=session_id,
-        prompt=agent.task,
-        on_done=_on_done,
-    )
-    return session_id
 
 
 def build_workflow_agent(

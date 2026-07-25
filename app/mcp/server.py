@@ -24,7 +24,6 @@ from app.core.errors import (
     RunNotFoundError,
 )
 from app.runtime import stage_tests
-from app.services import data_model as data_model_service
 from app.services import generation
 from app.services import loader
 from app.services import project as project_service
@@ -160,28 +159,6 @@ async def generate_data_model(project_id: str) -> dict[str, Any]:
     model = project_service.project_meta(pdir).model or "sonnet"
     session_id = generation.start_generation(pdir, document=document, model=model)
     return {"status": "started", "watch": f"/chat/{session_id}", "poll": "get_project_status"}
-
-
-@mcp.tool()
-async def generate_workflow(project_id: str) -> dict[str, Any]:
-    """Generate the project's WORKFLOW from its methodology document, grounded on
-    the data model ONLY if a human has approved it in the web UI (an unapproved
-    model is not passed — approve first for a grounded workflow). Never touches
-    the schemas. Starts a live generation turn in the background and returns
-    immediately — poll get_project_status until the workflow appears."""
-    pdir = _resolve_existing_project(project_id)
-    document = _read_document(pdir, project_id)
-    model = project_service.project_meta(pdir).model or "sonnet"
-    data_model = data_model_service.load_data_model(pdir, approved_only=True)
-    session_id = generation.start_workflow_generation(
-        pdir, document=document, model=model, data_model=data_model
-    )
-    return {
-        "status": "started",
-        "grounded_on_approved_data_model": data_model is not None,
-        "watch": f"/chat/{session_id}",
-        "poll": "get_project_status",
-    }
 
 
 @mcp.tool()
