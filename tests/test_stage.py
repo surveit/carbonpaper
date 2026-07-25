@@ -558,3 +558,42 @@ def test_output_schema_issues_surface_in_draft_validation():
         "output_schema": {"columns": [{"name": "undeclared_extra", "type": "str"}]},
     }])
     assert any("undeclared_extra" in issue for issue in issues)
+
+
+# ── fixed input arity ────────────────────────────────────────────────────────
+def test_join_rejects_a_third_input():
+    """The join handler merges inputs[0] and inputs[1] and never looks further,
+    and the save-time derivation mirrors it — a third input would be a
+    dependency whose data is silently dropped."""
+    spec = S(
+        id="enrich", type="join",
+        inputs=[{"id": "a"}, {"id": "b"}, {"id": "c"}],
+        join={"keys": [{"left": "k", "right": "k"}]},
+    )
+    with pytest.raises(ValidationError, match="chain joins"):
+        m.Stage.model_validate(spec)
+    spec["inputs"] = spec["inputs"][:2]
+    assert len(m.Stage.model_validate(spec).inputs) == 2
+
+
+def test_aggregate_rejects_a_second_input():
+    spec = S(
+        id="totals", type="aggregate",
+        inputs=[{"id": "a"}, {"id": "b"}],
+        aggregate={"group_by": ["company"],
+                   "aggregations": [{"output_column": "n", "formula": "count"}]},
+    )
+    with pytest.raises(ValidationError, match="exactly one input"):
+        m.Stage.model_validate(spec)
+    spec["inputs"] = spec["inputs"][:1]
+    assert len(m.Stage.model_validate(spec).inputs) == 1
+
+
+def test_row_function_arity_message_still_names_its_own_way_out():
+    spec = S(
+        id="t", type="python_row_function",
+        inputs=[{"id": "a"}, {"id": "b"}],
+        function={"kind": "inline", "code": "def transform(row):\n    return row\n"},
+    )
+    with pytest.raises(ValidationError, match="python_frame_function"):
+        m.Stage.model_validate(spec)

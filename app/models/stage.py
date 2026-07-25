@@ -244,14 +244,18 @@ class JoinKey(_Base):
 
 
 class JoinConfig(_Base):
-    """join handle. `keys` OR `on` is accepted.
+    """join handle. `keys` OR `on` is accepted. A join merges exactly TWO
+    inputs — the first is the left side, the second the right.
 
     The merged output contains: every LEFT column under its own name; each
     RIGHT column under its own name unless a left column shares it, in which
     case it appears as `<name>_r`; a key pair with the SAME name on both sides
     collapses into one column (there is no `<key>_r`). `select` and the
     stage's `output_schema` may only name these producible columns — anything
-    else is rejected when the stage is saved."""
+    else is rejected when the stage is saved. Two source columns may not land
+    on one merged name (a left `<name>_r` already present when a right
+    `<name>` has to be suffixed): that merge cannot run at all, and is
+    likewise rejected at save time."""
     # Every field changes what this stage computes (join type, keys, kept
     # columns) — see Stage.compute_definition_fingerprint.
     FINGERPRINT_FIELDS: ClassVar[frozenset[str]] = frozenset({"type", "keys", "on", "select"})
@@ -293,7 +297,13 @@ class AggregationOp(_Base):
 
 
 class AggregateConfig(_Base):
-    """aggregate handle."""
+    """aggregate handle. Groups exactly ONE input.
+
+    The output columns are exactly `group_by` plus one column per aggregation
+    `output_column`, and those names must all be distinct — a repeated
+    `group_by` entry, two aggregations sharing an `output_column`, or an
+    aggregation shadowing a `group_by` column is rejected when the stage is
+    saved. The stage's `output_schema` may only name these columns."""
     # Every field changes what this stage computes (grouping, aggregations) —
     # see Stage.compute_definition_fingerprint.
     FINGERPRINT_FIELDS: ClassVar[frozenset[str]] = frozenset({"group_by", "aggregations"})
@@ -372,13 +382,23 @@ class InputRef(_Base):
 # value string, not the enum member: with `use_enum_values`, `self.type` is a
 # str at runtime, and str-enum members hash by *name* (StageType.join_ hashes
 # as "join_", not "join") — a member-keyed dict would silently miss the lookup.
+# `max_inputs` caps a type whose handle reads a FIXED number of inputs, with
+# `max_inputs_hint` naming the way out in that type's own terms. Without the cap
+# the extra inputs are silently dead: the join handler merges inputs[0] and
+# inputs[1] and never looks further, and the aggregate handler groups inputs[0]
+# alone — so a third join input would be a dependency whose data is dropped
+# without a word, and the save-time output-schema derivation (which mirrors the
+# handlers) would call its columns "unproducible" without saying why.
 _TYPE_SPEC: dict[str, dict[str, Any]] = {
     "input_data":            {"handle": "connector", "requires_inputs": False, "min_inputs": 0},
     "llm_transform":         {"handle": "llm",       "requires_inputs": True,  "min_inputs": 1},
-    "python_row_function":   {"handle": "function",  "requires_inputs": True,  "min_inputs": 1, "max_inputs": 1},
+    "python_row_function":   {"handle": "function",  "requires_inputs": True,  "min_inputs": 1, "max_inputs": 1,
+                              "max_inputs_hint": "more than one input is a join, or use python_frame_function"},
     "python_frame_function": {"handle": "function",  "requires_inputs": True,  "min_inputs": 1},
-    "join":                  {"handle": "join",      "requires_inputs": True,  "min_inputs": 2},
-    "aggregate":             {"handle": "aggregate", "requires_inputs": True,  "min_inputs": 1},
+    "join":                  {"handle": "join",      "requires_inputs": True,  "min_inputs": 2, "max_inputs": 2,
+                              "max_inputs_hint": "a join merges exactly two inputs; chain joins to combine more"},
+    "aggregate":             {"handle": "aggregate", "requires_inputs": True,  "min_inputs": 1, "max_inputs": 1,
+                              "max_inputs_hint": "an aggregate groups exactly one input; join first, then aggregate"},
     "human_review_queue":    {"handle": "queue",     "requires_inputs": True,  "min_inputs": 1},
     "publish":               {"handle": "publish",   "also_requires": ["function"], "requires_inputs": True, "min_inputs": 1},
 }
@@ -507,7 +527,7 @@ class Stage(_Base):
         if max_inputs is not None and len(self.inputs) > max_inputs:
             raise ValueError(
                 f"type `{self.type}` takes <= {max_inputs} input(s), got {len(self.inputs)} "
-                f"(more than one input is a join, or use python_frame_function)"
+                f"({spec['max_inputs_hint']})"
             )
         return self
 
