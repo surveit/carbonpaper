@@ -50,9 +50,9 @@ def handle_human_review_queue(stage: Stage, inputs: dict[str, pd.DataFrame], ctx
 
     # Checked FIRST, before any reach for project scope / the decisions cache: when
     # the caller asked for in-memory auto-approval, every row is approved and returned
-    # without a stage-cache decision lookup, queue snapshot, or halt. A non-product
+    # without a stage-cache decision lookup, queue snapshot, or halt. A non-production
     # (subset/preview) run carries no project scope, so this is also the only way such
-    # a run can pass a queue stage. A product-run ctx never sets the flag, so product-run
+    # a run can pass a queue stage. A production-run ctx never sets the flag, so production-run
     # behavior is unchanged.
     if ctx.queue_auto_approve:
         return _auto_approve_all(src, stage, contribution)
@@ -91,12 +91,12 @@ def _require_project_scope(ctx: RunContext, sid: str) -> tuple[str, ReadOnlyStag
     `ReadOnlyStageCache` — this handler only ever reads, so mypy proves it
     never calls a write method (`ReadOnlyStageCache` has none). Raises loudly
     if either is absent: a human_review_queue stage always runs inside a
-    project-scoped (product) run; a subset/preview run's context (which
+    project-scoped (production) run; a subset/preview run's context (which
     carries neither) cannot resolve a cache key and must not be silently let
     through."""
     if ctx.identity is None or ctx.stage_cache is None:
         raise ValueError(
-            f"human_review_queue '{sid}' requires a project-scoped (product) "
+            f"human_review_queue '{sid}' requires a project-scoped (production) "
             "run: RunContext.identity and RunContext.stage_cache must both be "
             "set, but this run carries neither."
         )

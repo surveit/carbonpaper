@@ -1,7 +1,7 @@
 """RunContext: the frozen, typed run context every stage handler receives
 instead of the old `ctx: dict[str, Any]`. Pins its structural facts: no field
 names a project directory; identity/stage_cache are granted (or withheld)
-together; `mode` is stamped once and a product run may never carry the
+together; `mode` is stamped once and a production run may never carry the
 in-memory queue bypass; and the run's telemetry lives on the manifest, not
 here (no accumulator field to mutate)."""
 from __future__ import annotations
@@ -18,7 +18,7 @@ from app.core.stage_cache import StageCacheEntry
 def _make(**overrides: object) -> RunContext:
     identity = overrides.get("identity")
     defaults: dict[str, object] = dict(
-        mode="product" if identity is not None else "non_product",
+        mode="production" if identity is not None else "non_production",
         repo_root=Path("."), run_dir=Path("."), identity=None, stage_cache=None,
         limits={}, offsets={},
     )
@@ -57,22 +57,22 @@ def test_run_context_rejects_cache_without_identity() -> None:
         _make(identity=None, stage_cache=StageCacheEntry.read_write())
 
 
-def test_product_run_context_rejects_queue_auto_approve(tmp_path: Path) -> None:
-    """A product run must never carry the in-memory queue bypass: pairing
-    mode='product' with queue_auto_approve fails loudly at construction."""
-    with pytest.raises(ValidationError, match="non-product-run bypass"):
+def test_production_run_context_rejects_queue_auto_approve(tmp_path: Path) -> None:
+    """A production run must never carry the in-memory queue bypass: pairing
+    mode='production' with queue_auto_approve fails loudly at construction."""
+    with pytest.raises(ValidationError, match="non-production-run bypass"):
         RunContext(
-            mode="product",
+            mode="production",
             repo_root=tmp_path,
             run_dir=tmp_path / "run",
             queue_auto_approve=True,
         )
 
 
-def test_non_product_run_context_allows_queue_auto_approve(tmp_path: Path) -> None:
-    """A non-product run may set the bypass — that is the only mode that can."""
+def test_non_production_run_context_allows_queue_auto_approve(tmp_path: Path) -> None:
+    """A non-production run may set the bypass — that is the only mode that can."""
     ctx = RunContext(
-        mode="non_product",
+        mode="non_production",
         repo_root=tmp_path,
         run_dir=tmp_path / "run",
         queue_auto_approve=True,
@@ -87,18 +87,18 @@ def test_run_context_is_frozen(tmp_path: Path) -> None:
         ctx.run_dir = tmp_path / "other"  # type: ignore[misc]
 
 
-def test_for_product_run_stamps_mode_and_grants_scope(tmp_path: Path) -> None:
-    ctx = RunContext.for_product_run(tmp_path, tmp_path / "run", "proj", "r1")
-    assert ctx.mode == "product"
+def test_for_production_run_stamps_mode_and_grants_scope(tmp_path: Path) -> None:
+    ctx = RunContext.for_production_run(tmp_path, tmp_path / "run", "proj", "r1")
+    assert ctx.mode == "production"
     assert ctx.identity == RunIdentity(project="proj", run_id="r1")
     assert ctx.stage_cache is not None
 
 
-def test_for_non_product_run_allows_none_paths() -> None:
+def test_for_non_production_run_allows_none_paths() -> None:
     """The in-memory harness context carries no on-disk roots; require_run_dir
     fails loudly rather than handing back a fabricated path."""
-    ctx = RunContext.for_non_product_run(None, None)
-    assert ctx.mode == "non_product"
+    ctx = RunContext.for_non_production_run(None, None)
+    assert ctx.mode == "non_production"
     assert ctx.identity is None and ctx.stage_cache is None
     with pytest.raises(ValueError, match="no run_dir"):
         ctx.require_run_dir()
