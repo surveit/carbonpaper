@@ -38,6 +38,16 @@ _MIXED = pd.DataFrame({
     "a": [0.5, 1.5, None, 1.5],
     "b": pd.Series([True, False, True, None], dtype=object),
 })
+_TWO_NUMBERS = pd.DataFrame({"a": [0.5, 2.0, None, 3.0], "c": [1.0, 1.0, 1.0, None]})
+# The one frame that carries no null, because negating a bare column is the one
+# construct the frame engine has no usable verdict for once a null is in play:
+# `not col` reaches pandas as `~col`, which raises on a null cell, and on the
+# object dtype a nulled boolean column takes it inverts ints (`~True` is -2,
+# `~False` is -1, both truthy) instead of negating. A native bool column with
+# no null is the only shape where the frame engine's `not` is a real negation
+# and can therefore be agreed with; the null side of `not` is pinned instead by
+# `test_not_over_a_null_column_answers_where_the_frame_engine_cannot`.
+_BOOLEANS_WITHOUT_NULLS = pd.DataFrame({"b": [True, False, True]})
 
 # Every construct the grammar admits, paired with a frame whose relevant
 # column carries a null. Both engines must return the same verdict per row.
@@ -48,6 +58,11 @@ AGREEMENT_CASES: list[tuple[str, pd.DataFrame]] = [
     ("a > 1 and b", _MIXED),
     ("a > 1 or b", _MIXED),
     ("not (a > 1)", _NUMBERS),
+    ("not b", _BOOLEANS_WITHOUT_NULLS),
+    # Column against column, not column against literal: both sides are cell
+    # reads, and either can be the null one.
+    ("a > c", _TWO_NUMBERS),
+    ("a != c", _TWO_NUMBERS),
     ("1 < a < 3", _NUMBERS),
     ("a != 1", _NUMBERS),
     ("a == None", _NUMBERS),
@@ -70,9 +85,11 @@ AGREEMENT_CASES: list[tuple[str, pd.DataFrame]] = [
 # Expressions the grammar admits and `DataFrame.eval` happily evaluates, but
 # the row evaluator has no implementation of. It must say so loudly: a guessed
 # verdict here is exactly the drift the differential test exists to prevent.
-UNSUPPORTED_CASES: list[tuple[str, pd.DataFrame]] = [
-    ("s.str.upper() == 'XY'", _STRINGS),
-    ("a.abs() > 1", _NUMBERS),
+# Each entry carries the method its error must name, so adding an entry means
+# stating the expectation rather than having it re-derived from the expression.
+UNSUPPORTED_CASES: list[tuple[str, pd.DataFrame, str]] = [
+    ("s.str.upper() == 'XY'", _STRINGS, "upper"),
+    ("a.abs() > 1", _NUMBERS, "abs"),
 ]
 
 _ADMITTED_NODE_TYPES: frozenset[type[ast.AST]] = frozenset({
@@ -88,15 +105,22 @@ def test_row_evaluator_agrees_with_pandas_eval(expr: str, frame: pd.DataFrame) -
 
 
 def test_case_table_covers_every_admitted_node_type() -> None:
+    """Asserted on the AGREEMENT table alone, not on both tables together: a
+    construct whose only witness is an UNSUPPORTED case is a construct nothing
+    compares against `DataFrame.eval`, which is exactly the coverage this guard
+    exists to demand."""
     covered: set[type[ast.AST]] = set()
-    for expr, _frame in [*AGREEMENT_CASES, *UNSUPPORTED_CASES]:
+    for expr, _frame in AGREEMENT_CASES:
         covered.update(type(node) for node in ast.walk(parse_predicate(expr).syntax_tree))
     assert _ADMITTED_NODE_TYPES <= covered
 
 
-@pytest.mark.parametrize("expr,frame", UNSUPPORTED_CASES, ids=[c[0] for c in UNSUPPORTED_CASES])
-def test_unsupported_method_raises_predicate_error(expr: str, frame: pd.DataFrame) -> None:
-    method = "upper" if "upper" in expr else "abs"
+@pytest.mark.parametrize(
+    "expr,frame,method", UNSUPPORTED_CASES, ids=[case[0] for case in UNSUPPORTED_CASES]
+)
+def test_unsupported_method_raises_predicate_error(
+    expr: str, frame: pd.DataFrame, method: str
+) -> None:
     with pytest.raises(PredicateError, match=method):
         _evaluate_row_by_row(parse_predicate(expr), frame)
 
@@ -134,6 +158,23 @@ def test_null_column_read_as_a_bare_boolean_is_false() -> None:
     assert evaluate_predicate(parse_predicate("b"), {"b": None}) is False
 
 
+def test_not_over_a_null_column_answers_where_the_frame_engine_cannot() -> None:
+    """`not b` on a null cell: the null coerces to False, so the negation is
+    True — the row is selected. The frame engine has no verdict to compare
+    against here (`~col` raises `TypeError` on a null cell), and of the two
+    directions available this is the safe one: a row nobody needed to look at
+    is selected, rather than a row silently dropped."""
+    assert evaluate_predicate(parse_predicate("not b"), {"b": None}) is True
+
+
+def test_nat_read_as_the_whole_verdict_raises_predicate_error() -> None:
+    """`pd.NaT` is not a verdict. The frame engine reads it as True — a missing
+    timestamp counted as a match — which is why this raises instead of
+    inheriting that answer."""
+    with pytest.raises(PredicateError, match="NaT"):
+        evaluate_predicate(parse_predicate("t"), {"t": pd.NaT})
+
+
 def test_str_method_on_a_non_text_cell_raises_predicate_error() -> None:
     """A `.str.*` test on a cell that is neither text nor null raises rather
     than inheriting the frame engine's verdict there: pandas turns that cell
@@ -153,7 +194,8 @@ def test_invalid_contains_pattern_raises_predicate_error() -> None:
 def test_parsed_predicate_tree_matches_its_pandas_expr() -> None:
     """One parse feeds both engines: the tree the row evaluator walks is the
     same expression the frame engine's string runs."""
-    for expr, _frame in [*AGREEMENT_CASES, *UNSUPPORTED_CASES]:
+    every_expression = [case[0] for case in AGREEMENT_CASES] + [case[0] for case in UNSUPPORTED_CASES]
+    for expr in every_expression:
         parsed = parse_predicate(expr)
         from_tree = ast.parse(ast.unparse(parsed.syntax_tree), mode="eval")
         from_string = ast.parse(parsed.pandas_expr, mode="eval")

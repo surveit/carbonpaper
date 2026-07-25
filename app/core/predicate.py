@@ -309,6 +309,19 @@ def _evaluate_bin_op(node: ast.BinOp, row: Mapping[str, object], expr: str) -> b
 
 
 def _evaluate_unary_op(node: ast.UnaryOp, row: Mapping[str, object], expr: str) -> bool:
+    """`not`, over the coerced boolean of its operand.
+
+    Negating a bare column is the one place this walk answers where the frame
+    engine does not: `not col` reaches pandas as `~col`, which raises
+    `TypeError: bad operand type for unary ~` when the column holds a null,
+    and on an object-dtype boolean column (the dtype a boolean column takes
+    once a null lands in it) inverts the underlying ints instead — `~True` is
+    -2, `~False` is -1, both truthy, so every row comes back matched. Neither
+    is a verdict worth inheriting, so the walk negates the coerced boolean and
+    answers. For a null cell that means True: the filter matches, i.e. the row
+    is selected — queued for a human, where a review queue is the caller — so
+    the failure direction is selecting a row nobody needed to look at, never
+    silently dropping one."""
     if not isinstance(node.op, ast.Not):
         raise PredicateError(
             f"filter cannot be evaluated row by row: {expr!r} "
@@ -500,12 +513,17 @@ def _is_null(value: object) -> bool:
 
 
 def _coerce_to_bool(value: object, expr: str) -> bool:
-    """`value` as a true/false verdict, coerced exactly as the frame engine's
+    """`value` as a true/false verdict, coerced as the frame engine's
     `pd.Series(column, dtype=bool)` step coerces the same cell: a boolean
     stays itself, a number is truthy when non-zero, and a plain `None` — the
-    null form an object column carries — is False. Every other type, `pd.NA`
-    and `pd.NaT` among them (the frame engine refuses those too), raises
-    rather than being forced into a verdict."""
+    null form an object column carries — is False. Every other type raises
+    rather than being forced into a verdict.
+
+    That last rule covers the two remaining null forms, which the frame engine
+    treats differently from each other and neither of them usefully: `pd.NA`
+    it refuses too (`boolean value of NA is ambiguous`), while `pd.NaT` it
+    reads as True — a missing timestamp counted as a match. This raises for
+    both rather than inheriting that."""
     if isinstance(value, (bool, np.bool_)):
         return bool(value)
     if value is None:
