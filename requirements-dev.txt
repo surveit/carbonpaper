@@ -10,3 +10,10 @@ import-linter==2.13       # architecture-boundary contracts in pyproject [tool.i
 radon==6.0.1              # cyclomatic-complexity ratchet in tests/arch/test_complexity_ratchet.py
 pandas-stubs==3.0.3.260530
 types-PyYAML==6.0.12.20250516  # stubs for `import yaml` in app/services/eval_store.py
+# Substrate spike (app/spikes/substrate, issue #194). DEV-ONLY on purpose: the
+# spike is prototype code nothing in app/ imports, so `requirements.txt` — what
+# it takes to RUN the app — stays unchanged. They move up to requirements.txt
+# only if the spike graduates. Both ship py.typed, so mypy needs no stubs and
+# no ignore_missing_imports exemption.
+duckdb>=1.4               # json_serialize_sql/json_deserialize_sql + to_arrow_table
+polars>=1.0               # one of the two candidate python-transform hosts
