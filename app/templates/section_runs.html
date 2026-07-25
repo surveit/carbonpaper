@@ -6,7 +6,7 @@
   Context the route passes:
     state = project.project_state(mdir); section = "runs"
     runs  = main._list_runs(state.name)  — list of
-            {run_id, status, started_at, dag_version, stages_total, stages_ok, stages_error}
+            {run_id, status, started_at, workflow_version, stages_total, stages_ok, stages_error}
 
   The "awaiting review" count comes from state.runs.awaiting_review (a run halted at a
   human_review_queue). Counts are truthful — only manifest-backed runs appear.
@@ -44,8 +44,8 @@
     <tr>
       <td><a href="/project/{{ state.name }}/runs/{{ r.run_id }}"><code>{{ r.run_id }}</code></a></td>
       <td>
-        {% if r.dag_version %}
-          <a href="/project/{{ state.name }}/workflow"><code>{{ r.dag_version }}</code></a>
+        {% if r.workflow_version %}
+          <a href="/project/{{ state.name }}/workflow"><code>{{ r.workflow_version }}</code></a>
         {% else %}
           <span class="muted">(unversioned)</span>
         {% endif %}
