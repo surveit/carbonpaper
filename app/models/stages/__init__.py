@@ -9,7 +9,11 @@ from app.models.stages.aggregate import (
     find_aggregate_column_issues,
     find_aggregate_output_issues,
 )
-from app.models.stages.human_review_queue import find_queue_filter_column_issues
+from app.models.stages.human_review_queue import (
+    SERVICE_FILLED_COLUMNS,
+    find_queue_filter_column_issues,
+    find_reviewer_fields,
+)
 from app.models.stages.join import find_join_column_issues, find_join_output_issues
 from app.models.stages.llm_transform import find_llm_prompt_column_issues
 from app.models.stages.publish import find_publish_column_issues
@@ -54,3 +58,18 @@ def find_output_schema_issues(stage: "Stage") -> list[str]:
     fix the output) or one whose declared columns are all producible."""
     fn = _OUTPUT_VALIDATORS.get(stage.type)
     return fn(stage) if fn else []
+
+
+__all__ = [
+    "SERVICE_FILLED_COLUMNS",
+    "find_aggregate_column_issues",
+    "find_aggregate_output_issues",
+    "find_config_column_issues",
+    "find_join_column_issues",
+    "find_join_output_issues",
+    "find_llm_prompt_column_issues",
+    "find_output_schema_issues",
+    "find_publish_column_issues",
+    "find_queue_filter_column_issues",
+    "find_reviewer_fields",
+]
