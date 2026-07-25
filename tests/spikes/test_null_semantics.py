@@ -153,6 +153,27 @@ def test_both_hosts_agree_with_arrow_at_the_row_boundary(tmp_path):
     assert [list(row["tags"]) for row in arrow_pandas_rows] == [["sanctioned", "eu"], []]
 
 
+# ── the migration hazard the spike found ─────────────────────────────────────
+
+def test_flipping_the_substrate_changes_row_fingerprints_for_list_columns(tmp_path):
+    """`compute_row_fingerprint` already collapses every pandas null form to
+    JSON null, so a scalar column's identity survives the flip. A *list* column
+    does not: an ndarray reaches `json.dumps(default=str)` as its numpy repr,
+    a list serialises as a JSON array. Any stage whose input carries a list
+    column would re-queue every cached human decision on the day the substrate
+    changes — the one migration step that needs a plan, not just a flag."""
+    from app.services.stage_cache import compute_row_fingerprint
+
+    numpy_rows = rows_from_numpy_pandas(_numpy_pandas_frame(tmp_path))
+    arrow_rows = rows_from_arrow(_arrow_table(tmp_path))
+
+    scalars = ["id", "name", "score"]
+    assert compute_row_fingerprint({k: numpy_rows[1][k] for k in scalars}) == \
+        compute_row_fingerprint({k: arrow_rows[1][k] for k in scalars})
+
+    assert compute_row_fingerprint(numpy_rows[0]) != compute_row_fingerprint(arrow_rows[0])
+
+
 def test_arrow_backed_pandas_keeps_the_pandas_api_authors_already_use(tmp_path):
     """The migration-cost datum for `python_frame_function`: with
     `dtype_backend="pyarrow"`, existing pandas frame code keeps working while

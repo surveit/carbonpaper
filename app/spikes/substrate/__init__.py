@@ -23,6 +23,12 @@ The bug class being measured, all three from the issue:
 
 `tests/spikes/test_null_semantics.py` runs one authored transform function
 across all three substrates and records which of the three each one exhibits.
+It also pins the migration hazard the spike turned up: `compute_row_fingerprint`
+already collapses every pandas null form to JSON null, so a scalar column keeps
+its identity across a substrate flip — but a `list` column does not (an
+`ndarray` stringifies to its numpy repr, a `list` to a JSON array), so every
+cached human decision on a stage carrying a list column would be invalidated
+the day the flip lands.
 
 The invariant the relational half must satisfy (from the PR #182 discussion,
 restated in the issue): **the parse used to validate a filter's columns must be
