@@ -180,15 +180,18 @@ def test_not_over_an_object_dtype_bool_column_silently_disagrees() -> None:
     engines has one side raising, which announces itself; this one is silent in
     both directions, so it is pinned here rather than left to a reader who
     expects the engines to part company only over nulls. Both sides are
-    asserted: if a pandas release changes either, this test says so — and one
-    is already on a clock, since running it emits CPython's own
-    `DeprecationWarning: Bitwise inversion '~' on bool is deprecated and will
-    be removed in Python 3.16` (the three warnings this module contributes to
-    the suite are that, from this test)."""
+    asserted: if a pandas release changes either, this test says so.
+
+    The frame engine's answer is also on a clock, which the `pytest.warns`
+    below asserts rather than lets leak: producing it means inverting a bool,
+    and CPython removes that in 3.16. When it does, the frame engine's wrong
+    verdict here becomes an error instead — and this test reports it, because
+    the warning it now requires will stop being raised."""
     frame = pd.DataFrame({"b": pd.Series([True, False, True], dtype=object)})
     parsed = parse_predicate("not b")
     assert _evaluate_row_by_row(parsed, frame) == [False, True, False]
-    assert _evaluate_by_frame(parsed, frame) == [True, True, True]
+    with pytest.warns(DeprecationWarning, match="Bitwise inversion"):
+        assert _evaluate_by_frame(parsed, frame) == [True, True, True]
 
 
 def test_nat_read_as_the_whole_verdict_raises_predicate_error() -> None:
