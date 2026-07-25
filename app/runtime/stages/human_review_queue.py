@@ -54,8 +54,8 @@ from ..errors import HaltForReview
 from .execution import ROW_DEFERRED_KEY, ROW_DROP_KEY, Row
 
 # The upstream AI score column a queue stage reviews. Named once so the two sites
-# that test for its presence (auto-approve and passthrough finalization) can't
-# drift apart.
+# that test for its presence (_approve_row and _pass_row_through) can't drift
+# apart.
 _SCORE_COLUMN = "score"
 
 

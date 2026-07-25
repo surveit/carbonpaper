@@ -370,6 +370,34 @@ def test_fingerprint_matches_the_drivers_own_row_dict(tmp_path):
     assert fingerprints["input_fingerprints"] == expected
 
 
+def test_nullable_extension_dtype_cells_reach_the_reviewer_as_plain_numpy_values(tmp_path):
+    """The snapshot is REBUILT from the driver's row dicts rather than sliced
+    off the upstream frame, so pandas' nullable extension dtypes do not survive
+    it — and neither do the cell values that only those dtypes can hold. An
+    `Int64` column carrying a null comes back `float64`, so the reviewer sees
+    `1.0` where upstream held the integer `1`; a `boolean` column comes back
+    `object`, which changes the dtype but not the values.
+
+    This matters beyond display: what the reviewer decides on is frozen as the
+    cache entry's input, and the output row replayed on the next run is built
+    from that frozen row — so the widened value is what flows downstream."""
+    src = pd.DataFrame({
+        "id": ["r0", "r1"],
+        "score": pd.array([1, None], dtype="Int64"),
+        "flag": pd.array([True, None], dtype="boolean"),
+    })
+    snapshot, _fingerprints = _halt_and_read_snapshot(
+        _stage(), {"scored": src}, _ctx(tmp_path))
+
+    assert list(snapshot.columns) == ["id", "score", "flag"]
+    assert snapshot["score"].dtype == "float64"      # Int64 did not survive
+    assert snapshot.loc[0, "score"] == 1.0           # the integer 1 upstream
+    assert pd.isna(snapshot.loc[1, "score"])         # the null is still a null
+    assert snapshot["flag"].dtype == object          # boolean did not survive
+    assert snapshot.loc[0, "flag"] is True           # its values did
+    assert snapshot.loc[1, "flag"] is None
+
+
 def test_cancel_mid_queue_map_marks_the_stage_cancelled(tmp_path):
     """A cancel requested before the stage runs stops the row map with
     RunCancelled — the run was cancelled, so it must not also be reported as
