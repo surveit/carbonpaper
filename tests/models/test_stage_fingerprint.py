@@ -89,6 +89,20 @@ def test_compute_definition_fingerprint_for_queue_reacts_to_reviewer_instruction
     assert base.compute_definition_fingerprint() != changed.compute_definition_fingerprint()
 
 
+def test_cache_defaults_true():
+    assert _row_function_stage().cache is True
+
+
+def test_compute_definition_fingerprint_ignores_cache_flag():
+    # `cache` (Stage.cache) governs whether/how the stage-result cache is
+    # consulted for this stage — not what it computes — so flipping it must
+    # never move the fingerprint (that would invalidate every existing cache
+    # entry for a purely bookkeeping change).
+    a = _row_function_stage(cache=True)
+    b = _row_function_stage(cache=False)
+    assert a.compute_definition_fingerprint() == b.compute_definition_fingerprint()
+
+
 def test_compute_definition_fingerprint_survives_a_stored_round_trip():
     # A version-embedded stage is dumped/reloaded through
     # model_dump(mode="json", by_alias=True, exclude_none=True) —

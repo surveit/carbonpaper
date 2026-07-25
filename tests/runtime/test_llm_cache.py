@@ -2,7 +2,9 @@
 (app/runtime/stages/llm_transform.py): a row this stage already generated a
 reply for is served from app.services.stage_cache instead of re-asking the
 model — the LLM counterpart to human_review_queue's cached-decision matching
-(tests/runtime/test_hrq_cache.py, from PR #225).
+(tests/runtime/test_hrq_cache.py, from PR #225) — plus the run-mode controls
+from #228 that gate it: a per-stage `cache: false` declaration
+(Stage.cache) and a per-run "recompute everything" flag (RunContext.bust_cache).
 
 Every entry these tests seed or read goes through the seam (StageCache.put /
 .get), never a raw store write, mirroring test_hrq_cache.py's own discipline.
@@ -24,7 +26,7 @@ from conftest import make_run_context
 PROJECT = "llm-cache-tests"
 
 
-def _stage(*, batch_size: int = 1, prompt_instructions: str = "") -> Stage:
+def _stage(*, batch_size: int = 1, cache: bool = True, prompt_instructions: str = "") -> Stage:
     return Stage.model_validate({
         "id": "score", "name": "score", "type": "llm_transform",
         "inputs": [{"id": "load", "schema": {
@@ -36,13 +38,15 @@ def _stage(*, batch_size: int = 1, prompt_instructions: str = "") -> Stage:
             "primary_key": ["id"]},
         "llm": {"prompt_template": "Rate: {text}", "batch_size": batch_size,
                 "prompt_instructions": prompt_instructions, "max_retries": 0},
+        "cache": cache,
     })
 
 
-def _ctx(run_id: str = "r1"):
+def _ctx(run_id: str = "r1", bust_cache: bool = False):
     return make_run_context(
         identity=RunIdentity(project=PROJECT, run_id=run_id),
         stage_cache=StageCache(),
+        bust_cache=bust_cache,
     )
 
 
@@ -165,7 +169,47 @@ def test_failed_row_is_never_cached(monkeypatch):
     assert StageCache().get(PROJECT, "score", stage_fp, row_fp) is None
 
 
-# ── 6. No project scope (subset/preview) never touches the cache ────────────
+# ── 6. cache: false — always re-rolls, never reads or writes ────────────────
+
+
+def test_stage_cache_false_never_reads_or_writes(monkeypatch):
+    stage = _stage(cache=False)
+    src = _src(1)
+    calls = _counting_call_llm(monkeypatch)
+
+    _run(stage, {"load": src.copy()}, _ctx(run_id="run1"))
+    _run(stage, {"load": src.copy()}, _ctx(run_id="run2"))
+    assert calls["n"] == 2  # every run re-calls the model — nothing was ever cached
+
+    stage_fp = stage.compute_definition_fingerprint()
+    row_fp = compute_row_fingerprint({"id": "r0", "text": "t0"})
+    assert StageCache().get(PROJECT, "score", stage_fp, row_fp) is None
+
+
+# ── 7. bust_cache skips the read but still writes a fresh entry ─────────────
+
+
+def test_bust_cache_skips_read_but_still_writes(monkeypatch):
+    stage = _stage()
+    src = _src(1)
+    calls = _counting_call_llm(monkeypatch)
+
+    _run(stage, {"load": src.copy()}, _ctx(run_id="run1"))
+    assert calls["n"] == 1
+
+    # A normal run would hit the cache and make no new call; a bust_cache run
+    # re-calls the model even though a decision already exists.
+    _run(stage, {"load": src.copy()}, _ctx(run_id="run2", bust_cache=True))
+    assert calls["n"] == 2
+
+    # The fresh reply re-pinned the entry: a later ordinary run reuses IT, not
+    # the original, and makes no further call.
+    out3 = _run(stage, {"load": src.copy()}, _ctx(run_id="run3"))
+    assert calls["n"] == 2
+    assert out3.loc[0, "score"] == 102  # the second (bust) call's reply, not the first
+
+
+# ── 8. No project scope (subset/preview) never touches the cache ────────────
 
 
 def test_no_project_scope_never_touches_cache(monkeypatch):

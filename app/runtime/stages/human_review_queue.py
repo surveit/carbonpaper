@@ -29,7 +29,9 @@ def handle_human_review_queue(stage: Stage, inputs: dict[str, pd.DataFrame], ctx
        row (`input_fingerprints_by_index`, over its original upstream
        columns) — index-aligned, never burned onto the row itself.
     3. Look up this stage definition's cached decisions from `ctx.stage_cache`
-       and split queueable rows by whether their fingerprint matches one:
+       (skipped entirely when `ctx.bust_cache` is set — the run's "recompute
+       everything" flag treats every prior decision as absent) and split
+       queueable rows by whether their fingerprint matches one:
          - items with a cached decision get it applied
          - items without are written to runs/<id>/queue/<stage>.parquet, a
            PURE snapshot of their original upstream columns, alongside a
@@ -59,7 +61,13 @@ def handle_human_review_queue(stage: Stage, inputs: dict[str, pd.DataFrame], ctx
 
     stage_fp = stage.compute_definition_fingerprint()
     input_fingerprints_by_index = _compute_input_fingerprints(queueable)
-    entries = stage_cache.find_entries(project, sid, stage_fp)
+    # ctx.bust_cache (the run's "recompute everything" flag) makes this run treat
+    # every prior decision as absent: every queueable row re-halts for human
+    # review, exactly like a first-ever run of this stage definition. Whatever a
+    # reviewer decides through the normal decide route still writes through the
+    # seam as always — this only skips the READ, so the cache ends up re-pinned
+    # with fresh decisions rather than left stale.
+    entries = [] if ctx.bust_cache else stage_cache.find_entries(project, sid, stage_fp)
     entries_by_fingerprint = {entry.input_fingerprint: entry for entry in entries}
 
     pending, decided = _split_pending_and_decided(

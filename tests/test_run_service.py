@@ -95,6 +95,21 @@ def test_read_run_status_missing_run_raises(project_dir):
         run_service.read_run_status(_PROJECT, "20990101T000000")
 
 
+def test_start_run_bust_cache_defaults_false_and_is_recorded_on_the_manifest(project_dir):
+    """start_run's `bust_cache` (the run's "recompute everything" flag) is
+    recorded on the manifest verbatim — False when not given (an ordinary
+    run's caching stays unchanged), True when the caller asks for a fresh
+    run."""
+    _make_project(project_dir)
+    _seed_version(project_dir)
+
+    default_run_id = run_service.start_run(_PROJECT)
+    assert run_service.read_run_status(_PROJECT, default_run_id)["bust_cache"] is False
+
+    bust_run_id = run_service.start_run(_PROJECT, bust_cache=True)
+    assert run_service.read_run_status(_PROJECT, bust_run_id)["bust_cache"] is True
+
+
 def test_resolve_version_defaults_to_latest_published_and_raises_when_none(project_dir):
     """resolve_version(None) returns the newest published version; a project with
     no published version raises NoVersionToRunError."""

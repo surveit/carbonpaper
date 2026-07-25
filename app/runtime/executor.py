@@ -110,7 +110,7 @@ def run_subset(
     manifest = create_run_manifest(
         ordered, run_id=run_dir.name, project=project,
         workflow_version=workflow_version, run_bindings={}, input_bindings={},
-        limits={}, offsets={})
+        limits={}, offsets={}, bust_cache=False)
     write_manifest(run_dir, manifest)
     outputs: dict[str, pd.DataFrame] = dict(injected_outputs)
     manifest = _execute_stages(
@@ -299,6 +299,7 @@ def create_run_manifest(
     input_bindings: dict[str, dict[str, Any]],
     limits: dict[str, int],
     offsets: dict[str, int],
+    bust_cache: bool = False,
 ) -> dict[str, Any]:
     """The initial run manifest — every stage pending, status running. The single
     source of the run-manifest shape: every caller mints it here and persists it
@@ -307,7 +308,12 @@ def create_run_manifest(
 
     `project`/`workflow_version` are None for a subset run (run_subset) that was
     not told its logical identity — recorded honestly as None rather than a
-    fabricated placeholder. A production run always supplies both."""
+    fabricated placeholder. A production run always supplies both.
+
+    `bust_cache` records this run's own "recompute everything" flag (see
+    RunContext.bust_cache) so a resume replays the same value the run started
+    with — busting the cache stays in effect for the whole run, not just its
+    first (pre-halt) leg."""
     return {
         "run_id": run_id,
         "started_at": datetime.now().isoformat(timespec="seconds"),
@@ -315,6 +321,7 @@ def create_run_manifest(
         "workflow_version": workflow_version,
         "limit_overrides": limits,
         "offset_overrides": offsets,
+        "bust_cache": bust_cache,
         "run_bindings": run_bindings,
         "input_bindings": input_bindings,
         "status": RunStatus.RUNNING,

@@ -231,6 +231,34 @@ def test_legacy_decisions_parquet_never_read(tmp_path):
     assert len(snapshot) == 2  # every row still pending — the legacy file was never consulted
 
 
+# ── 7b. bust_cache re-halts every row even though decisions already exist ───
+
+
+def test_bust_cache_re_halts_every_row_despite_existing_decisions(tmp_path):
+    stage = _stage()
+    src = _src(2)
+
+    snapshot, fingerprints = _halt_and_read_snapshot(stage, {"scored": src}, _ctx(tmp_path, run_id="run1"))
+    _approve_every_row(snapshot, fingerprints, "run1")
+
+    # An ordinary run would reuse both decisions; a bust_cache run treats the
+    # cache as empty on read and re-halts every row, even though its decision
+    # is still sitting in the store, untouched.
+    bust_ctx = make_run_context(
+        run_dir=tmp_path,
+        identity=RunIdentity(project=PROJECT, run_id="run2"),
+        stage_cache=StageCache(),
+        bust_cache=True,
+    )
+    new_snapshot, _fp = _halt_and_read_snapshot(stage, {"scored": src.copy()}, bust_ctx)
+    assert len(new_snapshot) == 2
+    assert set(new_snapshot["id"]) == {"r0", "r1"}
+
+    # A non-bust run right after still finds the original decisions intact.
+    out = handle_human_review_queue(stage, {"scored": src.copy()}, _ctx(tmp_path, run_id="run3"))
+    assert len(out) == 2
+
+
 # ── 7. A subset/preview context (no project scope) fails loudly ─────────────
 
 

@@ -420,6 +420,23 @@ class Stage(_Base):
 
     review: Optional[ReviewConfig] = None
     limit: Optional[int] = None
+    cache: bool = Field(
+        default=True,
+        description=(
+            "Whether this stage's per-row results participate in the stage-result "
+            "cache (app.services.stage_cache), keyed by stage-definition + input-row "
+            "fingerprint (Stage.compute_definition_fingerprint). Default True: for a "
+            "non-deterministic stage (an llm_transform sampling a model) the cache is "
+            "the substrate of reproducibility, not a performance knob — a re-run "
+            "reuses the row it already computed rather than re-rolling it. Set to "
+            "False only as a semantic declaration that THIS stage must always "
+            "re-roll — every run computes fresh and nothing is read from or written "
+            "to the cache for it. Honored today by llm_transform; other stage types "
+            "ignore it. Incidental to what the stage computes, so it plays no part "
+            "in compute_definition_fingerprint (flipping it does not invalidate any "
+            "existing cache entry)."
+        ),
+    )
     compiler_notes: list[str] = Field(default_factory=list)
 
     # Descriptive eval note rendered on the stage page (reference data, metrics).
@@ -447,9 +464,11 @@ class Stage(_Base):
     def compute_definition_fingerprint(self) -> str:
         """sha1[:16] over the canonical JSON of the output-determining subset of
         this stage: {"type", "handle": <the type's handle block>, "output_schema"}.
-        Every other Stage field (id, name, source, inputs, review, limit,
+        Every other Stage field (id, name, source, inputs, review, limit, cache,
         compiler_notes, eval, tests) is incidental — it does not change what
-        this stage computes — and stays out of the fingerprint. The handle
+        this stage computes — and stays out of the fingerprint. `cache` in
+        particular governs whether/how this stage's cache is consulted, not
+        what it computes — see the `cache` field's own docstring. The handle
         block itself is trimmed to its class's own `FINGERPRINT_FIELDS` (every
         handle config class declares `FINGERPRINT_FIELDS`/`INCIDENTAL_FIELDS`
         explicitly, exhaustively over its own fields — see e.g. QueueConfig,

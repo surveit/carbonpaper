@@ -12,6 +12,12 @@
       blank runs the full file, a number N caps that input stage's OUTPUT to its
       first N rows for this run only (see prepare_run's `limits` in
       app/runtime/runner.py — this form is just its web-form surface)
+    · a "recompute everything" checkbox (bust_cache): ignores every cached
+      human_review_queue decision and llm_transform reply for THIS run only —
+      every queue row re-halts, every LLM row re-calls the model — while fresh
+      results still get written back, re-pinning the cache (see prepare_run's
+      `bust_cache` in app/runtime/runner.py / RunContext.bust_cache). Off by
+      default, so an ordinary run's caching is unchanged.
     · ▶ Run workflow
 
   Version and inputs belong together: different versions can author different input
@@ -50,6 +56,10 @@
     </label>
     {% endfor %}
   </div>
+  <label class="run-bust-cache" title="Ignore every cached human-review decision and LLM reply for this run only — re-ask humans, re-roll every LLM row. Fresh results are still written back, so the cache ends up re-pinned.">
+    <input type="checkbox" name="bust_cache" value="1">
+    recompute everything (ignore cache)
+  </label>
   <button type="submit" class="btn primary">▶ Run workflow</button>
 </form>
 <script src="/static/run_controls.js"></script>

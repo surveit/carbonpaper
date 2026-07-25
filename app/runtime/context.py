@@ -74,6 +74,19 @@ class RunContext:
                            decision lookup, no queue snapshot, no halt). Only a
                            non-production run ever sets it; production leaves it
                            False so the real review path is unchanged.
+      bust_cache — this run's "recompute everything" flag: every stage that
+                   consults the stage-result cache (human_review_queue,
+                   llm_transform) treats it as empty on READ for this run —
+                   every queue row re-halts for human review, every
+                   llm_transform row re-calls the model — while a WRITE-
+                   capable stage (llm_transform on a production run) still
+                   writes its fresh result back, so the cache ends this run
+                   re-pinned rather than left stale. False by default, so an
+                   ordinary run's caching is unchanged. Distinct from a
+                   stage's own `cache: false` (app.models.stage.Stage.cache):
+                   that is a per-STAGE, permanent declaration ("this stage is
+                   always fresh"); this is a per-RUN, one-off override
+                   ("ignore what's cached, just this once").
 
     Telemetry accumulators (stages write into these; the manifest reads
     them back): queue_stats, dropped_columns, row_errors, llm_usage,
@@ -87,6 +100,7 @@ class RunContext:
     limits: dict[str, int]
     offsets: dict[str, int]
     queue_auto_approve: bool = False
+    bust_cache: bool = False
     queue_stats: dict[str, QueueStats] = field(default_factory=dict)
     dropped_columns: dict[str, list[str]] = field(default_factory=dict)
     row_errors: dict[str, list[RowError]] = field(default_factory=dict)
@@ -112,18 +126,24 @@ class RunContext:
         offsets: dict[str, int] | None = None,
         queue_stats: dict[str, QueueStats] | None = None,
         dropped_columns: dict[str, list[str]] | None = None,
+        bust_cache: bool = False,
     ) -> "RunContext":
         """A production run's context: full project scope — `identity`
         (`project`, `run_id`) and a read+write stage-result cache
         (`StageCacheEntry.for_mode(CacheMode.PRODUCTION)`). `queue_stats`/
         `dropped_columns` default to fresh dicts (a new run); a resumed run
-        passes in the prior run's values so telemetry survives the resume."""
+        passes in the prior run's values so telemetry survives the resume.
+        `bust_cache` is this run's own "recompute everything" flag — see the
+        class docstring; a resumed run replays the value the halted/errored
+        run started with (recorded in the manifest), so busting the cache
+        stays in effect for the whole run, resume included."""
         return cls(
             repo_root=repo_root, run_dir=run_dir,
             identity=RunIdentity(project=project, run_id=run_id),
             stage_cache=StageCacheEntry.for_mode(CacheMode.PRODUCTION),
             limits=dict(limits or {}), offsets=dict(offsets or {}),
             queue_stats=dict(queue_stats or {}), dropped_columns=dict(dropped_columns or {}),
+            bust_cache=bust_cache,
         )
 
     @classmethod

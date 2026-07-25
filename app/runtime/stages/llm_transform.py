@@ -28,7 +28,12 @@ answer is both a cost win and what keeps a downstream human_review_queue's rows
 stable across runs (a fresh LLM re-roll would otherwise fingerprint as a
 different row and re-queue it). `_resolve_llm_cache` decides, once per stage
 execution, whether this stage's rows participate at all — never for a run with
-no project scope (a subset/preview run).
+no project scope (a subset/preview run), and never for a stage that declares
+`cache: false` (Stage.cache — a semantic "this stage is intentionally
+non-deterministic, always re-roll" declaration, not a performance knob).
+`ctx.bust_cache` (the run's own "recompute everything" flag) skips only the
+READ side per row for the run it's set on; a write-capable accessor still
+records the fresh reply, so the cache ends the run re-pinned rather than stale.
 """
 
 from __future__ import annotations
@@ -88,10 +93,14 @@ class _LlmCache:
 
 def _resolve_llm_cache(stage: Stage, ctx: RunContext) -> _LlmCache | None:
     """None when this stage's rows must not touch the cache at all this
-    execution — the run carries no project scope (a subset/preview run:
-    `ctx.identity`/`ctx.stage_cache` are None together, see
-    RunContext.__post_init__). Otherwise the handle every row of this
-    execution reads and writes its cache entry through."""
+    execution — either `stage.cache` is False (Stage.cache: a per-stage,
+    permanent "this stage is intentionally non-deterministic, always re-roll"
+    declaration — see its docstring) or the run carries no project scope (a
+    subset/preview run: `ctx.identity`/`ctx.stage_cache` are None together, see
+    RunContext.__post_init__). Otherwise the handle every row of this execution
+    reads and writes its cache entry through."""
+    if not stage.cache:
+        return None
     if ctx.identity is None or ctx.stage_cache is None:
         return None
     return _LlmCache(
@@ -143,8 +152,10 @@ def make_llm_row_mapper(stage: Stage, ctx: RunContext) -> Callable[[Row], Row]:
         # drops it, so it never reaches stage output.
         usages: list[LlmUsage] = []
 
-        # A cache hit skips the model call entirely.
-        if cache is not None:
+        # A cache hit skips the model call entirely — read side only, and only
+        # when this run isn't busting the cache (ctx.bust_cache: this run's own
+        # "recompute everything" flag skips reads, never writes).
+        if cache is not None and not ctx.bust_cache:
             hit = cache.accessor.get(
                 cache.project, cache.stage_id, cache.stage_fp, compute_row_fingerprint(row)
             )
@@ -264,8 +275,9 @@ def _fill_cached_rows(
     up through) and return the positions left unfilled — the rows this
     execution must actually send to the model, in original input order. Every
     position is "missing" when caching does not apply to this stage execution
-    at all (`cache is None`)."""
-    if cache is None:
+    at all (`cache is None`) or this run is busting the cache (`ctx.bust_cache`
+    — the run's own "recompute everything" flag skips reads, never writes)."""
+    if cache is None or ctx.bust_cache:
         return list(range(len(records)))
     entries_by_fingerprint = {
         entry.input_fingerprint: entry

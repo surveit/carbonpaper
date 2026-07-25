@@ -63,8 +63,10 @@ async def trigger_run(request: Request, project: str):
         version_id = str(form.get("version_id") or "").strip() or None
         bindings = _collect_bindings(form, project, version_id)
         limits = _collect_limits(form)
+        bust_cache = _collect_bust_cache(form)
         run_id = run_service.start_run(project, version_id=version_id,
-                                       bindings=bindings, limits=limits)
+                                       bindings=bindings, limits=limits,
+                                       bust_cache=bust_cache)
     except (NoVersionToRunError, MissingInputBindingError, ValueError) as exc:
         # ValueError here is binding/limit/offset validation failures raised by
         # apply_run_bindings / prepare_run — not a catch-all for other bugs.
@@ -148,6 +150,15 @@ def _collect_limits(form: FormData) -> dict[str, int]:
             )
         limits[stage_id] = int(text)
     return limits
+
+
+def _collect_bust_cache(form: FormData) -> bool:
+    """Read the `bust_cache` checkbox: an HTML checkbox is present in the form
+    (any truthy string value) only when checked, absent when unchecked — so
+    presence alone is the signal, the same idiom browsers use for every other
+    checkbox field. Off by default, same as prepare_run's own default, so an
+    ordinary run's caching is unchanged."""
+    return bool(str(form.get("bust_cache") or "").strip())
 
 
 @router.get("/project/{project}/run-inputs")

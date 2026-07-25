@@ -28,7 +28,13 @@ validate the output, write `outputs/<stage>.parquet`, append to `manifest.json`.
   `llm_transform` reads AND writes its own row replies (the runner itself, per row/chunk),
   so a re-run never re-asks the model for a row it already answered, and a downstream
   `human_review_queue`'s rows stay stable across runs instead of re-queuing on every LLM
-  re-roll.
+  re-roll. Two run-mode controls gate it: a stage's own `cache: false` (`Stage.cache`) is a
+  permanent per-stage declaration ("this stage is intentionally non-deterministic, always
+  re-roll") honored by `llm_transform`; a run's own `bust_cache` (`--bust-cache` / the run
+  form's "recompute everything" checkbox) skips every cache READ for that run only (re-asks
+  humans, re-rolls every LLM row) while still WRITING fresh results, so the cache ends the
+  run re-pinned rather than stale. Both default off — an ordinary run's caching is
+  unchanged.
 
 ## `stages/` — one module per stage type (`HANDLERS`)
 `input_data` connector `file` (csv/parquet/json/geojson; `_read_geojson` flattens a

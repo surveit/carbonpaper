@@ -169,6 +169,7 @@ def prepare_run(
     limits: dict[str, int] | None = None,
     offsets: dict[str, int] | None = None,
     bindings: Mapping[str, Mapping[str, Any]] | None = None,
+    bust_cache: bool = False,
 ) -> dict[str, Any]:
     """Create the run dir + id and write an initial `running` manifest (all
     stages pending) so a caller can redirect to the run page immediately and
@@ -204,6 +205,14 @@ def prepare_run(
     bound, or the bound file absent — fails loudly (MissingInputBindingError,
     aggregating every unready stage).
 
+    `bust_cache` is this run's own "recompute everything" flag (RunContext.
+    bust_cache): every stage that reads the stage-result cache treats it as
+    empty for this run — every human_review_queue row re-halts, every
+    llm_transform row re-calls the model — while a write-capable stage still
+    records its fresh result, so the cache ends the run re-pinned rather than
+    stale. False by default (an ordinary run's caching is unchanged); recorded
+    on the manifest (`bust_cache`) so a resume replays the same value.
+
     Raises NoVersionToRunError (no version exists, or none is published) or
     WorkflowLoadError (from the version snapshot's strict load) before the run
     dir is created, so a run with no published version — or an invalid
@@ -238,6 +247,7 @@ def prepare_run(
     # anything on disk. run_dir above stays I/O-only.
     ctx = RunContext.for_production(
         repo_root, run_dir, project_dir.name, run_id, limits=limits, offsets=offsets,
+        bust_cache=bust_cache,
     )
     # The manifest's shape and persistence belong to the executor — it mints the
     # initial record here and rewrites the same file as stages run. prepare only
@@ -253,6 +263,7 @@ def prepare_run(
         input_bindings=input_records,
         limits=limits,
         offsets=offsets,
+        bust_cache=bust_cache,
     )
     write_manifest(run_dir, manifest)
     return {"run_id": run_id, "run_dir": run_dir, "ctx": ctx,
@@ -273,15 +284,18 @@ def execute_run(
     limits: dict[str, int] | None = None,
     offsets: dict[str, int] | None = None,
     bindings: Mapping[str, Mapping[str, Any]] | None = None,
+    bust_cache: bool = False,
 ) -> dict[str, Any]:
     """Run the workflow once (synchronous). Returns the manifest dict. `version_id`
     pins the run to a workflow version (None -> newest published; none published ->
     NoVersionToRunError); see prepare_run / resolve_version_id.
     `limits`/`offsets` are per-run row slicing overrides; `bindings` is the
-    per-run connector-param override; see prepare_run."""
+    per-run connector-param override; `bust_cache` is the run's "recompute
+    everything" flag; see prepare_run."""
     return run_prepared(
         prepare_run(project_dir, repo_root, version_id,
-                    limits=limits, offsets=offsets, bindings=bindings)
+                    limits=limits, offsets=offsets, bindings=bindings,
+                    bust_cache=bust_cache)
     )
 
 
@@ -351,6 +365,9 @@ def resume_run(project_dir: Path, run_id: str, repo_root: Path) -> dict[str, Any
         offsets=manifest.get("offset_overrides") or {},
         queue_stats=manifest.get("queue_stats", {}),
         dropped_columns=manifest.get("dropped_columns", {}),
+        # Manifests from before this feature carry no `bust_cache` key;
+        # `.get(..., False)` resumes those exactly as before (cache honored).
+        bust_cache=manifest.get("bust_cache", False),
     )
 
     manifest["resumed_at"] = datetime.now().isoformat(timespec="seconds")
@@ -368,24 +385,29 @@ def main() -> int:
     args = sys.argv[1:]
     if not args:
         print("Usage: python -m app.runtime.runner <project_dir> "
-              "[--limit <stage_id>=<N> ...] [--offset <stage_id>=<M> ...]")
+              "[--limit <stage_id>=<N> ...] [--offset <stage_id>=<M> ...] [--bust-cache]")
         return 1
     project_dir = Path(args[0]).resolve()
     limits: dict[str, int] = {}
     offsets: dict[str, int] = {}
+    bust_cache = False
     i = 1
     while i < len(args):
         if args[i] in ("--limit", "--offset") and i + 1 < len(args) and "=" in args[i + 1]:
             stage_id, _, n = args[i + 1].partition("=")
             (limits if args[i] == "--limit" else offsets)[stage_id] = int(n)
             i += 2
+        elif args[i] == "--bust-cache":
+            bust_cache = True
+            i += 1
         else:
             print(f"Unknown argument: {args[i]}")
             return 1
     repo_root = Path(__file__).resolve().parents[2]
     try:
         manifest = execute_run(project_dir, repo_root,
-                               limits=limits or None, offsets=offsets or None)
+                               limits=limits or None, offsets=offsets or None,
+                               bust_cache=bust_cache)
     except (NoVersionToRunError, WorkflowLoadError) as exc:
         print(exc)
         return 1
