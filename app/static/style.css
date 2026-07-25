@@ -225,12 +225,23 @@ a { color: var(--accent); }
     display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
     margin-top: 10px; padding-top: 10px; border-top: 1px dashed #e0e0e0;
 }
-.decision-controls .modify-group {
-    display: flex; gap: 6px; align-items: center; margin-left: auto;
-    font-size: 13px;
+/* One control per column the stage's output_schema declares for its reviewer
+   (app.models.stages.find_reviewer_fields) — however many that is, and
+   whatever they are named. */
+.decision-controls .reviewer-fields {
+    display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap;
+    width: 100%; margin-bottom: 4px;
 }
+.decision-controls .reviewer-field {
+    display: flex; flex-direction: column; gap: 2px; font-size: 13px;
+}
+.decision-controls .reviewer-field .rf-name { font-weight: 600; }
+.decision-controls .reviewer-field .rf-type { font-size: 11px; }
 .decision-controls input[type="number"] {
-    width: 60px; padding: 4px 6px; border: 1px solid #ccc; border-radius: 3px;
+    width: 90px; padding: 4px 6px; border: 1px solid #ccc; border-radius: 3px;
+}
+.decision-controls input[type="text"], .decision-controls select {
+    min-width: 140px; padding: 4px 6px; border: 1px solid #ccc; border-radius: 3px;
 }
 .btn.approve { background: #e8f8e8; color: #1f5a1f; border-color: #2a8a2a; }
 .btn.reject  { background: #fde8e8; color: #802020; border-color: #cc2a2a; }

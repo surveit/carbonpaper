@@ -38,7 +38,12 @@
 <article class="queue-card {% if item.prior_decision %}decided decided-{{ item.prior_decision.decision }}{% endif %}"
          data-input-fingerprint="{{ item.input_fingerprint }}">
     <header>
-        <span class="ai-score score-{{ item.row.get('score', '0') }}">AI score: {{ item.row.get('score', '?') }}</span>
+        {# Presentational only: a queued row that carries an upstream `score`
+           gets the familiar badge. Nothing downstream depends on it — the
+           reviewable fields come from output_schema, not from this name. #}
+        {% if item.row.get('score') is not none %}
+        <span class="ai-score score-{{ item.row.get('score') }}">AI score: {{ item.row.get('score') }}</span>
+        {% endif %}
         {% if item.row.get('entity_id') %}<code>{{ item.row.entity_id }}</code>{% endif %}
         {% if item.row.get('query_id') %}· <code>{{ item.row.query_id }}</code>{% endif %}
         {% if item.row.get('benchmark_id') %}· <code>{{ item.row.benchmark_id }}</code>{% endif %}
@@ -74,26 +79,55 @@
     {% if item.prior_decision %}
     <p class="prior-decision">
         Current: <strong>{{ item.prior_decision.decision }}</strong>
-        {% if item.prior_decision.modified_score is not none and item.prior_decision.modified_score == item.prior_decision.modified_score %}
-          · score → <code>{{ item.prior_decision.modified_score }}</code>
-        {% endif %}
+        {% for field in reviewer_fields %}
+          {% set recorded = item.prior_decision.fields.get(field.name) %}
+          {% if recorded is not none %} · {{ field.name }} → <code>{{ recorded }}</code>{% endif %}
+        {% endfor %}
         {% if item.prior_decision.reviewer %}
         <span class="muted">by {{ item.prior_decision.reviewer }} at {{ item.prior_decision.reviewed_at | friendly_time }}</span>
         {% endif %}
     </p>
     {% endif %}
+    {# ── The form the stage's own output_schema declares: one control per
+         column it outputs that the queued row doesn't already carry. A stage
+         that declares none shows approve/reject alone. ── #}
     <div class="decision-controls">
+        {% if reviewer_fields %}
+        <div class="reviewer-fields">
+        {% for field in reviewer_fields %}
+          {% set recorded = item.prior_decision.fields.get(field.name) if item.prior_decision else none %}
+          {% set value = '' if recorded is none else recorded %}
+          <label class="reviewer-field" title="{{ field.description or '' }}">
+            <span class="rf-name">{{ field.name }}</span>
+            <span class="rf-type muted">{{ field.type }}{% if not field.nullable %} · required{% endif %}</span>
+            {% if field.enum %}
+              <select data-field="{{ field.name }}">
+                <option value=""></option>
+                {% for choice in field.enum %}
+                <option value="{{ choice }}" {% if value == choice %}selected{% endif %}>{{ choice }}</option>
+                {% endfor %}
+              </select>
+            {% elif field.type == 'bool' %}
+              <select data-field="{{ field.name }}">
+                <option value=""></option>
+                <option value="true" {% if value is sameas true %}selected{% endif %}>true</option>
+                <option value="false" {% if value is sameas false %}selected{% endif %}>false</option>
+              </select>
+            {% elif field.type in ('int', 'float') %}
+              <input type="number" step="{{ '1' if field.type == 'int' else 'any' }}"
+                     value="{{ value }}" data-field="{{ field.name }}">
+            {% else %}
+              <input type="text" value="{{ value }}" data-field="{{ field.name }}">
+            {% endif %}
+          </label>
+        {% endfor %}
+        </div>
+        {% endif %}
         <button type="button" class="btn approve {% if item.prior_decision and item.prior_decision.decision == 'approve' %}selected{% endif %}" data-action="approve">✓ Approve</button>
         <button type="button" class="btn reject  {% if item.prior_decision and item.prior_decision.decision == 'reject'  %}selected{% endif %}" data-action="reject">✗ Reject</button>
-        <span class="modify-group">
-            <label>Modify score:
-                <input type="number" step="1" min="-2" max="2"
-                       placeholder="e.g. -1"
-                       value="{% if item.prior_decision and item.prior_decision.decision == 'modify' and item.prior_decision.modified_score == item.prior_decision.modified_score %}{{ item.prior_decision.modified_score | int }}{% endif %}"
-                       data-role="score">
-            </label>
-            <button type="button" class="btn modify {% if item.prior_decision and item.prior_decision.decision == 'modify' %}selected{% endif %}" data-action="modify">Save</button>
-        </span>
+        {% if reviewer_fields %}
+        <button type="button" class="btn modify {% if item.prior_decision and item.prior_decision.decision == 'modify' %}selected{% endif %}" data-action="modify">Save changes</button>
+        {% endif %}
     </div>
     <details class="raw-row">
         <summary>raw row</summary>
@@ -109,14 +143,26 @@
   const RUN_ID = {{ run_id | tojson }};
   const STAGE_ID = {{ stage_id | tojson }};
   const DECIDE_URL = `/project/${PROJECT}/runs/${RUN_ID}/queue/${STAGE_ID}/decide`;
+  const FIELD_PREFIX = {{ field_prefix | tojson }};
 
-  async function submitDecision(card, decision, modifiedScore) {
+  // Every control the server rendered for a declared reviewer field, sent
+  // under its own column name. A blank control is omitted: the service reads
+  // "absent" as "not supplied", and for a nullable column that is null.
+  function fieldValues(card) {
+    const values = {};
+    card.querySelectorAll('[data-field]').forEach(function (input) {
+      if (input.value !== '') values[input.dataset.field] = input.value;
+    });
+    return values;
+  }
+
+  async function submitDecision(card, decision, values) {
     const fd = new FormData();
     fd.append('input_fingerprint', card.dataset.inputFingerprint);
     fd.append('decision', decision);
-    if (modifiedScore !== undefined && modifiedScore !== null && modifiedScore !== '') {
-      fd.append('modified_score', modifiedScore);
-    }
+    Object.entries(values || {}).forEach(function ([name, value]) {
+      fd.append(FIELD_PREFIX + name, value);
+    });
     const r = await fetch(DECIDE_URL, { method: 'POST', body: fd });
     if (!r.ok) {
       const text = await r.text();
@@ -133,15 +179,19 @@
     const card = btn.closest('.queue-card');
     if (!card) return;
     const action = btn.dataset.action;
-    if (action === 'approve' || action === 'reject') {
-      submitDecision(card, action);
+    if (action === 'reject') {
+      submitDecision(card, 'reject', {});
+    } else if (action === 'approve') {
+      // Approve records whatever the reviewer left in the declared fields
+      // (often nothing) alongside the verdict.
+      submitDecision(card, 'approve', fieldValues(card));
     } else if (action === 'modify') {
-      const input = card.querySelector('[data-role="score"]');
-      if (!input || input.value === '') {
-        alert('Enter a score to modify to.');
+      const values = fieldValues(card);
+      if (Object.keys(values).length === 0) {
+        alert('Fill in at least one field to save a change.');
         return;
       }
-      submitDecision(card, 'modify', input.value);
+      submitDecision(card, 'modify', values);
     }
   });
 })();
