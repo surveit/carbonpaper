@@ -135,7 +135,7 @@ def _subset_ctx(repo_root: Path, run_dir: Path, queue_auto_approve: bool) -> Run
     # scope (only human_review_queue does) fails loudly rather than reading a
     # fabricated wrong directory — unless `queue_auto_approve` tells that handler to
     # pass rows through in memory, in which case it never reaches for project scope.
-    return RunContext.for_non_product_run(repo_root, run_dir, queue_auto_approve=queue_auto_approve)
+    return RunContext.for_non_production_run(repo_root, run_dir, queue_auto_approve=queue_auto_approve)
 
 
 def _raise_if_run_failed(manifest: RunManifest) -> None:

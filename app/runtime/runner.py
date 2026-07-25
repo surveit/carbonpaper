@@ -241,7 +241,7 @@ def prepare_run(
     # This run's logical identity for cancellation's checkpoints (see
     # app.runtime.cancellation) — read by _execute_stages, never by name of
     # anything on disk. run_dir above stays I/O-only.
-    ctx = RunContext.for_product_run(
+    ctx = RunContext.for_production_run(
         repo_root, run_dir, project_dir.name, run_id, limits=limits, offsets=offsets,
     )
     # The manifest's shape and persistence belong to the executor — it mints the
@@ -345,7 +345,7 @@ def resume_run(project_dir: Path, run_id: str, repo_root: Path) -> dict[str, Any
     # This run's logical identity for cancellation's checkpoints — see the
     # matching comment in prepare_run. Stamped here too so a resumed run is
     # cancellable, not just a fresh one.
-    ctx = RunContext.for_product_run(
+    ctx = RunContext.for_production_run(
         repo_root, run_dir, project_dir.name, run_id,
         # Re-apply the run's per-stage row slicing so stages that resume after
         # a halt honor the same limits/offsets the run started with.

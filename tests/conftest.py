@@ -67,10 +67,10 @@ def make_run_context(
 ) -> RunContext:
     """A RunContext for tests that only care about a few of its fields. `mode`
     follows project scope: an `identity` (with its `stage_cache`) makes it a
-    product run, otherwise a non-product run. A stage's telemetry is reported on
+    production run, otherwise a non-production run. A stage's telemetry is reported on
     its output frame's `.attrs`, not on the context, so there is nothing to seed
     here."""
-    mode: RunMode = "product" if identity is not None else "non_product"
+    mode: RunMode = "production" if identity is not None else "non_production"
     return RunContext(
         mode=mode, repo_root=repo_root, run_dir=run_dir,
         identity=identity, stage_cache=stage_cache,

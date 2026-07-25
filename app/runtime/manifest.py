@@ -272,7 +272,7 @@ def create_run_manifest(
 
     `project`/`workflow_version` are None for a subset run (run_subset) that was
     not told its logical identity — recorded honestly as None rather than a
-    fabricated placeholder. A product run always supplies both.
+    fabricated placeholder. A production run always supplies both.
     `human_review_queue_stats` and `dropped_columns` start empty and grow live as
     stages settle (the executor drains each stage's StageContribution into
     them)."""
