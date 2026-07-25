@@ -1206,8 +1206,20 @@ td.row-num, th.row-num { text-align: right; color: #98a1b3; font-variant-numeric
 #eval-form input:disabled { background: var(--code-bg); color: var(--muted); }
 #eval-form textarea { min-height: 70px; resize: vertical; font-family: inherit; }
 
-/* Graph picker: the mermaid card keeps the shared .dag styling; this is the
-   status bar underneath it (override/target picks + clear). */
+/* Graph picker. Elsewhere .dag sits directly on the page background, so its
+   own white/border/radius card chrome is the only "card" around the diagram
+   (see methodology.html, data_model.html). Here it's already inside the
+   .eval-section-graph card, so the shared .dag styling would double up into
+   a card-in-card -- flatten it back to a plain diagram area and let the
+   section card be the only border/background layer. This is the status bar
+   underneath it (override/target picks + clear). */
+#eval-form .eval-section-graph .dag {
+    background: transparent;
+    border: 0;
+    border-radius: 0;
+    padding: 0;
+    margin: 16px 0;
+}
 #eval-form .pick-summary {
     display: flex;
     align-items: center;
@@ -1264,6 +1276,15 @@ td.row-num, th.row-num { text-align: right; color: #98a1b3; font-variant-numeric
 #eval-form #cases-schema-container { margin: 10px 0; }
 #eval-form #cases-schema-container .lede { margin: 0; }
 #eval-form #download-template-btn { margin: 0 0 20px; }
+/* .btn has no app-wide :disabled treatment, so a disabled button (the
+   template download starts disabled until picks + expected columns resolve
+   to a usable schema) otherwise looks identical to an active one. */
+#eval-form .btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    background: var(--code-bg);
+}
+#eval-form .btn:disabled:hover { background: var(--code-bg); }
 #eval-form .eval-upload-fields { display: flex; flex-direction: column; gap: 16px; margin-top: 16px; }
 #eval-form .eval-upload-fields .field { margin: 0; }
 
