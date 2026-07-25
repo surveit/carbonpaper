@@ -43,6 +43,7 @@ from .execution import (
     _collect_row_errors,
     _collect_row_usage,
     _project_onto_declared_columns,
+    _strip_internal_row_columns,
 )
 
 # The reply field carrying a batched result's item number — the rejoin handle.
@@ -142,7 +143,13 @@ def run_llm_batches(
     contribution = StageContribution()
     _collect_row_errors(df, contribution)
     _collect_row_usage(df, contribution)
-    df = _project_onto_declared_columns(df, stage, contribution)
+    # Strip before projecting, in that order: this path calls the projection
+    # itself rather than going through the row driver, and the projection reports
+    # every column it drops as a user column the stage produced and discarded.
+    # The markers collected just above are driver machinery, so they must be off
+    # the frame before it runs — otherwise they land in the contribution's
+    # dropped_columns and from there in the run manifest.
+    df = _project_onto_declared_columns(_strip_internal_row_columns(df), stage, contribution)
     # Report usage/errors/drops on the returned frame; the executor merges it
     # into the manifest. Nothing accumulates in the (frozen) context.
     df.attrs[CONTRIBUTION_ATTR] = contribution

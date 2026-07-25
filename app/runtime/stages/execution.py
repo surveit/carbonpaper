@@ -53,8 +53,10 @@ Row = dict[str, Any]
 ROW_ERROR_KEY = "_error"
 
 # Sentinel column carrying a row's token/cost usage dict (an llm_transform
-# attaches one per row). The driver sums these onto the stage's StageContribution
-# and then strips the column, so usage never reaches stage output.
+# attaches one per row). It is summed onto the stage's StageContribution and the
+# column is then stripped, so usage never reaches stage output. The row driver
+# does both for the stage it maps; a handler that assembles its own frame instead
+# of being row-driven (llm_transform's batched path) does both for itself.
 ROW_USAGE_KEY = "_usage"
 
 # Sentinel column a row mapper attaches to a row whose value could not be
@@ -117,7 +119,9 @@ class RowMapHandler(StageHandler):
     the map with the assembled frame — every marker column still on it — so the
     handler can read back whatever its mapper attached before the driver strips
     the markers off, and report what it found onto the stage's
-    `StageContribution`.
+    `StageContribution`. It runs AFTER marked rows are removed, so it sees the
+    surviving rows only; a handler needing a dropped row's markers must capture
+    them in its mapper.
     """
 
     def __init__(
@@ -302,8 +306,11 @@ def _finish_mapped_frame(
     marked rows, collect the driver's own markers onto this stage's
     `StageContribution`, hand the frame to the handler's marker collector if it
     has one, then strip every marker column and — where the handler asks for it
-    — project onto the declared columns. The collector sees the frame while
-    every marker is still on it; nothing after it does.
+    — project onto the declared columns.
+
+    The collector's window is exact: it runs after the marked rows are already
+    gone, so it sees the SURVIVING rows only, and before the strip, so it is the
+    last step that sees a marker column at all.
 
     The contribution rides out on the returned frame's `.attrs`; the executor
     merges it into the manifest. Nothing accumulates in the (frozen) context."""
@@ -335,8 +342,33 @@ def _drop_marked_rows(
             f"stage {stage.id}: a row carries the {ROW_DROP_KEY!r} marker, but this "
             f"handler does not declare row dropping"
         )
+    _validate_drop_markers(df, stage)
     keep = pd.Series([value is not True for value in df[ROW_DROP_KEY]], index=df.index, dtype=bool)
     return df[keep].reset_index(drop=True)
+
+
+def _validate_drop_markers(df: pd.DataFrame, stage: Stage) -> None:
+    """Raise unless every ROW_DROP_KEY value is a plain `bool` or null.
+
+    The removal decision is `value is True`, so a truthy STAND-IN — numpy's bool,
+    an int, a string — would quietly KEEP a row the mapper meant to remove, which
+    is data loss in the silent direction. Null stays legal: a mapper that marks
+    only some rows leaves the rest missing, and the frame fills those with NaN."""
+    for position, value in enumerate(df[ROW_DROP_KEY]):
+        if not isinstance(value, bool) and not pd.isna(value):
+            raise ValueError(
+                f"stage {stage.id}: row {position} carries a {ROW_DROP_KEY!r} marker of type "
+                f"{_name_type(value)}; it must be a plain bool or absent, because a row is "
+                f"removed only on exactly True and any other value would silently keep it"
+            )
+
+
+def _name_type(value: object) -> str:
+    """`value`'s type, module-qualified unless it is a builtin. numpy's bool
+    reports the bare name "bool" exactly like the builtin does, so the bare name
+    alone cannot tell an author which of the two they actually handed over."""
+    cls = type(value)
+    return cls.__qualname__ if cls.__module__ == "builtins" else f"{cls.__module__}.{cls.__qualname__}"
 
 
 def _strip_internal_row_columns(df: pd.DataFrame) -> pd.DataFrame:

@@ -5,15 +5,16 @@ from __future__ import annotations
 
 import time
 
+import numpy as np
 import pandas as pd
 import pytest
 
+from app.core.agent.usage import LlmUsage
 from app.models import Stage
 from app.models.stage import StageType
 from app.runtime.cancellation import request_cancel
 from app.runtime.context import RunIdentity
 from app.runtime.errors import RunCancelled
-from app.core.agent.usage import LlmUsage
 from app.runtime.stages.execution import (
     ROW_DEFERRED_KEY,
     ROW_DROP_KEY,
@@ -219,6 +220,53 @@ def test_row_driver_rejects_a_drop_marker_from_a_handler_that_does_not_declare_d
     with pytest.raises(ValueError) as excinfo:
         handler.execute(_row_stage(), {"src": pd.DataFrame({"x": [1, 2, 3]})}, make_run_context())
     assert "t" in str(excinfo.value) and ROW_DROP_KEY in str(excinfo.value)
+
+
+def _drop_marked_with(marker):
+    """A dropping handler whose mapper puts `marker` on row 2 and nothing at all
+    on the others — so the frame also exercises the missing-marker cells pandas
+    fills with NaN."""
+    def make_mapper(stage, ctx):
+        def map_row(row):
+            return {"x": row["x"], ROW_DROP_KEY: marker} if row["x"] == 2 else {"x": row["x"]}
+        return map_row
+    return RowMapHandler(make_mapper=make_mapper, drops_rows=True)
+
+
+def test_row_driver_keeps_rows_whose_drop_marker_is_false_or_missing():
+    out = _drop_marked_with(False).execute(
+        _row_stage(), {"src": pd.DataFrame({"x": [1, 2, 3]})}, make_run_context())
+    assert list(out["x"]) == [1, 2, 3]  # False keeps; the NaN-filled cells keep too
+
+
+# A truthy stand-in for the drop marker, and the type the driver actually
+# OBSERVES for it — which is not always the type the mapper wrote, because
+# assembling the frame coerces a partly-marked column (pandas turns the int 1
+# into 1.0 alongside the NaN cells). numpy's bool is the dangerous one: it
+# reports the bare name "bool" like the builtin, yet `is True` is False for it.
+@pytest.mark.parametrize("marker, observed_type", [
+    (np.bool_(True), "numpy.bool"),
+    (1, "float"),
+    ("yes", "str"),
+])
+def test_row_driver_rejects_a_drop_marker_that_is_not_a_plain_bool(marker, observed_type):
+    # The drop decision is `value is True`, so a truthy STAND-IN would silently
+    # KEEP a row the mapper meant to remove. Refuse it loudly instead.
+    handler = _drop_marked_with(marker)
+    with pytest.raises(ValueError) as excinfo:
+        handler.execute(_row_stage(), {"src": pd.DataFrame({"x": [1, 2, 3]})}, make_run_context())
+    message = str(excinfo.value)
+    assert "stage t" in message        # the stage id
+    assert "row 1" in message          # the offending row position
+    assert observed_type in message    # the observed type
+
+
+def test_row_driver_accepts_a_plain_bool_drop_marker_alongside_missing_ones():
+    # The null carve-out is load-bearing: a mapper that marks only SOME rows
+    # leaves the rest NaN, and that must stay legal rather than trip the check.
+    out = _drop_marked_with(True).execute(
+        _row_stage(), {"src": pd.DataFrame({"x": [1, 2, 3]})}, make_run_context())
+    assert list(out["x"]) == [1, 3]
 
 
 def _marks_every_row_with_every_marker(stage, ctx):
