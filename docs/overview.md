@@ -16,8 +16,9 @@ number or unsourced claim defeats the purpose. Two rules recur in the code:
 - **workflow** — the executable stage graph it compiles into (`compiled/*.json`, one
   validated `Stage` per file; a DAG of typed stages, every edge schema-validated).
 
-A project dir also holds `code/`, `data/`, `runs/<id>/` (outputs + `manifest.json`),
-and `decisions/` — runtime data, not source. Versions are documents in the store
+A project dir also holds `code/`, `data/`, `runs/<id>/` (outputs + `manifest.json`) —
+runtime data, not source. Review decisions are documents in the store
+(`app.core.stage_cache`), not a project subdir. Versions are documents in the store
 (the `workflow_version` collection), not a project subdir.
 
 ## The three features

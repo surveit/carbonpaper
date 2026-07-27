@@ -44,18 +44,28 @@ def test_hrq_note_names_the_decision_values_the_runtime_actually_emits():
 
 def test_hrq_note_names_every_queue_field_that_adds_a_column():
     """The note's job is to tell an author which columns to declare on
-    output_schema. `QueueConfig` is what decides that set: `reviewed_columns`
-    plus every `*_column` field. A field added there and not taught here would
-    leave the note describing a smaller output than the runtime produces —
-    the class of falsehood this note has already carried once."""
+    output_schema, and `_list_added_columns` is the code that decides that set —
+    read here rather than re-derived from a name pattern, so a column-adding
+    field that breaks the `*_column` convention still counts. Pinned in BOTH
+    directions: a field added there and not taught here leaves the note
+    describing a smaller output than the runtime produces (the class of
+    falsehood this note has already carried once), and a `queue.<field>` the
+    note names after `QueueConfig` dropped it no longer resolves."""
     from app.models import QueueConfig
+    from app.models.stages.human_review_queue import _list_added_columns
 
-    naming_fields = {
-        name for name in QueueConfig.model_fields
-        if name == "reviewed_columns" or name.endswith("_column")
-    }
-    for field in sorted(naming_fields):
-        assert f"queue.{field}" in m.HUMAN_REVIEW_QUEUE_CONTRACT_NOTE, field
+    queue = QueueConfig(
+        reviewed_columns={"src": "reviewed_src"}, verdict_column="v",
+        reviewer_column="r", reviewed_at_column="at", review_notes_column="n",
+    )
+    # `_list_added_columns` labels a reviewed target `queue.reviewed_columns['src']`;
+    # the field itself is the part before the subscript.
+    adding_fields = {field.split("[")[0] for field, _ in _list_added_columns(queue)}
+    mentioned = {f"queue.{name}" for name in re.findall(
+        r"queue\.(\w+)", m.HUMAN_REVIEW_QUEUE_CONTRACT_NOTE)}
+
+    assert adding_fields <= mentioned, adding_fields - mentioned
+    assert mentioned <= {f"queue.{name}" for name in QueueConfig.model_fields}, mentioned
 
 
 def test_publish_note_names_the_trace_link_helper():

@@ -130,8 +130,11 @@ async def index(request: Request):
 
 @router.post("/project/{project_name}/delete")
 async def delete_project(project_name: str):
-    """DESTRUCTIVE — remove an entire project (schemas, workflow, runs, decisions,
-    versions). Guarded via _project_dir: only a DIRECT child directory of examples/
+    """DESTRUCTIVE — remove an entire project DIRECTORY (schemas, workflow, run
+    outputs). The project's documents in the store — versions, node-review and
+    row-review decisions — are not touched, so a project deleted here and
+    re-created under the same name inherits them.
+    Guarded via _project_dir: only a DIRECT child directory of examples/
     can be removed (so a traversal, an absolute path, or a name resolving outside
     examples/ can never delete anything here). Only reachable via POST (the
     dashboard's confirm()-gated form). Redirects to the dashboard (303) on success."""
