@@ -305,8 +305,11 @@ def test_mcp_save_version_snapshots_the_working_copy_unpublished(tmp_path, monke
     assert {s.id for s in version.stages} == {"load", "double", "untested"}
 
 
-def test_mcp_save_version_leaves_the_first_version_parentless(tmp_path, monkeypatch):
-    """Nothing preceded it, so the chain starts here — never a fabricated ancestor."""
+def test_mcp_save_version_omitting_the_parent_records_none(tmp_path, monkeypatch):
+    """A caller that names no parent gets none recorded — even with a version already
+    stored. The agent authors against the working copy, so the newest stored version
+    is not evidence of what this snapshot descended from; asserting it would fabricate
+    the lineage the version exists to document."""
     from app.mcp import server
     from app.services import versioning, workspace
 
@@ -315,14 +318,16 @@ def test_mcp_save_version_leaves_the_first_version_parentless(tmp_path, monkeypa
     _write_compiled_workflow(pdir)
 
     server.save_version(project_id="trail", message="first cut")
+    time.sleep(1)  # version ids are second-resolution timestamps
+    second = server.save_version(project_id="trail", message="second cut")
 
-    [version] = versioning.list_versions(pdir)
-    assert version.parent_version is None
+    assert second["ok"] is True
+    assert versioning.load_version(pdir, second["version_id"]).parent_version is None
 
 
-def test_mcp_save_version_chains_onto_the_latest_version(tmp_path, monkeypatch):
-    """An agent-saved version records what it descended from, so the audit trail a
-    reviewer walks is unbroken across the agent's edits."""
+def test_mcp_save_version_records_the_caller_supplied_parent(tmp_path, monkeypatch):
+    """The parent the caller names is the one stored: the agent knows which version it
+    loaded, and that claim is the only basis for the lineage a reviewer walks."""
     from app.mcp import server
     from app.services import versioning, workspace
 
@@ -332,11 +337,36 @@ def test_mcp_save_version_chains_onto_the_latest_version(tmp_path, monkeypatch):
 
     first = server.save_version(project_id="trail", message="first cut")
     time.sleep(1)  # version ids are second-resolution timestamps
-    second = server.save_version(project_id="trail", message="second cut")
+    second = server.save_version(
+        project_id="trail", message="second cut", parent_version=first["version_id"])
 
     assert second["version_id"] != first["version_id"]
     saved = versioning.load_version(pdir, second["version_id"])
     assert saved.parent_version == first["version_id"]
+
+
+def test_mcp_save_version_refuses_a_parent_that_does_not_exist(tmp_path, monkeypatch):
+    """A parent id naming no stored version is refused on the {ok: False, issues}
+    channel and NOTHING is written — a dangling ancestor would be a lineage claim the
+    store cannot substantiate."""
+    from app.mcp import server
+    from app.services import versioning, workspace
+
+    monkeypatch.setattr(workspace, "EXAMPLES_DIR", tmp_path)
+    pdir = tmp_path / "trail"
+    _write_compiled_workflow(pdir)
+
+    server.save_version(project_id="trail", message="first cut")
+    before = [v.version_id for v in versioning.list_versions(pdir)]
+    time.sleep(1)  # a second save would land a new id, so the list below would grow
+
+    refused = server.save_version(
+        project_id="trail", message="second cut", parent_version="20200101T000000")
+
+    assert refused["ok"] is False
+    assert "20200101T000000" in " ".join(refused["issues"])
+    assert "version_id" not in refused
+    assert [v.version_id for v in versioning.list_versions(pdir)] == before
 
 
 def test_mcp_save_version_refuses_an_unloadable_working_copy(tmp_path, monkeypatch):

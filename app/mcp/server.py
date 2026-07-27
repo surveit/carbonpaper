@@ -344,19 +344,25 @@ def catch_stage_edit_refusals(edit: Callable[[], EditStageResult]) -> dict[str, 
 
 
 @mcp.tool()
-def save_version(project_id: str, message: str) -> dict[str, Any]:
+def save_version(
+    project_id: str, message: str, parent_version: str | None = None
+) -> dict[str, Any]:
     """Freeze the project's CURRENT workflow into an immutable version — the snapshot
-    a run or a workflow test executes. Born UNPUBLISHED: only a human publishes. The
-    snapshot chains onto the project's latest existing version as its parent (the
-    first version on a project has none). The working copy is strict-loaded first, so
-    an invalid workflow comes back as {ok: False, issues} and no version is written."""
+    a run or a workflow test executes. Born UNPUBLISHED: only a human publishes.
+
+    `parent_version` is the version YOU started this edit from. Supply it only when you
+    actually loaded that version; it is recorded verbatim as this snapshot's ancestor,
+    and an id naming no version of this project is refused. Omitting it is normal and
+    records no ancestor — nothing is inferred from what else the project has stored.
+
+    The working copy is strict-loaded first, so an invalid workflow comes back as
+    {ok: False, issues} and no version is written."""
     pdir = _resolve_existing_project(project_id)
     try:
+        if parent_version is not None:
+            versioning.validate_version_exists(pdir, parent_version)
         version = versioning.create_version_from_disk(
-            pdir,
-            message=message,
-            reviewer="agent",
-            parent_version=versioning.find_latest_version_id(pdir),
+            pdir, message=message, reviewer="agent", parent_version=parent_version
         )
     except _STAGE_TOOL_ERRORS as exc:
         return {"ok": False, "issues": [str(exc)]}
