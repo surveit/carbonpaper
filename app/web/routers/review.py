@@ -424,15 +424,15 @@ def _build_reviewed_field(source: str, target: str, column: Column) -> _Reviewed
     )
 
 
-def _load_scored_stage(stages: list[Stage], stage_def: Stage) -> Stage | None:
+def _load_upstream_stage(stages: list[Stage], stage_def: Stage) -> Stage | None:
     """The upstream stage whose OUTPUT this queue stage reviews — stage_def's
     declared input, or None if it declares none."""
-    scored_ids = stage_def.input_ids
-    return find_stage(stages, scored_ids[0]) if scored_ids else None
+    upstream_ids = stage_def.input_ids
+    return find_stage(stages, upstream_ids[0]) if upstream_ids else None
 
 
-def _resolve_prompt_template(scored_def: Stage | None) -> str | None:
-    return scored_def.llm.prompt_data_template if scored_def and scored_def.llm else None
+def _resolve_prompt_template(upstream_def: Stage | None) -> str | None:
+    return upstream_def.llm.prompt_data_template if upstream_def and upstream_def.llm else None
 
 
 def _read_table_or_none(path: Path) -> pd.DataFrame | None:
@@ -444,23 +444,23 @@ def _read_table_or_none(path: Path) -> pd.DataFrame | None:
         return None
 
 
-def _resolve_scored_input_frame(
-    scored_def: Stage, manifest: dict[str, Any], run_dir: Path
+def _resolve_upstream_input_frame(
+    upstream_def: Stage, manifest: dict[str, Any], run_dir: Path
 ) -> tuple[pd.DataFrame | None, list[str] | None]:
-    """The scored stage's OWN input — DataFrame plus declared primary key — the
+    """The upstream stage's OWN input — DataFrame plus declared primary key — the
     frame the queue snapshot needs to join back against to recover the model
     input, or (None, pk) if that stage's output isn't on disk."""
     output_by_id = {s.get("stage_id"): s.get("output_path") for s in manifest.get("stage_records", [])}
-    scored_in_id = scored_def.input_ids[0]
-    scored_in = scored_def.inputs[0] if scored_def.inputs else None
-    pk = scored_in.table_schema.primary_key if scored_in and scored_in.table_schema else None
-    in_path = output_by_id.get(scored_in_id)
+    upstream_in_id = upstream_def.input_ids[0]
+    upstream_in = upstream_def.inputs[0] if upstream_def.inputs else None
+    pk = upstream_in.table_schema.primary_key if upstream_in and upstream_in.table_schema else None
+    in_path = output_by_id.get(upstream_in_id)
     in_df = _read_table_or_none(run_dir / in_path) if in_path else None
     return in_df, pk
 
 
 def _find_join_keys(primary_key: list[str] | None, columns: list[str]) -> list[str]:
-    """Columns to join the queue snapshot back to the scored stage's input on:
+    """Columns to join the queue snapshot back to the upstream stage's input on:
     the declared primary key restricted to columns actually present, or a
     handful of common id-like column names as a fallback."""
     return [k for k in (primary_key or []) if k in columns] or \
@@ -477,18 +477,17 @@ def _index_rows_by_join_key(df: pd.DataFrame, join_keys: list[str]) -> dict[tupl
 def _load_model_input_lookup(
     stage_def: Stage, stages: list[Stage], manifest: dict[str, Any], run_dir: Path
 ) -> tuple[dict[tuple[str, ...], dict[str, Any]], list[str], str | None]:
-    """Recover the MODEL INPUT so the score is reviewable, not just visible.
-    The queue snapshot holds the scoring stage's OUTPUT (score + reasoning + ids);
-    the thing the model actually judged (the quote, the benchmark) lives in the
-    scoring stage's INPUT, one stage upstream. Join it back + resolve the prompt
-    template it was scored with."""
-    scored_def = _load_scored_stage(stages, stage_def)
-    prompt_template = _resolve_prompt_template(scored_def)
+    """Recover the MODEL INPUT so the AI's values are reviewable, not just
+    visible. The queue snapshot holds the upstream stage's OUTPUT; the material
+    the model actually judged lives in that stage's INPUT, one stage further
+    up. Join it back + resolve the prompt template it was produced with."""
+    upstream_def = _load_upstream_stage(stages, stage_def)
+    prompt_template = _resolve_prompt_template(upstream_def)
 
     input_lookup: dict[tuple[str, ...], dict[str, Any]] = {}
     join_keys: list[str] = []
-    if scored_def and scored_def.input_ids:
-        in_df, pk = _resolve_scored_input_frame(scored_def, manifest, run_dir)
+    if upstream_def and upstream_def.input_ids:
+        in_df, pk = _resolve_upstream_input_frame(upstream_def, manifest, run_dir)
         if in_df is not None:
             join_keys = _find_join_keys(pk, list(in_df.columns))
             if join_keys:

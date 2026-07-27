@@ -47,19 +47,22 @@ after injection — without that, the panel's JS (tabs + scratch tool) is dead.
 `GET /project/{p}/runs/{run_id}/queue/{stage_id}`.
 
 The key principle: **a reviewer must see the model INPUT, not just its output.**
-The queue snapshot only holds the scoring stage's *output* (score + reasoning +
-ids); the thing the model judged lives one stage upstream. `queue_page` walks
-back from the queue stage → the scoring `llm_transform` stage → that stage's
-input, loads the input's run output, joins each flagged row by primary key, and
-**re-renders the actual prompt**. The card leads with *the scored text + the
-exact prompt the model received*, then the model's output. If the input can't be
-recovered it says so loudly ("reviewing blind") rather than hiding it. (Known
-gap: when no primary key is declared, the join falls back to guessed keys —
-issue #49.)
+The queue snapshot only holds the upstream stage's *output*; the material the
+model judged lives one stage further up. `queue_page` walks back from the queue
+stage → its upstream stage → that stage's input, loads the input's run output,
+joins each flagged row by primary key, and **re-renders the actual prompt**. The
+card leads with *the reviewed material + the exact prompt the model received*,
+then the model's output. If the input can't be recovered it says so loudly
+("reviewing blind") rather than hiding it. (Known gap: when no primary key is
+declared, the join falls back to guessed keys — issue #49.)
 
-Decisions are content-hashed (`decisions/<stage>.parquet`) so they survive
-re-runs and LLM non-determinism. When all items are decided, a **Resume run**
-button appears.
+The form fields come from the stage's own `queue.reviewed_columns`: one control
+per reviewed column, typed from that column's declared schema. A decision
+records a verdict (`approve` for the AI's values, `modify` for the reviewer's),
+a value for each reviewed column, and optionally a note — it never overwrites
+the AI's original column. Decisions are keyed by a hash of the row (`app.core.stage_cache`)
+so they survive re-runs and LLM non-determinism. When all items are decided, a
+**Resume run** button appears.
 
 ## Node review + workflow versioning (`_node_review.html`, `versions.html`)
 
