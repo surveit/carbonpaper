@@ -674,12 +674,28 @@ def _project_onto_declared_columns(
     order. Column selection only — row count and order are untouched. Every
     column it drops is recorded on `contribution`, never silently discarded —
     and each is a user column, since the internal columns were already stripped
-    off before this runs."""
+    off before this runs. Raises when a declared column is absent, except on a
+    frame whose rows already reported generation failures — a failed row
+    produces no generated value, and its row errors fail the stage anyway."""
     declared = [c.name for c in stage.output_schema.columns] if stage.output_schema else []
     if not declared:
         return df
-    keep = [c for c in declared if c in df.columns]
-    dropped = [str(c) for c in df.columns if c not in keep]
+    if not len(df.columns) and not len(df):
+        # Not a violation: with an empty input no mapper result named a single
+        # column, so no row failed to produce a declared one. The driver hands
+        # this frame the input's own columns
+        # (_restore_input_columns_when_nothing_named_them).
+        return df
+    missing = [name for name in declared if name not in df.columns]
+    if missing and not contribution.row_errors:
+        raise ValueError(
+            f"stage '{stage.id}' declares output column(s) {missing} that it did not "
+            f"produce; the frame carries {[str(c) for c in df.columns]}. A declared "
+            "column is what downstream stages are entitled to read — it can be neither "
+            "invented nor dropped from the projection."
+        )
+    df = df.reindex(columns=[*df.columns, *missing]) if missing else df
+    dropped = [str(c) for c in df.columns if c not in declared]
     if dropped:
         contribution.dropped_columns = dropped
-    return df[keep]
+    return df[declared]

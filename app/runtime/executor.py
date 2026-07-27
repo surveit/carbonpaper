@@ -35,7 +35,7 @@ from .manifest import (
     write_manifest,
 )
 from .stages import HANDLERS, HaltForReview, StageHandler
-from .validation import Issue, validate_dataframe
+from .validation import Issue, Severity, ValidationReport, validate_dataframe
 
 
 def topological_sort(stages: list[Stage]) -> list[Stage]:
@@ -372,14 +372,17 @@ def _finalize_stage_output(
     manifest: RunManifest,
 ) -> bool:
     """Trim, validate, and persist a stage's raw handler output, then decide
-    its terminal status. A per-row generation failure is a stage error,
-    recorded exactly like a raised exception — the partial output file stays
-    on disk for inspection, and the stage's own `error` status keeps a resume
-    from reusing it. Otherwise the status is `ok`/`validation_warnings` from
-    the output and input validation reports. Returns True (a row-generation
-    error) if the caller must join this stage to `blocked`, so every
-    transitive consumer is skipped rather than run on this stage's partial
-    frame and marked `ok`; False otherwise."""
+    its terminal status. Two things make it a stage error, both recorded
+    exactly like a raised exception: a per-row generation failure, and an
+    error-severity issue in the OUTPUT validation report (a missing declared
+    column, a failed coercion, a null in a non-nullable column, a duplicated
+    primary key) — a frame that violates the declared schema must not be
+    consumed downstream. The output file stays on disk for inspection, and the
+    stage's own `error` status keeps a resume from reusing it. Otherwise the
+    status is `ok`, or `validation_warnings` when an INPUT report carries an
+    error. Returns True if the caller must join this stage to `blocked`, so
+    every transitive consumer is skipped rather than run on this stage's
+    non-conforming frame and marked `ok`; False otherwise."""
     sid = stage.id
     # Read the stage's contribution off the handler's frame BEFORE any slicing
     # (which builds a new frame and drops `.attrs`), then merge usage into this
@@ -413,15 +416,22 @@ def _finalize_stage_output(
             message=_summarize_row_errors(row_errors),
             traceback=None,
         )
+    elif not out_rep.ok:
+        record.status = StageStatus.ERROR
+        record.error = StageErrorInfo(
+            type="OutputSchemaViolation",
+            message=_summarize_output_schema_errors(sid, out_rep),
+            traceback=None,
+        )
     else:
-        record.status = StageStatus.OK if out_rep.ok and all(
+        record.status = StageStatus.OK if all(
             v["ok"] for v in record.input_validation_report
         ) else StageStatus.VALIDATION_WARNINGS
     record.output_row_count = int(len(output))
     # Manifest paths are POSIX-style so the persisted JSON is identical on
     # every platform.
     record.output_path = output_path.relative_to(run_dir).as_posix()
-    return bool(row_errors)
+    return record.status == StageStatus.ERROR
 
 
 def _read_stage_contribution(output: pd.DataFrame | None) -> StageContribution:
@@ -473,9 +483,9 @@ def _run_stage(
     error, halt, or a mid-stage cancel) into `records_by_id[stage.id]` —
     flushing the manifest once the stage starts and again once it settles, so
     the run page shows it live. Returns `(outcome, joins_blocked)`:
-    `joins_blocked` is True for a halt, a general exception, and a
-    row-generation error alike — every outcome except a clean ok/warnings or
-    a cancel — so the caller can add this stage to its own `blocked` set
+    `joins_blocked` is True for a halt, a general exception, a row-generation
+    error, and an output frame that violates the declared output_schema alike —
+    every outcome except a clean ok/warnings or a cancel — so the caller can add this stage to its own `blocked` set
     itself, keeping that decision visible at the loop."""
     sid = stage.id
     record = StageRecord.record_with_status(stage, StageStatus.RUNNING)
@@ -567,6 +577,19 @@ def _summarize_row_errors(row_errors: list[RowError]) -> str:
     head = "; ".join(f"row {e['row']}: {e['message']}" for e in row_errors[:3])
     more = f" (+{len(row_errors) - 3} more)" if len(row_errors) > 3 else ""
     return f"{len(row_errors)} row(s) failed generation: {head}{more}"
+
+
+def _summarize_output_schema_errors(sid: str, report: ValidationReport) -> str:
+    """One-line summary of the error-severity output issues for the stage's
+    error record, naming the columns at fault — the full issue list stays in the
+    output validation report."""
+    errors = [issue for issue in report.issues if issue.severity == Severity.error]
+    named = sorted({issue.column for issue in errors if issue.column})
+    columns = f" (column(s): {', '.join(named)})" if named else ""
+    return (
+        f"stage '{sid}' output violates its declared output_schema{columns}: "
+        + "; ".join(issue.message for issue in errors)
+    )
 
 
 def _read_run_identity(ctx: RunContext) -> RunIdentity | None:

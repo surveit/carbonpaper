@@ -220,6 +220,110 @@ def test_distinct_input_rows_pass(tmp_path):
     assert records["consume"]["output_row_count"] == 2
 
 
+def _output_schema_violation_project(root, transform_code: str):
+    """load → shape (a frame function running `transform_code`) → tail. `shape`
+    declares the (name, val) schema; what its code actually returns is the
+    variable under test, and `tail` exists to show what the run does downstream
+    of it."""
+    (root / "compiled").mkdir(parents=True)
+    (root / "data").mkdir(parents=True)
+    pd.DataFrame({"name": ["a", "b"], "val": [1, 2]}).to_csv(
+        root / "data" / "items.csv", index=False)
+    load = {
+        "id": "load", "name": "Load items", "type": "input_data",
+        "connector": {"kind": "file",
+                      "params": {"path": str(root / "data" / "items.csv"), "format": "csv"}},
+        "output_schema": _NAME_VAL_SCHEMA,
+    }
+    shape = {
+        "id": "shape", "name": "Shape items", "type": "python_frame_function",
+        "inputs": [{"id": "load", "schema": _NAME_VAL_SCHEMA}],
+        "output_schema": _NAME_VAL_SCHEMA,
+        "function": {"kind": "inline", "code": transform_code},
+    }
+    tail = {
+        "id": "tail", "name": "Tail", "type": "python_frame_function",
+        "inputs": [{"id": "shape", "schema": _NAME_VAL_SCHEMA}],
+        "output_schema": _NAME_VAL_SCHEMA,
+        "function": {"kind": "inline", "code": "def transform(df):\n    return df\n"},
+    }
+    for filename, stage in (("01_load.json", load), ("02_shape.json", shape),
+                            ("03_tail.json", tail)):
+        (root / "compiled" / filename).write_text(json.dumps(stage), encoding="utf-8")
+
+
+def test_output_missing_a_declared_column_errors_the_stage_and_blocks_downstream(tmp_path):
+    # An error-severity OUTPUT issue is a stage failure, not a warning: the
+    # frame does not satisfy the declared schema, so no downstream stage may
+    # consume it. Same fork-block a raised handler exception gets.
+    _output_schema_violation_project(
+        tmp_path, "def transform(df):\n    return df[['name']]\n")
+    _seed_version(tmp_path)
+    manifest = execute_run(tmp_path, repo_root=tmp_path)
+
+    records = {r["stage_id"]: r for r in manifest["stage_records"]}
+    assert records["load"]["status"] == "ok"
+    assert records["shape"]["status"] == "error"
+    assert "val" in records["shape"]["error"]["message"]      # names the failing column
+    # Downstream is blocked exactly as it is behind a raised exception: never
+    # run, never marked ok, and no output left behind for a resume to reuse.
+    assert records["tail"]["status"] == "pending"
+    assert records["tail"].get("output_path") is None
+    assert not (tmp_path / "runs" / manifest["run_id"] / "outputs" / "tail.parquet").exists()
+    assert manifest["status"] == "errors"
+
+
+def test_warning_only_output_report_does_not_error_the_stage(tmp_path):
+    # An undeclared extra column is warning-severity. It must not be swept into
+    # the error rule — every declared column is there, so downstream may consume
+    # the frame and the stage carries no error record.
+    _output_schema_violation_project(
+        tmp_path, "def transform(df):\n    df['extra'] = 1\n    return df\n")
+    _seed_version(tmp_path)
+    manifest = execute_run(tmp_path, repo_root=tmp_path)
+
+    records = {r["stage_id"]: r for r in manifest["stage_records"]}
+    assert records["shape"]["status"] != "error"
+    assert records["shape"]["error"] is None
+    issues = records["shape"]["output_validation_report"]["issues"]
+    assert [i["severity"] for i in issues] == ["warning"]   # warning-only, and reported
+    assert records["tail"]["status"] == "ok"                # not blocked
+    assert manifest["status"] != "errors"
+
+
+def test_output_validation_error_other_than_a_missing_column_also_errors_the_stage(tmp_path):
+    # The rule is on severity, not on one issue kind: a null in a column
+    # declared non-nullable is error-severity and fails the stage the same way.
+    (tmp_path / "compiled").mkdir(parents=True)
+    (tmp_path / "data").mkdir(parents=True)
+    pd.DataFrame({"name": ["a"], "val": [1]}).to_csv(
+        tmp_path / "data" / "items.csv", index=False)
+    load = {
+        "id": "load", "name": "Load items", "type": "input_data",
+        "connector": {"kind": "file",
+                      "params": {"path": str(tmp_path / "data" / "items.csv"), "format": "csv"}},
+        "output_schema": _NAME_VAL_SCHEMA,
+    }
+    blank = {
+        "id": "blank", "name": "Blank the value", "type": "python_frame_function",
+        "inputs": [{"id": "load", "schema": _NAME_VAL_SCHEMA}],
+        "output_schema": {"columns": [{"name": "name", "type": "str"},
+                                      {"name": "val", "type": "int", "nullable": False}]},
+        "function": {"kind": "inline",
+                     "code": "def transform(df):\n    df['val'] = None\n    return df\n"},
+    }
+    (tmp_path / "compiled" / "01_load.json").write_text(json.dumps(load), encoding="utf-8")
+    (tmp_path / "compiled" / "02_blank.json").write_text(json.dumps(blank), encoding="utf-8")
+    _seed_version(tmp_path)
+    manifest = execute_run(tmp_path, repo_root=tmp_path)
+
+    record = {r["stage_id"]: r for r in manifest["stage_records"]}["blank"]
+    assert record["status"] == "error"
+    assert record["error"]["type"] == "OutputSchemaViolation"
+    assert "val" in record["error"]["message"]
+    assert manifest["status"] == "errors"
+
+
 def _llm_transform_project(root):
     """input_data loading one row, feeding an llm_transform. Exercises the
     runner's row-error surfacing when a row's generation fails."""
