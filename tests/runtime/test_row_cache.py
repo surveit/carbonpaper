@@ -293,6 +293,102 @@ def test_a_failed_llm_row_is_never_recorded(monkeypatch):
     assert _entries(stage) == []
 
 
+# ── llm_transform, batch_size > 1 (the batched path bypasses the row driver) ─
+
+
+def _stub_call_llm_batch(monkeypatch, batches: list[list[int]]) -> None:
+    """Answer a batched call from the rendered task alone: each item's task text
+    is the row's `x`, so the stub records which rows the model was shown."""
+    def fake_call_llm_batch(stage_id, llm, instructions, task, reply_schema, usage_out):
+        shown = [
+            int(block.splitlines()[1])
+            for block in task.split("### item ")[1:]
+        ]
+        batches.append(shown)
+        return {"results": [
+            {"row_number": number, "verdict": f"v{value}"}
+            for number, value in enumerate(shown)
+        ]}
+
+    monkeypatch.setattr(
+        "app.runtime.stages.llm_transform.call_llm_batch", fake_call_llm_batch)
+
+
+def test_batched_path_caches_every_computed_row(monkeypatch):
+    batches: list[list[int]] = []
+    _stub_call_llm_batch(monkeypatch, batches)
+    stage = _llm_stage(batch_size=2)
+
+    out = _run(stage, _src([1, 2]), _ctx(run_id="run1"))
+    assert list(out["verdict"]) == ["v1", "v2"]
+    assert batches == [[1, 2]]
+    assert len(_entries(stage)) == 2
+
+
+def test_a_partial_batched_hit_calls_the_model_for_the_misses_only(monkeypatch):
+    batches: list[list[int]] = []
+    _stub_call_llm_batch(monkeypatch, batches)
+    stage = _llm_stage(batch_size=2)
+    _run(stage, _src([1, 2]), _ctx(run_id="run1"))
+    batches.clear()
+
+    out = _run(stage, _src([1, 2, 7, 8]), _ctx(run_id="run2"))
+    assert batches == [[7, 8]]  # rows 1 and 2 replayed; only the misses batched
+    assert list(out["x"]) == [1, 2, 7, 8]          # grain and order still hold
+    assert list(out["verdict"]) == ["v1", "v2", "v7", "v8"]
+
+
+def test_batched_misses_that_were_not_adjacent_rejoin_their_own_rows(monkeypatch):
+    """A chunk is packed from the misses alone, so its rows need not be adjacent
+    in the input — each reply must still land on the row that produced it."""
+    batches: list[list[int]] = []
+    _stub_call_llm_batch(monkeypatch, batches)
+    stage = _llm_stage(batch_size=2)
+    _run(stage, _src([2, 4]), _ctx(run_id="run1"))
+    batches.clear()
+
+    out = _run(stage, _src([1, 2, 3, 4, 5]), _ctx(run_id="run2"))
+    assert batches == [[1, 3], [5]]
+    assert list(out["x"]) == [1, 2, 3, 4, 5]
+    assert list(out["verdict"]) == ["v1", "v2", "v3", "v4", "v5"]
+
+
+def test_a_failed_batch_records_nothing(monkeypatch):
+    def failing_call_llm_batch(stage_id, llm, instructions, task, reply_schema, usage_out):
+        raise RuntimeError("model down")
+
+    monkeypatch.setattr(
+        "app.runtime.stages.llm_transform.call_llm_batch", failing_call_llm_batch)
+    stage = _llm_stage(batch_size=2)
+    out = _run(stage, _src([1, 2]), _ctx(run_id="run1"))
+    assert len(out) == 2          # every row still emitted, carrying its failure
+    assert _entries(stage) == []  # and nothing pinned
+
+
+def test_batched_bust_cache_skips_the_read_but_re_pins(monkeypatch):
+    batches: list[list[int]] = []
+    _stub_call_llm_batch(monkeypatch, batches)
+    stage = _llm_stage(batch_size=2)
+    _run(stage, _src([1, 2]), _ctx(run_id="run1"))
+    batches.clear()
+
+    _run(stage, _src([1, 2]), _ctx(run_id="run2", bust_cache=True))
+    assert batches == [[1, 2]]  # read skipped
+    batches.clear()
+
+    _run(stage, _src([1, 2]), _ctx(run_id="run3"))
+    assert batches == []  # re-pinned, not stale
+
+
+def test_batched_path_without_project_scope_calls_the_model_every_time(monkeypatch):
+    batches: list[list[int]] = []
+    _stub_call_llm_batch(monkeypatch, batches)
+    stage = _llm_stage(batch_size=2)
+    _run(stage, _src([1, 2]), make_run_context())
+    _run(stage, _src([1, 2]), make_run_context())
+    assert batches == [[1, 2], [1, 2]]
+
+
 # ── human_review_queue opts out at its registration site ─────────────────────
 
 

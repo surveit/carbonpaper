@@ -35,6 +35,17 @@ FeatureCollection); `python_row_function`/`python_frame_function`
 `human_review_queue` (row fingerprint → cached decision or halt);
 `publish` (a `function` module that writes artifacts).
 
+**Row caching is a property of the handler SHAPE, not of a stage type.** `RowMapHandler`
+wraps the one line of per-row compute (`execution.open_row_cache`), so `python_row_function`
+and a batch_size-1 `llm_transform` are cached by the same code; `llm_transform`'s batched
+path looks every row up, batches only the misses, and records each computed row. One bulk
+`find_entries` read per execution, keyed by (stage-definition fingerprint, input-row
+fingerprint). A row carrying `_error`/`_deferred` is never recorded and `_usage` is stripped
+before recording, so a hit reports no spend. `Stage.cache: false` declares a stage
+intentionally non-deterministic — no read, no write — and is outside the definition
+fingerprint. `human_review_queue` registers with `caches_rows=False`: its entries are human
+decisions written outside the run and its queue counts are accumulated per row.
+
 ## LLM backend (`llm_transform`)
 - `options.py` `require_agent_backend()` raises unless the agent backend can run
   (`claude_agent_sdk` importable and a `claude` CLI located, incl. Windows

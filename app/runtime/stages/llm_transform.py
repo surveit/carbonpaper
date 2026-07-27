@@ -36,10 +36,13 @@ from app.models.schema import Column, TableSchema
 from ..context import RunContext
 from ..manifest import CONTRIBUTION_ATTR, StageContribution
 from ..llm import call_llm, call_llm_batch, render_prompt
+from app.core.stage_cache import compute_row_fingerprint
+
 from .execution import (
     ROW_ERROR_KEY,
     ROW_USAGE_KEY,
     Row,
+    RowCache,
     RowMapper,
     _collect_row_errors,
     _collect_row_usage,
@@ -96,6 +99,7 @@ def run_llm_batches(
     inputs: dict[str, pd.DataFrame],
     ctx: RunContext,
     parallelism: int,
+    cache: RowCache | None = None,
 ) -> pd.DataFrame:
     """Run an llm_transform stage in chunks of `stage.llm.batch_size` rows per
     model call, rejoining each reply to its row by the batch-local row number.
@@ -105,7 +109,11 @@ def run_llm_batches(
     order — and then VERIFIED (no empty slot, count unchanged) before returning,
     so a bug in the batch path surfaces as a loud runtime error rather than a
     silently mis-grained frame. Per-row independence is NOT preserved: the model
-    sees a whole chunk in one prompt (see module docstring)."""
+    sees a whole chunk in one prompt (see module docstring).
+
+    Caching is not free here — this path bypasses the row driver's interceptor —
+    so it is spelled out: every row is looked up first, only the MISSES are
+    batched, and each computed row is recorded. Same key, same skip rules."""
     llm = stage.llm
     assert llm is not None  # Stage validation: llm_transform carries llm
     assert stage.output_schema is not None and stage.inputs[0].table_schema is not None
@@ -115,23 +123,16 @@ def run_llm_batches(
     records: list[Row] = [
         {str(k): v for k, v in record.items()} for record in src.to_dict("records")
     ]
-    size = llm.batch_size
-    chunks = [(start, records[start : start + size]) for start in range(0, len(records), size)]
+    keys = [compute_row_fingerprint(record) for record in records]
 
     results: list[Row | None] = [None] * len(records)
-    if parallelism > 1 and len(chunks) > 1:
-        with ThreadPoolExecutor(max_workers=parallelism) as pool:
-            futures = [
-                pool.submit(_process_chunk, stage, llm, batch_reply_schema, start, chunk)
-                for start, chunk in chunks
-            ]
-            for future in as_completed(futures):
-                for index, row in future.result():
-                    results[index] = row
-    else:
-        for start, chunk in chunks:
-            for index, row in _process_chunk(stage, llm, batch_reply_schema, start, chunk):
-                results[index] = row
+    misses = _resolve_cached_rows(records, keys, cache, results)
+    for index, row in _run_chunks(
+        stage, llm, batch_reply_schema, misses, llm.batch_size, parallelism
+    ):
+        results[index] = row
+        if cache is not None:
+            cache.record_row_output(keys[index], records[index], row)
 
     # Grain + order guarantee, verified not assumed: exactly one row per input,
     # every slot filled, in input order. A gap here is a batch-driver bug, raised
@@ -157,6 +158,62 @@ def run_llm_batches(
     # into the manifest. Nothing accumulates in the (frozen) context.
     df.attrs[CONTRIBUTION_ATTR] = contribution
     return df
+
+
+def _resolve_cached_rows(
+    records: list[Row], keys: list[str], cache: RowCache | None, results: list[Row | None]
+) -> list[tuple[int, Row]]:
+    """Fill `results` with every row the cache already holds and return the
+    rows that MISSED, each with its input index — the only rows the model is
+    asked about. With no cache every row misses."""
+    if cache is None:
+        return list(enumerate(records))
+    misses: list[tuple[int, Row]] = []
+    for index, record in enumerate(records):
+        cached = cache.find_cached_output(keys[index])
+        if cached is None:
+            misses.append((index, record))
+        else:
+            results[index] = cached
+    return misses
+
+
+def _run_chunks(
+    stage: Stage,
+    llm: Any,
+    batch_reply_schema: type,
+    misses: list[tuple[int, Row]],
+    size: int,
+    parallelism: int,
+) -> list[tuple[int, Row]]:
+    """Every miss's computed row, keyed by its INPUT index. Chunks are packed
+    from the misses alone, so a chunk may hold rows that were not adjacent in
+    the input; `_process_chunk` numbers each chunk 0..N-1 internally and the
+    input index is restored here."""
+    chunks = [misses[start : start + size] for start in range(0, len(misses), size)]
+    computed: list[tuple[int, Row]] = []
+    if parallelism > 1 and len(chunks) > 1:
+        with ThreadPoolExecutor(max_workers=parallelism) as pool:
+            futures = {
+                pool.submit(_process_chunk, stage, llm, batch_reply_schema, 0,
+                            [row for _index, row in chunk]): chunk
+                for chunk in chunks
+            }
+            for future in as_completed(futures):
+                computed.extend(_restore_input_indexes(futures[future], future.result()))
+    else:
+        for chunk in chunks:
+            chunk_rows = _process_chunk(
+                stage, llm, batch_reply_schema, 0, [row for _index, row in chunk]
+            )
+            computed.extend(_restore_input_indexes(chunk, chunk_rows))
+    return computed
+
+
+def _restore_input_indexes(
+    chunk: list[tuple[int, Row]], chunk_rows: list[tuple[int, Row]]
+) -> list[tuple[int, Row]]:
+    return [(chunk[offset][0], row) for offset, row in chunk_rows]
 
 
 def _build_batch_reply_schema(stage: Stage) -> type:

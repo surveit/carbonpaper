@@ -59,6 +59,13 @@ RowMapper = Callable[[Row, int], Row]
 # returns still sees one row at a time.
 MakeRowMapper = Callable[[Stage, RunContext, pd.DataFrame], RowMapper]
 
+# An LLMTransformHandler's batched execution function: the stage's inputs, the
+# run, the driver's parallelism, and this execution's row cache (None when
+# caching does not apply — see `open_row_cache`).
+RunBatches = Callable[
+    [Stage, dict[str, pd.DataFrame], RunContext, int, "RowCache | None"], pd.DataFrame
+]
+
 # Sentinel column a row mapper attaches to a row it could not produce (e.g. an
 # llm_transform whose generation failed). The row driver collects these off the
 # assembled frame so the runner can surface them as error-severity output issues
@@ -197,7 +204,7 @@ class LLMTransformHandler(RowMapHandler):
     def __init__(
         self,
         make_mapper: MakeRowMapper,
-        run_batches: Callable[[Stage, dict[str, pd.DataFrame], RunContext, int], pd.DataFrame],
+        run_batches: RunBatches,
         parallelism: int = 1,
         project_output_to_declared: bool = False,
     ) -> None:
@@ -209,7 +216,13 @@ class LLMTransformHandler(RowMapHandler):
     ) -> pd.DataFrame:
         assert stage.llm is not None  # Stage validation: an llm_transform always carries llm
         if stage.llm.batch_size > 1:
-            return self.run_batches(stage, inputs, ctx, self.parallelism)
+            # The batched path bypasses the row driver, so it is handed this
+            # execution's row cache rather than opening one for itself: whether
+            # rows cache is the SHAPE's call, and it is made in one place.
+            return self.run_batches(
+                stage, inputs, ctx, self.parallelism,
+                open_row_cache(stage, ctx, self.caches_rows),
+            )
         return _run_row_mapper(self, stage, inputs, ctx)
 
 
