@@ -106,7 +106,7 @@ every python-transform stage. Loop edit_stage → run_stage_tests until a stage'
 a failure means the CODE disagrees with the test, so fix the code.
 
 # Running
-Runs execute a stored version, which only the web UI creates. Publishing is human-only.
+Runs execute a stored version; no tool here creates one. Publishing is human-only.
 run_workflow(project_id, version_id?) starts a run of record and returns a run_id,
 get_run_status(project_id, run_id) follows it to its outcome, and
 run_workflow_test(project_id, version_id?, limit, offset) executes any stored version —
