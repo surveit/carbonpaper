@@ -39,8 +39,6 @@ router = APIRouter()
 
 @dataclass(frozen=True)
 class _DecisionDisplay:
-    """One recorded reviewer decision, shaped for the queue template."""
-
     verdict: str
     reviewed_values: dict[str, object]
     review_notes: str | None
@@ -51,9 +49,9 @@ class _DecisionDisplay:
 @dataclass(frozen=True)
 class _ReviewedField:
     """One reviewed column as the form renders it: `source` is the column the AI
-    produced and the field is pre-filled from, `target` the column the
-    reviewer's value lands in. `control` is the HTML input `type` verbatim, or
-    "select" / "checkbox" which the template renders as their own elements."""
+    produced, `target` the column the reviewer's value lands in. `control` is the
+    HTML input `type` verbatim, or "select", which the template renders as a
+    `<select>` over `options`."""
 
     source: str
     target: str
@@ -75,21 +73,22 @@ async def queue_page(request: Request, project: str, run_id: str, stage_id: str)
     stage_def = _require_queue_stage(stages, stage_id)
     queue = _require_queue_config(stage_def)
 
-    snapshot = queue_snapshot(project, run_id, stage_id)
     fingerprints = load_queue_fingerprints(project, run_id, stage_id)
-    if fingerprints is not None:
-        _validate_stage_definition_unchanged(stage_def, fingerprints.stage_fingerprint)
-    entries_by_fingerprint = (
-        _load_decided_entries(project, stage_id, fingerprints.stage_fingerprint)
-        if fingerprints else {}
+    drift = (
+        _find_definition_drift(stage_def, fingerprints.stage_fingerprint)
+        if fingerprints is not None else None
     )
-    input_lookup, join_keys, prompt_template = _load_model_input_lookup(
-        stage_def, stages, manifest, run_dir
-    )
-    items = _build_review_items(
-        snapshot, fingerprints, entries_by_fingerprint, queue,
-        input_lookup, join_keys, prompt_template,
-    )
+    fields = [] if drift else _build_reviewed_fields(stage_def, queue)
+    items: list[dict[str, Any]] = []
+    if fingerprints is not None and drift is None:
+        input_lookup, join_keys, prompt_template = _load_model_input_lookup(
+            stage_def, stages, manifest, run_dir
+        )
+        items = _build_review_items(
+            queue_snapshot(project, run_id, stage_id), fingerprints,
+            _load_decided_entries(project, stage_id, fingerprints.stage_fingerprint),
+            queue, fields, input_lookup, join_keys, prompt_template,
+        )
 
     reviewed_count = sum(1 for i in items if i["prior_decision"] is not None)
     total = len(items)
@@ -102,7 +101,8 @@ async def queue_page(request: Request, project: str, run_id: str, stage_id: str)
             "run_id": run_id,
             "stage_id": stage_id,
             "stage_def": stage_def,
-            "reviewed_fields": _build_reviewed_fields(stage_def, queue),
+            "definition_drift": drift,
+            "reviewed_fields": fields,
             "review_notes_column": queue.review_notes_column,
             "items": items,
             "reviewed_count": reviewed_count,
@@ -172,24 +172,28 @@ def _require_queue_config(stage_def: Stage) -> QueueConfig:
     return queue
 
 
-def _validate_stage_definition_unchanged(stage_def: Stage, halted_fingerprint: str) -> None:
+def _find_definition_drift(stage_def: Stage, halted_fingerprint: str) -> str | None:
     """The run snapshotted its queue under `halted_fingerprint` and its decisions
     are keyed by it, while the columns those decisions are read and written
     through come from the LIVE definition. Edit a fingerprinted queue field
     (`reviewed_columns`, `verdict_column`, …) between the halt and the review and
     the two describe different column sets, so neither reading nor adding to the
-    recorded decisions is meaningful."""
+    recorded decisions is meaningful. None when they still agree."""
     live_fingerprint = stage_def.compute_definition_fingerprint()
-    if live_fingerprint != halted_fingerprint:
-        raise HTTPException(
-            status_code=409,
-            detail=(
-                f"stage '{stage_def.id}' has changed since this run halted for review "
-                f"(halted under fingerprint {halted_fingerprint}, now {live_fingerprint}). "
-                "Its recorded decisions describe the definition it halted under, so they "
-                "cannot be shown or added to. Restore that definition, or start a new run."
-            ),
-        )
+    if live_fingerprint == halted_fingerprint:
+        return None
+    return (
+        f"stage '{stage_def.id}' has changed since this run halted for review "
+        f"(halted under fingerprint {halted_fingerprint}, now {live_fingerprint}). "
+        "Its recorded decisions describe the definition it halted under, so they "
+        "cannot be shown or added to. Restore that definition, or start a new run."
+    )
+
+
+def _validate_stage_definition_unchanged(stage_def: Stage, halted_fingerprint: str) -> None:
+    drift = _find_definition_drift(stage_def, halted_fingerprint)
+    if drift is not None:
+        raise HTTPException(status_code=409, detail=drift)
 
 
 def _require_reviewed_column(stage_def: Stage, source: str, target: str) -> Column:
@@ -388,13 +392,17 @@ def _build_reviewed_fields(stage_def: Stage, queue: QueueConfig) -> list[_Review
 
 
 # The HTML input `type` each scalar column type is entered through; a column
-# declaring an `enum` overrides this with a select of its vocabulary. Only the
-# numeric types carry a `step`.
+# declaring an `enum` overrides this with a select of its vocabulary. `bool` is a
+# select rather than a checkbox because a checkbox has two states and a bool
+# column has three — true, false, and (on a nullable column, or before anyone has
+# supplied one) no value at all, which a checkbox would render as false.
 _CONTROL_BY_COLUMN_TYPE: dict[str, str] = {
     "str": "text", "int": "number", "float": "number",
-    "bool": "checkbox", "date": "date", "datetime": "datetime-local",
+    "bool": "select", "date": "date", "datetime": "datetime-local",
 }
 _STEP_BY_COLUMN_TYPE: dict[str, str] = {"int": "1", "float": "any"}
+# The select vocabulary of a column type that has one without declaring an `enum`.
+_OPTIONS_BY_COLUMN_TYPE: dict[str, list[str]] = {"bool": ["true", "false"]}
 
 
 def _build_reviewed_field(source: str, target: str, column: Column) -> _ReviewedField:
@@ -408,10 +416,11 @@ def _build_reviewed_field(source: str, target: str, column: Column) -> _Reviewed
             ),
         )
     low, high = column.resolve_numeric_bounds()
+    options = column.enum if column.enum is not None else _OPTIONS_BY_COLUMN_TYPE.get(column.type)
     return _ReviewedField(
         source=source, target=target, control=control, nullable=column.nullable,
         step=_STEP_BY_COLUMN_TYPE.get(column.type), minimum=low, maximum=high,
-        options=list(column.enum) if column.enum is not None else None,
+        options=None if options is None else list(options),
     )
 
 
@@ -509,19 +518,44 @@ def _build_review_item(
     input_fingerprint: str,
     entries_by_fingerprint: dict[str, StageCacheEntry],
     queue: QueueConfig,
+    fields: list[_ReviewedField],
     input_lookup: dict[tuple[str, ...], dict[str, Any]],
     join_keys: list[str],
     prompt_template: str | None,
 ) -> dict[str, Any]:
     entry = entries_by_fingerprint.get(input_fingerprint)
     model_input = _find_model_input(row, input_lookup, join_keys)
+    prior = _display_decision(entry, queue) if entry is not None else None
+    displayed_row = {str(k): display_cell(v) for k, v in row.items()}
     return {
         "input_fingerprint": input_fingerprint,
-        "row": {k: display_cell(v) for k, v in row.items()},
+        "row": displayed_row,
         "model_input": model_input,
         "rendered_prompt": _render_model_prompt(model_input, prompt_template),
-        "prior_decision": _display_decision(entry, queue) if entry is not None else None,
+        "prior_decision": prior,
+        "prefill": _build_field_prefills(fields, displayed_row, prior),
     }
+
+
+def _build_field_prefills(
+    fields: list[_ReviewedField], displayed_row: dict[str, Any], prior: _DecisionDisplay | None
+) -> dict[str, object]:
+    """What each field opens with: on a row already decided, exactly what the
+    reviewer recorded — including a recorded null, which does NOT fall back to
+    the AI value — and on an undecided row the AI value it reviews. A blank on
+    either side is None: the control renders explicitly unset rather than
+    inventing a value of the column's type."""
+    return {
+        field.target: _blank_to_none(
+            displayed_row.get(field.source) if prior is None
+            else prior.reviewed_values.get(field.target)
+        )
+        for field in fields
+    }
+
+
+def _blank_to_none(value: object) -> object:
+    return None if value is None or value == "" else value
 
 
 def _build_review_items(
@@ -529,6 +563,7 @@ def _build_review_items(
     fingerprints: QueueFingerprints | None,
     entries_by_fingerprint: dict[str, StageCacheEntry],
     queue: QueueConfig,
+    fields: list[_ReviewedField],
     input_lookup: dict[tuple[str, ...], dict[str, Any]],
     join_keys: list[str],
     prompt_template: str | None,
@@ -541,7 +576,8 @@ def _build_review_items(
         return []
     return [
         _build_review_item(
-            row, fp, entries_by_fingerprint, queue, input_lookup, join_keys, prompt_template
+            row, fp, entries_by_fingerprint, queue, fields,
+            input_lookup, join_keys, prompt_template,
         )
         for (_, row), fp in zip(snapshot.iterrows(), fingerprints.input_fingerprints)
     ]

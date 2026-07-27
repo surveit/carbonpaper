@@ -223,9 +223,7 @@ class Column(_Base):
         return value
 
     def resolve_numeric_bounds(self) -> tuple[float | None, float | None]:
-        """A declared numeric `range` as (low, high); a bound declared as a
-        string containing RANGE_UNBOUNDED_MARKER is None on that side, as is
-        both when the column declares no range."""
+        """None on a side declared with the RANGE_UNBOUNDED_MARKER sentinel."""
         if self.range is None:
             return (None, None)
         low, high = self.range

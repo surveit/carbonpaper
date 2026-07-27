@@ -35,7 +35,9 @@
 </details>
 {% endif %}
 
-{% if not items %}
+{% if definition_drift %}
+<p class="definition-drift"><strong>⚠ This queue cannot be reviewed.</strong> {{ definition_drift }}</p>
+{% elif not items %}
 <p class="muted"><em>No items to review.</em></p>
 {% endif %}
 
@@ -95,23 +97,31 @@
         <div class="reviewed-fields">
         {% for field in reviewed_fields %}
         {% set field_id = 'rf-' ~ item.input_fingerprint ~ '-' ~ field.target %}
-        {% set ai_value = item.row.get(field.source, '') %}
+        {# The AI value is what the model produced; `prefill` is what the field opens
+           with — the reviewer's own recorded value once this row has been decided. #}
+        {% set ai_value = item.row.get(field.source) %}
+        {% set prefill = item.prefill.get(field.target) %}
         <div class="reviewed-field">
             <label for="{{ field_id }}">{{ field.target }}</label>
-            <span class="ai-value">AI <code>{{ field.source }}</code>: <strong>{{ ai_value }}</strong></span>
+            <span class="ai-value">AI <code>{{ field.source }}</code>:
+                <strong>{% if ai_value is none or ai_value == '' %}<em>null</em>{% else %}{{ ai_value }}{% endif %}</strong>
+                {% if item.prior_decision %}
+                <span class="recorded-value">· you recorded
+                    <strong>{% if prefill is none %}<em>null</em>{% else %}{{ prefill }}{% endif %}</strong></span>
+                {% endif %}
+            </span>
             {% if field.control == 'select' %}
-            <select id="{{ field_id }}" data-target="{{ field.target }}" data-ai-value="{{ ai_value }}">
-                {% if field.nullable %}<option value="">— none —</option>{% endif %}
+            <select id="{{ field_id }}" data-target="{{ field.target }}"
+                    data-ai-value="{{ '' if ai_value is none else ai_value }}">
+                {% if field.nullable or prefill is none %}<option value="">— unset —</option>{% endif %}
                 {% for option in field.options %}
-                <option value="{{ option }}" {% if option == ai_value|string %}selected{% endif %}>{{ option }}</option>
+                <option value="{{ option }}" {% if prefill is not none and option == prefill|string %}selected{% endif %}>{{ option }}</option>
                 {% endfor %}
             </select>
-            {% elif field.control == 'checkbox' %}
-            <input type="checkbox" id="{{ field_id }}" data-target="{{ field.target }}"
-                   data-ai-value="{{ 'true' if ai_value else 'false' }}" {% if ai_value %}checked{% endif %}>
             {% else %}
             <input type="{{ field.control }}" id="{{ field_id }}" data-target="{{ field.target }}"
-                   data-ai-value="{{ ai_value }}" value="{{ ai_value }}"
+                   data-ai-value="{{ '' if ai_value is none else ai_value }}"
+                   value="{{ '' if prefill is none else prefill }}"
                    {% if field.step %}step="{{ field.step }}"{% endif %}
                    {% if field.minimum is not none %}min="{{ field.minimum }}"{% endif %}
                    {% if field.maximum is not none %}max="{{ field.maximum }}"{% endif %}>
@@ -169,18 +179,18 @@
 
   nameInput.value = localStorage.getItem(REVIEWER_KEY) || '';
   syncReviewerGate();
-  nameInput.addEventListener('input', syncReviewerGate);
+  // Reveal as soon as there is a name, but hide (and forget) only once the
+  // reviewer leaves the field: select-all-and-retype passes through a blank
+  // value mid-keystroke, which must not tear the queue down under them.
+  nameInput.addEventListener('input', function () {
+    if (reviewerName()) syncReviewerGate();
+  });
+  nameInput.addEventListener('blur', syncReviewerGate);
 
   function readValues(card, useAiValues) {
     const values = {};
     card.querySelectorAll('[data-target]').forEach(function (el) {
-      if (useAiValues) {
-        values[el.dataset.target] = el.dataset.aiValue;
-      } else if (el.type === 'checkbox') {
-        values[el.dataset.target] = el.checked ? 'true' : 'false';
-      } else {
-        values[el.dataset.target] = el.value;
-      }
+      values[el.dataset.target] = useAiValues ? el.dataset.aiValue : el.value;
     });
     return values;
   }
