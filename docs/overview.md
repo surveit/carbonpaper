@@ -24,5 +24,5 @@ and `decisions/` — runtime data, not source. Versions are documents in the sto
 | Feature | Code | Status |
 |---|---|---|
 | **Runner** | `app/runtime/` | On master — executes a workflow (typed `Stage` end-to-end), validates I/O, persists, halts for review, resumes. |
-| **Compiler** | `app/compiler/` | Engine on master (prose → LLM → validated workflow, re-ask on failure; `python -m app.compiler`); authoring UI in the PR stack. |
+| **Compiler** | `app/compiler/` | On master — generates the data model and a stage's tests from the methodology document (LLM, re-ask on schema failure). Stages are authored one at a time by an MCP client through `app/services/stage_edit.py`. |
 | **Eval** | `app/models/eval.py` | Data model only — `EvalConfig` + grain-preservation gate; no runner integration yet. |

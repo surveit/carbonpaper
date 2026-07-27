@@ -86,7 +86,7 @@ def test_is_permitted_fastapi_importer_accepts_app_web_itself() -> None:
 
 
 def test_is_permitted_fastapi_importer_rejects_a_non_web_module() -> None:
-    assert is_permitted_fastapi_importer("app/compiler/workflow.py") is False
+    assert is_permitted_fastapi_importer("app/compiler/data_model.py") is False
 
 
 def test_is_permitted_fastapi_importer_rejects_a_module_merely_prefixed_web() -> None:

@@ -28,9 +28,11 @@
 <h1>New project · paste methodology → data model → workflow</h1>
 <p class="lede">
   Paste a methodology write-up (how an investigation finds, verifies, and surfaces
-  its claims). The compiler describes the <strong>data model first</strong> — the named
-  schemas it needs — and <strong>STOPS for your approval</strong>. Only after you approve
-  does it author the workflow that wires those schemas. Output lands in a new
+  its claims). This page creates the project and generates its <strong>data model</strong> —
+  the named schemas the pipeline needs — and <strong>STOPS for your approval</strong>.
+  The <strong>workflow is then authored stage by stage from an MCP client</strong> (see
+  below); each stage is validated against the whole graph as it is added, and you review,
+  approve and version every stage here. Everything lands in a new
   <code>examples/&lt;name&gt;/</code> working copy with the full review / version / run UI.
 </p>
 
@@ -64,19 +66,20 @@
 
     <button type="submit" class="btn primary">▶ Start</button>
     <p class="meta-line">Creates <code>examples/&lt;name&gt;/</code>, then
-      opens the project. There you stream Phase 1 (data model), approve it, then build
-      the workflow.</p>
+      opens the project. There you watch the data model stream and approve it; the
+      workflow is authored from an MCP client.</p>
   </form>
 </div>
 
 <hr style="margin:28px 0; border:0; border-top:1px solid #e3e6ea;">
 <div class="compile-form">
-  <h2>Or author from your own AI</h2>
-  <p class="meta-line">Connect Claude Code (or any MCP client) to this server and drive the
-    same flow — create the project, generate the data model, then the workflow — from a chat
-    session you can keep and resume. You still review and approve every stage here.</p>
+  <h2>Author from your own AI</h2>
+  <p class="meta-line">The workflow is authored from an MCP client. Connect Claude Code (or any
+    other MCP client) to this server and it creates the project, generates the data model, and
+    — once you approve it — writes the stages one at a time, each validated against the whole
+    graph before it is stored. You still review, approve and version every stage here.</p>
   <pre><code>claude mcp add --transport http glassbox {{ request.base_url }}mcp</code></pre>
   <p class="meta-line">Then start with a prompt like this (copy it):</p>
-  <pre style="white-space:pre-wrap"><code>I want to turn an investigation methodology into a reviewable data pipeline using the "glassbox" MCP server. Interview me about the investigation first. Then write a methodology document and call create_project, then generate_data_model — data model first: I approve it at {{ request.base_url }} before you call generate_workflow. Generation runs in the background, so poll get_project_status. Once the workflow lands, walk me through it and refine stages with edit_stage / add_stage.</code></pre>
+  <pre style="white-space:pre-wrap"><code>I want to turn an investigation methodology into a reviewable data pipeline using the "glassbox" MCP server. Interview me about the investigation first, then write the methodology document and call create_project, then generate_data_model — it runs in the background, so poll get_project_status until the schemas land. Stop there: I approve the data model at {{ request.base_url }} before any stage is written. Then author the workflow one stage at a time in dependency order — read_stage each upstream stage first so a new stage's declared input schema matches what that stage actually outputs, then add_stage the full stage. If an add comes back with issues, read the upstream it names, fix the stage and add it again. Show me describe_workflow as the graph grows, and tell me when the draft is complete so I can review and approve the stages here.</code></pre>
 </div>
 {% endblock %}

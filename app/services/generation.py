@@ -1,17 +1,10 @@
 """Auto-generation: on a fresh document, generate the DATA MODEL as a live chat turn and write
-the schemas. The WORKFLOW is NOT auto-built — the create-flow stops at the data model so it can
-be reviewed and approved first; the workflow is then generated on demand (grounded on that
-approved model) via start_workflow_generation. STAGE TESTS are generated per stage, on demand,
-via start_stage_test_generation.
+the schemas. STAGE TESTS are generated per stage, on demand, via start_stage_test_generation.
 
 These turns run through the app.compiler bridges (start_data_model_generation_agent /
-start_workflow_generation_agent / start_stage_test_derivation_agent):
-app.compiler owns the app.core.agent spine, so this orchestration delegates there rather than
-importing the spine directly. `start_generation` streams the data-model agent to /chat/<sid>;
-on a valid submission its schemas are written. `start_workflow_generation` is the manual
-workflow build — clicking "Generate workflow" runs the workflow agent as a live turn and
-returns its session id (the route lands the user on /chat/<sid>); it compiles ONLY the
-workflow, grounding it in the approved data model, without touching schemas/.
+start_stage_test_derivation_agent): app.compiler owns the app.core.agent spine, so this
+orchestration delegates there rather than importing the spine directly. `start_generation`
+streams the data-model agent to /chat/<sid>; on a valid submission its schemas are written.
 `start_stage_test_generation` runs the deriver agent for one python-transform stage as a
 HIDDEN, view-only turn and, on completion, REPLACES that stage's tests wholesale. A phase
 that fails is never fabricated as success: the error streams to the live turn AND is
@@ -20,8 +13,7 @@ reload even to a caller who was not watching live.
 
 The turns run on the server event loop, so every `start_*` entry here must be called from an
 async context. The CLI subprocess the agents spawn runs with the Claude-Code session markers
-already stripped from os.environ (see app.compiler.compiler), imported transitively via the
-bridges.
+already stripped from os.environ (see app.core.llm_sdk, imported transitively via the bridges).
 """
 from __future__ import annotations
 
@@ -33,13 +25,10 @@ from pydantic import BaseModel
 
 from app.compiler.data_model import start_data_model_generation_agent
 from app.compiler.stage_tests import start_stage_test_derivation_agent
-from app.compiler.workflow import workflow_result, start_workflow_generation_agent
 from app.core.errors import GenerationError
 from app.models.named_schemas import SchemaLibrary
 from app.models.stages.stage_tests import STAGE_TEST_TYPES
-from app.models.workflow import Workflow
 from app.services import data_model
-from app.services.compilation import regenerate_workflow
 from app.services.loader import load_workflow
 from app.services.project import find_document_path
 from app.services.stage_edit import patch_stage_spec
@@ -58,27 +47,6 @@ def start_generation(project_dir: Path, *, document: str, model: str) -> str:
         project_name=project_dir.name,
         model=model,
         on_answer=lambda answer: _finish_data_model(project_dir, answer),
-    )
-
-
-def start_workflow_generation(
-    project_dir: Path,
-    *,
-    document: str,
-    model: str,
-    data_model: SchemaLibrary | None,
-) -> str:
-    """Run the WORKFLOW agent as a LIVE chat turn and return its session id (the caller lands
-    the user on /chat/<sid>). Compiles ONLY the workflow — schemas/ is untouched — grounding it
-    in `data_model` (the approved schemas) when given. Must be called from the server event
-    loop."""
-    name = project_dir.name
-    return start_workflow_generation_agent(
-        document=document,
-        project_name=name,
-        model=model,
-        data_model=data_model,
-        on_answer=lambda answer: _finish_workflow(project_dir, name, answer),
     )
 
 
@@ -127,14 +95,6 @@ def _finish_data_model(project_dir: Path, answer: SchemaLibrary | None) -> None:
     if answer is None:
         return
     data_model.write_data_model(project_dir, answer)
-
-
-def _finish_workflow(project_dir: Path, name: str, answer: Workflow | None) -> None:
-    """Completion hook for the workflow turn: if the agent submitted a valid Workflow, write it
-    (schemas/ untouched); otherwise the failure was already streamed to the live turn."""
-    if answer is None:
-        return
-    regenerate_workflow(workflow_result(answer, name), project_dir)
 
 
 def _finish_stage_tests(project_dir: Path, stage_id: str, answer: BaseModel | None) -> None:

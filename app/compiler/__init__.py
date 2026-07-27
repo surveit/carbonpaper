@@ -1,19 +1,19 @@
 """
-app.compiler — the prose → LLM → workflow authoring engine.
+app.compiler — the prose → LLM generation engines that seed a project's authoring
+artifacts.
 
-Public surface:
-  - `read_input` / `compile_methodology`  — the one-shot BATCH compile (from
-    .compiler): prose → LLM → a workflow dict.
+  - `data_model` — a methodology document → the named schemas (the nouns) a human
+    then reviews and approves.
+  - `stage_tests` — one python-transform stage + the methodology → the example-based
+    tests that stage must satisfy.
 
-The LLM call, the validation pass, and the prompt builders are internal to the
-package. Persisting a batch compile as a first-class object (manifest /
-what-happened / workflow on disk, plus the index/detail loaders) is a separate
-concern owned by `app.services.compilation`. The command-line entry point is
-`app.compiler.__main__` (`python -m app.compiler`).
+Each pairs with its own prompt module (`data_model_prompt`, `stage_tests_prompt`).
+Both run an `app.core.agent.agent.Agent` targeting a model schema, so the model
+submits through `submit_answer` and a schema-invalid reply is corrected inside the
+agent's own loop. Persisting what comes back belongs to `app.services.generation`.
+
+Stages themselves are authored one at a time through `app.services.stage_edit`, not
+generated here.
 """
 
 from __future__ import annotations
-
-from app.compiler.compiler import compile_methodology, read_input
-
-__all__ = ["read_input", "compile_methodology"]

@@ -66,17 +66,17 @@ allowed_importers = ["app.web", "app.runtime", "app.evals", "app.compiler", "app
 # a deliberate edit, not an accident. (services → compiler is fine — compilation and
 # generation wrap it — which is why app.compiler lists app.services below.) app.agents
 # is the hydrated editing agent, a top-level interface like app.web / app.mcp: it reads
-# and edits projects through app.services.compilation / app.services.project. app.seeds'
+# and edits projects through app.services.stage_edit / app.services.project. app.seeds'
 # capture scripts compose the project export/import seam the same way — never sqlite3,
 # app.core.persistence, or app.core.frames directly.
 
 [[tool.importlinter.contracts]]
-name = "app.compiler imported only by the entrypoint and services"
+name = "app.compiler imported only by services"
 type = "protected"
 protected_modules = ["app.compiler"]
-allowed_importers = ["app.main", "app.services"]
-# app.services.compilation / generation wrap the compile mechanism by design; app.main
-# runs it from the CLI. The reusable agent spine (app.core.agent) must not import it.
+allowed_importers = ["app.services"]
+# app.services.generation wraps the data-model and stage-test generators by design.
+# The reusable agent spine (app.core.agent) must not import it.
 
 [[tool.importlinter.contracts]]
 name = "app.runtime imported only by evals, web, mcp"

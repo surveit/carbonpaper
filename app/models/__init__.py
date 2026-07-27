@@ -7,10 +7,13 @@ Split across modules:
   - named_schemas.py — the named data model (NamedSchema, SchemaLibrary)
   - table.py         — TableRef (a general on-disk table pointer)
   - eval.py          — the eval contract (EvalConfig, EvalRun, scorability)
+  - node_contract_notes.py — per-node-type runtime facts the authoring prompts
+                     render, beyond what NODE_TYPES itself carries
 
 Import from `app.models` (this aggregator) for the stable public surface.
 """
 from app.models.coverage import Coverage
+from app.models.node_contract_notes import HUMAN_REVIEW_QUEUE_CONTRACT_NOTE
 from app.models.schema import (
     Column,
     JSON_COLUMN_TYPE,
@@ -107,8 +110,8 @@ CONNECTOR_KINDS: set[str] = {
 }
 
 # ── The seven node types and their handle-block contract ─────────────────────
-# app.compiler.workflow_prompt renders this into the workflow compiler's system
-# prompt: type -> {summary, handle, required, optional, min_inputs, requires_inputs,
+# app.agents.compiler.prompt renders this into the editing agent's system prompt:
+# type -> {summary, handle, required, optional, min_inputs, requires_inputs,
 # also_requires?}. The Stage model does not expose this rendering shape, so the
 # spec is kept here as plain data purely for prompt rendering.
 NODE_TYPES: dict[str, dict[str, _Any]] = {
@@ -233,9 +236,9 @@ __all__ = [
     # eval contract
     "StageOutputOverride", "ExpectedOutput", "ScoringMetric", "CodeScorer", "EvalConfig",
     "EvalRunSettings", "EvalRun",
-    # compat vocabularies (rendered by prompt.py / read by compiler.py)
+    # compat vocabularies (rendered into the authoring prompts)
     "SCALAR_COLUMN_TYPES", "SCHEMA_KINDS", "JOIN_TYPES", "CONNECTOR_KINDS",
-    "NODE_TYPES", "NODE_TYPE_NAMES",
+    "NODE_TYPES", "NODE_TYPE_NAMES", "HUMAN_REVIEW_QUEUE_CONTRACT_NOTE",
     # individual column-type comparison handles
     "STR_COLUMN_TYPE", "JSON_COLUMN_TYPE", "LIST_JSON_COLUMN_TYPE",
     "RANGE_UNBOUNDED_MARKER",

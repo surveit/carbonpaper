@@ -285,11 +285,12 @@ async def create_version_route(project: str, message: str = Form(...)):
         if failing:
             return JSONResponse({"ok": False, "issues": failing}, status_code=400)
 
-    existing = versioning.list_versions(project_dir)  # newest-first
-    parent = existing[0].version_id if existing else None
     try:
         version = versioning.create_version_from_disk(
-            project_dir, message=message, reviewer="local", parent_version=parent
+            project_dir,
+            message=message,
+            reviewer="local",
+            parent_version=versioning.find_latest_version_id(project_dir),
         )
     except FileNotFoundError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

@@ -36,11 +36,6 @@ class RunVersionUnresolvableError(Exception):
     be read. Its message is shown to the reader in place of the graph."""
 
 
-class RegenerateWithoutSnapshotError(Exception):
-    """Raised when a from-scratch compile would overwrite reviewed work without a
-    prior version snapshot and without explicit confirm_overwrite."""
-
-
 class GenerationError(Exception):
     """A headless agent generation could not produce a VALID artifact.
 
@@ -94,12 +89,6 @@ class NoWorkflowTestVersionError(Exception):
 
 class LLMError(Exception):
     """A live-LLM call failed, or no LLM backend is available."""
-
-
-class CompilationError(Exception):
-    """`app.compiler.compiler.compile_methodology` produced no workflow: the workflow
-    agent's run ended without a validated `Workflow` to shape into a compile result.
-    Raised loudly rather than returning a fabricated or empty-stage result."""
 
 
 class DocumentNotFound(Exception):

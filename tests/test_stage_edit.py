@@ -4,6 +4,7 @@ from pathlib import Path
 import pytest
 
 from app.services import loader, node_review, stage_edit
+from app.services.errors import WorkflowLoadError
 
 # A strictly-1:1 llm_transform (app/models/stage.py): its input and output
 # schemas share a primary_key and the output is additive (keeps every input
@@ -201,3 +202,104 @@ def test_add_stage_rejects_duplicate_id(tmp_path: Path) -> None:
            "connector": {"kind": "file"}}
     result = stage_edit.add_stage_spec(pdir, json.dumps(dup))
     assert result.ok is False and any("already exists" in i for i in result.issues)
+
+
+def test_remove_stage_rejected_when_a_downstream_depends_on_it(tmp_path: Path) -> None:
+    # score inputs from load, so removing load would leave a dangling edge. The
+    # whole resulting workflow is validated BEFORE anything is unlinked.
+    pdir = _seed(tmp_path)
+    result = stage_edit.remove_stage_spec(pdir, "load")
+    assert result.ok is False
+    assert any("load" in issue for issue in result.issues)
+    assert (pdir / "compiled" / "01_load.json").exists()
+
+
+def test_remove_stage_deletes_the_stage_and_its_file(tmp_path: Path) -> None:
+    pdir = _seed_load(tmp_path)
+    new = {"id": "score", "name": "Score", "type": "llm_transform",
+           "inputs": [{"id": "load", "schema": _IN_SCHEMA}],
+           "llm": {"model": "claude-sonnet-4-6", "prompt_template": "score {doc_id}"},
+           "output_schema": _OUT_SCHEMA}
+    assert stage_edit.add_stage_spec(pdir, json.dumps(new)).ok is True
+
+    result = stage_edit.remove_stage_spec(pdir, "score")
+    assert result.ok is True and not result.issues
+    assert "score" not in stage_edit._current_specs(pdir)
+    assert not (pdir / "compiled" / "score.json").exists()
+
+
+def test_remove_nonexistent_stage_raises(tmp_path: Path) -> None:
+    pdir = _seed(tmp_path)
+    with pytest.raises(FileNotFoundError):
+        stage_edit.remove_stage_spec(pdir, "ghost")
+
+
+# ─── An empty workflow is a legitimate starting state ────────────────────────
+
+_FIRST_STAGE = {"id": "load", "name": "Load", "type": "input_data",
+                "connector": {"kind": "file"}}
+
+
+def _seed_empty(tmp_path: Path) -> Path:
+    """A project whose compiled/ dir exists but holds no stage files — a project
+    before its first stage is added."""
+    (tmp_path / "gamma" / "compiled").mkdir(parents=True)
+    return tmp_path / "gamma"
+
+
+def test_add_stage_creates_the_first_stage_of_an_empty_workflow(tmp_path: Path) -> None:
+    pdir = _seed_empty(tmp_path)
+    result = stage_edit.add_stage_spec(pdir, json.dumps(_FIRST_STAGE))
+    assert result.ok is True and not result.issues
+    assert (pdir / "compiled" / "load.json").exists()
+    assert set(stage_edit._current_specs(pdir)) == {"load"}
+
+
+def test_add_stage_creates_the_first_stage_when_compiled_dir_is_absent(tmp_path: Path) -> None:
+    pdir = tmp_path / "delta"
+    pdir.mkdir()
+    result = stage_edit.add_stage_spec(pdir, json.dumps(_FIRST_STAGE))
+    assert result.ok is True and not result.issues
+    assert (pdir / "compiled" / "load.json").exists()
+
+
+def test_add_stage_still_refuses_when_the_existing_workflow_is_unloadable(tmp_path: Path) -> None:
+    # compiled/ holds a stage file that does not parse as a Stage. That is a
+    # BROKEN workflow, not an empty one: the edit must fail loudly rather than
+    # proceed against a partial (or silently empty) view of it.
+    pdir = tmp_path / "epsilon"
+    (pdir / "compiled").mkdir(parents=True)
+    (pdir / "compiled" / "01_broken.json").write_text(
+        json.dumps({"id": "broken", "name": "Broken", "type": "not_a_real_type"}),
+        encoding="utf-8",
+    )
+    with pytest.raises(WorkflowLoadError):
+        stage_edit.add_stage_spec(pdir, json.dumps(_FIRST_STAGE))
+    assert not (pdir / "compiled" / "load.json").exists()
+
+
+def test_add_stage_still_refuses_when_a_stage_file_is_unparseable(tmp_path: Path) -> None:
+    pdir = tmp_path / "zeta"
+    (pdir / "compiled").mkdir(parents=True)
+    (pdir / "compiled" / "01_truncated.json").write_text("{not json", encoding="utf-8")
+    with pytest.raises(WorkflowLoadError):
+        stage_edit.add_stage_spec(pdir, json.dumps(_FIRST_STAGE))
+    assert not (pdir / "compiled" / "load.json").exists()
+
+
+def test_remove_stage_on_an_empty_workflow_raises(tmp_path: Path) -> None:
+    pdir = _seed_empty(tmp_path)
+    with pytest.raises(FileNotFoundError):
+        stage_edit.remove_stage_spec(pdir, "load")
+
+
+def test_edit_stage_on_an_empty_workflow_raises(tmp_path: Path) -> None:
+    pdir = _seed_empty(tmp_path)
+    with pytest.raises(FileNotFoundError):
+        stage_edit.edit_stage_spec(pdir, "load", json.dumps(_FIRST_STAGE))
+
+
+def test_patch_stage_on_an_empty_workflow_raises(tmp_path: Path) -> None:
+    pdir = _seed_empty(tmp_path)
+    with pytest.raises(FileNotFoundError):
+        stage_edit.patch_stage_spec(pdir, "load", json.dumps({"limit": 1}))

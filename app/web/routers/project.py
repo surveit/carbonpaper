@@ -33,8 +33,8 @@ Route order matters: the literal /project/new is declared on THIS router BEFORE 
 a project name. The two-word section paths (/data_model, /workflow, /document) never
 collide with a project name.
 
-Reuse rule: reuses P1's node_review (belief + schema-library gate), P2's compiler
-(compile_methodology), and the shared web helpers (diagrams, loading, config). The
+Reuse rule: reuses P1's node_review (belief + schema-library gate), the data-model
+generation service, and the shared web helpers (diagrams, loading, config). The
 app.models package is the only contract.
 """
 
@@ -57,7 +57,6 @@ from app.models import (
     validate_named_schema,
     validate_schema_library,
 )
-from app.services import data_model as data_model_service
 from app.services import generation, node_review, project, versioning
 from app.services.loader import stage_to_spec_dict
 from app.web.config import EXAMPLES_DIR, templates
@@ -205,8 +204,8 @@ async def new_project_submit(
 ):
     """Create the examples/<name>/ working copy + its project.json, persist the pasted
     document at document.md, then redirect to the project's data-model section where
-    authoring starts. The directory IS the session — the data-model / workflow streams
-    key off the project name and read document.md / write chat.jsonl in here.
+    authoring starts. The directory IS the session — the data-model stream keys off the
+    project name and reads document.md / writes chat.jsonl in here.
 
     Truthfulness: we write project.json (via project.write_project_meta) so a NEW
     project carries a real model + created_at (non-legacy); we never fabricate those
@@ -218,20 +217,20 @@ async def new_project_submit(
         raise HTTPException(status_code=400, detail=str(exc))
     project_dir = EXAMPLES_DIR / safe_name
     doc = (project_dir / "document.md").read_text(encoding="utf-8")
-    # Kick off automatic generation (data model → then workflow). The data-model phase
-    # runs as a LIVE chat turn; land the user on it so they watch the model being
-    # authored (it streams while it runs, then persists as the session's transcript).
+    # Kick off data-model generation. It runs as a LIVE chat turn; land the user on it
+    # so they watch the model being authored (it streams while it runs, then persists
+    # as the session's transcript).
     session_id = generation.start_generation(project_dir, document=doc, model=model)
     return RedirectResponse(url=f"/chat/{session_id}", status_code=303)
 
 
 @router.post("/project/{project_name}/generate")
 async def generate_project(project_name: str):
-    """(Re)kick automatic data-model → workflow generation for an EXISTING project —
-    the manual counterpart to the auto-kick on create (for a legacy project that has a
-    document but no data model, or to regenerate from scratch). Reads document.md + the
-    project's model, starts the data-model phase as a LIVE chat turn, and redirects to
-    that session so the run is watchable. 400 if there is no document to generate from."""
+    """(Re)kick data-model generation for an EXISTING project — the manual counterpart
+    to the auto-kick on create (for a legacy project that has a document but no data
+    model, or to regenerate from scratch). Reads document.md + the project's model,
+    starts the data-model phase as a LIVE chat turn, and redirects to that session so
+    the run is watchable. 400 if there is no document to generate from."""
     pdir = _project_dir(project_name)
     document_path = pdir / "document.md"
     if not document_path.is_file():
@@ -242,32 +241,6 @@ async def generate_project(project_name: str):
     model = project.project_meta(pdir).model or "sonnet"
     session_id = generation.start_generation(
         pdir, document=document_path.read_text(encoding="utf-8"), model=model
-    )
-    return RedirectResponse(url=f"/chat/{session_id}", status_code=303)
-
-
-@router.post("/project/{project_name}/generate-workflow")
-async def generate_workflow(project_name: str):
-    """Generate the WORKFLOW ONLY, from document.md, using the project's data model as
-    reference — but only when that data model is APPROVED (an unapproved or absent data
-    model is not passed, and the compile proceeds document-only). Never regenerates the
-    data model (schemas/ is untouched). 400 if there is no document; otherwise runs the
-    workflow agent as a LIVE chat turn and redirects to /chat/<sid> so the build is
-    watchable (it lands on disk when the turn ends)."""
-    pdir = _project_dir(project_name)
-    document_path = pdir / "document.md"
-    if not document_path.is_file():
-        raise HTTPException(
-            status_code=400,
-            detail=f"examples/{project_name}/ has no document.md to generate from.",
-        )
-    model = project.project_meta(pdir).model or "sonnet"
-    data_model = data_model_service.load_data_model(pdir, approved_only=True)
-    session_id = generation.start_workflow_generation(
-        pdir,
-        document=document_path.read_text(encoding="utf-8"),
-        model=model,
-        data_model=data_model,
     )
     return RedirectResponse(url=f"/chat/{session_id}", status_code=303)
 

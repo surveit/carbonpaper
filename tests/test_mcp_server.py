@@ -7,6 +7,7 @@ tool functions directly against a tmp workspace."""
 from __future__ import annotations
 
 import asyncio
+import time
 from pathlib import Path
 
 import pytest
@@ -60,14 +61,15 @@ def test_mcp_lists_the_authoring_tools(client):
         "create_project",
         "get_project_status",
         "generate_data_model",
-        "generate_workflow",
         "read_data_model",
         "describe_workflow",
         "read_stage",
         "edit_stage",
         "add_stage",
+        "remove_stage",
         "generate_stage_tests",
         "run_stage_tests",
+        "save_version",
     } <= names
 
 
@@ -196,6 +198,204 @@ def test_generate_stage_tests_kicks_the_derivation_turn(tmp_path, monkeypatch):
     assert out["status"] == "started"
     assert out["watch"] == "/chat/sess-tests"
     assert seen["stage_id"] == "double"
+
+
+def test_mcp_remove_stage_returns_ok_and_issues(tmp_path, monkeypatch):
+    from app.mcp import server
+    from app.services import workspace
+
+    monkeypatch.setattr(workspace, "EXAMPLES_DIR", tmp_path)
+    pdir = tmp_path / "trail"
+    _write_compiled_workflow(pdir)
+
+    removed = server.remove_stage(project_id="trail", stage_id="untested")
+    assert removed == {"ok": True, "issues": []}
+    assert not (pdir / "compiled" / "untested.json").exists()
+
+    # `double` still inputs from `load`, so removing `load` is refused with issues.
+    refused = server.remove_stage(project_id="trail", stage_id="load")
+    assert refused["ok"] is False and refused["issues"]
+    assert (pdir / "compiled" / "load.json").exists()
+
+
+def test_mcp_stage_tools_report_an_unknown_stage_id_as_issues(tmp_path, monkeypatch):
+    """The documented refusal channel is {ok: False, issues}: a stage id that is not
+    in the workflow comes back on it rather than as a tool exception."""
+    from app.mcp import server
+    from app.services import workspace
+
+    monkeypatch.setattr(workspace, "EXAMPLES_DIR", tmp_path)
+    _write_compiled_workflow(tmp_path / "trail")
+
+    removed = server.remove_stage(project_id="trail", stage_id="ghost")
+    assert removed["ok"] is False and any("ghost" in i for i in removed["issues"])
+
+    edited = server.edit_stage(project_id="trail", stage_id="ghost", changes_json='{"limit": 1}')
+    assert edited["ok"] is False and any("ghost" in i for i in edited["issues"])
+
+
+def test_mcp_add_stage_reports_an_unloadable_workflow_as_issues(tmp_path, monkeypatch):
+    """A compiled/ dir that holds a broken stage file still refuses the write — and
+    the refusal reaches the client on the documented {ok: False, issues} channel."""
+    from app.mcp import server
+    from app.services import workspace
+
+    monkeypatch.setattr(workspace, "EXAMPLES_DIR", tmp_path)
+    compiled = tmp_path / "trail" / "compiled"
+    compiled.mkdir(parents=True)
+    (compiled / "broken.json").write_text('{"id": "broken", "type": "not_a_real_type"}', encoding="utf-8")
+
+    added = server.add_stage(
+        project_id="trail",
+        stage_json='{"id": "load", "name": "Load", "type": "input_data", "connector": {"kind": "file"}}',
+    )
+    assert added["ok"] is False and added["issues"]
+    assert not (compiled / "load.json").exists()
+
+
+def test_mcp_add_stage_refuses_to_invent_a_project(tmp_path, monkeypatch):
+    """add_stage creates a workflow's first stage, never the project itself: a typo'd
+    project id is loud and writes nothing under the workspace."""
+    from app.mcp import server
+    from app.services import workspace
+
+    monkeypatch.setattr(workspace, "EXAMPLES_DIR", tmp_path)
+    with pytest.raises(ValueError):
+        server.add_stage(
+            project_id="no_such_project",
+            stage_json='{"id": "load", "name": "Load", "type": "input_data", "connector": {"kind": "file"}}',
+        )
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_mcp_add_stage_creates_the_first_stage_of_a_new_project(tmp_path, monkeypatch):
+    from app.mcp import server
+    from app.services import workspace
+
+    monkeypatch.setattr(workspace, "EXAMPLES_DIR", tmp_path)
+    server.create_project(name="trail", document="Follow the filings.")
+
+    added = server.add_stage(
+        project_id="trail",
+        stage_json='{"id": "load", "name": "Load", "type": "input_data", "connector": {"kind": "file"}}',
+    )
+    assert added == {"ok": True, "issues": []}
+    assert server.describe_workflow(project_id="trail")["stages"][0]["id"] == "load"
+
+
+def test_mcp_save_version_snapshots_the_working_copy_unpublished(tmp_path, monkeypatch):
+    """save_version freezes the CURRENT compiled workflow into a version the agent
+    owns end-to-end — but publishing stays human-only, so the snapshot is born
+    unpublished."""
+    from app.mcp import server
+    from app.services import versioning, workspace
+
+    monkeypatch.setattr(workspace, "EXAMPLES_DIR", tmp_path)
+    pdir = tmp_path / "trail"
+    _write_compiled_workflow(pdir)
+
+    saved = server.save_version(project_id="trail", message="first cut")
+    assert saved["ok"] is True and saved["issues"] == []
+
+    [version] = versioning.list_versions(pdir)
+    assert saved["version_id"] == version.version_id
+    assert version.message == "first cut"
+    assert version.reviewer == "agent"
+    assert version.published is False
+    assert {s.id for s in version.stages} == {"load", "double", "untested"}
+
+
+def test_mcp_save_version_omitting_the_parent_records_none(tmp_path, monkeypatch):
+    """A caller that names no parent gets none recorded — even with a version already
+    stored. The agent authors against the working copy, so the newest stored version
+    is not evidence of what this snapshot descended from; asserting it would fabricate
+    the lineage the version exists to document."""
+    from app.mcp import server
+    from app.services import versioning, workspace
+
+    monkeypatch.setattr(workspace, "EXAMPLES_DIR", tmp_path)
+    pdir = tmp_path / "trail"
+    _write_compiled_workflow(pdir)
+
+    server.save_version(project_id="trail", message="first cut")
+    time.sleep(1)  # version ids are second-resolution timestamps
+    second = server.save_version(project_id="trail", message="second cut")
+
+    assert second["ok"] is True
+    assert versioning.load_version(pdir, second["version_id"]).parent_version is None
+
+
+def test_mcp_save_version_records_the_caller_supplied_parent(tmp_path, monkeypatch):
+    """The parent the caller names is the one stored: the agent knows which version it
+    loaded, and that claim is the only basis for the lineage a reviewer walks."""
+    from app.mcp import server
+    from app.services import versioning, workspace
+
+    monkeypatch.setattr(workspace, "EXAMPLES_DIR", tmp_path)
+    pdir = tmp_path / "trail"
+    _write_compiled_workflow(pdir)
+
+    first = server.save_version(project_id="trail", message="first cut")
+    time.sleep(1)  # version ids are second-resolution timestamps
+    second = server.save_version(
+        project_id="trail", message="second cut", parent_version=first["version_id"])
+
+    assert second["version_id"] != first["version_id"]
+    saved = versioning.load_version(pdir, second["version_id"])
+    assert saved.parent_version == first["version_id"]
+
+
+def test_mcp_save_version_refuses_a_parent_that_does_not_exist(tmp_path, monkeypatch):
+    """A parent id naming no stored version is refused on the {ok: False, issues}
+    channel and NOTHING is written — a dangling ancestor would be a lineage claim the
+    store cannot substantiate."""
+    from app.mcp import server
+    from app.services import versioning, workspace
+
+    monkeypatch.setattr(workspace, "EXAMPLES_DIR", tmp_path)
+    pdir = tmp_path / "trail"
+    _write_compiled_workflow(pdir)
+
+    server.save_version(project_id="trail", message="first cut")
+    before = [v.version_id for v in versioning.list_versions(pdir)]
+    time.sleep(1)  # a second save would land a new id, so the list below would grow
+
+    refused = server.save_version(
+        project_id="trail", message="second cut", parent_version="20200101T000000")
+
+    assert refused["ok"] is False
+    assert "20200101T000000" in " ".join(refused["issues"])
+    assert "version_id" not in refused
+    assert [v.version_id for v in versioning.list_versions(pdir)] == before
+
+
+def test_mcp_save_version_refuses_an_unloadable_working_copy(tmp_path, monkeypatch):
+    """An invalid working copy can never become a version: the refusal reaches the
+    client on the documented {ok: False, issues} channel and nothing is stored."""
+    from app.mcp import server
+    from app.services import versioning, workspace
+
+    monkeypatch.setattr(workspace, "EXAMPLES_DIR", tmp_path)
+    pdir = tmp_path / "trail"
+    (pdir / "compiled").mkdir(parents=True)
+    (pdir / "compiled" / "broken.json").write_text(
+        '{"id": "broken", "type": "not_a_real_type"}', encoding="utf-8")
+
+    refused = server.save_version(project_id="trail", message="doomed")
+    assert refused["ok"] is False and refused["issues"]
+    assert "version_id" not in refused
+    assert versioning.list_versions(pdir) == []
+
+
+def test_mcp_save_version_refuses_to_invent_a_project(tmp_path, monkeypatch):
+    """A typo'd project id is loud and writes nothing under the workspace."""
+    from app.mcp import server
+    from app.services import workspace
+
+    monkeypatch.setattr(workspace, "EXAMPLES_DIR", tmp_path)
+    with pytest.raises(ValueError):
+        server.save_version(project_id="no_such_project", message="nope")
+    assert list(tmp_path.iterdir()) == []
 
 
 def test_read_tools_reject_unknown_project(tmp_path, monkeypatch):
