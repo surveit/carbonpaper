@@ -592,7 +592,123 @@
       "inputs": [
         {
           "id": "classify_issues",
-          "table_schema": null
+          "table_schema": {
+            "columns": [
+              {
+                "name": "filing_id",
+                "type": "str",
+                "nullable": false,
+                "description": "Stable unique identifier; unchanged from input.",
+                "range": null,
+                "source": null,
+                "enum": null,
+                "fields": null,
+                "value_type": null
+              },
+              {
+                "name": "client",
+                "type": "str",
+                "nullable": false,
+                "description": null,
+                "range": null,
+                "source": null,
+                "enum": null,
+                "fields": null,
+                "value_type": null
+              },
+              {
+                "name": "registrant",
+                "type": "str",
+                "nullable": false,
+                "description": null,
+                "range": null,
+                "source": null,
+                "enum": null,
+                "fields": null,
+                "value_type": null
+              },
+              {
+                "name": "amount_usd",
+                "type": "int",
+                "nullable": false,
+                "description": null,
+                "range": null,
+                "source": null,
+                "enum": null,
+                "fields": null,
+                "value_type": null
+              },
+              {
+                "name": "filing_period",
+                "type": "str",
+                "nullable": false,
+                "description": null,
+                "range": null,
+                "source": null,
+                "enum": null,
+                "fields": null,
+                "value_type": null
+              },
+              {
+                "name": "specific_issues",
+                "type": "str",
+                "nullable": false,
+                "description": null,
+                "range": null,
+                "source": null,
+                "enum": null,
+                "fields": null,
+                "value_type": null
+              },
+              {
+                "name": "policy_area",
+                "type": "str",
+                "nullable": true,
+                "description": "Single best-fit policy area from the fixed eight-value taxonomy.",
+                "range": null,
+                "source": null,
+                "enum": [
+                  "Health",
+                  "Energy & Environment",
+                  "Finance & Taxation",
+                  "Technology",
+                  "Defense",
+                  "Transportation",
+                  "Agriculture",
+                  "Other"
+                ],
+                "fields": null,
+                "value_type": null
+              },
+              {
+                "name": "targets_specific_bill",
+                "type": "bool",
+                "nullable": true,
+                "description": "True when the issue text names a specific bill number or named Act; false otherwise.",
+                "range": null,
+                "source": null,
+                "enum": null,
+                "fields": null,
+                "value_type": null
+              },
+              {
+                "name": "primary_ask",
+                "type": "str",
+                "nullable": true,
+                "description": "One plain-language sentence summarising what the client appears to want.",
+                "range": null,
+                "source": null,
+                "enum": null,
+                "fields": null,
+                "value_type": null
+              }
+            ],
+            "estimated_rows": null,
+            "primary_key": [
+              "filing_id"
+            ],
+            "notes": null
+          }
         }
       ],
       "output_schema": {
@@ -761,7 +877,137 @@
       "inputs": [
         {
           "id": "rank_by_spend",
-          "table_schema": null
+          "table_schema": {
+            "columns": [
+              {
+                "name": "filing_id",
+                "type": "str",
+                "nullable": false,
+                "description": null,
+                "range": null,
+                "source": null,
+                "enum": null,
+                "fields": null,
+                "value_type": null
+              },
+              {
+                "name": "client",
+                "type": "str",
+                "nullable": false,
+                "description": null,
+                "range": null,
+                "source": null,
+                "enum": null,
+                "fields": null,
+                "value_type": null
+              },
+              {
+                "name": "registrant",
+                "type": "str",
+                "nullable": false,
+                "description": null,
+                "range": null,
+                "source": null,
+                "enum": null,
+                "fields": null,
+                "value_type": null
+              },
+              {
+                "name": "amount_usd",
+                "type": "int",
+                "nullable": false,
+                "description": null,
+                "range": null,
+                "source": null,
+                "enum": null,
+                "fields": null,
+                "value_type": null
+              },
+              {
+                "name": "filing_period",
+                "type": "str",
+                "nullable": false,
+                "description": null,
+                "range": null,
+                "source": null,
+                "enum": null,
+                "fields": null,
+                "value_type": null
+              },
+              {
+                "name": "specific_issues",
+                "type": "str",
+                "nullable": false,
+                "description": null,
+                "range": null,
+                "source": null,
+                "enum": null,
+                "fields": null,
+                "value_type": null
+              },
+              {
+                "name": "policy_area",
+                "type": "str",
+                "nullable": true,
+                "description": null,
+                "range": null,
+                "source": null,
+                "enum": [
+                  "Health",
+                  "Energy & Environment",
+                  "Finance & Taxation",
+                  "Technology",
+                  "Defense",
+                  "Transportation",
+                  "Agriculture",
+                  "Other"
+                ],
+                "fields": null,
+                "value_type": null
+              },
+              {
+                "name": "targets_specific_bill",
+                "type": "bool",
+                "nullable": true,
+                "description": null,
+                "range": null,
+                "source": null,
+                "enum": null,
+                "fields": null,
+                "value_type": null
+              },
+              {
+                "name": "primary_ask",
+                "type": "str",
+                "nullable": true,
+                "description": null,
+                "range": null,
+                "source": null,
+                "enum": null,
+                "fields": null,
+                "value_type": null
+              },
+              {
+                "name": "spend_rank",
+                "type": "int",
+                "nullable": false,
+                "description": "Ordinal rank across all filings by amount_usd descending; 1 = highest spend.",
+                "range": [
+                  1,
+                  "inf"
+                ],
+                "source": null,
+                "enum": null,
+                "fields": null,
+                "value_type": null
+              }
+            ],
+            "estimated_rows": null,
+            "primary_key": [
+              "filing_id"
+            ],
+            "notes": null
+          }
         }
       ],
       "output_schema": null,
