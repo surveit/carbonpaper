@@ -38,11 +38,14 @@ FeatureCollection); `python_row_function`/`python_frame_function`
 
 **Row caching is a property of the handler SHAPE, not of a stage type.** `RowMapHandler`
 wraps the one line of per-row compute (`execution.open_row_cache`), so `python_row_function`
-and a batch_size-1 `llm_transform` are cached by the same code; `llm_transform`'s batched
-path looks every row up, batches only the misses, and records each computed row. One bulk
-`find_entries` read per execution, keyed by (stage-definition fingerprint, input-row
-fingerprint). A row carrying `_error`/`_deferred` is never recorded and `_usage` is stripped
-before recording, so a hit reports no spend. `Stage.cache: false` declares a stage
+and a batch_size-1 `llm_transform` are cached by the same code; for the batched path the
+shape looks every row up, hands `run_llm_batches` only the misses, scatters the computed
+rows back into input order alongside the hits, and records them. No stage module resolves a
+cache. The cache itself is `app.core.stage_cache.RowCache` — one bulk `find_entries` read
+per execution, keyed by (stage-definition fingerprint, input-row fingerprint); the runtime
+decides only whether to open one and whether a given result may be recorded. A row carrying
+`_error`/`_deferred` is never recorded and no marker column is ever part of a recorded row,
+so a hit reports no spend. `Stage.cache: false` declares a stage
 intentionally non-deterministic — no read, no write — and is outside the definition
 fingerprint. There is no per-registration opt-out: `human_review_queue` runs under the same
 interceptor, which replays a human's recorded decision before its mapper is called, so that

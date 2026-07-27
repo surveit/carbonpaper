@@ -26,7 +26,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Any, Callable, Protocol, runtime_checkable
+from typing import Any, Callable, NamedTuple, Protocol, runtime_checkable
 
 import pandas as pd
 
@@ -34,8 +34,7 @@ from app.models import Stage
 from app.models.stage import StageType, is_grain_and_order_preserving
 
 from app.core.agent.usage import LlmUsage
-from app.core.persistence import JsonDict
-from app.core.stage_cache import ReadOnlyStageCache, StageCache, compute_row_fingerprint
+from app.core.stage_cache import RowCache
 
 from ..cancellation import consume_cancel
 from ..context import RunContext
@@ -59,11 +58,11 @@ RowMapper = Callable[[Row, int], Row]
 MakeRowMapper = Callable[[Stage, RunContext, pd.DataFrame], RowMapper]
 
 # An LLMTransformHandler's batched execution function: the stage's inputs, the
-# run, the driver's parallelism, and this execution's row cache (None when
-# caching does not apply — see `open_row_cache`).
-RunBatches = Callable[
-    [Stage, dict[str, pd.DataFrame], RunContext, int, "RowCache | None"], pd.DataFrame
-]
+# run, and the driver's parallelism. It computes one raw row per input row it is
+# given — markers still attached, nothing stripped or projected — and knows
+# nothing about caching: which rows it is asked about is the shape's decision
+# (see `_run_batched`).
+RunBatches = Callable[[Stage, dict[str, pd.DataFrame], RunContext, int], list["Row"]]
 
 # Sentinel column a row mapper attaches to a row it could not produce (e.g. an
 # llm_transform whose generation failed). The row driver collects these off the
@@ -85,11 +84,29 @@ ROW_USAGE_KEY = "_usage"
 # that emits it reads it back in its own `finish_mapped_rows`.
 ROW_DEFERRED_KEY = "_deferred"
 
-# Internal per-row sentinel columns a mapper may attach. They are machinery, not
-# stage output: the driver strips them off every mapped frame and does NOT
-# report them as dropped user columns (they were collected by the driver or read
-# back by the mapper's own post-map step, not discarded).
-_INTERNAL_ROW_COLUMNS = frozenset({ROW_ERROR_KEY, ROW_USAGE_KEY, ROW_DEFERRED_KEY})
+
+class _RowMarker(NamedTuple):
+    """One sentinel column a mapper may attach, and what the driver does about
+    it. Both behaviors are stated per key so a new marker cannot be given one
+    and silently forgotten the other."""
+
+    column: str
+    # Machinery, not stage output: dropped off every mapped frame, and NOT
+    # reported as a dropped user column (it was collected by the driver or read
+    # back by the mapper's own post-map step, not discarded).
+    stripped_from_output: bool
+    # Marks a row that is not an output the stage produced, so the row must
+    # never be pinned as its input key's answer.
+    blocks_recording: bool
+
+
+# The ONE declaration of the special row keys: `_strip_marker_columns` and
+# `_record_row_output` read the two behaviors off this table.
+_ROW_MARKERS = (
+    _RowMarker(ROW_ERROR_KEY, stripped_from_output=True, blocks_recording=True),
+    _RowMarker(ROW_USAGE_KEY, stripped_from_output=True, blocks_recording=False),
+    _RowMarker(ROW_DEFERRED_KEY, stripped_from_output=True, blocks_recording=True),
+)
 
 
 @runtime_checkable
@@ -212,12 +229,7 @@ class LLMTransformHandler(RowMapHandler):
     ) -> pd.DataFrame:
         assert stage.llm is not None  # Stage validation: an llm_transform always carries llm
         if stage.llm.batch_size > 1:
-            # The batched path bypasses the row driver, so it is handed this
-            # execution's row cache rather than opening one for itself: the cache
-            # a row-mapped stage runs under is opened in one place.
-            return self.run_batches(
-                stage, inputs, ctx, self.parallelism, open_row_cache(stage, ctx),
-            )
+            return _run_batched(self, stage, inputs, ctx)
         return _run_row_mapper(self, stage, inputs, ctx)
 
 
@@ -298,11 +310,7 @@ def _run_row_mapper(
     # PostMapRowMapper shape, which a wrapper would hide.
     cache = open_row_cache(stage, ctx)
     compute_row = map_row if cache is None else _map_row_through_cache(cache, map_row)
-    # str(k) pins pandas' Hashable column labels down to str (a no-op for
-    # parquet/CSV data, whose labels are already strings).
-    records: list[Row] = [
-        {str(k): v for k, v in record.items()} for record in src.to_dict("records")
-    ]
+    records = _to_records(src)
 
     results: list[Row | None] = [None] * len(records)
     if handler.parallelism > 1 and len(records) > 1:
@@ -341,51 +349,11 @@ def _run_row_mapper(
 # ── the row-level cache interceptor ──────────────────────────────────────────
 # Caching is a property of the handler SHAPE, not of any stage type: the one
 # line where per-row compute happens is wrapped, so every row-mapped stage type
-# is cached by the same code and no stage implements a cache interface.
-
-
-class RowCache:
-    """One stage execution's stage-result cache, keyed by input-row fingerprint.
-
-    Built by `open_row_cache`, which performs the single bulk read: a per-row
-    store `get` would make a stage's store cost scale with its row count."""
-
-    def __init__(
-        self,
-        project: str,
-        stage_id: str,
-        stage_fingerprint: str,
-        cached_outputs: dict[str, JsonDict],
-        writer: StageCache | None,
-    ) -> None:
-        self._project = project
-        self._stage_id = stage_id
-        self._stage_fingerprint = stage_fingerprint
-        self._cached_outputs = cached_outputs
-        self._writer = writer
-
-    def find_cached_output(self, input_fingerprint: str) -> Row | None:
-        """The output row already recorded for this key, or None. A hit carries
-        no ROW_USAGE_KEY — a replayed row cost this run nothing, which is what
-        the stage's usage total should say."""
-        cached = self._cached_outputs.get(input_fingerprint)
-        return None if cached is None else dict(cached)
-
-    def record_row_output(
-        self, input_fingerprint: str, input_row: Row, output_row: Row
-    ) -> None:
-        """Pin one computed row, unless this accessor cannot write or the result
-        is not an output the stage produced (`_may_record_row_output`)."""
-        if self._writer is None or not _may_record_row_output(output_row):
-            return
-        self._writer.record(
-            project=self._project,
-            stage_id=self._stage_id,
-            stage_fingerprint=self._stage_fingerprint,
-            input_fingerprint=input_fingerprint,
-            input_row=input_row,
-            output_row=_without_usage(output_row),
-        )
+# is cached by the same code and no stage implements a cache interface. The
+# cache itself — the key, the bulk read, the lookup, the write — is
+# app.core.stage_cache.RowCache. What lives here is the runtime's side of that
+# seam: WHETHER a cache is opened at all, and whether a given result is one the
+# stage actually produced and may therefore be recorded.
 
 
 def open_row_cache(stage: Stage, ctx: RunContext) -> RowCache | None:
@@ -394,68 +362,141 @@ def open_row_cache(stage: Stage, ctx: RunContext) -> RowCache | None:
     re-roll), or the run carries no project scope (a subset run, a preview, an
     authored-test run).
 
-    Under `ctx.bust_cache` the bulk read is skipped while a write-capable
-    accessor is kept, so a busted run ends with the cache re-pinned, not stale.
-    Writing needs the `StageCache` subclass: a read-only accessor reuses hits
-    and records nothing."""
+    Under `ctx.bust_cache` nothing already recorded is replayed, while what this
+    run computes is still recorded — so a busted run ends with the cache
+    re-pinned, not stale."""
     if not stage.cache:
         return None
     if ctx.identity is None or ctx.stage_cache is None:
         return None
-    stage_fingerprint = stage.compute_definition_fingerprint()
-    cached_outputs = (
-        {} if ctx.bust_cache
-        else _read_cached_outputs(
-            ctx.stage_cache, ctx.identity.project, stage.id, stage_fingerprint
-        )
-    )
-    writer = ctx.stage_cache if isinstance(ctx.stage_cache, StageCache) else None
-    return RowCache(
-        ctx.identity.project, stage.id, stage_fingerprint, cached_outputs, writer
+    return RowCache.open(
+        ctx.stage_cache,
+        project=ctx.identity.project,
+        stage_id=stage.id,
+        stage_fingerprint=stage.compute_definition_fingerprint(),
+        replay_recorded=not ctx.bust_cache,
     )
 
 
-def _read_cached_outputs(
-    stage_cache: ReadOnlyStageCache, project: str, stage_id: str, stage_fingerprint: str
-) -> dict[str, JsonDict]:
-    """Every output row already recorded against this stage definition, keyed by
-    the input fingerprint it was filed under — ONE store read for the whole
-    execution. An entry carrying no output row is skipped: a row-mapped stage
-    owes one output row per input row, so such an entry replays nothing."""
-    return {
-        entry.input_fingerprint: entry.output_row
-        for entry in stage_cache.find_entries(project, stage_id, stage_fingerprint)
-        if entry.output_row is not None
-    }
+def _record_row_output(cache: RowCache, input_row: Row, output_row: Row) -> None:
+    """Pin one computed row, unless a marker on it says it is not an output the
+    stage produced. No marker is ever part of the recorded row, so a replayed
+    row reports no spend."""
+    if any(
+        output_row.get(marker.column) is not None
+        for marker in _ROW_MARKERS
+        if marker.blocks_recording
+    ):
+        return
+    cache.record_row_output(input_row, _without_row_markers(output_row))
 
 
-# A result carrying either sentinel is not stage output: ROW_ERROR_KEY marks a
-# row the stage FAILED to produce, ROW_DEFERRED_KEY one whose value does not
-# exist yet. Neither may ever be pinned as this key's answer.
-_UNRECORDABLE_ROW_SENTINELS = (ROW_ERROR_KEY, ROW_DEFERRED_KEY)
-
-
-def _may_record_row_output(row: Row) -> bool:
-    return all(row.get(key) is None for key in _UNRECORDABLE_ROW_SENTINELS)
-
-
-def _without_usage(row: Row) -> Row:
-    """`row` without ROW_USAGE_KEY: usage is per-CALL telemetry the driver sums
-    onto this run's contribution, never part of what the stage computed."""
-    return {key: value for key, value in row.items() if key != ROW_USAGE_KEY}
+def _without_row_markers(row: Row) -> Row:
+    markers = {marker.column for marker in _ROW_MARKERS}
+    return {key: value for key, value in row.items() if key not in markers}
 
 
 def _map_row_through_cache(cache: RowCache, map_row: RowMapper) -> RowMapper:
     def compute_row(row: Row, index: int) -> Row:
-        input_fingerprint = compute_row_fingerprint(row)
-        cached = cache.find_cached_output(input_fingerprint)
+        cached = cache.find_cached_output(row)
         if cached is not None:
             return cached
         result = map_row(row, index)
-        cache.record_row_output(input_fingerprint, row, result)
+        _record_row_output(cache, row, result)
         return result
 
     return compute_row
+
+
+# ── the batched llm_transform path ───────────────────────────────────────────
+# The one row-mapped path the driver above does not run: rows are computed N per
+# model call. Cache resolution is therefore spelled out here, in the SHAPE — the
+# stage's own module is handed the rows to compute and knows nothing about the
+# cache, the key, or what may be recorded.
+
+
+def _run_batched(
+    handler: "LLMTransformHandler",
+    stage: Stage,
+    inputs: dict[str, pd.DataFrame],
+    ctx: RunContext,
+) -> pd.DataFrame:
+    """Run the stage's batched execution function over only the rows the cache
+    cannot already answer, and assemble its rows back into INPUT order alongside
+    the hits."""
+    src = inputs[stage.inputs[0].id]
+    records = _to_records(src)
+    cache = open_row_cache(stage, ctx)
+    hits = {} if cache is None else _find_cached_rows(cache, records)
+    misses = [index for index in range(len(records)) if index not in hits]
+    computed = _compute_batched_rows(handler, stage, src, misses, ctx)
+    # Ordered before recorded: the ordering step is what verifies one computed
+    # row per miss, so nothing is pinned against a row it did not come from.
+    rows = _order_by_input_position(stage, hits, misses, computed, len(records))
+    if cache is not None:
+        for position, row in zip(misses, computed):
+            _record_row_output(cache, records[position], row)
+    return _restore_input_columns_when_nothing_named_them(
+        _finish_batched_frame(rows, handler, stage), src
+    )
+
+
+def _find_cached_rows(cache: RowCache, records: list[Row]) -> dict[int, Row]:
+    """Every input row the cache can already answer, by input position."""
+    found: dict[int, Row] = {}
+    for index, record in enumerate(records):
+        cached = cache.find_cached_output(record)
+        if cached is not None:
+            found[index] = cached
+    return found
+
+
+def _compute_batched_rows(
+    handler: "LLMTransformHandler",
+    stage: Stage,
+    src: pd.DataFrame,
+    misses: list[int],
+    ctx: RunContext,
+) -> list[Row]:
+    """One raw output row per MISS, in miss order. No miss at all means the
+    execution function is never called, so a fully-cached stage makes no model
+    call."""
+    if not misses:
+        return []
+    return handler.run_batches(
+        stage, {stage.inputs[0].id: src.iloc[misses]}, ctx, handler.parallelism
+    )
+
+
+def _order_by_input_position(
+    stage: Stage,
+    hits: dict[int, Row],
+    misses: list[int],
+    computed: list[Row],
+    row_count: int,
+) -> list[Row]:
+    """One row per input row, in input order: the cache hit where there was one,
+    the freshly computed row where there was not. Raises unless exactly one
+    computed row came back per miss — a gap would silently mis-grain the
+    stage."""
+    if len(computed) != len(misses):
+        raise RuntimeError(
+            f"stage {stage.id}: batched execution returned {len(computed)} rows "
+            f"for the {len(misses)} rows it was asked to compute"
+        )
+    by_position = dict(hits)
+    by_position.update(zip(misses, computed))
+    return [by_position[position] for position in range(row_count)]
+
+
+def _finish_batched_frame(
+    rows: list[Row], handler: RowMapHandler, stage: Stage
+) -> pd.DataFrame:
+    """The batched path's counterpart of `_finish_mapped_frame`: no mapper, so
+    no post-map step — the markers are collected off the assembled frame, then
+    stripped and the frame projected."""
+    df = pd.DataFrame(rows)
+    return _strip_and_project(df, _collect_row_markers(df), handler, stage)
 
 
 def _restore_input_columns_when_nothing_named_them(
@@ -500,24 +541,58 @@ def _finish_mapped_frame(
 
     The contribution rides out on the returned frame's `.attrs`; the executor
     merges it into the manifest. Nothing accumulates in the (frozen) context."""
+    contribution = _collect_row_markers(df)
+    if isinstance(map_row, PostMapRowMapper):
+        map_row.finish_mapped_rows(stage, df, ctx, contribution)
+    return _strip_and_project(df, contribution, handler, stage)
+
+
+def _collect_row_markers(df: pd.DataFrame) -> StageContribution:
+    """This stage's contribution, carrying what the driver reads off the marker
+    columns of the assembled frame."""
     contribution = StageContribution()
     _collect_row_errors(df, contribution)
     _collect_row_usage(df, contribution)
-    if isinstance(map_row, PostMapRowMapper):
-        map_row.finish_mapped_rows(stage, df, ctx, contribution)
-    df = _strip_internal_row_columns(df)
+    return contribution
+
+
+def _strip_and_project(
+    df: pd.DataFrame,
+    contribution: StageContribution,
+    handler: RowMapHandler,
+    stage: Stage,
+) -> pd.DataFrame:
+    """`df` with every marker column dropped and — where the handler asks for it
+    — projected onto the declared columns, carrying `contribution` out on its
+    `.attrs` for the executor to merge into the manifest.
+
+    Strip before project, in that order: the projection reports every column it
+    drops as a user column the stage produced and discarded, and a marker is
+    driver machinery, not that."""
+    df = _strip_marker_columns(df)
     if handler.project_output_to_declared:
         df = _project_onto_declared_columns(df, stage, contribution)
     df.attrs[CONTRIBUTION_ATTR] = contribution
     return df
 
 
-def _strip_internal_row_columns(df: pd.DataFrame) -> pd.DataFrame:
-    """Drop every `_INTERNAL_ROW_COLUMNS` marker present on `df`. Unconditional
-    — a marker is driver machinery, so it must never reach stage output, whether
-    or not the stage declares an output_schema."""
-    present = [column for column in df.columns if column in _INTERNAL_ROW_COLUMNS]
+def _strip_marker_columns(df: pd.DataFrame) -> pd.DataFrame:
+    """Drop every marker `_ROW_MARKERS` declares strippable that is present on
+    `df`. Unconditional — a marker is driver machinery, so it must never reach
+    stage output, whether or not the stage declares an output_schema."""
+    stripped = {
+        marker.column for marker in _ROW_MARKERS if marker.stripped_from_output
+    }
+    present = [column for column in df.columns if column in stripped]
     return df.drop(columns=present) if present else df
+
+
+def _to_records(frame: pd.DataFrame) -> list[Row]:
+    # str(k) pins pandas' Hashable column labels down to str (a no-op for
+    # parquet/CSV data, whose labels are already strings).
+    return [
+        {str(k): v for k, v in record.items()} for record in frame.to_dict("records")
+    ]
 
 
 def _consume_cancel(ctx: RunContext) -> bool:

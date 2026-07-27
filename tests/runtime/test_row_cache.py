@@ -8,6 +8,7 @@ tests drive the registered handlers, so what they pin is that whole path.
 from __future__ import annotations
 
 import pandas as pd
+import pytest
 
 from app.core.stage_cache import (
     ReadOnlyStageCache,
@@ -19,7 +20,13 @@ from app.models import Stage
 from app.models.stage import StageType
 from app.runtime.context import RunIdentity
 from app.runtime.stages import HANDLERS
-from app.runtime.stages.execution import ROW_ERROR_KEY, ROW_USAGE_KEY, RowMapHandler
+from app.runtime.stages.execution import (
+    ROW_ERROR_KEY,
+    ROW_USAGE_KEY,
+    RowMapHandler,
+    _order_by_input_position,
+)
+from app.runtime.stages.llm_transform import run_llm_batches
 from conftest import make_run_context
 
 PROJECT = "row-cache-tests"
@@ -386,6 +393,45 @@ def test_batched_path_without_project_scope_calls_the_model_every_time(monkeypat
     _run(stage, _src([1, 2]), make_run_context())
     _run(stage, _src([1, 2]), make_run_context())
     assert batches == [[1, 2], [1, 2]]
+
+
+# ── the batched path's scatter back into input order ────────────────────────
+
+
+def test_the_scatter_puts_every_row_back_in_its_own_input_position():
+    """The shape assembles hits and computed rows by INPUT position, never by
+    the order either arrived in: the computed rows come back in miss order and
+    land on the positions the misses came from."""
+    hits = {0: {"x": 0, "from": "cache"}, 3: {"x": 3, "from": "cache"}}
+    computed = [{"x": 1, "from": "model"}, {"x": 2, "from": "model"}]
+
+    rows = _order_by_input_position(_llm_stage(), hits, [1, 2], computed, 4)
+
+    assert [row["x"] for row in rows] == [0, 1, 2, 3]
+    assert [row["from"] for row in rows] == ["cache", "model", "model", "cache"]
+
+
+def test_the_scatter_refuses_a_result_that_is_not_one_row_per_miss():
+    """A missing computed row would silently mis-grain the stage, so the gap is
+    raised instead of filled."""
+    with pytest.raises(RuntimeError, match="batched execution returned 1 rows"):
+        _order_by_input_position(_llm_stage(), {}, [0, 1], [{"x": 0}], 2)
+
+
+def test_run_llm_batches_computes_every_row_it_is_given(monkeypatch):
+    """The stage module resolves nothing: called directly with rows the cache
+    could answer, it still asks the model about all of them. Which rows reach it
+    is the shape's decision alone."""
+    batches: list[list[int]] = []
+    _stub_call_llm_batch(monkeypatch, batches)
+    stage = _llm_stage(batch_size=2)
+    _run(stage, _src([1, 2]), _ctx(run_id="seed"))
+    batches.clear()
+
+    rows = run_llm_batches(stage, {"src": _src([1, 2])}, _ctx(run_id="direct"), 1)
+
+    assert batches == [[1, 2]]
+    assert [row["verdict"] for row in rows] == ["v1", "v2"]
 
 
 # ── every row-mapped registration caches: the shape has no opt-out ───────────
