@@ -26,18 +26,16 @@ def test_fixed_output_columns_contract_reaches_the_editing_agent_prompt():
 
 
 def test_hrq_note_names_the_decision_values_the_runtime_actually_emits():
-    """The note tells an author to exclude rejected rows with
-    `decision != "reject"`. That instruction is only correct while the strings
-    it names are the ones the queue handler writes — including the value it puts
-    on a row the queue filter passed through unreviewed, which is what makes the
-    documented filter safe without reasoning about a missing value. Pinned
-    against the handler's own constants so the guidance cannot drift from the
-    runtime it describes."""
-    from app.models import RowReviewDecision
+    """The note tells an author how to filter on the verdict column. That
+    guidance is only correct while the strings it names are the ones the queue
+    handler writes — including the value it puts on a row the queue filter
+    passed through unreviewed, which is what makes a filter safe without
+    reasoning about a missing value. Pinned against the handler's own constants
+    so the guidance cannot drift from the runtime it describes."""
+    from app.models import ReviewVerdict
     from app.runtime.stages.human_review_queue import NOT_REVIEWED
 
-    for value in (RowReviewDecision.reject.value, RowReviewDecision.approve.value,
-                  RowReviewDecision.modify.value, NOT_REVIEWED):
+    for value in (ReviewVerdict.approve.value, ReviewVerdict.modify.value, NOT_REVIEWED):
         assert f'"{value}"' in m.HUMAN_REVIEW_QUEUE_CONTRACT_NOTE, value
 
 

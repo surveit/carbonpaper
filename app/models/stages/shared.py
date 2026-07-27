@@ -1,8 +1,5 @@
-"""Shared helpers for per-stage-type column validation, on both the input and
-output side.
-
-`Stage` is imported only under `TYPE_CHECKING`: `app.models.stage` imports this
-package back for its own model validator, so a runtime import would be circular."""
+# `Stage` is imported only under TYPE_CHECKING: app.models.stage imports this package
+# back for its own model validator, so a runtime import would be circular.
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Mapping
@@ -19,14 +16,16 @@ COLUMN_ISSUE = (
 )
 
 
+def resolve_input_schema(stage: "Stage", index: int) -> "TableSchema":
+    """Deliberately EDGE-ONLY: a per-stage check must not reach for the upstream
+    producer's own output_schema — this runs on one `Stage` in isolation, at
+    construction time, so the producer may not even be present in whatever list
+    of stages the caller happens to hold."""
+    return stage.inputs[index].table_schema
+
+
 def resolve_input_columns(stage: "Stage", index: int) -> set[str]:
-    """The column names declared on `stage`'s input edge at `index` —
-    `inputs[index].table_schema` (aliased `schema:` on a compiled stage).
-    Deliberately EDGE-ONLY: a per-stage check must not reach for the
-    upstream producer's own output_schema — this runs on one `Stage` in
-    isolation, at construction time, so the producer may not even be present
-    in whatever list of stages the caller happens to hold."""
-    return {c.name for c in stage.inputs[index].table_schema.columns}
+    return {c.name for c in resolve_input_schema(stage, index).columns}
 
 
 def find_predicate_column_issues(

@@ -14,7 +14,7 @@ from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 
 from app.core.errors import ReviewValidationError
-from app.models import RowReviewDecision, Stage
+from app.models import ReviewVerdict, Stage
 from app.runtime.llm import render_prompt
 from app.services import review
 from app.core.stage_cache import StageCacheEntry
@@ -97,7 +97,7 @@ async def queue_decide(
     run_id: str,
     stage_id: str,
     input_fingerprint: str = Form(...),
-    decision: RowReviewDecision = Form(...),
+    decision: ReviewVerdict = Form(...),
     modified_score: float | None = Form(None),
 ):
     """Persist a reviewer's decision as a `StageCacheEntry` keyed by this

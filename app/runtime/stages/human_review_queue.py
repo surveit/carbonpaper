@@ -14,7 +14,7 @@ import pandas as pd
 import pyarrow.lib as pa_lib
 
 from app.core.predicate import parse_predicate
-from app.models import RowReviewDecision, Stage
+from app.models import ReviewVerdict, Stage
 from app.core.stage_cache import compute_row_fingerprint
 
 from ..context import RunContext
@@ -28,7 +28,7 @@ from .execution import ROW_DEFERRED_KEY, Row, RowMapper
 _SCORE_COLUMN = "score"
 
 # The `decision` value carried by a row the queue filter did not select. Not a
-# RowReviewDecision: no human saw this row, so no verdict of theirs applies to
+# ReviewVerdict: no human saw this row, so no verdict of theirs applies to
 # it. It is spelled out rather than left missing so that EVERY output row of a
 # queue stage carries a decision, and a downstream stage can exclude the
 # rejected rows by comparing strings — never by reasoning about a null.
@@ -201,10 +201,10 @@ def _approve_row(row: Row, index: int) -> Row:
         "ai_score": ai,
         "human_score": ai,
         "final_score": ai,
-        "review_notes": f"decision={RowReviewDecision.approve}",
+        "review_notes": f"decision={ReviewVerdict.approve}",
         "reviewer_id": pd.NA,
         "reviewed_at": pd.NA,
-        "decision": RowReviewDecision.approve,
+        "decision": ReviewVerdict.approve,
     }
 
 

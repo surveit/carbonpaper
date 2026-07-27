@@ -9,7 +9,7 @@ import pandas as pd
 import pytest
 
 import app.runtime.runner as runner
-from app.models import RowReviewDecision, Stage
+from app.models import ReviewVerdict, Stage
 from app.models.stage import StageType
 from app.runtime.cancellation import request_cancel
 from app.runtime.context import RunIdentity
@@ -20,7 +20,7 @@ from app.runtime.stages.human_review_queue import NOT_REVIEWED
 from app.services import review, versioning
 from app.core.stage_cache import StageCache, compute_row_fingerprint
 from app.services.versioning import create_version_from_disk
-from conftest import contribution_of, make_run_context
+from conftest import QUEUE_COLUMNS, contribution_of, make_run_context, queue_added_columns
 
 PROJECT = "hrq-cache-tests"
 
@@ -35,16 +35,10 @@ def _run_queue_stage(stage: Stage, inputs: dict[str, pd.DataFrame], ctx) -> pd.D
 _SCORED_COLUMNS = [{"name": "id", "type": "str"}, {"name": "score", "type": "int"}]
 _FLAGGED_COLUMNS = [*_SCORED_COLUMNS, {"name": "flag", "type": "str"}]
 
-# The columns the queue stage itself adds to every row it emits, whichever of the
-# three outcomes the row took (see _pass_row_through / review._build_output_row).
+# The columns `QUEUE_COLUMNS` declares this stage adds to every row it emits.
 # The stage's output is projected onto its declared columns, so output_schema has
 # to name these as well as the upstream ones it carries through.
-_REVIEW_COLUMNS = [
-    {"name": "ai_score", "type": "int"}, {"name": "human_score", "type": "float"},
-    {"name": "final_score", "type": "float"}, {"name": "review_notes", "type": "str"},
-    {"name": "reviewer_id", "type": "str"}, {"name": "reviewed_at", "type": "str"},
-    {"name": "decision", "type": "str"},
-]
+_REVIEW_COLUMNS = queue_added_columns()
 
 
 def _stage(
@@ -53,7 +47,7 @@ def _stage(
     flt: str | None = None,
     input_columns: list[dict] = _SCORED_COLUMNS,
 ) -> Stage:
-    queue: dict[str, str] = {}
+    queue: dict[str, object] = dict(QUEUE_COLUMNS)
     if reviewer_instructions is not None:
         queue["reviewer_instructions"] = reviewer_instructions
     if flt is not None:
@@ -106,7 +100,7 @@ def _halt_and_read_snapshot(
 
 def _put_approval(
     row: pd.Series, input_fingerprint: str, stage_fingerprint: str,
-    *, project: str = PROJECT, verdict: RowReviewDecision = RowReviewDecision.approve,
+    *, project: str = PROJECT, verdict: ReviewVerdict = ReviewVerdict.approve,
     modified_score: float | None = None,
 ) -> None:
     """Cache one verdict (`approve` unless told otherwise) for one row of a
@@ -363,31 +357,33 @@ def test_output_rows_stay_in_input_order(tmp_path):
     assert list(out["id"]) == ["r0", "r1", "r2", "r3"]
 
 
-def test_rejected_row_stays_in_output_carrying_its_rejection(tmp_path):
-    """A `reject` verdict removes no row: the rejected row is emitted in its own
-    input position, carrying the verdict with null human and final scores. The
-    rows around it are untouched. Excluding a rejected row is a downstream
-    filter stage's job, so the decision stays visible in the workflow."""
+def test_a_modified_row_stays_in_its_own_position_carrying_the_human_score(tmp_path):
+    """A verdict that changes the row's value removes no row: the modified row
+    is emitted in its own input position with the human score the reviewer
+    entered, and the rows around it are untouched."""
     stage = _stage()
     src = _src(3)
 
     snapshot, fingerprints = _halt_and_read_snapshot(
         stage, {"scored": src}, _ctx(tmp_path, run_id="run1"))
-    verdicts = [RowReviewDecision.approve, RowReviewDecision.reject, RowReviewDecision.approve]
-    for (_, row), fp, verdict in zip(
-        snapshot.iterrows(), fingerprints["input_fingerprints"], verdicts
+    decided = [(ReviewVerdict.approve, None),
+               (ReviewVerdict.modify, 77.0),
+               (ReviewVerdict.approve, None)]
+    for (_, row), fp, (verdict, score) in zip(
+        snapshot.iterrows(), fingerprints["input_fingerprints"], decided
     ):
-        _put_approval(row, fp, fingerprints["stage_fingerprint"], verdict=verdict)
+        _put_approval(row, fp, fingerprints["stage_fingerprint"],
+                      verdict=verdict, modified_score=score)
 
     out = _run_queue_stage(stage, {"scored": src.copy()}, _ctx(tmp_path, run_id="run2"))
     assert list(out["id"]) == ["r0", "r1", "r2"]
-    assert list(out["decision"]) == ["approve", "reject", "approve"]
-    rejected = out.loc[out["id"] == "r1"].iloc[0]
-    assert pd.isna(rejected["human_score"])
-    assert pd.isna(rejected["final_score"])
-    assert rejected["ai_score"] == 1              # what the AI said is still on the row
-    assert rejected["reviewer_id"] == "local"     # and who rejected it, when
-    assert rejected["reviewed_at"] == "2026-07-01T00:00:00"
+    assert list(out["decision"]) == ["approve", "modify", "approve"]
+    modified = out.loc[out["id"] == "r1"].iloc[0]
+    assert modified["human_score"] == 77.0
+    assert modified["final_score"] == 77.0
+    assert modified["ai_score"] == 1              # what the AI said is still on the row
+    assert modified["reviewer_id"] == "local"     # and who changed it, when
+    assert modified["reviewed_at"] == "2026-07-01T00:00:00"
 
 
 def _every_outcome_src() -> pd.DataFrame:
@@ -400,26 +396,23 @@ def _every_outcome_src() -> pd.DataFrame:
     })
 
 
-def test_the_documented_downstream_filter_excludes_only_the_rejected_row(tmp_path):
-    """The filter the authoring guidance documents — `decision != "reject"` —
-    run against a real queue output covering every outcome.
-
-    Every output row carries a decision, so the filter is a plain string
-    comparison: it keeps the approved row, the modified row and BOTH rows the
-    queue passed through unreviewed, and excludes only the rejection. The
-    filter it replaces (`decision == "approve"`) is asserted here too, because
-    it silently takes the unreviewed rows with it — the queue deliberately let
-    those through, and losing them is the data loss this stage no longer
-    performs."""
+def test_every_output_row_carries_a_verdict_covering_every_outcome(tmp_path):
+    """A real queue output covering every outcome: two rows the filter passed
+    through unreviewed either side of three the reviewer decided. EVERY row
+    carries a verdict value, so a downstream filter is a plain string
+    comparison and never has to reason about a missing one. Filtering on
+    `decision == "approve"` is asserted here as the trap it is: it silently
+    takes the unreviewed rows with it — the queue deliberately let those
+    through, and losing them is data loss."""
     stage = _stage(flt="flag == 'review'", input_columns=_FLAGGED_COLUMNS)
     src = _every_outcome_src()
 
     snapshot, fingerprints = _halt_and_read_snapshot(
         stage, {"scored": src}, _ctx(tmp_path, run_id="run1"))
     assert list(snapshot["id"]) == ["r1", "r2", "r3"]
-    decided = [(RowReviewDecision.approve, None),
-               (RowReviewDecision.modify, 99.0),
-               (RowReviewDecision.reject, None)]
+    decided = [(ReviewVerdict.approve, None),
+               (ReviewVerdict.modify, 99.0),
+               (ReviewVerdict.modify, 5.0)]
     for (_, row), fp, (verdict, score) in zip(
         snapshot.iterrows(), fingerprints["input_fingerprints"], decided
     ):
@@ -428,17 +421,15 @@ def test_the_documented_downstream_filter_excludes_only_the_rejected_row(tmp_pat
 
     out = _run_queue_stage(stage, {"scored": src.copy()}, _ctx(tmp_path, run_id="run2"))
     assert list(out["decision"]) == [
-        NOT_REVIEWED, "approve", "modify", "reject", NOT_REVIEWED]
+        NOT_REVIEWED, "approve", "modify", "modify", NOT_REVIEWED]
+    assert out["decision"].notna().all()
 
-    kept = out[out["decision"] != RowReviewDecision.reject.value]
-    assert list(kept["id"]) == ["r0", "r1", "r2", "r4"]
-
-    approved_only = out[out["decision"] == RowReviewDecision.approve.value]
+    approved_only = out[out["decision"] == ReviewVerdict.approve.value]
     assert list(approved_only["id"]) == ["r1"]  # the two unreviewed rows would be lost
 
 
-def test_every_row_rejected_still_emits_every_row_with_the_declared_columns(tmp_path):
-    """Rejecting EVERY queued row still emits every row, projected onto the
+def test_every_decided_row_is_emitted_with_only_the_declared_columns(tmp_path):
+    """Deciding EVERY queued row still emits every row, projected onto the
     columns output_schema declares. A queue stage can no longer hand a
     non-empty input on as a zero-row frame at all, whatever the reviewer
     decided."""
@@ -446,8 +437,9 @@ def test_every_row_rejected_still_emits_every_row_with_the_declared_columns(tmp_
         "id": "review", "name": "Review", "type": "human_review_queue",
         "inputs": [{"id": "scored", "schema": {"columns": _SCORED_COLUMNS}}],
         "output_schema": {"columns": [{"name": "id", "type": "str"},
-                                      {"name": "score", "type": "int"}]},
-        "queue": {},
+                                      {"name": "score", "type": "int"},
+                                      *_REVIEW_COLUMNS]},
+        "queue": dict(QUEUE_COLUMNS),
     })
     src = _src(2)
 
@@ -455,10 +447,11 @@ def test_every_row_rejected_still_emits_every_row_with_the_declared_columns(tmp_
         stage, {"scored": src}, _ctx(tmp_path, run_id="run1"))
     for (_, row), fp in zip(snapshot.iterrows(), fingerprints["input_fingerprints"]):
         _put_approval(row, fp, fingerprints["stage_fingerprint"],
-                      verdict=RowReviewDecision.reject)
+                      verdict=ReviewVerdict.modify, modified_score=3.0)
 
     out = _run_queue_stage(stage, {"scored": src.copy()}, _ctx(tmp_path, run_id="run2"))
-    assert list(out.columns) == ["id", "score"]
+    assert list(out.columns) == ["id", "score", "human_score",
+                                 "decision", "reviewer_id", "reviewed_at", "review_notes"]
     assert out["id"].tolist() == ["r0", "r1"]
 
 
@@ -482,11 +475,10 @@ def test_a_cached_entry_holding_no_output_row_re_queues_the_row(tmp_path):
     assert list(snapshot["id"]) == ["r0"]
 
 
-def test_queue_stats_count_every_row_including_the_rejected_one(tmp_path):
+def test_queue_stats_count_every_row_the_reviewer_answered(tmp_path):
     """The manifest's per-stage item counts, over a run where every outcome
-    occurs. `items_decided` counts the REJECTED row too — a rejection is a
-    decision, and the count is of what the reviewer answered, not of what
-    survived."""
+    occurs. `items_decided` counts what the reviewer ANSWERED, whatever the
+    verdict — not what a downstream stage would keep."""
     stage = _stage(flt="flag == 'review'", input_columns=_FLAGGED_COLUMNS)
     src = _alternating_src()
 
@@ -501,14 +493,15 @@ def test_queue_stats_count_every_row_including_the_rejected_one(tmp_path):
     queue_path = exc_info.value.queue_path
     snapshot, fingerprints = pd.read_parquet(queue_path), _read_fingerprints(queue_path)
 
-    verdicts = [RowReviewDecision.approve, RowReviewDecision.reject]
-    for (_, row), fp, verdict in zip(
-        snapshot.iterrows(), fingerprints["input_fingerprints"], verdicts
+    decided = [(ReviewVerdict.approve, None), (ReviewVerdict.modify, 8.0)]
+    for (_, row), fp, (verdict, score) in zip(
+        snapshot.iterrows(), fingerprints["input_fingerprints"], decided
     ):
-        _put_approval(row, fp, fingerprints["stage_fingerprint"], verdict=verdict)
+        _put_approval(row, fp, fingerprints["stage_fingerprint"],
+                      verdict=verdict, modified_score=score)
 
     out = _run_queue_stage(stage, {"scored": src.copy()}, _ctx(tmp_path, run_id="run2"))
-    assert list(out["id"]) == ["r0", "r1", "r2", "r3"]  # r3 was rejected, and stays
+    assert list(out["id"]) == ["r0", "r1", "r2", "r3"]
     assert contribution_of(out).human_review_queue_stats == {
         "items_queued_total": 2, "items_passed_through": 2,
         "items_pending": 0, "items_decided": 2,
@@ -709,7 +702,7 @@ def _review_stage_full():
                 "columns": [{"name": "id", "type": "str"}, {"name": "score", "type": "int"}],
                 "primary_key": ["id"]}}],
             "output_schema": {"columns": [*_SCORED_COLUMNS, *_REVIEW_COLUMNS]},
-            "queue": {}}
+            "queue": dict(QUEUE_COLUMNS)}
 
 
 def test_resume_reattaches_cached_decisions_written_via_the_seam(tmp_path):

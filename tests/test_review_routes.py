@@ -16,7 +16,8 @@ from app.runtime.stages import llm_transform as lt
 from app.services import review, versioning
 from app.core.stage_cache import StageCacheEntry
 from app.services.versioning import create_version_from_disk
-from app.models import RowReviewDecision
+from app.models import ReviewVerdict
+from conftest import QUEUE_COLUMNS, queue_added_columns
 
 PROJECT = "queue_route_journey"
 
@@ -56,15 +57,7 @@ def _load_quotes_stage(root):
 # Every non-publish stage must declare its output_schema
 # (app/models/stage.py: Stage._schemas_declared), and the runtime PROJECTS the
 # stage's output onto exactly those columns.
-_REVIEW_COLUMNS = [
-    {"name": "ai_score", "type": "float"},
-    {"name": "human_score", "type": "float"},
-    {"name": "final_score", "type": "float"},
-    {"name": "review_notes", "type": "str"},
-    {"name": "reviewer_id", "type": "str"},
-    {"name": "reviewed_at", "type": "str"},
-    {"name": "decision", "type": "str"},
-]
+_REVIEW_COLUMNS = queue_added_columns()
 
 
 def _score_stage():
@@ -97,7 +90,7 @@ def _review_stage():
                 "columns": [{"name": "id", "type": "str"}, {"name": "quote", "type": "str"},
                             {"name": "score", "type": "int"}] + _REVIEW_COLUMNS,
                 "primary_key": ["id"]},
-            "queue": {}}
+            "queue": dict(QUEUE_COLUMNS)}
 
 
 def _read_fingerprints(run_dir, stage_id: str = "review") -> dict:
@@ -138,7 +131,7 @@ def _build_and_halt(tmp_path, monkeypatch):
 def _put_cached_decision(
     project: str, stage_id: str,
     stage_fingerprint: str, input_fingerprint: str, row: pd.Series,
-    decision: RowReviewDecision, modified_score: float | None = None,
+    decision: ReviewVerdict, modified_score: float | None = None,
 ) -> None:
     """Seed a prior decision through the real review service (record_decision →
     the production cache seam) — never a hand-assembled entry, a raw store
@@ -162,7 +155,7 @@ def test_happy_path_renders_items_with_fingerprint_prior_decision_and_counts(tmp
     first_row = snapshot.iloc[0]
     _put_cached_decision(
         PROJECT, "review", fingerprints["stage_fingerprint"], first_fp,
-        first_row, RowReviewDecision.approve,
+        first_row, ReviewVerdict.approve,
     )
 
     client = TestClient(app)
@@ -245,7 +238,7 @@ def test_decide_422_on_unknown_decision(tmp_path, monkeypatch):
     client = TestClient(app)
     r = client.post(
         f"/project/{PROJECT}/runs/{run_id}/queue/review/decide",
-        data={"input_fingerprint": fp, "decision": "shrug"},  # not a RowReviewDecision value
+        data={"input_fingerprint": fp, "decision": "shrug"},  # not a ReviewVerdict value
     )
     assert r.status_code == 422  # FastAPI rejects the unknown enum value
     assert not StageCacheEntry.list(prefix=f"{PROJECT}/review/")  # nothing written
@@ -320,16 +313,15 @@ def _e2e_review_stage():
                 "columns": [{"name": "id", "type": "str"},
                             {"name": "score", "type": "int"}] + _REVIEW_COLUMNS,
                 "primary_key": ["id"]},
-            "queue": {}}
+            "queue": dict(QUEUE_COLUMNS)}
 
 
-def test_e2e_decide_approve_modify_and_reject_then_resume_completes(tmp_path, monkeypatch):
-    """halt -> POST /decide for each pending row (one of each verdict) ->
-    runner.resume_run -> completed manifest, with the resumed output
-    reflecting each verdict: approve keeps the AI score, modify substitutes
-    the human-entered score, and reject keeps the row with a null final score
-    and the rejection recorded on it. No decisions/ directory is created under
-    the project dir — every write goes through the cache."""
+def test_e2e_decide_every_verdict_then_resume_completes(tmp_path, monkeypatch):
+    """halt -> POST /decide for each pending row -> runner.resume_run ->
+    completed manifest, with the resumed output reflecting each verdict:
+    approve keeps the AI score, modify substitutes the human-entered score.
+    Every reviewed row is emitted. No decisions/ directory is created under the
+    project dir — every write goes through the cache."""
     project = "queue_route_e2e"
     monkeypatch.setattr(loading, "EXAMPLES_DIR", tmp_path)
 
@@ -353,7 +345,7 @@ def test_e2e_decide_approve_modify_and_reject_then_resume_completes(tmp_path, mo
     verdicts = {
         "a": {"decision": "approve"},
         "b": {"decision": "modify", "modified_score": "99"},
-        "c": {"decision": "reject"},
+        "c": {"decision": "modify", "modified_score": "0"},
     }
     for row_id, form in verdicts.items():
         r = client.post(
@@ -379,7 +371,7 @@ def test_e2e_decide_approve_modify_and_reject_then_resume_completes(tmp_path, mo
     assert list(out.index) == ["a", "b", "c"]   # every reviewed row is emitted
     assert out.loc["a", "final_score"] == 1     # approve: AI score kept
     assert out.loc["b", "final_score"] == 99    # modify: human score used
-    assert out.loc["c", "decision"] == "reject"   # reject: the row stays, carrying the verdict
-    assert pd.isna(out.loc["c", "final_score"])   # with no score anyone stands behind
+    assert out.loc["c", "decision"] == "modify"  # the row stays, carrying its verdict
+    assert out.loc["c", "final_score"] == 0      # a human-entered 0 is a score, not a blank
 
     assert not (project_dir / "decisions").exists()

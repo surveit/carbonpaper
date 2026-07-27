@@ -10,6 +10,7 @@ from app.models import Stage
 from app.services import workspace
 from app.services.workflow_test import run_workflow_test
 from app.services.versioning import WorkflowVersion
+from conftest import QUEUE_COLUMNS, queue_added_columns
 
 
 def _load_stage(demo):
@@ -67,8 +68,9 @@ _LOAD_PK_SCHEMA = {"columns": [{"name": "doc_id", "type": "str"},
 _QUEUE = {
     "id": "review", "type": "human_review_queue", "name": "Review rows",
     "inputs": [{"id": "load", "schema": _LOAD_PK_SCHEMA}],
-    "output_schema": _LOAD_PK_SCHEMA,
-    "queue": {"reviewer_instructions": "check"},
+    "output_schema": {"columns": _LOAD_PK_SCHEMA["columns"] + queue_added_columns(),
+                      "primary_key": ["doc_id"]},
+    "queue": {**QUEUE_COLUMNS, "reviewer_instructions": "check"},
 }
 
 

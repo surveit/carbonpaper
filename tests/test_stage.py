@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import pytest
+
+from conftest import queue_added_columns, queue_columns
 from pydantic import ValidationError
 
 from app import models as m
@@ -19,6 +21,10 @@ def S(**kw):
 # output_schema, so tests aimed at some OTHER part of the contract still have to
 # carry both. These are the smallest ones that satisfy it.
 _PK_ID_SCHEMA = {"columns": [{"name": "id", "type": "str"}], "primary_key": ["id"]}
+_QUEUE_IN_SCHEMA = {"columns": [{"name": "id", "type": "str"}, {"name": "score", "type": "int"}],
+                    "primary_key": ["id"]}
+_QUEUE_OUT_SCHEMA = {"columns": _QUEUE_IN_SCHEMA["columns"] + queue_added_columns(),
+                     "primary_key": ["id"]}
 _K_SCHEMA = {"columns": [{"name": "k", "type": "str"}]}
 
 
@@ -253,8 +259,8 @@ def test_queue_needs_no_hash_source_declared():
     # the row itself (app.core.stage_cache) — no upstream primary_key or
     # explicit column list is required to build the stage.
     s = m.Stage.model_validate(S(
-        id="rev", type="human_review_queue", inputs=[{"id": "a", "schema": _PK_ID_SCHEMA}],
-        output_schema=_PK_ID_SCHEMA, queue={},
+        id="rev", type="human_review_queue", inputs=[{"id": "a", "schema": _QUEUE_IN_SCHEMA}],
+        output_schema=_QUEUE_OUT_SCHEMA, queue=queue_columns(),
     ))
     assert s.queue is not None
 

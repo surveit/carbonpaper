@@ -76,3 +76,36 @@ def make_run_context(
         limits=dict(limits or {}), offsets=dict(offsets or {}),
         bust_cache=bust_cache,
     )
+
+
+def queue_columns(source: str = "score", target: str = "human_score") -> dict[str, object]:
+    """The queue-column names a human_review_queue fixture declares when the
+    test is about something else (halting, caching, counts). The bookkeeping
+    names match the columns the runtime writes today, so a fixture using them
+    needs no other change; `source` is the input column reviewed, which must
+    exist wherever the fixture declares an input schema."""
+    return {
+        "reviewed_columns": {source: target},
+        "verdict_column": "decision",
+        "reviewer_column": "reviewer_id",
+        "reviewed_at_column": "reviewed_at",
+        "review_notes_column": "review_notes",
+    }
+
+
+QUEUE_COLUMNS: dict[str, object] = queue_columns()
+
+
+def queue_added_columns(
+    target: str = "human_score", target_type: str = "int"
+) -> list[dict[str, object]]:
+    """The output_schema columns a `queue_columns()` stage adds, to append to
+    whatever the fixture's input schema declares. Every one but the verdict is
+    nullable: a filtered-out or auto-approved row gets no value written."""
+    return [
+        {"name": target, "type": target_type, "nullable": True},
+        {"name": "decision", "type": "str"},
+        {"name": "reviewer_id", "type": "str", "nullable": True},
+        {"name": "reviewed_at", "type": "str", "nullable": True},
+        {"name": "review_notes", "type": "str", "nullable": True},
+    ]

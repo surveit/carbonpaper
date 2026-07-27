@@ -6,7 +6,7 @@ from app.runtime.stages import HANDLERS
 from app.models import Stage
 from app.models.stage import StageType
 from app.core.stage_cache import StageCacheEntry
-from conftest import make_run_context
+from conftest import QUEUE_COLUMNS, make_run_context
 
 
 def test_bad_filter_raises_instead_of_skipping_review(tmp_path):
@@ -20,7 +20,7 @@ def test_bad_filter_raises_instead_of_skipping_review(tmp_path):
             {"name": "nonexistent", "type": "bool"}]}}],
         "output_schema": {"columns": [{"name": "claim_id", "type": "str", "nullable": False}],
                           "primary_key": ["claim_id"]},
-        "queue": {"filter": "nonexistent == True"},
+        "queue": {**QUEUE_COLUMNS, "filter": "nonexistent == True"},
     })
     inputs = {"a": pd.DataFrame({"claim_id": ["c1", "c2"]})}
     ctx = make_run_context(
@@ -44,7 +44,7 @@ def test_a_cell_the_filter_cannot_answer_names_the_stage_and_the_filter(tmp_path
             {"name": "score", "type": "int"}]}}],
         "output_schema": {"columns": [{"name": "claim_id", "type": "str", "nullable": False}],
                           "primary_key": ["claim_id"]},
-        "queue": {"filter": "score > 1"},
+        "queue": {**QUEUE_COLUMNS, "filter": "score > 1"},
     })
     inputs = {"a": pd.DataFrame({
         "claim_id": ["c1"], "score": pd.Series([np.array([1, 2, 3])], dtype=object),

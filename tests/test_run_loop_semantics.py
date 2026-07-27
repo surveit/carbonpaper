@@ -13,6 +13,7 @@ from app.runtime.runner import prepare_run, run_prepared
 from app.runtime.stages import llm_transform as lt
 from app.services import versioning
 from app.services.versioning import create_version_from_disk
+from conftest import queue_added_columns, queue_columns
 
 
 # The three frame shapes this file's DAGs carry. Declared once so an upstream's
@@ -20,6 +21,8 @@ from app.services.versioning import create_version_from_disk
 _ID_VAL_SCHEMA = {"columns": [{"name": "id", "type": "str"},
                               {"name": "val", "type": "int"}],
                   "primary_key": ["id"]}
+_QUEUE_OUT_SCHEMA = {"columns": _ID_VAL_SCHEMA["columns"] + queue_added_columns("human_val"),
+                     "primary_key": ["id"]}
 _ID_TEXT_SCHEMA = {"columns": [{"name": "id", "type": "str"},
                                {"name": "text", "type": "str"}],
                    "primary_key": ["id"]}
@@ -98,8 +101,8 @@ def _queue_stage(stage_id, input_id, name="Review"):
     bookkeeping columns are not part of its output."""
     return {"id": stage_id, "name": name, "type": "human_review_queue",
             "inputs": [{"id": input_id, "schema": _ID_VAL_SCHEMA}],
-            "output_schema": _ID_VAL_SCHEMA,
-            "queue": {}}
+            "output_schema": _QUEUE_OUT_SCHEMA,
+            "queue": queue_columns("val", "human_val")}
 
 
 def _five_item_load_stage(root):
@@ -120,8 +123,8 @@ def _filtered_queue_stage(stage_id, input_id, flt, name="Review"):
     same (id, val) output as `_queue_stage`."""
     return {"id": stage_id, "name": name, "type": "human_review_queue",
             "inputs": [{"id": input_id, "schema": _ID_VAL_SCHEMA}],
-            "output_schema": _ID_VAL_SCHEMA,
-            "queue": {"filter": flt}}
+            "output_schema": _QUEUE_OUT_SCHEMA,
+            "queue": {**queue_columns("val", "human_val"), "filter": flt}}
 
 
 def _stage_status(manifest, stage_id):

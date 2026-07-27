@@ -315,37 +315,63 @@ class AggregateConfig(_Base):
     aggregations: list[AggregationOp]
 
 
-class RowReviewDecision(str, Enum):
-    """A reviewer's verdict on one human_review_queue row, validated and applied
-    at the web/service boundary (app.services.review) and recorded as the review
-    stage's output row in the cache: `approve` keeps the AI score as final,
-    `modify` substitutes a human-entered score, `reject` leaves the human and
-    final scores null. EVERY verdict produces an output row — the review stage
-    emits one row per input row — so a rejected row reaches the stage's output
-    carrying its rejection, and excluding it is a downstream stage's job."""
+class ReviewVerdict(str, Enum):
+    """The vocabulary of a human_review_queue stage's VERDICT column, not only of
+    what a human posts: `skipped` is what the runtime writes for a row the
+    stage's filter did not select, and no client may post it."""
     approve = "approve"
     modify = "modify"
-    reject = "reject"
+    skipped = "skipped"
 
 
 class QueueConfig(_Base):
     """human_review_queue handle. A queued row is matched to a cached human
     decision by fingerprinting the row itself (app.core.stage_cache) — no
     column configuration is needed to enable that matching."""
-    # `filter`/`reviewer_instructions` change what the human is asked; routing,
+    # Every declared column name changes what the stage computes (which columns
+    # the human is asked about, and what the added columns are called); routing,
     # conflict_resolution, and estimated_volume_per_week describe how a
     # decision is routed, not what is asked — see
     # Stage.compute_definition_fingerprint.
-    FINGERPRINT_FIELDS: ClassVar[frozenset[str]] = frozenset({"filter", "reviewer_instructions"})
+    FINGERPRINT_FIELDS: ClassVar[frozenset[str]] = frozenset({
+        "filter", "reviewer_instructions", "reviewed_columns",
+        "verdict_column", "reviewer_column", "reviewed_at_column", "review_notes_column",
+    })
     INCIDENTAL_FIELDS: ClassVar[frozenset[str]] = frozenset({
         "routing", "conflict_resolution", "estimated_volume_per_week",
     })
 
     filter: Optional[str] = None
     reviewer_instructions: Optional[str] = None
+    reviewed_columns: dict[str, str] = Field(
+        description=(
+            "Each input column the human reviews, mapped to the name of the column this "
+            "stage adds carrying the reviewed value: {source column -> reviewed column}."
+        ),
+    )
+    verdict_column: str
+    reviewer_column: str
+    reviewed_at_column: str
+    review_notes_column: Optional[str] = Field(
+        default=None,
+        description=(
+            "Optional: name the column a reviewer's free-text note lands in. Omit it and "
+            "the stage neither offers a notes box nor adds a notes column."
+        ),
+    )
     routing: Optional[str] = None
     conflict_resolution: Optional[str] = None
     estimated_volume_per_week: Optional[int] = None
+
+    @field_validator("reviewed_columns")
+    @classmethod
+    def _reviews_something(cls, v: dict[str, str]) -> dict[str, str]:
+        if not v:
+            raise ValueError(
+                "reviewed_columns must name at least one column: a review stage that "
+                "adds no reviewed column asks the human for nothing"
+            )
+        return v
 
 
 class PublishConfig(_Base):

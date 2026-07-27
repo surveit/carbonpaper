@@ -26,6 +26,10 @@ def _queue_stage(**queue_overrides):
         "routing": "team-a",
         "conflict_resolution": "escalate",
         "estimated_volume_per_week": 10,
+        "reviewed_columns": {"score": "human_score"},
+        "verdict_column": "decision",
+        "reviewer_column": "reviewer_id",
+        "reviewed_at_column": "reviewed_at",
     }
     queue.update(queue_overrides)
     return Stage.model_validate({

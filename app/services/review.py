@@ -7,7 +7,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 
 from app.core.errors import ReviewValidationError
-from app.models import RowReviewDecision
+from app.models import ReviewVerdict
 from app.core.stage_cache import StageCacheEntry
 
 
@@ -15,14 +15,14 @@ def record_decision(
     *, project: str, stage_id: str,
     stage_fingerprint: str, input_fingerprint: str,
     frozen_row: Mapping[str, object],
-    verdict: RowReviewDecision, modified_score: float | None,
+    verdict: ReviewVerdict, modified_score: float | None,
     reviewer: str, reviewed_at: str,
 ) -> None:
     """Build the output row one reviewed row produces and record it through the
     read+write cache accessor, passing the raw frozen row and the resolved
     fingerprints. A `modify` verdict must carry a `modified_score` (the one
     domain rule), else ReviewValidationError."""
-    if verdict == RowReviewDecision.modify and modified_score is None:
+    if verdict == ReviewVerdict.modify and modified_score is None:
         raise ReviewValidationError("modify requires modified_score")
     output_row = _build_output_row(frozen_row, verdict, modified_score, reviewer, reviewed_at)
     StageCacheEntry.read_write().record(
@@ -33,14 +33,13 @@ def record_decision(
 
 
 def _build_output_row(
-    frozen_row: Mapping[str, object], verdict: RowReviewDecision, modified_score: float | None,
+    frozen_row: Mapping[str, object], verdict: ReviewVerdict, modified_score: float | None,
     reviewer: str, reviewed_at: str,
 ) -> Mapping[str, object]:
     """The review stage's output row for one reviewed input: the frozen input
     plus the score columns the verdict produces. Every verdict produces a row —
     `approve` keeps the AI score as final, `modify` substitutes the
-    human-entered score, and `reject` leaves the human and final scores null,
-    carrying the verdict itself as what the reviewer decided."""
+    human-entered score."""
     ai = frozen_row.get("score")
     human = _resolve_human_score(verdict, ai, modified_score)
     return {
@@ -53,14 +52,10 @@ def _build_output_row(
 
 
 def _resolve_human_score(
-    verdict: RowReviewDecision, ai_score: object, modified_score: float | None
+    verdict: ReviewVerdict, ai_score: object, modified_score: float | None
 ) -> object:
     """The score the reviewer's verdict settles on: the human-entered score for
-    a `modify`, the AI score for an `approve`, and None for a `reject` — a
-    rejected row has no score anyone stands behind, and a null says so where a
-    kept AI score would read as an endorsement."""
-    if verdict == RowReviewDecision.reject:
-        return None
-    if verdict == RowReviewDecision.modify:
+    a `modify`, the AI score for an `approve`."""
+    if verdict == ReviewVerdict.modify:
         return modified_score
     return ai_score

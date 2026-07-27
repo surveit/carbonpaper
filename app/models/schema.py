@@ -200,8 +200,58 @@ class Column(_Base):
             )
         return self
 
+    def coerce_text(self, text: str) -> object:
+        """`text` — one form field's raw string — as a value of this column's
+        declared type. Surrounding whitespace is not data and is stripped; what
+        is left blank is None on a nullable column and a ValueError on a
+        non-nullable one, never a silent null. A non-scalar column type
+        (`json`, `list[...]`) cannot be answered by a form field and raises.
+
+        Named consumer: the human-review queue UI, which receives a reviewer's
+        edit of a reviewed column as a string and must land the source column's
+        declared type."""
+        if self.type not in SCALAR_COLUMN_TYPES:
+            raise ValueError(
+                f"column {self.name!r}: type {self.type!r} is not a scalar and "
+                "cannot be entered as text"
+            )
+        stripped = text.strip()
+        if not stripped:
+            if self.nullable:
+                return None
+            raise ValueError(
+                f"column {self.name!r}: blank text, but the column is not nullable"
+            )
+        return _parse_scalar_text(self.name, self.type, stripped)
+
 
 Column.model_rebuild()
+
+
+# ── Parsing form text into a scalar (Column.coerce_text) ─────────────────────
+_BOOL_TEXT: dict[str, bool] = {
+    "true": True, "1": True, "yes": True, "on": True,
+    "false": False, "0": False, "no": False, "off": False,
+}
+
+
+def _parse_scalar_text(column_name: str, column_type: str, text: str) -> object:
+    try:
+        if column_type == "str":
+            return text
+        if column_type == "int":
+            return int(text)
+        if column_type == "float":
+            return float(text)
+        if column_type == "bool":
+            return _BOOL_TEXT[text.lower()]
+        if column_type == "date":
+            return datetime.date.fromisoformat(text)
+        return datetime.datetime.fromisoformat(text)
+    except (ValueError, KeyError) as exc:
+        raise ValueError(
+            f"column {column_name!r}: {text!r} is not a valid {column_type} value"
+        ) from exc
 
 
 # ── Column spec-equality ─────────────────────────────────────────────────────
