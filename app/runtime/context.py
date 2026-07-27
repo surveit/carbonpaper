@@ -76,6 +76,10 @@ class RunContext(BaseModel):
     # row in memory instead of reaching for the stage cache or halting. Only a
     # non-production run may set it (see the validator).
     queue_auto_approve: bool = False
+    # Recompute everything: this run SKIPS every stage-cache read, while the
+    # write-capable accessor still records what it computes — so the cache ends
+    # the run re-pinned, not stale. Per-run only; nothing about a stage says it.
+    bust_cache: bool = False
 
     @model_validator(mode="after")
     def _production_run_forbids_queue_auto_approve(self) -> RunContext:
@@ -84,6 +88,16 @@ class RunContext(BaseModel):
                 "queue_auto_approve is a non-production-run bypass; a production run "
                 "must never auto-approve its human review queue in memory. Build "
                 "the context with mode='non_production' if the bypass is intended."
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _busting_requires_a_cache(self) -> RunContext:
+        if self.bust_cache and self.stage_cache is None:
+            raise ValueError(
+                "bust_cache is set on a run with no stage cache to bust — a run "
+                "without project scope reads no cache in the first place, so "
+                "asking it to skip those reads describes nothing."
             )
         return self
 
@@ -119,12 +133,18 @@ class RunContext(BaseModel):
         run_id: str,
         limits: dict[str, int] | None = None,
         offsets: dict[str, int] | None = None,
+        bust_cache: bool = False,
     ) -> RunContext:
         """A production run's context: `mode="production"`, full project scope —
         `identity` (`project`, `run_id`) and a read+write stage-result cache
         (`StageCacheEntry.read_write()`). The run's growing telemetry lives on
         the manifest, not here, so a resume replays nothing through this
-        constructor."""
+        constructor.
+
+        `bust_cache` makes this run skip every cache READ; the accessor stays
+        write-capable, so the run leaves the cache re-pinned rather than stale.
+        Only a production run can be told this — it is the only kind that has a
+        cache — which is why `for_non_production_run` takes no such argument."""
         return cls(
             mode="production",
             repo_root=repo_root,
@@ -133,6 +153,7 @@ class RunContext(BaseModel):
             stage_cache=StageCacheEntry.read_write(),
             limits=dict(limits or {}),
             offsets=dict(offsets or {}),
+            bust_cache=bust_cache,
         )
 
     @classmethod

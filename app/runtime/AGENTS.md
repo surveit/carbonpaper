@@ -19,6 +19,10 @@ validate the output, write `outputs/<stage>.parquet`, append to `manifest.json`.
   Per run, `--limit <id>=<N>` overrides it and `--offset <id>=<M>` drops the first M rows
   first (offset 5 + limit 3 = rows 6-8); recorded in the manifest, re-applied on resume,
   unknown ids fail loudly.
+- **Recompute everything:** `--bust-cache` (a run-form checkbox too) sets
+  `RunContext.bust_cache`: the run skips every stage-cache READ while still recording
+  what it computes, so the cache ends re-pinned, not stale. Recorded in the manifest
+  and replayed on resume.
 - **Halt + resume:** `human_review_queue` raises `HaltForReview`; the run marks
   `awaiting_review` and persists the pending queue. `resume_run(...)` reloads completed
   outputs and continues once cached decisions exist for the pending rows.

@@ -37,6 +37,7 @@ def start_run(
     bindings: Mapping[str, Mapping[str, Any]] | None = None,
     limits: dict[str, int] | None = None,
     offsets: dict[str, int] | None = None,
+    bust_cache: bool = False,
 ) -> str:
     """Set up a run (writes the initial `running` manifest) and launch its
     execution on a background daemon thread, returning the run id immediately so
@@ -46,8 +47,8 @@ def start_run(
     work up front, so its loud failures (NoVersionToRunError /
     MissingInputBindingError / ValueError / WorkflowLoadError) surface here,
     before any thread starts and before a run dir exists. See prepare_run for
-    `version_id` / `bindings` / `limits` / `offsets` semantics — this seam adds
-    none of its own."""
+    `version_id` / `bindings` / `limits` / `offsets` / `bust_cache` semantics —
+    this seam adds none of its own."""
     prep = prepare_run(
         resolve_project_dir(project),
         repo_root(),
@@ -55,6 +56,7 @@ def start_run(
         limits=limits,
         offsets=offsets,
         bindings=bindings,
+        bust_cache=bust_cache,
     )
     _run_in_background(run_prepared, prep)
     return str(prep["run_id"])

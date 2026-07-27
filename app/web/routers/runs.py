@@ -69,7 +69,8 @@ async def trigger_run(request: Request, project: str):
         bindings = _collect_bindings(form, project, version_id)
         limits = _collect_limits(form)
         run_id = run_service.start_run(project, version_id=version_id,
-                                       bindings=bindings, limits=limits)
+                                       bindings=bindings, limits=limits,
+                                       bust_cache=_read_bust_cache(form))
     except (NoVersionToRunError, MissingInputBindingError, ValueError) as exc:
         # ValueError here is binding/limit/offset validation failures raised by
         # apply_run_bindings / prepare_run — not a catch-all for other bugs.
@@ -153,6 +154,14 @@ def _collect_limits(form: FormData) -> dict[str, int]:
             )
         limits[stage_id] = int(text)
     return limits
+
+
+def _read_bust_cache(form: FormData) -> bool:
+    """Whether the run form asked for a recompute-everything run, the shape
+    `prepare_run`'s `bust_cache` parameter takes. A checkbox is submitted only
+    when checked, so its presence in the form IS the value — there is no
+    unchecked value to parse."""
+    return "bust_cache" in form
 
 
 @router.get("/project/{project}/run-inputs")

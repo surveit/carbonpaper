@@ -6,6 +6,7 @@ in-memory queue bypass; and the run's telemetry lives on the manifest, not
 here (no accumulator field to mutate)."""
 from __future__ import annotations
 
+import inspect
 from pathlib import Path
 
 import pytest
@@ -80,6 +81,22 @@ def test_non_production_run_context_allows_queue_auto_approve(tmp_path: Path) ->
     assert ctx.queue_auto_approve is True
 
 
+def test_run_context_without_a_cache_rejects_bust_cache(tmp_path: Path) -> None:
+    """Busting the cache is meaningful only for a run that HAS one: a context
+    with no stage cache paired with bust_cache fails loudly at construction."""
+    with pytest.raises(ValidationError, match="no stage cache to bust"):
+        RunContext(
+            mode="non_production",
+            repo_root=tmp_path,
+            run_dir=tmp_path / "run",
+            bust_cache=True,
+        )
+
+
+def test_bust_cache_defaults_off() -> None:
+    assert _make().bust_cache is False
+
+
 def test_run_context_is_frozen(tmp_path: Path) -> None:
     """Identity/config is immutable once built — nothing mutates it mid-run."""
     ctx = _make()
@@ -92,6 +109,21 @@ def test_for_production_run_stamps_mode_and_grants_scope(tmp_path: Path) -> None
     assert ctx.mode == "production"
     assert ctx.identity == RunIdentity(project="proj", run_id="r1")
     assert ctx.stage_cache is not None
+    assert ctx.bust_cache is False
+
+
+def test_for_production_run_carries_bust_cache(tmp_path: Path) -> None:
+    ctx = RunContext.for_production_run(
+        tmp_path, tmp_path / "run", "proj", "r1", bust_cache=True)
+    assert ctx.bust_cache is True
+    assert ctx.stage_cache is not None  # still write-capable: re-pinned, not stale
+
+
+def test_for_non_production_run_takes_no_bust_cache() -> None:
+    """A non-production run has no cache at all, so the constructor offers no
+    way to ask for one to be busted."""
+    assert "bust_cache" not in inspect.signature(
+        RunContext.for_non_production_run).parameters
 
 
 def test_for_non_production_run_allows_none_paths() -> None:

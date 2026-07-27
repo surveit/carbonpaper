@@ -188,6 +188,10 @@ class RunManifest(BaseModel):
     offset_overrides: dict[str, int] = {}
     run_bindings: dict[str, dict[str, Any]] = {}
     input_bindings: dict[str, dict[str, Any]] = {}
+    # Whether this run skipped every stage-cache read (RunContext.bust_cache).
+    # Recorded so it is part of the run's provenance and so a resume replays the
+    # same choice; defaulted for the same legacy-manifest reason as the maps above.
+    bust_cache: bool = False
     # The live human_review_queue tallies. Required, unlike the override maps
     # above: the key was renamed out of an older on-disk vocabulary, so a default
     # would let a pre-rename manifest parse and then report an empty tally for a
@@ -264,6 +268,7 @@ def create_run_manifest(
     input_bindings: dict[str, dict[str, Any]],
     limits: dict[str, int],
     offsets: dict[str, int],
+    bust_cache: bool,
 ) -> RunManifest:
     """The initial run manifest — every stage pending, status running. The single
     source of the run-manifest shape: every caller mints it here and persists it
@@ -285,6 +290,7 @@ def create_run_manifest(
         offset_overrides=offsets,
         run_bindings=run_bindings,
         input_bindings=input_bindings,
+        bust_cache=bust_cache,
         human_review_queue_stats={},
         dropped_columns={},
         status=RunStatus.RUNNING,
