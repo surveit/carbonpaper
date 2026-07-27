@@ -95,7 +95,7 @@ A stage is written, validated against the whole graph, and only then stored.
    JSON Merge Patch), remove_stage(project_id, stage_id) to undo a stage you added
    (refused while another stage still lists it in `inputs`).
 
-Added stages land `unreviewed` (amber). REVIEW, APPROVAL AND VERSIONING ARE HUMAN-ONLY, in
+Added stages land `unreviewed`. REVIEW, APPROVAL AND VERSIONING ARE HUMAN-ONLY, in
 the web UI. Your job ends at a clean, fully-added workflow the human can then review.
 
 # Per-stage tests
@@ -292,8 +292,8 @@ def edit_stage(project_id: str, stage_id: str, changes_json: str) -> dict[str, A
     llm block intact; {"name": null} deletes a field. Fields you do not mention
     are preserved exactly. Validated first; if invalid, nothing is written and
     the issues are returned. A successful edit drops the node to 'edited_stale'
-    (amber) for a human to re-approve — you cannot approve it yourself. You
-    cannot change a stage's id this way."""
+    for a human to re-approve — you cannot approve it yourself. You cannot
+    change a stage's id this way."""
     return catch_stage_edit_refusals(lambda: project_service.edit_stage(project_id, stage_id, changes_json))
 
 
