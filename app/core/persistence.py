@@ -22,6 +22,7 @@ import json
 import sqlite3
 from datetime import datetime
 from enum import Enum
+from threading import RLock
 from typing import Any, ClassVar, Iterator, Protocol, Self
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -58,9 +59,19 @@ def validate_id(id: str) -> str:
 class SqliteKvStore:
     """DocumentStore backed by one SQLite table: opaque JSON bodies keyed by
     (collection, id). Writes are atomic; WAL mode lets readers run concurrently
-    with a writer. `db_path` is a file path or ":memory:" (tests)."""
+    with a writer. `db_path` is a file path or ":memory:" (tests).
+
+    ONE connection serves every caller (`check_same_thread=False`), and callers
+    are multi-threaded — a run's row driver computes rows in a worker pool, the
+    web app serves requests concurrently. A shared `sqlite3.Connection` does not
+    tolerate interleaved `execute`/`commit`, so `_lock` serializes every method
+    that touches it. It is reentrant because the scan helper is called by
+    methods that already hold it, and it is held across a scan's full
+    materialization: a cursor consumed after the lock is released would be read
+    while another thread is mid-statement."""
 
     def __init__(self, db_path: str) -> None:
+        self._lock = RLock()
         self._conn = sqlite3.connect(db_path, check_same_thread=False)
         self._conn.execute("PRAGMA journal_mode=WAL")
         self._conn.execute(
@@ -74,47 +85,53 @@ class SqliteKvStore:
         self._conn.commit()
 
     def write(self, collection: str, id: str, data: JsonDict, schema_version: int = 1) -> None:
-        self._conn.execute(
-            "INSERT OR REPLACE INTO documents (collection, id, data, schema_version) "
-            "VALUES (?, ?, ?, ?)",
-            (collection, id, json.dumps(data), schema_version),
-        )
-        self._conn.commit()
+        with self._lock:
+            self._conn.execute(
+                "INSERT OR REPLACE INTO documents (collection, id, data, schema_version) "
+                "VALUES (?, ?, ?, ?)",
+                (collection, id, json.dumps(data), schema_version),
+            )
+            self._conn.commit()
 
     def read(self, collection: str, id: str) -> JsonDict:
-        row = self._conn.execute(
-            "SELECT data FROM documents WHERE collection=? AND id=?", (collection, id)
-        ).fetchone()
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT data FROM documents WHERE collection=? AND id=?", (collection, id)
+            ).fetchone()
         if row is None:
             raise DocumentNotFound(f"{collection}/{id}")
         parsed: JsonDict = json.loads(row[0])
         return parsed
 
     def schema_version(self, collection: str, id: str) -> int:
-        row = self._conn.execute(
-            "SELECT schema_version FROM documents WHERE collection=? AND id=?",
-            (collection, id),
-        ).fetchone()
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT schema_version FROM documents WHERE collection=? AND id=?",
+                (collection, id),
+            ).fetchone()
         if row is None:
             raise DocumentNotFound(f"{collection}/{id}")
         return int(row[0])
 
     def exists(self, collection: str, id: str) -> bool:
-        row = self._conn.execute(
-            "SELECT 1 FROM documents WHERE collection=? AND id=?", (collection, id)
-        ).fetchone()
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT 1 FROM documents WHERE collection=? AND id=?", (collection, id)
+            ).fetchone()
         return row is not None
 
     def delete(self, collection: str, id: str) -> None:
-        self._conn.execute(
-            "DELETE FROM documents WHERE collection=? AND id=?", (collection, id)
-        )
-        self._conn.commit()
+        with self._lock:
+            self._conn.execute(
+                "DELETE FROM documents WHERE collection=? AND id=?", (collection, id)
+            )
+            self._conn.commit()
 
     def read_tolerant(self, collection: str, id: str) -> JsonDict | None:
-        row = self._conn.execute(
-            "SELECT data FROM documents WHERE collection=? AND id=?", (collection, id)
-        ).fetchone()
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT data FROM documents WHERE collection=? AND id=?", (collection, id)
+            ).fetchone()
         if row is None:
             return None
         try:
@@ -123,28 +140,32 @@ class SqliteKvStore:
             return None
         return parsed
 
-    def _scan(self, columns: str, collection: str, prefix: str) -> sqlite3.Cursor:
-        # `columns` is an internal literal, never user input. Prefix match is an
-        # index-friendly range on the (collection, id) primary key.
-        if prefix:
-            hi = prefix[:-1] + chr(ord(prefix[-1]) + 1)
+    def _scan(self, columns: str, collection: str, prefix: str) -> list[tuple[Any, ...]]:
+        """Every matching row, MATERIALIZED under the lock — a lazily-consumed
+        cursor would be read while another thread holds the connection.
+
+        `columns` is an internal literal, never user input. Prefix match is an
+        index-friendly range on the (collection, id) primary key."""
+        with self._lock:
+            if prefix:
+                hi = prefix[:-1] + chr(ord(prefix[-1]) + 1)
+                return self._conn.execute(
+                    f"SELECT {columns} FROM documents "
+                    "WHERE collection=? AND id>=? AND id<? ORDER BY id",
+                    (collection, prefix, hi),
+                ).fetchall()
             return self._conn.execute(
-                f"SELECT {columns} FROM documents "
-                "WHERE collection=? AND id>=? AND id<? ORDER BY id",
-                (collection, prefix, hi),
-            )
-        return self._conn.execute(
-            f"SELECT {columns} FROM documents WHERE collection=? ORDER BY id",
-            (collection,),
-        )
+                f"SELECT {columns} FROM documents WHERE collection=? ORDER BY id",
+                (collection,),
+            ).fetchall()
 
     def list_ids(self, collection: str, prefix: str = "") -> list[str]:
-        return [row[0] for row in self._scan("id", collection, prefix)]
+        return [str(row[0]) for row in self._scan("id", collection, prefix)]
 
     def read_all(self, collection: str, prefix: str = "") -> Iterator[tuple[str, JsonDict]]:
         for row_id, data in self._scan("id, data", collection, prefix):
             body: JsonDict = json.loads(data)
-            yield row_id, body
+            yield str(row_id), body
 
 
 class DocumentStore(Protocol):

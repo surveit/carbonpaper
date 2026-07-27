@@ -1,3 +1,4 @@
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
 
 import pytest
@@ -20,6 +21,46 @@ def test_write_is_upsert(store):
     store.write("run", "proj/1", {"status": "running"})
     store.write("run", "proj/1", {"status": "ok"})
     assert store.read("run", "proj/1") == {"status": "ok"}
+
+
+def test_concurrent_writers_all_land(store):
+    """One `SqliteKvStore` holds ONE sqlite connection shared by every caller
+    (`check_same_thread=False`), and a run writes from worker threads (the row
+    driver's `parallelism`). Interleaved `execute`+`commit` on a shared
+    connection loses rows and raises `OperationalError: cannot commit - no
+    transaction is active`, so the store serializes them itself."""
+    writers, per_writer = 8, 25
+
+    def write_many(writer: int) -> None:
+        for n in range(per_writer):
+            store.write("run", f"proj/{writer}-{n}", {"writer": writer, "n": n})
+
+    with ThreadPoolExecutor(max_workers=writers) as pool:
+        for future in [pool.submit(write_many, w) for w in range(writers)]:
+            future.result()
+
+    assert len(store.list_ids("run", "proj/")) == writers * per_writer
+
+
+def test_concurrent_readers_and_writers_see_consistent_rows(store):
+    """A reader running against the same shared connection as a writer must get
+    a whole row or nothing — never a torn scan or a cursor error."""
+    store.write("run", "proj/seed", {"status": "ok"})
+
+    def write_many(writer: int) -> None:
+        for n in range(50):
+            store.write("run", f"proj/{writer}-{n}", {"writer": writer})
+
+    def read_many(_reader: int) -> None:
+        for _ in range(50):
+            assert store.read("run", "proj/seed") == {"status": "ok"}
+            store.list_ids("run", "proj/")
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        futures = [pool.submit(write_many, w) for w in range(4)]
+        futures += [pool.submit(read_many, r) for r in range(4)]
+        for future in futures:
+            future.result()
 
 
 def test_read_missing_raises_document_not_found(store):

@@ -26,7 +26,6 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from threading import Lock
 from typing import Any, Callable, Protocol, runtime_checkable
 
 import pandas as pd
@@ -368,9 +367,6 @@ class RowCache:
         self._stage_fingerprint = stage_fingerprint
         self._cached_outputs = cached_outputs
         self._writer = writer
-        # The driver may compute rows across worker threads (RowMapHandler's
-        # `parallelism`), so records are serialized here.
-        self._write_lock = Lock()
 
     def find_cached_output(self, input_fingerprint: str) -> Row | None:
         """The output row already recorded for this key, or None. A hit carries
@@ -386,15 +382,14 @@ class RowCache:
         is not an output the stage produced (`_may_record_row_output`)."""
         if self._writer is None or not _may_record_row_output(output_row):
             return
-        with self._write_lock:
-            self._writer.record(
-                project=self._project,
-                stage_id=self._stage_id,
-                stage_fingerprint=self._stage_fingerprint,
-                input_fingerprint=input_fingerprint,
-                input_row=input_row,
-                output_row=_without_usage(output_row),
-            )
+        self._writer.record(
+            project=self._project,
+            stage_id=self._stage_id,
+            stage_fingerprint=self._stage_fingerprint,
+            input_fingerprint=input_fingerprint,
+            input_row=input_row,
+            output_row=_without_usage(output_row),
+        )
 
 
 def open_row_cache(stage: Stage, ctx: RunContext, caches_rows: bool) -> RowCache | None:
