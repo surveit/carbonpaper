@@ -58,13 +58,14 @@ approval + editing + version creation + publish — the only writer to `compiled
 `web/{config,loading,diagrams}.py` — paths + Jinja · viewer reads over the loader ·
 mermaid/ER builders. Everything a run page states about the workflow — its graph, each
 stage's source and schemas, the lineage panel, and the scratch re-run's handler — is read
-from the version its manifest pinned to (`loading.load_run_stages`), never from
-`compiled/`; a manifest naming no resolvable version raises
+from the version its manifest pinned to (`run.load_run_stages` /
+`run.load_pinned_stage_def` in `app/services/`), never from `compiled/`; a manifest naming no resolvable version raises
 `RunVersionUnresolvableError`, and the page shows an unavailable notice instead of the
 working copy while the scratch re-run refuses to execute (409).
 
 ## `app/services/` — web-independent workflow logic
-`loader.py` (canonical stage loader, above); `compilation.py` (compile persistence for
+`run.py` (the production run seam — start/resume/status, plus resolving what a run
+pinned: `resolve_version`, `load_run_stages`, `load_pinned_stage_def`); `loader.py` (canonical stage loader, above); `compilation.py` (compile persistence for
 `app/compiler`); `node_review.py` (content-hash approval over stage specs — read its
 docstring; the canonical-hash invariant must not rot); `versioning.py` (`create_version_from_stages`
 is the ONE write path for a `WorkflowVersion` document, born unpublished; `publish_version`

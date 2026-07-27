@@ -23,7 +23,6 @@ from app.core.errors import (
     StageNotInRun,
 )
 from app.core.run_status import RunStatus, StageStatus
-from app.models import Stage
 from app.services.errors import WorkflowLoadError
 from app.services.loader import load_workflow
 from app.services.versioning import list_versions
@@ -37,7 +36,6 @@ from app.web.config import EXAMPLES_DIR, REPO_ROOT, templates
 from app.web.diagrams import TYPE_CLASS, TYPE_GLYPH, build_mermaid_graph
 from app.web.loading import (
     build_llm_example,
-    find_stage,
     list_file_inputs,
     save_uploaded_input,
     list_runs,
@@ -45,7 +43,6 @@ from app.web.loading import (
     load_output_preview,
     load_output_row,
     load_output_table,
-    load_run_stages,
     manifest_stage,
     read_output_df,
     resolve_function_code,
@@ -263,34 +260,13 @@ def build_run_graph(
     project: str, manifest: dict[str, Any], status_by_id: dict[str, str]
 ) -> RunGraph:
     try:
-        stages = load_run_stages(project, manifest)
+        stages = run_service.load_run_stages(project, manifest)
     except RunVersionUnresolvableError as exc:
         return RunGraph(mermaid="", error=str(exc))
     return RunGraph(
         mermaid=build_mermaid_graph(stages, project, status_by_id=status_by_id),
         error=None,
     )
-
-
-@dataclass(frozen=True)
-class RunStageDef:
-    """EITHER one stage as the version this run pinned defines it, OR the reason
-    that version could not be read — never the `compiled/` working copy's
-    definition, which drifts as the project is edited. `stage` is also None when
-    the pinned version simply has no such stage."""
-
-    stage: Stage | None
-    error: str | None
-
-
-def load_pinned_stage_def(
-    project: str, manifest: dict[str, Any], stage_id: str
-) -> RunStageDef:
-    try:
-        stages = load_run_stages(project, manifest)
-    except RunVersionUnresolvableError as exc:
-        return RunStageDef(stage=None, error=str(exc))
-    return RunStageDef(stage=find_stage(stages, stage_id), error=None)
 
 
 def _artifact_links(project: str, run_id: str, run_dir: Path, manifest: dict) -> list[dict]:
@@ -369,7 +345,7 @@ async def run_stage_partial(
     # The panel's Schema tier and Transform detail describe what THIS run
     # executed, so they read the version it pinned. With no resolvable version
     # there is no stage definition to show and the panel says why.
-    pinned = load_pinned_stage_def(project, manifest, stage_id)
+    pinned = run_service.load_pinned_stage_def(project, manifest, stage_id)
     stage_def = pinned.stage
     output_by_id = {
         s.get("stage_id"): s.get("output_path") for s in manifest.get("stage_records", [])
@@ -468,7 +444,7 @@ async def run_stage_lineage_panel(
     # Transform detail is part of the lineage of THIS run, so it comes from the
     # version the run pinned. Unresolvable → no transform and a stated reason;
     # the row's output table still renders, because that data is still true.
-    pinned = load_pinned_stage_def(project, manifest, stage_id)
+    pinned = run_service.load_pinned_stage_def(project, manifest, stage_id)
     return templates.TemplateResponse(
         request,
         "_lineage_stage.html",
@@ -526,7 +502,7 @@ async def run_stage_row_trace_view(
     # copy: the story still lists the ancestry, transforms show as "unknown",
     # and no graph is drawn.
     try:
-        stages = load_run_stages(project, manifest)
+        stages = run_service.load_run_stages(project, manifest)
     except RunVersionUnresolvableError:
         stages = []
     stages_by_id = {s.id: s for s in stages}
@@ -580,7 +556,7 @@ async def run_stage_scratch_preview(
     # stage did here", so it runs the version the run pinned. With no resolvable
     # version it refuses: executing the working copy would answer a question
     # nobody asked, under the label of this run.
-    pinned = load_pinned_stage_def(project, manifest, stage_id)
+    pinned = run_service.load_pinned_stage_def(project, manifest, stage_id)
     if pinned.error is not None:
         return JSONResponse({"ok": False, "error": pinned.error}, status_code=409)
     stage_def = pinned.stage
