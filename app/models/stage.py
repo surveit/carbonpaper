@@ -682,24 +682,15 @@ class Stage(StageDraft):
         where/filter predicate (aggregate `where`, human_review_queue `filter`)
         must resolve against that reference's own input edge —
         `inputs[index].table_schema`, per
-        `app.models.stages.shared.resolve_input_schema`. EDGE-ONLY: this says
-        nothing about what an upstream producer itself declares, so it holds
-        for a single stage in isolation, independent of the rest of any
-        workflow.
+        `app.models.stages.shared.resolve_input_schema` — and every column the
+        config says the stage ADDS must be declared on its own output_schema.
+        EDGE-ONLY: this says nothing about what an upstream producer itself
+        declares, so it holds for a single stage in isolation, independent of
+        the rest of any workflow.
 
-        A config that names columns the stage ADDS is checked here too, against
-        this stage's own `output_schema`: a human_review_queue's reviewed
-        targets and bookkeeping columns must be declared there and must collide
-        with nothing (see `app.models.stages.human_review_queue`). Still a
-        single-stage check — output_schema is this stage's own declaration.
-
-        Runs after `_handle_for_type`, so the type-matched handle block (join/
-        aggregate/publish/llm/queue) this dispatches on is already guaranteed
-        present. Lazy-imports the dispatch, rather than importing it at module
-        level like every other import in this file: `app.models.stages`
-        needs `Stage` back only for a type hint, but a module-level import
-        here would run while this module (which defines `Stage`) is still
-        mid-import."""
+        Runs after `_handle_for_type`, so the type-matched handle block this
+        dispatches on is guaranteed present. The import is lazy because
+        `app.models.stages` imports `Stage` back."""
         from app.models.stages import find_config_column_issues
 
         issues = find_config_column_issues(self)

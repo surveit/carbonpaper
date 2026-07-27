@@ -56,6 +56,12 @@ then the model's output. If the input can't be recovered it says so loudly
 ("reviewing blind") rather than hiding it. (Known gap: when no primary key is
 declared, the join falls back to guessed keys — issue #49.)
 
+The page opens on a **"Reviewing as"** name field and the queue stays hidden
+until a name is typed (remembered in `localStorage`); `queue_decide` rejects a
+blank one with a 400, so no decision is recorded unattributed. The name is
+written into `queue.reviewer_column` on every decision, alongside a timestamp in
+`queue.reviewed_at_column`.
+
 The form fields come from the stage's own `queue.reviewed_columns`: one control
 per reviewed column, typed from that column's declared schema. A decision
 records a verdict (`approve` for the AI's values, `modify` for the reviewer's),

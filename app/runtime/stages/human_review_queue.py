@@ -191,6 +191,10 @@ def _skip_row(queue: QueueConfig, row: Row) -> Row:
 
 
 def _approve_row(queue: QueueConfig, row: Row, index: int) -> Row:
+    """Writes `approve` although nobody looked, which `_skip_row` refuses to do:
+    the difference is that this path exists only under `queue_auto_approve`, and
+    `RunContext._production_run_forbids_queue_auto_approve` keeps that flag off
+    every run whose output is a real artifact."""
     return _add_review_columns(queue, row, ReviewVerdict.approve)
 
 
