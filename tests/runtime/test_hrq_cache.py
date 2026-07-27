@@ -16,7 +16,6 @@ from app.runtime.context import RunIdentity
 from app.runtime.errors import HaltForReview, RunCancelled
 from app.runtime.runner import prepare_run, run_prepared
 from app.runtime.stages import HANDLERS, human_review_queue
-from app.runtime.stages.human_review_queue import NOT_REVIEWED
 from app.services import review, versioning
 from app.core.stage_cache import StageCache, compute_row_fingerprint
 from app.services.versioning import create_version_from_disk
@@ -421,7 +420,7 @@ def test_every_output_row_carries_a_verdict_covering_every_outcome(tmp_path):
 
     out = _run_queue_stage(stage, {"scored": src.copy()}, _ctx(tmp_path, run_id="run2"))
     assert list(out["decision"]) == [
-        NOT_REVIEWED, "approve", "modify", "modify", NOT_REVIEWED]
+        "skipped", "approve", "modify", "modify", "skipped"]
     assert out["decision"].notna().all()
 
     approved_only = out[out["decision"] == ReviewVerdict.approve.value]

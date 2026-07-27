@@ -1,38 +1,21 @@
-"""Handler for the human_review_queue stage type.
-
-Every input row yields exactly one output row in its own input position; a row with
-no cached decision is marked deferred, never defaulted. On any deferral the mapper
-writes a fingerprints sidecar POSITIONALLY aligned to the snapshot's rows, and halts."""
-
 from __future__ import annotations
 
 import json
 from dataclasses import dataclass
+from functools import partial
 from pathlib import Path
 
 import pandas as pd
 import pyarrow.lib as pa_lib
 
 from app.core.predicate import parse_predicate
-from app.models import ReviewVerdict, Stage
+from app.models import QueueConfig, ReviewVerdict, Stage
 from app.core.stage_cache import compute_row_fingerprint
 
 from ..context import RunContext
 from ..manifest import QueueStats, StageContribution
 from ..errors import HaltForReview
 from .execution import ROW_DEFERRED_KEY, Row, RowMapper
-
-# The upstream AI score column a queue stage reviews. Named once so the two sites
-# that test for its presence (_approve_row and _pass_row_through) can't drift
-# apart.
-_SCORE_COLUMN = "score"
-
-# The `decision` value carried by a row the queue filter did not select. Not a
-# ReviewVerdict: no human saw this row, so no verdict of theirs applies to
-# it. It is spelled out rather than left missing so that EVERY output row of a
-# queue stage carries a decision, and a downstream stage can exclude the
-# rejected rows by comparing strings — never by reasoning about a null.
-NOT_REVIEWED = "not_reviewed"
 
 
 @dataclass(frozen=True)
@@ -54,9 +37,15 @@ def make_human_review_mapper(stage: Stage, ctx: RunContext, src: pd.DataFrame) -
     Auto-approve is answered here and goes no further: `_approve_row` reaches
     for no project scope, no cache, no disk and no filter, so a run that carries
     none of those can still pass a queue stage through."""
+    queue = _require_queue_config(stage)
     if ctx.queue_auto_approve:
-        return _approve_row
-    return _QueueRowMapper(stage, ctx, src)
+        return partial(_approve_row, queue, stage.id)
+    return _QueueRowMapper(stage, queue, ctx, src)
+
+
+def _require_queue_config(stage: Stage) -> QueueConfig:
+    assert stage.queue is not None  # Stage validation: human_review_queue carries queue
+    return stage.queue
 
 
 class _QueueRowMapper:
@@ -73,14 +62,17 @@ class _QueueRowMapper:
     (a cancel) reports nothing and leaves whatever the manifest already held:
     for a resumed run, the counts of the halt it is resuming."""
 
-    def __init__(self, stage: Stage, ctx: RunContext, src: pd.DataFrame) -> None:
-        assert stage.queue is not None  # Stage validation: human_review_queue carries queue
+    def __init__(
+        self, stage: Stage, queue: QueueConfig, ctx: RunContext, src: pd.DataFrame
+    ) -> None:
+        self._queue = queue
+        self._stage_id = stage.id
         _require_project_scope(ctx, stage.id)
-        self._queueable = _compute_queueable_mask(src, stage.queue.filter, stage.id)
+        self._queueable = _compute_queueable_mask(src, queue.filter, stage.id)
 
     def __call__(self, row: Row, index: int) -> Row:
         if not self._queueable[index]:
-            return _pass_row_through(row)
+            return _skip_row(self._queue, self._stage_id, row)
         return _defer_row(row)
 
     def finish_mapped_rows(
@@ -96,7 +88,7 @@ class _QueueRowMapper:
         can produce. Returns after the counts when no row was deferred. The
         halt carries the same `contribution`, because on that path the raise is
         this stage's only return path into the manifest."""
-        contribution.human_review_queue_stats = _derive_queue_stats(df)
+        contribution.human_review_queue_stats = _derive_queue_stats(self._queue, df)
         pending = _find_pending_reviews(df)
         if not pending:
             return
@@ -171,58 +163,69 @@ def _defer_row(row: Row) -> Row:
     }
 
 
-def _pass_row_through(row: Row) -> Row:
-    """A row the filter did not select: its AI score stands as final, and the
-    reviewer columns carry the pass-through values (no human saw this row). Its
-    `decision` is NOT_REVIEWED — a value, not a blank, so a downstream filter
-    that excludes rejections keeps this row without having to test for a
-    missing one."""
-    passed: Row = dict(row)
-    if _SCORE_COLUMN in row:
-        passed["ai_score"] = row[_SCORE_COLUMN]
-        passed["final_score"] = row[_SCORE_COLUMN]
-    passed["human_score"] = pd.NA
-    passed["reviewer_id"] = row.get("reviewer", pd.NA)
-    passed["reviewed_at"] = pd.NA
-    passed["review_notes"] = "below review threshold"
-    passed["decision"] = NOT_REVIEWED
-    return passed
+def _skip_row(queue: QueueConfig, sid: str, row: Row) -> Row:
+    """A row the filter did not select. Declaring a filter is the author's
+    statement that the upstream values stand for the rows it excludes, so those
+    values are copied into the reviewed columns — but the verdict is `skipped`,
+    not `approve`: nobody looked at this row."""
+    return _add_review_columns(queue, sid, row, ReviewVerdict.skipped)
 
 
-def _approve_row(row: Row, index: int) -> Row:
-    """Approve one row in memory, as `ctx.queue_auto_approve` asks: the same
-    reviewer columns an `approve` decision produces (final and human score =
-    the AI score), with reviewer_id/reviewed_at null because no human reviewed
-    it. Reads no cache and writes no file. The outcome depends on the row
-    alone, so its position in the input is not read."""
-    ai = row[_SCORE_COLUMN] if _SCORE_COLUMN in row else pd.NA
-    return {
-        **row,
-        "ai_score": ai,
-        "human_score": ai,
-        "final_score": ai,
-        "review_notes": f"decision={ReviewVerdict.approve}",
-        "reviewer_id": pd.NA,
-        "reviewed_at": pd.NA,
-        "decision": ReviewVerdict.approve,
+def _approve_row(queue: QueueConfig, sid: str, row: Row, index: int) -> Row:
+    """Approve one row in memory, as `ctx.queue_auto_approve` asks — human
+    approval's stand-in in a test run. Reads no cache and writes no file. The
+    outcome depends on the row alone, so its position in the input is not
+    read."""
+    return _add_review_columns(queue, sid, row, ReviewVerdict.approve)
+
+
+def _add_review_columns(
+    queue: QueueConfig, sid: str, row: Row, verdict: ReviewVerdict
+) -> Row:
+    """The row plus the columns this stage declares it adds, for the two
+    outcomes no human answered: each reviewed column carries its source value,
+    and neither reviewer nor timestamp is invented."""
+    added: Row = {
+        target: _read_reviewed_source(row, source, sid)
+        for source, target in queue.reviewed_columns.items()
     }
+    added[queue.verdict_column] = verdict.value
+    added[queue.reviewer_column] = pd.NA
+    added[queue.reviewed_at_column] = pd.NA
+    if queue.review_notes_column is not None:
+        added[queue.review_notes_column] = pd.NA
+    return {**row, **added}
+
+
+def _read_reviewed_source(row: Row, source: str, sid: str) -> object:
+    if source not in row:
+        raise ValueError(
+            f"human_review_queue '{sid}': queue.reviewed_columns names source column "
+            f"'{source}', which this stage's actual input row does not carry "
+            f"(it has {sorted(row)}). The frame does not match the schema the stage "
+            "declares — no value may stand in for the missing column."
+        )
+    return row[source]
 
 
 # --- finish_mapped_rows: the deferred rows, the snapshot and its sidecar ------
 
 
-def _derive_queue_stats(df: pd.DataFrame) -> QueueStats:
+def _derive_queue_stats(queue: QueueConfig, df: pd.DataFrame) -> QueueStats:
     """The stage's item counts, read off the assembled frame rather than
     accumulated as rows are mapped: a row the driver's cache served never
     reaches the mapper, and every count is a property of the row it produced.
 
-    Each row shows which outcome it took — a deferred marker for a pending row,
-    `NOT_REVIEWED` for one the filter passed through, any other decision for one
-    a human decided. Queued total is the queueable rows: pending plus decided."""
-    decisions = list(df["decision"]) if "decision" in df.columns else []
-    passed_through = sum(1 for value in decisions if value == NOT_REVIEWED)
+    Each row's declared verdict column shows which outcome it took — a deferred
+    marker for a pending row, `skipped` for one the filter passed through, any
+    other verdict for one a human decided. Queued total is the queueable rows:
+    pending plus decided."""
+    column = queue.verdict_column
+    verdicts = list(df[column]) if column in df.columns else []
+    passed_through = sum(1 for value in verdicts if value == ReviewVerdict.skipped)
     decided = sum(
-        1 for value in decisions if not pd.isna(value) and value != NOT_REVIEWED
+        1 for value in verdicts
+        if not pd.isna(value) and value != ReviewVerdict.skipped
     )
     pending = len(_find_pending_reviews(df))
     return {

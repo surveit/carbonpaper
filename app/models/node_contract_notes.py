@@ -16,7 +16,7 @@ HUMAN_REVIEW_QUEUE_CONTRACT_NOTE = (
     "This type emits one output row per input row and never removes any: a rejected "
     "row is still emitted, carrying `decision == \"reject\"` with `human_score`/"
     "`final_score` null. Every output row carries a `decision` — \"approve\", "
-    "\"modify\" or \"reject\" where a human decided, and \"not_reviewed\" where the "
+    "\"modify\" or \"reject\" where a human decided, and \"skipped\" where the "
     "queue filter passed the row through without review. So a downstream stage "
     "filtering on `decision != \"reject\"` is what excludes a rejected row; filtering "
     "on `decision == \"approve\"` would silently discard the unreviewed rows too. "

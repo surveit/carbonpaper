@@ -27,16 +27,16 @@ def test_fixed_output_columns_contract_reaches_the_editing_agent_prompt():
 
 def test_hrq_note_names_the_decision_values_the_runtime_actually_emits():
     """The note tells an author how to filter on the verdict column. That
-    guidance is only correct while the strings it names are the ones the queue
-    handler writes — including the value it puts on a row the queue filter
-    passed through unreviewed, which is what makes a filter safe without
-    reasoning about a missing value. Pinned against the handler's own constants
-    so the guidance cannot drift from the runtime it describes."""
+    guidance is only correct while the strings it names are the ones a queue
+    stage's verdict column can hold — including `skipped`, which the handler
+    writes for a row the filter passed through unreviewed and which is what
+    makes a downstream filter safe without reasoning about a missing value.
+    Pinned against the whole enum, so a member added or renamed there and not
+    taught here fails."""
     from app.models import ReviewVerdict
-    from app.runtime.stages.human_review_queue import NOT_REVIEWED
 
-    for value in (ReviewVerdict.approve.value, ReviewVerdict.modify.value, NOT_REVIEWED):
-        assert f'"{value}"' in m.HUMAN_REVIEW_QUEUE_CONTRACT_NOTE, value
+    for verdict in ReviewVerdict:
+        assert f'"{verdict.value}"' in m.HUMAN_REVIEW_QUEUE_CONTRACT_NOTE, verdict
 
 
 def test_publish_note_names_the_trace_link_helper():

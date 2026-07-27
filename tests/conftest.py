@@ -80,10 +80,9 @@ def make_run_context(
 
 def queue_columns(source: str = "score", target: str = "human_score") -> dict[str, object]:
     """The queue-column names a human_review_queue fixture declares when the
-    test is about something else (halting, caching, counts). The bookkeeping
-    names match the columns the runtime writes today, so a fixture using them
-    needs no other change; `source` is the input column reviewed, which must
-    exist wherever the fixture declares an input schema."""
+    test is about something else (halting, caching, counts). `source` is the
+    input column reviewed, which must exist on the frame the fixture runs the
+    stage over — the runtime raises if it does not."""
     return {
         "reviewed_columns": {source: target},
         "verdict_column": "decision",
