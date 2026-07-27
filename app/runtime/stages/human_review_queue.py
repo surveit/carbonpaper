@@ -31,21 +31,41 @@ class PendingReview:
 
 
 def make_human_review_mapper(stage: Stage, ctx: RunContext, src: pd.DataFrame) -> RowMapper:
-    """The callable that decides one row's outcome for one execution of this
-    stage.
+    """The one place every path through this stage passes, so the frame is
+    checked against the declared columns here — before a row is mapped, a
+    snapshot written or a halt raised.
 
     Auto-approve is answered here and goes no further: `_approve_row` reaches
     for no project scope, no cache, no disk and no filter, so a run that carries
     none of those can still pass a queue stage through."""
     queue = _require_queue_config(stage)
+    _validate_reviewed_sources_present(queue, src, stage.id)
     if ctx.queue_auto_approve:
-        return partial(_approve_row, queue, stage.id)
+        return partial(_approve_row, queue)
     return _QueueRowMapper(stage, queue, ctx, src)
 
 
 def _require_queue_config(stage: Stage) -> QueueConfig:
     assert stage.queue is not None  # Stage validation: human_review_queue carries queue
     return stage.queue
+
+
+def _validate_reviewed_sources_present(
+    queue: QueueConfig, src: pd.DataFrame, sid: str
+) -> None:
+    """Authoring-time validation checks `reviewed_columns` against the input
+    edge's DECLARED schema; this is the complement — the frame this run actually
+    produced. A queued row never reads its source column (the human supplies the
+    value), so without this check a frame missing one would halt for review
+    instead of failing."""
+    missing = sorted(set(queue.reviewed_columns) - set(src.columns))
+    if missing:
+        raise ValueError(
+            f"human_review_queue '{sid}': queue.reviewed_columns names source column(s) "
+            f"{missing}, which this stage's actual input frame does not carry "
+            f"(it has {sorted(src.columns)}). The frame does not match the schema the "
+            "stage declares — no value may stand in for a missing column."
+        )
 
 
 class _QueueRowMapper:
@@ -66,13 +86,12 @@ class _QueueRowMapper:
         self, stage: Stage, queue: QueueConfig, ctx: RunContext, src: pd.DataFrame
     ) -> None:
         self._queue = queue
-        self._stage_id = stage.id
         _require_project_scope(ctx, stage.id)
         self._queueable = _compute_queueable_mask(src, queue.filter, stage.id)
 
     def __call__(self, row: Row, index: int) -> Row:
         if not self._queueable[index]:
-            return _skip_row(self._queue, self._stage_id, row)
+            return _skip_row(self._queue, row)
         return _defer_row(row)
 
     def finish_mapped_rows(
@@ -163,31 +182,21 @@ def _defer_row(row: Row) -> Row:
     }
 
 
-def _skip_row(queue: QueueConfig, sid: str, row: Row) -> Row:
+def _skip_row(queue: QueueConfig, row: Row) -> Row:
     """A row the filter did not select. Declaring a filter is the author's
     statement that the upstream values stand for the rows it excludes, so those
     values are copied into the reviewed columns — but the verdict is `skipped`,
     not `approve`: nobody looked at this row."""
-    return _add_review_columns(queue, sid, row, ReviewVerdict.skipped)
+    return _add_review_columns(queue, row, ReviewVerdict.skipped)
 
 
-def _approve_row(queue: QueueConfig, sid: str, row: Row, index: int) -> Row:
-    """Approve one row in memory, as `ctx.queue_auto_approve` asks — human
-    approval's stand-in in a test run. Reads no cache and writes no file. The
-    outcome depends on the row alone, so its position in the input is not
-    read."""
-    return _add_review_columns(queue, sid, row, ReviewVerdict.approve)
+def _approve_row(queue: QueueConfig, row: Row, index: int) -> Row:
+    return _add_review_columns(queue, row, ReviewVerdict.approve)
 
 
-def _add_review_columns(
-    queue: QueueConfig, sid: str, row: Row, verdict: ReviewVerdict
-) -> Row:
-    """The row plus the columns this stage declares it adds, for the two
-    outcomes no human answered: each reviewed column carries its source value,
-    and neither reviewer nor timestamp is invented."""
+def _add_review_columns(queue: QueueConfig, row: Row, verdict: ReviewVerdict) -> Row:
     added: Row = {
-        target: _read_reviewed_source(row, source, sid)
-        for source, target in queue.reviewed_columns.items()
+        target: row[source] for source, target in queue.reviewed_columns.items()
     }
     added[queue.verdict_column] = verdict.value
     added[queue.reviewer_column] = pd.NA
@@ -195,17 +204,6 @@ def _add_review_columns(
     if queue.review_notes_column is not None:
         added[queue.review_notes_column] = pd.NA
     return {**row, **added}
-
-
-def _read_reviewed_source(row: Row, source: str, sid: str) -> object:
-    if source not in row:
-        raise ValueError(
-            f"human_review_queue '{sid}': queue.reviewed_columns names source column "
-            f"'{source}', which this stage's actual input row does not carry "
-            f"(it has {sorted(row)}). The frame does not match the schema the stage "
-            "declares — no value may stand in for the missing column."
-        )
-    return row[source]
 
 
 # --- finish_mapped_rows: the deferred rows, the snapshot and its sidecar ------

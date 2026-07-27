@@ -137,6 +137,20 @@ def test_a_source_column_absent_from_the_frame_raises(tmp_path):
     assert "review" in str(exc_info.value)
 
 
+def test_a_queued_row_also_refuses_an_absent_source_column(tmp_path):
+    """The path that would otherwise hide the mismatch: with no filter every
+    row is QUEUED, so no row is ever skipped or auto-approved and nothing reads
+    `reviewed_columns` per row. The stage must still refuse rather than write a
+    review snapshot and halt for a human — the frame it would hand the reviewer
+    cannot produce the column the stage declares."""
+    stage = _stage({
+        **queue_columns(), "reviewed_columns": {"confidence": "human_confidence"},
+    })
+
+    with pytest.raises(ValueError, match="'confidence'"):
+        _run(stage, _production_ctx(tmp_path))
+
+
 def test_auto_approve_also_refuses_an_absent_source_column(tmp_path):
     stage = _stage({
         **queue_columns(), "reviewed_columns": {"confidence": "human_confidence"},

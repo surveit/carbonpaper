@@ -22,7 +22,10 @@ def test_bad_filter_raises_instead_of_skipping_review(tmp_path):
                           "primary_key": ["claim_id"]},
         "queue": {**QUEUE_COLUMNS, "filter": "nonexistent == True"},
     })
-    inputs = {"a": pd.DataFrame({"claim_id": ["c1", "c2"]})}
+    # `score` is here because QUEUE_COLUMNS reviews it: the stage refuses a frame
+    # missing a declared source column before it ever evaluates the filter, and
+    # this test is about the filter.
+    inputs = {"a": pd.DataFrame({"claim_id": ["c1", "c2"], "score": [1, 2]})}
     ctx = make_run_context(
         run_dir=tmp_path,
         identity=RunIdentity(project="queue-filter-loud", run_id="r1"),
