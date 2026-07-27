@@ -658,6 +658,25 @@ def test_publish_fully_declared_accepted():
     assert s.inputs[0].table_schema is not None
 
 
+_EMPTY_SCHEMA = {"columns": []}
+
+
+def test_stage_rejects_input_whose_schema_declares_no_columns():
+    """A zero-column schema is not a declaration: an empty projection makes the
+    edge check inert, which is exactly what the mandate closes."""
+    spec = _schema_spec("python_row_function")
+    spec["inputs"] = [{"id": "facilities", "schema": _EMPTY_SCHEMA}]
+    msg = _rejection_message(spec)
+    assert "declares no schema" in msg
+    assert "facilities" in msg
+
+
+def test_stage_rejects_output_schema_that_declares_no_columns():
+    spec = _schema_spec("python_row_function")
+    spec["output_schema"] = _EMPTY_SCHEMA
+    assert "declares no output_schema" in _rejection_message(spec)
+
+
 def test_output_schema_issues_surface_in_draft_validation():
     """The compiler's non-fatal channel reports the same issue as a string
     instead of raising — the submit/re-fire loop feeds it back to the model."""

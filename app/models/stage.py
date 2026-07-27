@@ -526,6 +526,29 @@ class Stage(_Base):
         return self
 
     @model_validator(mode="after")
+    def _schemas_declared(self) -> "Stage":
+        """Every input declares the schema it expects, and every stage declares
+        its output_schema, so `workflow.validate_edge_schemas` cannot early-out
+        on an undeclared side and leave an edge unchecked. A schema with zero
+        columns does not count as declared: it projects the stage's output onto
+        nothing and makes the edge check equally inert.
+
+        The two exemptions are one-sided. `input_data` takes no inputs but
+        still declares its output — otherwise the first edge of every workflow
+        goes unchecked. `publish` emits files rather than a table, so only its
+        output side is exempt."""
+        issues = [
+            f"input `{ref.id}` declares no schema"
+            for ref in self.inputs
+            if not _declares_columns(ref.table_schema)
+        ]
+        if self.type != StageType.publish and not _declares_columns(self.output_schema):
+            issues.append("declares no output_schema")
+        if issues:
+            raise ValueError(f"type `{self.type}`: " + "; ".join(issues))
+        return self
+
+    @model_validator(mode="after")
     def _llm_transform_one_to_one(self) -> "Stage":
         """An llm_transform maps one input row to one output row, so on its
         DECLARED schemas alone it must: take exactly one input; declare a
@@ -662,6 +685,10 @@ class Stage(_Base):
                                  rows (and it is terminal — nothing downstream).
         """
         return is_grain_and_order_preserving(self.type)
+
+
+def _declares_columns(schema: Optional[TableSchema]) -> bool:
+    return schema is not None and len(schema.columns) > 0
 
 
 # ── llm_transform's 1:1 contract ─────────────────────────────────────────────
