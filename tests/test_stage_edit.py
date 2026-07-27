@@ -238,7 +238,7 @@ def test_remove_nonexistent_stage_raises(tmp_path: Path) -> None:
 # ─── An empty workflow is a legitimate starting state ────────────────────────
 
 _FIRST_STAGE = {"id": "load", "name": "Load", "type": "input_data",
-                "connector": {"kind": "file"}}
+                "connector": {"kind": "file"}, "output_schema": _IN_SCHEMA}
 
 
 def _seed_empty(tmp_path: Path) -> Path:
