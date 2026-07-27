@@ -45,9 +45,11 @@ def find_join_column_issues(stage: "Stage") -> list[str]:
 
 def find_join_output_issues(stage: "Stage") -> list[str]:
     """Every declared output_schema column (and select entry) the join handle
-    cannot deliver. [] when the stage declares no output_schema and no select
-    problem exists, or when either input edge declares no schema at all — the
-    merged column set is then unknowable, never wrong."""
+    cannot deliver. Either input edge declaring no schema leaves the merged
+    column set unknowable, never wrong, so the check stands down. Those
+    early-outs (and the one for a missing output_schema) are for stages built by
+    a validation-bypassing path: `Stage._schemas_declared` runs first and
+    requires a join to declare both input schemas and its output_schema."""
     join = stage.join
     assert join is not None  # Stage._handle_for_type guarantees this for type="join"
     left = stage.inputs[0].table_schema

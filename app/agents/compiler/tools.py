@@ -58,7 +58,9 @@ def make_editing_tools(ctx: EditingContext) -> list[Callable[..., Any]]:
         stage as JSON: id (new and unique — use edit_stage to change an existing
         one), name, type, the type's handle block (e.g. connector / llm / function),
         output_schema, and inputs. Every id listed in `inputs` must ALREADY be a
-        stage in this workflow — a dangling input is rejected. The stage-type catalog is
+        stage in this workflow — a dangling input is rejected, as is an input without
+        a `schema` or (outside `publish`) a stage without an output_schema. The
+        stage-type catalog is
         in your instructions; read_stage on a similar existing stage shows the
         output_schema / inputs shape. Validated
         first; if invalid, nothing is written and the issues are returned. The new
@@ -172,7 +174,9 @@ TOOL_SCHEMAS: dict[str, ToolInputSchema] = {
             "The complete NEW stage as a JSON object (encoded as a string): id "
             "(new and unique), name, type, the type's handle block (connector / "
             "llm / function / ...), output_schema, and inputs. Every id in inputs "
-            "must already be a stage in this workflow, or it is rejected.",
+            "must already be a stage in this workflow, and each input must carry a "
+            "`schema` of at least one column; every type but `publish` must declare "
+            "an output_schema. Anything missing is rejected.",
         ],
     },
     "remove_stage": {

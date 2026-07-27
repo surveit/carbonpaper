@@ -65,9 +65,11 @@ def find_aggregate_column_issues(stage: "Stage") -> list[str]:
 def find_aggregate_output_issues(stage: "Stage") -> list[str]:
     """Every declared output_schema column the aggregate handle cannot deliver:
     a name outside group_by + aggregation output columns, or a type the
-    derivation contradicts. [] when the stage declares no output_schema. Name
-    feasibility holds even without an edge schema; type checks apply only where
-    the derivation can know the type."""
+    derivation contradicts. Name feasibility holds even without an edge schema;
+    type checks apply only where the derivation can know the type. The
+    undeclared-schema early-outs are for stages built by a validation-bypassing
+    path: `Stage._schemas_declared` runs first and requires an aggregate to
+    declare both its input schema and its output_schema."""
     aggregate = stage.aggregate
     assert aggregate is not None  # Stage._handle_for_type guarantees this for type="aggregate"
     if stage.output_schema is None:

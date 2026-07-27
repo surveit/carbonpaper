@@ -26,7 +26,13 @@ def resolve_input_columns(stage: "Stage", index: int) -> set[str] | None:
     "empty"). Deliberately EDGE-ONLY: a per-stage check must not reach for the
     upstream producer's own output_schema — this runs on one `Stage` in
     isolation, at construction time, so the producer may not even be present
-    in whatever list of stages the caller happens to hold."""
+    in whatever list of stages the caller happens to hold.
+
+    A validated `Stage` reaches neither None nor an empty set:
+    `Stage._schemas_declared` requires every input to declare a schema of at
+    least one column. The distinction is kept for callers holding a stage built
+    by a validation-bypassing path (`model_construct`), where "unknowable" and
+    "declares nothing" must still not be conflated."""
     schema = stage.inputs[index].table_schema
     return {c.name for c in schema.columns} if schema is not None else None
 

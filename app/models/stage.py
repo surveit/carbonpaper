@@ -363,11 +363,15 @@ class ReviewConfig(_Base):
 
 
 class InputRef(_Base):
-    """One upstream dependency: the upstream stage id, plus (optionally) the
-    schema this stage expects that upstream's output to satisfy. The runner
-    validates the real dataframe against `table_schema` before the stage runs.
-    The compiled stage spells the field `schema:`; the python name differs only
-    because pydantic reserves `schema` on BaseModel."""
+    """One upstream dependency: the upstream stage id plus the schema this stage
+    expects that upstream's output to satisfy. The runner validates the real
+    dataframe against `table_schema` before the stage runs. The compiled stage
+    spells the field `schema:`; the python name differs only because pydantic
+    reserves `schema` on BaseModel.
+
+    `table_schema` is typed Optional so an undeclared input parses and is then
+    REJECTED by `Stage._schemas_declared` with a message naming the input, rather
+    than failing as a bare missing-field type error."""
     id: str
     table_schema: Optional[TableSchema] = Field(default=None, alias="schema")
 
@@ -399,18 +403,23 @@ class Stage(_Base):
     inputs: list[InputRef] = Field(
         default_factory=list,
         description=(
-            "Upstream dependencies: each is an upstream stage id plus, optionally, the schema "
-            "this stage expects that input to satisfy — which is just the upstream stage's "
-            "output_schema. An llm_transform's single input must declare a primary_key."
+            "Upstream dependencies: each is an upstream stage id plus the schema this stage "
+            "expects that input to satisfy. The schema is REQUIRED and must name at least one "
+            "column — copy it from the upstream stage's output_schema, or project it down to "
+            "just the columns this stage reads. An llm_transform's single input must declare "
+            "a primary_key."
         ),
     )
     output_schema: Optional[TableSchema] = Field(
         default=None,
         description=(
-            "Columns this stage outputs, with an optional primary_key. For an llm_transform "
-            "this must be strictly ADDITIVE and 1:1: declare the SAME primary_key as its "
-            "single input's schema, keep every input column unchanged, and add at least one "
-            "new column (one input row -> one output row)."
+            "Columns this stage outputs, with an optional primary_key. REQUIRED, with at "
+            "least one column, for every type except `publish` (which emits files, not a "
+            "table). Enforced at run time: a declared column the stage does not produce "
+            "fails the stage and blocks everything downstream. For an "
+            "llm_transform it must be strictly ADDITIVE and 1:1: declare the SAME "
+            "primary_key as its single input's schema, keep every input column unchanged, "
+            "and add at least one new column (one input row -> one output row)."
         ),
     )
 
@@ -447,7 +456,11 @@ class Stage(_Base):
     @field_validator("inputs", mode="before")
     @classmethod
     def _bare_id_shorthand(cls, v: Any) -> Any:
-        """Accept `inputs: [upstream_id]` shorthand for `[{id: upstream_id}]`."""
+        """Normalise the bare-id form `inputs: [upstream_id]` to `[{id: upstream_id}]`.
+        Not an authoring affordance — a bare id carries no schema, so the stage is
+        then rejected by `_schemas_declared`. Parsing it exists so stored or draft
+        JSON written in that form gets a readable rejection naming the input,
+        instead of a raw pydantic "expected object, got str" type error."""
         if not isinstance(v, list):
             return v
         return [{"id": item} if isinstance(item, str) else item for item in v]
@@ -570,6 +583,9 @@ class Stage(_Base):
             )
         input_schema = self.inputs[0].table_schema
         output_schema = self.output_schema
+        # Reachable only when validation was bypassed (model_construct and
+        # friends): through model_validate, `_schemas_declared` runs first and
+        # has already rejected an undeclared side.
         if input_schema is None or output_schema is None:
             missing = "input schema" if input_schema is None else "output_schema"
             raise ValueError(
@@ -625,7 +641,10 @@ class Stage(_Base):
         nothing about what an upstream producer itself declares, so it holds
         for a single stage in isolation, independent of the rest of any
         workflow. A reference whose edge declares no schema at all is skipped,
-        not flagged — unresolvable means unknowable, never wrong.
+        not flagged — unresolvable means unknowable, never wrong. That skip is a
+        safety net for construction paths that bypass validation: through
+        `model_validate`, `_schemas_declared` has already rejected an input
+        without a schema before this runs.
 
         Runs after `_handle_for_type`, so the type-matched handle block (join/
         aggregate/publish/llm/queue) this dispatches on is already guaranteed

@@ -115,7 +115,9 @@ NODE_TYPES: dict[str, dict[str, _Any]] = {
         "optional": ["params", "refresh", "notes"],
         "notes": (
             "NEVER include a file path — where data physically lives is not "
-            "part of the methodology; the user binds a file when starting a run."
+            "part of the methodology; the user binds a file when starting a run. "
+            "Takes no inputs, but must still declare its output_schema — it is "
+            "what every downstream edge is checked against."
         ),
     },
     "llm_transform": {
@@ -201,7 +203,9 @@ NODE_TYPES: dict[str, dict[str, _Any]] = {
             "an href, where row_ordinal is that row's 0-based position in the input frame "
             "AS RECEIVED. Iterate the frame in order (enumerate it) and do not sort, "
             "filter, or dedup before reading the ordinal — position is the only key the "
-            "trace has. Omit the keyword for a format that cannot carry a link (csv, json)."
+            "trace has. Omit the keyword for a format that cannot carry a link (csv, json). "
+            "The one type exempt from declaring an output_schema, since it emits files "
+            "rather than a table; its inputs still each declare a schema."
         ),
     },
 }

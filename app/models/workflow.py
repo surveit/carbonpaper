@@ -73,11 +73,16 @@ def validate_edge_schemas(stages: list[Stage]) -> list[str]:
     see `TableSchema.find_unsatisfied_columns`). Reports every offending column
     across every edge, so one pass surfaces them all.
 
-    An edge is skipped, never flagged, when: the input declares no schema (nothing
-    to check); the named upstream stage is missing (`validate_inputs_resolve`
-    already reports that — this does not double-report); or the upstream declares
-    no `output_schema` (unknowable — a reference we cannot check is never wrong,
-    the same rule `Stage._config_columns_resolve` follows)."""
+    An edge is skipped, never flagged, when the named upstream stage is missing:
+    `validate_inputs_resolve` already reports that, and this does not double-report.
+
+    The `required is None` guard below is unreachable for a validated `Workflow`:
+    `Stage._schemas_declared` refuses any stage with an undeclared input schema,
+    so every edge here is genuinely checked. It remains for stage lists built by
+    paths that bypass stage validation (`model_construct`). The upstream
+    `output_schema is None` guard is still live in one case — a `publish` stage,
+    the one type exempt from declaring an output_schema, used as another stage's
+    input; nothing forbids that edge today."""
     by_id = {s.id: s for s in stages}
     issues: list[str] = []
     for stage in stages:
