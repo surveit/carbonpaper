@@ -1,5 +1,6 @@
 """Compiler authoring-prompt content: llm_transform's prompt/data split."""
 from app.compiler import workflow_prompt
+from app.compiler.node_contract_notes import HUMAN_REVIEW_QUEUE_CONTRACT_NOTE
 from app.compiler.workflow_prompt import WORKFLOW_SYSTEM_PROMPT
 from app import models
 
@@ -38,3 +39,19 @@ def test_hrq_line_has_both_notes() -> None:
     # output-columns contract note.
     assert "fingerprint" in hrq_line
     assert "decision" in hrq_line or "output columns are FIXED" in hrq_line
+
+
+def test_hrq_note_names_the_decision_values_the_runtime_actually_emits() -> None:
+    """The note tells an author to exclude rejected rows with
+    `decision != "reject"`. That instruction is only correct while the strings
+    it names are the ones the queue handler writes — including the value it puts
+    on a row the queue filter passed through unreviewed, which is what makes the
+    documented filter safe without reasoning about a missing value. Pinned
+    against the handler's own constants so the guidance cannot drift from the
+    runtime it describes."""
+    from app.models import RowReviewDecision
+    from app.runtime.stages.human_review_queue import NOT_REVIEWED
+
+    for value in (RowReviewDecision.reject.value, RowReviewDecision.approve.value,
+                  RowReviewDecision.modify.value, NOT_REVIEWED):
+        assert f'"{value}"' in HUMAN_REVIEW_QUEUE_CONTRACT_NOTE, value

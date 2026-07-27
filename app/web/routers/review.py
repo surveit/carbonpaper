@@ -38,7 +38,8 @@ router = APIRouter()
 class _DecisionDisplay:
     """One recorded reviewer decision, shaped for the queue template: the verdict
     label, the reviewer-entered score (only for a `modify`), and who reviewed it
-    when. A tombstone entry carries no reviewer metadata, so those are None."""
+    when. An entry holding no output row carries no reviewer metadata, so those
+    are None."""
 
     decision: str
     modified_score: float | None
@@ -165,9 +166,11 @@ def _load_decided_entries(
 
 def _display_decision(entry: StageCacheEntry) -> _DecisionDisplay:
     """The reviewer decision one cached entry records, shaped for the queue
-    template. A tombstone (`output_row is None`) is a `reject`; otherwise the
-    verdict and reviewer metadata are read off the stage output columns the
-    entry carries, and the modified score is shown only for a `modify`."""
+    template. An entry holding no output row (`output_row is None`) is shown as
+    a `reject` with no reviewer metadata — the shape a rejection was recorded in
+    before this stage emitted rejected rows. Otherwise the verdict and reviewer
+    metadata are read off the stage output columns the entry carries, and the
+    modified score is shown only for a `modify`."""
     output = entry.output_row
     if output is None:
         return _DecisionDisplay(decision="reject", modified_score=None, reviewer=None, reviewed_at=None)

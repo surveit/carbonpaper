@@ -58,6 +58,13 @@ from .execution import ROW_DEFERRED_KEY, Row
 # apart.
 _SCORE_COLUMN = "score"
 
+# The `decision` value carried by a row the queue filter did not select. Not a
+# RowReviewDecision: no human saw this row, so no verdict of theirs applies to
+# it. It is spelled out rather than left missing so that EVERY output row of a
+# queue stage carries a decision, and a downstream stage can exclude the
+# rejected rows by comparing strings — never by reasoning about a null.
+NOT_REVIEWED = "not_reviewed"
+
 
 @dataclass(frozen=True)
 class PendingReview:
@@ -162,7 +169,9 @@ class _QueueRowMapper:
             raise ValueError(
                 f"human_review_queue '{self._stage_id}': the decision cached for input "
                 f"fingerprint {fingerprint} carries no output row, so there is nothing "
-                "to replay for it. Re-record a decision for this row."
+                "to replay for it. A decision recorded before this stage emitted "
+                "rejected rows carries no output row — the rejection removed the row "
+                "instead. Re-record a decision for this row."
             )
         self._stats["items_decided"] += 1
         return dict(entry.output_row)
@@ -236,7 +245,10 @@ def _make_queueable_test(sid: str, flt: str | None) -> Callable[[Row], bool]:
 
 def _pass_row_through(row: Row) -> Row:
     """A row the filter did not select: its AI score stands as final, and the
-    reviewer columns carry the pass-through values (no human saw this row)."""
+    reviewer columns carry the pass-through values (no human saw this row). Its
+    `decision` is NOT_REVIEWED — a value, not a blank, so a downstream filter
+    that excludes rejections keeps this row without having to test for a
+    missing one."""
     passed: Row = dict(row)
     if _SCORE_COLUMN in row:
         passed["ai_score"] = row[_SCORE_COLUMN]
@@ -245,6 +257,7 @@ def _pass_row_through(row: Row) -> Row:
     passed["reviewer_id"] = row.get("reviewer", pd.NA)
     passed["reviewed_at"] = pd.NA
     passed["review_notes"] = "below review threshold"
+    passed["decision"] = NOT_REVIEWED
     return passed
 
 

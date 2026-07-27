@@ -309,8 +309,10 @@ class RowReviewDecision(str, Enum):
     """A reviewer's verdict on one human_review_queue row, validated and applied
     at the web/service boundary (app.services.review) and recorded as the review
     stage's output row in the cache: `approve` keeps the AI score as final,
-    `modify` substitutes a human-entered score, `reject` drops the row from the
-    stage's output."""
+    `modify` substitutes a human-entered score, `reject` leaves the human and
+    final scores null. EVERY verdict produces an output row — the review stage
+    emits one row per input row — so a rejected row reaches the stage's output
+    carrying its rejection, and excluding it is a downstream stage's job."""
     approve = "approve"
     modify = "modify"
     reject = "reject"

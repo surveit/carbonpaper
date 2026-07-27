@@ -7,9 +7,11 @@ the stage computes, `compute_row_fingerprint` identifies WHICH row it saw.
 Re-running the same stage definition against the same row resolves to the
 same cache entry, whether the run that first recorded it is long gone.
 
-The payload is generic: an `output_row`, or None as a tombstone meaning the
-stage dropped that row. What the output MEANS — and any verdict or column
-vocabulary behind it — lives above this seam, never here.
+The payload is generic: an `output_row`, or None for an entry that records no
+output row for its key. Reading code must handle the None whatever it currently
+writes, since entries carrying it may already exist in a store. What the output
+MEANS — and any verdict or column vocabulary behind it — lives above this seam,
+never here.
 
 `StageCacheEntry` is the only PersistedModel carrying
 `SCOPE = PersistenceScope.PROJECT_READ_WRITE` (see app.core.persistence.PersistenceScope):
@@ -38,8 +40,8 @@ from app.core.utils import compute_short_hash
 class StageCacheEntry(PersistedModel):
     """One cached stage output for one input key. `id` is
     `_build_cache_id(project, stage_id, stage_fingerprint, input_fingerprint)`.
-    `output_row` is the stage's output for that key — an output row, or None as
-    a tombstone (the stage dropped the row). `frozen_input` and `output_row`
+    `output_row` is the stage's output for that key — an output row, or None
+    where the entry records none. `frozen_input` and `output_row`
     are the sanctioned dynamic boundary (app.core.persistence.JsonDict):
     arbitrary row shapes this module does not otherwise constrain. `frozen_input`
     is the exact upstream row the stage saw, kept for auditability, not for
@@ -176,7 +178,7 @@ class StageCache(ReadOnlyStageCache):
         """Build one cache entry from the given parts and save it. The id is
         `_build_cache_id` of the four key parts; `input_row` and `output_row`
         are each reduced to JSON-native types (`_to_json_safe_row`), with a
-        None `output_row` stored as a tombstone. `stage_fingerprint` and
+        None `output_row` stored as None. `stage_fingerprint` and
         `input_fingerprint` are stored exactly as passed — not recomputed from
         `input_row`."""
         StageCacheEntry(

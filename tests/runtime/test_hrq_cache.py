@@ -29,6 +29,7 @@ from app.runtime.context import RunIdentity
 from app.runtime.errors import HaltForReview, RunCancelled
 from app.runtime.runner import prepare_run, run_prepared
 from app.runtime.stages import HANDLERS, human_review_queue
+from app.runtime.stages.human_review_queue import NOT_REVIEWED
 from app.services import review, versioning
 from app.core.stage_cache import StageCache, compute_row_fingerprint
 from app.services.versioning import create_version_from_disk
@@ -88,6 +89,7 @@ def _halt_and_read_snapshot(
 def _put_approval(
     row: pd.Series, input_fingerprint: str, stage_fingerprint: str,
     *, project: str = PROJECT, verdict: RowReviewDecision = RowReviewDecision.approve,
+    modified_score: float | None = None,
 ) -> None:
     """Cache one verdict (`approve` unless told otherwise) for one row of a
     halted snapshot, matched to it by the sidecar's fingerprints — built
@@ -98,7 +100,7 @@ def _put_approval(
         project=project, stage_id="review",
         stage_fingerprint=stage_fingerprint, input_fingerprint=input_fingerprint,
         frozen_row={str(column): value for column, value in row.items()},
-        verdict=verdict, modified_score=None,
+        verdict=verdict, modified_score=modified_score,
         reviewer="local", reviewed_at="2026-07-01T00:00:00",
     )
 
@@ -304,6 +306,53 @@ def test_rejected_row_stays_in_output_carrying_its_rejection(tmp_path):
     assert rejected["ai_score"] == 1              # what the AI said is still on the row
     assert rejected["reviewer_id"] == "local"     # and who rejected it, when
     assert rejected["reviewed_at"] == "2026-07-01T00:00:00"
+
+
+def _every_outcome_src() -> pd.DataFrame:
+    """Five rows: three the filter below selects (one per verdict), with a row
+    the filter passes through unreviewed on either side of them."""
+    return pd.DataFrame({
+        "id": ["r0", "r1", "r2", "r3", "r4"],
+        "score": [10, 11, 12, 13, 14],
+        "flag": ["skip", "review", "review", "review", "skip"],
+    })
+
+
+def test_the_documented_downstream_filter_excludes_only_the_rejected_row(tmp_path):
+    """The filter the authoring guidance documents — `decision != "reject"` —
+    run against a real queue output covering every outcome.
+
+    Every output row carries a decision, so the filter is a plain string
+    comparison: it keeps the approved row, the modified row and BOTH rows the
+    queue passed through unreviewed, and excludes only the rejection. The
+    filter it replaces (`decision == "approve"`) is asserted here too, because
+    it silently takes the unreviewed rows with it — the queue deliberately let
+    those through, and losing them is the data loss this stage no longer
+    performs."""
+    stage = _stage(flt="flag == 'review'")
+    src = _every_outcome_src()
+
+    snapshot, fingerprints = _halt_and_read_snapshot(
+        stage, {"scored": src}, _ctx(tmp_path, run_id="run1"))
+    assert list(snapshot["id"]) == ["r1", "r2", "r3"]
+    decided = [(RowReviewDecision.approve, None),
+               (RowReviewDecision.modify, 99.0),
+               (RowReviewDecision.reject, None)]
+    for (_, row), fp, (verdict, score) in zip(
+        snapshot.iterrows(), fingerprints["input_fingerprints"], decided
+    ):
+        _put_approval(row, fp, fingerprints["stage_fingerprint"],
+                      verdict=verdict, modified_score=score)
+
+    out = _run_queue_stage(stage, {"scored": src.copy()}, _ctx(tmp_path, run_id="run2"))
+    assert list(out["decision"]) == [
+        NOT_REVIEWED, "approve", "modify", "reject", NOT_REVIEWED]
+
+    kept = out[out["decision"] != RowReviewDecision.reject.value]
+    assert list(kept["id"]) == ["r0", "r1", "r2", "r4"]
+
+    approved_only = out[out["decision"] == RowReviewDecision.approve.value]
+    assert list(approved_only["id"]) == ["r1"]  # the two unreviewed rows would be lost
 
 
 def test_every_row_rejected_still_emits_every_row_with_the_declared_columns(tmp_path):
