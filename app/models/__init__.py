@@ -221,10 +221,16 @@ NODE_TYPES: dict[str, dict[str, _Any]] = {
                      "routing", "conflict_resolution", "estimated_volume_per_week"],
         "notes": (
             "Reviewed rows are matched to a cached human decision by "
-            "fingerprinting the row itself — no column configuration is needed. "
-            "Editing `filter` or `reviewer_instructions` changes the stage's "
-            "definition fingerprint, so every previously cached decision for "
-            "this stage stops matching and every row is asked again."
+            "fingerprinting the row itself — no column configuration is needed "
+            "to enable that matching. The column fields say what the human is "
+            "asked and what the stage ADDS: every column named by "
+            "`reviewed_columns`, `verdict_column`, `reviewer_column`, "
+            "`reviewed_at_column` and `review_notes_column` must be declared in "
+            "`output_schema` and must not already exist in the input. Editing "
+            "any of them — or `filter`/`reviewer_instructions` — changes the "
+            "stage's definition fingerprint, so every previously cached "
+            "decision for this stage stops matching and every row is asked "
+            "again."
         ),
     },
     "publish": {

@@ -201,15 +201,9 @@ class Column(_Base):
         return self
 
     def coerce_text(self, text: str) -> object:
-        """`text` — one form field's raw string — as a value of this column's
-        declared type. Surrounding whitespace is not data and is stripped; what
-        is left blank is None on a nullable column and a ValueError on a
-        non-nullable one, never a silent null. A non-scalar column type
-        (`json`, `list[...]`) cannot be answered by a form field and raises.
-
-        Named consumer: the human-review queue UI, which receives a reviewer's
-        edit of a reviewed column as a string and must land the source column's
-        declared type."""
+        """Whitespace is stripped; what is left blank is None only on a nullable
+        column and a ValueError on a non-nullable one, never a silent null. A
+        non-scalar type (`json`, `list[...]`) raises rather than parse."""
         if self.type not in SCALAR_COLUMN_TYPES:
             raise ValueError(
                 f"column {self.name!r}: type {self.type!r} is not a scalar and "

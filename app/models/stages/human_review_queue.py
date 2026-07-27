@@ -24,15 +24,15 @@ def find_queue_column_issues(stage: "Stage") -> list[str]:
     return issues
 
 
-def _added_column_names(queue: "QueueConfig") -> list[str]:
-    """Every column a queue stage adds to its input, in the order it declares
-    them: the reviewed targets, then the bookkeeping columns. Duplicates are
-    NOT collapsed — `_find_duplicate_added_names` reports them."""
-    names = list(queue.reviewed_columns.values())
-    names += [queue.verdict_column, queue.reviewer_column, queue.reviewed_at_column]
-    if queue.review_notes_column is not None:
-        names.append(queue.review_notes_column)
-    return names
+def _list_added_columns(queue: "QueueConfig") -> list[tuple[str, str]]:
+    """Every column a queue stage adds to its input, as (the config field that
+    names it, the name): the reviewed targets, then the bookkeeping columns.
+    Duplicates are NOT collapsed — `_find_duplicate_added_names` reports them."""
+    added = [
+        (f"queue.reviewed_columns['{source}']", target)
+        for source, target in queue.reviewed_columns.items()
+    ]
+    return added + _collect_bookkeeping_columns(queue)
 
 
 # --- the individual checks -----------------------------------------------------
@@ -80,17 +80,22 @@ def _find_added_column_collisions(
     review stages in series where the second reuses the first's names."""
     existing = {c.name for c in input_schema.columns}
     return [
-        f"stage '{sid}': queue adds column '{name}', which its input schema already "
+        f"stage '{sid}': {field} adds column '{name}', which its input schema already "
         f"declares — a review stage adds columns and never overwrites one"
-        for name in sorted(set(_added_column_names(queue)) & existing)
+        for field, name in sorted(_list_added_columns(queue), key=lambda pair: pair[::-1])
+        if name in existing
     ]
 
 
 def _find_duplicate_added_names(sid: str, queue: "QueueConfig") -> list[str]:
-    names = _added_column_names(queue)
+    fields_by_name: dict[str, list[str]] = {}
+    for field, name in _list_added_columns(queue):
+        fields_by_name.setdefault(name, []).append(field)
     return [
-        f"stage '{sid}': queue declares column name '{name}' more than once"
-        for name in sorted({n for n in names if names.count(n) > 1})
+        f"stage '{sid}': column '{name}' is named more than once, by "
+        f"{' and '.join(sorted(fields))}"
+        for name, fields in sorted(fields_by_name.items())
+        if len(fields) > 1
     ]
 
 
@@ -129,28 +134,28 @@ def _find_bookkeeping_target_issues(
     sid: str, queue: "QueueConfig", output_schema: TableSchema
 ) -> list[str]:
     issues: list[str] = []
-    for field, name in _bookkeeping_columns(queue):
+    for field, name in _collect_bookkeeping_columns(queue):
         column = output_schema.column_for_name(name)
         if column is None:
             issues.append(
-                f"stage '{sid}': queue.{field} adds column '{name}', which output_schema "
+                f"stage '{sid}': {field} adds column '{name}', which output_schema "
                 f"does not declare"
             )
         elif column.type != STR_COLUMN_TYPE:
             issues.append(
-                f"stage '{sid}': queue.{field} column '{name}' is declared "
+                f"stage '{sid}': {field} column '{name}' is declared "
                 f"'{column.type}' in output_schema, but it is written as "
                 f"'{STR_COLUMN_TYPE}'"
             )
     return issues
 
 
-def _bookkeeping_columns(queue: "QueueConfig") -> list[tuple[str, str]]:
+def _collect_bookkeeping_columns(queue: "QueueConfig") -> list[tuple[str, str]]:
     columns = [
-        ("verdict_column", queue.verdict_column),
-        ("reviewer_column", queue.reviewer_column),
-        ("reviewed_at_column", queue.reviewed_at_column),
+        ("queue.verdict_column", queue.verdict_column),
+        ("queue.reviewer_column", queue.reviewer_column),
+        ("queue.reviewed_at_column", queue.reviewed_at_column),
     ]
     if queue.review_notes_column is not None:
-        columns.append(("review_notes_column", queue.review_notes_column))
+        columns.append(("queue.review_notes_column", queue.review_notes_column))
     return columns

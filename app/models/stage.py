@@ -365,7 +365,7 @@ class QueueConfig(_Base):
 
     @field_validator("reviewed_columns")
     @classmethod
-    def _reviews_something(cls, v: dict[str, str]) -> dict[str, str]:
+    def _require_a_reviewed_column(cls, v: dict[str, str]) -> dict[str, str]:
         if not v:
             raise ValueError(
                 "reviewed_columns must name at least one column: a review stage that "
@@ -678,13 +678,20 @@ class Stage(StageDraft):
     def _config_columns_resolve(self) -> "Stage":
         """Every column this stage's config directly names (a join key, an
         aggregate group_by/value_column, publish.one_file_per, an llm prompt
-        {placeholder}) or references via a where/filter predicate (aggregate
-        `where`, human_review_queue `filter`) must resolve against that
-        reference's own input edge — `inputs[index].table_schema`, per
-        `app.models.stages.shared.resolve_input_columns`. EDGE-ONLY: this says
+        {placeholder}, a human_review_queue reviewed source) or references via a
+        where/filter predicate (aggregate `where`, human_review_queue `filter`)
+        must resolve against that reference's own input edge —
+        `inputs[index].table_schema`, per
+        `app.models.stages.shared.resolve_input_schema`. EDGE-ONLY: this says
         nothing about what an upstream producer itself declares, so it holds
         for a single stage in isolation, independent of the rest of any
         workflow.
+
+        A config that names columns the stage ADDS is checked here too, against
+        this stage's own `output_schema`: a human_review_queue's reviewed
+        targets and bookkeeping columns must be declared there and must collide
+        with nothing (see `app.models.stages.human_review_queue`). Still a
+        single-stage check — output_schema is this stage's own declaration.
 
         Runs after `_handle_for_type`, so the type-matched handle block (join/
         aggregate/publish/llm/queue) this dispatches on is already guaranteed
@@ -735,9 +742,8 @@ class Stage(StageDraft):
           - input_data         → yes (originates the rows)
           - human_review_queue → yes — the runtime maps it per row, so an output row
                                  is in its input row's position, and every input row
-                                 produces one: a rejected row stays, carrying the
-                                 rejection. Removing rows is a downstream filter
-                                 stage's job, not this one's.
+                                 produces one whatever the reviewer decided. Removing
+                                 rows is a downstream filter stage's job, not this one's.
           - join (fan-out) / aggregate (fan-in) → NO; grain changes are deferred
           - publish            → NO — handle_publish runs an authored function whose
                                  output is a table of artifact paths, not the input

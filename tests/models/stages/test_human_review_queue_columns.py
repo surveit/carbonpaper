@@ -10,6 +10,7 @@ _INPUT_COLUMNS = [
     {"name": "claim_id", "type": "str", "nullable": False},
     {"name": "assertion_text", "type": "str", "nullable": False},
     {"name": "score", "type": "int"},
+    {"name": "confidence", "type": "int"},
 ]
 _OUTPUT_COLUMNS = [
     {"name": "claim_id", "type": "str", "nullable": False},
@@ -153,15 +154,18 @@ def test_a_declared_notes_column_present_on_output_schema_is_clean():
 
 def test_an_added_column_that_the_input_already_declares_is_rejected():
     """The never-modify-in-place guard — and what catches a second review stage
-    reusing the first's column names."""
-    with pytest.raises(ValidationError, match="assertion_text"):
+    reusing the first's column names. `claim_id` is spec-identical to the source
+    reviewed into it, so rule 3 stays silent and only this rule can fire."""
+    with pytest.raises(ValidationError, match="already declares"):
         Stage.model_validate(_stage_spec(
-            queue={"reviewed_columns": {"score": "assertion_text"}}))
+            queue={"reviewed_columns": {"assertion_text": "claim_id"}}))
 
 
 def test_a_bookkeeping_column_that_the_input_already_declares_is_rejected():
+    """`decision` is declared `str` on output_schema, so rule 4 stays silent and
+    only this rule can fire."""
     input_columns = _INPUT_COLUMNS + [{"name": "decision", "type": "str"}]
-    with pytest.raises(ValidationError, match="decision"):
+    with pytest.raises(ValidationError, match="already declares"):
         Stage.model_validate(_stage_spec(input_columns=input_columns))
 
 
@@ -169,16 +173,20 @@ def test_a_bookkeeping_column_that_the_input_already_declares_is_rejected():
 
 
 def test_two_sources_mapping_to_the_same_target_are_rejected():
-    with pytest.raises(ValidationError, match="human_score"):
+    """Both sources are `int`, like the `human_score` they collide on, so rule 3
+    stays silent and only this rule can fire."""
+    with pytest.raises(ValidationError, match="named more than once"):
         Stage.model_validate(_stage_spec(
             queue={"reviewed_columns": {"score": "human_score",
-                                        "assertion_text": "human_score"}}))
+                                        "confidence": "human_score"}}))
 
 
 def test_a_bookkeeping_name_reused_as_a_reviewed_target_is_rejected():
-    with pytest.raises(ValidationError, match="decision"):
+    """The source is `str` non-null and `decision` is declared `str` on
+    output_schema, so rules 3 and 4 stay silent and only this rule can fire."""
+    with pytest.raises(ValidationError, match="named more than once"):
         Stage.model_validate(_stage_spec(
-            queue={"reviewed_columns": {"score": "decision"}}))
+            queue={"reviewed_columns": {"assertion_text": "decision"}}))
 
 
 # ── the config's own shape ───────────────────────────────────────────────────
