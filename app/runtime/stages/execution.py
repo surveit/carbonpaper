@@ -6,8 +6,9 @@ class whose `execute` fixes the calling convention:
 
   RowMapHandler  — the runtime maps a per-row function over the single input's
                    rows and reassembles results in input order: one dict in, one
-                   dict out. The mapper never sees the frame, so it cannot
-                   reorder, fan out or remove rows — that much holds by
+                   dict out. The mapper never sees the frame — only the factory
+                   that builds it does, before the map starts — so it cannot
+                   reorder, fan out or remove rows: that much holds by
                    construction (issue #87).
   SourceHandler  — no upstream inputs; the handler originates rows from outside
                    the run. Trivially preserving: the rows begin here.
@@ -41,6 +42,19 @@ from ..errors import RunCancelled
 
 # One row of a stage's input or output: column label → cell value.
 Row = dict[str, Any]
+
+# One stage execution's per-row function: a row and that row's position in the
+# input frame in, one row out. The position lets a mapper read its own entry out
+# of something its factory worked out over the whole input; a mapper that needs
+# nothing frame-wide ignores it.
+RowMapper = Callable[[Row, int], Row]
+
+# Builds the per-row function for ONE stage execution, from the stage, the run
+# context, and the single input frame the map is about to run over. The frame is
+# handed to the FACTORY, never to the mapper: work that is cheaper — or only
+# correct — done once over the whole input happens here, and the mapper it
+# returns still sees one row at a time.
+MakeRowMapper = Callable[[Stage, RunContext, pd.DataFrame], RowMapper]
 
 # Sentinel column a row mapper attaches to a row it could not produce (e.g. an
 # llm_transform whose generation failed). The row driver collects these off the
@@ -85,7 +99,7 @@ class PostMapRowMapper(Protocol):
     onto — the manifest fields the mapper owns — and may raise, which aborts the
     stage."""
 
-    def __call__(self, row: Row) -> Row: ...
+    def __call__(self, row: Row, index: int) -> Row: ...
 
     def finish_mapped_rows(
         self,
@@ -120,19 +134,20 @@ class RowMapHandler(StageHandler):
     cannot reorder or fan out rows.
 
     `make_mapper` runs once per stage execution (resolve code, render prompt
-    additions, record backend info) and returns the per-row callable — a plain
-    function, or a `PostMapRowMapper`, which the driver also hands the assembled
-    frame once the map is over. `parallelism` > 1 lets the driver run the mapper
-    over rows concurrently — results are written back by input index, so output
-    order is input order regardless of completion order.
-    `project_output_to_declared` asks the driver to project the assembled frame
-    onto exactly the columns output_schema declares — a column-only operation
-    that cannot change row count or order.
+    additions, record backend info, work anything frame-wide out ahead of the
+    map) and returns the per-row callable — a plain function, or a
+    `PostMapRowMapper`, which the driver also hands the assembled frame once the
+    map is over. `parallelism` > 1 lets the driver run the mapper over rows
+    concurrently — results are written back by input index, so output order is
+    input order regardless of completion order. `project_output_to_declared`
+    asks the driver to project the assembled frame onto exactly the columns
+    output_schema declares — a column-only operation that cannot change row
+    count or order.
     """
 
     def __init__(
         self,
-        make_mapper: Callable[[Stage, RunContext], Callable[[Row], Row]],
+        make_mapper: MakeRowMapper,
         parallelism: int = 1,
         project_output_to_declared: bool = False,
     ) -> None:
@@ -173,7 +188,7 @@ class LLMTransformHandler(RowMapHandler):
 
     def __init__(
         self,
-        make_mapper: Callable[[Stage, RunContext], Callable[[Row], Row]],
+        make_mapper: MakeRowMapper,
         run_batches: Callable[[Stage, dict[str, pd.DataFrame], RunContext, int], pd.DataFrame],
         parallelism: int = 1,
         project_output_to_declared: bool = False,
@@ -261,7 +276,7 @@ def _run_row_mapper(
             f"got {len(stage.inputs)}"
         )
     src = inputs[stage.inputs[0].id]
-    map_row = handler.make_mapper(stage, ctx)
+    map_row = handler.make_mapper(stage, ctx, src)
     # str(k) pins pandas' Hashable column labels down to str (a no-op for
     # parquet/CSV data, whose labels are already strings).
     records: list[Row] = [
@@ -272,7 +287,7 @@ def _run_row_mapper(
     if handler.parallelism > 1 and len(records) > 1:
         with ThreadPoolExecutor(max_workers=handler.parallelism) as pool:
             futures = {
-                pool.submit(map_row, record): index
+                pool.submit(map_row, record, index): index
                 for index, record in enumerate(records)
             }
             for future in as_completed(futures):
@@ -288,7 +303,7 @@ def _run_row_mapper(
         for index, record in enumerate(records):
             if _consume_cancel(ctx):
                 raise RunCancelled(f"stage {stage.id}: cancelled")
-            results[index] = map_row(record)
+            results[index] = map_row(record, index)
 
     out_rows: list[Row] = []
     for index, result in enumerate(results):
@@ -317,8 +332,8 @@ def _restore_input_columns_when_nothing_named_them(
 
     The substituted frame takes the mapped one's `.attrs` verbatim, because the
     stage's StageContribution rides there: an empty-input stage still reported
-    its usage, errors and queue counts, and swapping the frame must not swallow
-    them."""
+    whatever it reported onto that contribution, and swapping the frame must not
+    swallow it."""
     if len(mapped.columns) > 0 or len(mapped) > 0:
         return mapped
     empty = src.iloc[0:0].copy()
@@ -329,7 +344,7 @@ def _restore_input_columns_when_nothing_named_them(
 def _finish_mapped_frame(
     df: pd.DataFrame,
     handler: RowMapHandler,
-    map_row: Callable[[Row], Row],
+    map_row: RowMapper,
     stage: Stage,
     ctx: RunContext,
 ) -> pd.DataFrame:

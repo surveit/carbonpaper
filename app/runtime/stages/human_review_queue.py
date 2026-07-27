@@ -38,20 +38,18 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable
 
 import pandas as pd
 import pyarrow.lib as pa_lib
 
-from app.core.errors import PredicateError
-from app.core.predicate import evaluate_predicate, parse_predicate
+from app.core.predicate import parse_predicate
 from app.models import RowReviewDecision, Stage
 from app.core.stage_cache import ReadOnlyStageCache, StageCacheEntry, compute_row_fingerprint
 
 from ..context import RunContext
 from ..manifest import QueueStats, StageContribution
 from ..errors import HaltForReview
-from .execution import ROW_DEFERRED_KEY, Row
+from .execution import ROW_DEFERRED_KEY, Row, RowMapper
 
 # The upstream AI score column a queue stage reviews. Named once so the two sites
 # that test for its presence (_approve_row and _pass_row_through) can't drift
@@ -78,16 +76,16 @@ class PendingReview:
     frozen_row: Row
 
 
-def make_human_review_mapper(stage: Stage, ctx: RunContext) -> Callable[[Row], Row]:
+def make_human_review_mapper(stage: Stage, ctx: RunContext, src: pd.DataFrame) -> RowMapper:
     """The callable that decides one row's outcome for one execution of this
     stage.
 
     Auto-approve is answered here and goes no further: `_approve_row` reaches
-    for no project scope, no cache and no disk, so a run that carries none can
-    still pass a queue stage through."""
+    for no project scope, no cache, no disk and no filter, so a run that carries
+    none of those can still pass a queue stage through."""
     if ctx.queue_auto_approve:
         return _approve_row
-    return _QueueRowMapper(stage, ctx)
+    return _QueueRowMapper(stage, ctx, src)
 
 
 class _QueueRowMapper:
@@ -95,27 +93,32 @@ class _QueueRowMapper:
     step that reports what the rows produced, holding between them the state
     both need.
 
-    The cached decisions are read in `__init__`, ONCE for the whole stage: a
-    row's outcome is then a dictionary lookup, never a store read. The item
-    counters live here too and are incremented as rows are mapped. They reach
-    the stage's `StageContribution` — what the executor folds into the run
-    manifest — only in `finish_mapped_rows`, so a map that raises instead (a
-    cancel, a filter that cannot be evaluated) reports nothing and leaves
-    whatever the manifest already held: for a resumed run, the counts of the
-    halt it is resuming."""
+    Both of the things a row's outcome depends on beyond the row itself are
+    settled in `__init__`, once for the whole stage: the cached decisions (one
+    store read, so a queue stage's store cost does not scale with its row
+    count) and the queue filter's verdict for every row (one frame-wide
+    evaluation, so a filter that cannot be evaluated fails before any row is
+    mapped). A row's outcome is then two lookups by key and position.
 
-    def __init__(self, stage: Stage, ctx: RunContext) -> None:
+    The item counters live here too and are incremented as rows are mapped.
+    They reach the stage's `StageContribution` — what the executor folds into
+    the run manifest — only in `finish_mapped_rows`, so a map that raises
+    instead (a cancel, a cached entry with no output row) reports nothing and
+    leaves whatever the manifest already held: for a resumed run, the counts of
+    the halt it is resuming."""
+
+    def __init__(self, stage: Stage, ctx: RunContext, src: pd.DataFrame) -> None:
         assert stage.queue is not None  # Stage validation: human_review_queue carries queue
         self._stage_id = stage.id
         self._entries = _read_cached_decisions(stage, ctx)
-        self._is_queueable = _make_queueable_test(stage.id, stage.queue.filter)
+        self._queueable = _compute_queueable_mask(src, stage.queue.filter, stage.id)
         self._stats: QueueStats = {
             "items_queued_total": 0, "items_passed_through": 0,
             "items_pending": 0, "items_decided": 0,
         }
 
-    def __call__(self, row: Row) -> Row:
-        if not self._is_queueable(row):
+    def __call__(self, row: Row, index: int) -> Row:
+        if not self._queueable[index]:
             self._stats["items_passed_through"] += 1
             return _pass_row_through(row)
         self._stats["items_queued_total"] += 1
@@ -212,32 +215,33 @@ def _require_project_scope(ctx: RunContext, sid: str) -> tuple[str, ReadOnlyStag
     return ctx.identity.project, ctx.stage_cache
 
 
-def _make_queueable_test(sid: str, flt: str | None) -> Callable[[Row], bool]:
-    """Whether one row is subject to review. With no filter, every row is; with
-    one, the row's own verdict for it.
+def _compute_queueable_mask(src: pd.DataFrame, flt: str | None, sid: str) -> list[bool]:
+    """Whether each row of `src` is subject to review, one verdict per row in
+    `src`'s own row order. With no filter every row is; with one, the filter is
+    evaluated ONCE over the whole frame and the verdicts read off positionally.
 
-    The filter is parsed once, here — a `PredicateError` from the parse means
-    `flt` falls outside the closed grammar (bad grammar) and propagates
-    unwrapped, so such a filter fails at parse rather than being misreported as
-    an evaluation failure. A `PredicateError` from EVALUATING a row (a
-    referenced column the row does not carry, a cell the expression cannot
-    answer for) becomes a loud ValueError instead: a malformed reference must
-    halt the run rather than silently routing every row to passthrough, which
-    would skip human review unnoticed."""
+    A `PredicateError` from the parse means `flt` falls outside the closed
+    grammar `parse_predicate` enforces (bad grammar) and propagates unwrapped,
+    so such a filter fails at parse rather than being misreported as an
+    evaluation failure. A failure while EVALUATING — `flt` parses but references
+    a column absent from this run's actual frame, or a cell the expression
+    cannot answer for — becomes a ValueError naming this stage and the filter
+    text: a malformed reference must halt the run rather than silently routing
+    every row to passthrough, which would skip human review unnoticed."""
     if not flt:
-        return lambda row: True
+        return [True] * len(src)
     parsed = parse_predicate(flt)
-
-    def is_queueable(row: Row) -> bool:
-        try:
-            return evaluate_predicate(parsed, row)
-        except PredicateError as exc:
-            raise ValueError(
-                f"human_review_queue '{sid}' filter could not be evaluated: `{flt}` "
-                f"({type(exc).__name__}: {exc}). A filter must reference existing input columns."
-            ) from exc
-
-    return is_queueable
+    try:
+        # eval of a comparison yields a bool Series; the explicit dtype=bool
+        # conversion makes that a checked fact (anything else lands in the
+        # except below and is raised as a loud error).
+        mask = pd.Series(src.eval(parsed.pandas_expr), index=src.index, dtype=bool)
+    except (SyntaxError, ValueError, TypeError, KeyError, AttributeError, NameError) as exc:
+        raise ValueError(
+            f"human_review_queue '{sid}' filter could not be evaluated: `{flt}` "
+            f"({type(exc).__name__}: {exc}). A filter must reference existing input columns."
+        ) from exc
+    return [bool(verdict) for verdict in mask]
 
 
 # --- the row outcomes the mapper does not need its own state for ---------------
@@ -261,11 +265,12 @@ def _pass_row_through(row: Row) -> Row:
     return passed
 
 
-def _approve_row(row: Row) -> Row:
+def _approve_row(row: Row, index: int) -> Row:
     """Approve one row in memory, as `ctx.queue_auto_approve` asks: the same
     reviewer columns an `approve` decision produces (final and human score =
     the AI score), with reviewer_id/reviewed_at null because no human reviewed
-    it. Reads no cache and writes no file."""
+    it. Reads no cache and writes no file. The outcome depends on the row
+    alone, so its position in the input is not read."""
     ai = row[_SCORE_COLUMN] if _SCORE_COLUMN in row else pd.NA
     return {
         **row,

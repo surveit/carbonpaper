@@ -24,7 +24,7 @@ primary key existing or being unique (the runtime enforces neither). The columns
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Any, Callable
+from typing import Any
 
 import pandas as pd
 from pydantic import create_model
@@ -40,6 +40,7 @@ from .execution import (
     ROW_ERROR_KEY,
     ROW_USAGE_KEY,
     Row,
+    RowMapper,
     _collect_row_errors,
     _collect_row_usage,
     _project_onto_declared_columns,
@@ -53,7 +54,9 @@ _ROW_NUMBER_FIELD = "row_number"
 
 
 # ── batch_size == 1: per-row path (grain + order + independence by construction) ──
-def make_llm_row_mapper(stage: Stage, ctx: RunContext) -> Callable[[Row], Row]:
+def make_llm_row_mapper(stage: Stage, ctx: RunContext, src: pd.DataFrame) -> RowMapper:
+    """Build this execution's per-row mapper. A row's reply depends only on that
+    row, so neither the input frame nor a row's position in it is read."""
     llm = stage.llm
     assert llm is not None  # Stage validation: llm_transform carries llm
 
@@ -65,7 +68,7 @@ def make_llm_row_mapper(stage: Stage, ctx: RunContext) -> Callable[[Row], Row]:
     reply_spec = stage.output_schema.subtract(input_schema)
     reply_model = reply_spec.to_pydantic_model(f"{stage.id}_reply")
 
-    def map_row(row: Row) -> Row:
+    def map_row(row: Row, index: int) -> Row:
         # Per-attempt usage lands here (success or failure); the row carries its
         # summed usage out under ROW_USAGE_KEY for the driver to aggregate. Like
         # ROW_ERROR_KEY, it is an undeclared column and the output projection

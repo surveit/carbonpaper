@@ -16,7 +16,7 @@ import pandas as pd
 from app.models import FunctionKind, Stage
 
 from ..context import RunContext
-from .execution import Row
+from .execution import Row, RowMapper
 
 
 def _load_python_function(stage: Stage) -> Callable[..., Any]:
@@ -48,13 +48,14 @@ def handle_python_frame_function(stage: Stage, inputs: dict[str, pd.DataFrame], 
     return fn(*args)
 
 
-def make_python_row_mapper(stage: Stage, ctx: RunContext) -> Callable[[Row], Row]:
+def make_python_row_mapper(stage: Stage, ctx: RunContext, src: pd.DataFrame) -> RowMapper:
     """Resolve the stage's function once; the runtime maps it over the single
-    input's rows — one dict in, one dict out. The function never sees the
-    frame, so it cannot fan out, fan in, or reorder."""
+    input's rows — one dict in, one dict out. The authored function is shown
+    neither the frame nor a row's position in it, so it cannot fan out, fan in,
+    or reorder."""
     fn = _load_python_function(stage)
 
-    def map_row(row: Row) -> Row:
+    def map_row(row: Row, index: int) -> Row:
         result = fn(row)
         if not isinstance(result, dict):
             raise ValueError(
