@@ -692,7 +692,7 @@ def test_publish_fully_declared_accepted():
     assert s.inputs[0].table_schema is not None
 
 
-_EMPTY_SCHEMA = {"columns": []}
+_EMPTY_SCHEMA: dict[str, list[object]] = {"columns": []}
 
 
 def test_stage_rejects_input_whose_schema_declares_no_columns():
