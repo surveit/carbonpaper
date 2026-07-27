@@ -86,19 +86,17 @@ A stage is written, validated against the whole graph, and only then stored.
    stages that already exist in the workflow. The first stage you add starts the workflow,
    so it takes no inputs — it is the input_data stage that reads the source.
 6. An upstream stage's output_schema is what flows down the edge. A stage's declared input
-   schema is its OWN requirement — like a function's parameter types, not a copy of the
-   upstream output — and must be a subset the upstream can satisfy.
-7. Every add re-validates the WHOLE resulting workflow: each stage's own shape, unique ids,
-   every input id resolving to a real stage, no cycles, and edge conformance. A refusal
-   comes back as ok false plus issues, and nothing is written.
-8. As the graph grows: describe_workflow(project_id) for the shape (ids, types, inputs,
+   schema is usually that schema verbatim; it differs when the stage reads only part of what
+   upstream emits. Either way it must be a subset the upstream can satisfy.
+7. As the graph grows: describe_workflow(project_id) for the shape (ids, types, inputs,
    review state), read_stage(project_id, stage_id) for one stage in full,
    edit_stage(project_id, stage_id, changes_json) to change only the fields you name (a
    JSON Merge Patch), remove_stage(project_id, stage_id) to undo a stage you added
    (refused while another stage still lists it in `inputs`).
 
-Added stages land `unreviewed`. REVIEW, APPROVAL AND VERSIONING ARE HUMAN-ONLY, in
-the web UI. Your job ends at a clean, fully-added workflow the human can then review.
+Added stages land `unreviewed`. REVIEW AND APPROVAL ARE HUMAN-ONLY, in the web UI, and
+only a human publishes. Your job ends at a saved version with a workflow test run for the
+human to review.
 
 # Per-stage tests
 generate_stage_tests(project_id, stage_id) derives one python-transform stage's tests from
@@ -108,7 +106,8 @@ every python-transform stage. Loop edit_stage → run_stage_tests until a stage'
 a failure means the CODE disagrees with the test, so fix the code.
 
 # Running
-Runs execute a stored version; no tool here creates one. Publishing is human-only.
+Runs execute a stored version; save_version(project_id, message) creates one, then
+run_workflow_test against it is how you finish. Publishing is human-only.
 run_workflow(project_id, version_id?) starts a run of record and returns a run_id,
 get_run_status(project_id, run_id) follows it to its outcome, and
 run_workflow_test(project_id, version_id?, limit, offset) executes any stored version —
