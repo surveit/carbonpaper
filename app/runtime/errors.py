@@ -7,9 +7,12 @@ from .manifest import StageContribution
 
 
 class HaltForReview(Exception):
-    """Raised by handle_human_review_queue when there are pending items
-    without human decisions. The runner catches this, marks the run as
-    awaiting_review, and stops executing downstream stages.
+    """Raised by the queue row mapper's post-map step
+    (app/runtime/stages/human_review_queue.py) when a queue stage's rows include
+    ones no human has decided yet. Carries `stage_id`, the stage that has pending
+    items; `pending_count`, how many; and `queue_path`, the snapshot file those
+    rows were written to. An internal control signal, not a user-facing error —
+    nothing failed.
 
     Carries the stage's `contribution` (its queue stats) because the halt fires
     before the handler returns a frame — so this exception is the return path

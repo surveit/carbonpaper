@@ -1,9 +1,43 @@
-"""Handler for the human_review_queue stage type."""
+"""Handler for the human_review_queue stage type.
+
+The per-row compute this stage performs is "ask a human". It has one answer it
+can produce synchronously — a decision a human already recorded for this exact
+(stage definition, input row) pair, replayed from the stage-result cache — and
+one it cannot: for a row nobody has decided yet, the answer does not exist, and
+no default may stand in for it.
+
+Every input row produces exactly one output row, in its own input position —
+the stage never removes a row, whatever the reviewer decided. Each row ends in
+one of three outcomes:
+
+  - the queue filter did not match it → it passes through, carrying its AI
+    score as final and the pass-through reviewer columns;
+  - a cached decision holds an output row → that row, replayed verbatim. What
+    the payload MEANS is built and interpreted above this seam; this module
+    neither constructs nor reads it;
+  - no cached decision → the row is marked deferred (`ROW_DEFERRED_KEY`)
+    carrying the fingerprint it was looked up under and a frozen copy of
+    itself, and nothing else.
+
+The mapper's own `finish_mapped_rows` runs after the map: it reports the item
+counts the map accumulated onto the stage's `StageContribution`, then reads
+those deferred markers back. Where a row was deferred it writes the two files
+the reviewer UI reads and raises `HaltForReview`:
+
+  - `<run_dir>/queue/<stage>.parquet` (or `.csv` when a dtype defeats parquet),
+    the snapshot — built from the frozen rows themselves, so it holds exactly
+    the original upstream columns and no bookkeeping of any kind;
+  - `<run_dir>/queue/<stage>.fingerprints.json`, the sidecar, holding the one
+    `stage_fingerprint` this halt shares and `input_fingerprints` POSITIONALLY
+    aligned to the snapshot's rows. A fingerprint is never row data, so it
+    lives only here.
+"""
 
 from __future__ import annotations
 
 import json
-from typing import NoReturn
+from dataclasses import dataclass
+from pathlib import Path
 
 import pandas as pd
 import pyarrow.lib as pa_lib
@@ -13,76 +47,154 @@ from app.models import RowReviewDecision, Stage
 from app.core.stage_cache import ReadOnlyStageCache, StageCacheEntry, compute_row_fingerprint
 
 from ..context import RunContext
-from ..manifest import CONTRIBUTION_ATTR, QueueStats, StageContribution
+from ..manifest import QueueStats, StageContribution
 from ..errors import HaltForReview
+from .execution import ROW_DEFERRED_KEY, Row, RowMapper
 
 # The upstream AI score column a queue stage reviews. Named once so the two sites
-# that test for its presence (auto-approve and passthrough finalization) can't
-# drift apart.
+# that test for its presence (_approve_row and _pass_row_through) can't drift
+# apart.
 _SCORE_COLUMN = "score"
 
+# The `decision` value carried by a row the queue filter did not select. Not a
+# RowReviewDecision: no human saw this row, so no verdict of theirs applies to
+# it. It is spelled out rather than left missing so that EVERY output row of a
+# queue stage carries a decision, and a downstream stage can exclude the
+# rejected rows by comparing strings — never by reasoning about a null.
+NOT_REVIEWED = "not_reviewed"
 
-def handle_human_review_queue(stage: Stage, inputs: dict[str, pd.DataFrame], ctx: RunContext) -> pd.DataFrame:
-    """Real review-queue semantics:
 
-    1. Apply the queue filter to upstream output → items needing review.
-    2. Fingerprint the stage definition once (`stage_fp`) and every queueable
-       row (`input_fingerprints_by_index`, over its original upstream
-       columns) — index-aligned, never burned onto the row itself.
-    3. Look up this stage definition's cached decisions from `ctx.stage_cache`
-       and split queueable rows by whether their fingerprint matches one:
-         - items with a cached decision get it applied
-         - items without are written to runs/<id>/queue/<stage>.parquet, a
-           PURE snapshot of their original upstream columns, alongside a
-           `<stage>.fingerprints.json` sidecar naming the fingerprints.
-    4. If ANY items lack decisions, raise HaltForReview so the runner can
-       stop downstream execution and mark the run awaiting_review.
-    5. Otherwise replace each decided row with its cached output row, dropping
-       any whose cached output is a tombstone (the row was dropped upstream of
-       this seam), and concat with the passthrough rows. The cached output is
-       built and interpreted above this seam; this handler only replays it.
-    """
-    sid = stage.id
-    queue_cfg = stage.queue
-    assert queue_cfg is not None  # Stage validation: human_review_queue carries queue_cfg
-    src = inputs[stage.inputs[0].id].copy()
-    contribution = StageContribution()
+@dataclass(frozen=True)
+class PendingReview:
+    """One row awaiting a human decision: the `input_fingerprint` the cache was
+    searched under, and `frozen_row`, a copy of the row exactly as it arrived
+    from upstream. Carried on the deferred marker of the row that produced it,
+    which is the only place either value exists until the snapshot and its
+    sidecar are written."""
 
-    # Checked FIRST, before any reach for project scope / the decisions cache: when
-    # the caller asked for in-memory auto-approval, every row is approved and returned
-    # without a stage-cache decision lookup, queue snapshot, or halt. A non-production
-    # (subset/preview) run carries no project scope, so this is also the only way such
-    # a run can pass a queue stage. A production-run ctx never sets the flag, so production-run
-    # behavior is unchanged.
+    input_fingerprint: str
+    frozen_row: Row
+
+
+def make_human_review_mapper(stage: Stage, ctx: RunContext, src: pd.DataFrame) -> RowMapper:
+    """The callable that decides one row's outcome for one execution of this
+    stage.
+
+    Auto-approve is answered here and goes no further: `_approve_row` reaches
+    for no project scope, no cache, no disk and no filter, so a run that carries
+    none of those can still pass a queue stage through."""
     if ctx.queue_auto_approve:
-        return _auto_approve_all(src, stage, contribution)
-
-    project, stage_cache = _require_project_scope(ctx, sid)
-
-    queueable, passthrough = _partition_reviewable_rows(src, queue_cfg.filter, sid)
-
-    stage_fp = stage.compute_definition_fingerprint()
-    input_fingerprints_by_index = _compute_input_fingerprints(queueable)
-    entries = stage_cache.find_entries(project, sid, stage_fp)
-    entries_by_fingerprint = {entry.input_fingerprint: entry for entry in entries}
-
-    pending, decided = _split_pending_and_decided(
-        queueable, input_fingerprints_by_index, entries_by_fingerprint
-    )
-
-    _record_human_review_queue_stats(contribution, queueable, passthrough, pending, decided)
-
-    if len(pending):
-        pending_fingerprints = input_fingerprints_by_index.loc[pending.index].tolist()
-        _snapshot_pending_and_halt(ctx, sid, pending, stage_fp, pending_fingerprints, contribution)
-
-    decided = _collect_cached_output_rows(decided, entries_by_fingerprint, input_fingerprints_by_index)
-    passthrough = _finalize_passthrough_rows(passthrough)
-    out = _combine_decided_and_passthrough(decided, passthrough)
-    return _project_onto_output_schema(out, stage, contribution)
+        return _approve_row
+    return _QueueRowMapper(stage, ctx, src)
 
 
-# --- handle_human_review_queue helpers -----------------------------------------
+class _QueueRowMapper:
+    """One execution of a queue stage: the per-row decision and the post-map
+    step that reports what the rows produced, holding between them the state
+    both need.
+
+    Both of the things a row's outcome depends on beyond the row itself are
+    settled in `__init__`, once for the whole stage: the cached decisions (one
+    store read, so a queue stage's store cost does not scale with its row
+    count) and the queue filter's verdict for every row (one frame-wide
+    evaluation, so a filter that cannot be evaluated fails before any row is
+    mapped). A row's outcome is then two lookups by key and position.
+
+    The item counters live here too and are incremented as rows are mapped.
+    They reach the stage's `StageContribution` — what the executor folds into
+    the run manifest — only in `finish_mapped_rows`, so a map that raises
+    instead (a cancel, a cached entry with no output row) reports nothing and
+    leaves whatever the manifest already held: for a resumed run, the counts of
+    the halt it is resuming."""
+
+    def __init__(self, stage: Stage, ctx: RunContext, src: pd.DataFrame) -> None:
+        assert stage.queue is not None  # Stage validation: human_review_queue carries queue
+        self._stage_id = stage.id
+        self._entries = _read_cached_decisions(stage, ctx)
+        self._queueable = _compute_queueable_mask(src, stage.queue.filter, stage.id)
+        self._stats: QueueStats = {
+            "items_queued_total": 0, "items_passed_through": 0,
+            "items_pending": 0, "items_decided": 0,
+        }
+
+    def __call__(self, row: Row, index: int) -> Row:
+        if not self._queueable[index]:
+            self._stats["items_passed_through"] += 1
+            return _pass_row_through(row)
+        self._stats["items_queued_total"] += 1
+        return self._replay_decision_or_defer(row)
+
+    def finish_mapped_rows(
+        self,
+        stage: Stage,
+        df: pd.DataFrame,
+        ctx: RunContext,
+        contribution: StageContribution,
+    ) -> None:
+        """Report the item counts the completed map accumulated, then write the
+        snapshot and sidecar for every row it deferred and raise
+        `HaltForReview` — the run cannot go past a row whose value only a human
+        can produce. Returns after the counts when no row was deferred. The
+        halt carries the same `contribution`, because on that path the raise is
+        this stage's only return path into the manifest."""
+        contribution.human_review_queue_stats = self._stats
+        pending = _find_pending_reviews(df)
+        if not pending:
+            return
+        queue_path = _write_queue_files(ctx.require_run_dir() / "queue", stage, pending)
+        raise HaltForReview(
+            stage_id=stage.id,
+            pending_count=len(pending),
+            queue_path=queue_path,
+            contribution=contribution,
+        )
+
+    def _replay_decision_or_defer(self, row: Row) -> Row:
+        """A row subject to review, resolved against the decisions already
+        recorded: the cached output row replayed as-is, or — with no cached
+        decision — a deferred marker carrying the row's fingerprint and a frozen
+        copy of it, and nothing else. Never a substituted, defaulted or
+        partially-filled row: the value does not exist yet.
+
+        A cached entry carrying no output row at all cannot be replayed as this
+        row's output, and this stage emits one row per input row, so it raises
+        rather than resolve to a fabricated or absent row."""
+        fingerprint = compute_row_fingerprint(row)
+        entry = self._entries.get(fingerprint)
+        if entry is None:
+            self._stats["items_pending"] += 1
+            return {
+                ROW_DEFERRED_KEY: PendingReview(
+                    input_fingerprint=fingerprint, frozen_row=dict(row)
+                )
+            }
+        if entry.output_row is None:
+            raise ValueError(
+                f"human_review_queue '{self._stage_id}': the decision cached for input "
+                f"fingerprint {fingerprint} carries no output row, so there is nothing "
+                "to replay for it. A decision recorded before this stage emitted "
+                "rejected rows carries no output row — the rejection removed the row "
+                "instead. Re-record a decision for this row."
+            )
+        self._stats["items_decided"] += 1
+        return dict(entry.output_row)
+
+
+# --- _QueueRowMapper.__init__: once per stage execution ------------------------
+
+
+def _read_cached_decisions(stage: Stage, ctx: RunContext) -> dict[str, StageCacheEntry]:
+    """Every decision already recorded against this exact stage definition,
+    keyed by the input fingerprint it was filed under. This is the stage's one
+    and only cache read: a row's outcome is then a dictionary lookup, and a
+    queue stage's store cost does not scale with its row count."""
+    project, stage_cache = _require_project_scope(ctx, stage.id)
+    return {
+        entry.input_fingerprint: entry
+        for entry in stage_cache.find_entries(
+            project, stage.id, stage.compute_definition_fingerprint()
+        )
+    }
 
 
 def _require_project_scope(ctx: RunContext, sid: str) -> tuple[str, ReadOnlyStageCache]:
@@ -103,129 +215,110 @@ def _require_project_scope(ctx: RunContext, sid: str) -> tuple[str, ReadOnlyStag
     return ctx.identity.project, ctx.stage_cache
 
 
-def _auto_approve_all(
-    src: pd.DataFrame, stage: Stage, contribution: StageContribution
-) -> pd.DataFrame:
-    """Pass every row through as approved, entirely in memory — no stage-cache
-    decision lookup, no queue snapshot, no halt. Each row gets the same reviewer
-    columns an 'approve' decision produces (final/human score = ai score), then the
-    frame is projected onto the output schema exactly as the real path's output would
-    be, so the stage's recorded row count is its real one. No human reviewed these
-    rows, so reviewer_id/reviewed_at stay null."""
-    approved = src.copy()
-    ai = approved[_SCORE_COLUMN] if _SCORE_COLUMN in approved.columns else pd.NA
-    approved["ai_score"] = ai
-    approved["human_score"] = ai
-    approved["final_score"] = ai
-    approved["review_notes"] = f"decision={RowReviewDecision.approve}"
-    approved["reviewer_id"] = pd.NA
-    approved["reviewed_at"] = pd.NA
-    approved["decision"] = RowReviewDecision.approve
-    return _project_onto_output_schema(approved, stage, contribution)
+def _compute_queueable_mask(src: pd.DataFrame, flt: str | None, sid: str) -> list[bool]:
+    """Whether each row of `src` is subject to review, one verdict per row in
+    `src`'s own row order. With no filter every row is; with one, the filter is
+    evaluated ONCE over the whole frame and the verdicts read off positionally.
+
+    A `PredicateError` from the parse means `flt` falls outside the closed
+    grammar `parse_predicate` enforces (bad grammar) and propagates unwrapped,
+    so such a filter fails at parse rather than being misreported as an
+    evaluation failure. A failure while EVALUATING — `flt` parses but references
+    a column absent from this run's actual frame, or a cell the expression
+    cannot answer for — becomes a ValueError naming this stage and the filter
+    text: a malformed reference must halt the run rather than silently routing
+    every row to passthrough, which would skip human review unnoticed."""
+    if not flt:
+        return [True] * len(src)
+    parsed = parse_predicate(flt)
+    try:
+        # eval of a comparison yields a bool Series; the explicit dtype=bool
+        # conversion makes that a checked fact (anything else lands in the
+        # except below and is raised as a loud error).
+        mask = pd.Series(src.eval(parsed.pandas_expr), index=src.index, dtype=bool)
+    except (SyntaxError, ValueError, TypeError, KeyError, AttributeError, NameError) as exc:
+        raise ValueError(
+            f"human_review_queue '{sid}' filter could not be evaluated: `{flt}` "
+            f"({type(exc).__name__}: {exc}). A filter must reference existing input columns."
+        ) from exc
+    return [bool(verdict) for verdict in mask]
 
 
-def _partition_reviewable_rows(
-    src: pd.DataFrame, flt: str | None, sid: str
-) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Split `src` into rows subject to review (the queue filter matched, or
-    there is no filter) and rows that pass straight through."""
-    if flt:
-        # A PredicateError here means `flt` falls outside the closed grammar
-        # parse_predicate enforces (bad grammar) — let it propagate loud rather
-        # than folding it into the eval-time except below, so a bad-grammar
-        # filter fails at parse rather than being misreported as an eval failure.
-        parsed = parse_predicate(flt)
-        try:
-            # eval of a comparison yields a bool Series; the explicit dtype=bool
-            # conversion makes that a checked fact (anything else lands in the
-            # except below and is raised as a loud error).
-            queueable_mask = pd.Series(
-                src.eval(parsed.pandas_expr), index=src.index, dtype=bool
-            )
-        except (SyntaxError, ValueError, TypeError, KeyError, AttributeError, NameError) as exc:
-            # `flt` parses under our grammar but references a column absent
-            # from this run's actual frame (or another eval-time problem); a
-            # malformed reference must halt the run rather than silently
-            # routing every row to passthrough (which would skip human review
-            # unnoticed).
-            raise ValueError(
-                f"human_review_queue '{sid}' filter could not be evaluated: `{flt}` "
-                f"({type(exc).__name__}: {exc}). A filter must reference existing input columns."
-            ) from exc
-    else:
-        queueable_mask = pd.Series([True] * len(src), index=src.index)
-
-    return src[queueable_mask].copy(), src[~queueable_mask].copy()
+# --- the row outcomes the mapper does not need its own state for ---------------
 
 
-def _compute_input_fingerprints(queueable: pd.DataFrame) -> pd.Series:
-    """`input_fingerprint` per row of `queueable`, computed via
-    `compute_row_fingerprint` over each row's ORIGINAL upstream columns —
-    index-aligned WITH `queueable`, never assigned back onto it as a column.
-    A queued row's snapshot (`_snapshot_pending_and_halt`) must carry only its
-    original upstream columns, so this fingerprint lives only in this Series
-    and, for pending rows, in the sidecar file written alongside the
-    snapshot."""
-    if not len(queueable):
-        return pd.Series([], index=queueable.index, dtype=object)
-    fingerprints = queueable.apply(lambda row: compute_row_fingerprint(row.to_dict()), axis=1)
-    assert isinstance(fingerprints, pd.Series)
-    return fingerprints
+def _pass_row_through(row: Row) -> Row:
+    """A row the filter did not select: its AI score stands as final, and the
+    reviewer columns carry the pass-through values (no human saw this row). Its
+    `decision` is NOT_REVIEWED — a value, not a blank, so a downstream filter
+    that excludes rejections keeps this row without having to test for a
+    missing one."""
+    passed: Row = dict(row)
+    if _SCORE_COLUMN in row:
+        passed["ai_score"] = row[_SCORE_COLUMN]
+        passed["final_score"] = row[_SCORE_COLUMN]
+    passed["human_score"] = pd.NA
+    passed["reviewer_id"] = row.get("reviewer", pd.NA)
+    passed["reviewed_at"] = pd.NA
+    passed["review_notes"] = "below review threshold"
+    passed["decision"] = NOT_REVIEWED
+    return passed
 
 
-def _split_pending_and_decided(
-    queueable: pd.DataFrame,
-    input_fingerprints_by_index: pd.Series,
-    entries_by_fingerprint: dict[str, StageCacheEntry],
-) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """`queueable` split by whether its row's fingerprint (looked up in
-    `input_fingerprints_by_index`, never a dataframe column) names a cached
-    decision. Both halves keep exactly `queueable`'s own columns — no
-    decision-placeholder column is ever seeded, pending or decided."""
-    decided_mask = input_fingerprints_by_index.isin(entries_by_fingerprint.keys())
-    return queueable[~decided_mask], queueable[decided_mask]
-
-
-def _record_human_review_queue_stats(
-    contribution: StageContribution,
-    queueable: pd.DataFrame,
-    passthrough: pd.DataFrame,
-    pending: pd.DataFrame,
-    decided: pd.DataFrame,
-) -> None:
-    """Record this stage's queue tallies onto `contribution`; the executor drains
-    them onto the manifest under `human_review_queue_stats[stage_id]`."""
-    stats: QueueStats = {
-        "items_queued_total": int(len(queueable)),
-        "items_passed_through": int(len(passthrough)),
-        "items_pending": int(len(pending)),
-        "items_decided": int(len(decided)),
+def _approve_row(row: Row, index: int) -> Row:
+    """Approve one row in memory, as `ctx.queue_auto_approve` asks: the same
+    reviewer columns an `approve` decision produces (final and human score =
+    the AI score), with reviewer_id/reviewed_at null because no human reviewed
+    it. Reads no cache and writes no file. The outcome depends on the row
+    alone, so its position in the input is not read."""
+    ai = row[_SCORE_COLUMN] if _SCORE_COLUMN in row else pd.NA
+    return {
+        **row,
+        "ai_score": ai,
+        "human_score": ai,
+        "final_score": ai,
+        "review_notes": f"decision={RowReviewDecision.approve}",
+        "reviewer_id": pd.NA,
+        "reviewed_at": pd.NA,
+        "decision": RowReviewDecision.approve,
     }
-    contribution.human_review_queue_stats = stats
 
 
-def _snapshot_pending_and_halt(
-    ctx: RunContext,
-    sid: str,
-    pending: pd.DataFrame,
-    stage_fingerprint: str,
-    input_fingerprints: list[str],
-    contribution: StageContribution,
-) -> NoReturn:
-    """Persist the pending items for the reviewer UI, then halt the run.
+# --- finish_mapped_rows: the deferred rows, the snapshot and its sidecar ------
 
-    The snapshot (`<stage>.parquet`, or `.csv` on a parquet-incompatible
-    dtype) is written PURE — exactly `pending`'s own upstream columns, no
-    fingerprint or decision-bookkeeping column ever added to it. The
-    fingerprints those rows carry are never row data; they live in a sidecar
-    `<stage>.fingerprints.json`, `input_fingerprints` POSITIONALLY aligned to
-    the snapshot's row order, alongside the one `stage_fingerprint` every
-    pending row of this halt shares."""
-    queue_dir = ctx.require_run_dir() / "queue"
+
+def _find_pending_reviews(df: pd.DataFrame) -> list[PendingReview]:
+    """Every `PendingReview` the map attached to a deferred row, in the
+    assembled frame's own row order. A frame with no deferred column at all
+    means no row was deferred — every one of them was passed through or
+    decided."""
+    if ROW_DEFERRED_KEY not in df.columns:
+        return []
+    return [value for value in df[ROW_DEFERRED_KEY] if isinstance(value, PendingReview)]
+
+
+def _write_queue_files(
+    queue_dir: Path, stage: Stage, pending: list[PendingReview]
+) -> Path:
+    """Write the snapshot and its fingerprint sidecar into `queue_dir`,
+    creating the directory, and return the snapshot's path."""
     queue_dir.mkdir(parents=True, exist_ok=True)
+    queue_path = _write_pending_snapshot(queue_dir, stage.id, pending)
+    _write_fingerprint_sidecar(
+        queue_dir, stage.id, stage.compute_definition_fingerprint(), pending
+    )
+    return queue_path
+
+
+def _write_pending_snapshot(queue_dir: Path, sid: str, pending: list[PendingReview]) -> Path:
+    """Persist the pending rows for the reviewer UI and return the path
+    written. The frame is built from the frozen rows themselves, so it holds
+    exactly their original upstream columns — there is no step at which a
+    fingerprint or decision column could be added to it."""
+    frame = pd.DataFrame([item.frozen_row for item in pending])
     queue_path = queue_dir / f"{sid}.parquet"
     try:
-        pending.to_parquet(queue_path, index=False)
+        frame.to_parquet(queue_path, index=False)
     except (pa_lib.ArrowException, ValueError, TypeError):
         # A column whose dtype/shape parquet can't represent (mixed-type
         # object columns, nested Python values) — CSV stringifies those and
@@ -234,73 +327,21 @@ def _snapshot_pending_and_halt(
         # (and is recorded by the runner) rather than silently degrading the
         # queue snapshot.
         queue_path = queue_dir / f"{sid}.csv"
-        pending.to_csv(queue_path, index=False)
-    fingerprints_path = queue_dir / f"{sid}.fingerprints.json"
-    fingerprints_path.write_text(
+        frame.to_csv(queue_path, index=False)
+    return queue_path
+
+
+def _write_fingerprint_sidecar(
+    queue_dir: Path, sid: str, stage_fingerprint: str, pending: list[PendingReview]
+) -> None:
+    """Write `<stage>.fingerprints.json`: the one `stage_fingerprint` every
+    pending row of this halt shares, and `input_fingerprints` in the pending
+    rows' own order — POSITIONALLY aligned to the snapshot written from the
+    same list."""
+    (queue_dir / f"{sid}.fingerprints.json").write_text(
         json.dumps({
             "stage_fingerprint": stage_fingerprint,
-            "input_fingerprints": input_fingerprints,
+            "input_fingerprints": [item.input_fingerprint for item in pending],
         }),
         encoding="utf-8",
     )
-    raise HaltForReview(
-        stage_id=sid,
-        pending_count=int(len(pending)),
-        queue_path=queue_path,
-        contribution=contribution,
-    )
-
-
-def _collect_cached_output_rows(
-    decided: pd.DataFrame,
-    entries_by_fingerprint: dict[str, StageCacheEntry],
-    input_fingerprints_by_index: pd.Series,
-) -> pd.DataFrame:
-    """Look up each decided row's cached entry and collect the non-tombstone
-    output rows into the replacement frame — a tombstone (`output_row is None`)
-    drops its row. The entry carries the stage's output for that input; this
-    handler neither builds nor interprets it."""
-    if not len(decided):
-        return decided
-    matched = [entries_by_fingerprint[fp] for fp in input_fingerprints_by_index.loc[decided.index]]
-    output_rows = [entry.output_row for entry in matched if entry.output_row is not None]
-    return pd.DataFrame(output_rows)
-
-
-def _finalize_passthrough_rows(passthrough: pd.DataFrame) -> pd.DataFrame:
-    """Pass-through rows keep their AI score as final; the reviewer columns are
-    filled with the pass-through-specific values (no human ever reviewed them)."""
-    if len(passthrough) and _SCORE_COLUMN in passthrough.columns:
-        passthrough["ai_score"] = passthrough[_SCORE_COLUMN]
-        passthrough["final_score"] = passthrough[_SCORE_COLUMN]
-    passthrough["human_score"] = pd.NA
-    passthrough["reviewer_id"] = passthrough.get("reviewer", pd.NA)
-    passthrough["reviewed_at"] = pd.NA
-    passthrough["review_notes"] = "below review threshold"
-    return passthrough
-
-
-def _combine_decided_and_passthrough(decided: pd.DataFrame, passthrough: pd.DataFrame) -> pd.DataFrame:
-    return pd.concat([decided, passthrough], ignore_index=True, sort=False)
-
-
-def _project_onto_output_schema(
-    out: pd.DataFrame, stage: Stage, contribution: StageContribution
-) -> pd.DataFrame:
-    """Project onto exactly the columns output_schema declares — a column
-    carried through from upstream that the stage wants downstream earns its
-    place by being declared. Columns on the frame that the schema doesn't
-    declare are dropped, and the drop is recorded on `contribution` rather than
-    silently discarded. Attaches the contribution to the returned frame so the
-    executor can drain it into the manifest."""
-    declared = [c.name for c in stage.output_schema.columns] if stage.output_schema else []
-    if not declared:
-        out.attrs[CONTRIBUTION_ATTR] = contribution
-        return out
-    keep = [c for c in declared if c in out.columns]
-    dropped = [str(c) for c in out.columns if c not in keep]
-    if dropped:
-        contribution.dropped_columns = dropped
-    result = out[keep]
-    result.attrs[CONTRIBUTION_ATTR] = contribution
-    return result

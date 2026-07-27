@@ -310,8 +310,9 @@ def test_e2e_decide_approve_modify_and_reject_then_resume_completes(tmp_path, mo
     """halt -> POST /decide for each pending row (one of each verdict) ->
     runner.resume_run -> completed manifest, with the resumed output
     reflecting each verdict: approve keeps the AI score, modify substitutes
-    the human-entered score, and reject drops the row. No decisions/ directory
-    is created under the project dir — every write goes through the cache."""
+    the human-entered score, and reject keeps the row with a null final score
+    and the rejection recorded on it. No decisions/ directory is created under
+    the project dir — every write goes through the cache."""
     project = "queue_route_e2e"
     monkeypatch.setattr(loading, "EXAMPLES_DIR", tmp_path)
 
@@ -358,8 +359,10 @@ def test_e2e_decide_approve_modify_and_reject_then_resume_completes(tmp_path, mo
     assert resumed["status"] == "ok"
 
     out = pd.read_parquet(run_dir / "outputs" / "review.parquet").set_index("id")
+    assert list(out.index) == ["a", "b", "c"]   # every reviewed row is emitted
     assert out.loc["a", "final_score"] == 1     # approve: AI score kept
     assert out.loc["b", "final_score"] == 99    # modify: human score used
-    assert "c" not in out.index                 # reject: row dropped
+    assert out.loc["c", "decision"] == "reject"   # reject: the row stays, carrying the verdict
+    assert pd.isna(out.loc["c", "final_score"])   # with no score anyone stands behind
 
     assert not (project_dir / "decisions").exists()

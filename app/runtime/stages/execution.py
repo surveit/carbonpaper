@@ -1,30 +1,32 @@
 """Handler shapes: what the runtime hands each stage type, and the row driver.
 
-A stage type's grain-and-order guarantee is a fact about HOW the runtime invokes
-its handler, not a claim the handler makes about itself. Each shape is a class
-whose `execute` fixes the calling convention:
+A stage type's grain-and-order guarantee follows from HOW the runtime invokes its
+handler, not from anything the handler's own body chooses to do. Each shape is a
+class whose `execute` fixes the calling convention:
 
   RowMapHandler  — the runtime maps a per-row function over the single input's
                    rows and reassembles results in input order: one dict in, one
-                   dict out. The mapper never sees the frame, so it cannot
-                   reorder, drop, or fan out rows — preservation holds by
+                   dict out. The mapper never sees the frame — only the factory
+                   that builds it does, before the map starts — so it cannot
+                   reorder, fan out or remove rows: that much holds by
                    construction (issue #87).
   SourceHandler  — no upstream inputs; the handler originates rows from outside
                    the run. Trivially preserving: the rows begin here.
   FrameHandler   — the handler sees whole input frame(s) and may reshape or
                    reorder them freely; never grain-and-order preserving.
 
-Preservation is carried by the shape CLASS — RowMap/Source preserve, Frame does
-not — so a handler cannot separately declare itself preserving; it either is a
-row-driven shape or it is not. Which shape a type registers under must agree with
-the core fact (app.models is_grain_and_order_preserving); validate_registry_matches_model
-holds the two equal when the registry module is imported.
+Preservation is reported by each handler's `preserves_grain_and_order` — Source
+yes, Frame no, RowMap yes — and is fixed by the shape alone, not by anything an
+individual handler declares. Which handler a type registers under must agree
+with the core fact (app.models is_grain_and_order_preserving);
+validate_registry_matches_model holds the two equal when the registry module is
+imported.
 """
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Any, Callable
+from typing import Any, Callable, Protocol, runtime_checkable
 
 import pandas as pd
 
@@ -41,6 +43,19 @@ from ..errors import RunCancelled
 # One row of a stage's input or output: column label → cell value.
 Row = dict[str, Any]
 
+# One stage execution's per-row function: a row and that row's position in the
+# input frame in, one row out. The position lets a mapper read its own entry out
+# of something its factory worked out over the whole input; a mapper that needs
+# nothing frame-wide ignores it.
+RowMapper = Callable[[Row, int], Row]
+
+# Builds the per-row function for ONE stage execution, from the stage, the run
+# context, and the single input frame the map is about to run over. The frame is
+# handed to the FACTORY, never to the mapper: work that is cheaper — or only
+# correct — done once over the whole input happens here, and the mapper it
+# returns still sees one row at a time.
+MakeRowMapper = Callable[[Stage, RunContext, pd.DataFrame], RowMapper]
+
 # Sentinel column a row mapper attaches to a row it could not produce (e.g. an
 # llm_transform whose generation failed). The row driver collects these off the
 # assembled frame so the runner can surface them as error-severity output issues
@@ -48,15 +63,51 @@ Row = dict[str, Any]
 ROW_ERROR_KEY = "_error"
 
 # Sentinel column carrying a row's token/cost usage dict (an llm_transform
-# attaches one per row). The driver sums these onto the stage's StageContribution;
-# the output projection drops the column so usage never reaches stage output.
+# attaches one per row). It is summed onto the stage's StageContribution and the
+# column is then stripped, so usage never reaches stage output. The row driver
+# does both for the stage it maps; a handler that assembles its own frame instead
+# of being row-driven (llm_transform's batched path) does both for itself.
 ROW_USAGE_KEY = "_usage"
 
+# Sentinel column a row mapper attaches to a row whose value could not be
+# produced synchronously: the value does not exist yet, so the run cannot be
+# carried past this stage. Distinct from ROW_ERROR_KEY, which marks a row that
+# FAILED and lets the run continue. The driver never interprets it — a mapper
+# that emits it reads it back in its own `finish_mapped_rows`.
+ROW_DEFERRED_KEY = "_deferred"
+
 # Internal per-row sentinel columns a mapper may attach. They are machinery, not
-# stage output: the projection drops them but does NOT report them as dropped
-# user columns (they were collected onto the contribution by the driver, not
-# discarded).
-_INTERNAL_ROW_COLUMNS = frozenset({ROW_ERROR_KEY, ROW_USAGE_KEY})
+# stage output: the driver strips them off every mapped frame and does NOT
+# report them as dropped user columns (they were collected by the driver or read
+# back by the mapper's own post-map step, not discarded).
+_INTERNAL_ROW_COLUMNS = frozenset({ROW_ERROR_KEY, ROW_USAGE_KEY, ROW_DEFERRED_KEY})
+
+
+@runtime_checkable
+class PostMapRowMapper(Protocol):
+    """A row mapper that also carries the step to run once its map is over.
+
+    `make_mapper` may return a plain function — one row in, one row out — or an
+    object of this shape, which additionally gets `finish_mapped_rows` once the
+    assembled frame exists, with every marker column still on it. The two halves
+    then share whatever per-execution state the object holds, instead of needing
+    a channel outside the mapper to pass it through.
+
+    `finish_mapped_rows` runs on the assembled frame — one row per input row —
+    and before the driver strips the markers, so it is the last step that sees a
+    marker column at all. It is handed the stage's `StageContribution` to report
+    onto — the manifest fields the mapper owns — and may raise, which aborts the
+    stage."""
+
+    def __call__(self, row: Row, index: int) -> Row: ...
+
+    def finish_mapped_rows(
+        self,
+        stage: Stage,
+        df: pd.DataFrame,
+        ctx: RunContext,
+        contribution: StageContribution,
+    ) -> None: ...
 
 
 class StageHandler(ABC):
@@ -69,23 +120,34 @@ class StageHandler(ABC):
         self, stage: Stage, inputs: dict[str, pd.DataFrame], ctx: RunContext
     ) -> pd.DataFrame | None: ...
 
+    @property
+    @abstractmethod
+    def preserves_grain_and_order(self) -> bool:
+        """Does this handler guarantee that output row i came from input row i —
+        1:1 and in the same order? Compared against the core
+        is_grain_and_order_preserving fact for the stage type this handler is
+        registered under (validate_registry_matches_model)."""
+
 
 class RowMapHandler(StageHandler):
     """Driven per row by the runtime; the mapper never sees the frame, so it
-    cannot reorder, drop, or fan out rows.
+    cannot reorder or fan out rows.
 
     `make_mapper` runs once per stage execution (resolve code, render prompt
-    additions, record backend info) and returns the per-row function.
-    `parallelism` > 1 lets the driver run the mapper over rows concurrently —
-    results are written back by input index, so output order is input order
-    regardless of completion order. `project_output_to_declared` asks the driver
-    to project the assembled frame onto exactly the columns output_schema declares
-    — a column-only operation that cannot change row count or order.
+    additions, record backend info, work anything frame-wide out ahead of the
+    map) and returns the per-row callable — a plain function, or a
+    `PostMapRowMapper`, which the driver also hands the assembled frame once the
+    map is over. `parallelism` > 1 lets the driver run the mapper over rows
+    concurrently — results are written back by input index, so output order is
+    input order regardless of completion order. `project_output_to_declared`
+    asks the driver to project the assembled frame onto exactly the columns
+    output_schema declares — a column-only operation that cannot change row
+    count or order.
     """
 
     def __init__(
         self,
-        make_mapper: Callable[[Stage, RunContext], Callable[[Row], Row]],
+        make_mapper: MakeRowMapper,
         parallelism: int = 1,
         project_output_to_declared: bool = False,
     ) -> None:
@@ -97,6 +159,10 @@ class RowMapHandler(StageHandler):
         self, stage: Stage, inputs: dict[str, pd.DataFrame], ctx: RunContext
     ) -> pd.DataFrame:
         return _run_row_mapper(self, stage, inputs, ctx)
+
+    @property
+    def preserves_grain_and_order(self) -> bool:
+        return True
 
 
 class LLMTransformHandler(RowMapHandler):
@@ -114,7 +180,7 @@ class LLMTransformHandler(RowMapHandler):
       sees a whole chunk in one prompt, so a row's answer can be influenced by
       its batch-mates.
 
-    Subclassing RowMapHandler keeps `_PRESERVING_SHAPES` membership honest for the
+    Subclassing RowMapHandler keeps `preserves_grain_and_order` honest for the
     property the registry invariant is about — grain and order, which BOTH paths
     keep. It deliberately does not claim per-row independence; batch_size>1 trades
     that for cost, which is why it is opt-in and defaults to 1.
@@ -122,7 +188,7 @@ class LLMTransformHandler(RowMapHandler):
 
     def __init__(
         self,
-        make_mapper: Callable[[Stage, RunContext], Callable[[Row], Row]],
+        make_mapper: MakeRowMapper,
         run_batches: Callable[[Stage, dict[str, pd.DataFrame], RunContext, int], pd.DataFrame],
         parallelism: int = 1,
         project_output_to_declared: bool = False,
@@ -150,6 +216,10 @@ class SourceHandler(StageHandler):
     ) -> pd.DataFrame:
         return self.read(stage, ctx)
 
+    @property
+    def preserves_grain_and_order(self) -> bool:
+        return True
+
 
 class FrameHandler(StageHandler):
     """Sees whole input frame(s) keyed by upstream id; may reshape them."""
@@ -165,23 +235,23 @@ class FrameHandler(StageHandler):
     ) -> pd.DataFrame | None:
         return self.apply(stage, inputs, ctx)
 
-
-# The shapes that guarantee row-by-row preservation — the runtime side of the
-# core is_grain_and_order_preserving fact.
-_PRESERVING_SHAPES = (RowMapHandler, SourceHandler)
+    @property
+    def preserves_grain_and_order(self) -> bool:
+        return False
 
 
 def validate_registry_matches_model(handlers: dict[StageType, StageHandler]) -> None:
-    """Raise unless each stage type's registered shape agrees with the core
-    is_grain_and_order_preserving fact. Called when the registry module is
-    imported, so a mis-shaped registration — a preserving type wired as a
-    FrameHandler, or the reverse — cannot start the app."""
+    """Raise unless each registered handler's `preserves_grain_and_order` agrees
+    with the core is_grain_and_order_preserving fact for its stage type. Called
+    when the registry module is imported, so a mis-shaped registration — a
+    preserving type wired as a FrameHandler, or the reverse — cannot start the
+    app."""
     for stage_type, handler in handlers.items():
-        shape_preserves = isinstance(handler, _PRESERVING_SHAPES)
-        if shape_preserves != is_grain_and_order_preserving(stage_type):
+        handler_preserves = handler.preserves_grain_and_order
+        if handler_preserves != is_grain_and_order_preserving(stage_type):
             raise RuntimeError(
                 f"stage type {stage_type.value!r} is registered as "
-                f"{type(handler).__name__} (preserving={shape_preserves}), but the "
+                f"{type(handler).__name__} (preserving={handler_preserves}), but the "
                 f"model declares grain-and-order-preserving="
                 f"{is_grain_and_order_preserving(stage_type)}"
             )
@@ -197,14 +267,16 @@ def _run_row_mapper(
 
     Grain and order hold by construction: exactly one result slot exists per
     input row, filled by input index (also under concurrency), and the output
-    frame is assembled in index order."""
+    frame is assembled in index order. A result with no rows AND no columns —
+    an empty input — takes the input's columns instead of being handed on as a
+    0x0 frame."""
     if len(stage.inputs) != 1:
         raise ValueError(
             f"stage {stage.id}: a row-mapped stage takes exactly one input, "
             f"got {len(stage.inputs)}"
         )
     src = inputs[stage.inputs[0].id]
-    map_row = handler.make_mapper(stage, ctx)
+    map_row = handler.make_mapper(stage, ctx, src)
     # str(k) pins pandas' Hashable column labels down to str (a no-op for
     # parquet/CSV data, whose labels are already strings).
     records: list[Row] = [
@@ -215,7 +287,7 @@ def _run_row_mapper(
     if handler.parallelism > 1 and len(records) > 1:
         with ThreadPoolExecutor(max_workers=handler.parallelism) as pool:
             futures = {
-                pool.submit(map_row, record): index
+                pool.submit(map_row, record, index): index
                 for index, record in enumerate(records)
             }
             for future in as_completed(futures):
@@ -231,7 +303,7 @@ def _run_row_mapper(
         for index, record in enumerate(records):
             if _consume_cancel(ctx):
                 raise RunCancelled(f"stage {stage.id}: cancelled")
-            results[index] = map_row(record)
+            results[index] = map_row(record, index)
 
     out_rows: list[Row] = []
     for index, result in enumerate(results):
@@ -241,17 +313,70 @@ def _run_row_mapper(
                 f"got {type(result).__name__} for row {index}"
             )
         out_rows.append(result)
-    df = pd.DataFrame(out_rows)
+    mapped = _finish_mapped_frame(pd.DataFrame(out_rows), handler, map_row, stage, ctx)
+    return _restore_input_columns_when_nothing_named_them(mapped, src)
+
+
+def _restore_input_columns_when_nothing_named_them(
+    mapped: pd.DataFrame, src: pd.DataFrame
+) -> pd.DataFrame:
+    """The mapped frame, or — when it has neither rows nor columns — an empty
+    slice of the stage's input, carrying the mapped frame's `.attrs`.
+
+    A frame assembled from no results at all is 0 rows BY 0 COLUMNS: the input
+    was empty, so no mapper result named a single column. A downstream stage
+    keyed on an upstream column would then raise `KeyError` instead of producing
+    an empty result, and the input's own columns are the one honest shape
+    available. A frame that still carries a row or a column is returned
+    untouched.
+
+    The substituted frame takes the mapped one's `.attrs` verbatim, because the
+    stage's StageContribution rides there: an empty-input stage still reported
+    whatever it reported onto that contribution, and swapping the frame must not
+    swallow it."""
+    if len(mapped.columns) > 0 or len(mapped) > 0:
+        return mapped
+    empty = src.iloc[0:0].copy()
+    empty.attrs = dict(mapped.attrs)
+    return empty
+
+
+def _finish_mapped_frame(
+    df: pd.DataFrame,
+    handler: RowMapHandler,
+    map_row: RowMapper,
+    stage: Stage,
+    ctx: RunContext,
+) -> pd.DataFrame:
+    """Turn the assembled per-row results into the stage's output frame: collect
+    the driver's own markers onto this stage's `StageContribution`, hand the
+    frame back to the mapper where the mapper is a `PostMapRowMapper`, then
+    strip every marker column and — where the handler asks for it — project onto
+    the declared columns.
+
+    The mapper's window is exact: `finish_mapped_rows` runs before the strip, so
+    it is the last step that sees a marker column at all.
+
+    The contribution rides out on the returned frame's `.attrs`; the executor
+    merges it into the manifest. Nothing accumulates in the (frozen) context."""
     contribution = StageContribution()
     _collect_row_errors(df, contribution)
     _collect_row_usage(df, contribution)
+    if isinstance(map_row, PostMapRowMapper):
+        map_row.finish_mapped_rows(stage, df, ctx, contribution)
+    df = _strip_internal_row_columns(df)
     if handler.project_output_to_declared:
         df = _project_onto_declared_columns(df, stage, contribution)
-    # Report this stage's usage/errors/drops back to the engine on the frame it
-    # returns; the executor merges it into the manifest. Nothing accumulates in
-    # the (frozen) context.
     df.attrs[CONTRIBUTION_ATTR] = contribution
     return df
+
+
+def _strip_internal_row_columns(df: pd.DataFrame) -> pd.DataFrame:
+    """Drop every `_INTERNAL_ROW_COLUMNS` marker present on `df`. Unconditional
+    — a marker is driver machinery, so it must never reach stage output, whether
+    or not the stage declares an output_schema."""
+    present = [column for column in df.columns if column in _INTERNAL_ROW_COLUMNS]
+    return df.drop(columns=present) if present else df
 
 
 def _consume_cancel(ctx: RunContext) -> bool:
@@ -295,14 +420,15 @@ def _project_onto_declared_columns(
     df: pd.DataFrame, stage: Stage, contribution: StageContribution
 ) -> pd.DataFrame:
     """Project onto exactly the columns output_schema declares, in declared
-    order. Column selection only — row count and order are untouched. Dropped
-    columns are recorded on `contribution`, never silently discarded."""
+    order. Column selection only — row count and order are untouched. Every
+    column it drops is recorded on `contribution`, never silently discarded —
+    and each is a user column, since the internal markers were already stripped
+    off before this runs."""
     declared = [c.name for c in stage.output_schema.columns] if stage.output_schema else []
     if not declared:
         return df
     keep = [c for c in declared if c in df.columns]
-    dropped = [str(c) for c in df.columns
-               if c not in keep and c not in _INTERNAL_ROW_COLUMNS]
+    dropped = [str(c) for c in df.columns if c not in keep]
     if dropped:
         contribution.dropped_columns = dropped
     return df[keep]

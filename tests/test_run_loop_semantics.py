@@ -102,6 +102,27 @@ def _queue_stage(stage_id, input_id, name="Review"):
             "queue": {}}
 
 
+def _five_item_load_stage(root):
+    """An input_data stage reading 5 rows whose `val` runs 1..5, so a queue
+    filter can split them into unequal partitions."""
+    (root / "data").mkdir(parents=True, exist_ok=True)
+    csv_path = root / "data" / "five_items.csv"
+    pd.DataFrame({"id": list("abcde"), "val": [1, 2, 3, 4, 5]}).to_csv(csv_path, index=False)
+    return {"id": "load", "name": "Load", "type": "input_data",
+            "connector": {"kind": "file",
+                          "params": {"path": str(csv_path), "format": "csv"}}}
+
+
+def _filtered_queue_stage(stage_id, input_id, flt, name="Review"):
+    """A human_review_queue that reviews only the rows `flt` selects. With no
+    cached decisions, every selected row is pending — so it halts."""
+    return {"id": stage_id, "name": name, "type": "human_review_queue",
+            "inputs": [{"id": input_id, "schema": {
+                "columns": [{"name": "id", "type": "str"}, {"name": "val", "type": "int"}],
+                "primary_key": ["id"]}}],
+            "queue": {"filter": flt}}
+
+
 def _stage_status(manifest, stage_id):
     for record in manifest["stage_records"]:
         if record["stage_id"] == stage_id:
@@ -198,6 +219,44 @@ def test_two_parallel_halts_each_block_only_their_own_downstream(tmp_path):
     assert _stage_status(manifest, "review_b") == "awaiting_review"
     assert _stage_status(manifest, "tail_a") == "pending"
     assert _stage_status(manifest, "tail_b") == "pending"
+
+
+def test_halted_queue_stages_item_counts_reach_the_run_manifest(tmp_path):
+    """A halting queue stage's item counts land in the run manifest, with the
+    numbers the map actually produced.
+
+    The counts are accumulated on the mapper and travel out on the stage's
+    StageContribution — and on the halt path the raise, not a returned frame,
+    is what carries it, so the executor folds `HaltForReview.contribution` into
+    the manifest. That fold is the only thing standing between the counters and
+    the run page; asserting the key exists would not catch a fold that zeroed
+    them, so the exact numbers are asserted.
+
+    5 rows in, filter `val > 3`: 2 rows are subject to review and 3 pass
+    through. No decision is cached, so both reviewable rows are pending and
+    none is decided."""
+    _write_stage(tmp_path, "01_load.json", _five_item_load_stage(tmp_path))
+    _write_stage(tmp_path, "02_review.json",
+                 _filtered_queue_stage("review", "load", "val > 3"))
+    _seed_version(tmp_path)
+
+    manifest = run_prepared(prepare_run(tmp_path, repo_root=tmp_path))
+
+    assert manifest["status"] == "awaiting_review"
+    assert _stage_status(manifest, "review") == "awaiting_review"
+    assert manifest["human_review_queue_stats"] == {
+        "review": {
+            "items_queued_total": 2, "items_passed_through": 3,
+            "items_pending": 2, "items_decided": 0,
+        }
+    }
+
+    # The same counts survive the round trip to disk — the run page reads them
+    # back from manifest.json, not from the in-memory object.
+    on_disk = json.loads(
+        (tmp_path / "runs" / manifest["run_id"] / "manifest.json").read_text(encoding="utf-8")
+    )
+    assert on_disk["human_review_queue_stats"] == manifest["human_review_queue_stats"]
 
 
 def test_multi_halt_run_renders_the_full_halted_at_list_through_the_web_layer(

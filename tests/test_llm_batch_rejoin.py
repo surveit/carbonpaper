@@ -7,7 +7,11 @@ or non-unique keys can't screw up the join. Guarantees proven here:
   back to the model (re-called), and if it never comes back clean the WHOLE
   chunk fails loudly (a confused reply's other answers aren't trusted);
 - a thrown-back chunk that returns clean on retry recovers;
-- grain + order are preserved (and verified): N rows in → N rows out, in order.
+- grain + order are preserved (and verified): N rows in → N rows out, in order;
+- the markers this path attaches per row (`_usage` always, `_error` on a failed
+  chunk) are stripped before the declared-column projection, so they never reach
+  stage output and are never reported on the stage's contribution as user columns
+  the stage produced and discarded.
 
 Each test would fail if the join were positional, if an anomaly were silently
 tolerated, or if the retry didn't actually re-call the model.
@@ -138,3 +142,27 @@ def test_grain_and_order_preserved_across_chunks(monkeypatch):
     out, labels, ctx = _run(monkeypatch, _clean, batch_size=2)
     assert list(out["post_id"]) == ["a", "b", "c"]         # count + order preserved
     assert not contribution_of(out).row_errors
+
+
+def test_batched_run_reports_only_user_columns_as_dropped(monkeypatch):
+    # This path projects onto the declared columns DIRECTLY, so it must strip its
+    # own markers first. `_usage` rides on every batched row; reporting it here
+    # would show driver machinery in the run manifest as a column the stage
+    # produced and discarded. `note` is a real undeclared user column and must
+    # still be reported — the strip must not blunt the reporting itself.
+    src = _SRC.assign(note=["n1", "n2", "n3"])
+    out, labels, ctx = _run(monkeypatch, _clean, src=src)
+    # the user column, and ONLY it
+    assert contribution_of(out).dropped_columns == ["note"]
+    assert lt.ROW_USAGE_KEY not in out.columns
+
+
+def test_batched_chunk_failure_reports_no_marker_as_a_dropped_column(monkeypatch):
+    # A failed chunk puts ROW_ERROR_KEY on every row on top of ROW_USAGE_KEY, and
+    # no row produced `label` — so the projection sees two markers and nothing
+    # else undeclared. Neither is a user column: nothing should be reported.
+    out, labels, ctx = _run(monkeypatch, lambda *a, **k: {"results": [
+        {"row_number": 0, "label": "L0"}, {"row_number": 2, "label": "L2"}]})
+    assert contribution_of(out).row_errors                  # the chunk did fail
+    assert not contribution_of(out).dropped_columns
+    assert lt.ROW_ERROR_KEY not in out.columns and lt.ROW_USAGE_KEY not in out.columns

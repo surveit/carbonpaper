@@ -14,7 +14,7 @@ import pandas as pd
 from app.models import Stage
 from app.models.stage import StageType
 from app.runtime.context import RunContext, RunIdentity
-from app.runtime.stages import HANDLERS, handle_human_review_queue
+from app.runtime.stages import HANDLERS
 from app.runtime.stages import llm_transform as lt
 from app.core.stage_cache import StageCacheEntry
 from conftest import contribution_of, make_run_context
@@ -96,7 +96,7 @@ def _src_scored():
 
 
 def _queue_test_ctx(tmp_path, project: str) -> RunContext:
-    """A production-shaped ctx for a direct handle_human_review_queue call:
+    """A production-shaped ctx for running the human_review_queue handler:
     identity + a writable stage cache, the project scope the handler's own
     guard (`_require_project_scope`) requires."""
     identity = RunIdentity(project=project, run_id="r1")
@@ -113,7 +113,7 @@ def test_human_review_queue_keeps_only_declared_columns(tmp_path):
         flt="entity_id == 'nope'",
     )
     ctx = _queue_test_ctx(tmp_path, "keeps-declared-columns")
-    out = handle_human_review_queue(stage, {"scored": _src_scored()}, ctx)
+    out = HANDLERS[StageType.human_review_queue].execute(stage, {"scored": _src_scored()}, ctx)
 
     assert list(out.columns) == ["evidence_id", "final_score"]
     dropped = contribution_of(out).dropped_columns
@@ -131,7 +131,7 @@ def test_human_review_queue_carried_columns_survive_by_being_declared(tmp_path):
         flt="entity_id == 'nope'",
     )
     ctx = _queue_test_ctx(tmp_path, "carried-columns-survive")
-    out = handle_human_review_queue(stage, {"scored": _src_scored()}, ctx)
+    out = HANDLERS[StageType.human_review_queue].execute(stage, {"scored": _src_scored()}, ctx)
 
     assert list(out.columns) == ["evidence_id", "final_score", "quote"]
     dropped = contribution_of(out).dropped_columns

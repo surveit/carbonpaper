@@ -58,6 +58,7 @@ _GRAIN_AND_ORDER_PRESERVING_TYPES: frozenset[StageType] = frozenset({
     StageType.input_data,
     StageType.python_row_function,
     StageType.llm_transform,
+    StageType.human_review_queue,
 })
 
 
@@ -308,8 +309,10 @@ class RowReviewDecision(str, Enum):
     """A reviewer's verdict on one human_review_queue row, validated and applied
     at the web/service boundary (app.services.review) and recorded as the review
     stage's output row in the cache: `approve` keeps the AI score as final,
-    `modify` substitutes a human-entered score, `reject` drops the row from the
-    stage's output."""
+    `modify` substitutes a human-entered score, `reject` leaves the human and
+    final scores null. EVERY verdict produces an output row — the review stage
+    emits one row per input row — so a rejected row reaches the stage's output
+    carrying its rejection, and excluding it is a downstream stage's job."""
     approve = "approve"
     modify = "modify"
     reject = "reject"
@@ -639,10 +642,11 @@ class Stage(_Base):
           - llm_transform      → yes (per-row 1:1 in emit order in v1; a fan-out LLM
                                  like doc→pieces is out of scope until fan-out evals)
           - input_data         → yes (originates the rows)
-          - human_review_queue → NO — handle_human_review_queue drops rejected rows
-                                 and concatenates decided+passthrough, changing both
-                                 grain and order. Its intended "edits in place"
-                                 contract would make it yes; closing that gap is #106.
+          - human_review_queue → yes — the runtime maps it per row, so an output row
+                                 is in its input row's position, and every input row
+                                 produces one: a rejected row stays, carrying the
+                                 rejection. Removing rows is a downstream filter
+                                 stage's job, not this one's.
           - join (fan-out) / aggregate (fan-in) → NO; grain changes are deferred
           - publish            → NO — handle_publish runs an authored function whose
                                  output is a table of artifact paths, not the input

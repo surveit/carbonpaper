@@ -1,19 +1,29 @@
-"""Each stage type's registered handler SHAPE must agree with the core
-grain-and-order fact (a preserving type is registered as a row-driven shape, a
-non-preserving one as a FrameHandler). The registry import already enforces this
-via validate_registry_matches_model; these tests pin the equality and the total
-coverage of stage types as named, discoverable checks."""
+"""Each stage type's registered handler must report the same grain-and-order
+preservation the core model declares for that type. The registry import already
+enforces this via validate_registry_matches_model; these tests pin the equality
+of `handler.preserves_grain_and_order` with `is_grain_and_order_preserving`, and
+the total coverage of stage types, as named, discoverable checks."""
 from __future__ import annotations
 
 from app.models.stage import StageType, is_grain_and_order_preserving
-from app.runtime.stages import HANDLERS
-from app.runtime.stages.execution import RowMapHandler, SourceHandler
+from app.runtime.stages import HANDLERS, RowMapHandler
+
+
+def test_human_review_queue_maps_one_row_at_a_time_so_its_shared_counters_stay_correct():
+    """human_review_queue's mapper increments ONE shared QueueStats dict with
+    `+=` — a non-atomic load/add/store. Raising this stage's parallelism would
+    let two rows read the same count and write it back once, under-reporting
+    the run manifest's queue counts with nothing failing and no exception. That
+    is a silently wrong number, so the invariant is pinned here rather than
+    left to a comment."""
+    handler = HANDLERS[StageType.human_review_queue]
+    assert isinstance(handler, RowMapHandler)
+    assert handler.parallelism == 1
 
 
 def test_registry_shape_matches_the_model_for_every_type():
     for stage_type, handler in HANDLERS.items():
-        shape_preserves = isinstance(handler, (RowMapHandler, SourceHandler))
-        assert shape_preserves == is_grain_and_order_preserving(stage_type), stage_type
+        assert handler.preserves_grain_and_order == is_grain_and_order_preserving(stage_type), stage_type
 
 
 def test_every_stage_type_has_a_handler():

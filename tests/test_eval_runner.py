@@ -99,6 +99,59 @@ def test_run_eval_writes_a_per_row_result_table(project):
     assert list(result["row_passed"]) == [True, True, False, True]
 
 
+# A queue stage as the eval target: grain-and-order preserving, so the pathway
+# through it is row-alignable and no longer vetoed before it runs.
+_QUEUE_REVIEW = {
+    "id": "review", "type": "human_review_queue", "name": "Review scores",
+    "inputs": [{"id": "load", "schema": {"columns": [{"name": "doc_id", "type": "str"},
+                                                     {"name": "score", "type": "int"}]}}],
+    "queue": {},
+    "output_schema": {"columns": [{"name": "doc_id", "type": "str"},
+                                  {"name": "score", "type": "int"},
+                                  {"name": "final_score", "type": "int", "nullable": True}]},
+}
+
+
+def test_run_eval_through_a_queue_stage_records_an_error_never_a_score(project):
+    """An eval pathway crossing a human_review_queue stage.
+
+    The stage is grain-and-order preserving, so the pathway is row-alignable and
+    the eval is no longer vetoed as unscorable before it runs — it is attempted.
+    What it meets is the subset runner, which carries no project scope, which is
+    exactly what a queue stage needs to replay the decisions a human recorded.
+    So the stage fails loudly and the run is recorded as an `error` naming that,
+    with no metrics.
+
+    The one outcome that must never appear here is a score. Making this pathway
+    complete would mean auto-approving every row, and auto-approval keeps the AI
+    score as the final score — an accuracy computed over that would be standing
+    on human decisions nobody made."""
+    repo_root, demo, _config = project
+    WorkflowVersion(
+        id="demo/v-queue", version_id="v-queue", created_at="2026-07-12T00:00:00",
+        message="queue pathway", reviewer="test",
+        stages=[Stage.model_validate(_load(repo_root)), Stage.model_validate(_QUEUE_REVIEW)],
+    ).save()
+    pd.DataFrame({"doc_id": ["a", "b"], "score": [1, 2], "final_score": [1, 2]}).to_csv(
+        demo / "eval_data" / "queue_cases.csv", index=False)
+    config = EvalConfig(
+        id="queue_check", project="demo", name="Queue check",
+        override_stage="load", target_stage="review",
+        table=TableRef(path="demo/eval_data/queue_cases.csv", format=FileFormat.csv,
+                       table_schema=TableSchema(columns=[
+                           {"name": "doc_id", "type": "str"}, {"name": "score", "type": "int"},
+                           {"name": "final_score", "type": "int", "nullable": True}])),
+        expected_outputs=[ExpectedOutput(output_column="final_score", metric="exact")])
+
+    run = run_eval(demo, config, repo_root, version_id="v-queue")
+
+    assert run.settings.can_score_declaratively is True   # the pathway IS row-alignable
+    assert run.settings.blocking_stages == []
+    assert run.status == "error"                          # but it cannot run unscoped
+    assert any("project-scoped" in note for note in run.notes), run.notes
+    assert run.metrics == {}
+
+
 def test_run_eval_raises_when_no_dataset(project):
     """An eval with no dataset can't be run — it raises rather than record a run."""
     repo_root, demo, config = project

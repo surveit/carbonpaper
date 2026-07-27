@@ -81,7 +81,10 @@ def test_stage_cache_record_then_get_roundtrips():
     assert got.frozen_input == {"id": "r1", "score": 0.4}
 
 
-def test_stage_cache_record_tombstone_stores_none_output():
+def test_stage_cache_record_stores_and_returns_a_none_output_row():
+    """An entry may record no output row for its key, and the None round-trips.
+    The payload is generic here — what a caller reads into that None is decided
+    above this seam."""
     cache = StageCache()
     cache.record(
         project="proj", stage_id="review", stage_fingerprint="sf1", input_fingerprint="ift",
