@@ -25,9 +25,14 @@ from app.services.versioning import (
     publish_version,
 )
 
+# Every input declares the schema it expects and every non-publish stage declares
+# its output_schema (app/models/stage.py: Stage._schemas_declared).
+_ROWS_SCHEMA = {"columns": [{"name": "doc_id", "type": "str", "nullable": False}]}
+
 _LOAD_STAGE = {
     "id": "load", "name": "Load", "type": "input_data",
     "connector": {"kind": "file"},
+    "output_schema": _ROWS_SCHEMA,
 }
 
 
@@ -120,6 +125,7 @@ def test_create_version_invalid_workflow_raises_and_writes_nothing(tmp_path):
     workflow can be immortalised as a version."""
     (tmp_path / "compiled").mkdir()
     bad = {"id": "load", "name": "Load", "type": "input_data",
+           "output_schema": _ROWS_SCHEMA,
            "connector": {"kind": "file",
                          "params": {"path": "data/items.csv", "format": "csv"}}}  # relative path
     (tmp_path / "compiled" / "01_load.json").write_text(json.dumps(bad), encoding="utf-8")
@@ -271,7 +277,8 @@ def test_create_version_from_stages_invalid_raises_and_writes_nothing(tmp_path):
     create_version_from_stages never writes a version for an invalid graph."""
     dangling_input = {
         "id": "consume", "name": "Consume", "type": "python_frame_function",
-        "inputs": [{"id": "no-such-stage"}],
+        "inputs": [{"id": "no-such-stage", "schema": _ROWS_SCHEMA}],
+        "output_schema": _ROWS_SCHEMA,
         "function": {"kind": "inline", "code": "def transform(df):\n    return df\n"},
     }
     with pytest.raises(pydantic.ValidationError):

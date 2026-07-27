@@ -30,10 +30,15 @@ DRIFTED_ID = "drifted_stage"
 
 
 def _input_stage(stage_id: str, name: str, data_path: Path) -> dict:
+    # output_schema names rows.csv's columns; every non-publish stage must
+    # declare one (app/models/stage.py: Stage._schemas_declared).
     return {
         "id": stage_id, "name": name, "type": "input_data",
         "connector": {"kind": "file",
                       "params": {"path": str(data_path), "format": "csv"}},
+        "output_schema": {"columns": [
+            {"name": "name", "type": "str", "nullable": False},
+            {"name": "val", "type": "int", "nullable": False}]},
     }
 
 

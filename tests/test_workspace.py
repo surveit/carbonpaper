@@ -30,14 +30,13 @@ def _write_stage(compiled: Path, order: int, sid: str, stype: str, inputs: list[
     compiled.mkdir(parents=True, exist_ok=True)
     stage: dict = {"id": sid, "name": f"{sid} step", "type": stype}
     stage.update(_handle_by_type(compiled.parent).get(stype, {}))
+    # Every input declares the schema it expects and every non-publish stage
+    # declares its output_schema (app/models/stage.py: Stage._schemas_declared).
+    # llm_transform is additionally strictly 1:1: its input and output schemas
+    # must share a primary_key and the output must add a column.
+    stage["output_schema"] = _LLM_OUT_SCHEMA if stype == "llm_transform" else _LLM_IN_SCHEMA
     if inputs:
-        # llm_transform is strictly 1:1 (app/models/stage.py): its input and output
-        # schemas must share a primary_key and the output must add a column.
-        if stype == "llm_transform":
-            stage["inputs"] = [{"id": dep, "schema": _LLM_IN_SCHEMA} for dep in inputs]
-            stage["output_schema"] = _LLM_OUT_SCHEMA
-        else:
-            stage["inputs"] = [{"id": dep} for dep in inputs]
+        stage["inputs"] = [{"id": dep, "schema": _LLM_IN_SCHEMA} for dep in inputs]
     (compiled / f"{order:02d}_{sid}.json").write_text(json.dumps(stage), encoding="utf-8")
 
 

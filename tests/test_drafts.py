@@ -12,11 +12,16 @@ import pytest
 from app.core.errors import DraftNotFoundError
 from app.services import drafts, versioning
 
+# Every input declares the schema it expects and every non-publish stage declares
+# its output_schema (app/models/stage.py: Stage._schemas_declared).
+_ROWS_SCHEMA = {"columns": [{"name": "doc_id", "type": "str", "nullable": False}]}
+
 _STAGE = {
     "id": "load",
     "name": "Load rows",
     "type": "input_data",
     "connector": {"kind": "file"},
+    "output_schema": _ROWS_SCHEMA,
 }
 
 
@@ -48,7 +53,7 @@ def test_create_draft_seeded_from_version(examples: Path) -> None:
 # input never resolves.
 _DANGLING_INPUT_STAGE = dict(
     _STAGE, id="later", type="python_row_function",
-    inputs=[{"id": "missing"}],
+    inputs=[{"id": "missing", "schema": _ROWS_SCHEMA}],
     function={"kind": "inline", "code": "def transform(row): return row"},
 )
 del _DANGLING_INPUT_STAGE["connector"]
@@ -89,7 +94,7 @@ def test_set_stage_rejects_malformed_stage_missing_field(examples: Path) -> None
     handle block a type=input_data stage needs) is the agent's error — reject
     it back to the agent, don't store it."""
     draft = drafts.create_draft("demo", examples_dir=examples)
-    malformed = {"id": "load", "type": "input_data"}
+    malformed = {"id": "load", "type": "input_data", "output_schema": _ROWS_SCHEMA}
     with pytest.raises(ValueError):
         drafts.set_draft_stage("demo", draft.id, json.dumps(malformed),
                                examples_dir=examples)

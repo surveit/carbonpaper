@@ -44,7 +44,27 @@ def _load_quotes_stage(root):
     }).to_csv(csv_path, index=False)
     return {"id": "load", "name": "Load quotes", "type": "input_data",
             "connector": {"kind": "file",
-                          "params": {"path": str(csv_path), "format": "csv"}}}
+                          "params": {"path": str(csv_path), "format": "csv"}},
+            "output_schema": {
+                "columns": [{"name": "id", "type": "str"},
+                            {"name": "quote", "type": "str"}],
+                "primary_key": ["id"]}}
+
+
+# The reviewer columns app/services/review.py's _build_output_row (and the
+# runtime's pass-through/auto-approve rows) add on top of the frozen input row.
+# Every non-publish stage must declare its output_schema
+# (app/models/stage.py: Stage._schemas_declared), and the runtime PROJECTS the
+# stage's output onto exactly those columns.
+_REVIEW_COLUMNS = [
+    {"name": "ai_score", "type": "float"},
+    {"name": "human_score", "type": "float"},
+    {"name": "final_score", "type": "float"},
+    {"name": "review_notes", "type": "str"},
+    {"name": "reviewer_id", "type": "str"},
+    {"name": "reviewed_at", "type": "str"},
+    {"name": "decision", "type": "str"},
+]
 
 
 def _score_stage():
@@ -73,6 +93,10 @@ def _review_stage():
                 "columns": [{"name": "id", "type": "str"}, {"name": "quote", "type": "str"},
                             {"name": "score", "type": "int"}],
                 "primary_key": ["id"]}}],
+            "output_schema": {
+                "columns": [{"name": "id", "type": "str"}, {"name": "quote", "type": "str"},
+                            {"name": "score", "type": "int"}] + _REVIEW_COLUMNS,
+                "primary_key": ["id"]},
             "queue": {}}
 
 
@@ -281,7 +305,10 @@ def _e2e_load_stage(root):
     csv_path = root / "data" / "items.csv"
     pd.DataFrame({"id": ["a", "b", "c"], "score": [1, 2, 3]}).to_csv(csv_path, index=False)
     return {"id": "load", "name": "Load items", "type": "input_data",
-            "connector": {"kind": "file", "params": {"path": str(csv_path), "format": "csv"}}}
+            "connector": {"kind": "file", "params": {"path": str(csv_path), "format": "csv"}},
+            "output_schema": {
+                "columns": [{"name": "id", "type": "str"}, {"name": "score", "type": "int"}],
+                "primary_key": ["id"]}}
 
 
 def _e2e_review_stage():
@@ -289,6 +316,10 @@ def _e2e_review_stage():
             "inputs": [{"id": "load", "schema": {
                 "columns": [{"name": "id", "type": "str"}, {"name": "score", "type": "int"}],
                 "primary_key": ["id"]}}],
+            "output_schema": {
+                "columns": [{"name": "id", "type": "str"},
+                            {"name": "score", "type": "int"}] + _REVIEW_COLUMNS,
+                "primary_key": ["id"]},
             "queue": {}}
 
 
