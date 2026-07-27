@@ -16,7 +16,7 @@ from app.runtime.stages import llm_transform as lt
 from app.services import review, versioning
 from app.core.stage_cache import StageCacheEntry
 from app.services.versioning import create_version_from_disk
-from app.models import ReviewVerdict
+from app.models import ReviewVerdict, Stage
 from conftest import QUEUE_COLUMNS, queue_added_columns
 
 PROJECT = "queue_route_journey"
@@ -131,17 +131,23 @@ def _build_and_halt(tmp_path, monkeypatch):
 def _put_cached_decision(
     project: str, stage_id: str,
     stage_fingerprint: str, input_fingerprint: str, row: pd.Series,
-    decision: ReviewVerdict, modified_score: float | None = None,
+    decision: ReviewVerdict, reviewed_score: float | None = None,
 ) -> None:
     """Seed a prior decision through the real review service (record_decision →
     the production cache seam) — never a hand-assembled entry, a raw store
     write, or the HTTP endpoint (used by tests that only care about
-    queue_page's rendering of an already-cached decision)."""
+    queue_page's rendering of an already-cached decision). `reviewed_score` is
+    the reviewer's value for QUEUE_COLUMNS' one reviewed column, defaulting to
+    the AI value they were shown."""
     review.record_decision(
-        project=project, stage_id=stage_id,
+        project=project, stage=Stage.model_validate(_review_stage()),
         stage_fingerprint=stage_fingerprint, input_fingerprint=input_fingerprint,
         frozen_row={"id": row["id"], "quote": row["quote"], "score": int(row["score"])},
-        verdict=decision, modified_score=modified_score,
+        verdict=decision,
+        reviewed_values={
+            "human_score": int(row["score"]) if reviewed_score is None else reviewed_score
+        },
+        review_notes=None,
         reviewer="local", reviewed_at="2026-07-01T00:00:00",
     )
 
@@ -238,33 +244,37 @@ def test_decide_422_on_unknown_decision(tmp_path, monkeypatch):
     client = TestClient(app)
     r = client.post(
         f"/project/{PROJECT}/runs/{run_id}/queue/review/decide",
-        data={"input_fingerprint": fp, "decision": "shrug"},  # not a ReviewVerdict value
+        data={"input_fingerprint": fp, "decision": "shrug",  # not a ReviewVerdict value
+              "reviewed_values": json.dumps({"human_score": 1})},
     )
     assert r.status_code == 422  # FastAPI rejects the unknown enum value
     assert not StageCacheEntry.list(prefix=f"{PROJECT}/review/")  # nothing written
 
 
-def test_decide_422_on_non_numeric_modified_score(tmp_path, monkeypatch):
+def test_decide_400_on_malformed_reviewed_values_json(tmp_path, monkeypatch):
     _project_dir, run_id, _run_dir, _snapshot, fingerprints = _build_and_halt(tmp_path, monkeypatch)
     fp = fingerprints["input_fingerprints"][0]
 
     client = TestClient(app)
     r = client.post(
         f"/project/{PROJECT}/runs/{run_id}/queue/review/decide",
-        data={"input_fingerprint": fp, "decision": "modify", "modified_score": "not-a-number"},
+        data={"input_fingerprint": fp, "decision": "modify", "reviewed_values": "{not json"},
     )
-    assert r.status_code == 422  # FastAPI rejects the non-float modified_score
+    assert r.status_code == 400
     assert not StageCacheEntry.list(prefix=f"{PROJECT}/review/")  # nothing written
 
 
-def test_decide_400_when_modify_has_no_score(tmp_path, monkeypatch):
+def test_decide_400_when_reviewed_values_miss_a_declared_column(tmp_path, monkeypatch):
+    """The service's domain rule surfacing through the endpoint: a decision that
+    does not carry every declared reviewed column is a 400, not a partial fill."""
     _project_dir, run_id, _run_dir, _snapshot, fingerprints = _build_and_halt(tmp_path, monkeypatch)
     fp = fingerprints["input_fingerprints"][0]
 
     client = TestClient(app)
     r = client.post(
         f"/project/{PROJECT}/runs/{run_id}/queue/review/decide",
-        data={"input_fingerprint": fp, "decision": "modify"},
+        data={"input_fingerprint": fp, "decision": "modify",
+              "reviewed_values": json.dumps({})},
     )
     assert r.status_code == 400
     assert not StageCacheEntry.list(prefix=f"{PROJECT}/review/")
@@ -276,7 +286,8 @@ def test_decide_404_on_unknown_fingerprint_and_writes_nothing(tmp_path, monkeypa
     client = TestClient(app)
     r = client.post(
         f"/project/{PROJECT}/runs/{run_id}/queue/review/decide",
-        data={"input_fingerprint": "not-a-real-fingerprint", "decision": "approve"},
+        data={"input_fingerprint": "not-a-real-fingerprint", "decision": "approve",
+              "reviewed_values": json.dumps({"human_score": 1})},
     )
     assert r.status_code == 404
     assert not StageCacheEntry.list(prefix=f"{PROJECT}/review/")
@@ -342,10 +353,12 @@ def test_e2e_decide_every_verdict_then_resume_completes(tmp_path, monkeypatch):
     fp_by_id = dict(zip(snapshot["id"], fingerprints["input_fingerprints"]))
 
     client = TestClient(app)
+    ai_score_by_id = dict(zip(snapshot["id"], snapshot["score"]))
     verdicts = {
-        "a": {"decision": "approve"},
-        "b": {"decision": "modify", "modified_score": "99"},
-        "c": {"decision": "modify", "modified_score": "0"},
+        "a": {"decision": "approve", "reviewed_values": json.dumps(
+            {"human_score": int(ai_score_by_id["a"])})},
+        "b": {"decision": "modify", "reviewed_values": json.dumps({"human_score": 99})},
+        "c": {"decision": "modify", "reviewed_values": json.dumps({"human_score": 0})},
     }
     for row_id, form in verdicts.items():
         r = client.post(
@@ -369,9 +382,9 @@ def test_e2e_decide_every_verdict_then_resume_completes(tmp_path, monkeypatch):
 
     out = pd.read_parquet(run_dir / "outputs" / "review.parquet").set_index("id")
     assert list(out.index) == ["a", "b", "c"]   # every reviewed row is emitted
-    assert out.loc["a", "final_score"] == 1     # approve: AI score kept
-    assert out.loc["b", "final_score"] == 99    # modify: human score used
+    assert out.loc["a", "human_score"] == 1     # approve: AI score kept
+    assert out.loc["b", "human_score"] == 99    # modify: human score used
     assert out.loc["c", "decision"] == "modify"  # the row stays, carrying its verdict
-    assert out.loc["c", "final_score"] == 0      # a human-entered 0 is a score, not a blank
+    assert out.loc["c", "human_score"] == 0      # a human-entered 0 is a score, not a blank
 
     assert not (project_dir / "decisions").exists()

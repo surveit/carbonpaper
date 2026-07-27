@@ -74,9 +74,9 @@
     {% if item.prior_decision %}
     <p class="prior-decision">
         Current: <strong>{{ item.prior_decision.decision }}</strong>
-        {% if item.prior_decision.modified_score is not none and item.prior_decision.modified_score == item.prior_decision.modified_score %}
-          · score → <code>{{ item.prior_decision.modified_score }}</code>
-        {% endif %}
+        {% for column, value in item.prior_decision.reviewed_values.items() %}
+          · {{ column }} → <code>{{ value }}</code>
+        {% endfor %}
         {% if item.prior_decision.reviewer %}
         <span class="muted">by {{ item.prior_decision.reviewer }} at {{ item.prior_decision.reviewed_at | friendly_time }}</span>
         {% endif %}
@@ -89,7 +89,6 @@
             <label>Modify score:
                 <input type="number" step="1" min="-2" max="2"
                        placeholder="e.g. -1"
-                       value="{% if item.prior_decision and item.prior_decision.decision == 'modify' and item.prior_decision.modified_score == item.prior_decision.modified_score %}{{ item.prior_decision.modified_score | int }}{% endif %}"
                        data-role="score">
             </label>
             <button type="button" class="btn modify {% if item.prior_decision and item.prior_decision.decision == 'modify' %}selected{% endif %}" data-action="modify">Save</button>

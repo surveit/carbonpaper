@@ -4,6 +4,7 @@ into the stage-result cache (app.core.stage_cache)."""
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -14,7 +15,7 @@ from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 
 from app.core.errors import ReviewValidationError
-from app.models import ReviewVerdict, Stage
+from app.models import QueueConfig, ReviewVerdict, Stage
 from app.runtime.llm import render_prompt
 from app.services import review
 from app.core.stage_cache import StageCacheEntry
@@ -36,13 +37,11 @@ router = APIRouter()
 
 @dataclass(frozen=True)
 class _DecisionDisplay:
-    """One recorded reviewer decision, shaped for the queue template: the verdict
-    label, the reviewer-entered score (only for a `modify`), and who reviewed it
-    when. An entry holding no output row carries no reviewer metadata, so those
-    are None."""
+    """One recorded reviewer decision, shaped for the queue template. An entry
+    holding no output row carries no reviewer metadata, so those are None."""
 
     decision: str
-    modified_score: float | None
+    reviewed_values: dict[str, object]
     reviewer: str | None
     reviewed_at: str | None
 
@@ -54,9 +53,9 @@ async def queue_page(request: Request, project: str, run_id: str, stage_id: str)
     manifest = load_manifest(run_dir)
 
     stages = load_stages(project).stages
-    stage_def = find_stage(stages, stage_id)
-    if stage_def is None or stage_def.type != "human_review_queue":
-        raise HTTPException(status_code=404, detail=f"No queue stage '{stage_id}'")
+    stage_def = _require_queue_stage(stages, stage_id)
+    queue = stage_def.queue
+    assert queue is not None  # _require_queue_stage narrows the stage type
 
     snapshot = queue_snapshot(project, run_id, stage_id)
     fingerprints = load_queue_fingerprints(project, run_id, stage_id)
@@ -68,7 +67,8 @@ async def queue_page(request: Request, project: str, run_id: str, stage_id: str)
         stage_def, stages, manifest, run_dir
     )
     items = _build_review_items(
-        snapshot, fingerprints, entries_by_fingerprint, input_lookup, join_keys, prompt_template
+        snapshot, fingerprints, entries_by_fingerprint, queue,
+        input_lookup, join_keys, prompt_template,
     )
 
     reviewed_count = sum(1 for i in items if i["prior_decision"] is not None)
@@ -98,21 +98,24 @@ async def queue_decide(
     stage_id: str,
     input_fingerprint: str = Form(...),
     decision: ReviewVerdict = Form(...),
-    modified_score: float | None = Form(None),
+    reviewed_values: str = Form(...),
+    review_notes: str | None = Form(None),
 ):
     """Persist a reviewer's decision as a `StageCacheEntry` keyed by this
-    stage's definition fingerprint and this row's `input_fingerprint`. FastAPI
-    coerces and 422s a malformed `decision`/`modified_score`; the row is
-    resolved by POSITION in the halted-queue sidecar's fingerprint list — never
-    recomputed from live stages — so a fingerprint the sidecar can't vouch for
-    404s rather than being trusted."""
+    stage's definition fingerprint and this row's `input_fingerprint`.
+    `reviewed_values` is a JSON object keyed by reviewed TARGET column name. The
+    row is resolved by POSITION in the halted-queue sidecar's fingerprint list —
+    never recomputed from live stages — so a fingerprint the sidecar can't vouch
+    for 404s rather than being trusted."""
+    stage_def = _require_queue_stage(load_stages(project).stages, stage_id)
     stage_fingerprint, row = _resolve_queue_row(project, run_id, stage_id, input_fingerprint)
     try:
         review.record_decision(
-            project=project, stage_id=stage_id,
+            project=project, stage=stage_def,
             stage_fingerprint=stage_fingerprint, input_fingerprint=input_fingerprint,
             frozen_row={str(k): v for k, v in row.items()},
-            verdict=decision, modified_score=modified_score,
+            verdict=decision, reviewed_values=_parse_reviewed_values(reviewed_values),
+            review_notes=review_notes,
             reviewer="local", reviewed_at=datetime.now().isoformat(timespec="seconds"),
         )
     except ReviewValidationError as exc:
@@ -124,6 +127,28 @@ async def queue_decide(
 
 
 # --- queue_decide helpers ------------------------------------------------------
+
+
+def _require_queue_stage(stages: list[Stage], stage_id: str) -> Stage:
+    stage_def = find_stage(stages, stage_id)
+    if stage_def is None or stage_def.type != "human_review_queue":
+        raise HTTPException(status_code=404, detail=f"No queue stage '{stage_id}'")
+    return stage_def
+
+
+def _parse_reviewed_values(raw: str) -> dict[str, object]:
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise HTTPException(
+            status_code=400, detail=f"reviewed_values is not valid JSON: {exc}"
+        ) from exc
+    if not isinstance(parsed, dict):
+        raise HTTPException(
+            status_code=400,
+            detail=f"reviewed_values must be a JSON object, got {type(parsed).__name__}",
+        )
+    return {str(name): value for name, value in parsed.items()}
 
 
 def _resolve_queue_row(
@@ -164,22 +189,21 @@ def _load_decided_entries(
     return {entry.input_fingerprint: entry for entry in entries}
 
 
-def _display_decision(entry: StageCacheEntry) -> _DecisionDisplay:
-    """The reviewer decision one cached entry records, shaped for the queue
-    template. An entry holding no output row (`output_row is None`) is shown as
-    a `reject` with no reviewer metadata — the shape a rejection was recorded in
-    before this stage emitted rejected rows. Otherwise the verdict and reviewer
-    metadata are read off the stage output columns the entry carries, and the
-    modified score is shown only for a `modify`."""
+def _display_decision(entry: StageCacheEntry, queue: QueueConfig) -> _DecisionDisplay:
+    """The reviewer decision one cached entry records, read off the column names
+    the stage declares. An entry holding no output row (`output_row is None`) is
+    the shape a rejection was recorded in before this stage emitted rejected
+    rows; it carries no reviewer metadata."""
     output = entry.output_row
     if output is None:
-        return _DecisionDisplay(decision="reject", modified_score=None, reviewer=None, reviewed_at=None)
-    decision = output["decision"]
+        return _DecisionDisplay(
+            decision="reject", reviewed_values={}, reviewer=None, reviewed_at=None
+        )
     return _DecisionDisplay(
-        decision=decision,
-        modified_score=output["final_score"] if decision == "modify" else None,
-        reviewer=output["reviewer_id"],
-        reviewed_at=output["reviewed_at"],
+        decision=str(output[queue.verdict_column]),
+        reviewed_values={target: output[target] for target in queue.reviewed_columns.values()},
+        reviewer=output[queue.reviewer_column],
+        reviewed_at=output[queue.reviewed_at_column],
     )
 
 
@@ -276,6 +300,7 @@ def _build_review_item(
     row: pd.Series,
     input_fingerprint: str,
     entries_by_fingerprint: dict[str, StageCacheEntry],
+    queue: QueueConfig,
     input_lookup: dict[tuple[str, ...], dict[str, Any]],
     join_keys: list[str],
     prompt_template: str | None,
@@ -287,7 +312,7 @@ def _build_review_item(
         "row": {k: display_cell(v) for k, v in row.items()},
         "model_input": model_input,
         "rendered_prompt": _render_model_prompt(model_input, prompt_template),
-        "prior_decision": _display_decision(entry) if entry is not None else None,
+        "prior_decision": _display_decision(entry, queue) if entry is not None else None,
     }
 
 
@@ -295,6 +320,7 @@ def _build_review_items(
     snapshot: pd.DataFrame | None,
     fingerprints: QueueFingerprints | None,
     entries_by_fingerprint: dict[str, StageCacheEntry],
+    queue: QueueConfig,
     input_lookup: dict[tuple[str, ...], dict[str, Any]],
     join_keys: list[str],
     prompt_template: str | None,
@@ -306,6 +332,8 @@ def _build_review_items(
     if snapshot is None or fingerprints is None:
         return []
     return [
-        _build_review_item(row, fp, entries_by_fingerprint, input_lookup, join_keys, prompt_template)
+        _build_review_item(
+            row, fp, entries_by_fingerprint, queue, input_lookup, join_keys, prompt_template
+        )
         for (_, row), fp in zip(snapshot.iterrows(), fingerprints.input_fingerprints)
     ]

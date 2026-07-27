@@ -1,68 +1,137 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
+
 import pytest
 
 from app.core.errors import ReviewValidationError
-from app.models import ReviewVerdict
-from app.services import review
 from app.core.stage_cache import StageCacheEntry
+from app.models import ReviewVerdict, Stage
+from app.services import review
+from conftest import queue_columns
+
+FROZEN_ROW = {"id": "a", "score": 1}
 
 
-def _load_entry(input_fingerprint: str):
-    return StageCacheEntry.read_only().get(
-        "proj", "review", "sf1", input_fingerprint
-    )
+def _stage(queue: dict[str, object] | None = None) -> Stage:
+    return Stage.model_validate({
+        "id": "review", "name": "Review", "type": "human_review_queue",
+        "inputs": [{"id": "scored"}],
+        "queue": queue if queue is not None else queue_columns(),
+    })
 
 
-def test_record_decision_writes_the_output_row_the_modify_verdict_produces():
+def _record(
+    input_fingerprint: str, *,
+    stage: Stage | None = None,
+    verdict: ReviewVerdict = ReviewVerdict.approve,
+    frozen_row: Mapping[str, object] = FROZEN_ROW,
+    reviewed_values: Mapping[str, object] | None = None,
+    review_notes: str | None = None,
+) -> None:
     review.record_decision(
-        project="proj", stage_id="review",
-        stage_fingerprint="sf1", input_fingerprint="if1",
-        frozen_row={"id": "a", "score": 1},
-        verdict=ReviewVerdict.modify, modified_score=42.0,
-        reviewer="local", reviewed_at="2026-07-22T10:00:00",
+        project="proj", stage=stage if stage is not None else _stage(),
+        stage_fingerprint="sf1", input_fingerprint=input_fingerprint,
+        frozen_row=frozen_row, verdict=verdict,
+        reviewed_values={"human_score": 1} if reviewed_values is None else reviewed_values,
+        review_notes=review_notes,
+        reviewer="Ada", reviewed_at="2026-07-22T10:00:00",
     )
+
+
+def _load_entry(input_fingerprint: str) -> StageCacheEntry | None:
+    return StageCacheEntry.read_only().get("proj", "review", "sf1", input_fingerprint)
+
+
+# ── The output row a verdict produces ───────────────────────────────────────
+
+
+def test_approve_records_the_reviewed_values_under_the_declared_columns():
+    _record("if1")
 
     entry = _load_entry("if1")
     assert entry is not None
-    assert entry.output_row is not None
-    assert entry.output_row["decision"] == "modify"
-    assert entry.output_row["final_score"] == 42.0
-    assert entry.output_row["reviewer_id"] == "local"
-    assert entry.output_row["reviewed_at"] == "2026-07-22T10:00:00"
+    assert entry.output_row == {
+        "id": "a", "score": 1,          # the frozen input carried through
+        "human_score": 1,               # queue.reviewed_columns' target
+        "decision": "approve",          # queue.verdict_column
+        "reviewer_id": "Ada",           # queue.reviewer_column
+        "reviewed_at": "2026-07-22T10:00:00",
+        "review_notes": None,           # declared, and the reviewer wrote none
+    }
 
 
-def test_record_decision_writes_the_output_row_the_approve_verdict_produces():
-    """An `approve` keeps the AI score as the score everyone stands behind, and
-    carries the frozen input columns through unchanged."""
-    review.record_decision(
-        project="proj", stage_id="review",
-        stage_fingerprint="sf1", input_fingerprint="if2",
-        frozen_row={"id": "b", "score": 1},
-        verdict=ReviewVerdict.approve, modified_score=None,
-        reviewer="local", reviewed_at="2026-07-22T10:00:00",
-    )
+def test_modify_records_the_value_the_reviewer_entered_not_the_ai_value():
+    _record("if2", verdict=ReviewVerdict.modify, reviewed_values={"human_score": 42.0})
 
     entry = _load_entry("if2")
     assert entry is not None
     assert entry.output_row is not None
-    assert entry.output_row["decision"] == "approve"
-    assert entry.output_row["id"] == "b"
-    assert entry.output_row["ai_score"] == 1
-    assert entry.output_row["human_score"] == 1
-    assert entry.output_row["final_score"] == 1
-    assert entry.output_row["reviewer_id"] == "local"
-    assert entry.output_row["reviewed_at"] == "2026-07-22T10:00:00"
+    assert entry.output_row["human_score"] == 42.0
+    assert entry.output_row["score"] == 1  # the AI value stays on the row
+    assert entry.output_row["decision"] == "modify"
 
 
-def test_record_decision_rejects_modify_without_a_score():
-    with pytest.raises(ReviewValidationError):
-        review.record_decision(
-            project="proj", stage_id="review",
-            stage_fingerprint="sf1", input_fingerprint="if3",
-            frozen_row={"id": "c", "score": 1},
-            verdict=ReviewVerdict.modify, modified_score=None,
-            reviewer="local", reviewed_at="2026-07-22T10:00:00",
-        )
-    # Nothing was written for the rejected input.
-    assert _load_entry("if3") is None
+def test_every_declared_pair_lands_under_its_own_target_column():
+    queue = {**queue_columns(), "reviewed_columns": {"score": "checked_score",
+                                                     "label": "checked_label"}}
+    _record(
+        "if3", stage=_stage(queue),
+        frozen_row={"id": "a", "score": 1, "label": "pos"},
+        reviewed_values={"checked_score": 2, "checked_label": "neg"},
+    )
+
+    entry = _load_entry("if3")
+    assert entry is not None
+    assert entry.output_row is not None
+    assert entry.output_row["checked_score"] == 2
+    assert entry.output_row["checked_label"] == "neg"
+
+
+def test_notes_the_reviewer_wrote_land_in_the_declared_notes_column():
+    _record("if4", review_notes="the model missed the hedge")
+
+    entry = _load_entry("if4")
+    assert entry is not None
+    assert entry.output_row is not None
+    assert entry.output_row["review_notes"] == "the model missed the hedge"
+
+
+def test_a_config_with_no_notes_column_adds_no_notes_column():
+    queue = {**queue_columns(), "review_notes_column": None}
+    _record("if5", stage=_stage(queue))
+
+    entry = _load_entry("if5")
+    assert entry is not None
+    assert entry.output_row is not None
+    assert "review_notes" not in entry.output_row
+
+
+# ── The three domain rules ──────────────────────────────────────────────────
+
+
+def test_rejects_the_runtime_only_skipped_verdict():
+    with pytest.raises(ReviewValidationError, match="skipped"):
+        _record("if6", verdict=ReviewVerdict.skipped)
+    assert _load_entry("if6") is None
+
+
+def test_rejects_reviewed_values_missing_a_declared_column():
+    queue = {**queue_columns(), "reviewed_columns": {"score": "checked_score",
+                                                     "label": "checked_label"}}
+    with pytest.raises(ReviewValidationError, match="checked_label"):
+        _record("if7", stage=_stage(queue), reviewed_values={"checked_score": 2})
+    assert _load_entry("if7") is None
+
+
+def test_rejects_a_reviewed_value_for_an_undeclared_column():
+    with pytest.raises(ReviewValidationError, match="made_up"):
+        _record("if8", reviewed_values={"human_score": 1, "made_up": 9})
+    assert _load_entry("if8") is None
+
+
+def test_rejects_notes_when_no_notes_column_is_declared():
+    queue = {**queue_columns(), "review_notes_column": None}
+    with pytest.raises(ReviewValidationError, match="review_notes_column"):
+        _record("if9", stage=_stage(queue), review_notes="a note with nowhere to go")
+    assert _load_entry("if9") is None

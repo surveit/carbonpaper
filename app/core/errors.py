@@ -136,8 +136,9 @@ class RunNotFoundError(Exception):
 
 
 class ReviewValidationError(ValueError):
-    """A submitted review verdict is invalid (unknown verdict, or `modify`
-    without a numeric score)."""
+    """A submitted review decision does not match what the queue stage declares
+    (a runtime-only verdict, reviewed values that are not exactly the declared
+    reviewed columns, or notes with no notes column)."""
 
 
 class PredicateError(ValueError):

@@ -106,12 +106,18 @@ def _put_approval(
     halted snapshot, matched to it by the sidecar's fingerprints — built
     through the real review service (record_decision → the production cache
     seam), never a hand-assembled entry or a raw store write. The frozen row is
-    the whole snapshot row, which is what the reviewer saw."""
+    the whole snapshot row, which is what the reviewer saw; `modified_score` is
+    the value the reviewer entered for QUEUE_COLUMNS' one reviewed column,
+    defaulting to the AI value the reviewer was shown."""
     review.record_decision(
-        project=project, stage_id="review",
+        project=project, stage=_stage(),
         stage_fingerprint=stage_fingerprint, input_fingerprint=input_fingerprint,
         frozen_row={str(column): value for column, value in row.items()},
-        verdict=verdict, modified_score=modified_score,
+        verdict=verdict,
+        reviewed_values={
+            "human_score": row["score"] if modified_score is None else modified_score
+        },
+        review_notes=None,
         reviewer="local", reviewed_at="2026-07-01T00:00:00",
     )
 
@@ -134,7 +140,7 @@ def test_decided_rows_reused_across_runs(tmp_path):
 
     out = _run_queue_stage(stage, {"scored": src.copy()}, _ctx(tmp_path, run_id="run2"))
     assert len(out) == 2
-    assert sorted(out["final_score"].tolist()) == [0, 1]
+    assert sorted(out["human_score"].tolist()) == [0, 1]
     assert (out["decision"] == "approve").all()
 
 
@@ -188,7 +194,7 @@ def test_miss_never_falls_back(tmp_path):
     # A pending row has no reviewed output populated from any default, and the
     # snapshot carries no bookkeeping column at all.
     assert "decision" not in snapshot.columns
-    assert "final_score" not in snapshot.columns
+    assert "human_score" not in snapshot.columns
 
 
 # ── 5. Fingerprints survive a parquet round trip (the resume path's reload) ─
@@ -379,8 +385,7 @@ def test_a_modified_row_stays_in_its_own_position_carrying_the_human_score(tmp_p
     assert list(out["decision"]) == ["approve", "modify", "approve"]
     modified = out.loc[out["id"] == "r1"].iloc[0]
     assert modified["human_score"] == 77.0
-    assert modified["final_score"] == 77.0
-    assert modified["ai_score"] == 1              # what the AI said is still on the row
+    assert modified["score"] == 1                 # what the AI said is still on the row
     assert modified["reviewer_id"] == "local"     # and who changed it, when
     assert modified["reviewed_at"] == "2026-07-01T00:00:00"
 
@@ -731,7 +736,7 @@ def test_resume_reattaches_cached_decisions_written_via_the_seam(tmp_path):
     resumed = runner.resume_run(project_dir, run_id, project_dir)
     assert resumed["status"] == "ok"
     out = pd.read_parquet(run_dir / "outputs" / "review.parquet")
-    assert sorted(out["final_score"].tolist()) == [1, 2]
+    assert sorted(out["human_score"].tolist()) == [1, 2]
 
 
 def test_resume_replays_the_runs_bust_cache(tmp_path):
