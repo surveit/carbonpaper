@@ -83,26 +83,17 @@ A stage is written, validated against the whole graph, and only then stored.
 5. Plan the stages, then author them in DEPENDENCY ORDER: a stage's `inputs` may name only
    stages that already exist in the workflow. The first stage you add starts the workflow,
    so it takes no inputs — it is the input_data stage that reads the source.
-6. Before authoring a stage, read_stage on EVERY upstream stage it will take input from.
-   The upstream's output_schema is what actually flows down that edge. Write the new stage's
-   declared input schema as a projection of it — only the columns this stage reads, named
-   and typed exactly as upstream emits them. An input schema is this stage's OWN requirement,
-   like a function's parameter types; it is not a copy of the upstream output.
-7. add_stage(project_id, stage_json) with the FULL stage as JSON: id, name, type, that
-   type's handle block, output_schema, inputs. Never a partial stage — add_stage creates a
-   stage, it does not merge into one.
-8. Every add re-validates the WHOLE resulting workflow: each stage's own shape, unique ids,
-   every input id resolving to a real stage, no cycles, and edge conformance — a declared
-   input column the upstream's output_schema does not supply is refused. A refusal comes
-   back as ok false plus issues naming the stage, the edge and the offending columns, and
-   NOTHING is written.
-9. On a refusal: read_stage the upstream named in the issue, repair the stage JSON against
-   what that stage really outputs, and add_stage again. Repeat until ok.
-10. As the graph grows: describe_workflow(project_id) for the shape (ids, types, inputs,
-    review state), read_stage(project_id, stage_id) for one stage in full,
-    edit_stage(project_id, stage_id, changes_json) to change only the fields you name (a
-    JSON Merge Patch), remove_stage(project_id, stage_id) to undo a stage you added
-    (refused while another stage still lists it in `inputs`).
+6. An upstream stage's output_schema is what flows down the edge. A stage's declared input
+   schema is its OWN requirement — like a function's parameter types, not a copy of the
+   upstream output — and must be a subset the upstream can satisfy.
+7. Every add re-validates the WHOLE resulting workflow: each stage's own shape, unique ids,
+   every input id resolving to a real stage, no cycles, and edge conformance. A refusal
+   comes back as ok false plus issues, and nothing is written.
+8. As the graph grows: describe_workflow(project_id) for the shape (ids, types, inputs,
+   review state), read_stage(project_id, stage_id) for one stage in full,
+   edit_stage(project_id, stage_id, changes_json) to change only the fields you name (a
+   JSON Merge Patch), remove_stage(project_id, stage_id) to undo a stage you added
+   (refused while another stage still lists it in `inputs`).
 
 Added stages land `unreviewed` (amber). REVIEW, APPROVAL AND VERSIONING ARE HUMAN-ONLY, in
 the web UI. Your job ends at a clean, fully-added workflow the human can then review.
@@ -115,11 +106,11 @@ every python-transform stage. Loop edit_stage → run_stage_tests until a stage'
 a failure means the CODE disagrees with the test, so fix the code.
 
 # Running
-Runs execute a version, and only a human creates and publishes one. Once one exists:
+Runs execute a stored version, which only the web UI creates. Publishing is human-only.
 run_workflow(project_id, version_id?) starts a run of record and returns a run_id,
 get_run_status(project_id, run_id) follows it to its outcome, and
-run_workflow_test(project_id, version_id?, limit, offset) executes any stored version over a
-small slice of the real source without producing a run of record.
+run_workflow_test(project_id, version_id?, limit, offset) executes any stored version —
+published or not — over a small slice of the real source without producing a run of record.
 
 # Constraints
 {_NODE_TYPE_CONSTRAINTS}
@@ -303,7 +294,7 @@ def edit_stage(project_id: str, stage_id: str, changes_json: str) -> dict[str, A
     the issues are returned. A successful edit drops the node to 'edited_stale'
     (amber) for a human to re-approve — you cannot approve it yourself. You
     cannot change a stage's id this way."""
-    return _report_stage_edit(lambda: project_service.edit_stage(project_id, stage_id, changes_json))
+    return catch_stage_edit_refusals(lambda: project_service.edit_stage(project_id, stage_id, changes_json))
 
 
 @mcp.tool()
@@ -323,9 +314,9 @@ def add_stage(project_id: str, stage_json: str) -> dict[str, Any]:
     named upstream, repair this stage's declared input schema against what that
     stage really outputs, and call add_stage again.
 
-    The new node lands 'unreviewed' (amber) for a human to approve. The FIRST stage
+    The new node lands 'unreviewed' for a human to approve. The FIRST stage
     of a project starts its workflow — no other tool creates one."""
-    return _report_stage_edit(lambda: project_service.add_stage(project_id, stage_json))
+    return catch_stage_edit_refusals(lambda: project_service.add_stage(project_id, stage_json))
 
 
 @mcp.tool()
@@ -335,15 +326,15 @@ def remove_stage(project_id: str, stage_id: str) -> dict[str, Any]:
     in `inputs`, the removal is refused, nothing is deleted, and the issues are
     returned (remove or repoint the downstream stage first). Removing the last
     remaining stage is allowed."""
-    return _report_stage_edit(lambda: project_service.remove_stage(project_id, stage_id))
+    return catch_stage_edit_refusals(lambda: project_service.remove_stage(project_id, stage_id))
 
 
-def _report_stage_edit(edit: Callable[[], EditStageResult]) -> dict[str, Any]:
-    """Run one stage-mutating service call and report it on the {ok, issues} channel
-    these instructions document. An expected refusal — a stored workflow that does not
-    load, a stage id that is not in the workflow — comes back as `issues` carrying the
-    failure's own message, not as a tool exception a client is not watching for. Any
-    other exception propagates."""
+def catch_stage_edit_refusals(edit: Callable[[], EditStageResult]) -> dict[str, Any]:
+    """Run one stage-mutating service call and convert its expected refusals onto the
+    {ok, issues} channel these instructions document. An expected refusal — a stored
+    workflow that does not load, a stage id that is not in the workflow — comes back as
+    `issues` carrying the failure's own message, not as a tool exception a client is not
+    watching for. Any other exception propagates."""
     try:
         result = edit()
     except _STAGE_TOOL_ERRORS as exc:
