@@ -347,11 +347,17 @@ def catch_stage_edit_refusals(edit: Callable[[], EditStageResult]) -> dict[str, 
 def save_version(project_id: str, message: str) -> dict[str, Any]:
     """Freeze the project's CURRENT workflow into an immutable version — the snapshot
     a run or a workflow test executes. Born UNPUBLISHED: only a human publishes. The
-    working copy is strict-loaded first, so an invalid workflow comes back as
-    {ok: False, issues} and no version is written."""
+    snapshot chains onto the project's latest existing version as its parent (the
+    first version on a project has none). The working copy is strict-loaded first, so
+    an invalid workflow comes back as {ok: False, issues} and no version is written."""
     pdir = _resolve_existing_project(project_id)
     try:
-        version = versioning.create_version_from_disk(pdir, message=message, reviewer="agent")
+        version = versioning.create_version_from_disk(
+            pdir,
+            message=message,
+            reviewer="agent",
+            parent_version=versioning.find_latest_version_id(pdir),
+        )
     except _STAGE_TOOL_ERRORS as exc:
         return {"ok": False, "issues": [str(exc)]}
     return {"ok": True, "issues": [], "version_id": version.version_id}

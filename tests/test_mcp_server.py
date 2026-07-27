@@ -7,6 +7,7 @@ tool functions directly against a tmp workspace."""
 from __future__ import annotations
 
 import asyncio
+import time
 from pathlib import Path
 
 import pytest
@@ -302,6 +303,40 @@ def test_mcp_save_version_snapshots_the_working_copy_unpublished(tmp_path, monke
     assert version.reviewer == "agent"
     assert version.published is False
     assert {s.id for s in version.stages} == {"load", "double", "untested"}
+
+
+def test_mcp_save_version_leaves_the_first_version_parentless(tmp_path, monkeypatch):
+    """Nothing preceded it, so the chain starts here — never a fabricated ancestor."""
+    from app.mcp import server
+    from app.services import versioning, workspace
+
+    monkeypatch.setattr(workspace, "EXAMPLES_DIR", tmp_path)
+    pdir = tmp_path / "trail"
+    _write_compiled_workflow(pdir)
+
+    server.save_version(project_id="trail", message="first cut")
+
+    [version] = versioning.list_versions(pdir)
+    assert version.parent_version is None
+
+
+def test_mcp_save_version_chains_onto_the_latest_version(tmp_path, monkeypatch):
+    """An agent-saved version records what it descended from, so the audit trail a
+    reviewer walks is unbroken across the agent's edits."""
+    from app.mcp import server
+    from app.services import versioning, workspace
+
+    monkeypatch.setattr(workspace, "EXAMPLES_DIR", tmp_path)
+    pdir = tmp_path / "trail"
+    _write_compiled_workflow(pdir)
+
+    first = server.save_version(project_id="trail", message="first cut")
+    time.sleep(1)  # version ids are second-resolution timestamps
+    second = server.save_version(project_id="trail", message="second cut")
+
+    assert second["version_id"] != first["version_id"]
+    saved = versioning.load_version(pdir, second["version_id"])
+    assert saved.parent_version == first["version_id"]
 
 
 def test_mcp_save_version_refuses_an_unloadable_working_copy(tmp_path, monkeypatch):

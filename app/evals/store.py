@@ -28,7 +28,7 @@ from app.models import EvalConfig, EvalRun
 from app.core.persistence import get_store
 from app.core.utils import format_errors
 from app.evals.compatibility import CompatibilityReport
-from app.services.versioning import list_versions
+from app.services.versioning import find_latest_version_id
 
 _SLUG_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
 
@@ -149,10 +149,7 @@ def latest_version_id(project_dir: Path) -> str | None:
     runs use app.runtime.runner.resolve_version_id instead, which pins
     published versions only -- this function does not gate on publication, so
     it is not a substitute for that check."""
-    versions = list_versions(project_dir)  # newest-first
-    if not versions:
-        return None
-    return versions[0].version_id
+    return find_latest_version_id(project_dir)
 
 
 def eval_status(report: CompatibilityReport, runs: list[EvalRun],

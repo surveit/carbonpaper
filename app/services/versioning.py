@@ -240,6 +240,15 @@ def list_versions(project_dir: Path) -> list[WorkflowVersion]:
     return versions
 
 
+def find_latest_version_id(project_dir: Path) -> str | None:
+    """The newest stored version's id whatever its published state, or None when the
+    project has no version yet — the parent a new version chains onto. Not a
+    substitute for app.runtime.runner.resolve_version_id, which a production run
+    uses because it gates on publication."""
+    versions = list_versions(project_dir)  # newest-first
+    return versions[0].version_id if versions else None
+
+
 def load_version(project_dir: Path, version_id: str) -> WorkflowVersion:
     """This version, in full. Fails loudly if no such version is stored, or
     if the stored document no longer validates (WorkflowLoadError)."""
@@ -273,6 +282,7 @@ def load_version_stages(project_dir: Path, version_id: str) -> list[Stage]:
 __all__ = [
     "WorkflowVersion",
     "list_versions",
+    "find_latest_version_id",
     "load_version",
     "load_version_stages",
     "create_version_from_disk",
