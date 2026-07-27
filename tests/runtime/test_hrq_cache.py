@@ -19,7 +19,9 @@ from app.runtime.stages import HANDLERS, human_review_queue
 from app.services import review, versioning
 from app.core.stage_cache import StageCache, compute_row_fingerprint
 from app.services.versioning import create_version_from_disk
-from conftest import QUEUE_COLUMNS, contribution_of, make_run_context, queue_added_columns
+from conftest import (
+    QUEUE_COLUMNS, contribution_of, make_run_context, queue_added_columns,
+)
 
 PROJECT = "hrq-cache-tests"
 
@@ -441,8 +443,8 @@ def test_every_decided_row_is_emitted_with_only_the_declared_columns(tmp_path):
         "id": "review", "name": "Review", "type": "human_review_queue",
         "inputs": [{"id": "scored", "schema": {"columns": _SCORED_COLUMNS}}],
         "output_schema": {"columns": [{"name": "id", "type": "str"},
-                                      {"name": "score", "type": "int"},
-                                      *_REVIEW_COLUMNS]},
+                                      {"name": "score", "type": "int"}]
+                          + queue_added_columns()},
         "queue": dict(QUEUE_COLUMNS),
     })
     src = _src(2)
@@ -454,8 +456,8 @@ def test_every_decided_row_is_emitted_with_only_the_declared_columns(tmp_path):
                       verdict=ReviewVerdict.modify, modified_score=3.0)
 
     out = _run_queue_stage(stage, {"scored": src.copy()}, _ctx(tmp_path, run_id="run2"))
-    assert list(out.columns) == ["id", "score", "human_score",
-                                 "decision", "reviewer_id", "reviewed_at", "review_notes"]
+    assert list(out.columns) == ["id", "score"] + [
+        c["name"] for c in queue_added_columns()]
     assert out["id"].tolist() == ["r0", "r1"]
 
 

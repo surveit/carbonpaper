@@ -12,13 +12,13 @@ if TYPE_CHECKING:
 def find_queue_column_issues(stage: "Stage") -> list[str]:
     queue = stage.queue
     assert queue is not None  # Stage._handle_for_type guarantees this for type="human_review_queue"
-    input_schema = resolve_input_schema(stage, 0)
-    issues = _find_filter_issues(stage.id, queue, input_schema)
-    issues += _find_reviewed_source_issues(stage.id, queue, input_schema)
-    issues += _find_added_column_collisions(stage.id, queue, input_schema)
-    issues += _find_duplicate_added_names(stage.id, queue)
     output_schema = stage.output_schema
     assert output_schema is not None  # Stage._schemas_declared runs first and requires one
+    input_schema = resolve_input_schema(stage, 0)
+    issues = _find_duplicate_added_names(stage.id, queue)
+    issues += _find_filter_issues(stage.id, queue, input_schema)
+    issues += _find_reviewed_source_issues(stage.id, queue, input_schema)
+    issues += _find_added_column_collisions(stage.id, queue, input_schema)
     issues += _find_reviewed_target_issues(stage.id, queue, input_schema, output_schema)
     issues += _find_bookkeeping_target_issues(stage.id, queue, output_schema)
     return issues
@@ -100,16 +100,20 @@ def _find_duplicate_added_names(sid: str, queue: "QueueConfig") -> list[str]:
 
 
 def _find_reviewed_target_issues(
-    sid: str, queue: "QueueConfig", input_schema: TableSchema, output_schema: TableSchema
+    sid: str,
+    queue: "QueueConfig",
+    input_schema: TableSchema | None,
+    output_schema: TableSchema,
 ) -> list[str]:
     """Each reviewed target must be declared on output_schema with its source
     column's spec, and be at least as permissive about nulls. Framed as a
     producer/consumer check on a one-column schema pair: the declared target
     column is the consumer, the source column (renamed to the target) is what
-    supplies it."""
+    supplies it. With no input schema the source spec is unknowable, so only the
+    target-is-declared half runs."""
     issues: list[str] = []
     for source, target in sorted(queue.reviewed_columns.items()):
-        source_column = input_schema.column_for_name(source)
+        source_column = None if input_schema is None else input_schema.column_for_name(source)
         target_column = output_schema.column_for_name(target)
         if target_column is None:
             issues.append(
@@ -118,7 +122,7 @@ def _find_reviewed_target_issues(
             )
             continue
         if source_column is None:
-            continue  # already reported by _find_reviewed_source_issues
+            continue  # unknowable, or already reported by _find_reviewed_source_issues
         reasons = TableSchema(columns=[target_column]).find_unsatisfied_columns(
             TableSchema(columns=[source_column.model_copy(update={"name": target})])
         )
@@ -141,11 +145,19 @@ def _find_bookkeeping_target_issues(
                 f"stage '{sid}': {field} adds column '{name}', which output_schema "
                 f"does not declare"
             )
-        elif column.type != STR_COLUMN_TYPE:
+            continue
+        if column.type != STR_COLUMN_TYPE:
             issues.append(
                 f"stage '{sid}': {field} column '{name}' is declared "
                 f"'{column.type}' in output_schema, but it is written as "
                 f"'{STR_COLUMN_TYPE}'"
+            )
+        if not column.nullable and field != "queue.verdict_column":
+            issues.append(
+                f"stage '{sid}': {field} column '{name}' is declared non-nullable in "
+                f"output_schema, but this stage writes no value into it for a row the "
+                f"filter skipped or auto-approve decided — declare it nullable. Only "
+                f"queue.verdict_column carries a value on every row."
             )
     return issues
 

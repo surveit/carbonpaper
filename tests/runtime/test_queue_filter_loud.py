@@ -6,7 +6,7 @@ from app.runtime.stages import HANDLERS
 from app.models import Stage
 from app.models.stage import StageType
 from app.core.stage_cache import StageCacheEntry
-from conftest import QUEUE_COLUMNS, make_run_context
+from conftest import QUEUE_COLUMNS, make_run_context, queue_added_columns
 
 
 def test_bad_filter_raises_instead_of_skipping_review(tmp_path):
@@ -17,8 +17,10 @@ def test_bad_filter_raises_instead_of_skipping_review(tmp_path):
         # about the frame that actually arrives not having the column.
         "inputs": [{"id": "a", "schema": {"columns": [
             {"name": "claim_id", "type": "str", "nullable": False},
+            {"name": "score", "type": "int"},
             {"name": "nonexistent", "type": "bool"}]}}],
-        "output_schema": {"columns": [{"name": "claim_id", "type": "str", "nullable": False}],
+        "output_schema": {"columns": [{"name": "claim_id", "type": "str", "nullable": False}]
+                          + queue_added_columns(),
                           "primary_key": ["claim_id"]},
         "queue": {**QUEUE_COLUMNS, "filter": "nonexistent == True"},
     })
@@ -45,7 +47,8 @@ def test_a_cell_the_filter_cannot_answer_names_the_stage_and_the_filter(tmp_path
         "inputs": [{"id": "a", "schema": {"columns": [
             {"name": "claim_id", "type": "str", "nullable": False},
             {"name": "score", "type": "int"}]}}],
-        "output_schema": {"columns": [{"name": "claim_id", "type": "str", "nullable": False}],
+        "output_schema": {"columns": [{"name": "claim_id", "type": "str", "nullable": False}]
+                          + queue_added_columns(),
                           "primary_key": ["claim_id"]},
         "queue": {**QUEUE_COLUMNS, "filter": "score > 1"},
     })

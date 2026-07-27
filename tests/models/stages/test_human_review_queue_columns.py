@@ -38,7 +38,7 @@ def _stage_spec(*, queue=None, input_columns=None, output_columns=None):
     }
 
 
-# ── the valid config, and the cases with nothing to resolve against ──────────
+# ── the valid config ────────────────────────────────────────────────────────
 
 
 def test_a_fully_valid_config_reports_nothing():
@@ -55,7 +55,8 @@ def test_filter_naming_a_column_the_input_lacks_is_rejected():
 
 
 def test_a_filter_over_input_columns_is_clean():
-    Stage.model_validate(_stage_spec(queue={"filter": "assertion_text IS NOT NULL"}))
+    stage = Stage.model_validate(_stage_spec(queue={"filter": "assertion_text IS NOT NULL"}))
+    assert find_queue_column_issues(stage) == []
 
 
 # ── 2. reviewed source columns ───────────────────────────────────────────────
@@ -117,7 +118,8 @@ def test_a_reviewed_target_more_permissive_than_its_source_is_clean():
         c if c["name"] != "score" else {"name": "score", "type": "int", "nullable": False}
         for c in _INPUT_COLUMNS
     ]
-    Stage.model_validate(_stage_spec(input_columns=input_columns))
+    stage = Stage.model_validate(_stage_spec(input_columns=input_columns))
+    assert find_queue_column_issues(stage) == []
 
 
 # ── 4. the bookkeeping columns on output_schema ──────────────────────────────
@@ -143,10 +145,35 @@ def test_a_declared_notes_column_must_be_declared_on_output_schema():
 
 
 def test_a_declared_notes_column_present_on_output_schema_is_clean():
-    Stage.model_validate(_stage_spec(
+    stage = Stage.model_validate(_stage_spec(
         queue={"review_notes_column": "review_notes"},
         output_columns=_OUTPUT_COLUMNS + [{"name": "review_notes", "type": "str"}],
     ))
+    assert find_queue_column_issues(stage) == []
+
+
+def test_a_non_nullable_bookkeeping_column_is_rejected():
+    """The runtime writes no reviewer into a filter-skipped or auto-approved
+    row, so a non-nullable declaration would fail at the END of a run — after
+    the human had done all the reviewing."""
+    output_columns = [
+        c if c["name"] != "reviewer_id"
+        else {"name": "reviewer_id", "type": "str", "nullable": False}
+        for c in _OUTPUT_COLUMNS
+    ]
+    with pytest.raises(ValidationError, match="non-nullable"):
+        Stage.model_validate(_stage_spec(output_columns=output_columns))
+
+
+def test_a_non_nullable_verdict_column_is_clean():
+    """The one bookkeeping column the runtime writes on every row."""
+    output_columns = [
+        c if c["name"] != "decision"
+        else {"name": "decision", "type": "str", "nullable": False}
+        for c in _OUTPUT_COLUMNS
+    ]
+    stage = Stage.model_validate(_stage_spec(output_columns=output_columns))
+    assert find_queue_column_issues(stage) == []
 
 
 # ── 5. no added column may collide with an input column ──────────────────────

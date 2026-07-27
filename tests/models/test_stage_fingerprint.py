@@ -43,7 +43,14 @@ def _queue_stage(**queue_overrides):
                 {"name": "score", "type": "float", "nullable": False},
             ]},
         }],
-        "output_schema": {"columns": [{"name": "id", "type": "str", "nullable": False}]},
+        # Every column the queue adds, since output_schema must declare them all.
+        "output_schema": {"columns": [
+            {"name": "id", "type": "str", "nullable": False},
+            {"name": "human_score", "type": "float"},
+            {"name": "decision", "type": "str"},
+            {"name": "reviewer_id", "type": "str"},
+            {"name": "reviewed_at", "type": "str"},
+        ]},
         "queue": queue,
     })
 
