@@ -40,7 +40,10 @@ router = APIRouter()
 @dataclass(frozen=True)
 class _DecisionDisplay:
     verdict: str
-    reviewed_values: dict[str, object]
+    # Each recorded value in the spelling its form control uses, so the page
+    # never shows the same value two ways (a python `True` beside a "true"
+    # option). None is a recorded null, which is NOT the string "None".
+    reviewed_values: dict[str, str | None]
     review_notes: str | None
     reviewer: str
     reviewed_at: str
@@ -348,7 +351,10 @@ def _display_decision(entry: StageCacheEntry, queue: QueueConfig) -> _DecisionDi
     notes_column = queue.review_notes_column
     return _DecisionDisplay(
         verdict=str(output[queue.verdict_column]),
-        reviewed_values={target: output[target] for target in queue.reviewed_columns.values()},
+        reviewed_values={
+            target: _as_optional_option_text(output[target])
+            for target in queue.reviewed_columns.values()
+        },
         review_notes=(
             None if notes_column is None else _as_optional_text(output.get(notes_column))
         ),
@@ -382,6 +388,10 @@ def _require_recorded_output(
 
 def _as_optional_text(value: object) -> str | None:
     return None if value is None else str(value)
+
+
+def _as_optional_option_text(value: object) -> str | None:
+    return None if value is None else _as_option_text(value)
 
 
 def _build_reviewed_fields(stage_def: Stage, queue: QueueConfig) -> list[_ReviewedField]:
@@ -570,17 +580,34 @@ def _build_field_prefills(
 
 
 def _resolve_prefill(field: _ReviewedField, value: object) -> object:
-    """A select's prefill is the OPTION TEXT it opens on, so the template
-    compares like with like: leaving a python `True` here for the template to
-    stringify yields "True", which matches no option, and a select that
-    pre-selects nothing opens on whichever option is first — a value nobody
-    supplied. None when the value matches no option, which the template renders
-    as an explicitly-selected unset."""
+    """The text the control opens on, in that control's own spelling. None when
+    the value matches no option, which the template renders as an
+    explicitly-selected unset."""
     resolved = _blank_to_none(value)
-    if resolved is None or field.options is None:
-        return resolved
+    if resolved is None:
+        return None
+    if field.options is None:
+        return _as_control_value(field.control, resolved)
     text = _as_option_text(resolved)
     return text if text in field.options else None
+
+
+# The controls whose value attribute is rejected unless it is ISO 8601. A
+# recorded decision comes back from the stage cache stringified, where a
+# datetime reads "2026-01-01 00:00:00" — space-separated, so the control would
+# render blank and an untouched save would post that blank over a real value.
+_DATE_ONLY_BY_ISO_CONTROL: dict[str, bool] = {"date": True, "datetime-local": False}
+
+
+def _as_control_value(control: str, value: object) -> object:
+    date_only = _DATE_ONLY_BY_ISO_CONTROL.get(control)
+    if date_only is None or not isinstance(value, str):
+        return value
+    try:
+        moment = datetime.fromisoformat(value)
+    except ValueError:
+        return value
+    return moment.date().isoformat() if date_only else moment.isoformat()
 
 
 def _as_option_text(value: object) -> str:

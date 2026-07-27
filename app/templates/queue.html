@@ -99,14 +99,15 @@
         {% set field_id = 'rf-' ~ item.input_fingerprint ~ '-' ~ field.target %}
         {# The AI value is what the model produced; `prefill` is what the field opens
            with — the reviewer's own recorded value once this row has been decided. #}
-        {% set ai_value = item.row.get(field.source) %}
+        {# `ai_text` is both what Approve posts and what this card SHOWS, so the
+           label and the control never spell the same value two ways. #}
         {% set ai_text = item.ai_text.get(field.target) %}
         {% set prefill = item.prefill.get(field.target) %}
         {% set recorded = item.prior_decision.reviewed_values.get(field.target) if item.prior_decision else none %}
         <div class="reviewed-field">
             <label for="{{ field_id }}">{{ field.target }}</label>
             <span class="ai-value">AI <code>{{ field.source }}</code>:
-                <strong>{% if ai_value is none or ai_value == '' %}<em>null</em>{% else %}{{ ai_value }}{% endif %}</strong>
+                <strong>{% if ai_text is none or ai_text == '' %}<em>null</em>{% else %}{{ ai_text }}{% endif %}</strong>
                 {% if item.prior_decision %}
                 <span class="recorded-value">· you recorded
                     <strong>{% if recorded is none %}<em>null</em>{% else %}{{ recorded }}{% endif %}</strong></span>

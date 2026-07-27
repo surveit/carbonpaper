@@ -723,6 +723,10 @@ def test_a_bool_select_opens_on_the_recorded_value_of_a_decided_row(tmp_path, mo
 
     assert _find_selected_option(html, "human_flag") == "true"
     assert 'data-ai-value="false"' in html  # Approve still posts what the model said
+    # The labels spell the value the way the options do — never a python repr
+    # sitting beside a select that reads `true`.
+    assert "you recorded <strong>true</strong>" in " ".join(html.split())
+    assert "True" not in html and "False" not in html
 
 
 def test_a_non_nullable_bool_select_opens_on_the_ai_value(tmp_path, monkeypatch):
@@ -787,6 +791,72 @@ def test_an_enum_select_opens_on_the_recorded_value(tmp_path, monkeypatch):
     html = TestClient(app).get(f"/project/{project}/runs/{run_id}/queue/review").text
 
     assert _find_selected_option(html, "human_call") == "unclear"
+
+
+# ── 14b. date/datetime controls: ISO 8601 or the control renders blank ──────
+
+
+def _temporal_review_stage(column_type):
+    return {"id": "review", "name": "Review times", "type": "human_review_queue",
+            "inputs": [{"id": "load", "schema": {
+                "columns": [{"name": "id", "type": "str"},
+                            {"name": "seen_at", "type": column_type}],
+                "primary_key": ["id"]}}],
+            "queue": {**queue_columns(source="seen_at", target="human_seen_at")}}
+
+
+def _decide_a_temporal_row(tmp_path, monkeypatch, project, column_type, recorded):
+    """Runs a one-row queue over a `date`/`datetime` column, records `recorded`
+    for it through the real endpoint, and returns the reloaded page."""
+    monkeypatch.setattr(loading, "EXAMPLES_DIR", tmp_path)
+    project_dir = tmp_path / project
+    (project_dir / "data").mkdir(parents=True, exist_ok=True)
+    csv_path = project_dir / "data" / "sightings.csv"
+    pd.DataFrame({"id": ["a"], "seen_at": ["2026-01-01T08:00:00"]}).to_csv(csv_path, index=False)
+    _write_stage(project_dir, "01_load.json", {
+        "id": "load", "name": "Load sightings", "type": "input_data",
+        "connector": {"kind": "file", "params": {"path": str(csv_path), "format": "csv"}}})
+    _write_stage(project_dir, "02_review.json", _temporal_review_stage(column_type))
+    _seed_version(project_dir)
+    run_id = run_prepared(prepare_run(project_dir, repo_root=project_dir))["run_id"]
+    fingerprints = _read_fingerprints(project_dir / "runs" / run_id)
+
+    client = TestClient(app)
+    r = client.post(
+        f"/project/{project}/runs/{run_id}/queue/review/decide",
+        data={"input_fingerprint": fingerprints["input_fingerprints"][0],
+              "verdict": "modify", "reviewer": "Ada",
+              "reviewed_values": json.dumps({"human_seen_at": recorded})},
+    )
+    assert r.status_code == 200, r.text
+    return client.get(f"/project/{project}/runs/{run_id}/queue/review").text
+
+
+def _find_input_value(html, target):
+    field = re.search(rf'<input[^>]*data-target="{target}"[^>]*>', html, re.DOTALL)
+    assert field is not None, f"no input rendered for {target!r}"
+    # `\bvalue=` would match inside `data-ai-value=`, which is a different value.
+    value = re.search(r'\svalue="([^"]*)"', field.group(0))
+    return None if value is None else value.group(1)
+
+
+def test_a_datetime_control_opens_on_the_recorded_value_of_a_decided_row(tmp_path, monkeypatch):
+    """The recorded value comes back from the cache stringified — space-
+    separated, which a `datetime-local` control rejects, rendering BLANK on a row
+    that has a value. An untouched Save would then post "" over it."""
+    html = _decide_a_temporal_row(
+        tmp_path, monkeypatch, "queue_route_datetime", "datetime", "2026-03-04T09:30:00")
+
+    assert 'type="datetime-local"' in html
+    assert _find_input_value(html, "human_seen_at") == "2026-03-04T09:30:00"
+
+
+def test_a_date_control_opens_on_the_recorded_value_of_a_decided_row(tmp_path, monkeypatch):
+    html = _decide_a_temporal_row(
+        tmp_path, monkeypatch, "queue_route_date", "date", "2026-03-04")
+
+    assert 'type="date"' in html
+    assert _find_input_value(html, "human_seen_at") == "2026-03-04"
 
 
 # ── 15. Reviewed-value key handling at the endpoint ─────────────────────────
