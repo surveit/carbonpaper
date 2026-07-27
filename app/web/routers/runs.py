@@ -23,6 +23,7 @@ from app.core.errors import (
     StageNotInRun,
 )
 from app.core.run_status import RunStatus, StageStatus
+from app.models import Stage
 from app.services.errors import WorkflowLoadError
 from app.services.loader import load_workflow
 from app.services.versioning import list_versions
@@ -45,7 +46,6 @@ from app.web.loading import (
     load_output_row,
     load_output_table,
     load_run_stages,
-    load_stages,
     manifest_stage,
     read_output_df,
     resolve_function_code,
@@ -272,6 +272,27 @@ def build_run_graph(
     )
 
 
+@dataclass(frozen=True)
+class RunStageDef:
+    """EITHER one stage as the version this run pinned defines it, OR the reason
+    that version could not be read — never the `compiled/` working copy's
+    definition, which drifts as the project is edited. `stage` is also None when
+    the pinned version simply has no such stage."""
+
+    stage: Stage | None
+    error: str | None
+
+
+def load_pinned_stage_def(
+    project: str, manifest: dict[str, Any], stage_id: str
+) -> RunStageDef:
+    try:
+        stages = load_run_stages(project, manifest)
+    except RunVersionUnresolvableError as exc:
+        return RunStageDef(stage=None, error=str(exc))
+    return RunStageDef(stage=find_stage(stages, stage_id), error=None)
+
+
 def _artifact_links(project: str, run_id: str, run_dir: Path, manifest: dict) -> list[dict]:
     """Browsable links to the files a completed run published.
 
@@ -345,9 +366,11 @@ async def run_stage_partial(
 
     output_preview = load_output_preview(run_dir, stage_record.get("output_path"))
 
-    # Build input previews from upstream stages' outputs in this run.
-    stages_static = load_stages(project).stages
-    stage_def = find_stage(stages_static, stage_id)
+    # The panel's Schema tier and Transform detail describe what THIS run
+    # executed, so they read the version it pinned. With no resolvable version
+    # there is no stage definition to show and the panel says why.
+    pinned = load_pinned_stage_def(project, manifest, stage_id)
+    stage_def = pinned.stage
     output_by_id = {
         s.get("stage_id"): s.get("output_path") for s in manifest.get("stage_records", [])
     }
@@ -372,6 +395,7 @@ async def run_stage_partial(
             "run_id": run_id,
             "stage": stage_record,
             "stage_def": stage_def,
+            "stage_def_error": pinned.error,
             "preview": output_preview,
             "input_previews": input_previews,
             "function_code": function_code,
@@ -441,13 +465,10 @@ async def run_stage_lineage_panel(
     )
     if stage_record is None:
         raise HTTPException(status_code=404, detail=f"No stage '{stage_id}' in run")
-    # Transform detail needs the compiled stage; if it's unavailable the output
-    # table still renders (stage_def None → the template says so).
-    try:
-        stages = load_stages(project).stages
-    except HTTPException:
-        stages = []
-    stage_def = find_stage(stages, stage_id)
+    # Transform detail is part of the lineage of THIS run, so it comes from the
+    # version the run pinned. Unresolvable → no transform and a stated reason;
+    # the row's output table still renders, because that data is still true.
+    pinned = load_pinned_stage_def(project, manifest, stage_id)
     return templates.TemplateResponse(
         request,
         "_lineage_stage.html",
@@ -455,8 +476,9 @@ async def run_stage_lineage_panel(
             "project": project,
             "run_id": run_id,
             "stage": stage_record,
-            "stage_def": stage_def,
-            "function_code": resolve_function_code(stage_def),
+            "stage_def": pinned.stage,
+            "stage_def_error": pinned.error,
+            "function_code": resolve_function_code(pinned.stage),
             "preview": load_output_row(run_dir, stage_record.get("output_path"), row),
             "scoped_row": row,
             "type_glyph": TYPE_GLYPH,
@@ -554,8 +576,14 @@ async def run_stage_scratch_preview(
         except (TypeError, ValueError):
             continue
 
-    stages_static = load_stages(project).stages
-    stage_def = find_stage(stages_static, stage_id)
+    # This executes a stage against THIS run's rows and is read as "what that
+    # stage did here", so it runs the version the run pinned. With no resolvable
+    # version it refuses: executing the working copy would answer a question
+    # nobody asked, under the label of this run.
+    pinned = load_pinned_stage_def(project, manifest, stage_id)
+    if pinned.error is not None:
+        return JSONResponse({"ok": False, "error": pinned.error}, status_code=409)
+    stage_def = pinned.stage
     if stage_def is None:
         raise HTTPException(status_code=404, detail=f"No stage '{stage_id}'")
 
