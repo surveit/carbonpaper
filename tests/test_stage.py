@@ -541,6 +541,123 @@ def test_output_schema_issues_raise_at_stage_construction():
         m.Stage.model_validate(spec)
 
 
+# ── mandatory input/output schemas ───────────────────────────────────────────
+# Every stage must declare a schema on every input and an output_schema, with
+# two one-sided exemptions: input_data takes no inputs (but still declares its
+# output), publish emits files not a table (but still declares its inputs).
+
+_INLINE_ROW_FN = {"kind": "inline", "code": "def transform(row): return row"}
+_LEFT_SCHEMA = {"columns": [{"name": "id", "type": "str"}, {"name": "name", "type": "str"}],
+                "primary_key": ["id"]}
+_RIGHT_SCHEMA = {"columns": [{"name": "id", "type": "str"}, {"name": "amount", "type": "int"}],
+                 "primary_key": ["id"]}
+
+_HANDLE_BLOCK = {
+    "python_row_function": {"function": _INLINE_ROW_FN},
+    "python_frame_function": {"function": _INLINE_ROW_FN},
+    "join": {"join": {"keys": [{"left": "id", "right": "id"}]}},
+    "aggregate": {"aggregate": {"group_by": ["name"],
+                                "aggregations": [{"output_column": "n", "formula": "count"}]}},
+    "human_review_queue": {"queue": {}},
+    "publish": {"publish": {"format": "json"}, "function": _INLINE_ROW_FN},
+}
+_INPUT_IDS = {"join": ["facilities", "filings"]}
+_OUTPUT_SCHEMA = {
+    "join": {"columns": [{"name": "id", "type": "str"}, {"name": "name", "type": "str"},
+                         {"name": "amount", "type": "int"}]},
+    "aggregate": {"columns": [{"name": "name", "type": "str"}, {"name": "n", "type": "int"}]},
+}
+NON_EXEMPT_TYPES = ["python_row_function", "python_frame_function", "join", "aggregate",
+                    "human_review_queue"]
+
+
+def _schema_spec(stage_type, *, inputs_declared=True, declare_output=True):
+    """A minimal, otherwise-valid stage of `stage_type`. `inputs_declared` is
+    True/False for all inputs or a per-input list of flags; a False input carries
+    only its id, no `schema`."""
+    ids = _INPUT_IDS.get(stage_type, ["facilities"])
+    flags = inputs_declared if isinstance(inputs_declared, list) else [inputs_declared] * len(ids)
+    schemas = [_LEFT_SCHEMA, _RIGHT_SCHEMA]
+    kw = dict(
+        id="s", type=stage_type,
+        inputs=[{"id": i, **({"schema": s} if f else {})}
+                for i, s, f in zip(ids, schemas, flags)],
+        **_HANDLE_BLOCK[stage_type],
+    )
+    if declare_output:
+        kw["output_schema"] = _OUTPUT_SCHEMA.get(stage_type, _LEFT_SCHEMA)
+    return S(**kw)
+
+
+def _input_data_spec(tmp_path, *, declare_output=True):
+    kw = dict(id="load", type="input_data",
+              connector={"kind": "file", "params": {"path": str(tmp_path / "d.csv"),
+                                                    "format": "csv"}})
+    if declare_output:
+        kw["output_schema"] = _LEFT_SCHEMA
+    return S(**kw)
+
+
+def _rejection_message(spec) -> str:
+    with pytest.raises(ValidationError) as err:
+        m.Stage.model_validate(spec)
+    return str(err.value)
+
+
+@pytest.mark.parametrize("t", NON_EXEMPT_TYPES)
+def test_stage_rejects_input_that_declares_no_schema(t):
+    msg = _rejection_message(_schema_spec(t, inputs_declared=False))
+    assert "declares no schema" in msg
+    assert "facilities" in msg
+
+
+@pytest.mark.parametrize("t", NON_EXEMPT_TYPES)
+def test_stage_rejects_missing_output_schema(t):
+    msg = _rejection_message(_schema_spec(t, declare_output=False))
+    assert "declares no output_schema" in msg
+
+
+def test_stage_names_only_the_input_that_declares_no_schema():
+    msg = _rejection_message(_schema_spec("join", inputs_declared=[True, False]))
+    assert "filings" in msg
+    assert "facilities" not in msg
+
+
+@pytest.mark.parametrize("t", NON_EXEMPT_TYPES)
+def test_fully_declared_stage_accepted(t):
+    assert m.Stage.model_validate(_schema_spec(t)).output_schema is not None
+
+
+def test_input_data_rejects_missing_output_schema(tmp_path):
+    """input_data's exemption is input-side only: it takes no inputs, but it
+    still declares what it emits — otherwise the first edge of every workflow
+    goes unchecked."""
+    msg = _rejection_message(_input_data_spec(tmp_path, declare_output=False))
+    assert "declares no output_schema" in msg
+
+
+def test_input_data_with_output_schema_accepted(tmp_path):
+    assert m.Stage.model_validate(_input_data_spec(tmp_path)).output_schema is not None
+
+
+def test_publish_without_output_schema_accepted():
+    """publish emits files, not a table — its output side is exempt."""
+    s = m.Stage.model_validate(_schema_spec("publish", declare_output=False))
+    assert s.output_schema is None
+
+
+def test_publish_rejects_input_that_declares_no_schema():
+    """publish's exemption is output-side only: its inputs must still be declared."""
+    msg = _rejection_message(_schema_spec("publish", inputs_declared=False, declare_output=False))
+    assert "declares no schema" in msg
+    assert "facilities" in msg
+
+
+def test_publish_fully_declared_accepted():
+    s = m.Stage.model_validate(_schema_spec("publish"))
+    assert s.inputs[0].table_schema is not None
+
+
 def test_output_schema_issues_surface_in_draft_validation():
     """The compiler's non-fatal channel reports the same issue as a string
     instead of raising — the submit/re-fire loop feeds it back to the model."""
