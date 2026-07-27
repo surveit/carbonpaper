@@ -59,7 +59,7 @@ def make_editing_tools(ctx: EditingContext) -> list[Callable[..., Any]]:
         llm block intact; {"name": null} deletes a field. Fields you do not mention
         are preserved exactly — so you never alter anything you were not asked to.
         The result is validated first; if invalid, nothing is written and the issues
-        are returned. A successful edit drops the node to 'edited_stale' (amber) for a
+        are returned. A successful edit drops the node to 'edited_stale' for a
         human to re-approve — you cannot approve it yourself. You cannot change a
         stage's id this way."""
         result = project_service.edit_stage(project_id, stage_id, changes_json)
@@ -74,7 +74,7 @@ def make_editing_tools(ctx: EditingContext) -> list[Callable[..., Any]]:
         in your instructions; read_stage on a similar existing stage shows the
         output_schema / inputs shape. Validated
         first; if invalid, nothing is written and the issues are returned. The new
-        node lands 'unreviewed' (amber) for a human to approve."""
+        node lands 'unreviewed' for a human to approve."""
         result = project_service.add_stage(project_id, stage_json)
         return {"ok": result.ok, "issues": result.issues}
 

@@ -20,7 +20,7 @@ _SYSTEM_PROMPT = (
     "read_stage). Prefer small, targeted changes: edit_stage, add_stage and "
     "remove_stage (refused while another stage still inputs from the one you "
     "remove). Every "
-    "edit is validated and lands as UNREVIEWED (amber) for a human to approve — you "
+    "edit is validated and lands as UNREVIEWED for a human to approve — you "
     "cannot approve nodes. Never invent a column, source, model, or value — if you "
     "lack it, ask.\n\n"
     "For a multi-stage restructure, work in a scratch copy instead of editing live: "
