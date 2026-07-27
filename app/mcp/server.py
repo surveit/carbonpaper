@@ -30,6 +30,7 @@ from app.services import generation
 from app.services import loader
 from app.services import project as project_service
 from app.services import run as run_service
+from app.services import versioning
 from app.services import workflow_test as workflow_test_service
 from app.services import workspace
 from app.services.errors import WorkflowLoadError
@@ -47,10 +48,11 @@ _RUN_TOOL_ERRORS = (
     ValueError,
 )
 
-# Domain failures a stage-mutating tool turns into {ok: False, issues: [...]} — the
+# Domain failures an authoring tool turns into {ok: False, issues: [...]} — the
 # same refusal channel a validation failure comes back on, which is the one these
 # instructions tell a client to watch. WorkflowLoadError is a stored workflow that
-# does not load; FileNotFoundError is a stage id that is not in the workflow.
+# does not load; FileNotFoundError is a stage id that is not in the workflow, or a
+# project with no compiled workflow to snapshot.
 # Anything outside this set propagates as a genuine internal fault.
 _STAGE_TOOL_ERRORS = (WorkflowLoadError, FileNotFoundError)
 
@@ -340,6 +342,20 @@ def catch_stage_edit_refusals(edit: Callable[[], EditStageResult]) -> dict[str, 
     except _STAGE_TOOL_ERRORS as exc:
         return {"ok": False, "issues": [str(exc)]}
     return {"ok": result.ok, "issues": result.issues}
+
+
+@mcp.tool()
+def save_version(project_id: str, message: str) -> dict[str, Any]:
+    """Freeze the project's CURRENT workflow into an immutable version — the snapshot
+    a run or a workflow test executes. Born UNPUBLISHED: only a human publishes. The
+    working copy is strict-loaded first, so an invalid workflow comes back as
+    {ok: False, issues} and no version is written."""
+    pdir = _resolve_existing_project(project_id)
+    try:
+        version = versioning.create_version_from_disk(pdir, message=message, reviewer="agent")
+    except _STAGE_TOOL_ERRORS as exc:
+        return {"ok": False, "issues": [str(exc)]}
+    return {"ok": True, "issues": [], "version_id": version.version_id}
 
 
 @mcp.tool()

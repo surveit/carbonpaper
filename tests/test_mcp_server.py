@@ -68,6 +68,7 @@ def test_mcp_lists_the_authoring_tools(client):
         "remove_stage",
         "generate_stage_tests",
         "run_stage_tests",
+        "save_version",
     } <= names
 
 
@@ -279,6 +280,57 @@ def test_mcp_add_stage_creates_the_first_stage_of_a_new_project(tmp_path, monkey
     )
     assert added == {"ok": True, "issues": []}
     assert server.describe_workflow(project_id="trail")["stages"][0]["id"] == "load"
+
+
+def test_mcp_save_version_snapshots_the_working_copy_unpublished(tmp_path, monkeypatch):
+    """save_version freezes the CURRENT compiled workflow into a version the agent
+    owns end-to-end — but publishing stays human-only, so the snapshot is born
+    unpublished."""
+    from app.mcp import server
+    from app.services import versioning, workspace
+
+    monkeypatch.setattr(workspace, "EXAMPLES_DIR", tmp_path)
+    pdir = tmp_path / "trail"
+    _write_compiled_workflow(pdir)
+
+    saved = server.save_version(project_id="trail", message="first cut")
+    assert saved["ok"] is True and saved["issues"] == []
+
+    [version] = versioning.list_versions(pdir)
+    assert saved["version_id"] == version.version_id
+    assert version.message == "first cut"
+    assert version.reviewer == "agent"
+    assert version.published is False
+    assert {s.id for s in version.stages} == {"load", "double", "untested"}
+
+
+def test_mcp_save_version_refuses_an_unloadable_working_copy(tmp_path, monkeypatch):
+    """An invalid working copy can never become a version: the refusal reaches the
+    client on the documented {ok: False, issues} channel and nothing is stored."""
+    from app.mcp import server
+    from app.services import versioning, workspace
+
+    monkeypatch.setattr(workspace, "EXAMPLES_DIR", tmp_path)
+    pdir = tmp_path / "trail"
+    (pdir / "compiled").mkdir(parents=True)
+    (pdir / "compiled" / "broken.json").write_text(
+        '{"id": "broken", "type": "not_a_real_type"}', encoding="utf-8")
+
+    refused = server.save_version(project_id="trail", message="doomed")
+    assert refused["ok"] is False and refused["issues"]
+    assert "version_id" not in refused
+    assert versioning.list_versions(pdir) == []
+
+
+def test_mcp_save_version_refuses_to_invent_a_project(tmp_path, monkeypatch):
+    """A typo'd project id is loud and writes nothing under the workspace."""
+    from app.mcp import server
+    from app.services import workspace
+
+    monkeypatch.setattr(workspace, "EXAMPLES_DIR", tmp_path)
+    with pytest.raises(ValueError):
+        server.save_version(project_id="no_such_project", message="nope")
+    assert list(tmp_path.iterdir()) == []
 
 
 def test_read_tools_reject_unknown_project(tmp_path, monkeypatch):
