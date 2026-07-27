@@ -64,8 +64,8 @@ ROW_DEFERRED_KEY = "_deferred"
 
 # Internal per-row sentinel columns a mapper may attach. They are machinery, not
 # stage output: the driver strips them off every mapped frame and does NOT
-# report them as dropped user columns (they were collected by the driver or the
-# handler's own collector, not discarded).
+# report them as dropped user columns (they were collected by the driver or read
+# back by the mapper's own post-map step, not discarded).
 _INTERNAL_ROW_COLUMNS = frozenset({ROW_ERROR_KEY, ROW_USAGE_KEY, ROW_DEFERRED_KEY})
 
 
