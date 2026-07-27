@@ -198,6 +198,17 @@ NODE_TYPES: dict[str, dict[str, _Any]] = {
         "min_inputs": 1,
         "required": [],
         "optional": ["format", "destination", "template", "one_file_per", "cross_link"],
+        "notes": (
+            "Published output must be INTERROGABLE: every row or claim it renders links "
+            "back to that row's provenance. Declare the keyword `trace_links` on the "
+            "function — `def transform(df, output_dir, trace_links)` — and the runtime "
+            "hands it a linker for this run; per row emit "
+            "`trace_links.build_row_trace_url(\"<the input stage's id>\", row_ordinal)` as "
+            "an href, where row_ordinal is that row's 0-based position in the input frame "
+            "AS RECEIVED. Iterate the frame in order (enumerate it) and do not sort, "
+            "filter, or dedup before reading the ordinal — position is the only key the "
+            "trace has. Omit the keyword for a format that cannot carry a link (csv, json)."
+        ),
     },
 }
 

@@ -207,8 +207,9 @@ class PythonFunction(_Base):
             "out; cannot fan out/in or reorder); "
             "python_frame_function -> `def transform(df, ...) -> DataFrame` (the input pandas "
             "DataFrame(s), positional in declared input order; may reshape); "
-            "publish -> `def transform(df, ..., output_dir) -> DataFrame` (write artifacts "
-            "under output_dir, return a table of their paths)."
+            "publish -> `def transform(df, ..., output_dir, trace_links) -> DataFrame` "
+            "(write artifacts under output_dir, return a table of their paths; declare "
+            "`trace_links` to receive a linker that builds each row's provenance URL)."
         ),
     )
     module: Optional[str] = None
