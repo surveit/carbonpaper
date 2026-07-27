@@ -13,12 +13,15 @@ invalid working copy is refused loudly, writing nothing.
 from __future__ import annotations
 
 import json
+import sys
 import time
 
 import pandas as pd
 import pytest
 
+import app.runtime.runner as runner
 from app.core.errors import NoVersionToRunError, SubsetRunError
+from app.core.run_status import RunStatus
 from app.models import Stage, Workflow
 from app.runtime.runner import execute_run, resume_run
 from app.runtime.executor import _raise_if_run_failed, run_subset
@@ -101,6 +104,51 @@ def test_per_run_limit_and_offset_slice_and_are_recorded(tmp_path):
         .read_text(encoding="utf-8"))
     assert on_disk["limit_overrides"] == {"load": 3}
     assert on_disk["offset_overrides"] == {"load": 1}
+
+
+def test_bust_cache_is_recorded_on_the_manifest(tmp_path):
+    """A recompute-everything run records the flag as run provenance, so a
+    reader (and the resume) knows this run refused every cache read."""
+    _make_project(tmp_path)
+    _seed_version(tmp_path)
+    manifest = execute_run(tmp_path, repo_root=tmp_path, bust_cache=True)
+
+    assert manifest["bust_cache"] is True
+    on_disk = json.loads(
+        (tmp_path / "runs" / manifest["run_id"] / "manifest.json")
+        .read_text(encoding="utf-8"))
+    assert on_disk["bust_cache"] is True
+
+
+def test_an_ordinary_run_records_bust_cache_false(tmp_path):
+    _make_project(tmp_path)
+    _seed_version(tmp_path)
+    manifest = execute_run(tmp_path, repo_root=tmp_path)
+    assert manifest["bust_cache"] is False
+
+
+def test_cli_bust_cache_flag_reaches_execute_run(tmp_path, monkeypatch):
+    """`python -m app.runtime.runner <project> --bust-cache` threads the flag
+    into the run; without it the run is not busted."""
+    calls: list[bool] = []
+
+    def fake_execute_run(project_dir, repo_root, version_id=None, limits=None,
+                         offsets=None, bindings=None, bust_cache=False):
+        calls.append(bust_cache)
+        return {"run_id": "r", "workflow_version": "v", "status": RunStatus.OK,
+                "stage_records": []}
+
+    monkeypatch.setattr(runner, "execute_run", fake_execute_run)
+    monkeypatch.setattr(sys, "argv", ["runner", str(tmp_path), "--bust-cache"])
+    assert runner.main() == 0
+    monkeypatch.setattr(sys, "argv", ["runner", str(tmp_path)])
+    assert runner.main() == 0
+    assert calls == [True, False]
+
+
+def test_cli_rejects_an_unknown_flag(tmp_path, monkeypatch):
+    monkeypatch.setattr(sys, "argv", ["runner", str(tmp_path), "--nope"])
+    assert runner.main() == 1
 
 
 def test_per_run_override_for_unknown_stage_id_fails_loudly(tmp_path):

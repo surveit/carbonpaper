@@ -187,8 +187,15 @@ def _read_cached_decisions(stage: Stage, ctx: RunContext) -> dict[str, StageCach
     """Every decision already recorded against this exact stage definition,
     keyed by the input fingerprint it was filed under. This is the stage's one
     and only cache read: a row's outcome is then a dictionary lookup, and a
-    queue stage's store cost does not scale with its row count."""
+    queue stage's store cost does not scale with its row count.
+
+    Under `ctx.bust_cache` the read does not happen at all: no decision is
+    replayed, so every queueable row defers and the run re-asks the humans. The
+    recorded decisions are left untouched — a later run without the flag
+    replays them."""
     project, stage_cache = _require_project_scope(ctx, stage.id)
+    if ctx.bust_cache:
+        return {}
     return {
         entry.input_fingerprint: entry
         for entry in stage_cache.find_entries(

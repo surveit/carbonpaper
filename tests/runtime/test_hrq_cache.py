@@ -65,6 +65,15 @@ def _ctx(tmp_path, run_id="r1"):
     )
 
 
+def _bust_ctx(tmp_path, run_id="r1"):
+    return make_run_context(
+        run_dir=tmp_path,
+        identity=RunIdentity(project=PROJECT, run_id=run_id),
+        stage_cache=StageCache(),
+        bust_cache=True,
+    )
+
+
 def _src(rows: int = 2) -> pd.DataFrame:
     return pd.DataFrame({"id": [f"r{i}" for i in range(rows)], "score": list(range(rows))})
 
@@ -223,6 +232,70 @@ def test_snapshot_columns_match_original_upstream_columns_exactly(tmp_path):
 
     snapshot, _fingerprints = _halt_and_read_snapshot(stage, {"scored": src}, _ctx(tmp_path))
     assert list(snapshot.columns) == list(src.columns)
+
+
+# ── 5b. bust_cache: the run re-asks the humans ──────────────────────────────
+
+
+def test_bust_cache_defers_every_queueable_row_despite_cached_decisions(tmp_path):
+    """`RunContext.bust_cache` skips the decision READ entirely: every row a
+    prior run decided halts again, so the humans are re-asked. The decisions
+    themselves are untouched on disk — a run without the flag still replays
+    them."""
+    stage = _stage()
+    src = _src(2)
+
+    snapshot, fingerprints = _halt_and_read_snapshot(
+        stage, {"scored": src}, _ctx(tmp_path, run_id="run1"))
+    _approve_every_row(snapshot, fingerprints)
+
+    busted, _fingerprints = _halt_and_read_snapshot(
+        stage, {"scored": src.copy()}, _bust_ctx(tmp_path, run_id="run2"))
+    assert list(busted["id"]) == ["r0", "r1"]
+
+    out = _run_queue_stage(stage, {"scored": src.copy()}, _ctx(tmp_path, run_id="run3"))
+    assert (out["decision"] == "approve").all()
+
+
+def test_bust_cache_leaves_passed_through_rows_alone(tmp_path):
+    """Only QUEUEABLE rows are re-asked: a row the queue filter does not select
+    still passes through, because no cached decision was involved in its
+    outcome."""
+    stage = _stage(flt="flag == 'review'")
+    src = _alternating_src()
+
+    snapshot, fingerprints = _halt_and_read_snapshot(
+        stage, {"scored": src}, _ctx(tmp_path, run_id="run1"))
+    _approve_every_row(snapshot, fingerprints)
+
+    with pytest.raises(HaltForReview) as exc_info:
+        _run_queue_stage(stage, {"scored": src.copy()}, _bust_ctx(tmp_path, run_id="run2"))
+    assert exc_info.value.contribution.human_review_queue_stats == {
+        "items_queued_total": 2, "items_passed_through": 2,
+        "items_pending": 2, "items_decided": 0,
+    }
+
+
+def test_bust_cache_reads_no_cache_entries_at_all(tmp_path, monkeypatch):
+    """The read is SKIPPED, not filtered afterwards: the stage makes no
+    find_entries call under bust_cache."""
+    cache = StageCache()
+    calls: list[tuple[str, str, str]] = []
+
+    def recording_find_entries(project: str, stage_id: str, stage_fingerprint: str):
+        calls.append((project, stage_id, stage_fingerprint))
+        return []
+
+    monkeypatch.setattr(cache, "find_entries", recording_find_entries)
+    ctx = make_run_context(
+        run_dir=tmp_path,
+        identity=RunIdentity(project=PROJECT, run_id="busted"),
+        stage_cache=cache,
+        bust_cache=True,
+    )
+    with pytest.raises(HaltForReview):
+        _run_queue_stage(_stage(), {"scored": _src(2)}, ctx)
+    assert calls == []
 
 
 # ── 6. A legacy decisions/*.parquet on disk is never read ───────────────────
@@ -589,3 +662,30 @@ def test_resume_reattaches_cached_decisions_written_via_the_seam(tmp_path):
     assert resumed["status"] == "ok"
     out = pd.read_parquet(run_dir / "outputs" / "review.parquet")
     assert sorted(out["final_score"].tolist()) == [1, 2]
+
+
+def test_resume_replays_the_runs_bust_cache(tmp_path):
+    """`bust_cache` is per-run state recorded on the manifest, so a RESUME of a
+    busted run is still busted: decisions recorded between the halt and the
+    resume are not read, and the queue stage halts again. The un-busted resume
+    of the same shape completes (test above), which is what makes this the
+    discriminating outcome."""
+    project_dir = tmp_path / "resume_bust_project"
+    _write_stage(project_dir, "01_load.json", _load_stage(project_dir))
+    _write_stage(project_dir, "02_review.json", _review_stage_full())
+    _seed_version(project_dir)
+
+    halted = run_prepared(
+        prepare_run(project_dir, repo_root=project_dir, bust_cache=True))
+    assert halted["status"] == "awaiting_review"
+    run_id = halted["run_id"]
+
+    run_dir = project_dir / "runs" / run_id
+    assert json.loads((run_dir / "manifest.json").read_text(encoding="utf-8"))["bust_cache"]
+
+    snapshot = pd.read_parquet(run_dir / "queue" / "review.parquet")
+    fingerprints = _read_fingerprints(run_dir / "queue" / "review.parquet")
+    _approve_every_row(snapshot, fingerprints, project=project_dir.name)
+
+    resumed = runner.resume_run(project_dir, run_id, project_dir)
+    assert resumed["status"] == "awaiting_review"
