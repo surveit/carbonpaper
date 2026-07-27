@@ -1,6 +1,6 @@
 """Tests for Column.coerce_text (app/models/schema.py): one form field's raw
-string landed as a value of the column's declared type, with a blank refused
-rather than silently nulled on a non-nullable column."""
+string landed as a value the column's whole declaration allows — type,
+nullability, enum vocabulary and numeric range."""
 from __future__ import annotations
 
 import datetime
@@ -61,3 +61,27 @@ def test_a_non_scalar_column_cannot_be_entered_as_text(column_type):
     )
     with pytest.raises(ValueError, match="not a scalar"):
         column.coerce_text("anything")
+
+
+def test_a_value_outside_the_declared_enum_is_refused():
+    column = Column(name="verdict", type="str", enum=["yes", "no"])
+    assert column.coerce_text("yes") == "yes"
+    with pytest.raises(ValueError, match="not one of the declared values") as exc:
+        column.coerce_text("maybe")
+    assert "verdict" in str(exc.value) and "yes" in str(exc.value)
+
+
+@pytest.mark.parametrize(("text", "message"), [("-3", "below"), ("3", "above")])
+def test_a_value_outside_the_declared_range_is_refused(text, message):
+    column = Column(name="score", type="int", range=[-2, 2])
+    assert column.coerce_text("2") == 2
+    with pytest.raises(ValueError, match=message) as exc:
+        column.coerce_text(text)
+    assert "score" in str(exc.value)
+
+
+def test_an_unbounded_range_side_constrains_only_the_other_side():
+    column = Column(name="score", type="float", range=["-inf", 10])
+    assert column.coerce_text("-99999") == -99999.0
+    with pytest.raises(ValueError, match="above"):
+        column.coerce_text("10.5")

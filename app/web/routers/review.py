@@ -1,10 +1,11 @@
 """Human-review queue: render the reviewer UI for one queue stage (recovering
-the model input so the score is reviewable) and persist reviewer decisions
-into the stage-result cache (app.core.stage_cache)."""
+the model input so the AI's values are reviewable) and persist reviewer
+decisions into the stage-result cache (app.core.stage_cache)."""
 
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -15,7 +16,8 @@ from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 
 from app.core.errors import ReviewValidationError
-from app.models import QueueConfig, ReviewVerdict, Stage
+from app.models import Column, QueueConfig, ReviewVerdict, Stage
+from app.models.stages.shared import resolve_input_schema
 from app.runtime.llm import render_prompt
 from app.services import review
 from app.core.stage_cache import StageCacheEntry
@@ -37,13 +39,30 @@ router = APIRouter()
 
 @dataclass(frozen=True)
 class _DecisionDisplay:
-    """One recorded reviewer decision, shaped for the queue template. An entry
-    holding no output row carries no reviewer metadata, so those are None."""
+    """One recorded reviewer decision, shaped for the queue template."""
 
-    decision: str
+    verdict: str
     reviewed_values: dict[str, object]
-    reviewer: str | None
-    reviewed_at: str | None
+    review_notes: str | None
+    reviewer: str
+    reviewed_at: str
+
+
+@dataclass(frozen=True)
+class _ReviewedField:
+    """One reviewed column as the form renders it: `source` is the column the AI
+    produced and the field is pre-filled from, `target` the column the
+    reviewer's value lands in. `control` is the HTML input `type` verbatim, or
+    "select" / "checkbox" which the template renders as their own elements."""
+
+    source: str
+    target: str
+    control: str
+    nullable: bool
+    step: str | None
+    minimum: float | None
+    maximum: float | None
+    options: list[str] | None
 
 
 @router.get("/project/{project}/runs/{run_id}/queue/{stage_id}", response_class=HTMLResponse)
@@ -54,11 +73,12 @@ async def queue_page(request: Request, project: str, run_id: str, stage_id: str)
 
     stages = load_stages(project).stages
     stage_def = _require_queue_stage(stages, stage_id)
-    queue = stage_def.queue
-    assert queue is not None  # _require_queue_stage narrows the stage type
+    queue = _require_queue_config(stage_def)
 
     snapshot = queue_snapshot(project, run_id, stage_id)
     fingerprints = load_queue_fingerprints(project, run_id, stage_id)
+    if fingerprints is not None:
+        _validate_stage_definition_unchanged(stage_def, fingerprints.stage_fingerprint)
     entries_by_fingerprint = (
         _load_decided_entries(project, stage_id, fingerprints.stage_fingerprint)
         if fingerprints else {}
@@ -82,6 +102,8 @@ async def queue_page(request: Request, project: str, run_id: str, stage_id: str)
             "run_id": run_id,
             "stage_id": stage_id,
             "stage_def": stage_def,
+            "reviewed_fields": _build_reviewed_fields(stage_def, queue),
+            "review_notes_column": queue.review_notes_column,
             "items": items,
             "reviewed_count": reviewed_count,
             "total": total,
@@ -97,36 +119,44 @@ async def queue_decide(
     run_id: str,
     stage_id: str,
     input_fingerprint: str = Form(...),
-    decision: ReviewVerdict = Form(...),
+    verdict: ReviewVerdict = Form(...),
+    reviewer: str = Form(...),
     reviewed_values: str = Form(...),
     review_notes: str | None = Form(None),
 ):
     """Persist a reviewer's decision as a `StageCacheEntry` keyed by this
     stage's definition fingerprint and this row's `input_fingerprint`.
-    `reviewed_values` is a JSON object keyed by reviewed TARGET column name. The
-    row is resolved by POSITION in the halted-queue sidecar's fingerprint list —
-    never recomputed from live stages — so a fingerprint the sidecar can't vouch
-    for 404s rather than being trusted."""
+    `reviewed_values` is a JSON object keyed by reviewed TARGET column name,
+    each value the reviewer's raw form text. The row is resolved by POSITION in
+    the halted-queue sidecar's fingerprint list — never recomputed from live
+    stages — so a fingerprint the sidecar can't vouch for 404s rather than being
+    trusted."""
     stage_def = _require_queue_stage(load_stages(project).stages, stage_id)
+    queue = _require_queue_config(stage_def)
+    attributed_to = _require_reviewer_name(reviewer)
+    supplied = _parse_reviewed_values(reviewed_values)
     stage_fingerprint, row = _resolve_queue_row(project, run_id, stage_id, input_fingerprint)
+    _validate_stage_definition_unchanged(stage_def, stage_fingerprint)
     try:
         review.record_decision(
             project=project, stage=stage_def,
             stage_fingerprint=stage_fingerprint, input_fingerprint=input_fingerprint,
             frozen_row={str(k): v for k, v in row.items()},
-            verdict=decision, reviewed_values=_parse_reviewed_values(reviewed_values),
-            review_notes=review_notes,
-            reviewer="local", reviewed_at=datetime.now().isoformat(timespec="seconds"),
+            verdict=verdict,
+            reviewed_values=_coerce_reviewed_values(stage_def, queue, supplied),
+            review_notes=_normalise_review_notes(review_notes),
+            reviewer=attributed_to,
+            reviewed_at=datetime.now().isoformat(timespec="seconds"),
         )
     except ReviewValidationError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     return JSONResponse(
-        {"ok": True, "input_fingerprint": input_fingerprint, "decision": decision.value}
+        {"ok": True, "input_fingerprint": input_fingerprint, "verdict": verdict.value}
     )
 
 
-# --- queue_decide helpers ------------------------------------------------------
+# --- shared by both routes -----------------------------------------------------
 
 
 def _require_queue_stage(stages: list[Stage], stage_id: str) -> Stage:
@@ -134,6 +164,69 @@ def _require_queue_stage(stages: list[Stage], stage_id: str) -> Stage:
     if stage_def is None or stage_def.type != "human_review_queue":
         raise HTTPException(status_code=404, detail=f"No queue stage '{stage_id}'")
     return stage_def
+
+
+def _require_queue_config(stage_def: Stage) -> QueueConfig:
+    queue = stage_def.queue
+    assert queue is not None  # Stage._handle_for_type: human_review_queue carries queue
+    return queue
+
+
+def _validate_stage_definition_unchanged(stage_def: Stage, halted_fingerprint: str) -> None:
+    """The run snapshotted its queue under `halted_fingerprint` and its decisions
+    are keyed by it, while the columns those decisions are read and written
+    through come from the LIVE definition. Edit a fingerprinted queue field
+    (`reviewed_columns`, `verdict_column`, …) between the halt and the review and
+    the two describe different column sets, so neither reading nor adding to the
+    recorded decisions is meaningful."""
+    live_fingerprint = stage_def.compute_definition_fingerprint()
+    if live_fingerprint != halted_fingerprint:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"stage '{stage_def.id}' has changed since this run halted for review "
+                f"(halted under fingerprint {halted_fingerprint}, now {live_fingerprint}). "
+                "Its recorded decisions describe the definition it halted under, so they "
+                "cannot be shown or added to. Restore that definition, or start a new run."
+            ),
+        )
+
+
+def _require_reviewed_column(stage_def: Stage, source: str, target: str) -> Column:
+    """The declared column a reviewed value must satisfy: `output_schema`'s
+    `target` column, or — for a stage that declares no `output_schema` — the
+    input edge's `source` column, whose spec `target` is required to match
+    (app.models.stages.human_review_queue._find_reviewed_target_issues). With
+    neither declared the type is unknowable, so no value may be accepted."""
+    if stage_def.output_schema is not None:
+        declared = stage_def.output_schema.column_for_name(target)
+        if declared is not None:
+            return declared
+    input_schema = resolve_input_schema(stage_def, 0) if stage_def.inputs else None
+    source_column = input_schema.column_for_name(source) if input_schema else None
+    if source_column is not None:
+        return source_column.model_copy(update={"name": target})
+    raise HTTPException(
+        status_code=400,
+        detail=(
+            f"stage '{stage_def.id}': neither its output_schema nor its input edge "
+            f"declares a column for reviewed value '{target}' (reviewing '{source}'), "
+            "so there is no declaration to accept a value against"
+        ),
+    )
+
+
+# --- queue_decide helpers ------------------------------------------------------
+
+
+def _require_reviewer_name(reviewer: str) -> str:
+    name = reviewer.strip()
+    if not name:
+        raise HTTPException(
+            status_code=400,
+            detail="reviewer must be a non-blank name: no decision is recorded unattributed",
+        )
+    return name
 
 
 def _parse_reviewed_values(raw: str) -> dict[str, object]:
@@ -149,6 +242,61 @@ def _parse_reviewed_values(raw: str) -> dict[str, object]:
             detail=f"reviewed_values must be a JSON object, got {type(parsed).__name__}",
         )
     return {str(name): value for name, value in parsed.items()}
+
+
+def _coerce_reviewed_values(
+    stage_def: Stage, queue: QueueConfig, supplied: Mapping[str, object]
+) -> dict[str, object]:
+    """Each supplied value parsed against its target column's whole declaration.
+    A key the stage does not declare passes through untouched: the review service
+    owns the exactly-the-declared-columns rule, and duplicating it here would
+    give it two places to drift."""
+    column_by_target = {
+        target: _require_reviewed_column(stage_def, source, target)
+        for source, target in queue.reviewed_columns.items()
+    }
+    return {
+        target: (
+            _coerce_reviewed_value(column_by_target[target], value)
+            if target in column_by_target else value
+        )
+        for target, value in supplied.items()
+    }
+
+
+def _coerce_reviewed_value(column: Column, value: object) -> object:
+    try:
+        return column.coerce_text(_as_form_text(value))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+def _as_form_text(value: object) -> str:
+    """A JSON reviewed value as the text `Column.coerce_text` parses. JSON null
+    becomes blank text, which that method turns into None on a nullable column
+    and refuses on a non-nullable one — the null is never assumed to be allowed."""
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, (int, float)):
+        return str(value)
+    raise HTTPException(
+        status_code=400,
+        detail=(
+            "a reviewed value must be a JSON string, number, boolean or null, got "
+            f"{type(value).__name__}"
+        ),
+    )
+
+
+def _normalise_review_notes(review_notes: str | None) -> str | None:
+    """An HTML form posts an untouched notes box as "", not as an absent field:
+    blank means no note, never an empty note."""
+    stripped = (review_notes or "").strip()
+    return stripped or None
 
 
 def _resolve_queue_row(
@@ -191,19 +339,79 @@ def _load_decided_entries(
 
 def _display_decision(entry: StageCacheEntry, queue: QueueConfig) -> _DecisionDisplay:
     """The reviewer decision one cached entry records, read off the column names
-    the stage declares. An entry holding no output row (`output_row is None`) is
-    the shape a rejection was recorded in before this stage emitted rejected
-    rows; it carries no reviewer metadata."""
-    output = entry.output_row
-    if output is None:
-        return _DecisionDisplay(
-            decision="reject", reviewed_values={}, reviewer=None, reviewed_at=None
-        )
+    the stage declares."""
+    output = _require_recorded_output(entry, queue)
+    notes_column = queue.review_notes_column
     return _DecisionDisplay(
-        decision=str(output[queue.verdict_column]),
+        verdict=str(output[queue.verdict_column]),
         reviewed_values={target: output[target] for target in queue.reviewed_columns.values()},
-        reviewer=output[queue.reviewer_column],
-        reviewed_at=output[queue.reviewed_at_column],
+        review_notes=(
+            None if notes_column is None else _as_optional_text(output.get(notes_column))
+        ),
+        reviewer=str(output[queue.reviewer_column]),
+        reviewed_at=str(output[queue.reviewed_at_column]),
+    )
+
+
+def _require_recorded_output(
+    entry: StageCacheEntry, queue: QueueConfig
+) -> Mapping[str, object]:
+    """The review service writes every column named here, so an entry missing
+    one was recorded under a different column vocabulary — the page states that
+    rather than half-rendering it."""
+    output = entry.output_row or {}
+    missing = sorted(
+        {queue.verdict_column, queue.reviewer_column, queue.reviewed_at_column,
+         *queue.reviewed_columns.values()} - set(output)
+    )
+    if missing:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"the cached decision for input fingerprint '{entry.input_fingerprint}' "
+                f"records no {missing}: it was written under a different column "
+                "vocabulary and cannot be displayed. Re-record a decision for this row."
+            ),
+        )
+    return output
+
+
+def _as_optional_text(value: object) -> str | None:
+    return None if value is None else str(value)
+
+
+def _build_reviewed_fields(stage_def: Stage, queue: QueueConfig) -> list[_ReviewedField]:
+    return [
+        _build_reviewed_field(source, target, _require_reviewed_column(stage_def, source, target))
+        for source, target in queue.reviewed_columns.items()
+    ]
+
+
+# The HTML input `type` each scalar column type is entered through; a column
+# declaring an `enum` overrides this with a select of its vocabulary. Only the
+# numeric types carry a `step`.
+_CONTROL_BY_COLUMN_TYPE: dict[str, str] = {
+    "str": "text", "int": "number", "float": "number",
+    "bool": "checkbox", "date": "date", "datetime": "datetime-local",
+}
+_STEP_BY_COLUMN_TYPE: dict[str, str] = {"int": "1", "float": "any"}
+
+
+def _build_reviewed_field(source: str, target: str, column: Column) -> _ReviewedField:
+    control = "select" if column.enum is not None else _CONTROL_BY_COLUMN_TYPE.get(column.type)
+    if control is None:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"reviewed column '{target}' is declared type '{column.type}', which "
+                "cannot be entered through a form field"
+            ),
+        )
+    low, high = column.resolve_numeric_bounds()
+    return _ReviewedField(
+        source=source, target=target, control=control, nullable=column.nullable,
+        step=_STEP_BY_COLUMN_TYPE.get(column.type), minimum=low, maximum=high,
+        options=list(column.enum) if column.enum is not None else None,
     )
 
 

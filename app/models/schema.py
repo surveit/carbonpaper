@@ -203,7 +203,9 @@ class Column(_Base):
     def coerce_text(self, text: str) -> object:
         """Whitespace is stripped; what is left blank is None only on a nullable
         column and a ValueError on a non-nullable one, never a silent null. A
-        non-scalar type (`json`, `list[...]`) raises rather than parse."""
+        non-scalar type (`json`, `list[...]`) raises rather than parse. The
+        result satisfies the whole declaration, not only `type`: a value outside
+        a declared `enum` or `range` is a ValueError too."""
         if self.type not in SCALAR_COLUMN_TYPES:
             raise ValueError(
                 f"column {self.name!r}: type {self.type!r} is not a scalar and "
@@ -216,7 +218,19 @@ class Column(_Base):
             raise ValueError(
                 f"column {self.name!r}: blank text, but the column is not nullable"
             )
-        return _parse_scalar_text(self.name, self.type, stripped)
+        value = _parse_scalar_text(self.name, self.type, stripped)
+        _validate_declared_vocabulary(self, value)
+        return value
+
+    def resolve_numeric_bounds(self) -> tuple[float | None, float | None]:
+        """A declared numeric `range` as (low, high); a bound declared as a
+        string containing RANGE_UNBOUNDED_MARKER is None on that side, as is
+        both when the column declares no range."""
+        if self.range is None:
+            return (None, None)
+        low, high = self.range
+        return (None if isinstance(low, str) else low,
+                None if isinstance(high, str) else high)
 
 
 Column.model_rebuild()
@@ -246,6 +260,25 @@ def _parse_scalar_text(column_name: str, column_type: str, text: str) -> object:
         raise ValueError(
             f"column {column_name!r}: {text!r} is not a valid {column_type} value"
         ) from exc
+
+
+def _validate_declared_vocabulary(column: Column, value: object) -> None:
+    if column.enum is not None and value not in column.enum:
+        raise ValueError(
+            f"column {column.name!r}: {value!r} is not one of the declared "
+            f"values {column.enum}"
+        )
+    low, high = column.resolve_numeric_bounds()
+    if not isinstance(value, (int, float)):
+        return
+    if low is not None and value < low:
+        raise ValueError(
+            f"column {column.name!r}: {value!r} is below the declared minimum {low}"
+        )
+    if high is not None and value > high:
+        raise ValueError(
+            f"column {column.name!r}: {value!r} is above the declared maximum {high}"
+        )
 
 
 # ── Column spec-equality ─────────────────────────────────────────────────────
@@ -560,22 +593,9 @@ def _field_for(column: Column) -> Any:
     kwargs: dict[str, Any] = {}
     if column.description:
         kwargs["description"] = column.description
-    low, high = _numeric_bounds(column)
+    low, high = column.resolve_numeric_bounds()
     if low is not None:
         kwargs["ge"] = low
     if high is not None:
         kwargs["le"] = high
     return Field(**kwargs)
-
-
-def _numeric_bounds(column: Column) -> tuple[Any, Any]:
-    """A declared numeric range as (ge, le); a string bound containing "inf"
-    (the schema's unbounded sentinel) becomes None on that side."""
-    if column.range is None or column.type not in ("int", "float"):
-        return (None, None)
-    low, high = column.range
-    if isinstance(low, str):
-        low = None
-    if isinstance(high, str):
-        high = None
-    return (low, high)

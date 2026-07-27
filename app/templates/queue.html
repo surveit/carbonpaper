@@ -12,6 +12,12 @@
     <p class="stage-id"><code>{{ stage_id }}</code> · run <code>{{ run_id }}</code></p>
 </div>
 
+<div class="reviewer-gate">
+    <label for="reviewer-name">Reviewing as</label>
+    <input type="text" id="reviewer-name" placeholder="your name" autocomplete="name" autofocus>
+    <span class="muted" id="reviewer-hint"></span>
+</div>
+
 <div class="queue-progress">
     <div class="bar"><div class="fill" style="width: {{ (100 * reviewed_count / total) | round if total else 0 }}%"></div></div>
     <p><strong>{{ reviewed_count }}</strong> of <strong>{{ total }}</strong> reviewed</p>
@@ -33,17 +39,18 @@
 <p class="muted"><em>No items to review.</em></p>
 {% endif %}
 
-<div class="queue-items">
+<div class="queue-items" id="queue-items" hidden>
 {% for item in items %}
-<article class="queue-card {% if item.prior_decision %}decided decided-{{ item.prior_decision.decision }}{% endif %}"
+<article class="queue-card {% if item.prior_decision %}decided decided-{{ item.prior_decision.verdict }}{% endif %}"
          data-input-fingerprint="{{ item.input_fingerprint }}">
+    {% if item.row.get('entity_id') or item.row.get('query_id') or item.row.get('benchmark_id') %}
     <header>
-        <span class="ai-score score-{{ item.row.get('score', '0') }}">AI score: {{ item.row.get('score', '?') }}</span>
         {% if item.row.get('entity_id') %}<code>{{ item.row.entity_id }}</code>{% endif %}
         {% if item.row.get('query_id') %}· <code>{{ item.row.query_id }}</code>{% endif %}
         {% if item.row.get('benchmark_id') %}· <code>{{ item.row.benchmark_id }}</code>{% endif %}
     </header>
-    {# ── What the model saw (the INPUT) — so the score is reviewable ── #}
+    {% endif %}
+    {# ── What the model saw (the INPUT) — so the AI's values are reviewable ── #}
     {% set mi = item.model_input or {} %}
     {% set quote = mi.get('quote') or item.row.get('quote') %}
     {% if quote %}
@@ -73,27 +80,56 @@
 
     {% if item.prior_decision %}
     <p class="prior-decision">
-        Current: <strong>{{ item.prior_decision.decision }}</strong>
+        Recorded: <strong>{{ item.prior_decision.verdict }}</strong>
         {% for column, value in item.prior_decision.reviewed_values.items() %}
-          · {{ column }} → <code>{{ value }}</code>
+          · {{ column }} = <code>{{ value }}</code>
         {% endfor %}
-        {% if item.prior_decision.reviewer %}
-        <span class="muted">by {{ item.prior_decision.reviewer }} at {{ item.prior_decision.reviewed_at | friendly_time }}</span>
+        {% if item.prior_decision.review_notes %}
+        · notes: <em>{{ item.prior_decision.review_notes }}</em>
         {% endif %}
+        <span class="muted">by {{ item.prior_decision.reviewer }} at {{ item.prior_decision.reviewed_at | friendly_time }}</span>
     </p>
     {% endif %}
-    <div class="decision-controls">
-        <button type="button" class="btn approve {% if item.prior_decision and item.prior_decision.decision == 'approve' %}selected{% endif %}" data-action="approve">✓ Approve</button>
-        <button type="button" class="btn reject  {% if item.prior_decision and item.prior_decision.decision == 'reject'  %}selected{% endif %}" data-action="reject">✗ Reject</button>
-        <span class="modify-group">
-            <label>Modify score:
-                <input type="number" step="1" min="-2" max="2"
-                       placeholder="e.g. -1"
-                       data-role="score">
-            </label>
-            <button type="button" class="btn modify {% if item.prior_decision and item.prior_decision.decision == 'modify' %}selected{% endif %}" data-action="modify">Save</button>
-        </span>
-    </div>
+
+    <form class="review-form">
+        <div class="reviewed-fields">
+        {% for field in reviewed_fields %}
+        {% set field_id = 'rf-' ~ item.input_fingerprint ~ '-' ~ field.target %}
+        {% set ai_value = item.row.get(field.source, '') %}
+        <div class="reviewed-field">
+            <label for="{{ field_id }}">{{ field.target }}</label>
+            <span class="ai-value">AI <code>{{ field.source }}</code>: <strong>{{ ai_value }}</strong></span>
+            {% if field.control == 'select' %}
+            <select id="{{ field_id }}" data-target="{{ field.target }}" data-ai-value="{{ ai_value }}">
+                {% if field.nullable %}<option value="">— none —</option>{% endif %}
+                {% for option in field.options %}
+                <option value="{{ option }}" {% if option == ai_value|string %}selected{% endif %}>{{ option }}</option>
+                {% endfor %}
+            </select>
+            {% elif field.control == 'checkbox' %}
+            <input type="checkbox" id="{{ field_id }}" data-target="{{ field.target }}"
+                   data-ai-value="{{ 'true' if ai_value else 'false' }}" {% if ai_value %}checked{% endif %}>
+            {% else %}
+            <input type="{{ field.control }}" id="{{ field_id }}" data-target="{{ field.target }}"
+                   data-ai-value="{{ ai_value }}" value="{{ ai_value }}"
+                   {% if field.step %}step="{{ field.step }}"{% endif %}
+                   {% if field.minimum is not none %}min="{{ field.minimum }}"{% endif %}
+                   {% if field.maximum is not none %}max="{{ field.maximum }}"{% endif %}>
+            {% endif %}
+        </div>
+        {% endfor %}
+        </div>
+        {% if review_notes_column %}
+        <label class="review-notes">
+            <span>{{ review_notes_column }}</span>
+            <textarea rows="2" data-role="notes" placeholder="why you changed it (optional)">{{ item.prior_decision.review_notes if item.prior_decision and item.prior_decision.review_notes else '' }}</textarea>
+        </label>
+        {% endif %}
+        <div class="decision-controls">
+            <button type="button" class="btn approve {% if item.prior_decision and item.prior_decision.verdict == 'approve' %}selected{% endif %}" data-action="approve">✓ Approve AI values</button>
+            <button type="submit" class="btn modify {% if item.prior_decision and item.prior_decision.verdict == 'modify' %}selected{% endif %}">Save my values</button>
+        </div>
+    </form>
     <details class="raw-row">
         <summary>raw row</summary>
         <pre>{{ item.row | tojson(indent=2) }}</pre>
@@ -108,18 +144,62 @@
   const RUN_ID = {{ run_id | tojson }};
   const STAGE_ID = {{ stage_id | tojson }};
   const DECIDE_URL = `/project/${PROJECT}/runs/${RUN_ID}/queue/${STAGE_ID}/decide`;
+  const REVIEWER_KEY = 'carbonpaper.reviewer';
 
-  async function submitDecision(card, decision, modifiedScore) {
+  const nameInput = document.getElementById('reviewer-name');
+  const hint = document.getElementById('reviewer-hint');
+  const queueItems = document.getElementById('queue-items');
+
+  function reviewerName() {
+    return (nameInput.value || '').trim();
+  }
+
+  function syncReviewerGate() {
+    const name = reviewerName();
+    queueItems.hidden = !name;
+    hint.textContent = name
+      ? 'Decisions are recorded against this name.'
+      : 'Enter your name to see the queue — no decision is recorded unattributed.';
+    if (name) {
+      localStorage.setItem(REVIEWER_KEY, name);
+    } else {
+      localStorage.removeItem(REVIEWER_KEY);
+    }
+  }
+
+  nameInput.value = localStorage.getItem(REVIEWER_KEY) || '';
+  syncReviewerGate();
+  nameInput.addEventListener('input', syncReviewerGate);
+
+  function readValues(card, useAiValues) {
+    const values = {};
+    card.querySelectorAll('[data-target]').forEach(function (el) {
+      if (useAiValues) {
+        values[el.dataset.target] = el.dataset.aiValue;
+      } else if (el.type === 'checkbox') {
+        values[el.dataset.target] = el.checked ? 'true' : 'false';
+      } else {
+        values[el.dataset.target] = el.value;
+      }
+    });
+    return values;
+  }
+
+  async function submitDecision(card, verdict, values) {
+    if (!reviewerName()) {
+      nameInput.focus();
+      return;
+    }
     const fd = new FormData();
     fd.append('input_fingerprint', card.dataset.inputFingerprint);
-    fd.append('decision', decision);
-    if (modifiedScore !== undefined && modifiedScore !== null && modifiedScore !== '') {
-      fd.append('modified_score', modifiedScore);
-    }
+    fd.append('verdict', verdict);
+    fd.append('reviewer', reviewerName());
+    fd.append('reviewed_values', JSON.stringify(values));
+    const notes = card.querySelector('[data-role="notes"]');
+    if (notes) fd.append('review_notes', notes.value);
     const r = await fetch(DECIDE_URL, { method: 'POST', body: fd });
     if (!r.ok) {
-      const text = await r.text();
-      alert(`Failed: ${r.status} ${text}`);
+      alert(`Failed: ${r.status} ${await r.text()}`);
       return;
     }
     // Reload to update progress and reveal Resume button when complete.
@@ -127,21 +207,18 @@
   }
 
   document.addEventListener('click', function (ev) {
-    const btn = ev.target.closest('[data-action]');
+    const btn = ev.target.closest('[data-action="approve"]');
     if (!btn) return;
     const card = btn.closest('.queue-card');
-    if (!card) return;
-    const action = btn.dataset.action;
-    if (action === 'approve' || action === 'reject') {
-      submitDecision(card, action);
-    } else if (action === 'modify') {
-      const input = card.querySelector('[data-role="score"]');
-      if (!input || input.value === '') {
-        alert('Enter a score to modify to.');
-        return;
-      }
-      submitDecision(card, 'modify', input.value);
-    }
+    if (card) submitDecision(card, 'approve', readValues(card, true));
+  });
+
+  document.addEventListener('submit', function (ev) {
+    const form = ev.target.closest('.review-form');
+    if (!form) return;
+    ev.preventDefault();
+    const card = form.closest('.queue-card');
+    if (card) submitDecision(card, 'modify', readValues(card, false));
   });
 })();
 </script>

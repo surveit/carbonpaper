@@ -233,18 +233,18 @@ def test_404_when_the_stage_id_is_not_a_human_review_queue_stage(tmp_path, monke
     assert r.status_code == 404
 
 
-# ── 5. queue_decide validation: FastAPI 422s malformed input, ReviewValidation-
-#      Error 400s the modify-without-score domain rule, unknown fingerprint 404s ─
+# ── 5. queue_decide validation: FastAPI 422s malformed input, the endpoint and
+#      the review service 400 the domain rules, unknown fingerprint 404s ───────
 
 
-def test_decide_422_on_unknown_decision(tmp_path, monkeypatch):
+def test_decide_422_on_unknown_verdict(tmp_path, monkeypatch):
     _project_dir, run_id, _run_dir, _snapshot, fingerprints = _build_and_halt(tmp_path, monkeypatch)
     fp = fingerprints["input_fingerprints"][0]
 
     client = TestClient(app)
     r = client.post(
         f"/project/{PROJECT}/runs/{run_id}/queue/review/decide",
-        data={"input_fingerprint": fp, "decision": "shrug",  # not a ReviewVerdict value
+        data={"input_fingerprint": fp, "verdict": "shrug", "reviewer": "Ada",  # not a ReviewVerdict value
               "reviewed_values": json.dumps({"human_score": 1})},
     )
     assert r.status_code == 422  # FastAPI rejects the unknown enum value
@@ -258,22 +258,20 @@ def test_decide_400_on_malformed_reviewed_values_json(tmp_path, monkeypatch):
     client = TestClient(app)
     r = client.post(
         f"/project/{PROJECT}/runs/{run_id}/queue/review/decide",
-        data={"input_fingerprint": fp, "decision": "modify", "reviewed_values": "{not json"},
+        data={"input_fingerprint": fp, "verdict": "modify", "reviewer": "Ada", "reviewed_values": "{not json"},
     )
     assert r.status_code == 400
     assert not StageCacheEntry.list(prefix=f"{PROJECT}/review/")  # nothing written
 
 
 def test_decide_400_when_reviewed_values_miss_a_declared_column(tmp_path, monkeypatch):
-    """The service's domain rule surfacing through the endpoint: a decision that
-    does not carry every declared reviewed column is a 400, not a partial fill."""
     _project_dir, run_id, _run_dir, _snapshot, fingerprints = _build_and_halt(tmp_path, monkeypatch)
     fp = fingerprints["input_fingerprints"][0]
 
     client = TestClient(app)
     r = client.post(
         f"/project/{PROJECT}/runs/{run_id}/queue/review/decide",
-        data={"input_fingerprint": fp, "decision": "modify",
+        data={"input_fingerprint": fp, "verdict": "modify", "reviewer": "Ada",
               "reviewed_values": json.dumps({})},
     )
     assert r.status_code == 400
@@ -286,8 +284,8 @@ def test_decide_404_on_unknown_fingerprint_and_writes_nothing(tmp_path, monkeypa
     client = TestClient(app)
     r = client.post(
         f"/project/{PROJECT}/runs/{run_id}/queue/review/decide",
-        data={"input_fingerprint": "not-a-real-fingerprint", "decision": "approve",
-              "reviewed_values": json.dumps({"human_score": 1})},
+        data={"input_fingerprint": "not-a-real-fingerprint", "verdict": "approve",
+              "reviewer": "Ada", "reviewed_values": json.dumps({"human_score": 1})},
     )
     assert r.status_code == 404
     assert not StageCacheEntry.list(prefix=f"{PROJECT}/review/")
@@ -355,19 +353,20 @@ def test_e2e_decide_every_verdict_then_resume_completes(tmp_path, monkeypatch):
     client = TestClient(app)
     ai_score_by_id = dict(zip(snapshot["id"], snapshot["score"]))
     verdicts = {
-        "a": {"decision": "approve", "reviewed_values": json.dumps(
+        "a": {"verdict": "approve", "reviewed_values": json.dumps(
             {"human_score": int(ai_score_by_id["a"])})},
-        "b": {"decision": "modify", "reviewed_values": json.dumps({"human_score": 99})},
-        "c": {"decision": "modify", "reviewed_values": json.dumps({"human_score": 0})},
+        "b": {"verdict": "modify", "reviewed_values": json.dumps({"human_score": 99})},
+        "c": {"verdict": "modify", "reviewed_values": json.dumps({"human_score": 0})},
     }
     for row_id, form in verdicts.items():
         r = client.post(
             f"/project/{project}/runs/{run_id}/queue/review/decide",
-            data={"input_fingerprint": fp_by_id[row_id], **form},
+            data={"input_fingerprint": fp_by_id[row_id], "reviewer": "Ada Reviewer", **form},
         )
         assert r.status_code == 200, r.text
         body = r.json()
-        assert body == {"ok": True, "input_fingerprint": fp_by_id[row_id], "decision": form["decision"]}
+        assert body == {"ok": True, "input_fingerprint": fp_by_id[row_id],
+                        "verdict": form["verdict"]}
 
     # frozen_input is the upstream row the reviewer saw (id, score) alone — the
     # snapshot row the decision was recorded from carries only those columns to
@@ -385,6 +384,217 @@ def test_e2e_decide_every_verdict_then_resume_completes(tmp_path, monkeypatch):
     assert out.loc["a", "human_score"] == 1     # approve: AI score kept
     assert out.loc["b", "human_score"] == 99    # modify: human score used
     assert out.loc["c", "decision"] == "modify"  # the row stays, carrying its verdict
+    assert out.loc["b", "reviewer_id"] == "Ada Reviewer"  # the name the reviewer typed
     assert out.loc["c", "human_score"] == 0      # a human-entered 0 is a score, not a blank
 
     assert not (project_dir / "decisions").exists()
+
+
+# ── 8. Attribution: the reviewer types their own name; blank is refused ──────
+
+
+def test_decide_400_on_a_blank_reviewer_and_writes_nothing(tmp_path, monkeypatch):
+    _project_dir, run_id, _run_dir, _snapshot, fingerprints = _build_and_halt(tmp_path, monkeypatch)
+    fp = fingerprints["input_fingerprints"][0]
+
+    client = TestClient(app)
+    r = client.post(
+        f"/project/{PROJECT}/runs/{run_id}/queue/review/decide",
+        data={"input_fingerprint": fp, "verdict": "approve", "reviewer": "   ",
+              "reviewed_values": json.dumps({"human_score": 1})},
+    )
+    assert r.status_code == 400
+    assert "reviewer" in r.json()["detail"]
+    assert not StageCacheEntry.list(prefix=f"{PROJECT}/review/")
+
+
+def test_decide_records_the_reviewer_name_the_form_posted(tmp_path, monkeypatch):
+    _project_dir, run_id, _run_dir, _snapshot, fingerprints = _build_and_halt(tmp_path, monkeypatch)
+    fp = fingerprints["input_fingerprints"][0]
+
+    client = TestClient(app)
+    r = client.post(
+        f"/project/{PROJECT}/runs/{run_id}/queue/review/decide",
+        data={"input_fingerprint": fp, "verdict": "approve", "reviewer": "  Ada Lovelace  ",
+              "reviewed_values": json.dumps({"human_score": 1})},
+    )
+    assert r.status_code == 200, r.text
+
+    entry = StageCacheEntry.read_only().get(
+        PROJECT, "review", fingerprints["stage_fingerprint"], fp
+    )
+    assert entry is not None and entry.output_row is not None
+    assert entry.output_row["reviewer_id"] == "Ada Lovelace"  # trimmed, never "local"
+
+
+# ── 9. skipped is the runtime's own verdict; no reviewer may post it ─────────
+
+
+def test_decide_400_on_verdict_skipped(tmp_path, monkeypatch):
+    _project_dir, run_id, _run_dir, _snapshot, fingerprints = _build_and_halt(tmp_path, monkeypatch)
+    fp = fingerprints["input_fingerprints"][0]
+
+    client = TestClient(app)
+    r = client.post(
+        f"/project/{PROJECT}/runs/{run_id}/queue/review/decide",
+        data={"input_fingerprint": fp, "verdict": "skipped", "reviewer": "Ada",
+              "reviewed_values": json.dumps({"human_score": 1})},
+    )
+    assert r.status_code == 400
+    assert not StageCacheEntry.list(prefix=f"{PROJECT}/review/")
+
+
+# ── 10. Coercion against the declared column ────────────────────────────────
+
+
+def test_decide_400_on_a_value_that_will_not_coerce(tmp_path, monkeypatch):
+    """`human_score` reviews an `int` source column, so free text is refused
+    naming the column and the offending text — never stored as a string."""
+    _project_dir, run_id, _run_dir, _snapshot, fingerprints = _build_and_halt(tmp_path, monkeypatch)
+    fp = fingerprints["input_fingerprints"][0]
+
+    client = TestClient(app)
+    r = client.post(
+        f"/project/{PROJECT}/runs/{run_id}/queue/review/decide",
+        data={"input_fingerprint": fp, "verdict": "modify", "reviewer": "Ada",
+              "reviewed_values": json.dumps({"human_score": "banana"})},
+    )
+    assert r.status_code == 400
+    detail = r.json()["detail"]
+    assert "human_score" in detail and "banana" in detail
+    assert not StageCacheEntry.list(prefix=f"{PROJECT}/review/")
+
+
+def test_decide_coerces_form_text_to_the_declared_type(tmp_path, monkeypatch):
+    """The form posts strings; what lands in the cache is a typed int."""
+    _project_dir, run_id, _run_dir, _snapshot, fingerprints = _build_and_halt(tmp_path, monkeypatch)
+    fp = fingerprints["input_fingerprints"][0]
+
+    client = TestClient(app)
+    r = client.post(
+        f"/project/{PROJECT}/runs/{run_id}/queue/review/decide",
+        data={"input_fingerprint": fp, "verdict": "modify", "reviewer": "Ada",
+              "reviewed_values": json.dumps({"human_score": "  -3 "})},
+    )
+    assert r.status_code == 200, r.text
+
+    entry = StageCacheEntry.read_only().get(
+        PROJECT, "review", fingerprints["stage_fingerprint"], fp
+    )
+    assert entry is not None and entry.output_row is not None
+    assert entry.output_row["human_score"] == -3
+    assert not isinstance(entry.output_row["human_score"], str)
+
+
+# ── 11. Notes: normalised at the boundary, refused with no notes column ──────
+
+
+def test_decide_accepts_an_untouched_notes_box_as_no_note(tmp_path, monkeypatch):
+    """An HTML form posts an empty textarea as "" — that is no note, not an
+    empty note, and must not reach the notes column as one."""
+    _project_dir, run_id, _run_dir, _snapshot, fingerprints = _build_and_halt(tmp_path, monkeypatch)
+    fp = fingerprints["input_fingerprints"][0]
+
+    client = TestClient(app)
+    r = client.post(
+        f"/project/{PROJECT}/runs/{run_id}/queue/review/decide",
+        data={"input_fingerprint": fp, "verdict": "approve", "reviewer": "Ada",
+              "reviewed_values": json.dumps({"human_score": 1}), "review_notes": "   "},
+    )
+    assert r.status_code == 200, r.text
+
+    entry = StageCacheEntry.read_only().get(
+        PROJECT, "review", fingerprints["stage_fingerprint"], fp
+    )
+    assert entry is not None and entry.output_row is not None
+    assert entry.output_row["review_notes"] is None
+
+
+def _no_notes_review_stage():
+    queue = {k: v for k, v in QUEUE_COLUMNS.items() if k != "review_notes_column"}
+    return {"id": "review", "name": "Review items", "type": "human_review_queue",
+            "inputs": [{"id": "load", "schema": {
+                "columns": [{"name": "id", "type": "str"}, {"name": "score", "type": "int"}],
+                "primary_key": ["id"]}}],
+            "queue": queue}
+
+
+def test_decide_400_on_notes_when_the_stage_declares_no_notes_column(tmp_path, monkeypatch):
+    project = "queue_route_no_notes"
+    monkeypatch.setattr(loading, "EXAMPLES_DIR", tmp_path)
+    project_dir = tmp_path / project
+    _write_stage(project_dir, "01_load.json", _e2e_load_stage(project_dir))
+    _write_stage(project_dir, "02_review.json", _no_notes_review_stage())
+    _seed_version(project_dir)
+
+    manifest = run_prepared(prepare_run(project_dir, repo_root=project_dir))
+    run_id = manifest["run_id"]
+    fingerprints = _read_fingerprints(project_dir / "runs" / run_id)
+
+    client = TestClient(app)
+    r = client.post(
+        f"/project/{project}/runs/{run_id}/queue/review/decide",
+        data={"input_fingerprint": fingerprints["input_fingerprints"][0],
+              "verdict": "modify", "reviewer": "Ada",
+              "reviewed_values": json.dumps({"human_score": 2}),
+              "review_notes": "a note nobody declared a home for"},
+    )
+    assert r.status_code == 400
+    assert not StageCacheEntry.list(prefix=f"{project}/review/")
+
+
+# ── 12. Live-definition drift from the halted run ────────────────────────────
+
+
+def test_both_routes_409_when_the_stage_changed_since_the_halt(tmp_path, monkeypatch):
+    """The run's decisions are keyed by the fingerprint it halted under, but the
+    columns they are read and written through come from the live definition.
+    Rename a reviewed target between the halt and the review and the two describe
+    different column sets — the page says so rather than raising KeyError."""
+    project_dir, run_id, _run_dir, _snapshot, fingerprints = _build_and_halt(tmp_path, monkeypatch)
+    drifted = _review_stage()
+    drifted["queue"] = {**QUEUE_COLUMNS, "reviewed_columns": {"score": "checked_score"}}
+    _write_stage(project_dir, "03_review.json", drifted)
+
+    client = TestClient(app)
+    page = client.get(f"/project/{PROJECT}/runs/{run_id}/queue/review")
+    assert page.status_code == 409
+    assert "has changed since this run halted" in page.json()["detail"]
+
+    posted = client.post(
+        f"/project/{PROJECT}/runs/{run_id}/queue/review/decide",
+        data={"input_fingerprint": fingerprints["input_fingerprints"][0],
+              "verdict": "approve", "reviewer": "Ada",
+              "reviewed_values": json.dumps({"checked_score": 1})},
+    )
+    assert posted.status_code == 409
+    assert not StageCacheEntry.list(prefix=f"{PROJECT}/review/")
+
+
+# ── 13. The form the page renders: one field per declared reviewed column ────
+
+
+def test_queue_page_renders_one_prefilled_field_per_reviewed_column(tmp_path, monkeypatch):
+    """The field is generated from queue.reviewed_columns and typed from the
+    declared column — a number input for an `int`, pre-filled with the AI value
+    the reviewer is being asked to confirm or change."""
+    _project_dir, run_id, _run_dir, _snapshot, _fingerprints = _build_and_halt(tmp_path, monkeypatch)
+
+    client = TestClient(app)
+    html = client.get(f"/project/{PROJECT}/runs/{run_id}/queue/review").text
+
+    assert 'data-target="human_score"' in html
+    assert 'type="number"' in html
+    assert 'data-ai-value="1"' in html and 'value="1"' in html  # the mocked AI score
+    assert "modified_score" not in html  # the hardcoded -2..2 score field is gone
+    assert 'data-action="reject"' not in html
+
+
+def test_queue_page_gates_the_items_behind_the_reviewer_name(tmp_path, monkeypatch):
+    _project_dir, run_id, _run_dir, _snapshot, _fingerprints = _build_and_halt(tmp_path, monkeypatch)
+
+    client = TestClient(app)
+    html = client.get(f"/project/{PROJECT}/runs/{run_id}/queue/review").text
+
+    assert 'id="reviewer-name"' in html
+    assert '<div class="queue-items" id="queue-items" hidden>' in html  # revealed by JS only
