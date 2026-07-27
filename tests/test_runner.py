@@ -20,6 +20,16 @@ from app.services import versioning
 from app.services.versioning import create_version_from_disk, list_versions
 
 
+# The two shapes every fixture in this file loads: the (name, val) items csv and
+# the (id, text) csv an llm_transform scores. Declared once so an upstream's
+# output_schema and its downstream's input `schema` cannot drift apart.
+_NAME_VAL_SCHEMA = {"columns": [{"name": "name", "type": "str"},
+                                {"name": "val", "type": "int"}]}
+_ID_TEXT_SCHEMA = {"columns": [{"name": "id", "type": "str"},
+                               {"name": "text", "type": "str"}],
+                   "primary_key": ["id"]}
+
+
 def _seed_version(root):
     """Create the initial version a run targets, and PUBLISH it. Runs no longer
     create versions, so a test that builds a working copy must snapshot it into
@@ -39,6 +49,7 @@ def _make_project(root):
         "id": "load", "name": "Load items", "type": "input_data",
         "connector": {"kind": "file",
                       "params": {"path": str(root / "data" / "items.csv"), "format": "csv"}},
+        "output_schema": _NAME_VAL_SCHEMA,
         "limit": 2,
     }
     (root / "compiled" / "01_load.json").write_text(json.dumps(stage), encoding="utf-8")
@@ -158,10 +169,12 @@ def _two_stage_project(root, rows: list[dict]):
         "id": "load", "name": "Load items", "type": "input_data",
         "connector": {"kind": "file",
                       "params": {"path": str(root / "data" / "items.csv"), "format": "csv"}},
+        "output_schema": _NAME_VAL_SCHEMA,
     }
     consume = {
         "id": "consume", "name": "Consume items", "type": "python_frame_function",
-        "inputs": [{"id": "load"}],
+        "inputs": [{"id": "load", "schema": _NAME_VAL_SCHEMA}],
+        "output_schema": _NAME_VAL_SCHEMA,
         "function": {"kind": "inline",
                      "code": "def transform(df):\n    return df\n"},
     }
@@ -218,12 +231,11 @@ def _llm_transform_project(root):
         "id": "load", "name": "Load items", "type": "input_data",
         "connector": {"kind": "file",
                       "params": {"path": str(root / "data" / "items.csv"), "format": "csv"}},
+        "output_schema": _ID_TEXT_SCHEMA,
     }
     score = {
         "id": "score", "name": "Score items", "type": "llm_transform",
-        "inputs": [{"id": "load", "schema": {
-            "columns": [{"name": "id", "type": "str"}, {"name": "text", "type": "str"}],
-            "primary_key": ["id"]}}],
+        "inputs": [{"id": "load", "schema": _ID_TEXT_SCHEMA}],
         "output_schema": {
             "columns": [{"name": "id", "type": "str"}, {"name": "text", "type": "str"},
                         {"name": "score", "type": "int", "nullable": False}],
@@ -274,12 +286,11 @@ def test_run_subset_surfaces_the_real_row_failure_message(tmp_path, monkeypatch)
     load = Stage.model_validate({
         "id": "load", "name": "Load items", "type": "input_data",
         "connector": {"kind": "file"},
+        "output_schema": _ID_TEXT_SCHEMA,
     })
     score = Stage.model_validate({
         "id": "score", "name": "Score items", "type": "llm_transform",
-        "inputs": [{"id": "load", "schema": {
-            "columns": [{"name": "id", "type": "str"}, {"name": "text", "type": "str"}],
-            "primary_key": ["id"]}}],
+        "inputs": [{"id": "load", "schema": _ID_TEXT_SCHEMA}],
         "output_schema": {
             "columns": [{"name": "id", "type": "str"}, {"name": "text", "type": "str"},
                         {"name": "score", "type": "int", "nullable": False}],
@@ -308,6 +319,7 @@ def test_run_subset_preserves_partial_work_in_the_manifest_on_a_mid_frontier_err
     load = Stage.model_validate({
         "id": "load", "name": "Load items", "type": "input_data",
         "connector": {"kind": "file"},
+        "output_schema": _ID_TEXT_SCHEMA,
     })
     clean = Stage.model_validate({
         "id": "clean", "name": "Clean rows", "type": "python_row_function",
@@ -422,7 +434,8 @@ def test_create_version_rejects_invalid_working_copy(tmp_path):
     (tmp_path / "compiled").mkdir(parents=True)
     bad = {"id": "load", "name": "Load", "type": "input_data",
            "connector": {"kind": "file",
-                         "params": {"path": "data/items.csv", "format": "csv"}}}  # relative path
+                         "params": {"path": "data/items.csv", "format": "csv"}},  # relative path
+           "output_schema": _NAME_VAL_SCHEMA}
     (tmp_path / "compiled" / "01_load.json").write_text(
         json.dumps(bad), encoding="utf-8")
 
@@ -443,7 +456,8 @@ def test_invalid_workflow_never_becomes_a_version_and_run_never_pins_stale(tmp_p
     (tmp_path / "compiled").mkdir(parents=True)
     bad = {"id": "load", "name": "Load", "type": "input_data",
            "connector": {"kind": "file",
-                         "params": {"path": "data/items.csv", "format": "csv"}}}
+                         "params": {"path": "data/items.csv", "format": "csv"}},
+           "output_schema": _NAME_VAL_SCHEMA}
     (tmp_path / "compiled" / "01_load.json").write_text(
         json.dumps(bad), encoding="utf-8")
 
@@ -465,7 +479,8 @@ def test_invalid_workflow_never_becomes_a_version_and_run_never_pins_stale(tmp_p
         tmp_path / "data" / "items.csv", index=False)
     good = {"id": "load", "name": "Load", "type": "input_data",
             "connector": {"kind": "file",
-                          "params": {"path": str(tmp_path / "data" / "items.csv"), "format": "csv"}}}
+                          "params": {"path": str(tmp_path / "data" / "items.csv"), "format": "csv"}},
+            "output_schema": _NAME_VAL_SCHEMA}
     (tmp_path / "compiled" / "01_load.json").write_text(
         json.dumps(good), encoding="utf-8")
     with pytest.raises(NoVersionToRunError):
@@ -492,7 +507,8 @@ def test_resume_reapplies_run_bindings_for_a_pending_input_stage(tmp_path):
     binding, and a workflow that authors NO path for it."""
     (tmp_path / "compiled").mkdir(parents=True)
     stage = {"id": "load", "name": "Load items", "type": "input_data",
-              "connector": {"kind": "file", "params": {}}}  # no workflow-authored path
+              "connector": {"kind": "file", "params": {}},  # no workflow-authored path
+              "output_schema": _NAME_VAL_SCHEMA}
     (tmp_path / "compiled" / "01_load.json").write_text(
         json.dumps(stage), encoding="utf-8")
     version_id = _seed_version(tmp_path)
