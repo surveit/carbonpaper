@@ -424,6 +424,13 @@ class Stage(_Base):
     publish: Optional[PublishConfig] = None
 
     review: Optional[ReviewConfig] = None
+    # False declares this stage INTENTIONALLY non-deterministic — it must
+    # re-roll every run — so the runtime consults no stage-result cache for its
+    # rows. Not a performance knob, and deliberately absent from
+    # compute_definition_fingerprint: it governs WHETHER the cache is consulted,
+    # not WHAT the stage computes, so flipping it must never invalidate an
+    # entry already recorded.
+    cache: bool = True
     limit: Optional[int] = None
     compiler_notes: list[str] = Field(default_factory=list)
 
@@ -452,9 +459,11 @@ class Stage(_Base):
     def compute_definition_fingerprint(self) -> str:
         """sha1[:16] over the canonical JSON of the output-determining subset of
         this stage: {"type", "handle": <the type's handle block>, "output_schema"}.
-        Every other Stage field (id, name, source, inputs, review, limit,
-        compiler_notes, eval, tests) is incidental — it does not change what
-        this stage computes — and stays out of the fingerprint. The handle
+        Every other Stage field (id, name, source, inputs, review, cache,
+        limit, compiler_notes, eval, tests) is incidental — it does not change what
+        this stage computes — and stays out of the fingerprint, `cache`
+        included: it decides whether the cache is consulted, not what the stage
+        computes, so flipping it must not invalidate an existing entry. The handle
         block itself is trimmed to its class's own `FINGERPRINT_FIELDS` (every
         handle config class declares `FINGERPRINT_FIELDS`/`INCIDENTAL_FIELDS`
         explicitly, exhaustively over its own fields — see e.g. QueueConfig,

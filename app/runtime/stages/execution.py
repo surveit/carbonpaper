@@ -26,6 +26,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from threading import Lock
 from typing import Any, Callable, Protocol, runtime_checkable
 
 import pandas as pd
@@ -34,6 +35,8 @@ from app.models import Stage
 from app.models.stage import StageType, is_grain_and_order_preserving
 
 from app.core.agent.usage import LlmUsage
+from app.core.persistence import JsonDict
+from app.core.stage_cache import ReadOnlyStageCache, StageCache, compute_row_fingerprint
 
 from ..cancellation import consume_cancel
 from ..context import RunContext
@@ -142,7 +145,10 @@ class RowMapHandler(StageHandler):
     input order regardless of completion order. `project_output_to_declared`
     asks the driver to project the assembled frame onto exactly the columns
     output_schema declares — a column-only operation that cannot change row
-    count or order.
+    count or order. `caches_rows` lets the driver resolve a row against the
+    stage-result cache instead of calling the mapper (see `open_row_cache`); a
+    registration whose mapper accumulates state as it sees each row, or whose
+    entries are written from outside the run, passes it False.
     """
 
     def __init__(
@@ -150,10 +156,12 @@ class RowMapHandler(StageHandler):
         make_mapper: MakeRowMapper,
         parallelism: int = 1,
         project_output_to_declared: bool = False,
+        caches_rows: bool = True,
     ) -> None:
         self.make_mapper = make_mapper
         self.parallelism = parallelism
         self.project_output_to_declared = project_output_to_declared
+        self.caches_rows = caches_rows
 
     def execute(
         self, stage: Stage, inputs: dict[str, pd.DataFrame], ctx: RunContext
@@ -277,6 +285,11 @@ def _run_row_mapper(
         )
     src = inputs[stage.inputs[0].id]
     map_row = handler.make_mapper(stage, ctx, src)
+    # The ONE line of per-row compute, optionally routed through the row cache.
+    # `map_row` itself stays bound: _finish_mapped_frame tests it for the
+    # PostMapRowMapper shape, which a wrapper would hide.
+    cache = open_row_cache(stage, ctx, handler.caches_rows)
+    compute_row = map_row if cache is None else _map_row_through_cache(cache, map_row)
     # str(k) pins pandas' Hashable column labels down to str (a no-op for
     # parquet/CSV data, whose labels are already strings).
     records: list[Row] = [
@@ -287,7 +300,7 @@ def _run_row_mapper(
     if handler.parallelism > 1 and len(records) > 1:
         with ThreadPoolExecutor(max_workers=handler.parallelism) as pool:
             futures = {
-                pool.submit(map_row, record, index): index
+                pool.submit(compute_row, record, index): index
                 for index, record in enumerate(records)
             }
             for future in as_completed(futures):
@@ -303,7 +316,7 @@ def _run_row_mapper(
         for index, record in enumerate(records):
             if _consume_cancel(ctx):
                 raise RunCancelled(f"stage {stage.id}: cancelled")
-            results[index] = map_row(record, index)
+            results[index] = compute_row(record, index)
 
     out_rows: list[Row] = []
     for index, result in enumerate(results):
@@ -315,6 +328,130 @@ def _run_row_mapper(
         out_rows.append(result)
     mapped = _finish_mapped_frame(pd.DataFrame(out_rows), handler, map_row, stage, ctx)
     return _restore_input_columns_when_nothing_named_them(mapped, src)
+
+
+# ── the row-level cache interceptor ──────────────────────────────────────────
+# Caching is a property of the handler SHAPE, not of any stage type: the one
+# line where per-row compute happens is wrapped, so every row-mapped stage type
+# is cached by the same code and no stage implements a cache interface.
+
+
+class RowCache:
+    """One stage execution's stage-result cache, keyed by input-row fingerprint.
+
+    Built by `open_row_cache`, which performs the single bulk read: a per-row
+    store `get` would make a stage's store cost scale with its row count."""
+
+    def __init__(
+        self,
+        project: str,
+        stage_id: str,
+        stage_fingerprint: str,
+        cached_outputs: dict[str, JsonDict],
+        writer: StageCache | None,
+    ) -> None:
+        self._project = project
+        self._stage_id = stage_id
+        self._stage_fingerprint = stage_fingerprint
+        self._cached_outputs = cached_outputs
+        self._writer = writer
+        # The driver may compute rows across worker threads (RowMapHandler's
+        # `parallelism`), so records are serialized here.
+        self._write_lock = Lock()
+
+    def find_cached_output(self, input_fingerprint: str) -> Row | None:
+        """The output row already recorded for this key, or None. A hit carries
+        no ROW_USAGE_KEY — a replayed row cost this run nothing, which is what
+        the stage's usage total should say."""
+        cached = self._cached_outputs.get(input_fingerprint)
+        return None if cached is None else dict(cached)
+
+    def record_row_output(
+        self, input_fingerprint: str, input_row: Row, output_row: Row
+    ) -> None:
+        """Pin one computed row, unless this accessor cannot write or the result
+        is not an output the stage produced (`_may_record_row_output`)."""
+        if self._writer is None or not _may_record_row_output(output_row):
+            return
+        with self._write_lock:
+            self._writer.record(
+                project=self._project,
+                stage_id=self._stage_id,
+                stage_fingerprint=self._stage_fingerprint,
+                input_fingerprint=input_fingerprint,
+                input_row=input_row,
+                output_row=_without_usage(output_row),
+            )
+
+
+def open_row_cache(stage: Stage, ctx: RunContext, caches_rows: bool) -> RowCache | None:
+    """This execution's row cache, or None when caching does not apply: the
+    handler shape opts out (`caches_rows`), the stage declares `cache: false`
+    (intentionally non-deterministic — always re-roll), or the run carries no
+    project scope (a subset run, a preview, an authored-test run).
+
+    Under `ctx.bust_cache` the bulk read is skipped while a write-capable
+    accessor is kept, so a busted run ends with the cache re-pinned, not stale.
+    Writing needs the `StageCache` subclass: a read-only accessor reuses hits
+    and records nothing."""
+    if not caches_rows or not stage.cache:
+        return None
+    if ctx.identity is None or ctx.stage_cache is None:
+        return None
+    stage_fingerprint = stage.compute_definition_fingerprint()
+    cached_outputs = (
+        {} if ctx.bust_cache
+        else _read_cached_outputs(
+            ctx.stage_cache, ctx.identity.project, stage.id, stage_fingerprint
+        )
+    )
+    writer = ctx.stage_cache if isinstance(ctx.stage_cache, StageCache) else None
+    return RowCache(
+        ctx.identity.project, stage.id, stage_fingerprint, cached_outputs, writer
+    )
+
+
+def _read_cached_outputs(
+    stage_cache: ReadOnlyStageCache, project: str, stage_id: str, stage_fingerprint: str
+) -> dict[str, JsonDict]:
+    """Every output row already recorded against this stage definition, keyed by
+    the input fingerprint it was filed under — ONE store read for the whole
+    execution. An entry carrying no output row is skipped: a row-mapped stage
+    owes one output row per input row, so such an entry replays nothing."""
+    return {
+        entry.input_fingerprint: entry.output_row
+        for entry in stage_cache.find_entries(project, stage_id, stage_fingerprint)
+        if entry.output_row is not None
+    }
+
+
+# A result carrying either sentinel is not stage output: ROW_ERROR_KEY marks a
+# row the stage FAILED to produce, ROW_DEFERRED_KEY one whose value does not
+# exist yet. Neither may ever be pinned as this key's answer.
+_UNRECORDABLE_ROW_SENTINELS = (ROW_ERROR_KEY, ROW_DEFERRED_KEY)
+
+
+def _may_record_row_output(row: Row) -> bool:
+    return all(row.get(key) is None for key in _UNRECORDABLE_ROW_SENTINELS)
+
+
+def _without_usage(row: Row) -> Row:
+    """`row` without ROW_USAGE_KEY: usage is per-CALL telemetry the driver sums
+    onto this run's contribution, never part of what the stage computed."""
+    return {key: value for key, value in row.items() if key != ROW_USAGE_KEY}
+
+
+def _map_row_through_cache(cache: RowCache, map_row: RowMapper) -> RowMapper:
+    def compute_row(row: Row, index: int) -> Row:
+        input_fingerprint = compute_row_fingerprint(row)
+        cached = cache.find_cached_output(input_fingerprint)
+        if cached is not None:
+            return cached
+        result = map_row(row, index)
+        cache.record_row_output(input_fingerprint, row, result)
+        return result
+
+    return compute_row
 
 
 def _restore_input_columns_when_nothing_named_them(
