@@ -648,45 +648,145 @@ def test_queue_page_prefills_a_decided_row_from_the_recorded_value(tmp_path, mon
 # ── 14. A nullable bool: three states, so never a fabricated `false` ─────────
 
 
-def _bool_review_stage():
+def _bool_review_stage(nullable):
     return {"id": "review", "name": "Review flags", "type": "human_review_queue",
             "inputs": [{"id": "load", "schema": {
                 "columns": [{"name": "id", "type": "str"},
-                            {"name": "flag", "type": "bool", "nullable": True}],
+                            {"name": "flag", "type": "bool", "nullable": nullable}],
                 "primary_key": ["id"]}}],
             "queue": {**queue_columns(source="flag", target="human_flag")}}
 
 
-def _build_and_halt_bool_queue(tmp_path, monkeypatch):
-    """A queue over a nullable `bool` column whose AI value is null on every row."""
-    project = "queue_route_bool"
+def _build_and_halt_bool_queue(tmp_path, monkeypatch, project, *, ai_value, nullable=True):
+    """A one-row queue over a `bool` column whose AI value is `ai_value` (None
+    for a null). Returns (project, run_id, fingerprints, snapshot)."""
     monkeypatch.setattr(loading, "EXAMPLES_DIR", tmp_path)
     project_dir = tmp_path / project
     (project_dir / "data").mkdir(parents=True, exist_ok=True)
     csv_path = project_dir / "data" / "flags.csv"
-    pd.DataFrame({"id": ["a"], "flag": [None]}).to_csv(csv_path, index=False)
+    pd.DataFrame({"id": ["a"], "flag": [ai_value]}).to_csv(csv_path, index=False)
     _write_stage(project_dir, "01_load.json", {
         "id": "load", "name": "Load flags", "type": "input_data",
         "connector": {"kind": "file", "params": {"path": str(csv_path), "format": "csv"}}})
-    _write_stage(project_dir, "02_review.json", _bool_review_stage())
+    _write_stage(project_dir, "02_review.json", _bool_review_stage(nullable))
     _seed_version(project_dir)
-    manifest = run_prepared(prepare_run(project_dir, repo_root=project_dir))
-    return project, manifest["run_id"]
+    run_id = run_prepared(prepare_run(project_dir, repo_root=project_dir))["run_id"]
+    run_dir = project_dir / "runs" / run_id
+    return run_id, _read_fingerprints(run_dir), pd.read_parquet(run_dir / "queue" / "review.parquet")
+
+
+def _find_selected_option(html, target):
+    """The value of the `selected` option of `target`'s select, or None when the
+    select pre-selects nothing — in which case a browser falls back to whichever
+    option happens to be FIRST, so "nothing selected" is never a safe state."""
+    select = re.search(
+        rf'<select[^>]*data-target="{target}"[^>]*>(.*?)</select>', html, re.DOTALL
+    )
+    assert select is not None, f"no select rendered for {target!r}"
+    chosen = re.search(r'<option value="([^"]*)"[^>]*\bselected\b', select.group(1))
+    return None if chosen is None else chosen.group(1)
 
 
 def test_a_null_bool_ai_value_is_never_rendered_as_false(tmp_path, monkeypatch):
     """A checkbox has two states and a nullable bool has three, so a checkbox
     would advertise a missing AI value as `false` and Approve would post it. The
-    field is a select whose unset option is what a null renders as."""
-    project, run_id = _build_and_halt_bool_queue(tmp_path, monkeypatch)
+    field is a select that opens EXPLICITLY on its unset option — not merely
+    without a selection, which would leave the browser showing `true`."""
+    run_id, _fingerprints, _snapshot = _build_and_halt_bool_queue(
+        tmp_path, monkeypatch, "queue_route_bool_null", ai_value=None)
 
-    html = TestClient(app).get(f"/project/{project}/runs/{run_id}/queue/review").text
+    html = TestClient(app).get(f"/project/queue_route_bool_null/runs/{run_id}/queue/review").text
 
     assert 'type="checkbox"' not in html
     assert 'data-ai-value=""' in html      # the null AI value, not "false"
     assert "— unset —" in html
-    assert 'data-target="human_flag"' in html
-    assert "selected" not in html          # nothing pre-selected: there is no value
+    assert _find_selected_option(html, "human_flag") == ""
+
+
+def test_a_bool_select_opens_on_the_recorded_value_of_a_decided_row(tmp_path, monkeypatch):
+    """The recorded `true` must come back SELECTED. Left unselected, the unset
+    option renders first, the browser shows it, and an untouched Save posts ""
+    — silently reverting the reviewer's own decision."""
+    project = "queue_route_bool_recorded"
+    run_id, fingerprints, snapshot = _build_and_halt_bool_queue(
+        tmp_path, monkeypatch, project, ai_value=False)
+    review.record_decision(
+        project=project, stage=Stage.model_validate(_bool_review_stage(True)),
+        stage_fingerprint=fingerprints["stage_fingerprint"],
+        input_fingerprint=fingerprints["input_fingerprints"][0],
+        frozen_row={"id": snapshot.iloc[0]["id"], "flag": bool(snapshot.iloc[0]["flag"])},
+        verdict=ReviewVerdict.modify, reviewed_values={"human_flag": True},
+        review_notes=None, reviewer="Ada", reviewed_at="2026-07-01T00:00:00",
+    )
+
+    html = TestClient(app).get(f"/project/{project}/runs/{run_id}/queue/review").text
+
+    assert _find_selected_option(html, "human_flag") == "true"
+    assert 'data-ai-value="false"' in html  # Approve still posts what the model said
+
+
+def test_a_non_nullable_bool_select_opens_on_the_ai_value(tmp_path, monkeypatch):
+    """With no unset option to fall back on, an unselected select shows whichever
+    option is FIRST — `true` — so a row the model said `false` for would record
+    `true` on an untouched Save. The AI value must be selected."""
+    project = "queue_route_bool_required"
+    run_id, fingerprints, _snapshot = _build_and_halt_bool_queue(
+        tmp_path, monkeypatch, project, ai_value=False, nullable=False)
+
+    client = TestClient(app)
+    html = client.get(f"/project/{project}/runs/{run_id}/queue/review").text
+    assert "— unset —" not in html                              # nothing to be unset to
+    assert _find_selected_option(html, "human_flag") == "false"
+
+    # Saving what the page opened on records `false`, not the first option.
+    r = client.post(
+        f"/project/{project}/runs/{run_id}/queue/review/decide",
+        data={"input_fingerprint": fingerprints["input_fingerprints"][0],
+              "verdict": "modify", "reviewer": "Ada",
+              "reviewed_values": json.dumps({"human_flag": "false"})},
+    )
+    assert r.status_code == 200, r.text
+    entry = StageCacheEntry.read_only().get(
+        project, "review", fingerprints["stage_fingerprint"],
+        fingerprints["input_fingerprints"][0])
+    assert entry is not None and entry.output_row is not None
+    assert entry.output_row["human_flag"] is False
+
+
+def test_an_enum_select_opens_on_the_recorded_value(tmp_path, monkeypatch):
+    """The enum path goes through the same option comparison as bool."""
+    project = "queue_route_enum"
+    monkeypatch.setattr(loading, "EXAMPLES_DIR", tmp_path)
+    project_dir = tmp_path / project
+    (project_dir / "data").mkdir(parents=True, exist_ok=True)
+    csv_path = project_dir / "data" / "calls.csv"
+    pd.DataFrame({"id": ["a"], "call": ["no"]}).to_csv(csv_path, index=False)
+    stage = {"id": "review", "name": "Review calls", "type": "human_review_queue",
+             "inputs": [{"id": "load", "schema": {
+                 "columns": [{"name": "id", "type": "str"},
+                             {"name": "call", "type": "str", "nullable": False,
+                              "enum": ["yes", "no", "unclear"]}],
+                 "primary_key": ["id"]}}],
+             "queue": {**queue_columns(source="call", target="human_call")}}
+    _write_stage(project_dir, "01_load.json", {
+        "id": "load", "name": "Load calls", "type": "input_data",
+        "connector": {"kind": "file", "params": {"path": str(csv_path), "format": "csv"}}})
+    _write_stage(project_dir, "02_review.json", stage)
+    _seed_version(project_dir)
+    run_id = run_prepared(prepare_run(project_dir, repo_root=project_dir))["run_id"]
+    fingerprints = _read_fingerprints(project_dir / "runs" / run_id)
+    review.record_decision(
+        project=project, stage=Stage.model_validate(stage),
+        stage_fingerprint=fingerprints["stage_fingerprint"],
+        input_fingerprint=fingerprints["input_fingerprints"][0],
+        frozen_row={"id": "a", "call": "no"},
+        verdict=ReviewVerdict.modify, reviewed_values={"human_call": "unclear"},
+        review_notes=None, reviewer="Ada", reviewed_at="2026-07-01T00:00:00",
+    )
+
+    html = TestClient(app).get(f"/project/{project}/runs/{run_id}/queue/review").text
+
+    assert _find_selected_option(html, "human_call") == "unclear"
 
 
 # ── 15. Reviewed-value key handling at the endpoint ─────────────────────────

@@ -534,6 +534,21 @@ def _build_review_item(
         "rendered_prompt": _render_model_prompt(model_input, prompt_template),
         "prior_decision": prior,
         "prefill": _build_field_prefills(fields, displayed_row, prior),
+        "ai_text": _build_ai_texts(fields, displayed_row),
+    }
+
+
+def _build_ai_texts(
+    fields: list[_ReviewedField], displayed_row: dict[str, Any]
+) -> dict[str, str]:
+    """The AI value per field as the text `Approve` posts for it — blank for a
+    null, so an absent value is submitted as absent rather than as a value."""
+    return {
+        field.target: (
+            "" if (ai := _blank_to_none(displayed_row.get(field.source))) is None
+            else _as_option_text(ai)
+        )
+        for field in fields
     }
 
 
@@ -546,12 +561,35 @@ def _build_field_prefills(
     either side is None: the control renders explicitly unset rather than
     inventing a value of the column's type."""
     return {
-        field.target: _blank_to_none(
+        field.target: _resolve_prefill(
+            field,
             displayed_row.get(field.source) if prior is None
-            else prior.reviewed_values.get(field.target)
+            else prior.reviewed_values.get(field.target),
         )
         for field in fields
     }
+
+
+def _resolve_prefill(field: _ReviewedField, value: object) -> object:
+    """A select's prefill is the OPTION TEXT it opens on, so the template
+    compares like with like: leaving a python `True` here for the template to
+    stringify yields "True", which matches no option, and a select that
+    pre-selects nothing opens on whichever option is first — a value nobody
+    supplied. None when the value matches no option, which the template renders
+    as an explicitly-selected unset."""
+    resolved = _blank_to_none(value)
+    if resolved is None or field.options is None:
+        return resolved
+    text = _as_option_text(resolved)
+    return text if text in field.options else None
+
+
+def _as_option_text(value: object) -> str:
+    """A bool carries the same "true"/"false" spelling the options and
+    `Column.coerce_text` use; everything else compares by its own text."""
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    return str(value)
 
 
 def _blank_to_none(value: object) -> object:
