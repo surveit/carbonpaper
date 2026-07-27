@@ -11,10 +11,16 @@ from app.runtime.stages import HANDLERS
 from conftest import make_run_context
 
 
-def _stage(code, inputs=("src",)):
+# Every frame below is a single int column `x`; `output_columns` names what the
+# `code` under test returns.
+_X_COLUMN = [{"name": "x", "type": "int"}]
+
+
+def _stage(code, inputs=("src",), output_columns=_X_COLUMN):
     return Stage.model_validate({
         "id": "t", "name": "t", "type": "python_row_function",
-        "inputs": [{"id": i} for i in inputs],
+        "inputs": [{"id": i, "schema": {"columns": _X_COLUMN}} for i in inputs],
+        "output_schema": {"columns": output_columns},
         "function": {"kind": "inline", "code": code},
     })
 
@@ -26,7 +32,8 @@ def _run(stage, frames):
 def test_row_function_maps_per_row():
     df = pd.DataFrame({"x": [1, 2, 3]})
     code = "def transform(row):\n    return {'x': row['x'], 'y': row['x'] * 10}\n"
-    out = _run(_stage(code), {"src": df})
+    out = _run(_stage(code, output_columns=_X_COLUMN + [{"name": "y", "type": "int"}]),
+               {"src": df})
     assert len(out) == 3                    # 1:1 — one row out per row in
     assert list(out["y"]) == [10, 20, 30]
 

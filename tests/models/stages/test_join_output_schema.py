@@ -3,7 +3,9 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
+from app.models import InputRef, TableSchema
 from app.models.stage import Stage
+from app.models.stages import find_output_schema_issues
 
 _LEFT = {
     "columns": [
@@ -28,8 +30,8 @@ def _join_stage(*, output_columns=None, select=None, left=_LEFT, right=_RIGHT,
         "name": "Join facilities to filings",
         "type": "join",
         "inputs": [
-            {"id": "facilities", **({"schema": left} if left else {})},
-            {"id": "filings", **({"schema": right} if right else {})},
+            {"id": "facilities", "schema": left},
+            {"id": "filings", "schema": right},
         ],
         "join": {
             "type": "left",
@@ -52,7 +54,9 @@ def _issues(stage_dict) -> str:
 def test_select_entry_not_derivable_rejected():
     # The runtime silently drops a select entry the merge lacks; save time
     # rejects it instead.
-    msg = _issues(_join_stage(select=["facility_id", "amount_typo"]))
+    msg = _issues(_join_stage(
+        select=["facility_id", "amount_typo"],
+        output_columns=[{"name": "facility_id", "type": "str"}]))
     assert "amount_typo" in msg
     assert "join.select" in msg
 
@@ -106,11 +110,19 @@ def test_select_projection_limits_declared():
 
 
 def test_missing_either_edge_schema_skips():
+    """With one side's columns unknowable the merge's columns are unknowable
+    too, so nothing is flagged. `Stage._schemas_declared` rejects an input with
+    no schema, so the right edge is stripped with model_copy after
+    construction: this pins find_join_output_issues' own guard, which is
+    reached from paths that do not go through a validated Stage."""
     stage = Stage.model_validate(_join_stage(
-        right=None,
-        output_columns=[{"name": "anything_at_all", "type": "str"}],
-    ))
-    assert stage.id == "enrich"
+        output_columns=[{"name": "facility_id", "type": "str"}]))
+    unknowable = stage.model_copy(update={
+        "inputs": [stage.inputs[0], InputRef(id="filings")],
+        "output_schema": TableSchema.model_validate(
+            {"columns": [{"name": "anything_at_all", "type": "str"}]}),
+    })
+    assert find_output_schema_issues(unknowable) == []
 
 
 def test_valid_join_passes():

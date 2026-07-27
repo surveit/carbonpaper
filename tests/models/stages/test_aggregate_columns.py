@@ -3,7 +3,8 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from app.models import Stage
+from app.models import AggregateConfig, InputRef, Stage
+from app.models.stages import find_config_column_issues
 
 
 def _aggregate_stage(*, group_by, edge_columns, value_column=None, where=None, formula="count",
@@ -74,14 +75,18 @@ def test_where_unparseable_predicate_rejected():
 def test_no_edge_schema_declared_is_skipped_not_flagged():
     """Edge-only resolution: when the input edge declares no schema at all,
     a bad-looking group_by is unresolvable, not wrong — skipped rather than
-    flagged."""
-    stage = {
-        "id": "agg", "type": "aggregate", "name": "agg", "inputs": ["src"],
-        "output_schema": {"columns": [{"name": "nope", "type": "str", "nullable": False},
-                                      {"name": "n", "type": "int", "nullable": False}]},
-        "aggregate": {"group_by": ["nope"], "aggregations": [{"output_column": "n", "formula": "count"}]},
-    }
-    Stage.model_validate(stage)
+    flagged. `Stage._schemas_declared` rejects an input with no schema, so the
+    edge is stripped with model_copy after construction: this pins
+    find_aggregate_column_issues' own guard, which is reached from paths that
+    do not go through a validated Stage."""
+    stage = Stage.model_validate(_aggregate_stage(group_by=["a"], edge_columns=["a"]))
+    unresolvable = stage.model_copy(update={
+        "inputs": [InputRef(id="src")],
+        "aggregate": AggregateConfig.model_validate({
+            "group_by": ["nope"], "aggregations": [{"output_column": "n", "formula": "count"}],
+        }),
+    })
+    assert find_config_column_issues(unresolvable) == []
 
 
 def test_column_declared_only_on_a_sibling_producer_is_not_enough():

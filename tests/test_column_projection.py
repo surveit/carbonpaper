@@ -65,17 +65,25 @@ def test_llm_transform_declared_input_column_rides_through(monkeypatch):
     assert not contribution_of(out).dropped_columns           # nothing undeclared
 
 
-def _queue_stage(output_schema=None, flt=None):
+# The columns `_src_scored()` below actually builds — what the queue stage's one
+# input edge declares.
+_SCORED_COLUMNS = [
+    {"name": "entity_id", "type": "str"}, {"name": "evidence_id", "type": "str"},
+    {"name": "quote", "type": "str"}, {"name": "score", "type": "int"},
+    {"name": "benchmark_id", "type": "str"}, {"name": "query_id", "type": "str"},
+]
+
+
+def _queue_stage(output_schema, flt=None):
     queue = {}
     if flt is not None:
         queue["filter"] = flt
-    kw = {
+    return Stage.model_validate({
         "id": "review", "name": "Human review", "type": "human_review_queue",
-        "inputs": [{"id": "scored"}], "queue": queue,
-    }
-    if output_schema is not None:
-        kw["output_schema"] = output_schema
-    return Stage.model_validate(kw)
+        "inputs": [{"id": "scored", "schema": {"columns": _SCORED_COLUMNS}}],
+        "output_schema": output_schema,
+        "queue": queue,
+    })
 
 
 def _src_scored():

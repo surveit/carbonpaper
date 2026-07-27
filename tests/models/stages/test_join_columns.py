@@ -85,10 +85,15 @@ def test_find_join_column_issues_ignores_select():
 
 
 def test_side_with_no_edge_schema_is_skipped():
-    stage = {
-        "id": "j", "type": "join", "name": "j",
-        "inputs": ["L", "R"],
-        "output_schema": {"columns": [{"name": "a", "type": "str", "nullable": False}]},
-        "join": {"type": "inner", "keys": [{"left": "ghost_left", "right": "ghost_right"}]},
-    }
-    Stage.model_validate(stage)
+    """`Stage._schemas_declared` rejects an input with no schema, so both edges
+    are stripped with model_copy after construction: this pins
+    find_join_column_issues' own guard, which is reached from paths that do not
+    go through a validated Stage."""
+    stage = Stage.model_validate(
+        _join_stage(left_columns=["a"], right_columns=["b"], key_left="a", key_right="b"))
+    unresolvable = stage.model_copy(update={
+        "inputs": [InputRef(id="L"), InputRef(id="R")],
+        "join": JoinConfig.model_validate(
+            {"type": "inner", "keys": [{"left": "ghost_left", "right": "ghost_right"}]}),
+    })
+    assert find_join_column_issues(unresolvable) == []

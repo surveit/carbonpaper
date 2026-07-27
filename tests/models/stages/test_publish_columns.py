@@ -3,7 +3,8 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from app.models import Stage
+from app.models import InputRef, PublishConfig, Stage
+from app.models.stages import find_config_column_issues
 
 
 def _publish_stage(*, one_file_per, edge_columns):
@@ -28,20 +29,16 @@ def test_one_file_per_present_ok():
 
 
 def test_one_file_per_unset_is_clean():
-    stage = {
-        "id": "pub", "type": "publish", "name": "pub", "inputs": ["src"],
-        "output_schema": {"columns": [{"name": "a", "type": "str", "nullable": False}]},
-        "publish": {},
-        "function": {"kind": "inline", "code": "def transform(df, output_dir):\n    return df"},
-    }
-    Stage.model_validate(stage)
+    Stage.model_validate(_publish_stage(one_file_per=None, edge_columns=["a"]))
 
 
 def test_no_edge_schema_declared_is_skipped():
-    stage = {
-        "id": "pub", "type": "publish", "name": "pub", "inputs": ["src"],
-        "output_schema": {"columns": [{"name": "a", "type": "str", "nullable": False}]},
-        "publish": {"one_file_per": "nope"},
-        "function": {"kind": "inline", "code": "def transform(df, output_dir):\n    return df"},
-    }
-    Stage.model_validate(stage)
+    """`Stage._schemas_declared` rejects an input with no schema, so the edge is
+    stripped with model_copy after construction: this pins
+    find_publish_column_issues' own guard, which is reached from paths that do
+    not go through a validated Stage."""
+    stage = Stage.model_validate(_publish_stage(one_file_per="a", edge_columns=["a"]))
+    unresolvable = stage.model_copy(update={
+        "inputs": [InputRef(id="src")], "publish": PublishConfig(one_file_per="nope"),
+    })
+    assert find_config_column_issues(unresolvable) == []

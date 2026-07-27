@@ -31,7 +31,27 @@ def _run_queue_stage(stage: Stage, inputs: dict[str, pd.DataFrame], ctx) -> pd.D
     return out
 
 
-def _stage(*, reviewer_instructions: str | None = None, flt: str | None = None) -> Stage:
+# The upstream columns `_src()` builds — the default input edge below.
+_SCORED_COLUMNS = [{"name": "id", "type": "str"}, {"name": "score", "type": "int"}]
+
+# The columns the queue stage itself adds to every row it emits, whichever of the
+# three outcomes the row took (see _pass_row_through / review._build_output_row).
+# The stage's output is projected onto its declared columns, so output_schema has
+# to name these as well as the upstream ones it carries through.
+_REVIEW_COLUMNS = [
+    {"name": "ai_score", "type": "int"}, {"name": "human_score", "type": "float"},
+    {"name": "final_score", "type": "float"}, {"name": "review_notes", "type": "str"},
+    {"name": "reviewer_id", "type": "str"}, {"name": "reviewed_at", "type": "str"},
+    {"name": "decision", "type": "str"},
+]
+
+
+def _stage(
+    *,
+    reviewer_instructions: str | None = None,
+    flt: str | None = None,
+    input_columns: list[dict] = _SCORED_COLUMNS,
+) -> Stage:
     queue: dict[str, str] = {}
     if reviewer_instructions is not None:
         queue["reviewer_instructions"] = reviewer_instructions
@@ -39,7 +59,8 @@ def _stage(*, reviewer_instructions: str | None = None, flt: str | None = None) 
         queue["filter"] = flt
     return Stage.model_validate({
         "id": "review", "name": "Review", "type": "human_review_queue",
-        "inputs": [{"id": "scored"}],
+        "inputs": [{"id": "scored", "schema": {"columns": input_columns}}],
+        "output_schema": {"columns": [*input_columns, *_REVIEW_COLUMNS]},
         "queue": queue,
     })
 
@@ -314,6 +335,9 @@ def test_hrq_requires_project_grant(tmp_path):
 # ── 8. Row-driven shape: input order, rejections, one cache read, cancel ────
 
 
+_FLAGGED_COLUMNS = [*_SCORED_COLUMNS, {"name": "flag", "type": "str"}]
+
+
 def _alternating_src() -> pd.DataFrame:
     """Rows whose `flag` alternates, so the filter below selects a
     NON-CONTIGUOUS subset — the shape that tells input order apart from
@@ -329,7 +353,7 @@ def test_output_rows_stay_in_input_order(tmp_path):
     """A frame whose reviewed and passed-through rows alternate comes back in
     INPUT order — r0, r1, r2, r3 — not with the two decided rows hoisted to the
     front."""
-    stage = _stage(flt="flag == 'review'")
+    stage = _stage(flt="flag == 'review'", input_columns=_FLAGGED_COLUMNS)
     src = _alternating_src()
 
     snapshot, fingerprints = _halt_and_read_snapshot(
@@ -389,7 +413,7 @@ def test_the_documented_downstream_filter_excludes_only_the_rejected_row(tmp_pat
     it silently takes the unreviewed rows with it — the queue deliberately let
     those through, and losing them is the data loss this stage no longer
     performs."""
-    stage = _stage(flt="flag == 'review'")
+    stage = _stage(flt="flag == 'review'", input_columns=_FLAGGED_COLUMNS)
     src = _every_outcome_src()
 
     snapshot, fingerprints = _halt_and_read_snapshot(
@@ -422,7 +446,7 @@ def test_every_row_rejected_still_emits_every_row_with_the_declared_columns(tmp_
     decided."""
     stage = Stage.model_validate({
         "id": "review", "name": "Review", "type": "human_review_queue",
-        "inputs": [{"id": "scored"}],
+        "inputs": [{"id": "scored", "schema": {"columns": _SCORED_COLUMNS}}],
         "output_schema": {"columns": [{"name": "id", "type": "str"},
                                       {"name": "score", "type": "int"}]},
         "queue": {},
@@ -465,7 +489,7 @@ def test_queue_stats_count_every_row_including_the_rejected_one(tmp_path):
     occurs. `items_decided` counts the REJECTED row too — a rejection is a
     decision, and the count is of what the reviewer answered, not of what
     survived."""
-    stage = _stage(flt="flag == 'review'")
+    stage = _stage(flt="flag == 'review'", input_columns=_FLAGGED_COLUMNS)
     src = _alternating_src()
 
     # On the halting path the stage's contribution rides out on the halt itself
@@ -614,7 +638,8 @@ def test_nullable_extension_dtype_cells_reach_the_reviewer_as_plain_numpy_values
         "flag": pd.array([True, None], dtype="boolean"),
     })
     snapshot, _fingerprints = _halt_and_read_snapshot(
-        _stage(), {"scored": src}, _ctx(tmp_path))
+        _stage(input_columns=[*_SCORED_COLUMNS, {"name": "flag", "type": "bool"}]),
+        {"scored": src}, _ctx(tmp_path))
 
     assert list(snapshot.columns) == ["id", "score", "flag"]
     assert snapshot["score"].dtype == "float64"      # Int64 did not survive
@@ -676,6 +701,7 @@ def _load_stage(root):
     csv_path = root / "data" / "items.csv"
     pd.DataFrame({"id": ["a", "b"], "score": [1, 2]}).to_csv(csv_path, index=False)
     return {"id": "load", "name": "Load", "type": "input_data",
+            "output_schema": {"columns": _SCORED_COLUMNS, "primary_key": ["id"]},
             "connector": {"kind": "file", "params": {"path": str(csv_path), "format": "csv"}}}
 
 
@@ -684,6 +710,7 @@ def _review_stage_full():
             "inputs": [{"id": "load", "schema": {
                 "columns": [{"name": "id", "type": "str"}, {"name": "score", "type": "int"}],
                 "primary_key": ["id"]}}],
+            "output_schema": {"columns": [*_SCORED_COLUMNS, *_REVIEW_COLUMNS]},
             "queue": {}}
 
 
