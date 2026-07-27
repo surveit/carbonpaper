@@ -6,6 +6,7 @@ model_dump_json / model_validate_json, the form a real caller uses)."""
 from __future__ import annotations
 
 from app.models import (
+    Column,
     Connector,
     ConnectorKind,
     NamedColumn,
@@ -14,6 +15,7 @@ from app.models import (
     SchemaLibrary,
     Stage,
     StageType,
+    TableSchema,
 )
 from app.services import data_model, node_review, project, versioning, workspace
 from app.services.loader import load_compiled_dir, stage_to_spec_dict, write_stage
@@ -61,6 +63,12 @@ def test_round_trip_through_json_reproduces_the_source_and_mints_a_version(tmp_p
     stage = Stage(
         id="load_entities", name="Load Entities", type=StageType.input_data,
         connector=Connector(kind=ConnectorKind.file, params={"format": "csv"}),
+        # The `entity` schema this project's data model declares.
+        output_schema=TableSchema(
+            columns=[Column(name="entity_id", type="str", nullable=False),
+                     Column(name="entity_name", type="str")],
+            primary_key=["entity_id"],
+        ),
     )
     write_stage(compiled / "01_load_entities.json", stage)
     stage_hash = node_review.node_content_hash(stage_to_spec_dict(stage))

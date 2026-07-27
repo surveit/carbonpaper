@@ -195,9 +195,10 @@ def test_status_reports_error_after_failed_derivation(client: TestClient, tmp_pa
 
 
 def test_generate_tests_rejects_python_stage_without_output_schema(client: TestClient, tmp_path: Path):
-    """`double` is a python_row_function (tests are derivable for its TYPE), but a python
-    transform can validly lack an output_schema — only llm_transform enforces one. Tests
-    still need it to state expected rows, so the route must reject with 400 and leave no
+    """`double` is a python_row_function (tests are derivable for its TYPE), and every
+    stage bar publish must declare an output_schema — which derived tests need anyway, to
+    state their expected rows. A stored stage lacking one no longer parses, so the route
+    rejects it while loading the workflow: 400, naming the missing declaration, and no
     orphaned session, the same as the wrong-TYPE case above."""
     project_dir = _seed_project(tmp_path)
     (project_dir / "compiled" / "02_double.json").write_text(json.dumps({
@@ -211,7 +212,7 @@ def test_generate_tests_rejects_python_stage_without_output_schema(client: TestC
     response = client.post("/project/alpha/node/double/generate-tests")
 
     assert response.status_code == 400
-    assert "output schema" in response.json()["detail"]
+    assert "declares no output_schema" in response.json()["detail"]
     assert len(SessionStore().list_sessions()) == before  # no orphaned session
 
 

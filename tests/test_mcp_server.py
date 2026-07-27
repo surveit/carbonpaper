@@ -128,7 +128,8 @@ def _write_compiled_workflow(pdir: Path) -> None:
     compiled = pdir / "compiled"
     compiled.mkdir(parents=True)
     stages: list[dict[str, object]] = [
-        {"id": "load", "name": "Load", "type": "input_data", "connector": {"kind": "file"}},
+        {"id": "load", "name": "Load", "type": "input_data", "connector": {"kind": "file"},
+         "output_schema": _IN_SCHEMA},
         {"id": "double", "name": "Double", "type": "python_row_function",
          "inputs": [{"id": "load", "schema": _IN_SCHEMA}], "output_schema": _OUT_SCHEMA,
          "function": {"kind": "inline", "code": _DOUBLE},

@@ -16,6 +16,24 @@ _HANDLE_BY_TYPE: dict[str, dict] = {
     "llm_transform": {"llm": {"model": "claude-sonnet-4-6", "prompt_template": "score {row}"}},
 }
 
+# Stage now requires a schema on every input and (outside `publish`) an
+# output_schema. The only producer these fixtures build is `load`, so an input
+# edge always carries `load`'s output_schema; the llm_transform's output adds
+# `score` on top of it, keeping the same primary_key so it stays strictly 1:1.
+_LOAD_COLUMNS: list[dict] = [
+    {"name": "id", "type": "str", "nullable": False},
+    {"name": "row", "type": "str", "nullable": False},
+]
+_LOAD_SCHEMA: dict = {"columns": _LOAD_COLUMNS, "primary_key": ["id"]}
+_SCORE_SCHEMA: dict = {
+    "columns": [*_LOAD_COLUMNS, {"name": "score", "type": "float", "nullable": True}],
+    "primary_key": ["id"],
+}
+_OUTPUT_SCHEMA_BY_TYPE: dict[str, dict] = {
+    "input_data": _LOAD_SCHEMA,
+    "llm_transform": _SCORE_SCHEMA,
+}
+
 
 @pytest.fixture(autouse=True)
 def examples_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
@@ -33,8 +51,10 @@ def _tools(name: str) -> list[Callable]:
 def _stage(sid: str, name: str, stype: str, inputs: list[str] | None = None) -> dict:
     stage: dict = {"id": sid, "name": name, "type": stype}
     stage.update(_HANDLE_BY_TYPE.get(stype, {}))
+    if stype in _OUTPUT_SCHEMA_BY_TYPE:
+        stage["output_schema"] = _OUTPUT_SCHEMA_BY_TYPE[stype]
     if inputs:
-        stage["inputs"] = [{"id": dep} for dep in inputs]
+        stage["inputs"] = [{"id": dep, "schema": _LOAD_SCHEMA} for dep in inputs]
     return stage
 
 
