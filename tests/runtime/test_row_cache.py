@@ -8,7 +8,6 @@ tests drive the registered handlers, so what they pin is that whole path.
 from __future__ import annotations
 
 import pandas as pd
-import pytest
 
 from app.core.stage_cache import (
     ReadOnlyStageCache,
@@ -389,25 +388,17 @@ def test_batched_path_without_project_scope_calls_the_model_every_time(monkeypat
     assert batches == [[1, 2], [1, 2]]
 
 
-# ── human_review_queue opts out at its registration site ─────────────────────
+# ── every row-mapped registration caches: the shape has no opt-out ───────────
 
 
-def test_human_review_queue_is_registered_with_row_caching_off():
-    handler = HANDLERS[StageType.human_review_queue]
-    assert isinstance(handler, RowMapHandler)
-    assert handler.caches_rows is False
-
-
-def test_the_other_row_mapped_types_cache():
-    for stage_type in (StageType.python_row_function, StageType.llm_transform):
+def test_every_row_mapped_stage_type_runs_under_the_interceptor():
+    """No registration may exempt itself from the row cache — the interceptor is
+    a property of the shape, so a type that wants different caching has to say so
+    in `Stage.cache`, which is per-stage and visible to the author."""
+    for stage_type in (
+        StageType.python_row_function,
+        StageType.llm_transform,
+        StageType.human_review_queue,
+    ):
         handler = HANDLERS[stage_type]
         assert isinstance(handler, RowMapHandler)
-        assert handler.caches_rows is True
-
-
-@pytest.mark.parametrize("bust", [False, True])
-def test_open_row_cache_returns_nothing_for_an_opted_out_shape(bust):
-    from app.runtime.stages.execution import open_row_cache
-
-    ctx = _ctx(run_id="opt-out", bust_cache=bust)
-    assert open_row_cache(_row_stage(), ctx, caches_rows=False) is None

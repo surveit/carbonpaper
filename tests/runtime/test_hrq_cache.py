@@ -65,6 +65,15 @@ def _ctx(tmp_path, run_id="r1"):
     )
 
 
+def _bust_ctx(tmp_path, run_id="r1"):
+    return make_run_context(
+        run_dir=tmp_path,
+        identity=RunIdentity(project=PROJECT, run_id=run_id),
+        stage_cache=StageCache(),
+        bust_cache=True,
+    )
+
+
 def _src(rows: int = 2) -> pd.DataFrame:
     return pd.DataFrame({"id": [f"r{i}" for i in range(rows)], "score": list(range(rows))})
 
@@ -225,6 +234,70 @@ def test_snapshot_columns_match_original_upstream_columns_exactly(tmp_path):
     assert list(snapshot.columns) == list(src.columns)
 
 
+# ── 5b. bust_cache: the run re-asks the humans ──────────────────────────────
+
+
+def test_bust_cache_defers_every_queueable_row_despite_cached_decisions(tmp_path):
+    """`RunContext.bust_cache` skips the decision READ entirely: every row a
+    prior run decided halts again, so the humans are re-asked. The decisions
+    themselves are untouched on disk — a run without the flag still replays
+    them."""
+    stage = _stage()
+    src = _src(2)
+
+    snapshot, fingerprints = _halt_and_read_snapshot(
+        stage, {"scored": src}, _ctx(tmp_path, run_id="run1"))
+    _approve_every_row(snapshot, fingerprints)
+
+    busted, _fingerprints = _halt_and_read_snapshot(
+        stage, {"scored": src.copy()}, _bust_ctx(tmp_path, run_id="run2"))
+    assert list(busted["id"]) == ["r0", "r1"]
+
+    out = _run_queue_stage(stage, {"scored": src.copy()}, _ctx(tmp_path, run_id="run3"))
+    assert (out["decision"] == "approve").all()
+
+
+def test_bust_cache_leaves_passed_through_rows_alone(tmp_path):
+    """Only QUEUEABLE rows are re-asked: a row the queue filter does not select
+    still passes through, because no cached decision was involved in its
+    outcome."""
+    stage = _stage(flt="flag == 'review'")
+    src = _alternating_src()
+
+    snapshot, fingerprints = _halt_and_read_snapshot(
+        stage, {"scored": src}, _ctx(tmp_path, run_id="run1"))
+    _approve_every_row(snapshot, fingerprints)
+
+    with pytest.raises(HaltForReview) as exc_info:
+        _run_queue_stage(stage, {"scored": src.copy()}, _bust_ctx(tmp_path, run_id="run2"))
+    assert exc_info.value.contribution.human_review_queue_stats == {
+        "items_queued_total": 2, "items_passed_through": 2,
+        "items_pending": 2, "items_decided": 0,
+    }
+
+
+def test_bust_cache_reads_no_cache_entries_at_all(tmp_path, monkeypatch):
+    """The read is SKIPPED, not filtered afterwards: the stage makes no
+    find_entries call under bust_cache."""
+    cache = StageCache()
+    calls: list[tuple[str, str, str]] = []
+
+    def recording_find_entries(project: str, stage_id: str, stage_fingerprint: str):
+        calls.append((project, stage_id, stage_fingerprint))
+        return []
+
+    monkeypatch.setattr(cache, "find_entries", recording_find_entries)
+    ctx = make_run_context(
+        run_dir=tmp_path,
+        identity=RunIdentity(project=PROJECT, run_id="busted"),
+        stage_cache=cache,
+        bust_cache=True,
+    )
+    with pytest.raises(HaltForReview):
+        _run_queue_stage(_stage(), {"scored": _src(2)}, ctx)
+    assert calls == []
+
+
 # ── 6. A legacy decisions/*.parquet on disk is never read ───────────────────
 
 
@@ -380,11 +453,11 @@ def test_every_row_rejected_still_emits_every_row_with_the_declared_columns(tmp_
     assert out["id"].tolist() == ["r0", "r1"]
 
 
-def test_a_cached_entry_holding_no_output_row_fails_loudly(tmp_path):
-    """The cache payload still permits an entry with no output row at all. This
-    stage owes one output row per input row and has nothing to replay for such
-    an entry, so it raises rather than resolve the row to a fabricated or
-    absent value."""
+def test_a_cached_entry_holding_no_output_row_re_queues_the_row(tmp_path):
+    """The cache payload still permits an entry with no output row at all. A
+    row-mapped stage owes one output row per input row, so such an entry
+    replays nothing: the row is a MISS and defers, which re-queues it for the
+    human — the only thing anyone could do about it anyway."""
     stage = _stage()
     src = _src(1)
     row = {str(k): v for k, v in src.to_dict("records")[0].items()}
@@ -395,8 +468,9 @@ def test_a_cached_entry_holding_no_output_row_fails_loudly(tmp_path):
         input_row=row, output_row=None,
     )
 
-    with pytest.raises(ValueError, match="carries no output row"):
-        _run_queue_stage(stage, {"scored": src}, _ctx(tmp_path, run_id="no-output"))
+    snapshot, _fingerprints = _halt_and_read_snapshot(
+        stage, {"scored": src}, _ctx(tmp_path, run_id="no-output"))
+    assert list(snapshot["id"]) == ["r0"]
 
 
 def test_queue_stats_count_every_row_including_the_rejected_one(tmp_path):
@@ -453,6 +527,71 @@ def test_cache_is_read_once_per_stage_execution(tmp_path, monkeypatch):
     with pytest.raises(HaltForReview):
         _run_queue_stage(_stage(), {"scored": _src(3)}, ctx)
     assert len(calls) == 1
+
+
+def test_queue_stats_hold_when_every_row_is_served_from_the_cache(tmp_path, monkeypatch):
+    """The counts are derived from the assembled frame, not accumulated as rows
+    are mapped, so they survive a run where the driver's cache answers EVERY row
+    and the mapper is never called once — decided rows replaying a human's
+    verdict and passed-through rows replaying their own recorded output."""
+    stage = _stage(flt="flag == 'review'")
+    src = _alternating_src()
+
+    snapshot, fingerprints = _halt_and_read_snapshot(
+        stage, {"scored": src}, _ctx(tmp_path, run_id="run1"))
+    _approve_every_row(snapshot, fingerprints)
+
+    mapped: list[int] = []
+    call = human_review_queue._QueueRowMapper.__call__
+
+    def counting_call(self, row, index):
+        mapped.append(index)
+        return call(self, row, index)
+
+    monkeypatch.setattr(human_review_queue._QueueRowMapper, "__call__", counting_call)
+    out = _run_queue_stage(stage, {"scored": src.copy()}, _ctx(tmp_path, run_id="run2"))
+
+    assert mapped == []
+    assert contribution_of(out).human_review_queue_stats == {
+        "items_queued_total": 2, "items_passed_through": 2,
+        "items_pending": 0, "items_decided": 2,
+    }
+
+
+def test_a_passed_through_row_round_trips_through_the_cache(tmp_path):
+    """A row the filter did not select is recorded like any other computed row.
+    The second run replays it rather than re-evaluating the filter for it, and
+    what comes back is the same output row."""
+    stage = _stage(flt="flag == 'nothing-matches'")
+    src = _alternating_src()
+
+    first = _run_queue_stage(stage, {"scored": src}, _ctx(tmp_path, run_id="run1"))
+    second = _run_queue_stage(stage, {"scored": src.copy()}, _ctx(tmp_path, run_id="run2"))
+
+    assert list(second["decision"]) == [NOT_REVIEWED] * 4
+    for column in ("id", "score", "decision", "ai_score", "final_score", "review_notes"):
+        assert list(second[column]) == list(first[column])
+    assert contribution_of(second).human_review_queue_stats == {
+        "items_queued_total": 0, "items_passed_through": 4,
+        "items_pending": 0, "items_decided": 0,
+    }
+
+
+def test_changing_the_filter_re_evaluates_a_passed_through_row(tmp_path):
+    """`filter` is part of the stage's definition fingerprint, so entries
+    recorded under one filter are not in the key space the next definition
+    reads. A row recorded as passed-through therefore cannot replay "the filter
+    did not select me" once the filter DOES select it — it queues for the
+    human."""
+    src = _alternating_src()
+
+    out = _run_queue_stage(
+        _stage(flt="flag == 'nothing-matches'"), {"scored": src}, _ctx(tmp_path, run_id="run1"))
+    assert list(out["decision"]) == [NOT_REVIEWED] * 4
+
+    snapshot, _fingerprints = _halt_and_read_snapshot(
+        _stage(flt="flag == 'skip'"), {"scored": src.copy()}, _ctx(tmp_path, run_id="run2"))
+    assert list(snapshot["id"]) == ["r0", "r2"]
 
 
 def test_fingerprint_matches_the_drivers_own_row_dict(tmp_path):
@@ -589,3 +728,30 @@ def test_resume_reattaches_cached_decisions_written_via_the_seam(tmp_path):
     assert resumed["status"] == "ok"
     out = pd.read_parquet(run_dir / "outputs" / "review.parquet")
     assert sorted(out["final_score"].tolist()) == [1, 2]
+
+
+def test_resume_replays_the_runs_bust_cache(tmp_path):
+    """`bust_cache` is per-run state recorded on the manifest, so a RESUME of a
+    busted run is still busted: decisions recorded between the halt and the
+    resume are not read, and the queue stage halts again. The un-busted resume
+    of the same shape completes (test above), which is what makes this the
+    discriminating outcome."""
+    project_dir = tmp_path / "resume_bust_project"
+    _write_stage(project_dir, "01_load.json", _load_stage(project_dir))
+    _write_stage(project_dir, "02_review.json", _review_stage_full())
+    _seed_version(project_dir)
+
+    halted = run_prepared(
+        prepare_run(project_dir, repo_root=project_dir, bust_cache=True))
+    assert halted["status"] == "awaiting_review"
+    run_id = halted["run_id"]
+
+    run_dir = project_dir / "runs" / run_id
+    assert json.loads((run_dir / "manifest.json").read_text(encoding="utf-8"))["bust_cache"]
+
+    snapshot = pd.read_parquet(run_dir / "queue" / "review.parquet")
+    fingerprints = _read_fingerprints(run_dir / "queue" / "review.parquet")
+    _approve_every_row(snapshot, fingerprints, project=project_dir.name)
+
+    resumed = runner.resume_run(project_dir, run_id, project_dir)
+    assert resumed["status"] == "awaiting_review"

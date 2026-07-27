@@ -55,15 +55,9 @@ HANDLERS: dict[StageType, StageHandler] = {
         parallelism=DEFAULT_PARALLEL,
         project_output_to_declared=True,
     ),
-    # parallelism stays 1: the mapper increments one shared stats dict per row.
-    # caches_rows=False: this stage's entries are human decisions written
-    # OUTSIDE the run (the web decide endpoint), and its queue counts are
-    # accumulated by the mapper as it sees each row — a generic cache hit would
-    # skip the mapper and silently zero them. It does its own bulk read.
     StageType.human_review_queue: RowMapHandler(
         make_human_review_mapper,
         project_output_to_declared=True,
-        caches_rows=False,
     ),
     StageType.publish: FrameHandler(handle_publish),
 }

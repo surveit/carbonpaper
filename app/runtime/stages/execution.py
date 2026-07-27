@@ -151,10 +151,9 @@ class RowMapHandler(StageHandler):
     input order regardless of completion order. `project_output_to_declared`
     asks the driver to project the assembled frame onto exactly the columns
     output_schema declares — a column-only operation that cannot change row
-    count or order. `caches_rows` lets the driver resolve a row against the
-    stage-result cache instead of calling the mapper (see `open_row_cache`); a
-    registration whose mapper accumulates state as it sees each row, or whose
-    entries are written from outside the run, passes it False.
+    count or order. Every row-mapped stage resolves each row against the
+    stage-result cache before calling the mapper (see `open_row_cache`); there
+    is no per-registration opt-out.
     """
 
     def __init__(
@@ -162,12 +161,10 @@ class RowMapHandler(StageHandler):
         make_mapper: MakeRowMapper,
         parallelism: int = 1,
         project_output_to_declared: bool = False,
-        caches_rows: bool = True,
     ) -> None:
         self.make_mapper = make_mapper
         self.parallelism = parallelism
         self.project_output_to_declared = project_output_to_declared
-        self.caches_rows = caches_rows
 
     def execute(
         self, stage: Stage, inputs: dict[str, pd.DataFrame], ctx: RunContext
@@ -216,11 +213,10 @@ class LLMTransformHandler(RowMapHandler):
         assert stage.llm is not None  # Stage validation: an llm_transform always carries llm
         if stage.llm.batch_size > 1:
             # The batched path bypasses the row driver, so it is handed this
-            # execution's row cache rather than opening one for itself: whether
-            # rows cache is the SHAPE's call, and it is made in one place.
+            # execution's row cache rather than opening one for itself: the cache
+            # a row-mapped stage runs under is opened in one place.
             return self.run_batches(
-                stage, inputs, ctx, self.parallelism,
-                open_row_cache(stage, ctx, self.caches_rows),
+                stage, inputs, ctx, self.parallelism, open_row_cache(stage, ctx),
             )
         return _run_row_mapper(self, stage, inputs, ctx)
 
@@ -300,7 +296,7 @@ def _run_row_mapper(
     # The ONE line of per-row compute, optionally routed through the row cache.
     # `map_row` itself stays bound: _finish_mapped_frame tests it for the
     # PostMapRowMapper shape, which a wrapper would hide.
-    cache = open_row_cache(stage, ctx, handler.caches_rows)
+    cache = open_row_cache(stage, ctx)
     compute_row = map_row if cache is None else _map_row_through_cache(cache, map_row)
     # str(k) pins pandas' Hashable column labels down to str (a no-op for
     # parquet/CSV data, whose labels are already strings).
@@ -392,17 +388,17 @@ class RowCache:
         )
 
 
-def open_row_cache(stage: Stage, ctx: RunContext, caches_rows: bool) -> RowCache | None:
+def open_row_cache(stage: Stage, ctx: RunContext) -> RowCache | None:
     """This execution's row cache, or None when caching does not apply: the
-    handler shape opts out (`caches_rows`), the stage declares `cache: false`
-    (intentionally non-deterministic — always re-roll), or the run carries no
-    project scope (a subset run, a preview, an authored-test run).
+    stage declares `cache: false` (intentionally non-deterministic — always
+    re-roll), or the run carries no project scope (a subset run, a preview, an
+    authored-test run).
 
     Under `ctx.bust_cache` the bulk read is skipped while a write-capable
     accessor is kept, so a busted run ends with the cache re-pinned, not stale.
     Writing needs the `StageCache` subclass: a read-only accessor reuses hits
     and records nothing."""
-    if not caches_rows or not stage.cache:
+    if not stage.cache:
         return None
     if ctx.identity is None or ctx.stage_cache is None:
         return None

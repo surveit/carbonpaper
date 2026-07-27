@@ -1,28 +1,32 @@
 """Handler for the human_review_queue stage type.
 
-The per-row compute this stage performs is "ask a human". It has one answer it
-can produce synchronously — a decision a human already recorded for this exact
-(stage definition, input row) pair, replayed from the stage-result cache — and
-one it cannot: for a row nobody has decided yet, the answer does not exist, and
-no default may stand in for it.
+The per-row compute this stage performs is "ask a human". For a row nobody has
+decided yet the answer does not exist, and no default may stand in for it — so
+this mapper produces no answer at all. A decision a human already recorded for
+this exact (stage definition, input row) pair is replayed by the row driver's
+own cache (`execution.open_row_cache`), which resolves the row before the
+mapper is called: the same interceptor every row-mapped stage type runs under.
 
 Every input row produces exactly one output row, in its own input position —
 the stage never removes a row, whatever the reviewer decided. Each row ends in
 one of three outcomes:
 
+  - a decision was already recorded for it → the driver's cache replays that
+    output row and the mapper never sees the row. What the payload MEANS is
+    built and interpreted above this seam; this module neither constructs nor
+    reads it;
   - the queue filter did not match it → it passes through, carrying its AI
     score as final and the pass-through reviewer columns;
-  - a cached decision holds an output row → that row, replayed verbatim. What
-    the payload MEANS is built and interpreted above this seam; this module
-    neither constructs nor reads it;
-  - no cached decision → the row is marked deferred (`ROW_DEFERRED_KEY`)
-    carrying the fingerprint it was looked up under and a frozen copy of
-    itself, and nothing else.
+  - otherwise → the row is marked deferred (`ROW_DEFERRED_KEY`) carrying the
+    fingerprint it was looked up under and a frozen copy of itself, and
+    nothing else.
 
-The mapper's own `finish_mapped_rows` runs after the map: it reports the item
-counts the map accumulated onto the stage's `StageContribution`, then reads
-those deferred markers back. Where a row was deferred it writes the two files
-the reviewer UI reads and raises `HaltForReview`:
+The mapper's own `finish_mapped_rows` runs after the map, over the assembled
+frame — every row of it, including the ones the cache served. It derives the
+stage's item counts from those rows and reports them onto the
+`StageContribution`, then reads the deferred markers back. Where a row was
+deferred it writes the two files the reviewer UI reads and raises
+`HaltForReview`:
 
   - `<run_dir>/queue/<stage>.parquet` (or `.csv` when a dtype defeats parquet),
     the snapshot — built from the frozen rows themselves, so it holds exactly
@@ -44,7 +48,7 @@ import pyarrow.lib as pa_lib
 
 from app.core.predicate import parse_predicate
 from app.models import RowReviewDecision, Stage
-from app.core.stage_cache import ReadOnlyStageCache, StageCacheEntry, compute_row_fingerprint
+from app.core.stage_cache import compute_row_fingerprint
 
 from ..context import RunContext
 from ..manifest import QueueStats, StageContribution
@@ -89,40 +93,28 @@ def make_human_review_mapper(stage: Stage, ctx: RunContext, src: pd.DataFrame) -
 
 
 class _QueueRowMapper:
-    """One execution of a queue stage: the per-row decision and the post-map
-    step that reports what the rows produced, holding between them the state
-    both need.
+    """One execution of a queue stage: the per-row outcome and the post-map step
+    that reports what the rows produced.
 
-    Both of the things a row's outcome depends on beyond the row itself are
-    settled in `__init__`, once for the whole stage: the cached decisions (one
-    store read, so a queue stage's store cost does not scale with its row
-    count) and the queue filter's verdict for every row (one frame-wide
-    evaluation, so a filter that cannot be evaluated fails before any row is
-    mapped). A row's outcome is then two lookups by key and position.
+    The one thing a row's outcome depends on beyond the row itself is settled in
+    `__init__`, once for the whole stage: the queue filter's verdict for every
+    row (one frame-wide evaluation, so a filter that cannot be evaluated fails
+    before any row is mapped). A row's outcome is then a lookup by position.
 
-    The item counters live here too and are incremented as rows are mapped.
-    They reach the stage's `StageContribution` — what the executor folds into
-    the run manifest — only in `finish_mapped_rows`, so a map that raises
-    instead (a cancel, a cached entry with no output row) reports nothing and
-    leaves whatever the manifest already held: for a resumed run, the counts of
-    the halt it is resuming."""
+    Nothing is accumulated across rows. The item counts are derived in
+    `finish_mapped_rows` from the assembled frame, so a map that raises instead
+    (a cancel) reports nothing and leaves whatever the manifest already held:
+    for a resumed run, the counts of the halt it is resuming."""
 
     def __init__(self, stage: Stage, ctx: RunContext, src: pd.DataFrame) -> None:
         assert stage.queue is not None  # Stage validation: human_review_queue carries queue
-        self._stage_id = stage.id
-        self._entries = _read_cached_decisions(stage, ctx)
+        _require_project_scope(ctx, stage.id)
         self._queueable = _compute_queueable_mask(src, stage.queue.filter, stage.id)
-        self._stats: QueueStats = {
-            "items_queued_total": 0, "items_passed_through": 0,
-            "items_pending": 0, "items_decided": 0,
-        }
 
     def __call__(self, row: Row, index: int) -> Row:
         if not self._queueable[index]:
-            self._stats["items_passed_through"] += 1
             return _pass_row_through(row)
-        self._stats["items_queued_total"] += 1
-        return self._replay_decision_or_defer(row)
+        return _defer_row(row)
 
     def finish_mapped_rows(
         self,
@@ -131,13 +123,13 @@ class _QueueRowMapper:
         ctx: RunContext,
         contribution: StageContribution,
     ) -> None:
-        """Report the item counts the completed map accumulated, then write the
+        """Report the item counts the completed map produced, then write the
         snapshot and sidecar for every row it deferred and raise
         `HaltForReview` — the run cannot go past a row whose value only a human
         can produce. Returns after the counts when no row was deferred. The
         halt carries the same `contribution`, because on that path the raise is
         this stage's only return path into the manifest."""
-        contribution.human_review_queue_stats = self._stats
+        contribution.human_review_queue_stats = _derive_queue_stats(df)
         pending = _find_pending_reviews(df)
         if not pending:
             return
@@ -149,70 +141,22 @@ class _QueueRowMapper:
             contribution=contribution,
         )
 
-    def _replay_decision_or_defer(self, row: Row) -> Row:
-        """A row subject to review, resolved against the decisions already
-        recorded: the cached output row replayed as-is, or — with no cached
-        decision — a deferred marker carrying the row's fingerprint and a frozen
-        copy of it, and nothing else. Never a substituted, defaulted or
-        partially-filled row: the value does not exist yet.
-
-        A cached entry carrying no output row at all cannot be replayed as this
-        row's output, and this stage emits one row per input row, so it raises
-        rather than resolve to a fabricated or absent row."""
-        fingerprint = compute_row_fingerprint(row)
-        entry = self._entries.get(fingerprint)
-        if entry is None:
-            self._stats["items_pending"] += 1
-            return {
-                ROW_DEFERRED_KEY: PendingReview(
-                    input_fingerprint=fingerprint, frozen_row=dict(row)
-                )
-            }
-        if entry.output_row is None:
-            raise ValueError(
-                f"human_review_queue '{self._stage_id}': the decision cached for input "
-                f"fingerprint {fingerprint} carries no output row, so there is nothing "
-                "to replay for it. A decision recorded before this stage emitted "
-                "rejected rows carries no output row — the rejection removed the row "
-                "instead. Re-record a decision for this row."
-            )
-        self._stats["items_decided"] += 1
-        return dict(entry.output_row)
-
 
 # --- _QueueRowMapper.__init__: once per stage execution ------------------------
 
 
-def _read_cached_decisions(stage: Stage, ctx: RunContext) -> dict[str, StageCacheEntry]:
-    """Every decision already recorded against this exact stage definition,
-    keyed by the input fingerprint it was filed under. This is the stage's one
-    and only cache read: a row's outcome is then a dictionary lookup, and a
-    queue stage's store cost does not scale with its row count."""
-    project, stage_cache = _require_project_scope(ctx, stage.id)
-    return {
-        entry.input_fingerprint: entry
-        for entry in stage_cache.find_entries(
-            project, stage.id, stage.compute_definition_fingerprint()
-        )
-    }
-
-
-def _require_project_scope(ctx: RunContext, sid: str) -> tuple[str, ReadOnlyStageCache]:
-    """The (project, cache) pair a queue stage needs to look up cached
-    decisions: `ctx.identity.project` and `ctx.stage_cache`, typed down to
-    `ReadOnlyStageCache` — this handler only ever reads, so mypy proves it
-    never calls a write method (`ReadOnlyStageCache` has none). Raises loudly
-    if either is absent: a human_review_queue stage always runs inside a
-    project-scoped (production) run; a subset/preview run's context (which
-    carries neither) cannot resolve a cache key and must not be silently let
-    through."""
+def _require_project_scope(ctx: RunContext, sid: str) -> None:
+    """Raise unless the run grants project scope (`ctx.identity` and
+    `ctx.stage_cache`). Without it no decision can ever be replayed, so every
+    queueable row would defer and the run could never get past this stage: a
+    subset/preview run's context must fail loudly here rather than be silently
+    let through."""
     if ctx.identity is None or ctx.stage_cache is None:
         raise ValueError(
             f"human_review_queue '{sid}' requires a project-scoped (production) "
             "run: RunContext.identity and RunContext.stage_cache must both be "
             "set, but this run carries neither."
         )
-    return ctx.identity.project, ctx.stage_cache
 
 
 def _compute_queueable_mask(src: pd.DataFrame, flt: str | None, sid: str) -> list[bool]:
@@ -245,6 +189,19 @@ def _compute_queueable_mask(src: pd.DataFrame, flt: str | None, sid: str) -> lis
 
 
 # --- the row outcomes the mapper does not need its own state for ---------------
+
+
+def _defer_row(row: Row) -> Row:
+    """A queueable row nobody has decided: a deferred marker carrying the row's
+    fingerprint and a frozen copy of it, and nothing else. Never a substituted,
+    defaulted or partially-filled row — the value does not exist yet. The
+    fingerprint is the key the driver's row cache looked this row up under, so
+    the decision recorded against it resolves on the next run."""
+    return {
+        ROW_DEFERRED_KEY: PendingReview(
+            input_fingerprint=compute_row_fingerprint(row), frozen_row=dict(row)
+        )
+    }
 
 
 def _pass_row_through(row: Row) -> Row:
@@ -285,6 +242,28 @@ def _approve_row(row: Row, index: int) -> Row:
 
 
 # --- finish_mapped_rows: the deferred rows, the snapshot and its sidecar ------
+
+
+def _derive_queue_stats(df: pd.DataFrame) -> QueueStats:
+    """The stage's item counts, read off the assembled frame rather than
+    accumulated as rows are mapped: a row the driver's cache served never
+    reaches the mapper, and every count is a property of the row it produced.
+
+    Each row shows which outcome it took — a deferred marker for a pending row,
+    `NOT_REVIEWED` for one the filter passed through, any other decision for one
+    a human decided. Queued total is the queueable rows: pending plus decided."""
+    decisions = list(df["decision"]) if "decision" in df.columns else []
+    passed_through = sum(1 for value in decisions if value == NOT_REVIEWED)
+    decided = sum(
+        1 for value in decisions if not pd.isna(value) and value != NOT_REVIEWED
+    )
+    pending = len(_find_pending_reviews(df))
+    return {
+        "items_queued_total": pending + decided,
+        "items_passed_through": passed_through,
+        "items_pending": pending,
+        "items_decided": decided,
+    }
 
 
 def _find_pending_reviews(df: pd.DataFrame) -> list[PendingReview]:

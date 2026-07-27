@@ -22,7 +22,8 @@ validate the output, write `outputs/<stage>.parquet`, append to `manifest.json`.
 - **Recompute everything:** `--bust-cache` (a run-form checkbox too) sets
   `RunContext.bust_cache`: the run skips every stage-cache READ while still recording
   what it computes, so the cache ends re-pinned, not stale. Recorded in the manifest
-  and replayed on resume.
+  and replayed on resume. A `human_review_queue` under it replays no decision — every
+  queueable row halts again.
 - **Halt + resume:** `human_review_queue` raises `HaltForReview`; the run marks
   `awaiting_review` and persists the pending queue. `resume_run(...)` reloads completed
   outputs and continues once cached decisions exist for the pending rows.
@@ -43,8 +44,9 @@ path looks every row up, batches only the misses, and records each computed row.
 fingerprint). A row carrying `_error`/`_deferred` is never recorded and `_usage` is stripped
 before recording, so a hit reports no spend. `Stage.cache: false` declares a stage
 intentionally non-deterministic — no read, no write — and is outside the definition
-fingerprint. `human_review_queue` registers with `caches_rows=False`: its entries are human
-decisions written outside the run and its queue counts are accumulated per row.
+fingerprint. There is no per-registration opt-out: `human_review_queue` runs under the same
+interceptor, which replays a human's recorded decision before its mapper is called, so that
+mapper only ever passes a row through or defers it.
 
 ## LLM backend (`llm_transform`)
 - `options.py` `require_agent_backend()` raises unless the agent backend can run
