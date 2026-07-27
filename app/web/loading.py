@@ -17,12 +17,13 @@ import pandas as pd
 from fastapi import HTTPException
 from pydantic import ValidationError
 
-from app.core.errors import NoVersionToRunError
+from app.core.errors import NoVersionToRunError, RunVersionUnresolvableError
 from app.core.frames import PARQUET_SUFFIX
 from app.models import Stage, StageType
 from app.runtime.manifest import load_manifest_model
 from app.core.run_status import StageStatus
 from app.services.run import resolve_version
+from app.services.errors import WorkflowLoadError
 from app.services.loader import CompiledStageFile, load_compiled_dir
 from app.services.versioning import list_versions, load_version_stages
 from app.services.workspace import load_schemas, resolve_project_dir
@@ -134,6 +135,25 @@ def load_stages_or_empty(project: str) -> StageListing:
 
 def find_stage(stages: list[Stage], stage_id: str) -> Stage | None:
     return next((s for s in stages if s.id == stage_id), None)
+
+
+def load_run_stages(project: str, manifest: dict[str, Any]) -> list[Stage]:
+    """The stages of the version this run pinned, from that version's frozen
+    document — never `compiled/`, which drifts as the working copy is edited.
+    Raises RunVersionUnresolvableError rather than falling back to it."""
+    version_id = manifest.get("workflow_version")
+    if not version_id:
+        raise RunVersionUnresolvableError(
+            f"This run of '{project}' records no workflow version in its "
+            "manifest, so the workflow it executed cannot be identified."
+        )
+    try:
+        return load_version_stages(EXAMPLES_DIR / project, str(version_id))
+    except (FileNotFoundError, WorkflowLoadError) as exc:
+        raise RunVersionUnresolvableError(
+            f"This run of '{project}' pinned workflow version "
+            f"'{version_id}', which could not be read: {exc}"
+        ) from exc
 
 
 def list_file_inputs(project: str, version_id: str | None = None) -> list[dict[str, Any]]:
