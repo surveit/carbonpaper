@@ -6,16 +6,18 @@ The web run UI and any other run driver reach production runs through these
 functions rather than importing the runner directly, so "what starts a
 production run" has a single named door (enforced by the import-linter contract
 "production run entry points reached only by the run service"). The runner still
-owns the run mechanics; this seam adds the background-thread launch and the
-manifest status read the drivers need, and attaches no run vocabulary of its own
-beyond what prepare_run already defines."""
+owns the run mechanics; this seam adds the background-thread launch, the manifest
+status read, and the resolution of what a run pinned (its version, its stages,
+one stage's definition) that the drivers need."""
 from __future__ import annotations
 
 import threading
 import traceback
+from dataclasses import dataclass
 from typing import Any, Mapping
 
-from app.core.errors import RunNotFoundError
+from app.core.errors import RunNotFoundError, RunVersionUnresolvableError
+from app.models import Stage
 from app.runtime.manifest import load_manifest_model
 from app.runtime.runner import (
     prepare_run,
@@ -23,6 +25,8 @@ from app.runtime.runner import (
     resume_run,
     run_prepared,
 )
+from app.services.errors import WorkflowLoadError
+from app.services.versioning import load_version_stages
 from app.services.workspace import repo_root, resolve_project_dir
 
 
@@ -89,6 +93,46 @@ def resolve_version(project: str, version_id: str | None) -> str:
     name to its directory) so callers outside the runtime (e.g. the web layer's
     project listing) never import the runner."""
     return resolve_version_id(resolve_project_dir(project), version_id)
+
+
+def load_run_stages(project: str, manifest: dict[str, Any]) -> list[Stage]:
+    """The stages of the version this run pinned, from that version's frozen
+    document — never `compiled/`, which drifts as the working copy is edited.
+    Raises RunVersionUnresolvableError rather than falling back to it."""
+    version_id = manifest.get("workflow_version")
+    if not version_id:
+        raise RunVersionUnresolvableError(
+            f"This run of '{project}' records no workflow version in its "
+            "manifest, so the workflow it executed cannot be identified."
+        )
+    try:
+        return load_version_stages(resolve_project_dir(project), str(version_id))
+    except (FileNotFoundError, WorkflowLoadError) as exc:
+        raise RunVersionUnresolvableError(
+            f"This run of '{project}' pinned workflow version "
+            f"'{version_id}', which could not be read: {exc}"
+        ) from exc
+
+
+@dataclass(frozen=True)
+class RunStageDef:
+    """`stage` is None both when the version could not be read and when it simply
+    defines no such stage — `error` is the discriminator."""
+
+    stage: Stage | None
+    error: str | None
+
+
+def load_pinned_stage_def(
+    project: str, manifest: dict[str, Any], stage_id: str
+) -> RunStageDef:
+    try:
+        stages = load_run_stages(project, manifest)
+    except RunVersionUnresolvableError as exc:
+        return RunStageDef(stage=None, error=str(exc))
+    return RunStageDef(
+        stage=next((s for s in stages if s.id == stage_id), None), error=None
+    )
 
 
 def _run_in_background(target: Any, *args: Any) -> None:
