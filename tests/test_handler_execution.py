@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import time
 
-import numpy as np
 import pandas as pd
 import pytest
 
@@ -17,7 +16,6 @@ from app.runtime.context import RunIdentity
 from app.runtime.errors import RunCancelled
 from app.runtime.stages.execution import (
     ROW_DEFERRED_KEY,
-    ROW_DROP_KEY,
     ROW_ERROR_KEY,
     ROW_USAGE_KEY,
     FrameHandler,
@@ -183,20 +181,6 @@ def test_row_driver_empty_input_reports_no_dropped_columns_when_projecting():
     assert contribution_of(out).dropped_columns == []
 
 
-def test_row_driver_keeps_the_columns_a_mapper_named_when_every_row_is_dropped():
-    # The mapper DID name a column, so the frame keeps it rather than falling
-    # back to the input's columns.
-    def make_mapper(stage, ctx):
-        def map_row(row):
-            return {"y": row["x"] * 10, ROW_DROP_KEY: True}
-        return map_row
-
-    handler = RowMapHandler(make_mapper=make_mapper, drops_rows=True)
-    out = handler.execute(_row_stage(), {"src": pd.DataFrame({"x": [1, 2]})}, make_run_context())
-    assert len(out) == 0
-    assert list(out.columns) == ["y"]
-
-
 def test_row_driver_collects_row_errors_without_dropping_the_stage():
     def make_mapper(stage, ctx):
         def map_row(row):
@@ -244,80 +228,12 @@ def test_row_driver_projects_to_declared_columns():
     assert contribution_of(out).dropped_columns == ["extra"]
 
 
-def _marks_row_two_for_dropping(stage, ctx):
-    def map_row(row):
-        return {"x": row["x"], ROW_DROP_KEY: row["x"] == 2}
-    return map_row
-
-
-def test_row_driver_drops_rows_marked_by_a_dropping_handler():
-    handler = RowMapHandler(make_mapper=_marks_row_two_for_dropping, drops_rows=True)
-    out = handler.execute(_row_stage(), {"src": pd.DataFrame({"x": [1, 2, 3]})}, make_run_context())
-    assert list(out["x"]) == [1, 3]          # the marked row is gone, the rest in input order
-    assert list(out.index) == [0, 1]         # 0-based and contiguous for downstream row positions
-
-
-def test_row_driver_rejects_a_drop_marker_from_a_handler_that_does_not_declare_dropping():
-    handler = RowMapHandler(make_mapper=_marks_row_two_for_dropping)  # drops_rows defaults False
-    with pytest.raises(ValueError) as excinfo:
-        handler.execute(_row_stage(), {"src": pd.DataFrame({"x": [1, 2, 3]})}, make_run_context())
-    assert "t" in str(excinfo.value) and ROW_DROP_KEY in str(excinfo.value)
-
-
-def _drop_marked_with(marker):
-    """A dropping handler whose mapper puts `marker` on row 2 and nothing at all
-    on the others — so the frame also exercises the missing-marker cells pandas
-    fills with NaN."""
-    def make_mapper(stage, ctx):
-        def map_row(row):
-            return {"x": row["x"], ROW_DROP_KEY: marker} if row["x"] == 2 else {"x": row["x"]}
-        return map_row
-    return RowMapHandler(make_mapper=make_mapper, drops_rows=True)
-
-
-def test_row_driver_keeps_rows_whose_drop_marker_is_false_or_missing():
-    out = _drop_marked_with(False).execute(
-        _row_stage(), {"src": pd.DataFrame({"x": [1, 2, 3]})}, make_run_context())
-    assert list(out["x"]) == [1, 2, 3]  # False keeps; the NaN-filled cells keep too
-
-
-# A truthy stand-in for the drop marker, and the type the driver actually
-# OBSERVES for it — which is not always the type the mapper wrote, because
-# assembling the frame coerces a partly-marked column (pandas turns the int 1
-# into 1.0 alongside the NaN cells). numpy's bool is the dangerous one: it
-# reports the bare name "bool" like the builtin, yet `is True` is False for it.
-@pytest.mark.parametrize("marker, observed_type", [
-    (np.bool_(True), "numpy.bool"),
-    (1, "float"),
-    ("yes", "str"),
-])
-def test_row_driver_rejects_a_drop_marker_that_is_not_a_plain_bool(marker, observed_type):
-    # The drop decision is `value is True`, so a truthy STAND-IN would silently
-    # KEEP a row the mapper meant to remove. Refuse it loudly instead.
-    handler = _drop_marked_with(marker)
-    with pytest.raises(ValueError) as excinfo:
-        handler.execute(_row_stage(), {"src": pd.DataFrame({"x": [1, 2, 3]})}, make_run_context())
-    message = str(excinfo.value)
-    assert "stage t" in message        # the stage id
-    assert "row 1" in message          # the offending row position
-    assert observed_type in message    # the observed type
-
-
-def test_row_driver_accepts_a_plain_bool_drop_marker_alongside_missing_ones():
-    # The null carve-out is load-bearing: a mapper that marks only SOME rows
-    # leaves the rest NaN, and that must stay legal rather than trip the check.
-    out = _drop_marked_with(True).execute(
-        _row_stage(), {"src": pd.DataFrame({"x": [1, 2, 3]})}, make_run_context())
-    assert list(out["x"]) == [1, 3]
-
-
 def _mark_row_with_every_marker(row):
     return {
         "x": row["x"],
         ROW_ERROR_KEY: None,
         ROW_USAGE_KEY: LlmUsage(),
         ROW_DEFERRED_KEY: True,
-        ROW_DROP_KEY: False,
     }
 
 
@@ -349,11 +265,11 @@ class _MapperWhosePostMapStepRaises:
 
 def test_row_driver_runs_the_mappers_own_post_map_step_after_the_map():
     mapper = _MarksEveryRowAndKeepsTheFrame()
-    handler = RowMapHandler(make_mapper=lambda stage, ctx: mapper, drops_rows=True)
+    handler = RowMapHandler(make_mapper=lambda stage, ctx: mapper)
     handler.execute(_row_stage(), {"src": pd.DataFrame({"x": [1, 2, 3]})}, make_run_context())
     [collected] = mapper.seen
     assert len(collected) == 3  # every mapped row
-    assert {ROW_ERROR_KEY, ROW_USAGE_KEY, ROW_DEFERRED_KEY, ROW_DROP_KEY} <= set(collected.columns)
+    assert {ROW_ERROR_KEY, ROW_USAGE_KEY, ROW_DEFERRED_KEY} <= set(collected.columns)
 
 
 def test_row_driver_lets_a_mappers_post_map_step_raise_out_of_execute():
@@ -374,7 +290,7 @@ def test_a_plain_closure_mapper_needs_no_post_map_step():
 def test_internal_marker_columns_never_reach_output_even_without_an_output_schema():
     # No output_schema and no projection: the strip is the ONLY thing keeping
     # machinery columns out of stage output.
-    handler = RowMapHandler(make_mapper=_marks_every_row_with_every_marker, drops_rows=True)
+    handler = RowMapHandler(make_mapper=_marks_every_row_with_every_marker)
     out = handler.execute(_row_stage(), {"src": pd.DataFrame({"x": [1, 2]})}, make_run_context())
     assert list(out.columns) == ["x"]  # user column survives, every marker is gone
 
@@ -386,7 +302,7 @@ def test_marker_columns_are_not_reported_as_dropped_user_columns():
         return map_row
 
     schema = {"columns": [{"name": "x", "type": "int"}]}
-    handler = RowMapHandler(make_mapper=make_mapper, project_output_to_declared=True, drops_rows=True)
+    handler = RowMapHandler(make_mapper=make_mapper, project_output_to_declared=True)
     ctx = make_run_context()
     out = handler.execute(_row_stage(output_schema=schema), {"src": pd.DataFrame({"x": [1]})}, ctx)
     assert list(out.columns) == ["x"]
@@ -394,10 +310,8 @@ def test_marker_columns_are_not_reported_as_dropped_user_columns():
     assert contribution_of(out).dropped_columns == ["extra"]
 
 
-def test_dropping_handler_is_not_grain_and_order_preserving():
+def test_each_shape_reports_the_preservation_its_calling_convention_gives_it():
     mapping = RowMapHandler(make_mapper=lambda stage, ctx: lambda row: dict(row))
-    dropping = RowMapHandler(make_mapper=_marks_row_two_for_dropping, drops_rows=True)
-    assert dropping.preserves_grain_and_order is False
     assert mapping.preserves_grain_and_order is True
     assert SourceHandler(read=lambda stage, ctx: pd.DataFrame()).preserves_grain_and_order is True
     assert FrameHandler(apply=lambda stage, inputs, ctx: None).preserves_grain_and_order is False
@@ -424,7 +338,7 @@ def _registry(llm_shape):
         StageType.python_frame_function: frame,
         StageType.join_: frame,
         StageType.aggregate: frame,
-        StageType.human_review_queue: frame,
+        StageType.human_review_queue: RowMapHandler(make_mapper=lambda s, c: lambda r: r),
         StageType.publish: frame,
     }
 

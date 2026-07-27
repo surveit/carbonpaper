@@ -58,6 +58,7 @@ _GRAIN_AND_ORDER_PRESERVING_TYPES: frozenset[StageType] = frozenset({
     StageType.input_data,
     StageType.python_row_function,
     StageType.llm_transform,
+    StageType.human_review_queue,
 })
 
 
@@ -639,11 +640,11 @@ class Stage(_Base):
           - llm_transform      → yes (per-row 1:1 in emit order in v1; a fan-out LLM
                                  like doc→pieces is out of scope until fan-out evals)
           - input_data         → yes (originates the rows)
-          - human_review_queue → NO — the runtime maps it per row, so an output row
-                                 is in its input row's position; but a row the
-                                 reviewer rejected is dropped, so it is not 1:1.
-                                 Its intended "edits in place" contract would make
-                                 it yes; that remaining gap is #106.
+          - human_review_queue → yes — the runtime maps it per row, so an output row
+                                 is in its input row's position, and every input row
+                                 produces one: a rejected row stays, carrying the
+                                 rejection. Removing rows is a downstream filter
+                                 stage's job, not this one's.
           - join (fan-out) / aggregate (fan-in) → NO; grain changes are deferred
           - publish            → NO — handle_publish runs an authored function whose
                                  output is a table of artifact paths, not the input

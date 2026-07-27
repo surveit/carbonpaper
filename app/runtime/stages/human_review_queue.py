@@ -6,15 +6,15 @@ can produce synchronously — a decision a human already recorded for this exact
 one it cannot: for a row nobody has decided yet, the answer does not exist, and
 no default may stand in for it.
 
-So each row ends in exactly one of four outcomes:
+Every input row produces exactly one output row, in its own input position —
+the stage never removes a row, whatever the reviewer decided. Each row ends in
+one of three outcomes:
 
   - the queue filter did not match it → it passes through, carrying its AI
     score as final and the pass-through reviewer columns;
   - a cached decision holds an output row → that row, replayed verbatim. What
     the payload MEANS is built and interpreted above this seam; this module
     neither constructs nor reads it;
-  - a cached decision holds a tombstone → the row is marked for removal
-    (`ROW_DROP_KEY`), because the human rejected it;
   - no cached decision → the row is marked deferred (`ROW_DEFERRED_KEY`)
     carrying the fingerprint it was looked up under and a frozen copy of
     itself, and nothing else.
@@ -51,7 +51,7 @@ from app.core.stage_cache import ReadOnlyStageCache, StageCacheEntry, compute_ro
 from ..context import RunContext
 from ..manifest import QueueStats, StageContribution
 from ..errors import HaltForReview
-from .execution import ROW_DEFERRED_KEY, ROW_DROP_KEY, Row
+from .execution import ROW_DEFERRED_KEY, Row
 
 # The upstream AI score column a queue stage reviews. Named once so the two sites
 # that test for its presence (_approve_row and _pass_row_through) can't drift
@@ -90,16 +90,16 @@ class _QueueRowMapper:
 
     The cached decisions are read in `__init__`, ONCE for the whole stage: a
     row's outcome is then a dictionary lookup, never a store read. The item
-    counters live here too and are incremented as rows are mapped, which is the
-    only point at which a row the driver later removes (a tombstoned one) is
-    still countable. They reach the stage's `StageContribution` — what the
-    executor folds into the run manifest — only in `finish_mapped_rows`, so a
-    map that raises instead (a cancel, a filter that cannot be evaluated)
-    reports nothing and leaves whatever the manifest already held: for a
-    resumed run, the counts of the halt it is resuming."""
+    counters live here too and are incremented as rows are mapped. They reach
+    the stage's `StageContribution` — what the executor folds into the run
+    manifest — only in `finish_mapped_rows`, so a map that raises instead (a
+    cancel, a filter that cannot be evaluated) reports nothing and leaves
+    whatever the manifest already held: for a resumed run, the counts of the
+    halt it is resuming."""
 
     def __init__(self, stage: Stage, ctx: RunContext) -> None:
         assert stage.queue is not None  # Stage validation: human_review_queue carries queue
+        self._stage_id = stage.id
         self._entries = _read_cached_decisions(stage, ctx)
         self._is_queueable = _make_queueable_test(stage.id, stage.queue.filter)
         self._stats: QueueStats = {
@@ -141,11 +141,14 @@ class _QueueRowMapper:
 
     def _replay_decision_or_defer(self, row: Row) -> Row:
         """A row subject to review, resolved against the decisions already
-        recorded: the cached output row replayed as-is, a drop marker where the
-        cached output is a tombstone, or — with no cached decision — a deferred
-        marker carrying the row's fingerprint and a frozen copy of it, and
-        nothing else. Never a substituted, defaulted or partially-filled row:
-        the value does not exist yet."""
+        recorded: the cached output row replayed as-is, or — with no cached
+        decision — a deferred marker carrying the row's fingerprint and a frozen
+        copy of it, and nothing else. Never a substituted, defaulted or
+        partially-filled row: the value does not exist yet.
+
+        A cached entry carrying no output row at all cannot be replayed as this
+        row's output, and this stage emits one row per input row, so it raises
+        rather than resolve to a fabricated or absent row."""
         fingerprint = compute_row_fingerprint(row)
         entry = self._entries.get(fingerprint)
         if entry is None:
@@ -155,10 +158,13 @@ class _QueueRowMapper:
                     input_fingerprint=fingerprint, frozen_row=dict(row)
                 )
             }
-        self._stats["items_decided"] += 1
         if entry.output_row is None:
-            # A plain Python bool: the driver removes a row on exactly `is True`.
-            return {ROW_DROP_KEY: True}
+            raise ValueError(
+                f"human_review_queue '{self._stage_id}': the decision cached for input "
+                f"fingerprint {fingerprint} carries no output row, so there is nothing "
+                "to replay for it. Re-record a decision for this row."
+            )
+        self._stats["items_decided"] += 1
         return dict(entry.output_row)
 
 

@@ -13,7 +13,10 @@ HUMAN_REVIEW_QUEUE_CONTRACT_NOTE = (
     "output_schema declares: only `decision` (approve/modify/reject), `ai_score`, "
     "`human_score`, `final_score`, `review_notes`, `reviewer_id`, `reviewed_at`, plus "
     "passthrough columns are ever populated — declare exactly those (never invented "
-    "names like \"review_decision\") and filter downstream on `decision == \"approve\"`. "
+    "names like \"review_decision\"). This type emits one output row per input row and "
+    "never removes any: a rejected row is still emitted, carrying `decision == \"reject\"` "
+    "with `human_score`/`final_score` null, so a downstream stage filtering on "
+    "`decision == \"approve\"` is what actually excludes it. "
     "Unlike python_frame_function, undeclared upstream columns are silently dropped, so "
     "declare every column a later stage needs to read."
 )

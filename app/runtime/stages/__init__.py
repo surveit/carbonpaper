@@ -59,7 +59,6 @@ HANDLERS: dict[StageType, StageHandler] = {
     StageType.human_review_queue: RowMapHandler(
         make_human_review_mapper,
         project_output_to_declared=True,
-        drops_rows=True,
     ),
     StageType.publish: FrameHandler(handle_publish),
 }

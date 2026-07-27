@@ -63,12 +63,13 @@ def test_input_data_is_grain_and_order_preserving(tmp_path):
     assert m.Stage.model_validate(_file_input("load", tmp_path)).is_grain_and_order_preserving is True
 
 
-def test_human_review_queue_not_grain_and_order_preserving():
-    # The queue handler drops rows the reviewer rejected, so it is not 1:1
-    # (see #106).
+def test_human_review_queue_is_grain_and_order_preserving():
+    # The runtime maps the queue handler per row and it emits every one of them
+    # — a rejected row stays, carrying its rejection — so it is 1:1 in input
+    # order, and an eval pathway through a queue stage is row-alignable.
     s = m.Stage.model_validate(S(id="rev", type="human_review_queue",
                                  inputs=[{"id": "a"}], queue={}))
-    assert s.is_grain_and_order_preserving is False
+    assert s.is_grain_and_order_preserving is True
 
 
 def test_publish_not_grain_and_order_preserving():

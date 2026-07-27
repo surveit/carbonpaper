@@ -7,9 +7,8 @@ never a raw store write.
 
 The stage is always exercised through its registered handler
 (`HANDLERS[StageType.human_review_queue].execute`), so what these tests pin is
-the whole row-driven path — the per-row mapper, the driver's assembly and row
-dropping, and the handler's own post-map collection — not a function called
-underneath it.
+the whole row-driven path — the per-row mapper, the driver's assembly, and the
+handler's own post-map collection — not a function called underneath it.
 
 Fingerprints never live on the snapshot itself: they're read from the sidecar
 `<stage>.fingerprints.json` written alongside it, POSITIONALLY aligned to the
@@ -250,7 +249,7 @@ def test_hrq_requires_project_grant(tmp_path):
         _run_queue_stage(stage, {"scored": _src(1)}, ctx)
 
 
-# ── 8. Row-driven shape: input order, dropping, one cache read, cancel ──────
+# ── 8. Row-driven shape: input order, rejections, one cache read, cancel ────
 
 
 def _alternating_src() -> pd.DataFrame:
@@ -280,9 +279,11 @@ def test_output_rows_stay_in_input_order(tmp_path):
     assert list(out["id"]) == ["r0", "r1", "r2", "r3"]
 
 
-def test_rejected_row_is_dropped_and_the_rest_keep_input_order(tmp_path):
-    """A cached tombstone (a `reject` verdict) removes exactly its own row; the
-    rows around it keep their input order."""
+def test_rejected_row_stays_in_output_carrying_its_rejection(tmp_path):
+    """A `reject` verdict removes no row: the rejected row is emitted in its own
+    input position, carrying the verdict with null human and final scores. The
+    rows around it are untouched. Excluding a rejected row is a downstream
+    filter stage's job, so the decision stays visible in the workflow."""
     stage = _stage()
     src = _src(3)
 
@@ -295,14 +296,21 @@ def test_rejected_row_is_dropped_and_the_rest_keep_input_order(tmp_path):
         _put_approval(row, fp, fingerprints["stage_fingerprint"], verdict=verdict)
 
     out = _run_queue_stage(stage, {"scored": src.copy()}, _ctx(tmp_path, run_id="run2"))
-    assert list(out["id"]) == ["r0", "r2"]
+    assert list(out["id"]) == ["r0", "r1", "r2"]
+    assert list(out["decision"]) == ["approve", "reject", "approve"]
+    rejected = out.loc[out["id"] == "r1"].iloc[0]
+    assert pd.isna(rejected["human_score"])
+    assert pd.isna(rejected["final_score"])
+    assert rejected["ai_score"] == 1              # what the AI said is still on the row
+    assert rejected["reviewer_id"] == "local"     # and who rejected it, when
+    assert rejected["reviewed_at"] == "2026-07-01T00:00:00"
 
 
-def test_every_row_rejected_still_produces_the_declared_columns(tmp_path):
-    """Every queued row rejected leaves the stage with no row at all — and a
-    frame assembled from no rows carries no columns either unless the driver
-    restores the input's. Without them a downstream stage keyed on `id` raises
-    KeyError instead of producing an empty result."""
+def test_every_row_rejected_still_emits_every_row_with_the_declared_columns(tmp_path):
+    """Rejecting EVERY queued row still emits every row, projected onto the
+    columns output_schema declares. A queue stage can no longer hand a
+    non-empty input on as a zero-row frame at all, whatever the reviewer
+    decided."""
     stage = Stage.model_validate({
         "id": "review", "name": "Review", "type": "human_review_queue",
         "inputs": [{"id": "scored"}],
@@ -319,16 +327,34 @@ def test_every_row_rejected_still_produces_the_declared_columns(tmp_path):
                       verdict=RowReviewDecision.reject)
 
     out = _run_queue_stage(stage, {"scored": src.copy()}, _ctx(tmp_path, run_id="run2"))
-    assert len(out) == 0
     assert list(out.columns) == ["id", "score"]
-    assert out["id"].tolist() == []  # a downstream join can still key on it
+    assert out["id"].tolist() == ["r0", "r1"]
+
+
+def test_a_cached_entry_holding_no_output_row_fails_loudly(tmp_path):
+    """The cache payload still permits an entry with no output row at all. This
+    stage owes one output row per input row and has nothing to replay for such
+    an entry, so it raises rather than resolve the row to a fabricated or
+    absent value."""
+    stage = _stage()
+    src = _src(1)
+    row = {str(k): v for k, v in src.to_dict("records")[0].items()}
+    StageCache().record(
+        project=PROJECT, stage_id="review",
+        stage_fingerprint=stage.compute_definition_fingerprint(),
+        input_fingerprint=compute_row_fingerprint(row),
+        input_row=row, output_row=None,
+    )
+
+    with pytest.raises(ValueError, match="carries no output row"):
+        _run_queue_stage(stage, {"scored": src}, _ctx(tmp_path, run_id="no-output"))
 
 
 def test_queue_stats_count_every_row_including_the_rejected_one(tmp_path):
     """The manifest's per-stage item counts, over a run where every outcome
-    occurs. `items_decided` counts the REJECTED row too — it was decided, and
-    it is the one row that no longer exists by the time the stage's frame is
-    assembled, so it can only be counted as the row is mapped."""
+    occurs. `items_decided` counts the REJECTED row too — a rejection is a
+    decision, and the count is of what the reviewer answered, not of what
+    survived."""
     stage = _stage(flt="flag == 'review'")
     src = _alternating_src()
 
@@ -350,7 +376,7 @@ def test_queue_stats_count_every_row_including_the_rejected_one(tmp_path):
         _put_approval(row, fp, fingerprints["stage_fingerprint"], verdict=verdict)
 
     out = _run_queue_stage(stage, {"scored": src.copy()}, _ctx(tmp_path, run_id="run2"))
-    assert list(out["id"]) == ["r0", "r1", "r2"]  # r3 was rejected
+    assert list(out["id"]) == ["r0", "r1", "r2", "r3"]  # r3 was rejected, and stays
     assert contribution_of(out).human_review_queue_stats == {
         "items_queued_total": 2, "items_passed_through": 2,
         "items_pending": 0, "items_decided": 2,

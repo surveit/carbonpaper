@@ -7,23 +7,19 @@ class whose `execute` fixes the calling convention:
   RowMapHandler  — the runtime maps a per-row function over the single input's
                    rows and reassembles results in input order: one dict in, one
                    dict out. The mapper never sees the frame, so it cannot
-                   reorder or fan out rows — that much holds by construction
-                   (issue #87). Removing a row is possible only where the
-                   handler declares `drops_rows`; the mapper marks the row and
-                   the driver removes it.
+                   reorder, fan out or remove rows — that much holds by
+                   construction (issue #87).
   SourceHandler  — no upstream inputs; the handler originates rows from outside
                    the run. Trivially preserving: the rows begin here.
   FrameHandler   — the handler sees whole input frame(s) and may reshape or
                    reorder them freely; never grain-and-order preserving.
 
 Preservation is reported by each handler's `preserves_grain_and_order` — Source
-yes, Frame no, RowMap yes unless it declares `drops_rows`. It lives on the
-handler rather than the shape class because row removal is the one thing a
-row-driven shape can opt into, and a handler may only WEAKEN what its shape
-would otherwise guarantee, never claim more than it. Which handler a type
-registers under must agree with the core fact (app.models
-is_grain_and_order_preserving); validate_registry_matches_model holds the two
-equal when the registry module is imported.
+yes, Frame no, RowMap yes — and is fixed by the shape alone, not by anything an
+individual handler declares. Which handler a type registers under must agree
+with the core fact (app.models is_grain_and_order_preserving);
+validate_registry_matches_model holds the two equal when the registry module is
+imported.
 """
 from __future__ import annotations
 
@@ -66,19 +62,11 @@ ROW_USAGE_KEY = "_usage"
 # that emits it reads it back in its own `finish_mapped_rows`.
 ROW_DEFERRED_KEY = "_deferred"
 
-# Sentinel column a row mapper sets to True on a row the stage does not emit. A
-# mapper sees one row at a time and so cannot remove a row itself; it marks the
-# row and the driver removes it — only where the handler declares `drops_rows`,
-# since removing rows forfeits grain-and-order preservation.
-ROW_DROP_KEY = "_drop"
-
 # Internal per-row sentinel columns a mapper may attach. They are machinery, not
 # stage output: the driver strips them off every mapped frame and does NOT
 # report them as dropped user columns (they were collected by the driver or the
 # handler's own collector, not discarded).
-_INTERNAL_ROW_COLUMNS = frozenset(
-    {ROW_ERROR_KEY, ROW_USAGE_KEY, ROW_DEFERRED_KEY, ROW_DROP_KEY}
-)
+_INTERNAL_ROW_COLUMNS = frozenset({ROW_ERROR_KEY, ROW_USAGE_KEY, ROW_DEFERRED_KEY})
 
 
 @runtime_checkable
@@ -91,11 +79,11 @@ class PostMapRowMapper(Protocol):
     then share whatever per-execution state the object holds, instead of needing
     a channel outside the mapper to pass it through.
 
-    `finish_mapped_rows` runs AFTER marked rows are removed, so it sees the
-    SURVIVING rows only, and before the driver strips the markers, so it is the
-    last step that sees a marker column at all. It is handed the stage's
-    `StageContribution` to report onto — the manifest fields the mapper owns —
-    and may raise, which aborts the stage."""
+    `finish_mapped_rows` runs on the assembled frame — one row per input row —
+    and before the driver strips the markers, so it is the last step that sees a
+    marker column at all. It is handed the stage's `StageContribution` to report
+    onto — the manifest fields the mapper owns — and may raise, which aborts the
+    stage."""
 
     def __call__(self, row: Row) -> Row: ...
 
@@ -140,11 +128,6 @@ class RowMapHandler(StageHandler):
     `project_output_to_declared` asks the driver to project the assembled frame
     onto exactly the columns output_schema declares — a column-only operation
     that cannot change row count or order.
-
-    `drops_rows` declares that this handler's mapper may mark a row with
-    ROW_DROP_KEY for the driver to remove; the handler then stops claiming
-    grain-and-order preservation. Left False, a drop marker is an error rather
-    than a silent row loss.
     """
 
     def __init__(
@@ -152,12 +135,10 @@ class RowMapHandler(StageHandler):
         make_mapper: Callable[[Stage, RunContext], Callable[[Row], Row]],
         parallelism: int = 1,
         project_output_to_declared: bool = False,
-        drops_rows: bool = False,
     ) -> None:
         self.make_mapper = make_mapper
         self.parallelism = parallelism
         self.project_output_to_declared = project_output_to_declared
-        self.drops_rows = drops_rows
 
     def execute(
         self, stage: Stage, inputs: dict[str, pd.DataFrame], ctx: RunContext
@@ -166,7 +147,7 @@ class RowMapHandler(StageHandler):
 
     @property
     def preserves_grain_and_order(self) -> bool:
-        return not self.drops_rows
+        return True
 
 
 class LLMTransformHandler(RowMapHandler):
@@ -272,8 +253,8 @@ def _run_row_mapper(
     Grain and order hold by construction: exactly one result slot exists per
     input row, filled by input index (also under concurrency), and the output
     frame is assembled in index order. A result with no rows AND no columns —
-    an empty input, or every row removed — takes the input's columns instead of
-    being handed on as a 0x0 frame."""
+    an empty input — takes the input's columns instead of being handed on as a
+    0x0 frame."""
     if len(stage.inputs) != 1:
         raise ValueError(
             f"stage {stage.id}: a row-mapped stage takes exactly one input, "
@@ -328,17 +309,16 @@ def _restore_input_columns_when_nothing_named_them(
     slice of the stage's input, carrying the mapped frame's `.attrs`.
 
     A frame assembled from no results at all is 0 rows BY 0 COLUMNS: the input
-    was empty, or every row was marked for removal, so no mapper result named a
-    single column. A downstream stage keyed on an upstream column would then
-    raise `KeyError` instead of producing an empty result, and the input's own
-    columns are the one honest shape available. A frame that still carries a
-    column is returned untouched, including one whose rows are all gone but
-    whose columns a mapper result named.
+    was empty, so no mapper result named a single column. A downstream stage
+    keyed on an upstream column would then raise `KeyError` instead of producing
+    an empty result, and the input's own columns are the one honest shape
+    available. A frame that still carries a row or a column is returned
+    untouched.
 
     The substituted frame takes the mapped one's `.attrs` verbatim, because the
-    stage's StageContribution rides there: a stage whose rows all vanished still
-    reported usage, errors and queue counts, and swapping the frame must not
-    swallow them."""
+    stage's StageContribution rides there: an empty-input stage still reported
+    its usage, errors and queue counts, and swapping the frame must not swallow
+    them."""
     if len(mapped.columns) > 0 or len(mapped) > 0:
         return mapped
     empty = src.iloc[0:0].copy()
@@ -353,20 +333,18 @@ def _finish_mapped_frame(
     stage: Stage,
     ctx: RunContext,
 ) -> pd.DataFrame:
-    """Turn the assembled per-row results into the stage's output frame: remove
-    marked rows, collect the driver's own markers onto this stage's
-    `StageContribution`, hand the frame back to the mapper where the mapper is a
-    `PostMapRowMapper`, then strip every marker column and — where the handler
-    asks for it — project onto the declared columns.
+    """Turn the assembled per-row results into the stage's output frame: collect
+    the driver's own markers onto this stage's `StageContribution`, hand the
+    frame back to the mapper where the mapper is a `PostMapRowMapper`, then
+    strip every marker column and — where the handler asks for it — project onto
+    the declared columns.
 
-    The mapper's window is exact: `finish_mapped_rows` runs after the marked
-    rows are already gone, so it sees the SURVIVING rows only, and before the
-    strip, so it is the last step that sees a marker column at all.
+    The mapper's window is exact: `finish_mapped_rows` runs before the strip, so
+    it is the last step that sees a marker column at all.
 
     The contribution rides out on the returned frame's `.attrs`; the executor
     merges it into the manifest. Nothing accumulates in the (frozen) context."""
     contribution = StageContribution()
-    df = _drop_marked_rows(df, handler, stage)
     _collect_row_errors(df, contribution)
     _collect_row_usage(df, contribution)
     if isinstance(map_row, PostMapRowMapper):
@@ -376,50 +354,6 @@ def _finish_mapped_frame(
         df = _project_onto_declared_columns(df, stage, contribution)
     df.attrs[CONTRIBUTION_ATTR] = contribution
     return df
-
-
-def _drop_marked_rows(
-    df: pd.DataFrame, handler: RowMapHandler, stage: Stage
-) -> pd.DataFrame:
-    """Remove every row whose ROW_DROP_KEY marker is exactly True, re-indexing
-    from 0 so downstream row positions stay contiguous. A frame with no marker
-    column is returned unchanged. Raises unless the handler declares
-    `drops_rows`: a marker from one that does not is a mapper bug, and acting on
-    it would silently break the preservation the handler still claims."""
-    if ROW_DROP_KEY not in df.columns:
-        return df
-    if not handler.drops_rows:
-        raise ValueError(
-            f"stage {stage.id}: a row carries the {ROW_DROP_KEY!r} marker, but this "
-            f"handler does not declare row dropping"
-        )
-    _validate_drop_markers(df, stage)
-    keep = pd.Series([value is not True for value in df[ROW_DROP_KEY]], index=df.index, dtype=bool)
-    return df[keep].reset_index(drop=True)
-
-
-def _validate_drop_markers(df: pd.DataFrame, stage: Stage) -> None:
-    """Raise unless every ROW_DROP_KEY value is a plain `bool` or null.
-
-    The removal decision is `value is True`, so a truthy STAND-IN — numpy's bool,
-    an int, a string — would quietly KEEP a row the mapper meant to remove, which
-    is data loss in the silent direction. Null stays legal: a mapper that marks
-    only some rows leaves the rest missing, and the frame fills those with NaN."""
-    for position, value in enumerate(df[ROW_DROP_KEY]):
-        if not isinstance(value, bool) and not pd.isna(value):
-            raise ValueError(
-                f"stage {stage.id}: row {position} carries a {ROW_DROP_KEY!r} marker of type "
-                f"{_name_type(value)}; it must be a plain bool or absent, because a row is "
-                f"removed only on exactly True and any other value would silently keep it"
-            )
-
-
-def _name_type(value: object) -> str:
-    """`value`'s type, module-qualified unless it is a builtin. numpy's bool
-    reports the bare name "bool" exactly like the builtin does, so the bare name
-    alone cannot tell an author which of the two they actually handed over."""
-    cls = type(value)
-    return cls.__qualname__ if cls.__module__ == "builtins" else f"{cls.__module__}.{cls.__qualname__}"
 
 
 def _strip_internal_row_columns(df: pd.DataFrame) -> pd.DataFrame:

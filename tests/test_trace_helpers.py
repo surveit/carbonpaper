@@ -54,12 +54,12 @@ def write_run(tmp_path: Path, stages: list[dict], run_id: str = "T1") -> Path:
 
 def test_is_row_preserving_matches_the_model_classification():
     # Sourced from the model's is_grain_and_order_preserving, not a tracer-local
-    # list — llm_transform now crosses; human_review_queue does not (it drops +
-    # reorders, see #106); an unknown type is never trusted.
-    for stage_type in ("input_data", "python_row_function", "llm_transform"):
+    # list — llm_transform and human_review_queue both cross; an unknown type is
+    # never trusted.
+    for stage_type in ("input_data", "python_row_function", "llm_transform",
+                       "human_review_queue"):
         assert _is_row_preserving(stage_type) is True
-    for stage_type in ("python_frame_function", "join", "aggregate",
-                       "human_review_queue", "publish"):
+    for stage_type in ("python_frame_function", "join", "aggregate", "publish"):
         assert _is_row_preserving(stage_type) is False
     assert _is_row_preserving("not_a_stage_type") is False
 
