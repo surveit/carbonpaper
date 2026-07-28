@@ -31,7 +31,7 @@ from app.core.errors import (
 )
 from app.core.run_status import RunStatus, StageStatus
 from app.services.errors import WorkflowLoadError
-from app.services.loader import load_workflow
+from app.services.loader import load_workflow, resolve_function_code
 from app.services.versioning import list_versions
 from app.services import run as run_service
 from app.runtime.cancellation import request_cancel
@@ -39,7 +39,7 @@ from app.runtime.errors import PreviewError
 from app.runtime.preview import PREVIEWABLE_TYPES, run_stage_preview
 from app.runtime.run_log import RUN_DONE, read_events_since
 from app.runtime.trace import trace_row, trace_to_dict
-from app.web.trace_view import build_trace_view
+from app.runtime.trace_view import build_trace_view
 from app.web.config import EXAMPLES_DIR, REPO_ROOT, templates
 from app.web.diagrams import TYPE_CLASS, TYPE_GLYPH, build_mermaid_graph
 from app.web.loading import (
@@ -53,7 +53,6 @@ from app.web.loading import (
     load_output_table,
     manifest_stage,
     read_output_df,
-    resolve_function_code,
     runs_dir,
 )
 from app.web.project_view import shell_state
