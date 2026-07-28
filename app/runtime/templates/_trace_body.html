@@ -1,0 +1,51 @@
+{# Speaks build_trace_view's contract directly (view.nodes/edges/upstream,
+   node.stage_id/columns_new/row/role/transform) — no dual-shape fallbacks.
+   The environment's StrictUndefined turns a missing field into a raised
+   error rather than a silently empty fragment. #}
+{% if view.upstream.truncated %}
+<div class="trunc">⋯ upstream not traced — {{ view.upstream.message }}</div>
+{% endif %}
+{% for node in view.nodes %}
+{% set step_no = loop.index %}
+{% set stage_id = node.stage_id %}
+{% set transform = node.transform %}
+{% set kind = transform.kind %}
+{% set detail = transform.detail %}
+{% set cols = node.columns_new %}
+{% set row = node.row %}
+{% set preds = view.edges | selectattr('to_step', 'equalto', step_no) | map(attribute='from_step') | list %}
+<div class="step">
+  <span class="stepno">step {{ step_no }}</span>
+  {% if loop.index0 == 0 and not view.upstream.truncated %}
+  <span class="stage-link" data-stage="{{ stage_id }}" data-disc="transform">{{ stage_id }}</span> to get
+  {% else %}
+  <span class="stage-link" data-stage="{{ stage_id }}" data-disc="transform">
+    {%- if kind == 'python' -%}run python {{ stage_id }}()
+    {%- elif kind == 'llm' -%}ask the LLM in {{ stage_id }}
+    {%- elif kind == 'join' -%}join
+    {%- else -%}{{ stage_id }}
+    {%- endif -%}
+  </span>
+  {%- if preds | length == 1 %} using step {{ preds[0] }}'s output{% elif preds | length > 1 %} joining steps {{ preds | join(' and ') }}{% endif %} to get
+  {% endif %}
+  <details class="lin-disc" data-disc="output">
+    <summary class="disclosure row-chip" data-stage="{{ stage_id }}" data-disc="output">1 row</summary>
+    <div class="lin-detail">
+      {% if cols %}<p class="lin-cols">new columns: {{ cols | join(', ') }}</p>{% endif %}
+      <table class="data-preview"><tbody>
+        {% for col, val in row.items() %}<tr><th>{{ col }}</th><td>{{ val }}</td></tr>{% endfor %}
+      </tbody></table>
+      {% if detail is mapping %}
+        {# instructions/data_template: both keys are always present together
+           on an llm node's detail (_transform_of builds them as one literal
+           dict); .get() here guards an empty string, not a missing key. #}
+        {% if detail.get('instructions') %}<p class="lin-transform"><em>instructions:</em> {{ detail.get('instructions') }}</p>{% endif %}
+        {% if detail.get('data_template') %}<p class="lin-transform"><em>data template:</em> {{ detail.get('data_template') }}</p>{% endif %}
+      {% elif detail %}
+      <pre class="lin-transform">{{ detail }}</pre>
+      {% endif %}
+    </div>
+  </details>
+  {% if node.role == 'claim' %}<span class="claim-tag">published claim</span>{% endif %}
+</div>
+{% endfor %}

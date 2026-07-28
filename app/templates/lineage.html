@@ -27,7 +27,7 @@
 <h1>Lineage</h1><div class="lin-sub" id="sub"></div>
 <div class="lin-note">Tracing the pipeline filtered to this single row — every step below is the one row on this row's path, so each carries [1 row].</div>
 <div class="toggle"><button id="b-story" class="on">Story</button><button id="b-graph">Graph</button></div>
-<div id="story" class="story"></div>
+<div id="story" class="story">{{ trace_body | safe }}</div>
 <div id="graph" class="hidden"><pre class="mermaid" id="mmd">{{ mermaid }}</pre><div id="nograph" class="nograph hidden">Graph needs the compiled workflow, which isn't available for this run.</div></div>
 <div class="lin-panel" id="stage-panel"><div class="lin-empty">Click a step or a graph node to inspect that stage — its transform and output, trimmed to this row.</div></div>
 </div>
@@ -36,36 +36,6 @@ const V = {{ view | tojson }}, PROJECT = {{ project | tojson }};
 const esc = s => String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
 document.getElementById('sub').textContent = `run ${V.run_id} · ${V.start_stage} row ${V.start_row} · reads top to bottom, step 1 first`;
 const byStage = Object.fromEntries(V.nodes.map(n => [n.stage_id, n]));
-// A transform-link opens the panel's Transform disclosure; a row-chip opens Output.
-function tlink(sid, label){ return `<span class="stage-link" data-stage="${esc(sid)}" data-disc="transform">${esc(label)}</span>`; }
-function ochip(n){ return `<span class="row-chip" data-stage="${esc(n.stage_id)}" data-disc="output">1 row</span>`; }
-function verb(n){
-  const k = n.transform.kind, sid = n.stage_id;
-  if(k==='python') return `run python ${tlink(sid, sid + '()')}`;
-  if(k==='llm') return `ask the LLM in ${tlink(sid, sid)}`;
-  if(k==='join') return tlink(sid, 'join');
-  return tlink(sid, sid);
-}
-function predsOf(step){
-  const from = V.edges.filter(e => e.to_step === step).map(e => e.from_step);
-  if(!from.length) return '';
-  if(from.length === 1) return ` using step ${from[0]}'s output`;
-  return ` joining steps ${from.join(' and ')}`;
-}
-// ---- Story: <transform-link> to get [1 row]; both open a panel disclosure ----
-let html = '';
-if(V.upstream.truncated){ html += `<div class="trunc">⋯ upstream not traced — ${esc(V.upstream.message)}</div>`; }
-V.nodes.forEach((n, i) => {
-  let sentence;
-  if(i===0 && !V.upstream.truncated){
-    sentence = `${tlink(n.stage_id, n.stage_id)} to get ${ochip(n)}`;
-  } else {
-    const claimTag = n.role==='claim' ? ' <span class="claim-tag">published claim</span>' : '';
-    sentence = `${verb(n)}${predsOf(n.step)} to get ${ochip(n)}${claimTag}`;
-  }
-  html += `<div class="step"><span class="stepno">step ${n.step}</span>${sentence}</div>`;
-});
-document.getElementById('story').innerHTML = html;
 // ---- The row-trimmed stage panel (_lineage_stage.html) ----
 async function openStage(stageId, target){
   const n = byStage[stageId];
