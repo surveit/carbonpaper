@@ -11,6 +11,8 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
+from app.models import StageDraft
+
 HEADERS = {
     "Accept": "application/json, text/event-stream",
     "Content-Type": "application/json",
@@ -118,6 +120,10 @@ _OUT_SCHEMA = {"columns": [
     {"name": "doubled", "type": "float", "nullable": True},
 ]}
 _DOUBLE = "def transform(row):\n    return {**row, 'doubled': row['amount'] * 2}\n"
+_LOAD_STAGE = StageDraft.model_validate({
+    "id": "load", "name": "Load", "type": "input_data", "connector": {"kind": "file"},
+    "output_schema": {"columns": [{"name": "doc_id", "type": "str", "nullable": False}]},
+})
 
 
 def _write_compiled_workflow(pdir: Path) -> None:
@@ -246,7 +252,7 @@ def test_mcp_add_stage_reports_an_unloadable_workflow_as_issues(tmp_path, monkey
 
     added = server.add_stage(
         project_id="trail",
-        stage_json='{"id": "load", "name": "Load", "type": "input_data", "connector": {"kind": "file"}}',
+        stages=[_LOAD_STAGE],
     )
     assert added["ok"] is False and added["issues"]
     assert not (compiled / "load.json").exists()
@@ -262,7 +268,7 @@ def test_mcp_add_stage_refuses_to_invent_a_project(tmp_path, monkeypatch):
     with pytest.raises(ValueError):
         server.add_stage(
             project_id="no_such_project",
-            stage_json='{"id": "load", "name": "Load", "type": "input_data", "connector": {"kind": "file"}}',
+            stages=[_LOAD_STAGE],
         )
     assert list(tmp_path.iterdir()) == []
 
@@ -276,14 +282,102 @@ def test_mcp_add_stage_creates_the_first_stage_of_a_new_project(tmp_path, monkey
 
     added = server.add_stage(
         project_id="trail",
-        stage_json=json.dumps({
-            "id": "load", "name": "Load", "type": "input_data",
-            "connector": {"kind": "file"},
-            "output_schema": {"columns": [{"name": "doc_id", "type": "str", "nullable": False}]},
-        }),
+        stages=[_LOAD_STAGE],
     )
-    assert added == {"ok": True, "issues": []}
+    assert added == {
+        "ok": True, "issues": [], "added": ["load"], "failed": [], "skipped": [],
+    }, "a clean draft warns about nothing"
     assert server.describe_workflow(project_id="trail")["stages"][0]["id"] == "load"
+
+
+def test_mcp_add_stage_drops_server_owned_fields_and_names_them(tmp_path, monkeypatch):
+    """A client that copies a stage out of read_stage echoes back fields only the
+    server writes. Saving it is the useful behavior — but silently is not, so the
+    result names the fields that were dropped."""
+    from app.mcp import server
+    from app.services import workspace
+
+    monkeypatch.setattr(workspace, "EXAMPLES_DIR", tmp_path)
+    server.create_project(name="trail", document="Follow the filings.")
+    echoed = {
+        "id": "load", "name": "Load", "type": "input_data",
+        "connector": {"kind": "file"},
+        "output_schema": {"columns": [{"name": "doc_id", "type": "str"}]},
+        "tests": [], "source": {"section": "para 3"},
+    }
+
+    _content, added = asyncio.run(
+        server.mcp.call_tool("add_stage", {"project_id": "trail", "stages": [echoed]})
+    )
+
+    assert added["ok"] is True and added["added"] == ["load"]
+    named, explanation = added["warnings"]
+    assert named.startswith("`load`:"), "a batch must not lose which stage carried them"
+    assert "tests" in named and "source" in named
+    assert "eval" not in named and "review" not in named, "names only what was sent"
+    assert "generate_stage_tests" in explanation
+    stored = json.loads(server.read_stage(project_id="trail", stage_id="load"))
+    assert not {"tests", "source"} & set(stored)
+
+
+def test_mcp_add_stage_still_refuses_an_unknown_field(tmp_path, monkeypatch):
+    """Only the four KNOWN server-owned names are accepted-and-dropped. A typo'd
+    field name is still an error — otherwise the drop would swallow real mistakes."""
+    from app.mcp import server
+    from app.services import workspace
+
+    monkeypatch.setattr(workspace, "EXAMPLES_DIR", tmp_path)
+    server.create_project(name="trail", document="Follow the filings.")
+    typo = {
+        "id": "load", "name": "Load", "type": "input_data",
+        "connector": {"kind": "file"}, "nonsense": 1,
+    }
+
+    with pytest.raises(Exception, match="nonsense"):
+        asyncio.run(server.mcp.call_tool("add_stage", {"project_id": "trail", "stages": [typo]}))
+
+
+_UNADDITIVE_LLM_STAGE = {
+    "id": "score", "name": "Score", "type": "llm_transform",
+    "inputs": [{"id": "load", "schema": _IN_SCHEMA}],
+    # llm_transform must be additive and 1:1 — dropping the input's `amount`
+    # column breaks that, and `Stage` is where that rule lives.
+    "output_schema": {"columns": [{"name": "verdict", "type": "str"}]},
+    "llm": {"prompt_data_template": "judge {amount}"},
+}
+
+
+def test_mcp_add_stage_refuses_an_invalid_stage_on_the_issues_channel(tmp_path, monkeypatch):
+    """Driven through the real tool boundary, because that is where the risk is: a
+    stage that breaks a cross-field rule must bind as a StageDraft and be refused by
+    the handler as {ok: False, issues}. If the rule fired during FastMCP's parameter
+    binding instead, the client would get isError=true with raw Pydantic text — off
+    the refusal channel the instructions tell it to watch."""
+    from app.mcp import server
+    from app.services import workspace
+
+    monkeypatch.setattr(workspace, "EXAMPLES_DIR", tmp_path)
+    _write_compiled_workflow(tmp_path / "trail")
+
+    _content, refused = asyncio.run(
+        server.mcp.call_tool("add_stage", {"project_id": "trail", "stages": [_UNADDITIVE_LLM_STAGE]})
+    )
+
+    assert refused["ok"] is False
+    assert any("1:1" in issue for issue in refused["issues"])
+    assert not (tmp_path / "trail" / "compiled" / "score.json").exists()
+
+
+def test_add_stage_input_schema_omits_the_server_owned_fields(tmp_path, monkeypatch):
+    """The stage shape ships in the tool's inputSchema, which FastMCP generates
+    itself from StageDraft — so the fields no authoring client writes must be absent
+    from the document the client is handed, not only from the model."""
+    from app.mcp import server
+
+    [tool] = [t for t in asyncio.run(server.mcp.list_tools()) if t.name == "add_stage"]
+    defs = tool.inputSchema["$defs"]
+
+    assert not {"tests", "eval", "review", "source"} & set(defs["StageDraft"]["properties"])
 
 
 def test_mcp_save_version_snapshots_the_working_copy_unpublished(tmp_path, monkeypatch):

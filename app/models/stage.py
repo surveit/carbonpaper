@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any, ClassVar, Literal, Optional
 
 from pydantic import AliasChoices, Field, ValidationError, field_validator, model_validator
+from pydantic.json_schema import SkipJsonSchema
 
 from app.core.llm.options import LLMModel
 from app.models.schema import (
@@ -162,8 +163,7 @@ class LLMConfig(_Base):
         description=(
             "Sent to the model once per input row, rendered with Python's "
             "str.format_map over the row — inject a column as {column_name}. "
-            "Row-invariant guidance belongs in prompt_instructions instead, so "
-            "this stays a stable, cacheable prompt prefix across many rows."
+            "Row-invariant guidance belongs in prompt_instructions."
         ),
     )
     model: Optional[LLMModel] = None
@@ -176,13 +176,11 @@ class LLMConfig(_Base):
         default=1,
         ge=1,
         description=(
-            "Rows sent per model call. 1 (default) calls the model once per row. "
-            ">1 packs that many input rows into one call, amortizing the prompt/"
-            "harness overhead; the runtime tags each row with a batch-local row "
-            "number and rejoins the replies by it, so the stage stays strictly "
-            "one-row-out-per-row-in — but the model sees a whole chunk at once, so "
-            "batch_size>1 relaxes per-row independence (a row's answer can be "
-            "influenced by its batch-mates)."
+            "Rows per model call (default 1). >1 amortizes the prompt_instructions "
+            "prefix across rows, which matters when that prefix is large; the runtime "
+            "still returns exactly one row out per row in. But batch-mates share one "
+            "context, so a row's answer can be influenced by them — keep 1 when each "
+            "row needs an independent judgment."
         ),
     )
 
@@ -202,22 +200,16 @@ class PythonFunction(_Base):
     code: Optional[str] = Field(
         default=None,
         description=(
-            "Inline Python defining the function named by `function` (default `transform`). "
-            "Its signature depends on the stage type: "
-            "python_row_function -> `def transform(row: dict) -> dict` (one row in, one row "
-            "out; cannot fan out/in or reorder); "
-            "python_frame_function -> `def transform(df, ...) -> DataFrame` (the input pandas "
-            "DataFrame(s), positional in declared input order; may reshape); "
-            "publish -> `def transform(df, ..., output_dir, trace_links) -> DataFrame` "
-            "(write artifacts under output_dir, return a table of their paths; declare "
-            "`trace_links` to receive a linker that builds each row's provenance URL)."
+            "Inline Python defining `function` (default `transform`). Signature by stage "
+            "type: python_row_function `def transform(row: dict) -> dict` (1 row in, 1 out; "
+            "cannot reorder or fan out); python_frame_function "
+            "`def transform(df, ...) -> DataFrame` (inputs positional in declared order); "
+            "publish `def transform(df, ..., output_dir, trace_links) -> DataFrame` (writes "
+            "artifact files into output_dir; the returned frame lists them)."
         ),
     )
     module: Optional[str] = None
-    function: Optional[str] = Field(
-        default=None,
-        description="Name of the top-level function the runtime calls (default `transform`).",
-    )
+    function: Optional[str] = None
     requirements: list[str] = Field(default_factory=list)
 
     @model_validator(mode="after")
@@ -385,12 +377,87 @@ _TYPE_SPEC: dict[str, dict[str, Any]] = {
 }
 
 
-class Stage(_Base):
-    """One node in the workflow. Exactly one handle block is required,
-    selected by `type`."""
+# Stage fields an authoring client never writes, so StageDraft does not declare
+# them. A client that echoes back a stage it read from the server carries them
+# anyway; the draft drops those rather than refusing the whole stage.
+SERVER_OWNED_STAGE_FIELDS = ("tests", "eval", "review", "source")
+
+
+class StageDraft(_Base):
+    """One stage as an authoring client submits it. Carries no cross-field
+    validator: a stage that breaks a rule must parse here and be refused by
+    `Stage` in the handler, where the refusal reaches the client on the handler's
+    own channel rather than as a parameter-binding error. `Stage` extends this,
+    so the shared field list is declared once."""
     id: str
     type: StageType
     name: str
+    inputs: list[StageInput] = Field(default_factory=list)
+    output_schema: Optional[TableSchema] = None
+
+    # executable handles (exactly one populated, per type — enforced by Stage)
+    connector: Optional[Connector] = None
+    llm: Optional[LLMConfig] = None
+    function: Optional[PythonFunction] = None
+    join: Optional[JoinConfig] = None
+    aggregate: Optional[AggregateConfig] = None
+    queue: Optional[QueueConfig] = None
+    publish: Optional[PublishConfig] = None
+
+    # False declares this stage INTENTIONALLY non-deterministic — it must
+    # re-roll every run — so the runtime consults no stage-result cache for its
+    # rows. Not a performance knob, and deliberately absent from
+    # compute_definition_fingerprint: it governs WHETHER the cache is consulted,
+    # not WHAT the stage computes, so flipping it must never invalidate an
+    # entry already recorded.
+    cache: bool = True
+    limit: Optional[int] = None
+    compiler_notes: list[str] = Field(default_factory=list)
+
+    # Which SERVER_OWNED_STAGE_FIELDS the submitted draft carried, for the caller
+    # to warn about. Bookkeeping about one submission, not part of a stage: kept
+    # out of the JSON schema a client is handed and out of every dump. Always
+    # empty on `Stage`, whose own fields these are.
+    dropped_server_owned_fields: SkipJsonSchema[list[str]] = Field(
+        default_factory=list, exclude=True
+    )
+
+    @model_validator(mode="before")
+    @classmethod
+    def _drop_server_owned_fields(cls, data: Any) -> Any:
+        """Accept and discard the fields only the server writes, so a client can
+        echo back a stage it read without tripping `extra="forbid"`. Cannot
+        raise, and does not run for `Stage`, which owns these fields."""
+        if cls is not StageDraft or not isinstance(data, dict):
+            return data
+        present = [name for name in SERVER_OWNED_STAGE_FIELDS if name in data]
+        remaining = {k: v for k, v in data.items() if k not in SERVER_OWNED_STAGE_FIELDS}
+        remaining["dropped_server_owned_fields"] = present
+        return remaining
+
+    @field_validator("inputs", mode="before")
+    @classmethod
+    def _bare_id_shorthand(cls, v: Any) -> Any:
+        """Accept `inputs: [upstream_id]` shorthand for `[{id: upstream_id}]`."""
+        if not isinstance(v, list):
+            return v
+        return [{"id": item} if isinstance(item, str) else item for item in v]
+
+    @property
+    def input_ids(self) -> list[str]:
+        return [ref.id for ref in self.inputs]
+
+    def to_stage_spec(self) -> dict[str, Any]:
+        """This draft as a dict `Stage.model_validate` accepts — by alias, so
+        `StageInput.table_schema` spells itself `schema:` the way a compiled stage
+        does."""
+        return self.model_dump(exclude_unset=True, by_alias=True)
+
+
+class Stage(StageDraft):
+    """One node in the workflow: a submitted draft plus the fields only the
+    server writes, and every rule a stored stage must satisfy. Exactly one handle
+    block is required, selected by `type`."""
     source: Optional[SourceRef] = None
     inputs: list[StageInput] = Field(
         default_factory=list,
@@ -407,26 +474,7 @@ class Stage(_Base):
             "type except `publish`."
         ),
     )
-
-    # executable handles (exactly one populated, per type)
-    connector: Optional[Connector] = None
-    llm: Optional[LLMConfig] = None
-    function: Optional[PythonFunction] = None
-    join: Optional[JoinConfig] = None
-    aggregate: Optional[AggregateConfig] = None
-    queue: Optional[QueueConfig] = None
-    publish: Optional[PublishConfig] = None
-
     review: Optional[ReviewConfig] = None
-    # False declares this stage INTENTIONALLY non-deterministic — it must
-    # re-roll every run — so the runtime consults no stage-result cache for its
-    # rows. Not a performance knob, and deliberately absent from
-    # compute_definition_fingerprint: it governs WHETHER the cache is consulted,
-    # not WHAT the stage computes, so flipping it must never invalidate an
-    # entry already recorded.
-    cache: bool = True
-    limit: Optional[int] = None
-    compiler_notes: list[str] = Field(default_factory=list)
 
     # Descriptive eval note rendered on the stage page (reference data, metrics).
     # Display only — the executable eval contract is EvalConfig (app/models/eval.py).
@@ -437,19 +485,6 @@ class Stage(_Base):
     # stage has none: the canonical dump must not carry a `tests` key for
     # stages without tests, or every pre-existing belief hash would change.
     tests: Optional[list[StageTest]] = None
-
-    @field_validator("inputs", mode="before")
-    @classmethod
-    def _bare_id_shorthand(cls, v: Any) -> Any:
-        """Normalise the bare-id form `inputs: [upstream_id]` to `[{id: upstream_id}]`,
-        which then fails on the missing `schema`."""
-        if not isinstance(v, list):
-            return v
-        return [{"id": item} if isinstance(item, str) else item for item in v]
-
-    @property
-    def input_ids(self) -> list[str]:
-        return [ref.id for ref in self.inputs]
 
     def compute_definition_fingerprint(self) -> str:
         """sha1[:16] over the canonical JSON of the output-determining subset of

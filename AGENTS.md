@@ -39,6 +39,13 @@ app/chat/  PydanticAI chat · app/core/llm/  model menu · tests/  pytest (offli
   caller-defined and not yet known: a raw stage-spec dict that may be invalid mid-edit (matching
   `stage_to_spec_dict` / `validate_workflow_draft`), or foreign JSON being parsed — and even
   there, parse into a model at the first point the shape is known.
+- **Never weaken an arch test without human approval.** The import-linter contracts
+  (`pyproject.toml`, run as `lint-imports`) and the AST invariant tests (`_arch_tests/`,
+  `tests/arch/`) exist to fail on work in progress — that failure is the signal, not an obstacle.
+  Adding a contract or adding to a test is fine; relaxing, deleting, skipping, or adding an
+  allowlist entry to an existing one is a human decision on the record. When an arch test blocks
+  the change you were about to make, reroute the change and say in the PR which test caught you
+  and what you did differently.
 - **Planning docs stay out of the repo.** Design specs, implementation/execution plans,
   brainstorming or "rethink" notes, and refactor/migration roadmaps are ephemeral working
   artifacts — keep them in scratch or the PR description, never commit them. Committed docs

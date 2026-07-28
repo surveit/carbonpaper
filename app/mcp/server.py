@@ -20,7 +20,12 @@ from app.core.errors import (
     NoWorkflowTestVersionError,
     RunNotFoundError,
 )
-from app.models import HUMAN_REVIEW_QUEUE_CONTRACT_NOTE, NODE_TYPES
+from app.models import (
+    HUMAN_REVIEW_QUEUE_CONTRACT_NOTE,
+    NODE_TYPES,
+    StageDraft,
+    StageType,
+)
 from app.runtime import stage_tests
 from app.services import generation
 from app.services import loader
@@ -30,7 +35,7 @@ from app.services import versioning
 from app.services import workflow_test as workflow_test_service
 from app.services import workspace
 from app.services.errors import WorkflowLoadError
-from app.services.stage_edit import EditStageResult
+from app.services.stage_edit import AddStagesResult, EditStageResult
 
 # Domain failures a run/workflow-test tool turns into {ok: False, error: str(exc)} — a
 # loud, honest verdict rather than a traceback or a fabricated run id/status.
@@ -52,21 +57,29 @@ _RUN_TOOL_ERRORS = (
 # Anything outside this set propagates as a genuine internal fault.
 _STAGE_TOOL_ERRORS = (WorkflowLoadError, FileNotFoundError)
 
-# The two per-node-type facts an authoring client gets wrong most often, rendered from
-# app.models so this prompt and the editing agent's cannot drift apart on them, and
-# wrapped to the width of the surrounding prose.
-_NODE_TYPE_CONSTRAINTS = "\n".join(
-    textwrap.fill(f"- {stage_type} — {note}", width=88, subsequent_indent="  ")
-    for stage_type, note in (
-        ("input_data", NODE_TYPES["input_data"]["notes"]),
-        ("human_review_queue", HUMAN_REVIEW_QUEUE_CONTRACT_NOTE),
+
+def _render_node_type_constraints() -> str:
+    """Every node type's own runtime facts as bullets for the instructions
+    preamble, rendered from NODE_TYPES so this prompt and the editing agent's
+    cannot drift apart on them — nor from the registry when a type is added.
+    human_review_queue's registry notes are superseded by the fuller contract
+    note. Wrapped to the width of the surrounding prose."""
+    return "\n".join(
+        textwrap.fill(f"- {stage_type} — {note}", width=88, subsequent_indent="  ")
+        for stage_type, note in (
+            (name, HUMAN_REVIEW_QUEUE_CONTRACT_NOTE
+             if name == StageType.human_review_queue else spec["notes"])
+            for name, spec in NODE_TYPES.items()
+        )
     )
-)
+
+
+_NODE_TYPE_CONSTRAINTS = _render_node_type_constraints()
 
 INSTRUCTIONS = f"""\
 glassbox turns an investigation methodology (prose) into a reviewable, runnable data
-pipeline. YOU author the workflow, one validated stage at a time, through these tools.
-A stage is written, validated against the whole graph, and only then stored.
+pipeline. YOU author the workflow through these tools. Every stage is validated against
+the whole graph before it is stored.
 
 # Setup
 1. create_project(name, document) — the methodology prose becomes the project's source
@@ -75,12 +88,15 @@ A stage is written, validated against the whole graph, and only then stored.
    the background; poll get_project_status until schemas appear.
 3. The HUMAN approves the data model in the web UI. No tool approves it.
 
-# Authoring the workflow, one stage at a time
+# Authoring the workflow
 4. Read the methodology document and read_data_model(project_id). The approved schemas are
    the vocabulary the stages carry.
-5. Plan the stages, then author them in DEPENDENCY ORDER: a stage's `inputs` may name only
-   stages that already exist in the workflow. The first stage you add starts the workflow,
-   so it takes no inputs — it is the input_data stage that reads the source.
+5. Plan the stages, then add_stage(project_id, stages) them — `stages` is a LIST, so send
+   every stage you are ready to author in ONE call rather than one per call. Order does not
+   matter: they are sorted by the `inputs` they declare, and an input may name a stage in
+   the same call or one already in the workflow. Stages that validate are stored even if
+   another in the batch fails; the result's added/failed/skipped says which is which. The
+   workflow starts with an input_data stage that reads the source and takes no inputs.
 6. An upstream stage's output_schema is what flows down the edge. A stage's MANDATORY
    declared input schema is usually that schema verbatim; it differs when the stage reads
    only part of what upstream emits. Either way it must be a subset the upstream can satisfy.
@@ -95,11 +111,8 @@ only a human publishes. Your job ends at a saved version with a workflow test ru
 human to review.
 
 # Per-stage tests
-generate_stage_tests(project_id, stage_id) derives one python-transform stage's tests from
-the methodology (background; read_stage to see them once done). run_stage_tests(project_id,
-stage_id?) runs the authored tests against that stage's current code — omit stage_id to run
-every python-transform stage. Loop edit_stage → run_stage_tests until a stage's tests pass:
-a failure means the CODE disagrees with the test, so fix the code.
+Once a python-transform stage exists, generate_stage_tests derives its tests from the
+methodology; then loop edit_stage → run_stage_tests until they pass.
 
 # Running
 Runs execute a stored version; save_version(project_id, message) creates one, then
@@ -295,25 +308,78 @@ def edit_stage(project_id: str, stage_id: str, changes_json: str) -> dict[str, A
 
 
 @mcp.tool()
-def add_stage(project_id: str, stage_json: str) -> dict[str, Any]:
-    """Create a NEW stage in the workflow. `stage_json` is a FULL stage as JSON:
-    id (new and unique — use edit_stage to change an existing one), name, type,
-    the type's handle block (e.g. connector / llm / function), output_schema, and
-    inputs. Every id listed in `inputs` must ALREADY be a stage in this workflow,
-    so author stages in dependency order. read_stage on a similar existing stage
+def add_stage(project_id: str, stages: list[StageDraft]) -> dict[str, Any]:
+    """Create NEW stages in the workflow. `stages` is a LIST — submit every stage
+    you are ready to author in ONE call; a list of one is the single-stage case.
+    Each is a FULL stage: id (new and unique — use edit_stage to change an
+    existing one), name, type, the type's handle block (e.g. connector / llm /
+    function), output_schema, and inputs. read_stage on a similar existing stage
     shows the shape.
 
-    The WHOLE resulting workflow is validated before anything is written: the
-    stage's own shape, unique ids, inputs resolving, no cycles, and edge
-    conformance — a column a stage declares on an input that the upstream's
-    output_schema does not supply is refused. On a refusal nothing is written and
-    the issues name the stage, the edge and the offending columns: read_stage the
-    named upstream, repair this stage's declared input schema against what that
-    stage really outputs, and call add_stage again.
+    Order does not matter: the batch is sorted by the `inputs` each stage
+    declares, so a stage may name another stage in the SAME call as an input, or
+    one already in the workflow.
 
-    The new node lands 'unreviewed' for a human to approve. The FIRST stage
-    of a project starts its workflow — no other tool creates one."""
-    return catch_stage_edit_refusals(lambda: project_service.add_stage(project_id, stage_json))
+    Each stage is validated against the whole workflow-so-far before it is
+    written: its own shape, unique ids, inputs resolving, no cycles, and edge
+    conformance — a column a stage declares on an input that the upstream's
+    output_schema does not supply is refused. The result reports every stage:
+
+      added   — ids now in the workflow
+      failed  — [{id, issues}]; that stage was NOT written, the rest still were
+      skipped — [{id, because}]; not attempted, because a stage it inputs from
+                failed or was itself skipped
+      issues  — every failure's issues flattened, so `ok`/`issues` reads the same
+                as it always has
+
+    Fix what `failed` names and re-send only the failed and skipped stages:
+    read_stage the named upstream, repair the declared input schema against what
+    that stage really outputs. A batch that cannot be ordered at all — duplicate
+    ids, or a cycle among the submitted stages — is refused whole, with NOTHING
+    written and the cycle named in `issues`.
+
+    Copying a stage from read_stage is fine: the server-owned fields it carries
+    (tests, eval, review, source) are dropped rather than refused, and a
+    `warnings` entry names the stage and the fields dropped from it. Any OTHER
+    unknown field is still an error — a typo'd field name never passes silently.
+
+    New nodes land 'unreviewed' for a human to approve. The FIRST stage of a
+    project starts its workflow — no other tool creates one."""
+    try:
+        outcome = project_service.add_stages(project_id, stages)
+    except _STAGE_TOOL_ERRORS as exc:
+        outcome = AddStagesResult(batch_issues=[str(exc)])
+
+    result: dict[str, Any] = {
+        "ok": not (outcome.failed or outcome.batch_issues),
+        "added": outcome.added,
+        "failed": [{"id": f.id, "issues": f.issues} for f in outcome.failed],
+        "skipped": [{"id": s.id, "because": s.because} for s in outcome.skipped],
+        "issues": outcome.batch_issues + [i for f in outcome.failed for i in f.issues],
+    }
+    warnings = _find_dropped_field_warnings(stages, outcome.added)
+    if warnings:
+        result["warnings"] = warnings
+    return result
+
+
+def _find_dropped_field_warnings(stages: list[StageDraft], added: list[str]) -> list[str]:
+    """One entry per STORED stage that echoed back fields only the server writes,
+    naming the stage so a batch does not lose which one carried them, plus one
+    trailing entry saying who does write them. A stage that was not stored is not
+    warned about — nothing was dropped from the workflow on its behalf."""
+    stored = set(added)
+    named = [
+        f"`{s.id}`: ignored server-owned fields: {', '.join(s.dropped_server_owned_fields)}"
+        for s in stages
+        if s.id in stored and s.dropped_server_owned_fields
+    ]
+    if not named:
+        return []
+    return named + [
+        "only the server writes these: tests come from generate_stage_tests, "
+        "review is human-only."
+    ]
 
 
 @mcp.tool()

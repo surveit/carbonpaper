@@ -11,8 +11,15 @@ import json
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from app.models import Stage
-from app.models.workflow import validate_workflow_draft
+from typing import Sequence
+
+from app.models import Stage, StageDraft
+from app.models.workflow import (
+    detect_cycle,
+    sort_stages_by_dependency,
+    validate_unique_ids,
+    validate_workflow_draft,
+)
 from app.services import node_review
 from app.services.loader import (
     find_stage_file,
@@ -27,6 +34,29 @@ from app.services.loader import (
 class EditStageResult:
     ok: bool
     issues: list[str] = field(default_factory=list)
+
+
+@dataclass
+class StageFailure:
+    id: str
+    issues: list[str]
+
+
+@dataclass
+class SkippedStage:
+    id: str
+    because: str
+
+
+@dataclass
+class AddStagesResult:
+    """What became of each stage in one `add_stage_specs` batch. `batch_issues`
+    is a refusal of the batch as a whole, before any stage was attempted — the
+    other three lists are then empty."""
+    added: list[str] = field(default_factory=list)
+    failed: list[StageFailure] = field(default_factory=list)
+    skipped: list[SkippedStage] = field(default_factory=list)
+    batch_issues: list[str] = field(default_factory=list)
 
 
 def _merge_patch(target: object, patch: object) -> object:
@@ -63,6 +93,12 @@ def _current_specs(project_dir: Path) -> dict[str, dict]:
     return {stage.id: stage_to_spec_dict(stage) for stage in workflow.stages}
 
 
+def _canonicalize_spec(spec: dict) -> dict:
+    """A submitted spec reduced to the keys the workflow stores — the form that
+    goes into the in-memory `specs` map and onto disk."""
+    return {k: v for k, v in spec.items() if k not in node_review.CANONICAL_IGNORE_KEYS}
+
+
 def _apply(project_dir: Path, specs: dict[str, dict], stage_id: str, candidate: dict) -> EditStageResult:
     """Apply ``candidate`` as stage ``stage_id`` to the in-memory workflow ``specs``,
     validate the whole resulting workflow (per-stage AND graph, via the same
@@ -72,7 +108,7 @@ def _apply(project_dir: Path, specs: dict[str, dict], stage_id: str, candidate: 
     The writer reports only whether the write succeeded; it does not compute the
     node's review colour (content hash / approval state). A caller that needs the
     new colour re-derives it from the freshly-written stage."""
-    candidate = {k: v for k, v in candidate.items() if k not in node_review.CANONICAL_IGNORE_KEYS}
+    candidate = _canonicalize_spec(candidate)
     if candidate.get("id") != stage_id:
         return EditStageResult(
             ok=False,
@@ -132,6 +168,46 @@ def patch_stage_spec(project_dir: Path, stage_id: str, patch_text: str) -> EditS
     return _apply(project_dir, specs, stage_id, merged)
 
 
+def add_stage_specs(project_dir: Path, stages: Sequence[StageDraft]) -> AddStagesResult:
+    """Add several NEW stages in one pass, keeping everything that validates.
+
+    The stages are ordered by their declared `inputs`, so a caller may submit them
+    in any order, and each is validated against the whole workflow-so-far — the
+    stages already stored plus the ones accepted earlier in this batch. A stage
+    that fails is not written and does not stop the batch; the stages that depend
+    on it, directly or through another skipped stage, are skipped rather than
+    attempted, since they could only fail on the input that is now missing.
+
+    A batch that cannot be ordered at all — duplicate ids, or a cycle among the
+    submitted stages — is refused whole, with nothing written."""
+    batch_issues = validate_unique_ids(stages) + detect_cycle(stages)
+    if batch_issues:
+        return AddStagesResult(batch_issues=batch_issues)
+
+    result = AddStagesResult()
+    specs = _current_specs(project_dir)
+    for stage in sort_stages_by_dependency(stages):
+        blocker = _find_blocking_input(stage, result)
+        if blocker is not None:
+            result.skipped.append(SkippedStage(stage.id, f"inputs from {blocker}"))
+            continue
+        spec = stage.to_stage_spec()
+        outcome = _add_new_stage(project_dir, specs, spec)
+        if not outcome.ok:
+            result.failed.append(StageFailure(stage.id, outcome.issues))
+            continue
+        specs[stage.id] = _canonicalize_spec(spec)
+        result.added.append(stage.id)
+    return result
+
+
+def _find_blocking_input(stage: StageDraft, result: AddStagesResult) -> str | None:
+    """The id of the first input this stage names that the batch has already
+    failed or skipped — the NEAREST cause of skipping this one, not the root."""
+    unavailable = {f.id for f in result.failed} | {s.id for s in result.skipped}
+    return next((i for i in stage.input_ids if i in unavailable), None)
+
+
 def add_stage_spec(project_dir: Path, spec_text: str) -> EditStageResult:
     """Create a NEW stage from `spec_text` (a whole stage as JSON). The id must not
     already exist (use edit for an existing one). The resulting whole workflow is
@@ -143,10 +219,15 @@ def add_stage_spec(project_dir: Path, spec_text: str) -> EditStageResult:
         return EditStageResult(ok=False, issues=[f"JSON parse error: {exc}"])
     if not isinstance(spec, dict):
         return EditStageResult(ok=False, issues=["new stage must be a JSON object (a single stage)"])
+    return _add_new_stage(project_dir, _current_specs(project_dir), spec)
+
+
+def _add_new_stage(project_dir: Path, specs: dict[str, dict], spec: dict) -> EditStageResult:
+    """Validate one new stage against `specs` and, if clean, write it. Does not
+    mutate `specs`: a caller adding several stages records the accepted spec."""
     stage_id = spec.get("id")
     if not isinstance(stage_id, str) or not stage_id:
         return EditStageResult(ok=False, issues=["new stage must have a non-empty string 'id'"])
-    specs = _current_specs(project_dir)
     if stage_id in specs:
         return EditStageResult(
             ok=False,
