@@ -19,9 +19,10 @@ def transform(df, output_dir, trace_links):
     path = pathlib.Path(output_dir) / "index.html"
     rows = [
         "<li><a href='"
-        + trace_links.export_row_trace("enrich", i, from_file=path)
+        + trace_links.export_row_trace(
+            "enrich", row["trace_row_ordinal"], from_file=path, row=row)
         + "'>" + str(row["name"]) + "</a></li>"
-        for i, row in enumerate(df.to_dict("records"))
+        for row in df.to_dict("records")
     ]
     path.write_text("<ul>" + "".join(rows) + "</ul>", encoding="utf-8")
     return pd.DataFrame({"path": [str(path)]})

@@ -22,6 +22,10 @@ class TraceUnavailableError(Exception):
     """Raised instead of returning an href to a trace page that was not written."""
 
 
+class TraceRowMismatch(Exception):
+    """A trace was requested for an ordinal the caller's own row contradicts."""
+
+
 class NoVersionToRunError(Exception):
     """A run was requested for a project that has no PUBLISHED version to run.
 

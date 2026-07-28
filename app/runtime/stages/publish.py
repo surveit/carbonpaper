@@ -8,11 +8,11 @@ from typing import Any, Callable
 
 import pandas as pd
 
-from app.core.errors import TraceUnavailableError
+from app.core.errors import TraceRowMismatch, TraceUnavailableError
 from app.models import Stage
 
 from ..context import RunContext
-from ..trace_links import RowTraceExporter
+from ..trace_links import TRACE_ROW_ORDINAL_COLUMN, RowTraceExporter
 from .python_functions import _load_python_function
 
 TRACE_LINKS_KWARG = "trace_links"
@@ -30,7 +30,25 @@ def handle_publish(stage: Stage, inputs: dict[str, pd.DataFrame], ctx: RunContex
     exporter = _resolve_trace_exporter(fn, output_dir, ctx)
     if exporter is None:
         return fn(*args, output_dir=str(output_dir))
-    return _publish_with_traces(fn, args, output_dir, exporter, stage.id)
+    # After the executor's input-schema validation, which never sees this
+    # column: the stage's declared input schema does not list it.
+    traceable = [
+        _stamp_row_ordinals(df, ref.id, stage.id) for df, ref in zip(args, stage.inputs)
+    ]
+    return _publish_with_traces(fn, traceable, output_dir, exporter, stage.id)
+
+
+def _stamp_row_ordinals(df: pd.DataFrame, input_id: str, stage_id: str) -> pd.DataFrame:
+    """The ordinal has to ride ON the row: publish is frame-level, so sorting or
+    filtering would otherwise strand it. Assigns onto a copy — the runner hands
+    this same frame to every other consumer of `input_id`."""
+    if TRACE_ROW_ORDINAL_COLUMN in df.columns:
+        raise ValueError(
+            f"publish stage {stage_id}: input {input_id!r} already has a column named "
+            f"{TRACE_ROW_ORDINAL_COLUMN!r}, which the runtime needs for row provenance. "
+            "Rename it upstream — overwriting it would replace real data with ordinals."
+        )
+    return df.assign(**{TRACE_ROW_ORDINAL_COLUMN: range(len(df))})
 
 
 def _publish_with_traces(
@@ -45,8 +63,8 @@ def _publish_with_traces(
     Re-raise naming the publish stage so the failure says which one to fix."""
     try:
         return fn(*args, output_dir=str(output_dir), trace_links=exporter)
-    except TraceUnavailableError as exc:
-        raise TraceUnavailableError(f"publish stage {stage_id}: {exc}") from exc
+    except (TraceUnavailableError, TraceRowMismatch) as exc:
+        raise type(exc)(f"publish stage {stage_id}: {exc}") from exc
 
 
 def _prepare_output_dir(stage: Stage, ctx: RunContext) -> Path:

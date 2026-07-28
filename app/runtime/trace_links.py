@@ -5,16 +5,23 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
 from urllib.parse import quote
 
-from app.core.errors import RowOutOfRange, StageNotInRun, TraceUnavailableError
+from app.core.errors import (
+    RowOutOfRange,
+    StageNotInRun,
+    TraceRowMismatch,
+    TraceUnavailableError,
+)
 from app.models import Stage
 
 from .trace import trace_row, trace_to_dict
 from .trace_assets import copy_trace_assets
 from .trace_page import render_standalone_trace_page
 from .trace_view import build_trace_view
+
+TRACE_ROW_ORDINAL_COLUMN = "trace_row_ordinal"
 
 _TRACES_DIR = "_traces"
 _ASSETS_DIR = "_assets"
@@ -26,13 +33,15 @@ class RowTraceExporter:
     output_dir: Path  # the publish stage's artifacts root
     stages: dict[str, Stage]
 
-    def export_row_trace(self, stage_id: str, row_ordinal: int, from_file: Path) -> str:
-        """Write `(stage_id, row_ordinal)`'s trace page under `output_dir` and
-        return an href to it relative to `from_file`'s directory. `from_file` is
-        the file the caller is writing: only it knows its own depth in the
-        bundle. Raises rather than returning an href to a page that isn't there."""
+    def export_row_trace(
+        self, stage_id: str, row_ordinal: int, from_file: Path, *, row: Mapping[str, Any]
+    ) -> str:
+        """`from_file` is the file the caller is writing — only it knows its own
+        depth in the bundle. `row` is the row being rendered, which the ordinal
+        is checked against; both must be given, since either alone can be wrong."""
         if row_ordinal < 0:
             raise ValueError(f"row_ordinal must be >= 0, got {row_ordinal}")
+        _reject_contradicted_ordinal(stage_id, row_ordinal, row)
         from_dir = self._locate_writer_dir(from_file)
         page = self._locate_page(stage_id, row_ordinal)
         if not page.is_file():
@@ -78,10 +87,30 @@ class RowTraceExporter:
         page.write_text(render_standalone_trace_page(view, prefix), encoding="utf-8")
 
 
+def _reject_contradicted_ordinal(
+    stage_id: str, row_ordinal: int, row: Mapping[str, Any]
+) -> None:
+    """The runtime stamps each row with its true on-disk position before publish
+    runs, so the row itself is the authority on which ordinal belongs to it."""
+    if TRACE_ROW_ORDINAL_COLUMN not in row:
+        raise TraceRowMismatch(
+            f"stage {stage_id!r} row_ordinal {row_ordinal}: the row passed carries no "
+            f"{TRACE_ROW_ORDINAL_COLUMN!r} column. Pass a row from the frame this publish "
+            "function was given, keeping that column."
+        )
+    carried = row[TRACE_ROW_ORDINAL_COLUMN]
+    if carried != row_ordinal:
+        raise TraceRowMismatch(
+            f"stage {stage_id!r}: row_ordinal {row_ordinal} was passed for the row whose "
+            f"{TRACE_ROW_ORDINAL_COLUMN} is {carried}. The frame has been reordered or "
+            f"filtered, so use row[{TRACE_ROW_ORDINAL_COLUMN!r}] rather than enumerate()."
+        )
+
+
 def _build_relative_href(target: Path, from_dir: Path) -> str:
     """POSIX separators: os.path.relpath yields backslashes on Windows, which a
     browser reads as literal characters rather than path separators."""
     return Path(os.path.relpath(target, from_dir)).as_posix()
 
 
-__all__ = ["RowTraceExporter"]
+__all__ = ["RowTraceExporter", "TRACE_ROW_ORDINAL_COLUMN"]
