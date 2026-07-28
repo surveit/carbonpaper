@@ -1,11 +1,11 @@
 """_read_xlsx maps connector params onto pd.read_excel (app/runtime/stages/input_data.py)."""
 from __future__ import annotations
 
-import hashlib
 from pathlib import Path
 
 import openpyxl
 import pytest
+from pydantic import ValidationError
 
 from app.models.stage import FileFormat
 from app.runtime.stages.input_data import _read_xlsx
@@ -121,17 +121,26 @@ def test_first_column_default_zero_reads_whole_frame(tmp_path):
 
 
 @pytest.mark.parametrize("sheet", [None, ["Sheet1"]])
-def test_multi_sheet_selection_raises(tmp_path, sheet):
+def test_multi_sheet_selection_rejected_up_front(tmp_path, sheet):
+    """sheet_name is str|int (exactly one sheet); None/list (pandas' "select several
+    sheets" forms) are rejected by XlsxReadParams before pd.read_excel ever runs."""
     path = _write(tmp_path, [["client"], ["ACME"]])
-    with pytest.raises(ValueError, match="selected multiple sheets"):
+    with pytest.raises(ValidationError, match="sheet_name"):
         _read_xlsx(path, {"sheet_name": sheet})
 
 
 @pytest.mark.parametrize("param", ["header_row", "first_column"])
 def test_non_integer_offset_param_raises(tmp_path, param):
     path = _write(tmp_path, [["client", "income"], ["ACME", 1000]])
-    with pytest.raises(ValueError, match=param):
+    with pytest.raises(ValidationError, match=param):
         _read_xlsx(path, {param: 1.7})
+
+
+@pytest.mark.parametrize("param", ["header_row", "first_column"])
+def test_bool_offset_param_raises(tmp_path, param):
+    path = _write(tmp_path, [["client", "income"], ["ACME", 1000]])
+    with pytest.raises(ValidationError, match=param):
+        _read_xlsx(path, {param: True})
 
 
 def test_authoring_surfaces_advertise_xlsx():
@@ -148,22 +157,23 @@ def test_authoring_surfaces_advertise_xlsx():
         assert param in notes, f"{param} not advertised to the authoring agent"
 
 
-LDA_Q1 = Path(r"C:\Users\shuha\OneDrive\Documents\Q1 2026 LDA data.xlsx")
-LDA_Q1_SHA256 = "458da5cf33030a03558e3c5279fde2b94d563ac115512996186b8e6613036e7d"
+# Trimmed from the real 2026 Q1 Senate LDA quarterly export (public record): every
+# row whose specific_issues mentions "venezuela" (44) plus the first 20 non-matching
+# rows, real column names and real cell values throughout. Exercises real-shaped
+# content at small scale — it says nothing about behavior at the full export's
+# 24,797 rows.
+LDA_SAMPLE = Path(__file__).parent / "fixtures" / "lda_q1_venezuela_sample.xlsx"
+
+LDA_COLUMNS = [
+    "year", "type", "date_posted", "client", "client_state", "client_country",
+    "registrant", "income", "expenses", "issue_codes", "specific_issues",
+    "lobbyists", "filing_uuid",
+]
 
 
-@pytest.mark.skipif(not LDA_Q1.is_file(), reason="local LDA export not present")
-def test_reads_the_real_lda_export():
-    with LDA_Q1.open("rb") as handle:
-        digest = hashlib.file_digest(handle, "sha256").hexdigest()
-    assert digest == LDA_Q1_SHA256, (
-        f"{LDA_Q1} has changed since the row/match counts below were recorded "
-        f"(2026-07-28): got sha256 {digest}, expected {LDA_Q1_SHA256}. The counts "
-        "below are stale for the new file, not a reader regression."
-    )
-    df = _read_xlsx(LDA_Q1, {})
-    assert len(df) == 24797
-    assert "specific_issues" in df.columns
-    assert "filing_uuid" in df.columns
+def test_reads_the_lda_venezuela_sample():
+    df = _read_xlsx(LDA_SAMPLE, {})
+    assert list(df.columns) == LDA_COLUMNS
+    assert len(df) == 64
     matches = df["specific_issues"].fillna("").str.contains("venezuela", case=False)
     assert int(matches.sum()) == 44
