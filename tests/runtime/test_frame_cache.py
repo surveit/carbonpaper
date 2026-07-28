@@ -88,13 +88,21 @@ def test_a_second_run_returns_the_cached_frame_without_calling_the_transform():
 
 
 def test_the_registered_python_frame_function_replays_its_recorded_frame():
+    """Through the REGISTERED handler, not a hand-built one. The recorded frame
+    is seeded with an answer the authored function would never produce, so the
+    values that come back are themselves the evidence of a replay — running the
+    stage and reading the store back would only show that an entry exists."""
     stage, src = _frame_stage(), _src([1, 2])
-    handler = HANDLERS[StageType.python_frame_function]
-    handler.execute(stage, {"src": src}, _ctx(run_id="run1"))
+    StageCache().record_frame(
+        project=PROJECT, stage_id=stage.id,
+        stage_fingerprint=stage.compute_definition_fingerprint(),
+        input_frames=[src], frame=pd.DataFrame({"x": [1, 2], "y": [999, 999]}),
+    )
 
-    replayed = _cached_frame(stage, [src])
-    assert replayed is not None
-    assert list(replayed["y"]) == [2, 4]
+    out = HANDLERS[StageType.python_frame_function].execute(
+        stage, {"src": src}, _ctx(run_id="run1"))
+    assert out is not None
+    assert list(out["y"]) == [999, 999]  # the authored `x * 2` would have said [2, 4]
 
 
 def test_a_definition_change_invalidates_the_cached_frame():
@@ -193,37 +201,71 @@ def test_aggregate_computes_every_run_and_records_nothing():
 # ── the gating conditions ────────────────────────────────────────────────────
 
 
-def test_cache_false_neither_reads_nor_writes():
+def test_cache_false_writes_nothing():
     stage = _frame_stage(cache=False)
     calls: list[int] = []
     _counting_frame_handler(calls).execute(stage, {"src": _src([1])}, _ctx())
     assert _cached_frame(stage, [_src([1])]) is None
 
     _counting_frame_handler(calls).execute(stage, {"src": _src([1])}, _ctx(run_id="r2"))
-    assert calls == [1, 1]
+    assert calls == [1, 1]  # so the second run has nothing to replay
+
+
+def test_cache_false_reads_nothing_that_is_already_pinned():
+    """The read half of the opt-out, which the write test above cannot reach: a
+    run that wrote nothing has nothing to replay, so re-computing proves only
+    that the store is empty. `cache` stays out of the definition fingerprint, so
+    the SAME stage cached once leaves a frame the uncached stage would find if it
+    looked — and it must still recompute."""
+    calls: list[int] = []
+    _counting_frame_handler(calls).execute(
+        _frame_stage(cache=True), {"src": _src([1])}, _ctx(run_id="seed"))
+    assert _cached_frame(_frame_stage(), [_src([1])]) is not None
+
+    _counting_frame_handler(calls).execute(
+        _frame_stage(cache=False), {"src": _src([1])}, _ctx(run_id="uncached"))
+    assert calls == [1, 1]  # the pinned frame was there to be had, and was not taken
 
 
 def test_bust_cache_skips_the_read_but_still_re_pins():
+    """The two halves of the claim need two busted runs, because one execution
+    resolves ONE key at this grain: a busted run over a pinned frame can show the
+    read was skipped, and a busted run over a frame nothing has pinned is the only
+    one whose recording a later run can detect."""
     stage = _frame_stage()
     calls: list[int] = []
     _counting_frame_handler(calls).execute(stage, {"src": _src([1])}, _ctx())
 
     _counting_frame_handler(calls).execute(
         stage, {"src": _src([1])}, _ctx(run_id="r2", bust_cache=True))
-    assert calls == [1, 1]  # read skipped: recomputed
+    assert calls == [1, 1]  # read skipped: the pinned frame was recomputed
 
-    _counting_frame_handler(calls).execute(stage, {"src": _src([1])}, _ctx(run_id="r3"))
-    assert calls == [1, 1]  # the busted run left the entry re-pinned, not stale
+    _counting_frame_handler(calls).execute(
+        stage, {"src": _src([1, 2])}, _ctx(run_id="r3", bust_cache=True))
+    assert calls == [1, 1, 2]  # a frame nothing has pinned
+
+    _counting_frame_handler(calls).execute(
+        stage, {"src": _src([1, 2])}, _ctx(run_id="r4"))
+    # The two-row frame was computed by a busted run and by nothing else, so
+    # replaying it here is the evidence that a busted run records.
+    assert calls == [1, 1, 2]
 
 
 def test_a_run_without_project_scope_touches_the_cache_at_all():
+    """The frame is pinned by a scoped run FIRST, so the un-scoped run walks past
+    an entry that was there to be had; without the seed, re-computing would prove
+    only an empty store."""
     stage = _frame_stage()
     calls: list[int] = []
+    _counting_frame_handler(calls).execute(stage, {"src": _src([1])}, _ctx(run_id="seed"))
+    assert _cached_frame(stage, [_src([1])]) is not None
+
     ctx = make_run_context()  # identity=None, stage_cache=None
     _counting_frame_handler(calls).execute(stage, {"src": _src([1])}, ctx)
-    _counting_frame_handler(calls).execute(stage, {"src": _src([1])}, ctx)
-    assert calls == [1, 1]
-    assert _cached_frame(stage, [_src([1])]) is None
+    assert calls == [1, 1]                            # the pinned frame was not read
+    _counting_frame_handler(calls).execute(stage, {"src": _src([5])}, ctx)
+    assert calls == [1, 1, 1]
+    assert _cached_frame(stage, [_src([5])]) is None  # and nothing was written
 
 
 def test_a_read_only_accessor_reuses_a_hit_but_records_nothing():
