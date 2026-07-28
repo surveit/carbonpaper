@@ -112,7 +112,7 @@ def _read_xlsx(path: Path, params: dict[str, Any]) -> pd.DataFrame:
             "sheet, or omit sheet_name for the first"
         )
     if first_column:
-        validate_first_column_in_range(first_column, frame, path, sheet)
+        _validate_first_column_in_range(first_column, frame, path, sheet)
         frame = frame.iloc[:, first_column:]
     return frame
 
@@ -124,7 +124,7 @@ def _require_int_param(params: dict[str, Any], name: str, default: int) -> int:
     return value
 
 
-def validate_first_column_in_range(first_column: int, frame: pd.DataFrame, path: Path, sheet: Any) -> None:
+def _validate_first_column_in_range(first_column: int, frame: pd.DataFrame, path: Path, sheet: Any) -> None:
     if first_column < 0 or first_column >= len(frame.columns):
         raise ValueError(
             f"first_column={first_column} is out of range for {path.name} "

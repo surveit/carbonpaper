@@ -30,3 +30,4 @@ scripts/
 
 # agent chat session scratch (dev-only, never committed)
 app/agent/_sessions/
+hrq_242_wt/
