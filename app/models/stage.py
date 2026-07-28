@@ -162,8 +162,7 @@ class LLMConfig(_Base):
         description=(
             "Sent to the model once per input row, rendered with Python's "
             "str.format_map over the row — inject a column as {column_name}. "
-            "Row-invariant guidance belongs in prompt_instructions instead, so "
-            "this stays a stable, cacheable prompt prefix across many rows."
+            "Row-invariant guidance belongs in prompt_instructions."
         ),
     )
     model: Optional[LLMModel] = None
@@ -176,13 +175,11 @@ class LLMConfig(_Base):
         default=1,
         ge=1,
         description=(
-            "Rows sent per model call. 1 (default) calls the model once per row. "
-            ">1 packs that many input rows into one call, amortizing the prompt/"
-            "harness overhead; the runtime tags each row with a batch-local row "
-            "number and rejoins the replies by it, so the stage stays strictly "
-            "one-row-out-per-row-in — but the model sees a whole chunk at once, so "
-            "batch_size>1 relaxes per-row independence (a row's answer can be "
-            "influenced by its batch-mates)."
+            "Rows per model call (default 1). >1 amortizes the prompt_instructions "
+            "prefix across rows, which matters when that prefix is large; the runtime "
+            "still returns exactly one row out per row in. But batch-mates share one "
+            "context, so a row's answer can be influenced by them — keep 1 when each "
+            "row needs an independent judgment."
         ),
     )
 
@@ -202,22 +199,16 @@ class PythonFunction(_Base):
     code: Optional[str] = Field(
         default=None,
         description=(
-            "Inline Python defining the function named by `function` (default `transform`). "
-            "Its signature depends on the stage type: "
-            "python_row_function -> `def transform(row: dict) -> dict` (one row in, one row "
-            "out; cannot fan out/in or reorder); "
-            "python_frame_function -> `def transform(df, ...) -> DataFrame` (the input pandas "
-            "DataFrame(s), positional in declared input order; may reshape); "
-            "publish -> `def transform(df, ..., output_dir, trace_links) -> DataFrame` "
-            "(write artifacts under output_dir, return a table of their paths; declare "
-            "`trace_links` to receive a linker that builds each row's provenance URL)."
+            "Inline Python defining `function` (default `transform`). Signature by stage "
+            "type: python_row_function `def transform(row: dict) -> dict` (1 row in, 1 out; "
+            "cannot reorder or fan out); python_frame_function "
+            "`def transform(df, ...) -> DataFrame` (inputs positional in declared order); "
+            "publish `def transform(df, ..., output_dir, trace_links) -> DataFrame` (writes "
+            "artifact files into output_dir; the returned frame lists them)."
         ),
     )
     module: Optional[str] = None
-    function: Optional[str] = Field(
-        default=None,
-        description="Name of the top-level function the runtime calls (default `transform`).",
-    )
+    function: Optional[str] = None
     requirements: list[str] = Field(default_factory=list)
 
     @model_validator(mode="after")
@@ -392,14 +383,7 @@ class Stage(_Base):
     type: StageType
     name: str
     source: Optional[SourceRef] = None
-    inputs: list[StageInput] = Field(
-        default_factory=list,
-        description=(
-            "Upstream dependencies: each is an upstream stage id plus the REQUIRED schema "
-            "this stage expects that input to satisfy — which is just the upstream stage's "
-            "output_schema."
-        ),
-    )
+    inputs: list[StageInput] = Field(default_factory=list)
     output_schema: Optional[TableSchema] = Field(
         default=None,
         description=(

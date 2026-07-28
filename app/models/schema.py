@@ -113,15 +113,15 @@ class Column(_Base):
     fields: Optional[list["Column"]] = Field(
         default=None,
         description=(
-            "Sub-columns of a `json`/`list[json]` column (a fixed set of object keys). "
-            "Declare exactly ONE of `fields` or `value_type` on a json column."
+            "Sub-columns of a `json`/`list[json]` column. Declare exactly ONE of "
+            "`fields` or `value_type`."
         ),
     )
     value_type: Optional[str] = Field(
         default=None,
         description=(
-            "For an open `json`/`list[json]` map (string keys -> scalar values), the scalar "
-            "value type. Alternative to `fields`; declare exactly one."
+            "Scalar value type for an open `json` map (string keys -> scalars). "
+            "Alternative to `fields`."
         ),
     )
 
