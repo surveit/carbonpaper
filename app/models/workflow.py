@@ -65,18 +65,15 @@ def detect_cycle(stages: list[Stage]) -> list[str]:
 
 def validate_edge_schemas(stages: list[Stage]) -> list[str]:
     """One issue per workflow edge whose declared input schema the upstream stage
-    does not supply. A downstream stage may declare, on each input, the schema it
-    expects that upstream to satisfy (`inputs[i].schema`). That declaration is a
-    REQUIREMENT — possibly a projection naming only the columns the stage consumes
-    — and every column it names must appear in the upstream stage's `output_schema`
-    with a matching spec and compatible nullability (subsumption, not identity;
-    see `TableSchema.find_unsatisfied_columns`). Reports every offending column
-    across every edge, so one pass surfaces them all.
+    does not supply. `inputs[i].schema` is a REQUIREMENT — possibly a projection
+    naming only the columns the stage consumes — that the upstream's
+    `output_schema` must subsume (matching spec, compatible nullability, not
+    identity; see `TableSchema.find_unsatisfied_columns`). Reports every offending
+    column across every edge, so one pass surfaces them all.
 
-    Every input must already resolve to a stage — call `validate_inputs_resolve`
-    first (as `graph_issues` does) or this raises. A `publish` upstream is skipped:
-    it is the one type exempt from declaring an output_schema, and nothing forbids
-    it being another stage's input today."""
+    Raises if an input dangles or its upstream declares no output_schema:
+    `validate_inputs_resolve` and `validate_publish_is_terminal` must run, and
+    pass, before this check (as `graph_issues` does)."""
     by_id = {s.id: s for s in stages}
     issues: list[str] = []
     for stage in stages:
@@ -89,7 +86,11 @@ def validate_edge_schemas(stages: list[Stage]) -> list[str]:
                     "validate_inputs_resolve must run, and pass, before this check"
                 )
             if upstream.output_schema is None:
-                continue
+                raise ValueError(
+                    f"`{stage.id}`: input `{ref.id}` declares no output_schema — "
+                    "publish is the only type exempt, and "
+                    "validate_publish_is_terminal must run, and pass, before this check"
+                )
             for reason in input_table_schema.find_unsatisfied_columns(upstream.output_schema):
                 issues.append(f"`{stage.id}`: input from `{ref.id}` — {reason}")
     return issues
@@ -115,16 +116,17 @@ def graph_issues(stages: list[Stage]) -> list[str]:
     input schema the upstream stage's output_schema does not supply. The single
     source of truth both the strict
     model validator and the non-fatal `validate_workflow` build on."""
-    dangling = validate_inputs_resolve(stages)
-    issues = (
-        validate_unique_ids(stages)
-        + dangling
-        + detect_cycle(stages)
-        + validate_publish_is_terminal(stages)
+    # validate_edge_schemas raises rather than reports on an edge it cannot check:
+    # an input naming no stage, or an upstream with no output_schema (only publish
+    # is exempt). Both are reportable findings of the two checks below, so it runs
+    # only once they pass.
+    edge_check_prerequisites = (
+        validate_inputs_resolve(stages) + validate_publish_is_terminal(stages)
     )
-    if dangling:
-        # validate_edge_schemas raises on an input naming no stage: it may only
-        # run once every input resolves.
+    issues = (
+        validate_unique_ids(stages) + detect_cycle(stages) + edge_check_prerequisites
+    )
+    if edge_check_prerequisites:
         return issues
     return issues + validate_edge_schemas(stages)
 

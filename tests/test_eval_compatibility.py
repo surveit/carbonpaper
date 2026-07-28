@@ -118,14 +118,18 @@ def test_unknown_reference_override_stage(tmp_path):
 
 
 def test_override_stage_has_no_output_schema(tmp_path):
-    # get_output_columns_from_stage would raise on this stage -- the
-    # precondition check must catch it and report it, not let
+    # publish is the only type that declares no output_schema, so it is the only
+    # override stage this precondition can fire on. get_output_columns_from_stage
+    # would raise on it -- the precondition must report it, not let
     # validate_eval_compatibility crash.
     src = _file_input("src", tmp_path, cols=["k", "v", "quote"])
+    pub = m.Stage.model_validate(S(
+        id="pub", type="publish", inputs=_input_refs([src]),
+        publish={"format": "json"},
+        function={"kind": "inline", "code": "def transform(df, output_dir): return df"}))
     tgt = _row("tgt", [src], output_schema={
         "columns": [{"name": "k"}, {"name": "score", "type": "float"}]})
-    src = src.model_copy(update={"output_schema": None})
-    report = validate_eval_compatibility(_config(), [src, tgt])
+    report = validate_eval_compatibility(_config(override_stage="pub"), [src, pub, tgt])
     assert isinstance(report, CompatibilityReport)
     assert report.ok is False
     assert any("declares no output schema" in p for p in report.problems)

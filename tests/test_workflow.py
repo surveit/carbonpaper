@@ -270,12 +270,10 @@ def test_check_edge_schemas_flags_type_disagreement():
     assert "score" in issues[0] and "type" in issues[0]
 
 
-def test_check_edge_schemas_skips_an_upstream_declaring_no_output_schema():
-    # publish is the one type exempt from declaring an output_schema. An
-    # unresolvable upstream schema means unknowable, never wrong, so this
-    # function skips that edge; validate_publish_is_terminal is what rejects the
-    # graph, which is why these stages are built without the graph validator.
-    stages = [
+def _publish_upstream_stages():
+    """`down` reads `pub`, the one stage type exempt from declaring an
+    output_schema — built without the graph validator, which rejects the edge."""
+    return [
         Stage.model_validate(_producer()),
         Stage.model_validate(
             S(id="pub", type="publish",
@@ -288,7 +286,22 @@ def test_check_edge_schemas_skips_an_upstream_declaring_no_output_schema():
                       inputs=[{"id": "pub",
                                "schema": {"columns": [{"name": "anything", "type": "str"}]}}])),
     ]
-    assert m.validate_edge_schemas(stages) == []
+
+
+def test_check_edge_schemas_raises_on_an_upstream_declaring_no_output_schema():
+    """Every type but publish must declare an output_schema, and a publish stage
+    may not be an upstream — so an upstream without one means validation was
+    bypassed, not a finding to report."""
+    with pytest.raises(ValueError, match="declares no output_schema"):
+        m.validate_edge_schemas(_publish_upstream_stages())
+
+
+def test_graph_issues_reports_a_publish_upstream_instead_of_raising():
+    """The publish-terminal check gates validate_edge_schemas exactly as the
+    dangling-input check does, so this workflow comes back as a readable issue."""
+    issues = m.validate_workflow(_publish_upstream_stages())
+    assert len(issues) == 1
+    assert "down" in issues[0] and "pub" in issues[0] and "publish stage" in issues[0]
 
 
 def test_check_edge_schemas_raises_on_an_input_naming_no_stage():
@@ -311,7 +324,8 @@ def test_graph_issues_reports_a_dangling_input_instead_of_raising():
 # ── A publish stage may not be another stage's input (validate_publish_is_terminal) ─
 # A publish stage writes files instead of producing a table, so nothing downstream
 # can read from it. It is also the one type exempt from declaring an output_schema,
-# which is why such an edge would otherwise slip past validate_edge_schemas.
+# so this check is what keeps validate_edge_schemas from meeting an upstream it
+# cannot check.
 def _publish(stage_id="pub", inputs=("load",)):
     return S(id=stage_id, type="publish", inputs=[_in(i) for i in inputs],
              publish={"format": "json"},
