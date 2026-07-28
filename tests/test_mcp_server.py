@@ -11,6 +11,8 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
+from app.models import StageDraft
+
 HEADERS = {
     "Accept": "application/json, text/event-stream",
     "Content-Type": "application/json",
@@ -118,6 +120,10 @@ _OUT_SCHEMA = {"columns": [
     {"name": "doubled", "type": "float", "nullable": True},
 ]}
 _DOUBLE = "def transform(row):\n    return {**row, 'doubled': row['amount'] * 2}\n"
+_LOAD_STAGE = StageDraft.model_validate({
+    "id": "load", "name": "Load", "type": "input_data", "connector": {"kind": "file"},
+    "output_schema": {"columns": [{"name": "doc_id", "type": "str", "nullable": False}]},
+})
 
 
 def _write_compiled_workflow(pdir: Path) -> None:
@@ -246,7 +252,7 @@ def test_mcp_add_stage_reports_an_unloadable_workflow_as_issues(tmp_path, monkey
 
     added = server.add_stage(
         project_id="trail",
-        stage_json='{"id": "load", "name": "Load", "type": "input_data", "connector": {"kind": "file"}}',
+        stage=_LOAD_STAGE,
     )
     assert added["ok"] is False and added["issues"]
     assert not (compiled / "load.json").exists()
@@ -262,7 +268,7 @@ def test_mcp_add_stage_refuses_to_invent_a_project(tmp_path, monkeypatch):
     with pytest.raises(ValueError):
         server.add_stage(
             project_id="no_such_project",
-            stage_json='{"id": "load", "name": "Load", "type": "input_data", "connector": {"kind": "file"}}',
+            stage=_LOAD_STAGE,
         )
     assert list(tmp_path.iterdir()) == []
 
@@ -276,14 +282,55 @@ def test_mcp_add_stage_creates_the_first_stage_of_a_new_project(tmp_path, monkey
 
     added = server.add_stage(
         project_id="trail",
-        stage_json=json.dumps({
-            "id": "load", "name": "Load", "type": "input_data",
-            "connector": {"kind": "file"},
-            "output_schema": {"columns": [{"name": "doc_id", "type": "str", "nullable": False}]},
-        }),
+        stage=_LOAD_STAGE,
     )
     assert added == {"ok": True, "issues": []}
     assert server.describe_workflow(project_id="trail")["stages"][0]["id"] == "load"
+
+
+_UNADDITIVE_LLM_STAGE = {
+    "id": "score", "name": "Score", "type": "llm_transform",
+    "inputs": [{"id": "load", "schema": _IN_SCHEMA}],
+    # llm_transform must be additive and 1:1 — dropping the input's `amount`
+    # column breaks that, and `Stage` is where that rule lives.
+    "output_schema": {"columns": [{"name": "verdict", "type": "str"}]},
+    "llm": {"prompt_data_template": "judge {amount}"},
+}
+
+
+def test_mcp_add_stage_refuses_an_invalid_stage_on_the_issues_channel(tmp_path, monkeypatch):
+    """Driven through the real tool boundary, because that is where the risk is: a
+    stage that breaks a cross-field rule must bind as a StageDraft and be refused by
+    the handler as {ok: False, issues}. If the rule fired during FastMCP's parameter
+    binding instead, the client would get isError=true with raw Pydantic text — off
+    the refusal channel the instructions tell it to watch."""
+    from app.mcp import server
+    from app.services import workspace
+
+    monkeypatch.setattr(workspace, "EXAMPLES_DIR", tmp_path)
+    _write_compiled_workflow(tmp_path / "trail")
+
+    _content, refused = asyncio.run(
+        server.mcp.call_tool("add_stage", {"project_id": "trail", "stage": _UNADDITIVE_LLM_STAGE})
+    )
+
+    assert refused["ok"] is False
+    assert any("1:1" in issue for issue in refused["issues"])
+    assert not (tmp_path / "trail" / "compiled" / "score.json").exists()
+
+
+def test_add_stage_input_schema_carries_no_pydantic_titles(tmp_path, monkeypatch):
+    """The stage shape ships in the tool's inputSchema, so every Pydantic-generated
+    `title` in it is wire cost on each tools/list. FastMCP generates that document
+    itself — only a strip that rides on the models reaches its `$defs`."""
+    from app.mcp import server
+
+    [tool] = [t for t in asyncio.run(server.mcp.list_tools()) if t.name == "add_stage"]
+    defs = tool.inputSchema["$defs"]
+
+    assert defs, "nothing nested to have stripped"
+    assert "title" not in json.dumps(defs)
+    assert not {"tests", "eval", "review", "source"} & set(defs["StageDraft"]["properties"])
 
 
 def test_mcp_save_version_snapshots_the_working_copy_unpublished(tmp_path, monkeypatch):

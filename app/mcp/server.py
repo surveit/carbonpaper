@@ -5,6 +5,7 @@ names escaping the workspace. Generation tools start LIVE chat turns on the serv
 loop and return immediately; callers poll get_project_status. Failures raise, never fake success."""
 from __future__ import annotations
 
+import json
 import textwrap
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -20,7 +21,7 @@ from app.core.errors import (
     NoWorkflowTestVersionError,
     RunNotFoundError,
 )
-from app.models import HUMAN_REVIEW_QUEUE_CONTRACT_NOTE, NODE_TYPES
+from app.models import HUMAN_REVIEW_QUEUE_CONTRACT_NOTE, NODE_TYPES, StageDraft
 from app.runtime import stage_tests
 from app.services import generation
 from app.services import loader
@@ -295,12 +296,12 @@ def edit_stage(project_id: str, stage_id: str, changes_json: str) -> dict[str, A
 
 
 @mcp.tool()
-def add_stage(project_id: str, stage_json: str) -> dict[str, Any]:
-    """Create a NEW stage in the workflow. `stage_json` is a FULL stage as JSON:
-    id (new and unique — use edit_stage to change an existing one), name, type,
-    the type's handle block (e.g. connector / llm / function), output_schema, and
-    inputs. Every id listed in `inputs` must ALREADY be a stage in this workflow,
-    so author stages in dependency order. read_stage on a similar existing stage
+def add_stage(project_id: str, stage: StageDraft) -> dict[str, Any]:
+    """Create a NEW stage in the workflow. `stage` is a FULL stage: id (new and
+    unique — use edit_stage to change an existing one), name, type, the type's
+    handle block (e.g. connector / llm / function), output_schema, and inputs.
+    Every id listed in `inputs` must ALREADY be a stage in this workflow, so
+    author stages in dependency order. read_stage on a similar existing stage
     shows the shape.
 
     The WHOLE resulting workflow is validated before anything is written: the
@@ -313,7 +314,9 @@ def add_stage(project_id: str, stage_json: str) -> dict[str, Any]:
 
     The new node lands 'unreviewed' for a human to approve. The FIRST stage
     of a project starts its workflow — no other tool creates one."""
-    return catch_stage_edit_refusals(lambda: project_service.add_stage(project_id, stage_json))
+    return catch_stage_edit_refusals(
+        lambda: project_service.add_stage(project_id, json.dumps(stage.to_stage_spec()))
+    )
 
 
 @mcp.tool()
