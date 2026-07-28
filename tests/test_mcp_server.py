@@ -252,7 +252,7 @@ def test_mcp_add_stage_reports_an_unloadable_workflow_as_issues(tmp_path, monkey
 
     added = server.add_stage(
         project_id="trail",
-        stage=_LOAD_STAGE,
+        stages=[_LOAD_STAGE],
     )
     assert added["ok"] is False and added["issues"]
     assert not (compiled / "load.json").exists()
@@ -268,7 +268,7 @@ def test_mcp_add_stage_refuses_to_invent_a_project(tmp_path, monkeypatch):
     with pytest.raises(ValueError):
         server.add_stage(
             project_id="no_such_project",
-            stage=_LOAD_STAGE,
+            stages=[_LOAD_STAGE],
         )
     assert list(tmp_path.iterdir()) == []
 
@@ -282,9 +282,11 @@ def test_mcp_add_stage_creates_the_first_stage_of_a_new_project(tmp_path, monkey
 
     added = server.add_stage(
         project_id="trail",
-        stage=_LOAD_STAGE,
+        stages=[_LOAD_STAGE],
     )
-    assert added == {"ok": True, "issues": []}, "a clean draft warns about nothing"
+    assert added == {
+        "ok": True, "issues": [], "added": ["load"], "failed": [], "skipped": [],
+    }, "a clean draft warns about nothing"
     assert server.describe_workflow(project_id="trail")["stages"][0]["id"] == "load"
 
 
@@ -305,14 +307,15 @@ def test_mcp_add_stage_drops_server_owned_fields_and_names_them(tmp_path, monkey
     }
 
     _content, added = asyncio.run(
-        server.mcp.call_tool("add_stage", {"project_id": "trail", "stage": echoed})
+        server.mcp.call_tool("add_stage", {"project_id": "trail", "stages": [echoed]})
     )
 
-    assert added["ok"] is True
-    [warning] = added["warnings"]
-    named = warning.split(" — ")[0]
+    assert added["ok"] is True and added["added"] == ["load"]
+    named, explanation = added["warnings"]
+    assert named.startswith("`load`:"), "a batch must not lose which stage carried them"
     assert "tests" in named and "source" in named
     assert "eval" not in named and "review" not in named, "names only what was sent"
+    assert "generate_stage_tests" in explanation
     stored = json.loads(server.read_stage(project_id="trail", stage_id="load"))
     assert not {"tests", "source"} & set(stored)
 
@@ -331,7 +334,7 @@ def test_mcp_add_stage_still_refuses_an_unknown_field(tmp_path, monkeypatch):
     }
 
     with pytest.raises(Exception, match="nonsense"):
-        asyncio.run(server.mcp.call_tool("add_stage", {"project_id": "trail", "stage": typo}))
+        asyncio.run(server.mcp.call_tool("add_stage", {"project_id": "trail", "stages": [typo]}))
 
 
 _UNADDITIVE_LLM_STAGE = {
@@ -357,7 +360,7 @@ def test_mcp_add_stage_refuses_an_invalid_stage_on_the_issues_channel(tmp_path, 
     _write_compiled_workflow(tmp_path / "trail")
 
     _content, refused = asyncio.run(
-        server.mcp.call_tool("add_stage", {"project_id": "trail", "stage": _UNADDITIVE_LLM_STAGE})
+        server.mcp.call_tool("add_stage", {"project_id": "trail", "stages": [_UNADDITIVE_LLM_STAGE]})
     )
 
     assert refused["ok"] is False

@@ -6,16 +6,16 @@ batch is collected so one call surfaces every problem, not just the first.
 """
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Sequence
 
 from pydantic import ValidationError, model_validator
 
 from app.models.schema import _Base
-from app.models.stage import Stage, StageType
+from app.models.stage import Stage, StageDraft, StageType
 from app.core.utils import format_errors
 
 
-def validate_unique_ids(stages: list[Stage]) -> list[str]:
+def validate_unique_ids(stages: Sequence[StageDraft]) -> list[str]:
     """One issue per stage id that appears more than once."""
     ids = [s.id for s in stages]
     dupes = sorted({i for i in ids if ids.count(i) > 1})
@@ -34,10 +34,13 @@ def validate_inputs_resolve(stages: list[Stage]) -> list[str]:
     return issues
 
 
-def detect_cycle(stages: list[Stage]) -> list[str]:
+def detect_cycle(stages: Sequence[StageDraft]) -> list[str]:
     """A one-item list naming the first cycle found, or [] if acyclic. One cycle
     is enough to reject the workflow; we don't enumerate them all. The stage graph
-    must stay acyclic — a cycle means the runner could never order the stages."""
+    must stay acyclic — a cycle means the runner could never order the stages.
+
+    An input naming an id outside `stages` is not an edge here, so this finds
+    cycles WITHIN the given set only."""
     edges = {s.id: list(s.input_ids) for s in stages}
     WHITE, GRAY, BLACK = 0, 1, 2
     color = {sid: WHITE for sid in edges}
@@ -61,6 +64,25 @@ def detect_cycle(stages: list[Stage]) -> list[str]:
         if color[sid] == WHITE:
             visit(sid, [])
     return found
+
+
+def sort_stages_by_dependency(stages: Sequence[StageDraft]) -> list[StageDraft]:
+    """`stages` reordered so every stage follows the stages it names in `inputs`.
+    An input naming an id outside `stages` imposes no order — it is already in the
+    workflow, or missing, which is a validation problem and not this function's.
+    Ties keep submission order. Ids must be unique (`validate_unique_ids`);
+    raises ValueError on a cycle, which `detect_cycle` reports far better."""
+    pending = list(stages)
+    ordered: list[StageDraft] = []
+    while pending:
+        waiting = {s.id for s in pending}
+        ready = [s for s in pending if not waiting & set(s.input_ids)]
+        if not ready:
+            raise ValueError(f"cyclic stages, cannot order: {sorted(waiting)}")
+        ordered.extend(ready)
+        ready_ids = {s.id for s in ready}
+        pending = [s for s in pending if s.id not in ready_ids]
+    return ordered
 
 
 def validate_edge_schemas(stages: list[Stage]) -> list[str]:

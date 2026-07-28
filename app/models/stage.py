@@ -443,6 +443,10 @@ class StageDraft(_Base):
             return v
         return [{"id": item} if isinstance(item, str) else item for item in v]
 
+    @property
+    def input_ids(self) -> list[str]:
+        return [ref.id for ref in self.inputs]
+
     def to_stage_spec(self) -> dict[str, Any]:
         """This draft as a dict `Stage.model_validate` accepts — by alias, so
         `StageInput.table_schema` spells itself `schema:` the way a compiled stage
@@ -481,10 +485,6 @@ class Stage(StageDraft):
     # stage has none: the canonical dump must not carry a `tests` key for
     # stages without tests, or every pre-existing belief hash would change.
     tests: Optional[list[StageTest]] = None
-
-    @property
-    def input_ids(self) -> list[str]:
-        return [ref.id for ref in self.inputs]
 
     def compute_definition_fingerprint(self) -> str:
         """sha1[:16] over the canonical JSON of the output-determining subset of

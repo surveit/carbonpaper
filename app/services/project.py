@@ -11,16 +11,16 @@ import json
 import re
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Sequence
 
 from pydantic import BaseModel
 
 from app.core.errors import ProjectExistsError
-from app.models import Coverage, SchemaLibrary, Stage
+from app.models import Coverage, SchemaLibrary, Stage, StageDraft
 from app.core.run_status import RunStatus
 from app.services import data_model, node_review, stage_edit, versioning, workspace
 from app.services.loader import load_compiled_dir, stage_to_json, write_stage
-from app.services.stage_edit import EditStageResult
+from app.services.stage_edit import AddStagesResult, EditStageResult
 
 
 # ─── Status models ────────────────────────────────────────────────────────────
@@ -411,6 +411,15 @@ def add_stage(name: str, stage_json: str, examples_dir: Path | None = None) -> E
     """Add a new stage to a project's workflow (validated before it writes; nothing
     written on failure). The first stage of a project starts its workflow."""
     return stage_edit.add_stage_spec(_resolve_project_dir_to_write(name, examples_dir), stage_json)
+
+
+def add_stages(
+    name: str, stages: Sequence[StageDraft], examples_dir: Path | None = None
+) -> AddStagesResult:
+    """Add several new stages to a project's workflow in one pass — ordered by
+    their declared inputs, each validated against the whole graph, partial
+    success kept. See `stage_edit.add_stage_specs`."""
+    return stage_edit.add_stage_specs(_resolve_project_dir_to_write(name, examples_dir), stages)
 
 
 def remove_stage(name: str, stage_id: str, examples_dir: Path | None = None) -> EditStageResult:
