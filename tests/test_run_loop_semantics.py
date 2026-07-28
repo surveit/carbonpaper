@@ -18,10 +18,9 @@ from conftest import queue_added_columns, queue_columns
 
 # The three frame shapes this file's DAGs carry. Declared once so an upstream's
 # output_schema and its downstream's input `schema` cannot drift apart.
-_ID_VAL_SCHEMA = {"columns": [{"name": "id", "type": "str"},
-                              {"name": "val", "type": "int"}],
-                  "primary_key": ["id"]}
-_QUEUE_OUT_SCHEMA = {"columns": _ID_VAL_SCHEMA["columns"] + queue_added_columns("human_val"),
+_ID_VAL_COLUMNS = [{"name": "id", "type": "str"}, {"name": "val", "type": "int"}]
+_ID_VAL_SCHEMA = {"columns": _ID_VAL_COLUMNS, "primary_key": ["id"]}
+_QUEUE_OUT_SCHEMA = {"columns": _ID_VAL_COLUMNS + queue_added_columns("human_val"),
                      "primary_key": ["id"]}
 _ID_TEXT_SCHEMA = {"columns": [{"name": "id", "type": "str"},
                                {"name": "text", "type": "str"}],

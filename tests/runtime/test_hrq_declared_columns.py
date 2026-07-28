@@ -1,10 +1,3 @@
-"""The human_review_queue handler adds exactly the columns `stage.queue`
-declares, under the names it declares — no column name is hardcoded in the
-runtime. Covers the two outcomes the handler builds itself: a row the filter
-did not select (`skipped`) and `ctx.queue_auto_approve` (`approve`). The third
-outcome, a cached decision, is replayed verbatim and is pinned in
-test_hrq_cache.py.
-"""
 from __future__ import annotations
 
 from pathlib import Path
@@ -22,12 +15,33 @@ from conftest import make_run_context, queue_columns
 PROJECT = "hrq-declared-columns"
 
 
+# The columns `_src()` builds, by declared type.
+_FRAME_COLUMNS = {"id": "str", "score": "int", "label": "str"}
+
+
 def _stage(queue: dict[str, object], flt: str | None = None) -> Stage:
+    """The input edge declares `_src()`'s columns plus any reviewed source a
+    test deliberately leaves OUT of that frame: a stage naming an undeclared
+    source cannot be built at all, and those tests are about a live frame that
+    does not match what was declared."""
     if flt is not None:
         queue = {**queue, "filter": flt}
+    reviewed = queue["reviewed_columns"]
+    assert isinstance(reviewed, dict)
+    declared = dict(_FRAME_COLUMNS)
+    declared.update({source: "str" for source in reviewed if source not in declared})
+    input_columns = [{"name": name, "type": t} for name, t in declared.items()]
+    added = [{"name": target, "type": declared[source]}
+             for source, target in reviewed.items()]
+    added += [{"name": queue[field], "type": "str"}
+              for field in ("verdict_column", "reviewer_column",
+                            "reviewed_at_column", "review_notes_column")
+              if queue.get(field) is not None]
     return Stage.model_validate({
         "id": "review", "name": "Review", "type": "human_review_queue",
-        "inputs": [{"id": "scored"}], "queue": queue,
+        "inputs": [{"id": "scored", "schema": {"columns": input_columns}}],
+        "output_schema": {"columns": input_columns + added},
+        "queue": queue,
     })
 
 

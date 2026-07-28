@@ -1,5 +1,3 @@
-"""Tests for the eval contract (app/models/eval.py + table.py) and the
-grain-preservation gate on Stage that governs it (app/models/stage.py)."""
 from __future__ import annotations
 
 import pytest

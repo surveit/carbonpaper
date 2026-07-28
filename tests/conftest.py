@@ -1,7 +1,5 @@
-"""An un-stubbed `call_llm` raises `LLMError` rather than reaching the real `claude`
-CLI; a test exercising the LLM boundary must monkeypatch it itself. The per-test
-document and frame stores are configured ahead of the app's startup wiring, which
-leaves an already-configured store alone."""
+# An un-stubbed `call_llm` raises `LLMError` rather than reaching the real `claude`
+# CLI; a test exercising the LLM boundary must monkeypatch it itself.
 from __future__ import annotations
 
 from pathlib import Path
@@ -110,17 +108,3 @@ def queue_added_columns(
 
 QUEUE_COLUMNS: dict[str, object] = queue_columns()
 
-
-def queue_added_columns(
-    target: str = "human_score", target_type: str = "int"
-) -> list[dict[str, object]]:
-    """The output_schema columns a `queue_columns()` stage adds, to append to
-    whatever the fixture's input schema declares. Every one but the verdict is
-    nullable: a filtered-out or auto-approved row gets no value written."""
-    return [
-        {"name": target, "type": target_type, "nullable": True},
-        {"name": "decision", "type": "str"},
-        {"name": "reviewer_id", "type": "str", "nullable": True},
-        {"name": "reviewed_at", "type": "str", "nullable": True},
-        {"name": "review_notes", "type": "str", "nullable": True},
-    ]

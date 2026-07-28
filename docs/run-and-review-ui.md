@@ -54,12 +54,11 @@ controls; every other column of the row is background context, rendered as a
 key/value table (none of them under review → no table at all). `queue_page`
 describes each column from the schema the queue stage's input edge declares —
 its `description` becomes the label's tooltip, and a column in the declared
-`primary_key` carries a `key` flag. Where a declaration is missing the page says
-so: an edge with no schema falls back to the queued rows' own columns with no
-descriptions, and a stage with no declared `primary_key` states that rather than
-guessing which columns identify a row. Each card's header states its **position
-in the queue** (`Row 1 of 3`) — an opaque key identifies nothing to a human, and
-the key column is already in the table, flagged.
+`primary_key` carries a `key` flag. Every stage declares a schema on each input
+edge, but a `primary_key` on it is optional, so where one is missing the page
+states that rather than guessing which columns identify a row. Each card's header
+states its **position in the queue** (`Row 1 of 3`) — an opaque key identifies
+nothing to a human, and the key column is already in the table, flagged.
 
 **Lineage**: each card links to
 `…/stage/{upstream_stage_id}/row/{row_ordinal}/trace/view`, where the ordinal

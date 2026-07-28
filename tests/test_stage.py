@@ -1,4 +1,3 @@
-"""Tests for app/models/stage.py — node types, handle blocks, the Stage model."""
 from __future__ import annotations
 
 import pytest
@@ -21,9 +20,9 @@ def S(**kw):
 # output_schema, so tests aimed at some OTHER part of the contract still have to
 # carry both. These are the smallest ones that satisfy it.
 _PK_ID_SCHEMA = {"columns": [{"name": "id", "type": "str"}], "primary_key": ["id"]}
-_QUEUE_IN_SCHEMA = {"columns": [{"name": "id", "type": "str"}, {"name": "score", "type": "int"}],
-                    "primary_key": ["id"]}
-_QUEUE_OUT_SCHEMA = {"columns": _QUEUE_IN_SCHEMA["columns"] + queue_added_columns(),
+_QUEUE_IN_COLUMNS = [{"name": "id", "type": "str"}, {"name": "score", "type": "int"}]
+_QUEUE_IN_SCHEMA = {"columns": _QUEUE_IN_COLUMNS, "primary_key": ["id"]}
+_QUEUE_OUT_SCHEMA = {"columns": _QUEUE_IN_COLUMNS + queue_added_columns(),
                      "primary_key": ["id"]}
 _K_SCHEMA = {"columns": [{"name": "k", "type": "str"}]}
 
@@ -595,7 +594,7 @@ _HANDLE_BLOCK = {
     "join": {"join": {"keys": [{"left": "id", "right": "id"}]}},
     "aggregate": {"aggregate": {"group_by": ["name"],
                                 "aggregations": [{"output_column": "n", "formula": "count"}]}},
-    "human_review_queue": {"queue": {}},
+    "human_review_queue": {"queue": queue_columns("name", "human_name")},
     "publish": {"publish": {"format": "json"}, "function": _INLINE_ROW_FN},
 }
 _INPUT_IDS = {"join": ["facilities", "filings"]}
@@ -603,6 +602,10 @@ _OUTPUT_SCHEMA = {
     "join": {"columns": [{"name": "id", "type": "str"}, {"name": "name", "type": "str"},
                          {"name": "amount", "type": "int"}]},
     "aggregate": {"columns": [{"name": "name", "type": "str"}, {"name": "n", "type": "int"}]},
+    "human_review_queue": {
+        "columns": [{"name": "id", "type": "str"}, {"name": "name", "type": "str"}]
+                   + queue_added_columns("human_name", "str"),
+        "primary_key": ["id"]},
 }
 NON_EXEMPT_TYPES = ["python_row_function", "python_frame_function", "join", "aggregate",
                     "human_review_queue"]

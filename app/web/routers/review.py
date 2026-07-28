@@ -1,8 +1,3 @@
-"""Human-review queue: render the reviewer UI for one queue stage — the queued
-rows themselves, described by the columns the stage's input edge declares, and
-a lineage link per row — and persist reviewer decisions into the stage-result
-cache (app.core.stage_cache)."""
-
 from __future__ import annotations
 
 import json
@@ -241,28 +236,13 @@ def _validate_stage_definition_unchanged(stage_def: Stage, halted_fingerprint: s
         raise HTTPException(status_code=409, detail=drift)
 
 
-def _require_reviewed_column(stage_def: Stage, source: str, target: str) -> Column:
-    """The declared column a reviewed value must satisfy: `output_schema`'s
-    `target` column, or — for a stage that declares no `output_schema` — the
-    input edge's `source` column, whose spec `target` is required to match
-    (app.models.stages.human_review_queue._find_reviewed_target_issues). With
-    neither declared the type is unknowable, so no value may be accepted."""
-    if stage_def.output_schema is not None:
-        declared = stage_def.output_schema.column_for_name(target)
-        if declared is not None:
-            return declared
-    input_schema = resolve_input_schema(stage_def, 0) if stage_def.inputs else None
-    source_column = input_schema.column_for_name(source) if input_schema else None
-    if source_column is not None:
-        return source_column.model_copy(update={"name": target})
-    raise HTTPException(
-        status_code=400,
-        detail=(
-            f"stage '{stage_def.id}': neither its output_schema nor its input edge "
-            f"declares a column for reviewed value '{target}' (reviewing '{source}'), "
-            "so there is no declaration to accept a value against"
-        ),
-    )
+def _require_reviewed_column(stage_def: Stage, target: str) -> Column:
+    """The `output_schema` column a reviewed value must satisfy."""
+    output_schema = stage_def.output_schema
+    assert output_schema is not None  # Stage._schemas_declared: only publish may omit one
+    declared = output_schema.column_for_name(target)
+    assert declared is not None  # find_queue_column_issues: every target is declared
+    return declared
 
 
 # --- queue_decide helpers ------------------------------------------------------
@@ -327,7 +307,7 @@ def _coerce_reviewed_values(
     owns the exactly-the-declared-columns rule, and duplicating it here would
     give it two places to drift."""
     column_by_target = {
-        target: _require_reviewed_column(stage_def, source, target)
+        target: _require_reviewed_column(stage_def, target)
         for source, target in queue.reviewed_columns.items()
     }
     return {
@@ -467,7 +447,7 @@ def _build_reviewed_fields(stage_def: Stage, queue: QueueConfig) -> list[_Review
         _build_reviewed_field(
             source,
             target,
-            _require_reviewed_column(stage_def, source, target),
+            _require_reviewed_column(stage_def, target),
             _resolve_source_description(stage_def, source),
         )
         for source, target in queue.reviewed_columns.items()
@@ -475,18 +455,17 @@ def _build_reviewed_fields(stage_def: Stage, queue: QueueConfig) -> list[_Review
 
 
 def _resolve_source_description(stage_def: Stage, source: str) -> str | None:
-    input_schema = resolve_input_schema(stage_def, 0) if stage_def.inputs else None
-    column = input_schema.column_for_name(source) if input_schema else None
-    return None if column is None else column.description
+    column = resolve_input_schema(stage_def, 0).column_for_name(source)
+    assert column is not None  # find_queue_column_issues: every source is declared
+    return column.description
 
 
 def _resolve_notes_label(stage_def: Stage, column: str) -> str:
     """The notes column is written by this stage, so only its `output_schema`
     can describe it; with no description the column name is spelled out."""
-    declared = (
-        stage_def.output_schema.column_for_name(column)
-        if stage_def.output_schema is not None else None
-    )
+    output_schema = stage_def.output_schema
+    assert output_schema is not None  # Stage._schemas_declared: only publish may omit one
+    declared = output_schema.column_for_name(column)
     if declared is not None and declared.description:
         return declared.description
     return column.replace("_", " ").capitalize()
@@ -528,10 +507,6 @@ def _build_reviewed_field(
     )
 
 
-NO_SCHEMA_NOTE = (
-    "This stage's input edge declares no schema, so the columns below are the "
-    "queued rows' own and carry no declared description, type or primary key."
-)
 NO_PRIMARY_KEY_NOTE = (
     "No primary key is declared on this stage's input schema, so a queued row "
     "is identified only by its position in this queue."
@@ -546,12 +521,7 @@ def _describe_queued_columns(
     so a declared column the rows do not carry is reported in `schema_note`
     rather than rendered as an empty field."""
     names = [str(c) for c in snapshot.columns] if snapshot is not None else []
-    schema = resolve_input_schema(stage_def, 0) if stage_def.inputs else None
-    if schema is None:
-        return _DescribedColumns(
-            columns=[_QueuedColumn(n, None, False) for n in names],
-            schema_note=NO_SCHEMA_NOTE, identity_note=NO_SCHEMA_NOTE,
-        )
+    schema = resolve_input_schema(stage_def, 0)
     declared = {column.name: column for column in schema.columns}
     primary_key = list(schema.primary_key or [])
     return _DescribedColumns(

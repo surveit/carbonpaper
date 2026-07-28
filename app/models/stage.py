@@ -1,9 +1,5 @@
-"""Stage-level contract: the node types, their executable-handle blocks, and the
-Stage model. Constructing a model validates it.
-
-Models ignore unknown keys (compiled stage JSON carries fields we pass through) but are
-strict about the fields declared here.
-"""
+# Models ignore unknown keys (compiled stage JSON carries fields we pass through)
+# but are strict about the fields declared here.
 from __future__ import annotations
 
 import json

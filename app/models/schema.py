@@ -1,9 +1,5 @@
-"""Schema primitives — the model base and the anonymous Column / TableSchema.
-
-This module sits *below* `stage.py` and `named_schemas.py`: they import from here,
-never the other way around, so `NamedColumn`/`NamedSchema` can extend
-`Column`/`TableSchema` without `named_schemas.py` depending on `stage.py`.
-"""
+# Sits BELOW stage.py and named_schemas.py: they import from here, never the other
+# way round, so NamedColumn/NamedSchema can extend Column/TableSchema.
 from __future__ import annotations
 
 import datetime

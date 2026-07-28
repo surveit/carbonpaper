@@ -1,6 +1,3 @@
-"""Tests for Column.coerce_text (app/models/schema.py): one form field's raw
-string landed as a value the column's whole declaration allows — type,
-nullability, enum vocabulary and numeric range."""
 from __future__ import annotations
 
 import datetime

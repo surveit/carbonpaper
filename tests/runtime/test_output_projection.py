@@ -1,6 +1,3 @@
-"""`_project_onto_declared_columns` (the row driver, llm_transform's batched path,
-and human_review_queue all reach it): a declared column the stage never produced
-is a loud failure, never a silently narrowed projection."""
 from __future__ import annotations
 
 import pandas as pd
@@ -12,6 +9,7 @@ from app.runtime.context import RunContext
 from app.runtime.manifest import StageContribution
 from app.runtime.stages import HANDLERS
 from app.runtime.stages.execution import _project_onto_declared_columns
+from conftest import queue_columns
 
 
 def _rating_stage() -> Stage:
@@ -57,15 +55,20 @@ def test_human_review_queue_output_missing_a_declared_column_raises(tmp_path):
     stage = Stage.model_validate({
         "id": "q", "name": "Review", "type": "human_review_queue",
         "inputs": [{"id": "load", "schema": {"columns": [
-            {"name": "claim_id", "type": "str", "nullable": False}]}}],
+            {"name": "claim_id", "type": "str", "nullable": False},
+            {"name": "score", "type": "int"}]}}],
         "output_schema": {"columns": [
             {"name": "claim_id", "type": "str", "nullable": False},
+            {"name": "score", "type": "int"},
+            {"name": "human_score", "type": "int"},
             {"name": "decision", "type": "str"},
+            {"name": "reviewer_id", "type": "str"},
+            {"name": "reviewed_at", "type": "str"},
             {"name": "reviewer_note", "type": "str"},   # no row outcome produces this
         ]},
-        "queue": {"filter": None},
+        "queue": {**queue_columns(), "review_notes_column": None},
     })
-    inputs = {"load": pd.DataFrame({"claim_id": ["c1"]})}
+    inputs = {"load": pd.DataFrame({"claim_id": ["c1"], "score": [1]})}
     ctx = RunContext.for_non_production_run(tmp_path, tmp_path, queue_auto_approve=True)
 
     with pytest.raises(ValueError) as excinfo:

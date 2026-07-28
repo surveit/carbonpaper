@@ -1,7 +1,3 @@
-"""The workflow contract, as Pydantic models.
-
-Import from `app.models` (this aggregator) for the stable public surface.
-"""
 from app.models.coverage import Coverage
 from app.models.node_contract_notes import HUMAN_REVIEW_QUEUE_CONTRACT_NOTE
 from app.models.schema import (

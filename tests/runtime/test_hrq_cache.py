@@ -1,6 +1,3 @@
-"""Fingerprints never live on the snapshot: they are read from the sidecar
-`<stage>.fingerprints.json` written alongside it, POSITIONALLY aligned to
-the snapshot's row order."""
 from __future__ import annotations
 
 import json
@@ -576,9 +573,13 @@ def test_a_passed_through_row_round_trips_through_the_cache(tmp_path):
     first = _run_queue_stage(stage, {"scored": src}, _ctx(tmp_path, run_id="run1"))
     second = _run_queue_stage(stage, {"scored": src.copy()}, _ctx(tmp_path, run_id="run2"))
 
-    assert list(second["decision"]) == [NOT_REVIEWED] * 4
-    for column in ("id", "score", "decision", "ai_score", "final_score", "review_notes"):
+    assert list(second["decision"]) == [ReviewVerdict.skipped] * 4
+    for column in ("id", "score", "decision", "human_score"):
         assert list(second[column]) == list(first[column])
+    # The columns a skipped row leaves empty stay empty through the round trip;
+    # the cache payload is JSON, so pandas' NA comes back as None.
+    for column in ("reviewer_id", "reviewed_at", "review_notes"):
+        assert first[column].isna().all() and second[column].isna().all()
     assert contribution_of(second).human_review_queue_stats == {
         "items_queued_total": 0, "items_passed_through": 4,
         "items_pending": 0, "items_decided": 0,
@@ -595,7 +596,7 @@ def test_changing_the_filter_re_evaluates_a_passed_through_row(tmp_path):
 
     out = _run_queue_stage(
         _stage(flt="flag == 'nothing-matches'", input_columns=_FLAGGED_COLUMNS), {"scored": src}, _ctx(tmp_path, run_id="run1"))
-    assert list(out["decision"]) == [NOT_REVIEWED] * 4
+    assert list(out["decision"]) == [ReviewVerdict.skipped] * 4
 
     snapshot, _fingerprints = _halt_and_read_snapshot(
         _stage(flt="flag == 'skip'", input_columns=_FLAGGED_COLUMNS), {"scored": src.copy()}, _ctx(tmp_path, run_id="run2"))

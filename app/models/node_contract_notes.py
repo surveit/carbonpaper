@@ -1,8 +1,6 @@
-"""Node-type runtime facts rendered into the authoring prompts, in ONE place so no two
-prompts can drift apart.
-
-Lives in app.models, not app.compiler: an import-linter contract admits only app.main
-and app.services into app.compiler, which would lock out app.agents and app.mcp."""
+# Lives in app.models, not app.compiler: an import-linter contract admits only
+# app.main and app.services into app.compiler, which would lock out app.agents
+# and app.mcp.
 from __future__ import annotations
 
 HUMAN_REVIEW_QUEUE_CONTRACT_NOTE = (

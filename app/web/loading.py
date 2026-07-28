@@ -1,9 +1,5 @@
-"""Filesystem access for the web layer: read compiled stage JSON, run
-manifests, stage outputs, and queue snapshots off disk, plus small pure
-helpers for the stage-dict shape they return. Reviewer decisions themselves
-are not read from disk here — they live in the stage-result cache
-(app.core.stage_cache)."""
-
+# Reviewer decisions are NOT read from disk here — they live in the stage-result
+# cache (app.core.stage_cache).
 from __future__ import annotations
 
 import json

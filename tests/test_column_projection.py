@@ -1,5 +1,3 @@
-"""Pins issue #50: output_schema alone decides which columns survive a stage.
-"""
 from __future__ import annotations
 
 import pandas as pd

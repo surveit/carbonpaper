@@ -1,8 +1,5 @@
-"""Domain exceptions.
-
-Keep this module dependency-free (standard library only): errors are imported
-widely, including by low-level modules, so importing app packages here would
-risk import cycles."""
+# Dependency-free by rule (standard library only): errors are imported widely,
+# including by low-level modules, so an app import here would risk a cycle.
 from __future__ import annotations
 
 

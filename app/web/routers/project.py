@@ -1,10 +1,5 @@
-"""The project shell (Overview / Document / Data model / Workflow / Runs), plus
-project create/delete and the data-model approval gate. The Runs section page
-itself is served by app.web.routers.runs.
-Route order matters: the literal /project/new is declared on THIS router BEFORE
-the /project/{project} section routes, so "new" is never captured as a project.
-"""
-
+# Route order matters: the literal /project/new is declared on THIS router BEFORE
+# the /project/{project} section routes, so "new" is never captured as a project.
 from __future__ import annotations
 
 import json

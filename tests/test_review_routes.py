@@ -1,6 +1,4 @@
-"""Queue snapshots here are genuine runner output, not fixtures. The snapshot carries
-no fingerprint columns: they live in a sidecar aligned POSITIONALLY to row order.
-"""
+# Queue snapshots here are genuine runner output, not fixtures.
 from __future__ import annotations
 
 import json
@@ -29,6 +27,24 @@ PROJECT = "queue_route_journey"
 def _seed_version(root):
     vid = create_version_from_disk(root, message="test seed", reviewer="test").version_id
     versioning.publish_version(root, vid, reviewer="human")
+
+
+def _with_queue_output_schema(stage):
+    """`stage` plus the output_schema its input edge and `queue` block imply:
+    the edge's own columns, each reviewed source repeated under its target name
+    and spec, then the bookkeeping columns. For the fixtures whose subject is
+    something other than the output schema."""
+    input_schema = stage["inputs"][0]["schema"]
+    by_name = {column["name"]: column for column in input_schema["columns"]}
+    queue = stage["queue"]
+    added = [{**by_name[source], "name": target}
+             for source, target in queue["reviewed_columns"].items()]
+    added += [{"name": queue[field], "type": "str"}
+              for field in ("verdict_column", "reviewer_column",
+                            "reviewed_at_column", "review_notes_column")
+              if queue.get(field) is not None]
+    return {**stage, "output_schema": {**input_schema,
+                                       "columns": input_schema["columns"] + added}}
 
 
 def _write_stage(root, filename, stage):
@@ -565,11 +581,12 @@ def test_decide_accepts_an_untouched_notes_box_as_no_note(tmp_path, monkeypatch)
 
 def _no_notes_review_stage():
     queue = {k: v for k, v in QUEUE_COLUMNS.items() if k != "review_notes_column"}
-    return {"id": "review", "name": "Review items", "type": "human_review_queue",
+    return _with_queue_output_schema({
+            "id": "review", "name": "Review items", "type": "human_review_queue",
             "inputs": [{"id": "load", "schema": {
                 "columns": [{"name": "id", "type": "str"}, {"name": "score", "type": "int"}],
                 "primary_key": ["id"]}}],
-            "queue": queue}
+            "queue": queue})
 
 
 def test_decide_400_on_notes_when_the_stage_declares_no_notes_column(tmp_path, monkeypatch):
@@ -605,6 +622,10 @@ def _drift_the_review_stage(project_dir):
     the live stage fingerprint no longer matches the sidecar's."""
     drifted = _review_stage()
     drifted["queue"] = {**QUEUE_COLUMNS, "reviewed_columns": {"score": "checked_score"}}
+    drifted["output_schema"] = {**drifted["output_schema"], "columns": [
+        {"name": "checked_score", "type": "int"} if column["name"] == "human_score" else column
+        for column in drifted["output_schema"]["columns"]
+    ]}
     _write_stage(project_dir, "03_review.json", drifted)
 
 
@@ -704,12 +725,13 @@ def test_queue_page_prefills_a_decided_row_from_the_recorded_value(tmp_path, mon
 
 
 def _bool_review_stage(nullable):
-    return {"id": "review", "name": "Review flags", "type": "human_review_queue",
-            "inputs": [{"id": "load", "schema": {
-                "columns": [{"name": "id", "type": "str"},
-                            {"name": "flag", "type": "bool", "nullable": nullable}],
-                "primary_key": ["id"]}}],
-            "queue": {**queue_columns(source="flag", target="human_flag")}}
+    return _with_queue_output_schema({
+        "id": "review", "name": "Review flags", "type": "human_review_queue",
+        "inputs": [{"id": "load", "schema": {
+            "columns": [{"name": "id", "type": "str"},
+                        {"name": "flag", "type": "bool", "nullable": nullable}],
+            "primary_key": ["id"]}}],
+        "queue": {**queue_columns(source="flag", target="human_flag")}})
 
 
 def _build_and_halt_bool_queue(tmp_path, monkeypatch, project, *, ai_value, nullable=True):
@@ -722,7 +744,10 @@ def _build_and_halt_bool_queue(tmp_path, monkeypatch, project, *, ai_value, null
     pd.DataFrame({"id": ["a"], "flag": [ai_value]}).to_csv(csv_path, index=False)
     _write_stage(project_dir, "01_load.json", {
         "id": "load", "name": "Load flags", "type": "input_data",
-        "connector": {"kind": "file", "params": {"path": str(csv_path), "format": "csv"}}})
+        "connector": {"kind": "file", "params": {"path": str(csv_path), "format": "csv"}},
+        "output_schema": {"columns": [{"name": "id", "type": "str"},
+                                      {"name": "flag", "type": "bool", "nullable": nullable}],
+                          "primary_key": ["id"]}})
     _write_stage(project_dir, "02_review.json", _bool_review_stage(nullable))
     _seed_version(project_dir)
     run_id = run_prepared(prepare_run(project_dir, repo_root=project_dir))["run_id"]
@@ -822,16 +847,21 @@ def test_an_enum_select_opens_on_the_recorded_value(tmp_path, monkeypatch):
     (project_dir / "data").mkdir(parents=True, exist_ok=True)
     csv_path = project_dir / "data" / "calls.csv"
     pd.DataFrame({"id": ["a"], "call": ["no"]}).to_csv(csv_path, index=False)
-    stage = {"id": "review", "name": "Review calls", "type": "human_review_queue",
-             "inputs": [{"id": "load", "schema": {
-                 "columns": [{"name": "id", "type": "str"},
-                             {"name": "call", "type": "str", "nullable": False,
-                              "enum": ["yes", "no", "unclear"]}],
-                 "primary_key": ["id"]}}],
-             "queue": {**queue_columns(source="call", target="human_call")}}
+    stage = _with_queue_output_schema({
+        "id": "review", "name": "Review calls", "type": "human_review_queue",
+        "inputs": [{"id": "load", "schema": {
+            "columns": [{"name": "id", "type": "str"},
+                        {"name": "call", "type": "str", "nullable": False,
+                         "enum": ["yes", "no", "unclear"]}],
+            "primary_key": ["id"]}}],
+        "queue": {**queue_columns(source="call", target="human_call")}})
     _write_stage(project_dir, "01_load.json", {
         "id": "load", "name": "Load calls", "type": "input_data",
-        "connector": {"kind": "file", "params": {"path": str(csv_path), "format": "csv"}}})
+        "connector": {"kind": "file", "params": {"path": str(csv_path), "format": "csv"}},
+        "output_schema": {"columns": [{"name": "id", "type": "str"},
+                                      {"name": "call", "type": "str", "nullable": False,
+                                       "enum": ["yes", "no", "unclear"]}],
+                          "primary_key": ["id"]}})
     _write_stage(project_dir, "02_review.json", stage)
     _seed_version(project_dir)
     run_id = run_prepared(prepare_run(project_dir, repo_root=project_dir))["run_id"]
@@ -854,12 +884,13 @@ def test_an_enum_select_opens_on_the_recorded_value(tmp_path, monkeypatch):
 
 
 def _temporal_review_stage(column_type):
-    return {"id": "review", "name": "Review times", "type": "human_review_queue",
-            "inputs": [{"id": "load", "schema": {
-                "columns": [{"name": "id", "type": "str"},
-                            {"name": "seen_at", "type": column_type}],
-                "primary_key": ["id"]}}],
-            "queue": {**queue_columns(source="seen_at", target="human_seen_at")}}
+    return _with_queue_output_schema({
+        "id": "review", "name": "Review times", "type": "human_review_queue",
+        "inputs": [{"id": "load", "schema": {
+            "columns": [{"name": "id", "type": "str"},
+                        {"name": "seen_at", "type": column_type}],
+            "primary_key": ["id"]}}],
+        "queue": {**queue_columns(source="seen_at", target="human_seen_at")}})
 
 
 def _decide_a_temporal_row(tmp_path, monkeypatch, project, column_type, recorded):
@@ -872,7 +903,10 @@ def _decide_a_temporal_row(tmp_path, monkeypatch, project, column_type, recorded
     pd.DataFrame({"id": ["a"], "seen_at": ["2026-01-01T08:00:00"]}).to_csv(csv_path, index=False)
     _write_stage(project_dir, "01_load.json", {
         "id": "load", "name": "Load sightings", "type": "input_data",
-        "connector": {"kind": "file", "params": {"path": str(csv_path), "format": "csv"}}})
+        "connector": {"kind": "file", "params": {"path": str(csv_path), "format": "csv"}},
+        "output_schema": {"columns": [{"name": "id", "type": "str"},
+                                      {"name": "seen_at", "type": column_type}],
+                          "primary_key": ["id"]}})
     _write_stage(project_dir, "02_review.json", _temporal_review_stage(column_type))
     _seed_version(project_dir)
     run_id = run_prepared(prepare_run(project_dir, repo_root=project_dir))["run_id"]
@@ -977,7 +1011,14 @@ def _output_schema_review_stage():
 def _build_and_halt_output_schema_queue(tmp_path, monkeypatch, project):
     monkeypatch.setattr(loading, "EXAMPLES_DIR", tmp_path)
     project_dir = tmp_path / project
-    _write_stage(project_dir, "01_load.json", _e2e_load_stage(project_dir))
+    # The loader declares `score` exactly as the review stage's edge does: the
+    # edge check requires the producer to be no more permissive than the consumer.
+    load = _e2e_load_stage(project_dir)
+    load["output_schema"] = {"columns": [
+        {"name": "id", "type": "str"},
+        {"name": "score", "type": "int", "nullable": False, "range": [0, 5]}],
+        "primary_key": ["id"]}
+    _write_stage(project_dir, "01_load.json", load)
     _write_stage(project_dir, "02_review.json", _output_schema_review_stage())
     _seed_version(project_dir)
     run_id = run_prepared(prepare_run(project_dir, repo_root=project_dir))["run_id"]
@@ -1084,15 +1125,16 @@ def _labelled_row_function_stage():
 
 
 def _review_labels_stage():
-    return {"id": "review", "name": "Review labels", "type": "human_review_queue",
-            "inputs": [{"id": "label", "schema": {
-                "columns": [
-                    {"name": "id", "type": "str"},
-                    {"name": "score", "type": "int"},
-                    {"name": "label", "type": "str",
-                     "description": "high when the score exceeds one"}],
-                "primary_key": ["id"]}}],
-            "queue": {**queue_columns(source="label", target="human_label")}}
+    return _with_queue_output_schema({
+        "id": "review", "name": "Review labels", "type": "human_review_queue",
+        "inputs": [{"id": "label", "schema": {
+            "columns": [
+                {"name": "id", "type": "str"},
+                {"name": "score", "type": "int"},
+                {"name": "label", "type": "str",
+                 "description": "high when the score exceeds one"}],
+            "primary_key": ["id"]}}],
+        "queue": {**queue_columns(source="label", target="human_label")}})
 
 
 def test_a_queue_whose_upstream_is_not_an_llm_transform_renders_and_links(tmp_path, monkeypatch):
@@ -1141,11 +1183,12 @@ def test_queued_columns_carry_the_declared_description_and_primary_key(tmp_path,
 
 
 def _no_primary_key_review_stage():
-    return {"id": "review", "name": "Review items", "type": "human_review_queue",
-            "inputs": [{"id": "load", "schema": {
-                "columns": [{"name": "id", "type": "str"},
-                            {"name": "score", "type": "int"}]}}],
-            "queue": dict(QUEUE_COLUMNS)}
+    return _with_queue_output_schema({
+        "id": "review", "name": "Review items", "type": "human_review_queue",
+        "inputs": [{"id": "load", "schema": {
+            "columns": [{"name": "id", "type": "str"},
+                        {"name": "score", "type": "int"}]}}],
+        "queue": dict(QUEUE_COLUMNS)})
 
 
 def test_a_stage_with_no_declared_primary_key_says_so_rather_than_guessing(tmp_path, monkeypatch):
@@ -1166,30 +1209,6 @@ def test_a_stage_with_no_declared_primary_key_says_so_rather_than_guessing(tmp_p
 
     assert described.identity_note == review_routes.NO_PRIMARY_KEY_NOTE
     assert not any(column.in_primary_key for column in described.columns)
-
-
-def _schemaless_review_stage():
-    return {"id": "review", "name": "Review items", "type": "human_review_queue",
-            "inputs": [{"id": "load"}], "queue": dict(QUEUE_COLUMNS)}
-
-
-def test_an_input_edge_with_no_schema_falls_back_to_the_queued_columns(tmp_path, monkeypatch):
-    project = "queue_route_no_schema"
-    project_dir = tmp_path / project
-    run_id, _fingerprints = _build_and_halt_queue_over(
-        tmp_path, monkeypatch, project,
-        [_e2e_load_stage(project_dir), _schemaless_review_stage()],
-    )
-
-    described = review_routes._describe_queued_columns(
-        _find_stage_def(project, "review"),
-        loading.queue_snapshot(project, run_id, "review"),
-    )
-
-    assert [column.name for column in described.columns] == ["id", "score"]
-    assert all(column.description is None for column in described.columns)
-    assert not any(column.in_primary_key for column in described.columns)
-    assert described.schema_note == review_routes.NO_SCHEMA_NOTE
 
 
 def test_a_never_opened_field_carries_the_value_it_displays(tmp_path, monkeypatch):
@@ -1461,10 +1480,11 @@ def _empty_string_row_function_stage():
 
 
 def _empty_string_review_stage():
-    return {"id": "review", "name": "Review notes", "type": "human_review_queue",
-            "inputs": [{"id": "note", "schema": {
-                "columns": _EMPTY_STRING_COLUMNS, "primary_key": ["flag"]}}],
-            "queue": {**queue_columns(source="flag", target="human_flag")}}
+    return _with_queue_output_schema({
+        "id": "review", "name": "Review notes", "type": "human_review_queue",
+        "inputs": [{"id": "note", "schema": {
+            "columns": _EMPTY_STRING_COLUMNS, "primary_key": ["flag"]}}],
+        "queue": {**queue_columns(source="flag", target="human_flag")}})
 
 
 def test_an_empty_string_cell_is_not_printed_as_a_null(tmp_path, monkeypatch):
@@ -1507,10 +1527,11 @@ def test_a_reviewed_source_column_is_shown_only_in_the_review_section(tmp_path, 
 def _every_column_reviewed_stage():
     """A queue over a frame whose ONLY column is the one under review, so
     subtracting the reviewed columns leaves no context at all."""
-    return {"id": "review", "name": "Review scores", "type": "human_review_queue",
-            "inputs": [{"id": "load", "schema": {
-                "columns": [{"name": "score", "type": "int"}]}}],
-            "queue": dict(QUEUE_COLUMNS)}
+    return _with_queue_output_schema({
+        "id": "review", "name": "Review scores", "type": "human_review_queue",
+        "inputs": [{"id": "load", "schema": {
+            "columns": [{"name": "score", "type": "int"}]}}],
+        "queue": dict(QUEUE_COLUMNS)})
 
 
 def test_no_context_table_is_rendered_when_every_column_is_under_review(tmp_path, monkeypatch):
