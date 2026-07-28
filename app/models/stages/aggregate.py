@@ -32,12 +32,10 @@ AGG_FORMULA_LIST = "list"
 def find_aggregate_column_issues(stage: "Stage") -> list[str]:
     """Every `group_by` entry, aggregation `value_column`, and column an
     aggregation's `where` references that is absent from the resolved single
-    input; [] when that input's edge declares no schema at all."""
+    input."""
     aggregate = stage.aggregate
     assert aggregate is not None  # Stage._handle_for_type guarantees this for type="aggregate"
     cols = resolve_input_columns(stage, 0)
-    if cols is None:
-        return []
     issues = [
         COLUMN_ISSUE.format(sid=stage.id, field="aggregate.group_by", col=g, cols=sorted(cols))
         for g in aggregate.group_by
@@ -65,20 +63,18 @@ def find_aggregate_column_issues(stage: "Stage") -> list[str]:
 def find_aggregate_output_issues(stage: "Stage") -> list[str]:
     """Every declared output_schema column the aggregate handle cannot deliver:
     a name outside group_by + aggregation output columns, or a type the
-    derivation contradicts. [] when the stage declares no output_schema. Name
-    feasibility holds even without an edge schema; type checks apply only where
-    the derivation can know the type."""
+    derivation contradicts. Type checks apply only where the derivation can know
+    the type."""
     aggregate = stage.aggregate
     assert aggregate is not None  # Stage._handle_for_type guarantees this for type="aggregate"
-    if stage.output_schema is None:
-        return []
+    assert stage.output_schema is not None  # Stage._schemas_declared guarantees this off publish
     edge = stage.inputs[0].table_schema
     derived = derive_aggregate_output_types(aggregate, edge)
     return find_declared_vs_derived_issues(stage.id, "aggregate", stage.output_schema, derived)
 
 
 def derive_aggregate_output_types(
-    aggregate: "AggregateConfig", edge: "TableSchema | None"
+    aggregate: "AggregateConfig", edge: "TableSchema"
 ) -> dict[str, str | None]:
     """The columns the aggregate handle emits, each mapped to its derived type
     (None = unknowable): every group_by column carries its edge type through
@@ -88,7 +84,7 @@ def derive_aggregate_output_types(
     min/max/first->the value column's type; list->list[<value column's
     type>]."""
     def edge_type(name: str | None) -> str | None:
-        if name is None or edge is None:
+        if name is None:
             return None
         column = edge.column_for_name(name)
         return column.type if column is not None else None

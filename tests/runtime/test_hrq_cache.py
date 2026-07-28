@@ -31,7 +31,28 @@ def _run_queue_stage(stage: Stage, inputs: dict[str, pd.DataFrame], ctx) -> pd.D
     return out
 
 
-def _stage(*, reviewer_instructions: str | None = None, flt: str | None = None) -> Stage:
+# The upstream columns `_src()` builds — the default input edge below.
+_SCORED_COLUMNS = [{"name": "id", "type": "str"}, {"name": "score", "type": "int"}]
+_FLAGGED_COLUMNS = [*_SCORED_COLUMNS, {"name": "flag", "type": "str"}]
+
+# The columns the queue stage itself adds to every row it emits, whichever of the
+# three outcomes the row took (see _pass_row_through / review._build_output_row).
+# The stage's output is projected onto its declared columns, so output_schema has
+# to name these as well as the upstream ones it carries through.
+_REVIEW_COLUMNS = [
+    {"name": "ai_score", "type": "int"}, {"name": "human_score", "type": "float"},
+    {"name": "final_score", "type": "float"}, {"name": "review_notes", "type": "str"},
+    {"name": "reviewer_id", "type": "str"}, {"name": "reviewed_at", "type": "str"},
+    {"name": "decision", "type": "str"},
+]
+
+
+def _stage(
+    *,
+    reviewer_instructions: str | None = None,
+    flt: str | None = None,
+    input_columns: list[dict] = _SCORED_COLUMNS,
+) -> Stage:
     queue: dict[str, str] = {}
     if reviewer_instructions is not None:
         queue["reviewer_instructions"] = reviewer_instructions
@@ -39,7 +60,8 @@ def _stage(*, reviewer_instructions: str | None = None, flt: str | None = None) 
         queue["filter"] = flt
     return Stage.model_validate({
         "id": "review", "name": "Review", "type": "human_review_queue",
-        "inputs": [{"id": "scored"}],
+        "inputs": [{"id": "scored", "schema": {"columns": input_columns}}],
+        "output_schema": {"columns": [*input_columns, *_REVIEW_COLUMNS]},
         "queue": queue,
     })
 
@@ -248,7 +270,7 @@ def test_bust_cache_leaves_passed_through_rows_alone(tmp_path):
     """Only QUEUEABLE rows are re-asked: a row the queue filter does not select
     still passes through, because no cached decision was involved in its
     outcome."""
-    stage = _stage(flt="flag == 'review'")
+    stage = _stage(flt="flag == 'review'", input_columns=_FLAGGED_COLUMNS)
     src = _alternating_src()
 
     snapshot, fingerprints = _halt_and_read_snapshot(
@@ -329,7 +351,7 @@ def test_output_rows_stay_in_input_order(tmp_path):
     """A frame whose reviewed and passed-through rows alternate comes back in
     INPUT order — r0, r1, r2, r3 — not with the two decided rows hoisted to the
     front."""
-    stage = _stage(flt="flag == 'review'")
+    stage = _stage(flt="flag == 'review'", input_columns=_FLAGGED_COLUMNS)
     src = _alternating_src()
 
     snapshot, fingerprints = _halt_and_read_snapshot(
@@ -389,7 +411,7 @@ def test_the_documented_downstream_filter_excludes_only_the_rejected_row(tmp_pat
     it silently takes the unreviewed rows with it — the queue deliberately let
     those through, and losing them is the data loss this stage no longer
     performs."""
-    stage = _stage(flt="flag == 'review'")
+    stage = _stage(flt="flag == 'review'", input_columns=_FLAGGED_COLUMNS)
     src = _every_outcome_src()
 
     snapshot, fingerprints = _halt_and_read_snapshot(
@@ -422,7 +444,7 @@ def test_every_row_rejected_still_emits_every_row_with_the_declared_columns(tmp_
     decided."""
     stage = Stage.model_validate({
         "id": "review", "name": "Review", "type": "human_review_queue",
-        "inputs": [{"id": "scored"}],
+        "inputs": [{"id": "scored", "schema": {"columns": _SCORED_COLUMNS}}],
         "output_schema": {"columns": [{"name": "id", "type": "str"},
                                       {"name": "score", "type": "int"}]},
         "queue": {},
@@ -465,7 +487,7 @@ def test_queue_stats_count_every_row_including_the_rejected_one(tmp_path):
     occurs. `items_decided` counts the REJECTED row too — a rejection is a
     decision, and the count is of what the reviewer answered, not of what
     survived."""
-    stage = _stage(flt="flag == 'review'")
+    stage = _stage(flt="flag == 'review'", input_columns=_FLAGGED_COLUMNS)
     src = _alternating_src()
 
     # On the halting path the stage's contribution rides out on the halt itself
@@ -521,7 +543,7 @@ def test_queue_stats_hold_when_every_row_is_served_from_the_cache(tmp_path, monk
     are mapped, so they survive a run where the driver's cache answers EVERY row
     and the mapper is never called once — decided rows replaying a human's
     verdict and passed-through rows replaying their own recorded output."""
-    stage = _stage(flt="flag == 'review'")
+    stage = _stage(flt="flag == 'review'", input_columns=_FLAGGED_COLUMNS)
     src = _alternating_src()
 
     snapshot, fingerprints = _halt_and_read_snapshot(
@@ -549,7 +571,7 @@ def test_a_passed_through_row_round_trips_through_the_cache(tmp_path):
     """A row the filter did not select is recorded like any other computed row.
     The second run replays it rather than re-evaluating the filter for it, and
     what comes back is the same output row."""
-    stage = _stage(flt="flag == 'nothing-matches'")
+    stage = _stage(flt="flag == 'nothing-matches'", input_columns=_FLAGGED_COLUMNS)
     src = _alternating_src()
 
     first = _run_queue_stage(stage, {"scored": src}, _ctx(tmp_path, run_id="run1"))
@@ -573,11 +595,11 @@ def test_changing_the_filter_re_evaluates_a_passed_through_row(tmp_path):
     src = _alternating_src()
 
     out = _run_queue_stage(
-        _stage(flt="flag == 'nothing-matches'"), {"scored": src}, _ctx(tmp_path, run_id="run1"))
+        _stage(flt="flag == 'nothing-matches'", input_columns=_FLAGGED_COLUMNS), {"scored": src}, _ctx(tmp_path, run_id="run1"))
     assert list(out["decision"]) == [NOT_REVIEWED] * 4
 
     snapshot, _fingerprints = _halt_and_read_snapshot(
-        _stage(flt="flag == 'skip'"), {"scored": src.copy()}, _ctx(tmp_path, run_id="run2"))
+        _stage(flt="flag == 'skip'", input_columns=_FLAGGED_COLUMNS), {"scored": src.copy()}, _ctx(tmp_path, run_id="run2"))
     assert list(snapshot["id"]) == ["r0", "r2"]
 
 
@@ -614,7 +636,8 @@ def test_nullable_extension_dtype_cells_reach_the_reviewer_as_plain_numpy_values
         "flag": pd.array([True, None], dtype="boolean"),
     })
     snapshot, _fingerprints = _halt_and_read_snapshot(
-        _stage(), {"scored": src}, _ctx(tmp_path))
+        _stage(input_columns=[*_SCORED_COLUMNS, {"name": "flag", "type": "bool"}]),
+        {"scored": src}, _ctx(tmp_path))
 
     assert list(snapshot.columns) == ["id", "score", "flag"]
     assert snapshot["score"].dtype == "float64"      # Int64 did not survive
@@ -676,6 +699,7 @@ def _load_stage(root):
     csv_path = root / "data" / "items.csv"
     pd.DataFrame({"id": ["a", "b"], "score": [1, 2]}).to_csv(csv_path, index=False)
     return {"id": "load", "name": "Load", "type": "input_data",
+            "output_schema": {"columns": _SCORED_COLUMNS, "primary_key": ["id"]},
             "connector": {"kind": "file", "params": {"path": str(csv_path), "format": "csv"}}}
 
 
@@ -684,6 +708,7 @@ def _review_stage_full():
             "inputs": [{"id": "load", "schema": {
                 "columns": [{"name": "id", "type": "str"}, {"name": "score", "type": "int"}],
                 "primary_key": ["id"]}}],
+            "output_schema": {"columns": [*_SCORED_COLUMNS, *_REVIEW_COLUMNS]},
             "queue": {}}
 
 

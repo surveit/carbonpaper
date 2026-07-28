@@ -15,6 +15,21 @@ def S(**kw):
     return kw
 
 
+# Every stage must declare a schema on each input and (bar publish) an
+# output_schema, so tests aimed at some OTHER part of the contract still have to
+# carry both. These are the smallest ones that satisfy it.
+_PK_ID_SCHEMA = {"columns": [{"name": "id", "type": "str"}], "primary_key": ["id"]}
+_K_SCHEMA = {"columns": [{"name": "k", "type": "str"}]}
+
+
+def _build_join_on_k(*, join):
+    """A two-input join on `k`, declared end to end, so a test can vary only
+    the `join` block."""
+    return S(id="j", type="join",
+             inputs=[{"id": "a", "schema": _K_SCHEMA}, {"id": "b", "schema": _K_SCHEMA}],
+             output_schema=_K_SCHEMA, join=join)
+
+
 # ── column types ─────────────────────────────────────────────────────────────
 @pytest.mark.parametrize("t", ["str", "int", "float", "bool", "datetime", "date",
                                 "json", "list[str]", "list[list[int]]"])
@@ -52,7 +67,8 @@ def test_table_schema_ok():
 def test_valid_input_data(tmp_path):
     s = m.Stage.model_validate(S(
         id="load", type="input_data",
-        connector={"kind": "file", "params": {"path": str(tmp_path / "d.csv"), "format": "csv"}}))
+        connector={"kind": "file", "params": {"path": str(tmp_path / "d.csv"), "format": "csv"}},
+        output_schema={"columns": [{"name": "id", "type": "str"}]}))
     assert s.type == m.StageType.input_data
 
 
@@ -77,13 +93,15 @@ def test_llm_transform_rejects_more_than_one_input():
     with pytest.raises(ValidationError, match="exactly one input, has 2"):
         m.Stage.model_validate(S(
             id="extract", type="llm_transform",
-            inputs=[{"id": "a"}, {"id": "b"}],
+            inputs=[{"id": "a", "schema": _PK_ID_SCHEMA}, {"id": "b", "schema": _PK_ID_SCHEMA}],
             output_schema={"columns": [{"name": "id", "type": "str"}], "primary_key": ["id"]},
             llm={"prompt_template": "do it"}))
 
 
 def test_llm_transform_rejects_input_with_no_declared_schema():
-    with pytest.raises(ValidationError, match="declares no input schema"):
+    # `schema` is a required field on StageInput, so this never reaches
+    # _llm_transform_one_to_one — pydantic rejects the input itself.
+    with pytest.raises(ValidationError, match="inputs.0.schema"):
         m.Stage.model_validate(S(
             id="extract", type="llm_transform",
             inputs=[{"id": "a"}],
@@ -162,7 +180,7 @@ def test_publish_also_requires_function():
 
 def test_publish_config_is_typed():
     s = m.Stage.model_validate(S(
-        id="p", type="publish", inputs=[{"id": "a"}],
+        id="p", type="publish", inputs=[{"id": "a", "schema": _PK_ID_SCHEMA}],
         publish={"format": "json"}, function={"kind": "inline", "code": "def transform(row): return row"}))
     assert s.publish.format == m.PublishFormat.json
 
@@ -188,7 +206,9 @@ def test_python_function_inline_code_must_define_transform():
 
 
 def test_python_function_inline_valid_transform_ok():
-    m.Stage.model_validate(S(id="t", type="python_row_function", inputs=[{"id": "a"}],
+    m.Stage.model_validate(S(id="t", type="python_row_function",
+                             inputs=[{"id": "a", "schema": _PK_ID_SCHEMA}],
+                             output_schema=_PK_ID_SCHEMA,
                              function={"kind": "inline", "code": "def transform(row): return row"}))
 
 
@@ -216,14 +236,14 @@ def test_name_is_required():
 
 
 def test_input_ids_property():
-    s = m.Stage.model_validate(S(id="j", type="join", inputs=[{"id": "a"}, {"id": "b"}],
-                                 join={"keys": [{"left": "k", "right": "k"}]}))
+    s = m.Stage.model_validate(_build_join_on_k(join={"keys": [{"left": "k", "right": "k"}]}))
     assert s.input_ids == ["a", "b"]
 
 
 def test_source_parses_as_sourceref(tmp_path):
     s = m.Stage.model_validate(S(id="load", type="input_data",
                                  connector={"kind": "file", "params": {"path": str(tmp_path / "d.csv")}},
+                                 output_schema=_PK_ID_SCHEMA,
                                  source={"doc": "x.md", "section": "S1", "lines": [1, 2]}))
     assert s.source.doc == "x.md" and s.source.lines == [1, 2]
 
@@ -233,20 +253,19 @@ def test_queue_needs_no_hash_source_declared():
     # the row itself (app.core.stage_cache) — no upstream primary_key or
     # explicit column list is required to build the stage.
     s = m.Stage.model_validate(S(
-        id="rev", type="human_review_queue", inputs=[{"id": "a"}], queue={},
+        id="rev", type="human_review_queue", inputs=[{"id": "a", "schema": _PK_ID_SCHEMA}],
+        output_schema=_PK_ID_SCHEMA, queue={},
     ))
     assert s.queue is not None
 
 
 # ── fixes folded into the model ──────────────────────────────────────────────
 def test_join_accepts_on():
-    m.Stage.model_validate(S(id="j", type="join", inputs=[{"id": "a"}, {"id": "b"}],
-                             join={"on": [{"left": "k", "right": "k"}]}))
+    m.Stage.model_validate(_build_join_on_k(join={"on": [{"left": "k", "right": "k"}]}))
 
 
 def test_join_accepts_keys():
-    m.Stage.model_validate(S(id="j", type="join", inputs=[{"id": "a"}, {"id": "b"}],
-                             join={"keys": [{"left": "k", "right": "k"}]}))
+    m.Stage.model_validate(_build_join_on_k(join={"keys": [{"left": "k", "right": "k"}]}))
 
 
 def test_join_neither_raises():
@@ -262,10 +281,14 @@ def test_aggregate_output_column_required():
 
 
 def test_aggregate_valid():
-    m.Stage.model_validate(S(id="agg", type="aggregate", inputs=[{"id": "a"}],
-                             aggregate={"group_by": ["g"],
-                                        "aggregations": [{"formula": "sum", "output_column": "total",
-                                                          "value_column": "x"}]}))
+    m.Stage.model_validate(S(
+        id="agg", type="aggregate",
+        inputs=[{"id": "a", "schema": {"columns": [{"name": "g", "type": "str"},
+                                                   {"name": "x", "type": "int"}]}}],
+        output_schema={"columns": [{"name": "g", "type": "str"}, {"name": "total", "type": "int"}]},
+        aggregate={"group_by": ["g"],
+                   "aggregations": [{"formula": "sum", "output_column": "total",
+                                     "value_column": "x"}]}))
 
 
 # ── review cuts / enums ──────────────────────────────────────────────────────
@@ -312,7 +335,8 @@ def test_model_enum_rejects_unknown():
 # ── non-fatal helper ─────────────────────────────────────────────────────────
 def test_validate_stage_helper(tmp_path):
     assert m.validate_stage(S(id="load", type="input_data",
-                              connector={"kind": "file", "params": {"path": str(tmp_path / "d.csv")}})) == []
+                              connector={"kind": "file", "params": {"path": str(tmp_path / "d.csv")}},
+                              output_schema=_PK_ID_SCHEMA)) == []
     assert m.validate_stage({"id": "BadId", "type": "input_data", "name": "x", "connector": {"kind": "file"}})
 
 
@@ -322,6 +346,7 @@ def test_inputs_are_refs_with_schema():
         id="x", type="python_frame_function",
         inputs=[{"id": "a", "schema": {"primary_key": ["k"],
                                        "columns": [{"name": "k", "type": "str"}]}}],
+        output_schema={"columns": [{"name": "k", "type": "str"}]},
         function={"kind": "inline", "code": "def transform(row): return row"},
     ))
     assert s.input_ids == ["a"]
@@ -329,13 +354,15 @@ def test_inputs_are_refs_with_schema():
     assert s.inputs[0].table_schema.primary_key == ["k"]
 
 
-def test_inputs_accept_bare_id_shorthand():
-    s = m.Stage.model_validate(S(
+def test_inputs_bare_id_shorthand_normalises_then_fails_on_the_missing_schema():
+    """`inputs: ["a"]` still normalises to `[{"id": "a"}]`, which then fails on
+    the required `schema` rather than on the string's shape."""
+    issues = m.validate_stage(S(
         id="x", type="python_frame_function", inputs=["a"],
+        output_schema=_K_SCHEMA,
         function={"kind": "inline", "code": "def transform(row): return row"},
     ))
-    assert s.input_ids == ["a"]
-    assert s.inputs[0].table_schema is None
+    assert any("inputs.0.schema" in issue for issue in issues)
 
 
 def test_file_connector_without_path_is_valid():
@@ -375,7 +402,8 @@ def test_unknown_keys_rejected():
 
 def test_enum_fields_are_plain_strings(tmp_path):
     s = m.Stage.model_validate(S(id="load", type="input_data",
-                                 connector={"kind": "file", "params": {"path": str(tmp_path / "d.csv")}}))
+                                 connector={"kind": "file", "params": {"path": str(tmp_path / "d.csv")}},
+                                 output_schema=_PK_ID_SCHEMA))
     assert s.type == "input_data" and isinstance(s.type, str)
     assert s.connector is not None and isinstance(s.connector.kind, str)
 
@@ -389,6 +417,7 @@ def test_aggregation_requires_value_column_except_count():
 def test_stage_eval_block_is_kept(tmp_path):
     s = m.Stage.model_validate(S(id="load", type="input_data",
                                  connector={"kind": "file", "params": {"path": str(tmp_path / "d.csv")}},
+                                 output_schema=_PK_ID_SCHEMA,
                                  eval={"metrics": ["recall"]}))
     assert s.eval == {"metrics": ["recall"]}
 
@@ -530,7 +559,9 @@ def test_output_schema_issues_raise_at_stage_construction():
         "id": "totals",
         "name": "Totals",
         "type": "aggregate",
-        "inputs": [{"id": "rows"}],
+        # `rows` carries a schema so the mandate is satisfied and the
+        # deliverability issue below is the one that surfaces.
+        "inputs": [{"id": "rows", "schema": {"columns": [{"name": "company", "type": "str"}]}}],
         "aggregate": {
             "group_by": ["company"],
             "aggregations": [{"output_column": "n", "formula": "count"}],
@@ -539,6 +570,144 @@ def test_output_schema_issues_raise_at_stage_construction():
     }
     with pytest.raises(ValidationError, match="undeclared_extra"):
         m.Stage.model_validate(spec)
+
+
+# ── mandatory input/output schemas ───────────────────────────────────────────
+# Every stage must declare a schema on every input and an output_schema, with
+# two one-sided exemptions: input_data takes no inputs (but still declares its
+# output), publish emits files not a table (but still declares its inputs).
+
+_INLINE_ROW_FN = {"kind": "inline", "code": "def transform(row): return row"}
+_LEFT_SCHEMA = {"columns": [{"name": "id", "type": "str"}, {"name": "name", "type": "str"}],
+                "primary_key": ["id"]}
+_RIGHT_SCHEMA = {"columns": [{"name": "id", "type": "str"}, {"name": "amount", "type": "int"}],
+                 "primary_key": ["id"]}
+
+_HANDLE_BLOCK = {
+    "python_row_function": {"function": _INLINE_ROW_FN},
+    "python_frame_function": {"function": _INLINE_ROW_FN},
+    "join": {"join": {"keys": [{"left": "id", "right": "id"}]}},
+    "aggregate": {"aggregate": {"group_by": ["name"],
+                                "aggregations": [{"output_column": "n", "formula": "count"}]}},
+    "human_review_queue": {"queue": {}},
+    "publish": {"publish": {"format": "json"}, "function": _INLINE_ROW_FN},
+}
+_INPUT_IDS = {"join": ["facilities", "filings"]}
+_OUTPUT_SCHEMA = {
+    "join": {"columns": [{"name": "id", "type": "str"}, {"name": "name", "type": "str"},
+                         {"name": "amount", "type": "int"}]},
+    "aggregate": {"columns": [{"name": "name", "type": "str"}, {"name": "n", "type": "int"}]},
+}
+NON_EXEMPT_TYPES = ["python_row_function", "python_frame_function", "join", "aggregate",
+                    "human_review_queue"]
+
+
+def _schema_spec(stage_type, *, inputs_declared=True, declare_output=True):
+    """A minimal, otherwise-valid stage of `stage_type`. `inputs_declared` is
+    True/False for all inputs or a per-input list of flags; a False input carries
+    only its id, no `schema`."""
+    ids = _INPUT_IDS.get(stage_type, ["facilities"])
+    flags = inputs_declared if isinstance(inputs_declared, list) else [inputs_declared] * len(ids)
+    schemas = [_LEFT_SCHEMA, _RIGHT_SCHEMA]
+    kw = dict(
+        id="s", type=stage_type,
+        inputs=[{"id": i, **({"schema": s} if f else {})}
+                for i, s, f in zip(ids, schemas, flags)],
+        **_HANDLE_BLOCK[stage_type],
+    )
+    if declare_output:
+        kw["output_schema"] = _OUTPUT_SCHEMA.get(stage_type, _LEFT_SCHEMA)
+    return S(**kw)
+
+
+def _input_data_spec(tmp_path, *, declare_output=True):
+    kw = dict(id="load", type="input_data",
+              connector={"kind": "file", "params": {"path": str(tmp_path / "d.csv"),
+                                                    "format": "csv"}})
+    if declare_output:
+        kw["output_schema"] = _LEFT_SCHEMA
+    return S(**kw)
+
+
+def _rejection_message(spec) -> str:
+    with pytest.raises(ValidationError) as err:
+        m.Stage.model_validate(spec)
+    return str(err.value)
+
+
+@pytest.mark.parametrize("t", NON_EXEMPT_TYPES)
+def test_stage_rejects_input_that_declares_no_schema(t):
+    # `schema` is a required field on StageInput: pydantic locates the offending
+    # input by index rather than naming its upstream id.
+    msg = _rejection_message(_schema_spec(t, inputs_declared=False))
+    assert "inputs.0.schema" in msg
+    assert "Field required" in msg
+
+
+@pytest.mark.parametrize("t", NON_EXEMPT_TYPES)
+def test_stage_rejects_missing_output_schema(t):
+    msg = _rejection_message(_schema_spec(t, declare_output=False))
+    assert "declares no output_schema" in msg
+
+
+def test_stage_locates_only_the_input_that_declares_no_schema():
+    msg = _rejection_message(_schema_spec("join", inputs_declared=[True, False]))
+    assert "inputs.1.schema" in msg
+    assert "inputs.0.schema" not in msg
+
+
+@pytest.mark.parametrize("t", NON_EXEMPT_TYPES)
+def test_fully_declared_stage_accepted(t):
+    assert m.Stage.model_validate(_schema_spec(t)).output_schema is not None
+
+
+def test_input_data_rejects_missing_output_schema(tmp_path):
+    """input_data's exemption is input-side only: it takes no inputs, but it
+    still declares what it emits — otherwise the first edge of every workflow
+    goes unchecked."""
+    msg = _rejection_message(_input_data_spec(tmp_path, declare_output=False))
+    assert "declares no output_schema" in msg
+
+
+def test_input_data_with_output_schema_accepted(tmp_path):
+    assert m.Stage.model_validate(_input_data_spec(tmp_path)).output_schema is not None
+
+
+def test_publish_without_output_schema_accepted():
+    """publish emits files, not a table — its output side is exempt."""
+    s = m.Stage.model_validate(_schema_spec("publish", declare_output=False))
+    assert s.output_schema is None
+
+
+def test_publish_rejects_input_that_declares_no_schema():
+    """publish's exemption is output-side only: its inputs must still be declared."""
+    msg = _rejection_message(_schema_spec("publish", inputs_declared=False, declare_output=False))
+    assert "inputs.0.schema" in msg
+    assert "Field required" in msg
+
+
+def test_publish_fully_declared_accepted():
+    s = m.Stage.model_validate(_schema_spec("publish"))
+    assert s.inputs[0].table_schema is not None
+
+
+_EMPTY_SCHEMA: dict[str, list[object]] = {"columns": []}
+
+
+def test_stage_rejects_input_whose_schema_declares_no_columns():
+    """A zero-column schema is not a declaration: an empty projection makes the
+    edge check inert, which is exactly what the mandate closes."""
+    spec = _schema_spec("python_row_function")
+    spec["inputs"] = [{"id": "facilities", "schema": _EMPTY_SCHEMA}]
+    msg = _rejection_message(spec)
+    assert "declares a schema with no columns" in msg
+    assert "facilities" in msg
+
+
+def test_stage_rejects_output_schema_that_declares_no_columns():
+    spec = _schema_spec("python_row_function")
+    spec["output_schema"] = _EMPTY_SCHEMA
+    assert "declares no output_schema" in _rejection_message(spec)
 
 
 def test_output_schema_issues_surface_in_draft_validation():
@@ -550,7 +719,9 @@ def test_output_schema_issues_surface_in_draft_validation():
         "id": "totals",
         "name": "Totals",
         "type": "aggregate",
-        "inputs": [{"id": "rows"}],
+        # `rows` carries a schema so the mandate is satisfied and the
+        # deliverability issue below is the one that surfaces.
+        "inputs": [{"id": "rows", "schema": {"columns": [{"name": "company", "type": "str"}]}}],
         "aggregate": {
             "group_by": ["company"],
             "aggregations": [{"output_column": "n", "formula": "count"}],

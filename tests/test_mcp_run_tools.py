@@ -21,6 +21,8 @@ def _make_run_project(root):
         "connector": {"kind": "file",
                       "params": {"path": str(root / "data" / "items.csv"),
                                  "format": "csv"}},
+        "output_schema": {"columns": [{"name": "name", "type": "str"},
+                                      {"name": "val", "type": "int"}]},
     }
     (root / "compiled" / "01_load.json").write_text(json.dumps(stage), encoding="utf-8")
     vid = create_version_from_disk(root, message="seed", reviewer="test").version_id

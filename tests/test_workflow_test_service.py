@@ -46,9 +46,11 @@ _BOOM = {
                                   {"name": "score", "type": "int"}]},
 }
 
+_CLASSIFY_SCHEMA = _CLASSIFY["output_schema"]
+
 _PUBLISH = {
     "id": "publish_report", "type": "publish", "name": "Publish",
-    "inputs": [{"id": "classify"}],
+    "inputs": [{"id": "classify", "schema": _CLASSIFY_SCHEMA}],
     "function": {"kind": "inline", "code":
                  "def transform(df, output_dir):\n"
                  "    import os\n"
@@ -65,6 +67,7 @@ _LOAD_PK_SCHEMA = {"columns": [{"name": "doc_id", "type": "str"},
 _QUEUE = {
     "id": "review", "type": "human_review_queue", "name": "Review rows",
     "inputs": [{"id": "load", "schema": _LOAD_PK_SCHEMA}],
+    "output_schema": _LOAD_PK_SCHEMA,
     "queue": {"reviewer_instructions": "check"},
 }
 
@@ -179,7 +182,8 @@ def test_workflow_test_raises_when_no_source_stage(demo):
     # runs before workflow graph validation.
     standalone = {
         "id": "standalone", "type": "python_frame_function", "name": "No source",
-        "inputs": [{"id": "upstream"}],
+        "inputs": [{"id": "upstream", "schema": _LOAD_SCHEMA}],
+        "output_schema": _LOAD_SCHEMA,
         "function": {"kind": "inline", "code": "def transform(df):\n    return df"},
     }
     # Build the version document directly; the guard fires before Workflow build.

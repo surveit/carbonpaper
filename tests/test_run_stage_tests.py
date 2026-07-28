@@ -50,6 +50,7 @@ def _non_python_stage() -> Stage:
     return Stage.model_validate({
         "id": "load", "name": "Load", "type": "input_data",
         "connector": {"kind": "file"},
+        "output_schema": _IN_SCHEMA,
     })
 
 

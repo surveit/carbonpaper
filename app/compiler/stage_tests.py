@@ -110,8 +110,6 @@ def render_derivation_task(document: str, stage: Stage) -> str:
     against the document itself to learn what the stage must do."""
     inputs = "\n\n".join(
         f"Input `{ref.id}` schema:\n{ref.table_schema.to_prompt()}"
-        if ref.table_schema is not None
-        else f"Input `{ref.id}` (no schema declared)"
         for ref in stage.inputs
     )
     if stage.output_schema is None:

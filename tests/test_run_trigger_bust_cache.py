@@ -34,7 +34,9 @@ def project(tmp_path, monkeypatch):
     pd.DataFrame({"name": ["x", "y"], "val": [1, 2]}).to_csv(data, index=False)
     stage = {"id": "load", "name": "Load", "type": "input_data",
              "connector": {"kind": "file",
-                           "params": {"path": str(data), "format": "csv"}}}
+                           "params": {"path": str(data), "format": "csv"}},
+             "output_schema": {"columns": [{"name": "name", "type": "str"},
+                                           {"name": "val", "type": "int"}]}}
     (proj / "compiled" / "01_load.json").write_text(json.dumps(stage), encoding="utf-8")
     vid = create_version_from_disk(proj, message="seed", reviewer="test").version_id
     versioning.publish_version(proj, vid, reviewer="human")

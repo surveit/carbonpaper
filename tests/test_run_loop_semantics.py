@@ -15,6 +15,20 @@ from app.services import versioning
 from app.services.versioning import create_version_from_disk
 
 
+# The three frame shapes this file's DAGs carry. Declared once so an upstream's
+# output_schema and its downstream's input `schema` cannot drift apart.
+_ID_VAL_SCHEMA = {"columns": [{"name": "id", "type": "str"},
+                              {"name": "val", "type": "int"}],
+                  "primary_key": ["id"]}
+_ID_TEXT_SCHEMA = {"columns": [{"name": "id", "type": "str"},
+                               {"name": "text", "type": "str"}],
+                   "primary_key": ["id"]}
+_SCORED_SCHEMA = {"columns": [{"name": "id", "type": "str"},
+                              {"name": "text", "type": "str"},
+                              {"name": "score", "type": "int", "nullable": False}],
+                  "primary_key": ["id"]}
+
+
 def _seed_version(root):
     vid = create_version_from_disk(root, message="test seed", reviewer="test").version_id
     versioning.publish_version(root, vid, reviewer="human")
@@ -33,20 +47,27 @@ def _load_items_stage(root, *, stage_id="load"):
     pd.DataFrame({"id": ["a", "b"], "val": [1, 2]}).to_csv(csv_path, index=False)
     return {"id": stage_id, "name": f"Load {stage_id}", "type": "input_data",
             "connector": {"kind": "file",
-                          "params": {"path": str(csv_path), "format": "csv"}}}
+                          "params": {"path": str(csv_path), "format": "csv"}},
+            "output_schema": _ID_VAL_SCHEMA}
 
 
-def _raising_stage(stage_id, input_id, name="Boom"):
-    """A python_frame_function whose transform raises — the stage errors."""
+def _raising_stage(stage_id, input_id, name="Boom", schema=_ID_VAL_SCHEMA):
+    """A python_frame_function whose transform raises — the stage errors. It
+    emits nothing, so `schema` (its input's shape) stands as its declared output
+    too: the identity shape it would have emitted had it not raised."""
     return {"id": stage_id, "name": name, "type": "python_frame_function",
-            "inputs": [{"id": input_id}],
+            "inputs": [{"id": input_id, "schema": schema}],
+            "output_schema": schema,
             "function": {"kind": "inline",
                          "code": "def transform(df):\n    raise ValueError('boom')\n"}}
 
 
-def _passthrough_stage(stage_id, input_id, name="Passthrough"):
+def _passthrough_stage(stage_id, input_id, name="Passthrough", schema=_ID_VAL_SCHEMA):
+    """An identity python_frame_function: `schema` is both the shape it expects
+    from `input_id` and the shape it emits."""
     return {"id": stage_id, "name": name, "type": "python_frame_function",
-            "inputs": [{"id": input_id}],
+            "inputs": [{"id": input_id, "schema": schema}],
+            "output_schema": schema,
             "function": {"kind": "inline",
                          "code": "def transform(df):\n    return df\n"}}
 
@@ -58,28 +79,26 @@ def _score_load_stage(root):
     pd.DataFrame({"id": ["a", "b"], "text": ["x", "y"]}).to_csv(csv_path, index=False)
     return {"id": "load", "name": "Load", "type": "input_data",
             "connector": {"kind": "file",
-                          "params": {"path": str(csv_path), "format": "csv"}}}
+                          "params": {"path": str(csv_path), "format": "csv"}},
+            "output_schema": _ID_TEXT_SCHEMA}
 
 
 def _score_stage(stage_id, input_id, name="Score"):
     """An llm_transform adding a non-null `score` column to each (id, text) row."""
     return {"id": stage_id, "name": name, "type": "llm_transform",
-            "inputs": [{"id": input_id, "schema": {
-                "columns": [{"name": "id", "type": "str"}, {"name": "text", "type": "str"}],
-                "primary_key": ["id"]}}],
-            "output_schema": {
-                "columns": [{"name": "id", "type": "str"}, {"name": "text", "type": "str"},
-                            {"name": "score", "type": "int", "nullable": False}],
-                "primary_key": ["id"]},
+            "inputs": [{"id": input_id, "schema": _ID_TEXT_SCHEMA}],
+            "output_schema": _SCORED_SCHEMA,
             "llm": {"prompt_template": "Rate: {text}"}}
 
 
 def _queue_stage(stage_id, input_id, name="Review"):
-    """A human_review_queue with no cached decisions yet — it halts."""
+    """A human_review_queue with no cached decisions yet — it halts. Its
+    output_schema keeps the (id, val) columns a reviewed row carries through;
+    the stage projects onto exactly what it declares, so the reviewer
+    bookkeeping columns are not part of its output."""
     return {"id": stage_id, "name": name, "type": "human_review_queue",
-            "inputs": [{"id": input_id, "schema": {
-                "columns": [{"name": "id", "type": "str"}, {"name": "val", "type": "int"}],
-                "primary_key": ["id"]}}],
+            "inputs": [{"id": input_id, "schema": _ID_VAL_SCHEMA}],
+            "output_schema": _ID_VAL_SCHEMA,
             "queue": {}}
 
 
@@ -91,16 +110,17 @@ def _five_item_load_stage(root):
     pd.DataFrame({"id": list("abcde"), "val": [1, 2, 3, 4, 5]}).to_csv(csv_path, index=False)
     return {"id": "load", "name": "Load", "type": "input_data",
             "connector": {"kind": "file",
-                          "params": {"path": str(csv_path), "format": "csv"}}}
+                          "params": {"path": str(csv_path), "format": "csv"}},
+            "output_schema": _ID_VAL_SCHEMA}
 
 
 def _filtered_queue_stage(stage_id, input_id, flt, name="Review"):
     """A human_review_queue that reviews only the rows `flt` selects. With no
-    cached decisions, every selected row is pending — so it halts."""
+    cached decisions, every selected row is pending — so it halts. Declares the
+    same (id, val) output as `_queue_stage`."""
     return {"id": stage_id, "name": name, "type": "human_review_queue",
-            "inputs": [{"id": input_id, "schema": {
-                "columns": [{"name": "id", "type": "str"}, {"name": "val", "type": "int"}],
-                "primary_key": ["id"]}}],
+            "inputs": [{"id": input_id, "schema": _ID_VAL_SCHEMA}],
+            "output_schema": _ID_VAL_SCHEMA,
             "queue": {"filter": flt}}
 
 
@@ -443,8 +463,10 @@ def test_row_error_stage_blocks_downstream_and_resume_is_not_stale(tmp_path, mon
 
     _write_stage(tmp_path, "01_load.json", _score_load_stage(tmp_path))
     _write_stage(tmp_path, "02_score.json", _score_stage("score", "load"))
-    _write_stage(tmp_path, "03_tail.json", _passthrough_stage("tail", "score"))
-    _write_stage(tmp_path, "04_good.json", _passthrough_stage("good_tail", "load"))
+    _write_stage(tmp_path, "03_tail.json",
+                 _passthrough_stage("tail", "score", schema=_SCORED_SCHEMA))
+    _write_stage(tmp_path, "04_good.json",
+                 _passthrough_stage("good_tail", "load", schema=_ID_TEXT_SCHEMA))
     _seed_version(tmp_path)
 
     first = run_prepared(prepare_run(tmp_path, repo_root=tmp_path))
@@ -485,7 +507,8 @@ def test_resume_after_error_reruns_the_errored_stage_and_its_downstream(tmp_path
     csv_path = tmp_path / "data" / "items.csv"
     pd.DataFrame({"id": ["a", "b"], "val": [1, 2]}).to_csv(csv_path, index=False)
     load = {"id": "load", "name": "Load", "type": "input_data",
-            "connector": {"kind": "file", "params": {"path": str(csv_path), "format": "csv"}}}
+            "connector": {"kind": "file", "params": {"path": str(csv_path), "format": "csv"}},
+            "output_schema": _ID_VAL_SCHEMA}
     _write_stage(tmp_path, "01_load.json", load)
     _write_stage(tmp_path, "02_mid.json", _passthrough_stage("mid", "load"))
     _write_stage(tmp_path, "03_tail.json", _passthrough_stage("tail", "mid"))

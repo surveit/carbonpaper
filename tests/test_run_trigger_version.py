@@ -17,6 +17,11 @@ from app.services.versioning import create_version_from_disk, list_versions, pub
 
 client = TestClient(app)
 
+# The columns of the CSVs these fixtures write; every non-publish stage must
+# declare an output_schema (app/models/stage.py: Stage._schemas_declared).
+_ROWS_SCHEMA = {"columns": [{"name": "name", "type": "str", "nullable": False},
+                            {"name": "val", "type": "int", "nullable": False}]}
+
 
 @pytest.fixture
 def project_two_versions(tmp_path, monkeypatch):
@@ -28,6 +33,7 @@ def project_two_versions(tmp_path, monkeypatch):
     data = proj / "a.csv"
     pd.DataFrame({"name": ["x", "y"], "val": [1, 2]}).to_csv(data, index=False)
     stage = {"id": "load", "name": "Load", "type": "input_data",
+             "output_schema": _ROWS_SCHEMA,
              "connector": {"kind": "file",
                            "params": {"path": str(data), "format": "csv"}}}
     (proj / "compiled" / "01_load.json").write_text(json.dumps(stage), encoding="utf-8")
@@ -89,6 +95,7 @@ def _seed_load_stage(proj):
     data = proj / "a.csv"
     pd.DataFrame({"name": ["x"], "val": [1]}).to_csv(data, index=False)
     stage = {"id": "load", "name": "Load", "type": "input_data",
+             "output_schema": _ROWS_SCHEMA,
              "connector": {"kind": "file",
                            "params": {"path": str(data), "format": "csv"}}}
     (proj / "compiled" / "01_load.json").write_text(json.dumps(stage), encoding="utf-8")
@@ -143,6 +150,7 @@ def project_versions_diff_paths(tmp_path, monkeypatch):
     def _author(path):
         compiled.write_text(json.dumps(
             {"id": "load", "name": "Load", "type": "input_data",
+             "output_schema": _ROWS_SCHEMA,
              "connector": {"kind": "file",
                            "params": {"path": str(path), "format": "csv"}}}),
             encoding="utf-8")

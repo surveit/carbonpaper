@@ -15,13 +15,10 @@ if TYPE_CHECKING:
 def find_llm_prompt_column_issues(stage: "Stage") -> list[str]:
     """Every `{placeholder}` the prompt template actually interpolates (per
     `find_template_fields` — the same parser the runtime renders with) that is
-    absent from the resolved single input; [] when the input's edge declares
-    no schema at all."""
+    absent from the resolved single input."""
     llm = stage.llm
     assert llm is not None  # Stage._handle_for_type guarantees this for type="llm_transform"
     cols = resolve_input_columns(stage, 0)
-    if cols is None:
-        return []
     return [
         COLUMN_ISSUE.format(sid=stage.id, field=f"llm prompt {{{field}}}", col=field, cols=sorted(cols))
         for field in sorted(find_template_fields(llm.prompt_data_template))

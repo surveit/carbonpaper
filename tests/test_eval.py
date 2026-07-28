@@ -14,16 +14,22 @@ def S(**kw):
     return kw
 
 
-def _file_input(id_, tmp_path):
-    return S(id=id_, type="input_data",
+_K = {"columns": [{"name": "k"}]}
+
+
+def _file_input(id_, tmp_path, output_schema=_K):
+    return S(id=id_, type="input_data", output_schema=output_schema,
              connector={"kind": "file", "params": {"path": str(tmp_path / f"{id_}.csv")}})
 
 
-def _py(id_, inputs, granularity="frame", **kw):
-    """granularity 'row' -> python_row_function, else python_frame_function."""
+def _py(id_, inputs, granularity="frame", schema=_K, **kw):
+    """granularity 'row' -> python_row_function, else python_frame_function.
+    `schema` is both the schema declared on every input edge and the
+    output_schema — the inline transform is the identity."""
     type_ = "python_row_function" if granularity == "row" else "python_frame_function"
-    return S(id=id_, type=type_, inputs=[{"id": i} for i in inputs],
-             function={"kind": "inline", "code": "def transform(row): return row"}, **kw)
+    return S(id=id_, type=type_, inputs=[{"id": i, "schema": schema} for i in inputs],
+             function={"kind": "inline", "code": "def transform(row): return row"},
+             output_schema=schema, **kw)
 
 
 def _ref(path="x.csv", cols=("k",)):
@@ -44,8 +50,9 @@ def test_python_row_function_rejects_multiple_inputs():
     # a row function maps over one input's rows — two inputs is a join
     with pytest.raises(ValidationError):
         m.Stage.model_validate(S(id="t", type="python_row_function",
-                                 inputs=[{"id": "a"}, {"id": "b"}],
-                                 function={"kind": "inline", "code": "def transform(row): return row"}))
+                                 inputs=[{"id": "a", "schema": _K}, {"id": "b", "schema": _K}],
+                                 function={"kind": "inline", "code": "def transform(row): return row"},
+                                 output_schema=_K))
 
 
 def test_llm_is_grain_and_order_preserving():
@@ -68,7 +75,8 @@ def test_human_review_queue_is_grain_and_order_preserving():
     # — a rejected row stays, carrying its rejection — so it is 1:1 in input
     # order, and an eval pathway through a queue stage is row-alignable.
     s = m.Stage.model_validate(S(id="rev", type="human_review_queue",
-                                 inputs=[{"id": "a"}], queue={}))
+                                 inputs=[{"id": "a", "schema": _K}], queue={},
+                                 output_schema=_K))
     assert s.is_grain_and_order_preserving is True
 
 
@@ -76,18 +84,24 @@ def test_publish_not_grain_and_order_preserving():
     # handle_publish runs an authored function whose output is a table of
     # artifact paths — different rows from its input, never row-alignable.
     s = m.Stage.model_validate(S(id="pub", type="publish",
-                                 inputs=[{"id": "a"}], publish={},
+                                 inputs=[{"id": "a", "schema": _K}], publish={},
                                  function={"kind": "inline", "code": "def transform(row): return row"}))
     assert s.is_grain_and_order_preserving is False
 
 
 def test_join_and_aggregate_change_grain():
-    j = m.Stage.model_validate(S(id="j", type="join", inputs=[{"id": "a"}, {"id": "b"}],
-                                 join={"keys": [{"left": "k", "right": "k"}]}))
-    agg = m.Stage.model_validate(S(id="agg", type="aggregate", inputs=[{"id": "a"}],
+    j = m.Stage.model_validate(S(id="j", type="join",
+                                 inputs=[{"id": "a", "schema": _K}, {"id": "b", "schema": _K}],
+                                 join={"keys": [{"left": "k", "right": "k"}]},
+                                 output_schema=_K))
+    agg_in = {"columns": [{"name": "g"}, {"name": "x", "type": "int"}]}
+    agg = m.Stage.model_validate(S(id="agg", type="aggregate",
+                                   inputs=[{"id": "a", "schema": agg_in}],
                                    aggregate={"group_by": ["g"],
                                               "aggregations": [{"formula": "sum", "output_column": "t",
-                                                                "value_column": "x"}]}))
+                                                                "value_column": "x"}]},
+                                   output_schema={"columns": [{"name": "g"},
+                                                              {"name": "t", "type": "int"}]}))
     assert j.is_grain_and_order_preserving is False    # fan-out
     assert agg.is_grain_and_order_preserving is False  # fan-in
 
@@ -260,8 +274,8 @@ def test_scorable_when_tapping_before_the_frame_stage(tmp_path):
 def test_join_changes_grain_so_not_scorable(tmp_path):
     meth = m.parse_workflow([
         _file_input("j1", tmp_path), _file_input("j2", tmp_path),
-        S(id="jn", type="join", inputs=[{"id": "j1"}, {"id": "j2"}],
-          join={"keys": [{"left": "k", "right": "k"}]}),
+        S(id="jn", type="join", inputs=[{"id": "j1", "schema": _K}, {"id": "j2", "schema": _K}],
+          join={"keys": [{"left": "k", "right": "k"}]}, output_schema=_K),
     ])
     v = resolve_eval_run_settings(meth, overrides=[], target="jn")
     assert v.can_score_declaratively is False

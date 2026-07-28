@@ -24,19 +24,18 @@ SELECT_UNPRODUCIBLE_ISSUE = (
 
 def find_join_column_issues(stage: "Stage") -> list[str]:
     """Every join key whose `.left`/`.right` names a column absent from its
-    resolved side's input; a side whose edge declares no schema is skipped,
-    not flagged."""
+    resolved side's input."""
     join = stage.join
     assert join is not None  # Stage._handle_for_type guarantees this for type="join"
     left = resolve_input_columns(stage, 0)
     right = resolve_input_columns(stage, 1)
     issues: list[str] = []
     for key in join.keys or join.on or []:
-        if left is not None and key.left not in left:
+        if key.left not in left:
             issues.append(
                 COLUMN_ISSUE.format(sid=stage.id, field="join key .left", col=key.left, cols=sorted(left))
             )
-        if right is not None and key.right not in right:
+        if key.right not in right:
             issues.append(
                 COLUMN_ISSUE.format(sid=stage.id, field="join key .right", col=key.right, cols=sorted(right))
             )
@@ -45,23 +44,18 @@ def find_join_column_issues(stage: "Stage") -> list[str]:
 
 def find_join_output_issues(stage: "Stage") -> list[str]:
     """Every declared output_schema column (and select entry) the join handle
-    cannot deliver. [] when the stage declares no output_schema and no select
-    problem exists, or when either input edge declares no schema at all — the
-    merged column set is then unknowable, never wrong."""
+    cannot deliver."""
     join = stage.join
     assert join is not None  # Stage._handle_for_type guarantees this for type="join"
+    assert stage.output_schema is not None  # Stage._schemas_declared guarantees this off publish
     left = stage.inputs[0].table_schema
     right = stage.inputs[1].table_schema
-    if left is None or right is None:
-        return []
     merged = derive_join_output_types(join, left, right)
     issues = [
         SELECT_UNPRODUCIBLE_ISSUE.format(sid=stage.id, col=entry, cols=sorted(merged))
         for entry in join.select or []
         if entry not in merged
     ]
-    if stage.output_schema is None:
-        return issues
     effective = (
         {name: merged[name] for name in join.select if name in merged}
         if join.select else merged

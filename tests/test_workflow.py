@@ -7,18 +7,25 @@ from pydantic import ValidationError
 from app import models as m
 from app.models import Stage
 
+_K = {"columns": [{"name": "k"}]}
+
 
 def S(**kw):
     kw.setdefault("name", kw.get("id", "x"))
     return kw
 
 
+def _in(id_, schema=_K):
+    return {"id": id_, "schema": schema}
+
+
 def test_workflow_clean(tmp_path):
     wf = m.parse_workflow([
-        S(id="load", type="input_data",
+        S(id="load", type="input_data", output_schema=_K,
           connector={"kind": "file", "params": {"path": str(tmp_path / "d.csv"), "format": "csv"}}),
-        S(id="extract", type="python_frame_function", inputs=[{"id": "load"}],
-          function={"kind": "inline", "code": "def transform(row): return row"}),
+        S(id="extract", type="python_frame_function", inputs=[_in("load")],
+          function={"kind": "inline", "code": "def transform(row): return row"},
+          output_schema=_K),
     ])
     assert [s.id for s in wf.stages] == ["load", "extract"]
 
@@ -26,9 +33,9 @@ def test_workflow_clean(tmp_path):
 def test_workflow_duplicate_ids(tmp_path):
     with pytest.raises(ValidationError):
         m.parse_workflow([
-            S(id="a", type="input_data",
+            S(id="a", type="input_data", output_schema=_K,
               connector={"kind": "file", "params": {"path": str(tmp_path / "d.csv")}}),
-            S(id="a", type="input_data",
+            S(id="a", type="input_data", output_schema=_K,
               connector={"kind": "file", "params": {"path": str(tmp_path / "d.csv")}}),
         ])
 
@@ -36,16 +43,19 @@ def test_workflow_duplicate_ids(tmp_path):
 def test_workflow_dangling_input():
     with pytest.raises(ValidationError):
         m.parse_workflow([
-            S(id="b", type="python_frame_function", inputs=[{"id": "ghost"}],
-              function={"kind": "inline", "code": "def transform(row): return row"}),
+            S(id="b", type="python_frame_function", inputs=[_in("ghost")],
+              function={"kind": "inline", "code": "def transform(row): return row"},
+              output_schema=_K),
         ])
 
 
 def test_workflow_cycle():
     with pytest.raises(ValidationError):
         m.parse_workflow([
-            S(id="a", type="python_frame_function", inputs=[{"id": "b"}], function={"kind": "inline", "code": "def transform(row): return row"}),
-            S(id="b", type="python_frame_function", inputs=[{"id": "a"}], function={"kind": "inline", "code": "def transform(row): return row"}),
+            S(id="a", type="python_frame_function", inputs=[_in("b")], output_schema=_K,
+              function={"kind": "inline", "code": "def transform(row): return row"}),
+            S(id="b", type="python_frame_function", inputs=[_in("a")], output_schema=_K,
+              function={"kind": "inline", "code": "def transform(row): return row"}),
         ])
 
 
@@ -53,23 +63,28 @@ def test_workflow_cycle():
 # Each RETURNS its issues (all of them) rather than raising on the first.
 def test_validate_inputs_resolve_reports_all_dangling():
     s = Stage.model_validate(S(id="b", type="join",
-                               inputs=[{"id": "ghost1"}, {"id": "ghost2"}],
-                               join={"keys": [{"left": "x", "right": "y"}]}))
+                               inputs=[_in("ghost1", {"columns": [{"name": "x"}]}),
+                                       _in("ghost2", {"columns": [{"name": "y"}]})],
+                               join={"keys": [{"left": "x", "right": "y"}]},
+                               output_schema={"columns": [{"name": "x"}, {"name": "y"}]}))
     issues = m.validate_inputs_resolve([s])
     assert len(issues) == 2  # both dangling inputs, not just the first
     assert all("references no stage" in i for i in issues)
 
 
 def test_detect_cycle_reports_cycle():
-    a = Stage.model_validate(S(id="a", type="python_frame_function", inputs=[{"id": "b"}], function={"kind": "inline", "code": "def transform(row): return row"}))
-    b = Stage.model_validate(S(id="b", type="python_frame_function", inputs=[{"id": "a"}], function={"kind": "inline", "code": "def transform(row): return row"}))
+    a = Stage.model_validate(S(id="a", type="python_frame_function", inputs=[_in("b")], output_schema=_K,
+                               function={"kind": "inline", "code": "def transform(row): return row"}))
+    b = Stage.model_validate(S(id="b", type="python_frame_function", inputs=[_in("a")], output_schema=_K,
+                               function={"kind": "inline", "code": "def transform(row): return row"}))
     assert m.detect_cycle([a, b])  # non-empty
 
 
 def test_detect_cycle_empty_when_acyclic(tmp_path):
-    a = Stage.model_validate(S(id="a", type="input_data",
+    a = Stage.model_validate(S(id="a", type="input_data", output_schema=_K,
                                connector={"kind": "file", "params": {"path": str(tmp_path / "d.csv")}}))
-    b = Stage.model_validate(S(id="b", type="python_frame_function", inputs=[{"id": "a"}], function={"kind": "inline", "code": "def transform(row): return row"}))
+    b = Stage.model_validate(S(id="b", type="python_frame_function", inputs=[_in("a")], output_schema=_K,
+                               function={"kind": "inline", "code": "def transform(row): return row"}))
     assert m.detect_cycle([a, b]) == []
 
 
@@ -77,7 +92,7 @@ def test_detect_cycle_empty_when_acyclic(tmp_path):
 # check on already-validated stages and returns all issues at once ([] means clean).
 def test_validate_workflow_clean_is_empty(tmp_path):
     stages = [
-        Stage.model_validate(S(id="load", type="input_data",
+        Stage.model_validate(S(id="load", type="input_data", output_schema=_K,
                                connector={"kind": "file",
                                           "params": {"path": str(tmp_path / "d.csv"), "format": "csv"}})),
     ]
@@ -86,8 +101,10 @@ def test_validate_workflow_clean_is_empty(tmp_path):
 
 def test_validate_workflow_reports_issues():
     s = Stage.model_validate(S(id="j", type="join",
-                               inputs=[{"id": "a"}, {"id": "b"}],
-                               join={"keys": [{"left": "x", "right": "y"}]}))
+                               inputs=[_in("a", {"columns": [{"name": "x"}]}),
+                                       _in("b", {"columns": [{"name": "y"}]})],
+                               join={"keys": [{"left": "x", "right": "y"}]},
+                               output_schema={"columns": [{"name": "x"}, {"name": "y"}]}))
     issues = m.validate_workflow([s])
     assert issues  # both inputs dangle — reported, not raised
 
@@ -175,11 +192,13 @@ def _producer(**over):
 
 
 def _consumer(input_schema, **over):
-    """python_frame_function `down` consuming `up`, declaring `input_schema`."""
+    """python_frame_function `down` consuming `up`, declaring `input_schema`.
+    Its `transform` is the identity, so it emits exactly what it consumes."""
     base = dict(
         id="down", type="python_frame_function",
         inputs=[{"id": "up", "schema": input_schema}],
         function={"kind": "inline", "code": "def transform(df): return df"},
+        output_schema=input_schema,
     )
     base.update(over)
     return S(**base)
@@ -251,41 +270,80 @@ def test_check_edge_schemas_flags_type_disagreement():
     assert "score" in issues[0] and "type" in issues[0]
 
 
-def test_check_edge_schemas_skips_edge_without_declared_input_schema():
-    stages = m.parse_workflow([
-        _producer(),
-        S(id="down", type="python_frame_function", inputs=[{"id": "up"}],
-          function={"kind": "inline", "code": "def transform(df): return df"}),
-    ]).stages
-    assert m.validate_edge_schemas(stages) == []
+def _publish_upstream_stages():
+    """`down` reads `pub`, the one stage type exempt from declaring an
+    output_schema — built without the graph validator, which rejects the edge."""
+    return [
+        Stage.model_validate(_producer()),
+        Stage.model_validate(
+            S(id="pub", type="publish",
+              inputs=[{"id": "up", "schema": {"columns": [{"name": "id", "type": "str"}]}}],
+              publish={"format": "json"},
+              function={"kind": "inline",
+                        "code": "def transform(df, output_dir): return df"})),
+        Stage.model_validate(
+            _consumer({"columns": [{"name": "anything", "type": "str"}]}, id="down",
+                      inputs=[{"id": "pub",
+                               "schema": {"columns": [{"name": "anything", "type": "str"}]}}])),
+    ]
 
 
-def test_check_edge_schemas_skips_when_upstream_has_no_output_schema():
-    # Unresolvable means unknowable, never wrong: no upstream output_schema → skip.
-    stages = m.parse_workflow([
-        _producer(output_schema=None),
-        _consumer({"columns": [{"name": "anything", "type": "str"}]}),
-    ]).stages
-    assert m.validate_edge_schemas(stages) == []
+def test_check_edge_schemas_raises_on_an_upstream_declaring_no_output_schema():
+    """Every type but publish must declare an output_schema, and a publish stage
+    may not be an upstream — so an upstream without one means validation was
+    bypassed, not a finding to report."""
+    with pytest.raises(ValueError, match="declares no output_schema"):
+        m.validate_edge_schemas(_publish_upstream_stages())
+
+
+def test_graph_issues_reports_a_publish_upstream_instead_of_raising():
+    """The publish-terminal check gates validate_edge_schemas exactly as the
+    dangling-input check does, so this workflow comes back as a readable issue."""
+    issues = m.validate_workflow(_publish_upstream_stages())
+    assert len(issues) == 1
+    assert "down" in issues[0] and "pub" in issues[0] and "publish stage" in issues[0]
+
+
+def test_check_edge_schemas_raises_on_an_input_naming_no_stage():
+    """A dangling input is a programming error here, not a finding: callers run
+    validate_inputs_resolve first (graph_issues does), so reaching this means
+    stage validation was bypassed."""
+    stages = [Stage.model_validate(_consumer({"columns": [{"name": "id", "type": "str"}]}))]
+    with pytest.raises(ValueError, match="references no stage"):
+        m.validate_edge_schemas(stages)
+
+
+def test_graph_issues_reports_a_dangling_input_instead_of_raising():
+    """graph_issues short-circuits before validate_edge_schemas when an input
+    dangles, so an invalid-but-reportable workflow still comes back as issues."""
+    issues = m.validate_workflow(
+        [Stage.model_validate(_consumer({"columns": [{"name": "id", "type": "str"}]}))])
+    assert issues == ["`down`: input `up` references no stage"]
 
 
 # ── A publish stage may not be another stage's input (validate_publish_is_terminal) ─
 # A publish stage writes files instead of producing a table, so nothing downstream
 # can read from it. It is also the one type exempt from declaring an output_schema,
-# which is why such an edge would otherwise slip past validate_edge_schemas.
+# so this check is what keeps validate_edge_schemas from meeting an upstream it
+# cannot check.
 def _publish(stage_id="pub", inputs=("load",)):
-    return S(id=stage_id, type="publish", inputs=[{"id": i} for i in inputs],
+    return S(id=stage_id, type="publish", inputs=[_in(i) for i in inputs],
              publish={"format": "json"},
              function={"kind": "inline", "code": "def transform(df, output_dir): return df"})
 
 
+_X = {"columns": [{"name": "x"}]}
+_Y = {"columns": [{"name": "y"}]}
+
+
 def _reader(stage_id, upstream):
-    return S(id=stage_id, type="python_frame_function", inputs=[{"id": upstream}],
-             function={"kind": "inline", "code": "def transform(df): return df"})
+    return S(id=stage_id, type="python_frame_function", inputs=[_in(upstream)],
+             function={"kind": "inline", "code": "def transform(df): return df"},
+             output_schema=_K)
 
 
 def _loader():
-    return S(id="load", type="input_data", connector={"kind": "file"})
+    return S(id="load", type="input_data", connector={"kind": "file"}, output_schema=_K)
 
 
 def test_validate_publish_is_terminal_flags_stage_reading_a_publish():
@@ -300,8 +358,9 @@ def test_validate_publish_is_terminal_reports_every_offending_edge():
     stages = [Stage.model_validate(s) for s in (
         _loader(), _publish("pub_a"), _publish("pub_b"),
         _reader("down_a", "pub_a"), _reader("down_b", "pub_b"),
-        S(id="down_c", type="join", inputs=[{"id": "pub_a"}, {"id": "pub_b"}],
-          join={"keys": [{"left": "x", "right": "y"}]}),
+        S(id="down_c", type="join", inputs=[_in("pub_a", _X), _in("pub_b", _Y)],
+          join={"keys": [{"left": "x", "right": "y"}]},
+          output_schema={"columns": [{"name": "x"}, {"name": "y"}]}),
     )]
     issues = m.validate_publish_is_terminal(stages)
     assert len(issues) == 4  # every offending edge in one pass, not just the first

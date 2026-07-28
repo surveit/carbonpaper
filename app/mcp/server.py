@@ -81,9 +81,9 @@ A stage is written, validated against the whole graph, and only then stored.
 5. Plan the stages, then author them in DEPENDENCY ORDER: a stage's `inputs` may name only
    stages that already exist in the workflow. The first stage you add starts the workflow,
    so it takes no inputs — it is the input_data stage that reads the source.
-6. An upstream stage's output_schema is what flows down the edge. A stage's declared input
-   schema is usually that schema verbatim; it differs when the stage reads only part of what
-   upstream emits. Either way it must be a subset the upstream can satisfy.
+6. An upstream stage's output_schema is what flows down the edge. A stage's MANDATORY
+   declared input schema is usually that schema verbatim; it differs when the stage reads
+   only part of what upstream emits. Either way it must be a subset the upstream can satisfy.
 7. As the graph grows: describe_workflow(project_id) for the shape (ids, types, inputs,
    review state), read_stage(project_id, stage_id) for one stage in full,
    edit_stage(project_id, stage_id, changes_json) to change only the fields you name (a

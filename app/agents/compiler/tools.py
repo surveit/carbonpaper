@@ -57,8 +57,9 @@ def make_editing_tools(ctx: EditingContext) -> list[Callable[..., Any]]:
         """Create a NEW stage in a project's workflow. `stage_json` is a full
         stage as JSON: id (new and unique — use edit_stage to change an existing
         one), name, type, the type's handle block (e.g. connector / llm / function),
-        output_schema, and inputs. Every id listed in `inputs` must ALREADY be a
-        stage in this workflow — a dangling input is rejected. The stage-type catalog is
+        MANDATORY output_schema, and inputs each with a MANDATORY `schema`. Every id
+        listed in `inputs` must ALREADY be a stage in this workflow — a dangling input
+        is rejected. The stage-type catalog is
         in your instructions; read_stage on a similar existing stage shows the
         output_schema / inputs shape. Validated
         first; if invalid, nothing is written and the issues are returned. The new
@@ -171,7 +172,8 @@ TOOL_SCHEMAS: dict[str, ToolInputSchema] = {
             str,
             "The complete NEW stage as a JSON object (encoded as a string): id "
             "(new and unique), name, type, the type's handle block (connector / "
-            "llm / function / ...), output_schema, and inputs. Every id in inputs "
+            "llm / function / ...), MANDATORY output_schema, and inputs each with a "
+            "MANDATORY `schema`. Every id in inputs "
             "must already be a stage in this workflow, or it is rejected.",
         ],
     },

@@ -35,7 +35,7 @@ def _seed(tmp_path: Path) -> Path:
     # whole resulting workflow (graph included), not just the one edited stage.
     (compiled / "01_load.json").write_text(
         json.dumps({"id": "load", "name": "Load", "type": "input_data",
-                    "connector": {"kind": "file"}}),
+                    "connector": {"kind": "file"}, "output_schema": _IN_SCHEMA}),
         encoding="utf-8",
     )
     (compiled / "02_score.json").write_text(json.dumps(_VALID), encoding="utf-8")
@@ -86,7 +86,8 @@ def test_missing_stage_file_raises(tmp_path: Path) -> None:
     pdir = _seed(tmp_path)
     # A validly-shaped input_data spec (connector required) so the call reaches
     # the file-lookup step this test targets, rather than failing validation first.
-    valid_ghost = {"id": "ghost", "name": "x", "type": "input_data", "connector": {"kind": "file"}}
+    valid_ghost = {"id": "ghost", "name": "x", "type": "input_data",
+                   "connector": {"kind": "file"}, "output_schema": _IN_SCHEMA}
     with pytest.raises(FileNotFoundError):
         stage_edit.edit_stage_spec(pdir, "ghost", json.dumps(valid_ghost))
 
@@ -163,7 +164,7 @@ def _seed_load(tmp_path: Path) -> Path:
     compiled.mkdir(parents=True, exist_ok=True)
     (compiled / "01_load.json").write_text(
         json.dumps({"id": "load", "name": "Load", "type": "input_data",
-                    "connector": {"kind": "file"}}),
+                    "connector": {"kind": "file"}, "output_schema": _IN_SCHEMA}),
         encoding="utf-8",
     )
     return tmp_path / "beta"
@@ -199,7 +200,7 @@ def test_add_stage_rejects_dangling_input(tmp_path: Path) -> None:
 def test_add_stage_rejects_duplicate_id(tmp_path: Path) -> None:
     pdir = _seed_load(tmp_path)
     dup = {"id": "load", "name": "Load again", "type": "input_data",
-           "connector": {"kind": "file"}}
+           "connector": {"kind": "file"}, "output_schema": _IN_SCHEMA}
     result = stage_edit.add_stage_spec(pdir, json.dumps(dup))
     assert result.ok is False and any("already exists" in i for i in result.issues)
 
@@ -237,7 +238,7 @@ def test_remove_nonexistent_stage_raises(tmp_path: Path) -> None:
 # ─── An empty workflow is a legitimate starting state ────────────────────────
 
 _FIRST_STAGE = {"id": "load", "name": "Load", "type": "input_data",
-                "connector": {"kind": "file"}}
+                "connector": {"kind": "file"}, "output_schema": _IN_SCHEMA}
 
 
 def _seed_empty(tmp_path: Path) -> Path:

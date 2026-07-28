@@ -34,7 +34,9 @@ def test_no_input_rows_reports_error():
 
 
 def test_non_llm_stage_returns_none():
-    stage = Stage.model_validate(
-        {"id": "load", "name": "Load", "type": "input_data", "connector": {"kind": "file"}}
-    )
+    stage = Stage.model_validate({
+        "id": "load", "name": "Load", "type": "input_data",
+        "output_schema": {"columns": [{"name": "quote", "type": "str"}]},
+        "connector": {"kind": "file"},
+    })
     assert build_llm_example(stage, [{"id": "load", "preview": {"preview": [{"quote": "x"}]}}]) is None

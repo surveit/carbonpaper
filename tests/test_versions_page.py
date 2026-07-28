@@ -20,11 +20,14 @@ from app.services import versioning
 
 client = TestClient(app)
 
+# Every non-publish stage declares its output_schema
+# (app/models/stage.py: Stage._schemas_declared).
 _STAGE = {
     "id": "load",
     "name": "Load rows",
     "type": "input_data",
     "connector": {"kind": "file"},
+    "output_schema": {"columns": [{"name": "doc_id", "type": "str", "nullable": False}]},
 }
 
 

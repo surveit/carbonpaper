@@ -71,18 +71,6 @@ def test_where_unparseable_predicate_rejected():
         Stage.model_validate(_aggregate_stage(group_by=["a"], edge_columns=["a"], where="`weird name` == 1"))
 
 
-def test_no_edge_schema_declared_is_skipped_not_flagged():
-    """Edge-only resolution: when the input edge declares no schema at all,
-    a bad-looking group_by is unresolvable, not wrong — skipped rather than
-    flagged."""
-    stage = {
-        "id": "agg", "type": "aggregate", "name": "agg", "inputs": ["src"],
-        "output_schema": {"columns": [{"name": "nope", "type": "str", "nullable": False},
-                                      {"name": "n", "type": "int", "nullable": False}]},
-        "aggregate": {"group_by": ["nope"], "aggregations": [{"output_column": "n", "formula": "count"}]},
-    }
-    Stage.model_validate(stage)
-
 
 def test_column_declared_only_on_a_sibling_producer_is_not_enough():
     """EDGE-only, never a producer-output union: even if some OTHER stage in

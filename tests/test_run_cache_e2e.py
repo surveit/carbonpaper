@@ -20,6 +20,11 @@ from app.services import versioning
 
 _ROWS = [{"name": "a", "val": 1}, {"name": "b", "val": 2}, {"name": "c", "val": 3}]
 
+_LOADED = [{"name": "name", "type": "str"}, {"name": "val", "type": "int"}]
+_CLEANED = [*_LOADED, {"name": "doubled", "type": "int"}]
+_FLAGGED = [*_CLEANED, {"name": "big", "type": "bool"}]
+_TOTALLED = [*_FLAGGED, {"name": "total", "type": "int"}]
+
 # One fully-computing run's probe tally over `_ROWS`: a row-mapped stage's body
 # runs once per row, a frame-shaped stage's once for the whole frame.
 _EVERYTHING_COMPUTED = Counter({"clean": 3, "flag": 3, "totals": 1})
@@ -76,20 +81,24 @@ def _write_project(
         "id": "load", "name": "Load items", "type": "input_data",
         "connector": {"kind": "file", "params": {
             "path": str(root / "data" / "items.csv"), "format": "csv"}},
+        "output_schema": {"columns": _LOADED},
     })
     _write_stage(root, "02_clean", {
         "id": "clean", "name": "Clean", "type": "python_row_function",
-        "inputs": [{"id": "load"}],
+        "inputs": [{"id": "load", "schema": {"columns": _LOADED}}],
+        "output_schema": {"columns": _CLEANED},
         "function": {"kind": "inline", "code": _clean_code(probe, edit=clean_edit)},
     })
     _write_stage(root, "03_flag", {
         "id": "flag", "name": "Flag", "type": "python_row_function",
-        "inputs": [{"id": "clean"}], "cache": flag_cache,
+        "inputs": [{"id": "clean", "schema": {"columns": _CLEANED}}], "cache": flag_cache,
+        "output_schema": {"columns": _FLAGGED},
         "function": {"kind": "inline", "code": _flag_code(probe)},
     })
     _write_stage(root, "04_totals", {
         "id": "totals", "name": "Totals", "type": "python_frame_function",
-        "inputs": [{"id": "flag"}],
+        "inputs": [{"id": "flag", "schema": {"columns": _FLAGGED}}],
+        "output_schema": {"columns": _TOTALLED},
         "function": {"kind": "inline", "code": _totals_code(probe, edit=totals_edit)},
     })
     return probe

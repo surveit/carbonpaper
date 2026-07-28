@@ -148,6 +148,12 @@ def _workflow_stages(authored_path: str) -> list[dict]:
                     {"name": "flagged", "type": "bool"}],
         "primary_key": ["name"],
     }
+    # groupby("flagged", as_index=False)["val"].sum() — one row per flag value,
+    # in that column order.
+    totals_schema = {
+        "columns": [{"name": "flagged", "type": "bool"}, {"name": "val", "type": "int"}],
+        "primary_key": ["flagged"],
+    }
     return [
         {
             "id": "load", "name": "Load rows", "type": "input_data",
@@ -172,10 +178,11 @@ def _workflow_stages(authored_path: str) -> list[dict]:
                 "def transform(df):\n"
                 "    return df.groupby(\"flagged\", as_index=False)[\"val\"].sum()\n"
             )},
+            "output_schema": totals_schema,
         },
         {
             "id": "report", "name": "Publish totals", "type": "publish",
-            "inputs": [{"id": "totals"}],
+            "inputs": [{"id": "totals", "schema": totals_schema}],
             "publish": {"format": "csv", "destination": "report/"},
             "function": {"kind": "inline", "code": (
                 "import pandas as pd\n"

@@ -28,20 +28,5 @@ def test_one_file_per_present_ok():
 
 
 def test_one_file_per_unset_is_clean():
-    stage = {
-        "id": "pub", "type": "publish", "name": "pub", "inputs": ["src"],
-        "output_schema": {"columns": [{"name": "a", "type": "str", "nullable": False}]},
-        "publish": {},
-        "function": {"kind": "inline", "code": "def transform(df, output_dir):\n    return df"},
-    }
-    Stage.model_validate(stage)
+    Stage.model_validate(_publish_stage(one_file_per=None, edge_columns=["a"]))
 
-
-def test_no_edge_schema_declared_is_skipped():
-    stage = {
-        "id": "pub", "type": "publish", "name": "pub", "inputs": ["src"],
-        "output_schema": {"columns": [{"name": "a", "type": "str", "nullable": False}]},
-        "publish": {"one_file_per": "nope"},
-        "function": {"kind": "inline", "code": "def transform(df, output_dir):\n    return df"},
-    }
-    Stage.model_validate(stage)

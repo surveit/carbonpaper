@@ -4,6 +4,7 @@ is safe alongside other lifespan-running tests.
 from __future__ import annotations
 
 import asyncio
+import json
 import time
 from pathlib import Path
 
@@ -128,7 +129,8 @@ def _write_compiled_workflow(pdir: Path) -> None:
     compiled = pdir / "compiled"
     compiled.mkdir(parents=True)
     stages: list[dict[str, object]] = [
-        {"id": "load", "name": "Load", "type": "input_data", "connector": {"kind": "file"}},
+        {"id": "load", "name": "Load", "type": "input_data", "connector": {"kind": "file"},
+         "output_schema": _IN_SCHEMA},
         {"id": "double", "name": "Double", "type": "python_row_function",
          "inputs": [{"id": "load", "schema": _IN_SCHEMA}], "output_schema": _OUT_SCHEMA,
          "function": {"kind": "inline", "code": _DOUBLE},
@@ -274,7 +276,11 @@ def test_mcp_add_stage_creates_the_first_stage_of_a_new_project(tmp_path, monkey
 
     added = server.add_stage(
         project_id="trail",
-        stage_json='{"id": "load", "name": "Load", "type": "input_data", "connector": {"kind": "file"}}',
+        stage_json=json.dumps({
+            "id": "load", "name": "Load", "type": "input_data",
+            "connector": {"kind": "file"},
+            "output_schema": {"columns": [{"name": "doc_id", "type": "str", "nullable": False}]},
+        }),
     )
     assert added == {"ok": True, "issues": []}
     assert server.describe_workflow(project_id="trail")["stages"][0]["id"] == "load"

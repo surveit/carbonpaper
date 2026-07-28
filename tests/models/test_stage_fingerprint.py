@@ -3,12 +3,15 @@ from __future__ import annotations
 from app.models import Stage
 
 
-def _row_function_stage(**overrides):
+def _row_function_stage(input_id="src", **overrides):
     base = {
         "id": "step",
         "type": "python_row_function",
         "name": "Step",
-        "inputs": ["src"],
+        "inputs": [{
+            "id": input_id,
+            "schema": {"columns": [{"name": "a", "type": "str", "nullable": False}]},
+        }],
         "output_schema": {"columns": [{"name": "a", "type": "str", "nullable": False}]},
         "function": {"kind": "inline", "code": "def transform(row):\n    return row\n"},
     }
@@ -29,7 +32,13 @@ def _queue_stage(**queue_overrides):
         "id": "review",
         "type": "human_review_queue",
         "name": "review",
-        "inputs": ["src"],
+        "inputs": [{
+            "id": "src",
+            "schema": {"columns": [
+                {"name": "id", "type": "str", "nullable": False},
+                {"name": "score", "type": "float", "nullable": False},
+            ]},
+        }],
         "output_schema": {"columns": [{"name": "id", "type": "str", "nullable": False}]},
         "queue": queue,
     })
@@ -41,8 +50,8 @@ def test_compute_definition_fingerprint_is_deterministic():
 
 
 def test_compute_definition_fingerprint_ignores_incidental_fields():
-    a = _row_function_stage(id="step_a", name="Step A", inputs=["src_a"])
-    b = _row_function_stage(id="step_b", name="Step B", inputs=["src_b"])
+    a = _row_function_stage(input_id="src_a", id="step_a", name="Step A")
+    b = _row_function_stage(input_id="src_b", id="step_b", name="Step B")
     assert a.compute_definition_fingerprint() == b.compute_definition_fingerprint()
 
 

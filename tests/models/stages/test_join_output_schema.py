@@ -28,8 +28,8 @@ def _join_stage(*, output_columns=None, select=None, left=_LEFT, right=_RIGHT,
         "name": "Join facilities to filings",
         "type": "join",
         "inputs": [
-            {"id": "facilities", **({"schema": left} if left else {})},
-            {"id": "filings", **({"schema": right} if right else {})},
+            {"id": "facilities", "schema": left},
+            {"id": "filings", "schema": right},
         ],
         "join": {
             "type": "left",
@@ -52,7 +52,9 @@ def _issues(stage_dict) -> str:
 def test_select_entry_not_derivable_rejected():
     # The runtime silently drops a select entry the merge lacks; save time
     # rejects it instead.
-    msg = _issues(_join_stage(select=["facility_id", "amount_typo"]))
+    msg = _issues(_join_stage(
+        select=["facility_id", "amount_typo"],
+        output_columns=[{"name": "facility_id", "type": "str"}]))
     assert "amount_typo" in msg
     assert "join.select" in msg
 
@@ -104,13 +106,6 @@ def test_select_projection_limits_declared():
     ))
     assert "score" in msg
 
-
-def test_missing_either_edge_schema_skips():
-    stage = Stage.model_validate(_join_stage(
-        right=None,
-        output_columns=[{"name": "anything_at_all", "type": "str"}],
-    ))
-    assert stage.id == "enrich"
 
 
 def test_valid_join_passes():

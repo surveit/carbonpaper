@@ -64,6 +64,10 @@ mapper only ever passes a row through or defers it.
 
 `validation.py` — DATA validation of a dataframe against an `output_schema` (columns, types,
 ranges, nullability, PK uniqueness), distinct from the stage schemas in `app/models/`.
+An error-severity issue in the OUTPUT report (missing column, failed coercion, null in a
+non-nullable column, duplicate primary key) fails the stage: the record is `error` with an
+`OutputSchemaViolation` and downstream stages are blocked. `validation_warnings` means
+warning-severity issues only. Input-side issues alone still only warn.
 
 ## Run / debug
 ```

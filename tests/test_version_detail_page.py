@@ -20,11 +20,18 @@ from app.services import versioning
 client = TestClient(app)
 
 
+# The columns of the CSV the `project` fixture writes; every non-publish stage
+# must declare its output_schema (app/models/stage.py: Stage._schemas_declared).
+_ROWS_SCHEMA = {"columns": [{"name": "name", "type": "str", "nullable": False},
+                            {"name": "val", "type": "int", "nullable": False}]}
+
+
 def _stage(data_path: Path) -> dict:
     return {
         "id": "load", "name": "Load rows", "type": "input_data",
         "connector": {"kind": "file",
                       "params": {"path": str(data_path), "format": "csv"}},
+        "output_schema": _ROWS_SCHEMA,
     }
 
 
@@ -89,6 +96,7 @@ def test_run_this_version_400s_not_500s_on_unbound_input(
     unbound_stage = {
         "id": "load", "name": "Load rows", "type": "input_data",
         "connector": {"kind": "file", "params": {"format": "csv"}},
+        "output_schema": _ROWS_SCHEMA,
     }
     meta = versioning.create_version_from_stages(
         project, [unbound_stage], message="v-unbound", reviewer="local")

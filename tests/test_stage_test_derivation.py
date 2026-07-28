@@ -49,7 +49,10 @@ def test_task_never_contains_existing_tests():
 def test_deriver_rejects_non_python_stages():
     bad = Stage.model_validate({
         "id": "pub", "name": "Publish", "type": "publish",
-        "inputs": [{"id": "double"}],
+        "inputs": [{"id": "double", "schema": {"columns": [
+            {"name": "amount", "type": "float", "nullable": False},
+            {"name": "doubled", "type": "float", "nullable": False},
+        ]}}],
         "function": {"kind": "inline", "code": "def transform(df, output_dir):\n    return df\n"},
         "publish": {},
     })

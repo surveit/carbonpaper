@@ -362,14 +362,10 @@ class ReviewConfig(_Base):
     queue_name: Optional[str] = None
 
 
-class InputRef(_Base):
-    """One upstream dependency: the upstream stage id, plus (optionally) the
-    schema this stage expects that upstream's output to satisfy. The runner
-    validates the real dataframe against `table_schema` before the stage runs.
-    The compiled stage spells the field `schema:`; the python name differs only
-    because pydantic reserves `schema` on BaseModel."""
+class StageInput(_Base):
+    """Spelled `schema:` on a compiled stage; pydantic reserves `schema` on BaseModel."""
     id: str
-    table_schema: Optional[TableSchema] = Field(default=None, alias="schema")
+    table_schema: TableSchema = Field(alias="schema")
 
 
 # ── Stage ────────────────────────────────────────────────────────────────────
@@ -396,21 +392,19 @@ class Stage(_Base):
     type: StageType
     name: str
     source: Optional[SourceRef] = None
-    inputs: list[InputRef] = Field(
+    inputs: list[StageInput] = Field(
         default_factory=list,
         description=(
-            "Upstream dependencies: each is an upstream stage id plus, optionally, the schema "
+            "Upstream dependencies: each is an upstream stage id plus the REQUIRED schema "
             "this stage expects that input to satisfy — which is just the upstream stage's "
-            "output_schema. An llm_transform's single input must declare a primary_key."
+            "output_schema."
         ),
     )
     output_schema: Optional[TableSchema] = Field(
         default=None,
         description=(
-            "Columns this stage outputs, with an optional primary_key. For an llm_transform "
-            "this must be strictly ADDITIVE and 1:1: declare the SAME primary_key as its "
-            "single input's schema, keep every input column unchanged, and add at least one "
-            "new column (one input row -> one output row)."
+            "Columns this stage outputs, with an optional primary_key. REQUIRED for every "
+            "type except `publish`."
         ),
     )
 
@@ -447,7 +441,8 @@ class Stage(_Base):
     @field_validator("inputs", mode="before")
     @classmethod
     def _bare_id_shorthand(cls, v: Any) -> Any:
-        """Accept `inputs: [upstream_id]` shorthand for `[{id: upstream_id}]`."""
+        """Normalise the bare-id form `inputs: [upstream_id]` to `[{id: upstream_id}]`,
+        which then fails on the missing `schema`."""
         if not isinstance(v, list):
             return v
         return [{"id": item} if isinstance(item, str) else item for item in v]
@@ -526,6 +521,21 @@ class Stage(_Base):
         return self
 
     @model_validator(mode="after")
+    def _schemas_declared(self) -> "Stage":
+        issues = [
+            f"input `{ref.id}` declares a schema with no columns"
+            for ref in self.inputs
+            if not ref.table_schema.columns
+        ]
+        if self.type != StageType.publish and not (
+            self.output_schema and self.output_schema.columns
+        ):
+            issues.append("declares no output_schema")
+        if issues:
+            raise ValueError(f"type `{self.type}`: " + "; ".join(issues))
+        return self
+
+    @model_validator(mode="after")
     def _llm_transform_one_to_one(self) -> "Stage":
         """An llm_transform maps one input row to one output row, so on its
         DECLARED schemas alone it must: take exactly one input; declare a
@@ -547,13 +557,7 @@ class Stage(_Base):
             )
         input_schema = self.inputs[0].table_schema
         output_schema = self.output_schema
-        if input_schema is None or output_schema is None:
-            missing = "input schema" if input_schema is None else "output_schema"
-            raise ValueError(
-                f"llm_transform declares no {missing}; a 1:1 stage needs a "
-                "primary_key on both its input and output schemas"
-            )
-
+        assert output_schema is not None  # _schemas_declared guarantees this off publish
         issues = _find_primary_key_issues(input_schema, output_schema)
         issues.extend(_find_additive_shape_issues(input_schema, output_schema))
         if issues:
@@ -601,8 +605,7 @@ class Stage(_Base):
         `app.models.stages.shared.resolve_input_columns`. EDGE-ONLY: this says
         nothing about what an upstream producer itself declares, so it holds
         for a single stage in isolation, independent of the rest of any
-        workflow. A reference whose edge declares no schema at all is skipped,
-        not flagged — unresolvable means unknowable, never wrong.
+        workflow.
 
         Runs after `_handle_for_type`, so the type-matched handle block (join/
         aggregate/publish/llm/queue) this dispatches on is already guaranteed

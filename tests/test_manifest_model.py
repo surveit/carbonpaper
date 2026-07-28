@@ -71,7 +71,8 @@ def test_minted_manifest_omits_the_run_level_optionals():
     abs_path = str((Path.cwd() / "x.csv").resolve())
     stage = Stage.model_validate(
         {"id": "s", "name": "S", "type": "input_data",
-         "connector": {"kind": "file", "params": {"path": abs_path, "format": "csv"}}}
+         "connector": {"kind": "file", "params": {"path": abs_path, "format": "csv"}},
+         "output_schema": {"columns": [{"name": "k"}]}}
     )
     manifest = create_run_manifest(
         [stage], run_id="r", project="p", workflow_version="v",

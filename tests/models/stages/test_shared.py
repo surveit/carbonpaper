@@ -20,28 +20,8 @@ def _stage_with_edge_schema(columns):
     })
 
 
-def _stage_without_edge_schema():
-    return Stage.model_validate({
-        "id": "agg", "type": "aggregate", "name": "agg", "inputs": ["src"],
-        "output_schema": {"columns": [{"name": "n", "type": "int", "nullable": False}]},
-        "aggregate": {"group_by": [], "aggregations": [{"output_column": "n", "formula": "count"}]},
-    })
-
-
 def test_resolve_input_columns_reads_the_edge_schema():
     assert resolve_input_columns(_stage_with_edge_schema(["a", "b"]), 0) == {"a", "b"}
-
-
-def test_resolve_input_columns_is_none_when_edge_declares_no_schema():
-    """None ("unknowable"), not an empty set ("no columns") — the two must
-    stay distinguishable, since a caller treats None as skip-the-check."""
-    assert resolve_input_columns(_stage_without_edge_schema(), 0) is None
-
-
-def test_resolve_input_columns_empty_schema_is_an_empty_set_not_none():
-    """An edge that declares a schema with zero columns is still a DECLARED
-    schema — resolvable, just empty — distinct from no schema at all."""
-    assert resolve_input_columns(_stage_with_edge_schema([]), 0) == set()
 
 
 def test_find_predicate_column_issues_reports_missing_column():
@@ -66,5 +46,6 @@ def test_find_config_column_issues_is_empty_for_a_type_with_no_validator():
     load = Stage.model_validate({
         "id": "load", "type": "input_data", "name": "load",
         "connector": {"kind": "file", "params": {}},
+        "output_schema": {"columns": [{"name": "a", "type": "str", "nullable": False}]},
     })
     assert find_config_column_issues(load) == []

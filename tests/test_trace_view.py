@@ -10,13 +10,25 @@ def _stage(data: dict) -> Stage:
     return Stage.model_validate(data)
 
 
+# The columns the traced rows carry: seeds emits facility_id, enrich adds score.
+# Every input declares the schema it expects and every non-publish stage declares
+# its output_schema (app/models/stage.py: Stage._schemas_declared).
+_SEEDS_SCHEMA = {"columns": [{"name": "facility_id", "type": "str"}],
+                 "primary_key": ["facility_id"]}
+_ENRICH_SCHEMA = {"columns": [{"name": "facility_id", "type": "str"},
+                              {"name": "score", "type": "int"}],
+                  "primary_key": ["facility_id"]}
+
+
 def _stages() -> dict[str, Stage]:
     return {
         "seeds": _stage({"id": "seeds", "type": "input_data", "name": "Load seeds",
-                         "connector": {"kind": "file"}}),
+                         "connector": {"kind": "file"},
+                         "output_schema": _SEEDS_SCHEMA}),
         "enrich": _stage({
             "id": "enrich", "type": "python_row_function", "name": "Enrich",
-            "inputs": [{"id": "seeds"}],
+            "inputs": [{"id": "seeds", "schema": _SEEDS_SCHEMA}],
+            "output_schema": _ENRICH_SCHEMA,
             "function": {"kind": "inline", "code": "def transform(row):\n    return row"},
         }),
     }

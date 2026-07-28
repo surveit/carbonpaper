@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from app.models import InputRef, JoinConfig, Stage
+from app.models import StageInput, JoinConfig, Stage
 from app.models.stages.join import find_join_column_issues
 
 
@@ -70,10 +70,10 @@ def test_find_join_column_issues_ignores_select():
         name="j",
         type="join",
         inputs=[
-            InputRef.model_validate(
+            StageInput.model_validate(
                 {"id": "L", "schema": {"columns": [{"name": "a", "type": "str", "nullable": False}]}}
             ),
-            InputRef.model_validate(
+            StageInput.model_validate(
                 {"id": "R", "schema": {"columns": [{"name": "b", "type": "str", "nullable": False}]}}
             ),
         ],
@@ -83,12 +83,3 @@ def test_find_join_column_issues_ignores_select():
     )
     assert find_join_column_issues(stage) == []
 
-
-def test_side_with_no_edge_schema_is_skipped():
-    stage = {
-        "id": "j", "type": "join", "name": "j",
-        "inputs": ["L", "R"],
-        "output_schema": {"columns": [{"name": "a", "type": "str", "nullable": False}]},
-        "join": {"type": "inner", "keys": [{"left": "ghost_left", "right": "ghost_right"}]},
-    }
-    Stage.model_validate(stage)

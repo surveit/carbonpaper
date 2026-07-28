@@ -27,21 +27,28 @@ from app.core.stage_cache import StageCacheEntry
 from conftest import contribution_of, make_run_context
 
 
-def _row_stage(output_schema=None):
-    kw = {
+# The single `x` column of the frames these tests hand the driver. The declared
+# schemas only have to be present and honest: these handlers are constructed
+# directly, so a schema is read at all only where the handler is asked to
+# project (`project_output_to_declared=True`), and those tests pass their own.
+_X_COLUMN = [{"name": "x", "type": "int"}]
+
+
+def _row_stage(output_schema=None, input_columns=_X_COLUMN):
+    return Stage.model_validate({
         "id": "t", "name": "t", "type": "python_row_function",
-        "inputs": [{"id": "src"}],
+        "inputs": [{"id": "src", "schema": {"columns": input_columns}}],
+        "output_schema": output_schema or {"columns": input_columns},
         "function": {"kind": "inline", "code": "def transform(row):\n    return row\n"},
-    }
-    if output_schema is not None:
-        kw["output_schema"] = output_schema
-    return Stage.model_validate(kw)
+    })
 
 
 def _two_input_stage():
     return Stage.model_validate({
         "id": "t2", "name": "t2", "type": "python_frame_function",
-        "inputs": [{"id": "a"}, {"id": "b"}],
+        "inputs": [{"id": "a", "schema": {"columns": _X_COLUMN}},
+                   {"id": "b", "schema": {"columns": _X_COLUMN}}],
+        "output_schema": {"columns": _X_COLUMN},
         "function": {"kind": "inline", "code": "def transform(a, b):\n    return a\n"},
     })
 
@@ -146,6 +153,9 @@ def test_row_driver_rejects_multiple_inputs():
         handler.execute(_two_input_stage(), frames, make_run_context())
 
 
+_EMPTY_SOURCE_COLUMNS = [{"name": "x", "type": "int"}, {"name": "id", "type": "str"}]
+
+
 def _empty_source() -> pd.DataFrame:
     return pd.DataFrame({
         "x": pd.Series([], dtype="int64"), "id": pd.Series([], dtype="object")
@@ -158,7 +168,8 @@ def test_row_driver_empty_input():
     # on `id` raise KeyError instead of producing an empty result.
     handler = RowMapHandler(make_mapper=lambda stage, ctx, src: lambda row, index: dict(row))
     ctx = make_run_context()
-    out = handler.execute(_row_stage(), {"src": _empty_source()}, ctx)
+    out = handler.execute(
+        _row_stage(input_columns=_EMPTY_SOURCE_COLUMNS), {"src": _empty_source()}, ctx)
     assert len(out) == 0
     assert list(out.columns) == ["x", "id"]
     assert out["id"].tolist() == []      # the column is real, not just a label
@@ -175,7 +186,9 @@ def test_row_driver_empty_input_reports_no_dropped_columns_when_projecting():
         project_output_to_declared=True,
     )
     ctx = make_run_context()
-    out = handler.execute(_row_stage(output_schema=schema), {"src": _empty_source()}, ctx)
+    out = handler.execute(
+        _row_stage(output_schema=schema, input_columns=_EMPTY_SOURCE_COLUMNS),
+        {"src": _empty_source()}, ctx)
     assert len(out) == 0
     assert list(out.columns) == ["x", "id"]
     assert contribution_of(out).dropped_columns == []

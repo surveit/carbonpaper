@@ -39,13 +39,3 @@ def test_no_filter_is_clean():
     }
     Stage.model_validate(stage)
 
-
-def test_no_edge_schema_declared_is_skipped():
-    """Without the upstream edge declaring any schema at all, the filter check
-    is unresolvable, and skipped rather than flagged."""
-    stage = {
-        "id": "wc", "type": "human_review_queue", "name": "wc", "inputs": ["src"],
-        "output_schema": {"columns": [{"name": "claim_id", "type": "str", "nullable": False}]},
-        "queue": {"filter": "ghost == 1"},
-    }
-    Stage.model_validate(stage)

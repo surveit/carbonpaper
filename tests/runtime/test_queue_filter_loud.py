@@ -11,7 +11,13 @@ from conftest import make_run_context
 
 def test_bad_filter_raises_instead_of_skipping_review(tmp_path):
     stage = Stage.model_validate({
-        "id": "q", "type": "human_review_queue", "name": "q", "inputs": ["a"],
+        "id": "q", "type": "human_review_queue", "name": "q",
+        # The edge DECLARES `nonexistent` — otherwise the filter's column
+        # reference would be rejected when the stage is built, and this test is
+        # about the frame that actually arrives not having the column.
+        "inputs": [{"id": "a", "schema": {"columns": [
+            {"name": "claim_id", "type": "str", "nullable": False},
+            {"name": "nonexistent", "type": "bool"}]}}],
         "output_schema": {"columns": [{"name": "claim_id", "type": "str", "nullable": False}],
                           "primary_key": ["claim_id"]},
         "queue": {"filter": "nonexistent == True"},
@@ -32,7 +38,10 @@ def test_a_cell_the_filter_cannot_answer_names_the_stage_and_the_filter(tmp_path
     naming the stage id and the filter text — not the bare numpy error the
     comparison raises underneath."""
     stage = Stage.model_validate({
-        "id": "q", "type": "human_review_queue", "name": "q", "inputs": ["a"],
+        "id": "q", "type": "human_review_queue", "name": "q",
+        "inputs": [{"id": "a", "schema": {"columns": [
+            {"name": "claim_id", "type": "str", "nullable": False},
+            {"name": "score", "type": "int"}]}}],
         "output_schema": {"columns": [{"name": "claim_id", "type": "str", "nullable": False}],
                           "primary_key": ["claim_id"]},
         "queue": {"filter": "score > 1"},

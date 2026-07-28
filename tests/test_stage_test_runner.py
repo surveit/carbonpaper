@@ -303,5 +303,6 @@ def test_stage_without_tests_contributes_no_failures():
     plain = Stage.model_validate({
         "id": "load", "name": "Load", "type": "input_data",
         "connector": {"kind": "file"},
+        "output_schema": _IN_SCHEMA,
     })
     assert find_failing_stage_tests([plain]) == []

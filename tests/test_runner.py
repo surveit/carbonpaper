@@ -20,6 +20,16 @@ from app.services import versioning
 from app.services.versioning import create_version_from_disk, list_versions
 
 
+# The two shapes every fixture in this file loads: the (name, val) items csv and
+# the (id, text) csv an llm_transform scores. Declared once so an upstream's
+# output_schema and its downstream's input `schema` cannot drift apart.
+_NAME_VAL_SCHEMA = {"columns": [{"name": "name", "type": "str"},
+                                {"name": "val", "type": "int"}]}
+_ID_TEXT_SCHEMA = {"columns": [{"name": "id", "type": "str"},
+                               {"name": "text", "type": "str"}],
+                   "primary_key": ["id"]}
+
+
 def _seed_version(root):
     """Create the initial version a run targets, and PUBLISH it. Runs no longer
     create versions, so a test that builds a working copy must snapshot it into
@@ -39,6 +49,7 @@ def _make_project(root):
         "id": "load", "name": "Load items", "type": "input_data",
         "connector": {"kind": "file",
                       "params": {"path": str(root / "data" / "items.csv"), "format": "csv"}},
+        "output_schema": _NAME_VAL_SCHEMA,
         "limit": 2,
     }
     (root / "compiled" / "01_load.json").write_text(json.dumps(stage), encoding="utf-8")
@@ -158,10 +169,12 @@ def _two_stage_project(root, rows: list[dict]):
         "id": "load", "name": "Load items", "type": "input_data",
         "connector": {"kind": "file",
                       "params": {"path": str(root / "data" / "items.csv"), "format": "csv"}},
+        "output_schema": _NAME_VAL_SCHEMA,
     }
     consume = {
         "id": "consume", "name": "Consume items", "type": "python_frame_function",
-        "inputs": [{"id": "load"}],
+        "inputs": [{"id": "load", "schema": _NAME_VAL_SCHEMA}],
+        "output_schema": _NAME_VAL_SCHEMA,
         "function": {"kind": "inline",
                      "code": "def transform(df):\n    return df\n"},
     }
@@ -207,6 +220,110 @@ def test_distinct_input_rows_pass(tmp_path):
     assert records["consume"]["output_row_count"] == 2
 
 
+def _output_schema_violation_project(root, transform_code: str):
+    """load → shape (a frame function running `transform_code`) → tail. `shape`
+    declares the (name, val) schema; what its code actually returns is the
+    variable under test, and `tail` exists to show what the run does downstream
+    of it."""
+    (root / "compiled").mkdir(parents=True)
+    (root / "data").mkdir(parents=True)
+    pd.DataFrame({"name": ["a", "b"], "val": [1, 2]}).to_csv(
+        root / "data" / "items.csv", index=False)
+    load = {
+        "id": "load", "name": "Load items", "type": "input_data",
+        "connector": {"kind": "file",
+                      "params": {"path": str(root / "data" / "items.csv"), "format": "csv"}},
+        "output_schema": _NAME_VAL_SCHEMA,
+    }
+    shape = {
+        "id": "shape", "name": "Shape items", "type": "python_frame_function",
+        "inputs": [{"id": "load", "schema": _NAME_VAL_SCHEMA}],
+        "output_schema": _NAME_VAL_SCHEMA,
+        "function": {"kind": "inline", "code": transform_code},
+    }
+    tail = {
+        "id": "tail", "name": "Tail", "type": "python_frame_function",
+        "inputs": [{"id": "shape", "schema": _NAME_VAL_SCHEMA}],
+        "output_schema": _NAME_VAL_SCHEMA,
+        "function": {"kind": "inline", "code": "def transform(df):\n    return df\n"},
+    }
+    for filename, stage in (("01_load.json", load), ("02_shape.json", shape),
+                            ("03_tail.json", tail)):
+        (root / "compiled" / filename).write_text(json.dumps(stage), encoding="utf-8")
+
+
+def test_output_missing_a_declared_column_errors_the_stage_and_blocks_downstream(tmp_path):
+    # An error-severity OUTPUT issue is a stage failure, not a warning: the
+    # frame does not satisfy the declared schema, so no downstream stage may
+    # consume it. Same fork-block a raised handler exception gets.
+    _output_schema_violation_project(
+        tmp_path, "def transform(df):\n    return df[['name']]\n")
+    _seed_version(tmp_path)
+    manifest = execute_run(tmp_path, repo_root=tmp_path)
+
+    records = {r["stage_id"]: r for r in manifest["stage_records"]}
+    assert records["load"]["status"] == "ok"
+    assert records["shape"]["status"] == "error"
+    assert "val" in records["shape"]["error"]["message"]      # names the failing column
+    # Downstream is blocked exactly as it is behind a raised exception: never
+    # run, never marked ok, and no output left behind for a resume to reuse.
+    assert records["tail"]["status"] == "pending"
+    assert records["tail"].get("output_path") is None
+    assert not (tmp_path / "runs" / manifest["run_id"] / "outputs" / "tail.parquet").exists()
+    assert manifest["status"] == "errors"
+
+
+def test_warning_only_output_report_does_not_error_the_stage(tmp_path):
+    # An undeclared extra column is warning-severity. It must not be swept into
+    # the error rule — every declared column is there, so downstream may consume
+    # the frame and the stage carries no error record.
+    _output_schema_violation_project(
+        tmp_path, "def transform(df):\n    df['extra'] = 1\n    return df\n")
+    _seed_version(tmp_path)
+    manifest = execute_run(tmp_path, repo_root=tmp_path)
+
+    records = {r["stage_id"]: r for r in manifest["stage_records"]}
+    assert records["shape"]["status"] != "error"
+    assert records["shape"]["error"] is None
+    issues = records["shape"]["output_validation_report"]["issues"]
+    assert [i["severity"] for i in issues] == ["warning"]   # warning-only, and reported
+    assert records["tail"]["status"] == "ok"                # not blocked
+    assert manifest["status"] != "errors"
+
+
+def test_output_validation_error_other_than_a_missing_column_also_errors_the_stage(tmp_path):
+    # The rule is on severity, not on one issue kind: a null in a column
+    # declared non-nullable is error-severity and fails the stage the same way.
+    (tmp_path / "compiled").mkdir(parents=True)
+    (tmp_path / "data").mkdir(parents=True)
+    pd.DataFrame({"name": ["a"], "val": [1]}).to_csv(
+        tmp_path / "data" / "items.csv", index=False)
+    load = {
+        "id": "load", "name": "Load items", "type": "input_data",
+        "connector": {"kind": "file",
+                      "params": {"path": str(tmp_path / "data" / "items.csv"), "format": "csv"}},
+        "output_schema": _NAME_VAL_SCHEMA,
+    }
+    blank = {
+        "id": "blank", "name": "Blank the value", "type": "python_frame_function",
+        "inputs": [{"id": "load", "schema": _NAME_VAL_SCHEMA}],
+        "output_schema": {"columns": [{"name": "name", "type": "str"},
+                                      {"name": "val", "type": "int", "nullable": False}]},
+        "function": {"kind": "inline",
+                     "code": "def transform(df):\n    df['val'] = None\n    return df\n"},
+    }
+    (tmp_path / "compiled" / "01_load.json").write_text(json.dumps(load), encoding="utf-8")
+    (tmp_path / "compiled" / "02_blank.json").write_text(json.dumps(blank), encoding="utf-8")
+    _seed_version(tmp_path)
+    manifest = execute_run(tmp_path, repo_root=tmp_path)
+
+    record = {r["stage_id"]: r for r in manifest["stage_records"]}["blank"]
+    assert record["status"] == "error"
+    assert record["error"]["type"] == "OutputSchemaViolation"
+    assert "val" in record["error"]["message"]
+    assert manifest["status"] == "errors"
+
+
 def _llm_transform_project(root):
     """input_data loading one row, feeding an llm_transform. Exercises the
     runner's row-error surfacing when a row's generation fails."""
@@ -218,12 +335,11 @@ def _llm_transform_project(root):
         "id": "load", "name": "Load items", "type": "input_data",
         "connector": {"kind": "file",
                       "params": {"path": str(root / "data" / "items.csv"), "format": "csv"}},
+        "output_schema": _ID_TEXT_SCHEMA,
     }
     score = {
         "id": "score", "name": "Score items", "type": "llm_transform",
-        "inputs": [{"id": "load", "schema": {
-            "columns": [{"name": "id", "type": "str"}, {"name": "text", "type": "str"}],
-            "primary_key": ["id"]}}],
+        "inputs": [{"id": "load", "schema": _ID_TEXT_SCHEMA}],
         "output_schema": {
             "columns": [{"name": "id", "type": "str"}, {"name": "text", "type": "str"},
                         {"name": "score", "type": "int", "nullable": False}],
@@ -274,12 +390,11 @@ def test_run_subset_surfaces_the_real_row_failure_message(tmp_path, monkeypatch)
     load = Stage.model_validate({
         "id": "load", "name": "Load items", "type": "input_data",
         "connector": {"kind": "file"},
+        "output_schema": _ID_TEXT_SCHEMA,
     })
     score = Stage.model_validate({
         "id": "score", "name": "Score items", "type": "llm_transform",
-        "inputs": [{"id": "load", "schema": {
-            "columns": [{"name": "id", "type": "str"}, {"name": "text", "type": "str"}],
-            "primary_key": ["id"]}}],
+        "inputs": [{"id": "load", "schema": _ID_TEXT_SCHEMA}],
         "output_schema": {
             "columns": [{"name": "id", "type": "str"}, {"name": "text", "type": "str"},
                         {"name": "score", "type": "int", "nullable": False}],
@@ -308,6 +423,7 @@ def test_run_subset_preserves_partial_work_in_the_manifest_on_a_mid_frontier_err
     load = Stage.model_validate({
         "id": "load", "name": "Load items", "type": "input_data",
         "connector": {"kind": "file"},
+        "output_schema": _ID_TEXT_SCHEMA,
     })
     clean = Stage.model_validate({
         "id": "clean", "name": "Clean rows", "type": "python_row_function",
@@ -422,7 +538,8 @@ def test_create_version_rejects_invalid_working_copy(tmp_path):
     (tmp_path / "compiled").mkdir(parents=True)
     bad = {"id": "load", "name": "Load", "type": "input_data",
            "connector": {"kind": "file",
-                         "params": {"path": "data/items.csv", "format": "csv"}}}  # relative path
+                         "params": {"path": "data/items.csv", "format": "csv"}},  # relative path
+           "output_schema": _NAME_VAL_SCHEMA}
     (tmp_path / "compiled" / "01_load.json").write_text(
         json.dumps(bad), encoding="utf-8")
 
@@ -443,7 +560,8 @@ def test_invalid_workflow_never_becomes_a_version_and_run_never_pins_stale(tmp_p
     (tmp_path / "compiled").mkdir(parents=True)
     bad = {"id": "load", "name": "Load", "type": "input_data",
            "connector": {"kind": "file",
-                         "params": {"path": "data/items.csv", "format": "csv"}}}
+                         "params": {"path": "data/items.csv", "format": "csv"}},
+           "output_schema": _NAME_VAL_SCHEMA}
     (tmp_path / "compiled" / "01_load.json").write_text(
         json.dumps(bad), encoding="utf-8")
 
@@ -465,7 +583,8 @@ def test_invalid_workflow_never_becomes_a_version_and_run_never_pins_stale(tmp_p
         tmp_path / "data" / "items.csv", index=False)
     good = {"id": "load", "name": "Load", "type": "input_data",
             "connector": {"kind": "file",
-                          "params": {"path": str(tmp_path / "data" / "items.csv"), "format": "csv"}}}
+                          "params": {"path": str(tmp_path / "data" / "items.csv"), "format": "csv"}},
+            "output_schema": _NAME_VAL_SCHEMA}
     (tmp_path / "compiled" / "01_load.json").write_text(
         json.dumps(good), encoding="utf-8")
     with pytest.raises(NoVersionToRunError):
@@ -492,7 +611,8 @@ def test_resume_reapplies_run_bindings_for_a_pending_input_stage(tmp_path):
     binding, and a workflow that authors NO path for it."""
     (tmp_path / "compiled").mkdir(parents=True)
     stage = {"id": "load", "name": "Load items", "type": "input_data",
-              "connector": {"kind": "file", "params": {}}}  # no workflow-authored path
+              "connector": {"kind": "file", "params": {}},  # no workflow-authored path
+              "output_schema": _NAME_VAL_SCHEMA}
     (tmp_path / "compiled" / "01_load.json").write_text(
         json.dumps(stage), encoding="utf-8")
     version_id = _seed_version(tmp_path)
@@ -567,7 +687,9 @@ def _add_frame_stage(root):
     intercepts, so a run of this project exercises the frame store."""
     (root / "compiled" / "02_totals.json").write_text(json.dumps({
         "id": "totals", "name": "Totals", "type": "python_frame_function",
-        "inputs": [{"id": "load"}],
+        "inputs": [{"id": "load", "schema": _NAME_VAL_SCHEMA}],
+        "output_schema": {"columns": [*_NAME_VAL_SCHEMA["columns"],
+                                      {"name": "double", "type": "int"}]},
         "function": {"kind": "inline", "code": _FRAME_STAGE_CODE},
     }), encoding="utf-8")
 

@@ -64,12 +64,15 @@ def transform(df, output_dir):
 """
 
 
-def _publish_stage(code: str) -> Stage:
+_NAME_COLUMN = [{"name": "name", "type": "str"}]
+
+
+def _publish_stage(code: str, input_columns=_NAME_COLUMN) -> Stage:
     return Stage.model_validate({
         "id": "report",
         "type": "publish",
         "name": "Report",
-        "inputs": [{"id": "enrich"}],
+        "inputs": [{"id": "enrich", "schema": {"columns": input_columns}}],
         "publish": {"format": "html_report", "destination": "build/"},
         "function": {"kind": "inline", "code": "import pandas as pd\n" + code},
     })
@@ -122,7 +125,11 @@ def test_a_link_emitted_into_published_html_resolves(tmp_path, monkeypatch):
     ctx = RunContext.for_production_run(
         repo_root=tmp_path, run_dir=run_dir, project="proj", run_id="R1",
     )
-    handle_publish(_publish_stage(_LINKING_PUBLISH_CODE), {"enrich": enrich}, ctx)
+    enrich_columns = [{"name": "facility_id", "type": "str"}, *_NAME_COLUMN,
+                      {"name": "score", "type": "int"}]
+    handle_publish(
+        _publish_stage(_LINKING_PUBLISH_CODE, input_columns=enrich_columns),
+        {"enrich": enrich}, ctx)
     html = (run_dir / "artifacts" / "build" / "index.html").read_text(encoding="utf-8")
 
     monkeypatch.setattr(loading, "EXAMPLES_DIR", tmp_path)

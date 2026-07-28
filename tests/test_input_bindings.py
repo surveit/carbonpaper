@@ -15,18 +15,27 @@ from app.services.versioning import create_version_from_disk
 from conftest import make_run_context
 
 
+# Every input declares the schema it expects and every non-publish stage declares
+# its output_schema (app/models/stage.py: Stage._schemas_declared). The stages
+# these two helpers build are only ever bound/preflighted, never executed, so the
+# schema names the single column of the csv the file-writing tests here create.
+_X_SCHEMA = {"columns": [{"name": "x", "type": "int"}]}
+
+
 def _input_stage(stage_id: str, path: str | None) -> Stage:
     params: dict = {"path": path, "format": "csv"} if path else {}
     return Stage.model_validate({
         "id": stage_id, "name": stage_id, "type": "input_data",
         "connector": {"kind": "file", "params": params},
+        "output_schema": _X_SCHEMA,
     })
 
 
 def _connectorless_stage(stage_id: str, input_id: str) -> Stage:
     return Stage.model_validate({
         "id": stage_id, "name": stage_id, "type": "python_row_function",
-        "inputs": [input_id],
+        "inputs": [{"id": input_id, "schema": _X_SCHEMA}],
+        "output_schema": _X_SCHEMA,
         "function": {"kind": "inline", "code": "def transform(row):\n    return row\n"},
     })
 
@@ -123,11 +132,16 @@ def test_connectorless_stage_has_no_preflight(tmp_path):
 
 # ── prepare_run integration ─────────────────────────────────────────────────
 
+_ROWS_SCHEMA = {"columns": [{"name": "name", "type": "str"},
+                            {"name": "val", "type": "int"}]}
+
+
 def _make_bound_project(root, filename="a.csv"):
     (root / "compiled").mkdir(parents=True)
     data = root / filename
     pd.DataFrame({"name": ["x", "y"], "val": [1, 2]}).to_csv(data, index=False)
     stage = {"id": "load", "name": "Load", "type": "input_data",
+             "output_schema": _ROWS_SCHEMA,
              "connector": {"kind": "file",
                            "params": {"path": str(data), "format": "csv"}}}
     (root / "compiled" / "01_load.json").write_text(json.dumps(stage), encoding="utf-8")
@@ -164,7 +178,10 @@ def test_workflow_path_recorded_as_workflow_source(tmp_path):
 
 def test_unbound_input_leaves_no_run_dir(tmp_path):
     (tmp_path / "compiled").mkdir(parents=True)
+    # No file is ever bound, so the declared columns are never materialised —
+    # the stage declares the shape the rest of this file's data uses.
     stage = {"id": "load", "name": "Load", "type": "input_data",
+             "output_schema": _ROWS_SCHEMA,
              "connector": {"kind": "file", "params": {}}}
     (tmp_path / "compiled" / "01_load.json").write_text(json.dumps(stage), encoding="utf-8")
     vid = create_version_from_disk(tmp_path, message="seed", reviewer="test").version_id
