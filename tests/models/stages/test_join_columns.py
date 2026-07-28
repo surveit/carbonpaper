@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from app.models import InputRef, JoinConfig, Stage
+from app.models import StageInput, JoinConfig, Stage
 from app.models.stages.join import find_join_column_issues
 
 
@@ -70,10 +70,10 @@ def test_find_join_column_issues_ignores_select():
         name="j",
         type="join",
         inputs=[
-            InputRef.model_validate(
+            StageInput.model_validate(
                 {"id": "L", "schema": {"columns": [{"name": "a", "type": "str", "nullable": False}]}}
             ),
-            InputRef.model_validate(
+            StageInput.model_validate(
                 {"id": "R", "schema": {"columns": [{"name": "b", "type": "str", "nullable": False}]}}
             ),
         ],
@@ -83,17 +83,3 @@ def test_find_join_column_issues_ignores_select():
     )
     assert find_join_column_issues(stage) == []
 
-
-def test_side_with_no_edge_schema_is_skipped():
-    """`Stage._schemas_declared` rejects an input with no schema, so both edges
-    are stripped with model_copy after construction: this pins
-    find_join_column_issues' own guard, which is reached from paths that do not
-    go through a validated Stage."""
-    stage = Stage.model_validate(
-        _join_stage(left_columns=["a"], right_columns=["b"], key_left="a", key_right="b"))
-    unresolvable = stage.model_copy(update={
-        "inputs": [InputRef(id="L"), InputRef(id="R")],
-        "join": JoinConfig.model_validate(
-            {"type": "inner", "keys": [{"left": "ghost_left", "right": "ghost_right"}]}),
-    })
-    assert find_join_column_issues(unresolvable) == []

@@ -19,22 +19,14 @@ COLUMN_ISSUE = (
 )
 
 
-def resolve_input_columns(stage: "Stage", index: int) -> set[str] | None:
+def resolve_input_columns(stage: "Stage", index: int) -> set[str]:
     """The column names declared on `stage`'s input edge at `index` —
-    `inputs[index].table_schema` (aliased `schema:` on a compiled stage) — or
-    None when that edge declares no schema at all ("unknowable", never
-    "empty"). Deliberately EDGE-ONLY: a per-stage check must not reach for the
+    `inputs[index].table_schema` (aliased `schema:` on a compiled stage).
+    Deliberately EDGE-ONLY: a per-stage check must not reach for the
     upstream producer's own output_schema — this runs on one `Stage` in
     isolation, at construction time, so the producer may not even be present
-    in whatever list of stages the caller happens to hold.
-
-    A validated `Stage` reaches neither None nor an empty set:
-    `Stage._schemas_declared` requires every input to declare a schema of at
-    least one column. The distinction is kept for callers holding a stage built
-    by a validation-bypassing path (`model_construct`), where "unknowable" and
-    "declares nothing" must still not be conflated."""
-    schema = stage.inputs[index].table_schema
-    return {c.name for c in schema.columns} if schema is not None else None
+    in whatever list of stages the caller happens to hold."""
+    return {c.name for c in stage.inputs[index].table_schema.columns}
 
 
 def find_predicate_column_issues(
@@ -70,8 +62,9 @@ def find_declared_vs_derived_issues(
 ) -> list[str]:
     """Issues for a declared output schema against the columns a handle can
     actually produce: `derived` maps each producible column name to its derived
-    type, or None where the type is unknowable (e.g. the input edge declares no
-    schema). Every declared column must be producible by name; where the derived
+    type, or None where the type is unknowable (e.g. a sum over a value column
+    the edge schema does not name). Every declared column must be producible by
+    name; where the derived
     type is known, the declared `type` must equal it. Nullability/enum/range are
     deliberately NOT compared — they are claims about data, not about what the
     handle can produce."""

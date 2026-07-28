@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.models import InputRef, Stage, TableSchema
+from app.models import Stage
 from app.models.stages import find_config_column_issues
 from app.models.stages.shared import (
     COLUMN_ISSUE,
@@ -20,32 +20,8 @@ def _stage_with_edge_schema(columns):
     })
 
 
-def _stage_with_input(input_ref: InputRef) -> Stage:
-    """A stage whose single input is `input_ref` verbatim, substituted with
-    model_copy so Stage's own validators never see it: `Stage._schemas_declared`
-    rejects both inputs the two callers below need — one declaring no schema,
-    one declaring a zero-column schema. `resolve_input_columns` still has to
-    tell those two apart, because it is reached from paths that do not go
-    through a validated Stage."""
-    valid = _stage_with_edge_schema(["a"])
-    return valid.model_copy(update={"inputs": [input_ref]})
-
-
 def test_resolve_input_columns_reads_the_edge_schema():
     assert resolve_input_columns(_stage_with_edge_schema(["a", "b"]), 0) == {"a", "b"}
-
-
-def test_resolve_input_columns_is_none_when_edge_declares_no_schema():
-    """None ("unknowable"), not an empty set ("no columns") — the two must
-    stay distinguishable, since a caller treats None as skip-the-check."""
-    assert resolve_input_columns(_stage_with_input(InputRef(id="src")), 0) is None
-
-
-def test_resolve_input_columns_empty_schema_is_an_empty_set_not_none():
-    """An edge that declares a schema with zero columns is still a DECLARED
-    schema — resolvable, just empty — distinct from no schema at all."""
-    empty = InputRef(id="src", table_schema=TableSchema(columns=[]))
-    assert resolve_input_columns(_stage_with_input(empty), 0) == set()
 
 
 def test_find_predicate_column_issues_reports_missing_column():

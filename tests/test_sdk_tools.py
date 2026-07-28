@@ -173,7 +173,7 @@ def test_set_draft_stage_rejects_malformed_stage_as_tool_error(examples_root: Pa
 
 
 def test_draft_stage_input_schema_round_trips_in_alias_form(examples_root: Path) -> None:
-    """A stage's `inputs[].schema` — Pydantic's InputRef.table_schema field,
+    """A stage's `inputs[].schema` — Pydantic's StageInput.table_schema field,
     aliased to the wire name `schema` — must come back to the agent under
     `schema`, the same key the agent wrote, never the python field name
     `table_schema`. Exercises registry._as_content's by_alias=True dump for

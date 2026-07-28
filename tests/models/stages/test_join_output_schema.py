@@ -3,9 +3,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from app.models import InputRef, TableSchema
 from app.models.stage import Stage
-from app.models.stages import find_output_schema_issues
 
 _LEFT = {
     "columns": [
@@ -108,21 +106,6 @@ def test_select_projection_limits_declared():
     ))
     assert "score" in msg
 
-
-def test_missing_either_edge_schema_skips():
-    """With one side's columns unknowable the merge's columns are unknowable
-    too, so nothing is flagged. `Stage._schemas_declared` rejects an input with
-    no schema, so the right edge is stripped with model_copy after
-    construction: this pins find_join_output_issues' own guard, which is
-    reached from paths that do not go through a validated Stage."""
-    stage = Stage.model_validate(_join_stage(
-        output_columns=[{"name": "facility_id", "type": "str"}]))
-    unknowable = stage.model_copy(update={
-        "inputs": [stage.inputs[0], InputRef(id="filings")],
-        "output_schema": TableSchema.model_validate(
-            {"columns": [{"name": "anything_at_all", "type": "str"}]}),
-    })
-    assert find_output_schema_issues(unknowable) == []
 
 
 def test_valid_join_passes():

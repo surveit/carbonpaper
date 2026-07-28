@@ -99,10 +99,9 @@ def test_llm_transform_rejects_more_than_one_input():
 
 
 def test_llm_transform_rejects_input_with_no_declared_schema():
-    # Since the mandate this is caught one validator earlier, by
-    # _schemas_declared, which names the offending input — so that is the
-    # message, not _llm_transform_one_to_one's "declares no input schema".
-    with pytest.raises(ValidationError, match="input `a` declares no schema"):
+    # `schema` is a required field on StageInput, so this never reaches
+    # _llm_transform_one_to_one — pydantic rejects the input itself.
+    with pytest.raises(ValidationError, match="inputs.0.schema"):
         m.Stage.model_validate(S(
             id="extract", type="llm_transform",
             inputs=[{"id": "a"}],
@@ -355,17 +354,15 @@ def test_inputs_are_refs_with_schema():
     assert s.inputs[0].table_schema.primary_key == ["k"]
 
 
-def test_inputs_accept_bare_id_shorthand():
-    """`inputs: ["a"]` still normalises to `[{"id": "a"}]`. Since the mandate no
-    VALID stage can use the shorthand — a bare id carries no schema — so it
-    survives only to give stored or draft JSON a readable rejection that names
-    the input, rather than a shape error."""
+def test_inputs_bare_id_shorthand_normalises_then_fails_on_the_missing_schema():
+    """`inputs: ["a"]` still normalises to `[{"id": "a"}]`, which then fails on
+    the required `schema` rather than on the string's shape."""
     issues = m.validate_stage(S(
         id="x", type="python_frame_function", inputs=["a"],
         output_schema=_K_SCHEMA,
         function={"kind": "inline", "code": "def transform(row): return row"},
     ))
-    assert any("input `a` declares no schema" in issue for issue in issues)
+    assert any("inputs.0.schema" in issue for issue in issues)
 
 
 def test_file_connector_without_path_is_valid():
@@ -640,9 +637,11 @@ def _rejection_message(spec) -> str:
 
 @pytest.mark.parametrize("t", NON_EXEMPT_TYPES)
 def test_stage_rejects_input_that_declares_no_schema(t):
+    # `schema` is a required field on StageInput: pydantic locates the offending
+    # input by index rather than naming its upstream id.
     msg = _rejection_message(_schema_spec(t, inputs_declared=False))
-    assert "declares no schema" in msg
-    assert "facilities" in msg
+    assert "inputs.0.schema" in msg
+    assert "Field required" in msg
 
 
 @pytest.mark.parametrize("t", NON_EXEMPT_TYPES)
@@ -651,10 +650,10 @@ def test_stage_rejects_missing_output_schema(t):
     assert "declares no output_schema" in msg
 
 
-def test_stage_names_only_the_input_that_declares_no_schema():
+def test_stage_locates_only_the_input_that_declares_no_schema():
     msg = _rejection_message(_schema_spec("join", inputs_declared=[True, False]))
-    assert "filings" in msg
-    assert "facilities" not in msg
+    assert "inputs.1.schema" in msg
+    assert "inputs.0.schema" not in msg
 
 
 @pytest.mark.parametrize("t", NON_EXEMPT_TYPES)
@@ -683,8 +682,8 @@ def test_publish_without_output_schema_accepted():
 def test_publish_rejects_input_that_declares_no_schema():
     """publish's exemption is output-side only: its inputs must still be declared."""
     msg = _rejection_message(_schema_spec("publish", inputs_declared=False, declare_output=False))
-    assert "declares no schema" in msg
-    assert "facilities" in msg
+    assert "inputs.0.schema" in msg
+    assert "Field required" in msg
 
 
 def test_publish_fully_declared_accepted():
@@ -701,7 +700,7 @@ def test_stage_rejects_input_whose_schema_declares_no_columns():
     spec = _schema_spec("python_row_function")
     spec["inputs"] = [{"id": "facilities", "schema": _EMPTY_SCHEMA}]
     msg = _rejection_message(spec)
-    assert "declares no schema" in msg
+    assert "declares a schema with no columns" in msg
     assert "facilities" in msg
 
 

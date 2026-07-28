@@ -107,17 +107,9 @@ def render_derivation_task(document: str, stage: Stage) -> str:
     """The deriver's task string: methodology + stage identity + schemas.
     Deliberately renders nothing else from the stage — not the function
     block, not existing tests. The agent correlates the stage id/name
-    against the document itself to learn what the stage must do.
-
-    The two undeclared-schema branches below are reachable only for a `Stage`
-    built by a validation-bypassing path (`model_construct`) —
-    `Stage._schemas_declared` requires both declarations of every type this
-    deriver runs on — and are kept so such a stage gets a named failure here
-    rather than an AttributeError."""
+    against the document itself to learn what the stage must do."""
     inputs = "\n\n".join(
         f"Input `{ref.id}` schema:\n{ref.table_schema.to_prompt()}"
-        if ref.table_schema is not None
-        else f"Input `{ref.id}` (no schema declared)"
         for ref in stage.inputs
     )
     if stage.output_schema is None:
