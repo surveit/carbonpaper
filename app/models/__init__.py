@@ -148,6 +148,13 @@ NODE_TYPES: dict[str, dict[str, _Any]] = {
         "min_inputs": 1,
         "required": ["kind"],
         "optional": ["module", "function", "code", "requirements"],
+        "notes": (
+            "Takes exactly ONE input — two or more is a join or a python_frame_function. "
+            "`transform(row)` is handed a plain dict and must return a plain dict, and that "
+            "dict IS the output row: a key you do not return is absent from the output, so "
+            "carry columns through explicitly (`return {**row, ...}`). The function is shown "
+            "neither the frame nor the row's position, so it cannot fan out, drop or reorder."
+        ),
     },
     "python_frame_function": {
         "summary": "Deterministic Python over the whole dataframe(s); may reshape (dedup, pivot, multi-input merge).",
@@ -156,6 +163,13 @@ NODE_TYPES: dict[str, dict[str, _Any]] = {
         "min_inputs": 1,
         "required": ["kind"],
         "optional": ["module", "function", "code", "requirements"],
+        "notes": (
+            "The runtime calls `transform(*frames)`: one POSITIONAL parameter per declared "
+            "input, in `inputs` order — never by name, never a dict of frames. It receives no "
+            "output_dir and no trace_links; writing files is publish's job. Return the output "
+            "DataFrame. Rows may be added, dropped or reordered here, so this stage breaks the "
+            "row-position provenance trail an upstream row-mapped stage preserves."
+        ),
     },
     "join": {
         "summary": "Combine two or more upstream dataframes on keys.",
@@ -164,6 +178,13 @@ NODE_TYPES: dict[str, dict[str, _Any]] = {
         "min_inputs": 2,
         "required": ["keys"],
         "optional": ["type", "select", "on"],
+        "notes": (
+            "Merges the FIRST TWO inputs only: inputs[0] is left, inputs[1] is right, and a "
+            "third declared input is never merged in. A right column whose name a left column "
+            "shares arrives as `<name>_r`; a key pair with the SAME name on both sides "
+            "collapses into one column. `select` and output_schema may name only columns the "
+            "merge produces — anything else is rejected when the stage is saved."
+        ),
     },
     "aggregate": {
         "summary": "Structured group-by aggregation.",
@@ -172,6 +193,14 @@ NODE_TYPES: dict[str, dict[str, _Any]] = {
         "min_inputs": 1,
         "required": ["group_by", "aggregations"],
         "optional": [],
+        "notes": (
+            "Output columns are exactly group_by plus each aggregation's output_column — every "
+            "other input column is DROPPED, so carry anything needed downstream via group_by "
+            "or a `first` aggregation. formula `count` takes no value_column; every other "
+            "formula requires one. Declared output types must match "
+            "the derivation: count->int, mean->float, min/max/first->the value column's type, "
+            "list->list[<that type>]."
+        ),
     },
     "human_review_queue": {
         "summary": "Pulls flagged rows for human decision; halts the run.",
