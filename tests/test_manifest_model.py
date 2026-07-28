@@ -76,7 +76,8 @@ def test_minted_manifest_omits_the_run_level_optionals():
     )
     manifest = create_run_manifest(
         [stage], run_id="r", project="p", workflow_version="v",
-        run_bindings={}, input_bindings={}, limits={}, offsets={}, bust_cache=False)
+        run_bindings={}, input_bindings={}, limits={}, offsets={}, bust_cache=False,
+        of_record=True)
     dumped = manifest.to_dict()
 
     assert dumped["status"] == RunStatus.RUNNING

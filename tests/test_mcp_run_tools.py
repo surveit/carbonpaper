@@ -129,8 +129,13 @@ def test_run_workflow_test_delegates_and_reports_verdict(tmp_path, monkeypatch):
     assert result["ok"] is True
     assert result["stages_run"] == ["classify"]
     assert "rows_out" not in result
-    assert "workflow_test_id" in result
-    assert not (tmp_path / "demo" / "runs").exists()
+    assert "run_id" in result
+    # A real run under the project's runs/ dir — reachable through the same
+    # get_run_status a production run uses — but marked not of record.
+    manifest_path = tmp_path / "demo" / "runs" / result["run_id"] / "manifest.json"
+    assert manifest_path.exists()
+    status = server.get_run_status(project_id="demo", run_id=result["run_id"])
+    assert status["of_record"] is False
 
 
 def test_run_tools_are_registered(tmp_path, monkeypatch):

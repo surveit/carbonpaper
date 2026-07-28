@@ -85,12 +85,30 @@ def _build_project_card(p: Path) -> dict[str, Any] | None:
 
 
 def _count_runs_with_manifest(rdir: Path) -> int:
-    """Real runs only: a run dir counts iff it carries a manifest.json
-    (mirrors list_runs), so an in-progress or abandoned run dir is never
-    counted."""
+    """Real runs OF RECORD only: a run dir counts iff it carries a manifest.json
+    (mirrors list_runs) AND that manifest's `of_record` is not false, so an
+    in-progress/abandoned run dir, or a workflow test's run, is never counted."""
     if not rdir.is_dir():
         return 0
-    return sum(1 for r in rdir.iterdir() if r.is_dir() and (r / "manifest.json").exists())
+    return sum(
+        1 for r in rdir.iterdir()
+        if r.is_dir() and _manifest_is_of_record(r / "manifest.json")
+    )
+
+
+def _manifest_is_of_record(manifest_path: Path) -> bool:
+    """Whether `manifest_path` exists and records a run of record (default True
+    for a manifest with no `of_record` key — every run before that field
+    existed). A missing or unparseable manifest is not a run at all here (the
+    caller only calls this after confirming existence, or wants False either
+    way), so a parse failure also reports False."""
+    if not manifest_path.exists():
+        return False
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return False
+    return bool(manifest.get("of_record", True))
 
 
 @dataclass
@@ -246,6 +264,7 @@ def _run_index_row(run: Path) -> dict[str, Any]:
         "stages_total": len(records),
         "stages_ok": sum(1 for s in records if s.status == StageStatus.OK),
         "stages_error": sum(1 for s in records if s.status == StageStatus.ERROR),
+        "of_record": manifest.of_record,
     }
 
 
@@ -262,6 +281,7 @@ def _unreadable_run_row(run: Path) -> dict[str, Any]:
         "stages_total": None,
         "stages_ok": None,
         "stages_error": None,
+        "of_record": None,
     }
 
 

@@ -70,6 +70,8 @@ def run_subset(
     queue_auto_approve: bool = False,
     project: str | None = None,
     workflow_version: str | None = None,
+    identity: RunIdentity | None = None,
+    of_record: bool = True,
 ) -> dict[str, pd.DataFrame]:
     """Run only `stage_ids` of `workflow`, with `injected_outputs` seeded as the
     outputs of stages OUTSIDE the subset (their upstream is cut off — the output is
@@ -95,7 +97,14 @@ def run_subset(
     `queue_auto_approve` seeds the ctx flag of the same name: when set, a
     human_review_queue stage passes every row through in memory (approving all,
     no disk) instead of reaching for the decisions store. Off by default, so an
-    ordinary subset run's queue stage behaves exactly as before."""
+    ordinary subset run's queue stage behaves exactly as before.
+
+    `identity` grants this subset run project scope (a `RunIdentity` plus a
+    read-only stage-result cache) — see `RunContext.for_workflow_test_run`, the
+    only current source of one. None (the default) is the plain subset run:
+    no identity, no cache access, `trace_links` unavailable to a publish stage.
+    `of_record` is recorded on the manifest (`RunManifest.of_record`); default
+    True, so an ordinary subset run's manifest reads as a run of record."""
     by_id = workflow.index_stages_by_id()
     missing = [sid for sid in stage_ids if sid not in by_id]
     if missing:
@@ -105,22 +114,30 @@ def run_subset(
     manifest = create_run_manifest(
         ordered, run_id=run_dir.name, project=project,
         workflow_version=workflow_version, run_bindings={}, input_bindings={},
-        limits={}, offsets={}, bust_cache=False)
+        limits={}, offsets={}, bust_cache=False, of_record=of_record)
     write_manifest(run_dir, manifest)
     outputs: dict[str, pd.DataFrame] = dict(injected_outputs)
     manifest = _execute_stages(
-        ordered, _subset_ctx(repo_root, run_dir, queue_auto_approve),
+        ordered, _subset_ctx(repo_root, run_dir, queue_auto_approve, identity),
         manifest, run_dir, outputs)
     _raise_if_run_failed(manifest)
     return outputs
 
 
-def _subset_ctx(repo_root: Path, run_dir: Path, queue_auto_approve: bool) -> RunContext:
-    # No identity/stage_cache: a subset run is keyed on the Workflow + run_dir, not a
-    # project tree, and has no cross-run cache access. A handler that needs project
-    # scope (only human_review_queue does) fails loudly rather than reading a
-    # fabricated wrong directory — unless `queue_auto_approve` tells that handler to
-    # pass rows through in memory, in which case it never reaches for project scope.
+def _subset_ctx(
+    repo_root: Path, run_dir: Path, queue_auto_approve: bool, identity: RunIdentity | None
+) -> RunContext:
+    # No project scope by default: a subset run is keyed on the Workflow + run_dir,
+    # not a project tree, and has no cross-run cache access. A handler that needs
+    # project scope (human_review_queue, or a publish stage's trace_links) fails
+    # loudly rather than reading a fabricated wrong directory — unless
+    # `queue_auto_approve` tells human_review_queue to pass rows through in memory
+    # instead, or `identity` is given (a workflow test — see
+    # RunContext.for_workflow_test_run), in which case project scope IS granted,
+    # with a read-only cache so this run can never write a cache entry.
+    if identity is not None:
+        return RunContext.for_workflow_test_run(
+            repo_root, run_dir, identity.project, identity.run_id)
     return RunContext.for_non_production_run(repo_root, run_dir, queue_auto_approve=queue_auto_approve)
 
 

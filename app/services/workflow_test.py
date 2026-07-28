@@ -1,7 +1,8 @@
-"""Workflow-test seam: run a workflow over a slice of its real source without
-minting a run of record. It reaches the shared engine through
-app.runtime.executor (run_subset), never app.runtime.runner, and writes only
-inside its own `<project_dir>/workflow_tests/<id>/` dir."""
+"""Workflow-test seam: run a workflow over a slice of its real source as a REAL
+run — same `<project_dir>/runs/<id>/` dir, same manifest shape, same view/routes
+as a production run. It reaches the shared engine through app.runtime.executor
+(run_subset), never app.runtime.runner, with a read-only stage-result cache
+(RunContext.for_workflow_test_run) and `RunManifest.of_record=False`."""
 from __future__ import annotations
 
 from datetime import datetime
@@ -12,7 +13,7 @@ import pandas as pd
 
 from app.core.errors import NoWorkflowTestSourceError, NoWorkflowTestVersionError, SubsetRunError
 from app.models import Stage, StageType, Workflow
-from app.runtime.context import RunContext
+from app.runtime.context import RunContext, RunIdentity
 from app.runtime.executor import run_subset, topological_sort
 from app.runtime.stages.input_data import read_input_data
 from app.services.versioning import list_versions, load_version, load_version_stages
@@ -26,10 +27,9 @@ def run_workflow_test(
     limit: int = 20,
     offset: int = 0,
 ) -> dict[str, Any]:
-    """Run the resolved version's frontier over a slice of its bound source,
-    writing a production-shape manifest under
-    `<project_dir>/workflow_tests/<workflow_test_id>/`. Returns
-    `{ok, workflow_test_id, version_id, stages_run, error}`."""
+    """Run the resolved version's frontier over a slice of its bound source, as
+    a real (not-of-record) run under `<project_dir>/runs/<run_id>/`. Returns
+    `{ok, run_id, version_id, stages_run, error}`."""
     project_dir = resolve_project_dir(project)
     version = _resolve_workflow_test_version(project_dir, version_id)
     stages = load_version_stages(project_dir, version)
@@ -39,17 +39,17 @@ def run_workflow_test(
     workflow = Workflow(stages=stages)
     frontier = topological_sort(_frontier_stages(stages))
 
-    workflow_test_id = _mint_workflow_test_id()
-    workflow_test_dir = project_dir / "workflow_tests" / workflow_test_id
+    run_id = _mint_run_id()
+    run_dir = project_dir / "runs" / run_id
 
     stage_ids = [stage.id for stage in frontier]
     ok, error = _run_frontier(
-        workflow, injected, stage_ids, workflow_test_dir, repo_root(),
-        project=project_dir.name, workflow_version=version)
+        workflow, injected, stage_ids, run_dir, repo_root(),
+        project=project_dir.name, run_id=run_id, workflow_version=version)
 
     return {
         "ok": ok,
-        "workflow_test_id": workflow_test_id,
+        "run_id": run_id,
         "version_id": version,
         "stages_run": stage_ids,
         "error": error,
@@ -77,21 +77,26 @@ def _run_frontier(
     workflow: Workflow,
     injected: dict[str, pd.DataFrame],
     stage_ids: list[str],
-    workflow_test_dir: Path,
+    run_dir: Path,
     repo_root: Path,
     *,
     project: str,
+    run_id: str,
     workflow_version: str,
 ) -> tuple[bool, str | None]:
     """Execute the frontier subset: normal return -> (True, None); a SubsetRunError
     (a stage errored) -> (False, its message). run_subset owns the manifest under
-    `workflow_test_dir`; a mid-frontier human_review_queue auto-approves in memory
-    (queue_auto_approve=True) rather than halting."""
+    `run_dir`, records it `of_record=False`, and grants project scope
+    (`identity` + a read-only stage cache — see RunContext.for_workflow_test_run)
+    so a publish stage's `trace_links` resolves; a mid-frontier
+    human_review_queue auto-approves in memory (queue_auto_approve=True) rather
+    than halting."""
     try:
         run_subset(
             workflow, injected_outputs=injected, stage_ids=stage_ids,
-            run_dir=workflow_test_dir, repo_root=repo_root, queue_auto_approve=True,
-            project=project, workflow_version=workflow_version)
+            run_dir=run_dir, repo_root=repo_root, queue_auto_approve=True,
+            project=project, workflow_version=workflow_version,
+            identity=RunIdentity(project=project, run_id=run_id), of_record=False)
     except SubsetRunError as exc:
         return False, str(exc)
     return True, None
@@ -100,7 +105,7 @@ def _run_frontier(
 def _frontier_stages(stages: list[Stage]) -> list[Stage]:
     """The stages a workflow test executes: every stage except the source
     (input_data — its output is injected, not computed). Publish stages run; their
-    artifacts land run-scoped under the workflow-test dir."""
+    artifacts land run-scoped under the run dir, like any production run's."""
     return [stage for stage in stages if stage.type != StageType.input_data.value]
 
 
@@ -125,7 +130,8 @@ def get_source_data_with_limit_and_offset(
     }
 
 
-def _mint_workflow_test_id() -> str:
-    """A workflow test's id, in the runner's run-id timestamp format so workflow
-    tests sort and read consistently with production runs and versions."""
+def _mint_run_id() -> str:
+    """A fresh run id, in the same timestamp format app.runtime.runner mints
+    production run ids with, so a workflow test's run sorts and reads
+    consistently among a project's other runs."""
     return datetime.now().strftime("%Y%m%dT%H%M%S")

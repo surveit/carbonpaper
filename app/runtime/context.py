@@ -157,6 +157,35 @@ class RunContext(BaseModel):
         )
 
     @classmethod
+    def for_workflow_test_run(
+        cls,
+        repo_root: Path,
+        run_dir: Path,
+        project: str,
+        run_id: str,
+        limits: dict[str, int] | None = None,
+        offsets: dict[str, int] | None = None,
+    ) -> RunContext:
+        """A workflow test's context: `mode="non_production"` (its queue stage
+        auto-approves in memory, like any non-production run), but WITH project
+        scope — `identity` and a read-only stage-result cache
+        (`StageCacheEntry.read_only()`) — so a publish stage's `trace_links` can
+        build a URL and a slow upstream stage can replay a production run's
+        cached result. The cache view carries no `record` method, so this run
+        structurally cannot write a cache entry: a test's outputs never poison
+        what a production run reads back."""
+        return cls(
+            mode="non_production",
+            repo_root=repo_root,
+            run_dir=run_dir,
+            identity=RunIdentity(project=project, run_id=run_id),
+            stage_cache=StageCacheEntry.read_only(),
+            limits=dict(limits or {}),
+            offsets=dict(offsets or {}),
+            queue_auto_approve=True,
+        )
+
+    @classmethod
     def for_non_production_run(
         cls,
         repo_root: Path | None,

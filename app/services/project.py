@@ -146,15 +146,20 @@ def _load_compiled_stages(pdir: Path) -> list[dict[str, Any]]:
 
 def _runs_summary(pdir: Path) -> RunsSummary:
     """Summarise the project's runs/ dir into a RunsSummary (n / awaiting_review /
-    latest_status).
+    latest_status) — OF-RECORD runs only, so a workflow test (a real run under the
+    same runs/ dir, but marked `of_record: false` — see RunManifest.of_record)
+    never counts as, or masquerades as, the project's latest production run.
 
     Mirrors loading.list_runs exactly: a run is a child dir of runs/ WITH a readable
     manifest.json; dirs lacking one (partial / legacy-output-only) are not counted,
-    so n is the count of real runs, never inflated. `awaiting_review` counts runs
-    whose status is 'awaiting_review' (halted at a human_review_queue) — the driver
-    of the "review the run" rung of the ladder. `latest_status` is the newest run's
-    status (runs are timestamp-id'd, so the max id is newest); None when there are
-    no runs. A corrupt manifest is counted (status 'corrupt') rather than hidden."""
+    so n is the count of real runs of record, never inflated. `awaiting_review`
+    counts of-record runs whose status is 'awaiting_review' (halted at a
+    human_review_queue) — the driver of the "review the run" rung of the ladder.
+    `latest_status` is the newest of-record run's status (runs are timestamp-id'd,
+    so the max id is newest); None when there are no of-record runs. A corrupt
+    manifest is counted (status 'corrupt') rather than hidden — a manifest this
+    reader cannot parse carries no `of_record` to exclude it by, so it is treated
+    as one, same as before this field existed."""
     runs_dir = pdir / "runs"
     if not runs_dir.is_dir():
         return RunsSummary(n=0, awaiting_review=0, latest_status=None)
@@ -169,8 +174,12 @@ def _runs_summary(pdir: Path) -> RunsSummary:
         try:
             manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
             status = manifest.get("status", "unknown")
+            of_record = manifest.get("of_record", True)
         except json.JSONDecodeError:
             status = "corrupt"
+            of_record = True
+        if not of_record:
+            continue
         statuses.append((run.name, status))
         if status == RunStatus.AWAITING_REVIEW:
             awaiting += 1

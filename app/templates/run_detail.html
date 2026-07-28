@@ -28,6 +28,12 @@
 {% set done = ok + warn %}
 {% set is_running = manifest.status == 'running' %}
 
+{% if manifest.of_record == false %}
+<p class="banner" style="background:#f3e8fd;border-color:#8a5cf6;color:#5a2a8c">
+    🧪 <strong>Workflow test</strong> — not a run of record. It read the stage-result cache but wrote none, so it never affects a production run.
+</p>
+{% endif %}
+
 <div class="run-topbar">
     <h1>Run <code>{{ run_id }}</code></h1>
     <p class="stage-id">started {{ manifest.started_at | friendly_time }}{% if manifest.finished_at %} · finished {{ manifest.finished_at | friendly_time }}{% endif %}</p>
