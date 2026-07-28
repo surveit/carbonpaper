@@ -29,6 +29,7 @@ from .join import handle_join
 from .llm_transform import make_llm_row_mapper, run_llm_batches
 from .publish import handle_publish
 from .python_functions import handle_python_frame_function, make_python_row_mapper
+from .sql_transform import handle_sql_transform
 
 Preflight = Callable[[Stage], tuple[list[str], dict[str, Any] | None]]
 
@@ -48,6 +49,10 @@ HANDLERS: dict[StageType, StageHandler] = {
     # above runs arbitrary user code of unbounded cost and does cache.
     StageType.join_: FrameHandler(handle_join, caches_frames=False),
     StageType.aggregate: FrameHandler(handle_aggregate, caches_frames=False),
+    # caches_frames=True (the default): a query is arbitrary user-authored SQL
+    # of unbounded cost, like python_frame_function, not a bounded vectorised
+    # primitive like join/aggregate above.
+    StageType.sql_transform: FrameHandler(handle_sql_transform),
     StageType.llm_transform: LLMTransformHandler(
         make_llm_row_mapper,
         run_llm_batches,
@@ -88,6 +93,7 @@ __all__ = [
     "make_llm_row_mapper",
     "run_llm_batches",
     "make_python_row_mapper",
+    "handle_sql_transform",
     "preflight_input_data",
     "read_input_data",
 ]

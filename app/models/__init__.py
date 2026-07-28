@@ -33,6 +33,7 @@ from app.models.stage import (
     QueueConfig,
     ReviewConfig,
     RowReviewDecision,
+    SqlConfig,
     Stage,
     StageDraft,
     StageType,
@@ -210,6 +211,25 @@ NODE_TYPES: dict[str, dict[str, _Any]] = {
             "list->list[<that type>]."
         ),
     },
+    "sql_transform": {
+        "summary": "SQL query (DuckDB) over one or more upstream dataframes.",
+        "handle": "sql",
+        "requires_inputs": True,
+        "min_inputs": 1,
+        "required": ["query"],
+        "optional": [],
+        "notes": (
+            "Each declared input is registered as a DuckDB table named by its "
+            "upstream stage id — read it as `SELECT * FROM <stage_id>`. One "
+            "query, one output table: the query's result IS this stage's "
+            "output, validated against output_schema like every other stage. "
+            "This is the preferred way to filter (WHERE), union (UNION ALL), "
+            "group-by-and-count-distinct (COUNT(DISTINCT ...)), or otherwise "
+            "reshape rows in SQL a reviewer can read, rather than pandas code "
+            "they cannot. A query naming a table that is not a declared input "
+            "is rejected when the stage is saved."
+        ),
+    },
     "human_review_queue": {
         "summary": "Pulls flagged rows for human decision; halts the run.",
         "handle": "queue",
@@ -257,7 +277,7 @@ __all__ = [
     "FunctionKind", "PublishFormat", "is_valid_column_type",
     "SourceRef", "Column", "TableSchema", "Connector", "LLMConfig",
     "PythonFunction", "JoinKey", "JoinConfig", "AggregationOp",
-    "AggregateConfig", "QueueConfig", "PublishConfig", "ReviewConfig",
+    "AggregateConfig", "SqlConfig", "QueueConfig", "PublishConfig", "ReviewConfig",
     "RowReviewDecision",
     "StageInput", "Stage", "StageDraft", "StageTest", "XlsxReadParams", "validate_stage",
     "Workflow", "parse_workflow", "validate_workflow", "validate_workflow_draft",

@@ -52,6 +52,7 @@ class StageType(str, Enum):
     # StageType("join") looks up — is still "join".
     join_ = "join"
     aggregate = "aggregate"
+    sql_transform = "sql_transform"
     human_review_queue = "human_review_queue"
     publish = "publish"
 
@@ -315,6 +316,30 @@ class AggregateConfig(_Base):
     aggregations: list[AggregationOp]
 
 
+class SqlConfig(_Base):
+    """sql_transform handle. `query` runs against a DuckDB connection where
+    each declared input is registered as a table named by its stage id — a
+    query reads `SELECT * FROM <upstream_stage_id>`."""
+    # The query text is the entire definition of what this stage computes —
+    # see Stage.compute_definition_fingerprint.
+    FINGERPRINT_FIELDS: ClassVar[frozenset[str]] = frozenset({"query"})
+    INCIDENTAL_FIELDS: ClassVar[frozenset[str]] = frozenset()
+
+    query: str = Field(
+        description=(
+            "A DuckDB SQL query. Each declared input is registered as a table "
+            "named by its stage id — read it as `SELECT * FROM <stage_id>`. "
+            "The query's result becomes this stage's output frame."
+        ),
+    )
+
+    @model_validator(mode="after")
+    def _query_not_blank(self) -> "SqlConfig":
+        if not self.query.strip():
+            raise ValueError("sql_transform query must not be blank")
+        return self
+
+
 class RowReviewDecision(str, Enum):
     """A reviewer's verdict on one human_review_queue row, validated and applied
     at the web/service boundary (app.services.review) and recorded as the review
@@ -390,6 +415,7 @@ _TYPE_SPEC: dict[str, dict[str, Any]] = {
     "python_frame_function": {"handle": "function",  "requires_inputs": True,  "min_inputs": 1},
     "join":                  {"handle": "join",      "requires_inputs": True,  "min_inputs": 2},
     "aggregate":             {"handle": "aggregate", "requires_inputs": True,  "min_inputs": 1},
+    "sql_transform":         {"handle": "sql",       "requires_inputs": True,  "min_inputs": 1},
     "human_review_queue":    {"handle": "queue",     "requires_inputs": True,  "min_inputs": 1},
     "publish":               {"handle": "publish",   "also_requires": ["function"], "requires_inputs": True, "min_inputs": 1},
 }
@@ -419,6 +445,7 @@ class StageDraft(_Base):
     function: Optional[PythonFunction] = None
     join: Optional[JoinConfig] = None
     aggregate: Optional[AggregateConfig] = None
+    sql: Optional[SqlConfig] = None
     queue: Optional[QueueConfig] = None
     publish: Optional[PublishConfig] = None
 

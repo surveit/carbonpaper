@@ -18,6 +18,7 @@ TYPE_CLASS = {
     "python_frame_function": "python",
     "join": "join",
     "aggregate": "aggregate",
+    "sql_transform": "sql",
     "human_review_queue": "human",
     "publish": "publish",
 }
@@ -29,6 +30,7 @@ TYPE_GLYPH = {
     "python_frame_function": "🧨",
     "join": "🔗",
     "aggregate": "📊",
+    "sql_transform": "🗄️",
     "human_review_queue": "👤",
     "publish": "📤",
 }
@@ -278,6 +280,7 @@ def build_mermaid_graph(
         "    classDef python fill:#eef2f7,stroke:#4a5e85,color:#000",
         "    classDef join fill:#f4ecfa,stroke:#7b3aa8,color:#000",
         "    classDef aggregate fill:#f0f0e6,stroke:#888533,color:#000",
+        "    classDef sql fill:#e6f0ea,stroke:#2f7a52,color:#000",
         "    classDef human fill:#fce8f4,stroke:#c0399a,color:#000",
         "    classDef publish fill:#e8f8e8,stroke:#3aa83a,color:#000",
         "    classDef custom fill:#fde8e8,stroke:#cc3333,color:#000",
