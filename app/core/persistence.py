@@ -242,7 +242,7 @@ class PersistedModel(BaseModel):
     always reflects the last write while `created_at` stays at first-construct
     time.
 
-    Its own strict config mirrors app.models._Base without importing it, so the
+    Its own strict config mirrors app.models.StrictModel without importing it, so the
     storage layer stays free of an app.models dependency."""
 
     model_config = ConfigDict(

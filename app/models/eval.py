@@ -12,7 +12,7 @@ from typing import Annotated, Any, Literal, Optional
 
 from pydantic import AfterValidator, Field, field_validator, model_validator
 
-from app.models.schema import _Base
+from app.models.schema import StrictModel
 from app.models.table import TableRef
 
 _SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
@@ -30,7 +30,7 @@ SlugId = Annotated[str, AfterValidator(_validate_slug)]
 
 
 # ── Overrides ────────────────────────────────────────────────────────────────
-class StageOutputOverride(_Base):
+class StageOutputOverride(StrictModel):
     """Inject `table` AS `stage_id`'s output, cutting that stage and everything
     upstream of it out of the run. `stage_id` may be ANY stage, not just an input
     — reference data, a fixture, whatever the eval needs held fixed."""
@@ -47,7 +47,7 @@ class ScoringMetric(str, Enum):
 
 
 # ── The comparison ───────────────────────────────────────────────────────────
-class ExpectedOutput(_Base):
+class ExpectedOutput(StrictModel):
     """One check: which `target_stage` output column to grade, and how. The
     eval-dataset file's expected-output column for this check is not authored
     here — it is named after `output_column` (the same name), unless
@@ -65,7 +65,7 @@ class ExpectedOutput(_Base):
         return self
 
 
-class CodeScorer(_Base):
+class CodeScorer(StrictModel):
     """Escape hatch: `function(actual_df, dataset_df) -> dict[str, Any]` of metrics.
     Needed when the path isn't grain-preserving (so declarative comparison can't
     align rows) or the comparison isn't column-by-column."""
@@ -74,7 +74,7 @@ class CodeScorer(_Base):
 
 
 # ── The eval config ──────────────────────────────────────────────────────────
-class EvalConfig(_Base):
+class EvalConfig(StrictModel):
     """The authored eval: defined by its checks, plus how they plug into the
     workflow's stages and how they're scored.
 
@@ -128,7 +128,7 @@ class EvalConfig(_Base):
 
 
 # ── Scorability (computed per run) ───────────────────────────────────────────
-class EvalRunSettings(_Base):
+class EvalRunSettings(StrictModel):
     """How a given run will be scored, derived from the override→target path.
 
     `frontier` is the set of stages that actually execute to produce the target
@@ -143,7 +143,7 @@ class EvalRunSettings(_Base):
 
 
 # ── The run result ───────────────────────────────────────────────────────────
-class EvalRun(_Base):
+class EvalRun(StrictModel):
     """Result of running an EvalConfig against one workflow version."""
     id: SlugId
     config: str

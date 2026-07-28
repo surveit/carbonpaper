@@ -20,7 +20,7 @@ def _transform_of(stage: Stage | None) -> dict[str, Any]:
     compiled DAG may not be loadable)."""
     if stage is None:
         return {"kind": "unknown", "detail": None}
-    # _Base sets use_enum_values, so stage.type is a plain str; compare by value.
+    # StrictModel sets use_enum_values, so stage.type is a plain str; compare by value.
     stage_type = str(stage.type)
     if stage_type == StageType.input_data.value:
         path = stage.connector.params.get("path") if stage.connector else None

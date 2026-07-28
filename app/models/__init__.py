@@ -11,6 +11,7 @@ from app.models.schema import (
     RANGE_UNBOUNDED_MARKER,
     STR_COLUMN_TYPE,
     SourceRef,
+    StrictModel,
     TableSchema,
     is_valid_column_type,
 )
@@ -218,6 +219,7 @@ __all__ = [
     "Coverage",
     "StageType", "ConnectorKind", "FileFormat", "AggFormula", "JoinType",
     "FunctionKind", "PublishFormat", "is_valid_column_type",
+    "StrictModel",
     "SourceRef", "Column", "TableSchema", "Connector", "LLMConfig",
     "PythonFunction", "JoinKey", "JoinConfig", "AggregationOp",
     "AggregateConfig", "QueueConfig", "PublishConfig", "ReviewConfig",

@@ -17,14 +17,13 @@ from pydantic import AliasChoices, Field, ValidationError, field_validator, mode
 from app.core.llm.options import LLMModel
 from app.models.schema import (
     SourceRef,
+    StrictModel,
     TableSchema,
-    _Base,
-    _SNAKE_RE,
 )
 from app.models.stages.code import validate_inline_function_code
 from app.models.stages.stage_tests import StageTest, validate_stage_tests
 from app.core.prompt_template import find_template_fields
-from app.core.utils import compute_short_hash, format_errors
+from app.core.utils import compute_short_hash, format_errors, is_snake_case
 
 # ── Enumerated vocabularies ──────────────────────────────────────────────────
 class StageType(str, Enum):
@@ -110,7 +109,7 @@ class PublishFormat(str, Enum):
 
 
 # ── Executable-handle blocks (each self-validates) ───────────────────────────
-class Connector(_Base):
+class Connector(StrictModel):
     """input_data handle."""
     # Every field changes what this stage computes (which file, what params) —
     # see Stage.compute_definition_fingerprint.
@@ -146,7 +145,7 @@ class Connector(_Base):
         return self
 
 
-class LLMConfig(_Base):
+class LLMConfig(StrictModel):
     """llm_transform handle."""
     # Every field changes what this stage computes (the prompt, the model, the
     # sampling/response knobs) — see Stage.compute_definition_fingerprint.
@@ -187,7 +186,7 @@ class LLMConfig(_Base):
     )
 
 
-class PythonFunction(_Base):
+class PythonFunction(StrictModel):
     """Handle for python_row_function / python_frame_function (and publish). The
     row-vs-frame distinction lives in the stage `type`, not here — the runtime
     reads the type to decide whether to invoke this per row or per frame."""
@@ -240,12 +239,12 @@ class PythonFunction(_Base):
         return self
 
 
-class JoinKey(_Base):
+class JoinKey(StrictModel):
     left: str
     right: str
 
 
-class JoinConfig(_Base):
+class JoinConfig(StrictModel):
     """join handle. `keys` OR `on` is accepted.
 
     The merged output contains: every LEFT column under its own name; each
@@ -279,7 +278,7 @@ class JoinConfig(_Base):
         return self
 
 
-class AggregationOp(_Base):
+class AggregationOp(StrictModel):
     output_column: str
     formula: AggFormula
     value_column: Optional[str] = None
@@ -294,7 +293,7 @@ class AggregationOp(_Base):
         return self
 
 
-class AggregateConfig(_Base):
+class AggregateConfig(StrictModel):
     """aggregate handle."""
     # Every field changes what this stage computes (grouping, aggregations) —
     # see Stage.compute_definition_fingerprint.
@@ -318,7 +317,7 @@ class RowReviewDecision(str, Enum):
     reject = "reject"
 
 
-class QueueConfig(_Base):
+class QueueConfig(StrictModel):
     """human_review_queue handle. A queued row is matched to a cached human
     decision by fingerprinting the row itself (app.core.stage_cache) — no
     column configuration is needed to enable that matching."""
@@ -338,7 +337,7 @@ class QueueConfig(_Base):
     estimated_volume_per_week: Optional[int] = None
 
 
-class PublishConfig(_Base):
+class PublishConfig(StrictModel):
     """publish handle (runs alongside a `function` block)."""
     # Every field changes what this stage computes (format, destination,
     # template, layout) — see Stage.compute_definition_fingerprint.
@@ -354,7 +353,7 @@ class PublishConfig(_Base):
     cross_link: Optional[bool] = None
 
 
-class ReviewConfig(_Base):
+class ReviewConfig(StrictModel):
     """Routes a stage's outputs into human review."""
     when: Optional[str] = None
     routing: Optional[str] = None
@@ -362,7 +361,7 @@ class ReviewConfig(_Base):
     queue_name: Optional[str] = None
 
 
-class StageInput(_Base):
+class StageInput(StrictModel):
     """Spelled `schema:` on a compiled stage; pydantic reserves `schema` on BaseModel."""
     id: str
     table_schema: TableSchema = Field(alias="schema")
@@ -385,7 +384,7 @@ _TYPE_SPEC: dict[str, dict[str, Any]] = {
 }
 
 
-class Stage(_Base):
+class Stage(StrictModel):
     """One node in the workflow. Exactly one handle block is required,
     selected by `type`."""
     id: str
@@ -482,7 +481,7 @@ class Stage(_Base):
     @field_validator("id")
     @classmethod
     def _snake_case(cls, v: str) -> str:
-        if not _SNAKE_RE.match(v):
+        if not is_snake_case(v):
             raise ValueError(f"id {v!r} should be snake_case")
         return v
 

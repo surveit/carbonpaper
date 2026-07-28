@@ -21,22 +21,18 @@ from pydantic import (
 
 
 # ── Base ─────────────────────────────────────────────────────────────────────
-class _Base(BaseModel):
-    """Contract base. Unknown keys are rejected — a typo'd field is an invalid
-    stage, not silently-ignored data. Enum-typed fields hold their plain string
-    value after validation (compare with `==`, never `is`; never call `.value`).
-    Defaults are validated like any other value, and fields can be populated by
-    python name or alias."""
+class StrictModel(BaseModel):
+    """The shared base for every model in this package. Unknown keys are
+    rejected — a typo'd field is an invalid stage, not silently-ignored data.
+    Enum-typed fields hold their plain string value after validation (compare
+    with `==`, never `is`; never call `.value`). Defaults are validated like any
+    other value, and fields can be populated by python name or alias."""
     model_config = ConfigDict(
         extra="forbid",
         use_enum_values=True,
         validate_default=True,
         populate_by_name=True,
     )
-
-
-# ── Identifiers ──────────────────────────────────────────────────────────────
-_SNAKE_RE = re.compile(r"^[a-z][a-z0-9_]*$")
 
 
 # ── Column-type vocabulary ───────────────────────────────────────────────────
@@ -72,7 +68,7 @@ def is_valid_column_type(t: str) -> bool:
 
 
 # ── Provenance ───────────────────────────────────────────────────────────────
-class SourceRef(_Base):
+class SourceRef(StrictModel):
     """Where a stage's or schema's prose justification lives."""
     doc: Optional[str] = None
     section: Optional[str] = None
@@ -95,7 +91,7 @@ def _is_range_bound(v: Any) -> bool:
 
 
 # ── Typed columns / schemas ──────────────────────────────────────────────────
-class Column(_Base):
+class Column(StrictModel):
     name: str
     type: str = Field(
         default="str",
@@ -324,7 +320,7 @@ def _render_column(col: Column, indent: str) -> list[str]:
     return [line]
 
 
-class TableSchema(_Base):
+class TableSchema(StrictModel):
     """An anonymous schema — columns plus an optional primary key — that can be
     declared inline (e.g. a stage's `output_schema`). `NamedSchema` promotes it to
     a first-class, named artifact."""
