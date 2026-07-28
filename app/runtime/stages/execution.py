@@ -37,6 +37,12 @@ from app.core.agent.usage import LlmUsage
 from app.core.frames import list_rows
 from app.core.stage_cache import StageCache, compute_row_fingerprint
 
+from .frame_caching import (
+    find_cached_frame,
+    note_skipped_caching,
+    open_frame_caching,
+    record_frame_output,
+)
 from ..cancellation import consume_cancel
 from ..context import RunContext
 from ..manifest import CONTRIBUTION_ATTR, RowError, StageContribution
@@ -251,18 +257,36 @@ class SourceHandler(StageHandler):
 
 
 class FrameHandler(StageHandler):
-    """Sees whole input frame(s) keyed by upstream id; may reshape them."""
+    """Sees whole input frame(s) keyed by upstream id; may reshape them.
+
+    `caches_frames` lets the runtime resolve the WHOLE output frame against the
+    stage-result cache instead of calling `apply` (see
+    `frame_caching.open_frame_caching`). Two kinds of registration pass it
+    False: one whose stage is terminal and side-effecting — its output is read
+    by the world, not by a later run — and one whose compute is cheaper than
+    fingerprinting the input a lookup would have to hash.
+    """
 
     def __init__(
         self,
         apply: Callable[[Stage, dict[str, pd.DataFrame], RunContext], pd.DataFrame | None],
+        caches_frames: bool = True,
     ) -> None:
         self.apply = apply
+        self.caches_frames = caches_frames
 
     def execute(
         self, stage: Stage, inputs: dict[str, pd.DataFrame], ctx: RunContext
     ) -> pd.DataFrame | None:
-        return self.apply(stage, inputs, ctx)
+        caching = open_frame_caching(stage, ctx, self.caches_frames)
+        if caching.key is None:
+            output = self.apply(stage, inputs, ctx)
+            return note_skipped_caching(output, caching.skipped_note)
+        input_frames = [inputs[ref.id] for ref in stage.inputs]
+        cached = find_cached_frame(caching, input_frames)
+        if cached is not None:
+            return cached
+        return record_frame_output(caching, input_frames, self.apply(stage, inputs, ctx))
 
     @property
     def preserves_grain_and_order(self) -> bool:

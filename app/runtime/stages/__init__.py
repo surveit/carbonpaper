@@ -59,7 +59,10 @@ HANDLERS: dict[StageType, StageHandler] = {
         make_human_review_mapper,
         project_output_to_declared=True,
     ),
-    StageType.publish: FrameHandler(handle_publish),
+    # caches_frames=False: publish is terminal and side-effecting — it writes
+    # artifacts the world reads, not an output a later run consumes. Replaying a
+    # cached frame would skip the write and leave this run's artifacts absent.
+    StageType.publish: FrameHandler(handle_publish, caches_frames=False),
 }
 
 # A mis-shaped registration (e.g. a frame handler for a type the model declares

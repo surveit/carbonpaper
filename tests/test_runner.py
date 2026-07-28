@@ -582,3 +582,22 @@ def _add_frame_stage(root):
         "inputs": [{"id": "load"}],
         "function": {"kind": "inline", "code": _FRAME_STAGE_CODE},
     }), encoding="utf-8")
+
+
+def test_a_frame_stage_succeeds_with_no_frame_store_configured(tmp_path, monkeypatch):
+    """The dogfooded regression: a process with a document store but no frame
+    store must still run a frame stage — a cache miss is never a stage error."""
+    from app.core import frames as frames_module
+
+    _make_project(tmp_path)
+    _add_frame_stage(tmp_path)
+    _seed_version(tmp_path)
+    monkeypatch.setattr(frames_module, "_frame_store", None)
+
+    manifest = execute_run(tmp_path, repo_root=tmp_path)
+
+    assert manifest["status"] == "ok"
+    record = next(r for r in manifest["stage_records"] if r["stage_id"] == "totals")
+    assert record["status"] == "ok"
+    assert record["output_row_count"] == 2
+    assert any("no frame store" in note for note in record["notes"])
