@@ -156,10 +156,7 @@ class Connector(_Base):
 
 
 class XlsxReadParams(_Base):
-    """Connector params the xlsx reader interprets (app.runtime.stages.input_data._read_xlsx).
-    Strict so a float or bool never silently passes for header_row/first_column;
-    extra="ignore" because callers pass the whole connector.params dict, which
-    also carries path/format/list_columns/parse_dates for other formats."""
+    # extra=ignore: callers pass the whole connector.params dict, incl. other formats' keys
     model_config = ConfigDict(strict=True, extra="ignore")
 
     sheet_name: str | int = 0

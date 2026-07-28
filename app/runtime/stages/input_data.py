@@ -64,7 +64,7 @@ def read_input_data(stage: Stage, ctx: RunContext) -> pd.DataFrame:
     elif fmt == "geojson":
         df = _read_geojson(path)
     elif fmt == "xlsx":
-        df = _read_xlsx(path, params)
+        df = _read_xlsx(path, XlsxReadParams.model_validate(params))
     else:
         raise ValueError(f"Unsupported file format: {fmt}")
 
@@ -99,19 +99,18 @@ def _read_geojson(path: Path) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def _read_xlsx(path: Path, params: dict[str, Any]) -> pd.DataFrame:
+def _read_xlsx(path: Path, params: XlsxReadParams) -> pd.DataFrame:
     # header_row/first_column are 0-based indices into the sheet as it appears in
     # Excel; rows above and columns left of them are discarded before parsing.
-    xlsx_params = XlsxReadParams.model_validate(params)
     # sheet_name is str|int (exactly one sheet), so pd.read_excel always hands back
     # a single DataFrame here, never the dict it returns for a None/list sheet_name.
     frame = pd.read_excel(
-        path, sheet_name=xlsx_params.sheet_name, header=xlsx_params.header_row, engine="openpyxl"
+        path, sheet_name=params.sheet_name, header=params.header_row, engine="openpyxl"
     )
     assert isinstance(frame, pd.DataFrame)
-    if xlsx_params.first_column:
-        _validate_first_column_in_range(xlsx_params.first_column, frame, path, xlsx_params.sheet_name)
-        frame = frame.iloc[:, xlsx_params.first_column:]
+    if params.first_column:
+        _validate_first_column_in_range(params.first_column, frame, path, params.sheet_name)
+        frame = frame.iloc[:, params.first_column:]
     return frame
 
 
