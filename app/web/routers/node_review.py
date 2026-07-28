@@ -15,13 +15,13 @@ from app.core.agent.store import MessageRole, PartType, open_session_store
 from app.services import generation, node_review, stage_edit, versioning
 from app.services import project as project_service
 from app.services.errors import WorkflowLoadError
-from app.services.loader import stage_to_json, stage_to_spec_dict
+from app.services.loader import resolve_function_code, stage_to_json, stage_to_spec_dict
 from app.models import Stage
 from app.models.stages.stage_tests import STAGE_TEST_TYPES, StageTest
 from app.runtime.stage_tests import StageTestResult, find_failing_stage_tests, run_tests_for_stage
 from app.web.config import EXAMPLES_DIR, templates
 from app.web.diagrams import TYPE_CLASS, TYPE_GLYPH, build_mermaid_graph
-from app.web.loading import find_stage, load_stages, resolve_function_code
+from app.web.loading import find_stage, load_stages
 
 router = APIRouter()
 

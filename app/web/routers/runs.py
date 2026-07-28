@@ -24,7 +24,7 @@ from app.core.errors import (
 )
 from app.core.run_status import RunStatus, StageStatus
 from app.services.errors import WorkflowLoadError
-from app.services.loader import load_workflow
+from app.services.loader import load_workflow, resolve_function_code
 from app.services.versioning import list_versions
 from app.services import run as run_service
 from app.runtime.cancellation import request_cancel
@@ -45,7 +45,6 @@ from app.web.loading import (
     load_output_table,
     manifest_stage,
     read_output_df,
-    resolve_function_code,
     runs_dir,
 )
 from app.web.project_view import shell_state
