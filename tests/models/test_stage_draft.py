@@ -49,7 +49,7 @@ def test_round_trip_covers_more_than_one_stage_type():
 
 
 def test_an_input_schema_round_trips_under_the_key_a_compiled_stage_spells():
-    """InputRef's field is `table_schema` in python and `schema:` on the wire
+    """StageInput's field is `table_schema` in python and `schema:` on the wire
     (pydantic reserves `schema` on BaseModel), so to_stage_spec must dump by
     alias — a spec keyed `table_schema` would be a shape no compiled stage has."""
     draft = StageDraft.model_validate({
@@ -61,6 +61,7 @@ def test_an_input_schema_round_trips_under_the_key_a_compiled_stage_spells():
             "primary_key": ["filing_id"],
         }}],
         "function": {"kind": "inline", "code": "def transform(row):\n    return row\n"},
+        "output_schema": {"columns": [{"name": "filing_id", "type": "str"}]},
     })
 
     spec = draft.to_stage_spec()
@@ -79,7 +80,11 @@ def test_a_stage_that_breaks_a_cross_field_rule_parses_as_a_draft_and_is_refused
         "id": "score_rows",
         "type": "llm_transform",
         "name": "Score rows",
-        "inputs": [{"id": "raw"}],  # no input schema -> not 1:1-checkable
+        # an input schema with no primary_key -> the 1:1 rule is uncheckable
+        "inputs": [{"id": "raw", "schema": {"columns": [{"name": "text", "type": "str"}]}}],
+        "output_schema": {"columns": [
+            {"name": "text", "type": "str"}, {"name": "score", "type": "float"},
+        ]},
         "llm": {"prompt_data_template": "score this"},
     }
 
@@ -139,6 +144,7 @@ def test_stage_keeps_the_server_owned_fields_the_draft_drops():
     stage = Stage.model_validate({
         "id": "load", "type": "input_data", "name": "Load",
         "connector": {"kind": "file"}, "source": {"section": "para 3"},
+        "output_schema": {"columns": [{"name": "filing_id", "type": "str"}]},
     })
 
     assert stage.source is not None

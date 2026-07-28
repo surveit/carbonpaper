@@ -300,6 +300,7 @@ def test_mcp_add_stage_drops_server_owned_fields_and_names_them(tmp_path, monkey
     echoed = {
         "id": "load", "name": "Load", "type": "input_data",
         "connector": {"kind": "file"},
+        "output_schema": {"columns": [{"name": "doc_id", "type": "str"}]},
         "tests": [], "source": {"section": "para 3"},
     }
 
