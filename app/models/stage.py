@@ -79,6 +79,7 @@ class FileFormat(str, Enum):
     parquet = "parquet"
     json = "json"
     geojson = "geojson"
+    xlsx = "xlsx"
 
 
 class AggFormula(str, Enum):

@@ -63,6 +63,8 @@ def read_input_data(stage: Stage, ctx: RunContext) -> pd.DataFrame:
         df = pd.read_json(path, lines=True)
     elif fmt == "geojson":
         df = _read_geojson(path)
+    elif fmt == "xlsx":
+        df = _read_xlsx(path, params)
     else:
         raise ValueError(f"Unsupported file format: {fmt}")
 
@@ -95,6 +97,10 @@ def _read_geojson(path: Path) -> pd.DataFrame:
             props.setdefault("lat", coords[1])
         rows.append(props)
     return pd.DataFrame(rows)
+
+
+def _read_xlsx(path: Path, params: dict[str, Any]) -> pd.DataFrame:
+    return pd.read_excel(path, sheet_name=0, header=0, engine="openpyxl")
 
 
 def _parse_list_cell(cell: Any) -> list[str]:
