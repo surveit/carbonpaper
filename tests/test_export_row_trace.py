@@ -136,8 +136,8 @@ def test_rejects_a_from_file_outside_the_bundle(exporter, tmp_path):
 
 
 def test_rejects_a_row_that_carries_no_ordinal(exporter):
-    """The only misuse the signature still permits: a row the author built by
-    hand, or one whose stamp was dropped. No page is written."""
+    """A row the author built by hand, or one whose stamp was dropped, carries
+    no ordinal to read. No page is written."""
     with pytest.raises(TraceRowNotStamped) as excinfo:
         exporter.export_row_trace(
             SCORE_ID, exporter.output_dir / "index.html", row={"name": "a"})

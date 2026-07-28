@@ -8,7 +8,11 @@ from typing import Any, Callable
 
 import pandas as pd
 
-from app.core.errors import TraceRowNotStamped, TraceUnavailableError
+from app.core.errors import (
+    TraceOrdinalColumnCollision,
+    TraceRowNotStamped,
+    TraceUnavailableError,
+)
 from app.models import Stage
 
 from ..context import RunContext
@@ -43,7 +47,7 @@ def _stamp_row_ordinals(df: pd.DataFrame, input_id: str, stage_id: str) -> pd.Da
     filtering would otherwise strand it. Assigns onto a copy — the runner hands
     this same frame to every other consumer of `input_id`."""
     if TRACE_ROW_ORDINAL_COLUMN in df.columns:
-        raise ValueError(
+        raise TraceOrdinalColumnCollision(
             f"publish stage {stage_id}: input {input_id!r} already has a column named "
             f"{TRACE_ROW_ORDINAL_COLUMN!r}, which the runtime needs for row provenance. "
             "Rename it upstream — overwriting it would replace real data with ordinals."

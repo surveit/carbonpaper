@@ -26,6 +26,10 @@ class TraceRowNotStamped(Exception):
     """A trace was requested for a row lacking the ordinal the runtime stamps on."""
 
 
+class TraceOrdinalColumnCollision(ValueError):
+    """A publish input already holds the column name the runtime stamps ordinals into."""
+
+
 class NoVersionToRunError(Exception):
     """A run was requested for a project that has no PUBLISHED version to run.
 

@@ -35,8 +35,8 @@ class RowTraceExporter:
     stages: dict[str, Stage]
 
     def export_row_trace(self, stage_id: str, from_file: Path, *, row: Mapping[str, Any]) -> str:
-        """Takes no ordinal: `row` carries its own, so no caller can name a
-        position that isn't this row's. `from_file` is the file being written —
+        """Takes no ordinal: `row` carries its own, so a caller cannot pass a
+        position separate from a row. `from_file` is the file being written —
         only it knows its own depth in the bundle."""
         row_ordinal = _read_stamped_ordinal(stage_id, row)
         from_dir = self._locate_writer_dir(from_file)
