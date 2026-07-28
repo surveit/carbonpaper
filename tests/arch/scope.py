@@ -1,16 +1,7 @@
-"""Location-derived scope for architecture tests.
-
-An architecture test lives in an ``_arch_tests/`` folder inside the code it governs.
-``find_governed_files(__file__)`` returns the source files in that folder's parent
-subtree, so a test declares its scope by where it sits — no hardcoded path.
-``scan_all_source()`` is the whole-repo scope for genuinely-global rules.
-``find_source_files_under(target)`` is for a rule that names its own target
-path explicitly (a single file or a package directory) rather than deriving
-it from the test's own location.
-
-Exemptions are checked on the path RELATIVE to the scan base, not the absolute path:
-the checkout may itself live under a hidden directory (e.g. a git worktree under
-``.claude/``), so absolute parts would spuriously match ``startswith(".")``.
+"""Location-derived scope: an arch test in an ``_arch_tests/`` folder governs the
+subtree it sits in — no hardcoded path. Exemptions are checked on the path RELATIVE
+to the scan base: the checkout may itself live under a hidden directory (e.g. a git
+worktree under ``.claude/``), whose absolute parts would match ``startswith(".")``.
 """
 from __future__ import annotations
 

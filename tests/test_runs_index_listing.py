@@ -1,10 +1,3 @@
-"""The runs index reports real per-stage counts, or says the manifest is
-unreadable — never a fabricated zero.
-
-`list_runs` parses each run's manifest.json through the typed `RunManifest`. A
-manifest the model rejects (a pre-rename file still using the old `stages` key,
-a malformed status, truncated JSON) is listed as a `corrupt` row carrying NO
-counts, and one such run never breaks the index for the others."""
 from __future__ import annotations
 
 import json

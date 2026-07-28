@@ -1,16 +1,5 @@
-"""tests/test_admin_ui.py — the workspace-level admin page (app/web/routers/
-admin.py): load a packaged seed fixture, export a project back to a
-WorkflowFile json, and confirm an unknown name never reaches the seam.
-
-Isolation mirrors tests/test_project_tools.py / test_mcp_server.py: admin.py
-reaches the platform only through app.services.project, which resolves a name
-against workspace.EXAMPLES_DIR when no examples_dir is passed explicitly — so
-repointing workspace.EXAMPLES_DIR is what isolates the router from the real
-workspace. REPO_ROOT (the export destination's base) is admin.py's own
-captured import, isolated the same way the other routers' REPO_ROOT is (see
-test_eval_runner.py). The two roots are set up like the real repo (examples/
-and exports/ both under one root), so export's destination path matches
-production exactly.
+"""Isolated by repointing both workspace.EXAMPLES_DIR and admin.py's own captured
+REPO_ROOT; patching only one leaves the tests writing into the real workspace.
 """
 from __future__ import annotations
 

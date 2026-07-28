@@ -1,10 +1,6 @@
-"""The draft lifecycle: disposable scratch documents in the store's "draft"
-collection, word-triplet ids, loss acceptable by design. A stored stage is
-always individually valid (a malformed one is rejected at set_draft_stage,
-never stored); a workflow-level incompleteness — a dangling input, a
-duplicate id, a cycle — stays allowed mid-edit. Mirrors test_versioning.py's
-tmp_path-as-project-dir convention (project scoping is by directory name, not
-existence on disk — drafts are store-only and never touch the filesystem)."""
+"""Drafts are store-only: project scoping is by directory NAME, so tmp_path never
+has to exist on disk.
+"""
 from __future__ import annotations
 
 import json

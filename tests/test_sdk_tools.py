@@ -1,11 +1,5 @@
-"""The 12 editing tools wrapped as an in-process claude_agent_sdk MCP
-server. These tests reach the wrapped `SdkMcpTool` handlers directly (no CLI
-subprocess) to prove the adapter forwards results and surfaces errors loudly.
-
-The example workspace (`examples/`) is gitignored and absent in a fresh
-worktree, so — like tests/test_project_tools.py — we seed a project into
-tmp_path (and point the service surface at it) instead of depending on a
-checked-in `examples/congresswatch`.
+"""`examples/` is gitignored and absent in a fresh worktree, so a project is seeded
+into tmp_path rather than read from a checked-in example.
 """
 from __future__ import annotations
 

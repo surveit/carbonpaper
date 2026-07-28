@@ -1,14 +1,3 @@
-"""POST /project/{name}/run with `limit__<stage_id>` row-cap fields, and the
-`_collect_limits` helper that parses them.
-
-A row limit is output-side, per file-input stage: `prepare_run` already
-supports it end-to-end (`limits={stage_id: N}` -> manifest `limit_overrides`,
-enforced by `_execute_stages`, replayed on resume — see
-app/runtime/runner.py::prepare_run's docstring). This file only covers the
-web-form surface that collects `limit__<stage_id>` fields and threads them
-into `prepare_run`; the runner's own limit semantics are covered by
-tests/test_runner.py and tests/test_input_bindings.py.
-"""
 from __future__ import annotations
 
 import json

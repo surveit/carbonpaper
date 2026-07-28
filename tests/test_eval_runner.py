@@ -1,10 +1,3 @@
-"""End-to-end tests for the eval runner (app/evals/runner.py): inject an
-eval dataset at the override stage, run the grain-preserving pathway to the target,
-score the target's output against the dataset's expected column, and record the run.
-
-Builds a tiny project (load → classify) pinned to a stored version — no shipped
-data, no LLM: `classify` is a deterministic python_row_function so the whole loop
-is exercised without a model backend."""
 from __future__ import annotations
 
 import pandas as pd

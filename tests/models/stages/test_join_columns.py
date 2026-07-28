@@ -1,9 +1,5 @@
-"""Tests for the join stage's config-column check (app/models/stages/
-join.py, wired into Stage._config_columns_resolve): each key's `.left` must
-resolve against input 0's edge schema and `.right` against input 1's. The
-config-column check itself has no `select`/`_r`-suffix check — but `select`
-IS validated separately, by the output-schema check (find_join_output_issues,
-see test_join_output_schema.py); this file covers only the join-key check."""
+"""Covers only the join-key check; `select` is validated separately, by
+find_join_output_issues (see test_join_output_schema.py)."""
 from __future__ import annotations
 
 import pytest

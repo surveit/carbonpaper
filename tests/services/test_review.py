@@ -1,7 +1,3 @@
-"""Tests for app/services/review.py: recording a reviewer verdict as a
-stage-result cache entry (record_decision), through the production
-stage-result cache accessor. The one domain rule — a `modify` carries a score —
-lives here; verdict/score coercion is FastAPI's job at the web boundary."""
 from __future__ import annotations
 
 import pytest

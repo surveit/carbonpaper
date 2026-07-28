@@ -1,20 +1,7 @@
-"""The typed `RunManifest` reproduces the run manifest's historical on-disk JSON.
-
-The `tests/goldens/*.json` fixtures are real `manifest.json` files captured from
-the pre-typing dict code for three representative runs — a clean run
-(`ok_run`), an errored chain with a blocked-`pending` tail (`errored_run`), and a
-halted run carrying `human_review_queue_stats` plus a blocked tail
-(`halted_run`). Parsing
-each through `RunManifest` and re-serializing must preserve every key, value, and
-optional-field omission the dict code produced.
-
-Byte-for-byte identity holds for a fully-settled manifest (`ok_run`): the model's
-field order matches the historical insertion order of a stage that RAN. A
-manifest that still contains a never-started `pending` stage record differs only
-in the intra-record position of `started_at` (the old code built pending and
-started records with two different literal key orders; one canonical model order
-cannot reproduce both) — so those assert structural equality, which proves the
-keys/values/omission are identical.
+"""Goldens in tests/goldens/*.json are real pre-typing manifests. Byte-for-byte
+identity only holds for a fully-settled manifest; one containing a never-started
+`pending` record can only be asserted structurally, because the old code wrote
+pending and started records with two different key orders.
 """
 from __future__ import annotations
 

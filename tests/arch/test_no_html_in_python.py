@@ -1,25 +1,8 @@
-"""Architecture: no HTML-document tags in a Python string literal.
-
-HTML belongs in ``app/templates/*.html``, rendered through the templating
-layer; inline HTML built inside a Python string literal was a real review
-finding — it means a page fragment was authored in the wrong layer, outside
-the templates a reviewer would look at for markup.
-
-Detection is AST-based: every string-literal ``ast.Constant`` in a module
-(this also walks the literal segments of an f-string, since those parse as
-nested ``Constant`` nodes) is searched for one of a conservative, explicit
-tag list: ``<html``, ``<div``, ``<table``, ``<body``, ``<span``, ``<ul``,
-``<li``, ``<form``, ``<button``. Matching is case-insensitive and requires a
-non-identifier character (or end of string) right after the tag name, so
-``<li`` matches ``<li>``/``<li class=...>`` but not ``<list ...>`` — a
-compiler prompt file may legitimately write a placeholder like
-``<list of stage dicts as above>``, and a naive substring search would
-misflag it. The tag list is intentionally narrow and never matches a
-generic ``<word>`` pattern such as ``<example>`` or ``<methodology>``, which
-compiler prompt files use as XML-ish delimiters, not as HTML.
-
-Scope is ``app/`` (excluding ``tests/`` and ``_arch_tests/``, which hold the
-checker's own inline test-fixture snippets).
+"""Architecture: no HTML-document tags in a Python string literal — markup belongs in
+``app/templates/*.html``. The banned-tag list is deliberately narrow and a match needs
+a non-identifier character after the tag name: compiler prompt files legitimately use
+XML-ish delimiters (``<example>``) and placeholders (``<list of stage dicts as above>``)
+that a generic ``<word>`` or naive substring match would misflag.
 """
 from __future__ import annotations
 

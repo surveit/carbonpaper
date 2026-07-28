@@ -1,10 +1,5 @@
-"""Tests for building the editing agent's engine through the registry.
-
-Importing app.agents.compiler.config registers the "editing" agent; build_engine
-then validates the opaque context against EditingContext, builds that project's
-tools, wraps them, and returns a ClaudeAgentSdkEngine. Construction is lazy w.r.t.
-the filesystem (the tools only bind the project name), so this constructs an
-engine for a project without seeding a project directory on disk.
+"""Importing app.agents.compiler.config for its side effect is what registers the
+"editing" agent; engine construction is lazy, so no project need exist on disk.
 """
 from __future__ import annotations
 

@@ -1,37 +1,8 @@
-"""Architecture: a protected model attribute is never mutated from outside
-its owning package.
-
-A table of ``ProtectedAttributeRule`` rows names an attribute (e.g. `stages`
-on `Workflow`, `columns` on `TableSchema`) and the package that owns it. Code
-outside that package may still READ the attribute (pass it along, measure its
-length, iterate it plainly), but assigning to it or a subscript of it,
-deleting it, or calling a mutating method on it (`.append`/`.remove`/
-`.clear`/`.pop`/`.insert`/`.extend`/`.sort`) is never its job — reaching into
-another model's collection to change it in place is never a legitimate
-outside job. This is a hard fail with no allowlist.
-
-Two escape hatches appear below, and neither substitutes for the other: the
-owner-package exemption (`rule.owner` — code inside the model's own package
-is the implementation, not an outside caller), and `exempt_paths` (a
-file-scope exclusion for a DIFFERENT model that happens to declare a
-same-named attribute — e.g. `Draft.stages` in `app/services/drafts.py` — out
-of scope for that row because the file owns its OWN same-named attribute).
-
-Detection is name-based AST matching (types can't be resolved from a bare
-`.attr` access), which invites two kinds of over-match, each handled
-differently:
-
-- `columns` collides with `pandas.DataFrame.columns`, used throughout the
-  runtime on dataframes named `df`/`merged`/`out`/etc. A row may set
-  `receiver_is_relevant` to filter by the identifier the attribute was read
-  off (`schema.columns` -> "schema"); the `columns` row below only counts a
-  receiver whose identifier IS or ENDS WITH "schema" (schema, table_schema,
-  output_schema, input_schema, ...), which a `df`/`merged`/`out` receiver
-  never does. `stages` has no realistic namesake to exclude, so its row uses
-  no filter.
-- `stages` collides with OTHER models that happen to declare their own
-  `stages` field — see `_RULES` below for the one identified (and exempted)
-  case, `Draft`.
+"""Architecture: a protected model attribute is never mutated from outside its owning
+package; reading stays legal, and there is no allowlist. Detection is name-based AST
+matching, so a row may set `receiver_is_relevant` to exclude a namesake (`columns`
+collides with `pandas.DataFrame.columns`) and `exempt_paths` to exclude a file
+declaring a DIFFERENT model's same-named attribute (`Draft.stages`).
 """
 from __future__ import annotations
 

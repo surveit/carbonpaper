@@ -1,16 +1,3 @@
-"""The runner's three cancellation behaviors:
-  - a cancel requested before any stage starts leaves everything pending
-  - a cancel requested between two stages preserves the completed stage's
-    output on disk and marks the rest 'pending'
-  - a cancel requested DURING a stage's row-mapped fan-out marks that stage
-    itself 'cancelled' (not 'pending'), distinct from the between-stage case
-All three go through the real prepare_run/run_prepared entry points so the
-manifest shape matches what a live run would produce. A fourth test shows a
-cancelled run is not terminal: it can be resumed and run to completion, because
-the cancel message was consumed (not left as a lingering flag). See
-app/runtime/cancellation.py for the request/consume design and
-app/runtime/executor.py::_execute_stages for the checkpoints under test.
-"""
 from __future__ import annotations
 
 import json

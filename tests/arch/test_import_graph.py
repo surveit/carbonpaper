@@ -1,37 +1,8 @@
-"""Architecture: import-graph structure checks that declared contracts can't express.
-
-`pyproject.toml`'s `[tool.importlinter.contracts]` declare layering — which named
-layer may import which other named layer — and are enforced by `lint-imports`.
-That catches a *forbidden edge between two named layers*, but says nothing
-about two structural properties of the graph as a whole, checked here with
-`grimp` (already a dependency, as import-linter's own engine):
-
-1. **Cycles anywhere under `app/`** — not just between the layers a contract
-   names. A cycle can form entirely within one layer (e.g. two sibling
-   modules under `app.models`), which no layering contract sees.
-2. **Fan-in / fan-out degree drift** — a module quietly becoming a god-hub
-   (many other modules depend on it, or it depends on many others) is not an
-   illegal edge; it is a *count* that only grows one import at a time, so no
-   single PR's contract violation would ever catch it.
-
-All three checks share one `grimp.build_graph("app")` — building the graph is
-the expensive step, so it happens once per test module (a module-scoped
-fixture) rather than once per test.
-
-`app.models` and `app.core` are the repo's two acknowledged, fan-in-unbounded
-import targets — the placement rule for genuinely foundational code (see
-`docs/architecture.md`) — so they are exempt from the fan-in ceiling; nothing
-is exempt from fan-out (a module importing everything is doing too many jobs
-regardless of where it lives) or from the no-cycles rule.
-
-The shared graph is built with `exclude_type_checking_imports=True`: a
-reference only used inside an `if TYPE_CHECKING:` guard (a standard forward-
-reference pattern for typing a parameter/return without a load-time import)
-never executes at runtime, so counting it as a real edge would flag
-`app.models.stage` <-> `app.models.stages` as a cycle when it is not one —
-`app.models.stages/__init__.py` only reaches back to `app.models.stage` for a
-type annotation, guarded by `TYPE_CHECKING`. Confirmed at HEAD by rebuilding
-the graph both ways and diffing the cycle set.
+"""Architecture: cycles anywhere under `app/`, plus fan-in/fan-out degree drift —
+whole-graph properties `pyproject.toml`'s layering contracts can't express. `app.models`
+and `app.core` are exempt from the fan-in ceiling; nothing is exempt from fan-out or
+no-cycles. `if TYPE_CHECKING:` imports are excluded — they never execute at runtime and
+would otherwise read as a cycle between `app.models.stage` and `app.models.stages`.
 """
 from __future__ import annotations
 

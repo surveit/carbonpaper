@@ -1,16 +1,7 @@
-"""Shared pytest fixtures.
-
-Tests never reach a live LLM: `agent_available` is forced False, so any
-un-stubbed `call_llm` raises `LLMError` instead of shelling out to the real
-`claude` CLI. A test that exercises the LLM boundary monkeypatches `call_llm`
-(or `agent_available`) itself.
-
-Every test also gets a fresh in-memory document store (app.core.persistence) and
-a fresh frame store rooted at its own tmp dir (app.core.frames), isolating it
-from other tests and from any on-disk database. Both run ahead of the app's own
-startup wiring, which is guarded by `is_store_configured()` /
-`is_frame_store_configured()` and so leaves an already-configured store alone.
-"""
+"""An un-stubbed `call_llm` raises `LLMError` rather than reaching the real `claude`
+CLI; a test exercising the LLM boundary must monkeypatch it itself. The per-test
+document and frame stores are configured ahead of the app's startup wiring, which
+leaves an already-configured store alone."""
 from __future__ import annotations
 
 from pathlib import Path

@@ -1,7 +1,3 @@
-"""find_aggregate_output_issues: a declared output_schema must be deliverable
-by the aggregate handle — names from group_by + aggregation output columns,
-types from the derivation (count->int, mean->float, sum->numeric value type,
-min/max/first->value type, list->list[value type])."""
 from __future__ import annotations
 
 import pytest

@@ -1,12 +1,7 @@
-"""Tests for the llm_transform stage's config-column check (app/models/
-stages/llm_transform.py, wired into Stage._config_columns_resolve): every
-`{placeholder}` the prompt template actually interpolates must resolve
-against the stage's own input edge schema.
-
-(There is no "edge declares no schema" case here to test: Stage's own
+"""No "edge declares no schema" case exists to test: Stage's own
 _llm_transform_one_to_one validator already requires a primary_key on both
-the input and output schema, so a validly-constructed llm_transform's input
-edge always declares a schema.)"""
+schemas, so a validly-constructed llm_transform's input edge always
+declares one."""
 from __future__ import annotations
 
 import pytest

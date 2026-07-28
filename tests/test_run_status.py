@@ -1,17 +1,5 @@
-"""Contract test for app.core.run_status: StageStatus and RunStatus must
-render as their bare string value everywhere — str(), f-strings, json.dumps —
-never as "ClassName.MEMBER". This is the enum.StrEnum guarantee the run/stage
-status migration depends on (see app/core/run_status.py's module docstring):
-Jinja templates build CSS classes with `status-{{ status }}`, the run-page
-poller reads `status` straight off the JSON API, and the manifest is JSON on
-disk. If a future edit swapped `enum.StrEnum` for `class X(str, Enum)` (the
-pattern app.models uses for StageType etc.), every assertion below would
-fail loudly.
-
-The last two tests drive the real producer (app.runtime.runner.execute_run)
-end to end, proving the full round trip: enum member -> manifest.json on disk
--> reloaded plain string -> the run-detail template's `status-<value>` CSS
-class and the `/status` JSON poller.
+"""Guards the enum.StrEnum rendering guarantee: swapping it for `class X(str, Enum)`
+(the pattern app.models uses) would break every assertion here.
 """
 from __future__ import annotations
 

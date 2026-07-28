@@ -1,20 +1,6 @@
-"""Tier-2 smoke: the journey with a REAL llm_transform stage — spends tokens.
-
-Deselected from a default local pytest run (pytest.ini adds `-m "not
-live_llm"`) so `pytest` never spends tokens by surprise; opt in with
-`pytest -m live_llm`. CI opts in on every push (the live-llm-smoke workflow),
-which the tiny budget below is sized for.
-
-Covers what tests/test_journey_smoke.py structurally cannot: real completions
-arriving through the structured-output agent and conforming to the stage's
-reply spec, transient-failure retries, and the timeout path.
-
-Token budget is bounded BY CONSTRUCTION, and the bounds are asserted so they
-survive future edits: 1 row x (max_retries=2 + 1) = at most 3 model calls per
-run, on the default (small) model with a one-line prompt.
-
-When the backend is missing this tier FAILS, never skips: opting in states an
-intent to test the live path, and a silent skip would report it as covered.
+"""Spends real tokens. Deselected by default (pytest.ini adds -m "not live_llm");
+opt in with `pytest -m live_llm`. Bounded by construction to 3 model calls per
+run. With no backend this tier FAILS rather than skips.
 """
 from __future__ import annotations
 

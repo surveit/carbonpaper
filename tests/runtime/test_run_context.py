@@ -1,9 +1,3 @@
-"""RunContext: the frozen, typed run context every stage handler receives
-instead of the old `ctx: dict[str, Any]`. Pins its structural facts: no field
-names a project directory; identity/stage_cache are granted (or withheld)
-together; `mode` is stamped once and a production run may never carry the
-in-memory queue bypass; and the run's telemetry lives on the manifest, not
-here (no accumulator field to mutate)."""
 from __future__ import annotations
 
 import inspect

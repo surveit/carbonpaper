@@ -1,7 +1,3 @@
-"""Tests for Stage.compute_definition_fingerprint (app/models/stage.py): the
-output-determining subset of a stage — {"type", "handle", "output_schema"} —
-hashed to a stable sha1[:16]. Every other Stage field is incidental (does not
-change what the stage computes) and must not move the fingerprint."""
 from __future__ import annotations
 
 from app.models import Stage

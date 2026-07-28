@@ -1,10 +1,5 @@
-"""Task 2: ClaudeAgentSdkEngine drives claude_agent_sdk.query() and maps its block
-stream onto the normalized events the FE renders (thinking/text/tool_call/
-tool_result). query() is mocked here — no CLI subprocess is spawned.
-
-The plan's draft used @pytest.mark.anyio, but neither pytest-anyio nor
-pytest-asyncio is installed in this repo (no anyio_backend fixture), so we drive
-the coroutine with asyncio.run — mirroring tests/test_sdk_tools.py.
+"""Neither pytest-anyio nor pytest-asyncio is installed here (no anyio_backend
+fixture), so coroutines are driven with asyncio.run.
 """
 from __future__ import annotations
 

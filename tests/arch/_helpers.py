@@ -1,9 +1,8 @@
 """Static-analysis helpers for the architecture tests.
 
-Each helper reads a source file and inspects its AST. Nothing here imports the
-modules under test, so a boundary violation surfaces as a plain assertion naming
-the file rather than an import-time crash — and the tests run fine against code
-that itself imports heavy optional dependencies.
+Nothing here imports the modules under test, so a violation surfaces as a plain
+assertion naming the file rather than an import-time crash — and the tests run
+against code that itself imports heavy optional dependencies.
 """
 from __future__ import annotations
 

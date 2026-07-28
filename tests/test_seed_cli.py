@@ -1,9 +1,3 @@
-"""tests/test_seed_cli.py — the seed platform's testable core:
-discover_workflow_files + seed_all (app.seeds.seed) and the CW_SEED_DEMO
-startup hook (seed_demo_data_if_enabled), exercised directly.
-app/seeds/__main__.py (the `python -m app.seeds` CLI) and app.main's lifespan
-wiring have no logic of their own beyond calling these — nothing left to test
-at that layer."""
 from __future__ import annotations
 
 import os

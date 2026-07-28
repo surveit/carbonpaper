@@ -1,15 +1,5 @@
-"""Direct unit tests for app/services/versioning.py — versions as documents in
-the store's "workflow_version" collection: the WorkflowVersion contract of the
-four public functions (create_version_from_disk, list_versions, load_version,
-load_version_stages) that app.runtime.runner, app.evals, app.services.project and
-app.web.loading all depend on by signature.
-
-Project scoping is by `tmp_path.name` (the same convention every other
-collection in the store uses), isolated per test by the autouse in-memory store
-(see conftest.fresh_store). Run-lifecycle integration coverage (a run pinned to
-a version) lives in test_runner.py; the editing agent's stage tools live in
-test_project_tools.py; eval-pinning lives in test_eval_runner.py /
-test_eval_store.py. This file exercises versioning.py's own contract directly.
+"""Project scoping is by `tmp_path.name`, isolated per test by the autouse in-memory
+store (conftest.fresh_store).
 """
 from __future__ import annotations
 

@@ -1,8 +1,3 @@
-"""Tests for app/models/stages/shared.py: `resolve_input_columns` (the
-edge-only column resolver every per-stage-type validator dispatches through)
-and `find_predicate_column_issues` (the where/filter-predicate-to-issues
-helper aggregate.py and human_review_queue.py share), plus the dispatch table
-in app/models/stages/__init__.py."""
 from __future__ import annotations
 
 from app.models import Stage

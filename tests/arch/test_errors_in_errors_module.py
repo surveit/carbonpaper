@@ -1,17 +1,7 @@
-"""Architecture: exception classes live in a package's ``errors.py``.
-
-An exception declared inline near its raise site scatters the error
-vocabulary across the codebase; declaring it in a package's ``errors.py``
-keeps one home per concept. Any package may have its own ``errors.py``
-(``app/core/errors.py`` exists today; ``app/web/errors.py`` etc. are equally
-valid homes) — the rule is only that the class must live in a file named
-``errors.py``, not which one.
-
-Detection is name-based, since AST can't resolve base classes to real types: a
-``ClassDef`` counts as an exception iff one of its base names is "Exception",
-"BaseException", or ends with "Error" or "Exception". This over-matches
-nothing in practice for real exception hierarchies, and the allowlist below
-absorbs any case where it does.
+"""Architecture: exception classes live in a file named ``errors.py`` — any package's,
+not one specific module. Detection is name-based, since AST can't resolve base classes
+to real types: a ``ClassDef`` counts as an exception iff one of its base names is
+"Exception", "BaseException", or ends with "Error" or "Exception".
 """
 from __future__ import annotations
 
