@@ -85,6 +85,6 @@ authoritative description):
   numeric column — model a `status` enum + a nullable `score` (absence ≠ zero).
   This is a recurring trap in scoring pipelines.
 - **Beware `extra="ignore"`**: the shared model base (`app/models/schema.py`
-  `_Base`) silently drops unknown keys, so a mistyped field name (or a
+  `StrictModel`) silently drops unknown keys, so a mistyped field name (or a
   constraint added under the wrong key) disappears without an error. Check your
   spelling against the model; don't trust silence.

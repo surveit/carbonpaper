@@ -10,7 +10,7 @@ from typing import Any
 
 from pydantic import ValidationError, model_validator
 
-from app.models.schema import _Base
+from app.models.schema import StrictModel
 from app.models.stage import Stage, StageType
 from app.core.utils import format_errors
 
@@ -131,7 +131,7 @@ def graph_issues(stages: list[Stage]) -> list[str]:
     return issues + validate_edge_schemas(stages)
 
 
-class Workflow(_Base):
+class Workflow(StrictModel):
     """A whole workflow: validated stages with unique ids, resolvable inputs, acyclic."""
     stages: list[Stage]
 

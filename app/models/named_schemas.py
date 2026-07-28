@@ -13,11 +13,10 @@ from pydantic import Field, ValidationError, field_validator, model_validator
 from app.models.schema import (
     Column,
     SourceRef,
+    StrictModel,
     TableSchema,
-    _Base,
-    _SNAKE_RE,
 )
-from app.core.utils import format_errors
+from app.core.utils import format_errors, is_snake_case
 
 
 class SchemaKind(str, Enum):
@@ -55,7 +54,7 @@ class NamedSchema(TableSchema):
     @field_validator("name")
     @classmethod
     def _snake_case(cls, v: str) -> str:
-        if not _SNAKE_RE.match(v):
+        if not is_snake_case(v):
             raise ValueError(f"name {v!r} should be snake_case")
         return v
 
@@ -84,7 +83,7 @@ def validate_references_resolve(schemas: list[NamedSchema]) -> None:
                     f"which is not a column of `{target_name}`")
 
 
-class SchemaLibrary(_Base):
+class SchemaLibrary(StrictModel):
     """The whole data model: named schemas with unique names and resolvable FKs."""
     schemas: list[NamedSchema]
 

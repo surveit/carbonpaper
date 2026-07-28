@@ -13,7 +13,7 @@ from app.models import Stage
 
 from ..context import RunContext
 from ..trace_links import RowTraceLinker
-from .python_functions import _load_python_function
+from .python_functions import load_python_function
 
 TRACE_LINKS_KWARG = "trace_links"
 
@@ -24,7 +24,7 @@ def handle_publish(stage: Stage, inputs: dict[str, pd.DataFrame], ctx: RunContex
     positionally, an `output_dir` kwarg, and a `trace_links` RowTraceLinker only
     if it declares that keyword."""
     output_dir = _prepare_output_dir(stage, ctx)
-    fn = _load_python_function(stage)
+    fn = load_python_function(stage)
     args = [inputs[ref.id] for ref in stage.inputs]
 
     linker = _resolve_trace_linker(fn, stage, ctx)

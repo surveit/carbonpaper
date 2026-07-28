@@ -94,7 +94,7 @@ def _score_stage(stage_id, input_id, name="Score"):
 def _queue_stage(stage_id, input_id, name="Review"):
     """A human_review_queue with no cached decisions yet — it halts. Its
     output_schema keeps the (id, val) columns a reviewed row carries through;
-    the stage projects onto exactly what it declares, so the reviewer
+    the stage keeps exactly what it declares, so the reviewer
     bookkeeping columns are not part of its output."""
     return {"id": stage_id, "name": name, "type": "human_review_queue",
             "inputs": [{"id": input_id, "schema": _ID_VAL_SCHEMA}],
@@ -353,7 +353,7 @@ def test_manifest_paths_are_posix_on_every_platform(tmp_path, monkeypatch):
 # ── Resume clears the stale halt marker ──────────────────────────────────────
 
 def test_resume_pops_stale_halted_at_before_re_executing(tmp_path, monkeypatch):
-    """A resumed run is no longer halted, so resume_run must hand _execute_stages
+    """A resumed run is no longer halted, so resume_run must hand execute_stages
     a manifest WITHOUT `halted_at` — otherwise a mid-run flush (which persists
     status `running`) would carry the halt marker and the run page would show the
     review banner + queue links while the halted stage re-runs. The loop re-adds
@@ -366,13 +366,13 @@ def test_resume_pops_stale_halted_at_before_re_executing(tmp_path, monkeypatch):
     assert halted["halted_at"] == ["review"]  # the halted run recorded the marker
 
     captured: dict[str, bool] = {}
-    real_execute = runner._execute_stages
+    real_execute = runner.execute_stages
 
     def capture(ordered, ctx, manifest, run_dir, outputs_so_far):
         captured["halted_at_present"] = "halted_at" in manifest
         return real_execute(ordered, ctx, manifest, run_dir, outputs_so_far)
 
-    monkeypatch.setattr(runner, "_execute_stages", capture)
+    monkeypatch.setattr(runner, "execute_stages", capture)
     runner.resume_run(tmp_path, halted["run_id"], tmp_path)
 
     assert captured["halted_at_present"] is False

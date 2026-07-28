@@ -7,8 +7,20 @@ from __future__ import annotations
 
 import hashlib
 import random
+import re
 
 from pydantic import ValidationError
+
+
+# ── Identifiers ──────────────────────────────────────────────────────────────
+_SNAKE_RE = re.compile(r"^[a-z][a-z0-9_]*$")
+
+
+def is_snake_case(value: str) -> bool:
+    """True if `value` is a lowercase identifier: a leading letter, then letters,
+    digits or underscores. Rejects a leading digit or underscore."""
+    return _SNAKE_RE.match(value) is not None
+
 
 _ADJECTIVES = ("amber", "brisk", "calm", "dusky", "eager", "fresh", "glad", "keen",
                "lucid", "mellow", "noble", "plain", "quiet", "rapid", "solid", "tidy")

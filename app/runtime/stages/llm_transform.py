@@ -47,8 +47,8 @@ def make_llm_row_mapper(stage: Stage, ctx: RunContext, src: pd.DataFrame) -> Row
     def map_row(row: Row, index: int) -> Row:
         # Per-attempt usage lands here (success or failure); the row carries its
         # summed usage out under ROW_USAGE_KEY for the driver to aggregate. Like
-        # ROW_ERROR_KEY, it is an undeclared column and the output projection
-        # drops it, so it never reaches stage output.
+        # ROW_ERROR_KEY, it is an undeclared column and the output-schema column
+        # selection drops it, so it never reaches stage output.
         usages: list[LlmUsage] = []
         try:
             reply = call_llm(stage.id, llm, row, reply_model=reply_model, usage_out=usages)
@@ -87,7 +87,7 @@ def run_llm_batches(
     Which rows arrive here is not this function's business: the handler shape
     resolves the stage-result cache and hands over only the rows that must be
     computed. The rows returned carry their internal columns, un-stripped and
-    unprojected — the shape assembles the stage's output frame from them."""
+    unselected — the shape assembles the stage's output frame from them."""
     llm = stage.llm
     assert llm is not None  # Stage validation: llm_transform carries llm
     assert stage.output_schema is not None and stage.inputs[0].table_schema is not None

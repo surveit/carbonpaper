@@ -76,7 +76,7 @@ def run_subset(
 
     Owns its run manifest as a first-class, live-updated artifact: it mints the
     manifest here (create_run_manifest, the single source of the manifest shape)
-    and drives it through the same `_execute_stages` engine a production run uses,
+    and drives it through the same `execute_stages` engine a production run uses,
     which flushes the manifest to disk per stage. So if a mid-frontier stage
     errors, the manifest on disk already records the completed stages as ok and the
     failing stage's error before this raises — partial work is preserved for a
@@ -87,7 +87,7 @@ def run_subset(
     The run_id is `run_dir.name`.
 
     Any input of a subset stage that names a stage outside the subset must appear in
-    `injected_outputs`, or `_execute_stages` fails on it. Raises SubsetRunError if an
+    `injected_outputs`, or `execute_stages` fails on it. Raises SubsetRunError if an
     executed stage errors or the run halts for review, so a caller gets a clean output
     set or a loud failure — never a half-populated dict.
 
@@ -107,7 +107,7 @@ def run_subset(
         limits={}, offsets={}, bust_cache=False)
     write_manifest(run_dir, manifest)
     outputs: dict[str, pd.DataFrame] = dict(injected_outputs)
-    manifest = _execute_stages(
+    manifest = execute_stages(
         ordered, _subset_ctx(repo_root, run_dir, queue_auto_approve),
         manifest, run_dir, outputs)
     _raise_if_run_failed(manifest)
@@ -125,7 +125,7 @@ def _subset_ctx(repo_root: Path, run_dir: Path, queue_auto_approve: bool) -> Run
 
 def _raise_if_run_failed(manifest: RunManifest) -> None:
     """Turn a non-clean manifest into a SubsetRunError naming the cause. Reads the
-    same status/stage records `_execute_stages` writes — the manifest is the run's
+    same status/stage records `execute_stages` writes — the manifest is the run's
     result of record, so failure detection lives with it, not in each caller."""
     status = manifest.status
     if status in (RunStatus.OK, RunStatus.WARNINGS):
@@ -140,7 +140,7 @@ def _raise_if_run_failed(manifest: RunManifest) -> None:
     raise SubsetRunError(f"run did not complete (status {status!r})")
 
 
-def _execute_stages(
+def execute_stages(
     ordered: list[Stage],
     ctx: RunContext,
     manifest: RunManifest,
@@ -223,7 +223,7 @@ def _execute_stages(
     )
 
 
-# --- _execute_stages helpers -------------------------------------------------
+# --- execute_stages helpers -------------------------------------------------
 
 
 class _StageOutcome(enum.Enum):

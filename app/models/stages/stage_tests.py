@@ -10,13 +10,13 @@ from typing import Any, Optional
 
 from pydantic import BaseModel, ConfigDict, model_validator
 
-from app.models.schema import _Base
+from app.models.schema import StrictModel
 
 # The stage types whose handlers can execute a test.
 STAGE_TEST_TYPES = frozenset({"python_row_function", "python_frame_function"})
 
 
-class StageTest(_Base):
+class StageTest(StrictModel):
     """One case: `inputs` maps each of the stage's declared upstream ids to that
     input's rows; `expected` is the output rows those inputs must produce.
     `name` is the case's stable handle — what it pins down, e.g.

@@ -16,7 +16,7 @@ from ..context import RunContext
 from .execution import Row, RowMapper
 
 
-def _load_python_function(stage: Stage) -> Callable[..., Any]:
+def load_python_function(stage: Stage) -> Callable[..., Any]:
     """Resolve the callable for a stage carrying a function: block."""
     fn_spec = stage.function
     assert fn_spec is not None  # Stage validation: these types carry function
@@ -39,7 +39,7 @@ def _load_python_function(stage: Stage) -> Callable[..., Any]:
 def handle_python_frame_function(stage: Stage, inputs: dict[str, pd.DataFrame], ctx: RunContext) -> pd.DataFrame:
     """Whole-frame transform: the function sees the full input frame(s) and may
     reshape them (group-by, pivot, dedup, multi-input merge)."""
-    fn = _load_python_function(stage)
+    fn = load_python_function(stage)
     # Pass dataframes positionally in declared input order.
     args = [inputs[ref.id] for ref in stage.inputs]
     return fn(*args)
@@ -50,7 +50,7 @@ def make_python_row_mapper(stage: Stage, ctx: RunContext, src: pd.DataFrame) -> 
     input's rows — one dict in, one dict out. The authored function is shown
     neither the frame nor a row's position in it, so it cannot fan out, fan in,
     or reorder."""
-    fn = _load_python_function(stage)
+    fn = load_python_function(stage)
 
     def map_row(row: Row, index: int) -> Row:
         result = fn(row)

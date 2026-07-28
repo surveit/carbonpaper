@@ -465,7 +465,7 @@ def test_run_subset_preserves_partial_work_in_the_manifest_on_a_mid_frontier_err
 
 def test_raise_if_run_failed_lists_halted_stages_as_readable_text():
     """`halted_at` is a list of stage ids (see app/runtime/runner.py's
-    _execute_stages). _raise_if_run_failed's message must read them out
+    execute_stages). _raise_if_run_failed's message must read them out
     comma-joined, not as Python's list repr (`['review_a', 'review_b']`)."""
     manifest = RunManifest(
         run_id="r", started_at="t", project=None, workflow_version=None,

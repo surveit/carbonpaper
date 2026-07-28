@@ -11,6 +11,7 @@ from arch.predicates import (
     check_no_import,
     check_no_raw_disk,
     find_check_prefixed_functions,
+    find_private_name_imports,
     find_production_run_imports,
 )
 from arch.scope import find_governed_files, scan_all_source
@@ -24,5 +25,6 @@ __all__ = [
     "check_imports_are_stdlib_only",
     "check_no_dict_keys",
     "find_check_prefixed_functions",
+    "find_private_name_imports",
     "find_production_run_imports",
 ]

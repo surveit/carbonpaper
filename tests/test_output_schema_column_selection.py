@@ -89,7 +89,7 @@ def _queue_stage(output_schema, flt=None):
 def _src_scored():
     # filter="entity_id == 'nope'" matches nothing, so every row is a
     # pass-through row — avoids HaltForReview so the test can assert on the
-    # projected output directly.
+    # selected output directly.
     return pd.DataFrame([
         {"entity_id": "C:acme", "evidence_id": "d1#0", "quote": "we love climate policy",
          "score": 1, "benchmark_id": "B1", "query_id": "Q5"},

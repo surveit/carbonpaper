@@ -37,7 +37,7 @@ _FLAGGED_COLUMNS = [*_SCORED_COLUMNS, {"name": "flag", "type": "str"}]
 
 # The columns the queue stage itself adds to every row it emits, whichever of the
 # three outcomes the row took (see _pass_row_through / review._build_output_row).
-# The stage's output is projected onto its declared columns, so output_schema has
+# The stage's output is cut down to its declared columns, so output_schema has
 # to name these as well as the upstream ones it carries through.
 _REVIEW_COLUMNS = [
     {"name": "ai_score", "type": "int"}, {"name": "human_score", "type": "float"},
@@ -438,7 +438,7 @@ def test_the_documented_downstream_filter_excludes_only_the_rejected_row(tmp_pat
 
 
 def test_every_row_rejected_still_emits_every_row_with_the_declared_columns(tmp_path):
-    """Rejecting EVERY queued row still emits every row, projected onto the
+    """Rejecting EVERY queued row still emits every row, cut down to the
     columns output_schema declares. A queue stage can no longer hand a
     non-empty input on as a zero-row frame at all, whatever the reviewer
     decided."""

@@ -26,7 +26,7 @@ from app.services.errors import WorkflowLoadError
 from app.services import versioning
 
 from .context import RunContext
-from .executor import _execute_stages, topological_sort
+from .executor import execute_stages, topological_sort
 from .manifest import (
     create_run_manifest,
     load_manifest_model,
@@ -236,7 +236,7 @@ def prepare_run(
     (run_dir / "artifacts").mkdir(parents=True, exist_ok=True)
 
     # This run's logical identity for cancellation's checkpoints (see
-    # app.runtime.cancellation) — read by _execute_stages, never by name of
+    # app.runtime.cancellation) — read by execute_stages, never by name of
     # anything on disk. run_dir above stays I/O-only.
     ctx = RunContext.for_production_run(
         repo_root, run_dir, project_dir.name, run_id, limits=limits, offsets=offsets,
@@ -268,7 +268,7 @@ def run_prepared(prep: dict[str, Any]) -> dict[str, Any]:
     a background thread (the manifest is updated on disk as stages complete).
     Returns the final manifest as a plain JSON-native dict — the same shape a
     reader parses off disk."""
-    manifest = _execute_stages(prep["ordered"], prep["ctx"], prep["manifest"],
+    manifest = execute_stages(prep["ordered"], prep["ctx"], prep["manifest"],
                                prep["run_dir"], outputs_so_far={})
     return manifest.to_dict()
 
@@ -369,7 +369,7 @@ def resume_run(project_dir: Path, run_id: str, repo_root: Path) -> dict[str, Any
     # "halted for review" banner and queue links while the stage re-runs. The
     # loop re-adds `halted_at` if a stage halts again; otherwise it stays gone.
     manifest.clear_halt()
-    return _execute_stages(ordered, ctx, manifest, run_dir, outputs_so_far).to_dict()
+    return execute_stages(ordered, ctx, manifest, run_dir, outputs_so_far).to_dict()
 
 
 # CLI entrypoint for ad-hoc runs
