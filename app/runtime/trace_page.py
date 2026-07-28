@@ -21,3 +21,11 @@ _env = Environment(
 
 def render_trace_body(view: dict[str, Any]) -> str:
     return _env.get_template("_trace_body.html").render(view=view)
+
+
+def render_standalone_trace_page(view: dict[str, Any], asset_prefix: str) -> str:
+    return _env.get_template("trace_standalone.html").render(
+        view=view,
+        body=render_trace_body(view),
+        assets=asset_prefix,
+    )
