@@ -147,8 +147,11 @@ def test_a_row_whose_lineage_crosses_a_join_raises(tmp_path):
     ], run_id="R1")
     ctx = _production_ctx(tmp_path, run_dir, [])
 
-    with pytest.raises(TraceUnavailableError):
+    with pytest.raises(TraceUnavailableError) as exc:
         handle_publish(_publish_stage(_EXPORTING_PUBLISH_CODE), {"enrich": joined}, ctx)
+    # the failure names the publish stage to fix, not only the traced stage/row
+    assert "report" in str(exc.value)
+    assert "enrich" in str(exc.value)
 
 
 def _hrefs(html: str) -> list[str]:

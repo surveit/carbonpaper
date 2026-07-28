@@ -63,11 +63,12 @@ class RunContext(BaseModel):
     # touching a fabricated directory; repo_root has no reader in the runtime.
     repo_root: Path | None
     run_dir: Path | None
-    # The stages this execution is running, keyed by id — the workflow as pinned
-    # when the context was built. A handler still receives its OWN stage as an
-    # argument; this is here for the publish handler's trace exporter, which
-    # renders every UPSTREAM stage's transform onto an exported trace page and
-    # has no other way to see them.
+    # The stages THIS EXECUTION runs, keyed by id — not the whole workflow: a
+    # subset run, a preview, and an authored test each carry only what they run,
+    # so an out-of-subset upstream stage renders as `unknown`. A handler still
+    # receives its OWN stage as an argument; this is here for the publish
+    # handler's trace exporter, which renders every UPSTREAM stage's transform
+    # onto an exported trace page and has no other way to see them.
     stages: dict[str, Stage]
     # This run's logical identity, read by cancellation's checkpoints and the
     # stage-result cache key. Set for a production run; None for a subset run,

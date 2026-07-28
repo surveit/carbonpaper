@@ -8,6 +8,7 @@ from typing import Any, Callable
 
 import pandas as pd
 
+from app.core.errors import TraceUnavailableError
 from app.models import Stage
 
 from ..context import RunContext
@@ -29,7 +30,23 @@ def handle_publish(stage: Stage, inputs: dict[str, pd.DataFrame], ctx: RunContex
     exporter = _resolve_trace_exporter(fn, output_dir, ctx)
     if exporter is None:
         return fn(*args, output_dir=str(output_dir))
-    return fn(*args, output_dir=str(output_dir), trace_links=exporter)
+    return _publish_with_traces(fn, args, output_dir, exporter, stage.id)
+
+
+def _publish_with_traces(
+    fn: Callable[..., pd.DataFrame],
+    args: list[pd.DataFrame],
+    output_dir: Path,
+    exporter: RowTraceExporter,
+    stage_id: str,
+) -> pd.DataFrame:
+    """The export is raised from inside the authored function, whose message
+    names the TRACED stage and row — not the publish stage that asked for it.
+    Re-raise naming the publish stage so the failure says which one to fix."""
+    try:
+        return fn(*args, output_dir=str(output_dir), trace_links=exporter)
+    except TraceUnavailableError as exc:
+        raise TraceUnavailableError(f"publish stage {stage_id}: {exc}") from exc
 
 
 def _prepare_output_dir(stage: Stage, ctx: RunContext) -> Path:
