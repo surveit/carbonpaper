@@ -6,7 +6,7 @@ agent corrects in the same loop. The submitted object is never echoed into the c
 """
 from __future__ import annotations
 
-from typing import Any, Generic, TypeVar
+from typing import Any, Callable, Generic, TypeVar
 
 from pydantic import BaseModel, ValidationError
 
@@ -54,14 +54,17 @@ class Agent(Generic[Model]):
         # run() (None until then). Lets a caller attribute spend to this agent.
         self._last_usage: LlmUsage | None = None
 
-    async def run(self) -> Model:
+    async def run(self, emit: Callable[[dict[str, Any]], None] | None = None) -> Model:
         """Run the agent HEADLESSLY and return the validated `target_schema` it submits.
         Raises GenerationError if no valid answer is submitted within `max_attempts` — it
         never returns an invalid or fabricated one. (To run it as a live, streamable turn
-        instead, drive `build_engine()` through the TurnManager and read `answer`.)"""
+        instead, drive `build_engine()` through the TurnManager and read `answer`.)
+
+        `emit` opts into the turn's stream events (thinking/text/tool_call/error);
+        the default drops them."""
         engine = self.build_engine()
         await engine.stream_turn(
-            self._task, message_history=None, emit=_ignore_event, resume=None
+            self._task, message_history=None, emit=emit or _ignore_event, resume=None
         )
         # getattr, not attribute access: a custom engine need not track usage.
         self._last_usage = getattr(engine, "last_usage", None)
