@@ -1,14 +1,13 @@
 """StageTest — one authored input→expected-output case for a python transform, plus the
-shape and column checks the Stage model runs when it carries tests.
-
-A test is authored from the methodology, never produced by executing the stage's own code.
-Conformance that needs dataframes (types, nullability, ranges) is `app.runtime.stage_tests`."""
+shape and row validation the Stage model runs when it carries tests.
+A test is authored from the methodology, never produced by executing the stage's own code."""
 from __future__ import annotations
 
 from typing import Any, Optional
 
-from pydantic import BaseModel, ConfigDict, model_validator
+from pydantic import BaseModel, ConfigDict, ValidationError, model_validator
 
+from app.core.utils import format_errors
 from app.models.schema import TableSchema, _Base
 
 # The stage types whose handlers can execute a test.
@@ -71,21 +70,26 @@ def validate_stage_tests(
                 raise AssertionError(f"unhandled stage test type: {stage_type}")
 
 
-def validate_test_columns(
+def validate_test_rows(
     input_schemas: dict[str, TableSchema],
     output_schema: TableSchema,
     tests: list[StageTest],
 ) -> None:
-    """Raise ValueError if any test's rows name columns the stage does not
-    declare, or omit ones it does. Stricter than the runtime's stage-I/O
-    validation, which only warns on an undeclared column: a real stage may pass
-    extras through, but a test row inventing one is stating the wrong shape.
-    Callers must have run validate_stage_tests first — every test is assumed to
-    carry exactly the declared input ids."""
+    """Raise ValueError if any test row fails the schema it claims to instance.
+    Judged through TableSchema.to_pydantic_model, so every declared column must be
+    on EVERY row (a nullable one as an explicit None) and no other key is allowed —
+    stricter than the runtime's stage-I/O validation, which only warns on an
+    undeclared column: a real stage may pass extras through, but a test row
+    inventing one states the wrong shape. Assumes validate_stage_tests passed."""
+    input_models = {
+        input_id: schema.to_pydantic_model(f"{input_id}_row")
+        for input_id, schema in input_schemas.items()
+    }
+    expected_model = output_schema.to_pydantic_model("expected_row")
     problems = [
         problem
         for test in tests
-        for problem in _find_column_problems(test, input_schemas, output_schema)
+        for problem in _find_test_row_problems(test, input_models, expected_model)
     ]
     if problems:
         raise ValueError("; ".join(problems))
@@ -99,8 +103,8 @@ def build_stage_tests_model(
     """A pydantic model of shape ``{"tests": [StageTest, ...]}`` whose
     validation is bound to one stage's context: the shape rules
     validate_stage_tests enforces (inputs match the declared upstream ids,
-    row functions are one row in → one row out) and the column agreement
-    validate_test_columns enforces both run at model_validate time. Built per
+    row functions are one row in → one row out) and the row conformance
+    validate_test_rows enforces both run at model_validate time. Built per
     stage so an agent's submit_answer tool can reject a malformed suite inside
     the agent loop instead of at stage-write time."""
 
@@ -112,47 +116,36 @@ def build_stage_tests_model(
         @model_validator(mode="after")
         def _stage_rules(self) -> "StageTestSuite":
             validate_stage_tests(stage_type, list(input_schemas), self.tests)
-            validate_test_columns(input_schemas, output_schema, self.tests)
+            validate_test_rows(input_schemas, output_schema, self.tests)
             return self
 
     return StageTestSuite
 
 
-def _find_column_problems(
+def _find_test_row_problems(
     test: StageTest,
-    input_schemas: dict[str, TableSchema],
-    output_schema: TableSchema,
+    input_models: dict[str, type[BaseModel]],
+    expected_model: type[BaseModel],
 ) -> list[str]:
     problems = [
         f"test {test.name!r}, input {input_id!r}: {problem}"
-        for input_id, schema in input_schemas.items()
-        for problem in _find_row_column_problems(test.inputs[input_id], schema)
+        for input_id, row_model in input_models.items()
+        for problem in _find_row_problems(test.inputs[input_id], row_model)
     ]
     problems += [
         f"test {test.name!r}, expected rows: {problem}"
-        for problem in _find_row_column_problems(test.expected, output_schema)
+        for problem in _find_row_problems(test.expected, expected_model)
     ]
     return problems
 
 
-def _find_row_column_problems(
-    rows: list[dict[str, Any]], schema: TableSchema
+def _find_row_problems(
+    rows: list[dict[str, Any]], row_model: type[BaseModel]
 ) -> list[str]:
-    """Column disagreements between `rows` and `schema`, judged on the union of
-    the rows' keys: one row may omit a column (that reads as null, as it does at
-    run time), but the case as a whole must name every declared column and no
-    others. No rows means no claim about columns."""
-    if not rows:
-        return []
-    present = {column for row in rows for column in row}
-    declared = [column.name for column in schema.columns]
-    undeclared = sorted(name for name in present if schema.column_for_name(name) is None)
-    missing = sorted(name for name in declared if name not in present)
-    problems = []
-    if undeclared:
-        problems.append(
-            f"undeclared column(s) {undeclared} — the schema declares {sorted(declared)}"
-        )
-    if missing:
-        problems.append(f"missing declared column(s) {missing}")
+    problems: list[str] = []
+    for index, row in enumerate(rows):
+        try:
+            row_model.model_validate(row)
+        except ValidationError as err:
+            problems += [f"row {index}: {issue}" for issue in format_errors(err)]
     return problems
