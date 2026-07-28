@@ -1,6 +1,5 @@
-"""Renders the per-row trace body — the same fragment the live lineage route
-and a published artifact's standalone trace page both embed, from
-`build_trace_view`'s payload alone (no run directory, no database)."""
+"""Renders the per-row trace body from `build_trace_view`'s payload alone —
+no run directory, no database."""
 from __future__ import annotations
 
 from pathlib import Path

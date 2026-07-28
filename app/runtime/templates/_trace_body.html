@@ -1,10 +1,4 @@
-{# The row's stage chain: one <div class="step"> per node, in chronological
-   order, each carrying the columns new at that stage, the row's values there,
-   and the transform detail. Reads `view` — the dict build_trace_view returns
-   — so this same fragment renders both the live lineage page and a published
-   artifact's standalone trace page; see app/runtime/trace_page.py.
-
-   Speaks build_trace_view's one contract directly (view.nodes/edges/upstream,
+{# Speaks build_trace_view's contract directly (view.nodes/edges/upstream,
    node.stage_id/columns_new/row/role/transform) — no dual-shape fallbacks.
    The environment's StrictUndefined turns a missing field into a raised
    error rather than a silently empty fragment. #}
