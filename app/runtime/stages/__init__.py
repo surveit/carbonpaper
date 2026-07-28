@@ -55,7 +55,6 @@ HANDLERS: dict[StageType, StageHandler] = {
         parallelism=DEFAULT_PARALLEL,
         project_output_to_declared=True,
     ),
-    # parallelism stays 1: the mapper increments one shared stats dict per row.
     StageType.human_review_queue: RowMapHandler(
         make_human_review_mapper,
         project_output_to_declared=True,

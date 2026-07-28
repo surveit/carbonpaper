@@ -1,7 +1,7 @@
 import pandas as pd
 import pytest
 
-from app.core.frames import FrameStore
+from app.core.frames import FrameStore, list_rows
 
 
 @pytest.fixture
@@ -46,3 +46,14 @@ def test_unsafe_collection_rejected(frames, bad_collection):
     # built), just on the other path segment — so it never lands on disk either.
     escaped_path = frames.root / bad_collection / "proj/1.parquet"
     assert not escaped_path.exists()
+
+
+def test_list_rows_gives_one_str_keyed_dict_per_row():
+    """The str pinning is the point: a frame whose column labels are integers
+    still yields keys a caller can look up by name."""
+    frame = pd.DataFrame({"a": [1, 2], 3: ["x", "y"]})
+    assert list_rows(frame) == [{"a": 1, "3": "x"}, {"a": 2, "3": "y"}]
+
+
+def test_list_rows_of_an_empty_frame_is_empty():
+    assert list_rows(pd.DataFrame({"a": []})) == []

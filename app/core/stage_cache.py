@@ -17,11 +17,11 @@ never here.
 `SCOPE = PersistenceScope.PROJECT_READ_WRITE` (see app.core.persistence.PersistenceScope):
 the one deliberate channel that lets run activity write something that outlives
 the run. Two accessors express the two capabilities over it: `read_only`
-returns a `ReadOnlyStageCache` (`get`/`find_entries` only), the safe default
-view every cross-run channel must offer; `read_write` returns a `StageCache`
-(its subclass), which adds `record`. The write capability is a distinct type,
-structurally absent from the read-only view rather than gated by a flag or an
-exception.
+returns a `ReadOnlyStageCache` (`get`/`find_entries`/`find_recorded_rows`), the
+safe default view every cross-run channel must offer; `read_write` returns a
+`StageCache` (its subclass), which adds `record`. The write capability is a
+distinct type, structurally absent from the read-only view rather than gated by
+a flag or an exception.
 """
 from __future__ import annotations
 
@@ -61,12 +61,11 @@ class StageCacheEntry(PersistedModel):
 
     @classmethod
     def read_only(cls) -> "ReadOnlyStageCache":
-        """A read-only view over the cache: `get`/`find_entries`, no `record`."""
+        """A view over the cache that cannot record."""
         return ReadOnlyStageCache()
 
     @classmethod
     def read_write(cls) -> "StageCache":
-        """A read+write accessor over the cache: `get`/`find_entries` plus `record`."""
         return StageCache()
 
 
@@ -142,10 +141,9 @@ def _collapse_null_forms(value: object) -> object:
 
 
 class ReadOnlyStageCache:
-    """Read-only view over the stage-result cache: `get` and `find_entries`
-    only. `record` is not defined here, so an instance of this class cannot
-    write a cache entry — the capability is structurally absent, not withheld
-    by a runtime check."""
+    """Read-only view over the stage-result cache. `record` is not defined here,
+    so an instance of this class cannot write a cache entry — the capability is
+    structurally absent, not withheld by a runtime check."""
 
     def get(
         self, project: str, stage_id: str, stage_fingerprint: str, input_fingerprint: str
@@ -160,10 +158,23 @@ class ReadOnlyStageCache:
         prefix = f"{project}/{stage_id}/{stage_fingerprint}/"
         return StageCacheEntry.list(prefix=prefix)
 
+    def find_recorded_rows(
+        self, project: str, stage_id: str, stage_fingerprint: str
+    ) -> dict[str, JsonDict]:
+        """Every output row recorded against this stage definition, keyed by the
+        input fingerprint it was filed under — ONE store read for a whole stage
+        execution, rather than a `get` per row. An entry carrying no output row
+        is skipped: it replays nothing, so the row it was filed under misses."""
+        return {
+            entry.input_fingerprint: entry.output_row
+            for entry in self.find_entries(project, stage_id, stage_fingerprint)
+            if entry.output_row is not None
+        }
+
 
 class StageCache(ReadOnlyStageCache):
-    """Read+write accessor over the stage-result cache: the read-only view's
-    `get`/`find_entries` plus `record`."""
+    """Read+write accessor over the stage-result cache: the read-only view plus
+    `record`."""
 
     def record(
         self,

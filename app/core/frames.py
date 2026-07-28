@@ -1,11 +1,14 @@
-"""Parquet storage for the tabular payloads that aren't documents — run stage
-outputs, review-queue snapshots, decision logs, and uploaded eval datasets. Same
-(collection, id) addressing as the document store, different physical form: one
-parquet file per frame under a root directory. The only place outside the
-document store that turns an id into a file path, so it reuses validate_id."""
+"""The DataFrame layer: parquet storage for the tabular payloads that aren't
+documents — run stage outputs, review-queue snapshots, decision logs, and
+uploaded eval datasets — plus the frame-to-rows conversion every caller that
+walks a frame row by row shares. Storage uses the same (collection, id)
+addressing as the document store, different physical form: one parquet file per
+frame under a root directory. The only place outside the document store that
+turns an id into a file path, so it reuses validate_id."""
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import pandas as pd
 
@@ -15,6 +18,17 @@ from app.core.persistence import validate_id
 # distinguishes a parquet output from a csv one (by `Path.suffix`) compares
 # against the same value instead of re-typing the literal.
 PARQUET_SUFFIX = ".parquet"
+
+
+def list_rows(frame: pd.DataFrame) -> list[dict[str, Any]]:
+    """`frame` as one dict per row, column label → cell value. The labels are
+    pinned to `str`: pandas types them as `Hashable`, so a caller that keys a row
+    by a column name would otherwise be working against a wider type than any
+    frame read from parquet or CSV actually carries."""
+    return [
+        {str(label): value for label, value in record.items()}
+        for record in frame.to_dict("records")
+    ]
 
 
 class FrameStore:

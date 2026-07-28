@@ -119,7 +119,7 @@ def run_subset(
     manifest = create_run_manifest(
         ordered, run_id=run_dir.name, project=project,
         workflow_version=workflow_version, run_bindings={}, input_bindings={},
-        limits={}, offsets={})
+        limits={}, offsets={}, bust_cache=False)
     write_manifest(run_dir, manifest)
     outputs: dict[str, pd.DataFrame] = dict(injected_outputs)
     manifest = _execute_stages(

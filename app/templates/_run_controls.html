@@ -12,6 +12,10 @@
       blank runs the full file, a number N caps that input stage's OUTPUT to its
       first N rows for this run only (see prepare_run's `limits` in
       app/runtime/runner.py — this form is just its web-form surface)
+    · a recompute-everything checkbox (bust_cache): submitted only when checked, so
+      its presence is the value. The run skips every stage-cache read and records
+      what it computes, so a human review queue re-asks the humans (see prepare_run's
+      `bust_cache` in app/runtime/runner.py)
     · ▶ Run workflow
 
   Version and inputs belong together: different versions can author different input
@@ -50,6 +54,10 @@
     </label>
     {% endfor %}
   </div>
+  <label class="run-bust-cache">
+    <input type="checkbox" name="bust_cache" value="on">
+    recompute everything (ignore cached results; a review queue re-asks the humans)
+  </label>
   <button type="submit" class="btn primary">▶ Run workflow</button>
 </form>
 <script src="/static/run_controls.js"></script>

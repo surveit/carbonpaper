@@ -144,6 +144,51 @@ def test_find_entries_scopes_by_stage_fingerprint_prefix():
     assert {e.input_fingerprint for e in found} == {"if1", "if2"}
 
 
+# ── find_recorded_rows: the bulk read one stage execution makes ───────────────
+
+def test_find_recorded_rows_keys_every_output_row_by_its_input_fingerprint():
+    cache = StageCache()
+    cache.record(project="proj", stage_id="review", stage_fingerprint="sf1",
+                 input_fingerprint="if1", input_row={"id": "r1"},
+                 output_row={"id": "r1", "final_score": 0.4})
+    cache.record(project="proj", stage_id="review", stage_fingerprint="sf1",
+                 input_fingerprint="if2", input_row={"id": "r2"},
+                 output_row={"id": "r2", "final_score": 0.9})
+    assert cache.find_recorded_rows("proj", "review", "sf1") == {
+        "if1": {"id": "r1", "final_score": 0.4},
+        "if2": {"id": "r2", "final_score": 0.9},
+    }
+
+
+def test_find_recorded_rows_skips_an_entry_that_recorded_no_output_row():
+    """Such an entry replays nothing, so the row it was filed under must miss
+    rather than resolve to a null output."""
+    cache = StageCache()
+    cache.record(project="proj", stage_id="review", stage_fingerprint="sf1",
+                 input_fingerprint="if1", input_row={"id": "r1"}, output_row=None)
+    assert cache.find_recorded_rows("proj", "review", "sf1") == {}
+
+
+def test_find_recorded_rows_is_scoped_to_one_stage_definition():
+    cache = StageCache()
+    cache.record(project="proj", stage_id="review", stage_fingerprint="sf1",
+                 input_fingerprint="if1", input_row={"id": "r1"}, output_row={"v": 1})
+    cache.record(project="proj", stage_id="review", stage_fingerprint="sf-other",
+                 input_fingerprint="if2", input_row={"id": "r2"}, output_row={"v": 2})
+    cache.record(project="other-proj", stage_id="review", stage_fingerprint="sf1",
+                 input_fingerprint="if3", input_row={"id": "r3"}, output_row={"v": 3})
+    assert cache.find_recorded_rows("proj", "review", "sf1") == {"if1": {"v": 1}}
+
+
+def test_find_recorded_rows_is_available_on_the_read_only_view():
+    StageCache().record(project="proj", stage_id="review", stage_fingerprint="sf1",
+                        input_fingerprint="if1", input_row={"id": "r1"},
+                        output_row={"v": 1})
+    assert ReadOnlyStageCache().find_recorded_rows("proj", "review", "sf1") == {
+        "if1": {"v": 1}
+    }
+
+
 # ── read_only / read_write ────────────────────────────────────────────────────
 
 def test_read_write_returns_a_writable_cache():

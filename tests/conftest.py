@@ -64,6 +64,7 @@ def make_run_context(
     stage_cache: ReadOnlyStageCache | None = None,
     limits: dict[str, int] | None = None,
     offsets: dict[str, int] | None = None,
+    bust_cache: bool = False,
 ) -> RunContext:
     """A RunContext for tests that only care about a few of its fields. `mode`
     follows project scope: an `identity` (with its `stage_cache`) makes it a
@@ -75,4 +76,5 @@ def make_run_context(
         mode=mode, repo_root=repo_root, run_dir=run_dir,
         identity=identity, stage_cache=stage_cache,
         limits=dict(limits or {}), offsets=dict(offsets or {}),
+        bust_cache=bust_cache,
     )

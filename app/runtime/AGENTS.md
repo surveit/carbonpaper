@@ -19,6 +19,11 @@ validate the output, write `outputs/<stage>.parquet`, append to `manifest.json`.
   Per run, `--limit <id>=<N>` overrides it and `--offset <id>=<M>` drops the first M rows
   first (offset 5 + limit 3 = rows 6-8); recorded in the manifest, re-applied on resume,
   unknown ids fail loudly.
+- **Recompute everything:** `--bust-cache` (a run-form checkbox too) sets
+  `RunContext.bust_cache`: the run skips every stage-cache READ while still recording
+  what it computes, so the cache ends re-pinned, not stale. Recorded in the manifest
+  and replayed on resume. A `human_review_queue` under it replays no decision — every
+  queueable row halts again.
 - **Halt + resume:** `human_review_queue` raises `HaltForReview`; the run marks
   `awaiting_review` and persists the pending queue. `resume_run(...)` reloads completed
   outputs and continues once cached decisions exist for the pending rows.
@@ -30,6 +35,22 @@ FeatureCollection); `python_row_function`/`python_frame_function`
 `llm_transform` (row-mapped, bounded parallelism);
 `human_review_queue` (row fingerprint → cached decision or halt);
 `publish` (a `function` module that writes artifacts).
+
+**Row caching is a property of the handler SHAPE, not of a stage type.** `RowMapHandler`
+wraps the one line of per-row compute (`execution._open_row_caching`), so `python_row_function`
+and a batch_size-1 `llm_transform` are cached by the same code; for the batched path the
+shape looks every row up, hands `run_llm_batches` only the misses, scatters the computed
+rows back into input order alongside the hits, and records them. No stage module resolves a
+cache. The store is `app.core.stage_cache` — `find_recorded_rows` is one bulk read per
+execution, keyed by (stage-definition fingerprint, input-row fingerprint), and `record`
+needs the write-capable `StageCache` accessor; the runtime holds that execution's state and
+decides only whether caching applies and whether a result may be recorded. A row carrying
+`_error`/`_deferred` is never recorded and no internal column is ever part of a recorded row,
+so a hit reports no spend. `Stage.cache: false` declares a stage
+intentionally non-deterministic — no read, no write — and is outside the definition
+fingerprint. There is no per-registration opt-out: `human_review_queue` runs under the same
+interceptor, which replays a human's recorded decision before its mapper is called, so that
+mapper only ever passes a row through or defers it.
 
 ## LLM backend (`llm_transform`)
 - `options.py` `require_agent_backend()` raises unless the agent backend can run
