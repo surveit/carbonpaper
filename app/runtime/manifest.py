@@ -69,7 +69,8 @@ class StageContribution(BaseModel):
     errors (returned for the executor to fold into the stage's validation report
     and terminal status), dropped-column notes and human-review-queue tallies
     (folded onto the manifest's per-stage `dropped_columns`/
-    `human_review_queue_stats` maps). Empty for a stage that contributes none.
+    `human_review_queue_stats` maps), and free-text run notes (appended to the
+    stage record's `notes`). Empty for a stage that contributes none.
     Not stage data — the manifest fields a handler owns."""
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
@@ -78,6 +79,10 @@ class StageContribution(BaseModel):
     row_errors: list[RowError] = []
     dropped_columns: list[str] = []
     human_review_queue_stats: QueueStats | None = None
+    # Non-fatal facts about how the stage ran, appended to the stage record's
+    # own `notes` (where the executor also writes its row-slicing and CSV-
+    # fallback notes). Never stage data.
+    notes: list[str] = []
 
 
 class StageErrorInfo(BaseModel):

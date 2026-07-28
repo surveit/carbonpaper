@@ -5,9 +5,14 @@ the CLI and the web trigger actually take — `prepare_run` / `run_prepared` via
 `execute_run`, over a published version, against the process-wide stores — was
 never covered end to end.
 
+The chain spans BOTH cache grains — a row-mapped `python_row_function` and a
+frame-shaped `python_frame_function` are intercepted by different code — so one
+run exercises both.
+
 The evidence is the stages' own authored code, not the cache's internals: every
 stage appends a line to a probe file when its body runs, so a run that replays
-leaves the probe untouched. A run that recomputes appends one line per row.
+leaves the probe untouched. A run that recomputes appends one line per row it
+computes, or one line per execution where the stage is frame-shaped.
 """
 from __future__ import annotations
 
@@ -24,9 +29,9 @@ from app.services import versioning
 
 _ROWS = [{"name": "a", "val": 1}, {"name": "b", "val": 2}, {"name": "c", "val": 3}]
 
-# One computing run's probe tally over `_ROWS`: a row-mapped stage's body runs
-# once per row.
-_EVERY_ROW_COMPUTED = Counter({"clean": 3, "flag": 3})
+# One fully-computing run's probe tally over `_ROWS`: a row-mapped stage's body
+# runs once per row, a frame-shaped stage's once for the whole frame.
+_EVERYTHING_COMPUTED = Counter({"clean": 3, "flag": 3, "totals": 1})
 _NOTHING_COMPUTED: Counter[str] = Counter()
 
 
@@ -57,9 +62,21 @@ def _flag_code(probe: Path) -> str:
     )
 
 
-def _write_project(root: Path, *, clean_edit: str = "", flag_cache: bool = True) -> Path:
-    """`load` (csv) -> `clean` -> `flag`, two row-mapped stages deep. Returns the
-    probe file both stages append to."""
+def _totals_code(probe: Path, *, edit: str = "") -> str:
+    return (
+        "def transform(df):\n"
+        + _probe_call(probe, "totals")
+        + "    return df.assign(total=df['doubled'].sum())\n"
+        + edit
+    )
+
+
+def _write_project(
+    root: Path, *, clean_edit: str = "", totals_edit: str = "", flag_cache: bool = True
+) -> Path:
+    """`load` (csv) -> `clean` -> `flag` -> `totals`: two row-mapped stages and
+    then a frame-shaped one, so a run crosses both cache grains. Returns the
+    probe file every stage appends to."""
     probe = root / "probe.log"
     (root / "compiled").mkdir(parents=True, exist_ok=True)
     (root / "data").mkdir(parents=True, exist_ok=True)
@@ -78,6 +95,11 @@ def _write_project(root: Path, *, clean_edit: str = "", flag_cache: bool = True)
         "id": "flag", "name": "Flag", "type": "python_row_function",
         "inputs": [{"id": "clean"}], "cache": flag_cache,
         "function": {"kind": "inline", "code": _flag_code(probe)},
+    })
+    _write_stage(root, "04_totals", {
+        "id": "totals", "name": "Totals", "type": "python_frame_function",
+        "inputs": [{"id": "flag"}],
+        "function": {"kind": "inline", "code": _totals_code(probe, edit=totals_edit)},
     })
     return probe
 
@@ -136,10 +158,10 @@ def test_a_second_run_recomputes_nothing_and_reproduces_the_first_exactly(tmp_pa
     _publish_a_version(tmp_path)
 
     first = _run_and_read(tmp_path)
-    assert _invocations(probe) == _EVERY_ROW_COMPUTED
+    assert _invocations(probe) == _EVERYTHING_COMPUTED
 
     second = _run_and_read(tmp_path)
-    assert _invocations(probe) == _EVERY_ROW_COMPUTED  # no body ran a second time
+    assert _invocations(probe) == _EVERYTHING_COMPUTED  # no body ran a second time
     _assert_same_outputs(first, second)
 
 
@@ -153,23 +175,27 @@ def test_bust_cache_recomputes_everything_and_leaves_the_cache_re_pinned(tmp_pat
     _publish_a_version(tmp_path)
 
     _run_and_read(tmp_path)
-    assert _invocations(probe) == _EVERY_ROW_COMPUTED
+    assert _invocations(probe) == _EVERYTHING_COMPUTED
 
     _append_input_row(tmp_path, {"name": "d", "val": 4})
     busted = _run_and_read(tmp_path, bust_cache=True)
-    # Every row recomputed, including the three already pinned: reads skipped.
-    assert _invocations(probe) == _EVERY_ROW_COMPUTED + Counter({"clean": 4, "flag": 4})
+    # Everything recomputed, including what was already pinned: reads skipped at
+    # both grains.
+    assert _invocations(probe) == _EVERYTHING_COMPUTED + Counter(
+        {"clean": 4, "flag": 4, "totals": 1})
 
     after = _run_and_read(tmp_path)
-    # Unchanged — so row "d", which only the busted run ever computed, was pinned
-    # by it.
-    assert _invocations(probe) == _EVERY_ROW_COMPUTED + Counter({"clean": 4, "flag": 4})
+    # Unchanged — so row "d" and the four-row frame, which only the busted run
+    # ever computed, were pinned by it.
+    assert _invocations(probe) == _EVERYTHING_COMPUTED + Counter(
+        {"clean": 4, "flag": 4, "totals": 1})
     _assert_same_outputs(busted, after)
 
 
 def test_editing_one_stages_function_body_invalidates_that_stage_alone(tmp_path):
     """`clean`'s edit changes its definition fingerprint but not its output, so
-    `flag` still sees the rows it was pinned against and replays."""
+    `flag` still sees the rows it was pinned against and `totals` still sees the
+    frame it was pinned against — both replay."""
     probe = _write_project(tmp_path)
     _publish_a_version(tmp_path)
     first = _run_and_read(tmp_path)
@@ -179,8 +205,45 @@ def test_editing_one_stages_function_body_invalidates_that_stage_alone(tmp_path)
     _publish_a_version(tmp_path)
 
     edited = _run_and_read(tmp_path)
-    assert _invocations(probe) == _EVERY_ROW_COMPUTED + Counter({"clean": 3})
+    assert _invocations(probe) == _EVERYTHING_COMPUTED + Counter({"clean": 3})
     _assert_same_outputs(first, edited)
+
+
+def test_editing_the_frame_stages_body_invalidates_only_the_frame_stage(tmp_path):
+    """The other grain of the same property: the frame entry is keyed on the
+    stage definition too, and the row stages upstream are untouched by its edit."""
+    probe = _write_project(tmp_path)
+    _publish_a_version(tmp_path)
+    first = _run_and_read(tmp_path)
+    _run_and_read(tmp_path)
+    # An unedited `totals` replays — otherwise the tally below could not tell an
+    # invalidation apart from a frame stage that simply always recomputes.
+    assert _invocations(probe) == _EVERYTHING_COMPUTED
+
+    time.sleep(1.05)  # version ids are second-resolution
+    _write_project(tmp_path, totals_edit="\n# a comment the cache must notice\n")
+    _publish_a_version(tmp_path)
+
+    edited = _run_and_read(tmp_path)
+    assert _invocations(probe) == _EVERYTHING_COMPUTED + Counter({"totals": 1})
+    _assert_same_outputs(first, edited)
+
+
+def test_one_new_input_row_recomputes_only_that_row_but_the_whole_frame(tmp_path):
+    """What the two grains cost differently: a row stage replays the three rows
+    it pinned and computes only the new one, while the frame stage's entry is
+    keyed on its WHOLE input, so a single new row misses it entirely."""
+    probe = _write_project(tmp_path)
+    _publish_a_version(tmp_path)
+    _run_and_read(tmp_path)
+    _run_and_read(tmp_path)
+    assert _invocations(probe) == _EVERYTHING_COMPUTED  # nothing recomputes yet
+
+    _append_input_row(tmp_path, {"name": "d", "val": 4})
+    _run_and_read(tmp_path)
+
+    assert _invocations(probe) == _EVERYTHING_COMPUTED + Counter(
+        {"clean": 1, "flag": 1, "totals": 1})
 
 
 def test_a_stage_declaring_cache_false_recomputes_on_every_run(tmp_path):
@@ -190,7 +253,9 @@ def test_a_stage_declaring_cache_false_recomputes_on_every_run(tmp_path):
     _run_and_read(tmp_path)
     _run_and_read(tmp_path)
 
-    assert _invocations(probe) == _EVERY_ROW_COMPUTED + Counter({"flag": 3})
+    # `flag` re-rolled; `clean` above it and `totals` below it both replayed —
+    # the opt-out is that stage's alone.
+    assert _invocations(probe) == _EVERYTHING_COMPUTED + Counter({"flag": 3})
 
 
 def test_a_first_run_of_a_fresh_project_replays_nothing(tmp_path):
@@ -201,4 +266,4 @@ def test_a_first_run_of_a_fresh_project_replays_nothing(tmp_path):
     assert _invocations(probe) == _NOTHING_COMPUTED
     _publish_a_version(tmp_path)
     _run_and_read(tmp_path)
-    assert _invocations(probe) == _EVERY_ROW_COMPUTED
+    assert _invocations(probe) == _EVERYTHING_COMPUTED

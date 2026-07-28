@@ -17,16 +17,14 @@ Then open http://localhost:8765/
 
 from __future__ import annotations
 
-import os
 from contextlib import asynccontextmanager
-from pathlib import Path
 from typing import AsyncIterator
 
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from starlette.routing import Route
 
-from app.core.persistence import SqliteKvStore, configure_store, is_store_configured
+from app.core.store_config import configure_default_stores
 from app.seeds.seed import seed_demo_data_if_enabled
 from app.web.config import STATIC_DIR
 from app.web.routers import admin, editing, evals, project, node_review, review, runs
@@ -42,13 +40,10 @@ from app.agents.compiler import config as _editing_agent_config  # noqa: F401
 
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
-    # Guarded so a store configured ahead of time (the test suite's autouse
-    # `:memory:` fixture) wins over the on-disk default — the app never
-    # reconfigures a store that's already set.
-    if not is_store_configured():
-        db_path = os.environ.get("CW_DB_PATH", "data/app.db")
-        Path(db_path).parent.mkdir(parents=True, exist_ok=True)
-        configure_store(SqliteKvStore(db_path))
+    # Guarded inside configure_default_stores, so a store configured ahead of
+    # time (the test suite's autouse fixtures) wins over the on-disk defaults —
+    # the app never reconfigures a store that's already set.
+    configure_default_stores()
     # Opt-in demo data: CW_SEED_DEMO=1 seeds the committed example bundles into
     # the workspace (seed-if-absent, never destructive); a normal boot leaves
     # this env var unset, so it does nothing. All seeding logic lives in

@@ -539,3 +539,65 @@ def test_resume_reapplies_run_bindings_for_a_pending_input_stage(tmp_path):
     assert rec["status"] == "ok", rec.get("error")
     out = pd.read_parquet(run_dir / "outputs" / "load.parquet")
     assert list(out["name"]) == ["bound-row"]
+
+
+def test_the_documented_cli_runs_a_project_with_nothing_configured(tmp_path, monkeypatch):
+    """`python -m app.runtime.runner <project_dir>` is a standalone process: no
+    server lifespan wired storage for it, so its own entry point must. Seeds a
+    version through an on-disk store, then drops BOTH process-wide stores to
+    simulate the fresh process the CLI actually runs in."""
+    from app.core import frames as frames_module
+    from app.core import persistence as persistence_module
+    from app.core.persistence import SqliteKvStore, configure_store
+
+    db_path = tmp_path / "db" / "app.db"
+    db_path.parent.mkdir(parents=True)
+    monkeypatch.setenv("CW_DB_PATH", str(db_path))
+    monkeypatch.setenv("CW_FRAMES_ROOT", str(tmp_path / "frames"))
+
+    project_dir = tmp_path / "project"
+    configure_store(SqliteKvStore(str(db_path)))
+    _make_project(project_dir)
+    _add_frame_stage(project_dir)
+    _seed_version(project_dir)
+
+    monkeypatch.setattr(persistence_module, "_store", None)
+    monkeypatch.setattr(frames_module, "_frame_store", None)
+    monkeypatch.setattr(sys, "argv", ["runner", str(project_dir)])
+
+    assert runner.main() == 0
+    assert persistence_module.is_store_configured()
+    assert frames_module.is_frame_store_configured()
+    assert list((project_dir / "runs").iterdir())
+
+
+_FRAME_STAGE_CODE = "def transform(df):\n    return df.assign(double=df['val'] * 2)\n"
+
+
+def _add_frame_stage(root):
+    """A python_frame_function downstream of `load` — the shape the frame cache
+    intercepts, so a run of this project exercises the frame store."""
+    (root / "compiled" / "02_totals.json").write_text(json.dumps({
+        "id": "totals", "name": "Totals", "type": "python_frame_function",
+        "inputs": [{"id": "load"}],
+        "function": {"kind": "inline", "code": _FRAME_STAGE_CODE},
+    }), encoding="utf-8")
+
+
+def test_a_frame_stage_succeeds_with_no_frame_store_configured(tmp_path, monkeypatch):
+    """The dogfooded regression: a process with a document store but no frame
+    store must still run a frame stage — a cache miss is never a stage error."""
+    from app.core import frames as frames_module
+
+    _make_project(tmp_path)
+    _add_frame_stage(tmp_path)
+    _seed_version(tmp_path)
+    monkeypatch.setattr(frames_module, "_frame_store", None)
+
+    manifest = execute_run(tmp_path, repo_root=tmp_path)
+
+    assert manifest["status"] == "ok"
+    record = next(r for r in manifest["stage_records"] if r["stage_id"] == "totals")
+    assert record["status"] == "ok"
+    assert record["output_row_count"] == 2
+    assert any("no frame store" in note for note in record["notes"])

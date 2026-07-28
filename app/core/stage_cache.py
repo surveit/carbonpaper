@@ -17,24 +17,47 @@ never here.
 `SCOPE = PersistenceScope.PROJECT_READ_WRITE` (see app.core.persistence.PersistenceScope):
 the one deliberate channel that lets run activity write something that outlives
 the run. Two accessors express the two capabilities over it: `read_only`
-returns a `ReadOnlyStageCache` (`get`/`find_entries`/`find_recorded_rows`), the
-safe default view every cross-run channel must offer; `read_write` returns a
-`StageCache` (its subclass), which adds `record`. The write capability is a
-distinct type, structurally absent from the read-only view rather than gated by
-a flag or an exception.
+returns a `ReadOnlyStageCache` (`get`/`find_entries`/`find_recorded_rows`/
+`find_cached_frame`), the safe default view every cross-run channel must offer;
+`read_write` returns a `StageCache` (its subclass), which adds `record` and
+`record_frame`. The write capability is a distinct type, structurally absent
+from the read-only view rather than gated by a flag or an exception.
+
+Two grains share the seam. At ROW grain the caller passes an input fingerprint
+it computed with `compute_row_fingerprint`, because the same row identity is
+what a queued human decision is filed under. At FRAME grain the caller passes
+the ordered input frames themselves and the accessor resolves their identity
+through `app.core.frames.compute_frames_fingerprint`, so this seam exposes no
+frames fingerprint of its own.
+
+The pandas-shaped steps this seam needs — how a cell's null forms and numpy
+scalars reduce to JSON, how a whole frame reduces to an identity, and which
+exceptions a parquet write raises — live in `app.core.frames`. Here a frame is
+only a value to key and store.
 """
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from typing import ClassVar
 import json
-import math
 
-import numpy as np
 import pandas as pd
 
+from app.core.frames import (
+    collapse_null_forms,
+    compute_frames_fingerprint,
+    convert_cell_to_json_native,
+    get_frame_store,
+    save_frame_or_reject,
+)
 from app.core.persistence import JsonDict, PersistedModel, PersistenceScope
 from app.core.utils import compute_short_hash
+
+# The frame-store collection a whole-frame cache payload is filed under, keyed
+# by the same `_build_cache_id` composite as the entry itself. A frame is far
+# too big to carry as a `StageCacheEntry` JSON field, so it travels this second
+# channel.
+CACHED_FRAME_COLLECTION = "stage_cache_frames"
 
 
 class StageCacheEntry(PersistedModel):
@@ -75,17 +98,27 @@ def _build_cache_id(project: str, stage_id: str, stage_fingerprint: str, input_f
     return f"{project}/{stage_id}/{stage_fingerprint}/{input_fingerprint}"
 
 
+def _build_frame_cache_id(
+    project: str, stage_id: str, stage_fingerprint: str, input_frames: Sequence[pd.DataFrame]
+) -> str:
+    """The store id a whole-frame payload is filed under: the entry id, with the
+    ordered input frames standing where a row's fingerprint stands."""
+    return _build_cache_id(
+        project, stage_id, stage_fingerprint, compute_frames_fingerprint(input_frames)
+    )
+
+
 def compute_row_fingerprint(row: Mapping[str, object]) -> str:
     """compute_short_hash over the canonical JSON of `row`: every null form a
     pandas row cell can carry (None, float('nan'), pd.NA, pd.NaT — see
-    `_collapse_null_forms`) is mapped to JSON null first, so two rows that
-    differ only in which null form they carry hash identically. Column order
-    does not matter — json.dumps(sort_keys=True) makes key order irrelevant
+    `app.core.frames.collapse_null_forms`) is mapped to JSON null first, so two
+    rows that differ only in which null form they carry hash identically. Column
+    order does not matter — json.dumps(sort_keys=True) makes key order irrelevant
     regardless of the input mapping's own order. This construction defends
     against exactly two instability sources that would otherwise change a
     row's identity for free: null-form representation drift across a storage
     round trip, and column order."""
-    canonical = {key: _collapse_null_forms(value) for key, value in row.items()}
+    canonical = {key: collapse_null_forms(value) for key, value in row.items()}
     payload = json.dumps(canonical, sort_keys=True, separators=(",", ":"), default=str)
     return compute_short_hash(payload)
 
@@ -93,51 +126,20 @@ def compute_row_fingerprint(row: Mapping[str, object]) -> str:
 def _to_json_safe_row(row: Mapping[str, object]) -> JsonDict:
     """`row` reduced to JSON-native types for storage as a `StageCacheEntry`'s
     `frozen_input` or `output_row`: every null form collapses to JSON null (the same
-    `_collapse_null_forms` step `compute_row_fingerprint` hashes under), a numpy
+    `collapse_null_forms` step `compute_row_fingerprint` hashes under), a numpy
     numeric scalar becomes its JSON-native Python equivalent (`np.int64(1)` ->
     the number 1, not the string "1"), and any other non-JSON-native value (a
-    pandas Timestamp, ...) is stringified — see `_to_json_native`, the
-    `json.dumps` default. Preserving numbers as numbers matters because the
-    frozen row is read back as a stage's output, where a stringified score
-    would corrupt the numeric column it feeds."""
-    canonical = {key: _collapse_null_forms(value) for key, value in row.items()}
-    safe: JsonDict = json.loads(json.dumps(canonical, default=_to_json_native))
-    return safe
-
-
-def _to_json_native(value: object) -> object:
-    """`json.dumps` default for `_to_json_safe_row`: a numpy scalar becomes its
-    Python equivalent via `.item()` (so a numeric cell survives as a JSON
-    number), keeping the result only when that equivalent is itself JSON-native;
-    everything else — a pandas Timestamp, a numpy datetime, an arbitrary object
-    — is stringified. `compute_row_fingerprint` keeps its own `default=str`, so
+    pandas Timestamp, ...) is stringified — see
+    `app.core.frames.convert_cell_to_json_native`, the `json.dumps` default.
+    Preserving numbers as numbers matters because the frozen row is read back as
+    a stage's output, where a stringified score would corrupt the numeric column
+    it feeds. `compute_row_fingerprint` keeps its own `default=str`, so
     fingerprints are unaffected by this."""
-    if isinstance(value, np.generic):
-        native = value.item()
-        if native is None or isinstance(native, (bool, int, float, str)):
-            return native
-        return str(native)
-    return str(value)
-
-
-def _collapse_null_forms(value: object) -> object:
-    """`value`, or None if `value` is one of the four pandas null forms a row
-    cell can carry: plain `None`, `float('nan')`, `pd.NA`, or `pd.NaT` — all
-    become None so a parquet round trip can't shift a row's identity;
-    everything else passes through unchanged. Each form is tested
-    individually — an identity check for None/pd.NA/pd.NaT, an explicit
-    isinstance+isnan for a float nan — rather than via a single `pd.isna` call:
-    pandas-stubs' `isna` overloads do not accept a bare `object` argument, and
-    calling it on an array-valued cell (list/tuple/dict/set) would return an
-    elementwise array whose truth value is ambiguous in a plain `if`. None of
-    the checks here ask pd.isna anything, so an array-valued cell simply
-    matches none of them and falls through to the final `return value`
-    unchanged."""
-    if value is None or value is pd.NA or value is pd.NaT:
-        return None
-    if isinstance(value, float) and math.isnan(value):
-        return None
-    return value
+    canonical = {key: collapse_null_forms(value) for key, value in row.items()}
+    safe: JsonDict = json.loads(
+        json.dumps(canonical, default=convert_cell_to_json_native)
+    )
+    return safe
 
 
 class ReadOnlyStageCache:
@@ -171,6 +173,21 @@ class ReadOnlyStageCache:
             if entry.output_row is not None
         }
 
+    def find_cached_frame(
+        self,
+        project: str,
+        stage_id: str,
+        stage_fingerprint: str,
+        input_frames: Sequence[pd.DataFrame],
+    ) -> pd.DataFrame | None:
+        """The whole output frame recorded for this stage definition against
+        exactly these input frames, or None. The ORDER of `input_frames` is part
+        of the key, so swapping a join's two sides is a different input."""
+        return get_frame_store().load_frame(
+            CACHED_FRAME_COLLECTION,
+            _build_frame_cache_id(project, stage_id, stage_fingerprint, input_frames),
+        )
+
 
 class StageCache(ReadOnlyStageCache):
     """Read+write accessor over the stage-result cache: the read-only view plus
@@ -202,8 +219,29 @@ class StageCache(ReadOnlyStageCache):
             output_row=None if output_row is None else _to_json_safe_row(output_row),
         ).save()
 
+    def record_frame(
+        self,
+        *,
+        project: str,
+        stage_id: str,
+        stage_fingerprint: str,
+        input_frames: Sequence[pd.DataFrame],
+        frame: pd.DataFrame,
+    ) -> None:
+        """Pin one whole output frame under the same composite key `record` uses,
+        in the frame store rather than as a `StageCacheEntry` field. A frame the
+        storage form cannot represent raises `FrameNotSerializableError` (see
+        `app.core.frames.save_frame_or_reject`)."""
+        save_frame_or_reject(
+            CACHED_FRAME_COLLECTION,
+            _build_frame_cache_id(project, stage_id, stage_fingerprint, input_frames),
+            frame,
+            described_as=f"stage {stage_id}",
+        )
+
 
 __all__ = [
+    "CACHED_FRAME_COLLECTION",
     "StageCacheEntry",
     "compute_row_fingerprint",
     "ReadOnlyStageCache",

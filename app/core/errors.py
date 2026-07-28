@@ -99,6 +99,14 @@ class DocumentNotFound(Exception):
     surfaced loudly, never a fabricated empty document."""
 
 
+class FrameNotSerializableError(Exception):
+    """A frame carries a dtype/shape parquet cannot represent, so it could not
+    be written to the frame store. Raised by the stage cache's frame write,
+    where caching is best-effort: the caller leaves the frame uncached and
+    surfaces the fact as a run note rather than failing the run. A disk/OS error
+    is NOT reported this way — it propagates."""
+
+
 class ProjectExistsError(Exception):
     """A project create was requested for a name whose examples/<name>/ directory
     already exists. Raised (loudly) rather than clobbering existing data — the

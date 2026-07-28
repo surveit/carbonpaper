@@ -458,10 +458,12 @@ def _merge_stage_contribution(
     record: StageRecord,
 ) -> list[RowError]:
     """Merge one stage's contribution into the run's living record: its token
-    usage onto the stage record, its dropped-column and human-review-queue
-    tallies onto the
+    usage and run notes onto the stage record, its dropped-column and
+    human-review-queue tallies onto the
     manifest's per-stage maps. Returns the row-generation errors for the caller
     to fold into the output validation report and terminal status."""
+    for note in contribution.notes:
+        record.add_note(note)
     if contribution.llm_usage is not None:
         record.llm_usage = contribution.llm_usage
     if contribution.dropped_columns:
