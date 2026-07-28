@@ -84,10 +84,14 @@ class RunLog:
         self._writer.join(timeout=5.0)
 
     def _drain(self) -> None:
-        seq = 0
         # Append mode: a resumed run continues its existing log rather than
         # truncating it. Flushed per line so the tailer sees events promptly.
+        # seq resumes at the file's line count, so it is the line index of the
+        # event it stamps and stays monotonic across any number of resumes — a
+        # restart at 0 would put the resumed events behind a tailer's cursor,
+        # which drops every one of them.
         try:
+            seq = _count_logged_events(self._path)
             handle = self._path.open("a", encoding="utf-8")
         except OSError:
             return
@@ -111,6 +115,17 @@ class RunLog:
                     pass
         finally:
             handle.close()
+
+
+def _count_logged_events(path: Path) -> int:
+    """How many events `path` already holds — one per non-blank line."""
+    # A log that does not exist yet holds none; that is the count, not a
+    # stand-in for one. Any other OSError propagates to the caller, which
+    # cannot open the file for appending either.
+    if not path.exists():
+        return 0
+    with path.open("r", encoding="utf-8") as handle:
+        return sum(1 for line in handle if line.strip())
 
 
 def read_events_since(path: Path, from_seq: int) -> list[dict[str, Any]]:

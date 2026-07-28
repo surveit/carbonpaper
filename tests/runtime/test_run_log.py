@@ -207,6 +207,41 @@ def test_a_run_writes_its_lifecycle_spine_to_the_run_dir(tmp_path):
     assert [e["seq"] for e in events] == list(range(len(events)))
 
 
+def _resumable_log(path: Path, stage: str) -> None:
+    """Write one stage_start + the run_done marker to `path`, appending."""
+    log = RunLog(path)
+    log.emit({"kind": "stage_start", "stage": stage})
+    log.close()
+
+
+def test_a_resumed_log_keeps_seq_equal_to_the_line_index(tmp_path):
+    """resume_run opens a second RunLog on the same path; seq is the file's line
+    index, so it stays strictly monotonic across any number of resumes."""
+    path = tmp_path / "events.jsonl"
+    _resumable_log(path, "first")
+    _resumable_log(path, "second")
+    _resumable_log(path, "third")
+
+    events = read_events_since(path, 0)
+    assert [e["kind"] for e in events] == ["stage_start", RUN_DONE] * 3
+    assert [e["seq"] for e in events] == list(range(len(events)))
+
+
+def test_a_tailer_resuming_at_the_pre_resume_cursor_sees_the_resumed_events(tmp_path):
+    """The consequence of a restarted seq: an SSE client filtering seq >= cursor
+    would drop every event the resumed run wrote. Duplicate-free seqs alone do
+    not prove this — the resumed events must actually arrive."""
+    path = tmp_path / "events.jsonl"
+    _resumable_log(path, "first")
+    cursor = max(e["seq"] for e in read_events_since(path, 0)) + 1
+
+    _resumable_log(path, "second")
+
+    resumed = read_events_since(path, cursor)
+    assert [e["kind"] for e in resumed] == ["stage_start", RUN_DONE]
+    assert resumed[0]["stage"] == "second"
+
+
 def test_an_unbound_detail_emit_is_a_no_op(tmp_path):
     log = RunLog(tmp_path / "events.jsonl")
     emit_llm_detail(LLM_PROMPT, text="nobody is listening")
