@@ -10,6 +10,7 @@ from typing import Any, Callable, Generic, TypeVar
 
 from pydantic import BaseModel, ValidationError
 
+from app.core.agent.diagnostics import AgentRunDiagnostics, summarize_run
 from app.core.agent.registry import build_mcp_server
 from app.core.agent.sdk_engine import CLI_MODEL, ClaudeAgentSdkEngine
 from app.core.agent.usage import LlmUsage
@@ -18,6 +19,10 @@ from app.core.utils import format_errors
 
 # The Pydantic model this agent produces; run() returns an instance of it.
 Model = TypeVar("Model", bound=BaseModel)
+
+# The one tool this agent exposes. Also the name the engine reports on a
+# tool_call event, which is how a failed run counts the model's own calls.
+SUBMIT_ANSWER_TOOL = "submit_answer"
 
 
 class Agent(Generic[Model]):
@@ -60,20 +65,36 @@ class Agent(Generic[Model]):
         never returns an invalid or fabricated one. (To run it as a live, streamable turn
         instead, drive `build_engine()` through the TurnManager and read `answer`.)
 
-        `emit` opts into the turn's stream events (thinking/text/tool_call/error);
-        the default drops them."""
+        `emit` opts into the turn's stream events (thinking/text/tool_call/
+        tool_result/error); the default forwards them nowhere."""
         engine = self.build_engine()
+        # Collected whether or not a caller opted in: a failed run's only account
+        # of what the model did is this stream, and the diagnosis of a run that
+        # submitted nothing is built from it.
+        events: list[dict[str, Any]] = []
+
+        def tee(event: dict[str, Any]) -> None:
+            events.append(event)
+            if emit is not None:
+                emit(event)
+
         await engine.stream_turn(
-            self._task, message_history=None, emit=emit or _ignore_event, resume=None
+            self._task, message_history=None, emit=tee, resume=None
         )
         # getattr, not attribute access: a custom engine need not track usage.
         self._last_usage = getattr(engine, "last_usage", None)
         if self._answer is None:
-            raise GenerationError(
-                f"agent submitted no valid {self._target_schema.__name__} in "
-                f"{self._attempts} attempt(s); last issues: {self._last_issues}"
-            )
+            raise GenerationError(self._summarize_failure(events).render())
         return self._answer
+
+    def _summarize_failure(self, events: list[dict[str, Any]]) -> AgentRunDiagnostics:
+        return summarize_run(
+            events,
+            target_model=self._target_schema.__name__,
+            tool_name=SUBMIT_ANSWER_TOOL,
+            handler_invocations=self._attempts,
+            handler_issues=self._last_issues,
+        )
 
     @property
     def task(self) -> str:
@@ -122,7 +143,7 @@ class Agent(Generic[Model]):
         caller driving the agent as a live turn: turns.start(engine=agent.build_engine()...)."""
         input_schema = self._target_schema.model_json_schema()
         server, allowed, _wrapped = build_mcp_server(
-            [self.submit_answer], {"submit_answer": input_schema}
+            [self.submit_answer], {SUBMIT_ANSWER_TOOL: input_schema}
         )
         return ClaudeAgentSdkEngine(
             system_prompt=self._system_prompt,
@@ -131,7 +152,3 @@ class Agent(Generic[Model]):
             model=self._model,
             max_turns=self._max_attempts + 2,
         )
-
-
-def _ignore_event(_event: dict[str, Any]) -> None:
-    """Drop a stream event — a headless run has nowhere to forward it."""
