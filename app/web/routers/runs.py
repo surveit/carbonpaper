@@ -31,6 +31,7 @@ from app.runtime.cancellation import request_cancel
 from app.runtime.errors import PreviewError
 from app.runtime.preview import PREVIEWABLE_TYPES, run_stage_preview
 from app.runtime.trace import trace_row, trace_to_dict
+from app.runtime.trace_page import render_trace_body
 from app.runtime.trace_view import build_trace_view
 from app.web.config import EXAMPLES_DIR, REPO_ROOT, templates
 from app.web.diagrams import TYPE_CLASS, TYPE_GLYPH, build_mermaid_graph
@@ -525,6 +526,7 @@ async def run_stage_row_trace_view(
         {
             "title": f"{view['start_stage']} · row {view['start_row']}",
             "view": view,
+            "trace_body": render_trace_body(view),
             "project": project,
             "mermaid": mermaid,
         },
