@@ -11,6 +11,8 @@ def _stages() -> dict[str, Stage]:
         "load": Stage.model_validate({
             "id": "load", "type": "input_data", "name": "Load",
             "connector": {"kind": "file"},
+            "output_schema": {"columns": [{"name": "name", "type": "str"}],
+                              "primary_key": ["name"]},
         }),
         "score": Stage.model_validate({
             "id": "score", "type": "llm_transform", "name": "Score",
