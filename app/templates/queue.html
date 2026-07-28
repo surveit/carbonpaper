@@ -20,9 +20,9 @@
 </div>
 
 <div class="queue-progress">
-    <div class="bar"><div class="fill" style="width: {{ (100 * reviewed_count / total) | round if total else 0 }}%"></div></div>
-    <p><strong>{{ reviewed_count }}</strong> of <strong>{{ total }}</strong> reviewed</p>
-    {% if all_reviewed %}
+    <div class="bar"><div class="fill" style="width: {{ (100 * page.reviewed_count / page.total) | round if page.total else 0 }}%"></div></div>
+    <p><strong>{{ page.reviewed_count }}</strong> of <strong>{{ page.total }}</strong> reviewed</p>
+    {% if page.all_reviewed %}
     <form action="/project/{{ project }}/runs/{{ run_id }}/resume" method="post" style="display:inline">
         <button type="submit" class="btn primary">▶ Resume run</button>
     </form>
@@ -36,22 +36,22 @@
 </details>
 {% endif %}
 
-{% if schema_note %}<p class="queue-note">{{ schema_note }}</p>{% endif %}
-{% if identity_note and identity_note != schema_note %}<p class="queue-note">{{ identity_note }}</p>{% endif %}
-{% if lineage_note %}<p class="queue-note">{{ lineage_note }}</p>{% endif %}
+{% if page.schema_note %}<p class="queue-note">{{ page.schema_note }}</p>{% endif %}
+{% if page.identity_note and page.identity_note != page.schema_note %}<p class="queue-note">{{ page.identity_note }}</p>{% endif %}
+{% if page.lineage_note %}<p class="queue-note">{{ page.lineage_note }}</p>{% endif %}
 
 {% if definition_drift %}
 <p class="definition-drift"><strong>⚠ This queue cannot be reviewed.</strong> {{ definition_drift }}</p>
-{% elif not items %}
+{% elif not page.items %}
 <p class="muted"><em>No items to review.</em></p>
 {% endif %}
 
 <div class="queue-items" id="queue-items" hidden>
-{% for item in items %}
+{% for item in page.items %}
 <article class="queue-card {% if item.prior_decision %}decided decided-{{ item.prior_decision.verdict }}{% endif %}"
          data-input-fingerprint="{{ item.input_fingerprint }}">
     <header>
-        <span class="row-position">Row {{ loop.index }} of {{ total }}</span>
+        <span class="row-position">Row {{ loop.index }} of {{ page.total }}</span>
         {% if item.lineage_url %}
         <a class="lineage-link" href="{{ item.lineage_url }}">lineage of the upstream row →</a>
         {% endif %}
@@ -69,17 +69,17 @@
     </p>
     {% endif %}
 
-    {% if context_columns %}
+    {% if page.context_columns %}
     <details class="queued-row" open>
         <summary>Background for this row — not under review</summary>
-        {{ kv_table(context_columns, item.row) }}
+        {{ kv_table(page.context_columns, item.row) }}
     </details>
     {% endif %}
 
     <form class="review-form">
         <p class="review-section-heading">Columns to review</p>
         <div class="reviewed-fields">
-        {% for field in reviewed_fields %}
+        {% for field in page.reviewed_fields %}
         {% set field_id = 'rf-' ~ item.input_fingerprint ~ '-' ~ field.target %}
         {# The upstream value is what this stage received for the column; `prefill`
            is what the field opens with — the reviewer's own recorded value once this
@@ -135,7 +135,7 @@
         </div>
         {% if review_notes_column %}
         <label class="review-notes">
-            <span>{{ review_notes_label }}</span>
+            <span>{{ page.review_notes_label }}</span>
             <textarea rows="2" data-role="notes"
                       placeholder="Include any reasoning or citations for your decision">{{ item.prior_decision.review_notes if item.prior_decision and item.prior_decision.review_notes else '' }}</textarea>
         </label>

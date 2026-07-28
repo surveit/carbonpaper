@@ -6,12 +6,13 @@ import re
 from pathlib import Path
 
 import pandas as pd
+import pytest
 from fastapi.testclient import TestClient
 
 import app as app_package
 import app.runtime.runner as runner
 import app.web.loading as loading
-import app.web.routers.review as review_routes
+from app.web import queue_view
 from app.main import app
 from app.runtime.runner import prepare_run, run_prepared
 from app.runtime.stages import llm_transform as lt
@@ -188,7 +189,7 @@ def _put_cached_decision(
     )
 
 
-# ── 1. Happy path: snapshot + prior decisions from the cache ────────────────
+# ── 1. The page a halted queue renders: rows, prior decisions, controls ─────
 
 
 def test_happy_path_renders_items_with_fingerprint_prior_decision_and_counts(tmp_path, monkeypatch):
@@ -213,49 +214,19 @@ def test_happy_path_renders_items_with_fingerprint_prior_decision_and_counts(tmp
     assert "<strong>approve</strong>" in html
     # reviewed_count/total: exactly one of two rows has a prior decision.
     assert "<strong>1</strong> of <strong>2</strong> reviewed" in html
+    # One field per declared reviewed column, typed from the declared column and
+    # pre-filled with the value the reviewer is being asked to confirm or change.
+    assert 'data-target="human_score"' in html
+    assert 'type="number"' in html
+    assert 'data-prefill="1"' in html  # the mocked upstream score
+    # One Submit per card; the verdict is derived, so no button names one.
+    assert html.count(">Submit<") == html.count('<article class="queue-card')
+    # The notes column is labelled by name, and nothing ties a note to a change.
+    assert "<span>Review notes</span>" in html  # the declared column is `review_notes`
+    assert 'placeholder="Include any reasoning or citations for your decision"' in html
 
 
-# ── 2. Lineage: the sidecar's ordinal against the declared upstream stage ────
-
-
-def test_lineage_urls_name_the_upstream_stage_and_the_sidecar_ordinal(tmp_path, monkeypatch):
-    """The queue stage has produced no output at halt time, so a row's lineage
-    link names the UPSTREAM stage (`score`) and the row's ordinal from the
-    sidecar — never the queue stage itself, and never a guessed position."""
-    _project_dir, run_id, _run_dir, _snapshot, sidecar = _build_and_halt(tmp_path, monkeypatch)
-    assert sidecar["row_ordinals"] == [0, 1]
-
-    stage_def = _find_stage_def(PROJECT, "review")
-    fingerprints = loading.load_queue_fingerprints(PROJECT, run_id, "review")
-    urls = review_routes._build_lineage_urls(
-        PROJECT, run_id, review_routes._resolve_lineage(stage_def, fingerprints), fingerprints
-    )
-
-    assert urls == [
-        f"/project/{PROJECT}/runs/{run_id}/stage/score/row/0/trace/view",
-        f"/project/{PROJECT}/runs/{run_id}/stage/score/row/1/trace/view",
-    ]
-
-
-def test_a_sidecar_without_row_ordinals_yields_no_lineage_link(tmp_path, monkeypatch):
-    """A run halted before the runtime recorded ordinals has no exact row to
-    link to, so the page states that instead of linking a guessed position."""
-    _project_dir, run_id, run_dir, _snapshot, _sidecar = _build_and_halt(tmp_path, monkeypatch)
-    path = run_dir / "queue" / "review.fingerprints.json"
-    sidecar = json.loads(path.read_text(encoding="utf-8"))
-    del sidecar["row_ordinals"]
-    path.write_text(json.dumps(sidecar), encoding="utf-8")
-
-    stage_def = _find_stage_def(PROJECT, "review")
-    fingerprints = loading.load_queue_fingerprints(PROJECT, run_id, "review")
-    lineage = review_routes._resolve_lineage(stage_def, fingerprints)
-
-    assert lineage.upstream_stage_id is None
-    assert "ordinal" in (lineage.note or "")
-    assert review_routes._build_lineage_urls(PROJECT, run_id, lineage, fingerprints) == [None, None]
-
-
-# ── 4. 404 on a stage that isn't a human_review_queue stage ─────────────────
+# ── 2. Route-level refusals: 404 on the stage, 400 on the payload ───────────
 
 
 def test_404_when_the_stage_id_is_not_a_human_review_queue_stage(tmp_path, monkeypatch):
@@ -267,50 +238,39 @@ def test_404_when_the_stage_id_is_not_a_human_review_queue_stage(tmp_path, monke
     assert r.status_code == 404
 
 
-# ── 5. queue_decide validation: the endpoint and the review service 400 the
-#      domain rules, unknown fingerprint 404s ────────────────────────────────
-
-
-def test_decide_400_on_malformed_reviewed_values_json(tmp_path, monkeypatch):
-    _project_dir, run_id, _run_dir, _snapshot, fingerprints = _build_and_halt(tmp_path, monkeypatch)
-    fp = fingerprints["input_fingerprints"][0]
-
-    client = TestClient(app)
-    r = client.post(
-        f"/project/{PROJECT}/runs/{run_id}/queue/review/decide",
-        data=_decide_data(fp, "{not json"),
-    )
-    assert r.status_code == 400
-    assert not StageCacheEntry.list(prefix=f"{PROJECT}/review/")  # nothing written
-
-
-def test_decide_400_when_the_two_value_maps_name_different_columns(tmp_path, monkeypatch):
-    """The verdict is derived by comparing them column by column, so a column
-    present in only one is a comparison that cannot be made — never one
-    silently treated as unchanged."""
+@pytest.mark.parametrize(
+    "reviewed, prefilled, extra, expected_in_detail",
+    [
+        # The payload itself is unreadable as a map of target column -> value.
+        ("{not json", None, {}, "not valid JSON"),
+        ("[1, 2]", None, {}, "JSON object"),
+        # The verdict is derived by comparing the two maps column by column, so a
+        # column in only one is a comparison that cannot be made — never one
+        # silently treated as unchanged.
+        ({"human_score": 1}, {}, {}, "human_score"),
+        # The review service is the sole authority on the key set.
+        ({}, {}, {}, "human_score"),
+        ({"human_score": 1, "smuggled": "x"}, None, {}, "smuggled"),
+        # A value the declared column refuses: named, with the offending text.
+        ({"human_score": "banana"}, {"human_score": "1"}, {}, "banana"),
+        # No decision is recorded unattributed.
+        ({"human_score": 1}, None, {"reviewer": "   "}, "reviewer"),
+    ],
+)
+def test_decide_400s_and_writes_nothing_on_a_payload_it_cannot_honour(
+    tmp_path, monkeypatch, reviewed, prefilled, extra, expected_in_detail
+):
     _project_dir, run_id, _run_dir, _snapshot, fingerprints = _build_and_halt(tmp_path, monkeypatch)
     fp = fingerprints["input_fingerprints"][0]
 
     r = TestClient(app).post(
         f"/project/{PROJECT}/runs/{run_id}/queue/review/decide",
-        data=_decide_data(fp, {"human_score": 1}, prefilled={}),
+        data=_decide_data(fp, reviewed, prefilled=prefilled, **extra),
     )
-    assert r.status_code == 400
-    assert "human_score" in r.json()["detail"]
-    assert not StageCacheEntry.list(prefix=f"{PROJECT}/review/")
 
-
-def test_decide_400_when_reviewed_values_miss_a_declared_column(tmp_path, monkeypatch):
-    _project_dir, run_id, _run_dir, _snapshot, fingerprints = _build_and_halt(tmp_path, monkeypatch)
-    fp = fingerprints["input_fingerprints"][0]
-
-    client = TestClient(app)
-    r = client.post(
-        f"/project/{PROJECT}/runs/{run_id}/queue/review/decide",
-        data=_decide_data(fp, {}),
-    )
-    assert r.status_code == 400
-    assert not StageCacheEntry.list(prefix=f"{PROJECT}/review/")
+    assert r.status_code == 400, r.text
+    assert expected_in_detail in r.json()["detail"]
+    assert not StageCacheEntry.list(prefix=f"{PROJECT}/review/")  # nothing written
 
 
 def test_decide_404_on_unknown_fingerprint_and_writes_nothing(tmp_path, monkeypatch):
@@ -325,45 +285,43 @@ def test_decide_404_on_unknown_fingerprint_and_writes_nothing(tmp_path, monkeypa
     assert not StageCacheEntry.list(prefix=f"{PROJECT}/review/")
 
 
-# ── 5b. The verdict is DERIVED from submitted vs pre-filled values ───────────
+# ── 3. The verdict is DERIVED from submitted vs pre-filled values ───────────
 
 
-def test_decide_derives_approve_when_every_value_matches_the_prefill(tmp_path, monkeypatch):
+@pytest.mark.parametrize(
+    "submitted, extra, expected_verdict, expected_stored",
+    [
+        ("1", {"reviewer": "  Ada Lovelace  "}, "approve", 1),
+        ("4", {}, "modify", 4),
+        # The verdict comes from what changed, so a `verdict` field on the form
+        # is inert — `skipped` (the runtime's own verdict, which the review
+        # service refuses: tests/services/test_review.py) cannot be smuggled in.
+        ("1", {"verdict": "skipped"}, "approve", 1),
+        # Form text is parsed to the declared type, never stored as a string.
+        ("  -3 ", {}, "modify", -3),
+    ],
+)
+def test_decide_derives_the_verdict_from_submitted_against_prefilled(
+    tmp_path, monkeypatch, submitted, extra, expected_verdict, expected_stored
+):
     _project_dir, run_id, _run_dir, _snapshot, fingerprints = _build_and_halt(tmp_path, monkeypatch)
     fp = fingerprints["input_fingerprints"][0]
 
     r = TestClient(app).post(
         f"/project/{PROJECT}/runs/{run_id}/queue/review/decide",
-        data=_decide_data(fp, {"human_score": "1"}, prefilled={"human_score": "1"}),
+        data=_decide_data(fp, {"human_score": submitted}, prefilled={"human_score": "1"}, **extra),
     )
     assert r.status_code == 200, r.text
-    assert r.json()["verdict"] == "approve"
+    assert r.json()["verdict"] == expected_verdict
 
     entry = StageCacheEntry.read_only().get(
         PROJECT, "review", fingerprints["stage_fingerprint"], fp)
     assert entry is not None and entry.output_row is not None
-    assert entry.output_row["decision"] == "approve"
-
-
-def test_decide_derives_modify_when_a_value_differs_from_the_prefill(tmp_path, monkeypatch):
-    _project_dir, run_id, _run_dir, _snapshot, fingerprints = _build_and_halt(tmp_path, monkeypatch)
-    fp = fingerprints["input_fingerprints"][0]
-
-    r = TestClient(app).post(
-        f"/project/{PROJECT}/runs/{run_id}/queue/review/decide",
-        data=_decide_data(fp, {"human_score": "4"}, prefilled={"human_score": "1"}),
-    )
-    assert r.status_code == 200, r.text
-    assert r.json()["verdict"] == "modify"
-
-    entry = StageCacheEntry.read_only().get(
-        PROJECT, "review", fingerprints["stage_fingerprint"], fp)
-    assert entry is not None and entry.output_row is not None
-    assert entry.output_row["decision"] == "modify"
-    assert entry.output_row["human_score"] == 4
-
-
-# ── 6. Snapshot pureness: exactly the upstream columns, no bookkeeping ──────
+    assert entry.output_row["decision"] == expected_verdict
+    assert entry.output_row["human_score"] == expected_stored
+    assert not isinstance(entry.output_row["human_score"], str)
+    # The reviewer is the name the form posted, trimmed — never a hardcoded one.
+    assert entry.output_row["reviewer_id"] == extra.get("reviewer", "Ada").strip()
 
 
 def test_snapshot_columns_are_exactly_the_upstream_columns(tmp_path, monkeypatch):
@@ -371,7 +329,7 @@ def test_snapshot_columns_are_exactly_the_upstream_columns(tmp_path, monkeypatch
     assert set(snapshot.columns) == {"id", "quote", "score"}
 
 
-# ── 7. End-to-end capstone: decide all three verdicts, then resume ──────────
+# ── 4. End-to-end capstone: decide every verdict, then resume ───────────────
 
 
 def _e2e_load_stage(root):
@@ -464,99 +422,7 @@ def test_e2e_decide_every_verdict_then_resume_completes(tmp_path, monkeypatch):
     assert not (project_dir / "decisions").exists()
 
 
-# ── 8. Attribution: the reviewer types their own name; blank is refused ──────
-
-
-def test_decide_400_on_a_blank_reviewer_and_writes_nothing(tmp_path, monkeypatch):
-    _project_dir, run_id, _run_dir, _snapshot, fingerprints = _build_and_halt(tmp_path, monkeypatch)
-    fp = fingerprints["input_fingerprints"][0]
-
-    client = TestClient(app)
-    r = client.post(
-        f"/project/{PROJECT}/runs/{run_id}/queue/review/decide",
-        data=_decide_data(fp, {"human_score": 1}, reviewer="   "),
-    )
-    assert r.status_code == 400
-    assert "reviewer" in r.json()["detail"]
-    assert not StageCacheEntry.list(prefix=f"{PROJECT}/review/")
-
-
-def test_decide_records_the_reviewer_name_the_form_posted(tmp_path, monkeypatch):
-    _project_dir, run_id, _run_dir, _snapshot, fingerprints = _build_and_halt(tmp_path, monkeypatch)
-    fp = fingerprints["input_fingerprints"][0]
-
-    client = TestClient(app)
-    r = client.post(
-        f"/project/{PROJECT}/runs/{run_id}/queue/review/decide",
-        data=_decide_data(fp, {"human_score": 1}, reviewer="  Ada Lovelace  "),
-    )
-    assert r.status_code == 200, r.text
-
-    entry = StageCacheEntry.read_only().get(
-        PROJECT, "review", fingerprints["stage_fingerprint"], fp
-    )
-    assert entry is not None and entry.output_row is not None
-    assert entry.output_row["reviewer_id"] == "Ada Lovelace"  # trimmed, never "local"
-
-
-# ── 9. The reviewer names no verdict — a posted one is not a decision ────────
-
-
-def test_decide_ignores_a_posted_verdict_and_records_the_derived_one(tmp_path, monkeypatch):
-    """The verdict comes from what changed, so a `verdict` field on the form is
-    inert — `skipped` (the runtime's own verdict, which the review service
-    refuses: tests/services/test_review.py) cannot be smuggled in through it."""
-    _project_dir, run_id, _run_dir, _snapshot, fingerprints = _build_and_halt(tmp_path, monkeypatch)
-    fp = fingerprints["input_fingerprints"][0]
-
-    r = TestClient(app).post(
-        f"/project/{PROJECT}/runs/{run_id}/queue/review/decide",
-        data=_decide_data(fp, {"human_score": 1}, verdict="skipped"),
-    )
-    assert r.status_code == 200, r.text
-    assert r.json()["verdict"] == "approve"
-
-
-# ── 10. Coercion against the declared column ────────────────────────────────
-
-
-def test_decide_400_on_a_value_that_will_not_coerce(tmp_path, monkeypatch):
-    """`human_score` reviews an `int` source column, so free text is refused
-    naming the column and the offending text — never stored as a string."""
-    _project_dir, run_id, _run_dir, _snapshot, fingerprints = _build_and_halt(tmp_path, monkeypatch)
-    fp = fingerprints["input_fingerprints"][0]
-
-    client = TestClient(app)
-    r = client.post(
-        f"/project/{PROJECT}/runs/{run_id}/queue/review/decide",
-        data=_decide_data(fp, {"human_score": "banana"}, prefilled={"human_score": "1"}),
-    )
-    assert r.status_code == 400
-    detail = r.json()["detail"]
-    assert "human_score" in detail and "banana" in detail
-    assert not StageCacheEntry.list(prefix=f"{PROJECT}/review/")
-
-
-def test_decide_coerces_form_text_to_the_declared_type(tmp_path, monkeypatch):
-    _project_dir, run_id, _run_dir, _snapshot, fingerprints = _build_and_halt(tmp_path, monkeypatch)
-    fp = fingerprints["input_fingerprints"][0]
-
-    client = TestClient(app)
-    r = client.post(
-        f"/project/{PROJECT}/runs/{run_id}/queue/review/decide",
-        data=_decide_data(fp, {"human_score": "  -3 "}, prefilled={"human_score": "1"}),
-    )
-    assert r.status_code == 200, r.text
-
-    entry = StageCacheEntry.read_only().get(
-        PROJECT, "review", fingerprints["stage_fingerprint"], fp
-    )
-    assert entry is not None and entry.output_row is not None
-    assert entry.output_row["human_score"] == -3
-    assert not isinstance(entry.output_row["human_score"], str)
-
-
-# ── 11. Notes: normalised at the boundary, refused with no notes column ──────
+# ── 5. Review notes: normalised at the boundary, refused with no column ─────
 
 
 def test_decide_accepts_an_untouched_notes_box_as_no_note(tmp_path, monkeypatch):
@@ -614,7 +480,7 @@ def test_decide_400_on_notes_when_the_stage_declares_no_notes_column(tmp_path, m
     assert not StageCacheEntry.list(prefix=f"{project}/review/")
 
 
-# ── 12. Live-definition drift from the halted run ────────────────────────────
+# ── 6. Live-definition drift from the halted run ────────────────────────────
 
 
 def _drift_the_review_stage(project_dir):
@@ -658,26 +524,7 @@ def test_decide_409_when_the_stage_changed_since_the_halt(tmp_path, monkeypatch)
     assert not StageCacheEntry.list(prefix=f"{PROJECT}/review/")
 
 
-# ── 13. The form the page renders: one field per declared reviewed column ────
-
-
-def test_queue_page_renders_one_prefilled_field_per_reviewed_column(tmp_path, monkeypatch):
-    """The field is generated from queue.reviewed_columns and typed from the
-    declared column — a number input for an `int`, pre-filled with the AI value
-    the reviewer is being asked to confirm or change."""
-    _project_dir, run_id, _run_dir, _snapshot, _fingerprints = _build_and_halt(tmp_path, monkeypatch)
-
-    client = TestClient(app)
-    html = client.get(f"/project/{PROJECT}/runs/{run_id}/queue/review").text
-
-    assert 'data-target="human_score"' in html
-    assert 'type="number"' in html
-    assert 'data-prefill="1"' in html and 'value="1"' in html  # the mocked AI score
-    assert "modified_score" not in html  # the hardcoded -2..2 score field is gone
-    assert 'data-action="reject"' not in html
-    # One Submit; the verdict is derived, so no button names one.
-    assert 'data-action="approve"' not in html
-    assert html.count(">Submit<") == html.count("<article class=\"queue-card")
+# ── 7. The reviewer-name gate, and what a decided row's field opens on ──────
 
 
 def test_queue_page_gates_the_items_behind_the_reviewer_name(tmp_path, monkeypatch):
@@ -721,7 +568,7 @@ def test_queue_page_prefills_a_decided_row_from_the_recorded_value(tmp_path, mon
     assert "you recorded" in decided
 
 
-# ── 14. A nullable bool: three states, so never a fabricated `false` ─────────
+# ── 8. Controls whose value has its own spelling: bool, date/datetime, range ─
 
 
 def _bool_review_stage(nullable):
@@ -839,50 +686,6 @@ def test_a_non_nullable_bool_select_opens_on_the_ai_value(tmp_path, monkeypatch)
     assert entry.output_row["human_flag"] is False
 
 
-def test_an_enum_select_opens_on_the_recorded_value(tmp_path, monkeypatch):
-    """The enum path goes through the same option comparison as bool."""
-    project = "queue_route_enum"
-    monkeypatch.setattr(loading, "EXAMPLES_DIR", tmp_path)
-    project_dir = tmp_path / project
-    (project_dir / "data").mkdir(parents=True, exist_ok=True)
-    csv_path = project_dir / "data" / "calls.csv"
-    pd.DataFrame({"id": ["a"], "call": ["no"]}).to_csv(csv_path, index=False)
-    stage = _with_queue_output_schema({
-        "id": "review", "name": "Review calls", "type": "human_review_queue",
-        "inputs": [{"id": "load", "schema": {
-            "columns": [{"name": "id", "type": "str"},
-                        {"name": "call", "type": "str", "nullable": False,
-                         "enum": ["yes", "no", "unclear"]}],
-            "primary_key": ["id"]}}],
-        "queue": {**queue_columns(source="call", target="human_call")}})
-    _write_stage(project_dir, "01_load.json", {
-        "id": "load", "name": "Load calls", "type": "input_data",
-        "connector": {"kind": "file", "params": {"path": str(csv_path), "format": "csv"}},
-        "output_schema": {"columns": [{"name": "id", "type": "str"},
-                                      {"name": "call", "type": "str", "nullable": False,
-                                       "enum": ["yes", "no", "unclear"]}],
-                          "primary_key": ["id"]}})
-    _write_stage(project_dir, "02_review.json", stage)
-    _seed_version(project_dir)
-    run_id = run_prepared(prepare_run(project_dir, repo_root=project_dir))["run_id"]
-    fingerprints = _read_fingerprints(project_dir / "runs" / run_id)
-    review.record_decision(
-        project=project, stage=Stage.model_validate(stage),
-        stage_fingerprint=fingerprints["stage_fingerprint"],
-        input_fingerprint=fingerprints["input_fingerprints"][0],
-        frozen_row={"id": "a", "call": "no"},
-        verdict=ReviewVerdict.modify, reviewed_values={"human_call": "unclear"},
-        review_notes=None, reviewer="Ada", reviewed_at="2026-07-01T00:00:00",
-    )
-
-    html = TestClient(app).get(f"/project/{project}/runs/{run_id}/queue/review").text
-
-    assert _find_selected_option(html, "human_call") == "unclear"
-
-
-# ── 14b. date/datetime controls: ISO 8601 or the control renders blank ──────
-
-
 def _temporal_review_stage(column_type):
     return _with_queue_output_schema({
         "id": "review", "name": "Review times", "type": "human_review_queue",
@@ -932,58 +735,21 @@ def _find_input_value(html, target):
     return None if value is None else value.group(1)
 
 
-def test_a_datetime_control_opens_on_the_recorded_value_of_a_decided_row(tmp_path, monkeypatch):
+@pytest.mark.parametrize(
+    "column_type, control, recorded",
+    [("datetime", "datetime-local", "2026-03-04T09:30:00"), ("date", "date", "2026-03-04")],
+)
+def test_a_temporal_control_opens_on_the_recorded_value_of_a_decided_row(
+    tmp_path, monkeypatch, column_type, control, recorded
+):
     """The recorded value comes back from the cache stringified — space-
-    separated, which a `datetime-local` control rejects, rendering BLANK on a row
-    that has a value. An untouched Save would then post "" over it."""
+    separated, which a `date`/`datetime-local` control rejects, rendering BLANK
+    on a row that has a value. An untouched Save would then post "" over it."""
     html = _decide_a_temporal_row(
-        tmp_path, monkeypatch, "queue_route_datetime", "datetime", "2026-03-04T09:30:00")
+        tmp_path, monkeypatch, f"queue_route_{column_type}", column_type, recorded)
 
-    assert 'type="datetime-local"' in html
-    assert _find_input_value(html, "human_seen_at") == "2026-03-04T09:30:00"
-
-
-def test_a_date_control_opens_on_the_recorded_value_of_a_decided_row(tmp_path, monkeypatch):
-    html = _decide_a_temporal_row(
-        tmp_path, monkeypatch, "queue_route_date", "date", "2026-03-04")
-
-    assert 'type="date"' in html
-    assert _find_input_value(html, "human_seen_at") == "2026-03-04"
-
-
-# ── 15. Reviewed-value key handling at the endpoint ─────────────────────────
-
-
-def test_decide_400_on_reviewed_values_that_is_not_a_json_object(tmp_path, monkeypatch):
-    """`reviewed_values` is keyed by target column; a JSON array names nothing."""
-    _project_dir, run_id, _run_dir, _snapshot, fingerprints = _build_and_halt(tmp_path, monkeypatch)
-
-    r = TestClient(app).post(
-        f"/project/{PROJECT}/runs/{run_id}/queue/review/decide",
-        data=_decide_data(fingerprints["input_fingerprints"][0], "[1, 2]"),
-    )
-    assert r.status_code == 400
-    assert "JSON object" in r.json()["detail"]
-    assert not StageCacheEntry.list(prefix=f"{PROJECT}/review/")
-
-
-def test_decide_400_on_an_undeclared_reviewed_value_key(tmp_path, monkeypatch):
-    """The seam `_coerce_reviewed_values` leaves open: an undeclared key has no
-    column to coerce against, so it passes through uncoerced and the review
-    service — the sole authority on the key set — refuses the whole decision."""
-    _project_dir, run_id, _run_dir, _snapshot, fingerprints = _build_and_halt(tmp_path, monkeypatch)
-
-    r = TestClient(app).post(
-        f"/project/{PROJECT}/runs/{run_id}/queue/review/decide",
-        data=_decide_data(
-            fingerprints["input_fingerprints"][0], {"human_score": 1, "smuggled": "x"}),
-    )
-    assert r.status_code == 400
-    assert "smuggled" in r.json()["detail"]
-    assert not StageCacheEntry.list(prefix=f"{PROJECT}/review/")
-
-
-# ── 16. The output_schema path of the declared-column lookup ────────────────
+    assert f'type="{control}"' in html
+    assert _find_input_value(html, "human_seen_at") == recorded
 
 
 def _output_schema_review_stage():
@@ -1031,11 +797,15 @@ def test_decide_coerces_against_the_output_schema_column_when_declared(tmp_path,
     fp = fingerprints["input_fingerprints"][0]
 
     client = TestClient(app)
+    html = client.get(f"/project/{project}/runs/{run_id}/queue/review").text
+    assert 'min="0"' in html and 'max="5"' in html  # the declared range, on the control
+
     url = f"/project/{project}/runs/{run_id}/queue/review/decide"
     refused = client.post(url, data=_decide_data(
         fp, {"human_score": 9}, prefilled={"human_score": 1}))
     assert refused.status_code == 400  # outside the declared [0, 5]
-    assert "above the declared maximum" in refused.json()["detail"]
+    detail = refused.json()["detail"]
+    assert "human_score" in detail and "less than or equal to 5" in detail
 
     # Blank is a null only because output_schema's `human_score` is nullable; the
     # input edge's `score` is not, so this is the output_schema path being read.
@@ -1048,16 +818,7 @@ def test_decide_coerces_against_the_output_schema_column_when_declared(tmp_path,
     assert entry.output_row["human_score"] is None
 
 
-def test_queue_page_renders_the_declared_range_on_the_field(tmp_path, monkeypatch):
-    project = "queue_route_output_schema_page"
-    run_id, _fingerprints = _build_and_halt_output_schema_queue(tmp_path, monkeypatch, project)
-
-    html = TestClient(app).get(f"/project/{project}/runs/{run_id}/queue/review").text
-
-    assert 'min="0"' in html and 'max="5"' in html
-
-
-# ── 17. The queued rows are described from the DECLARED input schema ─────────
+# ── 9. The queued rows are described from the DECLARED input schema ─────────
 #
 # `human_review_queue` runs for any workflow, so nothing here may depend on the
 # upstream stage's type or on any particular column name.
@@ -1079,8 +840,8 @@ def _lineage_urls(project, run_id, stage_id="review"):
     stage_def = _find_stage_def(project, stage_id)
     fingerprints = loading.load_queue_fingerprints(project, run_id, stage_id)
     assert fingerprints is not None
-    return review_routes._build_lineage_urls(
-        project, run_id, review_routes._resolve_lineage(stage_def, fingerprints), fingerprints
+    return queue_view.build_lineage_urls(
+        project, run_id, queue_view.resolve_lineage(stage_def, fingerprints), fingerprints
     )
 
 
@@ -1098,7 +859,6 @@ def test_a_queue_directly_on_input_data_renders_and_links_to_that_stage(tmp_path
     html = TestClient(app).get(f"/project/{project}/runs/{run_id}/queue/review").text
     for fp in fingerprints["input_fingerprints"]:
         assert f'data-input-fingerprint="{fp}"' in html
-    assert "reviewing blind" not in html
 
     assert _lineage_urls(project, run_id) == [
         f"/project/{project}/runs/{run_id}/stage/load/row/{o}/trace/view"
@@ -1162,26 +922,6 @@ def test_a_queue_whose_upstream_is_not_an_llm_transform_renders_and_links(tmp_pa
     ]
 
 
-def test_queued_columns_carry_the_declared_description_and_primary_key(tmp_path, monkeypatch):
-    project = "queue_route_column_metadata"
-    project_dir = tmp_path / project
-    run_id, _fingerprints = _build_and_halt_queue_over(
-        tmp_path, monkeypatch, project,
-        [_e2e_load_stage(project_dir), _labelled_row_function_stage(), _review_labels_stage()],
-    )
-
-    described = review_routes._describe_queued_columns(
-        _find_stage_def(project, "review"),
-        loading.queue_snapshot(project, run_id, "review"),
-    )
-
-    by_name = {column.name: column for column in described.columns}
-    assert by_name["label"].description == "high when the score exceeds one"
-    assert not by_name["label"].in_primary_key
-    assert by_name["id"].in_primary_key and by_name["id"].description is None
-    assert described.schema_note is None and described.identity_note is None
-
-
 def _no_primary_key_review_stage():
     return _with_queue_output_schema({
         "id": "review", "name": "Review items", "type": "human_review_queue",
@@ -1189,48 +929,6 @@ def _no_primary_key_review_stage():
             "columns": [{"name": "id", "type": "str"},
                         {"name": "score", "type": "int"}]}}],
         "queue": dict(QUEUE_COLUMNS)})
-
-
-def test_a_stage_with_no_declared_primary_key_says_so_rather_than_guessing(tmp_path, monkeypatch):
-    """An `id` column is present and would have been guessed at by the removed
-    join-key fallback; with no `primary_key` declared the page states that
-    instead, and no column is flagged as the key."""
-    project = "queue_route_no_primary_key"
-    project_dir = tmp_path / project
-    run_id, _fingerprints = _build_and_halt_queue_over(
-        tmp_path, monkeypatch, project,
-        [_e2e_load_stage(project_dir), _no_primary_key_review_stage()],
-    )
-
-    described = review_routes._describe_queued_columns(
-        _find_stage_def(project, "review"),
-        loading.queue_snapshot(project, run_id, "review"),
-    )
-
-    assert described.identity_note == review_routes.NO_PRIMARY_KEY_NOTE
-    assert not any(column.in_primary_key for column in described.columns)
-
-
-def test_a_never_opened_field_carries_the_value_it_displays(tmp_path, monkeypatch):
-    """What a field submits when nobody touches it is `data-prefill`, and it is
-    the same text the control displays — so an untouched submit records the
-    value the reviewer was shown, which derives `approve`."""
-    _project_dir, run_id, _run_dir, _snapshot, _fingerprints = _build_and_halt(tmp_path, monkeypatch)
-
-    html = TestClient(app).get(f"/project/{PROJECT}/runs/{run_id}/queue/review").text
-
-    field = re.search(r'<input[^>]*data-target="human_score"[^>]*>', html, re.DOTALL)
-    assert field is not None
-    prefill = re.search(r'\sdata-prefill="([^"]*)"', field.group(0))
-    assert prefill is not None
-    assert prefill.group(1) == _find_input_value(html, "human_score") == "1"
-
-
-# ── 18. The card renders the queued row itself, described and linked ─────────
-#
-# The reviewable material is the snapshot row. Everything the card says about a
-# column comes from the declared schema, and nothing on the page names a column
-# this test's workflow did not declare.
 
 
 def _described_review_stage():
@@ -1274,87 +972,45 @@ def _first_card(html):
     return card[:card.index("</article>")]
 
 
-def test_the_card_renders_the_queued_row_as_a_key_value_table(tmp_path, monkeypatch):
-    """Every context column, labelled by its own name — no `<pre>` JSON dump,
-    no declared type on show, and no column name this workflow did not
-    declare."""
-    _run_id, _fingerprints, html = _described_queue_html(
-        tmp_path, monkeypatch, "queue_route_kv_table")
+def test_the_card_renders_the_described_queued_row_and_its_review_section(tmp_path, monkeypatch):
+    """The context table is the queued row MINUS the columns under review, each
+    column labelled by its own name and tooltipped from its DECLARED
+    description — no `<pre>` JSON dump, no declared type on show, no invented
+    tooltip, and no column name this workflow did not declare. The header says
+    where in the queue the reviewer is (a bare primary key identifies nothing to
+    a human) and links the upstream row; the reviewer brief reads as body text.
+    """
+    run_id, fingerprints, html = _described_queue_html(
+        tmp_path, monkeypatch, "queue_route_card")
 
     card = _first_card(html)
     assert '<table class="kv">' in card
-    for column in ("id", "score"):
-        assert f"<code>{column}</code>" in card
     assert "<pre>" not in card
     assert "type-pill" not in card
     for guessed in ("entity_id", "query_id", "benchmark_id", "quote", "benchmark_text"):
         assert guessed not in html
 
+    table = card[card.index('<table class="kv">'):card.index("</table>")]
+    assert re.findall(r"<code>(\w+)</code>", table) == ["id", "score"]  # `label` is reviewed
+    assert "received <code>label</code>:" in " ".join(card.split())
 
-def test_a_declared_description_becomes_the_column_tooltip(tmp_path, monkeypatch):
-    """And a column with no declared description gets NO tooltip — an absent
-    description is stated by absence, never invented."""
-    _run_id, _fingerprints, html = _described_queue_html(
-        tmp_path, monkeypatch, "queue_route_kv_tooltip")
-
-    card = _first_card(html)
+    # A declared description becomes the tooltip; `id` declares none and gets none.
     described = re.search(r'<th[^>]*title="([^"]*)"[^>]*>\s*<code>(\w+)</code>', card)
     assert described is not None
     assert described.groups() == ("the score this row was labelled from", "score")
-
-
-def test_the_reviewed_field_label_carries_the_declared_description(tmp_path, monkeypatch):
-    """The tooltip on `human_label` comes from the TARGET column's declared
-    description in `output_schema`."""
-    _run_id, _fingerprints, html = _described_queue_html(
-        tmp_path, monkeypatch, "queue_route_field_tooltip")
-
+    assert re.search(r'<th[^>]*>\s*<code>id</code>', table) is not None
     label = re.search(r'<label[^>]*for="[^"]*human_label"[^>]*>', html, re.DOTALL)
-    assert label is not None
-    assert 'title="the label after review"' in label.group(0)
-
-
-def test_a_reviewed_field_falls_back_to_the_source_column_description(tmp_path, monkeypatch):
-    """With no `output_schema` the target column is the source column, so the
-    tooltip is the SOURCE column's declared description."""
-    project = "queue_route_field_tooltip_source"
-    project_dir = tmp_path / project
-    run_id, _fingerprints = _build_and_halt_queue_over(
-        tmp_path, monkeypatch, project,
-        [_e2e_load_stage(project_dir), _labelled_row_function_stage(), _review_labels_stage()],
-    )
-
-    html = TestClient(app).get(f"/project/{project}/runs/{run_id}/queue/review").text
-
-    label = re.search(r'<label[^>]*for="[^"]*human_label"[^>]*>', html, re.DOTALL)
-    assert label is not None
-    assert 'title="high when the score exceeds one"' in label.group(0)
-
-
-def test_a_column_with_no_declared_description_carries_no_tooltip(tmp_path, monkeypatch):
-    project = "queue_route_no_tooltip"
-    project_dir = tmp_path / project
-    run_id, _fingerprints = _build_and_halt_queue_over(
-        tmp_path, monkeypatch, project,
-        [_e2e_load_stage(project_dir), _no_primary_key_review_stage()],
-    )
-
-    html = TestClient(app).get(f"/project/{project}/runs/{run_id}/queue/review").text
-
-    assert "title=" not in _first_card(html)
-
-
-def test_the_card_header_states_the_row_position_and_the_lineage_link(tmp_path, monkeypatch):
-    """A bare primary key identifies nothing to a human, so the header says
-    where in the queue the reviewer is; the key itself stays in the table."""
-    run_id, fingerprints, html = _described_queue_html(
-        tmp_path, monkeypatch, "queue_route_card_header")
+    assert label is not None and 'title="the label after review"' in label.group(0)
 
     positions = re.findall(r'<span class="row-position">([^<]*)</span>', html)
     assert positions == [f"Row {n} of {len(positions)}" for n in range(1, len(positions) + 1)]
     assert "identity-cell" not in html
-    assert (f'href="/project/queue_route_card_header/runs/{run_id}/stage/label/row/'
-            f'{fingerprints["row_ordinals"][0]}/trace/view"') in _first_card(html)
+    assert (f'href="/project/queue_route_card/runs/{run_id}/stage/label/row/'
+            f'{fingerprints["row_ordinals"][0]}/trace/view"') in card
+
+    # The reviewer brief is their brief, not the raw stage handle's monospace.
+    assert '<pre class="instructions">' not in html
+    assert '<p class="instructions-text">Confirm the label against the score.</p>' in html
 
 
 def test_a_stage_with_no_primary_key_states_it_rather_than_guessing_one(tmp_path, monkeypatch):
@@ -1367,47 +1023,8 @@ def test_a_stage_with_no_primary_key_states_it_rather_than_guessing_one(tmp_path
 
     html = TestClient(app).get(f"/project/{project}/runs/{run_id}/queue/review").text
 
-    assert review_routes.NO_PRIMARY_KEY_NOTE.replace("'", "&#39;") in html
+    assert queue_view.NO_PRIMARY_KEY_NOTE.replace("'", "&#39;") in html
     assert 'class="pk-flag"' not in html
-
-
-def test_the_reviewer_instructions_are_not_rendered_as_a_code_block(tmp_path, monkeypatch):
-    """They are the reviewer's brief, so they read as body text — the muted
-    monospace `pre.instructions` styling belongs to the raw stage handle."""
-    _run_id, _fingerprints, html = _described_queue_html(
-        tmp_path, monkeypatch, "queue_route_instructions")
-
-    assert '<pre class="instructions">' not in html
-    assert '<p class="instructions-text">Confirm the label against the score.</p>' in html
-
-
-def test_the_notes_box_is_labelled_and_invites_notes_on_any_decision(tmp_path, monkeypatch):
-    """The notes column name is spelled out as a label, and nothing in the copy
-    ties a note to a change — notes are as valid on an approval."""
-    _project_dir, run_id, _run_dir, _snapshot, _fingerprints = _build_and_halt(tmp_path, monkeypatch)
-
-    html = TestClient(app).get(f"/project/{PROJECT}/runs/{run_id}/queue/review").text
-
-    assert "<span>Review notes</span>" in html  # the declared column is `review_notes`
-    assert 'placeholder="Include any reasoning or citations for your decision"' in html
-    assert "why you changed it" not in html
-
-
-def test_the_notes_label_prefers_the_declared_description(tmp_path, monkeypatch):
-    """With no declared description the column name is spelled out — an
-    undeclared `reviewer_notes` reads "Reviewer notes", never a hardcoded one."""
-    stage_def = Stage.model_validate(_described_review_stage())
-    assert stage_def.output_schema is not None
-    assert review_routes._resolve_notes_label(stage_def, "review_notes") == "Review notes"
-    assert review_routes._resolve_notes_label(stage_def, "reviewer_notes") == "Reviewer notes"
-
-    described = stage_def.model_copy(update={"output_schema": stage_def.output_schema.model_copy(
-        update={"columns": [
-            column.model_copy(update={"description": "Why you decided as you did"})
-            if column.name == "review_notes" else column
-            for column in stage_def.output_schema.columns]})})
-    assert review_routes._resolve_notes_label(described, "review_notes") == (
-        "Why you decided as you did")
 
 
 def test_a_reviewed_value_is_read_only_until_its_edit_button_is_pressed(tmp_path, monkeypatch):
@@ -1433,8 +1050,9 @@ def test_a_reviewed_value_is_read_only_until_its_edit_button_is_pressed(tmp_path
 
 
 def test_the_closed_field_displays_exactly_what_it_will_submit(tmp_path, monkeypatch):
-    """The read-only display and `data-prefill` are the same text, so a field
-    nobody opened submits the value the reviewer was shown."""
+    """The read-only display, the control's own value and `data-prefill` are all
+    the same text, so a field nobody opened submits the value the reviewer was
+    shown — which derives `approve`."""
     _project_dir, run_id, _run_dir, _snapshot, _fingerprints = _build_and_halt(tmp_path, monkeypatch)
 
     html = TestClient(app).get(f"/project/{PROJECT}/runs/{run_id}/queue/review").text
@@ -1443,6 +1061,7 @@ def test_the_closed_field_displays_exactly_what_it_will_submit(tmp_path, monkeyp
     shown = re.search(r'<span class="current-value">(.*?)</span>', card, re.DOTALL)
     assert shown is not None and shown.group(1).strip() == "1"
     assert 'data-prefill="1"' in card
+    assert _find_input_value(html, "human_score") == "1"
 
 
 def _empty_string_load_stage(project_dir):
@@ -1506,22 +1125,7 @@ def test_an_empty_string_cell_is_not_printed_as_a_null(tmp_path, monkeypatch):
     assert "<em>null</em>" in cells
 
 
-# ── 19. Context columns and reviewed columns are two different sections ──────
-
-
-def test_a_reviewed_source_column_is_shown_only_in_the_review_section(tmp_path, monkeypatch):
-    """The context table is the input row MINUS the columns under review: a
-    column the reviewer is asked to change is shown once, beside its control,
-    not twice. The subtraction is by the queue's declared `reviewed_columns`
-    sources, never by matching on a column name."""
-    _run_id, _fingerprints, html = _described_queue_html(
-        tmp_path, monkeypatch, "queue_route_context_split")
-
-    card = _first_card(html)
-    table = card[card.index('<table class="kv">'):card.index("</table>")]
-    labels = re.findall(r"<code>(\w+)</code>", table)
-    assert labels == ["id", "score"]          # `label` is under review
-    assert "received <code>label</code>:" in " ".join(card.split())
+# ── 10. Values a display must not flatten, and the empty context table ──────
 
 
 def _every_column_reviewed_stage():
@@ -1555,7 +1159,7 @@ def test_no_context_table_is_rendered_when_every_column_is_under_review(tmp_path
     assert 'data-target="human_score"' in html
 
 
-# ── 20. A decided card is not asking for input ───────────────────────────────
+# ── 11. A decided card is not asking for input ──────────────────────────────
 
 
 def _decided_queue_html(tmp_path, monkeypatch):
@@ -1574,7 +1178,7 @@ def test_a_decided_card_disables_its_openers_and_offers_a_secondary_cta(tmp_path
     and activate it — a CSS-only look would leave the control live. And both
     halves of the hidden Submit: the attribute AND the stylesheet rule, without
     which `.btn`'s own `display` beats the UA's [hidden] rule."""
-    _project_dir, _run_id, _fingerprints, html = _decided_queue_html(tmp_path, monkeypatch)
+    _project_dir, _run_id, fingerprints, html = _decided_queue_html(tmp_path, monkeypatch)
 
     decided = _first_card(html)
     opener = re.search(r'<button type="button" class="value-display"[^>]*>', decided)
@@ -1589,17 +1193,15 @@ def test_a_decided_card_disables_its_openers_and_offers_a_secondary_cta(tmp_path
     )
     assert re.search(r"\.decision-controls \[hidden\]\s*\{[^}]*display:\s*none", stylesheet)
 
-
-def test_an_undecided_card_offers_the_primary_submit_and_live_openers(tmp_path, monkeypatch):
-    _project_dir, _run_id, fingerprints, html = _decided_queue_html(tmp_path, monkeypatch)
-
-    undecided = html[html.index(f'data-input-fingerprint="{fingerprints["input_fingerprints"][1]}"'):]
+    # The still-undecided row is the control: live openers, primary Submit, no CTA.
+    undecided = html[html.index(
+        f'data-input-fingerprint="{fingerprints["input_fingerprints"][1]}"'):]
     undecided = undecided[:undecided.index("</article>")]
-    opener = re.search(r'<button type="button" class="value-display"[^>]*>', undecided)
-    assert opener is not None and "disabled" not in opener.group(0)
+    live = re.search(r'<button type="button" class="value-display"[^>]*>', undecided)
+    assert live is not None and "disabled" not in live.group(0)
     assert ">Change my review<" not in undecided
-    submit = re.search(r'<button type="submit" class="btn primary"[^>]*>', undecided)
-    assert submit is not None and not re.search(r"\bhidden\b", submit.group(0))
+    open_submit = re.search(r'<button type="submit" class="btn primary"[^>]*>', undecided)
+    assert open_submit is not None and not re.search(r"hidden", open_submit.group(0))
 
 
 def test_unlocking_a_decided_card_records_a_new_verdict_on_resubmit(tmp_path, monkeypatch):

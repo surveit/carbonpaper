@@ -1,0 +1,253 @@
+# The queue page's view model, built from declared schemas alone — no run, no
+# HTTP round-trip. The route-level surface lives in tests/test_review_routes.py.
+from __future__ import annotations
+
+import pandas as pd
+import pytest
+
+from app.models import Stage
+from app.web import queue_view
+from app.web.loading import QueueFingerprints
+from conftest import queue_added_columns, queue_columns
+
+
+def _queue_stage(
+    input_columns: list[dict[str, object]],
+    *,
+    primary_key: list[str] | None = None,
+    source: str = "label",
+    target: str = "human_label",
+    target_type: str = "str",
+    target_spec: dict[str, object] | None = None,
+    input_ids: list[str] | None = None,
+) -> Stage:
+    """A `human_review_queue` stage over `input_columns`, with the output_schema
+    its input edge and `queue` block imply. `target_spec` overrides the reviewed
+    TARGET column's declaration."""
+    added: list[dict[str, object]] = queue_added_columns(target, target_type)
+    added[0] = {**added[0], **(target_spec or {})}
+    inputs = [
+        {"id": upstream, "schema": {"columns": input_columns, "primary_key": primary_key}}
+        for upstream in (input_ids or ["upstream"])
+    ]
+    return Stage.model_validate({
+        "id": "review", "name": "Review", "type": "human_review_queue",
+        "inputs": inputs,
+        "output_schema": {"columns": input_columns + added, "primary_key": primary_key},
+        "queue": queue_columns(source=source, target=target),
+    })
+
+
+_LABEL_COLUMNS: list[dict[str, object]] = [
+    {"name": "id", "type": "str"},
+    {"name": "score", "type": "int", "description": "the score this row was labelled from"},
+    {"name": "label", "type": "str", "description": "high when the score exceeds one"},
+]
+
+
+# ── Lineage: the upstream stage's row, or a stated reason for no link ────────
+
+
+def test_lineage_links_the_single_upstream_stage_at_the_sidecar_ordinal():
+    """The queue stage has produced no output at halt time, so a row's lineage
+    link names the UPSTREAM stage and the row's ordinal from the sidecar —
+    never the queue stage itself, and never a guessed position."""
+    stage = _queue_stage(_LABEL_COLUMNS, input_ids=["label"])
+    fingerprints = QueueFingerprints("sf", ["fp0", "fp1"], [3, 7])
+
+    lineage = queue_view.resolve_lineage(stage, fingerprints)
+
+    assert lineage == queue_view.Lineage("label", None)
+    assert queue_view.build_lineage_urls("proj", "run1", lineage, fingerprints) == [
+        "/project/proj/runs/run1/stage/label/row/3/trace/view",
+        "/project/proj/runs/run1/stage/label/row/7/trace/view",
+    ]
+
+
+@pytest.mark.parametrize(
+    "input_ids, row_ordinals, expected_in_note",
+    [
+        (["label"], None, "ordinal"),      # halted before ordinals were recorded
+        (["a", "b"], [0, 1], "2 inputs"),  # a row ordinal names no one input frame
+    ],
+)
+def test_lineage_states_why_no_link_can_be_built(input_ids, row_ordinals, expected_in_note):
+    stage = _queue_stage(_LABEL_COLUMNS, input_ids=input_ids)
+    fingerprints = QueueFingerprints("sf", ["fp0", "fp1"], row_ordinals)
+
+    lineage = queue_view.resolve_lineage(stage, fingerprints)
+
+    assert lineage.upstream_stage_id is None
+    assert expected_in_note in (lineage.note or "")
+    assert queue_view.build_lineage_urls("proj", "run1", lineage, fingerprints) == [None, None]
+
+
+# ── Describing the queued rows from the declared input schema ────────────────
+
+
+def test_queued_columns_carry_the_declared_description_and_primary_key():
+    stage = _queue_stage(_LABEL_COLUMNS, primary_key=["id"])
+    snapshot = pd.DataFrame({"id": ["a"], "score": [2], "label": ["high"]})
+
+    described = queue_view.describe_queued_columns(stage, snapshot)
+
+    by_name = {column.name: column for column in described.columns}
+    assert by_name["label"].description == "high when the score exceeds one"
+    assert not by_name["label"].in_primary_key
+    assert by_name["id"].in_primary_key and by_name["id"].description is None
+    assert described.schema_note is None and described.identity_note is None
+
+
+def test_a_stage_with_no_declared_primary_key_says_so_rather_than_guessing():
+    """An `id` column is present and would have been guessed at by the removed
+    join-key fallback; with no `primary_key` declared the view states that
+    instead, and no column is flagged as the key."""
+    stage = _queue_stage(_LABEL_COLUMNS)
+    snapshot = pd.DataFrame({"id": ["a"], "score": [2], "label": ["high"]})
+
+    described = queue_view.describe_queued_columns(stage, snapshot)
+
+    assert described.identity_note == queue_view.NO_PRIMARY_KEY_NOTE
+    assert not any(column.in_primary_key for column in described.columns)
+
+
+def test_a_schema_and_snapshot_that_disagree_are_reported_not_papered_over():
+    stage = _queue_stage(_LABEL_COLUMNS, primary_key=["id"])
+    snapshot = pd.DataFrame({"id": ["a"], "label": ["high"], "extra": [1]})
+
+    described = queue_view.describe_queued_columns(stage, snapshot)
+
+    note = described.schema_note or ""
+    assert "'score'" in note and "'extra'" in note
+    assert described.columns[-1].description is None  # undeclared: no invented prose
+
+
+def test_the_context_table_omits_the_columns_under_review():
+    """The context a reviewer is shown is the queued row MINUS the SOURCE of a
+    reviewed column, which the review section prints beside its own control."""
+    stage = _queue_stage(_LABEL_COLUMNS, primary_key=["id"])
+    snapshot = pd.DataFrame({"id": ["a"], "score": [2], "label": ["high"]})
+
+    page = queue_view.build_queue_page("p", "r", stage, stage.queue, snapshot, None, None)
+
+    assert [column.name for column in page.context_columns] == ["id", "score"]
+
+
+# ── The reviewed fields ──────────────────────────────────────────────────────
+
+
+@pytest.mark.parametrize(
+    "target_spec, expected",
+    [
+        ({"description": "the label after review"}, "the label after review"),  # the TARGET's
+        ({}, "high when the score exceeds one"),                     # else the SOURCE column's
+    ],
+)
+def test_a_reviewed_field_describes_itself_from_the_target_then_the_source(
+    target_spec, expected
+):
+    stage = _queue_stage(_LABEL_COLUMNS, target_spec=target_spec)
+
+    field, = queue_view.build_reviewed_fields(stage, stage.queue)
+
+    assert (field.source, field.target) == ("label", "human_label")
+    assert field.description == expected
+
+
+@pytest.mark.parametrize(
+    "target_type, control, options, step",
+    [
+        ("str", "text", None, None),
+        ("int", "number", None, "1"),
+        ("float", "number", None, "any"),
+        # Three states, not two: a checkbox would advertise a missing value as
+        # `false` and an untouched submit would record it.
+        ("bool", "select", ["true", "false"], None),
+        ("date", "date", None, None),
+        ("datetime", "datetime-local", None, None),
+    ],
+)
+def test_a_reviewed_field_takes_its_control_from_the_declared_type(
+    target_type, control, options, step
+):
+    stage = _queue_stage(
+        [{"name": "id", "type": "str"}, {"name": "label", "type": target_type}],
+        target_type=target_type,
+    )
+
+    field, = queue_view.build_reviewed_fields(stage, stage.queue)
+
+    assert (field.control, field.options, field.step) == (control, options, step)
+
+
+def test_a_declared_range_becomes_the_fields_bounds():
+    stage = _queue_stage(
+        [{"name": "id", "type": "str"}, {"name": "label", "type": "int", "range": [0, 5]}],
+        target_type="int", target_spec={"range": [0, 5]},
+    )
+
+    field, = queue_view.build_reviewed_fields(stage, stage.queue)
+
+    assert (field.minimum, field.maximum) == (0, 5)
+
+
+def test_the_notes_label_prefers_the_declared_description():
+    """With no declared description the column name is spelled out — an
+    undeclared `reviewer_notes` reads "Reviewer notes", never a hardcoded one."""
+    stage = _queue_stage(_LABEL_COLUMNS)
+    assert queue_view.resolve_notes_label(stage, "review_notes") == "Review notes"
+    assert queue_view.resolve_notes_label(stage, "reviewer_notes") == "Reviewer notes"
+
+    assert stage.output_schema is not None
+    described = stage.model_copy(update={"output_schema": stage.output_schema.model_copy(
+        update={"columns": [
+            column.model_copy(update={"description": "Why you decided as you did"})
+            if column.name == "review_notes" else column
+            for column in stage.output_schema.columns]})})
+    assert queue_view.resolve_notes_label(described, "review_notes") == (
+        "Why you decided as you did")
+
+
+# ── The value a control opens on ─────────────────────────────────────────────
+
+
+@pytest.mark.parametrize(
+    "target_type, value, expected",
+    [
+        # A select's prefill is spelled the way its options are, so the option
+        # comes back SELECTED; a value matching no option is an explicit unset,
+        # never the first option the browser would otherwise show.
+        ("bool", True, "true"),
+        ("bool", False, "false"),
+        ("bool", "", None),
+        ("bool", None, None),
+        # A recorded temporal value comes back from the cache stringified and
+        # space-separated, which date/datetime-local controls render as blank.
+        ("datetime", "2026-03-04 09:30:00", "2026-03-04T09:30:00"),
+        ("date", "2026-03-04 00:00:00", "2026-03-04"),
+        ("int", 7, 7),
+    ],
+)
+def test_a_control_opens_on_the_value_in_its_own_spelling(target_type, value, expected):
+    stage = _queue_stage(
+        [{"name": "id", "type": "str"},
+         {"name": "label", "type": target_type, "nullable": True}],
+        target_type=target_type, target_spec={"nullable": True},
+    )
+    field, = queue_view.build_reviewed_fields(stage, stage.queue)
+
+    assert queue_view._resolve_prefill(field, value) == expected
+
+
+def test_an_enum_prefill_keeps_a_declared_value_and_drops_an_undeclared_one():
+    stage = _queue_stage(
+        [{"name": "id", "type": "str"},
+         {"name": "label", "type": "str", "enum": ["yes", "no", "unclear"]}],
+        target_spec={"enum": ["yes", "no", "unclear"]},
+    )
+
+    field, = queue_view.build_reviewed_fields(stage, stage.queue)
+
+    assert field.control == "select" and field.options == ["yes", "no", "unclear"]
+    assert queue_view._resolve_prefill(field, "unclear") == "unclear"
+    assert queue_view._resolve_prefill(field, "retired") is None
