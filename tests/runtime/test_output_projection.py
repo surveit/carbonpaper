@@ -1,11 +1,6 @@
-"""Projecting a stage's frame onto its declared output columns must not invent
-one: a declared column the stage never produced is a loud failure, not a
-silently narrowed projection.
-
-Covers the shared projection (`_project_onto_declared_columns`, used by the row
-driver and by llm_transform's batched path) and the human_review_queue handler,
-which reaches it through the row driver.
-"""
+"""`_project_onto_declared_columns` (the row driver, llm_transform's batched path,
+and human_review_queue all reach it): a declared column the stage never produced
+is a loud failure, never a silently narrowed projection."""
 from __future__ import annotations
 
 import pandas as pd

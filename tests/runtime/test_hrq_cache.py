@@ -33,6 +33,7 @@ def _run_queue_stage(stage: Stage, inputs: dict[str, pd.DataFrame], ctx) -> pd.D
 
 # The upstream columns `_src()` builds — the default input edge below.
 _SCORED_COLUMNS = [{"name": "id", "type": "str"}, {"name": "score", "type": "int"}]
+_FLAGGED_COLUMNS = [*_SCORED_COLUMNS, {"name": "flag", "type": "str"}]
 
 # The columns the queue stage itself adds to every row it emits, whichever of the
 # three outcomes the row took (see _pass_row_through / review._build_output_row).
@@ -269,7 +270,7 @@ def test_bust_cache_leaves_passed_through_rows_alone(tmp_path):
     """Only QUEUEABLE rows are re-asked: a row the queue filter does not select
     still passes through, because no cached decision was involved in its
     outcome."""
-    stage = _stage(flt="flag == 'review'")
+    stage = _stage(flt="flag == 'review'", input_columns=_FLAGGED_COLUMNS)
     src = _alternating_src()
 
     snapshot, fingerprints = _halt_and_read_snapshot(
@@ -333,9 +334,6 @@ def test_hrq_requires_project_grant(tmp_path):
 
 
 # ── 8. Row-driven shape: input order, rejections, one cache read, cancel ────
-
-
-_FLAGGED_COLUMNS = [*_SCORED_COLUMNS, {"name": "flag", "type": "str"}]
 
 
 def _alternating_src() -> pd.DataFrame:
@@ -545,7 +543,7 @@ def test_queue_stats_hold_when_every_row_is_served_from_the_cache(tmp_path, monk
     are mapped, so they survive a run where the driver's cache answers EVERY row
     and the mapper is never called once — decided rows replaying a human's
     verdict and passed-through rows replaying their own recorded output."""
-    stage = _stage(flt="flag == 'review'")
+    stage = _stage(flt="flag == 'review'", input_columns=_FLAGGED_COLUMNS)
     src = _alternating_src()
 
     snapshot, fingerprints = _halt_and_read_snapshot(
@@ -573,7 +571,7 @@ def test_a_passed_through_row_round_trips_through_the_cache(tmp_path):
     """A row the filter did not select is recorded like any other computed row.
     The second run replays it rather than re-evaluating the filter for it, and
     what comes back is the same output row."""
-    stage = _stage(flt="flag == 'nothing-matches'")
+    stage = _stage(flt="flag == 'nothing-matches'", input_columns=_FLAGGED_COLUMNS)
     src = _alternating_src()
 
     first = _run_queue_stage(stage, {"scored": src}, _ctx(tmp_path, run_id="run1"))
@@ -597,11 +595,11 @@ def test_changing_the_filter_re_evaluates_a_passed_through_row(tmp_path):
     src = _alternating_src()
 
     out = _run_queue_stage(
-        _stage(flt="flag == 'nothing-matches'"), {"scored": src}, _ctx(tmp_path, run_id="run1"))
+        _stage(flt="flag == 'nothing-matches'", input_columns=_FLAGGED_COLUMNS), {"scored": src}, _ctx(tmp_path, run_id="run1"))
     assert list(out["decision"]) == [NOT_REVIEWED] * 4
 
     snapshot, _fingerprints = _halt_and_read_snapshot(
-        _stage(flt="flag == 'skip'"), {"scored": src.copy()}, _ctx(tmp_path, run_id="run2"))
+        _stage(flt="flag == 'skip'", input_columns=_FLAGGED_COLUMNS), {"scored": src.copy()}, _ctx(tmp_path, run_id="run2"))
     assert list(snapshot["id"]) == ["r0", "r2"]
 
 

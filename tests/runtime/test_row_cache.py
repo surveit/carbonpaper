@@ -32,7 +32,10 @@ _DOUBLING_CODE = "def transform(row):\n    return {**row, 'y': row['x'] * 2}\n"
 def _row_stage(code: str = _DOUBLING_CODE, *, cache: bool = True) -> Stage:
     return Stage.model_validate({
         "id": "double", "name": "Double", "type": "python_row_function",
-        "inputs": [{"id": "src"}], "cache": cache,
+        "inputs": [{"id": "src", "schema": {"columns": [{"name": "x", "type": "int"}]}}],
+        "cache": cache,
+        "output_schema": {
+            "columns": [{"name": "x", "type": "int"}, {"name": "y", "type": "int"}]},
         "function": {"kind": "inline", "code": code},
     })
 

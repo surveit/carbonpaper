@@ -15,13 +15,17 @@ from conftest import make_run_context
 
 PROJECT = "frame-cache-tests"
 
+_X = {"columns": [{"name": "x", "type": "int"}]}
+
 _DOUBLING_CODE = "def transform(df):\n    return df.assign(y=df['x'] * 2)\n"
 
 
 def _frame_stage(code: str = _DOUBLING_CODE, *, cache: bool = True) -> Stage:
     return Stage.model_validate({
         "id": "double", "name": "Double", "type": "python_frame_function",
-        "inputs": [{"id": "src"}], "cache": cache,
+        "inputs": [{"id": "src", "schema": _X}], "cache": cache,
+        "output_schema": {
+            "columns": [{"name": "x", "type": "int"}, {"name": "y", "type": "int"}]},
         "function": {"kind": "inline", "code": code},
     })
 
@@ -124,7 +128,8 @@ def test_reordering_the_input_rows_invalidates_the_cached_frame():
 def _two_input_stage() -> Stage:
     return Stage.model_validate({
         "id": "merge", "name": "Merge", "type": "python_frame_function",
-        "inputs": [{"id": "left"}, {"id": "right"}],
+        "inputs": [{"id": "left", "schema": _X}, {"id": "right", "schema": _X}],
+        "output_schema": _X,
         "function": {"kind": "inline",
                      "code": "def transform(left, right):\n    return left\n"},
     })
@@ -149,7 +154,11 @@ def test_the_key_covers_every_input_in_declared_order():
 def _join_stage() -> Stage:
     return Stage.model_validate({
         "id": "j", "name": "Join", "type": "join",
-        "inputs": [{"id": "left"}, {"id": "right"}],
+        "inputs": [{"id": "left", "schema": _X},
+                   {"id": "right", "schema": {"columns": [{"name": "x", "type": "int"},
+                                                          {"name": "z", "type": "str"}]}}],
+        "output_schema": {"columns": [{"name": "x", "type": "int"},
+                                      {"name": "z", "type": "str"}]},
         "join": {"type": "inner", "keys": [{"left": "x", "right": "x"}]},
     })
 
@@ -157,7 +166,9 @@ def _join_stage() -> Stage:
 def _aggregate_stage() -> Stage:
     return Stage.model_validate({
         "id": "agg", "name": "Agg", "type": "aggregate",
-        "inputs": [{"id": "src"}],
+        "inputs": [{"id": "src", "schema": {"columns": [{"name": "g", "type": "str"}]}}],
+        "output_schema": {"columns": [{"name": "g", "type": "str"},
+                                      {"name": "n", "type": "int"}]},
         "aggregate": {"group_by": ["g"], "aggregations": [
             {"output_column": "n", "formula": "count"}]},
     })
@@ -305,7 +316,7 @@ def test_publish_runs_its_side_effect_every_run_and_writes_no_entry(tmp_path):
     )
     stage = Stage.model_validate({
         "id": "pub", "name": "Publish", "type": "publish",
-        "inputs": [{"id": "src"}],
+        "inputs": [{"id": "src", "schema": _X}],
         "publish": {"destination": "build/"},
         "function": {"kind": "inline", "code": code},
     })

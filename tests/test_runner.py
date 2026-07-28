@@ -687,7 +687,9 @@ def _add_frame_stage(root):
     intercepts, so a run of this project exercises the frame store."""
     (root / "compiled" / "02_totals.json").write_text(json.dumps({
         "id": "totals", "name": "Totals", "type": "python_frame_function",
-        "inputs": [{"id": "load"}],
+        "inputs": [{"id": "load", "schema": _NAME_VAL_SCHEMA}],
+        "output_schema": {"columns": [*_NAME_VAL_SCHEMA["columns"],
+                                      {"name": "double", "type": "int"}]},
         "function": {"kind": "inline", "code": _FRAME_STAGE_CODE},
     }), encoding="utf-8")
 

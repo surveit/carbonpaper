@@ -270,19 +270,24 @@ def test_check_edge_schemas_flags_type_disagreement():
     assert "score" in issues[0] and "type" in issues[0]
 
 
-def test_check_edge_schemas_skips_a_publish_upstream():
-    # publish is the one type exempt from declaring an output_schema, and
-    # nothing forbids it being another stage's input: unresolvable means
-    # unknowable, never wrong, so that edge is skipped.
-    stages = m.parse_workflow([
-        _producer(),
-        S(id="pub", type="publish",
-          inputs=[{"id": "up", "schema": {"columns": [{"name": "id", "type": "str"}]}}],
-          publish={"format": "json"},
-          function={"kind": "inline", "code": "def transform(df, output_dir): return df"}),
-        _consumer({"columns": [{"name": "anything", "type": "str"}]}, id="down",
-                  inputs=[{"id": "pub", "schema": {"columns": [{"name": "anything", "type": "str"}]}}]),
-    ]).stages
+def test_check_edge_schemas_skips_an_upstream_declaring_no_output_schema():
+    # publish is the one type exempt from declaring an output_schema. An
+    # unresolvable upstream schema means unknowable, never wrong, so this
+    # function skips that edge; validate_publish_is_terminal is what rejects the
+    # graph, which is why these stages are built without the graph validator.
+    stages = [
+        Stage.model_validate(_producer()),
+        Stage.model_validate(
+            S(id="pub", type="publish",
+              inputs=[{"id": "up", "schema": {"columns": [{"name": "id", "type": "str"}]}}],
+              publish={"format": "json"},
+              function={"kind": "inline",
+                        "code": "def transform(df, output_dir): return df"})),
+        Stage.model_validate(
+            _consumer({"columns": [{"name": "anything", "type": "str"}]}, id="down",
+                      inputs=[{"id": "pub",
+                               "schema": {"columns": [{"name": "anything", "type": "str"}]}}])),
+    ]
     assert m.validate_edge_schemas(stages) == []
 
 
@@ -308,18 +313,23 @@ def test_graph_issues_reports_a_dangling_input_instead_of_raising():
 # can read from it. It is also the one type exempt from declaring an output_schema,
 # which is why such an edge would otherwise slip past validate_edge_schemas.
 def _publish(stage_id="pub", inputs=("load",)):
-    return S(id=stage_id, type="publish", inputs=[{"id": i} for i in inputs],
+    return S(id=stage_id, type="publish", inputs=[_in(i) for i in inputs],
              publish={"format": "json"},
              function={"kind": "inline", "code": "def transform(df, output_dir): return df"})
 
 
+_X = {"columns": [{"name": "x"}]}
+_Y = {"columns": [{"name": "y"}]}
+
+
 def _reader(stage_id, upstream):
-    return S(id=stage_id, type="python_frame_function", inputs=[{"id": upstream}],
-             function={"kind": "inline", "code": "def transform(df): return df"})
+    return S(id=stage_id, type="python_frame_function", inputs=[_in(upstream)],
+             function={"kind": "inline", "code": "def transform(df): return df"},
+             output_schema=_K)
 
 
 def _loader():
-    return S(id="load", type="input_data", connector={"kind": "file"})
+    return S(id="load", type="input_data", connector={"kind": "file"}, output_schema=_K)
 
 
 def test_validate_publish_is_terminal_flags_stage_reading_a_publish():
@@ -334,8 +344,9 @@ def test_validate_publish_is_terminal_reports_every_offending_edge():
     stages = [Stage.model_validate(s) for s in (
         _loader(), _publish("pub_a"), _publish("pub_b"),
         _reader("down_a", "pub_a"), _reader("down_b", "pub_b"),
-        S(id="down_c", type="join", inputs=[{"id": "pub_a"}, {"id": "pub_b"}],
-          join={"keys": [{"left": "x", "right": "y"}]}),
+        S(id="down_c", type="join", inputs=[_in("pub_a", _X), _in("pub_b", _Y)],
+          join={"keys": [{"left": "x", "right": "y"}]},
+          output_schema={"columns": [{"name": "x"}, {"name": "y"}]}),
     )]
     issues = m.validate_publish_is_terminal(stages)
     assert len(issues) == 4  # every offending edge in one pass, not just the first
