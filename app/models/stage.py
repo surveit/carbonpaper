@@ -12,7 +12,14 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, ClassVar, Literal, Optional
 
-from pydantic import AliasChoices, Field, ValidationError, field_validator, model_validator
+from pydantic import (
+    AliasChoices,
+    ConfigDict,
+    Field,
+    ValidationError,
+    field_validator,
+    model_validator,
+)
 from pydantic.json_schema import SkipJsonSchema
 
 from app.core.llm.options import LLMModel
@@ -146,6 +153,18 @@ class Connector(_Base):
             if fmt is not None and fmt not in {f.value for f in FileFormat}:
                 raise ValueError(f"unknown file format {fmt!r}")
         return self
+
+
+class XlsxReadParams(_Base):
+    """Connector params the xlsx reader interprets (app.runtime.stages.input_data._read_xlsx).
+    Strict so a float or bool never silently passes for header_row/first_column;
+    extra="ignore" because callers pass the whole connector.params dict, which
+    also carries path/format/list_columns/parse_dates for other formats."""
+    model_config = ConfigDict(strict=True, extra="ignore")
+
+    sheet_name: str | int = 0
+    header_row: int = 0
+    first_column: int = 0
 
 
 class LLMConfig(_Base):

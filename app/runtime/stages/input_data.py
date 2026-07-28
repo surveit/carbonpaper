@@ -13,7 +13,7 @@ from typing import Any
 
 import pandas as pd
 
-from app.models import Stage
+from app.models import Stage, XlsxReadParams
 
 from ..context import RunContext
 
@@ -102,26 +102,17 @@ def _read_geojson(path: Path) -> pd.DataFrame:
 def _read_xlsx(path: Path, params: dict[str, Any]) -> pd.DataFrame:
     # header_row/first_column are 0-based indices into the sheet as it appears in
     # Excel; rows above and columns left of them are discarded before parsing.
-    sheet = params.get("sheet_name", 0)  # data-default-ok: 0 is the documented default (first sheet)
-    header_row = _require_int_param(params, "header_row", 0)  # data-default-ok: 0 is the documented default (first row)
-    first_column = _require_int_param(params, "first_column", 0)  # data-default-ok: 0 is the documented default (first column)
-    frame = pd.read_excel(path, sheet_name=sheet, header=header_row, engine="openpyxl")
-    if not isinstance(frame, pd.DataFrame):
-        raise ValueError(
-            f"xlsx sheet_name={sheet!r} selected multiple sheets; name exactly one "
-            "sheet, or omit sheet_name for the first"
-        )
-    if first_column:
-        _validate_first_column_in_range(first_column, frame, path, sheet)
-        frame = frame.iloc[:, first_column:]
+    xlsx_params = XlsxReadParams.model_validate(params)
+    # sheet_name is str|int (exactly one sheet), so pd.read_excel always hands back
+    # a single DataFrame here, never the dict it returns for a None/list sheet_name.
+    frame = pd.read_excel(
+        path, sheet_name=xlsx_params.sheet_name, header=xlsx_params.header_row, engine="openpyxl"
+    )
+    assert isinstance(frame, pd.DataFrame)
+    if xlsx_params.first_column:
+        _validate_first_column_in_range(xlsx_params.first_column, frame, path, xlsx_params.sheet_name)
+        frame = frame.iloc[:, xlsx_params.first_column:]
     return frame
-
-
-def _require_int_param(params: dict[str, Any], name: str, default: int) -> int:
-    value = params.get(name, default)
-    if isinstance(value, bool) or not isinstance(value, int):
-        raise ValueError(f"{name}={value!r} must be an integer, got {type(value).__name__}")
-    return value
 
 
 def _validate_first_column_in_range(first_column: int, frame: pd.DataFrame, path: Path, sheet: Any) -> None:

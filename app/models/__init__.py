@@ -36,6 +36,7 @@ from app.models.stage import (
     Stage,
     StageDraft,
     StageType,
+    XlsxReadParams,
     validate_stage,
 )
 from app.models.stages.stage_tests import StageTest
@@ -258,7 +259,7 @@ __all__ = [
     "PythonFunction", "JoinKey", "JoinConfig", "AggregationOp",
     "AggregateConfig", "QueueConfig", "PublishConfig", "ReviewConfig",
     "RowReviewDecision",
-    "StageInput", "Stage", "StageDraft", "StageTest", "validate_stage",
+    "StageInput", "Stage", "StageDraft", "StageTest", "XlsxReadParams", "validate_stage",
     "Workflow", "parse_workflow", "validate_workflow", "validate_workflow_draft",
     "validate_unique_ids", "validate_inputs_resolve", "detect_cycle",
     "validate_publish_is_terminal", "validate_edge_schemas",
