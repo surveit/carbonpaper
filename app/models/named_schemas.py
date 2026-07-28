@@ -5,7 +5,6 @@ whole data model: it checks names are unique and every reference resolves.
 """
 from __future__ import annotations
 
-from enum import Enum
 from typing import Any, Optional
 
 from pydantic import Field, ValidationError, field_validator, model_validator
@@ -17,10 +16,11 @@ from app.models.schema import (
     _Base,
     _SNAKE_RE,
 )
+from app.core.schema_enum import SchemaEnum
 from app.core.utils import format_errors
 
 
-class SchemaKind(str, Enum):
+class SchemaKind(SchemaEnum):
     reference = "reference"        # source, don't compute (dimension / lookup / benchmark)
     input = "input"                # raw data fetched into the pipeline
     computed = "computed"          # produced by a workflow stage
