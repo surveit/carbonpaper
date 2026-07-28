@@ -178,3 +178,60 @@ def test_reads_the_lda_venezuela_sample():
     assert len(df) == 64
     matches = df["specific_issues"].fillna("").str.contains("venezuela", case=False)
     assert int(matches.sum()) == 44
+
+
+def test_source_row_column_omitted_by_default(tmp_path):
+    path = _write(tmp_path, [["client", "income"], ["ACME", 1000], ["BETA", 2000]])
+    df = _read_xlsx(path, _params())
+    assert list(df.columns) == ["client", "income"]
+
+
+def test_source_row_column_holds_true_sheet_row_numbers(tmp_path):
+    # Each data cell carries the 1-based Excel row it lives on, so the assertion
+    # is self-evident: the recorded value must equal the cell's own claim.
+    path = _write(tmp_path, [["client", "row"], ["ACME", 2], ["BETA", 3]])
+    df = _read_xlsx(path, _params(source_row_column="source_row"))
+    assert list(df["source_row"]) == list(df["row"])
+
+
+def test_source_row_column_correct_with_header_row(tmp_path):
+    path = _write(tmp_path, [
+        ["Venezuela lobbying — Q1 2026"],
+        ["Source: Senate LDA"],
+        [],
+        ["client", "row"],
+        ["ACME", 5],
+        ["BETA", 6],
+    ])
+    df = _read_xlsx(path, _params(header_row=3, source_row_column="source_row"))
+    assert list(df["source_row"]) == list(df["row"])
+
+
+def test_source_row_column_correct_with_first_column(tmp_path):
+    path = _write(tmp_path, [
+        ["note", "client", "row"],
+        ["x", "ACME", 2],
+        ["y", "BETA", 3],
+    ])
+    df = _read_xlsx(path, _params(first_column=1, source_row_column="source_row"))
+    assert list(df.columns) == ["client", "row", "source_row"]
+    assert list(df["source_row"]) == list(df["row"])
+
+
+def test_source_row_column_name_collision_raises_naming_the_column(tmp_path):
+    path = _write(tmp_path, [["client", "income"], ["ACME", 1000]])
+    with pytest.raises(ValueError, match="income"):
+        _read_xlsx(path, _params(source_row_column="income"))
+
+
+def test_source_row_column_makes_duplicate_rows_distinct(tmp_path):
+    path = _write(tmp_path, [
+        ["client", "income"],
+        ["ACME", 1000],
+        ["ACME", 1000],
+    ])
+    without = _read_xlsx(path, _params())
+    with_col = _read_xlsx(path, _params(source_row_column="source_row"))
+    assert without.iloc[0].equals(without.iloc[1])
+    assert not with_col.iloc[0].equals(with_col.iloc[1])
+    assert list(with_col["source_row"]) == [2, 3]

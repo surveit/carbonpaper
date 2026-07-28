@@ -162,6 +162,7 @@ class XlsxReadParams(_Base):
     sheet_name: str | int = 0
     header_row: int = 0
     first_column: int = 0
+    source_row_column: str | None = None
 
 
 class LLMConfig(_Base):
