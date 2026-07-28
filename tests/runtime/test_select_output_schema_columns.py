@@ -1,6 +1,6 @@
-"""`_project_onto_declared_columns` (the row driver, llm_transform's batched path,
+"""`_select_output_schema_columns` (the row driver, llm_transform's batched path,
 and human_review_queue all reach it): a declared column the stage never produced
-is a loud failure, never a silently narrowed projection."""
+is a loud failure, never a silently narrowed output."""
 from __future__ import annotations
 
 import pandas as pd
@@ -11,7 +11,7 @@ from app.models.stage import StageType
 from app.runtime.context import RunContext
 from app.runtime.manifest import StageContribution
 from app.runtime.stages import HANDLERS
-from app.runtime.stages.execution import _project_onto_declared_columns
+from app.runtime.stages.execution import _select_output_schema_columns
 
 
 def _rating_stage() -> Stage:
@@ -29,29 +29,29 @@ def _rating_stage() -> Stage:
     })
 
 
-def test_projection_raises_naming_the_stage_and_every_missing_column():
+def test_selection_raises_naming_the_stage_and_every_missing_column():
     frame = pd.DataFrame({"id": ["r1"], "leftover": [1]})
 
     with pytest.raises(ValueError) as excinfo:
-        _project_onto_declared_columns(frame, _rating_stage(), StageContribution())
+        _select_output_schema_columns(frame, _rating_stage(), StageContribution())
 
     message = str(excinfo.value)
     assert "rate" in message
     assert "score" in message and "verdict" in message   # every missing one, not just the first
 
 
-def test_projection_keeps_declared_order_and_reports_what_it_dropped():
+def test_selection_keeps_declared_order_and_reports_what_it_dropped():
     frame = pd.DataFrame({"verdict": ["yes"], "leftover": [1], "id": ["r1"], "score": [3]})
     contribution = StageContribution()
 
-    projected = _project_onto_declared_columns(frame, _rating_stage(), contribution)
+    selected = _select_output_schema_columns(frame, _rating_stage(), contribution)
 
-    assert list(projected.columns) == ["id", "score", "verdict"]
+    assert list(selected.columns) == ["id", "score", "verdict"]
     assert contribution.dropped_columns == ["leftover"]
 
 
 def test_human_review_queue_output_missing_a_declared_column_raises(tmp_path):
-    """The queue handler projects through the same row driver, so a column its
+    """The queue handler selects through the same row driver, so a column its
     rows never carry fails there too — it is not quietly dropped from the frame
     a downstream stage then consumes."""
     stage = Stage.model_validate({

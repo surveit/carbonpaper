@@ -128,7 +128,7 @@ def test_grain_and_order_preserved_across_chunks(monkeypatch):
 
 
 def test_batched_run_reports_only_user_columns_as_dropped(monkeypatch):
-    # This path projects onto the declared columns DIRECTLY, so it must strip its
+    # This path selects the output_schema columns DIRECTLY, so it must strip its
     # own markers first. `_usage` rides on every batched row; reporting it here
     # would show driver machinery in the run manifest as a column the stage
     # produced and discarded. `note` is a real undeclared user column and must
@@ -165,7 +165,7 @@ def test_batched_empty_input_keeps_the_input_columns(monkeypatch):
 
 def test_batched_chunk_failure_reports_no_marker_as_a_dropped_column(monkeypatch):
     # A failed chunk puts ROW_ERROR_KEY on every row on top of ROW_USAGE_KEY, and
-    # no row produced `label` — so the projection sees two markers and nothing
+    # no row produced `label` — so the selection sees two markers and nothing
     # else undeclared. Neither is a user column: nothing should be reported.
     out, labels, ctx = _run(monkeypatch, lambda *a, **k: {"results": [
         {"row_number": 0, "label": "L0"}, {"row_number": 2, "label": "L2"}]})

@@ -30,7 +30,7 @@ from conftest import contribution_of, make_run_context
 # The single `x` column of the frames these tests hand the driver. The declared
 # schemas only have to be present and honest: these handlers are constructed
 # directly, so a schema is read at all only where the handler is asked to
-# project (`project_output_to_declared=True`), and those tests pass their own.
+# select columns (`select_output_schema_columns=True`), and those tests pass their own.
 _X_COLUMN = [{"name": "x", "type": "int"}]
 
 
@@ -177,13 +177,13 @@ def test_row_driver_empty_input():
     assert contribution_of(out).dropped_columns == []
 
 
-def test_row_driver_empty_input_reports_no_dropped_columns_when_projecting():
-    # Projection sees a frame with no columns at all, so it drops nothing —
+def test_row_driver_empty_input_reports_no_dropped_columns_when_selecting():
+    # The selection sees a frame with no columns at all, so it drops nothing —
     # an empty input must not be reported as having discarded `id`.
     schema = {"columns": [{"name": "x", "type": "int"}]}
     handler = RowMapHandler(
         make_mapper=lambda stage, ctx, src: lambda row, index: dict(row),
-        project_output_to_declared=True,
+        select_output_schema_columns=True,
     )
     ctx = make_run_context()
     out = handler.execute(
@@ -228,11 +228,11 @@ def test_row_driver_collects_multiple_row_errors_in_ascending_row_order():
     ]
 
 
-def test_row_driver_projects_to_declared_columns():
+def test_row_driver_keeps_only_output_schema_columns():
     schema = {"columns": [{"name": "x", "type": "int"}, {"name": "score", "type": "int"}]}
     handler = RowMapHandler(
         make_mapper=lambda stage, ctx, src: lambda row, index: {"x": row["x"], "score": 1, "extra": "drop me"},
-        project_output_to_declared=True,
+        select_output_schema_columns=True,
     )
     ctx = make_run_context()
     out = handler.execute(_row_stage(output_schema=schema),
@@ -247,7 +247,7 @@ def test_row_driver_reorders_kept_columns_into_declared_order():
     schema = {"columns": [{"name": "x", "type": "int"}, {"name": "score", "type": "int"}]}
     handler = RowMapHandler(
         make_mapper=lambda stage, ctx, src: lambda row, index: {"score": 1, "x": row["x"]},
-        project_output_to_declared=True,
+        select_output_schema_columns=True,
     )
     ctx = make_run_context()
     out = handler.execute(_row_stage(output_schema=schema),
@@ -316,7 +316,7 @@ def test_a_plain_closure_mapper_needs_no_post_map_step():
 
 
 def test_internal_marker_columns_never_reach_output_even_without_an_output_schema():
-    # No output_schema and no projection: the strip is the ONLY thing keeping
+    # No output_schema and no column selection: the strip is the ONLY thing keeping
     # machinery columns out of stage output.
     handler = RowMapHandler(make_mapper=_marks_every_row_with_every_marker)
     out = handler.execute(_row_stage(), {"src": pd.DataFrame({"x": [1, 2]})}, make_run_context())
@@ -330,7 +330,7 @@ def test_marker_columns_are_not_reported_as_dropped_user_columns():
         return map_row
 
     schema = {"columns": [{"name": "x", "type": "int"}]}
-    handler = RowMapHandler(make_mapper=make_mapper, project_output_to_declared=True)
+    handler = RowMapHandler(make_mapper=make_mapper, select_output_schema_columns=True)
     ctx = make_run_context()
     out = handler.execute(_row_stage(output_schema=schema), {"src": pd.DataFrame({"x": [1]})}, ctx)
     assert list(out.columns) == ["x"]

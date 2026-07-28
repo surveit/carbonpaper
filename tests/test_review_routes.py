@@ -54,8 +54,8 @@ def _load_quotes_stage(root):
 # The reviewer columns app/services/review.py's _build_output_row (and the
 # runtime's pass-through/auto-approve rows) add on top of the frozen input row.
 # Every non-publish stage must declare its output_schema
-# (app/models/stage.py: Stage._schemas_declared), and the runtime PROJECTS the
-# stage's output onto exactly those columns.
+# (app/models/stage.py: Stage._schemas_declared), and the runtime cuts the
+# stage's output down to exactly those columns.
 _REVIEW_COLUMNS = [
     {"name": "ai_score", "type": "float"},
     {"name": "human_score", "type": "float"},
