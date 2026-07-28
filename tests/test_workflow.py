@@ -5,8 +5,7 @@ import pytest
 from pydantic import ValidationError
 
 from app import models as m
-from app.models import InputRef, Stage
-from app.models.schema import TableSchema
+from app.models import Stage
 
 _K = {"columns": [{"name": "k"}]}
 
@@ -271,32 +270,37 @@ def test_check_edge_schemas_flags_type_disagreement():
     assert "score" in issues[0] and "type" in issues[0]
 
 
-def test_check_edge_schemas_skips_edge_without_declared_input_schema():
-    # validate_edge_schemas keeps its own guard for an undeclared input schema,
-    # so it stays safe on any stage list. `Stage._schemas_declared` now rejects
-    # such a stage at construction, so the consumer is built with
-    # `Stage.model_construct`, which bypasses the model validators.
-    stages = [
-        Stage.model_validate(_producer()),
-        Stage.model_construct(
-            id="down", name="down", type="python_frame_function",
-            inputs=[InputRef.model_validate({"id": "up"})],
-            output_schema=TableSchema.model_validate({"columns": [{"name": "id", "type": "str"}]}),
-        ),
-    ]
+def test_check_edge_schemas_skips_a_publish_upstream():
+    # publish is the one type exempt from declaring an output_schema, and
+    # nothing forbids it being another stage's input: unresolvable means
+    # unknowable, never wrong, so that edge is skipped.
+    stages = m.parse_workflow([
+        _producer(),
+        S(id="pub", type="publish",
+          inputs=[{"id": "up", "schema": {"columns": [{"name": "id", "type": "str"}]}}],
+          publish={"format": "json"},
+          function={"kind": "inline", "code": "def transform(df, output_dir): return df"}),
+        _consumer({"columns": [{"name": "anything", "type": "str"}]}, id="down",
+                  inputs=[{"id": "pub", "schema": {"columns": [{"name": "anything", "type": "str"}]}}]),
+    ]).stages
     assert m.validate_edge_schemas(stages) == []
 
 
-def test_check_edge_schemas_skips_when_upstream_has_no_output_schema():
-    # Unresolvable means unknowable, never wrong: no upstream output_schema → skip.
-    # `Stage._schemas_declared` now rejects an input_data stage that declares no
-    # output_schema, so the producer is built with `Stage.model_construct`,
-    # which bypasses the model validators.
-    stages = [
-        Stage.model_construct(id="up", name="up", type="input_data", output_schema=None),
-        Stage.model_validate(_consumer({"columns": [{"name": "anything", "type": "str"}]})),
-    ]
-    assert m.validate_edge_schemas(stages) == []
+def test_check_edge_schemas_raises_on_an_input_naming_no_stage():
+    """A dangling input is a programming error here, not a finding: callers run
+    validate_inputs_resolve first (graph_issues does), so reaching this means
+    stage validation was bypassed."""
+    stages = [Stage.model_validate(_consumer({"columns": [{"name": "id", "type": "str"}]}))]
+    with pytest.raises(ValueError, match="references no stage"):
+        m.validate_edge_schemas(stages)
+
+
+def test_graph_issues_reports_a_dangling_input_instead_of_raising():
+    """graph_issues short-circuits before validate_edge_schemas when an input
+    dangles, so an invalid-but-reportable workflow still comes back as issues."""
+    issues = m.validate_workflow(
+        [Stage.model_validate(_consumer({"columns": [{"name": "id", "type": "str"}]}))])
+    assert issues == ["`down`: input `up` references no stage"]
 
 
 # ── A publish stage may not be another stage's input (validate_publish_is_terminal) ─
