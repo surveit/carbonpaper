@@ -467,7 +467,7 @@ def test_run_llm_batches_computes_every_row_it_is_given(monkeypatch):
     _run(stage, _src([1, 2]), _ctx(run_id="seed"))
     batches.clear()
 
-    rows = run_llm_batches(stage, {"src": _src([1, 2])}, _ctx(run_id="direct"), 1)
+    rows = run_llm_batches(stage, {"src": _src([1, 2])}, _ctx(run_id="direct"), 1, [0, 1])
 
     assert batches == [[1, 2]]
     assert [row["verdict"] for row in rows] == ["v1", "v2"]

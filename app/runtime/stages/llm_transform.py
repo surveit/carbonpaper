@@ -8,7 +8,7 @@ the input primary key (which the runtime does not require to exist or be unique)
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Any
+from typing import Any, Callable
 
 import pandas as pd
 from pydantic import create_model
@@ -20,6 +20,7 @@ from app.models.schema import Column, TableSchema
 
 from ..context import RunContext
 from ..llm import call_llm, call_llm_batch, render_prompt
+from ..run_log import RunLog, bind_detail_sink, unbind_detail_sink
 
 from .execution import ROW_ERROR_KEY, ROW_USAGE_KEY, Row, RowMapper
 
@@ -72,6 +73,7 @@ def run_llm_batches(
     inputs: dict[str, pd.DataFrame],
     ctx: RunContext,
     parallelism: int,
+    positions: list[int],
 ) -> list[Row]:
     """Compute one raw output row per input row, in chunks of
     `stage.llm.batch_size` rows per model call, rejoining each reply to its row
@@ -86,8 +88,11 @@ def run_llm_batches(
 
     Which rows arrive here is not this function's business: the handler shape
     resolves the stage-result cache and hands over only the rows that must be
-    computed. The rows returned carry their internal columns, un-stripped and
-    unprojected — the shape assembles the stage's output frame from them."""
+    computed, with `positions` naming where each one sits in the stage's input —
+    the only thing that lets a chunk's run-log detail be attributed to the rows
+    it actually covers. The rows returned carry their internal columns,
+    un-stripped and unprojected — the shape assembles the stage's output frame
+    from them."""
     llm = stage.llm
     assert llm is not None  # Stage validation: llm_transform carries llm
     assert stage.output_schema is not None and stage.inputs[0].table_schema is not None
@@ -97,9 +102,10 @@ def run_llm_batches(
     records: list[Row] = list_rows(src)
 
     results: list[Row | None] = [None] * len(records)
-    for index, row in _run_chunks(
-        stage, llm, batch_reply_schema, records, llm.batch_size, parallelism
-    ):
+    process_chunk = _build_chunk_processor(
+        stage, llm, batch_reply_schema, positions, ctx.run_log
+    )
+    for index, row in _run_chunks(records, llm.batch_size, parallelism, process_chunk):
         results[index] = row
 
     # Grain + order guarantee, verified not assumed: exactly one row per input,
@@ -113,13 +119,36 @@ def run_llm_batches(
     return [row for row in results if row is not None]
 
 
-def _run_chunks(
+def _build_chunk_processor(
     stage: Stage,
     llm: Any,
     batch_reply_schema: type,
+    positions: list[int],
+    log: RunLog | None,
+) -> Callable[[int, list[Row]], list[tuple[int, Row]]]:
+    """`_process_chunk` with this chunk's rows bound as the run log's detail sink."""
+    # Bound HERE rather than around the fan-out: a pool worker thread starts with
+    # an empty context, so the binding only reaches the model call if it happens
+    # on the thread that makes it. `positions` maps the chunk's offsets back to
+    # real input rows, so a chunk's prompt is never attributed to rows the cache
+    # already answered and this path skipped.
+    def process_chunk(start: int, chunk: list[Row]) -> list[tuple[int, Row]]:
+        token = bind_detail_sink(
+            log, stage.id, tuple(positions[start : start + len(chunk)])
+        )
+        try:
+            return _process_chunk(stage, llm, batch_reply_schema, start, chunk)
+        finally:
+            unbind_detail_sink(token)
+
+    return process_chunk
+
+
+def _run_chunks(
     records: list[Row],
     size: int,
     parallelism: int,
+    process_chunk: Callable[[int, list[Row]], list[tuple[int, Row]]],
 ) -> list[tuple[int, Row]]:
     """Every computed row, keyed by the position of the row it came from.
     `_process_chunk` numbers each chunk 0..N-1 for the model; `start` turns that
@@ -130,17 +159,12 @@ def _run_chunks(
     computed: list[tuple[int, Row]] = []
     if parallelism > 1 and len(chunks) > 1:
         with ThreadPoolExecutor(max_workers=parallelism) as pool:
-            futures = [
-                pool.submit(_process_chunk, stage, llm, batch_reply_schema, start, chunk)
-                for start, chunk in chunks
-            ]
+            futures = [pool.submit(process_chunk, start, chunk) for start, chunk in chunks]
             for future in as_completed(futures):
                 computed.extend(future.result())
     else:
         for start, chunk in chunks:
-            computed.extend(
-                _process_chunk(stage, llm, batch_reply_schema, start, chunk)
-            )
+            computed.extend(process_chunk(start, chunk))
     return computed
 
 

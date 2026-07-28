@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import time
-from typing import Any
+from typing import Any, Callable
 
 from pydantic import BaseModel
 
@@ -23,6 +23,28 @@ from .options import (
     DEFAULT_TIMEOUT_S,
     require_agent_backend,
 )
+from .run_log import (
+    LLM_ERROR,
+    LLM_PROMPT,
+    LLM_RESPONSE,
+    LLM_TEXT,
+    LLM_THINKING,
+    DetailSink,
+    current_detail_sink,
+    emit_llm_detail,
+)
+
+# Engine stream-event kind → the detail-log kind surfaced on the run page. The
+# engine speaks in raw block types; the run log speaks in what a reader wants to
+# see: the model's thinking, its free text, and the answer it submitted (a
+# submit_answer tool_call). Kinds absent here (tool_result echoes) are dropped
+# rather than logged as noise.
+_LLM_EVENT_KINDS = {
+    "thinking": LLM_THINKING,
+    "text": LLM_TEXT,
+    "tool_call": LLM_RESPONSE,
+    "error": LLM_ERROR,
+}
 
 # Frames the calling convention only. Epistemic guidance (when a value is
 # unknowable, how to weigh sources) is compiler-authored prompt content, not
@@ -124,6 +146,11 @@ def _run_agent(
     (success or failure) recorded, and the LAST failure re-raised so the caller
     records a real error rather than a fabricated reply."""
     require_agent_backend()
+    # The run log's detail tier for whatever row/chunk is bound (nothing, outside
+    # a logged run). The sink is captured HERE, on the caller's own thread, so it
+    # survives the thread hop inside run_sync; RunLog.emit is itself thread-safe.
+    emit_llm_detail(LLM_PROMPT, text=task)
+    forward = _forward_agent_events(current_detail_sink())
     attempts = max(1, (max_retries or 0) + 1)
     last_exc: Exception | None = None
     for attempt in range(attempts):
@@ -134,16 +161,48 @@ def _run_agent(
             model=model_name,
         )
         try:
-            answer = run_sync(asyncio.wait_for(agent.run(), timeout=DEFAULT_TIMEOUT_S))
+            answer = run_sync(
+                asyncio.wait_for(agent.run(forward), timeout=DEFAULT_TIMEOUT_S)
+            )
             _record_usage(usage_out, agent)
             return answer.model_dump(mode="json")
         except Exception as exc:  # noqa: BLE001 — retry any backend failure, record its usage, re-raise the last
             _record_usage(usage_out, agent)
+            emit_llm_detail(LLM_ERROR, text=str(exc) or type(exc).__name__)
             last_exc = exc
             if attempt + 1 < attempts:
                 time.sleep(min(4.0, 1.0 * (attempt + 1)))
     assert last_exc is not None  # attempts >= 1, so the loop ran and set this
     raise last_exc
+
+
+def _forward_agent_events(
+    sink: DetailSink | None,
+) -> Callable[[dict[str, Any]], None] | None:
+    """Translate the agent's stream events into this row/chunk's detail events."""
+    if sink is None:
+        return None
+
+    def emit(event: dict[str, Any]) -> None:
+        kind = _LLM_EVENT_KINDS.get(event.get("kind", ""))
+        if kind is None:
+            return
+        # A tool_call's `args` (the submitted answer) is the useful body; other
+        # kinds carry `text`. Normalize both onto `text` so the run page renders
+        # one shape; an event carrying neither has no body to show and is
+        # dropped rather than logged as an empty one.
+        if "text" in event:
+            body = event["text"]
+        elif "args" in event:
+            body = event["args"]
+        else:
+            return
+        fields: dict[str, Any] = {"text": body}
+        if event.get("label"):
+            fields["label"] = event["label"]
+        sink.emit(kind, **fields)
+
+    return emit
 
 
 def _record_usage(usage_out: list[LlmUsage] | None, agent: Agent[BaseModel]) -> None:
