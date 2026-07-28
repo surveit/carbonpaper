@@ -135,7 +135,7 @@ def run_stage_preview(
     # Ephemeral context: no identity/stage_cache (this run has no project
     # scope), and a pure handler (python/llm/join/aggregate) never writes — we
     # never call the runner, so no manifest/output is touched.
-    ctx = RunContext.for_non_production_run(repo_root, run_dir)
+    ctx = RunContext.for_non_production_run(repo_root, run_dir, [stage_def])
 
     output = handler.execute(stage_def, inputs, ctx)
     if output is None:

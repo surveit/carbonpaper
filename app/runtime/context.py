@@ -30,6 +30,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, model_validator
 
 from app.core.stage_cache import ReadOnlyStageCache, StageCacheEntry
+from app.models import Stage
 
 RunMode = Literal["production", "non_production"]
 
@@ -62,6 +63,12 @@ class RunContext(BaseModel):
     # touching a fabricated directory; repo_root has no reader in the runtime.
     repo_root: Path | None
     run_dir: Path | None
+    # The stages this execution is running, keyed by id — the workflow as pinned
+    # when the context was built. A handler still receives its OWN stage as an
+    # argument; this is here for the publish handler's trace exporter, which
+    # renders every UPSTREAM stage's transform onto an exported trace page and
+    # has no other way to see them.
+    stages: dict[str, Stage]
     # This run's logical identity, read by cancellation's checkpoints and the
     # stage-result cache key. Set for a production run; None for a subset run,
     # which is therefore simply not cancellable and carries no cache scope.
@@ -117,6 +124,7 @@ class RunContext(BaseModel):
         run_dir: Path,
         project: str,
         run_id: str,
+        stages: list[Stage],
         limits: dict[str, int] | None = None,
         offsets: dict[str, int] | None = None,
     ) -> RunContext:
@@ -129,6 +137,7 @@ class RunContext(BaseModel):
             mode="production",
             repo_root=repo_root,
             run_dir=run_dir,
+            stages={stage.id: stage for stage in stages},
             identity=RunIdentity(project=project, run_id=run_id),
             stage_cache=StageCacheEntry.read_write(),
             limits=dict(limits or {}),
@@ -140,6 +149,7 @@ class RunContext(BaseModel):
         cls,
         repo_root: Path | None,
         run_dir: Path | None,
+        stages: list[Stage],
         limits: dict[str, int] | None = None,
         offsets: dict[str, int] | None = None,
         queue_auto_approve: bool = False,
@@ -154,6 +164,7 @@ class RunContext(BaseModel):
             mode="non_production",
             repo_root=repo_root,
             run_dir=run_dir,
+            stages={stage.id: stage for stage in stages},
             identity=None,
             stage_cache=None,
             limits=dict(limits or {}),

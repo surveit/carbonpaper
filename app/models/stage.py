@@ -210,7 +210,14 @@ class PythonFunction(_Base):
             "DataFrame(s), positional in declared input order; may reshape); "
             "publish -> `def transform(df, ..., output_dir, trace_links) -> DataFrame` "
             "(write artifacts under output_dir, return a table of their paths; declare "
-            "`trace_links` to receive a linker that builds each row's provenance URL)."
+            "`trace_links` to receive an exporter, then call "
+            "`trace_links.export_row_trace(stage_id, row_ordinal, from_file=<the file you "
+            "are writing>)` — it writes that row's trace page under output_dir and returns "
+            "a relative href to embed. `row_ordinal` is the row's POSITION in the stage "
+            "output, so enumerate the frame in its original order; sorting or filtering "
+            "before enumerating produces confidently wrong links. A row whose lineage "
+            "crosses a join, aggregate, or python_frame_function cannot be traced and "
+            "raises, so exporting every row of a post-join stage fails the run)."
         ),
     )
     module: Optional[str] = None

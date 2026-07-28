@@ -118,7 +118,7 @@ def get_source_data_with_limit_and_offset(
     # (an absolute bound path), never repo_root/run_dir or project scope — so this
     # source read carries the real repo_root and no run_dir (None, the read
     # precedes any run-dir creation) rather than a fabricated cwd sentinel.
-    ctx = RunContext.for_non_production_run(repo_root(), None)
+    ctx = RunContext.for_non_production_run(repo_root(), None, stages)
     return {
         source.id: read_input_data(source, ctx).iloc[offset:offset + limit]
         for source in sources

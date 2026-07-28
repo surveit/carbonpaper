@@ -69,12 +69,6 @@ class SubsetRunError(Exception):
     eval runner translate it into their own outcome, e.g. an `error` eval run.)"""
 
 
-class TraceLinksUnavailableError(Exception):
-    """A publish function declared the `trace_links` keyword, but the run has no
-    project scope (`RunContext.identity is None` — a preview, subset, or
-    authored-test run), so no row-trace URL can be addressed."""
-
-
 class NoWorkflowTestSourceError(Exception):
     """A workflow test was requested on a workflow with no input_data stage to
     sample from — there is no bound source to slice a preview off, so nothing can

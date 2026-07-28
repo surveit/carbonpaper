@@ -8,11 +8,10 @@ from typing import Any, Callable
 
 import pandas as pd
 
-from app.core.errors import TraceLinksUnavailableError
 from app.models import Stage
 
 from ..context import RunContext
-from ..trace_links import RowTraceLinker
+from ..trace_links import RowTraceExporter
 from .python_functions import _load_python_function
 
 TRACE_LINKS_KWARG = "trace_links"
@@ -21,16 +20,16 @@ TRACE_LINKS_KWARG = "trace_links"
 def handle_publish(stage: Stage, inputs: dict[str, pd.DataFrame], ctx: RunContext) -> pd.DataFrame:
     """Publish stages have a function: block. Run the function and capture its
     output dataframe (paths to artifacts). The function gets the input frames
-    positionally, an `output_dir` kwarg, and a `trace_links` RowTraceLinker only
-    if it declares that keyword."""
+    positionally, an `output_dir` kwarg, and a `trace_links` RowTraceExporter
+    only if it declares that keyword."""
     output_dir = _prepare_output_dir(stage, ctx)
     fn = _load_python_function(stage)
     args = [inputs[ref.id] for ref in stage.inputs]
 
-    linker = _resolve_trace_linker(fn, stage, ctx)
-    if linker is None:
+    exporter = _resolve_trace_exporter(fn, output_dir, ctx)
+    if exporter is None:
         return fn(*args, output_dir=str(output_dir))
-    return fn(*args, output_dir=str(output_dir), trace_links=linker)
+    return fn(*args, output_dir=str(output_dir), trace_links=exporter)
 
 
 def _prepare_output_dir(stage: Stage, ctx: RunContext) -> Path:
@@ -45,20 +44,18 @@ def _prepare_output_dir(stage: Stage, ctx: RunContext) -> Path:
     return output_dir
 
 
-def _resolve_trace_linker(
-    fn: Callable[..., Any], stage: Stage, ctx: RunContext
-) -> RowTraceLinker | None:
+def _resolve_trace_exporter(
+    fn: Callable[..., Any], output_dir: Path, ctx: RunContext
+) -> RowTraceExporter | None:
     """None unless the function declares the keyword, so a function written
-    against the plain `(df, output_dir)` signature keeps running unchanged."""
+    against the plain `(df, output_dir)` signature keeps running unchanged.
+    `output_dir` is the same directory the function writes into, so an exported
+    page lands inside the bundle the function is building."""
     if not _accepts_trace_links(fn):
         return None
-    if ctx.identity is None:
-        raise TraceLinksUnavailableError(
-            f"publish stage {stage.id}: its function declares `{TRACE_LINKS_KWARG}`, but "
-            "this run has no project scope (a preview, subset, or authored-test run), so "
-            "no row-trace URL can be built"
-        )
-    return RowTraceLinker(project=ctx.identity.project, run_id=ctx.identity.run_id)
+    return RowTraceExporter(
+        run_dir=ctx.require_run_dir(), output_dir=output_dir, stages=ctx.stages
+    )
 
 
 def _accepts_trace_links(fn: Callable[..., Any]) -> bool:

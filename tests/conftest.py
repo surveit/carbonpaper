@@ -22,6 +22,7 @@ from app.runtime.context import (
     RunIdentity,
     RunMode,
 )
+from app.models import Stage
 from app.runtime.manifest import CONTRIBUTION_ATTR, StageContribution
 from app.core.stage_cache import ReadOnlyStageCache
 
@@ -62,6 +63,7 @@ def make_run_context(
     run_dir: Path = Path("."),
     identity: RunIdentity | None = None,
     stage_cache: ReadOnlyStageCache | None = None,
+    stages: list[Stage] | None = None,
     limits: dict[str, int] | None = None,
     offsets: dict[str, int] | None = None,
 ) -> RunContext:
@@ -73,6 +75,7 @@ def make_run_context(
     mode: RunMode = "production" if identity is not None else "non_production"
     return RunContext(
         mode=mode, repo_root=repo_root, run_dir=run_dir,
+        stages={stage.id: stage for stage in stages or []},
         identity=identity, stage_cache=stage_cache,
         limits=dict(limits or {}), offsets=dict(offsets or {}),
     )

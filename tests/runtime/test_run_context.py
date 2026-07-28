@@ -19,8 +19,8 @@ def _make(**overrides: object) -> RunContext:
     identity = overrides.get("identity")
     defaults: dict[str, object] = dict(
         mode="production" if identity is not None else "non_production",
-        repo_root=Path("."), run_dir=Path("."), identity=None, stage_cache=None,
-        limits={}, offsets={},
+        repo_root=Path("."), run_dir=Path("."), stages={}, identity=None,
+        stage_cache=None, limits={}, offsets={},
     )
     defaults.update(overrides)
     return RunContext(**defaults)  # type: ignore[arg-type]
@@ -65,6 +65,7 @@ def test_production_run_context_rejects_queue_auto_approve(tmp_path: Path) -> No
             mode="production",
             repo_root=tmp_path,
             run_dir=tmp_path / "run",
+            stages={},
             queue_auto_approve=True,
         )
 
@@ -75,6 +76,7 @@ def test_non_production_run_context_allows_queue_auto_approve(tmp_path: Path) ->
         mode="non_production",
         repo_root=tmp_path,
         run_dir=tmp_path / "run",
+        stages={},
         queue_auto_approve=True,
     )
     assert ctx.queue_auto_approve is True
@@ -88,7 +90,7 @@ def test_run_context_is_frozen(tmp_path: Path) -> None:
 
 
 def test_for_production_run_stamps_mode_and_grants_scope(tmp_path: Path) -> None:
-    ctx = RunContext.for_production_run(tmp_path, tmp_path / "run", "proj", "r1")
+    ctx = RunContext.for_production_run(tmp_path, tmp_path / "run", "proj", "r1", [])
     assert ctx.mode == "production"
     assert ctx.identity == RunIdentity(project="proj", run_id="r1")
     assert ctx.stage_cache is not None
@@ -97,7 +99,7 @@ def test_for_production_run_stamps_mode_and_grants_scope(tmp_path: Path) -> None
 def test_for_non_production_run_allows_none_paths() -> None:
     """The in-memory harness context carries no on-disk roots; require_run_dir
     fails loudly rather than handing back a fabricated path."""
-    ctx = RunContext.for_non_production_run(None, None)
+    ctx = RunContext.for_non_production_run(None, None, [])
     assert ctx.mode == "non_production"
     assert ctx.identity is None and ctx.stage_cache is None
     with pytest.raises(ValueError, match="no run_dir"):

@@ -52,9 +52,12 @@ def test_hrq_note_names_the_decision_values_the_runtime_actually_emits():
 def test_publish_note_names_the_trace_link_helper():
     note = m.NODE_TYPES["publish"].get("notes")
     assert note, "publish must carry a `notes` explanation"
-    # the authoring agent has to know the keyword to declare and the call to make
+    # the authoring agent has to know the keyword to declare, the call to make,
+    # and that a post-join export raises rather than degrading
     assert "trace_links" in note
-    assert "build_row_trace_url" in note
+    assert "export_row_trace" in note
+    assert "from_file" in note
+    assert "join" in note
 
 
 def test_publish_note_reaches_the_editing_agent_prompt():

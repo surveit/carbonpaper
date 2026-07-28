@@ -123,19 +123,22 @@ def run_subset(
     write_manifest(run_dir, manifest)
     outputs: dict[str, pd.DataFrame] = dict(injected_outputs)
     manifest = _execute_stages(
-        ordered, _subset_ctx(repo_root, run_dir, queue_auto_approve),
+        ordered, _subset_ctx(repo_root, run_dir, ordered, queue_auto_approve),
         manifest, run_dir, outputs)
     _raise_if_run_failed(manifest)
     return outputs
 
 
-def _subset_ctx(repo_root: Path, run_dir: Path, queue_auto_approve: bool) -> RunContext:
+def _subset_ctx(
+    repo_root: Path, run_dir: Path, ordered: list[Stage], queue_auto_approve: bool
+) -> RunContext:
     # No identity/stage_cache: a subset run is keyed on the Workflow + run_dir, not a
     # project tree, and has no cross-run cache access. A handler that needs project
     # scope (only human_review_queue does) fails loudly rather than reading a
     # fabricated wrong directory — unless `queue_auto_approve` tells that handler to
     # pass rows through in memory, in which case it never reaches for project scope.
-    return RunContext.for_non_production_run(repo_root, run_dir, queue_auto_approve=queue_auto_approve)
+    return RunContext.for_non_production_run(
+        repo_root, run_dir, ordered, queue_auto_approve=queue_auto_approve)
 
 
 def _raise_if_run_failed(manifest: RunManifest) -> None:
