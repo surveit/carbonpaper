@@ -119,6 +119,10 @@ NODE_TYPES: dict[str, dict[str, _Any]] = {
             "carry it and MUST be an ABSOLUTE path; when the source does not say "
             "where the data lives, omit path — the user binds a file when starting "
             "a run. Never invent a path. "
+            "For format=xlsx, optional params select the sheet and skip leading "
+            "rows or columns: sheet_name (name or 0-based position, default first "
+            "sheet), header_row (0-based index of the header row, default 0) and "
+            "first_column (0-based index of the first column read, default 0). "
             "Takes no inputs, but must still declare its output_schema."
         ),
     },

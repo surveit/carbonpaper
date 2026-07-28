@@ -99,3 +99,16 @@ def test_unknown_sheet_name_raises_naming_the_sheet(tmp_path):
     path = _write(tmp_path, [["client"], ["ACME"]])
     with pytest.raises(ValueError, match="Nope"):
         _read_xlsx(path, {"sheet_name": "Nope"})
+
+
+def test_authoring_surfaces_advertise_xlsx():
+    from app.models import NODE_TYPES
+    from app.models.stage import Connector
+
+    params_description = Connector.model_fields["params"].description or ""
+    assert "xlsx" in params_description
+
+    notes = NODE_TYPES["input_data"]["notes"]
+    assert "xlsx" in notes
+    for param in ("sheet_name", "header_row", "first_column"):
+        assert param in notes, f"{param} not advertised to the authoring agent"

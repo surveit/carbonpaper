@@ -125,9 +125,9 @@ class Connector(_Base):
         description=(
             "Connector parameters. For kind=file: params.path, when present, is the "
             "ABSOLUTE path to the data file, plus optional params.format "
-            "(csv/parquet/json/geojson). If the source material does not state where "
-            "the file lives, OMIT path entirely — the user binds a file when starting "
-            "a run. Never invent a path."
+            "(csv/parquet/json/geojson/xlsx). If the source material does not state "
+            "where the file lives, OMIT path entirely — the user binds a file when "
+            "starting a run. Never invent a path."
         ),
     )
     refresh: str = "ad_hoc"
