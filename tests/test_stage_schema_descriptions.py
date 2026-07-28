@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel
 
+from app.models import NODE_TYPES
 from app.models.schema import Column
 from app.models.stage import Connector, PythonFunction, Stage
 
@@ -29,11 +30,17 @@ def test_connector_params_documents_optional_absolute_path_and_bans_invention():
     assert "placeholder" not in d
 
 
-def test_output_schema_documents_llm_transform_additive_rule():
-    # validator: `llm_transform not strictly 1:1 ... additive ... primary_key` (stage.py) — #2
-    d = _desc(Stage, "output_schema")
-    assert "additive" in d
-    assert "primary_key" in d
+def test_llm_transform_notes_document_the_additive_rule():
+    # validator: `llm_transform not strictly 1:1 ... additive ... primary_key` (stage.py) — #2.
+    # Type-specific, so it rides in that type's catalogue notes rather than on a
+    # field shared by every type.
+    notes = NODE_TYPES["llm_transform"]["notes"].lower()
+    assert "additive" in notes
+    assert "primary_key" in notes
+
+
+def test_output_schema_documents_that_it_is_required():
+    assert "required" in _desc(Stage, "output_schema")
 
 
 def test_function_code_documents_the_three_signatures():

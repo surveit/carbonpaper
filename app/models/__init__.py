@@ -22,7 +22,7 @@ from app.models.stage import (
     ConnectorKind,
     FileFormat,
     FunctionKind,
-    InputRef,
+    StageInput,
     JoinConfig,
     JoinKey,
     JoinType,
@@ -116,8 +116,7 @@ NODE_TYPES: dict[str, dict[str, _Any]] = {
         "notes": (
             "NEVER include a file path — where data physically lives is not "
             "part of the methodology; the user binds a file when starting a run. "
-            "Takes no inputs, but must still declare its output_schema — it is "
-            "what every downstream edge is checked against."
+            "Takes no inputs, but must still declare its output_schema."
         ),
     },
     "llm_transform": {
@@ -135,7 +134,11 @@ NODE_TYPES: dict[str, dict[str, _Any]] = {
             "them byte-stable and separate from per-row data lets the runtime cache that "
             "prefix, cutting latency (and cost on a per-token backend). "
             "prompt_data_template is the minimal per-row input framing, rendered with "
-            "Python's str.format_map: inject a column as {column_name}."
+            "Python's str.format_map: inject a column as {column_name}. "
+            "Its single input's schema must declare a primary_key, and its output_schema "
+            "must be strictly ADDITIVE and 1:1: the SAME primary_key as that input, every "
+            "input column unchanged, plus at least one new column (one input row -> one "
+            "output row)."
         ),
     },
     "python_row_function": {
@@ -204,8 +207,7 @@ NODE_TYPES: dict[str, dict[str, _Any]] = {
             "AS RECEIVED. Iterate the frame in order (enumerate it) and do not sort, "
             "filter, or dedup before reading the ordinal — position is the only key the "
             "trace has. Omit the keyword for a format that cannot carry a link (csv, json). "
-            "The one type exempt from declaring an output_schema, since it emits files "
-            "rather than a table; its inputs still each declare a schema."
+            "The one type exempt from declaring an output_schema: it emits files, not a table."
         ),
     },
 }
@@ -220,7 +222,7 @@ __all__ = [
     "PythonFunction", "JoinKey", "JoinConfig", "AggregationOp",
     "AggregateConfig", "QueueConfig", "PublishConfig", "ReviewConfig",
     "RowReviewDecision",
-    "InputRef", "Stage", "StageTest", "validate_stage",
+    "StageInput", "Stage", "StageTest", "validate_stage",
     "Workflow", "parse_workflow", "validate_workflow", "validate_workflow_draft",
     "validate_unique_ids", "validate_inputs_resolve", "detect_cycle",
     "validate_publish_is_terminal", "validate_edge_schemas",
