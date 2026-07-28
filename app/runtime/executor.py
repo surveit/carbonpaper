@@ -34,6 +34,7 @@ from .manifest import (
     create_run_manifest,
     write_manifest,
 )
+from .run_log import RUN_START, STAGE_DONE, STAGE_START, RunLog
 from .stages import HANDLERS, HaltForReview, StageHandler
 from .validation import Issue, Severity, ValidationReport, validate_dataframe
 
@@ -141,6 +142,32 @@ def _raise_if_run_failed(manifest: RunManifest) -> None:
 
 
 def _execute_stages(
+    ordered: list[Stage],
+    ctx: RunContext,
+    manifest: RunManifest,
+    run_dir: Path,
+    outputs_so_far: dict[str, pd.DataFrame],
+) -> RunManifest:
+    """Execute ordered stages under this run's own event log."""
+    # Opened here, not in the RunContext constructors, so EVERY entry path
+    # (run_prepared, execute_run, run_subset, resume_run) is logged regardless of
+    # the ctx it built, and the log's lifetime is exactly this call's.
+    run_log = RunLog(run_dir / "events.jsonl")
+    run_log.emit({
+        "kind": RUN_START, "run_id": manifest.run_id, "stage_count": len(ordered),
+    })
+    try:
+        return _run_ordered_stages(
+            ordered, ctx.attach_run_log(run_log), manifest, run_dir, outputs_so_far
+        )
+    finally:
+        # close() writes the terminal run_done marker the SSE tailer stops on —
+        # in a finally, so an exception escaping the loop still ends the stream
+        # instead of leaving a client tailing forever.
+        run_log.close()
+
+
+def _run_ordered_stages(
     ordered: list[Stage],
     ctx: RunContext,
     manifest: RunManifest,
@@ -492,6 +519,7 @@ def _run_stage(
     t0 = time.perf_counter()
     records_by_id[sid] = record
     _flush_manifest(manifest, records_by_id, ordered, run_dir, RunStatus.RUNNING)
+    _emit_stage_start(ctx.run_log, stage)
 
     joins_blocked = False
     try:
@@ -527,8 +555,26 @@ def _run_stage(
         record.elapsed_ms = int((time.perf_counter() - t0) * 1000)
         record.finished_at = datetime.now().isoformat(timespec="seconds")
         _flush_manifest(manifest, records_by_id, ordered, run_dir, RunStatus.RUNNING)
+        _emit_stage_done(ctx.run_log, record)
 
     return _StageOutcome.RAN, joins_blocked
+
+
+def _emit_stage_start(log: RunLog | None, stage: Stage) -> None:
+    if log is not None:
+        log.emit({
+            "kind": STAGE_START, "stage": stage.id, "type": stage.type,
+            "name": stage.name,
+        })
+
+
+def _emit_stage_done(log: RunLog | None, record: StageRecord) -> None:
+    if log is not None:
+        log.emit({
+            "kind": STAGE_DONE, "stage": record.stage_id, "status": record.status,
+            "rows": record.output_row_count, "elapsed_ms": record.elapsed_ms,
+            "error": None if record.error is None else record.error.message,
+        })
 
 
 def _finalize_run_manifest(

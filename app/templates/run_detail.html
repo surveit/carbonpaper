@@ -109,6 +109,40 @@
     <div class="empty-state"><h2>Select a stage</h2><p>Click any node in the workflow to load its run details.</p></div>
 </div>
 
+{# ── Run log: live-tailed lifecycle events (stage/row start·done·error),
+      streamed over SSE from runs/<id>/events.jsonl. Opens for a live run AND a
+      finished one — the endpoint drains the file then ends either way, so this
+      is also how you investigate a past run. ── #}
+<style>
+  .run-log-panel .run-log-toolbar { display: flex; gap: 1.2em; align-items: center; margin: .4em 0; font-size: .85em; }
+  .run-log { max-height: 22em; overflow: auto; font-size: .82em; line-height: 1.45; }
+  .run-log a.run-log-row { display: block; color: inherit; text-decoration: none; }
+  .run-log a.run-log-row:hover { text-decoration: underline; }
+  .run-log .run-log-cached { opacity: .55; }
+  .run-log .run-log-detail { display: block; opacity: .62; }
+  .run-log .run-log-detail-head { color: #8a5cf6; }
+  .run-log .run-log-detail-body { display: block; white-space: pre-wrap; max-height: 6.5em; overflow: auto; margin: 0 0 .3em 2em; padding-left: .6em; border-left: 2px solid #d7cdf5; }
+</style>
+<details class="run-log-panel" id="run-log-panel" open>
+    <summary>Run log <span id="run-log-count" class="muted"></span></summary>
+    <div class="run-log-toolbar">
+        <label><input type="checkbox" id="run-log-errors-only"> errors only</label>
+        <label title="Show each row's prompt, thinking, and submitted response"><input type="checkbox" id="run-log-detail"> LLM detail</label>
+        <button type="button" id="run-log-clear" class="btn">clear view</button>
+        <span id="run-log-state" class="muted"></span>
+    </div>
+    <pre id="run-log" class="run-log"></pre>
+    <p class="muted" style="font-size:.8em">A row marked <code>cached</code> was replayed from the stage-result cache: it ran no code and called no model, so it has no LLM detail.</p>
+</details>
+
+{# The panel's behaviour lives in /static/run_log.js — filtering and reconnect
+   are the parts with tests (tests/test_run_log_client.py), which needs them
+   loadable outside a page. #}
+<script src="/static/run_log.js"></script>
+<script>
+  initRunLog({ project: {{ project | tojson }}, runId: {{ run_id | tojson }} });
+</script>
+
 <details class="raw-yaml"><summary>Raw manifest</summary><pre>{{ manifest | tojson(indent=2) }}</pre></details>
 
 <script>

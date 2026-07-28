@@ -28,6 +28,15 @@ from ..cancellation import consume_cancel
 from ..context import RunContext
 from ..manifest import CONTRIBUTION_ATTR, RowError, StageContribution
 from ..errors import RunCancelled
+from ..run_log import RunLog, bind_row_sink, unbind_detail_sink
+from .row_events import (
+    emit_batched_row_outcomes,
+    emit_batched_row_starts,
+    emit_cached_row,
+    emit_row_outcome,
+    emit_row_raised,
+    emit_row_start,
+)
 
 # One row of a stage's input or output: column label → cell value.
 Row = dict[str, Any]
@@ -46,11 +55,15 @@ RowMapper = Callable[[Row, int], Row]
 MakeRowMapper = Callable[[Stage, RunContext, pd.DataFrame], RowMapper]
 
 # An LLMTransformHandler's batched execution function: the stage's inputs, the
-# run, and the driver's parallelism. It computes one raw row per input row it is
+# run, the driver's parallelism, and the INPUT POSITION of each row it is handed
+# (in the order handed), which is what lets it attribute a chunk's log detail to
+# the rows it actually covers. It computes one raw row per input row it is
 # given — internal columns still attached, nothing stripped or projected — and knows
 # nothing about caching: which rows it is asked about is the shape's decision
 # (see `_run_batched`).
-RunBatches = Callable[[Stage, dict[str, pd.DataFrame], RunContext, int], list["Row"]]
+RunBatches = Callable[
+    [Stage, dict[str, pd.DataFrame], RunContext, int, list[int]], list["Row"]
+]
 
 # Internal column a row mapper attaches to a row it could not produce (e.g. an
 # llm_transform whose generation failed). The row driver collects these off the
@@ -311,11 +324,15 @@ def _run_row_mapper(
         )
     src = inputs[stage.inputs[0].id]
     map_row = handler.make_mapper(stage, ctx, src)
-    # The ONE line of per-row compute, optionally routed through the row cache.
+    # The ONE line of per-row compute, optionally routed through the row cache
+    # and the run log. Log outside cache, so a row the cache answers never
+    # reaches the mapper's lifecycle wrapper and is logged as the replay it is.
     # `map_row` itself stays bound: _finish_mapped_frame tests it for the
     # PostMapRowMapper shape, which a wrapper would hide.
     caching = _open_row_caching(stage, ctx)
-    compute_row = map_row if caching is None else _map_row_through_cache(caching, map_row)
+    compute_row = _log_row_lifecycle(map_row, ctx.run_log, stage.id)
+    if caching is not None:
+        compute_row = _map_row_through_cache(caching, compute_row, ctx.run_log, stage.id)
     records = list_rows(src)
 
     results: list[Row | None] = [None] * len(records)
@@ -434,13 +451,44 @@ def _without_internal_columns(row: Row) -> Row:
     return {key: value for key, value in row.items() if key not in internal}
 
 
-def _map_row_through_cache(caching: _RowCaching, map_row: RowMapper) -> RowMapper:
+def _map_row_through_cache(
+    caching: _RowCaching, map_row: RowMapper, log: RunLog | None, stage_id: str
+) -> RowMapper:
     def compute_row(row: Row, index: int) -> Row:
         cached = _find_cached_row(caching, row)
         if cached is not None:
+            emit_cached_row(log, stage_id, index)
             return cached
         result = map_row(row, index)
         _record_row_output(caching, row, result)
+        return result
+
+    return compute_row
+
+
+# ── the run log's row lifecycle ──────────────────────────────────────────────
+
+
+def _log_row_lifecycle(map_row: RowMapper, log: RunLog | None, stage_id: str) -> RowMapper:
+    """`map_row` wrapped in its own row_start/row_ok/row_error events."""
+    if log is None:
+        return map_row
+
+    def compute_row(row: Row, index: int) -> Row:
+        emit_row_start(log, stage_id, index)
+        # Bind the detail sink so the LLM layer, several frames below map_row,
+        # can attribute its prompt/thinking/response to this (stage, row)
+        # without any of that being threaded through the mapper's signature.
+        token = bind_row_sink(log, stage_id, index)
+        try:
+            result = map_row(row, index)
+        except Exception as exc:  # noqa: BLE001 — logged, then re-raised unchanged;
+            # the executor's own per-stage handling is untouched.
+            emit_row_raised(log, stage_id, index, exc)
+            raise
+        finally:
+            unbind_detail_sink(token)
+        emit_row_outcome(log, stage_id, index, result.get(ROW_ERROR_KEY))
         return result
 
     return compute_row
@@ -467,6 +515,7 @@ def _run_batched(
     caching = _open_row_caching(stage, ctx)
     hits = {} if caching is None else _find_cached_rows_by_position(caching, records)
     misses = [index for index in range(len(records)) if index not in hits]
+    emit_batched_row_starts(ctx.run_log, stage.id, hits, misses)
     computed = _compute_batched_rows(handler, stage, src, misses, ctx)
     # Ordered before recorded: the ordering step is what verifies one computed
     # row per miss, so nothing is pinned against a row it did not come from.
@@ -474,6 +523,9 @@ def _run_batched(
     if caching is not None:
         for position, row in zip(misses, computed):
             _record_row_output(caching, records[position], row)
+    emit_batched_row_outcomes(
+        ctx.run_log, stage.id, misses, [row.get(ROW_ERROR_KEY) for row in computed]
+    )
     return _restore_input_columns_when_nothing_named_them(
         _finish_batched_frame(rows, handler, stage), src
     )
@@ -504,7 +556,7 @@ def _compute_batched_rows(
     if not misses:
         return []
     return handler.run_batches(
-        stage, {stage.inputs[0].id: src.iloc[misses]}, ctx, handler.parallelism
+        stage, {stage.inputs[0].id: src.iloc[misses]}, ctx, handler.parallelism, misses
     )
 
 

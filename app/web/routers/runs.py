@@ -5,14 +5,21 @@ resume."""
 
 from __future__ import annotations
 
+import asyncio
+import json
 import traceback
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, AsyncIterator
 
 from fastapi import APIRouter, File, Form, HTTPException, Request, Response, UploadFile
 from fastapi.datastructures import FormData
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import (
+    HTMLResponse,
+    JSONResponse,
+    RedirectResponse,
+    StreamingResponse,
+)
 from starlette.concurrency import run_in_threadpool
 
 from app.core.errors import (
@@ -30,6 +37,7 @@ from app.services import run as run_service
 from app.runtime.cancellation import request_cancel
 from app.runtime.errors import PreviewError
 from app.runtime.preview import PREVIEWABLE_TYPES, run_stage_preview
+from app.runtime.run_log import RUN_DONE, read_events_since
 from app.runtime.trace import trace_row, trace_to_dict
 from app.web.trace_view import build_trace_view
 from app.web.config import EXAMPLES_DIR, REPO_ROOT, templates
@@ -51,6 +59,12 @@ from app.web.loading import (
 from app.web.project_view import shell_state
 
 router = APIRouter()
+
+# How the run-log SSE tail polls events.jsonl, and how many empty polls it
+# tolerates after the manifest has settled before it stops a stream whose
+# run_done marker never arrived.
+_EVENT_POLL_INTERVAL_S = 0.5
+_IDLE_POLLS_BEFORE_TERMINAL_STOP = 2
 
 
 @router.post("/project/{project}/run")
@@ -306,6 +320,59 @@ def _artifact_links(project: str, run_id: str, run_dir: Path, manifest: dict) ->
         }
         for f in files
     ]
+
+
+@router.get("/project/{project}/runs/{run_id}/events")
+async def stream_run_events(
+    project: str, run_id: str, request: Request, from_seq: int = 0
+):
+    """SSE tail of this run's event log, live or finished."""
+    run_dir = runs_dir(project) / run_id
+    load_manifest(run_dir)  # 404s if the run doesn't exist
+    return StreamingResponse(
+        _tail_run_events(run_dir, request, from_seq),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+async def _tail_run_events(
+    run_dir: Path, request: Request, from_seq: int
+) -> AsyncIterator[str]:
+    """Drain runs/<id>/events.jsonl as it grows, ending on the run_done marker."""
+    # The same generator serves a FINISHED run: it drains the file and ends, so
+    # the live feed and after-the-fact investigation are one code path.
+    # `from_seq` resumes after a reconnect (every event carries a monotonic seq).
+    # File-tailing rather than asyncio wakeups is deliberate: the run and its LLM
+    # rows execute on worker threads with no access to the server loop, and a
+    # file crosses that boundary for free.
+    events_path = run_dir / "events.jsonl"
+    cursor = from_seq
+    idle_polls = 0
+    while True:
+        if await request.is_disconnected():
+            return
+        new = read_events_since(events_path, cursor)
+        for event in new:
+            cursor = int(event["seq"]) + 1
+            yield f"data: {json.dumps(event)}\n\n"
+            if event.get("kind") == RUN_DONE:
+                return
+        # Fallback stop: if the writer never wrote run_done (a crash mid-run),
+        # end once the manifest has settled AND a couple of polls added nothing,
+        # so a client never hangs on an interrupted run.
+        if _find_terminal_status(run_dir) is not None:
+            idle_polls = 0 if new else idle_polls + 1
+            if idle_polls >= _IDLE_POLLS_BEFORE_TERMINAL_STOP:
+                yield "event: done\ndata: {}\n\n"
+                return
+        await asyncio.sleep(_EVENT_POLL_INTERVAL_S)
+
+
+def _find_terminal_status(run_dir: Path) -> str | None:
+    """This run's settled status, or None while it is still running."""
+    status = load_manifest(run_dir).get("status")
+    return None if status == RunStatus.RUNNING else status
 
 
 @router.get("/project/{project}/runs/{run_id}", response_class=HTMLResponse)

@@ -15,6 +15,8 @@ from pydantic import BaseModel, ConfigDict, model_validator
 
 from app.core.stage_cache import ReadOnlyStageCache, StageCacheEntry
 
+from .run_log import RunLog
+
 RunMode = Literal["production", "non_production"]
 
 
@@ -64,6 +66,12 @@ class RunContext(BaseModel):
     # write-capable accessor still records what it computes — so the cache ends
     # the run re-pinned, not stale. Per-run only; nothing about a stage says it.
     bust_cache: bool = False
+    # This run's event log (runs/<id>/events.jsonl), attached by the executor for
+    # the duration of the run — see `attach_run_log`. Write-only from here: a
+    # handler emits onto it and never reads it back, so it carries no run state
+    # and nothing here becomes load-bearing. None outside a logged execution
+    # (every emit site treats that as "don't log"), never a fabricated sink.
+    run_log: RunLog | None = None
 
     @model_validator(mode="after")
     def _production_run_forbids_queue_auto_approve(self) -> RunContext:
@@ -94,6 +102,14 @@ class RunContext(BaseModel):
                 "or it doesn't (neither)"
             )
         return self
+
+    def attach_run_log(self, log: RunLog) -> RunContext:
+        """A copy of this context carrying `log` — the executor's one attachment point."""
+        # The only derivation of a context: the log's lifetime is the run's, so
+        # it cannot be set by the constructors (which run before the run's
+        # directory is being written to) without leaking a writer thread when a
+        # prepared run is never executed.
+        return self.model_copy(update={"run_log": log})
 
     def require_run_dir(self) -> Path:
         """This run's on-disk dir, for a handler that writes run-scoped output
