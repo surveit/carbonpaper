@@ -41,6 +41,7 @@ class _FakeAgent:
             emit({"kind": "thinking", "text": "weighing the options"})
             emit({"kind": "tool_call", "name": "submit_answer",
                   "args": '{"score": 5}', "label": "submit answer"})
+            emit({"kind": "tool_result", "content": "Accepted — recorded."})
         return _Reply(score=5)
 
 
@@ -81,7 +82,9 @@ def test_detail_events_logged_when_a_row_is_bound(tmp_path, monkeypatch):
 
     # Prompt, thinking, and the submitted response all land, at the detail tier,
     # attributed to the bound (stage, row).
-    assert set(by_kind) == {"llm_prompt", "llm_thinking", "llm_response"}
+    assert set(by_kind) == {
+        "llm_prompt", "llm_thinking", "llm_response", "llm_tool_result"
+    }
     for event in by_kind.values():
         assert event["level"] == LEVEL_DETAIL
         assert event["stage"] == "classify"
@@ -89,6 +92,10 @@ def test_detail_events_logged_when_a_row_is_bound(tmp_path, monkeypatch):
     assert by_kind["llm_prompt"]["text"] == "Rate: hello"     # rendered, not the template
     assert by_kind["llm_thinking"]["text"] == "weighing the options"
     assert by_kind["llm_response"]["text"] == '{"score": 5}'  # the submit_answer args
+    # The tool's verdict on that submission. It is the only place an upstream
+    # rejection of a wrong-shaped call is visible — the handler never runs, so
+    # nothing else in the tier records that the call happened and was refused.
+    assert by_kind["llm_tool_result"]["text"] == "Accepted — recorded."
 
 
 def test_no_detail_events_without_a_bound_row(tmp_path, monkeypatch):
