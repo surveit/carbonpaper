@@ -1,30 +1,28 @@
 {# The row's stage chain: one <div class="step"> per node, in chronological
    order, each carrying the columns new at that stage, the row's values there,
-   and the transform detail. Reads only `view` (build_trace_view's payload) so
-   this same fragment renders both the live lineage page and a published
-   artifact's standalone trace page — see app/runtime/trace_page.py.
+   and the transform detail. Reads `view` — the dict build_trace_view returns
+   — so this same fragment renders both the live lineage page and a published
+   artifact's standalone trace page; see app/runtime/trace_page.py.
 
-   Field access goes through .get() everywhere: view/node shapes vary slightly
-   between the compiled Stage-backed live view and a hand-built fixture, and
-   this fragment must degrade to "not shown" rather than error on either. #}
-{% set nodes = view.get('nodes', []) %}
-{% set edges = view.get('edges', []) %}
-{% set upstream = view.get('upstream', {}) %}
-{% if upstream.get('truncated') %}
-<div class="trunc">⋯ upstream not traced — {{ upstream.get('message', '') }}</div>
+   Speaks build_trace_view's one contract directly (view.nodes/edges/upstream,
+   node.stage_id/columns_new/row/role/transform) — no dual-shape fallbacks.
+   The environment's StrictUndefined turns a missing field into a raised
+   error rather than a silently empty fragment. #}
+{% if view.upstream.truncated %}
+<div class="trunc">⋯ upstream not traced — {{ view.upstream.message }}</div>
 {% endif %}
-{% for node in nodes %}
+{% for node in view.nodes %}
 {% set step_no = loop.index %}
-{% set stage_id = node.get('stage_id', '') %}
-{% set transform = node.get('transform', {}) %}
-{% set kind = transform.get('kind', '') %}
-{% set detail = transform.get('detail') %}
-{% set cols = node.get('columns_new', node.get('new_columns', [])) %}
-{% set row = node.get('row', {}) %}
-{% set preds = edges | selectattr('to_step', 'equalto', step_no) | map(attribute='from_step') | list %}
+{% set stage_id = node.stage_id %}
+{% set transform = node.transform %}
+{% set kind = transform.kind %}
+{% set detail = transform.detail %}
+{% set cols = node.columns_new %}
+{% set row = node.row %}
+{% set preds = view.edges | selectattr('to_step', 'equalto', step_no) | map(attribute='from_step') | list %}
 <div class="step">
   <span class="stepno">step {{ step_no }}</span>
-  {% if loop.index0 == 0 and not upstream.get('truncated') %}
+  {% if loop.index0 == 0 and not view.upstream.truncated %}
   <span class="stage-link" data-stage="{{ stage_id }}" data-disc="transform">{{ stage_id }}</span> to get
   {% else %}
   <span class="stage-link" data-stage="{{ stage_id }}" data-disc="transform">
@@ -44,6 +42,9 @@
         {% for col, val in row.items() %}<tr><th>{{ col }}</th><td>{{ val }}</td></tr>{% endfor %}
       </tbody></table>
       {% if detail is mapping %}
+        {# instructions/data_template: both keys are always present together
+           on an llm node's detail (_transform_of builds them as one literal
+           dict); .get() here guards an empty string, not a missing key. #}
         {% if detail.get('instructions') %}<p class="lin-transform"><em>instructions:</em> {{ detail.get('instructions') }}</p>{% endif %}
         {% if detail.get('data_template') %}<p class="lin-transform"><em>data template:</em> {{ detail.get('data_template') }}</p>{% endif %}
       {% elif detail %}
@@ -51,6 +52,6 @@
       {% endif %}
     </div>
   </details>
-  {% if node.get('role') == 'claim' %}<span class="claim-tag">published claim</span>{% endif %}
+  {% if node.role == 'claim' %}<span class="claim-tag">published claim</span>{% endif %}
 </div>
 {% endfor %}
