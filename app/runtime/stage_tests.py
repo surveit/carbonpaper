@@ -33,6 +33,7 @@ from typing import Any, Literal
 import pandas as pd
 from pydantic import BaseModel
 
+from app.core.frames import list_rows
 from app.models import Stage, TableSchema
 from app.models.stage import StageType
 from app.models.stages.stage_tests import STAGE_TEST_TYPES, StageTest
@@ -247,10 +248,7 @@ def _compare(stage: Stage, test: StageTest, actual: pd.DataFrame) -> StageTestRe
     assert stage.output_schema is not None
     columns = [column.name for column in stage.output_schema.columns]
     expected_rows = [_select_cells(row, columns) for row in test.expected]
-    actual_rows = [
-        _select_cells({str(key): value for key, value in row.items()}, columns)
-        for row in actual.to_dict("records")
-    ]
+    actual_rows = [_select_cells(row, columns) for row in list_rows(actual)]
     if len(expected_rows) != len(actual_rows):
         return StageTestResult(
             test.name, "mismatch",

@@ -36,6 +36,7 @@ import pandas as pd
 from pydantic import create_model
 
 from app.core.agent.usage import LlmUsage
+from app.core.frames import list_rows
 from app.models import Stage
 from app.models.schema import Column, TableSchema
 
@@ -115,9 +116,7 @@ def run_llm_batches(
     batch_reply_schema = _build_batch_reply_schema(stage)
 
     src = inputs[stage.inputs[0].id]
-    records: list[Row] = [
-        {str(k): v for k, v in record.items()} for record in src.to_dict("records")
-    ]
+    records: list[Row] = list_rows(src)
 
     results: list[Row | None] = [None] * len(records)
     for index, row in _run_chunks(

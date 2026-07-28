@@ -34,6 +34,7 @@ from app.models import Stage
 from app.models.stage import StageType, is_grain_and_order_preserving
 
 from app.core.agent.usage import LlmUsage
+from app.core.frames import list_rows
 from app.core.stage_cache import StageCache, compute_row_fingerprint
 
 from ..cancellation import consume_cancel
@@ -310,7 +311,7 @@ def _run_row_mapper(
     # PostMapRowMapper shape, which a wrapper would hide.
     caching = _open_row_caching(stage, ctx)
     compute_row = map_row if caching is None else _map_row_through_cache(caching, map_row)
-    records = _to_records(src)
+    records = list_rows(src)
 
     results: list[Row | None] = [None] * len(records)
     if handler.parallelism > 1 and len(records) > 1:
@@ -457,7 +458,7 @@ def _run_batched(
     cannot already answer, and assemble its rows back into INPUT order alongside
     the hits."""
     src = inputs[stage.inputs[0].id]
-    records = _to_records(src)
+    records = list_rows(src)
     caching = _open_row_caching(stage, ctx)
     hits = {} if caching is None else _find_cached_rows_by_position(caching, records)
     misses = [index for index in range(len(records)) if index not in hits]
@@ -622,14 +623,6 @@ def _strip_internal_columns(df: pd.DataFrame) -> pd.DataFrame:
     }
     present = [column for column in df.columns if column in stripped]
     return df.drop(columns=present) if present else df
-
-
-def _to_records(frame: pd.DataFrame) -> list[Row]:
-    # str(k) pins pandas' Hashable column labels down to str (a no-op for
-    # parquet/CSV data, whose labels are already strings).
-    return [
-        {str(k): v for k, v in record.items()} for record in frame.to_dict("records")
-    ]
 
 
 def _consume_cancel(ctx: RunContext) -> bool:
