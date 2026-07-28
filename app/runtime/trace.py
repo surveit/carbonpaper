@@ -14,7 +14,7 @@ compiled DAG, so it is unaffected by later edits to the methodology.
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
@@ -22,6 +22,7 @@ import pandas as pd
 
 from app.core.errors import RowOutOfRange, StageNotInRun
 from app.core.frames import PARQUET_SUFFIX
+from app.core.paths import strip_directories
 from app.models.stage import StageType, is_grain_and_order_preserving
 
 
@@ -46,6 +47,14 @@ def _is_row_preserving(stage_type: str) -> bool:
 
 
 @dataclass
+class InputIdentity:
+    """Identifies an input file by its content, never by where it sat on disk."""
+    filename: str
+    sha256: str
+    bytes: int
+
+
+@dataclass
 class StageTransform:
     """One stage on the traced path: the single row this stage contributed and
     how it entered. (One step of the walk — see `Trace.steps`.)"""
@@ -55,6 +64,7 @@ class StageTransform:
     row: dict[str, Any]     # the row's cells, verbatim
     columns_new: list[str]  # columns first appearing at this stage vs its parent
     origin: str             # "source" | "computed" | "llm" | "other"
+    input_identity: InputIdentity | None  # set only where the run bound a file
 
 
 @dataclass
@@ -102,6 +112,16 @@ def _origin(stage_type: str) -> str:
         "python_row_function": "computed",
         "llm_transform": "llm",
     }.get(stage_type, "other")
+
+
+def _read_input_identity(manifest: dict[str, Any], stage_id: str) -> InputIdentity | None:
+    """None unless the run's preflight recorded all three fields — never a
+    stand-in hash or size for a binding the manifest does not carry."""
+    record = (manifest.get("input_bindings") or {}).get(stage_id) or {}
+    if not all(key in record for key in ("path", "sha256", "bytes")):
+        return None
+    return InputIdentity(filename=strip_directories(str(record["path"])),
+                         sha256=str(record["sha256"]), bytes=int(record["bytes"]))
 
 
 def _read_output(run_dir: Path, stage_record: dict[str, Any]) -> pd.DataFrame | None:
@@ -182,6 +202,7 @@ def trace_row(run_dir: Path, stage_id: str, row_ordinal: int) -> Trace:
             row=_row_dict(df, r),
             columns_new=_new_columns(df, parent_df),
             origin=_origin(stage_type),
+            input_identity=_read_input_identity(manifest, sid),
         ))
 
         # Can we cross into the parent, keeping the same ordinal?
@@ -229,6 +250,7 @@ def trace_to_dict(trace: Trace) -> dict[str, Any]:
                 "row": step.row,
                 "columns_new": step.columns_new,
                 "origin": step.origin,
+                "input_identity": asdict(step.input_identity) if step.input_identity else None,
             }
             for step in trace.steps
         ],

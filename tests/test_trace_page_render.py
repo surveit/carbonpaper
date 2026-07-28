@@ -33,9 +33,11 @@ def _trace() -> dict:
         "run_id": "R1", "start_stage": "score", "start_row": 0,
         "steps": [
             {"stage_id": "score", "stage_type": "llm_transform", "row_ordinal": 0,
-             "row": {"name": "Acme", "risk": "high"}, "columns_new": ["risk"], "origin": "computed"},
+             "row": {"name": "Acme", "risk": "high"}, "columns_new": ["risk"],
+             "origin": "computed", "input_identity": None},
             {"stage_id": "load", "stage_type": "input_data", "row_ordinal": 0,
-             "row": {"name": "Acme"}, "columns_new": ["name"], "origin": "source"},
+             "row": {"name": "Acme"}, "columns_new": ["name"],
+             "origin": "source", "input_identity": None},
         ],
         "end": {"reached_origin": True, "at_stage": "load",
                 "message": "input_data stage — the rows originate here"},

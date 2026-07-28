@@ -28,9 +28,11 @@ def _trace() -> dict:
         "run_id": "R1", "start_stage": "enrich", "start_row": 0,
         "steps": [
             {"stage_id": "enrich", "stage_type": "python_row_function", "row_ordinal": 0,
-             "row": {"facility_id": "a", "score": 1}, "columns_new": ["score"], "origin": "computed"},
+             "row": {"facility_id": "a", "score": 1}, "columns_new": ["score"],
+             "origin": "computed", "input_identity": None},
             {"stage_id": "seeds", "stage_type": "input_data", "row_ordinal": 0,
-             "row": {"facility_id": "a"}, "columns_new": ["facility_id"], "origin": "source"},
+             "row": {"facility_id": "a"}, "columns_new": ["facility_id"],
+             "origin": "source", "input_identity": None},
         ],
         "end": {"reached_origin": True, "at_stage": "seeds",
                 "message": "input_data stage — the rows originate here"},
@@ -89,7 +91,7 @@ def test_trace_shows_instructions_and_data():
     trace["steps"].insert(0, {
         "stage_id": "score", "stage_type": "llm_transform", "row_ordinal": 0,
         "row": {"facility_id": "a", "score": 1, "rating": 5}, "columns_new": ["rating"],
-        "origin": "computed",
+        "origin": "computed", "input_identity": None,
     })
     view = build_trace_view(trace, stages)
     detail = view["nodes"][-1]["transform"]["detail"]
@@ -116,3 +118,34 @@ def test_missing_compiled_stage_degrades_gracefully():
     view = build_trace_view(_trace(), {})  # no compiled stages at all
     assert view["nodes"][-1]["transform"]["kind"] == "unknown"
     assert view["nodes"][-1]["transform"]["detail"] is None
+
+
+def test_source_node_shows_the_recorded_name_and_hash_not_a_path():
+    trace = _trace()
+    trace["steps"][-1]["input_identity"] = {
+        "filename": "seeds.csv", "sha256": "ab" * 32, "bytes": 847}
+    source = build_trace_view(trace, _stages())["nodes"][0]
+    assert source["transform"]["kind"] == "source"
+    assert source["transform"]["detail"] == f"seeds.csv — sha256 {'ab' * 32} (847 bytes)"
+
+
+def test_an_identified_source_needs_no_compiled_stage():
+    """The identity comes from the run's manifest, so the source stays named even
+    when the compiled DAG is gone."""
+    trace = _trace()
+    trace["steps"][-1]["input_identity"] = {
+        "filename": "seeds.csv", "sha256": "ab" * 32, "bytes": 847}
+    source = build_trace_view(trace, {})["nodes"][0]
+    assert source["transform"]["kind"] == "source"
+    assert "seeds.csv" in source["transform"]["detail"]
+
+
+def test_an_unrecorded_input_falls_back_to_the_filename_alone():
+    """A run whose manifest bound no file still names the input — but only its
+    basename, never the directories the connector path carries."""
+    stages = _stages()
+    stages["seeds"] = _stage({
+        "id": "seeds", "type": "input_data", "name": "Load seeds",
+        "connector": {"kind": "file", "params": {"path": "C:\\authors\\secret\\seeds.csv"}}})
+    source = build_trace_view(_trace(), stages)["nodes"][0]
+    assert source["transform"]["detail"] == "seeds.csv"

@@ -15,24 +15,27 @@ from __future__ import annotations
 
 from typing import Any
 
+from app.core.paths import strip_directories
 from app.models import Stage
 from app.models.stage import StageType
 from app.services.loader import resolve_function_code
 
 
-def _transform_of(stage: Stage | None) -> dict[str, Any]:
+def _transform_of(stage: Stage | None, input_identity: dict[str, Any] | None) -> dict[str, Any]:
     """What the stage did, for the node-detail panel: a `kind` the template
     styles on and a `detail` blob (code / prompt / keys / source). `unknown`
     when the compiled stage is absent (the tracer needs only the run dir; the
     compiled DAG may not be loadable)."""
+    if input_identity is not None:
+        # Only an input stage carries one, so it settles the kind on its own —
+        # and it identifies the source even when the compiled stage is missing.
+        return {"kind": "source", "detail": _describe_hashed_input(input_identity)}
     if stage is None:
         return {"kind": "unknown", "detail": None}
     # _Base sets use_enum_values, so stage.type is a plain str; compare by value.
     stage_type = str(stage.type)
     if stage_type == StageType.input_data.value:
-        path = stage.connector.params.get("path") if stage.connector else None
-        src = path or (stage.source.doc if stage.source else None)
-        return {"kind": "source", "detail": src or "originates the rows"}
+        return {"kind": "source", "detail": _describe_unhashed_input(stage)}
     if stage_type in (StageType.python_row_function.value, StageType.python_frame_function.value):
         # Full source: the whole module file for a module ref, the inline code
         # for an inline ref — never a partial snippet or a bare reference.
@@ -48,6 +51,20 @@ def _transform_of(stage: Stage | None) -> dict[str, Any]:
         detail = ", ".join(f"{k.left}={k.right}" for k in pairs) if pairs else None
         return {"kind": "join", "detail": detail}
     return {"kind": stage_type, "detail": None}
+
+
+def _describe_hashed_input(input_identity: dict[str, Any]) -> str:
+    """Filename + content hash, never a path: the page ships to outside readers."""
+    return (f"{input_identity['filename']} — sha256 {input_identity['sha256']} "
+            f"({input_identity['bytes']} bytes)")
+
+
+def _describe_unhashed_input(stage: Stage) -> str:
+    """For a run whose manifest recorded no binding: names the file, never its
+    directories, so the page still says which input without disclosing where."""
+    path = stage.connector.params.get("path") if stage.connector else None
+    named = strip_directories(str(path)) if path else None
+    return named or (stage.source.doc if stage.source else None) or "originates the rows"
 
 
 def build_trace_view(trace: dict[str, Any], stages: dict[str, Stage]) -> dict[str, Any]:
@@ -83,7 +100,7 @@ def build_trace_view(trace: dict[str, Any], stages: dict[str, Stage]) -> dict[st
             "role": role,
             "columns_new": step["columns_new"],
             "row": step["row"],
-            "transform": _transform_of(stages.get(step["stage_id"])),
+            "transform": _transform_of(stages.get(step["stage_id"]), step["input_identity"]),
         })
 
     edges = [
