@@ -103,8 +103,8 @@ def _read_xlsx(path: Path, params: dict[str, Any]) -> pd.DataFrame:
     # header_row/first_column are 0-based indices into the sheet as it appears in
     # Excel; rows above and columns left of them are discarded before parsing.
     sheet = params.get("sheet_name", 0)  # data-default-ok: 0 is the documented default (first sheet)
-    header_row = _int_param(params, "header_row", 0)  # data-default-ok: 0 is the documented default (first row)
-    first_column = _int_param(params, "first_column", 0)  # data-default-ok: 0 is the documented default (first column)
+    header_row = _require_int_param(params, "header_row", 0)  # data-default-ok: 0 is the documented default (first row)
+    first_column = _require_int_param(params, "first_column", 0)  # data-default-ok: 0 is the documented default (first column)
     frame = pd.read_excel(path, sheet_name=sheet, header=header_row, engine="openpyxl")
     if not isinstance(frame, pd.DataFrame):
         raise ValueError(
@@ -117,7 +117,7 @@ def _read_xlsx(path: Path, params: dict[str, Any]) -> pd.DataFrame:
     return frame
 
 
-def _int_param(params: dict[str, Any], name: str, default: int) -> int:
+def _require_int_param(params: dict[str, Any], name: str, default: int) -> int:
     value = params.get(name, default)
     if isinstance(value, bool) or not isinstance(value, int):
         raise ValueError(f"{name}={value!r} must be an integer, got {type(value).__name__}")
