@@ -9,6 +9,9 @@ The chain spans BOTH cache grains — a row-mapped `python_row_function` and a
 frame-shaped `python_frame_function` are intercepted by different code — so one
 run exercises both.
 
+One case goes further and runs the chain twice in two separate OS processes,
+the only way to observe that a payload outlives the run that wrote it.
+
 The evidence is the stages' own authored code, not the cache's internals: every
 stage appends a line to a probe file when its body runs, so a run that replays
 leaves the probe untouched. A run that recomputes appends one line per row it
@@ -17,6 +20,9 @@ computes, or one line per execution where the stage is frame-shaped.
 from __future__ import annotations
 
 import json
+import os
+import subprocess
+import sys
 import time
 from collections import Counter
 from pathlib import Path
@@ -256,6 +262,58 @@ def test_a_stage_declaring_cache_false_recomputes_on_every_run(tmp_path):
     # `flag` re-rolled; `clean` above it and `totals` below it both replayed —
     # the opt-out is that stage's alone.
     assert _invocations(probe) == _EVERYTHING_COMPUTED + Counter({"flag": 3})
+
+
+def test_the_cache_survives_a_process_restart_and_a_change_of_directory(tmp_path):
+    """The one property no in-process test can observe: a payload pinned by a
+    run that has EXITED is replayed by a later, unrelated process. Both grains
+    at once — the row payloads live in the document store, the frame payload in
+    a parquet under the frame store, so a tally that does not grow is evidence
+    that both were read back off disk.
+
+    The two runs are launched from DIFFERENT directories, neither of them the
+    project, with only CW_DB_PATH set and the frames root left to its default:
+    a frames root that resolved against the working directory rather than
+    against the pinned database would send the two runs to different roots, and
+    the second would miss the frame entry and recompute `totals`.
+
+    Two real interpreter startups is the price; nothing cheaper distinguishes a
+    durable store from a process-lifetime one."""
+    from app.core.persistence import SqliteKvStore, configure_store
+
+    db = tmp_path / "workspace" / "app.db"
+    db.parent.mkdir()
+    configure_store(SqliteKvStore(str(db)))  # the version must outlive this process too
+    probe = _write_project(tmp_path)
+    _publish_a_version(tmp_path)
+    first_cwd, second_cwd = tmp_path / "launch_a", tmp_path / "launch_b"
+    first_cwd.mkdir()
+    second_cwd.mkdir()
+
+    _run_in_a_fresh_process(tmp_path, db=db, cwd=first_cwd)
+    assert _invocations(probe) == _EVERYTHING_COMPUTED
+
+    time.sleep(1.05)  # run ids are second-resolution: one dir per run
+    _run_in_a_fresh_process(tmp_path, db=db, cwd=second_cwd)
+
+    assert _invocations(probe) == _EVERYTHING_COMPUTED  # every stage replayed
+
+
+def _run_in_a_fresh_process(project: Path, *, db: Path, cwd: Path) -> None:
+    """One whole run through the runner CLI in a process that has configured no
+    store of its own — the faithful exercise of a restart, as
+    tests/test_seed_cli.py is of a store-free process."""
+    repo_root = Path(__file__).resolve().parents[1]
+    env = {k: v for k, v in os.environ.items() if k != "CW_FRAMES_ROOT"}
+    result = subprocess.run(
+        [sys.executable, "-m", "app.runtime.runner", str(project)],
+        cwd=cwd, env={**env, "PYTHONPATH": str(repo_root), "CW_DB_PATH": str(db)},
+        capture_output=True, text=True,
+    )
+    assert result.returncode == 0, (
+        f"run crashed in a fresh process:\nstdout:\n{result.stdout}\n"
+        f"stderr:\n{result.stderr}"
+    )
 
 
 def test_a_first_run_of_a_fresh_project_replays_nothing(tmp_path):
