@@ -4,6 +4,7 @@ is safe alongside other lifespan-running tests.
 from __future__ import annotations
 
 import asyncio
+import json
 import time
 from pathlib import Path
 
@@ -283,8 +284,53 @@ def test_mcp_add_stage_creates_the_first_stage_of_a_new_project(tmp_path, monkey
         project_id="trail",
         stage=_LOAD_STAGE,
     )
-    assert added == {"ok": True, "issues": []}
+    assert added == {"ok": True, "issues": []}, "a clean draft warns about nothing"
     assert server.describe_workflow(project_id="trail")["stages"][0]["id"] == "load"
+
+
+def test_mcp_add_stage_drops_server_owned_fields_and_names_them(tmp_path, monkeypatch):
+    """A client that copies a stage out of read_stage echoes back fields only the
+    server writes. Saving it is the useful behavior — but silently is not, so the
+    result names the fields that were dropped."""
+    from app.mcp import server
+    from app.services import workspace
+
+    monkeypatch.setattr(workspace, "EXAMPLES_DIR", tmp_path)
+    server.create_project(name="trail", document="Follow the filings.")
+    echoed = {
+        "id": "load", "name": "Load", "type": "input_data",
+        "connector": {"kind": "file"},
+        "tests": [], "source": {"section": "para 3"},
+    }
+
+    _content, added = asyncio.run(
+        server.mcp.call_tool("add_stage", {"project_id": "trail", "stage": echoed})
+    )
+
+    assert added["ok"] is True
+    [warning] = added["warnings"]
+    named = warning.split(" — ")[0]
+    assert "tests" in named and "source" in named
+    assert "eval" not in named and "review" not in named, "names only what was sent"
+    stored = json.loads(server.read_stage(project_id="trail", stage_id="load"))
+    assert not {"tests", "source"} & set(stored)
+
+
+def test_mcp_add_stage_still_refuses_an_unknown_field(tmp_path, monkeypatch):
+    """Only the four KNOWN server-owned names are accepted-and-dropped. A typo'd
+    field name is still an error — otherwise the drop would swallow real mistakes."""
+    from app.mcp import server
+    from app.services import workspace
+
+    monkeypatch.setattr(workspace, "EXAMPLES_DIR", tmp_path)
+    server.create_project(name="trail", document="Follow the filings.")
+    typo = {
+        "id": "load", "name": "Load", "type": "input_data",
+        "connector": {"kind": "file"}, "nonsense": 1,
+    }
+
+    with pytest.raises(Exception, match="nonsense"):
+        asyncio.run(server.mcp.call_tool("add_stage", {"project_id": "trail", "stage": typo}))
 
 
 _UNADDITIVE_LLM_STAGE = {

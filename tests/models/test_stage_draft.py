@@ -93,3 +93,53 @@ def test_schema_omits_the_fields_no_authoring_client_writes():
     properties = StageDraft.model_json_schema()["properties"]
     assert not set(DROPPED_FIELDS) & set(properties)
     assert "compiler_notes" in properties, "the authoring agent does set this one"
+
+
+def test_stage_extends_the_draft_so_the_shared_fields_are_declared_once():
+    """The two models held together by inheritance, not by two field lists kept
+    in step by hand: a field added to the draft is a Stage field automatically,
+    and Stage adds only what the server itself writes."""
+    assert issubclass(Stage, StageDraft)
+    assert set(Stage.model_fields) - set(StageDraft.model_fields) == set(DROPPED_FIELDS)
+
+
+def test_the_draft_carries_no_cross_field_validator_of_its_own():
+    """Load-bearing: FastMCP binds the parameter before the handler runs, so a
+    rule that fired here would surface as isError=true instead of the documented
+    {ok, issues} refusal. The one model validator the draft does declare drops
+    server-owned keys and cannot raise."""
+    after_validators = StageDraft.__pydantic_decorators__.model_validators
+    assert {name for name, dec in after_validators.items() if dec.info.mode == "after"} == set()
+
+
+def test_a_draft_that_echoes_back_server_owned_fields_parses_and_records_them():
+    """A client copying a stage out of read_stage sends fields only the server
+    writes. They are dropped, not refused — and named, so the drop is not silent."""
+    draft = StageDraft.model_validate({
+        "id": "load", "type": "input_data", "name": "Load",
+        "connector": {"kind": "file"},
+        "tests": [], "source": {"section": "para 3"},
+    })
+
+    assert draft.dropped_server_owned_fields == ["tests", "source"]
+    assert not set(DROPPED_FIELDS) & set(draft.to_stage_spec())
+
+
+def test_an_unknown_field_is_still_refused():
+    with pytest.raises(ValidationError, match="nonsense"):
+        StageDraft.model_validate({
+            "id": "load", "type": "input_data", "name": "Load",
+            "connector": {"kind": "file"}, "nonsense": 1,
+        })
+
+
+def test_stage_keeps_the_server_owned_fields_the_draft_drops():
+    """The drop is the draft's behavior alone — inheriting it would make `Stage`
+    unable to hold the tests and provenance a stored stage carries."""
+    stage = Stage.model_validate({
+        "id": "load", "type": "input_data", "name": "Load",
+        "connector": {"kind": "file"}, "source": {"section": "para 3"},
+    })
+
+    assert stage.source is not None
+    assert stage.dropped_server_owned_fields == []

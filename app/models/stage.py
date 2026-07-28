@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any, ClassVar, Literal, Optional
 
 from pydantic import AliasChoices, Field, ValidationError, field_validator, model_validator
+from pydantic.json_schema import SkipJsonSchema
 
 from app.core.llm.options import LLMModel
 from app.models.schema import (
@@ -376,12 +377,83 @@ _TYPE_SPEC: dict[str, dict[str, Any]] = {
 }
 
 
-class Stage(_Base):
-    """One node in the workflow. Exactly one handle block is required,
-    selected by `type`."""
+# Stage fields an authoring client never writes, so StageDraft does not declare
+# them. A client that echoes back a stage it read from the server carries them
+# anyway; the draft drops those rather than refusing the whole stage.
+SERVER_OWNED_STAGE_FIELDS = ("tests", "eval", "review", "source")
+
+
+class StageDraft(_Base):
+    """One stage as an authoring client submits it. Carries no cross-field
+    validator: a stage that breaks a rule must parse here and be refused by
+    `Stage` in the handler, where the refusal reaches the client on the handler's
+    own channel rather than as a parameter-binding error. `Stage` extends this,
+    so the shared field list is declared once."""
     id: str
     type: StageType
     name: str
+    inputs: list[StageInput] = Field(default_factory=list)
+    output_schema: Optional[TableSchema] = None
+
+    # executable handles (exactly one populated, per type — enforced by Stage)
+    connector: Optional[Connector] = None
+    llm: Optional[LLMConfig] = None
+    function: Optional[PythonFunction] = None
+    join: Optional[JoinConfig] = None
+    aggregate: Optional[AggregateConfig] = None
+    queue: Optional[QueueConfig] = None
+    publish: Optional[PublishConfig] = None
+
+    # False declares this stage INTENTIONALLY non-deterministic — it must
+    # re-roll every run — so the runtime consults no stage-result cache for its
+    # rows. Not a performance knob, and deliberately absent from
+    # compute_definition_fingerprint: it governs WHETHER the cache is consulted,
+    # not WHAT the stage computes, so flipping it must never invalidate an
+    # entry already recorded.
+    cache: bool = True
+    limit: Optional[int] = None
+    compiler_notes: list[str] = Field(default_factory=list)
+
+    # Which SERVER_OWNED_STAGE_FIELDS the submitted draft carried, for the caller
+    # to warn about. Bookkeeping about one submission, not part of a stage: kept
+    # out of the JSON schema a client is handed and out of every dump. Always
+    # empty on `Stage`, whose own fields these are.
+    dropped_server_owned_fields: SkipJsonSchema[list[str]] = Field(
+        default_factory=list, exclude=True
+    )
+
+    @model_validator(mode="before")
+    @classmethod
+    def _drop_server_owned_fields(cls, data: Any) -> Any:
+        """Accept and discard the fields only the server writes, so a client can
+        echo back a stage it read without tripping `extra="forbid"`. Cannot
+        raise, and does not run for `Stage`, which owns these fields."""
+        if cls is not StageDraft or not isinstance(data, dict):
+            return data
+        present = [name for name in SERVER_OWNED_STAGE_FIELDS if name in data]
+        remaining = {k: v for k, v in data.items() if k not in SERVER_OWNED_STAGE_FIELDS}
+        remaining["dropped_server_owned_fields"] = present
+        return remaining
+
+    @field_validator("inputs", mode="before")
+    @classmethod
+    def _bare_id_shorthand(cls, v: Any) -> Any:
+        """Accept `inputs: [upstream_id]` shorthand for `[{id: upstream_id}]`."""
+        if not isinstance(v, list):
+            return v
+        return [{"id": item} if isinstance(item, str) else item for item in v]
+
+    def to_stage_spec(self) -> dict[str, Any]:
+        """This draft as a dict `Stage.model_validate` accepts — by alias, so
+        `StageInput.table_schema` spells itself `schema:` the way a compiled stage
+        does."""
+        return self.model_dump(exclude_unset=True, by_alias=True)
+
+
+class Stage(StageDraft):
+    """One node in the workflow: a submitted draft plus the fields only the
+    server writes, and every rule a stored stage must satisfy. Exactly one handle
+    block is required, selected by `type`."""
     source: Optional[SourceRef] = None
     inputs: list[StageInput] = Field(
         default_factory=list,
@@ -398,26 +470,7 @@ class Stage(_Base):
             "type except `publish`."
         ),
     )
-
-    # executable handles (exactly one populated, per type)
-    connector: Optional[Connector] = None
-    llm: Optional[LLMConfig] = None
-    function: Optional[PythonFunction] = None
-    join: Optional[JoinConfig] = None
-    aggregate: Optional[AggregateConfig] = None
-    queue: Optional[QueueConfig] = None
-    publish: Optional[PublishConfig] = None
-
     review: Optional[ReviewConfig] = None
-    # False declares this stage INTENTIONALLY non-deterministic — it must
-    # re-roll every run — so the runtime consults no stage-result cache for its
-    # rows. Not a performance knob, and deliberately absent from
-    # compute_definition_fingerprint: it governs WHETHER the cache is consulted,
-    # not WHAT the stage computes, so flipping it must never invalidate an
-    # entry already recorded.
-    cache: bool = True
-    limit: Optional[int] = None
-    compiler_notes: list[str] = Field(default_factory=list)
 
     # Descriptive eval note rendered on the stage page (reference data, metrics).
     # Display only — the executable eval contract is EvalConfig (app/models/eval.py).
@@ -428,15 +481,6 @@ class Stage(_Base):
     # stage has none: the canonical dump must not carry a `tests` key for
     # stages without tests, or every pre-existing belief hash would change.
     tests: Optional[list[StageTest]] = None
-
-    @field_validator("inputs", mode="before")
-    @classmethod
-    def _bare_id_shorthand(cls, v: Any) -> Any:
-        """Normalise the bare-id form `inputs: [upstream_id]` to `[{id: upstream_id}]`,
-        which then fails on the missing `schema`."""
-        if not isinstance(v, list):
-            return v
-        return [{"id": item} if isinstance(item, str) else item for item in v]
 
     @property
     def input_ids(self) -> list[str]:

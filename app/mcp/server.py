@@ -322,11 +322,24 @@ def add_stage(project_id: str, stage: StageDraft) -> dict[str, Any]:
     named upstream, repair this stage's declared input schema against what that
     stage really outputs, and call add_stage again.
 
+    Copying a stage from read_stage is fine: the server-owned fields it carries
+    (tests, eval, review, source) are dropped rather than refused, and a
+    `warnings` entry names the ones that were dropped. Any OTHER unknown field is
+    still an error — a typo'd field name never passes silently.
+
     The new node lands 'unreviewed' for a human to approve. The FIRST stage
     of a project starts its workflow — no other tool creates one."""
-    return catch_stage_edit_refusals(
+    result = catch_stage_edit_refusals(
         lambda: project_service.add_stage(project_id, json.dumps(stage.to_stage_spec()))
     )
+    if stage.dropped_server_owned_fields:
+        result["warnings"] = [
+            "ignored server-owned fields: "
+            + ", ".join(stage.dropped_server_owned_fields)
+            + " — only the server writes these: tests come from generate_stage_tests, "
+            "review is human-only."
+        ]
+    return result
 
 
 @mcp.tool()

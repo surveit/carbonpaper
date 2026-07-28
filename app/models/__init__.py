@@ -34,10 +34,10 @@ from app.models.stage import (
     ReviewConfig,
     RowReviewDecision,
     Stage,
+    StageDraft,
     StageType,
     validate_stage,
 )
-from app.models.stage_draft import StageDraft
 from app.models.stages.stage_tests import StageTest
 from app.models.workflow import (
     Workflow,
