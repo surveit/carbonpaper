@@ -1,41 +1,8 @@
-"""
-project.py (router) — the PROJECT SHELL + gated authoring.
-
-A project is one directory under examples/<name>/ framed by a left-sidebar shell
-(Overview · Document · Data model · Workflow · Runs). This router owns:
-
-  Home dashboard
-    GET  /                                       — project cards + create + delete
-    POST /project/{project}/delete               — DESTRUCTIVE remove (guarded)
-
-  Section pages (each renders project_shell.html via a section_*.html body)
-    GET  /project/{project}                      — Overview
-    GET  /project/{project}/document             — Document (read-only source)
-    GET  /project/{project}/data_model           — Data model + ER + the approval GATE
-    GET  /project/{project}/workflow             — Workflow (belief graph + node review)
-    GET  /project/{project}/workflow/versions    — the version list, newest-first
-    GET  /project/{project}/workflow/version/{id}— one immutable version, read-only
-    GET  /project/{project}/versions             — 307 redirect to /workflow/versions
-
-  Create + data-model gate
-    GET  /project/new                            — the paste-doc create form
-    POST /project/new                            — create examples/<name>/ + project.json
-    POST /project/{project}/data-model/approve   — record the schema-library approval (gate)
-    POST /project/{project}/schema/{name}/edit   — the only writer into schemas/
-
-The Runs section page (GET /project/{project}/runs) is served by app.web.routers.runs
-so it stays next to the run lifecycle it renders. Per-stage detail is served inline by
-the workflow section (node review at /project/{project}/node/{id}/review-partial, in
-app.web.routers.node_review), so this router carries no standalone stage-detail view.
-
-Route order matters: the literal /project/new is declared on THIS router BEFORE the
-/project/{project} section routes, so "new" is matched as a literal, never captured as
-a project name. The two-word section paths (/data_model, /workflow, /document) never
-collide with a project name.
-
-Reuse rule: reuses P1's node_review (belief + schema-library gate), the data-model
-generation service, and the shared web helpers (diagrams, loading, config). The
-app.models package is the only contract.
+"""The project shell (Overview / Document / Data model / Workflow / Runs), plus
+project create/delete and the data-model approval gate. The Runs section page
+itself is served by app.web.routers.runs.
+Route order matters: the literal /project/new is declared on THIS router BEFORE
+the /project/{project} section routes, so "new" is never captured as a project.
 """
 
 from __future__ import annotations

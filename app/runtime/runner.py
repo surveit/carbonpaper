@@ -1,20 +1,8 @@
-"""
-Production workflow runner — the run-lifecycle entry points.
+"""Production workflow runner - the run-lifecycle entry points.
 
-Resolves and pins a PUBLISHED workflow version, creates the `runs/<run_id>/`
-dir, writes the production run manifest, and drives the shared stage-execution
-engine (`app.runtime.executor`) over the run. These are the only functions that
-create a production run record; the reusable engine they call
-(`_execute_stages`, `topological_sort`) and the non-production subset executor
-(`run_subset`) live in `app.runtime.executor`, so a non-production caller
-(evals) can reach the engine without reaching these production entry points —
-an import-linter contract enforces that split (see `pyproject.toml`).
-
-Run output layout:
-    examples/<project>/runs/<run_id>/
-        manifest.json
-        outputs/<stage_id>.parquet
-        artifacts/<...>           # for publish stages
+These are the only functions that create a production run record; the reusable
+engine they call and the non-production subset executor both live in
+`app.runtime.executor`, and an import-linter contract enforces that split.
 """
 
 from __future__ import annotations

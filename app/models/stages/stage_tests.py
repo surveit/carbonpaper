@@ -1,13 +1,8 @@
-"""StageTest — one authored input→expected-output case for a python transform
-(python_row_function / python_frame_function) — plus the shape checks the Stage
-model runs when it carries tests.
+"""StageTest — one authored input→expected-output case for a python transform, plus the
+shape checks the Stage model runs when it carries tests.
 
-A test is a claim about what the stage's function must do, authored from the
-methodology, never produced by executing the stage's own code (that would assert
-the code equals itself). The runner that holds the code to these claims is
-app.runtime.stage_tests; this module is only the data shape and its invariants.
-Schema conformance of the rows needs dataframes, so it is checked by the runner,
-not here.
+A test is authored from the methodology, never produced by executing the stage's own code.
+Schema conformance of the rows needs dataframes, so `app.runtime.stage_tests` checks it.
 """
 from __future__ import annotations
 

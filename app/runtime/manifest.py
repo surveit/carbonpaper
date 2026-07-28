@@ -1,31 +1,8 @@
 """The run manifest: the one legitimately-mutable run object, and its on-disk shape.
 
-A run's `manifest.json` is the run's living record of what happened — minted when
-the run starts (every stage pending), mutated per stage as the run proceeds, and
-flushed to disk live so the run page shows progress. The executor
-(`app.runtime.executor`) is its single writer; every other layer reads it back.
-
-This module owns that shape as typed Pydantic models rather than a raw dict:
-
-- `RunManifest` — the top-level run record (identity, per-run overrides, the
-  live `human_review_queue_stats`/`dropped_columns` tallies, and the per-stage
-  `stage_records`).
-- `StageRecord` — one stage's record within `manifest["stage_records"]`, built
-  by `StageRecord.record_with_status` (pending before the run reaches it,
-  running once it starts) and mutated as the stage settles.
-- `StageContribution` — what a stage HANDLER contributes back to the manifest:
-  its token usage (onto its `StageRecord.llm_usage`), its dropped-column and
-  queue tallies (onto the manifest's per-stage maps), and its per-row generation
-  errors (transient — folded into the stage's validation report and status, never
-  stored as a field). A handler attaches one to its output frame's `.attrs` (or,
-  when the queue stage halts before returning a frame, to the `HaltForReview` it
-  raises); the executor MERGES it into the record/manifest it owns.
-
-Serialization is `exclude_unset`: a field that was never set is omitted, so the
-optional per-stage fields (`output_path`, `queue_path`, `notes`, `llm_usage`) and
-the optional run-level fields (`finished_at`, `halted_at`, `cancelled_at`,
-`resumed_at`, `updated_at`) appear on disk only once the run reaches the point
-that sets them — reproducing the historical dict's key-presence exactly.
+The executor (`app.runtime.executor`) is its single writer; every other layer
+reads it back. Serialization is `exclude_unset`, so an optional field appears
+on disk only once the run reaches the point that sets it.
 """
 
 from __future__ import annotations

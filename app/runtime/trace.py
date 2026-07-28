@@ -1,15 +1,8 @@
 """Positional provenance tracer: walk a claim's row back through the
-row-preserving stages of one run, by row ordinal alone.
-
-A stage is *row-preserving* when output row i is produced from input row i by
-position. For such a chain the row ordinal is the cross-stage key, so nothing
-needs to be recorded: the tracer just reads row i at each stage. At any stage
-that reshapes rows the walk stops — the ancestry beyond it isn't positionally
-recoverable (recorded lineage is issue #58).
-
-Self-contained on the run directory: reads manifest.json (stage type, parent
-edges, row counts) and outputs/<stage>.parquet (row values). It never reads the
-compiled DAG, so it is unaffected by later edits to the methodology.
+row-preserving stages of one run by row ordinal alone. The walk stops at any
+stage that reshapes rows - ancestry beyond it isn't positionally recoverable.
+Self-contained on the run directory (manifest.json + outputs/<stage>.parquet),
+so it never reads the compiled DAG and later methodology edits don't affect it.
 """
 from __future__ import annotations
 

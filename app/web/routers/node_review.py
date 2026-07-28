@@ -1,14 +1,7 @@
-"""Node-level review + workflow versioning: the "node review" layer.
-
-NODE review = "do we trust HOW this step is modeled?" — colours the workflow by a
+"""NODE review: "do we trust HOW this step is modeled?" -- colours the workflow by a
 content-hash approval state, and does NOT halt a run. (Distinct from the ROW
-review queue in `review.py`, which is "is this run's DATA right?" and DOES halt a
-run.) It mirrors the queue's decide/partial patterns, lifted from data rows up to
-workflow node specs, and adds immutable version snapshots the runner pins runs to.
-
-State: `node_decisions.parquet` (approvals) under examples/<project>/, and version
-snapshots as documents in the store's `workflow_version` collection — managed by
-app.services.node_review + app.services.versioning.
+review queue in `review.py`, which asks "is this run's DATA right?" and DOES halt
+a run.) Also owns the immutable version snapshots the runner pins runs to.
 """
 
 from __future__ import annotations

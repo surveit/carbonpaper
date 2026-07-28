@@ -1,15 +1,8 @@
-"""bootstrap.py — configure the document store for the STANDALONE
-`python -m app.seeds` CLI entrypoint.
+"""Configure the document store for the standalone `python -m app.seeds` CLI.
 
-The seeding LOGIC (app.seeds.seed) is store-free: it composes the
-app.services.project export/import seam, which assumes a store is already configured.
-A long-running server configures one in app.main's lifespan, and the test
-suite in an autouse fixture — but a standalone CLI process has neither, so its
-entrypoint must configure the store itself before it reaches the seam (import
-now snapshots a version, which lives in the document store). That is
-composition-root wiring, kept OUT of the seed logic: only this entrypoint
-imports the store, seed.py never does — the import-linter contract enforces it,
-carving out this one module in ignore_imports."""
+A server configures one in app.main's lifespan and tests in an autouse fixture; a
+CLI process has neither. Composition-root wiring kept out of seed.py — the
+import-linter contract carves out only this module in ignore_imports."""
 from __future__ import annotations
 
 import os

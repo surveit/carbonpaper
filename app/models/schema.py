@@ -1,12 +1,8 @@
 """Schema primitives — the model base and the anonymous Column / TableSchema.
 
-The pieces both the workflow (`stage.py`) and the named data model (`named_schemas.py`)
-build on: the model base, the column-type vocabulary, `Column`, `TableSchema` (an
-anonymous schema that can be declared inline), and the `SourceRef` provenance
-handle. They live *below* both modules — `stage.py` and
-`named_schemas.py` import from here, never the other way around — so `NamedColumn`
-and `NamedSchema` can extend `Column`/`TableSchema` without `named_schemas.py`
-depending on `stage.py`.
+This module sits *below* `stage.py` and `named_schemas.py`: they import from here,
+never the other way around, so `NamedColumn`/`NamedSchema` can extend
+`Column`/`TableSchema` without `named_schemas.py` depending on `stage.py`.
 """
 from __future__ import annotations
 

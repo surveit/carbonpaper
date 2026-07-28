@@ -1,23 +1,8 @@
-"""Architecture: run activity holds no project-scope write capability of its
-own; the cache seam's accessors (`app.core.stage_cache`) are the only
-channel a stage handler may use to persist something that outlives its own
-run. `run_dir` writes (the per-run manifest, stage outputs, the pending-queue
-snapshot) remain legitimate — those are the run's OWN directory, not
-project-scope state.
-
-Two rules:
-  1. No file under `app/runtime/stages` reads or writes a `"project_dir"` dict
-     key. This was the shape of the TRANSITIONAL registry a stage handler
-     used, pre-cache, to reach a project's own directory on the side (keyed
-     off a module-global dict rather than anything RunContext carries); this
-     rule keeps that channel from coming back.
-  2. No file under `app/runtime` calls `.save()` or `.delete()` — the two
-     `PersistedModel` writes (`app.core.persistence`) — directly. A stage
-     handler that reached `get_store()` for itself, or called `.save()` on a
-     `StageCacheEntry` it merely read, would defeat the cache seam's whole
-     point: writes happen only through `StageCache.put` (granted to a
-     production run's `RunContext.stage_cache`), never by a handler reaching
-     past the accessor it was handed.
+"""Architecture: the `app.core.stage_cache` accessors are the only channel a
+stage handler may use to persist something outliving its own run. Two rules:
+no `"project_dir"` dict key under `app/runtime/stages`, and no direct
+`.save()`/`.delete()` anywhere under `app/runtime`. `run_dir` writes stay
+legitimate - that is the run's OWN directory, not project-scope state.
 """
 from __future__ import annotations
 

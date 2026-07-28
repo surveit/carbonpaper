@@ -1,34 +1,8 @@
 """Eval contract, as Pydantic models. Constructing a model validates it.
-
-An eval measures the *real* workflow, not a copy of it. The v1 shape
-(fan-out / fan-in are out of scope — those evals come later):
-
-  - An **EvalConfig** is the authored spec. What defines it is the checks: each
-    names a `target_stage` output column to grade (`ExpectedOutput.output_column`).
-    An optional row-aligned eval-dataset `table` supplies the data for those
-    checks; it's the data, not the definition, so a config can exist with no
-    `table` yet (attach it later). When a table is present, its columns are
-    exactly `override_stage`'s output columns (injected as that stage's whole
-    output) plus one expected-output column per check, named after the check's
-    target column (disambiguated on a name conflict — see
-    `app.evals.dataset_columns`).
-    (Not yet built: the scorer that runs this table through the workflow and
-    grades it is expected to align each target output row back to the eval-
-    dataset row that produced it by row-level lineage — an id stamped on each
-    injected eval-dataset row and carried through to the target — rather than
-    by a shared data column or row position; that alignment is only
-    well-defined when the override→target path preserves grain, no fan-out /
-    fan-in.) The config also carries any `reference_overrides` (extra data a
-    row needs loaded) and how to score (`expected_outputs` comparisons,
-    rollup `metrics`, or a `code` scorer for the escape hatch).
-  - A **StageOutputOverride** injects a whole table as some stage's output.
-  - An **EvalRun** is the result at a specific workflow version: its computed
-    `settings` (can it be scored automatically, and if not why), and the
-    scorer's `metrics` / per-row result table.
-
-Storage: configs and runs are documents in the store (collections `eval` and
-`eval_run`); the eval dataset is an on-disk tabular file the config references by
-`table.path`.
+An eval measures the *real* workflow, not a copy; fan-out / fan-in are out of scope.
+An EvalConfig can exist with no `table` yet; when a table is present its columns are
+exactly `override_stage`'s output columns plus one expected-output column per check
+(disambiguated on name conflict — see `app.evals.dataset_columns`).
 """
 from __future__ import annotations
 

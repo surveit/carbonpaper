@@ -1,28 +1,8 @@
-"""Derive the override-stage columns an eval-dataset file must inject: the
-override stage's whole output, deconflicted against the checks' expected-
-output column names. Single source of truth for this derivation -- called by
-`app.evals.compatibility.validate_eval_compatibility`'s override-coverage
-check, so callers always agree on the exact column names an eval-dataset
-file must carry.
-
-Each derived column is a copy of the source stage's own `Column` (only the
-`name` is overridden) -- `type`, `nullable`, `range`, `description`, and
-`source` all carry through unchanged, so a caller can render or validate the
-full declared shape instead of just a name and type.
-
-Name conflict: a check's target column can share a name with one of the
-override stage's own output columns. A flat table can't hold two columns
-with the same name, so a conflicting name is deconflicted: the injected
-input is written `override.<name>`, the expected-output column is written
-`output.<name>`. Non-conflicting names are left as-is. (Surfacing that
-conflict as a warning to an author is a UI/preview concern for the authoring
-form, not this derivation.)
-
-Both `override` and `target` must declare an output schema, and every name
-in `check_output_columns` must resolve against `target`'s declared output --
-this module raises `ValueError` otherwise rather than silently degrading, so
-`app.evals.compatibility.validate_eval_compatibility` must verify those
-preconditions itself and report them as problems before calling in here.
+"""Derive the override-stage columns an eval-dataset file must inject: the override
+stage's whole output, deconflicted against the checks' expected-output names.
+A check's target column may share a name with an override output column; a flat
+table can't hold both, so the injected input becomes `override.<name>` and the
+expected output `output.<name>`. Missing preconditions raise ValueError.
 """
 from __future__ import annotations
 

@@ -1,19 +1,8 @@
 """Architecture: the cancel mailbox is a stdlib-only leaf.
 
-``app/runtime/cancellation.py`` holds the per-run cancel mailbox
-(request_cancel drops a message, consume_cancel pops it). It is keyed on a
-run's logical ``(project, run_id)`` identity and must know nothing about how or
-where a run is stored — not the persistence layer, not the web layer, not any
-other app module. That independence is what keeps cancellation a pure signal
-rather than something entangled with run state.
-
-Enforced as a stdlib-only allowlist: every import in the module is a standard-
-library module, and there are no relative imports. An allowlist (rather than a
-``forbidden`` import-linter contract enumerating the modules to deny) is
-self-maintaining — a new sibling under ``app/runtime/`` needs no change here —
-and it catches an in-project import written either absolutely
-(``from app.runtime.runner import x``) or relatively (``from .runner import
-x``) alike.
+Enforced as a stdlib allowlist rather than a `forbidden` contract, so a new
+sibling under `app/runtime/` needs no change here and an in-project import
+written absolutely or relatively is caught alike.
 """
 from __future__ import annotations
 

@@ -1,15 +1,9 @@
-"""Stage handlers — one module per stage type (the two python-function grains
-share python_functions.py). `HANDLERS` maps stage type to a shaped handler:
-the shape (row-mapped / source / frame) fixes what the runtime hands the
-handler — see execution.py. The runner and preview run a stage through
-`handler.execute(...)`.
-
-`PREFLIGHTS` maps a stage type to its prepare-time readiness check: given the
-stage (with any run bindings already applied), return (issues, record) —
-human-readable issues naming what stops this stage from running ([] = ready),
-and a provenance record for the run manifest (None when unready). Only types
-whose readiness a valid model can't guarantee register one; the runner calls
-whatever is registered without knowing what any stage type checks."""
+"""Stage handlers - one module per stage type. `HANDLERS` maps a type to a shaped
+handler (row-mapped / source / frame); the shape fixes what the runtime hands
+the handler. `PREFLIGHTS` maps a type to its prepare-time readiness check,
+returning (issues, record). Only types whose readiness a valid model can't
+guarantee register one; the runner calls whatever is registered.
+"""
 
 from __future__ import annotations
 

@@ -1,18 +1,8 @@
-"""Our SQL-ish predicate dialect, shared by the runtime stage handlers that
-evaluate a `where`/`filter` expression against a dataframe (aggregate,
-human_review_queue) and by the save-time validator that checks such an
-expression only references columns that exist.
-
-`parse_predicate` does ONE parse and returns both the referenced columns and
-the pandas expression string, over a grammar restricted to exactly the subset
-where `ast` (what this module inspects) and `pandas.eval`/`DataFrame.query`
-(what the runtime executes) resolve column references identically. Anything
-outside that grammar raises `PredicateError` rather than being forwarded to
-pandas unchecked — a construct `ast` and pandas could read differently
-(backticks, `@vars`, ...) is exactly what must never reach `.eval()`/
-`.query()` unvalidated. Because validation (which reads `.columns`) and
-execution (which runs `.pandas_expr`) both come from this same parse, a
-filter that validation accepts is exactly one execution can run."""
+"""Our SQL-ish predicate dialect for `where`/`filter` expressions. The grammar is
+restricted to the subset where `ast` (inspected here) and `pandas.eval`/
+`DataFrame.query` (executed by the runtime) resolve column references identically.
+Anything outside it — backticks, `@vars`, ... — raises `PredicateError` rather than
+reaching `.eval()`/`.query()` unvalidated."""
 from __future__ import annotations
 
 import ast

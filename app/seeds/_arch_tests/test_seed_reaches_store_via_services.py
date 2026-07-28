@@ -1,14 +1,8 @@
 """Architecture: the seed platform reaches the store through services, not directly.
 
-app/seeds loads committed example projects into the workspace by calling
-app.services (project.import_project), which owns the document store. The seed
-LOGIC never imports app.core.persistence itself — only the CLI bootstrap
-(bootstrap.py) configures the store, exactly as app.main does, so a store-free
-`python -m app.seeds` process doesn't crash.
-
-Enforced as an allowlist (like the cancellation stdlib-leaf and the sqlite seal),
-NOT a forbidden import-linter contract: no file under app/seeds/ imports
-app.core.persistence except bootstrap.py — the one composition-root exception.
+No file under app/seeds/ imports app.core.persistence except bootstrap.py — the one
+composition-root exception. Enforced as an allowlist, not a forbidden import-linter
+contract.
 """
 from __future__ import annotations
 

@@ -1,13 +1,6 @@
-"""Agent registry + engine builder — the generic wiring that turns a registered
-AgentConfig into a ready-to-run ClaudeAgentSdkEngine.
-
-An AgentConfig is the static description of one agent: its system prompt, model,
-the tools' input schemas + display labels, and the pydantic model its opaque
-context validates against. A registered agent also supplies a `build_tools`
-callable that, given a validated context, returns the in-process tool callables.
-`build_engine` validates the caller's context, builds the tools, wraps them as an
-in-process SDK-MCP server, and hands the whole thing to the engine. Nothing here
-knows about any specific agent; a concrete agent registers itself at import.
+"""Agent registry + engine builder — turns a registered AgentConfig into a
+ready-to-run ClaudeAgentSdkEngine. Nothing here knows about any specific agent;
+a concrete agent registers itself at import, so its module must be imported first.
 """
 from __future__ import annotations
 

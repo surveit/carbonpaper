@@ -1,9 +1,7 @@
-"""editing.py (router) — the compiler subsystem's chat-driven editing entry.
-
-The 'Edit with agent' control on a project posts here; this opens a chat session
-bound to the "editing" agent, carrying the project as its context, and redirects
-the browser to that session's chat page. The generic chat surface
-(app.web.chat_router) takes over from there."""
+"""Router for the 'Edit with agent' control: opens a chat session bound to the
+"editing" agent with the project as its context, then redirects to that
+session's chat page, where the generic chat surface takes over.
+"""
 from __future__ import annotations
 
 from fastapi import APIRouter

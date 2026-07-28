@@ -1,19 +1,8 @@
 """Eval config/run storage (the document store), plus status derivation.
-
-Eval configs are mutable authored documents in the "eval" collection (write is
-upsert, so overwrite is inherent). Eval runs are immutable results in the
-"eval_run" collection: minted once per execution by the runner and only read
-here. Both collections are project-scoped -- each document id is
-`f"{project_dir.name}/{local_id}"` -- so listing or loading against a project
-with no eval activity yet returns empty results rather than requiring any
-scaffolding to exist first.
-
-Dataset uploads are a different kind of payload (raw file bytes, not an eval
-document) and stay on disk at `eval_data/{filename}`, immutable once written --
-a second upload under the same name is refused rather than silently replacing
-the file a config may already point at. (Deferred: dataset uploads and each
-run's per-row result table move to a tabular FrameStore in a later slice; this
-module only converts configs and runs.)
+Configs are mutable authored documents (write is upsert); runs are immutable,
+minted by the runner and only read here. Both are project-scoped by document id,
+so a project with no eval activity returns empty rather than needing scaffolding.
+Dataset uploads stay on disk at `eval_data/{filename}`, immutable once written.
 """
 from __future__ import annotations
 

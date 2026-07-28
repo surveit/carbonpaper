@@ -1,31 +1,8 @@
-"""drafts.py — the DRAFT lifecycle: disposable, mutable scratch space for a
-workflow's stages.
+"""The DRAFT lifecycle: disposable, mutable scratch space for a workflow's stages.
 
-A draft is where an agent (or, later, a UI edit buffer) assembles stages
-before freezing them into an immutable version. Unlike a version it is
-mutable and carries no promise of survival: a `Draft` is a document in the
-store's "draft" collection, doc id `f"{project}/{draft_id}"` — project-scoped
-like every other collection — kept purely so an in-flight edit survives a
-server restart. Anything may delete a draft at any time, nothing may depend on
-one existing, and drafts are never project state (not versioned, not run).
-
-Every stored stage is a valid `Stage` — set_draft_stage rejects a malformed
-one outright (see its docstring). What stays allowed mid-edit is WORKFLOW-level
-incompleteness: a valid stage whose `inputs` reference a stage id not yet in
-the draft, a duplicate id, or a cycle — the cross-stage graph checks
-(`app.models.workflow.validate_workflow`) — since a draft is a workflow
-under construction, not yet a finished one. The only exit is save_version,
-which requires the whole graph to be clean and refuses rather than persist an
-incomplete workflow.
-
-Draft ids are word triplets (e.g. brisk-otter-lamp): short enough for an agent
-to retype reliably, and unmistakable for a timestamp version id — see
-app.core.utils.generate_word_triplet_id.
-
-Dependency note: this module may import app.services.versioning (to seed from
-and freeze into a version) and app.services.workspace (to resolve a project
-name to its directory), and app.core.*, but nothing from app.runtime or
-app.compiler."""
+Anything may delete a draft at any time; nothing may depend on one existing. Every
+stored stage is individually valid, but WORKFLOW-level incompleteness (dangling
+`inputs`, duplicate ids, cycles) stays allowed until save_version, the only exit."""
 from __future__ import annotations
 
 import json

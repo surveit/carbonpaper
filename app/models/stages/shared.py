@@ -1,13 +1,8 @@
 """Shared helpers for per-stage-type column validation, on both the input and
-output side: resolving the column names a stage's input edge declares,
-turning a resolved check — direct or via a where/filter predicate — into a
-human-readable issue string, and comparing a declared output_schema against
-the columns a handle can actually derive.
+output side.
 
-`from __future__ import annotations` plus `TYPE_CHECKING` below: `Stage` is
-needed only for a type hint (attribute access on it needs no import at all),
-never at runtime, since `app.models.stage` imports this package back for
-its own model validator."""
+`Stage` is imported only under `TYPE_CHECKING`: `app.models.stage` imports this
+package back for its own model validator, so a runtime import would be circular."""
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Mapping

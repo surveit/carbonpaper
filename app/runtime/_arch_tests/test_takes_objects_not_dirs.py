@@ -1,18 +1,8 @@
 """Architecture: runtime signatures take objects, not project directories.
 
-The runtime operates on in-memory objects (Workflow, stages, frames); reading
-project directories is the services layer's job. A function or method under
-``app/runtime`` that accepts a ``project_dir`` / ``project_path`` /
-``project_root`` parameter is reaching for the filesystem itself instead of
-being handed the object it needs — that filesystem read belongs to whichever
-service layer resolves a project id to its on-disk layout, one call site
-above the runtime.
-
-Detection is AST-based: every named parameter of every ``def``/``async def``
-(positional-only, ordinary, ``*args``, keyword-only, ``**kwargs``) and every
-method is checked against the banned names. Lambdas are skipped — an
-anonymous function has no name worth attributing an offense to, and none of
-the runtime's lambdas take a directory argument today.
+Detection is AST-based over every named parameter of every def/method
+(positional-only, ordinary, *args, keyword-only, **kwargs). Lambdas are
+skipped.
 """
 from __future__ import annotations
 

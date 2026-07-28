@@ -1,41 +1,8 @@
 """Handler for the human_review_queue stage type.
 
-The per-row compute this stage performs is "ask a human". For a row nobody has
-decided yet the answer does not exist, and no default may stand in for it — so
-this mapper produces no answer at all. A decision a human already recorded for
-this exact (stage definition, input row) pair is replayed by the row driver's
-own cache (`execution._open_row_caching`), which resolves the row before the
-mapper is called: the same interceptor every row-mapped stage type runs under.
-
-Every input row produces exactly one output row, in its own input position —
-the stage never removes a row, whatever the reviewer decided. Each row ends in
-one of three outcomes:
-
-  - a decision was already recorded for it → the driver's cache replays that
-    output row and the mapper never sees the row. What the payload MEANS is
-    built and interpreted above this seam; this module neither constructs nor
-    reads it;
-  - the queue filter did not match it → it passes through, carrying its AI
-    score as final and the pass-through reviewer columns;
-  - otherwise → the row is marked deferred (`ROW_DEFERRED_KEY`) carrying the
-    fingerprint it was looked up under and a frozen copy of itself, and
-    nothing else.
-
-The mapper's own `finish_mapped_rows` runs after the map, over the assembled
-frame — every row of it, including the ones the cache served. It derives the
-stage's item counts from those rows and reports them onto the
-`StageContribution`, then reads the deferred markers back. Where a row was
-deferred it writes the two files the reviewer UI reads and raises
-`HaltForReview`:
-
-  - `<run_dir>/queue/<stage>.parquet` (or `.csv` when a dtype defeats parquet),
-    the snapshot — built from the frozen rows themselves, so it holds exactly
-    the original upstream columns and no bookkeeping of any kind;
-  - `<run_dir>/queue/<stage>.fingerprints.json`, the sidecar, holding the one
-    `stage_fingerprint` this halt shares and `input_fingerprints` POSITIONALLY
-    aligned to the snapshot's rows. A fingerprint is never row data, so it
-    lives only here.
-"""
+Every input row yields exactly one output row in its own input position; a row with
+no cached decision is marked deferred, never defaulted. On any deferral the mapper
+writes a fingerprints sidecar POSITIONALLY aligned to the snapshot's rows, and halts."""
 
 from __future__ import annotations
 

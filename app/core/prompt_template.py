@@ -1,11 +1,8 @@
 """Placeholder analysis for llm_transform prompt templates.
 
-A prompt_template is rendered per input row with `str.format_map`
-(app/runtime/llm.render_prompt): single-brace `{col}` interpolates that row's
-`col`; double-brace `{{col}}` is an ESCAPED literal that renders as the text
-`{col}` and never substitutes. `find_template_fields` reports which field names
-the template would actually interpolate, using the same parser `str.format_map`
-uses (`string.Formatter`), so it can never drift from the renderer."""
+Templates are rendered with `str.format_map`: single-brace `{col}` interpolates,
+double-brace `{{col}}` is an ESCAPED literal rendering as `{col}` and never
+substitutes. Uses `string.Formatter` so it cannot drift from the renderer."""
 from __future__ import annotations
 
 import string

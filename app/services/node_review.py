@@ -1,48 +1,8 @@
-"""
-node_review.py — node-level APPROVAL / BELIEF state for a workflow.
+"""Node-level approval state: is a step modeled in a way we trust? Never halts a run.
 
-This lifts the existing row-decision pattern (a reviewer accepting/rejecting a
-flagged *data row*, keyed by a content hash) up one level: here a reviewer
-accepts/rejects how a *workflow node is modeled*. The unit of belief is one compiled
-stage spec; its identity is a content hash of the spec. Editing a node's knobs
-changes the hash, so a prior approval no longer matches and the node auto-drops
-to "edited_stale" — the staleness mechanic falls out of the hash for free, no
-separate dirty-flag to keep in sync.
-
-Two reviews, deliberately distinct:
-  - NODE review (this module) = "do we trust how this step is modeled?" — colors
-    the workflow, does NOT halt a run.
-  - ROW review (app/runtime/stages/human_review_queue.py + app/main.py decisions
-    store) = "is this run's data right?" — the human_review_queue, which DOES
-    halt a run.
-
-Dependency rule (mirrors app/models' discipline): this module imports NOTHING
-from app.runtime or app.compiler. It is pure stdlib + pandas, so it stays
-a trustworthy, side-effect-light interface that both the routes layer and the
-versioning layer can lean on.
-
-──────────────────────────────────────────────────────────────────────────────
-CANONICAL-HASH INVARIANT (the one correctness rule that must not rot)
-
-The content hash is computed over the LOADED stage dict, never the file text, so
-whitespace / comment / key-reordering edits keep a node's approval, while any
-semantic change (a model, a temperature, a column name, a prompt) drops it.
-
-For that to hold, the canonical form must strip every bookkeeping key that is
-not part of the spec. The canonical loader (app.services.loader) parses files
-into typed Stage objects and injects nothing into the spec dict, so today the
-strip only matters for dicts arriving from elsewhere — e.g. a spec pasted into
-the node edit box that still carries keys an older loader injected:
-
-    _filename  — the source file name
-    _order     — the numeric filename prefix
-    _error     — set when a stage failed to parse
-
-These are listed in CANONICAL_IGNORE_KEYS below. **If a loader ever injects a
-new bookkeeping key, it MUST be added to CANONICAL_IGNORE_KEYS** — otherwise that
-key leaks into the hash and a cosmetic reload silently invalidates every prior
-approval. This set is the single point of truth for that contract.
-"""
+CANONICAL-HASH INVARIANT: the hash is over the LOADED stage dict, not the file text.
+A loader injecting a new bookkeeping key MUST add it to CANONICAL_IGNORE_KEYS, or a
+cosmetic reload silently invalidates every prior approval."""
 
 from __future__ import annotations
 

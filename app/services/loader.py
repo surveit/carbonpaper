@@ -1,24 +1,8 @@
 """Canonical load + save for a project's compiled stage files.
 
-One JSON file per stage under `<project>/compiled/`. This module is the ONE
-place that knows the on-disk stage format — both directions. Everything past it
-speaks `Stage` objects; nothing else should call `model_dump_json` on a stage or
-glob `compiled/*.json`, so a format change (or the planned rename) touches only
-this file.
-
-Read:
-  - list_stage_files: which files in a compiled/ dir are stages, before any
-    parsing — how a caller tells an empty workflow from a broken one.
-  - load_compiled_dir: tolerant, per-file — for the viewer, which renders
-    problems rather than crashing.
-  - load_workflow_object: strict — the whole workflow as one in-memory
-    `Workflow` object; raises on any invalid stage or cross-stage issue.
-  - load_workflow: strict — the same, returning just the `list[Stage]` for
-    callers that want the stages (the runner, the version snapshotter).
-
-Serialize / save:
-  - stage_to_spec_dict / stage_to_json: the canonical data + text forms.
-  - find_stage_file / write_stage: locate and overwrite one stage's file.
+One JSON file per stage under `<project>/compiled/`. This module is the ONE place
+that knows the on-disk stage format, in both directions: nothing else should call
+`model_dump_json` on a stage or glob `compiled/*.json`.
 """
 from __future__ import annotations
 

@@ -1,20 +1,8 @@
-"""
-admin.py (router) — the WORKSPACE ADMIN page: load a packaged seed fixture
-into the workspace, or export a project back to a portable WorkflowFile
-document. Workspace-level (about the whole workspace, not one project), so it
-lives outside the per-project shell (app.web.routers.project) and is
-reachable from the global `/admin` nav link in base.html.
+"""Workspace admin page: load a packaged seed fixture into the workspace, or
+export a project back to a portable WorkflowFile document.
 
-  GET  /admin                    — seed fixtures + current projects, with an
-                                    optional one-line status message (?msg=).
-  POST /admin/load/{bundle}      — import a seed fixture if not already present.
-  POST /admin/export/{project}   — export a project to REPO_ROOT/exports/<project>.json.
-
-Every path param is checked against a known list (discover_workflow_files() /
-project.list_projects()) before use, so a request for an unknown name 404s
-instead of reaching the seam with unsanitized input. Reaches the platform
-only through app.seeds and app.services.project — never sqlite3,
-app.core.persistence, or app.core.frames.
+Every path param is checked against a known list before use, so a request for an
+unknown name 404s instead of reaching the seam with unsanitized input.
 """
 from __future__ import annotations
 

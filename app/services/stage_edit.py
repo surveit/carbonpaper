@@ -1,16 +1,8 @@
-"""stage_edit.py — the single validated writer for one compiled stage.
+"""The single validated writer for one compiled stage.
 
-Extracted from the node-edit route so the route and the editing agent's tools
-share ONE writer. It never touches disk itself: it loads the current workflow
-through the loader (`Stage` objects, not raw files), applies the change to the
-in-memory stage set, validates the whole resulting workflow, and only if that is
-clean persists the one stage through `write_stage` — creating the project's
-compiled/ dir when the stage being written is its first. Every change is validated
-against the whole resulting workflow before anything is written.
-
-Removal is the one direct disk touch: there is no stage to write, so once the
-reduced workflow validates clean the stage's file — located through the loader's
-`find_stage_file` — is unlinked here.
+Every change is validated against the whole resulting workflow before anything is
+written. Removal is the one direct disk touch (the stage's file is unlinked here);
+every other write goes through the loader's `write_stage`.
 """
 
 from __future__ import annotations

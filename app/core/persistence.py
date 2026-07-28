@@ -1,20 +1,8 @@
-"""The single document-storage seam. Everything above speaks typed PersistedModel
-objects; only this module (and app/core/frames.py, for tabular payloads) knows how
-those objects reach storage — a SQLite key-value table.
-
-Sealed on purpose, and the seal is executable:
-  - no other module imports ``sqlite3`` — guarded by
-    ``app/_arch_tests/test_storage_engine_sealed.py``;
-  - the store sits at the bottom of the import graph: it imports ``app.core.errors``
-    and nothing else first-party — guarded by the import-linter contract in
-    ``pyproject.toml``.
-Swapping the backend (Postgres, or plain files for inspection) is a new
-DocumentStore implementation plus one ``configure_store`` call; nothing above the
-seam changes.
-
-Implementation status: ``validate_id``, ``SqliteKvStore``, ``DocumentStore``, and
-``PersistedModel`` are implemented; ``FrameStore`` lands next per the Phase-1 plan,
-guarded by the arch checks above.
+"""The single document-storage seam (a SQLite key-value table), sealed by two
+executable checks: no other module may import ``sqlite3``
+(``app/_arch_tests/test_storage_engine_sealed.py``), and this module must import
+``app.core.errors`` and nothing else first-party (import-linter contract in
+``pyproject.toml``).
 """
 from __future__ import annotations
 

@@ -1,11 +1,7 @@
-"""python -m app.seeds
+"""python -m app.seeds — thin CLI over app.seeds.seed.
 
-Thin CLI over app.seeds.seed: bootstraps the document store (this standalone
-process has no app.main lifespan to do it), calls seed_all, and prints one
-line per committed bundle under app/seeds/data/ — "imported" for a project
-seed_all just materialized, "skipped" for one it left alone because it
-already exists. All seeding decisions live in seed_all; this module only
-configures the store, parses arguments, and prints the result."""
+Bootstraps the document store itself: this standalone process has no app.main
+lifespan to do it."""
 from __future__ import annotations
 
 import argparse

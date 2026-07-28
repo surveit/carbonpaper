@@ -1,20 +1,8 @@
-"""The in-process tools the editing agent calls to read and edit a project's
-workflow.
+"""The in-process tools the editing agent calls to read and edit a project's workflow.
 
-`make_editing_tools(ctx)` returns callables bound to one editing session's
-`EditingContext` (which project it edits). Each read/write tool takes an explicit
-`project_id` and goes through the NAME-BASED service surfaces in
-`app.services.project` (which resolves the project directory and returns in-memory
-objects) and `app.services.drafts` (the disposable draft-editing lifecycle) — the
-tools never build a filesystem path. `get_current_project` returns the project the
-session was opened on (call it first, then pass its value as `project_id`).
-
-The callables are wrapped as an in-process claude_agent_sdk MCP server by the
-generic `app.core.agent.registry.build_mcp_server`, using `TOOL_SCHEMAS` (input
-schemas) and `TOOL_LABELS` (display labels) below.
-
-Every write tool validates before it writes and never fabricates a value: a
-missing stage or column is a raised error, not an invented default."""
+Tools go through the name-based `app.services` surfaces and never build a filesystem
+path. `get_current_project` must be called first — its value is what every other tool
+passes as `project_id`. A missing stage or column raises, never an invented default."""
 
 from __future__ import annotations
 

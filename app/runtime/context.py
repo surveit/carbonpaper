@@ -1,24 +1,8 @@
 """The frozen run context.
 
-`RunContext` is the immutable identity + config a run is executed under. It is
-built once — by `RunContext.for_production_run` (a production run:
-`app.runtime.runner.prepare_run`/`resume_run`), by `RunContext.for_non_production_run`
-(a subset run, a preview, an authored-test run) — and threaded read-only through
-the executor, the row driver, and every stage handler. Nothing mutates it
-mid-run: the run's growing state (per-stage token usage, dropped-column notes,
-queue stats, row-generation errors) lives on the manifest, not here — a handler
-reports it back as a `StageContribution` (app.runtime.manifest).
-
-`mode` is stamped at construction and never changes: a production run cannot
-carry `queue_auto_approve` (the in-memory queue bypass evals/workflow-test use),
-so a context that pairs the two fails loudly here rather than silently
-auto-approving a production run's review queue.
-
-`identity`/`stage_cache` are the pair a caller chooses at construction:
-`for_production_run` grants both (this run's (project, run_id) and a read+write
-stage-result cache); `for_non_production_run` grants neither. They co-vary by
-construction — there is no state with cache access but no identity, or the
-reverse — enforced by the validator so a hand-built context can't violate it.
+Built once and threaded read-only; a run's growing state lives on the manifest.
+A production-mode context may not carry `queue_auto_approve`, and
+`identity`/`stage_cache` co-vary (both or neither) - both enforced by validators.
 """
 
 from __future__ import annotations

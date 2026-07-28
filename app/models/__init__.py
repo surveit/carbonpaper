@@ -1,15 +1,5 @@
 """The workflow contract, as Pydantic models.
 
-Split across modules:
-  - schema.py        — model base + the Column/TableSchema primitives
-  - stage.py         — node types, handle blocks, the Stage model
-  - workflow.py      — the Workflow model + cross-stage graph checks
-  - named_schemas.py — the named data model (NamedSchema, SchemaLibrary)
-  - table.py         — TableRef (a general on-disk table pointer)
-  - eval.py          — the eval contract (EvalConfig, EvalRun, scorability)
-  - node_contract_notes.py — per-node-type runtime facts the authoring prompts
-                     render, beyond what NODE_TYPES itself carries
-
 Import from `app.models` (this aggregator) for the stable public surface.
 """
 from app.models.coverage import Coverage

@@ -1,6 +1,4 @@
-"""Domain exceptions, declared here rather than inline in the modules that
-raise them, so failure types have one home and can be imported without pulling
-in a whole subsystem.
+"""Domain exceptions.
 
 Keep this module dependency-free (standard library only): errors are imported
 widely, including by low-level modules, so importing app packages here would

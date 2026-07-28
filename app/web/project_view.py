@@ -1,15 +1,7 @@
-"""View helpers for the project shell (app.web layer).
+"""View helpers for the project shell: the left-nav tree and the call-to-action.
 
-app.services.project.project_state gives the DOMAIN status snapshot (counts,
-states, coverage) — no UI, no URLs. This module adds what the shell needs to
-RENDER but the domain layer must not know: the left-nav tree (labels, hrefs, and
-a per-item status token) and the "what to do next" call-to-action. The section
-routes render shell_state(pdir), not the bare domain snapshot.
-
-The nav carries a semantic `status` token per item (ok / warn / bad / todo / none
-/ review / present / home / evals); the TEMPLATE maps that token to a glyph + colour
-(project_shell.html), so the visual vocabulary lives next to the markup while the
-structure + classification stay here and stay unit-testable.
+Each nav item carries a semantic `status` token; project_shell.html maps that
+token to a glyph + colour, so the visual vocabulary lives next to the markup.
 """
 
 from __future__ import annotations

@@ -1,19 +1,7 @@
-"""Auto-generation: on a fresh document, generate the DATA MODEL as a live chat turn and write
-the schemas. STAGE TESTS are generated per stage, on demand, via start_stage_test_generation.
+"""LLM generation of a project's data model and of one stage's tests.
 
-These turns run through the app.compiler bridges (start_data_model_generation_agent /
-start_stage_test_derivation_agent): app.compiler owns the app.core.agent spine, so this
-orchestration delegates there rather than importing the spine directly. `start_generation`
-streams the data-model agent to /chat/<sid>; on a valid submission its schemas are written.
-`start_stage_test_generation` runs the deriver agent for one python-transform stage as a
-HIDDEN, view-only turn and, on completion, REPLACES that stage's tests wholesale. A phase
-that fails is never fabricated as success: the error streams to the live turn AND is
-persisted into the session's transcript (app.compiler.stage_tests), so it is visible on
-reload even to a caller who was not watching live.
-
-The turns run on the server event loop, so every `start_*` entry here must be called from an
-async context. The CLI subprocess the agents spawn runs with the Claude-Code session markers
-already stripped from os.environ (see app.core.llm_sdk, imported transitively via the bridges).
+The turns run on the server event loop, so every `start_*` entry here must be called
+from an async context. Stage-test generation REPLACES that stage's tests wholesale.
 """
 from __future__ import annotations
 

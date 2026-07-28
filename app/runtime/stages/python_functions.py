@@ -1,9 +1,6 @@
-"""Handlers for the python_row_function and python_frame_function stage types.
-
-One module for both: they are the two grains of the same idea (run authored
-python over the input), differing only in what the function is shown — a row
-dict (`make_python_row_mapper`) or the whole frame
-(`handle_python_frame_function`) — and they share the function loader.
+"""Handlers for the python_row_function and python_frame_function stage types -
+the two grains of running authored python over the input, differing only in
+what the function is shown (a row dict or the whole frame).
 """
 
 from __future__ import annotations

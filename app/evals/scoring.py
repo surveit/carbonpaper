@@ -1,19 +1,8 @@
 """Score a workflow target's output against an eval dataset's expected columns.
-
-The eval dataset holds, per row, the override stage's input columns (injected to
-produce the output) alongside one expected-output column per check. This module
-compares each check's expected column to the matching column the target actually
-produced, row by row, and rolls the per-row matches up into metrics.
-
-Row alignment is by POSITION: target row i was produced from eval-dataset row i.
-That holds because this only scores paths compatibility judged grain-preserving, and
-`Stage.is_grain_and_order_preserving` is defined as 1:1 AND order-preserving (see its docstring
-— the guarantee is declared where a stage claims it, not assumed here). The one
-observable consequence — row count — is still checked: a length mismatch means a stage
-broke the grain claim, and `score_expected_outputs` raises rather than align a
-mismatched pair (which would report a fabricated result). A reorder that kept the count
-can't be detected post-hoc, which is exactly why order-preservation is part of the
-is_grain_and_order_preserving contract rather than a hope at this call site.
+Row alignment is by POSITION: target row i came from eval-dataset row i, which
+holds only for paths compatibility judged grain-and-order-preserving. A length
+mismatch means a stage broke that claim and raises rather than aligning a
+mismatched pair; a reorder that kept the count can't be detected post-hoc.
 """
 from __future__ import annotations
 
