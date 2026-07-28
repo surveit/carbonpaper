@@ -13,6 +13,7 @@ from fastapi.testclient import TestClient
 import app as app_package
 import app.runtime.runner as runner
 import app.web.loading as loading
+import app.web.routers.review as review_routes
 from app.main import app
 from app.runtime.runner import prepare_run, run_prepared
 from app.runtime.stages import llm_transform as lt
@@ -36,10 +37,7 @@ def _write_stage(root, filename, stage):
 
 
 def _load_quotes_stage(root):
-    """input_data stage reading a 2-row (id, quote) csv — the MODEL INPUT the
-    scoring stage judges. `review`'s own queued row does NOT carry `quote`
-    (see `_score_stage`), so the only way it can appear on the page is via
-    queue_page's join-back-to-upstream recovery."""
+    """input_data stage reading a 2-row (id, quote) csv."""
     (root / "data").mkdir(parents=True, exist_ok=True)
     csv_path = root / "data" / "quotes.csv"
     pd.DataFrame({
@@ -66,9 +64,7 @@ _REVIEW_COLUMNS = queue_added_columns()
 def _score_stage():
     """llm_transform: scores each quote. output_schema is additive (a stage
     invariant — app/models/stage.py's _llm_transform_one_to_one), so `quote`
-    survives onto the queued row; the prompt_data_template references
-    `{quote}` so a successful model-input recovery can render the exact
-    prompt sent."""
+    survives onto the queued row."""
     return {"id": "score", "name": "Score quotes", "type": "llm_transform",
             "inputs": [{"id": "load", "schema": {
                 "columns": [{"name": "id", "type": "str"}, {"name": "quote", "type": "str"}],
@@ -102,6 +98,27 @@ def _read_fingerprints(run_dir, stage_id: str = "review") -> dict:
     path = run_dir / "queue" / f"{stage_id}.fingerprints.json"
     parsed: dict = json.loads(path.read_text(encoding="utf-8"))
     return parsed
+
+
+def _find_stage_def(project: str, stage_id: str) -> Stage:
+    stage_def = loading.find_stage(loading.load_stages(project).stages, stage_id)
+    assert stage_def is not None
+    return stage_def
+
+
+def _decide_data(fp, reviewed, prefilled=None, reviewer="Ada", **extra):
+    """The form a browser posts to /decide. `prefilled` defaults to `reviewed`,
+    the unchanged submit the endpoint derives `approve` from; pass a different
+    mapping to post a changed value. Either may be a raw string, for the
+    malformed-payload cases."""
+    if prefilled is None:
+        prefilled = {} if isinstance(reviewed, str) else reviewed
+    return {
+        "input_fingerprint": fp, "reviewer": reviewer,
+        "reviewed_values": reviewed if isinstance(reviewed, str) else json.dumps(reviewed),
+        "prefilled_values": prefilled if isinstance(prefilled, str) else json.dumps(prefilled),
+        **extra,
+    }
 
 
 def _build_and_halt(tmp_path, monkeypatch):
@@ -182,46 +199,44 @@ def test_happy_path_renders_items_with_fingerprint_prior_decision_and_counts(tmp
     assert "<strong>1</strong> of <strong>2</strong> reviewed" in html
 
 
-# ── 2. Model-input recovery: resolvable join keys ────────────────────────────
+# ── 2. Lineage: the sidecar's ordinal against the declared upstream stage ────
 
 
-def test_model_input_recovery_renders_the_exact_rendered_prompt(tmp_path, monkeypatch):
-    _project_dir, run_id, _run_dir, _snapshot, _fingerprints = _build_and_halt(tmp_path, monkeypatch)
+def test_lineage_urls_name_the_upstream_stage_and_the_sidecar_ordinal(tmp_path, monkeypatch):
+    """The queue stage has produced no output at halt time, so a row's lineage
+    link names the UPSTREAM stage (`score`) and the row's ordinal from the
+    sidecar — never the queue stage itself, and never a guessed position."""
+    _project_dir, run_id, _run_dir, _snapshot, sidecar = _build_and_halt(tmp_path, monkeypatch)
+    assert sidecar["row_ordinals"] == [0, 1]
 
-    client = TestClient(app)
-    html = client.get(f"/project/{PROJECT}/runs/{run_id}/queue/review").text
+    stage_def = _find_stage_def(PROJECT, "review")
+    fingerprints = loading.load_queue_fingerprints(PROJECT, run_id, "review")
+    urls = review_routes._build_lineage_urls(
+        PROJECT, run_id, review_routes._resolve_lineage(stage_def, fingerprints), fingerprints
+    )
 
-    # The queued row itself carries no `quote` (see _score_stage's docstring);
-    # this text can only appear via a successful join back to the `load`
-    # stage's output, rendered into the prompt the model actually received.
-    assert '<pre class="prompt-rendered">' in html
-    assert "Rate this: Quote about widgets." in html
-    assert "Rate this: Quote about gadgets." in html
-
-
-# ── 3. Degraded path: upstream scored-input table missing on disk ───────────
+    assert urls == [
+        f"/project/{PROJECT}/runs/{run_id}/stage/score/row/0/trace/view",
+        f"/project/{PROJECT}/runs/{run_id}/stage/score/row/1/trace/view",
+    ]
 
 
-def test_degrades_gracefully_when_upstream_scored_input_is_missing(tmp_path, monkeypatch):
-    _project_dir, run_id, run_dir, _snapshot, fingerprints = _build_and_halt(tmp_path, monkeypatch)
+def test_a_sidecar_without_row_ordinals_yields_no_lineage_link(tmp_path, monkeypatch):
+    """A run halted before the runtime recorded ordinals has no exact row to
+    link to, so the page states that instead of linking a guessed position."""
+    _project_dir, run_id, run_dir, _snapshot, _sidecar = _build_and_halt(tmp_path, monkeypatch)
+    path = run_dir / "queue" / "review.fingerprints.json"
+    sidecar = json.loads(path.read_text(encoding="utf-8"))
+    del sidecar["row_ordinals"]
+    path.write_text(json.dumps(sidecar), encoding="utf-8")
 
-    manifest = json.loads((run_dir / "manifest.json").read_text(encoding="utf-8"))
-    load_record = next(s for s in manifest["stage_records"] if s["stage_id"] == "load")
-    (run_dir / load_record["output_path"]).unlink()  # the frame model_input would join against
+    stage_def = _find_stage_def(PROJECT, "review")
+    fingerprints = loading.load_queue_fingerprints(PROJECT, run_id, "review")
+    lineage = review_routes._resolve_lineage(stage_def, fingerprints)
 
-    client = TestClient(app)
-    r = client.get(f"/project/{PROJECT}/runs/{run_id}/queue/review")
-
-    assert r.status_code == 200  # missing upstream output does not break the page
-    html = r.text
-    # Items still render — both fingerprints present.
-    for fp in fingerprints["input_fingerprints"]:
-        assert f'data-input-fingerprint="{fp}"' in html
-    # No rendered prompt (needs model_input) and no raw model-input dump (also
-    # needs model_input): both of queue_page's model_input-gated blocks are
-    # absent, evidencing model_input/rendered_prompt are None for every item.
-    assert '<pre class="prompt-rendered">' not in html
-    assert "model input — all fields" not in html
+    assert lineage.upstream_stage_id is None
+    assert "ordinal" in (lineage.note or "")
+    assert review_routes._build_lineage_urls(PROJECT, run_id, lineage, fingerprints) == [None, None]
 
 
 # ── 4. 404 on a stage that isn't a human_review_queue stage ─────────────────
@@ -236,22 +251,8 @@ def test_404_when_the_stage_id_is_not_a_human_review_queue_stage(tmp_path, monke
     assert r.status_code == 404
 
 
-# ── 5. queue_decide validation: FastAPI 422s malformed input, the endpoint and
-#      the review service 400 the domain rules, unknown fingerprint 404s ───────
-
-
-def test_decide_422_on_unknown_verdict(tmp_path, monkeypatch):
-    _project_dir, run_id, _run_dir, _snapshot, fingerprints = _build_and_halt(tmp_path, monkeypatch)
-    fp = fingerprints["input_fingerprints"][0]
-
-    client = TestClient(app)
-    r = client.post(
-        f"/project/{PROJECT}/runs/{run_id}/queue/review/decide",
-        data={"input_fingerprint": fp, "verdict": "shrug", "reviewer": "Ada",  # not a ReviewVerdict value
-              "reviewed_values": json.dumps({"human_score": 1})},
-    )
-    assert r.status_code == 422  # FastAPI rejects the unknown enum value
-    assert not StageCacheEntry.list(prefix=f"{PROJECT}/review/")  # nothing written
+# ── 5. queue_decide validation: the endpoint and the review service 400 the
+#      domain rules, unknown fingerprint 404s ────────────────────────────────
 
 
 def test_decide_400_on_malformed_reviewed_values_json(tmp_path, monkeypatch):
@@ -261,10 +262,26 @@ def test_decide_400_on_malformed_reviewed_values_json(tmp_path, monkeypatch):
     client = TestClient(app)
     r = client.post(
         f"/project/{PROJECT}/runs/{run_id}/queue/review/decide",
-        data={"input_fingerprint": fp, "verdict": "modify", "reviewer": "Ada", "reviewed_values": "{not json"},
+        data=_decide_data(fp, "{not json"),
     )
     assert r.status_code == 400
     assert not StageCacheEntry.list(prefix=f"{PROJECT}/review/")  # nothing written
+
+
+def test_decide_400_when_the_two_value_maps_name_different_columns(tmp_path, monkeypatch):
+    """The verdict is derived by comparing them column by column, so a column
+    present in only one is a comparison that cannot be made — never one
+    silently treated as unchanged."""
+    _project_dir, run_id, _run_dir, _snapshot, fingerprints = _build_and_halt(tmp_path, monkeypatch)
+    fp = fingerprints["input_fingerprints"][0]
+
+    r = TestClient(app).post(
+        f"/project/{PROJECT}/runs/{run_id}/queue/review/decide",
+        data=_decide_data(fp, {"human_score": 1}, prefilled={}),
+    )
+    assert r.status_code == 400
+    assert "human_score" in r.json()["detail"]
+    assert not StageCacheEntry.list(prefix=f"{PROJECT}/review/")
 
 
 def test_decide_400_when_reviewed_values_miss_a_declared_column(tmp_path, monkeypatch):
@@ -274,8 +291,7 @@ def test_decide_400_when_reviewed_values_miss_a_declared_column(tmp_path, monkey
     client = TestClient(app)
     r = client.post(
         f"/project/{PROJECT}/runs/{run_id}/queue/review/decide",
-        data={"input_fingerprint": fp, "verdict": "modify", "reviewer": "Ada",
-              "reviewed_values": json.dumps({})},
+        data=_decide_data(fp, {}),
     )
     assert r.status_code == 400
     assert not StageCacheEntry.list(prefix=f"{PROJECT}/review/")
@@ -287,11 +303,48 @@ def test_decide_404_on_unknown_fingerprint_and_writes_nothing(tmp_path, monkeypa
     client = TestClient(app)
     r = client.post(
         f"/project/{PROJECT}/runs/{run_id}/queue/review/decide",
-        data={"input_fingerprint": "not-a-real-fingerprint", "verdict": "approve",
-              "reviewer": "Ada", "reviewed_values": json.dumps({"human_score": 1})},
+        data=_decide_data("not-a-real-fingerprint", {"human_score": 1}),
     )
     assert r.status_code == 404
     assert not StageCacheEntry.list(prefix=f"{PROJECT}/review/")
+
+
+# ── 5b. The verdict is DERIVED from submitted vs pre-filled values ───────────
+
+
+def test_decide_derives_approve_when_every_value_matches_the_prefill(tmp_path, monkeypatch):
+    _project_dir, run_id, _run_dir, _snapshot, fingerprints = _build_and_halt(tmp_path, monkeypatch)
+    fp = fingerprints["input_fingerprints"][0]
+
+    r = TestClient(app).post(
+        f"/project/{PROJECT}/runs/{run_id}/queue/review/decide",
+        data=_decide_data(fp, {"human_score": "1"}, prefilled={"human_score": "1"}),
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["verdict"] == "approve"
+
+    entry = StageCacheEntry.read_only().get(
+        PROJECT, "review", fingerprints["stage_fingerprint"], fp)
+    assert entry is not None and entry.output_row is not None
+    assert entry.output_row["decision"] == "approve"
+
+
+def test_decide_derives_modify_when_a_value_differs_from_the_prefill(tmp_path, monkeypatch):
+    _project_dir, run_id, _run_dir, _snapshot, fingerprints = _build_and_halt(tmp_path, monkeypatch)
+    fp = fingerprints["input_fingerprints"][0]
+
+    r = TestClient(app).post(
+        f"/project/{PROJECT}/runs/{run_id}/queue/review/decide",
+        data=_decide_data(fp, {"human_score": "4"}, prefilled={"human_score": "1"}),
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["verdict"] == "modify"
+
+    entry = StageCacheEntry.read_only().get(
+        PROJECT, "review", fingerprints["stage_fingerprint"], fp)
+    assert entry is not None and entry.output_row is not None
+    assert entry.output_row["decision"] == "modify"
+    assert entry.output_row["human_score"] == 4
 
 
 # ── 6. Snapshot pureness: exactly the upstream columns, no bookkeeping ──────
@@ -330,8 +383,9 @@ def _e2e_review_stage():
 
 def test_e2e_decide_every_verdict_then_resume_completes(tmp_path, monkeypatch):
     """halt -> POST /decide for each pending row -> runner.resume_run ->
-    completed manifest, with the resumed output reflecting each verdict:
-    approve keeps the AI score, modify substitutes the human-entered score.
+    completed manifest, with the resumed output reflecting each DERIVED verdict:
+    a submit matching the prefill records approve and keeps the AI score, one
+    differing from it records modify and substitutes the human-entered score.
     Every reviewed row is emitted. No decisions/ directory is created under the
     project dir — every write goes through the cache."""
     project = "queue_route_e2e"
@@ -354,22 +408,23 @@ def test_e2e_decide_every_verdict_then_resume_completes(tmp_path, monkeypatch):
     fp_by_id = dict(zip(snapshot["id"], fingerprints["input_fingerprints"]))
 
     client = TestClient(app)
-    ai_score_by_id = dict(zip(snapshot["id"], snapshot["score"]))
-    verdicts = {
-        "a": {"verdict": "approve", "reviewed_values": json.dumps(
-            {"human_score": int(ai_score_by_id["a"])})},
-        "b": {"verdict": "modify", "reviewed_values": json.dumps({"human_score": 99})},
-        "c": {"verdict": "modify", "reviewed_values": json.dumps({"human_score": 0})},
-    }
-    for row_id, form in verdicts.items():
+    # Each row's prefill is the AI value the page opened on; submitting it
+    # unchanged derives approve, submitting anything else derives modify.
+    ai_score_by_id = {k: str(v) for k, v in zip(snapshot["id"], snapshot["score"])}
+    submitted = {"a": ai_score_by_id["a"], "b": "99", "c": "0"}
+    expected_verdict = {"a": "approve", "b": "modify", "c": "modify"}
+    for row_id, value in submitted.items():
         r = client.post(
             f"/project/{project}/runs/{run_id}/queue/review/decide",
-            data={"input_fingerprint": fp_by_id[row_id], "reviewer": "Ada Reviewer", **form},
+            data=_decide_data(
+                fp_by_id[row_id], {"human_score": value},
+                prefilled={"human_score": ai_score_by_id[row_id]},
+                reviewer="Ada Reviewer",
+            ),
         )
         assert r.status_code == 200, r.text
-        body = r.json()
-        assert body == {"ok": True, "input_fingerprint": fp_by_id[row_id],
-                        "verdict": form["verdict"]}
+        assert r.json() == {"ok": True, "input_fingerprint": fp_by_id[row_id],
+                            "verdict": expected_verdict[row_id]}
 
     # frozen_input is the upstream row the reviewer saw (id, score) alone — the
     # snapshot row the decision was recorded from carries only those columns to
@@ -403,8 +458,7 @@ def test_decide_400_on_a_blank_reviewer_and_writes_nothing(tmp_path, monkeypatch
     client = TestClient(app)
     r = client.post(
         f"/project/{PROJECT}/runs/{run_id}/queue/review/decide",
-        data={"input_fingerprint": fp, "verdict": "approve", "reviewer": "   ",
-              "reviewed_values": json.dumps({"human_score": 1})},
+        data=_decide_data(fp, {"human_score": 1}, reviewer="   "),
     )
     assert r.status_code == 400
     assert "reviewer" in r.json()["detail"]
@@ -418,8 +472,7 @@ def test_decide_records_the_reviewer_name_the_form_posted(tmp_path, monkeypatch)
     client = TestClient(app)
     r = client.post(
         f"/project/{PROJECT}/runs/{run_id}/queue/review/decide",
-        data={"input_fingerprint": fp, "verdict": "approve", "reviewer": "  Ada Lovelace  ",
-              "reviewed_values": json.dumps({"human_score": 1})},
+        data=_decide_data(fp, {"human_score": 1}, reviewer="  Ada Lovelace  "),
     )
     assert r.status_code == 200, r.text
 
@@ -430,21 +483,22 @@ def test_decide_records_the_reviewer_name_the_form_posted(tmp_path, monkeypatch)
     assert entry.output_row["reviewer_id"] == "Ada Lovelace"  # trimmed, never "local"
 
 
-# ── 9. skipped is the runtime's own verdict; no reviewer may post it ─────────
+# ── 9. The reviewer names no verdict — a posted one is not a decision ────────
 
 
-def test_decide_400_on_verdict_skipped(tmp_path, monkeypatch):
+def test_decide_ignores_a_posted_verdict_and_records_the_derived_one(tmp_path, monkeypatch):
+    """The verdict comes from what changed, so a `verdict` field on the form is
+    inert — `skipped` (the runtime's own verdict, which the review service
+    refuses: tests/services/test_review.py) cannot be smuggled in through it."""
     _project_dir, run_id, _run_dir, _snapshot, fingerprints = _build_and_halt(tmp_path, monkeypatch)
     fp = fingerprints["input_fingerprints"][0]
 
-    client = TestClient(app)
-    r = client.post(
+    r = TestClient(app).post(
         f"/project/{PROJECT}/runs/{run_id}/queue/review/decide",
-        data={"input_fingerprint": fp, "verdict": "skipped", "reviewer": "Ada",
-              "reviewed_values": json.dumps({"human_score": 1})},
+        data=_decide_data(fp, {"human_score": 1}, verdict="skipped"),
     )
-    assert r.status_code == 400
-    assert not StageCacheEntry.list(prefix=f"{PROJECT}/review/")
+    assert r.status_code == 200, r.text
+    assert r.json()["verdict"] == "approve"
 
 
 # ── 10. Coercion against the declared column ────────────────────────────────
@@ -459,8 +513,7 @@ def test_decide_400_on_a_value_that_will_not_coerce(tmp_path, monkeypatch):
     client = TestClient(app)
     r = client.post(
         f"/project/{PROJECT}/runs/{run_id}/queue/review/decide",
-        data={"input_fingerprint": fp, "verdict": "modify", "reviewer": "Ada",
-              "reviewed_values": json.dumps({"human_score": "banana"})},
+        data=_decide_data(fp, {"human_score": "banana"}, prefilled={"human_score": "1"}),
     )
     assert r.status_code == 400
     detail = r.json()["detail"]
@@ -475,8 +528,7 @@ def test_decide_coerces_form_text_to_the_declared_type(tmp_path, monkeypatch):
     client = TestClient(app)
     r = client.post(
         f"/project/{PROJECT}/runs/{run_id}/queue/review/decide",
-        data={"input_fingerprint": fp, "verdict": "modify", "reviewer": "Ada",
-              "reviewed_values": json.dumps({"human_score": "  -3 "})},
+        data=_decide_data(fp, {"human_score": "  -3 "}, prefilled={"human_score": "1"}),
     )
     assert r.status_code == 200, r.text
 
@@ -500,8 +552,7 @@ def test_decide_accepts_an_untouched_notes_box_as_no_note(tmp_path, monkeypatch)
     client = TestClient(app)
     r = client.post(
         f"/project/{PROJECT}/runs/{run_id}/queue/review/decide",
-        data={"input_fingerprint": fp, "verdict": "approve", "reviewer": "Ada",
-              "reviewed_values": json.dumps({"human_score": 1}), "review_notes": "   "},
+        data=_decide_data(fp, {"human_score": 1}, review_notes="   "),
     )
     assert r.status_code == 200, r.text
 
@@ -536,10 +587,11 @@ def test_decide_400_on_notes_when_the_stage_declares_no_notes_column(tmp_path, m
     client = TestClient(app)
     r = client.post(
         f"/project/{project}/runs/{run_id}/queue/review/decide",
-        data={"input_fingerprint": fingerprints["input_fingerprints"][0],
-              "verdict": "modify", "reviewer": "Ada",
-              "reviewed_values": json.dumps({"human_score": 2}),
-              "review_notes": "a note nobody declared a home for"},
+        data=_decide_data(
+            fingerprints["input_fingerprints"][0], {"human_score": 2},
+            prefilled={"human_score": 1},
+            review_notes="a note nobody declared a home for",
+        ),
     )
     assert r.status_code == 400
     assert not StageCacheEntry.list(prefix=f"{project}/review/")
@@ -578,9 +630,7 @@ def test_decide_409_when_the_stage_changed_since_the_halt(tmp_path, monkeypatch)
 
     r = TestClient(app).post(
         f"/project/{PROJECT}/runs/{run_id}/queue/review/decide",
-        data={"input_fingerprint": fingerprints["input_fingerprints"][0],
-              "verdict": "approve", "reviewer": "Ada",
-              "reviewed_values": json.dumps({"checked_score": 1})},
+        data=_decide_data(fingerprints["input_fingerprints"][0], {"checked_score": 1}),
     )
     assert r.status_code == 409
     assert "has changed since this run halted" in r.json()["detail"]
@@ -742,14 +792,14 @@ def test_a_non_nullable_bool_select_opens_on_the_ai_value(tmp_path, monkeypatch)
     assert "— unset —" not in html                              # nothing to be unset to
     assert _find_selected_option(html, "human_flag") == "false"
 
-    # Saving what the page opened on records `false`, not the first option.
+    # Submitting what the page opened on records `false`, not the first option
+    # — and, unchanged from the prefill, derives `approve`.
     r = client.post(
         f"/project/{project}/runs/{run_id}/queue/review/decide",
-        data={"input_fingerprint": fingerprints["input_fingerprints"][0],
-              "verdict": "modify", "reviewer": "Ada",
-              "reviewed_values": json.dumps({"human_flag": "false"})},
+        data=_decide_data(fingerprints["input_fingerprints"][0], {"human_flag": "false"}),
     )
     assert r.status_code == 200, r.text
+    assert r.json()["verdict"] == "approve"
     entry = StageCacheEntry.read_only().get(
         project, "review", fingerprints["stage_fingerprint"],
         fingerprints["input_fingerprints"][0])
@@ -824,9 +874,10 @@ def _decide_a_temporal_row(tmp_path, monkeypatch, project, column_type, recorded
     client = TestClient(app)
     r = client.post(
         f"/project/{project}/runs/{run_id}/queue/review/decide",
-        data={"input_fingerprint": fingerprints["input_fingerprints"][0],
-              "verdict": "modify", "reviewer": "Ada",
-              "reviewed_values": json.dumps({"human_seen_at": recorded})},
+        data=_decide_data(
+            fingerprints["input_fingerprints"][0], {"human_seen_at": recorded},
+            prefilled={"human_seen_at": "2026-01-01T08:00:00"},
+        ),
     )
     assert r.status_code == 200, r.text
     return client.get(f"/project/{project}/runs/{run_id}/queue/review").text
@@ -868,8 +919,7 @@ def test_decide_400_on_reviewed_values_that_is_not_a_json_object(tmp_path, monke
 
     r = TestClient(app).post(
         f"/project/{PROJECT}/runs/{run_id}/queue/review/decide",
-        data={"input_fingerprint": fingerprints["input_fingerprints"][0],
-              "verdict": "modify", "reviewer": "Ada", "reviewed_values": "[1, 2]"},
+        data=_decide_data(fingerprints["input_fingerprints"][0], "[1, 2]"),
     )
     assert r.status_code == 400
     assert "JSON object" in r.json()["detail"]
@@ -884,9 +934,8 @@ def test_decide_400_on_an_undeclared_reviewed_value_key(tmp_path, monkeypatch):
 
     r = TestClient(app).post(
         f"/project/{PROJECT}/runs/{run_id}/queue/review/decide",
-        data={"input_fingerprint": fingerprints["input_fingerprints"][0],
-              "verdict": "modify", "reviewer": "Ada",
-              "reviewed_values": json.dumps({"human_score": 1, "smuggled": "x"})},
+        data=_decide_data(
+            fingerprints["input_fingerprints"][0], {"human_score": 1, "smuggled": "x"}),
     )
     assert r.status_code == 400
     assert "smuggled" in r.json()["detail"]
@@ -935,17 +984,15 @@ def test_decide_coerces_against_the_output_schema_column_when_declared(tmp_path,
 
     client = TestClient(app)
     url = f"/project/{project}/runs/{run_id}/queue/review/decide"
-    refused = client.post(url, data={
-        "input_fingerprint": fp, "verdict": "modify", "reviewer": "Ada",
-        "reviewed_values": json.dumps({"human_score": 9})})
+    refused = client.post(url, data=_decide_data(
+        fp, {"human_score": 9}, prefilled={"human_score": 1}))
     assert refused.status_code == 400  # outside the declared [0, 5]
     assert "above the declared maximum" in refused.json()["detail"]
 
     # Blank is a null only because output_schema's `human_score` is nullable; the
     # input edge's `score` is not, so this is the output_schema path being read.
-    accepted = client.post(url, data={
-        "input_fingerprint": fp, "verdict": "modify", "reviewer": "Ada",
-        "reviewed_values": json.dumps({"human_score": ""})})
+    accepted = client.post(url, data=_decide_data(
+        fp, {"human_score": ""}, prefilled={"human_score": 1}))
     assert accepted.status_code == 200, accepted.text
     entry = StageCacheEntry.read_only().get(
         project, "review", fingerprints["stage_fingerprint"], fp)
@@ -960,3 +1007,191 @@ def test_queue_page_renders_the_declared_range_on_the_field(tmp_path, monkeypatc
     html = TestClient(app).get(f"/project/{project}/runs/{run_id}/queue/review").text
 
     assert 'min="0"' in html and 'max="5"' in html
+
+
+# ── 17. The queued rows are described from the DECLARED input schema ─────────
+#
+# `human_review_queue` runs for any workflow, so nothing here may depend on the
+# upstream stage's type or on any particular column name.
+
+
+def _build_and_halt_queue_over(tmp_path, monkeypatch, project, stages):
+    monkeypatch.setattr(loading, "EXAMPLES_DIR", tmp_path)
+    project_dir = tmp_path / project
+    for index, stage in enumerate(stages, start=1):
+        _write_stage(project_dir, f"{index:02d}_{stage['id']}.json", stage)
+    _seed_version(project_dir)
+    manifest = run_prepared(prepare_run(project_dir, repo_root=project_dir))
+    assert manifest["status"] == "awaiting_review", manifest
+    run_id = manifest["run_id"]
+    return run_id, _read_fingerprints(project_dir / "runs" / run_id)
+
+
+def _lineage_urls(project, run_id, stage_id="review"):
+    stage_def = _find_stage_def(project, stage_id)
+    fingerprints = loading.load_queue_fingerprints(project, run_id, stage_id)
+    assert fingerprints is not None
+    return review_routes._build_lineage_urls(
+        project, run_id, review_routes._resolve_lineage(stage_def, fingerprints), fingerprints
+    )
+
+
+def test_a_queue_directly_on_input_data_renders_and_links_to_that_stage(tmp_path, monkeypatch):
+    """The snapshot IS the material to review here — there is no model between
+    the input and the queue — so the page renders in full and traces the
+    `input_data` stage's row."""
+    project = "queue_route_on_input_data"
+    project_dir = tmp_path / project
+    run_id, fingerprints = _build_and_halt_queue_over(
+        tmp_path, monkeypatch, project,
+        [_e2e_load_stage(project_dir), _e2e_review_stage()],
+    )
+
+    html = TestClient(app).get(f"/project/{project}/runs/{run_id}/queue/review").text
+    for fp in fingerprints["input_fingerprints"]:
+        assert f'data-input-fingerprint="{fp}"' in html
+    assert "reviewing blind" not in html
+
+    assert _lineage_urls(project, run_id) == [
+        f"/project/{project}/runs/{run_id}/stage/load/row/{o}/trace/view"
+        for o in fingerprints["row_ordinals"]
+    ]
+
+
+def _labelled_row_function_stage():
+    """python_row_function upstream: no model produced these values, and the
+    queue's input edge declares a description for the column it adds."""
+    code = (
+        "def transform(row):\n"
+        "    return {'id': row['id'], 'score': row['score'],\n"
+        "            'label': 'high' if row['score'] > 1 else 'low'}"
+    )
+    return {"id": "label", "name": "Label items", "type": "python_row_function",
+            "inputs": [{"id": "load", "schema": {
+                "columns": [{"name": "id", "type": "str"}, {"name": "score", "type": "int"}],
+                "primary_key": ["id"]}}],
+            "function": {"kind": "inline", "code": code},
+            "output_schema": {"columns": [
+                {"name": "id", "type": "str"}, {"name": "score", "type": "int"},
+                {"name": "label", "type": "str"}]}}
+
+
+def _review_labels_stage():
+    return {"id": "review", "name": "Review labels", "type": "human_review_queue",
+            "inputs": [{"id": "label", "schema": {
+                "columns": [
+                    {"name": "id", "type": "str"},
+                    {"name": "score", "type": "int"},
+                    {"name": "label", "type": "str",
+                     "description": "high when the score exceeds one"}],
+                "primary_key": ["id"]}}],
+            "queue": {**queue_columns(source="label", target="human_label")}}
+
+
+def test_a_queue_whose_upstream_is_not_an_llm_transform_renders_and_links(tmp_path, monkeypatch):
+    project = "queue_route_on_row_function"
+    project_dir = tmp_path / project
+    run_id, fingerprints = _build_and_halt_queue_over(
+        tmp_path, monkeypatch, project,
+        [_e2e_load_stage(project_dir), _labelled_row_function_stage(), _review_labels_stage()],
+    )
+
+    html = TestClient(app).get(f"/project/{project}/runs/{run_id}/queue/review").text
+    for fp in fingerprints["input_fingerprints"]:
+        assert f'data-input-fingerprint="{fp}"' in html
+    assert 'data-target="human_label"' in html
+
+    assert _lineage_urls(project, run_id) == [
+        f"/project/{project}/runs/{run_id}/stage/label/row/{o}/trace/view"
+        for o in fingerprints["row_ordinals"]
+    ]
+
+
+def test_queued_columns_carry_the_declared_description_type_and_primary_key(tmp_path, monkeypatch):
+    project = "queue_route_column_metadata"
+    project_dir = tmp_path / project
+    run_id, _fingerprints = _build_and_halt_queue_over(
+        tmp_path, monkeypatch, project,
+        [_e2e_load_stage(project_dir), _labelled_row_function_stage(), _review_labels_stage()],
+    )
+
+    described = review_routes._describe_queued_columns(
+        _find_stage_def(project, "review"),
+        loading.queue_snapshot(project, run_id, "review"),
+    )
+
+    by_name = {column.name: column for column in described.columns}
+    assert by_name["label"].description == "high when the score exceeds one"
+    assert by_name["label"].type == "str" and not by_name["label"].in_primary_key
+    assert by_name["id"].in_primary_key and by_name["id"].description is None
+    assert described.primary_key == ["id"]
+    assert described.schema_note is None and described.identity_note is None
+
+
+def _no_primary_key_review_stage():
+    return {"id": "review", "name": "Review items", "type": "human_review_queue",
+            "inputs": [{"id": "load", "schema": {
+                "columns": [{"name": "id", "type": "str"},
+                            {"name": "score", "type": "int"}]}}],
+            "queue": dict(QUEUE_COLUMNS)}
+
+
+def test_a_stage_with_no_declared_primary_key_says_so_rather_than_guessing(tmp_path, monkeypatch):
+    """An `id` column is present and would have been guessed at by the removed
+    join-key fallback; with no `primary_key` declared the page states that
+    instead, and no card carries an identity."""
+    project = "queue_route_no_primary_key"
+    project_dir = tmp_path / project
+    run_id, _fingerprints = _build_and_halt_queue_over(
+        tmp_path, monkeypatch, project,
+        [_e2e_load_stage(project_dir), _no_primary_key_review_stage()],
+    )
+
+    described = review_routes._describe_queued_columns(
+        _find_stage_def(project, "review"),
+        loading.queue_snapshot(project, run_id, "review"),
+    )
+
+    assert described.primary_key == []
+    assert described.identity_note == review_routes.NO_PRIMARY_KEY_NOTE
+    assert not any(column.in_primary_key for column in described.columns)
+
+
+def _schemaless_review_stage():
+    return {"id": "review", "name": "Review items", "type": "human_review_queue",
+            "inputs": [{"id": "load"}], "queue": dict(QUEUE_COLUMNS)}
+
+
+def test_an_input_edge_with_no_schema_falls_back_to_the_queued_columns(tmp_path, monkeypatch):
+    project = "queue_route_no_schema"
+    project_dir = tmp_path / project
+    run_id, _fingerprints = _build_and_halt_queue_over(
+        tmp_path, monkeypatch, project,
+        [_e2e_load_stage(project_dir), _schemaless_review_stage()],
+    )
+
+    described = review_routes._describe_queued_columns(
+        _find_stage_def(project, "review"),
+        loading.queue_snapshot(project, run_id, "review"),
+    )
+
+    assert [column.name for column in described.columns] == ["id", "score"]
+    assert all(column.type is None and column.description is None
+               for column in described.columns)
+    assert described.schema_note == review_routes.NO_SCHEMA_NOTE
+    assert described.primary_key == []
+
+
+def test_a_never_opened_field_carries_the_value_it_displays(tmp_path, monkeypatch):
+    """What a field submits when nobody touches it is `data-prefill`, and it is
+    the same text the control displays — so an untouched submit records the
+    value the reviewer was shown, which derives `approve`."""
+    _project_dir, run_id, _run_dir, _snapshot, _fingerprints = _build_and_halt(tmp_path, monkeypatch)
+
+    html = TestClient(app).get(f"/project/{PROJECT}/runs/{run_id}/queue/review").text
+
+    field = re.search(r'<input[^>]*data-target="human_score"[^>]*>', html, re.DOTALL)
+    assert field is not None
+    prefill = re.search(r'\sdata-prefill="([^"]*)"', field.group(0))
+    assert prefill is not None
+    assert prefill.group(1) == _find_input_value(html, "human_score") == "1"

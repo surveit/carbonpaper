@@ -21,13 +21,14 @@ from .execution import ROW_DEFERRED_KEY, Row, RowMapper
 @dataclass(frozen=True)
 class PendingReview:
     """One row awaiting a human decision: the `input_fingerprint` the cache was
-    searched under, and `frozen_row`, a copy of the row exactly as it arrived
-    from upstream. Carried on the deferred marker of the row that produced it,
-    which is the only place either value exists until the snapshot and its
-    sidecar are written."""
+    searched under, `frozen_row`, a copy of the row exactly as it arrived from
+    upstream, and `row_ordinal`, its 0-based position in this stage's input
+    frame — which is also its position in the upstream stage's output frame,
+    since a row-mapped stage neither reorders nor fans out rows."""
 
     input_fingerprint: str
     frozen_row: Row
+    row_ordinal: int
 
 
 def make_human_review_mapper(stage: Stage, ctx: RunContext, src: pd.DataFrame) -> RowMapper:
@@ -92,7 +93,7 @@ class _QueueRowMapper:
     def __call__(self, row: Row, index: int) -> Row:
         if not self._queueable[index]:
             return _skip_row(self._queue, row)
-        return _defer_row(row)
+        return _defer_row(row, index)
 
     def finish_mapped_rows(
         self,
@@ -169,15 +170,17 @@ def _compute_queueable_mask(src: pd.DataFrame, flt: str | None, sid: str) -> lis
 # --- the row outcomes the mapper does not need its own state for ---------------
 
 
-def _defer_row(row: Row) -> Row:
+def _defer_row(row: Row, index: int) -> Row:
     """A queueable row nobody has decided: a deferred marker carrying the row's
-    fingerprint and a frozen copy of it, and nothing else. Never a substituted,
-    defaulted or partially-filled row — the value does not exist yet. The
-    fingerprint is the key the driver's row cache looked this row up under, so
-    the decision recorded against it resolves on the next run."""
+    fingerprint, a frozen copy of it and its input position, and nothing else.
+    Never a substituted, defaulted or partially-filled row — the value does not
+    exist yet. The fingerprint is the key the driver's row cache looked this row
+    up under, so the decision recorded against it resolves on the next run."""
     return {
         ROW_DEFERRED_KEY: PendingReview(
-            input_fingerprint=compute_row_fingerprint(row), frozen_row=dict(row)
+            input_fingerprint=compute_row_fingerprint(row),
+            frozen_row=dict(row),
+            row_ordinal=index,
         )
     }
 
@@ -285,14 +288,15 @@ def _write_pending_snapshot(queue_dir: Path, sid: str, pending: list[PendingRevi
 def _write_fingerprint_sidecar(
     queue_dir: Path, sid: str, stage_fingerprint: str, pending: list[PendingReview]
 ) -> None:
-    """Write `<stage>.fingerprints.json`: the one `stage_fingerprint` every
-    pending row of this halt shares, and `input_fingerprints` in the pending
-    rows' own order — POSITIONALLY aligned to the snapshot written from the
-    same list."""
+    """`input_fingerprints` and `row_ordinals` are both in the pending rows' own
+    order — POSITIONALLY aligned to the snapshot written from the same list.
+    `row_ordinals` are positions in this stage's INPUT frame, so they are NOT
+    0..n-1 whenever a queue filter passed some rows through unreviewed."""
     (queue_dir / f"{sid}.fingerprints.json").write_text(
         json.dumps({
             "stage_fingerprint": stage_fingerprint,
             "input_fingerprints": [item.input_fingerprint for item in pending],
+            "row_ordinals": [item.row_ordinal for item in pending],
         }),
         encoding="utf-8",
     )

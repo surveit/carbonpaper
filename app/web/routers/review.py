@@ -1,6 +1,7 @@
-"""Human-review queue: render the reviewer UI for one queue stage (recovering
-the model input so the AI's values are reviewable) and persist reviewer
-decisions into the stage-result cache (app.core.stage_cache)."""
+"""Human-review queue: render the reviewer UI for one queue stage — the queued
+rows themselves, described by the columns the stage's input edge declares, and
+a lineage link per row — and persist reviewer decisions into the stage-result
+cache (app.core.stage_cache)."""
 
 from __future__ import annotations
 
@@ -8,7 +9,6 @@ import json
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
-from pathlib import Path
 from typing import Any
 
 import pandas as pd
@@ -18,7 +18,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from app.core.errors import ReviewValidationError
 from app.models import Column, QueueConfig, ReviewVerdict, Stage
 from app.models.stages.shared import resolve_input_schema
-from app.runtime.llm import render_prompt
+from app.runtime.trace_links import RowTraceLinker
 from app.services import review
 from app.core.stage_cache import StageCacheEntry
 from app.web.config import templates
@@ -30,7 +30,6 @@ from app.web.loading import (
     load_queue_fingerprints,
     load_stages,
     queue_snapshot,
-    read_table,
     runs_dir,
 )
 
@@ -66,6 +65,43 @@ class _ReviewedField:
     options: list[str] | None
 
 
+@dataclass(frozen=True)
+class _QueuedColumn:
+    """One column of the queued rows as the page describes it. `description` and
+    `type` are None where the input edge declares nothing for that column —
+    unknowable, never inferred from the values."""
+
+    name: str
+    description: str | None
+    type: str | None
+    in_primary_key: bool
+
+
+@dataclass(frozen=True)
+class _IdentityCell:
+    column: str
+    value: str
+
+
+@dataclass(frozen=True)
+class _DescribedColumns:
+    columns: list[_QueuedColumn]
+    # The declared primary key restricted to columns the queued rows carry;
+    # empty whenever a card's identity cannot be built from a declaration.
+    primary_key: list[str]
+    schema_note: str | None
+    identity_note: str | None
+
+
+@dataclass(frozen=True)
+class _Lineage:
+    """The upstream stage a queued row's provenance is traced through, or None
+    with `note` saying why no link can be built."""
+
+    upstream_stage_id: str | None
+    note: str | None
+
+
 @router.get("/project/{project}/runs/{run_id}/queue/{stage_id}", response_class=HTMLResponse)
 async def queue_page(request: Request, project: str, run_id: str, stage_id: str):
     """Reviewer UI for one queue stage in one run."""
@@ -81,16 +117,18 @@ async def queue_page(request: Request, project: str, run_id: str, stage_id: str)
         _find_definition_drift(stage_def, fingerprints.stage_fingerprint)
         if fingerprints is not None else None
     )
+    snapshot = queue_snapshot(project, run_id, stage_id)
+    described = _describe_queued_columns(stage_def, snapshot)
+    lineage = _resolve_lineage(stage_def, fingerprints)
+
     fields = [] if drift else _build_reviewed_fields(stage_def, queue)
     items: list[dict[str, Any]] = []
     if fingerprints is not None and drift is None:
-        input_lookup, join_keys, prompt_template = _load_model_input_lookup(
-            stage_def, stages, manifest, run_dir
-        )
         items = _build_review_items(
-            queue_snapshot(project, run_id, stage_id), fingerprints,
+            snapshot, fingerprints,
             _load_decided_entries(project, stage_id, fingerprints.stage_fingerprint),
-            queue, fields, input_lookup, join_keys, prompt_template,
+            queue, fields, described.primary_key,
+            _build_lineage_urls(project, run_id, lineage, fingerprints),
         )
 
     reviewed_count = sum(1 for i in items if i["prior_decision"] is not None)
@@ -107,6 +145,10 @@ async def queue_page(request: Request, project: str, run_id: str, stage_id: str)
             "definition_drift": drift,
             "reviewed_fields": fields,
             "review_notes_column": queue.review_notes_column,
+            "queued_columns": described.columns,
+            "schema_note": described.schema_note,
+            "identity_note": described.identity_note,
+            "lineage_note": lineage.note,
             "items": items,
             "reviewed_count": reviewed_count,
             "total": total,
@@ -122,22 +164,24 @@ async def queue_decide(
     run_id: str,
     stage_id: str,
     input_fingerprint: str = Form(...),
-    verdict: ReviewVerdict = Form(...),
     reviewer: str = Form(...),
     reviewed_values: str = Form(...),
+    prefilled_values: str = Form(...),
     review_notes: str | None = Form(None),
 ):
     """Persist a reviewer's decision as a `StageCacheEntry` keyed by this
     stage's definition fingerprint and this row's `input_fingerprint`.
-    `reviewed_values` is a JSON object keyed by reviewed TARGET column name,
-    each value the reviewer's raw form text. The row is resolved by POSITION in
-    the halted-queue sidecar's fingerprint list — never recomputed from live
-    stages — so a fingerprint the sidecar can't vouch for 404s rather than being
-    trusted."""
+    `reviewed_values` and `prefilled_values` are JSON objects keyed by reviewed
+    TARGET column name — what the reviewer submitted, and what the page they
+    submitted from had pre-filled. The verdict is DERIVED from the two, so the
+    reviewer chooses none. The row is resolved by POSITION in the halted-queue
+    sidecar's fingerprint list — never recomputed from live stages — so a
+    fingerprint the sidecar can't vouch for 404s rather than being trusted."""
     stage_def = _require_queue_stage(load_stages(project).stages, stage_id)
     queue = _require_queue_config(stage_def)
     attributed_to = _require_reviewer_name(reviewer)
-    supplied = _parse_reviewed_values(reviewed_values)
+    supplied = _parse_reviewed_values(reviewed_values, "reviewed_values")
+    verdict = _derive_verdict(supplied, _parse_reviewed_values(prefilled_values, "prefilled_values"))
     stage_fingerprint, row = _resolve_queue_row(project, run_id, stage_id, input_fingerprint)
     _validate_stage_definition_unchanged(stage_def, stage_fingerprint)
     try:
@@ -236,19 +280,45 @@ def _require_reviewer_name(reviewer: str) -> str:
     return name
 
 
-def _parse_reviewed_values(raw: str) -> dict[str, object]:
+def _parse_reviewed_values(raw: str, field: str) -> dict[str, object]:
     try:
         parsed = json.loads(raw)
     except json.JSONDecodeError as exc:
         raise HTTPException(
-            status_code=400, detail=f"reviewed_values is not valid JSON: {exc}"
+            status_code=400, detail=f"{field} is not valid JSON: {exc}"
         ) from exc
     if not isinstance(parsed, dict):
         raise HTTPException(
             status_code=400,
-            detail=f"reviewed_values must be a JSON object, got {type(parsed).__name__}",
+            detail=f"{field} must be a JSON object, got {type(parsed).__name__}",
         )
     return {str(name): value for name, value in parsed.items()}
+
+
+def _derive_verdict(
+    supplied: Mapping[str, object], prefilled: Mapping[str, object]
+) -> ReviewVerdict:
+    """`modify` iff a submitted value differs from what THE PAGE carried as its
+    prefill for that column. Deliberately not compared against a server-side
+    recompute of the prefill: the reviewer decided against what they were
+    shown, and a decision landing between render and submit would change what
+    a recompute produced. A reviewer who retypes an identical value records
+    `approve` — `modify` means the value changed."""
+    unmatched = sorted(set(supplied) ^ set(prefilled))
+    if unmatched:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "reviewed_values and prefilled_values must name the same columns — "
+                f"the verdict is derived by comparing them; {unmatched} appears in only "
+                "one of the two"
+            ),
+        )
+    changed = any(
+        _as_form_text(value) != _as_form_text(prefilled[target])
+        for target, value in supplied.items()
+    )
+    return ReviewVerdict.modify if changed else ReviewVerdict.approve
 
 
 def _coerce_reviewed_values(
@@ -434,92 +504,110 @@ def _build_reviewed_field(source: str, target: str, column: Column) -> _Reviewed
     )
 
 
-def _load_upstream_stage(stages: list[Stage], stage_def: Stage) -> Stage | None:
-    """The upstream stage whose OUTPUT this queue stage reviews — stage_def's
-    declared input, or None if it declares none."""
-    upstream_ids = stage_def.input_ids
-    return find_stage(stages, upstream_ids[0]) if upstream_ids else None
+NO_SCHEMA_NOTE = (
+    "This stage's input edge declares no schema, so the columns below are the "
+    "queued rows' own and carry no declared description, type or primary key."
+)
+NO_PRIMARY_KEY_NOTE = (
+    "No primary key is declared on this stage's input schema, so a queued row "
+    "is identified only by its position in this queue."
+)
 
 
-def _resolve_prompt_template(upstream_def: Stage | None) -> str | None:
-    return upstream_def.llm.prompt_data_template if upstream_def and upstream_def.llm else None
+def _describe_queued_columns(
+    stage_def: Stage, snapshot: pd.DataFrame | None
+) -> _DescribedColumns:
+    """The queued rows' own columns, annotated from the input edge's declared
+    schema. The SNAPSHOT is the spine: it holds the values there are to review,
+    so a declared column the rows do not carry is reported in `schema_note`
+    rather than rendered as an empty field."""
+    names = [str(c) for c in snapshot.columns] if snapshot is not None else []
+    schema = resolve_input_schema(stage_def, 0) if stage_def.inputs else None
+    if schema is None:
+        return _DescribedColumns(
+            columns=[_QueuedColumn(n, None, None, False) for n in names],
+            primary_key=[], schema_note=NO_SCHEMA_NOTE, identity_note=NO_SCHEMA_NOTE,
+        )
+    declared = {column.name: column for column in schema.columns}
+    primary_key = list(schema.primary_key or [])
+    return _DescribedColumns(
+        columns=[
+            _QueuedColumn(
+                name=name,
+                description=declared[name].description if name in declared else None,
+                type=declared[name].type if name in declared else None,
+                in_primary_key=name in primary_key,
+            )
+            for name in names
+        ],
+        primary_key=primary_key if all(k in names for k in primary_key) else [],
+        schema_note=_find_schema_discrepancy(sorted(declared), names),
+        identity_note=_find_identity_note(primary_key, names),
+    )
 
 
-def _read_table_or_none(path: Path) -> pd.DataFrame | None:
-    if not path.exists():
-        return None
-    try:
-        return read_table(path)
-    except Exception:  # noqa: BLE001
-        return None
+def _find_schema_discrepancy(declared: list[str], present: list[str]) -> str | None:
+    missing = [name for name in declared if name not in present]
+    undeclared = [name for name in present if name not in declared]
+    parts = []
+    if missing:
+        parts.append(
+            f"the input schema declares column(s) {missing} that the queued rows "
+            "do not carry, so they are not shown"
+        )
+    if undeclared:
+        parts.append(
+            f"the queued rows carry column(s) {undeclared} the input schema does "
+            "not declare, so those have no description or type"
+        )
+    return None if not parts else f"Schema and queued rows disagree: {'; '.join(parts)}."
 
 
-def _resolve_upstream_input_frame(
-    upstream_def: Stage, manifest: dict[str, Any], run_dir: Path
-) -> tuple[pd.DataFrame | None, list[str] | None]:
-    """The upstream stage's OWN input — DataFrame plus declared primary key — the
-    frame the queue snapshot needs to join back against to recover the model
-    input, or (None, pk) if that stage's output isn't on disk."""
-    output_by_id = {s.get("stage_id"): s.get("output_path") for s in manifest.get("stage_records", [])}
-    upstream_in_id = upstream_def.input_ids[0]
-    upstream_in = upstream_def.inputs[0] if upstream_def.inputs else None
-    pk = upstream_in.table_schema.primary_key if upstream_in and upstream_in.table_schema else None
-    in_path = output_by_id.get(upstream_in_id)
-    in_df = _read_table_or_none(run_dir / in_path) if in_path else None
-    return in_df, pk
-
-
-def _find_join_keys(primary_key: list[str] | None, columns: list[str]) -> list[str]:
-    """Columns to join the queue snapshot back to the upstream stage's input on:
-    the declared primary key restricted to columns actually present, or a
-    handful of common id-like column names as a fallback."""
-    return [k for k in (primary_key or []) if k in columns] or \
-        [c for c in ("evidence_id", "entity_id", "doc_id", "id") if c in columns]
-
-
-def _index_rows_by_join_key(df: pd.DataFrame, join_keys: list[str]) -> dict[tuple[str, ...], dict[str, Any]]:
-    return {
-        tuple(str(r[k]) for k in join_keys): {str(k): display_cell(v) for k, v in r.items()}
-        for _, r in df.iterrows()
-    }
-
-
-def _load_model_input_lookup(
-    stage_def: Stage, stages: list[Stage], manifest: dict[str, Any], run_dir: Path
-) -> tuple[dict[tuple[str, ...], dict[str, Any]], list[str], str | None]:
-    """Recover the MODEL INPUT so the AI's values are reviewable, not just
-    visible. The queue snapshot holds the upstream stage's OUTPUT; the material
-    the model actually judged lives in that stage's INPUT, one stage further
-    up. Join it back + resolve the prompt template it was produced with."""
-    upstream_def = _load_upstream_stage(stages, stage_def)
-    prompt_template = _resolve_prompt_template(upstream_def)
-
-    input_lookup: dict[tuple[str, ...], dict[str, Any]] = {}
-    join_keys: list[str] = []
-    if upstream_def and upstream_def.input_ids:
-        in_df, pk = _resolve_upstream_input_frame(upstream_def, manifest, run_dir)
-        if in_df is not None:
-            join_keys = _find_join_keys(pk, list(in_df.columns))
-            if join_keys:
-                input_lookup = _index_rows_by_join_key(in_df, join_keys)
-    return input_lookup, join_keys, prompt_template
-
-
-def _find_model_input(
-    row: pd.Series, input_lookup: dict[tuple[str, ...], dict[str, Any]], join_keys: list[str]
-) -> dict[str, Any] | None:
-    if input_lookup and join_keys and all(k in row.index for k in join_keys):
-        return input_lookup.get(tuple(str(row[k]) for k in join_keys))
+def _find_identity_note(primary_key: list[str], present: list[str]) -> str | None:
+    if not primary_key:
+        return NO_PRIMARY_KEY_NOTE
+    missing = [k for k in primary_key if k not in present]
+    if missing:
+        return (
+            f"The declared primary key {primary_key} names column(s) {missing} the "
+            "queued rows do not carry, so no row identity can be shown."
+        )
     return None
 
 
-def _render_model_prompt(model_input: dict[str, Any] | None, prompt_template: str | None) -> str | None:
-    if not model_input or not prompt_template:
-        return None
-    try:
-        return render_prompt(prompt_template, model_input)
-    except Exception:  # noqa: BLE001
-        return None
+def _resolve_lineage(stage_def: Stage, fingerprints: QueueFingerprints | None) -> _Lineage:
+    """The queue stage has produced no output at halt time, so its own rows
+    cannot be traced — the link points at the UPSTREAM stage's row instead.
+    A row-mapped stage takes exactly one input frame
+    (app.runtime.stages.execution._run_row_mapper), so a row ordinal cannot be
+    attributed to any one of several declared inputs; that case gets no link."""
+    input_ids = stage_def.input_ids
+    if not input_ids:
+        return _Lineage(None, "This stage declares no input, so there is no upstream row to trace.")
+    if len(input_ids) > 1:
+        return _Lineage(None, (
+            f"This stage declares {len(input_ids)} inputs ({input_ids}); a queued row's "
+            "ordinal is its position in the single frame a row-mapped stage takes, so it "
+            "cannot be attributed to one of them and no lineage link is offered."
+        ))
+    if fingerprints is not None and fingerprints.row_ordinals is None:
+        return _Lineage(None, (
+            "This run halted before the queue recorded each row's ordinal, so there is "
+            "no exact row to link to upstream."
+        ))
+    return _Lineage(input_ids[0], None)
+
+
+def _build_lineage_urls(
+    project: str, run_id: str, lineage: _Lineage, fingerprints: QueueFingerprints
+) -> list[str | None]:
+    """One entry per queued row, POSITIONALLY aligned to
+    `fingerprints.input_fingerprints`; None where no link can be built."""
+    ordinals = fingerprints.row_ordinals
+    if lineage.upstream_stage_id is None or ordinals is None:
+        return [None] * len(fingerprints.input_fingerprints)
+    linker = RowTraceLinker(project=project, run_id=run_id)
+    return [linker.build_row_trace_url(lineage.upstream_stage_id, o) for o in ordinals]
 
 
 def _build_review_item(
@@ -528,19 +616,19 @@ def _build_review_item(
     entries_by_fingerprint: dict[str, StageCacheEntry],
     queue: QueueConfig,
     fields: list[_ReviewedField],
-    input_lookup: dict[tuple[str, ...], dict[str, Any]],
-    join_keys: list[str],
-    prompt_template: str | None,
+    primary_key: list[str],
+    lineage_url: str | None,
 ) -> dict[str, Any]:
     entry = entries_by_fingerprint.get(input_fingerprint)
-    model_input = _find_model_input(row, input_lookup, join_keys)
     prior = _display_decision(entry, queue) if entry is not None else None
     displayed_row = {str(k): display_cell(v) for k, v in row.items()}
     return {
         "input_fingerprint": input_fingerprint,
         "row": displayed_row,
-        "model_input": model_input,
-        "rendered_prompt": _render_model_prompt(model_input, prompt_template),
+        "identity": [
+            _IdentityCell(column=k, value=str(displayed_row[k])) for k in primary_key
+        ],
+        "lineage_url": lineage_url,
         "prior_decision": prior,
         "prefill": _build_field_prefills(fields, displayed_row, prior),
         "ai_text": _build_ai_texts(fields, displayed_row),
@@ -628,20 +716,20 @@ def _build_review_items(
     entries_by_fingerprint: dict[str, StageCacheEntry],
     queue: QueueConfig,
     fields: list[_ReviewedField],
-    input_lookup: dict[tuple[str, ...], dict[str, Any]],
-    join_keys: list[str],
-    prompt_template: str | None,
+    primary_key: list[str],
+    lineage_urls: list[str | None],
 ) -> list[dict[str, Any]]:
     """One review item per snapshot row, zipped POSITIONALLY with the
-    sidecar's `input_fingerprints` — the two lists are index-independent
-    (the snapshot carries no fingerprint column), so position is the only
-    correspondence between them."""
+    sidecar's `input_fingerprints` and the lineage URLs built from the same
+    sidecar — the lists are index-independent (the snapshot carries no
+    fingerprint column), so position is the only correspondence between them."""
     if snapshot is None or fingerprints is None:
         return []
     return [
         _build_review_item(
-            row, fp, entries_by_fingerprint, queue, fields,
-            input_lookup, join_keys, prompt_template,
+            row, fp, entries_by_fingerprint, queue, fields, primary_key, url,
         )
-        for (_, row), fp in zip(snapshot.iterrows(), fingerprints.input_fingerprints)
+        for (_, row), fp, url in zip(
+            snapshot.iterrows(), fingerprints.input_fingerprints, lineage_urls
+        )
     ]

@@ -46,15 +46,23 @@ after injection — without that, the panel's JS (tabs + scratch tool) is dead.
 
 `GET /project/{p}/runs/{run_id}/queue/{stage_id}`.
 
-The key principle: **a reviewer must see the model INPUT, not just its output.**
-The queue snapshot only holds the upstream stage's *output*; the material the
-model judged lives one stage further up. `queue_page` walks back from the queue
-stage → its upstream stage → that stage's input, loads the input's run output,
-joins each flagged row by primary key, and **re-renders the actual prompt**. The
-card leads with *the reviewed material + the exact prompt the model received*,
-then the model's output. If the input can't be recovered it says so loudly
-("reviewing blind") rather than hiding it. (Known gap: when no primary key is
-declared, the join falls back to guessed keys — issue #49.)
+A `human_review_queue` can follow **any** stage type, so the page assumes
+nothing about the upstream stage or its column names. The queued row itself is
+the material to review; `queue_page` describes each of its columns from the
+schema the queue stage's input edge declares (name, `description`, `type`,
+whether it is part of the declared `primary_key`) and links out for anything
+upstream. Where a declaration is missing the page says so — an edge with no
+schema falls back to the queued rows' own columns with no descriptions, and a
+stage with no declared `primary_key` states that rather than guessing which
+columns identify a row.
+
+**Lineage**: each card links to
+`…/stage/{upstream_stage_id}/row/{row_ordinal}/trace/view`, where the ordinal
+comes from the halted-queue sidecar's `row_ordinals` (written by the runtime,
+positionally aligned to the snapshot). The queue stage has produced no output at
+halt time, so it is the UPSTREAM stage's row that is traced. No ordinals, no
+declared input, or more than one declared input → no link and a stated reason,
+never a guessed one.
 
 The page opens on a **"Reviewing as"** name field and the queue stays hidden
 until a name is typed (remembered in `localStorage`); `queue_decide` rejects a
@@ -63,9 +71,13 @@ written into `queue.reviewer_column` on every decision, alongside a timestamp in
 `queue.reviewed_at_column`.
 
 The form fields come from the stage's own `queue.reviewed_columns`: one control
-per reviewed column, typed from that column's declared schema. A decision
-records a verdict (`approve` for the AI's values, `modify` for the reviewer's),
-a value for each reviewed column, and optionally a note — it never overwrites
+per reviewed column, typed from that column's declared schema. The reviewer
+names no verdict: the page posts both the values it submits and the values it
+was pre-filled with, and `queue_decide` DERIVES `modify` when any submitted
+value differs from the prefill the page carried, `approve` when they all match.
+(`skipped` is the runtime's own verdict for a row its filter excluded; the
+review service refuses it from a reviewer.) A decision records that verdict, a
+value for each reviewed column, and optionally a note — it never overwrites
 the AI's original column. Decisions are keyed by a hash of the row (`app.core.stage_cache`)
 so they survive re-runs and LLM non-determinism. When all items are decided, a
 **Resume run** button appears.

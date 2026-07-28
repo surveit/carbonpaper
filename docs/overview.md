@@ -6,7 +6,8 @@ true things about how power and money work. The standards *are* the product — 
 number or unsourced claim defeats the purpose. Two rules recur in the code:
 - **Never fabricate; fail loudly.** An unsourceable value is `null`/`unknown`; the pipeline
   halts or errors rather than inventing a number, URL, citation, or quote (a missing LLM
-  backend raises; the runner rejects duplicate rows; the queue says "reviewing blind").
+  backend raises; the runner rejects duplicate rows; the review queue states that no
+  primary key is declared rather than guessing which columns identify a row).
 - **Expensive or irreversible steps sit behind human review.** `human_review_queue` halts
   the run; decisions are content-hashed so they survive re-runs.
 
