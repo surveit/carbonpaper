@@ -156,14 +156,30 @@ def test_a_failed_row_is_never_recorded():
     assert compute_row_fingerprint({"x": 1}) in recorded
 
 
-def test_cache_false_neither_reads_nor_writes():
+def test_cache_false_writes_nothing():
     stage = _row_stage(cache=False)
     calls: list[int] = []
     _counting_row_handler(calls).execute(stage, {"src": _src([1])}, _ctx(run_id="run1"))
-    assert _entries(stage) == []  # nothing written
+    assert _entries(stage) == []
 
     _counting_row_handler(calls).execute(stage, {"src": _src([1])}, _ctx(run_id="run2"))
-    assert calls == [1, 1]  # and nothing read: the row re-rolled
+    assert calls == [1, 1]  # so the second run has nothing to replay
+
+
+def test_cache_false_reads_nothing_that_is_already_pinned():
+    """The read half of the opt-out, which the write test above cannot reach: a
+    run that wrote nothing has nothing to replay, so re-rolling proves only that
+    the store is empty. `cache` stays out of the definition fingerprint (see the
+    test below), so the SAME stage cached once leaves an entry the uncached stage
+    would find if it looked — and it must still re-roll."""
+    calls: list[int] = []
+    _counting_row_handler(calls).execute(
+        _row_stage(cache=True), {"src": _src([1])}, _ctx(run_id="seed"))
+    assert len(_entries(_row_stage())) == 1
+
+    _counting_row_handler(calls).execute(
+        _row_stage(cache=False), {"src": _src([1])}, _ctx(run_id="uncached"))
+    assert calls == [1, 1]  # the pinned row was there to be had, and was not taken
 
 
 def test_cache_false_does_not_change_the_definition_fingerprint():
@@ -174,16 +190,26 @@ def test_cache_false_does_not_change_the_definition_fingerprint():
 
 
 def test_bust_cache_skips_the_read_but_still_re_pins_the_entry():
+    """Re-pinned, not merely stale. A busted run over a row that is ALREADY
+    pinned proves only that the read was skipped: the run after it hits the first
+    run's entry either way, so the recording half of the claim goes untested. The
+    busted run is therefore also shown x=5, which nothing has ever pinned — the
+    run after it can replay x=5 only if the busted run recorded what it
+    recomputed."""
     stage = _row_stage()
     calls: list[int] = []
     _counting_row_handler(calls).execute(stage, {"src": _src([1])}, _ctx(run_id="run1"))
+    assert calls == [1]
 
     _counting_row_handler(calls).execute(
-        stage, {"src": _src([1])}, _ctx(run_id="run2", bust_cache=True))
-    assert calls == [1, 1]  # read skipped: recomputed
+        stage, {"src": _src([1, 5])}, _ctx(run_id="run2", bust_cache=True))
+    assert calls == [1, 1, 5]  # read skipped: x=1 recomputed despite its entry
 
-    _counting_row_handler(calls).execute(stage, {"src": _src([1])}, _ctx(run_id="run3"))
-    assert calls == [1, 1]  # the busted run left the entry re-pinned, not stale
+    _counting_row_handler(calls).execute(
+        stage, {"src": _src([1, 5])}, _ctx(run_id="run3"))
+    # x=5 was computed by the busted run and by nothing else, so replaying it
+    # here is the evidence that a busted run records.
+    assert calls == [1, 1, 5]
 
 
 def test_a_run_without_project_scope_touches_the_cache_at_all():
@@ -372,18 +398,23 @@ def test_a_failed_batch_records_nothing(monkeypatch):
 
 
 def test_batched_bust_cache_skips_the_read_but_re_pins(monkeypatch):
+    """The batched path's version of the row-grain test above, and shaped the
+    same way: the busted run is shown x=7, which nothing has ever pinned, so the
+    run after it is what proves the busted run recorded rather than merely
+    skipped its reads."""
     batches: list[list[int]] = []
     _stub_call_llm_batch(monkeypatch, batches)
     stage = _llm_stage(batch_size=2)
     _run(stage, _src([1, 2]), _ctx(run_id="run1"))
     batches.clear()
 
-    _run(stage, _src([1, 2]), _ctx(run_id="run2", bust_cache=True))
-    assert batches == [[1, 2]]  # read skipped
+    _run(stage, _src([1, 2, 7]), _ctx(run_id="run2", bust_cache=True))
+    assert batches == [[1, 2], [7]]  # read skipped: every row batched, pinned or not
     batches.clear()
 
-    _run(stage, _src([1, 2]), _ctx(run_id="run3"))
-    assert batches == []  # re-pinned, not stale
+    _run(stage, _src([1, 2, 7]), _ctx(run_id="run3"))
+    # x=7 was computed by the busted run and by nothing else.
+    assert batches == []
 
 
 def test_batched_path_without_project_scope_calls_the_model_every_time(monkeypatch):
