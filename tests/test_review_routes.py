@@ -1120,7 +1120,7 @@ def test_a_queue_whose_upstream_is_not_an_llm_transform_renders_and_links(tmp_pa
     ]
 
 
-def test_queued_columns_carry_the_declared_description_type_and_primary_key(tmp_path, monkeypatch):
+def test_queued_columns_carry_the_declared_description_and_primary_key(tmp_path, monkeypatch):
     project = "queue_route_column_metadata"
     project_dir = tmp_path / project
     run_id, _fingerprints = _build_and_halt_queue_over(
@@ -1135,9 +1135,8 @@ def test_queued_columns_carry_the_declared_description_type_and_primary_key(tmp_
 
     by_name = {column.name: column for column in described.columns}
     assert by_name["label"].description == "high when the score exceeds one"
-    assert by_name["label"].type == "str" and not by_name["label"].in_primary_key
+    assert not by_name["label"].in_primary_key
     assert by_name["id"].in_primary_key and by_name["id"].description is None
-    assert described.primary_key == ["id"]
     assert described.schema_note is None and described.identity_note is None
 
 
@@ -1152,7 +1151,7 @@ def _no_primary_key_review_stage():
 def test_a_stage_with_no_declared_primary_key_says_so_rather_than_guessing(tmp_path, monkeypatch):
     """An `id` column is present and would have been guessed at by the removed
     join-key fallback; with no `primary_key` declared the page states that
-    instead, and no card carries an identity."""
+    instead, and no column is flagged as the key."""
     project = "queue_route_no_primary_key"
     project_dir = tmp_path / project
     run_id, _fingerprints = _build_and_halt_queue_over(
@@ -1165,7 +1164,6 @@ def test_a_stage_with_no_declared_primary_key_says_so_rather_than_guessing(tmp_p
         loading.queue_snapshot(project, run_id, "review"),
     )
 
-    assert described.primary_key == []
     assert described.identity_note == review_routes.NO_PRIMARY_KEY_NOTE
     assert not any(column.in_primary_key for column in described.columns)
 
@@ -1189,10 +1187,9 @@ def test_an_input_edge_with_no_schema_falls_back_to_the_queued_columns(tmp_path,
     )
 
     assert [column.name for column in described.columns] == ["id", "score"]
-    assert all(column.type is None and column.description is None
-               for column in described.columns)
+    assert all(column.description is None for column in described.columns)
+    assert not any(column.in_primary_key for column in described.columns)
     assert described.schema_note == review_routes.NO_SCHEMA_NOTE
-    assert described.primary_key == []
 
 
 def test_a_never_opened_field_carries_the_value_it_displays(tmp_path, monkeypatch):
@@ -1224,7 +1221,8 @@ def _described_review_stage():
             "inputs": [{"id": "label", "schema": {
                 "columns": [
                     {"name": "id", "type": "str"},
-                    {"name": "score", "type": "int"},
+                    {"name": "score", "type": "int",
+                     "description": "the score this row was labelled from"},
                     {"name": "label", "type": "str",
                      "description": "high when the score exceeds one"}],
                 "primary_key": ["id"]}}],
@@ -1258,16 +1256,18 @@ def _first_card(html):
 
 
 def test_the_card_renders_the_queued_row_as_a_key_value_table(tmp_path, monkeypatch):
-    """Every queued column, labelled by its own name — no `<pre>` JSON dump and
-    no column name this workflow did not declare."""
+    """Every context column, labelled by its own name — no `<pre>` JSON dump,
+    no declared type on show, and no column name this workflow did not
+    declare."""
     _run_id, _fingerprints, html = _described_queue_html(
         tmp_path, monkeypatch, "queue_route_kv_table")
 
     card = _first_card(html)
     assert '<table class="kv">' in card
-    for column in ("id", "score", "label"):
+    for column in ("id", "score"):
         assert f"<code>{column}</code>" in card
     assert "<pre>" not in card
+    assert "type-pill" not in card
     for guessed in ("entity_id", "query_id", "benchmark_id", "quote", "benchmark_text"):
         assert guessed not in html
 
@@ -1279,9 +1279,9 @@ def test_a_declared_description_becomes_the_column_tooltip(tmp_path, monkeypatch
         tmp_path, monkeypatch, "queue_route_kv_tooltip")
 
     card = _first_card(html)
-    assert 'title="high when the score exceeds one"' in card
-    described = re.search(r'<th[^>]*title="[^"]*"[^>]*>\s*<code>(\w+)</code>', card)
-    assert described is not None and described.group(1) == "label"
+    described = re.search(r'<th[^>]*title="([^"]*)"[^>]*>\s*<code>(\w+)</code>', card)
+    assert described is not None
+    assert described.groups() == ("the score this row was labelled from", "score")
 
 
 def test_the_reviewed_field_label_carries_the_declared_description(tmp_path, monkeypatch):
@@ -1325,17 +1325,20 @@ def test_a_column_with_no_declared_description_carries_no_tooltip(tmp_path, monk
     assert "title=" not in _first_card(html)
 
 
-def test_the_card_header_carries_the_declared_identity_and_the_lineage_link(tmp_path, monkeypatch):
+def test_the_card_header_states_the_row_position_and_the_lineage_link(tmp_path, monkeypatch):
+    """A bare primary key identifies nothing to a human, so the header says
+    where in the queue the reviewer is; the key itself stays in the table."""
     run_id, fingerprints, html = _described_queue_html(
         tmp_path, monkeypatch, "queue_route_card_header")
 
-    card = _first_card(html)
-    assert '<span class="identity-cell">id <code>' in card
+    positions = re.findall(r'<span class="row-position">([^<]*)</span>', html)
+    assert positions == [f"Row {n} of {len(positions)}" for n in range(1, len(positions) + 1)]
+    assert "identity-cell" not in html
     assert (f'href="/project/queue_route_card_header/runs/{run_id}/stage/label/row/'
-            f'{fingerprints["row_ordinals"][0]}/trace/view"') in card
+            f'{fingerprints["row_ordinals"][0]}/trace/view"') in _first_card(html)
 
 
-def test_a_stage_with_no_primary_key_states_it_instead_of_a_card_identity(tmp_path, monkeypatch):
+def test_a_stage_with_no_primary_key_states_it_rather_than_guessing_one(tmp_path, monkeypatch):
     project = "queue_route_identity_note"
     project_dir = tmp_path / project
     run_id, _fingerprints = _build_and_halt_queue_over(
@@ -1346,7 +1349,7 @@ def test_a_stage_with_no_primary_key_states_it_instead_of_a_card_identity(tmp_pa
     html = TestClient(app).get(f"/project/{project}/runs/{run_id}/queue/review").text
 
     assert review_routes.NO_PRIMARY_KEY_NOTE.replace("'", "&#39;") in html
-    assert 'class="identity-cell"' not in html
+    assert 'class="pk-flag"' not in html
 
 
 def test_the_reviewer_instructions_are_not_rendered_as_a_code_block(tmp_path, monkeypatch):
@@ -1461,7 +1464,7 @@ def _empty_string_review_stage():
     return {"id": "review", "name": "Review notes", "type": "human_review_queue",
             "inputs": [{"id": "note", "schema": {
                 "columns": _EMPTY_STRING_COLUMNS, "primary_key": ["flag"]}}],
-            "queue": {**queue_columns(source="note", target="human_note")}}
+            "queue": {**queue_columns(source="flag", target="human_flag")}}
 
 
 def test_an_empty_string_cell_is_not_printed_as_a_null(tmp_path, monkeypatch):
@@ -1483,19 +1486,121 @@ def test_an_empty_string_cell_is_not_printed_as_a_null(tmp_path, monkeypatch):
     assert "<em>null</em>" in cells
 
 
-def test_a_bool_primary_key_reads_the_same_in_the_header_and_the_table(tmp_path, monkeypatch):
-    """The identity cell and the table cell print one value one way — a python
-    `True` in the header beside a `true` in the table is the same value spelled
-    two ways on one card."""
-    project = "queue_route_identity_spelling"
+# ── 19. Context columns and reviewed columns are two different sections ──────
+
+
+def test_a_reviewed_source_column_is_shown_only_in_the_review_section(tmp_path, monkeypatch):
+    """The context table is the input row MINUS the columns under review: a
+    column the reviewer is asked to change is shown once, beside its control,
+    not twice. The subtraction is by the queue's declared `reviewed_columns`
+    sources, never by matching on a column name."""
+    _run_id, _fingerprints, html = _described_queue_html(
+        tmp_path, monkeypatch, "queue_route_context_split")
+
+    card = _first_card(html)
+    table = card[card.index('<table class="kv">'):card.index("</table>")]
+    labels = re.findall(r"<code>(\w+)</code>", table)
+    assert labels == ["id", "score"]          # `label` is under review
+    assert "received <code>label</code>:" in " ".join(card.split())
+
+
+def _every_column_reviewed_stage():
+    """A queue over a frame whose ONLY column is the one under review, so
+    subtracting the reviewed columns leaves no context at all."""
+    return {"id": "review", "name": "Review scores", "type": "human_review_queue",
+            "inputs": [{"id": "load", "schema": {
+                "columns": [{"name": "score", "type": "int"}]}}],
+            "queue": dict(QUEUE_COLUMNS)}
+
+
+def test_no_context_table_is_rendered_when_every_column_is_under_review(tmp_path, monkeypatch):
+    """No empty table, and no note inventing an explanation for its absence."""
+    project = "queue_route_no_context"
     project_dir = tmp_path / project
+    csv_path = project_dir / "data" / "scores.csv"
+    csv_path.parent.mkdir(parents=True, exist_ok=True)
+    csv_path.write_text("score\n1\n2\n", encoding="utf-8")
+    load = {"id": "load", "name": "Load scores", "type": "input_data",
+            "connector": {"kind": "file",
+                          "params": {"path": str(csv_path), "format": "csv"}},
+            "output_schema": {"columns": [{"name": "score", "type": "int"}]}}
     run_id, _fingerprints = _build_and_halt_queue_over(
-        tmp_path, monkeypatch, project,
-        [_empty_string_load_stage(project_dir), _empty_string_row_function_stage(),
-         _empty_string_review_stage()],
-    )
+        tmp_path, monkeypatch, project, [load, _every_column_reviewed_stage()])
 
     html = TestClient(app).get(f"/project/{project}/runs/{run_id}/queue/review").text
 
-    identities = re.findall(r'<span class="identity-cell">flag <code>([^<]*)</code>', html)
-    assert identities == ["true", "false"]
+    assert '<table class="kv">' not in html
+    assert "no columns" not in html
+    assert 'data-target="human_score"' in html
+
+
+# ── 20. A decided card is not asking for input ───────────────────────────────
+
+
+def _decided_queue_html(tmp_path, monkeypatch):
+    """The main fixture with its FIRST row decided through the real service."""
+    project_dir, run_id, _run_dir, snapshot, fingerprints = _build_and_halt(tmp_path, monkeypatch)
+    _put_cached_decision(
+        PROJECT, "review", fingerprints["stage_fingerprint"],
+        fingerprints["input_fingerprints"][0], snapshot.iloc[0], ReviewVerdict.approve,
+    )
+    html = TestClient(app).get(f"/project/{PROJECT}/runs/{run_id}/queue/review").text
+    return project_dir, run_id, fingerprints, html
+
+
+def test_a_decided_card_disables_its_openers_and_offers_a_secondary_cta(tmp_path, monkeypatch):
+    """`disabled` on the `<button>` itself, so a keyboard user cannot tab into
+    and activate it — a CSS-only look would leave the control live. And both
+    halves of the hidden Submit: the attribute AND the stylesheet rule, without
+    which `.btn`'s own `display` beats the UA's [hidden] rule."""
+    _project_dir, _run_id, _fingerprints, html = _decided_queue_html(tmp_path, monkeypatch)
+
+    decided = _first_card(html)
+    opener = re.search(r'<button type="button" class="value-display"[^>]*>', decided)
+    assert opener is not None and "disabled" in opener.group(0)
+    assert ">Change my review<" in decided
+    submit = re.search(r'<button type="submit" class="btn primary"[^>]*>', decided)
+    assert submit is not None and re.search(r"\bhidden\b", submit.group(0))
+    assert "Recorded: <strong>approve</strong>" in " ".join(decided.split())
+
+    stylesheet = (Path(app_package.__file__).parent / "static" / "style.css").read_text(
+        encoding="utf-8"
+    )
+    assert re.search(r"\.decision-controls \[hidden\]\s*\{[^}]*display:\s*none", stylesheet)
+
+
+def test_an_undecided_card_offers_the_primary_submit_and_live_openers(tmp_path, monkeypatch):
+    _project_dir, _run_id, fingerprints, html = _decided_queue_html(tmp_path, monkeypatch)
+
+    undecided = html[html.index(f'data-input-fingerprint="{fingerprints["input_fingerprints"][1]}"'):]
+    undecided = undecided[:undecided.index("</article>")]
+    opener = re.search(r'<button type="button" class="value-display"[^>]*>', undecided)
+    assert opener is not None and "disabled" not in opener.group(0)
+    assert ">Change my review<" not in undecided
+    submit = re.search(r'<button type="submit" class="btn primary"[^>]*>', undecided)
+    assert submit is not None and not re.search(r"\bhidden\b", submit.group(0))
+
+
+def test_unlocking_a_decided_card_records_a_new_verdict_on_resubmit(tmp_path, monkeypatch):
+    """"Change my review" itself records nothing — it unlocks the card. The
+    re-submit that follows still derives its verdict from the page's prefill,
+    which on a decided row is the value the reviewer recorded before."""
+    _project_dir, run_id, fingerprints, html = _decided_queue_html(tmp_path, monkeypatch)
+
+    decided = _first_card(html)
+    assert 'data-prefill="1"' in decided  # the recorded value the card opens on
+    assert "data-unlock" in decided
+
+    fp = fingerprints["input_fingerprints"][0]
+    client = TestClient(app)
+    changed = client.post(
+        f"/project/{PROJECT}/runs/{run_id}/queue/review/decide",
+        data=_decide_data(fp, {"human_score": "7"}, prefilled={"human_score": "1"}),
+    )
+    assert changed.status_code == 200, changed.text
+    assert changed.json()["verdict"] == "modify"
+
+    entry = StageCacheEntry.read_only().get(
+        PROJECT, "review", fingerprints["stage_fingerprint"], fp)
+    assert entry is not None and entry.output_row is not None
+    assert entry.output_row["human_score"] == 7

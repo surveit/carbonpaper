@@ -48,13 +48,18 @@ after injection — without that, the panel's JS (tabs + scratch tool) is dead.
 
 A `human_review_queue` can follow **any** stage type, so the page assumes
 nothing about the upstream stage or its column names. The queued row itself is
-the material to review; `queue_page` describes each of its columns from the
-schema the queue stage's input edge declares (name, `description`, `type`,
-whether it is part of the declared `primary_key`) and links out for anything
-upstream. Where a declaration is missing the page says so — an edge with no
-schema falls back to the queued rows' own columns with no descriptions, and a
-stage with no declared `primary_key` states that rather than guessing which
-columns identify a row.
+the material to review, split in two: the columns the queue declares as
+`reviewed_columns` sources appear only in the review section, beside their
+controls; every other column of the row is background context, rendered as a
+key/value table (none of them under review → no table at all). `queue_page`
+describes each column from the schema the queue stage's input edge declares —
+its `description` becomes the label's tooltip, and a column in the declared
+`primary_key` carries a `key` flag. Where a declaration is missing the page says
+so: an edge with no schema falls back to the queued rows' own columns with no
+descriptions, and a stage with no declared `primary_key` states that rather than
+guessing which columns identify a row. Each card's header states its **position
+in the queue** (`Row 1 of 3`) — an opaque key identifies nothing to a human, and
+the key column is already in the table, flagged.
 
 **Lineage**: each card links to
 `…/stage/{upstream_stage_id}/row/{row_ordinal}/trace/view`, where the ordinal
@@ -80,7 +85,12 @@ review service refuses it from a reviewer.) A decision records that verdict, a
 value for each reviewed column, and optionally a note — it never overwrites the
 column it reviewed, because a review stage may only ADD columns
 (`app.models.stages.human_review_queue._find_added_column_collisions` rejects a
-target that reuses an input column's name). Decisions are keyed by a hash of the
+target that reuses an input column's name). Once a decision is recorded the card
+stops asking for input: its per-field `change` openers carry the `disabled`
+attribute and the primary **Submit** is replaced by a secondary **Change my
+review**, which records nothing and only re-enables the controls; the re-submit
+that follows derives its verdict against the recorded value the card opens on.
+Decisions are keyed by a hash of the
 row (`app.core.stage_cache`)
 so they survive re-runs and LLM non-determinism. When all items are decided, a
 **Resume run** button appears.

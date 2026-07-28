@@ -71,28 +71,18 @@ class _ReviewedField:
 
 @dataclass(frozen=True)
 class _QueuedColumn:
-    """One column of the queued rows as the page describes it. `description` and
-    `type` are None where the input edge declares nothing for that column —
-    unknowable, never inferred from the values."""
+    """One column of the queued rows as the page describes it. `description` is
+    None where the input edge declares none for that column — unknowable, never
+    inferred from the values, and rendered as no tooltip at all."""
 
     name: str
     description: str | None
-    type: str | None
     in_primary_key: bool
-
-
-@dataclass(frozen=True)
-class _IdentityCell:
-    column: str
-    value: str
 
 
 @dataclass(frozen=True)
 class _DescribedColumns:
     columns: list[_QueuedColumn]
-    # The declared primary key restricted to columns the queued rows carry;
-    # empty whenever a card's identity cannot be built from a declaration.
-    primary_key: list[str]
     schema_note: str | None
     identity_note: str | None
 
@@ -131,7 +121,7 @@ async def queue_page(request: Request, project: str, run_id: str, stage_id: str)
         items = _build_review_items(
             snapshot, fingerprints,
             _load_decided_entries(project, stage_id, fingerprints.stage_fingerprint),
-            queue, fields, described.primary_key,
+            queue, fields,
             _build_lineage_urls(project, run_id, lineage, fingerprints),
         )
 
@@ -153,7 +143,7 @@ async def queue_page(request: Request, project: str, run_id: str, stage_id: str)
                 None if queue.review_notes_column is None
                 else _resolve_notes_label(stage_def, queue.review_notes_column)
             ),
-            "queued_columns": described.columns,
+            "context_columns": _subtract_reviewed_columns(described.columns, queue),
             "schema_note": described.schema_note,
             "identity_note": described.identity_note,
             "lineage_note": lineage.note,
@@ -559,8 +549,8 @@ def _describe_queued_columns(
     schema = resolve_input_schema(stage_def, 0) if stage_def.inputs else None
     if schema is None:
         return _DescribedColumns(
-            columns=[_QueuedColumn(n, None, None, False) for n in names],
-            primary_key=[], schema_note=NO_SCHEMA_NOTE, identity_note=NO_SCHEMA_NOTE,
+            columns=[_QueuedColumn(n, None, False) for n in names],
+            schema_note=NO_SCHEMA_NOTE, identity_note=NO_SCHEMA_NOTE,
         )
     declared = {column.name: column for column in schema.columns}
     primary_key = list(schema.primary_key or [])
@@ -569,15 +559,24 @@ def _describe_queued_columns(
             _QueuedColumn(
                 name=name,
                 description=declared[name].description if name in declared else None,
-                type=declared[name].type if name in declared else None,
                 in_primary_key=name in primary_key,
             )
             for name in names
         ],
-        primary_key=primary_key if all(k in names for k in primary_key) else [],
         schema_note=_find_schema_discrepancy(sorted(declared), names),
         identity_note=_find_identity_note(primary_key, names),
     )
+
+
+def _subtract_reviewed_columns(
+    columns: list[_QueuedColumn], queue: QueueConfig
+) -> list[_QueuedColumn]:
+    """The context a reviewer is shown but is not asked to change: every queued
+    column except the SOURCE of a reviewed column, which the review section
+    already prints beside its own control. Empty when every queued column is
+    under review."""
+    under_review = set(queue.reviewed_columns)
+    return [column for column in columns if column.name not in under_review]
 
 
 def _find_schema_discrepancy(declared: list[str], present: list[str]) -> str | None:
@@ -604,7 +603,7 @@ def _find_identity_note(primary_key: list[str], present: list[str]) -> str | Non
     if missing:
         return (
             f"The declared primary key {primary_key} names column(s) {missing} the "
-            "queued rows do not carry, so no row identity can be shown."
+            "queued rows do not carry, so the key flags below cover only part of it."
         )
     return None
 
@@ -650,7 +649,6 @@ def _build_review_item(
     entries_by_fingerprint: dict[str, StageCacheEntry],
     queue: QueueConfig,
     fields: list[_ReviewedField],
-    primary_key: list[str],
     lineage_url: str | None,
 ) -> dict[str, Any]:
     entry = entries_by_fingerprint.get(input_fingerprint)
@@ -659,10 +657,6 @@ def _build_review_item(
     return {
         "input_fingerprint": input_fingerprint,
         "row": {str(name): _as_cell_text(value) for name, value in row.items()},
-        "identity": [
-            _IdentityCell(column=k, value=_as_display_text(displayed_row[k]))
-            for k in primary_key
-        ],
         "lineage_url": lineage_url,
         "prior_decision": prior,
         "prefill": _build_field_prefills(fields, displayed_row, prior),
@@ -773,7 +767,6 @@ def _build_review_items(
     entries_by_fingerprint: dict[str, StageCacheEntry],
     queue: QueueConfig,
     fields: list[_ReviewedField],
-    primary_key: list[str],
     lineage_urls: list[str | None],
 ) -> list[dict[str, Any]]:
     """One review item per snapshot row, zipped POSITIONALLY with the
@@ -783,9 +776,7 @@ def _build_review_items(
     if snapshot is None or fingerprints is None:
         return []
     return [
-        _build_review_item(
-            row, fp, entries_by_fingerprint, queue, fields, primary_key, url,
-        )
+        _build_review_item(row, fp, entries_by_fingerprint, queue, fields, url)
         for (_, row), fp, url in zip(
             snapshot.iterrows(), fingerprints.input_fingerprints, lineage_urls
         )

@@ -50,16 +50,12 @@
 {% for item in items %}
 <article class="queue-card {% if item.prior_decision %}decided decided-{{ item.prior_decision.verdict }}{% endif %}"
          data-input-fingerprint="{{ item.input_fingerprint }}">
-    {% if item.identity or item.lineage_url %}
     <header>
-        {% for cell in item.identity %}
-        <span class="identity-cell">{{ cell.column }} <code>{{ cell.value }}</code></span>
-        {% endfor %}
+        <span class="row-position">Row {{ loop.index }} of {{ total }}</span>
         {% if item.lineage_url %}
         <a class="lineage-link" href="{{ item.lineage_url }}">lineage of the upstream row →</a>
         {% endif %}
     </header>
-    {% endif %}
     {% if item.prior_decision %}
     <p class="prior-decision">
         Recorded: <strong>{{ item.prior_decision.verdict }}</strong>
@@ -73,12 +69,15 @@
     </p>
     {% endif %}
 
+    {% if context_columns %}
     <details class="queued-row" open>
-        <summary>Queued row</summary>
-        {{ kv_table(queued_columns, item.row) }}
+        <summary>Background for this row — not under review</summary>
+        {{ kv_table(context_columns, item.row) }}
     </details>
+    {% endif %}
 
     <form class="review-form">
+        <p class="review-section-heading">Columns to review</p>
         <div class="reviewed-fields">
         {% for field in reviewed_fields %}
         {% set field_id = 'rf-' ~ item.input_fingerprint ~ '-' ~ field.target %}
@@ -101,8 +100,11 @@
                 {% endif %}
             </span>
             <div class="field-control">
+                {# A decided card is not asking for input: its openers are really
+                   disabled (not merely styled so) until "Change my review" unlocks them. #}
                 <button type="button" class="value-display" data-edit-for="{{ field_id }}"
-                        aria-controls="{{ field_id }}">
+                        aria-controls="{{ field_id }}"
+                        {% if item.prior_decision %}disabled{% endif %}>
                     <span class="current-value">{% if prefill is none %}<em>unset</em>{% else %}{{ prefill }}{% endif %}</span>
                     <span class="edit-hint">change</span>
                 </button>
@@ -139,7 +141,11 @@
         </label>
         {% endif %}
         <div class="decision-controls">
-            <button type="submit" class="btn primary">Submit</button>
+            {% if item.prior_decision %}
+            <button type="button" class="btn unlock-review" data-unlock>Change my review</button>
+            {% endif %}
+            <button type="submit" class="btn primary"
+                    {% if item.prior_decision %}hidden{% endif %}>Submit</button>
         </div>
     </form>
 </article>
@@ -236,7 +242,20 @@
     opener.focus();
   }
 
+  // A decided card records no new decision until the reviewer asks to change
+  // it, so unlocking only re-enables the controls — it submits nothing.
+  function unlockCard(button) {
+    const card = button.closest('.queue-card');
+    card.querySelectorAll('[data-edit-for]').forEach(function (opener) {
+      opener.disabled = false;
+    });
+    button.hidden = true;
+    card.querySelector('button[type="submit"]').hidden = false;
+  }
+
   document.addEventListener('click', function (ev) {
+    const unlock = ev.target.closest('[data-unlock]');
+    if (unlock) { unlockCard(unlock); return; }
     const opener = ev.target.closest('[data-edit-for]');
     if (opener) { openEditor(opener); return; }
     const reverter = ev.target.closest('[data-revert-for]');
