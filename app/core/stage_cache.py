@@ -17,24 +17,39 @@ never here.
 `SCOPE = PersistenceScope.PROJECT_READ_WRITE` (see app.core.persistence.PersistenceScope):
 the one deliberate channel that lets run activity write something that outlives
 the run. Two accessors express the two capabilities over it: `read_only`
-returns a `ReadOnlyStageCache` (`get`/`find_entries`/`find_recorded_rows`), the
-safe default view every cross-run channel must offer; `read_write` returns a
-`StageCache` (its subclass), which adds `record`. The write capability is a
-distinct type, structurally absent from the read-only view rather than gated by
-a flag or an exception.
+returns a `ReadOnlyStageCache` (`get`/`find_entries`/`find_recorded_rows`/
+`find_cached_frame`), the safe default view every cross-run channel must offer;
+`read_write` returns a `StageCache` (its subclass), which adds `record` and
+`record_frame`. The write capability is a distinct type, structurally absent
+from the read-only view rather than gated by a flag or an exception.
+
+Two grains share the seam. At ROW grain the caller passes an input fingerprint
+it computed with `compute_row_fingerprint`, because the same row identity is
+what a queued human decision is filed under. At FRAME grain the caller passes
+the ordered input frames themselves and the accessor resolves their identity,
+which is why no frames fingerprint is public.
 """
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from typing import ClassVar
 import json
 import math
 
 import numpy as np
 import pandas as pd
+import pyarrow.lib as pa_lib
 
+from app.core.errors import FrameNotSerializableError
+from app.core.frames import get_frame_store
 from app.core.persistence import JsonDict, PersistedModel, PersistenceScope
 from app.core.utils import compute_short_hash
+
+# The frame-store collection a whole-frame cache payload is filed under, keyed
+# by the same `_build_cache_id` composite as the entry itself. A frame is far
+# too big to carry as a `StageCacheEntry` JSON field, so it travels this second
+# channel.
+CACHED_FRAME_COLLECTION = "stage_cache_frames"
 
 
 class StageCacheEntry(PersistedModel):
@@ -75,6 +90,16 @@ def _build_cache_id(project: str, stage_id: str, stage_fingerprint: str, input_f
     return f"{project}/{stage_id}/{stage_fingerprint}/{input_fingerprint}"
 
 
+def _build_frame_cache_id(
+    project: str, stage_id: str, stage_fingerprint: str, input_frames: Sequence[pd.DataFrame]
+) -> str:
+    """The store id a whole-frame payload is filed under: the entry id, with the
+    ordered input frames standing where a row's fingerprint stands."""
+    return _build_cache_id(
+        project, stage_id, stage_fingerprint, _compute_frames_fingerprint(input_frames)
+    )
+
+
 def compute_row_fingerprint(row: Mapping[str, object]) -> str:
     """compute_short_hash over the canonical JSON of `row`: every null form a
     pandas row cell can carry (None, float('nan'), pd.NA, pd.NaT — see
@@ -88,6 +113,36 @@ def compute_row_fingerprint(row: Mapping[str, object]) -> str:
     canonical = {key: _collapse_null_forms(value) for key, value in row.items()}
     payload = json.dumps(canonical, sort_keys=True, separators=(",", ":"), default=str)
     return compute_short_hash(payload)
+
+
+def _compute_frame_fingerprint(frame: pd.DataFrame) -> str:
+    """compute_short_hash over the canonical JSON of a WHOLE frame: its column
+    labels in their own order, then its cells row by row in their own order,
+    each cell collapsed through `_collapse_null_forms` exactly as a row cell is.
+
+    Column and row ORDER are part of the identity here, unlike
+    `compute_row_fingerprint`, where key order is deliberately irrelevant: a
+    whole-frame transform may index positionally or depend on sort order, so a
+    reordered input is a genuinely different input and must not resolve to the
+    same cached output. The frame's index is not part of the identity — it does
+    not survive the parquet round trip the payload takes."""
+    canonical = {
+        "columns": [str(label) for label in frame.columns],
+        "rows": [
+            [_collapse_null_forms(cell) for cell in row]
+            for row in frame.itertuples(index=False, name=None)
+        ],
+    }
+    return compute_short_hash(json.dumps(canonical, separators=(",", ":"), default=str))
+
+
+def _compute_frames_fingerprint(frames: Sequence[pd.DataFrame]) -> str:
+    """One identity for an ordered sequence of frames — a frame-shaped stage's
+    inputs in its declared input order. Order matters: swapping a join's two
+    sides is a different input."""
+    return compute_short_hash(
+        json.dumps([_compute_frame_fingerprint(frame) for frame in frames])
+    )
 
 
 def _to_json_safe_row(row: Mapping[str, object]) -> JsonDict:
@@ -171,6 +226,21 @@ class ReadOnlyStageCache:
             if entry.output_row is not None
         }
 
+    def find_cached_frame(
+        self,
+        project: str,
+        stage_id: str,
+        stage_fingerprint: str,
+        input_frames: Sequence[pd.DataFrame],
+    ) -> pd.DataFrame | None:
+        """The whole output frame recorded for this stage definition against
+        exactly these input frames, or None. The ORDER of `input_frames` is part
+        of the key, so swapping a join's two sides is a different input."""
+        return get_frame_store().load_frame(
+            CACHED_FRAME_COLLECTION,
+            _build_frame_cache_id(project, stage_id, stage_fingerprint, input_frames),
+        )
+
 
 class StageCache(ReadOnlyStageCache):
     """Read+write accessor over the stage-result cache: the read-only view plus
@@ -202,8 +272,37 @@ class StageCache(ReadOnlyStageCache):
             output_row=None if output_row is None else _to_json_safe_row(output_row),
         ).save()
 
+    def record_frame(
+        self,
+        *,
+        project: str,
+        stage_id: str,
+        stage_fingerprint: str,
+        input_frames: Sequence[pd.DataFrame],
+        frame: pd.DataFrame,
+    ) -> None:
+        """Pin one whole output frame under the same composite key `record` uses,
+        in the frame store rather than as a `StageCacheEntry` field.
+
+        A dtype/shape parquet cannot represent raises `FrameNotSerializableError`
+        after removing whatever partial file the failed write left, so a later
+        read never resolves to a truncated frame. A disk/OS error is deliberately
+        NOT converted: it propagates."""
+        store = get_frame_store()
+        cache_id = _build_frame_cache_id(
+            project, stage_id, stage_fingerprint, input_frames
+        )
+        try:
+            store.save_frame(CACHED_FRAME_COLLECTION, cache_id, frame)
+        except (pa_lib.ArrowException, ValueError, TypeError) as exc:
+            store.delete(CACHED_FRAME_COLLECTION, cache_id)
+            raise FrameNotSerializableError(
+                f"stage {stage_id}: output frame could not be written as parquet ({exc})"
+            ) from exc
+
 
 __all__ = [
+    "CACHED_FRAME_COLLECTION",
     "StageCacheEntry",
     "compute_row_fingerprint",
     "ReadOnlyStageCache",

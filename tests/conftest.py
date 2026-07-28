@@ -5,10 +5,11 @@ un-stubbed `call_llm` raises `LLMError` instead of shelling out to the real
 `claude` CLI. A test that exercises the LLM boundary monkeypatches `call_llm`
 (or `agent_available`) itself.
 
-Every test also gets a fresh in-memory document store (app.core.persistence),
-isolating it from other tests and from any on-disk database. This runs ahead of
-the app's own startup wiring, so `app.main`'s lifespan — guarded by
-`is_store_configured()` — finds a store already configured and leaves it alone.
+Every test also gets a fresh in-memory document store (app.core.persistence) and
+a fresh frame store rooted at its own tmp dir (app.core.frames), isolating it
+from other tests and from any on-disk database. Both run ahead of the app's own
+startup wiring, which is guarded by `is_store_configured()` /
+`is_frame_store_configured()` and so leaves an already-configured store alone.
 """
 from __future__ import annotations
 
@@ -43,6 +44,12 @@ def offline_llm(monkeypatch):
 def fresh_store():
     from app.core.persistence import SqliteKvStore, configure_store
     configure_store(SqliteKvStore(":memory:"))
+
+
+@pytest.fixture(autouse=True)
+def fresh_frame_store(tmp_path):
+    from app.core.frames import FrameStore, configure_frame_store
+    configure_frame_store(FrameStore(tmp_path / "frames"))
 
 
 @pytest.fixture(autouse=True)
