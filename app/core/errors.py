@@ -18,6 +18,10 @@ class RowOutOfRange(ValueError):
     path/param (→ 400), not an internal fault."""
 
 
+class TraceUnavailableError(Exception):
+    """Raised instead of returning an href to a trace page that was not written."""
+
+
 class NoVersionToRunError(Exception):
     """A run was requested for a project that has no PUBLISHED version to run.
 
