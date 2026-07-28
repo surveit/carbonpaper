@@ -383,7 +383,14 @@ class Stage(_Base):
     type: StageType
     name: str
     source: Optional[SourceRef] = None
-    inputs: list[StageInput] = Field(default_factory=list)
+    inputs: list[StageInput] = Field(
+        default_factory=list,
+        description=(
+            "Upstream dependencies: each is an upstream stage id plus the REQUIRED schema "
+            "this stage expects that input to satisfy — which is just the upstream stage's "
+            "output_schema."
+        ),
+    )
     output_schema: Optional[TableSchema] = Field(
         default=None,
         description=(
