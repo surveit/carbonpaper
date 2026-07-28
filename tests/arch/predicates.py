@@ -15,9 +15,11 @@ from arch._helpers import (
     collect_called_methods,
     find_dict_key_uses,
     find_function_defs,
+    find_imported_module_aliases,
     find_imported_modules,
     find_numeric_get_defaults,
     parse_module,
+    render_dotted_name,
 )
 
 _PRODUCTION_RUN_MODULE = "app.runtime.runner"
@@ -134,6 +136,40 @@ def find_production_run_imports(paths: list[Path]) -> list[str]:
         ):
             offenders.append(path.as_posix())
     return offenders
+
+
+def find_private_name_imports(paths: list[Path]) -> list[str]:
+    """Places a module reaches for another module's ``_``-prefixed name: a
+    ``from x import _y`` (relative or absolute, aliased or not), or a ``_y``
+    attribute on a name bound by a plain ``import``. Dunders are not flagged —
+    ``mod.__name__`` is a language protocol, not a private reach.
+
+    Not covered: an attribute on a name bound by ``from x import y``, since
+    ``y._z`` there is indistinguishable from an attribute on a class or an
+    instance. A module reached that way is caught only if the private name
+    itself is imported.
+    """
+    offenders: list[str] = []
+    for path in paths:
+        tree = parse_module(path)
+        module_aliases = find_imported_module_aliases(tree)
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom):
+                source = "." * node.level + (node.module or "")
+                offenders += [
+                    f"{path}:{node.lineno}  from {source} import {alias.name}"
+                    for alias in node.names
+                    if _is_private_name(alias.name)
+                ]
+            elif isinstance(node, ast.Attribute) and _is_private_name(node.attr):
+                dotted = render_dotted_name(node)
+                if dotted is not None and dotted.split(".")[0] in module_aliases:
+                    offenders.append(f"{path}:{node.lineno}  {dotted}")
+    return offenders
+
+
+def _is_private_name(name: str) -> bool:
+    return name.startswith("_") and not name.startswith("__")
 
 
 def find_check_prefixed_functions(paths: list[Path]) -> list[str]:

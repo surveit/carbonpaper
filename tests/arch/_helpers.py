@@ -55,6 +55,29 @@ def find_imported_modules(tree: ast.Module) -> set[str]:
     return modules
 
 
+def find_imported_module_aliases(tree: ast.Module) -> set[str]:
+    """The local names a plain `import` binds: `import a.b` binds "a",
+    `import a.b as c` binds "c". These are the names that definitely refer to a
+    MODULE, so an attribute on one is a module attribute — unlike a name bound
+    by `from a import b`, which may be a module, a class or a function."""
+    aliases: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                aliases.add(alias.asname or alias.name.split(".")[0])
+    return aliases
+
+
+def render_dotted_name(node: ast.expr) -> str | None:
+    """"a.b.c" for a chain of attributes rooted in a plain name, else None."""
+    if isinstance(node, ast.Name):
+        return node.id
+    if isinstance(node, ast.Attribute):
+        prefix = render_dotted_name(node.value)
+        return None if prefix is None else f"{prefix}.{node.attr}"
+    return None
+
+
 def find_dict_key_uses(tree: ast.Module, keys: set[str]) -> list[tuple[int, str]]:
     """(lineno, key) of each place the module reads or writes one of `keys` as a
     dict key: a subscript (`x["path"]`), a `.get("path", ...)` first argument, or

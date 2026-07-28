@@ -14,7 +14,7 @@ def test_workflow_test_never_imports_production_runner() -> None:
     offenders = find_production_run_imports(workflow_test)
     assert not offenders, (
         "app/services/workflow_test.py must reach the execution engine through "
-        "app.runtime.executor (run_subset / _execute_stages), never the "
+        "app.runtime.executor (run_subset / execute_stages), never the "
         "production run-lifecycle entry points in app.runtime.runner — importing "
         "those would let a workflow test mint a production run under runs/. Offending "
         "files:\n  " + "\n  ".join(offenders)
