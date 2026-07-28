@@ -94,6 +94,24 @@ def test_compute_definition_fingerprint_for_queue_reacts_to_reviewer_instruction
     assert base.compute_definition_fingerprint() != changed.compute_definition_fingerprint()
 
 
+def _sql_stage(query: str = "SELECT * FROM src"):
+    return Stage.model_validate({
+        "id": "q", "type": "sql_transform", "name": "q",
+        "inputs": [{
+            "id": "src",
+            "schema": {"columns": [{"name": "a", "type": "str", "nullable": False}]},
+        }],
+        "output_schema": {"columns": [{"name": "a", "type": "str", "nullable": False}]},
+        "sql": {"query": query},
+    })
+
+
+def test_compute_definition_fingerprint_changes_with_sql_query_text():
+    a = _sql_stage()
+    b = _sql_stage(query="SELECT * FROM src WHERE a IS NOT NULL")
+    assert a.compute_definition_fingerprint() != b.compute_definition_fingerprint()
+
+
 def test_compute_definition_fingerprint_survives_a_stored_round_trip():
     # A version-embedded stage is dumped/reloaded through
     # model_dump(mode="json", by_alias=True, exclude_none=True) —
