@@ -93,7 +93,7 @@ def _current_specs(project_dir: Path) -> dict[str, dict]:
     return {stage.id: stage_to_spec_dict(stage) for stage in workflow.stages}
 
 
-def _canonical(spec: dict) -> dict:
+def _canonicalize_spec(spec: dict) -> dict:
     """A submitted spec reduced to the keys the workflow stores — the form that
     goes into the in-memory `specs` map and onto disk."""
     return {k: v for k, v in spec.items() if k not in node_review.CANONICAL_IGNORE_KEYS}
@@ -108,7 +108,7 @@ def _apply(project_dir: Path, specs: dict[str, dict], stage_id: str, candidate: 
     The writer reports only whether the write succeeded; it does not compute the
     node's review colour (content hash / approval state). A caller that needs the
     new colour re-derives it from the freshly-written stage."""
-    candidate = _canonical(candidate)
+    candidate = _canonicalize_spec(candidate)
     if candidate.get("id") != stage_id:
         return EditStageResult(
             ok=False,
@@ -192,11 +192,11 @@ def add_stage_specs(project_dir: Path, stages: Sequence[StageDraft]) -> AddStage
             result.skipped.append(SkippedStage(stage.id, f"inputs from {blocker}"))
             continue
         spec = stage.to_stage_spec()
-        outcome = _add_one(project_dir, specs, spec)
+        outcome = _add_new_stage(project_dir, specs, spec)
         if not outcome.ok:
             result.failed.append(StageFailure(stage.id, outcome.issues))
             continue
-        specs[stage.id] = _canonical(spec)
+        specs[stage.id] = _canonicalize_spec(spec)
         result.added.append(stage.id)
     return result
 
@@ -219,10 +219,10 @@ def add_stage_spec(project_dir: Path, spec_text: str) -> EditStageResult:
         return EditStageResult(ok=False, issues=[f"JSON parse error: {exc}"])
     if not isinstance(spec, dict):
         return EditStageResult(ok=False, issues=["new stage must be a JSON object (a single stage)"])
-    return _add_one(project_dir, _current_specs(project_dir), spec)
+    return _add_new_stage(project_dir, _current_specs(project_dir), spec)
 
 
-def _add_one(project_dir: Path, specs: dict[str, dict], spec: dict) -> EditStageResult:
+def _add_new_stage(project_dir: Path, specs: dict[str, dict], spec: dict) -> EditStageResult:
     """Validate one new stage against `specs` and, if clean, write it. Does not
     mutate `specs`: a caller adding several stages records the accepted spec."""
     stage_id = spec.get("id")

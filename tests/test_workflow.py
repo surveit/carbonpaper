@@ -400,7 +400,7 @@ def test_parse_workflow_rejects_nonconformant_edge():
 # ─── sort_stages_by_dependency ────────────────────────────────────────────────
 
 
-def _draft(id_, inputs=()):
+def _build_stage_draft(id_, inputs=()):
     from app.models import StageDraft
 
     return StageDraft.model_validate({
@@ -411,7 +411,7 @@ def _draft(id_, inputs=()):
 
 def test_sort_stages_by_dependency_puts_every_stage_after_its_inputs():
     order = m.workflow.sort_stages_by_dependency(
-        [_draft("c", ["b"]), _draft("a"), _draft("b", ["a"])]
+        [_build_stage_draft("c", ["b"]), _build_stage_draft("a"), _build_stage_draft("b", ["a"])]
     )
     assert [s.id for s in order] == ["a", "b", "c"]
 
@@ -419,7 +419,7 @@ def test_sort_stages_by_dependency_puts_every_stage_after_its_inputs():
 def test_sort_stages_by_dependency_ignores_inputs_from_outside_the_given_set():
     """An input already stored in the workflow constrains nothing about the order
     of the stages being added — only intra-set edges do."""
-    order = m.workflow.sort_stages_by_dependency([_draft("b", ["stored"]), _draft("a")])
+    order = m.workflow.sort_stages_by_dependency([_build_stage_draft("b", ["stored"]), _build_stage_draft("a")])
     assert [s.id for s in order] == ["b", "a"], "ties keep submission order"
 
 
@@ -427,4 +427,4 @@ def test_sort_stages_by_dependency_raises_on_a_cycle():
     """No order exists, and returning one anyway would silently mis-order the
     stages a caller then writes."""
     with pytest.raises(ValueError, match="cyclic"):
-        m.workflow.sort_stages_by_dependency([_draft("a", ["b"]), _draft("b", ["a"])])
+        m.workflow.sort_stages_by_dependency([_build_stage_draft("a", ["b"]), _build_stage_draft("b", ["a"])])

@@ -357,13 +357,13 @@ def add_stage(project_id: str, stages: list[StageDraft]) -> dict[str, Any]:
         "skipped": [{"id": s.id, "because": s.because} for s in outcome.skipped],
         "issues": outcome.batch_issues + [i for f in outcome.failed for i in f.issues],
     }
-    warnings = _dropped_field_warnings(stages, outcome.added)
+    warnings = _find_dropped_field_warnings(stages, outcome.added)
     if warnings:
         result["warnings"] = warnings
     return result
 
 
-def _dropped_field_warnings(stages: list[StageDraft], added: list[str]) -> list[str]:
+def _find_dropped_field_warnings(stages: list[StageDraft], added: list[str]) -> list[str]:
     """One entry per STORED stage that echoed back fields only the server writes,
     naming the stage so a batch does not lose which one carried them, plus one
     trailing entry saying who does write them. A stage that was not stored is not

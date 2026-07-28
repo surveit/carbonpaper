@@ -19,7 +19,7 @@ from app.seeds.seed import discover_workflow_files
 DROPPED_FIELDS = ("tests", "eval", "review", "source")
 
 
-def _committed_example_stages() -> list[dict]:
+def _read_committed_example_stages() -> list[dict]:
     stages: list[dict] = []
     for path in discover_workflow_files():
         stages.extend(json.loads(path.read_text(encoding="utf-8"))["stages"])
@@ -27,7 +27,7 @@ def _committed_example_stages() -> list[dict]:
 
 
 def test_every_committed_example_stage_round_trips_through_a_draft():
-    stages = _committed_example_stages()
+    stages = _read_committed_example_stages()
     assert len(stages) > 1, "no committed example stages to round-trip"
 
     for raw in stages:
@@ -44,7 +44,7 @@ def test_every_committed_example_stage_round_trips_through_a_draft():
 def test_round_trip_covers_more_than_one_stage_type():
     """Guards the round-trip above against going vacuous: it only proves
     anything about the handle blocks the fixtures actually populate."""
-    types = {raw["type"] for raw in _committed_example_stages()}
+    types = {raw["type"] for raw in _read_committed_example_stages()}
     assert len(types) > 1, types
 
 
