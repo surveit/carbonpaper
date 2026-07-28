@@ -103,8 +103,8 @@ def _read_xlsx(path: Path, params: dict[str, Any]) -> pd.DataFrame:
     # header_row/first_column are 0-based indices into the sheet as it appears in
     # Excel; rows above and columns left of them are discarded before parsing.
     sheet = params.get("sheet_name", 0)  # data-default-ok: 0 is the documented default (first sheet)
-    header_row = int(params.get("header_row", 0))  # data-default-ok: 0 is the documented default (first row)
-    first_column = int(params.get("first_column", 0))  # data-default-ok: 0 is the documented default (first column)
+    header_row = _int_param(params, "header_row", 0)  # data-default-ok: 0 is the documented default (first row)
+    first_column = _int_param(params, "first_column", 0)  # data-default-ok: 0 is the documented default (first column)
     frame = pd.read_excel(path, sheet_name=sheet, header=header_row, engine="openpyxl")
     if not isinstance(frame, pd.DataFrame):
         raise ValueError(
@@ -112,8 +112,24 @@ def _read_xlsx(path: Path, params: dict[str, Any]) -> pd.DataFrame:
             "sheet, or omit sheet_name for the first"
         )
     if first_column:
+        validate_first_column_in_range(first_column, frame, path, sheet)
         frame = frame.iloc[:, first_column:]
     return frame
+
+
+def _int_param(params: dict[str, Any], name: str, default: int) -> int:
+    value = params.get(name, default)
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ValueError(f"{name}={value!r} must be an integer, got {type(value).__name__}")
+    return value
+
+
+def validate_first_column_in_range(first_column: int, frame: pd.DataFrame, path: Path, sheet: Any) -> None:
+    if first_column < 0 or first_column >= len(frame.columns):
+        raise ValueError(
+            f"first_column={first_column} is out of range for {path.name} "
+            f"sheet {sheet!r}, which has {len(frame.columns)} columns"
+        )
 
 
 def _parse_list_cell(cell: Any) -> list[str]:
