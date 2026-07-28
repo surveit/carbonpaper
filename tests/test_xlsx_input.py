@@ -112,3 +112,16 @@ def test_authoring_surfaces_advertise_xlsx():
     assert "xlsx" in notes
     for param in ("sheet_name", "header_row", "first_column"):
         assert param in notes, f"{param} not advertised to the authoring agent"
+
+
+LDA_Q1 = Path(r"C:\Users\shuha\OneDrive\Documents\Q1 2026 LDA data.xlsx")
+
+
+@pytest.mark.skipif(not LDA_Q1.is_file(), reason="local LDA export not present")
+def test_reads_the_real_lda_export():
+    df = _read_xlsx(LDA_Q1, {})
+    assert len(df) == 24797
+    assert "specific_issues" in df.columns
+    assert "filing_uuid" in df.columns
+    matches = df["specific_issues"].fillna("").str.contains("venezuela", case=False)
+    assert int(matches.sum()) == 44
