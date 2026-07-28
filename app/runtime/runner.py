@@ -31,6 +31,7 @@ from pydantic import ValidationError as PydanticValidationError
 
 from app.core.errors import MissingInputBindingError, NoVersionToRunError
 from app.core.frames import PARQUET_SUFFIX
+from app.core.store_config import configure_default_stores
 from app.models import Connector, Stage, StageType
 from app.core.run_status import RunStatus, StageStatus
 from app.services.errors import WorkflowLoadError
@@ -408,6 +409,11 @@ def main() -> int:
             print(f"Unknown argument: {args[i]}")
             return 1
     repo_root = Path(__file__).resolve().parents[2]
+    # This process has no server lifespan to wire storage for it, and the run it
+    # is about to start reads a version out of the document store and may pin a
+    # frame in the frame store. Guarded, so a caller that configured its own
+    # stores before invoking main() keeps them.
+    configure_default_stores()
     try:
         manifest = execute_run(project_dir, repo_root,
                                limits=limits or None, offsets=offsets or None,
