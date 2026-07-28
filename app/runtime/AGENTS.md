@@ -52,6 +52,26 @@ fingerprint. There is no per-registration opt-out: `human_review_queue` runs und
 interceptor, which replays a human's recorded decision before its mapper is called, so that
 mapper only ever passes a row through or defers it.
 
+## `run_log.py` — the per-run event log
+`_execute_stages` opens a `RunLog` on `runs/<id>/events.jsonl` for every entry path and
+closes it (writing the terminal `run_done` marker) before returning. Workers emit
+lock-free; one writer thread stamps a monotonic `seq` + `ts` + `level` and appends one JSON
+line per event. `read_events_since(path, from_seq)` re-reads it for both the run page's SSE
+tail (`GET /project/{p}/runs/{id}/events`) and after-the-fact investigation. The manifest
+stays the source of truth for stage status; this log is only ever the drill-down.
+- **Two levels.** 0 = lifecycle (`run_start`, `stage_start`/`stage_done`,
+  `row_start`/`row_ok`/`row_error`); 1 = LLM detail (`llm_prompt`, `llm_thinking`,
+  `llm_text`, `llm_response`, `llm_error`), off by default on the run page and revealed by
+  a client-side filter over the same feed.
+- **Cached vs computed.** Every terminal row event carries `source`. A row the stage-result
+  cache answered emits ONE `row_ok` marked `cached` — no `row_start`, no LLM detail,
+  because nothing ran.
+- **Detail attribution.** The row driver binds a `DetailSink` ContextVar for the duration of
+  one row (the batched path binds one per chunk, over the input positions that chunk
+  covers), so `llm.py` can log the prompt/thinking/response several frames down without a
+  log being threaded through every mapper. The binding happens on the worker thread that
+  makes the call — a pool thread starts with an empty context.
+
 ## LLM backend (`llm_transform`)
 - `options.py` `require_agent_backend()` raises unless the agent backend can run
   (`claude_agent_sdk` importable and a `claude` CLI located, incl. Windows
@@ -73,4 +93,4 @@ warning-severity issues only. Input-side issues alone still only warn.
 ```
 python -m app.runtime.runner <project_dir>
 ```
-Outputs: `runs/<id>/{manifest.json, outputs/*.parquet, artifacts/, queue/}`.
+Outputs: `runs/<id>/{manifest.json, events.jsonl, outputs/*.parquet, artifacts/, queue/}`.

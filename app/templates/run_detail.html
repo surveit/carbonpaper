@@ -109,6 +109,110 @@
     <div class="empty-state"><h2>Select a stage</h2><p>Click any node in the workflow to load its run details.</p></div>
 </div>
 
+{# ── Run log: live-tailed lifecycle events (stage/row start·done·error),
+      streamed over SSE from runs/<id>/events.jsonl. Opens for a live run AND a
+      finished one — the endpoint drains the file then ends either way, so this
+      is also how you investigate a past run. ── #}
+<style>
+  .run-log-panel .run-log-toolbar { display: flex; gap: 1.2em; align-items: center; margin: .4em 0; font-size: .85em; }
+  .run-log { max-height: 22em; overflow: auto; font-size: .82em; line-height: 1.45; }
+  .run-log a.run-log-row { display: block; color: inherit; text-decoration: none; }
+  .run-log a.run-log-row:hover { text-decoration: underline; }
+  .run-log .run-log-cached { opacity: .55; }
+  .run-log .run-log-detail { display: block; opacity: .62; }
+  .run-log .run-log-detail-head { color: #8a5cf6; }
+  .run-log .run-log-detail-body { display: block; white-space: pre-wrap; max-height: 6.5em; overflow: auto; margin: 0 0 .3em 2em; padding-left: .6em; border-left: 2px solid #d7cdf5; }
+</style>
+<details class="run-log-panel" id="run-log-panel" open>
+    <summary>Run log <span id="run-log-count" class="muted"></span></summary>
+    <div class="run-log-toolbar">
+        <label><input type="checkbox" id="run-log-errors-only"> errors only</label>
+        <label title="Show each row's prompt, thinking, and submitted response"><input type="checkbox" id="run-log-detail"> LLM detail</label>
+        <button type="button" id="run-log-clear" class="btn">clear view</button>
+        <span id="run-log-state" class="muted"></span>
+    </div>
+    <pre id="run-log" class="run-log"></pre>
+    <p class="muted" style="font-size:.8em">A row marked <code>cached</code> was replayed from the stage-result cache: it ran no code and called no model, so it has no LLM detail.</p>
+</details>
+
+<script>
+(function () {
+  const PROJECT = {{ project | tojson }};
+  const RUN_ID = {{ run_id | tojson }};
+  const url = `/project/${encodeURIComponent(PROJECT)}/runs/${encodeURIComponent(RUN_ID)}/events?from_seq=0`;
+  const pre = document.getElementById('run-log');
+  const countEl = document.getElementById('run-log-count');
+  const stateEl = document.getElementById('run-log-state');
+  const errorsOnly = document.getElementById('run-log-errors-only');
+  const detail = document.getElementById('run-log-detail');
+  const events = [];
+
+  const esc = s => String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+
+  // A detail (level 1) event carries the model's own prompt/thinking/response
+  // and can be long: rendered nested under its row, dimmed, whitespace kept, and
+  // clipped unless scrolled so the lifecycle spine stays scannable. `rows` names
+  // every row one prompt covered — a batched chunk's detail belongs to all of
+  // them, not to the single row it is filed under.
+  function fmtDetail(ev) {
+    const label = (ev.kind || '').replace(/^llm_/, '');
+    const span = (ev.rows && ev.rows.length > 1)
+      ? `rows ${ev.rows[0]}–${ev.rows[ev.rows.length - 1]}` : `row ${ev.row}`;
+    const head = esc(`    ${label}${ev.stage != null ? `  ${ev.stage} · ${span}` : ''}`);
+    const body = esc(ev.text || '').replace(/\n/g, '<br>');
+    return `<span class="run-log-detail"><span class="run-log-detail-head">${head}</span>`
+         + `<span class="run-log-detail-body">${body}</span></span>`;
+  }
+
+  function fmt(ev) {
+    if ((ev.level || 0) >= 1) return fmtDetail(ev);
+    const ts = (ev.ts || '').slice(11, 23);        // HH:MM:SS.mmm
+    const loc = [ev.stage, ev.row != null ? `row ${ev.row}` : null].filter(Boolean).join(' · ');
+    const tail = ev.text ? ` — ${ev.text}` : (ev.status ? ` — ${ev.status}` : '');
+    const src = ev.source ? `  [${ev.source}]` : '';
+    const line = esc(`${ts}  ${(ev.kind || '').padEnd(11)} ${loc}${src}${tail}`);
+    const cls = ev.source === 'cached' ? ' run-log-cached' : '';
+    // A per-row event links to that row's lineage/trace. Opens in a new tab so
+    // the live feed keeps running.
+    if (ev.stage != null && ev.row != null) {
+      const u = `/project/${encodeURIComponent(PROJECT)}/runs/${encodeURIComponent(RUN_ID)}/stage/${encodeURIComponent(ev.stage)}/row/${ev.row}/trace/view`;
+      return `<a class="run-log-row${cls}" href="${u}" target="_blank" rel="noopener">${line}</a>`;
+    }
+    return `<span class="${cls.trim()}">${line}</span>`;
+  }
+
+  function render() {
+    const only = errorsOnly.checked;
+    // LLM detail is off by default: the lifecycle spine is what you scan, and
+    // turning detail on is a client-side filter over the same feed — no
+    // reconnect. "errors only" is the tightest filter and wins.
+    let shown = detail.checked ? events : events.filter(e => (e.level || 0) < 1);
+    if (only) shown = shown.filter(e => e.kind === 'row_error' || (e.kind === 'stage_done' && e.status === 'error') || e.kind === 'llm_error');
+    pre.innerHTML = shown.map(fmt).join('\n');
+    const detailN = events.filter(e => (e.level || 0) >= 1).length;
+    countEl.textContent = `· ${events.length} event${events.length !== 1 ? 's' : ''}`
+      + (detailN ? ` (${detailN} LLM detail)` : '');
+    const nearBottom = pre.scrollHeight - pre.scrollTop - pre.clientHeight < 60;
+    if (nearBottom) pre.scrollTop = pre.scrollHeight;
+  }
+
+  errorsOnly.addEventListener('change', render);
+  detail.addEventListener('change', render);
+  document.getElementById('run-log-clear').addEventListener('click', () => { pre.textContent = ''; });
+
+  stateEl.textContent = 'connecting…';
+  const es = new EventSource(url);
+  es.onmessage = (m) => {
+    let ev; try { ev = JSON.parse(m.data); } catch (_) { return; }
+    if (ev.kind === 'run_done') { es.close(); stateEl.textContent = 'complete'; return; }
+    events.push(ev); render();
+    stateEl.textContent = 'live';
+  };
+  es.addEventListener('done', () => { es.close(); stateEl.textContent = 'complete'; });
+  es.onerror = () => { stateEl.textContent = 'disconnected'; };
+})();
+</script>
+
 <details class="raw-yaml"><summary>Raw manifest</summary><pre>{{ manifest | tojson(indent=2) }}</pre></details>
 
 <script>
