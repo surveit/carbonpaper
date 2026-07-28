@@ -4,7 +4,7 @@ The per-row compute this stage performs is "ask a human". For a row nobody has
 decided yet the answer does not exist, and no default may stand in for it — so
 this mapper produces no answer at all. A decision a human already recorded for
 this exact (stage definition, input row) pair is replayed by the row driver's
-own cache (`execution.open_row_cache`), which resolves the row before the
+own cache (`execution._open_row_caching`), which resolves the row before the
 mapper is called: the same interceptor every row-mapped stage type runs under.
 
 Every input row produces exactly one output row, in its own input position —

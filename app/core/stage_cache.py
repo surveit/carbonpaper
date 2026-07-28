@@ -13,18 +13,15 @@ writes, since entries carrying it may already exist in a store. What the output
 MEANS — and any verdict or column vocabulary behind it — lives above this seam,
 never here.
 
-`RowCache` is the per-stage-execution view over all of this: one bulk read, then
-look a row up / record a row, by row rather than by key.
-
 `StageCacheEntry` is the only PersistedModel carrying
 `SCOPE = PersistenceScope.PROJECT_READ_WRITE` (see app.core.persistence.PersistenceScope):
 the one deliberate channel that lets run activity write something that outlives
 the run. Two accessors express the two capabilities over it: `read_only`
-returns a `ReadOnlyStageCache` (`get`/`find_entries` only), the safe default
-view every cross-run channel must offer; `read_write` returns a `StageCache`
-(its subclass), which adds `record`. The write capability is a distinct type,
-structurally absent from the read-only view rather than gated by a flag or an
-exception.
+returns a `ReadOnlyStageCache` (`get`/`find_entries`/`find_recorded_rows`), the
+safe default view every cross-run channel must offer; `read_write` returns a
+`StageCache` (its subclass), which adds `record`. The write capability is a
+distinct type, structurally absent from the read-only view rather than gated by
+a flag or an exception.
 """
 from __future__ import annotations
 
@@ -64,12 +61,11 @@ class StageCacheEntry(PersistedModel):
 
     @classmethod
     def read_only(cls) -> "ReadOnlyStageCache":
-        """A read-only view over the cache: `get`/`find_entries`, no `record`."""
+        """A view over the cache that cannot record."""
         return ReadOnlyStageCache()
 
     @classmethod
     def read_write(cls) -> "StageCache":
-        """A read+write accessor over the cache: `get`/`find_entries` plus `record`."""
         return StageCache()
 
 
@@ -145,10 +141,9 @@ def _collapse_null_forms(value: object) -> object:
 
 
 class ReadOnlyStageCache:
-    """Read-only view over the stage-result cache: `get` and `find_entries`
-    only. `record` is not defined here, so an instance of this class cannot
-    write a cache entry — the capability is structurally absent, not withheld
-    by a runtime check."""
+    """Read-only view over the stage-result cache. `record` is not defined here,
+    so an instance of this class cannot write a cache entry — the capability is
+    structurally absent, not withheld by a runtime check."""
 
     def get(
         self, project: str, stage_id: str, stage_fingerprint: str, input_fingerprint: str
@@ -163,10 +158,23 @@ class ReadOnlyStageCache:
         prefix = f"{project}/{stage_id}/{stage_fingerprint}/"
         return StageCacheEntry.list(prefix=prefix)
 
+    def find_recorded_rows(
+        self, project: str, stage_id: str, stage_fingerprint: str
+    ) -> dict[str, JsonDict]:
+        """Every output row recorded against this stage definition, keyed by the
+        input fingerprint it was filed under — ONE store read for a whole stage
+        execution, rather than a `get` per row. An entry carrying no output row
+        is skipped: it replays nothing, so the row it was filed under misses."""
+        return {
+            entry.input_fingerprint: entry.output_row
+            for entry in self.find_entries(project, stage_id, stage_fingerprint)
+            if entry.output_row is not None
+        }
+
 
 class StageCache(ReadOnlyStageCache):
-    """Read+write accessor over the stage-result cache: the read-only view's
-    `get`/`find_entries` plus `record`."""
+    """Read+write accessor over the stage-result cache: the read-only view plus
+    `record`."""
 
     def record(
         self,
@@ -195,92 +203,7 @@ class StageCache(ReadOnlyStageCache):
         ).save()
 
 
-class RowCache:
-    """One stage execution's view of the cache at ROW grain: look a row up,
-    record a row. Built by `open`, which performs the single bulk read for the
-    whole execution — a per-row store `get` would make a stage's store cost
-    scale with its row count.
-
-    A caller hands rows, never keys: the (stage-definition fingerprint,
-    input-row fingerprint) pair this view is keyed on is resolved here. What an
-    output row MEANS — including whether it is one worth recording at all —
-    is decided above this seam."""
-
-    def __init__(
-        self,
-        project: str,
-        stage_id: str,
-        stage_fingerprint: str,
-        recorded_outputs: dict[str, JsonDict],
-        writer: StageCache | None,
-    ) -> None:
-        self._project = project
-        self._stage_id = stage_id
-        self._stage_fingerprint = stage_fingerprint
-        self._recorded_outputs = recorded_outputs
-        self._writer = writer
-
-    @classmethod
-    def open(
-        cls,
-        stage_cache: ReadOnlyStageCache,
-        *,
-        project: str,
-        stage_id: str,
-        stage_fingerprint: str,
-        replay_recorded: bool = True,
-    ) -> "RowCache":
-        """This execution's view, with every row already recorded against
-        `stage_fingerprint` read in ONE `find_entries` call.
-
-        `replay_recorded=False` skips that read entirely while keeping the write
-        capability, so an execution that reuses nothing still leaves the cache
-        re-pinned rather than stale. Writing needs the `StageCache` subclass: a
-        read-only accessor reuses hits and records nothing."""
-        return cls(
-            project,
-            stage_id,
-            stage_fingerprint,
-            _read_recorded_outputs(stage_cache, project, stage_id, stage_fingerprint)
-            if replay_recorded
-            else {},
-            stage_cache if isinstance(stage_cache, StageCache) else None,
-        )
-
-    def find_cached_output(self, input_row: Mapping[str, object]) -> JsonDict | None:
-        recorded = self._recorded_outputs.get(compute_row_fingerprint(input_row))
-        return None if recorded is None else dict(recorded)
-
-    def record_row_output(
-        self, input_row: Mapping[str, object], output_row: Mapping[str, object]
-    ) -> None:
-        if self._writer is None:
-            return
-        self._writer.record(
-            project=self._project,
-            stage_id=self._stage_id,
-            stage_fingerprint=self._stage_fingerprint,
-            input_fingerprint=compute_row_fingerprint(input_row),
-            input_row=input_row,
-            output_row=output_row,
-        )
-
-
-def _read_recorded_outputs(
-    stage_cache: ReadOnlyStageCache, project: str, stage_id: str, stage_fingerprint: str
-) -> dict[str, JsonDict]:
-    """Every output row already recorded against this stage definition, keyed by
-    the input fingerprint it was filed under. An entry carrying no output row is
-    skipped: it replays nothing, so the row it was filed under misses."""
-    return {
-        entry.input_fingerprint: entry.output_row
-        for entry in stage_cache.find_entries(project, stage_id, stage_fingerprint)
-        if entry.output_row is not None
-    }
-
-
 __all__ = [
-    "RowCache",
     "StageCacheEntry",
     "compute_row_fingerprint",
     "ReadOnlyStageCache",

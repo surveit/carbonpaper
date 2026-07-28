@@ -37,13 +37,14 @@ FeatureCollection); `python_row_function`/`python_frame_function`
 `publish` (a `function` module that writes artifacts).
 
 **Row caching is a property of the handler SHAPE, not of a stage type.** `RowMapHandler`
-wraps the one line of per-row compute (`execution.open_row_cache`), so `python_row_function`
+wraps the one line of per-row compute (`execution._open_row_caching`), so `python_row_function`
 and a batch_size-1 `llm_transform` are cached by the same code; for the batched path the
 shape looks every row up, hands `run_llm_batches` only the misses, scatters the computed
 rows back into input order alongside the hits, and records them. No stage module resolves a
-cache. The cache itself is `app.core.stage_cache.RowCache` — one bulk `find_entries` read
-per execution, keyed by (stage-definition fingerprint, input-row fingerprint); the runtime
-decides only whether to open one and whether a given result may be recorded. A row carrying
+cache. The store is `app.core.stage_cache` — `find_recorded_rows` is one bulk read per
+execution, keyed by (stage-definition fingerprint, input-row fingerprint), and `record`
+needs the write-capable `StageCache` accessor; the runtime holds that execution's state and
+decides only whether caching applies and whether a result may be recorded. A row carrying
 `_error`/`_deferred` is never recorded and no marker column is ever part of a recorded row,
 so a hit reports no spend. `Stage.cache: false` declares a stage
 intentionally non-deterministic — no read, no write — and is outside the definition

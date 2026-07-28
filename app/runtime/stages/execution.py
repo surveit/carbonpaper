@@ -34,7 +34,7 @@ from app.models import Stage
 from app.models.stage import StageType, is_grain_and_order_preserving
 
 from app.core.agent.usage import LlmUsage
-from app.core.stage_cache import RowCache
+from app.core.stage_cache import StageCache, compute_row_fingerprint
 
 from ..cancellation import consume_cancel
 from ..context import RunContext
@@ -169,8 +169,8 @@ class RowMapHandler(StageHandler):
     asks the driver to project the assembled frame onto exactly the columns
     output_schema declares — a column-only operation that cannot change row
     count or order. Every row-mapped stage resolves each row against the
-    stage-result cache before calling the mapper (see `open_row_cache`); there
-    is no per-registration opt-out.
+    stage-result cache before calling the mapper (see `_open_row_caching`);
+    there is no per-registration opt-out.
     """
 
     def __init__(
@@ -308,8 +308,8 @@ def _run_row_mapper(
     # The ONE line of per-row compute, optionally routed through the row cache.
     # `map_row` itself stays bound: _finish_mapped_frame tests it for the
     # PostMapRowMapper shape, which a wrapper would hide.
-    cache = open_row_cache(stage, ctx)
-    compute_row = map_row if cache is None else _map_row_through_cache(cache, map_row)
+    caching = _open_row_caching(stage, ctx)
+    compute_row = map_row if caching is None else _map_row_through_cache(caching, map_row)
     records = _to_records(src)
 
     results: list[Row | None] = [None] * len(records)
@@ -350,45 +350,77 @@ def _run_row_mapper(
 # Caching is a property of the handler SHAPE, not of any stage type: the one
 # line where per-row compute happens is wrapped, so every row-mapped stage type
 # is cached by the same code and no stage implements a cache interface. The
-# cache itself — the key, the bulk read, the lookup, the write — is
-# app.core.stage_cache.RowCache. What lives here is the runtime's side of that
-# seam: WHETHER a cache is opened at all, and whether a given result is one the
+# cache store and its keying live below the seam (app.core.stage_cache); what
+# lives here is one execution's state over it and the two decisions the runtime
+# owns: WHETHER caching applies at all, and whether a given result is one the
 # stage actually produced and may therefore be recorded.
 
 
-def open_row_cache(stage: Stage, ctx: RunContext) -> RowCache | None:
-    """This execution's row cache, or None when caching does not apply: the
-    stage declares `cache: false` (intentionally non-deterministic — always
-    re-roll), or the run carries no project scope (a subset run, a preview, an
-    authored-test run).
+class _RowCaching(NamedTuple):
+    """One row-mapped execution's row-grain cache state.
 
-    Under `ctx.bust_cache` nothing already recorded is replayed, while what this
-    run computes is still recorded — so a busted run ends with the cache
-    re-pinned, not stale."""
+    `recorded_outputs` is read ONCE for the whole execution — a per-row store
+    lookup would make a stage's store cost scale with its row count — and is
+    empty where nothing may be replayed. `writer` is None under a read-only
+    accessor, which reuses hits and records nothing."""
+
+    project: str
+    stage_id: str
+    stage_fingerprint: str
+    recorded_outputs: dict[str, Row]
+    writer: StageCache | None
+
+
+def _open_row_caching(stage: Stage, ctx: RunContext) -> _RowCaching | None:
+    """None where caching does not apply: the stage declares `cache: false`
+    (intentionally non-deterministic — always re-roll), or the run carries no
+    project scope (a subset run, a preview, an authored-test run).
+
+    Under `ctx.bust_cache` nothing already recorded is read, while what this run
+    computes is still recorded — so a busted run ends with the cache re-pinned,
+    not stale."""
     if not stage.cache:
         return None
     if ctx.identity is None or ctx.stage_cache is None:
         return None
-    return RowCache.open(
-        ctx.stage_cache,
-        project=ctx.identity.project,
-        stage_id=stage.id,
-        stage_fingerprint=stage.compute_definition_fingerprint(),
-        replay_recorded=not ctx.bust_cache,
+    project = ctx.identity.project
+    stage_fingerprint = stage.compute_definition_fingerprint()
+    return _RowCaching(
+        project,
+        stage.id,
+        stage_fingerprint,
+        {} if ctx.bust_cache else ctx.stage_cache.find_recorded_rows(
+            project, stage.id, stage_fingerprint
+        ),
+        ctx.stage_cache if isinstance(ctx.stage_cache, StageCache) else None,
     )
 
 
-def _record_row_output(cache: RowCache, input_row: Row, output_row: Row) -> None:
-    """Pin one computed row, unless a marker on it says it is not an output the
-    stage produced. No marker is ever part of the recorded row, so a replayed
-    row reports no spend."""
+def _find_cached_row(caching: _RowCaching, input_row: Row) -> Row | None:
+    recorded = caching.recorded_outputs.get(compute_row_fingerprint(input_row))
+    return None if recorded is None else dict(recorded)
+
+
+def _record_row_output(caching: _RowCaching, input_row: Row, output_row: Row) -> None:
+    """Pin one computed row, unless the run cannot write or a marker on the row
+    says it is not an output the stage produced. No marker is ever part of the
+    recorded row, so a replayed row reports no spend."""
+    if caching.writer is None:
+        return
     if any(
         output_row.get(marker.column) is not None
         for marker in _ROW_MARKERS
         if marker.blocks_recording
     ):
         return
-    cache.record_row_output(input_row, _without_row_markers(output_row))
+    caching.writer.record(
+        project=caching.project,
+        stage_id=caching.stage_id,
+        stage_fingerprint=caching.stage_fingerprint,
+        input_fingerprint=compute_row_fingerprint(input_row),
+        input_row=input_row,
+        output_row=_without_row_markers(output_row),
+    )
 
 
 def _without_row_markers(row: Row) -> Row:
@@ -396,13 +428,13 @@ def _without_row_markers(row: Row) -> Row:
     return {key: value for key, value in row.items() if key not in markers}
 
 
-def _map_row_through_cache(cache: RowCache, map_row: RowMapper) -> RowMapper:
+def _map_row_through_cache(caching: _RowCaching, map_row: RowMapper) -> RowMapper:
     def compute_row(row: Row, index: int) -> Row:
-        cached = cache.find_cached_output(row)
+        cached = _find_cached_row(caching, row)
         if cached is not None:
             return cached
         result = map_row(row, index)
-        _record_row_output(cache, row, result)
+        _record_row_output(caching, row, result)
         return result
 
     return compute_row
@@ -426,26 +458,28 @@ def _run_batched(
     the hits."""
     src = inputs[stage.inputs[0].id]
     records = _to_records(src)
-    cache = open_row_cache(stage, ctx)
-    hits = {} if cache is None else _find_cached_rows(cache, records)
+    caching = _open_row_caching(stage, ctx)
+    hits = {} if caching is None else _find_cached_rows_by_position(caching, records)
     misses = [index for index in range(len(records)) if index not in hits]
     computed = _compute_batched_rows(handler, stage, src, misses, ctx)
     # Ordered before recorded: the ordering step is what verifies one computed
     # row per miss, so nothing is pinned against a row it did not come from.
     rows = _order_by_input_position(stage, hits, misses, computed, len(records))
-    if cache is not None:
+    if caching is not None:
         for position, row in zip(misses, computed):
-            _record_row_output(cache, records[position], row)
+            _record_row_output(caching, records[position], row)
     return _restore_input_columns_when_nothing_named_them(
         _finish_batched_frame(rows, handler, stage), src
     )
 
 
-def _find_cached_rows(cache: RowCache, records: list[Row]) -> dict[int, Row]:
+def _find_cached_rows_by_position(
+    caching: _RowCaching, records: list[Row]
+) -> dict[int, Row]:
     """Every input row the cache can already answer, by input position."""
     found: dict[int, Row] = {}
     for index, record in enumerate(records):
-        cached = cache.find_cached_output(record)
+        cached = _find_cached_row(caching, record)
         if cached is not None:
             found[index] = cached
     return found
