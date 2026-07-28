@@ -21,7 +21,12 @@ from app.core.errors import (
     NoWorkflowTestVersionError,
     RunNotFoundError,
 )
-from app.models import HUMAN_REVIEW_QUEUE_CONTRACT_NOTE, NODE_TYPES, StageDraft
+from app.models import (
+    HUMAN_REVIEW_QUEUE_CONTRACT_NOTE,
+    NODE_TYPES,
+    StageDraft,
+    StageType,
+)
 from app.runtime import stage_tests
 from app.services import generation
 from app.services import loader
@@ -53,16 +58,24 @@ _RUN_TOOL_ERRORS = (
 # Anything outside this set propagates as a genuine internal fault.
 _STAGE_TOOL_ERRORS = (WorkflowLoadError, FileNotFoundError)
 
-# The two per-node-type facts an authoring client gets wrong most often, rendered from
-# app.models so this prompt and the editing agent's cannot drift apart on them, and
-# wrapped to the width of the surrounding prose.
-_NODE_TYPE_CONSTRAINTS = "\n".join(
-    textwrap.fill(f"- {stage_type} — {note}", width=88, subsequent_indent="  ")
-    for stage_type, note in (
-        ("input_data", NODE_TYPES["input_data"]["notes"]),
-        ("human_review_queue", HUMAN_REVIEW_QUEUE_CONTRACT_NOTE),
+
+def _render_node_type_constraints() -> str:
+    """Every node type's own runtime facts as bullets for the instructions
+    preamble, rendered from NODE_TYPES so this prompt and the editing agent's
+    cannot drift apart on them — nor from the registry when a type is added.
+    human_review_queue's registry notes are superseded by the fuller contract
+    note. Wrapped to the width of the surrounding prose."""
+    return "\n".join(
+        textwrap.fill(f"- {stage_type} — {note}", width=88, subsequent_indent="  ")
+        for stage_type, note in (
+            (name, HUMAN_REVIEW_QUEUE_CONTRACT_NOTE
+             if name == StageType.human_review_queue else spec["notes"])
+            for name, spec in NODE_TYPES.items()
+        )
     )
-)
+
+
+_NODE_TYPE_CONSTRAINTS = _render_node_type_constraints()
 
 INSTRUCTIONS = f"""\
 glassbox turns an investigation methodology (prose) into a reviewable, runnable data
@@ -96,11 +109,8 @@ only a human publishes. Your job ends at a saved version with a workflow test ru
 human to review.
 
 # Per-stage tests
-generate_stage_tests(project_id, stage_id) derives one python-transform stage's tests from
-the methodology (background; read_stage to see them once done). run_stage_tests(project_id,
-stage_id?) runs the authored tests against that stage's current code — omit stage_id to run
-every python-transform stage. Loop edit_stage → run_stage_tests until a stage's tests pass:
-a failure means the CODE disagrees with the test, so fix the code.
+Once a python-transform stage exists, generate_stage_tests derives its tests from the
+methodology; then loop edit_stage → run_stage_tests until they pass.
 
 # Running
 Runs execute a stored version; save_version(project_id, message) creates one, then
