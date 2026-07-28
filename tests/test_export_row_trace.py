@@ -101,7 +101,7 @@ def test_the_written_page_makes_no_absolute_requests(exporter):
 
 def test_assets_land_beside_the_pages(exporter):
     exporter.export_row_trace(SCORE_ID, exporter.output_dir / "index.html", row=at(0))
-    assert (exporter.output_dir / "_assets/mermaid.min.js").is_file()
+    assert (exporter.output_dir / "_assets/trace.css").is_file()
 
 
 def test_the_page_reaches_its_assets_from_its_own_depth(exporter):

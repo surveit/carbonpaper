@@ -1,0 +1,22 @@
+/* The trace body (app/runtime/templates/_trace_body.html) renders both inside
+   the live lineage page and inside an exported bundle. Both load this file, so
+   an exported page looks like what the reviewer saw. Nothing here may depend
+   on the lineage page's chrome — no ancestor selectors. */
+
+.trunc{background:#fff4e6;color:#7a4a00;border-radius:8px;padding:8px 12px;font-size:13px;margin-bottom:12px}
+
+.step{margin:2px 0}
+.stepno{display:inline-block;min-width:56px;color:#888;font-size:12px;font-weight:500}
+.stage-link{font-weight:600;cursor:pointer;color:#1a3a72;text-decoration:underline;text-underline-offset:2px}
+
+.row-chip{cursor:pointer;background:#eef4ff;color:#1a3a72;border:1px solid #cfe0ff;border-radius:6px;padding:0 7px;font-size:12.5px;white-space:nowrap}
+.row-chip::before{content:"[";color:#8aa}
+.row-chip::after{content:"]";color:#8aa}
+
+.lin-disc{margin:10px 0}
+summary.disclosure{cursor:pointer;font-weight:500;padding:4px 0}
+.lin-detail{margin:6px 0 10px 56px}
+.lin-cols{color:#555;font-size:12.5px;margin:0 0 6px}
+.lin-transform{color:#444;font-size:12.5px;white-space:pre-wrap;word-break:break-word;background:#fafafa;border-left:2px solid #e2e2e2;padding:6px 10px;margin:8px 0}
+
+.claim-tag{font-size:10.5px;border-radius:5px;padding:0 5px;margin-left:3px;background:#e8f8e8;color:#1f5a1f}

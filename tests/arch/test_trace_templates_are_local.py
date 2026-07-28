@@ -26,4 +26,4 @@ def test_runtime_trace_templates_reference_only_local_assets():
 def test_the_pattern_catches_any_scheme_not_a_blocklisted_host():
     for url in ("https://cdn.jsdelivr.net/x.js", "http://a/b.css", "//unpkg.com/x"):
         assert ABSOLUTE_ASSET_REF.search(f'<script src="{url}"></script>'), url
-    assert not ABSOLUTE_ASSET_REF.search('<script src="../_assets/mermaid.min.js">')
+    assert not ABSOLUTE_ASSET_REF.search('<link href="../_assets/trace.css">')

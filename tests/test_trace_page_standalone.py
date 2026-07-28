@@ -13,7 +13,7 @@ def test_standalone_is_a_complete_document():
 def test_standalone_references_assets_relatively():
     html = render_standalone_trace_page(VIEW, asset_prefix="../_assets/")
     assert "../_assets/style.css" in html
-    assert "../_assets/mermaid.min.js" in html
+    assert "../_assets/trace.css" in html
 
 
 def test_standalone_makes_no_absolute_requests():

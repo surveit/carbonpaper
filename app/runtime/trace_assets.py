@@ -5,7 +5,7 @@ from pathlib import Path
 
 _STATIC = Path(__file__).resolve().parents[1] / "static"
 _ASSETS = {"style.css": _STATIC / "style.css",
-           "mermaid.min.js": _STATIC / "vendor/mermaid.min.js"}
+           "trace.css": _STATIC / "trace.css"}
 
 
 def copy_trace_assets(dest_dir: Path) -> None:
