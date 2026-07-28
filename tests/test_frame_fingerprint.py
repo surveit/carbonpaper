@@ -1,9 +1,5 @@
-"""The whole-frame identity (app/core/frames.py) and the frame payload
-accessors that key on it (app/core/stage_cache.py).
-
-A whole-frame transform may index positionally or depend on order, so column
-order AND row order are part of a frame's identity — unlike a row, whose column
-order is deliberately irrelevant.
+"""A whole-frame transform may index positionally, so column order AND row order
+are part of a frame's identity — unlike a row, whose column order is irrelevant.
 """
 from __future__ import annotations
 

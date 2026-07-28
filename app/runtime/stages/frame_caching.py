@@ -1,9 +1,5 @@
-"""The frame-level stage cache: the runtime's side of the seam, at frame grain.
-
-The sibling of the row-level interceptor in `execution.py`, at the other grain:
-a frame-shaped stage's whole output is ONE entry, keyed by the stage definition
-plus every input frame in the stage's declared input order. What lives here is
-one execution's state over the cache accessor, never a view class wrapping it.
+"""A frame-shaped stage's whole output is ONE cache entry, keyed by the stage
+definition plus every input frame in the stage's declared input order.
 """
 from __future__ import annotations
 

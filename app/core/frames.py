@@ -1,16 +1,6 @@
-"""The DataFrame layer: parquet storage for the tabular payloads that aren't
-documents — run stage outputs, review-queue snapshots, decision logs, and
-uploaded eval datasets — plus the frame-to-rows conversion every caller that
-walks a frame row by row shares. Storage uses the same (collection, id)
-addressing as the document store, different physical form: one parquet file per
-frame under a root directory. The only place outside the document store that
-turns an id into a file path, so it reuses validate_id.
-
-It also owns the value-level pandas knowledge the stage cache keys and stores
-under: the null forms a cell can carry (`collapse_null_forms`), a numpy
-scalar's JSON-native equivalent (`convert_cell_to_json_native`), the walk that
-reduces a whole frame to a stable identity (`compute_frames_fingerprint`), and
-which exceptions a parquet write raises (`save_frame_or_reject`)."""
+"""Frames are addressed by (collection, id) like the document store, but stored one
+parquet file per frame under a root directory. Also owns the value-level pandas
+knowledge the stage cache keys under - null forms, numpy scalars, frame identity."""
 from __future__ import annotations
 
 from collections.abc import Sequence

@@ -1,19 +1,7 @@
-"""Whole workflows run TWICE through the production run entry points.
-
-Every other stage-cache test drives `handler.execute(...)` directly, so the path
-the CLI and the web trigger actually take — `prepare_run` / `run_prepared` via
-`execute_run`, over a published version, against the process-wide stores — was
-never covered end to end.
-
-The chain spans BOTH cache grains — a row-mapped `python_row_function` and a
-frame-shaped `python_frame_function` are intercepted by different code — so one
-run exercises both.
-
-The evidence is the stages' own authored code, not the cache's internals: every
-stage appends a line to a probe file when its body runs, so a run that replays
-leaves the probe untouched. A run that recomputes appends one line per row it
-computes, or one line per execution where the stage is frame-shaped.
-"""
+"""Whole workflows run twice through the production entry points, spanning both cache
+grains - row-mapped and frame-shaped are intercepted by different code. Evidence is the
+stages' own authored code: each appends a line to a probe file when its body runs, so a
+replayed run leaves the probe untouched."""
 from __future__ import annotations
 
 import json
