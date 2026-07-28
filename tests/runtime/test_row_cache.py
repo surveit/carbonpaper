@@ -106,17 +106,21 @@ def test_second_run_reuses_the_cache_and_never_calls_the_mapper():
     assert calls == [1, 2]  # the mapper was not called again
 
 
-def test_registered_python_row_function_reuses_its_recorded_rows():
-    """Through the REGISTERED handler, not a hand-built one: the recorded rows
-    replay even when the authored function would now answer differently."""
-    src = _src([1, 2])
-    _run(_row_stage(), src, _ctx(run_id="run1"))
+def test_registered_python_row_function_replays_a_recorded_row_over_its_own_code():
+    """Through the REGISTERED handler, not a hand-built one. The recorded row is
+    seeded with an answer the authored function would never produce, so the value
+    that comes back is itself the evidence of a replay — re-running the stage and
+    reading the store back would only show that entries exist."""
+    stage = _row_stage()
+    StageCache().record(
+        project=PROJECT, stage_id=stage.id,
+        stage_fingerprint=stage.compute_definition_fingerprint(),
+        input_fingerprint=compute_row_fingerprint({"x": 1}),
+        input_row={"x": 1}, output_row={"x": 1, "y": 999},
+    )
 
-    # Same definition fingerprint is what matters, so re-run the same stage —
-    # and assert nothing was re-derived by checking the store, not the values.
-    out = _run(_row_stage(), src.copy(), _ctx(run_id="run2"))
-    assert list(out["y"]) == [2, 4]
-    assert {entry.output_row["y"] for entry in _entries(_row_stage())} == {2, 4}
+    out = _run(stage, _src([1]), _ctx(run_id="run1"))
+    assert list(out["y"]) == [999]  # the authored `x * 2` would have said 2
 
 
 def test_changing_the_stage_definition_invalidates_every_row():
@@ -214,14 +218,20 @@ def test_bust_cache_skips_the_read_but_still_re_pins_the_entry():
 
 def test_a_run_without_project_scope_touches_the_cache_at_all():
     """A subset/preview run carries no identity and no cache accessor, so the
-    interceptor never opens — the mapper answers every row."""
+    interceptor never opens — the mapper answers every row. The row is pinned by
+    a scoped run FIRST, so the un-scoped run walks past an entry that was there
+    to be had; without the seed, re-computing would prove only an empty store."""
     stage = _row_stage()
     calls: list[int] = []
+    _counting_row_handler(calls).execute(stage, {"src": _src([1])}, _ctx(run_id="seed"))
+    assert len(_entries(stage)) == 1
+
     ctx = make_run_context()  # identity=None, stage_cache=None
     _counting_row_handler(calls).execute(stage, {"src": _src([1])}, ctx)
-    _counting_row_handler(calls).execute(stage, {"src": _src([1])}, ctx)
-    assert calls == [1, 1]
-    assert _entries(stage) == []
+    assert calls == [1, 1]              # the pinned row was not read
+    _counting_row_handler(calls).execute(stage, {"src": _src([5])}, ctx)
+    assert calls == [1, 1, 5]
+    assert len(_entries(stage)) == 1    # and x=5 was not written
 
 
 def test_a_read_only_accessor_reuses_a_hit_but_records_nothing():
