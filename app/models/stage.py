@@ -8,12 +8,12 @@ from __future__ import annotations
 
 import json
 import re
+from enum import Enum
 from pathlib import Path
 from typing import Any, ClassVar, Literal, Optional
 
 from pydantic import AliasChoices, Field, ValidationError, field_validator, model_validator
 
-from app.core.schema_enum import SchemaEnum
 from app.core.llm.options import LLMModel
 from app.models.schema import (
     SourceRef,
@@ -26,9 +26,8 @@ from app.models.stages.stage_tests import StageTest, validate_stage_tests
 from app.core.prompt_template import find_template_fields
 from app.core.utils import compute_short_hash, format_errors
 
-
 # ── Enumerated vocabularies ──────────────────────────────────────────────────
-class StageType(SchemaEnum):
+class StageType(str, Enum):
     input_data = "input_data"
     llm_transform = "llm_transform"
     # Two Python transforms, distinguished by how the runtime invokes them (which
@@ -70,18 +69,18 @@ def is_grain_and_order_preserving(stage_type: StageType) -> bool:
     return stage_type in _GRAIN_AND_ORDER_PRESERVING_TYPES
 
 
-class ConnectorKind(SchemaEnum):
+class ConnectorKind(str, Enum):
     file = "file"
 
 
-class FileFormat(SchemaEnum):
+class FileFormat(str, Enum):
     csv = "csv"
     parquet = "parquet"
     json = "json"
     geojson = "geojson"
 
 
-class AggFormula(SchemaEnum):
+class AggFormula(str, Enum):
     sum = "sum"
     mean = "mean"
     count_ = "count"  # trailing underscore: `count` would shadow str.count
@@ -91,19 +90,19 @@ class AggFormula(SchemaEnum):
     list = "list"
 
 
-class JoinType(SchemaEnum):
+class JoinType(str, Enum):
     inner = "inner"
     left = "left"
     right = "right"
     outer = "outer"
 
 
-class FunctionKind(SchemaEnum):
+class FunctionKind(str, Enum):
     inline = "inline"
     module = "module"
 
 
-class PublishFormat(SchemaEnum):
+class PublishFormat(str, Enum):
     html_report = "html_report"
     json = "json"
     csv = "csv"
@@ -297,7 +296,7 @@ class AggregateConfig(_Base):
     aggregations: list[AggregationOp]
 
 
-class RowReviewDecision(SchemaEnum):
+class RowReviewDecision(str, Enum):
     """A reviewer's verdict on one human_review_queue row, validated and applied
     at the web/service boundary (app.services.review) and recorded as the review
     stage's output row in the cache: `approve` keeps the AI score as final,

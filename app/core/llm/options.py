@@ -4,10 +4,10 @@ The menu of models the platform may call. An org-specific deployment narrows or
 extends this list; the workflow contract (app/models) references it so a stage can only
 name a model the deployment actually offers.
 """
-from app.core.schema_enum import SchemaEnum
+from enum import Enum
 
 
-class LLMModel(SchemaEnum):
+class LLMModel(str, Enum):
     haiku = "haiku"
     sonnet = "sonnet"
     opus = "opus"

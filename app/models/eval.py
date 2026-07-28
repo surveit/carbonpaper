@@ -7,11 +7,11 @@ exactly `override_stage`'s output columns plus one expected-output column per ch
 from __future__ import annotations
 
 import re
+from enum import Enum
 from typing import Annotated, Any, Literal, Optional
 
 from pydantic import AfterValidator, Field, field_validator, model_validator
 
-from app.core.schema_enum import SchemaEnum
 from app.models.schema import _Base
 from app.models.table import TableRef
 
@@ -38,7 +38,7 @@ class StageOutputOverride(_Base):
     table: TableRef
 
 
-class ScoringMetric(SchemaEnum):
+class ScoringMetric(str, Enum):
     """How `ExpectedOutput` grades one column: `exact` equality, `abs_tol`
     within `tolerance`, or `sign` (same sign)."""
     exact = "exact"

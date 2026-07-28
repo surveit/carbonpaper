@@ -4,7 +4,6 @@ is safe alongside other lifespan-running tests.
 from __future__ import annotations
 
 import asyncio
-import json
 import time
 from pathlib import Path
 
@@ -319,17 +318,15 @@ def test_mcp_add_stage_refuses_an_invalid_stage_on_the_issues_channel(tmp_path, 
     assert not (tmp_path / "trail" / "compiled" / "score.json").exists()
 
 
-def test_add_stage_input_schema_carries_no_pydantic_titles(tmp_path, monkeypatch):
-    """The stage shape ships in the tool's inputSchema, so every Pydantic-generated
-    `title` in it is wire cost on each tools/list. FastMCP generates that document
-    itself — only a strip that rides on the models reaches its `$defs`."""
+def test_add_stage_input_schema_omits_the_server_owned_fields(tmp_path, monkeypatch):
+    """The stage shape ships in the tool's inputSchema, which FastMCP generates
+    itself from StageDraft — so the fields no authoring client writes must be absent
+    from the document the client is handed, not only from the model."""
     from app.mcp import server
 
     [tool] = [t for t in asyncio.run(server.mcp.list_tools()) if t.name == "add_stage"]
     defs = tool.inputSchema["$defs"]
 
-    assert defs, "nothing nested to have stripped"
-    assert "title" not in json.dumps(defs)
     assert not {"tests", "eval", "review", "source"} & set(defs["StageDraft"]["properties"])
 
 

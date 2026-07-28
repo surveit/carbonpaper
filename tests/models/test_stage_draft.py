@@ -89,15 +89,6 @@ def test_a_stage_that_breaks_a_cross_field_rule_parses_as_a_draft_and_is_refused
         Stage.model_validate(draft.to_stage_spec())
 
 
-def test_schema_carries_no_pydantic_generated_titles():
-    """Titles are derived from field names and carry nothing, but they ship on
-    every tools/list. The `$defs` are the load-bearing half — a strip that runs
-    only on StageDraft's own object leaves every handle block's titles behind."""
-    schema = StageDraft.model_json_schema()
-    assert "title" not in json.dumps(schema)
-    assert schema["$defs"], "nothing nested to have stripped"
-
-
 def test_schema_omits_the_fields_no_authoring_client_writes():
     properties = StageDraft.model_json_schema()["properties"]
     assert not set(DROPPED_FIELDS) & set(properties)
