@@ -1,25 +1,8 @@
-"""
-In-memory scratch re-run of a single stage.
+"""In-memory scratch re-run of a single stage.
 
-This module powers the node-detail panel's "Run transform on selected" button.
-It loads a stage's upstream inputs from a completed run's on-disk outputs,
-subsets them to a caller-chosen set of row indices, runs THIS stage's handler
-in memory, and returns the resulting rows as records.
-
-Hard guarantee: NOTHING is persisted. No manifest is touched, no output parquet
-is written, no queue snapshot or artifact is produced. We achieve this by
-calling the stage handler directly (never the runner) and by refusing the two
-stage types whose handlers have disk side-effects:
-
-  - human_review_queue  → writes a queue snapshot + raises HaltForReview
-  - publish             → writes artifacts to run_dir/artifacts
-
-Allowed types are the pure transforms: python_row_function,
-python_frame_function, llm_transform, join, aggregate. (input_data is also
-refused — it has no upstream rows to subset.)
-
-This module imports and reuses the existing handlers; it does not change their
-behavior.
+Hard guarantee: NOTHING is persisted. Handlers are called directly, never the
+runner, and the two stage types whose handlers touch disk (human_review_queue,
+publish) are refused - as is input_data, which has no upstream rows to subset.
 """
 
 from __future__ import annotations

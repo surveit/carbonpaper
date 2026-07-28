@@ -1,9 +1,3 @@
-"""Tests for the human_review_queue stage's config-column check
-(app/models/stages/human_review_queue.py, wired into
-Stage._config_columns_resolve): every column `queue.filter` references must
-resolve against the stage's own input edge schema — the check that catches a
-filter reading a column the review is meant to SET (argcritic bug 4), now
-enforced at Stage construction rather than only at workflow load."""
 from __future__ import annotations
 
 import pytest

@@ -1,7 +1,3 @@
-"""Tests for `app.core.predicate.parse_predicate` — the strict single-parse
-predicate parser that returns both the columns a where/filter expression
-references (for save-time validation) and the pandas expression to evaluate
-it (for runtime execution), from one `ast` parse over a closed grammar."""
 from __future__ import annotations
 
 import pandas as pd

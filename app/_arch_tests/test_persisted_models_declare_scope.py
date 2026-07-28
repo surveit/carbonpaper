@@ -1,17 +1,8 @@
 """Architecture: every `PersistedModel` subclass declares its permission scope.
 
-`app.core.persistence.PersistenceScope` is a permission profile for run
-activity (see its docstring): `RUN`, `PROJECT_READ`, or `PROJECT_READ_WRITE`.
-The base class carries no default for `SCOPE` — nothing at runtime reads
-`SCOPE`, so an omitted declaration is a modeling gap only this arch test
-catches, at review time; there is no runtime check. A second test enforces
-the sharper rule for the one scope that grants a run a write outliving it: a
-class carrying `SCOPE = PersistenceScope.PROJECT_READ_WRITE` must also define
-`read_only`, the safe read-only view every such cross-run writable channel
-must offer.
-
-Scope is all of `app/` (this test sits at its root); detection is AST-only —
-neither test imports the modules it inspects.
+Nothing at runtime reads `SCOPE`, so an omitted declaration is a modeling gap only this
+test catches. A second test requires any `SCOPE = PROJECT_READ_WRITE` class to also
+define `read_only`. Detection is AST-only — neither test imports what it inspects.
 """
 from __future__ import annotations
 

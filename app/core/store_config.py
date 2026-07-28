@@ -1,10 +1,6 @@
-"""Default process-wide storage wiring — the composition-root step an entry
-point takes before it reaches anything that reads or writes a store.
-
-One place, so the server and the CLI entry points cannot drift onto different
-databases: a run started from the command line must land in the same store the
-web UI reads back. Guarded, so a store configured ahead of time (the test
-suite's per-test in-memory / tmp stores) always wins.
+"""Default process-wide storage wiring, one place so the server and the CLI
+cannot drift onto different databases: a run started from the command line must
+land in the same store the web UI reads back.
 """
 from __future__ import annotations
 

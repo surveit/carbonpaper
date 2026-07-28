@@ -1,10 +1,3 @@
-"""Generation's data-model phase runs as a LIVE chat turn: start_generation creates a
-session and starts the data-model agent as a turn on the shared TurnManager (streamable at
-/chat/<sid> while it runs); when the turn ends with a valid submission, the schemas are
-written. The create-flow stops there — the workflow is built separately, on demand.
-
-The agent + turn are faked; no CLI subprocess, no real LLM. Driven with asyncio.run.
-"""
 from __future__ import annotations
 
 import asyncio

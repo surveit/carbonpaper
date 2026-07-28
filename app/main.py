@@ -1,18 +1,8 @@
 """
-Workflow visualization app (v2).
-
-Reads compiled stage JSON files for each project, renders an interactive
-workflow view plus per-stage detail pages that display the executable handle
-(connector spec, prompt template, pandas function, join keys, aggregation
-rules, queue config, or publish target) along with typed input/output schemas
-and any eval/review configuration.
-
-Routes live in `app.web.routers` (project / runs / review / node_review); the
-helpers they share are in `app.web` (config, loading, diagrams).
+Workflow visualization app: the FastAPI entry point.
 
 Run:
     python -m uvicorn app.main:app --reload --port 8765
-Then open http://localhost:8765/
 """
 
 from __future__ import annotations

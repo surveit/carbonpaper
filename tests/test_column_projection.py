@@ -1,12 +1,5 @@
-"""Pins the fix for issue #50: llm_transform / human_review_queue project their
-output onto EXACTLY the columns declared in output_schema — never a runtime
-keep-list of methodology-specific column names (the old code force-kept
-evidence_id / doc_id / entity_id / benchmark_id / query_id / quote / ...). A
-column survives by being declared in output_schema. For llm_transform a column
-shared with the input schema rides through untouched (it's outside the reply
-spec, so the model is never asked for it); a column output_schema adds is what
-the model returns. Anything produced that output_schema doesn't declare is
-dropped and recorded on the stage's contribution, not silently discarded."""
+"""Pins issue #50: output_schema alone decides which columns survive a stage.
+"""
 from __future__ import annotations
 
 import pandas as pd

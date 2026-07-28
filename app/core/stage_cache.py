@@ -1,40 +1,8 @@
-"""stage_cache.py — the content-addressed stage-result cache.
-
-A cache entry is one stage's output for one input row, keyed by the exact
-(stage-definition fingerprint, input-row fingerprint) pair that produced it:
-`Stage.compute_definition_fingerprint()` (app/models/stage.py) identifies WHAT
-the stage computes, `compute_row_fingerprint` identifies WHICH row it saw.
-Re-running the same stage definition against the same row resolves to the
-same cache entry, whether the run that first recorded it is long gone.
-
-The payload is generic: an `output_row`, or None for an entry that records no
-output row for its key. Reading code must handle the None whatever it currently
-writes, since entries carrying it may already exist in a store. What the output
-MEANS — and any verdict or column vocabulary behind it — lives above this seam,
-never here.
-
-`StageCacheEntry` is the only PersistedModel carrying
-`SCOPE = PersistenceScope.PROJECT_READ_WRITE` (see app.core.persistence.PersistenceScope):
-the one deliberate channel that lets run activity write something that outlives
-the run. Two accessors express the two capabilities over it: `read_only`
-returns a `ReadOnlyStageCache` (`get`/`find_entries`/`find_recorded_rows`/
-`find_cached_frame`), the safe default view every cross-run channel must offer;
-`read_write` returns a `StageCache` (its subclass), which adds `record` and
-`record_frame`. The write capability is a distinct type, structurally absent
-from the read-only view rather than gated by a flag or an exception.
-
-Two grains share the seam. At ROW grain the caller passes an input fingerprint
-it computed with `compute_row_fingerprint`, because the same row identity is
-what a queued human decision is filed under. At FRAME grain the caller passes
-the ordered input frames themselves and the accessor resolves their identity
-through `app.core.frames.compute_frames_fingerprint`, so this seam exposes no
-frames fingerprint of its own.
-
-The pandas-shaped steps this seam needs — how a cell's null forms and numpy
-scalars reduce to JSON, how a whole frame reduces to an identity, and which
-exceptions a parquet write raises — live in `app.core.frames`. Here a frame is
-only a value to key and store.
-"""
+"""The content-addressed stage-result cache, keyed by (stage-definition fingerprint,
+input identity). Two grains, asymmetric: at ROW grain the caller passes a fingerprint
+it computed; at FRAME grain it passes the frames and the accessor resolves identity
+itself, so this seam exposes no frames fingerprint. `output_row` may be None — handle
+it. What the output MEANS lives above this seam, never here."""
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence

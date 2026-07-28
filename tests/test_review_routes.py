@@ -1,19 +1,5 @@
-"""Behavior tests for the reviewer web routes (app/web/routers/review.py):
-`queue_page` (GET) and `queue_decide` (POST) for one human_review_queue stage.
-
-Both routes go through the stage-result cache (app.core.stage_cache),
-never a `decisions/*.parquet` file: `queue_page`'s prior decisions come from
-`StageCacheEntry.find_entries`, and `queue_decide` writes a `StageCacheEntry`
-via `StageCache.record`. Projects are built on disk and run through the real
-runner (app.runtime.runner.prepare_run / run_prepared / resume_run) — the same
-pattern tests/test_run_loop_semantics.py and tests/runtime/test_hrq_cache.py
-use for human_review_queue halts — so the queue snapshot these routes read is
-genuine runner output, not a hand-assembled fixture. The llm_transform stage's
-model call is mocked (deterministic score, no live LLM) where a test needs one.
-
-The snapshot itself carries no fingerprint columns: fingerprints live in the
-sidecar `<stage>.fingerprints.json` beside it, POSITIONALLY aligned to the
-snapshot's row order (app.runtime.stages.human_review_queue).
+"""Queue snapshots here are genuine runner output, not fixtures. The snapshot carries
+no fingerprint columns: they live in a sidecar aligned POSITIONALLY to row order.
 """
 from __future__ import annotations
 

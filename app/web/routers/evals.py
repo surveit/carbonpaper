@@ -1,16 +1,4 @@
-"""Eval read pages, framed by the project shell.
-
-Three GET views, no authoring (that's the deferred form PR):
-
-  GET /project/{project}/evals                      — the evals list (a shell section)
-  GET /project/{project}/evals/{eval_id}            — one config: pathway, compatibility,
-                                                       eval-dataset preview, scoring, run history
-  GET /project/{project}/evals/{eval_id}/runs/{run} — one run's result
-
-Structural twin of runs.py: the list is a section in project_shell (section_evals.html);
-the two detail pages are standalone drill-downs (eval_detail.html / eval_run.html), each
-with a back-link to the list. Configs belong to the project; a run pins the
-workflow_version it scored. Nothing here writes — evals are authored elsewhere.
+"""Eval read pages, framed by the project shell. Nothing here writes.
 """
 
 from __future__ import annotations

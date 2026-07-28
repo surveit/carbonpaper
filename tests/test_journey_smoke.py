@@ -1,18 +1,5 @@
-"""End-to-end smoke gate: the offline journey from an authored working copy to a
-published artifact, driven through the real web endpoints.
-
-The journey under test — the product's core promise, minus the LLM steps
-(conftest forces the LLM offline; LLM-stage coverage needs a real key and runs
-on demand, not in CI):
-
-    create project -> author a python-only workflow (compiled/*.json, the app's
-    own storage convention) -> POST /version -> run form offers a binding field
-    -> POST /run binding a run-time input file -> every stage reaches `ok` ->
-    the publish stage's artifact exists on disk, is served by the artifact
-    route, and carries numbers computed from the bound file.
-
-Any break on this path is a product outage even when every unit test is green,
-so this test fails at the first seam that regresses.
+"""Offline end-to-end gate through the real web endpoints; conftest forces the LLM
+offline, so the journey covered here excludes the LLM stages.
 """
 from __future__ import annotations
 

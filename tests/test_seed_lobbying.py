@@ -1,10 +1,3 @@
-"""tests/test_seed_lobbying.py — smoke test for the committed lobbying-issue-
-triage WorkflowFile fixture (app/seeds/data/lobbying_issue_triage.json,
-produced by app.seeds.capture_lobbying): importing it through the project
-export/import seam must produce a runnable project with the source workflow's
-shape. A WorkflowFile carries no review state (see its docstring), so an
-import always starts with a clean, unreviewed slate — never a fabricated
-"pre-approved" project."""
 from __future__ import annotations
 
 from pathlib import Path

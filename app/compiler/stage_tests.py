@@ -1,13 +1,8 @@
-"""Compiler bridge for stage-test derivation: builds the code-blind agent
-that authors StageTest cases for one python transform stage, and runs it as a
-live chat turn on the app.core.agent spine (`start_stage_test_derivation_agent`).
+"""Builds the code-blind agent that authors StageTest cases for one python transform stage.
 
-The deriver's task is assembled from the methodology document and the
-stage's declared identity and schemas ONLY — the stage's function code and
-any existing tests are excluded by construction (they are never rendered
-into the task), so expected outputs cannot be anchored on an
-implementation. The submitted suite is handed back through a callback;
-persisting it (via app.services.stage_edit) is the caller's job."""
+The stage's function code and any existing tests are excluded by construction, so
+expected outputs cannot be anchored on an implementation. The submitted suite comes back
+through a callback; persisting it is the caller's job."""
 from __future__ import annotations
 
 from typing import Callable

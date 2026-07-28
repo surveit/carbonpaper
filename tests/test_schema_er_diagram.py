@@ -1,15 +1,3 @@
-"""Behavior tests for build_schema_er_diagram (app/web/diagrams.py) — the
-Mermaid erDiagram rendered for the data-model's NAMED schemas.
-
-build_schema_er_diagram had zero test coverage before this branch's
-decomposition — confirmed by grep across tests/. These tests pin its
-generated-text behavior through the public function only, so the suite
-passes identically against the pre-decomposition single function: one entity
-block per named schema (PK/FK markers, truncated+quote-escaped description
-comments, the empty-column "any" placeholder row), FK edges deduped and
-derived only from explicit column `references`, and schemas/columns missing
-a `name` skipped.
-"""
 from __future__ import annotations
 
 from app.web.diagrams import build_schema_er_diagram

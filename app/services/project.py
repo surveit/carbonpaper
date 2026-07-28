@@ -1,30 +1,8 @@
-"""
-project.py — the project lifecycle service.
+"""The project lifecycle service: a project is a directory under examples/<name>/.
 
-A "project" is a directory under examples/<name>/ that accumulates, over its life:
-a source DOCUMENT (the pasted methodology), a DATA MODEL (named schemas/), a
-WORKFLOW (the compiled/ stages), immutable VERSIONS, and RUNS. This module drives
-that lifecycle — create a project (from a pasted document, or from an imported
-`WorkflowFile`), edit its stages, export/import it as one portable `WorkflowFile`,
-and compute the status snapshot the app renders — composing the sub-services that
-own each part (data_model, loader, versioning, node_review) rather than touching
-their on-disk formats itself.
-
-The status snapshot is the load-bearing read: the unified app shows ONE project at
-a time across five sections (Overview / Document / Data model / Workflow / Runs);
-every section route and the shell share the counts computed once here, so the
-routes layer never recomputes ad hoc or disagrees with the sidebar.
-  - project_meta(pdir)  : the project's identity card (name/title/created/model/
-                          source). Reads examples/<name>/project.json when present;
-                          for LEGACY projects with none, degrades TRUTHFULLY — never
-                          invents a model or a creation date.
-  - project_state(pdir) : the status object the Overview + shell render (document /
-                          data model / workflow / versions / runs). The "what to do
-                          next" CTA is added on top by the web layer, not here.
-
-export_project / import_project make a project portable via one `WorkflowFile`
-pydantic document — export reads through the loaders, import writes through the same
-service writers (import-if-absent: a name clash raises rather than replacing).
+project_meta degrades TRUTHFULLY for legacy projects with no project.json — it never
+invents a model or a creation date. import_project is import-if-absent: a name clash
+raises rather than replacing.
 """
 
 from __future__ import annotations

@@ -1,10 +1,3 @@
-"""The home dashboard lists a project from the moment it is created.
-
-Creating a project writes examples/<name>/ with document.md + project.json
-immediately; the data model and workflow are generated afterwards. The
-dashboard must show the project in that document-only state — a creator who
-navigates back mid-generation should see their project, not an empty list.
-"""
 from __future__ import annotations
 
 import json

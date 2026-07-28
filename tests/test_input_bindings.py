@@ -1,10 +1,3 @@
-"""Run bindings: per-run connector-param overrides merged into just-loaded
-stages (apply_run_bindings, generic), and the stage-owned preflight that judges
-run-readiness and records provenance (validate_stages_ready + PREFLIGHTS).
-
-Pure-function tests plus prepare_run integration (manifest provenance, sha256,
-no-run-dir-on-failure).
-"""
 from __future__ import annotations
 
 import hashlib

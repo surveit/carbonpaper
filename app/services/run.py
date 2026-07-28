@@ -1,14 +1,6 @@
-"""Production run seam: the one service module allowed to drive
-app.runtime.runner's production run-lifecycle entry points (prepare_run /
-run_prepared / resume_run / resolve_version_id).
-
-The web run UI and any other run driver reach production runs through these
-functions rather than importing the runner directly, so "what starts a
-production run" has a single named door (enforced by the import-linter contract
-"production run entry points reached only by the run service"). The runner still
-owns the run mechanics; this seam adds the background-thread launch, the manifest
-status read, and the resolution of what a run pinned (its version, its stages,
-one stage's definition) that the drivers need."""
+"""Production run seam: the one service module allowed to drive app.runtime.runner's
+production run-lifecycle entry points (enforced by an import-linter contract). Every
+other run driver goes through here rather than importing the runner directly."""
 from __future__ import annotations
 
 import threading

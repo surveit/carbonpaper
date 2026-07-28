@@ -1,15 +1,8 @@
-"""Workflow-run enums: the per-stage and overall-run `status` a run's manifest
-records — StageStatus and RunStatus (see app.runtime.runner).
+"""Workflow-run enums: the per-stage and overall-run `status` a run's manifest records.
 
-Both are `enum.StrEnum`, not the `class X(str, Enum)` pattern used for the
-workflow-contract vocabularies in app.models (StageType, ConnectorKind,
-...). For the status enums that distinction is load-bearing: their values are
-rendered as bare strings on paths only StrEnum gets right — Jinja builds CSS
-classes with `status-{{ status }}`, the run-page poller reads `status` straight
-off the JSON API, and the manifest itself is JSON on disk. A `class X(str, Enum)`
-member renders `str()`/an f-string as `"ClassName.MEMBER"`; an `enum.StrEnum`
-member renders as its bare value ("ok"), matches `== "ok"`, and
-`json.dumps`-serialises as `"ok"` with no `default=str` needed.
+`enum.StrEnum`, deliberately NOT the `class X(str, Enum)` pattern used elsewhere:
+these values are interpolated as bare strings (Jinja `status-{{ status }}`, JSON
+manifest), where `class X(str, Enum)` would render `"ClassName.MEMBER"`.
 """
 from __future__ import annotations
 

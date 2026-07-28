@@ -1,23 +1,8 @@
 """Architecture: the runner attaches no meaning to connector params.
 
-``app/runtime/runner.py`` orchestrates runs generically: it merges run bindings
-into connector params and asks each stage type's preflight whether the stage is
-ready — without knowing what any param means. The param vocabulary ("path",
-"format", "file", "list_columns", "parse_dates") belongs to the stage modules
-that read it (``stages/input_data.py``) and to the Connector model that
-validates it. If the runner starts touching those keys, stage-specific
-semantics are leaking back into the orchestrator — the exact smell this rule
-exists to stop. Scope is runner.py alone: stage modules under ``stages/``
-legitimately own these keys.
-
-Matching is by exact dict-key spelling, not by word segment: "path" flags a
-literal ``"path"`` key but never a compound like ``"output_path"`` or
-``"queue_path"`` — the runner's own manifest/queue bookkeeping keys, unrelated
-to connector-param semantics. ``check_no_dict_keys`` inspects only dict keys
-(a subscript, a ``.get`` first argument, or a dict-literal key), never plain
-identifiers — this file also imports ``pathlib.Path`` and uses local
-path-bookkeeping variable names for its own manifest-writing, none of which
-this rule is concerned with.
+Scope is runner.py alone; stage modules legitimately own these keys. Matching
+is by exact dict-key spelling, so a compound like "output_path" (the runner's
+own bookkeeping) is not flagged, and plain identifiers are never inspected.
 """
 from __future__ import annotations
 

@@ -1,28 +1,7 @@
-"""Architecture: a file-size ratchet on ``app/``.
-
-The cyclomatic-complexity ratchet (``test_complexity_ratchet.py``) gates how
-tangled one function is allowed to get, but a file can stay full of small,
-simple functions and still grow past what a reviewer can hold in their head
-in one sitting — a dimension complexity alone never measures. This rule
-gates that dimension directly: a ``.py`` file's physical line count.
-
-Scope is identical to the complexity ratchet's: this module reuses its
-``find_app_source_files`` scanner (imported, not duplicated) rather than
-re-deriving the same exemption rules a second time.
-
-Unlike the complexity ratchet, there is no JSON baseline file recording an
-exact value per offender — line counts churn on nearly every unrelated edit
-to a file, so an exact-match baseline would drift constantly and demand
-constant re-recording for no safety benefit. Instead:
-
-1. A file over ``_LINE_CEILING`` and not in ``_ALLOWLIST`` below is a new
-   offender — split it into smaller modules.
-2. A file in ``_ALLOWLIST`` that has grown past ``_LINE_CEILING *
-   _BACKSTOP_MULTIPLIER`` is a backstop violation: grandfathering a file in
-   is not a license to let it grow unboundedly while listed.
-3. An ``_ALLOWLIST`` entry for a file now at or under ``_LINE_CEILING`` (or a
-   file that no longer exists) is stale — remove the entry. The allowlist is
-   a ratchet: entries may only be removed, never added.
+"""Architecture: a file-size ratchet on ``app/`` — physical line count. Three rules:
+1. over ``_LINE_CEILING`` and not in ``_ALLOWLIST`` — a new offender, split it;
+2. allowlisted but past ``_LINE_CEILING * _BACKSTOP_MULTIPLIER`` — backstop violation;
+3. allowlisted while at/under the ceiling (or gone) — stale entry, remove it.
 """
 from __future__ import annotations
 

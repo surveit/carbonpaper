@@ -1,22 +1,3 @@
-"""The runner's loop control on error and halt: both are fork-blocking, not
-loop-ending. A stage's `ok` status asserts that every upstream stage actually
-succeeded, so the runner must never run a stage on a failed/halted upstream's
-output and mark it `ok`.
-
-  - an errored stage blocks only its transitive downstream (those stay
-    `pending`, no output written); independent forks run to completion
-  - a halting human_review_queue stage does the same, and multiple halts each
-    block only their own downstream
-  - a run with both an error and a halt reports `errors` overall while the
-    halted stage still reads `awaiting_review`
-  - resume after an error re-runs the errored stage AND its downstream (their
-    outputs are never reused as stale)
-
-Cancel's hard-stop behaviour is unchanged and covered by test_run_cancel.py.
-DAGs are built the way test_run_cancel.py builds them (compiled/*.json +
-_seed_version; run offline via prepare_run/run_prepared; mock LLM forced by
-conftest.py).
-"""
 from __future__ import annotations
 
 import json

@@ -1,6 +1,3 @@
-"""Tests for app/core/stage_cache.py: the content-addressed stage-result
-cache — compute_row_fingerprint, StageCacheEntry, and its two accessors
-(StageCache read+write, ReadOnlyStageCache read-only)."""
 from __future__ import annotations
 
 import numpy as np

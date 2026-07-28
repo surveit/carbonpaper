@@ -1,15 +1,8 @@
-"""Workflow contract: a workflow is a list of validated stages plus the
-cross-stage checks (unique ids, inputs resolve, acyclic).
+"""Workflow contract: validated stages plus the cross-stage checks (unique ids, inputs
+resolve, acyclic). A check answerable from one stage alone belongs on `Stage`, not here.
 
-This module owns ONLY cross-stage checks — the ones that need the whole stage
-list to decide. A single stage's own invariants (e.g. an llm_transform being
-strictly 1:1) live on the `Stage` model as validators, not here; if a check can
-be answered from one stage alone, it does not belong in this file.
-
-The graph checks are plain functions so they can be tested on their own and read
-without wading through a validator. Each returns a list of human-readable issue
-strings ([] means it found nothing) — the whole batch is collected so one call
-surfaces every problem, not just the first.
+Each check returns a list of issue strings ([] means it found nothing), and the whole
+batch is collected so one call surfaces every problem, not just the first.
 """
 from __future__ import annotations
 

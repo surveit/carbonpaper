@@ -1,9 +1,4 @@
-"""
-Runtime LLM configuration + backend availability.
-
-Isolated here (rather than inline in `llm.py`) so the env knobs and the
-availability policy live in one place an org can override without touching
-the call machinery.
+"""Runtime LLM configuration + backend availability.
 """
 
 from __future__ import annotations

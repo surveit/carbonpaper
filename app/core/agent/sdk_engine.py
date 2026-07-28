@@ -1,17 +1,8 @@
-"""SDK-native chat engine. Drives the Claude CLI subprocess via
-claude_agent_sdk.query() so the subscription backend (no API key) can run
-in-process MCP tools; maps the block stream onto the normalized events the FE
-already renders (thinking/text/tool_call/tool_result).
+"""SDK-native chat engine: drives the Claude CLI subprocess via
+claude_agent_sdk.query(), mapping blocks onto normalized events.
 
-Cross-turn memory: each turn returns the CLI session id, which the turn manager
-persists and passes back as `resume` next turn, so the model sees the whole
-conversation (tool calls included) without us replaying it. message_history is
-accepted for the turn-manager contract but unused — the CLI session, not a
-replayed transcript, carries the memory.
-
-Generic: the engine knows nothing about any specific agent. Its system prompt,
-tool labels, allowed tools and mounted MCP server are all supplied by the caller
-(see app.core.agent.registry.build_engine).
+Cross-turn memory rides on the CLI session id passed back as `resume`;
+`message_history` is accepted for the turn-manager contract but UNUSED.
 """
 from __future__ import annotations
 

@@ -1,15 +1,6 @@
-"""
-Schema validation for stage I/O.
-
-A stage's declared output_schema is a contract. Every run validates:
-  - all declared columns are present in the produced dataframe
-  - types coerce
-  - range constraints are satisfied
-  - nullability is respected
-  - primary key (if declared) is unique
-
-Validation results are returned as structured records so the run viewer can
-surface them next to the stage card.
+"""Schema validation for stage I/O: column presence, type coercion, range
+constraints, nullability, and primary-key uniqueness against a stage's declared
+output_schema. Results are returned as structured records, not raised.
 """
 
 from __future__ import annotations

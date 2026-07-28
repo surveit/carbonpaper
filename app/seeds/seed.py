@@ -1,12 +1,6 @@
-"""seed.py — the seed API: discover committed example WorkflowFile fixtures
-under app/seeds/data/*.json and import them into the workspace through the
-project export/import seam (app.services.project). app/seeds/__main__.py (the
-`python -m app.seeds` CLI) and app.main's opt-in CW_SEED_DEMO startup hook
-are both thin callers of this module; neither carries seeding logic of its
-own.
-
-Reaches the seam via app.services.project only — no sqlite3,
-app.core.persistence, or app.core.frames (see app/seeds/__init__.py)."""
+"""Discover committed WorkflowFile fixtures under app/seeds/data/*.json and import
+them into the workspace through the app.services.project seam — never sqlite3,
+app.core.persistence, or app.core.frames."""
 from __future__ import annotations
 
 import os

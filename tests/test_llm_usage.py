@@ -1,12 +1,3 @@
-"""LLM token/cost usage flows from the model call to the run manifest, and is
-never allowed to leak into stage output.
-
-The chain: call_llm reports per-attempt usage through a `usage_out` sink ->
-the llm_transform mapper attaches the row's summed usage under ROW_USAGE_KEY ->
-the row driver sums those onto the stage's StageContribution AND the projection
-drops the hidden column -> the executor drains that usage onto the stage's
-manifest record. The stage panel renders it.
-"""
 from __future__ import annotations
 
 import pandas as pd

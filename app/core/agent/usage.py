@@ -1,10 +1,7 @@
-"""Token/cost usage of model calls — a structured value, not a bare dict.
+"""Token/cost usage of model calls.
 
-Produced from a CLI turn's ResultMessage (app.core.agent.sdk_engine), summed
-across a row's retry attempts and a stage's rows (app.runtime), and dumped to a
-plain dict only at the JSON manifest boundary (app.runtime.runner). Lives in
-app.core.agent (not app.models) because the SDK layer that produces it may not
-import app.models — the app.core ↛ app.models contract.
+Lives in app.core.agent rather than app.models because the SDK layer that
+produces it may not import app.models — the app.core ↛ app.models contract.
 """
 from __future__ import annotations
 

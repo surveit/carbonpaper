@@ -1,19 +1,6 @@
-"""Behavior tests for the human_review_queue handler's cache-backed decision
-matching (app/runtime/stages/human_review_queue.py): a queued row is matched
-to a prior human decision by fingerprinting the row and the stage definition
-(app.core.stage_cache), never by re-reading a legacy decisions/*.parquet
-file. Every entry these tests seed goes through the seam (`StageCache.put`),
-never a raw store write.
-
-The stage is always exercised through its registered handler
-(`HANDLERS[StageType.human_review_queue].execute`), so what these tests pin is
-the whole row-driven path — the per-row mapper, the driver's assembly, and the
-handler's own post-map collection — not a function called underneath it.
-
-Fingerprints never live on the snapshot itself: they're read from the sidecar
-`<stage>.fingerprints.json` written alongside it, POSITIONALLY aligned to the
-snapshot's row order.
-"""
+"""Fingerprints never live on the snapshot: they are read from the sidecar
+`<stage>.fingerprints.json` written alongside it, POSITIONALLY aligned to
+the snapshot's row order."""
 from __future__ import annotations
 
 import json

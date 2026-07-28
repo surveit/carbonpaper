@@ -1,27 +1,8 @@
 """Handler shapes: what the runtime hands each stage type, and the row driver.
 
-A stage type's grain-and-order guarantee follows from HOW the runtime invokes its
-handler, not from anything the handler's own body chooses to do. Each shape is a
-class whose `execute` fixes the calling convention:
-
-  RowMapHandler  — the runtime maps a per-row function over the single input's
-                   rows and reassembles results in input order: one dict in, one
-                   dict out. The mapper never sees the frame — only the factory
-                   that builds it does, before the map starts — so it cannot
-                   reorder, fan out or remove rows: that much holds by
-                   construction (issue #87).
-  SourceHandler  — no upstream inputs; the handler originates rows from outside
-                   the run. Trivially preserving: the rows begin here.
-  FrameHandler   — the handler sees whole input frame(s) and may reshape or
-                   reorder them freely; never grain-and-order preserving.
-
-Preservation is reported by each handler's `preserves_grain_and_order` — Source
-yes, Frame no, RowMap yes — and is fixed by the shape alone, not by anything an
-individual handler declares. Which handler a type registers under must agree
-with the core fact (app.models is_grain_and_order_preserving);
-validate_registry_matches_model holds the two equal when the registry module is
-imported.
-"""
+A stage type's grain-and-order guarantee follows from HOW the runtime invokes
+its handler, not from the handler's body: RowMap and Source preserve, Frame
+does not. validate_registry_matches_model holds the registry equal to the core fact."""
 from __future__ import annotations
 
 from abc import ABC, abstractmethod

@@ -1,14 +1,8 @@
-"""Chat session store (axis-1 persistence).
+"""Chat session store: an `AgentSession` record holding one engine-agnostic
+transcript (``{role, parts}`` messages) plus the agent's resume token.
 
-Each session is an `AgentSession` record in the process-wide document store (see
-app.core.persistence): metadata plus one engine-agnostic transcript — a list of
-``{role, parts}`` messages (part types ``text|thinking|tool_call|tool_result``) —
-plus the resume token that carries the agent's cross-turn memory. `SessionStore`
-is a stateless adapter over that record: every method loads, mutates, and saves
-through the configured store.
-
-In-flight turns live in memory (see app.core.agent.turns); surviving a server restart
-mid-turn is out of scope.
+In-flight turns live in memory (app.core.agent.turns); surviving a server
+restart mid-turn is out of scope.
 """
 from __future__ import annotations
 

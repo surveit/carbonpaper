@@ -1,41 +1,8 @@
-"""Architecture: a string literal compared at multiple sites must be a named
-constant.
-
-The same magic string compared in two places drifts silently when one site
-changes; a shared name (Enum or constant) makes the vocabulary explicit. This
-was a real review finding: bare run-status strings and a locally re-declared
-stage-type set, compared inline instead of through one shared name.
-
-Detection is AST-based: a string literal counts only when it is a direct
-operand of ``==``, ``!=``, ``in``, or ``not in`` (a literal passed as a call
-argument, assigned to a variable, or used as a dict key is out of scope for
-this rule — not because it can't drift, but because this rule only detects
-the comparison shape). A literal shorter than two characters is exempt (an
-empty string or a single-character literal, e.g. ``","``, is punctuation,
-not vocabulary). Occurrences are grouped into "sites": every comparison
-inside one function collapses to a single site (repetition inside one
-function is a local style call, not a cross-site drift risk), while a
-comparison outside any function is its own site per line. A value compared at
-two or more distinct sites is a violation.
-
-Two known limitations:
-
-- The allowlist below is value-keyed, not site-keyed: adding a value to it
-  (because today's two sites are legitimately unrelated, e.g. a coincidental
-  shared literal) exempts every future comparison of that same value anywhere
-  in the tree, not just today's two sites. A new, unrelated pair of sites that
-  happens to compare an already-allowlisted value will pass silently.
-- Membership tests against a tuple/list literal (``x in ("a", "b")``) are out
-  of scope: the operand actually compared is the container, not the string
-  constants inside it, so this rule's ``ast.Constant`` check on the immediate
-  operand never sees them.
-
-One structural exclusion, applied before a literal is even recorded as a site
-(not via the allowlist below): ``"__main__"``, as compared by
-``if __name__ == "__main__":``. That comparison is Python's own module-entry-
-point idiom — identical by convention in every script that has one, never an
-app concept that could drift between two call sites — so it is excluded by
-value rather than frozen into the allowlist.
+"""Architecture: a string literal compared at two or more distinct sites must be a named
+constant; every comparison inside one function collapses to a single site. Two known
+limitations: the allowlist is value-keyed, not site-keyed, so allowlisting a value
+exempts every future comparison of it anywhere; and membership against a tuple/list
+literal (``x in ("a", "b")``) is out of scope — the operand compared is the container.
 """
 from __future__ import annotations
 

@@ -1,15 +1,8 @@
 """Compile a methodology document into a DATA MODEL (a SchemaLibrary).
 
-The sibling of `app.compiler.stage_tests` (a stage → its test cases): this is prose →
-named schemas. It builds an `app.core.agent.agent.Agent` whose target schema is
-`SchemaLibrary`, so the agent SUBMITS the data model through the submit_answer tool
-(validated against SchemaLibrary) rather than emitting free-text JSON.
-
-`start_data_model_generation_agent` runs that agent as a LIVE chat turn on the app.core.agent
-spine, and is the bridge onto it: app.compiler is an allowed importer of app.core.agent, so the higher-level
-orchestration in app.services (generation) delegates here rather than reaching into the
-spine itself. The submitted SchemaLibrary is handed back through a callback; persisting it
-is the caller's job.
+The agent SUBMITS the data model through the submit_answer tool (validated against
+`SchemaLibrary`) rather than emitting free-text JSON. The result is handed back through
+a callback; persisting it is the caller's job.
 """
 from __future__ import annotations
 

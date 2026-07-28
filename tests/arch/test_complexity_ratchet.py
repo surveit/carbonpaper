@@ -1,33 +1,8 @@
-"""Architecture: a hard cyclomatic-complexity ceiling on ``app/``.
-
-Cyclomatic complexity above 20 (radon grade D or worse) is a function too
-tangled to review confidently. There is no exception list: every function in
-``app/`` must measure at or under the threshold — the only remedy for a
-violator is decomposing it.
-
-Scope is every ``.py`` file under ``app/``, including ``_arch_tests/``
-subdirs — unlike ``arch.scope``, which exempts them (they hold other rules'
-own inline fixtures, not code this rule needs to skip). Nothing under
-``tests/`` is scanned, matching every other arch rule. `_SOURCE_EXEMPT_PARTS`
-otherwise mirrors ``arch.scope``'s shared exemptions (``_vendor/``,
-``node_modules/``, ``venv/``, dot-directories, ...), so third-party or
-vendored code is never held to this rule.
-
-Complexity is measured with radon as a library (``radon.complexity.cc_visit``),
-not a subprocess, so a worktree with no radon on PATH still runs this test via
-the installed dependency. A method's qualified name is radon's own
-``ClassName.method``; a closure's is its parent's qualified name plus
-``.<name>``, so a closure nested two levels deep reads as
-``outer.<inner>.<innermost>`` — ``cc_visit`` does not flatten closures the way
-it flattens methods, so this module walks ``.closures`` itself, recursively.
-Two blocks that resolve to the same qualified name (e.g. a platform-conditional
-``def foo(): ... / def foo(): ...`` under ``if``/``else``) fail loud via
-`index_by_identity` rather than silently comparing only one of them.
-``@typing.overload`` stubs are the one expected same-name collision: an
-overload group's stub bodies are always the trivial ``...``, never a
-complexity violator, so `measure_function_complexities` excludes them (via
-`find_overload_stub_lines`) before `index_by_identity` ever sees them — only
-the real implementation is measured.
+"""Architecture: every function in ``app/`` at or under cyclomatic complexity 20,
+with no exception list. Scope deliberately INCLUDES ``_arch_tests/`` subdirs, which
+``arch.scope`` exempts. ``cc_visit`` flattens methods but not closures, so this
+module walks ``.closures`` itself; ``@typing.overload`` stubs are excluded before
+`index_by_identity`, which otherwise fails loud on same-name collisions.
 """
 from __future__ import annotations
 

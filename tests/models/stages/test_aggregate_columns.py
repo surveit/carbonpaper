@@ -1,8 +1,3 @@
-"""Tests for the aggregate stage's config-column check (app/models/stages/
-aggregate.py, wired into Stage._config_columns_resolve): `group_by`, each
-aggregation's `value_column`, and every column an aggregation's `where`
-references must resolve against the stage's own input edge schema — checked
-at Stage construction, not just at workflow load."""
 from __future__ import annotations
 
 import pytest

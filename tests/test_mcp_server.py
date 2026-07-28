@@ -1,9 +1,6 @@
-"""The MCP authoring surface: /mcp endpoint wiring + tool behavior.
-
-Endpoint tests drive the real streamable-HTTP mount through TestClient (the app
-lifespan starts a fresh MCP session manager per entry, so entering it here is
-safe alongside other lifespan-running tests). Tool-behavior tests call the
-tool functions directly against a tmp workspace."""
+"""The app lifespan starts a fresh MCP session manager per entry, so entering it here
+is safe alongside other lifespan-running tests.
+"""
 from __future__ import annotations
 
 import asyncio

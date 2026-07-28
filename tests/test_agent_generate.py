@@ -1,10 +1,3 @@
-"""The headless Agent (app.core.agent.agent.Agent): it produces a validated Pydantic object
-by having the model CALL a submit_answer tool whose input schema IS the target model.
-
-The submit/capture logic is tested directly (no CLI subprocess); run()'s loop is driven
-over a FAKE engine whose stream_turn simulates the agent calling submit_answer with
-scripted arguments. Coroutines are run with asyncio.run, mirroring tests/test_sdk_engine.py.
-"""
 from __future__ import annotations
 
 import asyncio

@@ -1,10 +1,8 @@
-"""Does an eval config still fit a workflow's stages?
+"""Does an eval config still fit a workflow's stages, as they are NOW?
 
-An eval binds to stages by name and by declared output schema: the tables it
-injects must be valid stand-ins for the overridden stages' outputs, and the
-columns it asserts on must exist on the target. This module answers "does that
-still hold?" for the stages as they are NOW. The answer is computed on demand
-and never stored — a stored flag could drift from the stages it describes."""
+The answer is computed on demand and never stored -- a stored flag could drift
+from the stages it describes.
+"""
 from __future__ import annotations
 
 from dataclasses import dataclass, field

@@ -1,10 +1,5 @@
-"""The row-level cache interceptor (app/runtime/stages/execution.py).
-
-Caching is a property of the handler SHAPE: `python_row_function` and a
-batch_size-1 `llm_transform` are both driven through `_run_row_mapper`, so both
-are cached by the same wrapper around the one line of per-row compute. These
-tests drive the registered handlers, so what they pin is that whole path.
-"""
+"""`python_row_function` and a batch_size-1 `llm_transform` share one
+`_run_row_mapper` cache wrapper, so both are exercised here."""
 from __future__ import annotations
 
 import pandas as pd

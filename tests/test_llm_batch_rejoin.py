@@ -1,21 +1,3 @@
-"""Batched llm_transform rejoins each reply to its row by a runtime-assigned
-BATCH ROW NUMBER (0-based, per chunk) — never the input primary key, so complex
-or non-unique keys can't screw up the join. Guarantees proven here:
-
-- matched by row number, not reply order (shuffle-safe);
-- ANY anomaly — a missing, unknown/extra, or duplicated row number — is thrown
-  back to the model (re-called), and if it never comes back clean the WHOLE
-  chunk fails loudly (a confused reply's other answers aren't trusted);
-- a thrown-back chunk that returns clean on retry recovers;
-- grain + order are preserved (and verified): N rows in → N rows out, in order;
-- the markers this path attaches per row (`_usage` always, `_error` on a failed
-  chunk) are stripped before the declared-column projection, so they never reach
-  stage output and are never reported on the stage's contribution as user columns
-  the stage produced and discarded.
-
-Each test would fail if the join were positional, if an anomaly were silently
-tolerated, or if the retry didn't actually re-call the model.
-"""
 from __future__ import annotations
 
 import pandas as pd

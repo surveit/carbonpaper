@@ -1,10 +1,5 @@
-"""POST /project/{p}/version on a working copy that fails validation must
-return the validation issues as a structured 400 — the workflow page's save
-handler renders `issues` to the reviewer — never a bare 500 that hides them.
-
-Found by dogfooding (palm_oil_mill_osint, 2026-07-20): a legacy generated
-workflow with 18 validation issues produced `Internal Server Error` on
-version-save, discarding the itemized report the loader had already built.
+"""Regression from dogfooding (palm_oil_mill_osint, 2026-07-20): a workflow with 18
+validation issues returned a bare 500, discarding the itemized report.
 """
 from __future__ import annotations
 

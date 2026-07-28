@@ -1,7 +1,5 @@
-"""The MCP authoring surface: the same name-based service surface the in-app
-editing agent uses, exposed as a streamable-HTTP MCP server ("glassbox") so an
-EXTERNAL agent (Claude Code, or any MCP client) can author projects. Humans
-review and approve in the web UI — no tool here approves anything.
+"""The MCP authoring surface ("glassbox"): the name-based service surface exposed to
+external MCP clients. No tool here approves anything — humans approve in the web UI.
 
 Mounted by app.main at /mcp in the same server process: same event loop, which
 the generation live-turns require."""

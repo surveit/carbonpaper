@@ -1,13 +1,8 @@
 """In-process registry of running chat turns + a replayable event buffer.
 
-A turn runs as a detached asyncio task on the server loop, independent of any
-HTTP request: closing the tab or navigating away does not cancel it. Each
-streamed event is appended to an in-memory buffer, so a client that reconnects
-(``?from=N``) replays what it missed and then follows live. This is what makes
-"navigate away and come back to the same in-flight answer" work.
-
-Scope: single process, in memory. The buffer does not survive a server restart
-(that would be durable-execution territory); persisted message history does.
+A turn is a detached asyncio task: closing the tab or navigating away does not
+cancel it, and a client reconnecting with ``?from=N`` replays what it missed.
+Single process, in memory — the buffer does not survive a server restart.
 """
 from __future__ import annotations
 

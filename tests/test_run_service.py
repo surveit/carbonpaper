@@ -1,9 +1,3 @@
-"""The production run service seam (app.services.run): start a run on a
-background thread, read a run's manifest status, resume, and resolve the pinned
-version. Builds a small file-connector project, snapshots + publishes it into a
-version (the same idiom as tests/test_runner.py), and drives the service
-directly. The background launch is monkeypatched to run synchronously so each
-test can assert on the finished manifest deterministically."""
 from __future__ import annotations
 
 import json

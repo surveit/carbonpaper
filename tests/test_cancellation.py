@@ -1,10 +1,5 @@
-"""Unit tests for the per-run cancel mailbox.
-
-The web thread DROPS a cancel message (request_cancel); the run thread
-CONSUMES it (consume_cancel) at its checkpoints — read-once, so a consumed
-message is gone (that is what lets a cancelled run be resumed). reset() empties
-every mailbox for test isolation (see the autouse fixture in conftest.py). See
-app/runtime/cancellation.py for the two-thread, shared-memory design.
+"""A cancel message is read-once, so conftest's autouse reset() is what keeps a
+consumed message from leaking between tests.
 """
 from __future__ import annotations
 

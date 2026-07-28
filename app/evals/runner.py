@@ -1,14 +1,8 @@
 """Run one eval against a pinned workflow version and record the result.
 
-Ties the pieces together: check the config still fits the workflow, inject the eval
-dataset as the override stage's output, run the grain-preserving stage subset to the
-target (app.runtime.executor.run_subset), score the target's output against the
-dataset's expected columns (app.evals.scoring), and write an EvalRun.
-
-v1 scores DECLARATIVELY only — a path that isn't grain-preserving is recorded as
-`vetoed` (a code scorer is the escape hatch, but executing one is not built yet). An
-eval that no longer fits the workflow, or has no dataset, can't be run at all and
-raises rather than recording a fake result.
+v1 scores DECLARATIVELY only -- a path that isn't grain-preserving is recorded as
+`vetoed`. An eval that no longer fits the workflow, or has no dataset, raises
+rather than recording a fake result.
 """
 from __future__ import annotations
 

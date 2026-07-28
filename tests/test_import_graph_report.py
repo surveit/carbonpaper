@@ -1,30 +1,7 @@
-"""Unit tests for tools/import_graph_report.py: propagation-cost math on
-synthetic graphs with a known-by-hand answer, fan-extreme selection, markdown
-rendering, and the JSON round-trip that carries metrics between the two
-checkouts the CI job compares.
-
-Propagation cost's own `compute_propagation_cost_percent` cross-checks
-grimp's forward and backward traversal against each other before either
-total is trusted — but both directions are grimp's own graph traversal, so
-that only catches the two directions disagreeing with each other, not grimp
-being wrong in a way both share. The genuinely independent verification is
-here: `test_grimp_find_upstream_modules_matches_a_manual_bfs_on_a_diamond`
-cross-checks grimp's `find_upstream_modules` against a from-scratch manual
-BFS reimplementation that shares no code with either grimp or
-`compute_propagation_cost_percent`.
-
-Tests that point `compute_import_graph_metrics` at a *different* `app`
-package than the real repo's run the script as a subprocess
-(`_run_script`), not as an in-process call. That's not a style choice: once
-`conftest.py`'s fixtures import the real `app` package elsewhere in the same
-pytest session, `sys.modules["app"]` is cached, and Python's import system
-resolves `find_spec("app")` from that cached entry regardless of later
-`sys.path` changes — so `_make_root_importable` cannot redirect an
-already-imported `app` within one process. This is also exactly how the CI
-job uses `--root`: two separate `python tools/import_graph_report.py`
-process invocations (one per checkout), never two calls in one process — so
-the subprocess tests exercise the script the way it is actually invoked,
-not a workaround for the caching gap.
+"""Tests pointing compute_import_graph_metrics at a different `app` package must run
+the script as a subprocess: once conftest imports the real `app`, sys.modules
+caches it and find_spec("app") ignores later sys.path changes, so
+_make_root_importable cannot redirect an already-imported `app` in-process.
 """
 from __future__ import annotations
 

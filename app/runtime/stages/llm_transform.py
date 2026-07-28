@@ -1,30 +1,8 @@
-"""Execution for the llm_transform stage type — two clearly separate paths, one
-per `batch_size`, dispatched by `LLMTransformHandler`:
-
-- `make_llm_row_mapper` (batch_size == 1): the per-row mapper the runtime drives
-  one row at a time. Grain, order, AND per-row independence hold by construction
-  — the mapper never sees the frame, so a row's output depends only on its own
-  input.
-- `run_llm_batches` (batch_size > 1): packs N rows into one model call to
-  amortize the prompt/harness overhead, returning one raw row per row it was
-  given. Grain and order still hold (one pre-allocated slot per input row,
-  filled by input index, and verified before returning). Per-row INDEPENDENCE
-  does NOT: the model sees every row in a chunk in one prompt, so a row's answer
-  can in principle be influenced by its batch-mates. That is the semantic price
-  of batching, and the reason it is a separate function rather than a mode
-  folded into the per-row path.
-
-Both paths compute rows and nothing else. WHICH rows they are asked to compute
-— and what becomes of the answers — is the handler shape's business
-(app/runtime/stages/execution.py): this module holds no cache, no key, and no
-frame assembly.
-
-Replies are rejoined to rows by a batch-local ROW NUMBER the runtime assigns
-(0-based, per chunk) — never the input primary key. The number is a tiny int we
-control, so the model can't mangle it and the rejoin does not depend on the
-primary key existing or being unique (the runtime enforces neither). The columns
-`output_schema` adds beyond the input schema are the reply spec, compiled by
-`TableSchema.to_pydantic_model` into the per-item reply schema.
+"""Execution for the llm_transform stage type, split by `batch_size`. Both paths
+hold grain and order; only the per-row path (== 1) also holds per-row
+INDEPENDENCE - a batched call (> 1) shows the model every row in the chunk.
+Replies rejoin by a batch-local 0-based row number the runtime assigns, never
+the input primary key (which the runtime does not require to exist or be unique).
 """
 
 from __future__ import annotations

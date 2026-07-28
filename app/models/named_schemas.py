@@ -1,14 +1,7 @@
 """Named schemas — the data model, authored before the workflow.
-
-A NamedSchema is a TableSchema (the anonymous, inline schema a stage can make up
-on the fly) promoted to a first-class, addressable artifact: it adds a `name`, a
-`kind` (where it sits in the pipeline), and explicit foreign keys (`references` on
-its columns) so the data model is a real graph rather than a PK-name-collision
-heuristic. A SchemaLibrary is the whole data model: it checks names are unique and
-every reference resolves.
-
-Like workflow.py, the cross-schema checks are plain functions so they can be
-tested and read on their own.
+A NamedSchema is a TableSchema promoted to an addressable artifact: it adds a `name`, a
+`kind`, and explicit foreign keys (`references` on its columns). A SchemaLibrary is the
+whole data model: it checks names are unique and every reference resolves.
 """
 from __future__ import annotations
 

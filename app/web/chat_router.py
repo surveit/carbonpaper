@@ -1,10 +1,6 @@
-"""FastAPI routes for the chat subsystem — a generic, agent-agnostic surface.
-
-Every session is bound to a registered agent by an `agent_id` and carries an
-opaque `context` (whatever that agent needs to bind its tools). A message turn
-looks the pair back up, builds the engine via the registry, and streams it. The
-routes know nothing about any specific agent; a concrete agent registers itself
-(see app.core.agent.registry) and a host route creates the session with its context.
+"""FastAPI routes for the chat subsystem -- generic and agent-agnostic: a session
+binds an `agent_id` to an opaque `context`, and a turn rebuilds the engine from
+the registry (app.core.agent.registry) rather than knowing any concrete agent.
 """
 from __future__ import annotations
 

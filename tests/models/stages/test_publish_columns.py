@@ -1,6 +1,3 @@
-"""Tests for the publish stage's config-column check (app/models/stages/
-publish.py, wired into Stage._config_columns_resolve): `one_file_per`, when
-set, must resolve against the stage's own input edge schema."""
 from __future__ import annotations
 
 import pytest

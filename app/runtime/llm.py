@@ -1,16 +1,8 @@
 """LLM dispatch for `llm_transform` stages.
 
-`call_llm` runs one input row through a headless structured-output agent
-(`app.core.agent.agent.Agent`) whose `target_schema` is the stage's reply model —
-the reply arrives as a validated Pydantic instance submitted through the
-agent's submit_answer tool. The agent is the only backend: when it isn't
-available (`options.require_agent_backend`), the call raises rather than
-fabricating output.
-
-Batching: the runtime's row driver (`app/runtime/stages/execution.py`) calls
-`call_llm` once per row under bounded parallelism (default 4, override via
-CW_LLM_PARALLEL).
-"""
+The structured-output agent is the only backend: when it is unavailable
+(`options.require_agent_backend`) the call raises rather than fabricating output.
+Called once per row by the row driver, bounded parallelism (default 4, CW_LLM_PARALLEL)."""
 
 from __future__ import annotations
 

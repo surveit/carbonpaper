@@ -1,27 +1,8 @@
-"""Run a python transform's authored tests against its actual code.
+"""Run a python transform's authored tests against its actual code, executing each
+through the SAME handler registry the real runner uses.
 
-A test (app.models.stages.stage_tests.StageTest) is a claim about what
-given input rows must produce, authored from the methodology. This module holds
-the stage's code to those claims: it executes each test through the SAME
-handler registry the real runner uses — fidelity comes from sharing the
-execution path, not reimplementing it — and reports one StageTestResult each.
-
-Statuses:
-  passed    — actual output equals expected under the comparison below
-  mismatch  — executed cleanly but at least one cell (or the row count) differs
-  error     — the stage's function raised; message carries the exception
-  malformed — the test itself violates the stage's declared schemas; a bad
-              test is its own failure kind, never reported as a code bug
-
-Comparison: cells compare on the output_schema's columns. Null and NaN are one
-absence — a cell matches iff the values are equal, where None and float NaN
-count as the same absent value (a pandas frame stores a null as NaN in a
-numeric column and as None in an object column, so the two cannot be told
-apart). An omitted column in a row is a claim of absence. Both sides compare
-as a multiset of rows: each is sorted into the same value-based order first,
-so no test pins an ordering (a python_row_function test is one row in → one
-row out, where order is vacuous; python_frame_function is not
-order-preserving).
+Comparison is on the output_schema's columns, counts None and float NaN as one
+absence, and compares both sides as a multiset, so no test pins an ordering.
 """
 from __future__ import annotations
 

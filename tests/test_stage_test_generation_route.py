@@ -1,16 +1,5 @@
-"""Route-level tests for the Generate-tests action on the stage review panel:
-POST /project/{project}/node/{stage_id}/generate-tests starts a hidden derivation
-turn (app.services.generation.start_stage_test_generation) and GET
-/project/{project}/generation-session/{sid}/status polls it, per
-app/web/routers/node_review.py.
-
-The engine is faked (no CLI subprocess, no real LLM) via the same
-build_stage_test_deriver monkeypatch tests/test_stage_test_generation_service.py
-uses. Unlike that lower-level test, this one drives the turn from OUTSIDE the
-route handler: the fake turn runs on the TestClient's own event loop (kept alive
-by using it as a context manager, so the loop survives across the POST and the
-follow-up status polls) while the test polls /generation-session/.../status —
-the same thing the page's JS does — until it reports inactive.
+"""The TestClient is used as a context manager so its event loop survives across the
+POST and the follow-up status polls; the faked turn runs on that same loop.
 """
 from __future__ import annotations
 

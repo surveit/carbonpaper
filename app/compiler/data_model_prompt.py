@@ -1,10 +1,8 @@
-"""The data-model authoring system prompt: describe a methodology's tables as a set of
-NAMED SCHEMAS and submit them.
+"""The data-model authoring system prompt.
 
 The emit SHAPE is not described here — it is carried by the `submit_answer` tool's input
-schema (derived from `SchemaLibrary`), which the provider renders for the model. This
-prompt carries only the role and the methodology guidance (what a good data model is);
-the tool + validation enforce the shape.
+schema (derived from `SchemaLibrary`); this prompt carries only the role and the
+methodology guidance.
 """
 from __future__ import annotations
 

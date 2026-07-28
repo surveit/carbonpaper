@@ -1,11 +1,3 @@
-"""Node-type guidance must reach the workflow-authoring agent as PROMPT guidance —
-not only as a validation error after the fact. These guard that each source of that
-guidance is rendered into the editing agent's system prompt: the type's own `notes`
-in app.models.NODE_TYPES (human_review_queue's hash-source requirement, publish's
-trace-link keyword) and HUMAN_REVIEW_QUEUE_CONTRACT_NOTE (the fixed-output-columns
-contract), each from its single definition so the prompt can't drift from it. One
-also pins HUMAN_REVIEW_QUEUE_CONTRACT_NOTE against the queue handler's own
-constants, so what the note teaches can't drift from what the runtime emits."""
 from __future__ import annotations
 
 from app import models as m

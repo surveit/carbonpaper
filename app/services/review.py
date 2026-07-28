@@ -1,10 +1,7 @@
-"""Record a reviewer's verdict on one queued row as a stage-result cache entry
-(app.core.stage_cache): enforce the one domain rule (a `modify` carries a
-score), build the review stage's output row for the verdict, and write it.
+"""Record a reviewer's verdict on one queued row as a stage-result cache entry.
 
-The write goes through the read+write cache accessor
-(`StageCacheEntry.read_write()`): recording a decision is the
-one sanctioned way run activity persists something that outlives the run."""
+Recording a decision is the one sanctioned way run activity persists something
+that outlives the run."""
 from __future__ import annotations
 
 from collections.abc import Mapping

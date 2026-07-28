@@ -1,31 +1,8 @@
 """Cooperative cancellation for a running workflow run.
 
-A run executes on one process: a web thread handles ``POST …/cancel``
-requests, and a daemon run thread executes the workflow
-(``app/web/routers/runs.py::run_in_background``). The two threads share
-process memory, so cancellation is not a signal delivered down a call stack —
-the run thread does not RECEIVE a cancellation. Instead the web thread DROPS a
-cancel message into this module's per-run mailbox (request_cancel), and the
-run thread CONSUMES it at the runner's checkpoints (between stages, and
-mid-fan-out in the row driver — see app/runtime/runner.py and
-app/runtime/stages/execution.py).
-
-A message is consumed on read: the first checkpoint to find one pops it and
-stops the run, and it is then gone. So cancel is a SIGNAL, not a state — a
-cancelled run leaves no lingering "cancelled" flag behind, which is what lets
-that same run be resumed (resume re-runs its not-yet-completed stages): the
-resume finds an empty mailbox and proceeds. To stop a resumed run, send a
-fresh cancel. (The manifest's "cancelled" run status is a separate thing — the
-recorded OUTCOME of a run that was stopped, not the live signal.)
-
-A mailbox is keyed by a run's logical identity ``(project, run_id)``, never
-its persistence layout (e.g. the run directory path): this module knows
-nothing about how or where a run is stored. That keeps cancellation
-independent of the persistence model — enforced by the
-"app.runtime.cancellation is a stdlib-only leaf" import-linter contract in
-pyproject.toml, which forbids this module from importing any other app
-module (stdlib only).
-"""
+A message is consumed on read, so cancel is a SIGNAL, not a state: a cancelled
+run leaves no flag behind and can be resumed (send a fresh cancel to stop it again).
+Mailboxes key on a run's logical `(project, run_id)`, never on its persistence layout."""
 from __future__ import annotations
 
 import threading

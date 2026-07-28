@@ -1,21 +1,7 @@
-"""Architecture: fastapi is only imported by app.web or the entrypoint.
-
-The FastAPI() instance is constructed in app.main (app/main.py); every route
-module lives under app/web/ (including app/web/routers/). No other subsystem —
-app.core, app.services, app.compiler, app.runtime, app.evals, app.mcp,
-app.agents — may import fastapi (or one of its submodules, e.g.
-fastapi.responses): HTTP/routing concerns stay out of the domain and infra
-layers.
-
-This is a default-DENY allowlist, not a forbidden-module list: the only two
-permitted locations are named explicitly (app/web/** and app/main.py), so a
-brand-new module that imports fastapi fails automatically — there is nothing
-to remember to add to a ban list. This replaces the former import-linter
-`forbidden` contract ("fastapi stays in the web layer"), which was
-default-ALLOW (a new module escaped it until someone added it to
-`source_modules`) and carried a permanent `ignore_imports` exception for
-app.compiler.router — that router has since moved into app.web (as
-app/web/routers/editing.py), so the exception no longer exists.
+"""Architecture: only app/web/** and the app/main.py entrypoint may import fastapi or
+one of its submodules. Default-DENY: the two permitted locations are named explicitly,
+so a brand-new module that imports fastapi fails automatically — there is no ban list
+to remember to add it to.
 """
 from __future__ import annotations
 

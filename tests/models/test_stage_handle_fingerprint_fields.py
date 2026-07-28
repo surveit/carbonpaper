@@ -1,11 +1,5 @@
-"""Every stage handle config class in app/models/stage.py (Connector,
-LLMConfig, PythonFunction, JoinConfig, AggregateConfig, QueueConfig,
-PublishConfig) partitions its own fields into `FINGERPRINT_FIELDS` (changes
-what the stage computes) and `INCIDENTAL_FIELDS` (does not) — declared
-EXPLICITLY, never computed from `model_fields`. That's the point: adding a
-new field to a handle forces a classification decision here, rather than the
-field silently falling into (or out of) `Stage.compute_definition_fingerprint`.
-"""
+"""The partition is declared EXPLICITLY, never computed from `model_fields`,
+so that adding a field to a handle forces a classification decision here."""
 from __future__ import annotations
 
 import pytest

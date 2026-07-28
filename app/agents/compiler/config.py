@@ -1,10 +1,7 @@
 """Wire the editing agent into the generic agent registry.
 
-Builds the `AgentConfig` (system prompt + stage-type catalog, the tools' input
-schemas and display labels, and the EditingContext its opaque context validates
-against) and registers it under the id "editing" with its tool factory. Importing
-this module is what makes `app.core.agent.registry.build_engine("editing", …)` work;
-app.main imports it at startup."""
+Importing this module is what makes `app.core.agent.registry.build_engine("editing", …)`
+work; app.main imports it at startup."""
 
 from __future__ import annotations
 

@@ -1,9 +1,3 @@
-"""find_join_output_issues: a declared output_schema must be deliverable by the
-join handle. Derivation mirrors pandas merge(..., suffixes=("", "_r")): a key
-pair with the same name on both sides collapses to one column; every other
-right column whose name collides with a left column appears as <name>_r;
-`select`, when present, projects the merged columns and every entry must be
-derivable."""
 from __future__ import annotations
 
 import pytest

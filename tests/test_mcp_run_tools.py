@@ -1,11 +1,3 @@
-"""The MCP run surface: the run_workflow / get_run_status / run_workflow_test tools.
-
-Thin wrappers over app.services.run / app.services.workflow_test. Tests call the
-tool functions directly against a tmp workspace (the EXAMPLES_DIR idiom from
-tests/test_mcp_server.py) and assert the delegate contract plus the loud-error
-translation to {ok: False, error}. The run happy path reuses the file-connector
-project idiom from tests/test_run_service.py; the workflow-test delegate reuses the
-demo fixtures from tests/test_workflow_test_service.py."""
 from __future__ import annotations
 
 import json

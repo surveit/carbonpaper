@@ -1,19 +1,8 @@
-"""capture_lobbying.py — regenerate the committed lobbying-issue-triage
-WorkflowFile fixture at app/seeds/data/lobbying_issue_triage.json from its
-source project, through the app.services.project seam (export_project).
+"""Regenerate the committed lobbying-issue-triage WorkflowFile fixture.
 
-Run as a script whenever the source demo changes:
-    python -m app.seeds.capture_lobbying
-
-Reads only from the source worktree named below; writes only into this repo's
-app/seeds/data/, replacing any previously captured fixture there first — so
-re-running the script always reflects the source project's current state,
-never a stale mix of old and new content.
-
-export_project reads the source project's status through app.services.project,
-which touches the document store (its version count) even for a read-only
-export — so this standalone script has no app.main lifespan to configure one,
-and bootstraps it itself, the same way the `python -m app.seeds` CLI does."""
+Run `python -m app.seeds.capture_lobbying` when the source demo changes. It replaces any
+previously captured fixture first, so a re-run is never a stale mix, and bootstraps the
+store itself — export_project reads the project's status even for a read-only export."""
 from __future__ import annotations
 
 from pathlib import Path

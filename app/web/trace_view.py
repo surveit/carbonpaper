@@ -1,15 +1,8 @@
-"""View-model for show-your-work: fold a linear trace (from
-`app.runtime.trace`) plus the compiled stages into the chronological
-story/graph payload the template renders.
+"""View-model for show-your-work: fold a linear trace (app.runtime.trace) plus the
+compiled stages into the payload the template renders.
 
-Two separations the design rests on:
-  - a stage is a *transform* (a verb — the code it ran, the prompt it asked,
-    the keys it joined on), taken from the compiled `Stage`;
-  - an edge is *data* (the rows that flowed), taken from the run outputs the
-    tracer already read.
-
-The payload is a graph (`nodes` + `edges`) even though v1 traces a single
-chain, so real fan-in (issue #58) slots in without reshaping this contract.
+The payload is a graph (`nodes` + `edges`) even though v1 traces a single chain,
+so real fan-in slots in without reshaping this contract.
 """
 from __future__ import annotations
 

@@ -1,11 +1,3 @@
-"""Tests for the workflow-test seam (app/services/workflow_test.py): take a slice
-of a version's bound source, run the frontier (source-exclusive, publish included)
-over that slice, and record a production-shape manifest under workflow_tests/ —
-never under runs/.
-
-Builds a tiny `demo` project pinned to a published version, no shipped data and
-no LLM: `classify` is a deterministic python_row_function, so the whole loop runs
-without a model backend (mirrors tests/test_eval_runner.py)."""
 from __future__ import annotations
 
 import json

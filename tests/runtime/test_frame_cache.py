@@ -1,15 +1,4 @@
-"""The frame-level cache interceptor (app/runtime/stages/execution.py).
-
-Caching is a property of the handler SHAPE: every `FrameHandler` is intercepted
-by the same wrapper around `apply` — one cache entry for the whole output frame,
-keyed by the stage definition plus every input frame in declared order.
-
-Three of the four registrations exclude themselves at the registration site:
-`publish`, because a publish is read by the world rather than by future runs,
-and `join`/`aggregate`, because hashing their input costs more than the pandas
-operation a hit would skip. `python_frame_function` runs unbounded user code and
-caches.
-"""
+"""The frame-level cache interceptor, which lives in app/runtime/stages/execution.py."""
 from __future__ import annotations
 
 import numpy as np

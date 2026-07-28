@@ -1,11 +1,3 @@
-"""Stage-test derivation runs as a hidden, view-only chat turn: start_stage_test_generation
-loads document.md + the stage, starts the deriver agent (app.compiler.stage_tests) as a turn
-on the shared TurnManager, and on completion `_finish_stage_tests` REPLACES the stage's tests
-wholesale via app.services.stage_edit.patch_stage_spec.
-
-The agent + turn are faked; no CLI subprocess, no real LLM. Driven with asyncio.run, mirroring
-tests/test_generation_session.py.
-"""
 from __future__ import annotations
 
 import asyncio

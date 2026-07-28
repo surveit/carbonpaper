@@ -1,23 +1,8 @@
-"""
-Shared stage-execution engine.
-
-Holds the reusable machinery that runs a set of ordered stages through their
-type-specific handlers — validating each stage's input + output schema, honoring
-`HaltForReview`/`RunCancelled`, and writing per-stage outputs plus a live
-manifest. Two callers sit on top of it:
-
-- `app/runtime/runner.py` — the PRODUCTION run lifecycle (`prepare_run` /
-  `execute_run` / `run_prepared` / `resume_run`): creates the `runs/<id>/` dir,
-  writes the production run manifest, and pins a published workflow version.
-- `run_subset` (here) — the NON-PRODUCTION subset executor used by evals (and
-  any preview): runs only a chosen subset of a `Workflow`'s stages, with the
-  outputs of stages outside the subset injected rather than computed.
-
-This module never creates a production run record; it only executes stages it is
-handed. Keeping it separate from `runner.py` lets an import-linter contract stop
-a non-production caller (evals) from ever reaching the production run entry
-points — see `pyproject.toml`.
-"""
+"""Shared stage-execution engine, driven both by the production run lifecycle
+(`app/runtime/runner.py`) and by `run_subset` here, the non-production subset
+executor used by evals and previews. This module never creates a production
+run record; that split is what lets an import-linter contract keep evals away
+from the production run entry points."""
 
 from __future__ import annotations
 

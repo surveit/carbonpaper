@@ -1,42 +1,8 @@
-"""
-versioning.py — immutable, committable snapshots of a workflow.
+"""Immutable, committable snapshots of a workflow.
 
-A "version" is a `WorkflowVersion` document in the store's "workflow_version" collection: a frozen
-copy of a project's authored artifacts — its compiled stages (typed, embedded
-verbatim) and its schemas/ data model (embedded raw) — taken at a point in time,
-plus who created it, why, its parent, and the approval coverage AT creation time.
-Runs are pinned to a version and read its embedded stages, so a run is
-reproducible against the exact workflow it executed, never "whatever the working
-copy happened to be".
-
-Each version's document id is `f"{project_dir.name}/{version_id}"` — project-scoped,
-like every other collection in the store — so listing or loading against a project
-with no versions yet returns empty results rather than requiring any scaffolding to
-exist first. `version_id` uses the SAME timestamp scheme as run ids
-(datetime.now().strftime('%Y%m%dT%H%M%S')) so versions and runs sort and read
-consistently; it is the local "id" every caller of this module's public functions
-works with — never the composite store id.
-
-A version is born UNPUBLISHED (`published=False`): creating a snapshot and
-approving it for runs are separate acts. `publish_version` is the only way a
-version becomes published; a run (see app.runtime.runner.resolve_version_id)
-refuses to target an unpublished version. A stored document that carries no
-`published` key (e.g. one written before the field existed) reads as
-unpublished, the same as the field's default.
-
-`create_version_from_stages` is the ONE place a WorkflowVersion is written:
-it strict-parses the given stage dicts, embeds the project's current schemas,
-freezes approval coverage, and saves — nothing is written on a validation
-failure. `create_version_from_disk` (snapshot the working copy) is a thin
-adapter over it: it strict-loads compiled/ into stage dicts and delegates.
-
-Dependency note: this module may import app.services.node_review (to freeze
-coverage), app.services.workspace (to read the working data model), and
-app.models, but nothing from app.runtime or app.compiler. A version's stages
-are parsed through the same strict parser as the working copy
-(app.models.workflow.parse_workflow / app.services.loader), so a version's
-stages load identically to the working copy's at the moment it was snapshotted.
-"""
+`version_id` is the LOCAL id every public function here takes, never the composite
+store id. A version is born unpublished, and a stored document carrying no
+`published` key reads as unpublished."""
 
 from __future__ import annotations
 

@@ -1,12 +1,3 @@
-"""POST /project/{name}/run with the `bust_cache` checkbox, and the
-`_read_bust_cache` helper that parses it.
-
-Recompute-everything is a whole-run switch, not a per-stage one: an HTML
-checkbox is only submitted when it is checked, so its presence in the form IS
-the value. This file covers the web-form surface; the runner-side semantics
-(manifest recording, resume replay, the queue stage re-asking) live in
-tests/test_runner.py and tests/runtime/test_hrq_cache.py.
-"""
 from __future__ import annotations
 
 import json

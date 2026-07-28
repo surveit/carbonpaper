@@ -1,16 +1,8 @@
 """Headless structured-output agent: run an agent to a VALIDATED Pydantic object.
 
-The interactive surface (app.web.chat_router + app.core.agent.turns) streams a chat to a human.
-This is the non-interactive counterpart: an `Agent` is configured with a system prompt
-and a `target_schema` (the Pydantic model it must produce), given a `task` (the input
-material to work from), and `run()` returns a validated instance of that schema.
-
-The agent produces its answer by CALLING one tool — `submit_answer`, whose input schema
-IS `target_schema` — rather than emitting JSON as free text. So the answer arrives
-structured (nothing to parse), the schema is carried by the tool definition (the
-provider renders it, not a hand-written dump in the prompt), and a rejected answer comes
-back as a tool error the agent corrects in the same loop. The submitted object is
-captured from the tool call and returned — it is never echoed back into the context.
+The answer arrives as a call to one tool — `submit_answer`, whose input schema IS
+`target_schema` — not as free text, so a rejected answer comes back as a tool error the
+agent corrects in the same loop. The submitted object is never echoed into the context.
 """
 from __future__ import annotations
 

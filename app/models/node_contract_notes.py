@@ -1,15 +1,8 @@
-"""Node-type facts the workflow-authoring prompts must teach the model, kept in
-ONE place so no two prompts can drift apart on the same underlying facts about
-the runtime. Rendered into the editing agent's system prompt alongside each
-node type's own `notes` from NODE_TYPES.
+"""Node-type runtime facts rendered into the authoring prompts, in ONE place so no two
+prompts can drift apart.
 
-These are runtime CONTRACTS, not authoring style — discovered by actually
-running workflows and finding the authoring assumptions didn't match what the
-runtime handlers really do.
-
-Lives in app.models (not app.compiler) so every authoring surface can reach it:
-app.compiler is protected by an import-linter contract that admits only
-app.main and app.services, which would lock out app.agents and app.mcp."""
+Lives in app.models, not app.compiler: an import-linter contract admits only app.main
+and app.services into app.compiler, which would lock out app.agents and app.mcp."""
 from __future__ import annotations
 
 HUMAN_REVIEW_QUEUE_CONTRACT_NOTE = (
