@@ -1,9 +1,9 @@
-"""The web view-model that turns a linear trace + compiled stages into the
+"""The view-model that turns a linear trace + compiled stages into the
 chronological story/graph payload the template renders."""
 from __future__ import annotations
 
 from app.models import Stage
-from app.web.trace_view import build_trace_view
+from app.runtime.trace_view import build_trace_view
 
 
 def _stage(data: dict) -> Stage:
