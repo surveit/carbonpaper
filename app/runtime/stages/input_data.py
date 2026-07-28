@@ -110,8 +110,19 @@ def _read_xlsx(path: Path, params: XlsxReadParams) -> pd.DataFrame:
     assert isinstance(frame, pd.DataFrame)
     if params.first_column:
         _validate_first_column_in_range(params.first_column, frame, path, params.sheet_name)
-        frame = frame.iloc[:, params.first_column:]
+        frame = frame.iloc[:, params.first_column:].copy()
+    if params.source_row_column:
+        _add_source_row_column(frame, params.source_row_column, params.header_row)
     return frame
+
+
+def _add_source_row_column(frame: pd.DataFrame, column: str, header_row: int) -> None:
+    # frame.index is the default 0-based RangeIndex pd.read_excel assigns to data
+    # rows in sheet order; the sheet's own 1-based row N is header_row + 2 + index,
+    # since header_row is the header's 0-based sheet row and data starts the row after it.
+    if column in frame.columns:
+        raise ValueError(f"source_row_column '{column}' collides with an existing column")
+    frame[column] = frame.index + header_row + 2
 
 
 def _validate_first_column_in_range(first_column: int, frame: pd.DataFrame, path: Path, sheet: Any) -> None:
