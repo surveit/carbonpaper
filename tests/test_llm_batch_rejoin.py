@@ -3,6 +3,7 @@ from __future__ import annotations
 import pandas as pd
 from conftest import contribution_of, make_run_context
 
+from app.core.agent.usage import LlmUsage
 from app.models import Stage
 from app.models.stage import StageType
 from app.runtime.stages import HANDLERS
@@ -137,6 +138,29 @@ def test_batched_run_reports_only_user_columns_as_dropped(monkeypatch):
     # the user column, and ONLY it
     assert contribution_of(out).dropped_columns == ["note"]
     assert lt.ROW_USAGE_KEY not in out.columns
+
+
+def test_batched_run_reports_usage_on_the_contribution(monkeypatch):
+    # Usage is per-call and attributed to the chunk's first row; the tail sums it
+    # onto the stage's contribution and strips the marker.
+    def fake(*a, **k):
+        k["usage_out"].append(LlmUsage(input_tokens=7, output_tokens=3))
+        return _clean(*a, **k)
+
+    out, labels, ctx = _run(monkeypatch, fake)
+    usage = contribution_of(out).llm_usage
+    assert usage is not None
+    assert (usage.input_tokens, usage.output_tokens) == (7, 3)
+
+
+def test_batched_empty_input_keeps_the_input_columns(monkeypatch):
+    # No rows means no reply named a single column, so the assembled frame is
+    # 0x0. A downstream stage keyed on an upstream column would raise KeyError,
+    # so the input's columns are carried through instead.
+    out, labels, ctx = _run(monkeypatch, _clean, src=_SRC.iloc[0:0])
+    assert len(out) == 0
+    assert list(out.columns) == ["post_id", "text"]
+    assert contribution_of(out) is not None
 
 
 def test_batched_chunk_failure_reports_no_marker_as_a_dropped_column(monkeypatch):

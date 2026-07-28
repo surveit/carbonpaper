@@ -348,8 +348,11 @@ def _run_row_mapper(
                 f"got {type(result).__name__} for row {index}"
             )
         out_rows.append(result)
-    mapped = _finish_mapped_frame(pd.DataFrame(out_rows), handler, map_row, stage, ctx)
-    return _restore_input_columns_when_nothing_named_them(mapped, src)
+    return _finish_mapped_frame(
+        pd.DataFrame(out_rows), src, stage, ctx,
+        project_output_to_declared=handler.project_output_to_declared,
+        map_row=map_row,
+    )
 
 
 # ── the row-level cache interceptor ──────────────────────────────────────────
@@ -474,8 +477,9 @@ def _run_batched(
     if caching is not None:
         for position, row in zip(misses, computed):
             _record_row_output(caching, records[position], row)
-    return _restore_input_columns_when_nothing_named_them(
-        _finish_batched_frame(rows, handler, stage), src
+    return _finish_mapped_frame(
+        pd.DataFrame(rows), src, stage, ctx,
+        project_output_to_declared=handler.project_output_to_declared,
     )
 
 
@@ -529,14 +533,36 @@ def _order_by_input_position(
     return [by_position[position] for position in range(row_count)]
 
 
-def _finish_batched_frame(
-    rows: list[Row], handler: RowMapHandler, stage: Stage
+def _finish_mapped_frame(
+    df: pd.DataFrame,
+    src: pd.DataFrame,
+    stage: Stage,
+    ctx: RunContext,
+    *,
+    project_output_to_declared: bool,
+    map_row: RowMapper | None = None,
 ) -> pd.DataFrame:
-    """The batched path's counterpart of `_finish_mapped_frame`: no mapper, so
-    no post-map step — the internal columns are collected off the assembled
-    frame, then stripped and the frame projected."""
-    df = pd.DataFrame(rows)
-    return _strip_and_project(df, _collect_internal_columns(df), handler, stage)
+    """Turn the assembled per-row results into the stage's output frame: collect
+    the driver's own internal columns onto this stage's `StageContribution`, hand
+    the frame back to the mapper where the mapper is a `PostMapRowMapper`, strip
+    every internal column, project onto the declared columns where asked, and
+    substitute `src`'s columns where nothing named any.
+
+    The ONE tail both row-mapped paths run. `map_row` is None for the batched
+    path, which computes N rows per model call and so has no per-row mapper to
+    hand the frame back to; every other step is identical, which is why they
+    share this function rather than each keeping a copy that can drift.
+
+    The mapper's window is exact: `finish_mapped_rows` runs before the strip, so
+    it is the last step that sees an internal column at all.
+
+    The contribution rides out on the returned frame's `.attrs`; the executor
+    merges it into the manifest. Nothing accumulates in the (frozen) context."""
+    contribution = _collect_internal_columns(df)
+    if isinstance(map_row, PostMapRowMapper):
+        map_row.finish_mapped_rows(stage, df, ctx, contribution)
+    finished = _strip_and_project(df, contribution, project_output_to_declared, stage)
+    return _restore_input_columns_when_nothing_named_them(finished, src)
 
 
 def _restore_input_columns_when_nothing_named_them(
@@ -563,30 +589,6 @@ def _restore_input_columns_when_nothing_named_them(
     return empty
 
 
-def _finish_mapped_frame(
-    df: pd.DataFrame,
-    handler: RowMapHandler,
-    map_row: RowMapper,
-    stage: Stage,
-    ctx: RunContext,
-) -> pd.DataFrame:
-    """Turn the assembled per-row results into the stage's output frame: collect
-    the driver's own internal columns onto this stage's `StageContribution`, hand
-    the frame back to the mapper where the mapper is a `PostMapRowMapper`, then
-    strip every internal column and — where the handler asks for it — project
-    onto the declared columns.
-
-    The mapper's window is exact: `finish_mapped_rows` runs before the strip, so
-    it is the last step that sees an internal column at all.
-
-    The contribution rides out on the returned frame's `.attrs`; the executor
-    merges it into the manifest. Nothing accumulates in the (frozen) context."""
-    contribution = _collect_internal_columns(df)
-    if isinstance(map_row, PostMapRowMapper):
-        map_row.finish_mapped_rows(stage, df, ctx, contribution)
-    return _strip_and_project(df, contribution, handler, stage)
-
-
 def _collect_internal_columns(df: pd.DataFrame) -> StageContribution:
     """This stage's contribution, carrying what the driver reads off the internal
     columns of the assembled frame."""
@@ -599,10 +601,10 @@ def _collect_internal_columns(df: pd.DataFrame) -> StageContribution:
 def _strip_and_project(
     df: pd.DataFrame,
     contribution: StageContribution,
-    handler: RowMapHandler,
+    project_output_to_declared: bool,
     stage: Stage,
 ) -> pd.DataFrame:
-    """`df` with every internal column dropped and — where the handler asks for
+    """`df` with every internal column dropped and — where the caller asks for
     it — projected onto the declared columns, carrying `contribution` out on its
     `.attrs` for the executor to merge into the manifest.
 
@@ -610,7 +612,7 @@ def _strip_and_project(
     drops as a user column the stage produced and discarded, and an internal
     column is driver machinery, not that."""
     df = _strip_internal_columns(df)
-    if handler.project_output_to_declared:
+    if project_output_to_declared:
         df = _project_onto_declared_columns(df, stage, contribution)
     df.attrs[CONTRIBUTION_ATTR] = contribution
     return df

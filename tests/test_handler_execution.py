@@ -241,6 +241,21 @@ def test_row_driver_projects_to_declared_columns():
     assert contribution_of(out).dropped_columns == ["extra"]
 
 
+def test_row_driver_reorders_kept_columns_into_declared_order():
+    # The mapper names its columns in the OPPOSITE order to output_schema, and
+    # nothing is dropped: the only thing the selection can change here is order.
+    schema = {"columns": [{"name": "x", "type": "int"}, {"name": "score", "type": "int"}]}
+    handler = RowMapHandler(
+        make_mapper=lambda stage, ctx, src: lambda row, index: {"score": 1, "x": row["x"]},
+        project_output_to_declared=True,
+    )
+    ctx = make_run_context()
+    out = handler.execute(_row_stage(output_schema=schema),
+                          {"src": pd.DataFrame({"x": [1]})}, ctx)
+    assert list(out.columns) == ["x", "score"]
+    assert contribution_of(out).dropped_columns == []
+
+
 def _mark_row_with_every_marker(row, index):
     return {
         "x": row["x"],
