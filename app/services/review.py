@@ -9,6 +9,26 @@ from app.core.stage_cache import StageCacheEntry
 from app.models import QueueConfig, ReviewVerdict, Stage
 
 
+def derive_verdict(
+    supplied: Mapping[str, str | None], prefilled: Mapping[str, str | None]
+) -> ReviewVerdict:
+    """`modify` iff a submitted value differs from what THE PAGE carried as its
+    prefill for that column. Deliberately not compared against a server-side
+    recompute of the prefill: the reviewer decided against what they were
+    shown, and a decision landing between render and submit would change what
+    a recompute produced. A reviewer who retypes an identical value records
+    `approve` — `modify` means the value changed."""
+    unmatched = sorted(set(supplied) ^ set(prefilled))
+    if unmatched:
+        raise ReviewValidationError(
+            "reviewed_values and prefilled_values must name the same columns — "
+            f"the verdict is derived by comparing them; {unmatched} appears in only "
+            "one of the two"
+        )
+    changed = any(value != prefilled[target] for target, value in supplied.items())
+    return ReviewVerdict.modify if changed else ReviewVerdict.approve
+
+
 def record_decision(
     *, project: str, stage: Stage,
     stage_fingerprint: str, input_fingerprint: str,

@@ -196,31 +196,10 @@ class Column(_Base):
             )
         return self
 
-    def coerce_text(self, text: str) -> object:
-        """Whitespace is stripped; what is left blank is None only on a nullable
-        column and a ValueError on a non-nullable one, never a silent null. A
-        non-scalar type (`json`, `list[...]`) raises rather than parse. The
-        result satisfies the whole declaration, not only `type`: a value outside
-        a declared `enum` or `range` is a ValueError too."""
-        if self.type not in SCALAR_COLUMN_TYPES:
-            raise ValueError(
-                f"column {self.name!r}: type {self.type!r} is not a scalar and "
-                "cannot be entered as text"
-            )
-        stripped = text.strip()
-        if not stripped:
-            if self.nullable:
-                return None
-            raise ValueError(
-                f"column {self.name!r}: blank text, but the column is not nullable"
-            )
-        value = _parse_scalar_text(self.name, self.type, stripped)
-        _validate_declared_vocabulary(self, value)
-        return value
-
     def resolve_numeric_bounds(self) -> tuple[float | None, float | None]:
-        """None on a side declared with the RANGE_UNBOUNDED_MARKER sentinel."""
-        if self.range is None:
+        """A declared numeric range as (low, high); a bound declared with the
+        RANGE_UNBOUNDED_MARKER sentinel is None on that side."""
+        if self.range is None or self.type not in ("int", "float"):
             return (None, None)
         low, high = self.range
         return (None if isinstance(low, str) else low,
@@ -228,51 +207,6 @@ class Column(_Base):
 
 
 Column.model_rebuild()
-
-
-# ── Parsing form text into a scalar (Column.coerce_text) ─────────────────────
-_BOOL_TEXT: dict[str, bool] = {
-    "true": True, "1": True, "yes": True, "on": True,
-    "false": False, "0": False, "no": False, "off": False,
-}
-
-
-def _parse_scalar_text(column_name: str, column_type: str, text: str) -> object:
-    try:
-        if column_type == "str":
-            return text
-        if column_type == "int":
-            return int(text)
-        if column_type == "float":
-            return float(text)
-        if column_type == "bool":
-            return _BOOL_TEXT[text.lower()]
-        if column_type == "date":
-            return datetime.date.fromisoformat(text)
-        return datetime.datetime.fromisoformat(text)
-    except (ValueError, KeyError) as exc:
-        raise ValueError(
-            f"column {column_name!r}: {text!r} is not a valid {column_type} value"
-        ) from exc
-
-
-def _validate_declared_vocabulary(column: Column, value: object) -> None:
-    if column.enum is not None and value not in column.enum:
-        raise ValueError(
-            f"column {column.name!r}: {value!r} is not one of the declared "
-            f"values {column.enum}"
-        )
-    low, high = column.resolve_numeric_bounds()
-    if not isinstance(value, (int, float)):
-        return
-    if low is not None and value < low:
-        raise ValueError(
-            f"column {column.name!r}: {value!r} is below the declared minimum {low}"
-        )
-    if high is not None and value > high:
-        raise ValueError(
-            f"column {column.name!r}: {value!r} is above the declared maximum {high}"
-        )
 
 
 # ── Column spec-equality ─────────────────────────────────────────────────────
