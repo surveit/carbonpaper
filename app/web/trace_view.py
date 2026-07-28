@@ -17,7 +17,7 @@ from typing import Any
 
 from app.models import Stage
 from app.models.stage import StageType
-from app.web.loading import resolve_function_code
+from app.services.loader import resolve_function_code
 
 
 def _transform_of(stage: Stage | None) -> dict[str, Any]:

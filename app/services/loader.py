@@ -19,6 +19,10 @@ Read:
 Serialize / save:
   - stage_to_spec_dict / stage_to_json: the canonical data + text forms.
   - find_stage_file / write_stage: locate and overwrite one stage's file.
+
+Source reads:
+  - read_module_code / resolve_function_code: a stage's Python source, for
+    viewers and traces (both `app.web` and `app.runtime` may import this module).
 """
 from __future__ import annotations
 
@@ -29,6 +33,7 @@ from typing import Any
 
 from pydantic import ValidationError
 
+from app.core.paths import repo_root
 from app.models.workflow import Workflow, validate_workflow
 from app.models.stage import Stage
 from app.core.utils import format_errors
@@ -131,3 +136,30 @@ def find_stage_file(compiled_dir: Path, stage_id: str) -> Path | None:
 def write_stage(path: Path, stage: Stage) -> None:
     """Persist one validated stage to `path` in the canonical on-disk JSON."""
     path.write_text(stage_to_json(stage), encoding="utf-8")
+
+
+# ─── Source & code reads ─────────────────────────────────────────────────────
+
+def read_module_code(module_path: str) -> str | None:
+    """Resolve module 'examples.lobbymap.code.foo' to a file path and read it."""
+    if not module_path:
+        return None
+    parts = module_path.split(".")
+    candidate = repo_root() / Path(*parts).with_suffix(".py")
+    if not candidate.exists():
+        return None
+    try:
+        return candidate.read_text(encoding="utf-8")
+    except OSError:
+        return None
+
+
+def resolve_function_code(stage_def: Stage | None) -> str | None:
+    """Python source for a stage's function handle: the module file for a module
+    ref, or the inline code string. None if the stage has neither."""
+    fn = stage_def.function if stage_def else None
+    if fn and fn.kind == "module" and fn.module:
+        return read_module_code(fn.module)
+    if fn and fn.kind == "inline":
+        return fn.code
+    return None

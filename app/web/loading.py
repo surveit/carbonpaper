@@ -26,7 +26,7 @@ from app.services.run import resolve_version
 from app.services.loader import CompiledStageFile, load_compiled_dir
 from app.services.versioning import list_versions, load_version_stages
 from app.services.workspace import load_schemas, resolve_project_dir
-from app.web.config import EXAMPLES_DIR, REPO_ROOT
+from app.web.config import EXAMPLES_DIR
 
 
 # ─── Projects & stages ──────────────────────────────────────────────────
@@ -188,33 +188,6 @@ def save_uploaded_input(project_dir: Path, stage_id: str, filename: str, src) ->
     with dest.open("wb") as out:
         shutil.copyfileobj(src, out)
     return dest.resolve()
-
-
-# ─── Source & code reads ─────────────────────────────────────────────────────
-
-def read_module_code(module_path: str) -> str | None:
-    """Resolve module 'examples.lobbymap.code.foo' to a file path and read it."""
-    if not module_path:
-        return None
-    parts = module_path.split(".")
-    candidate = REPO_ROOT / Path(*parts).with_suffix(".py")
-    if not candidate.exists():
-        return None
-    try:
-        return candidate.read_text(encoding="utf-8")
-    except OSError:
-        return None
-
-
-def resolve_function_code(stage_def: Stage | None) -> str | None:
-    """Python source for a stage's function handle: the module file for a module
-    ref, or the inline code string. None if the stage has neither."""
-    fn = stage_def.function if stage_def else None
-    if fn and fn.kind == "module" and fn.module:
-        return read_module_code(fn.module)
-    if fn and fn.kind == "inline":
-        return fn.code
-    return None
 
 
 # ─── Runs & manifests ────────────────────────────────────────────────────────
