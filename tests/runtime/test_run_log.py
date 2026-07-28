@@ -1,9 +1,8 @@
 """The per-run event log's row lifecycle (app/runtime/run_log.py + stages/row_events.py).
 
-Driven through the registered handlers, so what these pin is the whole row
-path: a computed row opens and settles, a row the stage-result cache answered
-settles ONCE and is marked cached, and a raising mapper is logged before it
-propagates.
+Driven through the registered handlers: a computed row opens and settles, a
+cache-answered row settles ONCE marked cached, a raising mapper is logged
+before it propagates.
 """
 from __future__ import annotations
 
@@ -44,7 +43,10 @@ _RAISING_CODE = "def transform(row):\n    raise ValueError('bad row')\n"
 def _row_stage(code: str = _DOUBLING_CODE) -> Stage:
     return Stage.model_validate({
         "id": "double", "name": "Double", "type": "python_row_function",
-        "inputs": [{"id": "src"}], "cache": True,
+        "inputs": [{"id": "src", "schema": {"columns": [{"name": "x", "type": "int"}]}}],
+        "cache": True,
+        "output_schema": {
+            "columns": [{"name": "x", "type": "int"}, {"name": "y", "type": "int"}]},
         "function": {"kind": "inline", "code": code},
     })
 
@@ -188,6 +190,7 @@ def test_a_run_writes_its_lifecycle_spine_to_the_run_dir(tmp_path):
     source = Stage.model_validate({
         "id": "src", "name": "Source", "type": "input_data",
         "connector": {"kind": "file"},
+        "output_schema": {"columns": [{"name": "x", "type": "int"}]},
     })
     run_dir = tmp_path / "runs" / "subset1"
     run_subset(

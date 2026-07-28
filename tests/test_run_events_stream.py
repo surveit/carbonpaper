@@ -1,9 +1,8 @@
 """The run log's SSE tail (GET /project/{p}/runs/{id}/events).
 
-One code path serves the live feed and a finished run: the endpoint drains
-runs/<id>/events.jsonl and ends on the terminal run_done marker — or, when that
-marker never arrived, once the manifest has settled, so an interrupted run can
-never hang the client.
+One code path serves the live feed and a finished run: drain
+runs/<id>/events.jsonl, end on the terminal run_done marker — or, if it never
+arrived, once the manifest settled, so an interrupted run can't hang a client.
 """
 from __future__ import annotations
 

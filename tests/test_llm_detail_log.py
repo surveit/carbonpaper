@@ -1,9 +1,8 @@
 """The LLM detail tier of the run log (app/runtime/llm.py).
 
-Under a bound sink, an agent call logs the rendered prompt and forwards the
-agent's thinking/response as LEVEL_DETAIL events keyed to that (stage, rows).
-With no sink bound, nothing extra is logged. `call_llm` and `call_llm_batch`
-share `_run_agent`, so both paths are covered by its one emit point.
+Under a bound sink an agent call logs its prompt and forwards thinking/response
+as LEVEL_DETAIL keyed to that (stage, rows); with none bound, nothing extra.
+`call_llm`/`call_llm_batch` share `_run_agent`'s one emit point.
 """
 from __future__ import annotations
 
