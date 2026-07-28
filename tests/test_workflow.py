@@ -269,6 +269,65 @@ def test_check_edge_schemas_skips_when_upstream_has_no_output_schema():
     assert m.validate_edge_schemas(stages) == []
 
 
+# ── A publish stage may not be another stage's input (validate_publish_is_terminal) ─
+# A publish stage writes files instead of producing a table, so nothing downstream
+# can read from it. It is also the one type exempt from declaring an output_schema,
+# which is why such an edge would otherwise slip past validate_edge_schemas.
+def _publish(stage_id="pub", inputs=("load",)):
+    return S(id=stage_id, type="publish", inputs=[{"id": i} for i in inputs],
+             publish={"format": "json"},
+             function={"kind": "inline", "code": "def transform(df, output_dir): return df"})
+
+
+def _reader(stage_id, upstream):
+    return S(id=stage_id, type="python_frame_function", inputs=[{"id": upstream}],
+             function={"kind": "inline", "code": "def transform(df): return df"})
+
+
+def _loader():
+    return S(id="load", type="input_data", connector={"kind": "file"})
+
+
+def test_validate_publish_is_terminal_flags_stage_reading_a_publish():
+    stages = [Stage.model_validate(s) for s in
+              (_loader(), _publish(), _reader("down", "pub"))]
+    issues = m.validate_publish_is_terminal(stages)
+    assert len(issues) == 1
+    assert "down" in issues[0] and "pub" in issues[0]
+
+
+def test_validate_publish_is_terminal_reports_every_offending_edge():
+    stages = [Stage.model_validate(s) for s in (
+        _loader(), _publish("pub_a"), _publish("pub_b"),
+        _reader("down_a", "pub_a"), _reader("down_b", "pub_b"),
+        S(id="down_c", type="join", inputs=[{"id": "pub_a"}, {"id": "pub_b"}],
+          join={"keys": [{"left": "x", "right": "y"}]}),
+    )]
+    issues = m.validate_publish_is_terminal(stages)
+    assert len(issues) == 4  # every offending edge in one pass, not just the first
+
+
+def test_validate_publish_is_terminal_clean_when_publish_is_terminal():
+    stages = [Stage.model_validate(s) for s in (_loader(), _publish())]
+    assert m.validate_publish_is_terminal(stages) == []
+
+
+def test_validate_publish_is_terminal_clean_with_several_unconsumed_publishes():
+    stages = [Stage.model_validate(s) for s in
+              (_loader(), _publish("pub_a"), _publish("pub_b"), _publish("pub_c"))]
+    assert m.validate_publish_is_terminal(stages) == []
+
+
+def test_parse_workflow_rejects_stage_reading_a_publish():
+    with pytest.raises(ValidationError, match="publish"):
+        m.parse_workflow([_loader(), _publish(), _reader("down", "pub")])
+
+
+def test_parse_workflow_accepts_terminal_publish():
+    wf = m.parse_workflow([_loader(), _publish()])
+    assert [s.id for s in wf.stages] == ["load", "pub"]
+
+
 def test_parse_workflow_rejects_nonconformant_edge():
     """The save gate (parse_workflow → Workflow model validator → graph_issues)
     rejects a workflow whose edge is non-conformant."""

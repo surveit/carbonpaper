@@ -18,7 +18,7 @@ from typing import Any
 from pydantic import ValidationError, model_validator
 
 from app.models.schema import _Base
-from app.models.stage import Stage
+from app.models.stage import Stage, StageType
 from app.core.utils import format_errors
 
 
@@ -100,15 +100,31 @@ def validate_edge_schemas(stages: list[Stage]) -> list[str]:
     return issues
 
 
+def validate_publish_is_terminal(stages: list[Stage]) -> list[str]:
+    """One issue per edge whose upstream is a publish stage. A publish stage writes
+    files instead of producing a table, so nothing downstream can read it. Reports
+    every offending edge, not just the first."""
+    publish_ids = {s.id for s in stages if s.type == StageType.publish}
+    return [
+        f"`{stage.id}`: input `{upstream}` is a publish stage — a publish stage "
+        f"writes files and produces no table, so it cannot be another stage's input"
+        for stage in stages
+        for upstream in stage.input_ids
+        if upstream in publish_ids
+    ]
+
+
 def graph_issues(stages: list[Stage]) -> list[str]:
     """Every cross-stage problem in the workflow graph: duplicate ids, dangling
-    inputs, a cycle, and any edge whose declared input schema the upstream stage's
-    output_schema does not supply. The single source of truth both the strict
+    inputs, a cycle, an edge reading a publish stage, and any edge whose declared
+    input schema the upstream stage's output_schema does not supply. The single
+    source of truth both the strict
     model validator and the non-fatal `validate_workflow` build on."""
     return (
         validate_unique_ids(stages)
         + validate_inputs_resolve(stages)
         + detect_cycle(stages)
+        + validate_publish_is_terminal(stages)
         + validate_edge_schemas(stages)
     )
 
@@ -140,8 +156,8 @@ def parse_workflow(stages: list[dict[str, Any]]) -> Workflow:
 def validate_workflow(stages: list[Stage]) -> list[str]:
     """Cross-stage checks on already-parsed stages, as human-readable issue
     strings — every problem, not just the first: unique ids, inputs resolve,
-    acyclic, and every edge's declared input schema supplied by its upstream
-    output_schema. Per-stage invariants (e.g. llm_transform being strictly 1:1) are
+    acyclic, no stage reading a publish stage, and every edge's declared input
+    schema supplied by its upstream output_schema. Per-stage invariants (e.g. llm_transform being strictly 1:1) are
     already enforced by `Stage` construction, so any `list[Stage]` reaching here
     is stage-valid; this is the remaining, whole-graph seam `load_workflow` (and
     hence `create_version_from_disk`) enforces, so an invalid workflow is never versioned
