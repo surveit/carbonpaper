@@ -1,6 +1,8 @@
 {# One row rendered as label/value pairs. `columns` are the described columns
    (name, description, type, in_primary_key); `row` maps those same names to the
-   display values. A column whose description is None gets no tooltip. #}
+   display text, or to None for a null — which is NOT the same as the empty
+   string, and prints differently. A column whose description is None gets no
+   tooltip. #}
 {% macro kv_table(columns, row) %}
 {% if columns %}
 <table class="kv">
@@ -13,7 +15,11 @@
             {% if column.in_primary_key %}<span class="pk-flag" title="declared primary key">key</span>{% endif %}
             {% if column.type %}<span class="type-pill">{{ column.type }}</span>{% endif %}
         </th>
-        <td class="kv-value">{% if value is none or value == '' %}<em>null</em>{% else %}{{ value }}{% endif %}</td>
+        <td class="kv-value">
+            {%- if value is none %}<em>null</em>
+            {%- elif value == '' %}<em>empty string</em>
+            {%- else %}{{ value }}{% endif -%}
+        </td>
     </tr>
     {% endfor %}
     </tbody>

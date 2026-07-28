@@ -24,8 +24,9 @@ HUMAN_REVIEW_QUEUE_CONTRACT_NOTE = (
     "their added columns differently. `queue.filter` may reference INPUT columns only, "
     "never a column this stage adds. "
     "This type emits one output row per input row and never removes any. The verdict column "
-    "holds \"approve\" (a human accepted the AI value), \"modify\" (a human supplied a "
-    "different one), or \"skipped\" (the queue filter did not select the row, so the AI "
-    "value stands unreviewed). A downstream stage that wants only human-sanctioned values "
+    "holds \"approve\" (a human accepted the value this stage received), \"modify\" (a "
+    "human supplied a different one), or \"skipped\" (the queue filter did not select the "
+    "row, so the received value stands unreviewed). A downstream stage that wants only "
+    "human-sanctioned values "
     "filters on the verdict column != \"skipped\"."
 )

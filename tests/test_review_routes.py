@@ -679,9 +679,10 @@ def test_queue_page_gates_the_items_behind_the_reviewer_name(tmp_path, monkeypat
 
 
 def test_queue_page_prefills_a_decided_row_from_the_recorded_value(tmp_path, monkeypatch):
-    """A decided row opens with what the reviewer recorded, not the AI value it
-    contradicts — otherwise Approve/Save silently reverts their own decision. The
-    AI value stays visible beside it, labelled separately."""
+    """A decided row opens with what the reviewer recorded, not the value it
+    contradicts — otherwise an untouched submit silently reverts their own
+    decision. What the stage received stays visible beside it, labelled
+    separately."""
     _project_dir, run_id, _run_dir, snapshot, fingerprints = _build_and_halt(tmp_path, monkeypatch)
     first_fp = fingerprints["input_fingerprints"][0]
     _put_cached_decision(
@@ -694,8 +695,8 @@ def test_queue_page_prefills_a_decided_row_from_the_recorded_value(tmp_path, mon
     decided = html[html.index(f'data-input-fingerprint="{first_fp}"'):]
     decided = decided[:decided.index("</article>")]
     assert 'value="99"' in decided          # the field opens on the recorded value
-    # The AI value stays visible beside it, labelled as the AI's.
-    assert "AI <code>score</code>: <strong>1</strong>" in " ".join(decided.split())
+    # what the stage received stays visible beside it, labelled as received
+    assert "received <code>score</code>: <strong>1</strong>" in " ".join(decided.split())
     assert "you recorded" in decided
 
 
@@ -752,8 +753,8 @@ def test_a_null_bool_ai_value_is_never_rendered_as_false(tmp_path, monkeypatch):
     html = TestClient(app).get(f"/project/queue_route_bool_null/runs/{run_id}/queue/review").text
 
     assert 'type="checkbox"' not in html
-    # the null AI value shown as null, not as "false"
-    assert "AI <code>flag</code>: <strong><em>null</em></strong>" in " ".join(html.split())
+    # the null upstream value shown as null, not as "false"
+    assert "received <code>flag</code>: <strong><em>null</em></strong>" in " ".join(html.split())
     assert "— unset —" in html
     assert _find_selected_option(html, "human_flag") == ""
 
@@ -777,8 +778,8 @@ def test_a_bool_select_opens_on_the_recorded_value_of_a_decided_row(tmp_path, mo
     html = TestClient(app).get(f"/project/{project}/runs/{run_id}/queue/review").text
 
     assert _find_selected_option(html, "human_flag") == "true"
-    # what the model said stays visible beside the recorded value
-    assert "AI <code>flag</code>: <strong>false</strong>" in " ".join(html.split())
+    # what the stage received stays visible beside the recorded value
+    assert "received <code>flag</code>: <strong>false</strong>" in " ".join(html.split())
     # The labels spell the value the way the options do — never a python repr
     # sitting beside a select that reads `true`.
     assert "you recorded <strong>true</strong>" in " ".join(html.split())
@@ -892,7 +893,7 @@ def _decide_a_temporal_row(tmp_path, monkeypatch, project, column_type, recorded
 def _find_input_value(html, target):
     field = re.search(rf'<input[^>]*data-target="{target}"[^>]*>', html, re.DOTALL)
     assert field is not None, f"no input rendered for {target!r}"
-    # `\bvalue=` would match inside `data-ai-value=`, which is a different value.
+    # `\bvalue=` would match inside `data-prefill=`, which is a different value.
     value = re.search(r'\svalue="([^"]*)"', field.group(0))
     return None if value is None else value.group(1)
 
@@ -1095,6 +1096,10 @@ def _review_labels_stage():
 
 
 def test_a_queue_whose_upstream_is_not_an_llm_transform_renders_and_links(tmp_path, monkeypatch):
+    """A `python_row_function` computed these values, so nothing on the page may
+    attribute them to a model: the queue stage cannot know what produced what it
+    received, and telling the reviewer "AI" is exactly the fabrication this
+    surface was rewritten to remove."""
     project = "queue_route_on_row_function"
     project_dir = tmp_path / project
     run_id, fingerprints = _build_and_halt_queue_over(
@@ -1106,6 +1111,8 @@ def test_a_queue_whose_upstream_is_not_an_llm_transform_renders_and_links(tmp_pa
     for fp in fingerprints["input_fingerprints"]:
         assert f'data-input-fingerprint="{fp}"' in html
     assert 'data-target="human_label"' in html
+    assert "AI" not in html
+    assert "received <code>label</code>:" in " ".join(html.split())
 
     assert _lineage_urls(project, run_id) == [
         f"/project/{project}/runs/{run_id}/stage/label/row/{o}/trace/view"
@@ -1414,3 +1421,81 @@ def test_the_closed_field_displays_exactly_what_it_will_submit(tmp_path, monkeyp
     shown = re.search(r'<span class="current-value">(.*?)</span>', card, re.DOTALL)
     assert shown is not None and shown.group(1).strip() == "1"
     assert 'data-prefill="1"' in card
+
+
+def _empty_string_load_stage(project_dir):
+    csv_path = project_dir / "data" / "rows.csv"
+    csv_path.parent.mkdir(parents=True, exist_ok=True)
+    csv_path.write_text("id,flag\ne,true\nn,false\n", encoding="utf-8")
+    return {"id": "load", "name": "Load rows", "type": "input_data",
+            "connector": {"kind": "file",
+                          "params": {"path": str(csv_path), "format": "csv"}},
+            "output_schema": {"columns": [
+                {"name": "id", "type": "str"},
+                {"name": "flag", "type": "bool"}], "primary_key": ["flag"]}}
+
+
+_EMPTY_STRING_COLUMNS = [
+    {"name": "id", "type": "str"},
+    {"name": "flag", "type": "bool"},
+    {"name": "note", "type": "str", "nullable": True},
+]
+
+
+def _empty_string_row_function_stage():
+    """One row holds a real empty string and one holds a null, in the same `str`
+    column — the pair a null-flattening display prints alike. A CSV cannot carry
+    the distinction (pandas reads a quoted empty field as NaN), so the frame is
+    built by a row function."""
+    code = ("def transform(row):\n"
+            "    return {'id': row['id'], 'flag': row['flag'],\n"
+            "            'note': '' if row['id'] == 'e' else None}")
+    return {"id": "note", "name": "Add notes", "type": "python_row_function",
+            "inputs": [{"id": "load", "schema": {
+                "columns": _EMPTY_STRING_COLUMNS[:2], "primary_key": ["flag"]}}],
+            "function": {"kind": "inline", "code": code},
+            "output_schema": {"columns": _EMPTY_STRING_COLUMNS, "primary_key": ["flag"]}}
+
+
+def _empty_string_review_stage():
+    return {"id": "review", "name": "Review notes", "type": "human_review_queue",
+            "inputs": [{"id": "note", "schema": {
+                "columns": _EMPTY_STRING_COLUMNS, "primary_key": ["flag"]}}],
+            "queue": {**queue_columns(source="note", target="human_note")}}
+
+
+def test_an_empty_string_cell_is_not_printed_as_a_null(tmp_path, monkeypatch):
+    """`display_cell` flattens a null to "", so a column holding a real empty
+    string would otherwise be shown as holding nothing — stating something the
+    data does not say."""
+    project = "queue_route_empty_string"
+    project_dir = tmp_path / project
+    run_id, _fingerprints = _build_and_halt_queue_over(
+        tmp_path, monkeypatch, project,
+        [_empty_string_load_stage(project_dir), _empty_string_row_function_stage(),
+         _empty_string_review_stage()],
+    )
+
+    html = TestClient(app).get(f"/project/{project}/runs/{run_id}/queue/review").text
+
+    cells = re.findall(r'<td class="kv-value">\s*(.*?)\s*</td>', html, re.DOTALL)
+    assert "<em>empty string</em>" in cells
+    assert "<em>null</em>" in cells
+
+
+def test_a_bool_primary_key_reads_the_same_in_the_header_and_the_table(tmp_path, monkeypatch):
+    """The identity cell and the table cell print one value one way — a python
+    `True` in the header beside a `true` in the table is the same value spelled
+    two ways on one card."""
+    project = "queue_route_identity_spelling"
+    project_dir = tmp_path / project
+    run_id, _fingerprints = _build_and_halt_queue_over(
+        tmp_path, monkeypatch, project,
+        [_empty_string_load_stage(project_dir), _empty_string_row_function_stage(),
+         _empty_string_review_stage()],
+    )
+
+    html = TestClient(app).get(f"/project/{project}/runs/{run_id}/queue/review").text
+
+    identities = re.findall(r'<span class="identity-cell">flag <code>([^<]*)</code>', html)
+    assert identities == ["true", "false"]

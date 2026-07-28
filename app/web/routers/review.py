@@ -6,6 +6,7 @@ cache (app.core.stage_cache)."""
 from __future__ import annotations
 
 import json
+import math
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
@@ -50,10 +51,10 @@ class _DecisionDisplay:
 
 @dataclass(frozen=True)
 class _ReviewedField:
-    """One reviewed column as the form renders it: `source` is the column the AI
-    produced, `target` the column the reviewer's value lands in. `control` is the
-    HTML input `type` verbatim, or "select", which the template renders as a
-    `<select>` over `options`."""
+    """One reviewed column as the form renders it: `source` is the column this
+    stage received the value in, `target` the column the reviewer's value lands
+    in. `control` is the HTML input `type` verbatim, or "select", which the
+    template renders as a `<select>` over `options`."""
 
     source: str
     target: str
@@ -490,9 +491,8 @@ def _resolve_source_description(stage_def: Stage, source: str) -> str | None:
 
 
 def _resolve_notes_label(stage_def: Stage, column: str) -> str:
-    """The reviewer-notes box's visible label. The notes column is written by
-    this stage, so only its `output_schema` can describe it; with no
-    description the column name is spelled out as a sentence."""
+    """The notes column is written by this stage, so only its `output_schema`
+    can describe it; with no description the column name is spelled out."""
     declared = (
         stage_def.output_schema.column_for_name(column)
         if stage_def.output_schema is not None else None
@@ -658,27 +658,29 @@ def _build_review_item(
     displayed_row = {str(k): display_cell(v) for k, v in row.items()}
     return {
         "input_fingerprint": input_fingerprint,
-        "row": {name: _as_display_text(value) for name, value in displayed_row.items()},
+        "row": {str(name): _as_cell_text(value) for name, value in row.items()},
         "identity": [
-            _IdentityCell(column=k, value=str(displayed_row[k])) for k in primary_key
+            _IdentityCell(column=k, value=_as_display_text(displayed_row[k]))
+            for k in primary_key
         ],
         "lineage_url": lineage_url,
         "prior_decision": prior,
         "prefill": _build_field_prefills(fields, displayed_row, prior),
-        "ai_text": _build_ai_texts(fields, displayed_row),
+        "upstream_text": _build_upstream_texts(fields, displayed_row),
     }
 
 
-def _build_ai_texts(
+def _build_upstream_texts(
     fields: list[_ReviewedField], displayed_row: dict[str, Any]
 ) -> dict[str, str]:
-    """The upstream value per field as the card displays it beside the control —
-    blank for a null, which the page shows as an explicit null rather than as a
-    value of the column's type."""
+    """The value this stage received per field, as the card displays it beside
+    the control — blank for a null, which the page shows as an explicit null
+    rather than as a value of the column's type. What produced it is the
+    upstream stage's business: a queue may follow any stage type."""
     return {
         field.target: (
-            "" if (ai := _blank_to_none(displayed_row.get(field.source))) is None
-            else _as_option_text(ai)
+            "" if (received := _blank_to_none(displayed_row.get(field.source))) is None
+            else _as_option_text(received)
         )
         for field in fields
     }
@@ -689,9 +691,9 @@ def _build_field_prefills(
 ) -> dict[str, object]:
     """What each field opens with: on a row already decided, exactly what the
     reviewer recorded — including a recorded null, which does NOT fall back to
-    the AI value — and on an undecided row the AI value it reviews. A blank on
-    either side is None: the control renders explicitly unset rather than
-    inventing a value of the column's type."""
+    the received value — and on an undecided row the value this stage received.
+    A blank on either side is None: the control renders explicitly unset rather
+    than inventing a value of the column's type."""
     return {
         field.target: _resolve_prefill(
             field,
@@ -733,9 +735,23 @@ def _as_control_value(control: str, value: object) -> object:
     return moment.date().isoformat() if date_only else moment.isoformat()
 
 
+def _as_cell_text(value: object) -> str | None:
+    """A queued value as its table cell prints it, None ONLY where the value is
+    null. `display_cell` flattens a null to "", which would print a column
+    holding a real empty string as if it held nothing."""
+    return None if _is_null(value) else _as_display_text(display_cell(value))
+
+
+def _is_null(value: object) -> bool:
+    """The null spellings a frame cell arrives in. Spelled out rather than
+    `pd.isna`, which raises on a list- or array-valued cell."""
+    if value is None or value is pd.NaT or value is pd.NA:
+        return True
+    return isinstance(value, float) and math.isnan(value)
+
+
 def _as_display_text(value: object) -> str:
-    """A queued value as the card prints it. A bool takes the same spelling its
-    control's options use, so one value never reads two ways on one card."""
+    """A bool takes its control's "true"/"false" spelling, never python's."""
     return "" if value is None else _as_option_text(value)
 
 

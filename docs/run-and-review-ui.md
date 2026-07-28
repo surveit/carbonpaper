@@ -77,8 +77,11 @@ was pre-filled with, and `queue_decide` DERIVES `modify` when any submitted
 value differs from the prefill the page carried, `approve` when they all match.
 (`skipped` is the runtime's own verdict for a row its filter excluded; the
 review service refuses it from a reviewer.) A decision records that verdict, a
-value for each reviewed column, and optionally a note — it never overwrites
-the AI's original column. Decisions are keyed by a hash of the row (`app.core.stage_cache`)
+value for each reviewed column, and optionally a note — it never overwrites the
+column it reviewed, because a review stage may only ADD columns
+(`app.models.stages.human_review_queue._find_added_column_collisions` rejects a
+target that reuses an input column's name). Decisions are keyed by a hash of the
+row (`app.core.stage_cache`)
 so they survive re-runs and LLM non-determinism. When all items are decided, a
 **Resume run** button appears.
 
