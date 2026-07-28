@@ -1,0 +1,24 @@
+{# One row rendered as label/value pairs. `columns` are the described columns
+   (name, description, type, in_primary_key); `row` maps those same names to the
+   display values. A column whose description is None gets no tooltip. #}
+{% macro kv_table(columns, row) %}
+{% if columns %}
+<table class="kv">
+    <tbody>
+    {% for column in columns %}
+    {% set value = row.get(column.name) %}
+    <tr>
+        <th scope="row" {% if column.description %}title="{{ column.description }}"{% endif %}>
+            <code>{{ column.name }}</code>
+            {% if column.in_primary_key %}<span class="pk-flag" title="declared primary key">key</span>{% endif %}
+            {% if column.type %}<span class="type-pill">{{ column.type }}</span>{% endif %}
+        </th>
+        <td class="kv-value">{% if value is none or value == '' %}<em>null</em>{% else %}{{ value }}{% endif %}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<p class="muted"><em>(no columns)</em></p>
+{% endif %}
+{% endmacro %}

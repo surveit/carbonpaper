@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_kv_table.html" import kv_table %}
 {% block title %}Review queue · {{ stage_id }} · {{ run_id }}{% endblock %}
 
 {% block header_extra %}
@@ -31,9 +32,13 @@
 {% if stage_def.queue and stage_def.queue.reviewer_instructions %}
 <details class="reviewer-instructions" open>
     <summary>Reviewer instructions</summary>
-    <pre class="instructions">{{ stage_def.queue.reviewer_instructions }}</pre>
+    <p class="instructions-text">{{ stage_def.queue.reviewer_instructions }}</p>
 </details>
 {% endif %}
+
+{% if schema_note %}<p class="queue-note">{{ schema_note }}</p>{% endif %}
+{% if identity_note and identity_note != schema_note %}<p class="queue-note">{{ identity_note }}</p>{% endif %}
+{% if lineage_note %}<p class="queue-note">{{ lineage_note }}</p>{% endif %}
 
 {% if definition_drift %}
 <p class="definition-drift"><strong>⚠ This queue cannot be reviewed.</strong> {{ definition_drift }}</p>
@@ -45,18 +50,21 @@
 {% for item in items %}
 <article class="queue-card {% if item.prior_decision %}decided decided-{{ item.prior_decision.verdict }}{% endif %}"
          data-input-fingerprint="{{ item.input_fingerprint }}">
-    {% if item.row.get('entity_id') or item.row.get('query_id') or item.row.get('benchmark_id') %}
+    {% if item.identity or item.lineage_url %}
     <header>
-        {% if item.row.get('entity_id') %}<code>{{ item.row.entity_id }}</code>{% endif %}
-        {% if item.row.get('query_id') %}· <code>{{ item.row.query_id }}</code>{% endif %}
-        {% if item.row.get('benchmark_id') %}· <code>{{ item.row.benchmark_id }}</code>{% endif %}
+        {% for cell in item.identity %}
+        <span class="identity-cell">{{ cell.column }} <code>{{ cell.value }}</code></span>
+        {% endfor %}
+        {% if item.lineage_url %}
+        <a class="lineage-link" href="{{ item.lineage_url }}">lineage of the upstream row →</a>
+        {% endif %}
     </header>
     {% endif %}
     {% if item.prior_decision %}
     <p class="prior-decision">
         Recorded: <strong>{{ item.prior_decision.verdict }}</strong>
         {% for column, value in item.prior_decision.reviewed_values.items() %}
-          · {{ column }} = <code>{{ value }}</code>
+          · {{ column }} = {% if value is none %}<em>null</em>{% else %}<code>{{ value }}</code>{% endif %}
         {% endfor %}
         {% if item.prior_decision.review_notes %}
         · notes: <em>{{ item.prior_decision.review_notes }}</em>
@@ -65,19 +73,26 @@
     </p>
     {% endif %}
 
+    <details class="queued-row" open>
+        <summary>Queued row</summary>
+        {{ kv_table(queued_columns, item.row) }}
+    </details>
+
     <form class="review-form">
         <div class="reviewed-fields">
         {% for field in reviewed_fields %}
         {% set field_id = 'rf-' ~ item.input_fingerprint ~ '-' ~ field.target %}
         {# The AI value is what the model produced; `prefill` is what the field opens
-           with — the reviewer's own recorded value once this row has been decided. #}
-        {# `ai_text` is both what Approve posts and what this card SHOWS, so the
-           label and the control never spell the same value two ways. #}
+           with — the reviewer's own recorded value once this row has been decided —
+           and is also what the closed field displays, so an untouched submit records
+           exactly the value the reviewer was shown. #}
         {% set ai_text = item.ai_text.get(field.target) %}
         {% set prefill = item.prefill.get(field.target) %}
+        {% set prefill_text = '' if prefill is none else prefill %}
         {% set recorded = item.prior_decision.reviewed_values.get(field.target) if item.prior_decision else none %}
         <div class="reviewed-field">
-            <label for="{{ field_id }}">{{ field.target }}</label>
+            <label for="{{ field_id }}"
+                   {% if field.description %}title="{{ field.description }}"{% endif %}>{{ field.target }}</label>
             <span class="ai-value">AI <code>{{ field.source }}</code>:
                 <strong>{% if ai_text is none or ai_text == '' %}<em>null</em>{% else %}{{ ai_text }}{% endif %}</strong>
                 {% if item.prior_decision %}
@@ -85,43 +100,48 @@
                     <strong>{% if recorded is none %}<em>null</em>{% else %}{{ recorded }}{% endif %}</strong></span>
                 {% endif %}
             </span>
-            {% if field.control == 'select' %}
-            <select id="{{ field_id }}" data-target="{{ field.target }}" data-ai-value="{{ ai_text }}"
-                    data-prefill="{{ '' if prefill is none else prefill }}">
-                {% if field.nullable or prefill is none %}
-                <option value="" {% if prefill is none %}selected{% endif %}>— unset —</option>
+            <div class="field-control">
+                <button type="button" class="value-display" data-edit-for="{{ field_id }}"
+                        aria-controls="{{ field_id }}">
+                    <span class="current-value">{% if prefill is none %}<em>unset</em>{% else %}{{ prefill }}{% endif %}</span>
+                    <span class="edit-hint">change</span>
+                </button>
+                <span class="field-editor" hidden>
+                {% if field.control == 'select' %}
+                <select id="{{ field_id }}" data-target="{{ field.target }}"
+                        data-prefill="{{ prefill_text }}">
+                    {% if field.nullable or prefill is none %}
+                    <option value="" {% if prefill is none %}selected{% endif %}>— unset —</option>
+                    {% endif %}
+                    {% for option in field.options %}
+                    <option value="{{ option }}" {% if option == prefill %}selected{% endif %}>{{ option }}</option>
+                    {% endfor %}
+                </select>
+                {% else %}
+                <input type="{{ field.control }}" id="{{ field_id }}" data-target="{{ field.target }}"
+                       data-prefill="{{ prefill_text }}"
+                       value="{{ prefill_text }}"
+                       {% if field.step %}step="{{ field.step }}"{% endif %}
+                       {% if field.minimum is not none %}min="{{ field.minimum }}"{% endif %}
+                       {% if field.maximum is not none %}max="{{ field.maximum }}"{% endif %}>
                 {% endif %}
-                {% for option in field.options %}
-                <option value="{{ option }}" {% if option == prefill %}selected{% endif %}>{{ option }}</option>
-                {% endfor %}
-            </select>
-            {% else %}
-            <input type="{{ field.control }}" id="{{ field_id }}" data-target="{{ field.target }}"
-                   data-ai-value="{{ ai_text }}"
-                   data-prefill="{{ '' if prefill is none else prefill }}"
-                   value="{{ '' if prefill is none else prefill }}"
-                   {% if field.step %}step="{{ field.step }}"{% endif %}
-                   {% if field.minimum is not none %}min="{{ field.minimum }}"{% endif %}
-                   {% if field.maximum is not none %}max="{{ field.maximum }}"{% endif %}>
-            {% endif %}
+                <button type="button" class="revert-edit" data-revert-for="{{ field_id }}">revert</button>
+                </span>
+            </div>
         </div>
         {% endfor %}
         </div>
         {% if review_notes_column %}
         <label class="review-notes">
-            <span>{{ review_notes_column }}</span>
-            <textarea rows="2" data-role="notes" placeholder="why you changed it (optional)">{{ item.prior_decision.review_notes if item.prior_decision and item.prior_decision.review_notes else '' }}</textarea>
+            <span>{{ review_notes_label }}</span>
+            <textarea rows="2" data-role="notes"
+                      placeholder="Include any reasoning or citations for your decision">{{ item.prior_decision.review_notes if item.prior_decision and item.prior_decision.review_notes else '' }}</textarea>
         </label>
         {% endif %}
         <div class="decision-controls">
-            <button type="button" class="btn approve {% if item.prior_decision and item.prior_decision.verdict == 'approve' %}selected{% endif %}" data-action="approve">✓ Approve AI values</button>
-            <button type="submit" class="btn modify {% if item.prior_decision and item.prior_decision.verdict == 'modify' %}selected{% endif %}">Save my values</button>
+            <button type="submit" class="btn primary">Submit</button>
         </div>
     </form>
-    <details class="raw-row">
-        <summary>raw row</summary>
-        <pre>{{ item.row | tojson(indent=2) }}</pre>
-    </details>
 </article>
 {% endfor %}
 </div>
@@ -196,11 +216,31 @@
     window.location.reload();
   }
 
+  // A field is read-only until the reviewer opens it, so an untouched field
+  // submits exactly the value it displayed. Reverting closes it and restores
+  // the prefill, which is that same displayed value.
+  function openEditor(opener) {
+    const cell = opener.closest('.field-control');
+    opener.hidden = true;
+    cell.querySelector('.field-editor').hidden = false;
+    cell.querySelector('[data-target]').focus();
+  }
+
+  function closeEditor(reverter) {
+    const cell = reverter.closest('.field-control');
+    const control = cell.querySelector('[data-target]');
+    control.value = control.dataset.prefill;
+    cell.querySelector('.field-editor').hidden = true;
+    const opener = cell.querySelector('[data-edit-for]');
+    opener.hidden = false;
+    opener.focus();
+  }
+
   document.addEventListener('click', function (ev) {
-    const btn = ev.target.closest('[data-action="approve"]');
-    if (!btn) return;
-    const card = btn.closest('.queue-card');
-    if (card) submitDecision(card, readValues(card, 'aiValue'));
+    const opener = ev.target.closest('[data-edit-for]');
+    if (opener) { openEditor(opener); return; }
+    const reverter = ev.target.closest('[data-revert-for]');
+    if (reverter) closeEditor(reverter);
   });
 
   document.addEventListener('submit', function (ev) {

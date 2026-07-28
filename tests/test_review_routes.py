@@ -651,9 +651,12 @@ def test_queue_page_renders_one_prefilled_field_per_reviewed_column(tmp_path, mo
 
     assert 'data-target="human_score"' in html
     assert 'type="number"' in html
-    assert 'data-ai-value="1"' in html and 'value="1"' in html  # the mocked AI score
+    assert 'data-prefill="1"' in html and 'value="1"' in html  # the mocked AI score
     assert "modified_score" not in html  # the hardcoded -2..2 score field is gone
     assert 'data-action="reject"' not in html
+    # One Submit; the verdict is derived, so no button names one.
+    assert 'data-action="approve"' not in html
+    assert html.count(">Submit<") == html.count("<article class=\"queue-card")
 
 
 def test_queue_page_gates_the_items_behind_the_reviewer_name(tmp_path, monkeypatch):
@@ -691,7 +694,8 @@ def test_queue_page_prefills_a_decided_row_from_the_recorded_value(tmp_path, mon
     decided = html[html.index(f'data-input-fingerprint="{first_fp}"'):]
     decided = decided[:decided.index("</article>")]
     assert 'value="99"' in decided          # the field opens on the recorded value
-    assert 'data-ai-value="1"' in decided   # Approve still posts the AI value
+    # The AI value stays visible beside it, labelled as the AI's.
+    assert "AI <code>score</code>: <strong>1</strong>" in " ".join(decided.split())
     assert "you recorded" in decided
 
 
@@ -748,7 +752,8 @@ def test_a_null_bool_ai_value_is_never_rendered_as_false(tmp_path, monkeypatch):
     html = TestClient(app).get(f"/project/queue_route_bool_null/runs/{run_id}/queue/review").text
 
     assert 'type="checkbox"' not in html
-    assert 'data-ai-value=""' in html      # the null AI value, not "false"
+    # the null AI value shown as null, not as "false"
+    assert "AI <code>flag</code>: <strong><em>null</em></strong>" in " ".join(html.split())
     assert "— unset —" in html
     assert _find_selected_option(html, "human_flag") == ""
 
@@ -772,7 +777,8 @@ def test_a_bool_select_opens_on_the_recorded_value_of_a_decided_row(tmp_path, mo
     html = TestClient(app).get(f"/project/{project}/runs/{run_id}/queue/review").text
 
     assert _find_selected_option(html, "human_flag") == "true"
-    assert 'data-ai-value="false"' in html  # Approve still posts what the model said
+    # what the model said stays visible beside the recorded value
+    assert "AI <code>flag</code>: <strong>false</strong>" in " ".join(html.split())
     # The labels spell the value the way the options do — never a python repr
     # sitting beside a select that reads `true`.
     assert "you recorded <strong>true</strong>" in " ".join(html.split())
@@ -1195,3 +1201,216 @@ def test_a_never_opened_field_carries_the_value_it_displays(tmp_path, monkeypatc
     prefill = re.search(r'\sdata-prefill="([^"]*)"', field.group(0))
     assert prefill is not None
     assert prefill.group(1) == _find_input_value(html, "human_score") == "1"
+
+
+# ── 18. The card renders the queued row itself, described and linked ─────────
+#
+# The reviewable material is the snapshot row. Everything the card says about a
+# column comes from the declared schema, and nothing on the page names a column
+# this test's workflow did not declare.
+
+
+def _described_review_stage():
+    """The queue's input edge describes the columns it queues, and its output
+    schema describes what the reviewer writes back."""
+    return {"id": "review", "name": "Review labels", "type": "human_review_queue",
+            "inputs": [{"id": "label", "schema": {
+                "columns": [
+                    {"name": "id", "type": "str"},
+                    {"name": "score", "type": "int"},
+                    {"name": "label", "type": "str",
+                     "description": "high when the score exceeds one"}],
+                "primary_key": ["id"]}}],
+            "output_schema": {"columns": [
+                {"name": "id", "type": "str"}, {"name": "score", "type": "int"},
+                {"name": "label", "type": "str"},
+                {"name": "human_label", "type": "str",
+                 "description": "the label after review"},
+                {"name": "decision", "type": "str"},
+                {"name": "reviewer_id", "type": "str"},
+                {"name": "reviewed_at", "type": "str"},
+                {"name": "review_notes", "type": "str", "nullable": True}]},
+            "queue": {**queue_columns(source="label", target="human_label"),
+                      "reviewer_instructions": "Confirm the label against the score."}}
+
+
+def _described_queue_html(tmp_path, monkeypatch, project):
+    project_dir = tmp_path / project
+    run_id, fingerprints = _build_and_halt_queue_over(
+        tmp_path, monkeypatch, project,
+        [_e2e_load_stage(project_dir), _labelled_row_function_stage(),
+         _described_review_stage()],
+    )
+    html = TestClient(app).get(f"/project/{project}/runs/{run_id}/queue/review").text
+    return run_id, fingerprints, html
+
+
+def _first_card(html):
+    card = html[html.index('<article class="queue-card'):]
+    return card[:card.index("</article>")]
+
+
+def test_the_card_renders_the_queued_row_as_a_key_value_table(tmp_path, monkeypatch):
+    """Every queued column, labelled by its own name — no `<pre>` JSON dump and
+    no column name this workflow did not declare."""
+    _run_id, _fingerprints, html = _described_queue_html(
+        tmp_path, monkeypatch, "queue_route_kv_table")
+
+    card = _first_card(html)
+    assert '<table class="kv">' in card
+    for column in ("id", "score", "label"):
+        assert f"<code>{column}</code>" in card
+    assert "<pre>" not in card
+    for guessed in ("entity_id", "query_id", "benchmark_id", "quote", "benchmark_text"):
+        assert guessed not in html
+
+
+def test_a_declared_description_becomes_the_column_tooltip(tmp_path, monkeypatch):
+    """And a column with no declared description gets NO tooltip — an absent
+    description is stated by absence, never invented."""
+    _run_id, _fingerprints, html = _described_queue_html(
+        tmp_path, monkeypatch, "queue_route_kv_tooltip")
+
+    card = _first_card(html)
+    assert 'title="high when the score exceeds one"' in card
+    described = re.search(r'<th[^>]*title="[^"]*"[^>]*>\s*<code>(\w+)</code>', card)
+    assert described is not None and described.group(1) == "label"
+
+
+def test_the_reviewed_field_label_carries_the_declared_description(tmp_path, monkeypatch):
+    """The tooltip on `human_label` comes from the TARGET column's declared
+    description in `output_schema`."""
+    _run_id, _fingerprints, html = _described_queue_html(
+        tmp_path, monkeypatch, "queue_route_field_tooltip")
+
+    label = re.search(r'<label[^>]*for="[^"]*human_label"[^>]*>', html, re.DOTALL)
+    assert label is not None
+    assert 'title="the label after review"' in label.group(0)
+
+
+def test_a_reviewed_field_falls_back_to_the_source_column_description(tmp_path, monkeypatch):
+    """With no `output_schema` the target column is the source column, so the
+    tooltip is the SOURCE column's declared description."""
+    project = "queue_route_field_tooltip_source"
+    project_dir = tmp_path / project
+    run_id, _fingerprints = _build_and_halt_queue_over(
+        tmp_path, monkeypatch, project,
+        [_e2e_load_stage(project_dir), _labelled_row_function_stage(), _review_labels_stage()],
+    )
+
+    html = TestClient(app).get(f"/project/{project}/runs/{run_id}/queue/review").text
+
+    label = re.search(r'<label[^>]*for="[^"]*human_label"[^>]*>', html, re.DOTALL)
+    assert label is not None
+    assert 'title="high when the score exceeds one"' in label.group(0)
+
+
+def test_a_column_with_no_declared_description_carries_no_tooltip(tmp_path, monkeypatch):
+    project = "queue_route_no_tooltip"
+    project_dir = tmp_path / project
+    run_id, _fingerprints = _build_and_halt_queue_over(
+        tmp_path, monkeypatch, project,
+        [_e2e_load_stage(project_dir), _no_primary_key_review_stage()],
+    )
+
+    html = TestClient(app).get(f"/project/{project}/runs/{run_id}/queue/review").text
+
+    assert "title=" not in _first_card(html)
+
+
+def test_the_card_header_carries_the_declared_identity_and_the_lineage_link(tmp_path, monkeypatch):
+    run_id, fingerprints, html = _described_queue_html(
+        tmp_path, monkeypatch, "queue_route_card_header")
+
+    card = _first_card(html)
+    assert '<span class="identity-cell">id <code>' in card
+    assert (f'href="/project/queue_route_card_header/runs/{run_id}/stage/label/row/'
+            f'{fingerprints["row_ordinals"][0]}/trace/view"') in card
+
+
+def test_a_stage_with_no_primary_key_states_it_instead_of_a_card_identity(tmp_path, monkeypatch):
+    project = "queue_route_identity_note"
+    project_dir = tmp_path / project
+    run_id, _fingerprints = _build_and_halt_queue_over(
+        tmp_path, monkeypatch, project,
+        [_e2e_load_stage(project_dir), _no_primary_key_review_stage()],
+    )
+
+    html = TestClient(app).get(f"/project/{project}/runs/{run_id}/queue/review").text
+
+    assert review_routes.NO_PRIMARY_KEY_NOTE.replace("'", "&#39;") in html
+    assert 'class="identity-cell"' not in html
+
+
+def test_the_reviewer_instructions_are_not_rendered_as_a_code_block(tmp_path, monkeypatch):
+    """They are the reviewer's brief, so they read as body text — the muted
+    monospace `pre.instructions` styling belongs to the raw stage handle."""
+    _run_id, _fingerprints, html = _described_queue_html(
+        tmp_path, monkeypatch, "queue_route_instructions")
+
+    assert '<pre class="instructions">' not in html
+    assert '<p class="instructions-text">Confirm the label against the score.</p>' in html
+
+
+def test_the_notes_box_is_labelled_and_invites_notes_on_any_decision(tmp_path, monkeypatch):
+    """The notes column name is spelled out as a label, and nothing in the copy
+    ties a note to a change — notes are as valid on an approval."""
+    _project_dir, run_id, _run_dir, _snapshot, _fingerprints = _build_and_halt(tmp_path, monkeypatch)
+
+    html = TestClient(app).get(f"/project/{PROJECT}/runs/{run_id}/queue/review").text
+
+    assert "<span>Review notes</span>" in html  # the declared column is `review_notes`
+    assert 'placeholder="Include any reasoning or citations for your decision"' in html
+    assert "why you changed it" not in html
+
+
+def test_the_notes_label_prefers_the_declared_description(tmp_path, monkeypatch):
+    """With no declared description the column name is spelled out — an
+    undeclared `reviewer_notes` reads "Reviewer notes", never a hardcoded one."""
+    stage_def = Stage.model_validate(_described_review_stage())
+    assert stage_def.output_schema is not None
+    assert review_routes._resolve_notes_label(stage_def, "review_notes") == "Review notes"
+    assert review_routes._resolve_notes_label(stage_def, "reviewer_notes") == "Reviewer notes"
+
+    described = stage_def.model_copy(update={"output_schema": stage_def.output_schema.model_copy(
+        update={"columns": [
+            column.model_copy(update={"description": "Why you decided as you did"})
+            if column.name == "review_notes" else column
+            for column in stage_def.output_schema.columns]})})
+    assert review_routes._resolve_notes_label(described, "review_notes") == (
+        "Why you decided as you did")
+
+
+def test_a_reviewed_value_is_read_only_until_its_edit_button_is_pressed(tmp_path, monkeypatch):
+    """Both halves, as with the reviewer-name gate: the editor carries `hidden`,
+    AND the stylesheet answers it. Without the second half the editor's own
+    `display` beats the UA rule and every field is editable on load — markup-only
+    assertions pass while the affordance is inert. The opener is a real
+    `<button>`, which the platform activates on Enter and Space."""
+    _project_dir, run_id, _run_dir, _snapshot, _fingerprints = _build_and_halt(tmp_path, monkeypatch)
+
+    html = TestClient(app).get(f"/project/{PROJECT}/runs/{run_id}/queue/review").text
+
+    editor = re.search(r'<span class="field-editor"[^>]*>', html)
+    assert editor is not None and re.search(r"\bhidden\b", editor.group(0))
+    opener = re.search(r'<button type="button" class="value-display"[^>]*>', html)
+    assert opener is not None and "data-edit-for=" in opener.group(0)
+    assert 'class="revert-edit"' in html
+
+    stylesheet = (Path(app_package.__file__).parent / "static" / "style.css").read_text(
+        encoding="utf-8"
+    )
+    assert re.search(r"\.field-control \[hidden\]\s*\{[^}]*display:\s*none", stylesheet)
+
+
+def test_the_closed_field_displays_exactly_what_it_will_submit(tmp_path, monkeypatch):
+    """The read-only display and `data-prefill` are the same text, so a field
+    nobody opened submits the value the reviewer was shown."""
+    _project_dir, run_id, _run_dir, _snapshot, _fingerprints = _build_and_halt(tmp_path, monkeypatch)
+
+    html = TestClient(app).get(f"/project/{PROJECT}/runs/{run_id}/queue/review").text
+
+    card = _first_card(html)
+    shown = re.search(r'<span class="current-value">(.*?)</span>', card, re.DOTALL)
+    assert shown is not None and shown.group(1).strip() == "1"
+    assert 'data-prefill="1"' in card

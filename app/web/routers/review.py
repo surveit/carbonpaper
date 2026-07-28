@@ -63,6 +63,9 @@ class _ReviewedField:
     minimum: float | None
     maximum: float | None
     options: list[str] | None
+    # The declared description behind the field's tooltip; None where neither
+    # the target nor the source column declares one — never invented.
+    description: str | None
 
 
 @dataclass(frozen=True)
@@ -145,6 +148,10 @@ async def queue_page(request: Request, project: str, run_id: str, stage_id: str)
             "definition_drift": drift,
             "reviewed_fields": fields,
             "review_notes_column": queue.review_notes_column,
+            "review_notes_label": (
+                None if queue.review_notes_column is None
+                else _resolve_notes_label(stage_def, queue.review_notes_column)
+            ),
             "queued_columns": described.columns,
             "schema_note": described.schema_note,
             "identity_note": described.identity_note,
@@ -466,9 +473,33 @@ def _as_optional_option_text(value: object) -> str | None:
 
 def _build_reviewed_fields(stage_def: Stage, queue: QueueConfig) -> list[_ReviewedField]:
     return [
-        _build_reviewed_field(source, target, _require_reviewed_column(stage_def, source, target))
+        _build_reviewed_field(
+            source,
+            target,
+            _require_reviewed_column(stage_def, source, target),
+            _resolve_source_description(stage_def, source),
+        )
         for source, target in queue.reviewed_columns.items()
     ]
+
+
+def _resolve_source_description(stage_def: Stage, source: str) -> str | None:
+    input_schema = resolve_input_schema(stage_def, 0) if stage_def.inputs else None
+    column = input_schema.column_for_name(source) if input_schema else None
+    return None if column is None else column.description
+
+
+def _resolve_notes_label(stage_def: Stage, column: str) -> str:
+    """The reviewer-notes box's visible label. The notes column is written by
+    this stage, so only its `output_schema` can describe it; with no
+    description the column name is spelled out as a sentence."""
+    declared = (
+        stage_def.output_schema.column_for_name(column)
+        if stage_def.output_schema is not None else None
+    )
+    if declared is not None and declared.description:
+        return declared.description
+    return column.replace("_", " ").capitalize()
 
 
 # The HTML input `type` each scalar column type is entered through; a column
@@ -485,7 +516,9 @@ _STEP_BY_COLUMN_TYPE: dict[str, str] = {"int": "1", "float": "any"}
 _OPTIONS_BY_COLUMN_TYPE: dict[str, list[str]] = {"bool": ["true", "false"]}
 
 
-def _build_reviewed_field(source: str, target: str, column: Column) -> _ReviewedField:
+def _build_reviewed_field(
+    source: str, target: str, column: Column, source_description: str | None
+) -> _ReviewedField:
     control = "select" if column.enum is not None else _CONTROL_BY_COLUMN_TYPE.get(column.type)
     if control is None:
         raise HTTPException(
@@ -501,6 +534,7 @@ def _build_reviewed_field(source: str, target: str, column: Column) -> _Reviewed
         source=source, target=target, control=control, nullable=column.nullable,
         step=_STEP_BY_COLUMN_TYPE.get(column.type), minimum=low, maximum=high,
         options=None if options is None else list(options),
+        description=column.description or source_description,
     )
 
 
@@ -624,7 +658,7 @@ def _build_review_item(
     displayed_row = {str(k): display_cell(v) for k, v in row.items()}
     return {
         "input_fingerprint": input_fingerprint,
-        "row": displayed_row,
+        "row": {name: _as_display_text(value) for name, value in displayed_row.items()},
         "identity": [
             _IdentityCell(column=k, value=str(displayed_row[k])) for k in primary_key
         ],
@@ -638,8 +672,9 @@ def _build_review_item(
 def _build_ai_texts(
     fields: list[_ReviewedField], displayed_row: dict[str, Any]
 ) -> dict[str, str]:
-    """The AI value per field as the text `Approve` posts for it — blank for a
-    null, so an absent value is submitted as absent rather than as a value."""
+    """The upstream value per field as the card displays it beside the control —
+    blank for a null, which the page shows as an explicit null rather than as a
+    value of the column's type."""
     return {
         field.target: (
             "" if (ai := _blank_to_none(displayed_row.get(field.source))) is None
@@ -696,6 +731,12 @@ def _as_control_value(control: str, value: object) -> object:
     except ValueError:
         return value
     return moment.date().isoformat() if date_only else moment.isoformat()
+
+
+def _as_display_text(value: object) -> str:
+    """A queued value as the card prints it. A bool takes the same spelling its
+    control's options use, so one value never reads two ways on one card."""
+    return "" if value is None else _as_option_text(value)
 
 
 def _as_option_text(value: object) -> str:
