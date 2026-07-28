@@ -13,8 +13,12 @@ from app.services.loader import load_workflow
 from test_run_stage_views_pinned_version import LOAD_ID, _load_stage, _run_once
 
 SCORE_ID = "score"
+LABELS_ID = "labels"
+MERGE_ID = "merge"
 
 _COLUMNS = [{"name": "name", "type": "str"}, {"name": "val", "type": "int"}]
+_SCORED = [*_COLUMNS, {"name": "score", "type": "int"}]
+_LABELS = [{"name": "name", "type": "str"}, {"name": "label", "type": "str"}]
 
 
 def _score_stage() -> dict:
@@ -23,7 +27,27 @@ def _score_stage() -> dict:
         "inputs": [{"id": LOAD_ID, "schema": {"columns": _COLUMNS}}],
         "function": {"kind": "inline",
                      "code": 'def transform(row):\n    return {**row, "score": row["val"] * 2}\n'},
-        "output_schema": {"columns": [*_COLUMNS, {"name": "score", "type": "int"}]},
+        "output_schema": {"columns": _SCORED},
+    }
+
+
+def _labels_stage(data_path: Path) -> dict:
+    return {
+        "id": LABELS_ID, "name": "Load labels", "type": "input_data",
+        "connector": {"kind": "file", "params": {"path": str(data_path), "format": "csv"}},
+        "output_schema": {"columns": _LABELS},
+    }
+
+
+def _merge_stage() -> dict:
+    """Two inputs: `trace_row` cannot cross fan-in on row position, so a row of
+    this stage has no complete provenance chain (recorded lineage is issue #58)."""
+    return {
+        "id": MERGE_ID, "name": "Merge labels", "type": "join",
+        "inputs": [{"id": SCORE_ID, "schema": {"columns": _SCORED}},
+                   {"id": LABELS_ID, "schema": {"columns": _LABELS}}],
+        "join": {"type": "inner", "keys": [{"left": "name", "right": "name"}]},
+        "output_schema": {"columns": [*_SCORED, {"name": "label", "type": "str"}]},
     }
 
 
@@ -37,6 +61,12 @@ def exporter(tmp_path: Path) -> RowTraceExporter:
         json.dumps(_load_stage(data)), encoding="utf-8")
     (project_dir / "compiled" / "02_score.json").write_text(
         json.dumps(_score_stage()), encoding="utf-8")
+    labels = project_dir / "labels.csv"
+    labels.write_text("name,label\na,first\nb,second\n", encoding="utf-8")
+    (project_dir / "compiled" / "03_labels.json").write_text(
+        json.dumps(_labels_stage(labels)), encoding="utf-8")
+    (project_dir / "compiled" / "04_merge.json").write_text(
+        json.dumps(_merge_stage()), encoding="utf-8")
 
     run_dir = project_dir / "runs" / _run_once(project_dir)
     output_dir = run_dir / "artifacts"
@@ -79,6 +109,24 @@ def test_raises_rather_than_returning_a_dead_link(exporter):
     with pytest.raises(TraceUnavailableError) as excinfo:
         exporter.export_row_trace(SCORE_ID, 9999, exporter.output_dir / "index.html")
     assert "9999" in str(excinfo.value)
+
+
+def test_raises_for_a_row_whose_lineage_crosses_a_fan_in(exporter):
+    """The row exists and renders fine; what it lacks is a chain reaching the
+    source. An href here would advertise provenance the page cannot show."""
+    with pytest.raises(TraceUnavailableError) as excinfo:
+        exporter.export_row_trace(MERGE_ID, 0, exporter.output_dir / "index.html")
+    assert MERGE_ID in str(excinfo.value)
+    assert not (exporter.output_dir / "_traces" / MERGE_ID).exists()
+
+
+def test_rejects_a_from_file_outside_the_bundle(exporter, tmp_path):
+    """An href from outside the bundle climbs out of it: it resolves here and
+    breaks the moment the bundle is copied."""
+    outside = tmp_path / "elsewhere" / "index.html"
+    with pytest.raises(ValueError) as excinfo:
+        exporter.export_row_trace(SCORE_ID, 0, outside)
+    assert "elsewhere" in str(excinfo.value) and str(exporter.output_dir) in str(excinfo.value)
 
 
 def test_rejects_a_negative_ordinal(exporter):
