@@ -59,25 +59,25 @@ MakeRowMapper = Callable[[Stage, RunContext, pd.DataFrame], RowMapper]
 
 # An LLMTransformHandler's batched execution function: the stage's inputs, the
 # run, and the driver's parallelism. It computes one raw row per input row it is
-# given — markers still attached, nothing stripped or projected — and knows
+# given — internal columns still attached, nothing stripped or projected — and knows
 # nothing about caching: which rows it is asked about is the shape's decision
 # (see `_run_batched`).
 RunBatches = Callable[[Stage, dict[str, pd.DataFrame], RunContext, int], list["Row"]]
 
-# Sentinel column a row mapper attaches to a row it could not produce (e.g. an
+# Internal column a row mapper attaches to a row it could not produce (e.g. an
 # llm_transform whose generation failed). The row driver collects these off the
 # assembled frame so the runner can surface them as error-severity output issues
 # — a failed row is a reported error, not a silently dropped column.
 ROW_ERROR_KEY = "_error"
 
-# Sentinel column carrying a row's token/cost usage dict (an llm_transform
+# Internal column carrying a row's token/cost usage dict (an llm_transform
 # attaches one per row). It is summed onto the stage's StageContribution and the
 # column is then stripped, so usage never reaches stage output. The row driver
 # does both for the stage it maps; a handler that assembles its own frame instead
 # of being row-driven (llm_transform's batched path) does both for itself.
 ROW_USAGE_KEY = "_usage"
 
-# Sentinel column a row mapper attaches to a row whose value could not be
+# Internal column a row mapper attaches to a row whose value could not be
 # produced synchronously: the value does not exist yet, so the run cannot be
 # carried past this stage. Distinct from ROW_ERROR_KEY, which marks a row that
 # FAILED and lets the run continue. The driver never interprets it — a mapper
@@ -85,9 +85,9 @@ ROW_USAGE_KEY = "_usage"
 ROW_DEFERRED_KEY = "_deferred"
 
 
-class _RowMarker(NamedTuple):
-    """One sentinel column a mapper may attach, and what the driver does about
-    it. Both behaviors are stated per key so a new marker cannot be given one
+class _InternalRowColumn(NamedTuple):
+    """One internal column a mapper may attach, and what the driver does about
+    it. Both behaviors are stated per column so a new one cannot be given one
     and silently forgotten the other."""
 
     column: str
@@ -100,12 +100,12 @@ class _RowMarker(NamedTuple):
     blocks_recording: bool
 
 
-# The ONE declaration of the special row keys: `_strip_marker_columns` and
+# The ONE declaration of the internal row columns: `_strip_internal_columns` and
 # `_record_row_output` read the two behaviors off this table.
-_ROW_MARKERS = (
-    _RowMarker(ROW_ERROR_KEY, stripped_from_output=True, blocks_recording=True),
-    _RowMarker(ROW_USAGE_KEY, stripped_from_output=True, blocks_recording=False),
-    _RowMarker(ROW_DEFERRED_KEY, stripped_from_output=True, blocks_recording=True),
+_INTERNAL_ROW_COLUMNS = (
+    _InternalRowColumn(ROW_ERROR_KEY, stripped_from_output=True, blocks_recording=True),
+    _InternalRowColumn(ROW_USAGE_KEY, stripped_from_output=True, blocks_recording=False),
+    _InternalRowColumn(ROW_DEFERRED_KEY, stripped_from_output=True, blocks_recording=True),
 )
 
 
@@ -115,13 +115,13 @@ class PostMapRowMapper(Protocol):
 
     `make_mapper` may return a plain function — one row in, one row out — or an
     object of this shape, which additionally gets `finish_mapped_rows` once the
-    assembled frame exists, with every marker column still on it. The two halves
-    then share whatever per-execution state the object holds, instead of needing
-    a channel outside the mapper to pass it through.
+    assembled frame exists, with every internal column still on it. The two
+    halves then share whatever per-execution state the object holds, instead of
+    needing a channel outside the mapper to pass it through.
 
     `finish_mapped_rows` runs on the assembled frame — one row per input row —
-    and before the driver strips the markers, so it is the last step that sees a
-    marker column at all. It is handed the stage's `StageContribution` to report
+    and before the driver strips the internal columns, so it is the last step
+    that sees one at all. It is handed the stage's `StageContribution` to report
     onto — the manifest fields the mapper owns — and may raise, which aborts the
     stage."""
 
@@ -402,15 +402,15 @@ def _find_cached_row(caching: _RowCaching, input_row: Row) -> Row | None:
 
 
 def _record_row_output(caching: _RowCaching, input_row: Row, output_row: Row) -> None:
-    """Pin one computed row, unless the run cannot write or a marker on the row
-    says it is not an output the stage produced. No marker is ever part of the
-    recorded row, so a replayed row reports no spend."""
+    """Pin one computed row, unless the run cannot write or an internal column on
+    the row says it is not an output the stage produced. No internal column is
+    ever part of the recorded row, so a replayed row reports no spend."""
     if caching.writer is None:
         return
     if any(
-        output_row.get(marker.column) is not None
-        for marker in _ROW_MARKERS
-        if marker.blocks_recording
+        output_row.get(internal.column) is not None
+        for internal in _INTERNAL_ROW_COLUMNS
+        if internal.blocks_recording
     ):
         return
     caching.writer.record(
@@ -419,13 +419,13 @@ def _record_row_output(caching: _RowCaching, input_row: Row, output_row: Row) ->
         stage_fingerprint=caching.stage_fingerprint,
         input_fingerprint=compute_row_fingerprint(input_row),
         input_row=input_row,
-        output_row=_without_row_markers(output_row),
+        output_row=_without_internal_columns(output_row),
     )
 
 
-def _without_row_markers(row: Row) -> Row:
-    markers = {marker.column for marker in _ROW_MARKERS}
-    return {key: value for key, value in row.items() if key not in markers}
+def _without_internal_columns(row: Row) -> Row:
+    internal = {column.column for column in _INTERNAL_ROW_COLUMNS}
+    return {key: value for key, value in row.items() if key not in internal}
 
 
 def _map_row_through_cache(caching: _RowCaching, map_row: RowMapper) -> RowMapper:
@@ -527,10 +527,10 @@ def _finish_batched_frame(
     rows: list[Row], handler: RowMapHandler, stage: Stage
 ) -> pd.DataFrame:
     """The batched path's counterpart of `_finish_mapped_frame`: no mapper, so
-    no post-map step — the markers are collected off the assembled frame, then
-    stripped and the frame projected."""
+    no post-map step — the internal columns are collected off the assembled
+    frame, then stripped and the frame projected."""
     df = pd.DataFrame(rows)
-    return _strip_and_project(df, _collect_row_markers(df), handler, stage)
+    return _strip_and_project(df, _collect_internal_columns(df), handler, stage)
 
 
 def _restore_input_columns_when_nothing_named_them(
@@ -565,24 +565,24 @@ def _finish_mapped_frame(
     ctx: RunContext,
 ) -> pd.DataFrame:
     """Turn the assembled per-row results into the stage's output frame: collect
-    the driver's own markers onto this stage's `StageContribution`, hand the
-    frame back to the mapper where the mapper is a `PostMapRowMapper`, then
-    strip every marker column and — where the handler asks for it — project onto
-    the declared columns.
+    the driver's own internal columns onto this stage's `StageContribution`, hand
+    the frame back to the mapper where the mapper is a `PostMapRowMapper`, then
+    strip every internal column and — where the handler asks for it — project
+    onto the declared columns.
 
     The mapper's window is exact: `finish_mapped_rows` runs before the strip, so
-    it is the last step that sees a marker column at all.
+    it is the last step that sees an internal column at all.
 
     The contribution rides out on the returned frame's `.attrs`; the executor
     merges it into the manifest. Nothing accumulates in the (frozen) context."""
-    contribution = _collect_row_markers(df)
+    contribution = _collect_internal_columns(df)
     if isinstance(map_row, PostMapRowMapper):
         map_row.finish_mapped_rows(stage, df, ctx, contribution)
     return _strip_and_project(df, contribution, handler, stage)
 
 
-def _collect_row_markers(df: pd.DataFrame) -> StageContribution:
-    """This stage's contribution, carrying what the driver reads off the marker
+def _collect_internal_columns(df: pd.DataFrame) -> StageContribution:
+    """This stage's contribution, carrying what the driver reads off the internal
     columns of the assembled frame."""
     contribution = StageContribution()
     _collect_row_errors(df, contribution)
@@ -596,26 +596,29 @@ def _strip_and_project(
     handler: RowMapHandler,
     stage: Stage,
 ) -> pd.DataFrame:
-    """`df` with every marker column dropped and — where the handler asks for it
-    — projected onto the declared columns, carrying `contribution` out on its
+    """`df` with every internal column dropped and — where the handler asks for
+    it — projected onto the declared columns, carrying `contribution` out on its
     `.attrs` for the executor to merge into the manifest.
 
     Strip before project, in that order: the projection reports every column it
-    drops as a user column the stage produced and discarded, and a marker is
-    driver machinery, not that."""
-    df = _strip_marker_columns(df)
+    drops as a user column the stage produced and discarded, and an internal
+    column is driver machinery, not that."""
+    df = _strip_internal_columns(df)
     if handler.project_output_to_declared:
         df = _project_onto_declared_columns(df, stage, contribution)
     df.attrs[CONTRIBUTION_ATTR] = contribution
     return df
 
 
-def _strip_marker_columns(df: pd.DataFrame) -> pd.DataFrame:
-    """Drop every marker `_ROW_MARKERS` declares strippable that is present on
-    `df`. Unconditional — a marker is driver machinery, so it must never reach
-    stage output, whether or not the stage declares an output_schema."""
+def _strip_internal_columns(df: pd.DataFrame) -> pd.DataFrame:
+    """Drop every column `_INTERNAL_ROW_COLUMNS` declares strippable that is
+    present on `df`. Unconditional — an internal column is driver machinery, so
+    it must never reach stage output, whether or not the stage declares an
+    output_schema."""
     stripped = {
-        marker.column for marker in _ROW_MARKERS if marker.stripped_from_output
+        internal.column
+        for internal in _INTERNAL_ROW_COLUMNS
+        if internal.stripped_from_output
     }
     present = [column for column in df.columns if column in stripped]
     return df.drop(columns=present) if present else df
@@ -672,7 +675,7 @@ def _project_onto_declared_columns(
     """Project onto exactly the columns output_schema declares, in declared
     order. Column selection only — row count and order are untouched. Every
     column it drops is recorded on `contribution`, never silently discarded —
-    and each is a user column, since the internal markers were already stripped
+    and each is a user column, since the internal columns were already stripped
     off before this runs."""
     declared = [c.name for c in stage.output_schema.columns] if stage.output_schema else []
     if not declared:

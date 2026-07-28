@@ -45,7 +45,7 @@ cache. The store is `app.core.stage_cache` — `find_recorded_rows` is one bulk 
 execution, keyed by (stage-definition fingerprint, input-row fingerprint), and `record`
 needs the write-capable `StageCache` accessor; the runtime holds that execution's state and
 decides only whether caching applies and whether a result may be recorded. A row carrying
-`_error`/`_deferred` is never recorded and no marker column is ever part of a recorded row,
+`_error`/`_deferred` is never recorded and no internal column is ever part of a recorded row,
 so a hit reports no spend. `Stage.cache: false` declares a stage
 intentionally non-deterministic — no read, no write — and is outside the definition
 fingerprint. There is no per-registration opt-out: `human_review_queue` runs under the same

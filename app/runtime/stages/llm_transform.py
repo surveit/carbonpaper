@@ -107,7 +107,7 @@ def run_llm_batches(
 
     Which rows arrive here is not this function's business: the handler shape
     resolves the stage-result cache and hands over only the rows that must be
-    computed. The rows returned carry their marker columns, un-stripped and
+    computed. The rows returned carry their internal columns, un-stripped and
     unprojected — the shape assembles the stage's output frame from them."""
     llm = stage.llm
     assert llm is not None  # Stage validation: llm_transform carries llm
