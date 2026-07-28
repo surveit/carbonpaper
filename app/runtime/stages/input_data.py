@@ -100,7 +100,20 @@ def _read_geojson(path: Path) -> pd.DataFrame:
 
 
 def _read_xlsx(path: Path, params: dict[str, Any]) -> pd.DataFrame:
-    return pd.read_excel(path, sheet_name=0, header=0, engine="openpyxl")
+    # header_row/first_column are 0-based indices into the sheet as it appears in
+    # Excel; rows above and columns left of them are discarded before parsing.
+    sheet = params.get("sheet_name", 0)  # data-default-ok: 0 is the documented default (first sheet)
+    header_row = int(params.get("header_row", 0))  # data-default-ok: 0 is the documented default (first row)
+    first_column = int(params.get("first_column", 0))  # data-default-ok: 0 is the documented default (first column)
+    frame = pd.read_excel(path, sheet_name=sheet, header=header_row, engine="openpyxl")
+    if not isinstance(frame, pd.DataFrame):
+        raise ValueError(
+            f"xlsx sheet_name={sheet!r} selected multiple sheets; name exactly one "
+            "sheet, or omit sheet_name for the first"
+        )
+    if first_column:
+        frame = frame.iloc[:, first_column:]
+    return frame
 
 
 def _parse_list_cell(cell: Any) -> list[str]:

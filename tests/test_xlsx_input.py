@@ -4,6 +4,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import openpyxl
+import pytest
 
 from app.models.stage import FileFormat
 from app.runtime.stages.input_data import _read_xlsx
@@ -36,3 +37,65 @@ def test_reads_first_sheet_with_header_on_row_one(tmp_path):
     assert len(df) == 2
     assert df.iloc[1]["client"] == "BETA"
     assert df.iloc[0]["income"] == 1000
+
+
+def test_selects_sheet_by_name(tmp_path):
+    path = _write(
+        tmp_path,
+        [["a"], [1]],
+        sheets={"Filings": [["client", "income"], ["ACME", 500]]},
+    )
+    df = _read_xlsx(path, {"sheet_name": "Filings"})
+    assert list(df.columns) == ["client", "income"]
+    assert df.iloc[0]["income"] == 500
+
+
+def test_selects_sheet_by_position(tmp_path):
+    path = _write(
+        tmp_path,
+        [["a"], [1]],
+        sheets={"Second": [["client"], ["ACME"]]},
+    )
+    df = _read_xlsx(path, {"sheet_name": 1})
+    assert list(df.columns) == ["client"]
+
+
+def test_header_row_skips_banner_rows(tmp_path):
+    path = _write(tmp_path, [
+        ["Venezuela lobbying — Q1 2026"],
+        ["Source: Senate LDA"],
+        [],
+        ["client", "income"],
+        ["ACME", 1000],
+    ])
+    df = _read_xlsx(path, {"header_row": 3})
+    assert list(df.columns) == ["client", "income"]
+    assert len(df) == 1
+    assert df.iloc[0]["client"] == "ACME"
+
+
+def test_first_column_skips_leading_columns(tmp_path):
+    path = _write(tmp_path, [
+        ["note", "client", "income"],
+        ["x", "ACME", 1000],
+    ])
+    df = _read_xlsx(path, {"first_column": 1})
+    assert list(df.columns) == ["client", "income"]
+    assert df.iloc[0]["client"] == "ACME"
+
+
+def test_header_row_and_first_column_combine(tmp_path):
+    path = _write(tmp_path, [
+        ["Banner", "", ""],
+        ["note", "client", "income"],
+        ["x", "ACME", 1000],
+    ])
+    df = _read_xlsx(path, {"header_row": 1, "first_column": 1})
+    assert list(df.columns) == ["client", "income"]
+    assert df.iloc[0]["income"] == 1000
+
+
+def test_unknown_sheet_name_raises_naming_the_sheet(tmp_path):
+    path = _write(tmp_path, [["client"], ["ACME"]])
+    with pytest.raises(ValueError, match="Nope"):
+        _read_xlsx(path, {"sheet_name": "Nope"})
