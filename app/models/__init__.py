@@ -115,8 +115,10 @@ NODE_TYPES: dict[str, dict[str, _Any]] = {
         "required": ["kind"],
         "optional": ["params", "refresh", "notes"],
         "notes": (
-            "NEVER include a file path — where data physically lives is not "
-            "part of the methodology; the user binds a file when starting a run. "
+            "When the methodology names a specific static file, params.path may "
+            "carry it and MUST be an ABSOLUTE path; when the source does not say "
+            "where the data lives, omit path — the user binds a file when starting "
+            "a run. Never invent a path. "
             "Takes no inputs, but must still declare its output_schema."
         ),
     },
