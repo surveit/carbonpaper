@@ -8,7 +8,7 @@ from typing import Any, Callable
 
 import pandas as pd
 
-from app.core.errors import TraceRowMismatch, TraceUnavailableError
+from app.core.errors import TraceRowNotStamped, TraceUnavailableError
 from app.models import Stage
 
 from ..context import RunContext
@@ -63,7 +63,7 @@ def _publish_with_traces(
     Re-raise naming the publish stage so the failure says which one to fix."""
     try:
         return fn(*args, output_dir=str(output_dir), trace_links=exporter)
-    except (TraceUnavailableError, TraceRowMismatch) as exc:
+    except (TraceUnavailableError, TraceRowNotStamped) as exc:
         raise type(exc)(f"publish stage {stage_id}: {exc}") from exc
 
 

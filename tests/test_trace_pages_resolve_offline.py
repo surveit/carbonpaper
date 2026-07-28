@@ -11,7 +11,7 @@ REF = re.compile(r"""\b(?:src|href)\s*=\s*["'](?P<url>[^"']+)["']""")
 
 def test_every_asset_a_generated_trace_page_references_exists_on_disk(exporter):  # noqa: F811
     from_file = exporter.output_dir / "index.html"
-    href = exporter.export_row_trace(SCORE_ID, 0, from_file, row=at(0))
+    href = exporter.export_row_trace(SCORE_ID, from_file, row=at(0))
     page = (from_file.parent / href).resolve()
 
     refs = [m.group("url") for m in REF.finditer(page.read_text(encoding="utf-8"))]

@@ -1,13 +1,13 @@
 """Publish is frame-level, so a function that ranks its rows before rendering
 must still link each claim to ITS OWN provenance. The runtime injects each
-row's true on-disk ordinal into the frame, and the exporter refuses an ordinal
-that disagrees with the row it was handed."""
+row's true on-disk ordinal into the frame, and the exporter reads the ordinal
+off the row it is handed — there is no ordinal argument to get wrong."""
 from __future__ import annotations
 
 import pandas as pd
 import pytest
 
-from app.core.errors import TraceRowMismatch
+from app.core.errors import TraceRowNotStamped
 from app.models import Stage
 from app.runtime.context import RunContext
 from app.runtime.stages.publish import handle_publish
@@ -22,25 +22,22 @@ def transform(df, output_dir, trace_links):
     path = pathlib.Path(output_dir) / "index.html"
     cards = []
     for row in df.sort_values("spend", ascending=False).to_dict("records"):
-        href = trace_links.export_row_trace(
-            "enrich", row["trace_row_ordinal"], from_file=path, row=row)
+        href = trace_links.export_row_trace("enrich", from_file=path, row=row)
         cards.append("<li><a href='" + href + "'>" + str(row["name"]) + "</a></li>")
     path.write_text("<ul>" + "".join(cards) + "</ul>", encoding="utf-8")
     return pd.DataFrame({"path": [str(path)]})
 """
 
-# The defect this task fixes: enumerate() over a re-ordered frame.
-_ENUMERATING_PUBLISH_CODE = """
+# The one misuse the signature still permits: a row assembled by the author,
+# which carries no stamp for the exporter to read.
+_HAND_BUILT_ROW_PUBLISH_CODE = """
 import pathlib
 
 def transform(df, output_dir, trace_links):
     path = pathlib.Path(output_dir) / "index.html"
-    cards = []
-    ranked = df.sort_values("spend", ascending=False).to_dict("records")
-    for i, row in enumerate(ranked):
-        href = trace_links.export_row_trace("enrich", i, from_file=path, row=row)
-        cards.append("<li><a href='" + href + "'>" + str(row["name"]) + "</a></li>")
-    path.write_text("<ul>" + "".join(cards) + "</ul>", encoding="utf-8")
+    for row in df.sort_values("spend", ascending=False).to_dict("records"):
+        trace_links.export_row_trace(
+            "enrich", from_file=path, row={"name": row["name"]})
     return pd.DataFrame({"path": [str(path)]})
 """
 
@@ -115,9 +112,11 @@ def test_a_ranked_publish_links_every_card_to_its_own_row(tmp_path, run_dir):
                 assert other not in page, f"card {name} shows {other}'s provenance"
 
 
-def test_a_ranked_publish_that_enumerates_raises(tmp_path, run_dir):
-    with pytest.raises(TraceRowMismatch) as excinfo:
-        handle_publish(_publish_stage(_ENUMERATING_PUBLISH_CODE),
+def test_a_publish_passing_a_hand_built_row_raises(tmp_path, run_dir):
+    """No ordinal argument exists to get wrong, so the last way to lose the
+    ordinal is to render a row the runtime never stamped."""
+    with pytest.raises(TraceRowNotStamped) as excinfo:
+        handle_publish(_publish_stage(_HAND_BUILT_ROW_PUBLISH_CODE),
                        {"enrich": _ENRICHED}, _ctx(tmp_path, run_dir))
     message = str(excinfo.value)
     assert "report" in message, "the failure must name the publish stage to fix"

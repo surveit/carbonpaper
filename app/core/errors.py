@@ -22,8 +22,8 @@ class TraceUnavailableError(Exception):
     """Raised instead of returning an href to a trace page that was not written."""
 
 
-class TraceRowMismatch(Exception):
-    """A trace was requested for an ordinal the caller's own row contradicts."""
+class TraceRowNotStamped(Exception):
+    """A trace was requested for a row lacking the ordinal the runtime stamps on."""
 
 
 class NoVersionToRunError(Exception):

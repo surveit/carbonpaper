@@ -7,12 +7,12 @@ from pathlib import Path
 
 import pytest
 
-from app.core.errors import TraceRowMismatch, TraceUnavailableError
+from app.core.errors import TraceRowNotStamped, TraceUnavailableError
 from app.runtime.trace_links import TRACE_ROW_ORDINAL_COLUMN, RowTraceExporter
 from app.services.loader import load_workflow
 from test_run_stage_views_pinned_version import LOAD_ID, _load_stage, _run_once
 
-def at(row_ordinal: int) -> dict:
+def at(row_ordinal: object) -> dict:
     """The runtime stamps this column onto the frame publish receives; these
     tests drive the exporter directly, so they stamp it themselves."""
     return {TRACE_ROW_ORDINAL_COLUMN: row_ordinal}
@@ -87,25 +87,25 @@ def exporter(tmp_path: Path) -> RowTraceExporter:
 def test_writes_the_page_and_returns_a_relative_href(exporter):
     from_file = exporter.output_dir / "profiles" / "acme.html"
     from_file.parent.mkdir(parents=True, exist_ok=True)
-    href = exporter.export_row_trace(SCORE_ID, 0, from_file, row=at(0))
+    href = exporter.export_row_trace(SCORE_ID, from_file, row=at(0))
     assert href == "../_traces/score/0.html"
     assert (from_file.parent / href).resolve().is_file()
 
 
 def test_the_written_page_makes_no_absolute_requests(exporter):
     from_file = exporter.output_dir / "index.html"
-    href = exporter.export_row_trace(SCORE_ID, 0, from_file, row=at(0))
+    href = exporter.export_row_trace(SCORE_ID, from_file, row=at(0))
     html = (from_file.parent / href).resolve().read_text(encoding="utf-8")
     assert "http://" not in html and "https://" not in html
 
 
 def test_assets_land_beside_the_pages(exporter):
-    exporter.export_row_trace(SCORE_ID, 0, exporter.output_dir / "index.html", row=at(0))
+    exporter.export_row_trace(SCORE_ID, exporter.output_dir / "index.html", row=at(0))
     assert (exporter.output_dir / "_assets/mermaid.min.js").is_file()
 
 
 def test_the_page_reaches_its_assets_from_its_own_depth(exporter):
-    href = exporter.export_row_trace(SCORE_ID, 0, exporter.output_dir / "index.html", row=at(0))
+    href = exporter.export_row_trace(SCORE_ID, exporter.output_dir / "index.html", row=at(0))
     page = (exporter.output_dir / href).resolve()
     prefix = page.read_text(encoding="utf-8").split('href="', 1)[1].split("style.css", 1)[0]
     assert (page.parent / (prefix + "style.css")).resolve().is_file()
@@ -113,7 +113,7 @@ def test_the_page_reaches_its_assets_from_its_own_depth(exporter):
 
 def test_raises_rather_than_returning_a_dead_link(exporter):
     with pytest.raises(TraceUnavailableError) as excinfo:
-        exporter.export_row_trace(SCORE_ID, 9999, exporter.output_dir / "index.html", row=at(9999))
+        exporter.export_row_trace(SCORE_ID, exporter.output_dir / "index.html", row=at(9999))
     assert "9999" in str(excinfo.value)
 
 
@@ -121,7 +121,7 @@ def test_raises_for_a_row_whose_lineage_crosses_a_fan_in(exporter):
     """The row exists and renders fine; what it lacks is a chain reaching the
     source. An href here would advertise provenance the page cannot show."""
     with pytest.raises(TraceUnavailableError) as excinfo:
-        exporter.export_row_trace(MERGE_ID, 0, exporter.output_dir / "index.html", row=at(0))
+        exporter.export_row_trace(MERGE_ID, exporter.output_dir / "index.html", row=at(0))
     assert MERGE_ID in str(excinfo.value)
     assert not (exporter.output_dir / "_traces" / MERGE_ID).exists()
 
@@ -131,42 +131,39 @@ def test_rejects_a_from_file_outside_the_bundle(exporter, tmp_path):
     breaks the moment the bundle is copied."""
     outside = tmp_path / "elsewhere" / "index.html"
     with pytest.raises(ValueError) as excinfo:
-        exporter.export_row_trace(SCORE_ID, 0, outside, row=at(0))
+        exporter.export_row_trace(SCORE_ID, outside, row=at(0))
     assert "elsewhere" in str(excinfo.value) and str(exporter.output_dir) in str(excinfo.value)
 
 
-def test_rejects_an_ordinal_the_row_contradicts(exporter):
-    """The row carries its true position, so a caller that re-derived the
-    ordinal (enumerate over a sorted frame) is caught before a page is written."""
-    with pytest.raises(TraceRowMismatch) as excinfo:
+def test_rejects_a_row_that_carries_no_ordinal(exporter):
+    """The only misuse the signature still permits: a row the author built by
+    hand, or one whose stamp was dropped. No page is written."""
+    with pytest.raises(TraceRowNotStamped) as excinfo:
         exporter.export_row_trace(
-            SCORE_ID, 0, exporter.output_dir / "index.html", row=at(1))
-    assert "0" in str(excinfo.value) and "1" in str(excinfo.value)
+            SCORE_ID, exporter.output_dir / "index.html", row={"name": "a"})
+    assert TRACE_ROW_ORDINAL_COLUMN in str(excinfo.value)
     assert not (exporter.output_dir / "_traces").exists()
 
 
-def test_rejects_a_row_that_carries_no_ordinal(exporter):
-    with pytest.raises(TraceRowMismatch) as excinfo:
-        exporter.export_row_trace(
-            SCORE_ID, 0, exporter.output_dir / "index.html", row={"name": "a"})
-    assert TRACE_ROW_ORDINAL_COLUMN in str(excinfo.value)
-
-
-def test_rejects_a_negative_ordinal(exporter):
-    with pytest.raises(ValueError):
-        exporter.export_row_trace(SCORE_ID, -1, exporter.output_dir / "index.html", row=at(-1))
+def test_rejects_a_mangled_stamp(exporter):
+    """A stamp overwritten with a negative, a string, or a null is not a
+    position the runtime wrote, so it is refused rather than coerced."""
+    for mangled in (-1, "0", None):
+        with pytest.raises(TraceRowNotStamped):
+            exporter.export_row_trace(
+                SCORE_ID, exporter.output_dir / "index.html", row=at(mangled))
 
 
 def test_a_second_call_reuses_the_page_instead_of_rewriting_it(exporter):
     """Many published rows can point at one trace; writing it per call would
     rewrite the same file hundreds of times."""
     from_file = exporter.output_dir / "index.html"
-    a = exporter.export_row_trace(SCORE_ID, 0, from_file, row=at(0))
+    a = exporter.export_row_trace(SCORE_ID, from_file, row=at(0))
     page = (from_file.parent / a).resolve()
 
     # A sentinel survives only if the second call does not rewrite the file.
     page.write_text(page.read_text(encoding="utf-8") + "<!--sentinel-->", encoding="utf-8")
-    b = exporter.export_row_trace(SCORE_ID, 0, from_file, row=at(0))
+    b = exporter.export_row_trace(SCORE_ID, from_file, row=at(0))
 
     assert b == a
     assert "<!--sentinel-->" in page.read_text(encoding="utf-8")
