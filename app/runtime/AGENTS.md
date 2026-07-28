@@ -61,8 +61,10 @@ tail (`GET /project/{p}/runs/{id}/events`) and after-the-fact investigation. The
 stays the source of truth for stage status; this log is only ever the drill-down.
 - **Two levels.** 0 = lifecycle (`run_start`, `stage_start`/`stage_done`,
   `row_start`/`row_ok`/`row_error`); 1 = LLM detail (`llm_prompt`, `llm_thinking`,
-  `llm_text`, `llm_response`, `llm_error`), off by default on the run page and revealed by
-  a client-side filter over the same feed.
+  `llm_text`, `llm_response`, `llm_tool_result`, `llm_error`), off by default on the run
+  page and revealed by a client-side filter over the same feed. `llm_response` is the
+  answer the model submitted; `llm_tool_result` is the verdict that came back on it, and
+  is the only record of a call the tool layer rejected before the tool function ran.
 - **Cached vs computed.** Every terminal row event carries `source`. A row the stage-result
   cache answered emits ONE `row_ok` marked `cached` — no `row_start`, no LLM detail,
   because nothing ran.

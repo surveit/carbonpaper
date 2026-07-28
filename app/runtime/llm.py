@@ -29,6 +29,7 @@ from .run_log import (
     LLM_RESPONSE,
     LLM_TEXT,
     LLM_THINKING,
+    LLM_TOOL_RESULT,
     DetailSink,
     current_detail_sink,
     emit_llm_detail,
@@ -36,13 +37,16 @@ from .run_log import (
 
 # Engine stream-event kind → the detail-log kind surfaced on the run page. The
 # engine speaks in raw block types; the run log speaks in what a reader wants to
-# see: the model's thinking, its free text, and the answer it submitted (a
-# submit_answer tool_call). Kinds absent here (tool_result echoes) are dropped
-# rather than logged as noise.
+# see: the model's thinking, its free text, the answer it submitted (a
+# submit_answer tool_call), and the verdict that came back on that submission.
+# The verdict is logged because a call rejected upstream — against the tool's
+# input schema, before dispatch — never reaches the tool function, so the
+# tool_result is the only record that the model called the tool at all.
 _LLM_EVENT_KINDS = {
     "thinking": LLM_THINKING,
     "text": LLM_TEXT,
     "tool_call": LLM_RESPONSE,
+    "tool_result": LLM_TOOL_RESULT,
     "error": LLM_ERROR,
 }
 
@@ -187,14 +191,16 @@ def _forward_agent_events(
         kind = _LLM_EVENT_KINDS.get(event.get("kind", ""))
         if kind is None:
             return
-        # A tool_call's `args` (the submitted answer) is the useful body; other
-        # kinds carry `text`. Normalize both onto `text` so the run page renders
-        # one shape; an event carrying neither has no body to show and is
-        # dropped rather than logged as an empty one.
+        # A tool_call's `args` (the submitted answer) is the useful body, and a
+        # tool_result's is its `content`; other kinds carry `text`. Normalize all
+        # three onto `text` so the run page renders one shape; an event carrying
+        # none has no body to show and is dropped rather than logged as empty.
         if "text" in event:
             body = event["text"]
         elif "args" in event:
             body = event["args"]
+        elif "content" in event:
+            body = event["content"]
         else:
             return
         fields: dict[str, Any] = {"text": body}

@@ -30,6 +30,7 @@ LLM_PROMPT = "llm_prompt"
 LLM_THINKING = "llm_thinking"
 LLM_TEXT = "llm_text"
 LLM_RESPONSE = "llm_response"
+LLM_TOOL_RESULT = "llm_tool_result"
 LLM_ERROR = "llm_error"
 
 # Where a row's output came from, stamped on every terminal row event. A cache

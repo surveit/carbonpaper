@@ -8,6 +8,13 @@
 # and would silently bill the metered API instead of the subscription.
 # Spend is bounded by the test itself anyway (tests/test_journey_live_llm.py:
 # 1 row x 3 attempts max, small model, one-line prompt).
+#
+# CLI version is PINNED (see #208): an unpinned `npm install -g` always grabs
+# latest, so a red here could be this gate's code or an untested upstream CLI
+# release, indistinguishably. 2.1.195 is the last version confirmed to pass
+# this tier repeatedly (locally and in CI) before intermittent tool-less
+# completions appeared with 2.1.217. Bump deliberately, after confirming the
+# new version passes this tier repeatedly.
 name: live-llm-smoke
 
 on:
@@ -32,7 +39,7 @@ jobs:
         with:
           node-version: "20"
       - run: python -m pip install -r requirements-dev.txt
-      - run: npm install -g @anthropic-ai/claude-code
+      - run: npm install -g @anthropic-ai/claude-code@2.1.195
       - run: python -m pytest -m live_llm tests/test_journey_live_llm.py
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
