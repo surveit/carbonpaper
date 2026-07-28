@@ -47,8 +47,13 @@ HANDLERS: dict[StageType, StageHandler] = {
     # parallelism stays 1: the mapped function is user-authored code, not assumed thread-safe.
     StageType.python_row_function: RowMapHandler(make_python_row_mapper),
     StageType.python_frame_function: FrameHandler(handle_python_frame_function),
-    StageType.join_: FrameHandler(handle_join),
-    StageType.aggregate: FrameHandler(handle_aggregate),
+    # caches_frames=False: join and aggregate are bounded vectorised primitives
+    # whose compute is lower-order than the hash of their own input, so
+    # fingerprinting the inputs costs more than the pandas operation a hit would
+    # skip — the cache would only ever slow them down. python_frame_function
+    # above runs arbitrary user code of unbounded cost and does cache.
+    StageType.join_: FrameHandler(handle_join, caches_frames=False),
+    StageType.aggregate: FrameHandler(handle_aggregate, caches_frames=False),
     StageType.llm_transform: LLMTransformHandler(
         make_llm_row_mapper,
         run_llm_batches,

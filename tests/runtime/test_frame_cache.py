@@ -4,9 +4,11 @@ Caching is a property of the handler SHAPE: every `FrameHandler` is intercepted
 by the same wrapper around `apply` — one cache entry for the whole output frame,
 keyed by the stage definition plus every input frame in declared order.
 
-`publish` excludes itself at the registration site, because a publish is read by
-the world rather than by future runs. `python_frame_function` runs unbounded user
-code and caches.
+Three of the four registrations exclude themselves at the registration site:
+`publish`, because a publish is read by the world rather than by future runs,
+and `join`/`aggregate`, because hashing their input costs more than the pandas
+operation a hit would skip. `python_frame_function` runs unbounded user code and
+caches.
 """
 from __future__ import annotations
 
@@ -144,6 +146,50 @@ def test_the_key_covers_every_input_in_declared_order():
     assert calls == [2, 2]
 
 
+# ── join and aggregate: bounded primitives, not worth a hash ─────────────────
+
+
+def _join_stage() -> Stage:
+    return Stage.model_validate({
+        "id": "j", "name": "Join", "type": "join",
+        "inputs": [{"id": "left"}, {"id": "right"}],
+        "join": {"type": "inner", "keys": [{"left": "x", "right": "x"}]},
+    })
+
+
+def _aggregate_stage() -> Stage:
+    return Stage.model_validate({
+        "id": "agg", "name": "Agg", "type": "aggregate",
+        "inputs": [{"id": "src"}],
+        "aggregate": {"group_by": ["g"], "aggregations": [
+            {"output_column": "n", "formula": "count"}]},
+    })
+
+
+def test_join_computes_every_run_and_records_nothing():
+    """Fingerprinting a join's two input frames costs more than the merge a hit
+    would skip, so the stage is registered with caching off: it still produces
+    its output, and leaves no entry behind."""
+    stage = _join_stage()
+    left, right = pd.DataFrame({"x": [1, 2]}), pd.DataFrame({"x": [1], "z": ["a"]})
+    out = HANDLERS[StageType.join_].execute(
+        stage, {"left": left, "right": right}, _ctx())
+    assert out is not None and list(out["z"]) == ["a"]
+
+    assert _cached_frame(stage, [left, right]) is None
+    assert _entries(stage) == []
+
+
+def test_aggregate_computes_every_run_and_records_nothing():
+    stage = _aggregate_stage()
+    src = pd.DataFrame({"g": ["a", "a", "b"]})
+    out = HANDLERS[StageType.aggregate].execute(stage, {"src": src}, _ctx())
+    assert out is not None and sorted(out["n"]) == [1, 2]
+
+    assert _cached_frame(stage, [src]) is None
+    assert _entries(stage) == []
+
+
 # ── the gating conditions ────────────────────────────────────────────────────
 
 
@@ -204,12 +250,12 @@ def test_a_handler_that_returns_none_records_nothing():
 # ── which registrations opt out ──────────────────────────────────────────────
 
 
-def test_a_terminal_side_effecting_stage_opts_out():
+def test_only_the_unbounded_frame_shaped_type_caches():
     """`python_frame_function` runs arbitrary user code, so a hit can skip
-    unbounded work; `publish` writes artifacts the world reads, so replaying a
-    cached frame would leave this run's artifacts absent."""
+    unbounded work; `join`, `aggregate` and `publish` each opt out."""
     assert _frame_handler(StageType.python_frame_function).caches_frames is True
-    assert _frame_handler(StageType.publish).caches_frames is False
+    for stage_type in (StageType.join_, StageType.aggregate, StageType.publish):
+        assert _frame_handler(stage_type).caches_frames is False
 
 
 def _frame_handler(stage_type: StageType) -> FrameHandler:
