@@ -12,7 +12,14 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, ClassVar, Literal, Optional
 
-from pydantic import AliasChoices, Field, ValidationError, field_validator, model_validator
+from pydantic import (
+    AliasChoices,
+    ConfigDict,
+    Field,
+    ValidationError,
+    field_validator,
+    model_validator,
+)
 from pydantic.json_schema import SkipJsonSchema
 
 from app.core.llm.options import LLMModel
@@ -79,6 +86,7 @@ class FileFormat(str, Enum):
     parquet = "parquet"
     json = "json"
     geojson = "geojson"
+    xlsx = "xlsx"
 
 
 class AggFormula(str, Enum):
@@ -124,9 +132,9 @@ class Connector(_Base):
         description=(
             "Connector parameters. For kind=file: params.path, when present, is the "
             "ABSOLUTE path to the data file, plus optional params.format "
-            "(csv/parquet/json/geojson). If the source material does not state where "
-            "the file lives, OMIT path entirely — the user binds a file when starting "
-            "a run. Never invent a path."
+            "(csv/parquet/json/geojson/xlsx). If the source material does not state "
+            "where the file lives, OMIT path entirely — the user binds a file when "
+            "starting a run. Never invent a path."
         ),
     )
     refresh: str = "ad_hoc"
@@ -145,6 +153,15 @@ class Connector(_Base):
             if fmt is not None and fmt not in {f.value for f in FileFormat}:
                 raise ValueError(f"unknown file format {fmt!r}")
         return self
+
+
+class XlsxReadParams(_Base):
+    # extra=ignore: callers pass the whole connector.params dict, incl. other formats' keys
+    model_config = ConfigDict(strict=True, extra="ignore")
+
+    sheet_name: str | int = 0
+    header_row: int = 0
+    first_column: int = 0
 
 
 class LLMConfig(_Base):

@@ -10,3 +10,4 @@ import-linter==2.13       # architecture-boundary contracts in pyproject [tool.i
 radon==6.0.1              # cyclomatic-complexity ratchet in tests/arch/test_complexity_ratchet.py
 pandas-stubs==3.0.3.260530
 types-PyYAML==6.0.12.20250516  # stubs for `import yaml` in app/services/eval_store.py
+types-openpyxl==3.1.5.20260724  # stubs for `import openpyxl` in tests/test_xlsx_input.py

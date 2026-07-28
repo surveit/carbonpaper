@@ -13,7 +13,7 @@ from typing import Any
 
 import pandas as pd
 
-from app.models import Stage
+from app.models import Stage, XlsxReadParams
 
 from ..context import RunContext
 
@@ -63,6 +63,8 @@ def read_input_data(stage: Stage, ctx: RunContext) -> pd.DataFrame:
         df = pd.read_json(path, lines=True)
     elif fmt == "geojson":
         df = _read_geojson(path)
+    elif fmt == "xlsx":
+        df = _read_xlsx(path, XlsxReadParams.model_validate(params))
     else:
         raise ValueError(f"Unsupported file format: {fmt}")
 
@@ -95,6 +97,29 @@ def _read_geojson(path: Path) -> pd.DataFrame:
             props.setdefault("lat", coords[1])
         rows.append(props)
     return pd.DataFrame(rows)
+
+
+def _read_xlsx(path: Path, params: XlsxReadParams) -> pd.DataFrame:
+    # header_row/first_column are 0-based indices into the sheet as it appears in
+    # Excel; rows above and columns left of them are discarded before parsing.
+    # sheet_name is str|int (exactly one sheet), so pd.read_excel always hands back
+    # a single DataFrame here, never the dict it returns for a None/list sheet_name.
+    frame = pd.read_excel(
+        path, sheet_name=params.sheet_name, header=params.header_row, engine="openpyxl"
+    )
+    assert isinstance(frame, pd.DataFrame)
+    if params.first_column:
+        _validate_first_column_in_range(params.first_column, frame, path, params.sheet_name)
+        frame = frame.iloc[:, params.first_column:]
+    return frame
+
+
+def _validate_first_column_in_range(first_column: int, frame: pd.DataFrame, path: Path, sheet: Any) -> None:
+    if first_column < 0 or first_column >= len(frame.columns):
+        raise ValueError(
+            f"first_column={first_column} is out of range for {path.name} "
+            f"sheet {sheet!r}, which has {len(frame.columns)} columns"
+        )
 
 
 def _parse_list_cell(cell: Any) -> list[str]:

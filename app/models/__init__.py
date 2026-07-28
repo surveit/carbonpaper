@@ -36,6 +36,7 @@ from app.models.stage import (
     Stage,
     StageDraft,
     StageType,
+    XlsxReadParams,
     validate_stage,
 )
 from app.models.stages.stage_tests import StageTest
@@ -119,6 +120,10 @@ NODE_TYPES: dict[str, dict[str, _Any]] = {
             "carry it and MUST be an ABSOLUTE path; when the source does not say "
             "where the data lives, omit path — the user binds a file when starting "
             "a run. Never invent a path. "
+            "For format=xlsx, optional params select the sheet and skip leading "
+            "rows or columns: sheet_name (name or 0-based position, default first "
+            "sheet), header_row (0-based index of the header row, default 0) and "
+            "first_column (0-based index of the first column read, default 0). "
             "Takes no inputs, but must still declare its output_schema."
         ),
     },
@@ -254,7 +259,7 @@ __all__ = [
     "PythonFunction", "JoinKey", "JoinConfig", "AggregationOp",
     "AggregateConfig", "QueueConfig", "PublishConfig", "ReviewConfig",
     "RowReviewDecision",
-    "StageInput", "Stage", "StageDraft", "StageTest", "validate_stage",
+    "StageInput", "Stage", "StageDraft", "StageTest", "XlsxReadParams", "validate_stage",
     "Workflow", "parse_workflow", "validate_workflow", "validate_workflow_draft",
     "validate_unique_ids", "validate_inputs_resolve", "detect_cycle",
     "validate_publish_is_terminal", "validate_edge_schemas",
