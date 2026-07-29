@@ -13,13 +13,14 @@ from typing import Any, Callable
 from claude_agent_sdk import (
     AssistantMessage,
     ClaudeAgentOptions,
+    query,
     ResultMessage,
+    SystemMessage,
     TextBlock,
     ThinkingBlock,
     ToolResultBlock,
     ToolUseBlock,
     UserMessage,
-    query,
 )
 
 # `CLI_PATH` is the located Claude Code CLI (the SDK does not always find it on
@@ -175,6 +176,18 @@ class ClaudeAgentSdkEngine:
                         assistant_parts.append(
                             {"type": "tool_result", "content": content}
                         )
+            elif isinstance(msg, SystemMessage):
+                # The CLI's own account of the turn — the init message carries
+                # which MCP servers connected and which tools the model can
+                # actually see, which is the difference between a model that
+                # declined to call a tool and one that was never offered it.
+                # Not part of the transcript: it is the CLI talking, not the
+                # model. A caller that does not want it drops the unknown kind.
+                emit({
+                    "kind": "system",
+                    "subtype": getattr(msg, "subtype", "") or "",
+                    "text": json.dumps(getattr(msg, "data", None) or {}, default=str),
+                })
             elif isinstance(msg, ResultMessage):
                 # ResultMessage is terminal; let the generator exhaust naturally
                 # (do NOT break — breaking aclose()s a still-running generator).

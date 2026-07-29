@@ -32,6 +32,10 @@ LLM_TEXT = "llm_text"
 LLM_RESPONSE = "llm_response"
 LLM_TOOL_RESULT = "llm_tool_result"
 LLM_ERROR = "llm_error"
+# The CLI's own account of a turn (its init inventory: connected MCP servers,
+# the tools the model was actually offered) — not the model's words, but the
+# only record of what the model had to work with.
+LLM_SYSTEM = "llm_system"
 
 # Where a row's output came from, stamped on every terminal row event. A cache
 # hit ran no code and called no model, so it has no start and no LLM detail —

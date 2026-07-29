@@ -29,6 +29,7 @@ from .run_log import (
     LLM_RESPONSE,
     LLM_TEXT,
     LLM_THINKING,
+    LLM_SYSTEM,
     LLM_TOOL_RESULT,
     DetailSink,
     current_detail_sink,
@@ -38,7 +39,8 @@ from .run_log import (
 # Engine stream-event kind → the detail-log kind surfaced on the run page. The
 # engine speaks in raw block types; the run log speaks in what a reader wants to
 # see: the model's thinking, its free text, the answer it submitted (a
-# submit_answer tool_call), and the verdict that came back on that submission.
+# submit_answer tool_call), the verdict that came back on that submission, and
+# the CLI's own init inventory of what the model was offered.
 # The verdict is logged because a call rejected upstream — against the tool's
 # input schema, before dispatch — never reaches the tool function, so the
 # tool_result is the only record that the model called the tool at all.
@@ -48,6 +50,7 @@ _LLM_EVENT_KINDS = {
     "tool_call": LLM_RESPONSE,
     "tool_result": LLM_TOOL_RESULT,
     "error": LLM_ERROR,
+    "system": LLM_SYSTEM,
 }
 
 # Frames the calling convention only. Epistemic guidance (when a value is
