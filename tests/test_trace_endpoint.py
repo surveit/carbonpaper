@@ -2,6 +2,9 @@
 HTTP status codes. Uses a temp EXAMPLES_DIR so it needs no committed run."""
 from __future__ import annotations
 
+import json
+import math
+
 import pandas as pd
 from fastapi.testclient import TestClient
 
@@ -32,6 +35,29 @@ def test_trace_endpoint_returns_serialized_trace(tmp_path, monkeypatch):
     body = resp.json()
     assert [s["stage_id"] for s in body["steps"]] == ["enrich", "seeds"]
     assert body["end"]["reached_origin"] is True
+
+
+def test_trace_endpoint_encodes_nan_and_infinity_as_null(tmp_path, monkeypatch):
+    # A nullable numeric column (income/expenses on a lobbying-disclosure
+    # dataset, legitimately absent on most rows) arrives as pandas NaN; a 500
+    # here means any dataset with a nullable numeric column is unreachable.
+    project_runs = tmp_path / "proj" / "runs"
+    project_runs.mkdir(parents=True)
+    seeds = pd.DataFrame({"facility_id": ["a", "b", "c"]})
+    enrich = seeds.assign(income=[math.nan, math.inf, -math.inf])
+    write_run(project_runs, [
+        {"id": "seeds", "type": "input_data", "parents": [], "df": seeds},
+        {"id": "enrich", "type": "python_row_function", "parents": ["seeds"], "df": enrich},
+    ], run_id="R3")
+    monkeypatch.setattr(loading, "EXAMPLES_DIR", tmp_path)
+    client = TestClient(app)
+    for row, expected in enumerate([None, None, None]):
+        resp = client.get(f"/project/proj/runs/R3/stage/enrich/row/{row}/trace")
+        assert resp.status_code == 200
+        # Strict JSON: json.loads must not choke, and the raw body must carry
+        # the standard `null` token, never the non-standard `NaN`/`Infinity`.
+        assert json.loads(resp.text)["steps"][0]["row"]["income"] is expected
+        assert "NaN" not in resp.text and "Infinity" not in resp.text
 
 
 def test_trace_endpoint_404_for_unknown_stage(tmp_path, monkeypatch):

@@ -7,6 +7,7 @@ so it never reads the compiled DAG and later methodology edits don't affect it.
 from __future__ import annotations
 
 import json
+import math
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -108,10 +109,15 @@ def _read_output(run_dir: Path, stage_record: dict[str, Any]) -> pd.DataFrame | 
 
 
 def _scalar(value: Any) -> Any:
-    # Parquet list/array cells arrive as numpy arrays; make them plain lists so
-    # the row is JSON-able. Leave everything else (including strings) untouched.
+    # Parquet list/array cells (and numpy scalar types, e.g. float64) arrive
+    # with .tolist(); convert to plain Python so the row is JSON-able.
     if hasattr(value, "tolist") and not isinstance(value, str):
-        return value.tolist()
+        value = value.tolist()
+    # A pandas-null numeric cell (NaN, +-inf) becomes None: JSON has no
+    # non-finite float token, and 0 would misrepresent a value the source
+    # never reported.
+    if isinstance(value, float) and not math.isfinite(value):
+        return None
     return value
 
 
