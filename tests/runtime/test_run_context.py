@@ -11,7 +11,6 @@ from app.core.stage_cache import StageCacheEntry
 
 
 def _make(**overrides: object) -> RunContext:
-    identity = overrides.get("identity")
     defaults: dict[str, object] = dict(
         repo_root=Path("."), run_dir=Path("."), identity=None, stage_cache=None,
         limits={}, offsets={},
