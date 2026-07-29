@@ -691,6 +691,21 @@ a.fact-chip:hover { background: var(--hover); color: var(--fg); }
 .btn.danger:hover { background: #fbdada; }
 .btn.danger:disabled { opacity: 0.6; cursor: default; }
 
+/* A workflow test's run — see RunManifest.is_test_run */
+.badge-test {
+    display: inline-block;
+    margin-left: 6px;
+    padding: 2px 7px;
+    border-radius: 3px;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    background: #f3e8fd;
+    color: #5a2a8c;
+    border: 1px solid #8a5cf6;
+}
+
 /* Run status badges */
 .run-status {
     display: inline-block;

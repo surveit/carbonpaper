@@ -115,34 +115,34 @@ def test_workflow_test_limit_and_offset_slice_the_source(demo):
     assert result["stages_run"] == ["classify"]
 
 
-def test_workflow_test_writes_production_shape_manifest_under_workflow_tests_not_runs(demo):
-    """The manifest lands under workflow_tests/<id>/, carries the production
-    run-manifest fields (project + workflow_version), and no runs/ dir is ever
-    created."""
+def test_workflow_test_writes_a_real_run_marked_is_test_run(demo):
+    """A workflow test is a REAL run: its manifest lands under the project's own
+    runs/<id>/ dir — the same dir a production run writes into — and carries the
+    same production run-manifest fields (project + workflow_version), but
+    `is_test_run` is True, the one thing marking it as a test."""
     _seed(demo, [_load_stage(demo), _CLASSIFY])
     result = run_workflow_test("demo")
-    manifest_path = demo / "workflow_tests" / result["workflow_test_id"] / "manifest.json"
+    manifest_path = demo / "runs" / result["run_id"] / "manifest.json"
     assert manifest_path.exists()
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     assert manifest["project"] == "demo"
     assert manifest["workflow_version"] == "v1"
     assert manifest["status"] == "ok"
-    assert not (demo / "runs").exists()
+    assert manifest["is_test_run"] is True
 
 
-def test_workflow_test_runs_publish_scoped_to_the_workflow_test_dir(demo):
+def test_workflow_test_runs_publish_scoped_to_its_own_run_dir(demo):
     """A publish stage RUNS in a workflow test — it is in stages_run and its
-    artifact lands run-scoped under workflow_tests/<id>/, never in a project-level
-    build dir or under runs/."""
+    artifact lands run-scoped under runs/<id>/, never in a project-level build
+    dir."""
     _seed(demo, [_load_stage(demo), _CLASSIFY, _PUBLISH])
     result = run_workflow_test("demo")
     assert result["ok"] is True
     assert result["stages_run"] == ["classify", "publish_report"]
-    workflow_test_dir = demo / "workflow_tests" / result["workflow_test_id"]
-    artifacts = list(workflow_test_dir.rglob("report.json"))
+    run_dir = demo / "runs" / result["run_id"]
+    artifacts = list(run_dir.rglob("report.json"))
     assert len(artifacts) == 1
     assert not (demo / "build").exists()
-    assert not (demo / "runs").exists()
 
 
 def test_workflow_test_reports_a_stage_error_as_failure(demo):
@@ -153,7 +153,7 @@ def test_workflow_test_reports_a_stage_error_as_failure(demo):
     assert result["ok"] is False
     assert "boom" in result["error"]
     manifest = json.loads(
-        (demo / "workflow_tests" / result["workflow_test_id"] / "manifest.json").read_text("utf-8"))
+        (demo / "runs" / result["run_id"] / "manifest.json").read_text("utf-8"))
     assert manifest["status"] == "errors"
 
 
@@ -171,7 +171,7 @@ def test_workflow_test_auto_approves_a_queue_stage_in_memory(demo):
     # state — those dirs must not exist after the run.
     assert not (demo / "decisions").exists()
     assert not (demo / "queue").exists()
-    assert not (demo / "workflow_tests" / result["workflow_test_id"] / "queue").exists()
+    assert not (demo / "runs" / result["run_id"] / "queue").exists()
 
 
 def test_workflow_test_raises_when_no_source_stage(demo):

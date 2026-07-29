@@ -82,7 +82,7 @@ _FRAME = pd.DataFrame({"name": ["Alpha", "Beta"]})
 
 
 def test_handler_passes_a_linker_when_the_function_declares_it(tmp_path):
-    ctx = RunContext.for_production_run(
+    ctx = RunContext.for_workflow_run(
         repo_root=tmp_path, run_dir=tmp_path / "run", project="palm", run_id="R1",
     )
     result = handle_publish(_publish_stage(_LINKING_PUBLISH_CODE), {"enrich": _FRAME}, ctx)
@@ -93,7 +93,7 @@ def test_handler_passes_a_linker_when_the_function_declares_it(tmp_path):
 
 
 def test_handler_leaves_a_function_without_the_keyword_untouched(tmp_path):
-    ctx = RunContext.for_production_run(
+    ctx = RunContext.for_workflow_run(
         repo_root=tmp_path, run_dir=tmp_path / "run", project="palm", run_id="R1",
     )
     handle_publish(_publish_stage(_PLAIN_PUBLISH_CODE), {"enrich": _FRAME}, ctx)
@@ -102,7 +102,7 @@ def test_handler_leaves_a_function_without_the_keyword_untouched(tmp_path):
 
 
 def test_handler_fails_loudly_when_a_scopeless_run_cannot_address_a_trace(tmp_path):
-    ctx = RunContext.for_non_production_run(repo_root=tmp_path, run_dir=tmp_path / "run")
+    ctx = RunContext.for_stages_outside_a_run(repo_root=tmp_path, run_dir=tmp_path / "run")
     with pytest.raises(TraceLinksUnavailableError) as exc:
         handle_publish(_publish_stage(_LINKING_PUBLISH_CODE), {"enrich": _FRAME}, ctx)
     assert "report" in str(exc.value)
@@ -122,7 +122,7 @@ def test_a_link_emitted_into_published_html_resolves(tmp_path, monkeypatch):
         {"id": "enrich", "type": "python_row_function", "parents": ["seeds"], "df": enrich},
     ], run_id="R1")
 
-    ctx = RunContext.for_production_run(
+    ctx = RunContext.for_workflow_run(
         repo_root=tmp_path, run_dir=run_dir, project="proj", run_id="R1",
     )
     enrich_columns = [{"name": "facility_id", "type": "str"}, *_NAME_COLUMN,
