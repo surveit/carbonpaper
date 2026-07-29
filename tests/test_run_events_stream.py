@@ -26,7 +26,7 @@ def _seed_run(tmp_path: Path, monkeypatch, events: list[dict]) -> str:
     manifest = create_run_manifest(
         [], run_id="r1", project=PROJECT, workflow_version=None,
         run_bindings={}, input_bindings={}, limits={}, offsets={}, bust_cache=False,
-        of_record=True,
+        is_test_run=False,
     )
     manifest.status = RunStatus.OK
     write_manifest(run_dir, manifest)

@@ -75,6 +75,6 @@ def test_publish_stage_trace_links_works_in_a_workflow_test(demo):
     # The URL resolves through the SAME route a production run's trace links use
     # — reachable because the workflow test wrote a real manifest under runs/.
     manifest = json.loads((demo / "runs" / run_id / "manifest.json").read_text("utf-8"))
-    assert manifest["of_record"] is False
+    assert manifest["is_test_run"] is True
     assert loading.runs_dir("demo") == demo / "runs"
     assert (demo / "runs" / run_id / "manifest.json").exists()

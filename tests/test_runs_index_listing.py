@@ -72,23 +72,23 @@ def test_unparseable_json_is_corrupt_not_zero(runs_root: Path):
     assert entry["stages_total"] is None
 
 
-def test_a_workflow_test_run_is_listed_and_marked_not_of_record(runs_root: Path):
+def test_a_workflow_test_run_is_listed_and_marked_is_test_run(runs_root: Path):
     """A workflow test writes into runs/ exactly like a production run — it
     appears in the same listing, reachable through the same row shape — but its
-    row carries `of_record: False` so the template can mark it."""
+    row carries `is_test_run: True` so the template can mark it."""
     test_run = _current_manifest()
-    test_run["of_record"] = False
+    test_run["is_test_run"] = True
     _write_run(runs_root, "20260101T000003", test_run)
 
     entry, = loading.list_runs("demo")
     assert entry["run_id"] == "20260101T000003"
-    assert entry["of_record"] is False
+    assert entry["is_test_run"] is True
 
 
-def test_a_manifest_predating_the_field_reads_as_of_record(runs_root: Path):
-    """No `of_record` key at all (every manifest on disk before this field
-    existed) is a run of record — the default, not a fabricated guess."""
+def test_a_manifest_predating_the_field_reads_as_not_a_test(runs_root: Path):
+    """No `is_test_run` key at all (every manifest on disk before this field
+    existed) is not a test — the default, not a fabricated guess."""
     _write_run(runs_root, "20260101T000004", _current_manifest())
 
     entry, = loading.list_runs("demo")
-    assert entry["of_record"] is True
+    assert entry["is_test_run"] is False

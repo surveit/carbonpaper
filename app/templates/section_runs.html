@@ -43,7 +43,7 @@
     {% for r in runs %}
     <tr>
       <td><a href="/project/{{ state.name }}/runs/{{ r.run_id }}"><code>{{ r.run_id }}</code></a>
-        {% if r.of_record == false %}<span class="badge-test" title="A workflow test — not a run of record. It read the stage-result cache but wrote none.">test</span>{% endif %}
+        {% if r.is_test_run %}<span class="badge-test" title="A workflow test, not a production run. It read the stage-result cache but wrote none.">test</span>{% endif %}
       </td>
       <td>
         {% if r.workflow_version %}

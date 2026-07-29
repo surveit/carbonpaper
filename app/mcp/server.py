@@ -120,7 +120,7 @@ run_workflow_test against it is how you finish. Publishing is human-only.
 run_workflow(project_id, version_id?) starts a run of record and returns a run_id,
 get_run_status(project_id, run_id) follows it to its outcome, and
 run_workflow_test(project_id, version_id?, limit, offset) executes any stored version —
-published or not — over a small slice of the real source without producing a run of record.
+published or not — over a small slice of the real source, as a run marked is_test_run.
 
 # Constraints
 {_NODE_TYPE_CONSTRAINTS}
@@ -470,7 +470,7 @@ def run_workflow_test(
     workflow's bound source and run the frontier over just that slice, so an
     author can watch the pipeline execute on real data before publishing. It IS
     a real run — same `runs/` dir, manifest, and trace/view routes as
-    run_workflow's — except it is marked NOT a run of record (it may READ the
+    run_workflow's — except it is marked `is_test_run` (it may READ the
     stage-result cache but never writes to it, so it can't affect a production
     run) and never counts as the project's latest run. Accepts any stored
     version, published or not (omit `version_id` for the newest). Returns the

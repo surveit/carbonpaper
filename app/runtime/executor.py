@@ -71,7 +71,7 @@ def run_subset(
     project: str | None = None,
     workflow_version: str | None = None,
     identity: RunIdentity | None = None,
-    of_record: bool = True,
+    is_test_run: bool = False,
 ) -> dict[str, pd.DataFrame]:
     """Run only `stage_ids` of `workflow`, with `injected_outputs` seeded as the
     outputs of stages OUTSIDE the subset (their upstream is cut off — the output is
@@ -103,8 +103,8 @@ def run_subset(
     read-only stage-result cache) — see `RunContext.for_workflow_test_run`, the
     only current source of one. None (the default) is the plain subset run:
     no identity, no cache access, `trace_links` unavailable to a publish stage.
-    `of_record` is recorded on the manifest (`RunManifest.of_record`); default
-    True, so an ordinary subset run's manifest reads as a run of record."""
+    `is_test_run` is recorded on the manifest (`RunManifest.is_test_run`);
+    default False, so an ordinary subset run's manifest reads as a real run."""
     by_id = workflow.index_stages_by_id()
     missing = [sid for sid in stage_ids if sid not in by_id]
     if missing:
@@ -114,7 +114,7 @@ def run_subset(
     manifest = create_run_manifest(
         ordered, run_id=run_dir.name, project=project,
         workflow_version=workflow_version, run_bindings={}, input_bindings={},
-        limits={}, offsets={}, bust_cache=False, of_record=of_record)
+        limits={}, offsets={}, bust_cache=False, is_test_run=is_test_run)
     write_manifest(run_dir, manifest)
     outputs: dict[str, pd.DataFrame] = dict(injected_outputs)
     manifest = _execute_stages(

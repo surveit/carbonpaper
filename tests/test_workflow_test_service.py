@@ -115,11 +115,11 @@ def test_workflow_test_limit_and_offset_slice_the_source(demo):
     assert result["stages_run"] == ["classify"]
 
 
-def test_workflow_test_writes_a_real_run_marked_not_of_record(demo):
+def test_workflow_test_writes_a_real_run_marked_is_test_run(demo):
     """A workflow test is a REAL run: its manifest lands under the project's own
     runs/<id>/ dir — the same dir a production run writes into — and carries the
     same production run-manifest fields (project + workflow_version), but
-    `of_record` is False, the one thing marking it as not a run of record."""
+    `is_test_run` is True, the one thing marking it as a test."""
     _seed(demo, [_load_stage(demo), _CLASSIFY])
     result = run_workflow_test("demo")
     manifest_path = demo / "runs" / result["run_id"] / "manifest.json"
@@ -128,7 +128,7 @@ def test_workflow_test_writes_a_real_run_marked_not_of_record(demo):
     assert manifest["project"] == "demo"
     assert manifest["workflow_version"] == "v1"
     assert manifest["status"] == "ok"
-    assert manifest["of_record"] is False
+    assert manifest["is_test_run"] is True
 
 
 def test_workflow_test_runs_publish_scoped_to_its_own_run_dir(demo):

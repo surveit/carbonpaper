@@ -1,4 +1,4 @@
-"""Workflow test = a real run under runs/, marked not of record: it may READ the
+"""Workflow test = a real run under runs/, marked is_test_run: it may READ the
 stage-result cache (fast replay) but writes NO entries, so a later production run
 is unaffected by having run one. Evidence is the same probe-file technique
 tests/test_run_cache_e2e.py uses: a stage appends a line to a file each time its

@@ -2,7 +2,7 @@
 run — same `<project_dir>/runs/<id>/` dir, same manifest shape, same view/routes
 as a production run. It reaches the shared engine through app.runtime.executor
 (run_subset), never app.runtime.runner, with a read-only stage-result cache
-(RunContext.for_workflow_test_run) and `RunManifest.of_record=False`."""
+(RunContext.for_workflow_test_run) and `RunManifest.is_test_run=True`."""
 from __future__ import annotations
 
 from datetime import datetime
@@ -28,7 +28,7 @@ def run_workflow_test(
     offset: int = 0,
 ) -> dict[str, Any]:
     """Run the resolved version's frontier over a slice of its bound source, as
-    a real (not-of-record) run under `<project_dir>/runs/<run_id>/`. Returns
+    a real run (marked `is_test_run`) under `<project_dir>/runs/<run_id>/`. Returns
     `{ok, run_id, version_id, stages_run, error}`."""
     project_dir = resolve_project_dir(project)
     version = _resolve_workflow_test_version(project_dir, version_id)
@@ -86,7 +86,7 @@ def _run_frontier(
 ) -> tuple[bool, str | None]:
     """Execute the frontier subset: normal return -> (True, None); a SubsetRunError
     (a stage errored) -> (False, its message). run_subset owns the manifest under
-    `run_dir`, records it `of_record=False`, and grants project scope
+    `run_dir`, records it `is_test_run=True`, and grants project scope
     (`identity` + a read-only stage cache — see RunContext.for_workflow_test_run)
     so a publish stage's `trace_links` resolves; a mid-frontier
     human_review_queue auto-approves in memory (queue_auto_approve=True) rather
@@ -96,7 +96,7 @@ def _run_frontier(
             workflow, injected_outputs=injected, stage_ids=stage_ids,
             run_dir=run_dir, repo_root=repo_root, queue_auto_approve=True,
             project=project, workflow_version=workflow_version,
-            identity=RunIdentity(project=project, run_id=run_id), of_record=False)
+            identity=RunIdentity(project=project, run_id=run_id), is_test_run=True)
     except SubsetRunError as exc:
         return False, str(exc)
     return True, None

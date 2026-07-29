@@ -131,11 +131,11 @@ def test_run_workflow_test_delegates_and_reports_verdict(tmp_path, monkeypatch):
     assert "rows_out" not in result
     assert "run_id" in result
     # A real run under the project's runs/ dir — reachable through the same
-    # get_run_status a production run uses — but marked not of record.
+    # get_run_status a production run uses — but marked a test run.
     manifest_path = tmp_path / "demo" / "runs" / result["run_id"] / "manifest.json"
     assert manifest_path.exists()
     status = server.get_run_status(project_id="demo", run_id=result["run_id"])
-    assert status["of_record"] is False
+    assert status["is_test_run"] is True
 
 
 def test_run_tools_are_registered(tmp_path, monkeypatch):

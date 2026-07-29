@@ -257,7 +257,7 @@ def prepare_run(
         limits=limits,
         offsets=offsets,
         bust_cache=bust_cache,
-        of_record=True,
+        is_test_run=False,
     )
     write_manifest(run_dir, manifest)
     return {"run_id": run_id, "run_dir": run_dir, "ctx": ctx,
