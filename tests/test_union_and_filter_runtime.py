@@ -29,7 +29,7 @@ def _filter_stage(sid: str, input_id: str, predicate_code: str) -> Stage:
         "id": sid, "name": sid, "type": "filter_rows",
         "inputs": [{"id": input_id, "schema": _AB_SCHEMA}],
         "output_schema": _AB_SCHEMA,
-        "filter": {"kind": "inline", "code": predicate_code},
+        "filter": {"code": predicate_code},
     })
 
 
@@ -156,3 +156,54 @@ def test_trace_walks_through_union_to_the_right_source_row_in_the_right_input(tm
     trace0 = trace_row(run_dir, "u", 0)
     assert [s.stage_id for s in trace0.steps] == ["u", "left"]
     assert trace0.steps[1].row["a"] == "l0"
+
+
+# ── the runtime's row slicing, applied to lineage as well as rows ─────────────
+
+
+def test_trace_follows_lineage_after_the_stage_limit_trims_kept_rows(tmp_path):
+    """A limit trims the filter's OUTPUT after the predicate ran, so the lineage
+    the runtime recorded has to be narrowed by the same window — otherwise the
+    surviving row is traced back to whichever ordinal the untrimmed lineage
+    happened to list first."""
+    src = pd.DataFrame({"a": ["x", "y", "z"], "b": [-1, 1, 2]})
+    load = _load_stage("src", src, tmp_path)
+    filt = _filter_stage("f", "src", "def should_include(row): return row['b'] > 0")
+    filt = filt.model_copy(update={"limit": 1})
+    workflow = Workflow(stages=[load, filt])
+    run_dir = tmp_path / "runs" / "trace_filter_limit"
+
+    outputs = run_subset(
+        workflow, injected_outputs={},
+        stage_ids=["src", "f"], run_dir=run_dir, repo_root=tmp_path,
+    )
+
+    # Predicate keeps src rows 1 and 2; limit=1 then keeps only the first of
+    # those, which is src row 1 ('y') — NOT src row 0.
+    assert outputs["f"]["a"].tolist() == ["y"]
+    trace = trace_row(run_dir, "f", 0)
+    assert trace.steps[1].row_ordinal == 1
+    assert trace.steps[1].row["a"] == "y"
+
+
+def test_a_row_mapper_that_may_not_drop_still_rejects_a_none_row(tmp_path):
+    """Dropping is a per-handler capability (filter_rows), not a licence for
+    every row-mapped stage: python_row_function returning None is still the
+    loud error it was."""
+    src = pd.DataFrame({"a": ["x"], "b": [1]})
+    load = _load_stage("src", src, tmp_path)
+    mapper = Stage.model_validate({
+        "id": "m", "name": "m", "type": "python_row_function",
+        "inputs": [{"id": "src", "schema": _AB_SCHEMA}],
+        "output_schema": _AB_SCHEMA,
+        "function": {"kind": "inline", "code": "def transform(row): return None"},
+    })
+    workflow = Workflow(stages=[load, mapper])
+
+    with pytest.raises(SubsetRunError) as exc_info:
+        run_subset(
+            workflow, injected_outputs={},
+            stage_ids=["src", "m"], run_dir=tmp_path / "runs" / "none_row",
+            repo_root=tmp_path,
+        )
+    assert "must return a dict per row" in str(exc_info.value)

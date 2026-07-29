@@ -13,10 +13,7 @@ def _filter_stage(*, output_schema=None, filter_cfg=None):
         "id": "f", "type": "filter_rows", "name": "f",
         "inputs": [{"id": "src", "schema": _AB_SCHEMA}],
         "output_schema": output_schema or _AB_SCHEMA,
-        "filter": filter_cfg or {
-            "kind": "inline",
-            "code": "def should_include(row): return row['b'] > 0",
-        },
+        "filter": filter_cfg or {"code": "def should_include(row): return row['b'] > 0"},
     }
 
 
@@ -39,9 +36,7 @@ def test_output_schema_extra_column_rejected():
 
 def test_inline_code_must_define_should_include():
     with pytest.raises(ValidationError, match="should_include"):
-        Stage.model_validate(_filter_stage(filter_cfg={
-            "kind": "inline", "code": "def other(row): return True",
-        }))
+        Stage.model_validate(_filter_stage(filter_cfg={"code": "def other(row): return True"}))
 
 
 def test_takes_exactly_one_input():

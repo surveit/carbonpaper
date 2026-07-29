@@ -268,10 +268,12 @@ NODE_TYPES: dict[str, dict[str, _Any]] = {
         "handle": "filter",
         "requires_inputs": True,
         "min_inputs": 1,
-        "required": ["kind"],
-        "optional": ["module", "function", "code", "requirements"],
+        "required": ["code"],
+        "optional": ["function"],
         "notes": (
-            "Takes exactly ONE input. `should_include(row)` is handed a plain dict and "
+            "Takes exactly ONE input. The predicate is INLINE code only — there is no "
+            "kind/module here; a filter that needs an importable module is doing more "
+            "than deciding. `should_include(row)` is handed a plain dict and "
             "must return a bool — True keeps the row, False drops it; any other return "
             "type is a run-time error. Kept rows preserve their original relative order "
             "and every column unchanged, so output_schema must equal the input schema."

@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, ClassVar, Optional
 
 from pydantic import Field, model_validator
 
-from app.models.schema import FunctionKind, _Base
+from app.models.schema import _Base
 from app.models.stages.code import validate_inline_function_code
 
 if TYPE_CHECKING:
@@ -17,39 +17,35 @@ if TYPE_CHECKING:
 class FilterConfig(_Base):
     """filter_rows handle: an authored row predicate, `def should_include(row:
     dict) -> bool`. True keeps the row, False drops it; every kept row's
-    columns pass through unchanged and its relative order is preserved."""
-    # Every field changes what this stage computes (the predicate code/module
-    # it runs) — see Stage.compute_definition_fingerprint.
-    FINGERPRINT_FIELDS: ClassVar[frozenset[str]] = frozenset({
-        "kind", "code", "module", "function", "requirements",
-    })
+    columns pass through unchanged and its relative order is preserved.
+
+    Inline code is the only source for that predicate: a filter decides, and a
+    decision that needs an importable module is doing more than deciding. There
+    is deliberately no `kind`/`module` here, unlike PythonFunction."""
+    # Every field changes what this stage computes (the predicate it runs) —
+    # see Stage.compute_definition_fingerprint.
+    FINGERPRINT_FIELDS: ClassVar[frozenset[str]] = frozenset({"code", "function"})
     INCIDENTAL_FIELDS: ClassVar[frozenset[str]] = frozenset()
 
-    kind: FunctionKind
-    code: Optional[str] = Field(
-        default=None,
+    code: str = Field(
         description=(
-            "Inline Python defining `should_include` (default `should_include`). "
+            "Inline Python defining `should_include` (or whatever `function` names). "
             "Signature: `def should_include(row: dict) -> bool` — True keeps the "
             "row. Returning anything other than a bool is an error."
         ),
     )
-    module: Optional[str] = None
-    function: Optional[str] = None
-    requirements: list[str] = Field(default_factory=list)
-
-    @model_validator(mode="after")
-    def _kind_fields(self) -> "FilterConfig":
-        if self.kind == FunctionKind.module and not self.module:
-            raise ValueError("filter.kind=module needs `module`")
-        if self.kind == FunctionKind.inline and not self.code:
-            raise ValueError("filter.kind=inline needs `code`")
-        return self
+    function: Optional[str] = Field(
+        default=None,
+        description=(
+            "Name of the predicate to call within `code`, defaulting to "
+            "`should_include`. `code` says what is defined; this says which name in "
+            "it to call — set it only when the predicate is not called "
+            "`should_include`."
+        ),
+    )
 
     @model_validator(mode="after")
     def _inline_code_is_runnable(self) -> "FilterConfig":
-        if self.kind != FunctionKind.inline or not self.code:
-            return self
         validate_inline_function_code(
             self.code, self.function, default_name="should_include", return_hint="a bool"
         )

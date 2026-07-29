@@ -16,7 +16,7 @@ import pandas as pd
 from app.core.errors import RowOutOfRange, StageNotInRun
 from app.core.frames import PARQUET_SUFFIX
 from app.models.stage import StageType, is_grain_and_order_preserving
-from app.runtime.stages.lineage import (
+from app.runtime.lineage import (
     TRACE_SOURCE_ROW_KEY,
     TRACE_SOURCE_STAGE_KEY,
     lineage_sidecar_path,
@@ -128,7 +128,7 @@ def _lineage_hop(run_dir: Path, stage_id: str, row_ordinal: int) -> tuple[str, i
     """This stage's recorded parent (stage id, row ordinal) for `row_ordinal`,
     read from its lineage sidecar — present only for a stage type that records
     explicit per-row provenance (filter_rows, union; see
-    app.runtime.stages.lineage). None where no sidecar exists for this stage,
+    app.runtime.lineage). None where no sidecar exists for this stage,
     or `row_ordinal` is out of its range."""
     path = lineage_sidecar_path(run_dir, stage_id)
     if not path.exists():

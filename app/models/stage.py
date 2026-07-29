@@ -61,7 +61,7 @@ class StageType(str, Enum):
     # specific input row) but neither is grain-and-order preserving BY
     # POSITION: filter_rows drops rows, union interleaves rows from several
     # inputs. The runtime records their per-row provenance explicitly (see
-    # app.runtime.stages.lineage) so app.runtime.trace can still cross them.
+    # app.runtime.lineage) so app.runtime.trace can still cross them.
     union = "union"
     filter_rows = "filter_rows"
 
@@ -729,7 +729,7 @@ class Stage(StageDraft):
                                  from several inputs, so neither is 1:1-by-position.
                                  Each output row's exact source (stage id + row
                                  ordinal) is still recorded, in
-                                 app.runtime.stages.lineage, for the trace to follow.
+                                 app.runtime.lineage, for the trace to follow.
         """
         return is_grain_and_order_preserving(self.type)
 

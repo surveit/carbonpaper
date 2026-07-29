@@ -23,7 +23,7 @@ from .execution import (
     StageHandler,
     validate_registry_matches_model,
 )
-from .filter_rows import handle_filter_rows
+from .filter_rows import make_filter_mapper
 from .human_review_queue import make_human_review_mapper
 from .input_data import preflight_input_data, read_input_data
 from .join import handle_join
@@ -67,9 +67,13 @@ HANDLERS: dict[StageType, StageHandler] = {
     # caches_frames=False: concatenation is a bounded vectorised primitive,
     # same reasoning as join/aggregate above.
     StageType.union: FrameHandler(handle_union, caches_frames=False),
-    # caches_frames=True (the default): the predicate is arbitrary user code
-    # of unbounded cost, like python_frame_function above.
-    StageType.filter_rows: FrameHandler(handle_filter_rows),
+    # Row-mapped with drops_rows: the runtime drives the predicate row by row
+    # and does the selecting itself, so it holds the input ordinals that
+    # survived — this stage's lineage — without the handler reporting them.
+    # caches_rows=False: deciding a row costs less than fingerprinting it.
+    StageType.filter_rows: RowMapHandler(
+        make_filter_mapper, drops_rows=True, caches_rows=False
+    ),
 }
 
 # A mis-shaped registration (e.g. a frame handler for a type the model declares
@@ -99,5 +103,5 @@ __all__ = [
     "preflight_input_data",
     "read_input_data",
     "handle_union",
-    "handle_filter_rows",
+    "make_filter_mapper",
 ]
