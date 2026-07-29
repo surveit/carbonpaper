@@ -93,12 +93,16 @@ def build_stage_test_deriver(
         raise ValueError(
             f"tests can only be derived for python transforms, not `{stage.type}`"
         )
+    task = render_derivation_task(document, stage)  # raises if there is no output schema
+    assert stage.output_schema is not None
     return Agent(
         system_prompt=STAGE_TESTS_SYSTEM_PROMPT,
         target_schema=build_stage_tests_model(
-            stage.type, [ref.id for ref in stage.inputs]
+            stage.type,
+            {ref.id: ref.table_schema for ref in stage.inputs},
+            stage.output_schema,
         ),
-        task=render_derivation_task(document, stage),
+        task=task,
         model=model,
     )
 

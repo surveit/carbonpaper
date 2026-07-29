@@ -2,7 +2,7 @@
 import pytest
 from pydantic import ValidationError
 
-from app.models import Stage, StageTest
+from app.models import Stage, StageTest, TableSchema
 from app.models.stages.stage_tests import build_stage_tests_model
 from app.services.loader import stage_to_spec_dict
 
@@ -108,22 +108,119 @@ def test_tests_round_trip_through_spec_dict():
     assert reloaded.tests[0].expected == [{"amount": 2.0, "doubled": 4.0}]
 
 
+def _row_suite_model():
+    return build_stage_tests_model(
+        "python_row_function",
+        {"load": TableSchema.model_validate(_IN_SCHEMA)},
+        TableSchema.model_validate(_OUT_SCHEMA),
+    )
+
+
 def test_stage_tests_model_accepts_a_valid_suite():
-    model = build_stage_tests_model("python_row_function", ["load"])
-    suite = model.model_validate({"tests": [_GOOD_TEST]})
+    suite = _row_suite_model().model_validate({"tests": [_GOOD_TEST]})
     assert suite.tests[0].name == _GOOD_TEST["name"]
 
 
 def test_stage_tests_model_rejects_wrong_input_ids():
-    model = build_stage_tests_model("python_row_function", ["load"])
     bad = dict(_GOOD_TEST, inputs={"ghost": [{"amount": 2.0}]})
     with pytest.raises(ValidationError, match="declared inputs"):
-        model.model_validate({"tests": [bad]})
+        _row_suite_model().model_validate({"tests": [bad]})
 
 
 def test_stage_tests_model_rejects_row_function_fan_out():
-    model = build_stage_tests_model("python_row_function", ["load"])
     bad = dict(_GOOD_TEST, expected=[{"amount": 2.0, "doubled": 4.0},
                                      {"amount": 3.0, "doubled": 6.0}])
     with pytest.raises(ValidationError, match="one row in"):
-        model.model_validate({"tests": [bad]})
+        _row_suite_model().model_validate({"tests": [bad]})
+
+
+def test_stage_tests_model_rejects_undeclared_column_in_an_input_row():
+    bad = dict(_GOOD_TEST, inputs={"load": [{"amount": 2.0, "currency": "USD"}]})
+    with pytest.raises(ValidationError) as excinfo:
+        _row_suite_model().model_validate({"tests": [bad]})
+    message = str(excinfo.value)
+    assert "doubles_a_positive_amount" in message
+    assert "load" in message
+    assert "currency" in message
+
+
+def test_stage_tests_model_rejects_undeclared_column_in_expected_rows():
+    bad = dict(_GOOD_TEST,
+               expected=[{"amount": 2.0, "doubled": 4.0, "tripled": 6.0}])
+    with pytest.raises(ValidationError) as excinfo:
+        _row_suite_model().model_validate({"tests": [bad]})
+    message = str(excinfo.value)
+    assert "doubles_a_positive_amount" in message
+    assert "tripled" in message
+
+
+def test_stage_tests_model_rejects_missing_declared_column_in_expected_rows():
+    bad = dict(_GOOD_TEST, expected=[{"amount": 2.0}])
+    with pytest.raises(ValidationError) as excinfo:
+        _row_suite_model().model_validate({"tests": [bad]})
+    assert "doubled" in str(excinfo.value)
+
+
+def test_stage_tests_model_rejects_a_wrongly_typed_cell():
+    bad = dict(_GOOD_TEST, inputs={"load": [{"amount": "two"}]})
+    with pytest.raises(ValidationError) as excinfo:
+        _row_suite_model().model_validate({"tests": [bad]})
+    message = str(excinfo.value)
+    assert "doubles_a_positive_amount" in message
+    assert "load" in message
+    assert "amount" in message
+
+
+def _frame_suite_model(in_schema: dict) -> type:
+    return build_stage_tests_model(
+        "python_frame_function",
+        {"load": TableSchema.model_validate(in_schema)},
+        TableSchema.model_validate(in_schema),
+    )
+
+
+_TWO_COLUMN_SCHEMA = {"columns": [
+    {"name": "amount", "type": "float", "nullable": False},
+    {"name": "label", "type": "str", "nullable": True},
+]}
+
+
+def test_stage_tests_model_rejects_a_row_omitting_a_column_another_row_supplies():
+    """Every row states the whole schema. A nullable column is an explicit None,
+    not an absent key — the union of a case's rows is not enough."""
+    bad = {
+        "name": "second_row_drops_label",
+        "inputs": {"load": [{"amount": 1.0, "label": "a"}, {"amount": 2.0}]},
+        "expected": [{"amount": 1.0, "label": "a"}, {"amount": 2.0, "label": None}],
+    }
+    with pytest.raises(ValidationError) as excinfo:
+        _frame_suite_model(_TWO_COLUMN_SCHEMA).model_validate({"tests": [bad]})
+    message = str(excinfo.value)
+    assert "second_row_drops_label" in message
+    assert "load" in message
+    assert "label" in message
+
+
+def test_stage_tests_model_accepts_an_explicit_null_in_a_nullable_column():
+    suite = _frame_suite_model(_TWO_COLUMN_SCHEMA).model_validate({"tests": [{
+        "name": "label_may_be_null",
+        "inputs": {"load": [{"amount": 1.0, "label": None}]},
+        "expected": [{"amount": 1.0, "label": None}],
+    }]})
+    assert suite.tests[0].inputs["load"] == [{"amount": 1.0, "label": None}]
+
+
+def test_stage_tests_model_accepts_an_empty_input_case():
+    """No rows means no columns to disagree with — an "empty upstream" case is
+    legitimate, and the runtime builds its frame from the declared schema."""
+    model = build_stage_tests_model(
+        "python_frame_function",
+        {"load": TableSchema.model_validate(_IN_SCHEMA)},
+        TableSchema.model_validate(_OUT_SCHEMA),
+    )
+    suite = model.model_validate({"tests": [{
+        "name": "empty_input_yields_no_rows",
+        "inputs": {"load": []},
+        "expected": [],
+    }]})
+    assert suite.tests[0].inputs == {"load": []}

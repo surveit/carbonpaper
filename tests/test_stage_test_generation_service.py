@@ -12,6 +12,7 @@ import app.services.generation as generation
 from app.core.agent.store import SessionStore
 from app.core.agent.turns import TurnManager
 from app.core.errors import GenerationError
+from app.models import TableSchema
 from app.models.stages.stage_tests import build_stage_tests_model
 
 _IN_SCHEMA = {"columns": [{"name": "amount", "type": "float", "nullable": False}]}
@@ -19,6 +20,16 @@ _OUT_SCHEMA = {"columns": [
     {"name": "amount", "type": "float", "nullable": False},
     {"name": "doubled", "type": "float", "nullable": False},
 ]}
+
+
+def _suite_model(output_schema: dict = _OUT_SCHEMA) -> Any:
+    """The suite model for the `double` stage: one input `load` carrying
+    _IN_SCHEMA, a python_row_function so each test is one row in / one row out."""
+    return build_stage_tests_model(
+        "python_row_function",
+        {"load": TableSchema.model_validate(_IN_SCHEMA)},
+        TableSchema.model_validate(output_schema),
+    )
 
 
 def _seed_project(project_dir: Path, *, existing_tests: list[dict] | None = None) -> None:
@@ -47,10 +58,7 @@ def _seed_project(project_dir: Path, *, existing_tests: list[dict] | None = None
 
 
 def _valid_suite() -> Any:
-    """A validated StageTestSuite instance for the `double` stage's shape (one input `load`,
-    a python_row_function so each test is exactly one row in / one row out)."""
-    suite_model = build_stage_tests_model("python_row_function", ["load"])
-    return suite_model.model_validate({
+    return _suite_model().model_validate({
         "tests": [{
             "name": "doubles_two",
             "inputs": {"load": [{"amount": 2.0}]},
@@ -108,7 +116,7 @@ def test_finish_with_empty_suite_raises(tmp_path: Path):
         "inputs": {"load": [{"amount": 1.0}]},
         "expected": [{"amount": 1.0, "doubled": 2.0}],
     }])
-    empty_suite = build_stage_tests_model("python_row_function", ["load"]).model_validate({"tests": []})
+    empty_suite = _suite_model().model_validate({"tests": []})
 
     with pytest.raises(GenerationError, match="empty test suite"):
         generation._finish_stage_tests(project_dir, "double", empty_suite)
@@ -150,7 +158,7 @@ def test_finish_stage_tests_preserves_null_cells(tmp_path: Path):
                      "code": "def transform(row):\n    return {**row, 'flag': None}\n"},
     }), encoding="utf-8")
 
-    suite = build_stage_tests_model("python_row_function", ["load"]).model_validate({
+    suite = _suite_model(out_schema).model_validate({
         "tests": [{
             "name": "flag_defaults_null",
             "inputs": {"load": [{"amount": 1.0}]},
