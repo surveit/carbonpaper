@@ -5,6 +5,7 @@
    Required context: stage, function_code (may be None).
    Optional context: llm_example {prompt, columns} — a rendered prompt
    from this run's actual input first row, for LLM stages. #}
+{% from "_schema_table.html" import schema_table %}
 
 {% if stage.connector %}
 <section class="exec-block">
@@ -45,6 +46,19 @@
     <pre class="prompt">{{ stage.llm.prompt_instructions }}</pre>
     <h3>prompt data template</h3>
     <pre class="prompt">{{ stage.llm.prompt_data_template }}</pre>
+    {# The reply spec the runtime compiles the model's response format from —
+       stage.llm_reply_schema() is that exact object, not a re-derivation. #}
+    {% set reply_schema = stage.llm_reply_schema() %}
+    {% if reply_schema %}
+    <h3>expected reply schema</h3>
+    <p class="muted">What the model must return per row: the output schema minus the input
+        schema — the columns this stage adds. Input columns are rejoined by the runtime and
+        are not part of the reply.{% if stage.llm.batch_size and stage.llm.batch_size > 1 %}
+        Batched ({{ stage.llm.batch_size }} rows per call), so the reply is
+        <code>{"results": [...]}</code> and each item also carries the
+        <code>row_number</code> it was shown, which rejoins it to its row.{% endif %}</p>
+    {{ schema_table(reply_schema) }}
+    {% endif %}
     {% if llm_example %}
     <details {% if llm_example.error %}{% else %}open{% endif %}>
         <summary>Example rendered prompt (first input row{% if llm_example.source_id %} from <code>{{ llm_example.source_id }}</code>{% endif %})</summary>
