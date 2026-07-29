@@ -1,7 +1,10 @@
 {# Per-run stage detail panel. Two layers of tabs:
      L1: Schema (the static contract) | Current run (this run's data)
      L2: Inputs | Transform | Outputs
-   6 panes = L1 × L2. Reduces the "everything at once" overload. #}
+   5 panes: Inputs and Outputs differ by tier, Transform does not. The stage
+   definition this run pinned IS what the current run transformed with, so one
+   pane serves both tiers (`data-pane` lists both) and you can stay on
+   "Current run" for the whole panel. #}
 {% from "_schema_table.html" import schema_table %}
 
 <div class="run-stage-panel"
@@ -70,10 +73,13 @@
     {% else %}<p class="muted"><em>No declared inputs.</em></p>{% endif %}
   </div>
 
-  {# ─────────── SCHEMA × TRANSFORM ─────────── #}
-  <div class="pane" data-pane="schema-transform" hidden>
+  {# ─────────── TRANSFORM (both tiers) ─────────── #}
+  <div class="pane" data-pane="schema-transform run-transform" hidden>
     {% if stage_def %}{% with stage = stage_def %}{% include "_stage_executable.html" %}{% endwith %}
     {% else %}<p class="muted"><em>No static stage definition.</em></p>{% endif %}
+    {# Scratch re-run result — filled in by the Inputs row picker below. #}
+    <div class="scratch-result" hidden></div>
+    {% if previewable %}<p class="muted"><em>Pick rows under <b>Inputs</b> and run the transform to preview it here.</em></p>{% endif %}
   </div>
 
   {# ─────────── SCHEMA × OUTPUTS ─────────── #}
@@ -124,18 +130,6 @@
     {% endif %}
   </div>
 
-  {# ─────────── RUN × TRANSFORM ─────────── #}
-  <div class="pane" data-pane="run-transform" hidden>
-    {% if llm_example and llm_example.rendered %}
-    <div class="schema-card">
-      <h4>rendered prompt <span class="muted">· on row from <code>{{ llm_example.source_id }}</code></span></h4>
-      <pre class="prompt-rendered">{{ llm_example.rendered }}</pre>
-    </div>
-    {% elif llm_example and llm_example.error %}<p class="muted"><em>{{ llm_example.error }}</em></p>{% endif %}
-    <div class="scratch-result" hidden></div>
-    {% if not llm_example %}<p class="muted"><em>Pick rows under <b>Inputs</b> and run the transform to preview it here.</em></p>{% endif %}
-  </div>
-
   {# ─────────── RUN × OUTPUTS ─────────── #}
   <div class="pane" data-pane="run-outputs" hidden>
     {% if preview and preview.preview %}
@@ -179,7 +173,8 @@
   function apply() {
     root.querySelectorAll('[data-l1]').forEach(b => b.classList.toggle('active', b.dataset.l1 === l1));
     root.querySelectorAll('[data-l2]').forEach(b => b.classList.toggle('active', b.dataset.l2 === l2));
-    root.querySelectorAll('.pane').forEach(p => { p.hidden = (p.dataset.pane !== l1 + '-' + l2); });
+    // A pane may serve more than one tier — data-pane is a space-separated list.
+    root.querySelectorAll('.pane').forEach(p => { p.hidden = !p.dataset.pane.split(' ').includes(l1 + '-' + l2); });
   }
   root.querySelectorAll('[data-l1]').forEach(b => b.addEventListener('click', () => { l1 = b.dataset.l1; apply(); }));
   root.querySelectorAll('[data-l2]').forEach(b => b.addEventListener('click', () => { l2 = b.dataset.l2; apply(); }));
