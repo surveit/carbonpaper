@@ -23,12 +23,14 @@ from .execution import (
     StageHandler,
     validate_registry_matches_model,
 )
+from .filter_rows import handle_filter_rows
 from .human_review_queue import make_human_review_mapper
 from .input_data import preflight_input_data, read_input_data
 from .join import handle_join
 from .llm_transform import make_llm_row_mapper, run_llm_batches
 from .publish import handle_publish
 from .python_functions import handle_python_frame_function, make_python_row_mapper
+from .union import handle_union
 
 Preflight = Callable[[Stage], tuple[list[str], dict[str, Any] | None]]
 
@@ -62,6 +64,12 @@ HANDLERS: dict[StageType, StageHandler] = {
     # artifacts the world reads, not an output a later run consumes. Replaying a
     # cached frame would skip the write and leave this run's artifacts absent.
     StageType.publish: FrameHandler(handle_publish, caches_frames=False),
+    # caches_frames=False: concatenation is a bounded vectorised primitive,
+    # same reasoning as join/aggregate above.
+    StageType.union: FrameHandler(handle_union, caches_frames=False),
+    # caches_frames=True (the default): the predicate is arbitrary user code
+    # of unbounded cost, like python_frame_function above.
+    StageType.filter_rows: FrameHandler(handle_filter_rows),
 }
 
 # A mis-shaped registration (e.g. a frame handler for a type the model declares
@@ -90,4 +98,6 @@ __all__ = [
     "make_python_row_mapper",
     "preflight_input_data",
     "read_input_data",
+    "handle_union",
+    "handle_filter_rows",
 ]

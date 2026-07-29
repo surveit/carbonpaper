@@ -1,8 +1,8 @@
-"""Positional provenance tracer: walk a claim's row back through the
-row-preserving stages of one run by row ordinal alone. The walk stops at any
-stage that reshapes rows - ancestry beyond it isn't positionally recoverable.
-Self-contained on the run directory (manifest.json + outputs/<stage>.parquet),
-so it never reads the compiled DAG and later methodology edits don't affect it.
+"""Provenance tracer: walk a claim's row back through one run, by row ordinal
+for a row-preserving stage or via its lineage sidecar otherwise (filter_rows,
+union). Stops at any stage neither covers. Self-contained on the run
+directory (manifest.json + outputs/<stage>[.lineage].parquet) - never reads
+the compiled DAG, so later methodology edits don't affect it.
 """
 from __future__ import annotations
 
@@ -16,6 +16,11 @@ import pandas as pd
 from app.core.errors import RowOutOfRange, StageNotInRun
 from app.core.frames import PARQUET_SUFFIX
 from app.models.stage import StageType, is_grain_and_order_preserving
+from app.runtime.stages.lineage import (
+    TRACE_SOURCE_ROW_KEY,
+    TRACE_SOURCE_STAGE_KEY,
+    lineage_sidecar_path,
+)
 
 
 def _is_row_preserving(stage_type: str) -> bool:
@@ -119,6 +124,22 @@ def _row_dict(df: pd.DataFrame, r: int) -> dict[str, Any]:
     return {str(k): _scalar(v) for k, v in df.iloc[r].items()}
 
 
+def _lineage_hop(run_dir: Path, stage_id: str, row_ordinal: int) -> tuple[str, int] | None:
+    """This stage's recorded parent (stage id, row ordinal) for `row_ordinal`,
+    read from its lineage sidecar — present only for a stage type that records
+    explicit per-row provenance (filter_rows, union; see
+    app.runtime.stages.lineage). None where no sidecar exists for this stage,
+    or `row_ordinal` is out of its range."""
+    path = lineage_sidecar_path(run_dir, stage_id)
+    if not path.exists():
+        return None
+    lineage = pd.read_parquet(path)
+    if row_ordinal < 0 or row_ordinal >= len(lineage):
+        return None
+    row = lineage.iloc[row_ordinal]
+    return str(row[TRACE_SOURCE_STAGE_KEY]), int(row[TRACE_SOURCE_ROW_KEY])
+
+
 def _new_columns(child: pd.DataFrame, parent: pd.DataFrame | None) -> list[str]:
     if parent is None:
         return [str(c) for c in child.columns]
@@ -133,6 +154,74 @@ def _not_preserving_message(stage_type: str) -> str:
     row-preserving type carrying the wrong parent arity (len(parents) != 1)."""
     return (f"stops at {stage_type} — it reshapes rows, so row-level lineage "
             "across it needs recording (issue #58)")
+
+
+def _columns_parent_id(
+    parents: list[str], lineage_hop: tuple[str, int] | None
+) -> str | None:
+    """The id of the row's ACTUAL parent for `columns_new` purposes: the
+    lineage-recorded one when there is one, else the single input edge when
+    there is exactly one — None when neither pins down a single parent."""
+    if lineage_hop is not None:
+        return lineage_hop[0]
+    return parents[0] if len(parents) == 1 else None
+
+
+def _advance_via_lineage(
+    run_dir: Path, by_id: dict[str, dict[str, Any]], sid: str,
+    parents: list[str], lineage_hop: tuple[str, int],
+) -> tuple[str, int] | TraceEnd:
+    """Cross via recorded per-row provenance — valid even when the stage isn't
+    row-preserving BY POSITION (filter_rows, union)."""
+    parent_id, parent_row = lineage_hop
+    if parent_id not in parents:
+        return TraceEnd(False, sid, "lineage names a parent not among this stage's input edges")
+    if parent_id not in by_id:
+        return TraceEnd(False, sid, "the parent named in lineage is not in the run")
+    parent_output = _read_output(run_dir, by_id[parent_id])
+    if parent_output is None:
+        return TraceEnd(False, parent_id, "this stage's output file is missing from the run")
+    if parent_row < 0 or parent_row >= len(parent_output):
+        return TraceEnd(False, sid, "lineage names an out-of-range parent row")
+    return parent_id, parent_row
+
+
+def _advance_positionally(
+    run_dir: Path, by_id: dict[str, dict[str, Any]], sid: str,
+    parent_id: str, r: int, df: pd.DataFrame,
+) -> tuple[str, int] | TraceEnd:
+    """Cross a row-preserving stage's single input edge, keeping the same
+    ordinal — the whole point of row-and-order preservation."""
+    if parent_id not in by_id:
+        return TraceEnd(False, sid, "the parent named in the manifest is not in the run")
+    parent_df = _read_output(run_dir, by_id[parent_id])
+    if parent_df is None:
+        return TraceEnd(False, parent_id, "this stage's output file is missing from the run")
+    if len(parent_df) != len(df):
+        return TraceEnd(False, sid,
+                         "this stage's row count differs from its input, so per-row "
+                         "position can't be trusted (issue #58)")
+    return parent_id, r
+
+
+def _advance(
+    run_dir: Path, by_id: dict[str, dict[str, Any]], sid: str, stage_type: str, r: int,
+    df: pd.DataFrame, parents: list[str], lineage_hop: tuple[str, int] | None,
+) -> tuple[str, int] | TraceEnd:
+    """The next `(stage_id, row_ordinal)` to visit from `(sid, r)`, or the
+    `TraceEnd` the walk stops on here: an `input_data` origin, no recorded
+    input edge, a recorded lineage hop, or an ordinal cross across a single
+    row-preserving input. A row-preserving stage with more than one parent (or
+    the wrong arity) is treated as not row-preserving — position can't be trusted."""
+    if stage_type == StageType.input_data:
+        return TraceEnd(True, sid, "input_data stage — the rows originate here")
+    if not parents:
+        return TraceEnd(False, sid, "the manifest records no input edge for this stage")
+    if lineage_hop is not None:
+        return _advance_via_lineage(run_dir, by_id, sid, parents, lineage_hop)
+    if not _is_row_preserving(stage_type) or len(parents) != 1:
+        return TraceEnd(False, sid, _not_preserving_message(stage_type))
+    return _advance_positionally(run_dir, by_id, sid, parents[0], r, df)
 
 
 def trace_row(run_dir: Path, stage_id: str, row_ordinal: int) -> Trace:
@@ -164,9 +253,12 @@ def trace_row(run_dir: Path, stage_id: str, row_ordinal: int) -> Trace:
             raise RowOutOfRange(f"row {r} out of range for stage {sid!r} ({len(df)} rows)")
 
         parents = _parents(record)
-        parent_df = None
-        if len(parents) == 1 and parents[0] in by_id:
-            parent_df = _read_output(run_dir, by_id[parents[0]])
+        lineage_hop = _lineage_hop(run_dir, sid, r)
+        columns_parent_id = _columns_parent_id(parents, lineage_hop)
+        parent_df = (
+            _read_output(run_dir, by_id[columns_parent_id])
+            if columns_parent_id in by_id else None
+        )
 
         steps.append(StageTransform(
             stage_id=sid,
@@ -177,27 +269,11 @@ def trace_row(run_dir: Path, stage_id: str, row_ordinal: int) -> Trace:
             origin=_origin(stage_type),
         ))
 
-        # Can we cross into the parent, keeping the same ordinal?
-        if stage_type == StageType.input_data:
-            end = TraceEnd(True, sid, "input_data stage — the rows originate here")
-        elif not parents:
-            end = TraceEnd(False, sid, "the manifest records no input edge for this stage")
-        # A row-preserving stage has exactly one input; more (or the wrong type)
-        # means we can't trust position — treat it as not row-preserving.
-        elif not _is_row_preserving(stage_type) or len(parents) != 1:
-            end = TraceEnd(False, sid, _not_preserving_message(stage_type))
+        next_hop = _advance(run_dir, by_id, sid, stage_type, r, df, parents, lineage_hop)
+        if isinstance(next_hop, TraceEnd):
+            end = next_hop
         else:
-            parent_id = parents[0]
-            if parent_id not in by_id:
-                end = TraceEnd(False, sid, "the parent named in the manifest is not in the run")
-            elif parent_df is None:
-                end = TraceEnd(False, parent_id, "this stage's output file is missing from the run")
-            elif len(parent_df) != len(df):
-                end = TraceEnd(False, sid,
-                               "this stage's row count differs from its input, so per-row "
-                               "position can't be trusted (issue #58)")
-            else:
-                sid, r = parent_id, r  # same ordinal — the whole point
+            sid, r = next_hop
 
     return Trace(
         run_id=manifest.get("run_id", run_dir.name),

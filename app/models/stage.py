@@ -24,13 +24,16 @@ from pydantic.json_schema import SkipJsonSchema
 
 from app.core.llm.options import LLMModel
 from app.models.schema import (
+    FunctionKind,
     SourceRef,
     TableSchema,
     _Base,
     _SNAKE_RE,
 )
 from app.models.stages.code import validate_inline_function_code
+from app.models.stages.filter_rows import FilterConfig
 from app.models.stages.stage_tests import StageTest, validate_stage_tests
+from app.models.stages.union import UnionConfig
 from app.core.prompt_template import find_template_fields
 from app.core.utils import compute_short_hash, format_errors
 
@@ -54,6 +57,13 @@ class StageType(str, Enum):
     aggregate = "aggregate"
     human_review_queue = "human_review_queue"
     publish = "publish"
+    # Both preserve exact per-row PROVENANCE (each output row traces to one
+    # specific input row) but neither is grain-and-order preserving BY
+    # POSITION: filter_rows drops rows, union interleaves rows from several
+    # inputs. The runtime records their per-row provenance explicitly (see
+    # app.runtime.stages.lineage) so app.runtime.trace can still cross them.
+    union = "union"
+    filter_rows = "filter_rows"
 
 
 # The stage types that guarantee output row i came from input row i — 1:1 and in
@@ -104,11 +114,6 @@ class JoinType(str, Enum):
     left = "left"
     right = "right"
     outer = "outer"
-
-
-class FunctionKind(str, Enum):
-    inline = "inline"
-    module = "module"
 
 
 class PublishFormat(str, Enum):
@@ -392,6 +397,8 @@ _TYPE_SPEC: dict[str, dict[str, Any]] = {
     "aggregate":             {"handle": "aggregate", "requires_inputs": True,  "min_inputs": 1},
     "human_review_queue":    {"handle": "queue",     "requires_inputs": True,  "min_inputs": 1},
     "publish":               {"handle": "publish",   "also_requires": ["function"], "requires_inputs": True, "min_inputs": 1},
+    "union":                 {"handle": "union",     "requires_inputs": True,  "min_inputs": 2},
+    "filter_rows":           {"handle": "filter",    "requires_inputs": True,  "min_inputs": 1, "max_inputs": 1},
 }
 
 
@@ -421,6 +428,8 @@ class StageDraft(_Base):
     aggregate: Optional[AggregateConfig] = None
     queue: Optional[QueueConfig] = None
     publish: Optional[PublishConfig] = None
+    union: Optional[UnionConfig] = None
+    filter: Optional[FilterConfig] = None
 
     # False declares this stage INTENTIONALLY non-deterministic — it must
     # re-roll every run — so the runtime consults no stage-result cache for its
@@ -716,6 +725,11 @@ class Stage(StageDraft):
           - publish            → NO — handle_publish runs an authored function whose
                                  output is a table of artifact paths, not the input
                                  rows (and it is terminal — nothing downstream).
+          - filter_rows / union → NO — a filter drops rows, a union interleaves rows
+                                 from several inputs, so neither is 1:1-by-position.
+                                 Each output row's exact source (stage id + row
+                                 ordinal) is still recorded, in
+                                 app.runtime.stages.lineage, for the trace to follow.
         """
         return is_grain_and_order_preserving(self.type)
 

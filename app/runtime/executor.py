@@ -36,6 +36,7 @@ from .manifest import (
 )
 from .run_log import RUN_START, STAGE_DONE, STAGE_START, RunLog
 from .stages import HANDLERS, HaltForReview, StageHandler
+from .stages.lineage import lineage_sidecar_path, split_row_provenance
 from .validation import Issue, Severity, ValidationReport, validate_dataframe
 
 
@@ -372,6 +373,14 @@ def _apply_row_slicing(
     return output
 
 
+def _persist_row_lineage(lineage: pd.DataFrame, sid: str, run_dir: Path) -> None:
+    """Write `sid`'s per-row provenance sidecar (source stage id + row ordinal,
+    one row per this stage's own output row, in output order) that
+    `app.runtime.trace` reads to cross a hop that isn't row-preserving by
+    position alone (filter_rows, union)."""
+    lineage.to_parquet(lineage_sidecar_path(run_dir, sid), index=False)
+
+
 def _persist_stage_output(output: pd.DataFrame, sid: str, run_dir: Path, record: StageRecord) -> Path:
     """Write `output` as the stage's parquet artifact, falling back to CSV
     (noting the fallback on `record`) for a column whose dtype/shape parquet
@@ -423,6 +432,9 @@ def _finalize_stage_output(
     # (its metadata isn't JSON-serializable) — it has been merged above.
     output.attrs.pop(CONTRIBUTION_ATTR, None)
     output = _apply_row_slicing(output, stage, ctx, record)
+    output, lineage = split_row_provenance(output)
+    if lineage is not None:
+        _persist_row_lineage(lineage, sid, run_dir)
 
     out_rep = validate_dataframe(output, stage.output_schema, stage_id=sid, phase="output")
     if row_errors:

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import datetime
 import re
+from enum import Enum
 from typing import Any, Literal, Optional, Sequence
 
 from pydantic import (
@@ -37,6 +38,14 @@ class _Base(BaseModel):
 
 # ── Identifiers ──────────────────────────────────────────────────────────────
 _SNAKE_RE = re.compile(r"^[a-z][a-z0-9_]*$")
+
+
+# Shared by every authored-code handle (python_row_function/python_frame_function,
+# publish's function block, filter_rows) — lives here, below `stage.py`, so a
+# handle-config class defined in its own module can use it without a cycle.
+class FunctionKind(str, Enum):
+    inline = "inline"
+    module = "module"
 
 
 # ── Column-type vocabulary ───────────────────────────────────────────────────
@@ -389,6 +398,21 @@ class TableSchema(_Base):
             ],
             primary_key=None,
         )
+
+    def differing_column_names(self, other: "TableSchema") -> set[str]:
+        """Column names where `self` and `other` disagree: present on only one
+        side, or present on both with a differing spec (prose aside, per
+        `_column_spec_differences`). Empty means the two schemas' columns are
+        identical, ignoring order and prose."""
+        self_by_name = {c.name: c for c in self.columns}
+        other_by_name = {c.name: c for c in other.columns}
+        names = set(self_by_name) | set(other_by_name)
+        return {
+            name for name in names
+            if name not in self_by_name
+            or name not in other_by_name
+            or _column_spec_differences(self_by_name[name], other_by_name[name])
+        }
 
     def is_subset_of(self, other: "TableSchema") -> bool:
         """True exactly when every column here also appears in `other` with an
