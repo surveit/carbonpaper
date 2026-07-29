@@ -150,6 +150,27 @@ def test_scratch_preview_executes_the_stage_that_ran_not_the_working_copy(
     assert [row["label"] for row in body["preview"]] == [PINNED_MARKER]
 
 
+# ─── Transform reads the same under either tier ─────────────────────────────
+
+def test_transform_pane_serves_both_the_schema_and_current_run_tiers(
+    project: Path,
+) -> None:
+    """The definition the run pinned IS what the current run transformed with,
+    so one pane answers both tiers. Two panes would leave "Current run ›
+    Transform" — the tier the panel opens on — showing less than Schema does."""
+    run_id = _run_once(project)
+
+    html = _stage_panel(run_id).text
+    assert 'data-pane="schema-transform run-transform"' in html
+    assert 'data-pane="schema-transform"' not in html
+    assert 'data-pane="run-transform"' not in html
+    # The handle and the scratch re-run result both live in that one pane.
+    pane = html.split('data-pane="schema-transform run-transform"', 1)[1]
+    pane = pane.split("data-pane=", 1)[0]
+    assert PINNED_MARKER in pane
+    assert 'class="scratch-result"' in pane
+
+
 # ─── Unresolvable pinned version: loud and visible, never a substitute ───────
 
 def test_stage_panel_says_the_definition_is_unavailable_when_the_run_is_unpinned(
