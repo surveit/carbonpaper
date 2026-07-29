@@ -37,7 +37,12 @@ from app.services import run as run_service
 from app.runtime.cancellation import request_cancel
 from app.runtime.errors import PreviewError
 from app.runtime.preview import PREVIEWABLE_TYPES, run_stage_preview
-from app.runtime.run_log import RUN_DONE, read_events_since
+from app.runtime.run_log import (
+    RUN_DONE,
+    latest_seq,
+    read_events_since,
+    read_events_window,
+)
 from app.runtime.trace import trace_row, trace_to_dict
 from app.runtime.trace_view import build_trace_view
 from app.web.config import EXAMPLES_DIR, REPO_ROOT, templates
@@ -64,6 +69,12 @@ router = APIRouter()
 # run_done marker never arrived.
 _EVENT_POLL_INTERVAL_S = 0.5
 _IDLE_POLLS_BEFORE_TERMINAL_STOP = 2
+
+# The run log's page size: how many events the SSE feed opens on, and how many
+# one "load older" fetch brings back. The template reads EVENT_TAIL too, so the
+# panel's "showing N of M" is sized by the same number the stream is.
+EVENT_TAIL = 500
+EVENT_PAGE_MAX = 5000
 
 
 @router.post("/project/{project}/run")
@@ -323,16 +334,50 @@ def _artifact_links(project: str, run_id: str, run_dir: Path, manifest: dict) ->
 
 @router.get("/project/{project}/runs/{run_id}/events")
 async def stream_run_events(
-    project: str, run_id: str, request: Request, from_seq: int = 0
+    project: str,
+    run_id: str,
+    request: Request,
+    from_seq: int | None = None,
+    tail: int = EVENT_TAIL,
 ):
-    """SSE tail of this run's event log, live or finished."""
+    """SSE tail of this run's event log, live or finished.
+
+    Defaults to the LAST `tail` events, not the whole log: a row-per-event log
+    of a 135k-row stage runs to 270k events, and streaming all of them is a feed
+    no one can read arriving faster than a browser can render it. Older events
+    are a page fetch away (/events/page); `from_seq` still replays from an exact
+    cursor, which is what a reconnect uses.
+    """
     run_dir = runs_dir(project) / run_id
     load_manifest(run_dir)  # 404s if the run doesn't exist
+    if from_seq is None:
+        # seq is the event's line index, so the last N start at (highest+1) - N.
+        start = max(0, latest_seq(run_dir / "events.jsonl") + 1 - max(tail, 0))
+    else:
+        start = max(from_seq, 0)
     return StreamingResponse(
-        _tail_run_events(run_dir, request, from_seq),
+        _tail_run_events(run_dir, request, start),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+@router.get("/project/{project}/runs/{run_id}/events/page")
+async def run_events_page(
+    project: str, run_id: str, before_seq: int, limit: int = EVENT_TAIL
+):
+    """The page of events immediately BEFORE `before_seq` — "load older"."""
+    # Backwards paging only. Newer events arrive on the SSE feed, so a forwards
+    # page would be a second route to the same events with its own cursor to
+    # keep in step; there is nothing for it to do.
+    run_dir = runs_dir(project) / run_id
+    load_manifest(run_dir)  # 404s if the run doesn't exist
+    limit = max(1, min(limit, EVENT_PAGE_MAX))
+    start = max(0, before_seq - limit)
+    events = read_events_window(
+        run_dir / "events.jsonl", start, limit=max(0, before_seq - start)
+    )
+    return {"events": events, "first_seq": start, "has_more": start > 0}
 
 
 async def _tail_run_events(
@@ -391,6 +436,11 @@ async def run_detail(request: Request, project: str, run_id: str):
             "manifest": manifest,
             "mermaid": graph.mermaid,
             "graph_error": graph.error,
+            # Sizes the log panel's "showing N of M" without the client having
+            # to receive M events to count them. Stale by design on a live run —
+            # the panel takes the larger of this and what it has seen.
+            "event_total": latest_seq(run_dir / "events.jsonl") + 1,
+            "event_tail": EVENT_TAIL,
             "artifact_links": artifact_links,
             "type_glyph": TYPE_GLYPH,
             "type_class": TYPE_CLASS,

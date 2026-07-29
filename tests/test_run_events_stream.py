@@ -82,6 +82,71 @@ def test_an_interrupted_run_ends_the_stream_instead_of_hanging(tmp_path, monkeyp
     assert "event: done" in response.text
 
 
+def _lifecycle_events(count: int) -> list[dict]:
+    """`count` row events, seq 0..count-1, the last of them the run_done marker."""
+    return [
+        {"seq": i, "kind": "row_ok", "stage": "s", "row": i, "level": 0}
+        for i in range(count - 1)
+    ] + [{"seq": count - 1, "kind": RUN_DONE, "level": 0}]
+
+
+def test_a_long_log_opens_on_the_tail_rather_than_replaying_all_of_it(
+    tmp_path, monkeypatch
+):
+    """The freeze this default exists to prevent: a row-per-event log of a large
+    stage runs to hundreds of thousands of events, and streaming all of them on
+    page load is more than the panel can render."""
+    url = _seed_run(tmp_path, monkeypatch, _lifecycle_events(1200))
+
+    response = TestClient(app).get(url, params={"tail": 100})
+
+    streamed = [
+        json.loads(line[len("data: "):])
+        for line in response.text.splitlines()
+        if line.startswith("data: ") and line != "data: {}"
+    ]
+    assert len(streamed) == 100
+    assert streamed[0]["seq"] == 1100          # the LAST 100, not the first
+    assert streamed[-1]["kind"] == RUN_DONE
+
+
+def test_an_explicit_from_seq_still_wins_over_the_tail_default(tmp_path, monkeypatch):
+    # A reconnect names its cursor; falling back to the tail would skip whatever
+    # arrived between the drop and the retry.
+    url = _seed_run(tmp_path, monkeypatch, _lifecycle_events(1200))
+
+    response = TestClient(app).get(url, params={"from_seq": 0, "tail": 100})
+
+    assert len(_streamed_kinds(response.text)) == 1200
+
+
+def test_load_older_pages_backwards_from_a_cursor(tmp_path, monkeypatch):
+    _seed_run(tmp_path, monkeypatch, _lifecycle_events(1200))
+
+    response = TestClient(app).get(
+        f"/project/{PROJECT}/runs/r1/events/page",
+        params={"before_seq": 1100, "limit": 100},
+    )
+
+    page = response.json()
+    assert [e["seq"] for e in page["events"]] == list(range(1000, 1100))
+    assert page["first_seq"] == 1000
+    assert page["has_more"] is True
+
+
+def test_the_last_page_back_reports_that_nothing_older_remains(tmp_path, monkeypatch):
+    _seed_run(tmp_path, monkeypatch, _lifecycle_events(1200))
+
+    response = TestClient(app).get(
+        f"/project/{PROJECT}/runs/r1/events/page",
+        params={"before_seq": 40, "limit": 100},
+    )
+
+    page = response.json()
+    assert [e["seq"] for e in page["events"]] == list(range(40))
+    assert page["has_more"] is False
+
+
 def test_an_unknown_run_is_a_404(tmp_path, monkeypatch):
     _seed_run(tmp_path, monkeypatch, [])
 

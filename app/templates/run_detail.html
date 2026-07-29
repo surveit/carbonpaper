@@ -137,6 +137,11 @@
         <button type="button" id="run-log-clear" class="btn">clear view</button>
         <span id="run-log-state" class="muted"></span>
     </div>
+    {# The panel opens on the last {{ event_tail }} events — a row-per-event log
+       of a large stage runs to hundreds of thousands, which is neither readable
+       nor renderable. This walks back through the rest a page at a time. #}
+    <button type="button" id="run-log-older" class="btn" hidden
+            style="font-size:.8em;margin-bottom:.3em">load older</button>
     <pre id="run-log" class="run-log"></pre>
     <p class="muted" style="font-size:.8em">A row marked <code>cached</code> was replayed from the stage-result cache: it ran no code and called no model, so it has no LLM detail.</p>
 </details>
@@ -146,7 +151,10 @@
    loadable outside a page. #}
 <script src="/static/run_log.js"></script>
 <script>
-  initRunLog({ project: {{ project | tojson }}, runId: {{ run_id | tojson }} });
+  initRunLog({
+    project: {{ project | tojson }}, runId: {{ run_id | tojson }},
+    totalEvents: {{ event_total | tojson }}, pageSize: {{ event_tail | tojson }},
+  });
 </script>
 
 <details class="raw-yaml"><summary>Raw manifest</summary><pre>{{ manifest | tojson(indent=2) }}</pre></details>
