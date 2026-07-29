@@ -541,6 +541,24 @@ class Stage(StageDraft):
         payload = json.dumps(canonical, sort_keys=True, separators=(",", ":"), default=str)
         return compute_short_hash(payload)
 
+    def llm_reply_schema(self) -> Optional[TableSchema]:
+        """What the model's reply itself must carry: `output_schema` minus the
+        input schema — the columns this stage ADDS, since an llm_transform
+        passes its input columns through untouched and the runtime rejoins them
+        itself. This is the single definition of that spec: the runtime compiles
+        the reply model from it (app.runtime.stages.llm_transform) and the stage
+        panel displays it, so neither can drift from the other.
+
+        None for anything that is not a 1:1 llm_transform with both schemas
+        declared. For one that is, `_llm_transform_one_to_one` has already
+        guaranteed the difference is well defined, so `subtract` cannot throw."""
+        if self.type != StageType.llm_transform or not self.inputs:
+            return None
+        input_schema = self.inputs[0].table_schema
+        if self.output_schema is None or input_schema is None:
+            return None
+        return self.output_schema.subtract(input_schema)
+
     @field_validator("id")
     @classmethod
     def _snake_case(cls, v: str) -> str:
