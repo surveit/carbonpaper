@@ -115,11 +115,20 @@
     <div class="empty-state"><h2>Select a stage</h2><p>Click any node in the workflow to load its run details.</p></div>
 </div>
 
+<details class="raw-yaml"><summary>Raw manifest</summary><pre>{{ manifest | tojson(indent=2) }}</pre></details>
+
 {# ── Run log: live-tailed lifecycle events (stage/row start·done·error),
       streamed over SSE from runs/<id>/events.jsonl. Opens for a live run AND a
       finished one — the endpoint drains the file then ends either way, so this
-      is also how you investigate a past run. ── #}
+      is also how you investigate a past run.
+
+      It lives at the very bottom, in its own titled section: the events cover
+      the WHOLE run, not the stage loaded in the panel above, and sitting
+      directly under that panel made it read as part of the stage detail. ── #}
 <style>
+  .run-log-section { margin-top: 2.4rem; border-top: 2px solid var(--border); padding-top: 1.1rem; }
+  .run-log-section > h2 { margin: 0 0 .15rem; }
+  .run-log-section > .lede { margin-bottom: .8rem; }
   .run-log-panel .run-log-toolbar { display: flex; gap: 1.2em; align-items: center; margin: .4em 0; font-size: .85em; }
   .run-log { max-height: 22em; overflow: auto; font-size: .82em; line-height: 1.45; }
   .run-log a.run-log-row { display: block; color: inherit; text-decoration: none; }
@@ -129,22 +138,26 @@
   .run-log .run-log-detail-head { color: #8a5cf6; }
   .run-log .run-log-detail-body { display: block; white-space: pre-wrap; max-height: 6.5em; overflow: auto; margin: 0 0 .3em 2em; padding-left: .6em; border-left: 2px solid #d7cdf5; }
 </style>
-<details class="run-log-panel" id="run-log-panel" open>
-    <summary>Run log <span id="run-log-count" class="muted"></span></summary>
-    <div class="run-log-toolbar">
-        <label><input type="checkbox" id="run-log-errors-only"> errors only</label>
-        <label title="Show each row's prompt, thinking, submitted response, and the verdict on it"><input type="checkbox" id="run-log-detail"> LLM detail</label>
-        <button type="button" id="run-log-clear" class="btn">clear view</button>
-        <span id="run-log-state" class="muted"></span>
-    </div>
-    {# The panel opens on the last {{ event_tail }} events — a row-per-event log
-       of a large stage runs to hundreds of thousands, which is neither readable
-       nor renderable. This walks back through the rest a page at a time. #}
-    <button type="button" id="run-log-older" class="btn" hidden
-            style="font-size:.8em;margin-bottom:.3em">load older</button>
-    <pre id="run-log" class="run-log"></pre>
-    <p class="muted" style="font-size:.8em">A row marked <code>cached</code> was replayed from the stage-result cache: it ran no code and called no model, so it has no LLM detail.</p>
-</details>
+<section class="run-log-section" id="run-log-section">
+    <h2>Run log</h2>
+    <p class="lede">Every lifecycle event for this whole run — all stages, in the order they happened. Not scoped to the stage selected above.</p>
+    <details class="run-log-panel" id="run-log-panel" open>
+        <summary>Events <span id="run-log-count" class="muted"></span></summary>
+        <div class="run-log-toolbar">
+            <label><input type="checkbox" id="run-log-errors-only"> errors only</label>
+            <label title="Show each row's prompt, thinking, submitted response, and the verdict on it"><input type="checkbox" id="run-log-detail"> LLM detail</label>
+            <button type="button" id="run-log-clear" class="btn">clear view</button>
+            <span id="run-log-state" class="muted"></span>
+        </div>
+        {# The panel opens on the last {{ event_tail }} events — a row-per-event log
+           of a large stage runs to hundreds of thousands, which is neither readable
+           nor renderable. This walks back through the rest a page at a time. #}
+        <button type="button" id="run-log-older" class="btn" hidden
+                style="font-size:.8em;margin-bottom:.3em">load older</button>
+        <pre id="run-log" class="run-log"></pre>
+        <p class="muted" style="font-size:.8em">A row marked <code>cached</code> was replayed from the stage-result cache: it ran no code and called no model, so it has no LLM detail.</p>
+    </details>
+</section>
 
 {# The panel's behaviour lives in /static/run_log.js — filtering and reconnect
    are the parts with tests (tests/test_run_log_client.py), which needs them
@@ -156,8 +169,6 @@
     pageSize: {{ event_tail | tojson }},
   });
 </script>
-
-<details class="raw-yaml"><summary>Raw manifest</summary><pre>{{ manifest | tojson(indent=2) }}</pre></details>
 
 <script>
 (function () {
