@@ -25,7 +25,7 @@ from app.models import (
     validate_schema_library,
 )
 from app.services import generation, node_review, project, versioning
-from app.services.loader import stage_to_spec_dict
+from app.services.loader import resolve_function_code, stage_to_json, stage_to_spec_dict
 from app.web.config import EXAMPLES_DIR, templates
 from app.web.diagrams import (
     SCHEMA_KIND_CLASS,
@@ -389,6 +389,41 @@ async def project_workflow_version(request: Request, project_name: str, version_
             "section": "versions",
             "version": version,
             "mermaid": build_mermaid_graph(version.stages, project_name),
+        },
+    )
+
+
+@router.get(
+    "/project/{project_name}/workflow/version/{version_id}/stage/{stage_id}/partial",
+    response_class=HTMLResponse,
+)
+async def version_stage_partial(
+    request: Request, project_name: str, version_id: str, stage_id: str
+):
+    """One frozen stage of a version, read-only — the panel the version page's graph
+    nodes open. Reads the SNAPSHOT's stages, not the working copy: the point of the
+    version page is what was frozen, which may since have been edited or deleted."""
+    pdir = _project_dir(project_name)
+    try:
+        version = versioning.load_version(pdir, version_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    stage = next((s for s in version.stages if s.id == stage_id), None)
+    if stage is None:
+        raise HTTPException(
+            status_code=404, detail=f"No stage '{stage_id}' in version {version_id}"
+        )
+    return templates.TemplateResponse(
+        request,
+        "_version_stage.html",
+        {
+            "project": project_name,
+            "version_id": version_id,
+            "stage": stage,
+            "raw_json": stage_to_json(stage),
+            "function_code": resolve_function_code(stage),
+            "type_class": TYPE_CLASS,
+            "type_glyph": TYPE_GLYPH,
         },
     )
 

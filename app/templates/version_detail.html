@@ -14,6 +14,8 @@
 {% block section_head %}
 <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
 <script>
+  // Graph node clicks → the read-only frozen-stage panel below the graph.
+  onDiagramNode(function (stageId) { if (window._loadStage) window._loadStage(stageId); });
   document.addEventListener("DOMContentLoaded", function () {
     mermaid.initialize({ startOnLoad: false, theme: "default",
       flowchart: { curve: "basis", padding: 20, useMaxWidth: false },
@@ -66,5 +68,63 @@
       </pre>
     </div>
   </div>
-</div></div>
+</div>
+
+{# Stage detail, full-width below the graph — same master-detail shape as the
+   workflow editor, but every panel it loads is read-only (a version is frozen). #}
+<div class="wf-detail" id="wf-detail">
+  <div id="stage-panel">
+    <div class="empty-state"><h2>Pick a stage</h2>
+      <p>Click a node in the graph above to see how it was defined when this version was cut.</p></div>
+  </div>
+</div>
+</div>
+
+<script>
+(function () {
+  const PROJECT = {{ state.name | tojson }};
+  const VERSION = {{ version.version_id | tojson }};
+  const panel = document.getElementById('stage-panel');
+  const wfDetail = document.getElementById('wf-detail');
+
+  async function loadStage(stageId) {
+    if (!stageId || !panel) return;
+    if (wfDetail) wfDetail.classList.add('loading');
+    try {
+      const r = await fetch(`/project/${encodeURIComponent(PROJECT)}/workflow/version/${encodeURIComponent(VERSION)}/stage/${encodeURIComponent(stageId)}/partial`);
+      if (!r.ok) {
+        panel.innerHTML = `<div class="empty-state"><h2>Error</h2><p>${r.status} loading stage <code>${stageId}</code></p></div>`;
+        return;
+      }
+      panel.innerHTML = await r.text();
+      // innerHTML does not execute <script> tags — re-create them so the panel's
+      // tab JS runs (the same trick section_workflow/run_detail use).
+      panel.querySelectorAll('script').forEach(old => {
+        const s = document.createElement('script');
+        if (old.src) s.src = old.src; else s.textContent = old.textContent;
+        old.replaceWith(s);
+      });
+      if (location.hash !== `#${stageId}`) { history.replaceState(null, '', `#${stageId}`); }
+      document.querySelectorAll('.diagram-viewport svg g.node.wf-node-active')
+        .forEach(n => n.classList.remove('wf-node-active'));
+      const node = document.querySelector(`.diagram-viewport svg g.node[id*="-${CSS.escape(stageId)}-"]`);
+      if (node) node.classList.add('wf-node-active');
+      if (wfDetail) wfDetail.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    } finally {
+      if (wfDetail) wfDetail.classList.remove('loading');
+    }
+  }
+  window._loadStage = loadStage;
+
+  // Upstream-input links inside the panel navigate to that stage.
+  document.addEventListener('click', function (ev) {
+    const a = ev.target.closest('[data-stage-link]');
+    if (!a) return;
+    ev.preventDefault();
+    loadStage(a.getAttribute('data-stage-link'));
+  });
+
+  if (location.hash) loadStage(decodeURIComponent(location.hash.slice(1)));
+})();
+</script>
 {% endblock %}

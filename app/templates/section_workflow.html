@@ -34,10 +34,11 @@
 {% block section_head %}
 <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
 <script>
-  // Mermaid click handler: route node clicks to window.loadStage() (the review panel).
-  window.loadStage = function (stageId) {
+  // Graph node clicks → the review panel. onDiagramNode (static/diagram_nodes.js) is
+  // the subscription; _loadStage is defined further down, after the panel exists.
+  onDiagramNode(function (stageId) {
     if (window._loadStage) { window._loadStage(stageId); }
-  };
+  });
   document.addEventListener("DOMContentLoaded", function () {
     // startOnLoad:false + useMaxWidth:false — diagram_viewport.js renders the graph and
     // sizes the svg itself, so it's legible (not shrunk to the column) and zoom is real.

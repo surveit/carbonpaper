@@ -1811,6 +1811,13 @@ td.row-num, th.row-num { text-align: right; color: #98a1b3; font-variant-numeric
 .diagram-viewport svg g.node.wf-node-active > path { stroke: #2f43c9 !important; stroke-width: 3px !important; }
 .diagram-viewport svg g.node.wf-node-active { filter: drop-shadow(0 0 4px rgba(47,67,201,.55)); }
 
+/* Stage nodes carry mermaid's .clickable (and its pointer cursor) because the graph
+   DECLARES a click handler — whether or not this page listens for one. onDiagramNode()
+   sets data-diagram-clickable on <html>, so the cursor promises a click only where one
+   is actually wired. See static/diagram_nodes.js. */
+.mermaid g.node.clickable { cursor: default; }
+html[data-diagram-clickable] .mermaid g.node.clickable { cursor: pointer; }
+
 /* ── Workflow: graph on top, stage detail full-width below (master-detail layout). ── */
 .wf-top .diagram-viewport { max-height: 56vh; }        /* cap so the detail below stays reachable */
 .wf-detail { margin-top: 20px; border-top: 2px solid var(--border); padding-top: 18px; min-height: 120px; }
