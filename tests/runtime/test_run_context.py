@@ -114,10 +114,31 @@ def test_for_production_run_carries_bust_cache(tmp_path: Path) -> None:
 
 
 def test_for_non_production_run_takes_no_bust_cache() -> None:
-    """A non-production run has no cache at all, so the constructor offers no
-    way to ask for one to be busted."""
+    """A non-production run's cache, when it has one at all, is read-only — so
+    the constructor offers no way to ask for one to be busted."""
     assert "bust_cache" not in inspect.signature(
         RunContext.for_non_production_run).parameters
+
+
+def test_for_non_production_run_with_a_project_grants_read_only_scope(tmp_path: Path) -> None:
+    """A workflow test's context: still non-production, but scoped — so a publish
+    stage's trace_links resolves and a slow stage can replay a cached result. The
+    cache view cannot record, so the test can never write what production reads."""
+    ctx = RunContext.for_non_production_run(
+        tmp_path, tmp_path / "run", project="proj", run_id="r1")
+    assert ctx.mode == "non_production"
+    assert ctx.identity == RunIdentity(project="proj", run_id="r1")
+    assert ctx.stage_cache is not None
+    assert not hasattr(ctx.stage_cache, "record")
+
+
+def test_for_non_production_run_rejects_half_an_identity(tmp_path: Path) -> None:
+    """project and run_id are two halves of one identity: neither alone can key a
+    cache entry, so passing one is a loud error, not a silently unscoped run."""
+    with pytest.raises(ValueError, match="two halves of one identity"):
+        RunContext.for_non_production_run(tmp_path, tmp_path / "run", project="proj")
+    with pytest.raises(ValueError, match="two halves of one identity"):
+        RunContext.for_non_production_run(tmp_path, tmp_path / "run", run_id="r1")
 
 
 def test_for_non_production_run_allows_none_paths() -> None:

@@ -1,8 +1,8 @@
 """Workflow-test seam: run a workflow over a slice of its real source as a REAL
-run — same `<project_dir>/runs/<id>/` dir, same manifest shape, same view/routes
-as a production run. It reaches the shared engine through app.runtime.executor
-(run_subset), never app.runtime.runner, with a read-only stage-result cache
-(RunContext.for_workflow_test_run) and `RunManifest.is_test_run=True`."""
+run — same `<project_dir>/runs/<id>/` dir, manifest, and routes as a production
+run, but marked `RunManifest.is_test_run` and scoped read-only. It reaches the
+shared engine through app.runtime.executor (run_subset), never
+app.runtime.runner."""
 from __future__ import annotations
 
 from datetime import datetime
@@ -87,7 +87,7 @@ def _run_frontier(
     """Execute the frontier subset: normal return -> (True, None); a SubsetRunError
     (a stage errored) -> (False, its message). run_subset owns the manifest under
     `run_dir`, records it `is_test_run=True`, and grants project scope
-    (`identity` + a read-only stage cache — see RunContext.for_workflow_test_run)
+    (`identity` + a read-only stage cache — see RunContext.for_non_production_run)
     so a publish stage's `trace_links` resolves; a mid-frontier
     human_review_queue auto-approves in memory (queue_auto_approve=True) rather
     than halting."""

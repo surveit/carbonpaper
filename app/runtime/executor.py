@@ -100,9 +100,10 @@ def run_subset(
     ordinary subset run's queue stage behaves exactly as before.
 
     `identity` grants this subset run project scope (a `RunIdentity` plus a
-    read-only stage-result cache) — see `RunContext.for_workflow_test_run`, the
-    only current source of one. None (the default) is the plain subset run:
-    no identity, no cache access, `trace_links` unavailable to a publish stage.
+    read-only stage-result cache — see `RunContext.for_non_production_run`); a
+    workflow test is the only current source of one. None (the default) is the
+    plain subset run: no identity, no cache access, `trace_links` unavailable to
+    a publish stage.
     `is_test_run` is recorded on the manifest (`RunManifest.is_test_run`);
     default False, so an ordinary subset run's manifest reads as a real run."""
     by_id = workflow.index_stages_by_id()
@@ -132,13 +133,14 @@ def _subset_ctx(
     # project scope (human_review_queue, or a publish stage's trace_links) fails
     # loudly rather than reading a fabricated wrong directory — unless
     # `queue_auto_approve` tells human_review_queue to pass rows through in memory
-    # instead, or `identity` is given (a workflow test — see
-    # RunContext.for_workflow_test_run), in which case project scope IS granted,
-    # with a read-only cache so this run can never write a cache entry.
-    if identity is not None:
-        return RunContext.for_workflow_test_run(
-            repo_root, run_dir, identity.project, identity.run_id)
-    return RunContext.for_non_production_run(repo_root, run_dir, queue_auto_approve=queue_auto_approve)
+    # instead, or `identity` is given (a workflow test), in which case project
+    # scope IS granted, read-only: a non-production run can never write a cache entry.
+    return RunContext.for_non_production_run(
+        repo_root, run_dir,
+        queue_auto_approve=queue_auto_approve,
+        project=identity.project if identity else None,
+        run_id=identity.run_id if identity else None,
+    )
 
 
 def _raise_if_run_failed(manifest: RunManifest) -> None:

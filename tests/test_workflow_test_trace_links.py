@@ -1,4 +1,5 @@
-"""A workflow test now carries project scope (RunContext.for_workflow_test_run),
+"""A workflow test now carries project scope (RunContext.for_non_production_run
+with a project/run_id),
 so a publish stage that declares `trace_links` must run successfully in one —
 previously TraceLinksUnavailableError, since a workflow test had no
 `ctx.identity`. The URL it builds must resolve to the run's own trace route."""

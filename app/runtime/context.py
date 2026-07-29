@@ -35,8 +35,9 @@ class RunIdentity:
 class RunContext(BaseModel):
     """Immutable identity + config for one run. `for_production_run` sets
     `mode="production"` and grants project scope (`identity` + a read+write
-    stage-result cache); `for_non_production_run` sets `mode="non_production"`, may
-    set `queue_auto_approve`, and grants no project scope."""
+    stage-result cache); `for_non_production_run` sets `mode="non_production"`,
+    may set `queue_auto_approve`, and grants project scope only when handed a
+    `project`/`run_id` — and then read-only, never write."""
 
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
 
@@ -157,35 +158,6 @@ class RunContext(BaseModel):
         )
 
     @classmethod
-    def for_workflow_test_run(
-        cls,
-        repo_root: Path,
-        run_dir: Path,
-        project: str,
-        run_id: str,
-        limits: dict[str, int] | None = None,
-        offsets: dict[str, int] | None = None,
-    ) -> RunContext:
-        """A workflow test's context: `mode="non_production"` (its queue stage
-        auto-approves in memory, like any non-production run), but WITH project
-        scope — `identity` and a read-only stage-result cache
-        (`StageCacheEntry.read_only()`) — so a publish stage's `trace_links` can
-        build a URL and a slow upstream stage can replay a production run's
-        cached result. The cache view carries no `record` method, so this run
-        structurally cannot write a cache entry: a test's outputs never poison
-        what a production run reads back."""
-        return cls(
-            mode="non_production",
-            repo_root=repo_root,
-            run_dir=run_dir,
-            identity=RunIdentity(project=project, run_id=run_id),
-            stage_cache=StageCacheEntry.read_only(),
-            limits=dict(limits or {}),
-            offsets=dict(offsets or {}),
-            queue_auto_approve=True,
-        )
-
-    @classmethod
     def for_non_production_run(
         cls,
         repo_root: Path | None,
@@ -193,19 +165,36 @@ class RunContext(BaseModel):
         limits: dict[str, int] | None = None,
         offsets: dict[str, int] | None = None,
         queue_auto_approve: bool = False,
+        project: str | None = None,
+        run_id: str | None = None,
     ) -> RunContext:
-        """A run with no project scope (a subset run, a preview, an authored-test
-        run): `mode="non_production"`, no `identity`, no stage-result cache.
+        """Every run that is not a production run: `mode="non_production"`.
         `repo_root`/`run_dir` are None for an in-memory harness that executes a
-        handler outside any run. `queue_auto_approve` lets such a run pass a
-        human_review_queue stage through in memory (it carries no project scope
-        to resolve cached decisions against)."""
+        handler outside any run. `queue_auto_approve` lets the run pass a
+        human_review_queue stage through in memory.
+
+        Project scope is off by default (a subset run, a preview, an authored-test
+        run): no `identity`, no stage-result cache, so a handler that needs scope
+        fails loudly rather than reading a fabricated wrong directory. Passing
+        `project`/`run_id` — a workflow test does — grants it, with a READ-ONLY
+        cache (`StageCacheEntry.read_only()`): a publish stage's `trace_links` can
+        build a URL and a slow upstream stage can replay a production run's cached
+        result, but the view carries no `record` method, so a non-production run
+        structurally cannot write a cache entry and never poisons what a
+        production run reads back. Read-write scope is `for_production_run`'s
+        alone, which is why this takes no `bust_cache`."""
+        if (project is None) != (run_id is None):
+            raise ValueError(
+                "project and run_id are the two halves of one identity — pass "
+                "both to grant project scope, or neither to withhold it."
+            )
+        scoped = project is not None and run_id is not None
         return cls(
             mode="non_production",
             repo_root=repo_root,
             run_dir=run_dir,
-            identity=None,
-            stage_cache=None,
+            identity=RunIdentity(project=project, run_id=run_id) if scoped else None,
+            stage_cache=StageCacheEntry.read_only() if scoped else None,
             limits=dict(limits or {}),
             offsets=dict(offsets or {}),
             queue_auto_approve=queue_auto_approve,
