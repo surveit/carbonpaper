@@ -9,7 +9,6 @@ from __future__ import annotations
 import contextvars
 import json
 import queue
-import re
 import threading
 from datetime import datetime
 from pathlib import Path
@@ -130,29 +129,20 @@ def _count_logged_events(path: Path) -> int:
         return sum(1 for line in handle if line.strip())
 
 
-# The writer stamps `seq` first (see _drain), and json.dumps preserves insertion
-# order, so every line it emits starts `{"seq": N,`. Reading N off the front
-# decides whether a line is in the requested window without parsing it — on a
-# 270k-event log that is the difference between a multi-second poll and a
-# millisecond one. A line that does not match falls through to a full parse, so
-# this is an optimisation, never a correctness assumption about the format.
-_SEQ_PREFIX = re.compile(r'^\{"seq":\s*(\d+)')
-
-
 def read_events_since(path: Path, from_seq: int) -> list[dict[str, Any]]:
     """The events in `path` with seq >= from_seq, in file order."""
-    return read_events_window(path, from_seq)
-
-
-def read_events_window(
-    path: Path, from_seq: int, limit: int | None = None
-) -> list[dict[str, Any]]:
-    """The events in `path` with seq >= from_seq, at most `limit` of them."""
-    # Streamed line by line rather than slurped: the caller may want 500 events
-    # out of a 37MB file, and holding the whole thing in memory to find them is
-    # the cost this window exists to avoid. A malformed trailing line — possible
-    # when read mid-write — is skipped and picked up by the next poll once
-    # complete. A missing file (the writer hasn't created it yet) reads as empty.
+    # Streamed line by line rather than slurped whole: the file reaches tens of
+    # MB on a large run, and there is no reason to hold all of it in memory to
+    # walk it once. A malformed line — possible when read mid-write — is skipped
+    # and picked up by the next poll once complete. A missing file (the writer
+    # hasn't created it yet) reads as empty.
+    #
+    # Every line is parsed. Measured on a 272k-event / 37MB log that is 0.24s,
+    # which is the honest price of asking a question about record contents. It
+    # would be tempting to read `seq` off the raw text and skip parsing the rest,
+    # but that couples the reader to json.dumps' key order — it would break
+    # silently, into slowness rather than an error, the moment someone reordered
+    # the writer's dict.
     try:
         handle = path.open("r", encoding="utf-8")
     except OSError:
@@ -162,9 +152,6 @@ def read_events_window(
         for line in handle:
             if not line.strip():
                 continue
-            prefix = _SEQ_PREFIX.match(line)
-            if prefix is not None and int(prefix.group(1)) < from_seq:
-                continue
             try:
                 event = json.loads(line)
             except json.JSONDecodeError:
@@ -172,38 +159,17 @@ def read_events_window(
             # Every event the writer emits carries a seq; a dict without one is
             # skipped rather than assigned a fabricated position.
             seq = event.get("seq")
-            if seq is None or seq < from_seq:
-                continue
-            out.append(event)
-            if limit is not None and len(out) >= limit:
-                break
+            if seq is not None and seq >= from_seq:
+                out.append(event)
     return out
 
 
-def latest_seq(path: Path) -> int:
-    """The highest seq `path` holds, or -1 if it holds no events."""
-    # Scanned without parsing: this exists to size a tail window, and the whole
-    # point of the tail is not to touch 270k events to show the last 500.
-    try:
-        handle = path.open("r", encoding="utf-8")
-    except OSError:
-        return -1
-    highest = -1
-    with handle:
-        for line in handle:
-            if not line.strip():
-                continue
-            prefix = _SEQ_PREFIX.match(line)
-            if prefix is not None:
-                highest = max(highest, int(prefix.group(1)))
-                continue
-            try:
-                seq = json.loads(line).get("seq")
-            except json.JSONDecodeError:
-                continue
-            if seq is not None:
-                highest = max(highest, int(seq))
-    return highest
+def read_events_window(
+    path: Path, from_seq: int, limit: int | None = None
+) -> list[dict[str, Any]]:
+    """The events in `path` with seq >= from_seq, at most `limit` of them."""
+    events = read_events_since(path, from_seq)
+    return events if limit is None else events[:limit]
 
 
 # ── the per-unit detail sink ─────────────────────────────────────────────────

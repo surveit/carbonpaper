@@ -158,10 +158,8 @@
     var pending = [];              // arrived since the last flush
     var timer = null;
     var loadingOlder = false;
+    var moreAvailable = true;      // until a page fetch says otherwise
     var pageSize = config.pageSize || 500;
-    // The log's true length, from the server at render time. A live run grows
-    // past it, so the panel reports whichever is larger.
-    var serverTotal = config.totalEvents || 0;
     var base = "/project/" + encodeURIComponent(config.project)
       + "/runs/" + encodeURIComponent(config.runId);
 
@@ -177,8 +175,9 @@
       };
     }
 
-    // seq is the event's line index in the file, so anything before the oldest
-    // event held is older still — no separate "is there more" flag needed.
+    // seq only has to be MONOTONIC for this to hold: an event before the oldest
+    // one held is older still. The panel deliberately does not turn seq into a
+    // count — that would assume it has no gaps.
     function oldestSeq() {
       return events.length && typeof events[0].seq === "number" ? events[0].seq : 0;
     }
@@ -187,18 +186,14 @@
       var detailN = events.filter(function (e) {
         return (e.level || 0) >= LEVEL_DETAIL;
       }).length;
-      var total = Math.max(serverTotal, oldestSeq() + events.length);
-      var shown = events.length === total
-        ? total + " event" + (total !== 1 ? "s" : "")
-        : events.length + " of " + total + " events";
-      countEl.textContent = "· " + shown
-        + (detailN ? " (" + detailN + " LLM detail)" : "");
+      countEl.textContent = "· " + events.length
+        + " event" + (events.length !== 1 ? "s" : "")
+        + (detailN ? " (" + detailN + " LLM detail)" : "")
+        + (moreAvailable && oldestSeq() > 0 ? " · older not loaded" : "");
       if (!olderBtn) return;
-      olderBtn.hidden = oldestSeq() <= 0;
+      olderBtn.hidden = !(moreAvailable && oldestSeq() > 0);
       olderBtn.disabled = loadingOlder;
-      olderBtn.textContent = loadingOlder
-        ? "loading…"
-        : "load " + Math.min(pageSize, oldestSeq()) + " older";
+      olderBtn.textContent = loadingOlder ? "loading…" : "load older";
     }
 
     // Full rebuild. Only for what actually invalidates every line: a filter
@@ -247,6 +242,7 @@
         .then(function (r) { return r.json(); })
         .then(function (page) {
           events = (page.events || []).concat(events);
+          moreAvailable = !!page.has_more;
           // Prepending moves everything down by the height of what was added;
           // holding scrollTop steady against that keeps the reader's place.
           var heightBefore = pre.scrollHeight;

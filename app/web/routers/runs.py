@@ -37,12 +37,7 @@ from app.services import run as run_service
 from app.runtime.cancellation import request_cancel
 from app.runtime.errors import PreviewError
 from app.runtime.preview import PREVIEWABLE_TYPES, run_stage_preview
-from app.runtime.run_log import (
-    RUN_DONE,
-    latest_seq,
-    read_events_since,
-    read_events_window,
-)
+from app.runtime.run_log import RUN_DONE, read_events_since, read_events_window
 from app.runtime.trace import trace_row, trace_to_dict
 from app.runtime.trace_view import build_trace_view
 from app.web.config import EXAMPLES_DIR, REPO_ROOT, templates
@@ -350,16 +345,30 @@ async def stream_run_events(
     """
     run_dir = runs_dir(project) / run_id
     load_manifest(run_dir)  # 404s if the run doesn't exist
-    if from_seq is None:
-        # seq is the event's line index, so the last N start at (highest+1) - N.
-        start = max(0, latest_seq(run_dir / "events.jsonl") + 1 - max(tail, 0))
-    else:
-        start = max(from_seq, 0)
+    start = (
+        _tail_start_seq(run_dir / "events.jsonl", tail)
+        if from_seq is None
+        else max(from_seq, 0)
+    )
     return StreamingResponse(
         _tail_run_events(run_dir, request, start),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+def _tail_start_seq(events_path: Path, tail: int) -> int:
+    """The seq to open a stream at so it yields the last `tail` events."""
+    # One read of the log, and the answer comes off the parsed events rather than
+    # from arithmetic on seq: taking `highest - tail` would assume seq has no
+    # gaps, which is true of what the writer emits today but is not a property
+    # the log itself carries.
+    events = read_events_since(events_path, 0)
+    if not events:
+        return 0
+    if tail <= 0:
+        return int(events[-1]["seq"]) + 1      # start past the end: nothing old
+    return 0 if len(events) <= tail else int(events[-tail]["seq"])
 
 
 @router.get("/project/{project}/runs/{run_id}/events/page")
@@ -436,10 +445,6 @@ async def run_detail(request: Request, project: str, run_id: str):
             "manifest": manifest,
             "mermaid": graph.mermaid,
             "graph_error": graph.error,
-            # Sizes the log panel's "showing N of M" without the client having
-            # to receive M events to count them. Stale by design on a live run —
-            # the panel takes the larger of this and what it has seen.
-            "event_total": latest_seq(run_dir / "events.jsonl") + 1,
             "event_tail": EVENT_TAIL,
             "artifact_links": artifact_links,
             "type_glyph": TYPE_GLYPH,
