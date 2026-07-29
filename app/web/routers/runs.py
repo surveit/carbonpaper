@@ -56,6 +56,7 @@ from app.web.loading import (
     runs_dir,
 )
 from app.web.project_view import shell_state
+from app.web.run_stage_panel import not_executed_panel
 
 router = APIRouter()
 
@@ -467,16 +468,18 @@ async def run_stage_partial(
         (s for s in manifest.get("stage_records", []) if s.get("stage_id") == stage_id),
         None,
     )
-    if stage_record is None:
-        raise HTTPException(status_code=404, detail=f"No stage '{stage_id}' in run")
-
-    output_preview = load_output_preview(run_dir, stage_record.get("output_path"))
 
     # The panel's Schema tier and Transform detail describe what THIS run
     # executed, so they read the version it pinned. With no resolvable version
     # there is no stage definition to show and the panel says why.
     pinned = run_service.load_pinned_stage_def(project, manifest, stage_id)
     stage_def = pinned.stage
+    if stage_record is None:
+        # A stage the graph draws but this run never executed (a workflow test
+        # injects its input stages) — see app.web.run_stage_panel.
+        return not_executed_panel(request, project, run_id, manifest, stage_id, pinned)
+
+    output_preview = load_output_preview(run_dir, stage_record.get("output_path"))
     output_by_id = {
         s.get("stage_id"): s.get("output_path") for s in manifest.get("stage_records", [])
     }
