@@ -40,7 +40,7 @@ from app.runtime.preview import PREVIEWABLE_TYPES, run_stage_preview
 from app.runtime.run_log import RUN_DONE, read_events_since, read_events_window
 from app.runtime.trace import trace_row, trace_to_dict
 from app.runtime.trace_view import build_trace_view
-from app.web.config import EXAMPLES_DIR, REPO_ROOT, templates
+from app.web.config import projects_dir, REPO_ROOT, templates
 from app.web.stage_test_views import build_certification, shape_test_views
 from app.web.diagrams import TYPE_CLASS, TYPE_GLYPH, build_mermaid_graph
 from app.web.loading import (
@@ -76,7 +76,7 @@ EVENT_PAGE_MAX = 5000
 
 @router.post("/project/{project}/run")
 async def trigger_run(request: Request, project: str):
-    project_dir = EXAMPLES_DIR / project
+    project_dir = projects_dir() / project
     if not project_dir.is_dir():
         raise HTTPException(status_code=404, detail=f"No project '{project}'")
     # Set up the run (writes an initial `running` manifest), kick off execution
@@ -113,7 +113,7 @@ async def trigger_run_of_version(project: str, version_id: str):
     (400), and MissingInputBindingError/ValueError for a version whose stages
     aren't run-ready (e.g. an unbound file input) (400). Same
     background-and-redirect flow as trigger_run."""
-    project_dir = EXAMPLES_DIR / project
+    project_dir = projects_dir() / project
     if not project_dir.is_dir():
         raise HTTPException(status_code=404, detail=f"No project '{project}'")
     try:
@@ -191,7 +191,7 @@ async def run_inputs(project: str, version_id: str | None = None):
     path}]). The run form fetches this when the version dropdown changes so its
     path fields describe the version about to run — a different version can author
     different input stages/paths. `version_id` None resolves to the latest."""
-    project_dir = EXAMPLES_DIR / project
+    project_dir = projects_dir() / project
     if not project_dir.is_dir():
         raise HTTPException(status_code=404, detail=f"No project '{project}'")
     return JSONResponse(list_file_inputs(project, version_id))
@@ -209,7 +209,7 @@ async def upload_input(
     a path, so we save those bytes server-side (uploads/<stage_id>/<name>) and
     hand back the saved copy's path for the field. The disk copy runs in a
     threadpool so a large upload doesn't stall the event loop."""
-    project_dir = EXAMPLES_DIR / project
+    project_dir = projects_dir() / project
     if not project_dir.is_dir():
         raise HTTPException(status_code=404, detail=f"No project '{project}'")
     if not file.filename:
@@ -225,7 +225,7 @@ async def runs_index(request: Request, project: str):
     """RUNS section of the project shell: the runs list, framed by the sidebar. Passes
     the SAME project_state the other sections do (so the sidebar / next-action agree)
     plus the manifest-backed run rows. 404 if the project dir doesn't exist."""
-    pdir = EXAMPLES_DIR / project
+    pdir = projects_dir() / project
     if not pdir.is_dir():
         raise HTTPException(status_code=404, detail=f"No project '{project}'")
     # A stored version that no longer validates raises WorkflowLoadError from
@@ -445,7 +445,7 @@ async def run_detail(request: Request, project: str, run_id: str):
             # The run view renders inside the project shell, so it carries the nav
             # state like every other section. `section: runs` keeps the Runs entry
             # highlighted while looking at one run.
-            "state": shell_state(EXAMPLES_DIR / project),
+            "state": shell_state(projects_dir() / project),
             "section": "runs",
             "project": project,
             "run_id": run_id,
@@ -748,7 +748,7 @@ async def resume_run_route(project: str, run_id: str):
     NOT already complete (so this serves BOTH: a halted run after its review
     decisions, AND an ERRORED run after the bug is fixed — it re-runs the failed
     stage + downstream and reuses completed upstream outputs)."""
-    project_dir = EXAMPLES_DIR / project
+    project_dir = projects_dir() / project
     if not project_dir.is_dir():
         raise HTTPException(status_code=404, detail=f"No project '{project}'")
     run_dir = runs_dir(project) / run_id

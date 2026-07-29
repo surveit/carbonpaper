@@ -54,7 +54,7 @@ type = "protected"
 protected_modules = ["app.web"]
 allowed_importers = ["app.main"]
 # The web layer is the top: app.main mounts it, nothing else imports it. app.services
-# in particular stays web-independent — EXAMPLES_DIR / load_schemas live in
+# in particular stays web-independent — projects_dir / load_schemas live in
 # app.services.workspace and app.web re-exports them so routers are unaffected.
 
 [[tool.importlinter.contracts]]

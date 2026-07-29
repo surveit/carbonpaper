@@ -5,22 +5,19 @@ import json
 import pytest
 from fastapi.testclient import TestClient
 
-import app.web.config as web_config
-import app.web.loading as loading
-import app.web.routers.project as project_router
 from app.core.persistence import get_store
 from app.main import app
 from app.services.versioning import WorkflowVersion
 from app.web.loading import list_projects
+from app.services import workspace
 
 client = TestClient(app)
 
 
 @pytest.fixture(autouse=True)
 def examples_root(tmp_path, monkeypatch):
-    """EXAMPLES_DIR repointed at a tmp dir in every module that captured it."""
-    for mod in (web_config, loading, project_router):
-        monkeypatch.setattr(mod, "EXAMPLES_DIR", tmp_path, raising=False)
+    """The projects root repointed at a tmp dir."""
+    workspace.set_projects_dir(tmp_path)
     return tmp_path
 
 

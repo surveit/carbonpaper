@@ -26,7 +26,7 @@ from app.models import (
 )
 from app.services import generation, node_review, project, versioning
 from app.services.loader import resolve_function_code, stage_to_json, stage_to_spec_dict
-from app.web.config import EXAMPLES_DIR, templates
+from app.web.config import projects_dir, templates
 from app.web.stage_test_views import build_certification, shape_test_views
 from app.web.diagrams import (
     SCHEMA_KIND_CLASS,
@@ -55,10 +55,10 @@ def _project_dir(project_name: str) -> Path:
     every section + authoring route: refuse anything that isn't a DIRECT child of
     examples/ (no traversal, no absolute path), so a name like '..%2f..' or one
     resolving outside examples/ can never read or delete anything here."""
-    target = (EXAMPLES_DIR / project_name).resolve()
-    if target.parent != EXAMPLES_DIR.resolve() or not target.is_dir():
+    target = (projects_dir() / project_name).resolve()
+    if target.parent != projects_dir().resolve() or not target.is_dir():
         raise HTTPException(status_code=404, detail=f"No project '{project_name}'")
-    return EXAMPLES_DIR / project_name
+    return projects_dir() / project_name
 
 
 # ─── Gated-flow render helpers (the data-model gate + per-schema edit seed) ────
@@ -183,7 +183,7 @@ async def new_project_submit(
         safe_name = project.create_project(name, doc_text, model=model, source="pasted document")
     except (ValueError, ProjectExistsError) as exc:
         raise HTTPException(status_code=400, detail=str(exc))
-    project_dir = EXAMPLES_DIR / safe_name
+    project_dir = projects_dir() / safe_name
     doc = (project_dir / "document.md").read_text(encoding="utf-8")
     # Kick off data-model generation. It runs as a LIVE chat turn; land the user on it
     # so they watch the model being authored (it streams while it runs, then persists

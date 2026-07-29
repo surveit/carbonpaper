@@ -337,7 +337,7 @@ def project_state(pdir: Path) -> ProjectState:
 
 # ─── Editing-agent service surface (name-based) ───────────────────────────────
 # Thin wrappers the editing agent's tools call. Each takes a project NAME, resolves
-# EXAMPLES_DIR/<name> internally, and returns in-memory objects (never a Path) via
+# <projects root>/<name> internally, and returns in-memory objects (never a Path) via
 # the loader/services — so the agent tools never build a filesystem path. The name
 # comes from the model, so it is validated to stay inside the workspace.
 
@@ -358,7 +358,6 @@ def create_project(
     *,
     model: str = "sonnet",
     source: str,
-    examples_dir: Path | None = None,
 ) -> str:
     """Create the examples/<name>/ working copy for a NEW project: sanitize the
     name, write document.md (the source of record) and project.json (real model +
@@ -368,8 +367,7 @@ def create_project(
     doc = document.strip()
     if not doc:
         raise ValueError("The methodology document is empty.")
-    root = Path(examples_dir) if examples_dir is not None else workspace.EXAMPLES_DIR
-    project_dir = root / safe_name
+    project_dir = workspace.projects_dir() / safe_name
     if project_dir.exists():
         raise ProjectExistsError(
             f"examples/{safe_name}/ already exists — choose a different name."
@@ -387,21 +385,21 @@ def create_project(
     return safe_name
 
 
-def list_projects(examples_dir: Path | None = None) -> list[str]:
+def list_projects() -> list[str]:
     """The names of every authored project in the workspace."""
-    return workspace.list_project_names(Path(examples_dir) if examples_dir is not None else workspace.EXAMPLES_DIR)
+    return workspace.list_project_names()
 
 
-def describe_workflow(name: str, examples_dir: Path | None = None) -> dict[str, Any]:
+def describe_workflow(name: str) -> dict[str, Any]:
     """A compact summary of one project's workflow (stage ids/types/inputs/review
     state), read through the tolerant loader."""
-    return workspace.project_workflow_summary(workspace.resolve_project_dir(name, examples_dir))
+    return workspace.project_workflow_summary(workspace.resolve_project_dir(name))
 
 
-def read_stage(name: str, stage_id: str, examples_dir: Path | None = None) -> str:
+def read_stage(name: str, stage_id: str) -> str:
     """The on-disk JSON text of one stage in a project's workflow. Raises ValueError if
     the stage is not in the workflow."""
-    project_dir = workspace.resolve_project_dir(name, examples_dir)
+    project_dir = workspace.resolve_project_dir(name)
     stages = {c.stage.id: c.stage
               for c in load_compiled_dir(project_dir / "compiled") if c.stage is not None}
     stage = stages.get(stage_id)
@@ -410,38 +408,38 @@ def read_stage(name: str, stage_id: str, examples_dir: Path | None = None) -> st
     return stage_to_json(stage)
 
 
-def edit_stage(name: str, stage_id: str, changes_json: str, examples_dir: Path | None = None) -> EditStageResult:
+def edit_stage(name: str, stage_id: str, changes_json: str) -> EditStageResult:
     """Apply a JSON Merge Patch to one stage of a project's workflow (validated
     before it writes; nothing written on failure)."""
-    return stage_edit.patch_stage_spec(_resolve_project_dir_to_write(name, examples_dir), stage_id, changes_json)
+    return stage_edit.patch_stage_spec(_resolve_project_dir_to_write(name), stage_id, changes_json)
 
 
-def add_stage(name: str, stage_json: str, examples_dir: Path | None = None) -> EditStageResult:
+def add_stage(name: str, stage_json: str) -> EditStageResult:
     """Add a new stage to a project's workflow (validated before it writes; nothing
     written on failure). The first stage of a project starts its workflow."""
-    return stage_edit.add_stage_spec(_resolve_project_dir_to_write(name, examples_dir), stage_json)
+    return stage_edit.add_stage_spec(_resolve_project_dir_to_write(name), stage_json)
 
 
 def add_stages(
-    name: str, stages: Sequence[StageDraft], examples_dir: Path | None = None
+    name: str, stages: Sequence[StageDraft]
 ) -> AddStagesResult:
     """Add several new stages to a project's workflow in one pass — ordered by
     their declared inputs, each validated against the whole graph, partial
     success kept. See `stage_edit.add_stage_specs`."""
-    return stage_edit.add_stage_specs(_resolve_project_dir_to_write(name, examples_dir), stages)
+    return stage_edit.add_stage_specs(_resolve_project_dir_to_write(name), stages)
 
 
-def remove_stage(name: str, stage_id: str, examples_dir: Path | None = None) -> EditStageResult:
+def remove_stage(name: str, stage_id: str) -> EditStageResult:
     """Delete one stage from a project's workflow (the reduced workflow is validated
     first; nothing is deleted when another stage still inputs from it)."""
-    return stage_edit.remove_stage_spec(_resolve_project_dir_to_write(name, examples_dir), stage_id)
+    return stage_edit.remove_stage_spec(_resolve_project_dir_to_write(name), stage_id)
 
 
-def _resolve_project_dir_to_write(name: str, examples_dir: Path | None) -> Path:
+def _resolve_project_dir_to_write(name: str) -> Path:
     """The directory of an EXISTING project, for the stage writers. A name with no
     project directory raises: writing a stage must never bring a project into being,
     now that the first stage creates the workflow's compiled/ dir."""
-    project_dir = workspace.resolve_project_dir(name, examples_dir)
+    project_dir = workspace.resolve_project_dir(name)
     if not project_dir.is_dir():
         raise ValueError(f"no project '{name}' in the workspace")
     return project_dir
@@ -485,11 +483,11 @@ class WorkflowFile(BaseModel):
         return self.model_dump_json(indent=2, exclude_none=True)
 
 
-def export_project(name: str, *, examples_dir: Path | None = None) -> WorkflowFile:
+def export_project(name: str) -> WorkflowFile:
     """Read project `name`'s working copy through the loaders into a WorkflowFile —
     read-only. Raises FileNotFoundError if no such project; ValueError if it has no
     recorded model/source/document (never fabricated)."""
-    pdir = workspace.resolve_project_dir(name, examples_dir)
+    pdir = workspace.resolve_project_dir(name)
     meta = project_meta(pdir)
     if meta.model is None or meta.source is None:
         raise ValueError(
@@ -511,16 +509,16 @@ def export_project(name: str, *, examples_dir: Path | None = None) -> WorkflowFi
 
 
 def import_project(
-    wf: WorkflowFile, *, name: str | None = None, examples_dir: Path | None = None,
+    wf: WorkflowFile, *, name: str | None = None,
 ) -> str:
     """Write `wf` into the workspace under `name` (default: `wf.name`) through the
     existing service writers, then mint one version when it carries stages. Import-if-
     absent only: raises ProjectExistsError on a name clash. Returns the sanitized name."""
     target = sanitize_project_name(name or wf.name)
-    pdir = workspace.resolve_project_dir(target, examples_dir)
+    pdir = workspace.resolve_project_dir(target)
     if pdir.exists():
         raise ProjectExistsError(f"examples/{target}/ already exists — choose a different name.")
-    create_project(target, wf.document, model=wf.model, source=wf.source, examples_dir=examples_dir)
+    create_project(target, wf.document, model=wf.model, source=wf.source)
     data_model.write_data_model(pdir, wf.data_model)
     for i, stage in enumerate(wf.stages, start=1):
         stage_path = pdir / "compiled" / f"{i:02d}_{stage.id}.json"

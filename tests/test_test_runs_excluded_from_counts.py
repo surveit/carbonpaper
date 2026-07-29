@@ -8,6 +8,7 @@ import json
 from pathlib import Path
 
 from app.services import project as project_service
+from app.services import workspace
 from app.web import loading
 
 
@@ -42,7 +43,7 @@ def test_runs_summary_with_only_test_runs_reports_no_runs(tmp_path):
 
 
 def test_dashboard_card_n_runs_excludes_test_runs(tmp_path, monkeypatch):
-    monkeypatch.setattr(loading, "EXAMPLES_DIR", tmp_path)
+    workspace.set_projects_dir(tmp_path)
     root = tmp_path / "demo"
     root.mkdir()
     (root / "document.md").write_text("methodology", encoding="utf-8")

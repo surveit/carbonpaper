@@ -24,11 +24,11 @@ def test_committed_lobbying_fixture_imports_and_validates_cleanly(tmp_path):
     wf = WorkflowFile.model_validate_json(_FIXTURE_PATH.read_text(encoding="utf-8"))
     assert {stage.id for stage in wf.stages} == _EXPECTED_STAGE_IDS
 
-    imported_name = import_project(wf, name="lobbying_smoke", examples_dir=examples_dir)
+    imported_name = import_project(wf, name="lobbying_smoke")
     project_dir = examples_dir / imported_name
-    assert imported_name in project.list_projects(examples_dir=examples_dir)
+    assert imported_name in project.list_projects()
 
-    summary = project.describe_workflow(imported_name, examples_dir=examples_dir)
+    summary = project.describe_workflow(imported_name)
     assert summary["issues"] == []
     assert {stage["id"] for stage in summary["stages"]} == _EXPECTED_STAGE_IDS
 

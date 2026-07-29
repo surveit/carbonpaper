@@ -6,6 +6,7 @@ from __future__ import annotations
 import asyncio
 
 import pytest
+from app.services import workspace
 
 _CLAIM = {"columns": [
     {"name": "claim_id", "type": "str", "nullable": False},
@@ -76,9 +77,8 @@ def _list_stored_stage_ids(tmp_path) -> set[str]:
 @pytest.fixture
 def project(tmp_path, monkeypatch):
     from app.mcp import server
-    from app.services import workspace
 
-    monkeypatch.setattr(workspace, "EXAMPLES_DIR", tmp_path)
+    workspace.set_projects_dir(tmp_path)
     server.create_project(name="trail", document="Follow the filings.")
     return tmp_path
 

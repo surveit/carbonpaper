@@ -38,9 +38,9 @@ _OUTPUT_SCHEMA_BY_TYPE: dict[str, dict] = {
 @pytest.fixture(autouse=True)
 def examples_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """Point the name-based service surface at a tmp examples root, so the tools —
-    which resolve names against workspace.EXAMPLES_DIR internally — read and
+    which resolve names against the projects root internally — read and
     write there rather than the real workspace."""
-    monkeypatch.setattr(workspace, "EXAMPLES_DIR", tmp_path)
+    workspace.set_projects_dir(tmp_path)
     return tmp_path
 
 

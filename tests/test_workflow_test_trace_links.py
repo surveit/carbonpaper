@@ -43,8 +43,7 @@ _PUBLISH = {
 
 @pytest.fixture
 def demo(tmp_path, monkeypatch):
-    monkeypatch.setattr(workspace, "EXAMPLES_DIR", tmp_path)
-    monkeypatch.setattr(loading, "EXAMPLES_DIR", tmp_path)
+    workspace.set_projects_dir(tmp_path)
     demo = tmp_path / "demo"
     (demo / "data").mkdir(parents=True)
     pd.DataFrame({"doc_id": ["a", "b"]}).to_csv(demo / "data" / "rows.csv", index=False)

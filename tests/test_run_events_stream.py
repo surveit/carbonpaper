@@ -9,18 +9,18 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import app.web.loading as loading
 from app.core.run_status import RunStatus
 from app.main import app
 from app.runtime.manifest import create_run_manifest, write_manifest
 from app.runtime.run_log import RUN_DONE
 from fastapi.testclient import TestClient
+from app.services import workspace
 
 PROJECT = "events_stream"
 
 
 def _seed_run(tmp_path: Path, monkeypatch, events: list[dict]) -> str:
-    monkeypatch.setattr(loading, "EXAMPLES_DIR", tmp_path)
+    workspace.set_projects_dir(tmp_path)
     run_dir = tmp_path / PROJECT / "runs" / "r1"
     run_dir.mkdir(parents=True)
     manifest = create_run_manifest(

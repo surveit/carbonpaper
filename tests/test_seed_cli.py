@@ -27,7 +27,7 @@ def test_seed_cli_subprocess_bootstraps_the_store_and_seeds(tmp_path):
     examples_dir.mkdir()
     env = {
         **os.environ,
-        "CARBONPAPER_EXAMPLES_DIR": str(examples_dir),
+        "CARBONPAPER_PROJECTS_DIR": str(examples_dir),
         "CARBONPAPER_DB_PATH": str(tmp_path / "app.db"),
     }
     result = subprocess.run(
@@ -47,22 +47,22 @@ def test_seed_all_imports_the_lobbying_bundle_into_an_empty_workspace(tmp_path):
     examples_dir = tmp_path / "examples"
     examples_dir.mkdir()
 
-    imported = seed_all(examples_dir=examples_dir)
+    imported = seed_all()
 
     assert imported == [_LOBBYING]
-    assert _LOBBYING in project.list_projects(examples_dir=examples_dir)
+    assert _LOBBYING in project.list_projects()
 
 
 def test_seed_all_skips_a_bundle_whose_project_already_exists(tmp_path):
     examples_dir = tmp_path / "examples"
     examples_dir.mkdir()
-    first = seed_all(examples_dir=examples_dir)
+    first = seed_all()
     assert first == [_LOBBYING]
 
-    second = seed_all(examples_dir=examples_dir)
+    second = seed_all()
 
     assert second == []
-    assert _LOBBYING in project.list_projects(examples_dir=examples_dir)
+    assert _LOBBYING in project.list_projects()
 
 
 def test_discover_workflow_files_finds_the_committed_lobbying_fixture():
@@ -94,10 +94,10 @@ def test_seed_demo_data_if_enabled_is_a_noop_when_env_var_unset(tmp_path, monkey
     examples_dir = tmp_path / "examples"
     examples_dir.mkdir()
 
-    imported = seed_demo_data_if_enabled(examples_dir=examples_dir)
+    imported = seed_demo_data_if_enabled()
 
     assert imported == []
-    assert project.list_projects(examples_dir=examples_dir) == []
+    assert project.list_projects() == []
 
 
 def test_seed_demo_data_if_enabled_seeds_when_env_var_is_1(tmp_path, monkeypatch):
@@ -105,7 +105,7 @@ def test_seed_demo_data_if_enabled_seeds_when_env_var_is_1(tmp_path, monkeypatch
     examples_dir = tmp_path / "examples"
     examples_dir.mkdir()
 
-    imported = seed_demo_data_if_enabled(examples_dir=examples_dir)
+    imported = seed_demo_data_if_enabled()
 
     assert imported == [_LOBBYING]
-    assert _LOBBYING in project.list_projects(examples_dir=examples_dir)
+    assert _LOBBYING in project.list_projects()

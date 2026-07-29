@@ -23,7 +23,7 @@ from app.services import workspace
 
 @pytest.fixture(autouse=True)
 def examples_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    monkeypatch.setattr(workspace, "EXAMPLES_DIR", tmp_path)
+    workspace.set_projects_dir(tmp_path)
     return tmp_path
 
 

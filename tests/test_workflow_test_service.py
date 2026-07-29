@@ -87,7 +87,7 @@ def demo(tmp_path, monkeypatch):
     """A `demo` project dir with a 4-row source file bound at an absolute path,
     reachable by name through the workspace (pointed at tmp_path). The workflow-test
     service takes the project NAME `demo` and resolves it to this directory."""
-    monkeypatch.setattr(workspace, "EXAMPLES_DIR", tmp_path)
+    workspace.set_projects_dir(tmp_path)
     demo = tmp_path / "demo"
     (demo / "data").mkdir(parents=True)
     pd.DataFrame({"doc_id": ["a", "b", "c", "d"], "score": [1, -1, 2, -3]}).to_csv(

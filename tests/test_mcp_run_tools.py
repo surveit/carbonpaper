@@ -8,6 +8,7 @@ import app.services.run as run_service
 from app.models import parse_stage
 from app.services import versioning
 from app.services.versioning import WorkflowVersion, create_version_from_disk
+from app.services import workspace
 
 
 def _make_run_project(root):
@@ -74,9 +75,8 @@ def _sync_background(monkeypatch):
 def test_run_workflow_starts_a_real_run_pollable_by_get_run_status(tmp_path, monkeypatch):
     """run_workflow mints a real run id; get_run_status reads back its manifest."""
     from app.mcp import server
-    from app.services import workspace
 
-    monkeypatch.setattr(workspace, "EXAMPLES_DIR", tmp_path)
+    workspace.set_projects_dir(tmp_path)
     _sync_background(monkeypatch)
     _make_run_project(tmp_path / "money_trail")
 
@@ -91,9 +91,8 @@ def test_run_workflow_translates_no_version_to_error(tmp_path, monkeypatch):
     """A project with no published version fails loudly as {ok: False, error},
     never a traceback or a fabricated run id."""
     from app.mcp import server
-    from app.services import workspace
 
-    monkeypatch.setattr(workspace, "EXAMPLES_DIR", tmp_path)
+    workspace.set_projects_dir(tmp_path)
     _sync_background(monkeypatch)
     (tmp_path / "unready").mkdir()
 
@@ -106,9 +105,8 @@ def test_run_workflow_translates_no_version_to_error(tmp_path, monkeypatch):
 def test_get_run_status_missing_run_translates_to_error(tmp_path, monkeypatch):
     """An unknown run id becomes {ok: False, error}, not a RunNotFoundError trace."""
     from app.mcp import server
-    from app.services import workspace
 
-    monkeypatch.setattr(workspace, "EXAMPLES_DIR", tmp_path)
+    workspace.set_projects_dir(tmp_path)
     _make_run_project(tmp_path / "money_trail")
 
     result = server.get_run_status(project_id="money_trail", run_id="20990101T000000")
@@ -120,9 +118,8 @@ def test_run_workflow_test_delegates_and_reports_verdict(tmp_path, monkeypatch):
     """run_workflow_test runs the frontier over the slice and returns the
     workflow-test verdict (ok True, the executed stage) — never a production run."""
     from app.mcp import server
-    from app.services import workspace
 
-    monkeypatch.setattr(workspace, "EXAMPLES_DIR", tmp_path)
+    workspace.set_projects_dir(tmp_path)
     _make_workflow_test_project(tmp_path / "demo")
 
     result = server.run_workflow_test(project_id="demo", limit=2, offset=1)

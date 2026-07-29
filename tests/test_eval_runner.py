@@ -12,6 +12,7 @@ from app.models.schema import TableSchema
 from app.evals.runner import run_eval
 from app.evals.store import load_eval_run, save_eval_config
 from app.services.versioning import WorkflowVersion
+from app.services import workspace
 
 def _load(tmp_path):
     return {
@@ -218,7 +219,7 @@ def test_trigger_route_runs_and_redirects_to_the_run(project, monkeypatch):
     """POST .../run scores the eval and 303-redirects to its new run page."""
     repo_root, demo, config = project
     save_eval_config(demo, config)
-    monkeypatch.setattr(evals_router, "EXAMPLES_DIR", repo_root)
+    workspace.set_projects_dir(repo_root)
     monkeypatch.setattr(evals_router, "REPO_ROOT", repo_root)
 
     r = TestClient(app).post("/project/demo/evals/label_check/run", follow_redirects=False)
@@ -230,7 +231,7 @@ def test_trigger_route_400s_when_not_runnable(project, monkeypatch):
     """An eval with no dataset can't be run; the route reports 400, not a redirect."""
     repo_root, demo, config = project
     save_eval_config(demo, config.model_copy(update={"table": None}))
-    monkeypatch.setattr(evals_router, "EXAMPLES_DIR", repo_root)
+    workspace.set_projects_dir(repo_root)
     monkeypatch.setattr(evals_router, "REPO_ROOT", repo_root)
 
     r = TestClient(app).post("/project/demo/evals/label_check/run", follow_redirects=False)
@@ -249,7 +250,7 @@ def test_trigger_route_scores_an_explicitly_selected_unpublished_version(project
         stages=[parse_stage(_load(repo_root)), parse_stage(_CLASSIFY)],
         published=False,
     ).save()
-    monkeypatch.setattr(evals_router, "EXAMPLES_DIR", repo_root)
+    workspace.set_projects_dir(repo_root)
     monkeypatch.setattr(evals_router, "REPO_ROOT", repo_root)
 
     r = TestClient(app).post(
@@ -265,7 +266,7 @@ def test_trigger_route_404s_when_selected_version_does_not_exist(project, monkey
     500 -- the route reports 404 with the reason."""
     repo_root, demo, config = project
     save_eval_config(demo, config)
-    monkeypatch.setattr(evals_router, "EXAMPLES_DIR", repo_root)
+    workspace.set_projects_dir(repo_root)
     monkeypatch.setattr(evals_router, "REPO_ROOT", repo_root)
 
     r = TestClient(app).post(

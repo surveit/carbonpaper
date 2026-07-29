@@ -7,6 +7,7 @@ import pytest
 
 from app.core.run_status import RunStatus
 from app.web import loading
+from app.services import workspace
 
 
 GOLDENS = Path(__file__).parent / "goldens"
@@ -14,8 +15,8 @@ GOLDENS = Path(__file__).parent / "goldens"
 
 @pytest.fixture()
 def runs_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """EXAMPLES_DIR repointed at a tmp workspace holding one project, `demo`."""
-    monkeypatch.setattr(loading, "EXAMPLES_DIR", tmp_path)
+    """The projects root repointed at a tmp workspace holding one project, `demo`."""
+    workspace.set_projects_dir(tmp_path)
     runs = tmp_path / "demo" / "runs"
     runs.mkdir(parents=True)
     return runs

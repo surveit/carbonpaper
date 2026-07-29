@@ -7,7 +7,7 @@ import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
 
-import app.web.loading as loading
+from app.services import workspace
 from app.core.errors import TraceLinksUnavailableError
 from app.main import app
 from app.models import parse_stage, Stage
@@ -132,7 +132,7 @@ def test_a_link_emitted_into_published_html_resolves(tmp_path, monkeypatch):
         {"enrich": enrich}, ctx)
     html = (run_dir / "artifacts" / "build" / "index.html").read_text(encoding="utf-8")
 
-    monkeypatch.setattr(loading, "EXAMPLES_DIR", tmp_path)
+    workspace.set_projects_dir(tmp_path)
     client = TestClient(app)
     for href in _hrefs(html):
         assert client.get(href).status_code == 200

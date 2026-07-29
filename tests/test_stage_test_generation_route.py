@@ -17,6 +17,7 @@ from app.core.agent.turns import TurnManager
 from app.models import TableSchema
 from app.models.stages.stage_tests import build_stage_tests_model
 from app.main import app
+from app.services import workspace
 
 _IN_SCHEMA = {"columns": [{"name": "amount", "type": "float", "nullable": False}]}
 _OUT_SCHEMA = {"columns": [
@@ -128,10 +129,7 @@ def client(tmp_path: Path, monkeypatch):
     across the POST and the follow-up status polls, not be torn down after each
     request (starlette's TestClient tears down a fresh portal per call unless
     it's used as `with TestClient(app) as client:`)."""
-    import app.web.loading as loading
-    import app.web.routers.node_review as node_review_router
-    monkeypatch.setattr(node_review_router, "EXAMPLES_DIR", tmp_path)
-    monkeypatch.setattr(loading, "EXAMPLES_DIR", tmp_path)
+    workspace.set_projects_dir(tmp_path)
     with TestClient(app) as c:
         yield c
 
