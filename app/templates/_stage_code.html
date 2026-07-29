@@ -1,0 +1,43 @@
+{# Macros for the two halves of an authored-code handle, kept apart on purpose:
+   the plain-language `summary` leads the Transform pane, and the code itself is
+   rendered LAST — after the executable block and after the test cases — because
+   a non-engineer reviewer reads what the step does, then the examples that pin
+   it down, and only then the implementation. Both python_row_function /
+   python_frame_function / publish (stage.function) and filter_rows
+   (stage.filter) go through here, so the two read the same way.
+
+   stage_code(stage, function_code): function_code is the resolved source for a
+   `function` handle (None when a module ref can't be found on disk); a filter's
+   code is inline on the handle and needs no resolution. #}
+
+{% macro stage_summary(text) %}
+{% if text %}
+<p class="stage-summary">{{ text }}</p>
+{% else %}
+<p class="stage-summary missing muted"><em>No plain-language summary — this step can only be
+    reviewed by reading its code. Ask for one when the stage is next edited.</em></p>
+{% endif %}
+{% endmacro %}
+
+{% macro stage_code(stage, function_code) %}
+{% if stage.function %}
+<section class="exec-block code-block">
+    <details>
+        <summary><h2>💻 Code</h2><span class="muted">the implementation of the summary above</span></summary>
+        {% if function_code %}
+        <pre class="code">{{ function_code }}</pre>
+        {% else %}
+        <p class="muted"><em>(function source not found on disk)</em></p>
+        {% endif %}
+    </details>
+</section>
+{% endif %}
+{% if stage.filter %}
+<section class="exec-block code-block">
+    <details>
+        <summary><h2>💻 Code</h2><span class="muted">the predicate behind the summary above</span></summary>
+        <pre class="code">{{ stage.filter.code }}</pre>
+    </details>
+</section>
+{% endif %}
+{% endmacro %}

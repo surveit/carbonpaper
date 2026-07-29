@@ -16,8 +16,11 @@ routers in `app/web/routers/`, which import the Runner (`app.runtime`) and the s
 **Inputs │ Transform │ Outputs**:
 - **Inputs** — each input's schema + upstream preview, per-row checkboxes for the scratch re-run.
 - **Transform** — the *raw* executable handle (`_stage_executable.html`): llm prompt+model+tools,
-  python code, join keys, aggregate ops, connector/queue/publish spec — plus the scratch re-run
-  result. One pane serves **both** the Schema and Current-run tiers (its `data-pane` names both):
+  join keys, aggregate ops, connector/queue/publish spec — plus the scratch re-run
+  result. An authored-code handle (`function` / `filter`) reads **description → examples → code**:
+  the handle's plain-language `summary` leads, the test cases follow, and the source is rendered
+  last and folded (`_stage_code.html`), because the reviewer is a journalist, not an engineer.
+  One pane serves **both** the Schema and Current-run tiers (its `data-pane` names both):
   the definition the run pinned *is* what the current run transformed with, so switching tiers
   here would show the same thing twice and push you off "Current run" mid-panel.
 - **Outputs** — output schema + preview + **validation rendered as part of the output** (input
