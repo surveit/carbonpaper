@@ -10,7 +10,6 @@ import pytest
 from app.runtime.context import (
     RunContext,
     RunIdentity,
-    RunMode,
 )
 from app.runtime.manifest import CONTRIBUTION_ATTR, StageContribution
 from app.core.stage_cache import ReadOnlyStageCache
@@ -62,14 +61,12 @@ def make_run_context(
     offsets: dict[str, int] | None = None,
     bust_cache: bool = False,
 ) -> RunContext:
-    """A RunContext for tests that only care about a few of its fields. `mode`
-    follows project scope: an `identity` (with its `stage_cache`) makes it a
-    production run, otherwise a non-production run. A stage's telemetry is reported on
-    its output frame's `.attrs`, not on the context, so there is nothing to seed
-    here."""
-    mode: RunMode = "production" if identity is not None else "non_production"
+    """A RunContext for tests that only care about a few of its fields. Project
+    scope is whatever the caller passes: an `identity` with its `stage_cache`, or
+    neither. A stage's telemetry is reported on its output frame's `.attrs`, not
+    on the context, so there is nothing to seed here."""
     return RunContext(
-        mode=mode, repo_root=repo_root, run_dir=run_dir,
+        repo_root=repo_root, run_dir=run_dir,
         identity=identity, stage_cache=stage_cache,
         limits=dict(limits or {}), offsets=dict(offsets or {}),
         bust_cache=bust_cache,

@@ -21,9 +21,15 @@ def _binds_name(tree: ast.Module, name: str) -> bool:
     return False
 
 
-def validate_inline_function_code(code: str, function: str | None) -> None:
+def validate_inline_function_code(
+    code: str,
+    function: str | None,
+    default_name: str = "transform",
+    return_hint: str = "a dict",
+) -> None:
     """Raise ValueError if inline function `code` does not compile or does not
-    define the function the runtime calls (`transform` by default, or `function`).
+    define the function the runtime calls (`default_name` unless `function`
+    names another).
 
     A single stage's invariant, enforced at write time so broken code (e.g. a
     bare body with a top-level `return`) is rejected before the runner exec()s it."""
@@ -35,11 +41,11 @@ def validate_inline_function_code(code: str, function: str | None) -> None:
     except SyntaxError as exc:
         raise ValueError(
             f"inline function code does not compile: {exc.msg} (line {exc.lineno}). "
-            "Define a function, e.g. `def transform(row): ...; return row`."
+            f"Define a function, e.g. `def {default_name}(row): ...; return row`."
         )
-    wanted = function or "transform"
-    if not (_binds_name(tree, wanted) or _binds_name(tree, "transform")):
+    wanted = function or default_name
+    if not (_binds_name(tree, wanted) or _binds_name(tree, default_name)):
         raise ValueError(
             f"inline function code must define `def {wanted}(...)` at the top level — "
-            f"the runtime calls {wanted}(row) per row and expects a dict back"
+            f"the runtime calls {wanted}(row) per row and expects {return_hint} back"
         )

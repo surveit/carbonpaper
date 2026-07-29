@@ -118,7 +118,7 @@ def test_each_reviewed_pair_maps_independently(tmp_path):
 
 
 def _auto_approve_ctx(tmp_path: Path) -> RunContext:
-    return RunContext.for_non_production_run(
+    return RunContext.for_stages_outside_a_run(
         repo_root=tmp_path, run_dir=tmp_path, queue_auto_approve=True)
 
 

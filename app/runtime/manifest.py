@@ -174,6 +174,13 @@ class RunManifest(BaseModel):
     # Recorded so it is part of the run's provenance and so a resume replays the
     # same choice; defaulted for the same legacy-manifest reason as the maps above.
     bust_cache: bool = False
+    # True for a workflow test: a run that lives under the same runs/ dir and is
+    # viewable through the same routes as a production run, but is a test — it
+    # wrote no stage-cache entries and its numbers must never be mistaken for the
+    # project's latest real run (see app.services.project.RunsSummary). Defaults
+    # False so a pre-this-field manifest on disk (every run predates the field)
+    # parses as what it always was: not a test.
+    is_test_run: bool = False
     # The live human_review_queue tallies. Required, unlike the override maps
     # above: the key was renamed out of an older on-disk vocabulary, so a default
     # would let a pre-rename manifest parse and then report an empty tally for a
@@ -251,6 +258,7 @@ def create_run_manifest(
     limits: dict[str, int],
     offsets: dict[str, int],
     bust_cache: bool,
+    is_test_run: bool,
 ) -> RunManifest:
     """The initial run manifest — every stage pending, status running. The single
     source of the run-manifest shape: every caller mints it here and persists it
@@ -259,10 +267,12 @@ def create_run_manifest(
 
     `project`/`workflow_version` are None for a subset run (run_subset) that was
     not told its logical identity — recorded honestly as None rather than a
-    fabricated placeholder. A production run always supplies both.
-    `human_review_queue_stats` and `dropped_columns` start empty and grow live as
-    stages settle (the executor drains each stage's StageContribution into
-    them)."""
+    fabricated placeholder. A production run always supplies both. `is_test_run`
+    is required of every caller (no default) so minting a manifest forces a
+    conscious choice, unlike the field's own legacy-tolerant default on
+    `RunManifest`. `human_review_queue_stats` and `dropped_columns` start empty
+    and grow live as stages settle (the executor drains each stage's
+    StageContribution into them)."""
     return RunManifest(
         run_id=run_id,
         started_at=datetime.now().isoformat(timespec="seconds"),
@@ -273,6 +283,7 @@ def create_run_manifest(
         run_bindings=run_bindings,
         input_bindings=input_bindings,
         bust_cache=bust_cache,
+        is_test_run=is_test_run,
         human_review_queue_stats={},
         dropped_columns={},
         status=RunStatus.RUNNING,

@@ -36,6 +36,13 @@ from .manifest import (
 )
 from .run_log import RUN_START, STAGE_DONE, STAGE_START, RunLog
 from .stages import HANDLERS, HaltForReview, StageHandler
+from .lineage import (
+    LINEAGE_ATTR,
+    RowLineage,
+    concatenated_inputs_lineage,
+    lineage_sidecar_path,
+    read_row_lineage,
+)
 from .validation import Issue, Severity, ValidationReport, validate_dataframe
 
 
@@ -70,6 +77,8 @@ def run_subset(
     queue_auto_approve: bool = False,
     project: str | None = None,
     workflow_version: str | None = None,
+    identity: RunIdentity | None = None,
+    is_test_run: bool = False,
 ) -> dict[str, pd.DataFrame]:
     """Run only `stage_ids` of `workflow`, with `injected_outputs` seeded as the
     outputs of stages OUTSIDE the subset (their upstream is cut off — the output is
@@ -95,7 +104,15 @@ def run_subset(
     `queue_auto_approve` seeds the ctx flag of the same name: when set, a
     human_review_queue stage passes every row through in memory (approving all,
     no disk) instead of reaching for the decisions store. Off by default, so an
-    ordinary subset run's queue stage behaves exactly as before."""
+    ordinary subset run's queue stage behaves exactly as before.
+
+    `identity` makes this a workflow test's run — project scope plus a read-only
+    stage-result cache (`RunContext.for_workflow_test_run`); a workflow test is
+    the only current source of one. None (the default) is the plain subset run
+    (`RunContext.for_stages_outside_a_run`): no identity, no cache access,
+    `trace_links` unavailable to a publish stage.
+    `is_test_run` is recorded on the manifest (`RunManifest.is_test_run`);
+    default False, so an ordinary subset run's manifest reads as a real run."""
     by_id = workflow.index_stages_by_id()
     missing = [sid for sid in stage_ids if sid not in by_id]
     if missing:
@@ -105,23 +122,31 @@ def run_subset(
     manifest = create_run_manifest(
         ordered, run_id=run_dir.name, project=project,
         workflow_version=workflow_version, run_bindings={}, input_bindings={},
-        limits={}, offsets={}, bust_cache=False)
+        limits={}, offsets={}, bust_cache=False, is_test_run=is_test_run)
     write_manifest(run_dir, manifest)
     outputs: dict[str, pd.DataFrame] = dict(injected_outputs)
     manifest = _execute_stages(
-        ordered, _subset_ctx(repo_root, run_dir, queue_auto_approve),
+        ordered, _subset_ctx(repo_root, run_dir, queue_auto_approve, identity),
         manifest, run_dir, outputs)
     _raise_if_run_failed(manifest)
     return outputs
 
 
-def _subset_ctx(repo_root: Path, run_dir: Path, queue_auto_approve: bool) -> RunContext:
-    # No identity/stage_cache: a subset run is keyed on the Workflow + run_dir, not a
-    # project tree, and has no cross-run cache access. A handler that needs project
-    # scope (only human_review_queue does) fails loudly rather than reading a
-    # fabricated wrong directory — unless `queue_auto_approve` tells that handler to
-    # pass rows through in memory, in which case it never reaches for project scope.
-    return RunContext.for_non_production_run(repo_root, run_dir, queue_auto_approve=queue_auto_approve)
+def _subset_ctx(
+    repo_root: Path, run_dir: Path, queue_auto_approve: bool, identity: RunIdentity | None
+) -> RunContext:
+    # `identity` is what makes this a workflow test's run rather than a bare
+    # subset: it grants project scope, read-only. Without it a subset run is keyed
+    # on the Workflow + run_dir, not a project tree, and has no cache access — a
+    # handler that needs project scope (human_review_queue, or a publish stage's
+    # trace_links) then fails loudly rather than reading a fabricated wrong
+    # directory, unless `queue_auto_approve` tells human_review_queue to pass rows
+    # through in memory instead.
+    if identity is not None:
+        return RunContext.for_workflow_test_run(
+            repo_root, run_dir, identity.project, identity.run_id)
+    return RunContext.for_stages_outside_a_run(
+        repo_root, run_dir, queue_auto_approve=queue_auto_approve)
 
 
 def _raise_if_run_failed(manifest: RunManifest) -> None:
@@ -350,26 +375,60 @@ def _record_stage_error(record: StageRecord, exc: Exception) -> None:
 
 def _apply_row_slicing(
     output: pd.DataFrame, stage: Stage, ctx: RunContext, record: StageRecord
-) -> pd.DataFrame:
+) -> tuple[pd.DataFrame, int, int | None]:
     """Offset then cap `output`'s rows, in the handler's emitted order. Offset
     (per-run only, from --offset stage=M) drops the first M rows; the cap
     (--limit stage=N, else the stage's static `limit:`) then keeps the first
     N. Used to throttle/page the expensive LLM fan-out. Each trim actually
-    taken is recorded as a note on `record`."""
+    taken is recorded as a note on `record`.
+
+    Returns the trimmed frame and the window it took out of the handler's own
+    rows, as (start, stop), so the caller can narrow this stage's row lineage to
+    exactly the rows that survived."""
     sid = stage.id
+    start = 0
     offset = ctx.offsets.get(sid)
     if isinstance(offset, int) and offset > 0 and len(output) > 0:
         record.add_note(
             f"offset={offset}: dropped first {min(offset, len(output))} of {len(output)} row(s)"
         )
+        start = min(offset, len(output))
         output = output.iloc[offset:].reset_index(drop=True).copy()
+    stop: int | None = None
     limit = ctx.limits.get(sid, stage.limit)
     if isinstance(limit, int) and limit >= 0 and len(output) > limit:
         record.add_note(
             f"limit={limit}: truncated from {len(output)} to {limit} row(s)"
         )
+        stop = start + limit
         output = output.head(limit).copy()
-    return output
+    return output, start, stop
+
+
+def _persist_row_lineage(lineage: RowLineage, sid: str, run_dir: Path) -> None:
+    """Write `sid`'s per-row provenance sidecar (source stage id + row ordinal,
+    one row per this stage's own output row, in output order) that
+    `app.runtime.trace` reads to cross a hop that isn't row-preserving by
+    position alone (filter_rows, union)."""
+    lineage.to_frame().to_parquet(lineage_sidecar_path(run_dir, sid), index=False)
+
+
+def _stage_row_lineage(
+    stage: Stage, output: pd.DataFrame | None, inputs: dict[str, pd.DataFrame]
+) -> RowLineage | None:
+    """This stage's per-row provenance, or None where output row i is input row
+    i and the trace needs no help crossing it.
+
+    Both sources are the runtime's own knowledge, never the stage's report of
+    itself: the row driver's record of which input ordinals it emitted, riding
+    the frame's `.attrs`, and — for a union — the row counts of the inputs the
+    runtime handed over, since concatenation is in declared order."""
+    driven = read_row_lineage(output)
+    if driven is not None:
+        return driven
+    if stage.type == StageType.union:
+        return concatenated_inputs_lineage(stage, inputs)
+    return None
 
 
 def _persist_stage_output(output: pd.DataFrame, sid: str, run_dir: Path, record: StageRecord) -> Path:
@@ -394,6 +453,7 @@ def _finalize_stage_output(
     ctx: RunContext,
     record: StageRecord,
     output: pd.DataFrame | None,
+    inputs_for_stage: dict[str, pd.DataFrame],
     outputs_so_far: dict[str, pd.DataFrame],
     run_dir: Path,
     manifest: RunManifest,
@@ -422,7 +482,15 @@ def _finalize_stage_output(
     # Drop the contribution channel so it never reaches the persisted parquet
     # (its metadata isn't JSON-serializable) — it has been merged above.
     output.attrs.pop(CONTRIBUTION_ATTR, None)
-    output = _apply_row_slicing(output, stage, ctx, record)
+    lineage = _stage_row_lineage(stage, output, inputs_for_stage)
+    # Drop the lineage channel for the same reason as the contribution one
+    # above: `.attrs` is not JSON-serializable and must not reach the parquet.
+    output.attrs.pop(LINEAGE_ATTR, None)
+    output, start, stop = _apply_row_slicing(output, stage, ctx, record)
+    if lineage is not None:
+        # Slicing happens after the handler emitted, so the lineage narrows with
+        # it — entry i must still describe output row i.
+        _persist_row_lineage(lineage.sliced(start, stop), sid, run_dir)
 
     out_rep = validate_dataframe(output, stage.output_schema, stage_id=sid, phase="output")
     if row_errors:
@@ -541,7 +609,8 @@ def _run_stage(
             record.status = StageStatus.CANCELLED
             return _StageOutcome.CANCELLED, False
         joins_blocked = _finalize_stage_output(
-            stage, ctx, record, output, outputs_so_far, run_dir, manifest)
+            stage, ctx, record, output, inputs_for_stage, outputs_so_far, run_dir,
+            manifest)
     except Exception as exc:  # noqa: BLE001 — the runner's contract is to
         # record ANY stage failure in the manifest and keep running
         # independent forks rather than crash the whole run.

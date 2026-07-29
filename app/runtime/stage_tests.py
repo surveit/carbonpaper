@@ -171,7 +171,7 @@ def _run_one_test(stage: Stage, test: StageTest) -> StageTestResult:
     # disk), no identity, no cache. A stage reaching for run disk under this
     # context fails loudly via require_run_dir rather than touching a fabricated
     # path.
-    ctx = RunContext.for_non_production_run(None, None)
+    ctx = RunContext.for_stages_outside_a_run(None, None)
     try:
         actual = HANDLERS[StageType(stage.type)].execute(stage, input_frames, ctx)
     except Exception as exc:  # noqa: BLE001 — the function is authored code; any raise IS the result
