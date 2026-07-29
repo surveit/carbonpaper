@@ -30,7 +30,7 @@ from app.models.schema import (
     _Base,
     _SNAKE_RE,
 )
-from app.models.stages.code import validate_inline_function_code
+from app.models.stages.code import SUMMARY_DESCRIPTION, validate_inline_function_code
 from app.models.stages.filter_rows import FilterConfig
 from app.models.stages.stage_tests import StageTest, validate_stage_tests
 from app.models.stages.union import UnionConfig
@@ -212,14 +212,16 @@ class PythonFunction(_Base):
     """Handle for python_row_function / python_frame_function (and publish). The
     row-vs-frame distinction lives in the stage `type`, not here — the runtime
     reads the type to decide whether to invoke this per row or per frame."""
-    # Every field changes what this stage computes (the code/module it runs) —
-    # see Stage.compute_definition_fingerprint.
+    # Every field changes what this stage computes (the code/module it runs)
+    # except `summary`, which describes that code to a reader — see
+    # Stage.compute_definition_fingerprint.
     FINGERPRINT_FIELDS: ClassVar[frozenset[str]] = frozenset({
         "kind", "code", "module", "function", "requirements",
     })
-    INCIDENTAL_FIELDS: ClassVar[frozenset[str]] = frozenset()
+    INCIDENTAL_FIELDS: ClassVar[frozenset[str]] = frozenset({"summary"})
 
     kind: FunctionKind
+    summary: Optional[str] = Field(default=None, description=SUMMARY_DESCRIPTION)
     code: Optional[str] = Field(
         default=None,
         description=(

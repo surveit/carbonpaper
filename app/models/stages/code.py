@@ -1,11 +1,29 @@
 """Validation for python-code stages: the inline code a python_row_function /
 python_frame_function (or a publish stage's function block) carries must parse,
-compile, and define the function the runtime calls. Split out of the `Stage`
-model so the AST check lives beside other stage-type helpers rather than inline
-on the model."""
+compile, and define the function the runtime calls. Also holds the wording of the
+`summary` every authored-code handle asks for, so PythonFunction and FilterConfig
+cannot drift apart."""
 from __future__ import annotations
 
 import ast
+
+# The instruction an authoring client reads when it fills in `summary`. Python
+# code is the one handle a non-engineer reviewer cannot read for themselves, so
+# the summary — not the code — is what the stage page leads with; it is written
+# alongside the code, from the methodology, and says the RULE rather than the
+# implementation.
+SUMMARY_DESCRIPTION = (
+    "REQUIRED in practice: one or two plain sentences telling a non-engineer what this "
+    "step does, written from the methodology at the same time as the code. State the "
+    "rule and its intent, not the implementation — \"marks a bill withdrawn when its "
+    "status text says so, leaving the score blank\", never \"applies a regex to `status` "
+    "and returns a dict\". No Python vocabulary (function, dict, DataFrame, None, "
+    "regex); the only identifiers to use are column names the reader already sees in "
+    "the schema. Anything conditional or surprising about the behaviour — rows left "
+    "untouched, values deliberately blanked — belongs here, because it is what a "
+    "reviewer would otherwise have to read the code to find. Rewrite it whenever the "
+    "code changes."
+)
 
 
 def _binds_name(tree: ast.Module, name: str) -> bool:

@@ -5,6 +5,19 @@ Lives in app.models, not app.compiler: an import-linter contract admits only app
 and app.services into app.compiler, which would lock out app.agents and app.mcp."""
 from __future__ import annotations
 
+# Appended to the notes of every type carrying authored code. The reviewer of a
+# python stage is a journalist, not an engineer: the summary is the only part of
+# the stage they can check, and the stage page leads with it.
+CODE_SUMMARY_CONTRACT_NOTE = (
+    "ALWAYS write the handle's `summary` alongside the code: one or two plain "
+    "sentences telling a non-engineer what this step does and why, in the "
+    "methodology's own words. It is what the stage page leads with — the code is "
+    "shown last, folded — because the human reviewing this stage reads prose, not "
+    "Python. Say the rule, not the implementation, name no Python constructs, and "
+    "call out anything conditional (rows left untouched, values deliberately "
+    "blank). Rewrite it in the same edit whenever the code changes."
+)
+
 HUMAN_REVIEW_QUEUE_CONTRACT_NOTE = (
     "This type's output columns are FIXED by the runtime regardless of what "
     "output_schema declares: only `decision`, `ai_score`, `human_score`, "

@@ -6,6 +6,7 @@
    pane serves both tiers (`data-pane` lists both) and you can stay on
    "Current run" for the whole panel. #}
 {% from "_schema_table.html" import schema_table %}
+{% from "_stage_code.html" import stage_code %}
 
 <div class="run-stage-panel"
      data-project="{{ project }}" data-run="{{ run_id }}" data-stage="{{ stage.stage_id }}">
@@ -76,6 +77,7 @@
   {# ─────────── TRANSFORM (both tiers) ─────────── #}
   <div class="pane" data-pane="schema-transform run-transform" hidden>
     {% if stage_def %}{% with stage = stage_def %}{% include "_stage_executable.html" %}{% endwith %}
+    {{ stage_code(stage_def, function_code) }}
     {% else %}<p class="muted"><em>No static stage definition.</em></p>{% endif %}
     {# Scratch re-run result — filled in by the Inputs row picker below. #}
     <div class="scratch-result" hidden></div>
