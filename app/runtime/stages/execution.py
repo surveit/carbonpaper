@@ -1,8 +1,8 @@
 """Handler shapes: what the runtime hands each stage type, and the row driver.
 
-A stage type's grain-and-order guarantee follows from HOW the runtime invokes
-its handler, not from the handler's body: RowMap and Source preserve, Frame
-does not. validate_registry_matches_model holds the registry equal to the core fact."""
+A stage type's grain-and-order guarantee follows from HOW the runtime invokes its
+handler, not from the handler's body: RowMap and Source preserve (RowMap unless
+registered `drops_rows`, which keeps order but not grain), Frame does not."""
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
@@ -26,6 +26,7 @@ from .frame_caching import (
 )
 from ..cancellation import consume_cancel
 from ..context import RunContext
+from ..lineage import attach_row_lineage, kept_rows_lineage
 from ..manifest import CONTRIBUTION_ATTR, RowError, StageContribution
 from ..errors import RunCancelled
 from ..run_log import RunLog, bind_row_sink, unbind_detail_sink
@@ -42,10 +43,11 @@ from .row_events import (
 Row = dict[str, Any]
 
 # One stage execution's per-row function: a row and that row's position in the
-# input frame in, one row out. The position lets a mapper read its own entry out
-# of something its factory worked out over the whole input; a mapper that needs
-# nothing frame-wide ignores it.
-RowMapper = Callable[[Row, int], Row]
+# input frame in, one row out — or None to drop the row, which only a mapper
+# whose handler declares `drops_rows` may return. The position lets a mapper
+# read its own entry out of something its factory worked out over the whole
+# input; a mapper that needs nothing frame-wide ignores it.
+RowMapper = Callable[[Row, int], "Row | None"]
 
 # Builds the per-row function for ONE stage execution, from the stage, the run
 # context, and the single input frame the map is about to run over. The frame is
@@ -160,6 +162,16 @@ class RowMapHandler(StageHandler):
     """Driven per row by the runtime; the mapper never sees the frame, so it
     cannot reorder or fan out rows.
 
+    `drops_rows` widens the mapper's return to `Row | None`, None meaning DROP
+    THIS ROW — the one way a row-mapped stage may emit fewer rows than it was
+    given (filter_rows). Order and 1-to-at-most-1 still hold by construction, so
+    the driver knows exactly which input ordinal each surviving row came from
+    and records it as this stage's lineage; grain no longer holds, which is why
+    the property below reports it. `caches_rows=False` skips row-grain caching
+    for a stage whose per-row compute is cheaper than the fingerprint a lookup
+    would have to hash (the frame-level counterpart is FrameHandler's
+    `caches_frames`).
+
     `make_mapper` runs once per stage execution (resolve code, render prompt
     additions, record backend info, work anything frame-wide out ahead of the
     map) and returns the per-row callable — a plain function, or a
@@ -169,9 +181,9 @@ class RowMapHandler(StageHandler):
     input order regardless of completion order. `project_output_to_declared`
     asks the driver to project the assembled frame onto exactly the columns
     output_schema declares — a column-only operation that cannot change row
-    count or order. Every row-mapped stage resolves each row against the
-    stage-result cache before calling the mapper (see `_open_row_caching`);
-    there is no per-registration opt-out.
+    count or order. A row-mapped stage resolves each row against the
+    stage-result cache before calling the mapper (see `_open_row_caching`)
+    unless it registers `caches_rows=False`.
     """
 
     def __init__(
@@ -179,10 +191,14 @@ class RowMapHandler(StageHandler):
         make_mapper: MakeRowMapper,
         parallelism: int = 1,
         project_output_to_declared: bool = False,
+        drops_rows: bool = False,
+        caches_rows: bool = True,
     ) -> None:
         self.make_mapper = make_mapper
         self.parallelism = parallelism
         self.project_output_to_declared = project_output_to_declared
+        self.drops_rows = drops_rows
+        self.caches_rows = caches_rows
 
     def execute(
         self, stage: Stage, inputs: dict[str, pd.DataFrame], ctx: RunContext
@@ -191,7 +207,7 @@ class RowMapHandler(StageHandler):
 
     @property
     def preserves_grain_and_order(self) -> bool:
-        return True
+        return not self.drops_rows
 
 
 class LLMTransformHandler(RowMapHandler):
@@ -316,7 +332,11 @@ def _run_row_mapper(
     input row, filled by input index (also under concurrency), and the output
     frame is assembled in index order. A result with no rows AND no columns —
     an empty input — takes the input's columns instead of being handed on as a
-    0x0 frame."""
+    0x0 frame.
+
+    Under `handler.drops_rows` a slot may come back None, meaning the row is
+    dropped; order still holds, and the assembly loop below keeps the input
+    ordinals it emitted as the stage's lineage."""
     if len(stage.inputs) != 1:
         raise ValueError(
             f"stage {stage.id}: a row-mapped stage takes exactly one input, "
@@ -329,7 +349,7 @@ def _run_row_mapper(
     # reaches the mapper's lifecycle wrapper and is logged as the replay it is.
     # `map_row` itself stays bound: _finish_mapped_frame tests it for the
     # PostMapRowMapper shape, which a wrapper would hide.
-    caching = _open_row_caching(stage, ctx)
+    caching = _open_row_caching(stage, ctx) if handler.caches_rows else None
     compute_row = _log_row_lifecycle(map_row, ctx.run_log, stage.id)
     if caching is not None:
         compute_row = _map_row_through_cache(caching, compute_row, ctx.run_log, stage.id)
@@ -358,15 +378,23 @@ def _run_row_mapper(
             results[index] = compute_row(record, index)
 
     out_rows: list[Row] = []
+    kept_indices: list[int] = []
     for index, result in enumerate(results):
+        if result is None and handler.drops_rows:
+            continue
         if not isinstance(result, dict):
             raise ValueError(
                 f"stage {stage.id}: row mapper must return one dict per row, "
                 f"got {type(result).__name__} for row {index}"
             )
         out_rows.append(result)
+        kept_indices.append(index)
     mapped = _finish_mapped_frame(pd.DataFrame(out_rows), handler, map_row, stage, ctx)
-    return _restore_input_columns_when_nothing_named_them(mapped, src)
+    out = _restore_input_columns_when_nothing_named_them(mapped, src)
+    if handler.drops_rows:
+        # The driver, not the stage, knows which input ordinals survived.
+        attach_row_lineage(out, kept_rows_lineage(stage.inputs[0].id, kept_indices))
+    return out
 
 
 # ── the row-level cache interceptor ──────────────────────────────────────────
@@ -454,13 +482,16 @@ def _without_internal_columns(row: Row) -> Row:
 def _map_row_through_cache(
     caching: _RowCaching, map_row: RowMapper, log: RunLog | None, stage_id: str
 ) -> RowMapper:
-    def compute_row(row: Row, index: int) -> Row:
+    def compute_row(row: Row, index: int) -> Row | None:
         cached = _find_cached_row(caching, row)
         if cached is not None:
             emit_cached_row(log, stage_id, index)
             return cached
         result = map_row(row, index)
-        _record_row_output(caching, row, result)
+        # A drop is not a recordable output: the store holds output ROWS, so a
+        # replayed drop would be indistinguishable from a miss.
+        if result is not None:
+            _record_row_output(caching, row, result)
         return result
 
     return compute_row
@@ -474,7 +505,7 @@ def _log_row_lifecycle(map_row: RowMapper, log: RunLog | None, stage_id: str) ->
     if log is None:
         return map_row
 
-    def compute_row(row: Row, index: int) -> Row:
+    def compute_row(row: Row, index: int) -> Row | None:
         emit_row_start(log, stage_id, index)
         # Bind the detail sink so the LLM layer, several frames below map_row,
         # can attribute its prompt/thinking/response to this (stage, row)
@@ -488,7 +519,8 @@ def _log_row_lifecycle(map_row: RowMapper, log: RunLog | None, stage_id: str) ->
             raise
         finally:
             unbind_detail_sink(token)
-        emit_row_outcome(log, stage_id, index, result.get(ROW_ERROR_KEY))
+        # A dropped row (None) ran to completion — it has no error to report.
+        emit_row_outcome(log, stage_id, index, result.get(ROW_ERROR_KEY) if result else None)
         return result
 
     return compute_row

@@ -21,6 +21,7 @@ from app.models.stage import (
     Connector,
     ConnectorKind,
     FileFormat,
+    FilterConfig,
     FunctionKind,
     StageInput,
     JoinConfig,
@@ -36,6 +37,7 @@ from app.models.stage import (
     Stage,
     StageDraft,
     StageType,
+    UnionConfig,
     XlsxReadParams,
     validate_stage,
 )
@@ -247,6 +249,36 @@ NODE_TYPES: dict[str, dict[str, _Any]] = {
             "The one type exempt from declaring an output_schema: it emits files, not a table."
         ),
     },
+    "union": {
+        "summary": "Concatenate two or more upstream dataframes with an identical schema.",
+        "handle": "union",
+        "requires_inputs": True,
+        "min_inputs": 2,
+        "required": [],
+        "optional": [],
+        "notes": (
+            "No configuration — pass `union: {}`. Every input must declare an IDENTICAL "
+            "schema (same columns, same types); a mismatch is refused when the stage is "
+            "saved, naming the differing columns. Concatenates the inputs in declared "
+            "order; output_schema must equal that shared schema."
+        ),
+    },
+    "filter_rows": {
+        "summary": "Keep the rows an authored predicate returns True for.",
+        "handle": "filter",
+        "requires_inputs": True,
+        "min_inputs": 1,
+        "required": ["code"],
+        "optional": ["function"],
+        "notes": (
+            "Takes exactly ONE input. The predicate is INLINE code only — there is no "
+            "kind/module here; a filter that needs an importable module is doing more "
+            "than deciding. `should_include(row)` is handed a plain dict and "
+            "must return a bool — True keeps the row, False drops it; any other return "
+            "type is a run-time error. Kept rows preserve their original relative order "
+            "and every column unchanged, so output_schema must equal the input schema."
+        ),
+    },
 }
 
 NODE_TYPE_NAMES: set[str] = set(NODE_TYPES)
@@ -258,7 +290,7 @@ __all__ = [
     "SourceRef", "Column", "TableSchema", "Connector", "LLMConfig",
     "PythonFunction", "JoinKey", "JoinConfig", "AggregationOp",
     "AggregateConfig", "QueueConfig", "PublishConfig", "ReviewConfig",
-    "RowReviewDecision",
+    "RowReviewDecision", "UnionConfig", "FilterConfig",
     "StageInput", "Stage", "StageDraft", "StageTest", "XlsxReadParams", "validate_stage",
     "Workflow", "parse_workflow", "validate_workflow", "validate_workflow_draft",
     "validate_unique_ids", "validate_inputs_resolve", "detect_cycle",
