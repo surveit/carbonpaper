@@ -311,15 +311,15 @@ _STATUS_STROKE: dict[str, tuple[str, str]] = {
 def _render_workflow_node_lines(
     n: dict[str, Any], status_by_id: dict[str, str], review_by_id: dict[str, str]
 ) -> list[str]:
-    """One node's flowchart declaration, click handler, and (if a run status
-    or node-review belief applies) a stroke-override `style` line."""
+    """One node's flowchart declaration, click handler (always the one dispatcher,
+    static/diagram_nodes.js), and (if a status/belief applies) a `style` line."""
     sid = n["id"]
     stype = n["type"]
     status = status_by_id.get(sid)
     label = _build_workflow_node_label(n, status)
     lines = [
         f"    {sid}[{label}]:::{TYPE_CLASS.get(stype, 'custom')}",
-        f'    click {sid} call loadStage("{sid}") "Open stage"',
+        f'    click {sid} call dvNode("{sid}") "Open stage"',
     ]
     stroke_line = _resolve_stroke_line(sid, status, review_by_id.get(sid))
     if stroke_line is not None:

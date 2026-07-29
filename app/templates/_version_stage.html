@@ -1,0 +1,100 @@
+{# ── One stage of a frozen VERSION, read-only. The version-page counterpart to
+   _node_review.html: same Inputs / Transform / Outputs / Spec shape, minus every
+   control that writes. A version is immutable, so there is no decision bar, no
+   spec editor, and no test-generation — belief review lives on the working copy.
+
+   Context (GET /project/{project}/workflow/version/{version_id}/stage/{id}/partial):
+     project / version_id — str
+     stage        — the frozen Stage out of the version snapshot
+     raw_json     — stage_to_json(stage), displayed (not edited)
+     function_code — python source for a function stage (may be None)
+     type_class / type_glyph — the type-tag maps
+#}
+{% from "_schema_table.html" import schema_table %}
+
+<div class="node-review-full" id="version-stage-panel" data-stage-id="{{ stage.id }}">
+
+  <div class="nr-bar">
+    <div class="nr-bar-id">
+      <span class="type-tag big {{ type_class.get(stage.type, 'custom') }}">{{ type_glyph.get(stage.type, '') }} {{ stage.type }}</span>
+      <div class="nr-bar-name"><h2>{{ stage.name }}</h2><code>{{ stage.id }}</code></div>
+    </div>
+  </div>
+
+  <div class="nr-meta">
+    <span class="nr-scope muted">Frozen in version <code>{{ version_id }}</code> — read-only. To change this stage, edit it on the
+      <a href="/project/{{ project }}/workflow">working copy</a> and cut a new version.</span>
+  </div>
+
+  <div class="stage-tabs nr-tabs">
+    <div class="tabs">
+      <button type="button" data-nrtab="inputs">Inputs</button>
+      <button type="button" data-nrtab="transform" class="active">Transform</button>
+      <button type="button" data-nrtab="outputs">Outputs</button>
+      <button type="button" data-nrtab="spec">Spec (JSON)</button>
+    </div>
+  </div>
+
+  <div class="panes nr-panes">
+    <div class="pane" data-pane="inputs" hidden>
+      {% if stage.inputs %}
+        {% for inp in stage.inputs %}
+        <div class="schema-card">
+          <h4><a href="#" data-stage-link="{{ inp.id }}"><code>{{ inp.id }}</code></a> <span class="muted">— upstream output → this input</span></h4>
+          {{ schema_table(inp.table_schema) }}
+        </div>
+        {% endfor %}
+      {% else %}<p class="muted"><em>No declared inputs — a source stage.</em></p>{% endif %}
+    </div>
+
+    <div class="pane" data-pane="transform">
+      {% include "_stage_executable.html" %}
+      {% if stage.eval %}
+      <section class="eval-block">
+        <h2>📊 Eval</h2>
+        <dl class="kv">
+          {% if stage.eval.reference %}<dt>reference</dt><dd><code>{{ stage.eval.reference }}</code></dd>{% endif %}
+          {% if stage.eval.join_on %}<dt>join_on</dt><dd>{% for k in stage.eval.join_on %}<code>{{ k }}</code>{% if not loop.last %}, {% endif %}{% endfor %}</dd>{% endif %}
+          {% if stage.eval.metrics %}<dt>metrics</dt><dd>{% for m in stage.eval.metrics %}<code>{{ m }}</code>{% if not loop.last %}, {% endif %}{% endfor %}</dd>{% endif %}
+        </dl>
+      </section>
+      {% endif %}
+      {% if stage.review %}
+      <section class="review-block">
+        <h2>👤 Review routing (on outputs)</h2>
+        <dl class="kv">
+          {% if stage.review.when %}<dt>when</dt><dd><code>{{ stage.review.when }}</code></dd>{% endif %}
+          {% if stage.review.routing %}<dt>routing</dt><dd>{{ stage.review.routing }}</dd>{% endif %}
+        </dl>
+      </section>
+      {% endif %}
+    </div>
+
+    <div class="pane" data-pane="outputs" hidden>
+      {% if stage.output_schema %}
+      <div class="schema-card"><h4>output schema</h4>{{ schema_table(stage.output_schema) }}</div>
+      {% else %}<p class="muted"><em>No output schema declared.</em></p>{% endif %}
+    </div>
+
+    <div class="pane" data-pane="spec" hidden>
+      <pre class="yaml-block">{{ raw_json }}</pre>
+    </div>
+  </div>
+</div>
+
+<script>
+// Injected via innerHTML; the parent re-creates this script so it runs. Tab
+// switching only — this panel has no writers. Scoped to this panel so it can't
+// collide with the working-copy review panel's identical markup.
+(function () {
+  const panel = document.getElementById('version-stage-panel');
+  if (!panel) return;
+  panel.querySelectorAll('[data-nrtab]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      const key = btn.dataset.nrtab;
+      panel.querySelectorAll('[data-nrtab]').forEach(b => b.classList.toggle('active', b === btn));
+      panel.querySelectorAll('[data-pane]').forEach(p => { p.hidden = p.dataset.pane !== key; });
+    });
+  });
+})();
+</script>

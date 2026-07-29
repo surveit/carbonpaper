@@ -124,7 +124,7 @@ def test_row_trace_view_graph_stays_on_the_pinned_version(project: Path) -> None
     # covers every traced node and renders. Read off the working copy the traced
     # stage id would be unknown and the page would fall back to no graph at all.
     assert "flowchart LR" in page.text
-    assert f'click {PINNED_ID} call loadStage' in page.text
+    assert f'click {PINNED_ID} call dvNode' in page.text
 
 
 # ─── Unresolvable pinned version: loud and visible, never a substitute ───────
