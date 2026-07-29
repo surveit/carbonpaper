@@ -33,7 +33,7 @@ def _seed_version(root):
 def _with_queue_output_schema(stage):
     """`stage` plus the output_schema its input edge and `queue` block imply:
     the edge's own columns, each reviewed source repeated under its target name
-    and spec, then the bookkeeping columns. For the fixtures whose subject is
+    and spec, then the review-record columns. For the fixtures whose subject is
     something other than the output schema."""
     input_schema = stage["inputs"][0]["schema"]
     by_name = {column["name"]: column for column in input_schema["columns"]}

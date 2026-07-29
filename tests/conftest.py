@@ -94,7 +94,7 @@ def queue_added_columns(
     target: str = "human_score", target_type: str = "int"
 ) -> list[dict[str, object]]:
     """The output_schema declarations `queue_columns()` obliges a fixture to
-    make: a stage must declare every column it adds, and every bookkeeping
+    make: a stage must declare every column it adds, and every review-record
     column but the verdict must be nullable (the runtime writes none of them
     into a skipped or auto-approved row)."""
     return [

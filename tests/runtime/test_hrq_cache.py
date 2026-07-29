@@ -191,7 +191,7 @@ def test_miss_never_falls_back(tmp_path):
     assert len(snapshot) == 1
     assert len(fingerprints["input_fingerprints"]) == 1
     # A pending row has no reviewed output populated from any default, and the
-    # snapshot carries no bookkeeping column at all.
+    # snapshot carries no review-record column at all.
     assert "decision" not in snapshot.columns
     assert "human_score" not in snapshot.columns
 
@@ -211,13 +211,13 @@ def test_fingerprints_stable_across_parquet_round_trip(tmp_path):
     assert original == roundtripped
 
 
-def test_input_fingerprint_matches_original_row_before_any_bookkeeping_stamped(tmp_path):
+def test_input_fingerprint_matches_original_row_before_any_review_record_stamped(tmp_path):
     """The sidecar's `input_fingerprint` for a halted snapshot row must equal
     `compute_row_fingerprint` of that row's ORIGINAL upstream dict, recomputed
     independently here from `src` — never a value that shifts once the
     handler applies a cached decision. Fingerprinting happens on the upstream
-    row before any bookkeeping is added, so a later column can never change
-    the key a cached decision is matched on."""
+    row before any review-record column is stamped, so a later column can never
+    change the key a cached decision is matched on."""
     stage = _stage()
     src = _src(3)
     expected_by_id = {
@@ -232,7 +232,7 @@ def test_input_fingerprint_matches_original_row_before_any_bookkeeping_stamped(t
 
 def test_snapshot_columns_match_original_upstream_columns_exactly(tmp_path):
     """The pending snapshot is written PURE: exactly the pending rows'
-    original upstream columns, no fingerprint or decision-bookkeeping column
+    original upstream columns, no fingerprint or review-record column
     ever added."""
     stage = _stage()
     src = _src(2)

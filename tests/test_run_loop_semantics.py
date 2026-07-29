@@ -96,8 +96,8 @@ def _score_stage(stage_id, input_id, name="Score"):
 def _queue_stage(stage_id, input_id, name="Review"):
     """A human_review_queue with no cached decisions yet — it halts. Its
     output_schema keeps the (id, val) columns a reviewed row carries through;
-    the stage projects onto exactly what it declares, so the reviewer
-    bookkeeping columns are not part of its output."""
+    the stage projects onto exactly what it declares, so the review-record
+    columns are not part of its output."""
     return {"id": stage_id, "name": name, "type": "human_review_queue",
             "inputs": [{"id": input_id, "schema": _ID_VAL_SCHEMA}],
             "output_schema": _QUEUE_OUT_SCHEMA,

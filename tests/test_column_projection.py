@@ -74,9 +74,9 @@ _SCORED_COLUMNS = [
 # Every one must be declared on output_schema (app/models/stages/
 # human_review_queue.py), so they are appended to whatever a test declares and
 # named in its expected column list.
-_BOOKKEEPING = ["decision", "reviewer_id", "reviewed_at", "review_notes"]
-_BOOKKEEPING_COLUMNS = [
-    {"name": name, "type": "str", "nullable": name != "decision"} for name in _BOOKKEEPING
+_REVIEW_RECORD = ["decision", "reviewer_id", "reviewed_at", "review_notes"]
+_REVIEW_RECORD_COLUMNS = [
+    {"name": name, "type": "str", "nullable": name != "decision"} for name in _REVIEW_RECORD
 ]
 
 
@@ -89,7 +89,7 @@ def _queue_stage(output_schema, flt=None):
     return Stage.model_validate({
         "id": "review", "name": "Human review", "type": "human_review_queue",
         "inputs": [{"id": "scored", "schema": {"columns": _SCORED_COLUMNS}}],
-        "output_schema": {"columns": output_schema["columns"] + _BOOKKEEPING_COLUMNS},
+        "output_schema": {"columns": output_schema["columns"] + _REVIEW_RECORD_COLUMNS},
         "queue": queue,
     })
 
@@ -124,7 +124,7 @@ def test_human_review_queue_keeps_only_declared_columns(tmp_path):
     ctx = _queue_test_ctx(tmp_path, "keeps-declared-columns")
     out = HANDLERS[StageType.human_review_queue].execute(stage, {"scored": _src_scored()}, ctx)
 
-    assert list(out.columns) == ["evidence_id", "final_score"] + _BOOKKEEPING
+    assert list(out.columns) == ["evidence_id", "final_score"] + _REVIEW_RECORD
     dropped = contribution_of(out).dropped_columns
     for col in ("entity_id", "quote", "benchmark_id", "query_id"):
         assert col in dropped
@@ -142,7 +142,7 @@ def test_human_review_queue_carried_columns_survive_by_being_declared(tmp_path):
     ctx = _queue_test_ctx(tmp_path, "carried-columns-survive")
     out = HANDLERS[StageType.human_review_queue].execute(stage, {"scored": _src_scored()}, ctx)
 
-    assert list(out.columns) == ["evidence_id", "final_score", "quote"] + _BOOKKEEPING
+    assert list(out.columns) == ["evidence_id", "final_score", "quote"] + _REVIEW_RECORD
     dropped = contribution_of(out).dropped_columns
     assert "quote" not in dropped
     assert "benchmark_id" in dropped  # still dropped: not declared

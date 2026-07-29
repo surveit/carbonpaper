@@ -122,15 +122,15 @@ def test_a_reviewed_target_more_permissive_than_its_source_is_clean():
     assert find_queue_column_issues(stage) == []
 
 
-# ── 4. the bookkeeping columns on output_schema ──────────────────────────────
+# ── 4. the review-record columns on output_schema ────────────────────────────
 
 
-def test_a_bookkeeping_column_missing_from_output_schema_is_rejected():
+def test_a_review_record_column_missing_from_output_schema_is_rejected():
     with pytest.raises(ValidationError, match="who_reviewed"):
         Stage.model_validate(_stage_spec(queue={"reviewer_column": "who_reviewed"}))
 
 
-def test_a_bookkeeping_column_declared_non_str_is_rejected():
+def test_a_review_record_column_declared_non_str_is_rejected():
     output_columns = [
         c if c["name"] != "decision" else {"name": "decision", "type": "int"}
         for c in _OUTPUT_COLUMNS
@@ -152,7 +152,7 @@ def test_a_declared_notes_column_present_on_output_schema_is_clean():
     assert find_queue_column_issues(stage) == []
 
 
-def test_a_non_nullable_bookkeeping_column_is_rejected():
+def test_a_non_nullable_review_record_column_is_rejected():
     """The runtime writes no reviewer into a filter-skipped or auto-approved
     row, so a non-nullable declaration would fail at the END of a run — after
     the human had done all the reviewing."""
@@ -166,7 +166,7 @@ def test_a_non_nullable_bookkeeping_column_is_rejected():
 
 
 def test_a_non_nullable_verdict_column_is_clean():
-    """The one bookkeeping column the runtime writes on every row."""
+    """The one review-record column the runtime writes on every row."""
     output_columns = [
         c if c["name"] != "decision"
         else {"name": "decision", "type": "str", "nullable": False}
@@ -188,7 +188,7 @@ def test_an_added_column_that_the_input_already_declares_is_rejected():
             queue={"reviewed_columns": {"assertion_text": "claim_id"}}))
 
 
-def test_a_bookkeeping_column_that_the_input_already_declares_is_rejected():
+def test_a_review_record_column_that_the_input_already_declares_is_rejected():
     """`decision` is declared `str` on output_schema, so rule 4 stays silent and
     only this rule can fire."""
     input_columns = _INPUT_COLUMNS + [{"name": "decision", "type": "str"}]
@@ -208,7 +208,7 @@ def test_two_sources_mapping_to_the_same_target_are_rejected():
                                         "confidence": "human_score"}}))
 
 
-def test_a_bookkeeping_name_reused_as_a_reviewed_target_is_rejected():
+def test_a_review_record_name_reused_as_a_reviewed_target_is_rejected():
     """The source is `str` non-null and `decision` is declared `str` on
     output_schema, so rules 3 and 4 stay silent and only this rule can fire."""
     with pytest.raises(ValidationError, match="named more than once"):

@@ -22,19 +22,19 @@ def find_queue_column_issues(stage: "Stage") -> list[str]:
     issues += _find_reviewed_source_issues(stage.id, queue, input_schema)
     issues += _find_added_column_collisions(stage.id, queue, input_schema)
     issues += _find_reviewed_target_issues(stage.id, queue, input_schema, output_schema)
-    issues += _find_bookkeeping_target_issues(stage.id, queue, output_schema)
+    issues += _find_review_record_target_issues(stage.id, queue, output_schema)
     return issues
 
 
 def _list_added_columns(queue: "QueueConfig") -> list[tuple[str, str]]:
     """Every column a queue stage adds to its input, as (the config field that
-    names it, the name): the reviewed targets, then the bookkeeping columns.
+    names it, the name): the reviewed targets, then the review-record columns.
     Duplicates are NOT collapsed — `_find_duplicate_added_names` reports them."""
     added = [
         (f"queue.reviewed_columns['{source}']", target)
         for source, target in queue.reviewed_columns.items()
     ]
-    return added + _collect_bookkeeping_columns(queue)
+    return added + _collect_review_record_columns(queue)
 
 
 # --- the individual checks -----------------------------------------------------
@@ -136,11 +136,11 @@ def _find_reviewed_target_issues(
     return issues
 
 
-def _find_bookkeeping_target_issues(
+def _find_review_record_target_issues(
     sid: str, queue: "QueueConfig", output_schema: TableSchema
 ) -> list[str]:
     issues: list[str] = []
-    for field, name in _collect_bookkeeping_columns(queue):
+    for field, name in _collect_review_record_columns(queue):
         column = output_schema.column_for_name(name)
         if column is None:
             issues.append(
@@ -164,7 +164,7 @@ def _find_bookkeeping_target_issues(
     return issues
 
 
-def _collect_bookkeeping_columns(queue: "QueueConfig") -> list[tuple[str, str]]:
+def _collect_review_record_columns(queue: "QueueConfig") -> list[tuple[str, str]]:
     columns = [
         ("queue.verdict_column", queue.verdict_column),
         ("queue.reviewer_column", queue.reviewer_column),
