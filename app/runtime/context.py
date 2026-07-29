@@ -1,7 +1,7 @@
 """The frozen run context.
 
 Built once and threaded read-only; a run's growing state lives on the manifest.
-A production-mode context may not carry `queue_auto_approve`, and
+A cache-WRITING context may not carry `queue_auto_approve`, and
 `identity`/`stage_cache` co-vary (both or neither) - both enforced by validators.
 """
 
@@ -9,59 +9,55 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
-
 from pydantic import BaseModel, ConfigDict, model_validator
 
-from app.core.stage_cache import ReadOnlyStageCache, StageCacheEntry
+from app.core.stage_cache import ReadOnlyStageCache, StageCache, StageCacheEntry
 
 from .run_log import RunLog
-
-RunMode = Literal["production", "non_production"]
 
 
 @dataclass(frozen=True)
 class RunIdentity:
-    """A production run's logical identity: the (project, run_id) pair
-    cancellation's checkpoints poll (`app.runtime.cancellation`) and the
-    stage-result cache key scopes to. Carried on `RunContext.identity`; absent
-    (`None`) for a run with no project scope — a subset run or an in-memory
-    preview."""
+    """A run's logical identity: the (project, run_id) pair cancellation's
+    checkpoints poll (`app.runtime.cancellation`) and the stage-result cache key
+    scopes to. Carried on `RunContext.identity`; absent (`None`) when stages
+    execute outside a run — a preview, an authored stage test, an eval."""
 
     project: str
     run_id: str
 
 
 class RunContext(BaseModel):
-    """Immutable identity + config for one run. `for_production_run` sets
-    `mode="production"` and grants project scope (`identity` + a read+write
-    stage-result cache); `for_non_production_run` sets `mode="non_production"`,
-    may set `queue_auto_approve`, and grants project scope only when handed a
-    `project`/`run_id` — and then read-only, never write."""
+    """Immutable identity + config for one execution, built by exactly one of
+    three constructors named for what is being executed: `for_workflow_run` (a
+    workflow run — project scope, read+write cache), `for_workflow_test_run` (a
+    workflow test's run — project scope, READ-ONLY cache), or
+    `for_stages_outside_a_run` (a preview / authored stage test / eval — no
+    scope, no cache, possibly no paths)."""
 
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
 
-    mode: RunMode
-    # A real run's on-disk roots. Both are None only for an in-memory harness
-    # that executes a handler outside any run (the stage-test runner) — the stage
-    # types it runs read neither. Every handler that DOES reach for run-scoped
-    # disk goes through require_run_dir() and fails loudly on None rather than
-    # touching a fabricated directory; repo_root has no reader in the runtime.
+    # A run's on-disk roots. Both are None only when stages execute outside any
+    # run (the stage-test runner) — the stage types it runs read neither. Every
+    # handler that DOES reach for run-scoped disk goes through require_run_dir()
+    # and fails loudly on None rather than touching a fabricated directory;
+    # repo_root has no reader in the runtime.
     repo_root: Path | None
     run_dir: Path | None
     # This run's logical identity, read by cancellation's checkpoints and the
-    # stage-result cache key. Set for a production run; None for a subset run,
-    # which is therefore simply not cancellable and carries no cache scope.
+    # stage-result cache key. Set for a workflow run and a workflow test's run;
+    # None outside a run, which is therefore simply not cancellable and carries
+    # no cache scope.
     identity: RunIdentity | None = None
-    # The stage-result cache view this run may read (and, for a production run,
+    # The stage-result cache view this run may read (and, for a workflow run,
     # write via the writable `StageCache` subclass). None alongside
     # `identity is None` — enforced by the validator.
     stage_cache: ReadOnlyStageCache | None = None
     limits: dict[str, int] = {}
     offsets: dict[str, int] = {}
     # In-memory queue bypass: when set, a human_review_queue stage approves every
-    # row in memory instead of reaching for the stage cache or halting. Only a
-    # non-production run may set it (see the validator).
+    # row in memory instead of reaching for the stage cache or halting. Never set
+    # alongside a WRITABLE cache (see the validator).
     queue_auto_approve: bool = False
     # Recompute everything: this run SKIPS every stage-cache read, while the
     # write-capable accessor still records what it computes — so the cache ends
@@ -75,12 +71,18 @@ class RunContext(BaseModel):
     run_log: RunLog | None = None
 
     @model_validator(mode="after")
-    def _production_run_forbids_queue_auto_approve(self) -> RunContext:
-        if self.mode == "production" and self.queue_auto_approve:
+    def _a_writable_cache_forbids_queue_auto_approve(self) -> RunContext:
+        # The real hazard the old mode="production" guard was standing in for: an
+        # auto-approved queue decides in memory, and a WRITE-capable cache would
+        # persist stage results reached that way for a later workflow run to read
+        # back as if a human had approved them. Read-only scope (a workflow test)
+        # cannot, so it may bypass freely.
+        if isinstance(self.stage_cache, StageCache) and self.queue_auto_approve:
             raise ValueError(
-                "queue_auto_approve is a non-production-run bypass; a production run "
-                "must never auto-approve its human review queue in memory. Build "
-                "the context with mode='non_production' if the bypass is intended."
+                "queue_auto_approve is set on a run whose stage cache is "
+                "WRITABLE — its in-memory approvals would be recorded for a "
+                "later run to read back as human decisions. Only a run with a "
+                "read-only cache, or none at all, may bypass the queue."
             )
         return self
 
@@ -126,7 +128,7 @@ class RunContext(BaseModel):
         return self.run_dir
 
     @classmethod
-    def for_production_run(
+    def for_workflow_run(
         cls,
         repo_root: Path,
         run_dir: Path,
@@ -136,18 +138,18 @@ class RunContext(BaseModel):
         offsets: dict[str, int] | None = None,
         bust_cache: bool = False,
     ) -> RunContext:
-        """A production run's context: `mode="production"`, full project scope —
-        `identity` (`project`, `run_id`) and a read+write stage-result cache
+        """A workflow run's context (app.runtime.runner): full project scope —
+        `identity` (`project`, `run_id`) and a read+WRITE stage-result cache
         (`StageCacheEntry.read_write()`). The run's growing telemetry lives on
         the manifest, not here, so a resume replays nothing through this
         constructor.
 
         `bust_cache` makes this run skip every cache READ; the accessor stays
         write-capable, so the run leaves the cache re-pinned rather than stale.
-        Only a production run can be told this — it is the only kind that has a
-        cache — which is why `for_non_production_run` takes no such argument."""
+        Only a workflow run can be told this — it is the only kind that WRITES
+        the cache, so the only kind whose skipped reads get re-pinned — which is
+        why neither other constructor takes the argument."""
         return cls(
-            mode="production",
             repo_root=repo_root,
             run_dir=run_dir,
             identity=RunIdentity(project=project, run_id=run_id),
@@ -158,43 +160,61 @@ class RunContext(BaseModel):
         )
 
     @classmethod
-    def for_non_production_run(
+    def for_workflow_test_run(
+        cls,
+        repo_root: Path,
+        run_dir: Path,
+        project: str,
+        run_id: str,
+        limits: dict[str, int] | None = None,
+        offsets: dict[str, int] | None = None,
+    ) -> RunContext:
+        """A workflow test's run (app.services.workflow_test): the same project
+        scope a workflow run gets — `identity` plus a stage-result cache — except
+        the cache is READ-ONLY (`StageCacheEntry.read_only()`). So a publish
+        stage's `trace_links` resolves and a slow upstream stage can replay a
+        workflow run's cached result, but the view carries no `record` method:
+        this run structurally cannot write a cache entry, and a test's outputs
+        never poison what a workflow run reads back.
+
+        Its human_review_queue auto-approves in memory (`queue_auto_approve`) —
+        safe precisely because the read-only cache cannot persist those in-memory
+        approvals for a later run to mistake for human ones."""
+        return cls(
+            repo_root=repo_root,
+            run_dir=run_dir,
+            identity=RunIdentity(project=project, run_id=run_id),
+            stage_cache=StageCacheEntry.read_only(),
+            limits=dict(limits or {}),
+            offsets=dict(offsets or {}),
+            queue_auto_approve=True,
+        )
+
+    @classmethod
+    def for_stages_outside_a_run(
         cls,
         repo_root: Path | None,
         run_dir: Path | None,
         limits: dict[str, int] | None = None,
         offsets: dict[str, int] | None = None,
         queue_auto_approve: bool = False,
-        project: str | None = None,
-        run_id: str | None = None,
     ) -> RunContext:
-        """Every run that is not a production run: `mode="non_production"`.
-        `repo_root`/`run_dir` are None for an in-memory harness that executes a
-        handler outside any run. `queue_auto_approve` lets the run pass a
-        human_review_queue stage through in memory.
+        """Stage handlers executed with no run behind them: a single-stage preview
+        (app.runtime.preview), an authored stage test (app.runtime.stage_tests),
+        an eval, a bare subset run. No `identity` and no stage-result cache, so a
+        handler that needs project scope fails loudly rather than reading a
+        fabricated wrong directory.
 
-        Project scope is off by default (a subset run, a preview, an authored-test
-        run): no `identity`, no stage-result cache, so a handler that needs scope
-        fails loudly rather than reading a fabricated wrong directory. Passing
-        `project`/`run_id` — a workflow test does — grants it, with a READ-ONLY
-        cache (`StageCacheEntry.read_only()`): a publish stage's `trace_links` can
-        build a URL and a slow upstream stage can replay a production run's cached
-        result, but the view carries no `record` method, so a non-production run
-        structurally cannot write a cache entry and never poisons what a
-        production run reads back. Read-write scope is `for_production_run`'s
-        alone, which is why this takes no `bust_cache`."""
-        if (project is None) != (run_id is None):
-            raise ValueError(
-                "project and run_id are the two halves of one identity — pass "
-                "both to grant project scope, or neither to withhold it."
-            )
-        scoped = project is not None and run_id is not None
+        `repo_root`/`run_dir` are both None when there is no run on disk at all —
+        require_run_dir() then fails loudly for any stage that writes run-scoped
+        output. `queue_auto_approve` lets a human_review_queue stage pass rows
+        through in memory; there is no cache here to persist those approvals
+        into."""
         return cls(
-            mode="non_production",
             repo_root=repo_root,
             run_dir=run_dir,
-            identity=RunIdentity(project=project, run_id=run_id) if scoped else None,
-            stage_cache=StageCacheEntry.read_only() if scoped else None,
+            identity=None,
+            stage_cache=None,
             limits=dict(limits or {}),
             offsets=dict(offsets or {}),
             queue_auto_approve=queue_auto_approve,
@@ -202,7 +222,6 @@ class RunContext(BaseModel):
 
 
 __all__ = [
-    "RunMode",
     "RunIdentity",
     "RunContext",
 ]

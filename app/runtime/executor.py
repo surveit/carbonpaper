@@ -99,11 +99,11 @@ def run_subset(
     no disk) instead of reaching for the decisions store. Off by default, so an
     ordinary subset run's queue stage behaves exactly as before.
 
-    `identity` grants this subset run project scope (a `RunIdentity` plus a
-    read-only stage-result cache — see `RunContext.for_non_production_run`); a
-    workflow test is the only current source of one. None (the default) is the
-    plain subset run: no identity, no cache access, `trace_links` unavailable to
-    a publish stage.
+    `identity` makes this a workflow test's run — project scope plus a read-only
+    stage-result cache (`RunContext.for_workflow_test_run`); a workflow test is
+    the only current source of one. None (the default) is the plain subset run
+    (`RunContext.for_stages_outside_a_run`): no identity, no cache access,
+    `trace_links` unavailable to a publish stage.
     `is_test_run` is recorded on the manifest (`RunManifest.is_test_run`);
     default False, so an ordinary subset run's manifest reads as a real run."""
     by_id = workflow.index_stages_by_id()
@@ -128,19 +128,18 @@ def run_subset(
 def _subset_ctx(
     repo_root: Path, run_dir: Path, queue_auto_approve: bool, identity: RunIdentity | None
 ) -> RunContext:
-    # No project scope by default: a subset run is keyed on the Workflow + run_dir,
-    # not a project tree, and has no cross-run cache access. A handler that needs
-    # project scope (human_review_queue, or a publish stage's trace_links) fails
-    # loudly rather than reading a fabricated wrong directory — unless
-    # `queue_auto_approve` tells human_review_queue to pass rows through in memory
-    # instead, or `identity` is given (a workflow test), in which case project
-    # scope IS granted, read-only: a non-production run can never write a cache entry.
-    return RunContext.for_non_production_run(
-        repo_root, run_dir,
-        queue_auto_approve=queue_auto_approve,
-        project=identity.project if identity else None,
-        run_id=identity.run_id if identity else None,
-    )
+    # `identity` is what makes this a workflow test's run rather than a bare
+    # subset: it grants project scope, read-only. Without it a subset run is keyed
+    # on the Workflow + run_dir, not a project tree, and has no cache access — a
+    # handler that needs project scope (human_review_queue, or a publish stage's
+    # trace_links) then fails loudly rather than reading a fabricated wrong
+    # directory, unless `queue_auto_approve` tells human_review_queue to pass rows
+    # through in memory instead.
+    if identity is not None:
+        return RunContext.for_workflow_test_run(
+            repo_root, run_dir, identity.project, identity.run_id)
+    return RunContext.for_stages_outside_a_run(
+        repo_root, run_dir, queue_auto_approve=queue_auto_approve)
 
 
 def _raise_if_run_failed(manifest: RunManifest) -> None:

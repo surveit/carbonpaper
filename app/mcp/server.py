@@ -117,7 +117,7 @@ methodology; then loop edit_stage → run_stage_tests until they pass.
 # Running
 Runs execute a stored version; save_version(project_id, message) creates one, then
 run_workflow_test against it is how you finish. Publishing is human-only.
-run_workflow(project_id, version_id?) starts a run of record and returns a run_id,
+run_workflow(project_id, version_id?) starts a real run and returns a run_id,
 get_run_status(project_id, run_id) follows it to its outcome, and
 run_workflow_test(project_id, version_id?, limit, offset) executes any stored version —
 published or not — over a small slice of the real source, as a run marked is_test_run.
@@ -466,18 +466,27 @@ def get_run_status(project_id: str, run_id: str) -> dict[str, Any]:
 def run_workflow_test(
     project_id: str, version_id: str | None = None, limit: int = 20, offset: int = 0,
 ) -> dict[str, Any]:
-    """Run a workflow test: take the first `limit` rows (from `offset`) of the
-    workflow's bound source and run the frontier over just that slice, so an
-    author can watch the pipeline execute on real data before publishing. It IS
-    a real run — same `runs/` dir, manifest, and trace/view routes as
-    run_workflow's — except it is marked `is_test_run` (it may READ the
-    stage-result cache but never writes to it, so it can't affect a production
-    run) and never counts as the project's latest run. Accepts any stored
-    version, published or not (omit `version_id` for the newest). Returns the
-    verdict {ok, run_id, version_id, stages_run, error}: `ok` False on any stage
-    error, with `error` naming what failed; poll get_run_status(project_id,
-    run_id) for the same live/final manifest a production run exposes. A
-    project with no stored version is a loud error."""
+    """Run a workflow test, so an author can watch the pipeline execute on real
+    data before publishing. It IS a real run — same `runs/` dir, manifest, and
+    trace/view routes as run_workflow's — and differs from run_workflow on
+    exactly five axes:
+
+    1. VERSION: any stored version, published or not (run_workflow pins a
+       published one). Omit `version_id` for the newest stored.
+    2. SOURCE: the `limit` rows from `offset` of the workflow's bound source,
+       injected (run_workflow reads the whole source through input_data).
+    3. EXECUTION: synchronous — this returns when the run is done (run_workflow
+       returns a run_id immediately and executes on a background thread).
+    4. REVIEW QUEUE: a human_review_queue stage auto-approves every row in
+       memory (run_workflow halts there and waits for a human).
+    5. STAGE CACHE: read-only — it may replay a workflow run's cached results
+       but records none of its own, so it cannot affect a later run.
+
+    Marked `is_test_run` on the manifest, so it never counts as the project's
+    latest run. Returns the verdict {ok, run_id, version_id, stages_run, error}:
+    `ok` False on any stage error, with `error` naming what failed; poll
+    get_run_status(project_id, run_id) for the same live/final manifest
+    run_workflow exposes. A project with no stored version is a loud error."""
     _resolve_existing_project(project_id)  # loud if the project doesn't exist
     try:
         return workflow_test_service.run_workflow_test(

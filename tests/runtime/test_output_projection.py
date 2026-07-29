@@ -66,7 +66,7 @@ def test_human_review_queue_output_missing_a_declared_column_raises(tmp_path):
         "queue": {"filter": None},
     })
     inputs = {"load": pd.DataFrame({"claim_id": ["c1"]})}
-    ctx = RunContext.for_non_production_run(tmp_path, tmp_path, queue_auto_approve=True)
+    ctx = RunContext.for_stages_outside_a_run(tmp_path, tmp_path, queue_auto_approve=True)
 
     with pytest.raises(ValueError) as excinfo:
         HANDLERS[StageType.human_review_queue].execute(stage, inputs, ctx)

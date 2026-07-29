@@ -27,9 +27,24 @@ def run_workflow_test(
     limit: int = 20,
     offset: int = 0,
 ) -> dict[str, Any]:
-    """Run the resolved version's frontier over a slice of its bound source, as
-    a real run (marked `is_test_run`) under `<project_dir>/runs/<run_id>/`. Returns
-    `{ok, run_id, version_id, stages_run, error}`."""
+    """Run the resolved version's frontier over a slice of its bound source, as a
+    real run (marked `is_test_run`) under `<project_dir>/runs/<run_id>/`. Returns
+    `{ok, run_id, version_id, stages_run, error}`.
+
+    The same run app.services.run.start_run produces, differing on exactly five
+    axes — the reason this is its own seam rather than a flag on that one:
+
+    1. VERSION: any stored version, published or not (_resolve_workflow_test_version).
+    2. SOURCE: a `limit`/`offset` slice, injected (get_source_data_with_limit_and_offset)
+       rather than read whole through the input_data stage — which is why the
+       frontier excludes input_data (_frontier_stages).
+    3. EXECUTION: synchronous; start_run launches a background daemon thread.
+    4. REVIEW QUEUE: auto-approves in memory (queue_auto_approve) instead of halting.
+    5. STAGE CACHE: read-only (RunContext.for_workflow_test_run) instead of read+write.
+
+    Collapsing these into start_run would mean five flags with two valid
+    combinations, so they stay two functions; only version resolution is shared
+    vocabulary (cf. app.services.run.resolve_version, which gates on published)."""
     project_dir = resolve_project_dir(project)
     version = _resolve_workflow_test_version(project_dir, version_id)
     stages = load_version_stages(project_dir, version)
@@ -87,7 +102,7 @@ def _run_frontier(
     """Execute the frontier subset: normal return -> (True, None); a SubsetRunError
     (a stage errored) -> (False, its message). run_subset owns the manifest under
     `run_dir`, records it `is_test_run=True`, and grants project scope
-    (`identity` + a read-only stage cache — see RunContext.for_non_production_run)
+    (`identity` + a read-only stage cache — see RunContext.for_stages_outside_a_run)
     so a publish stage's `trace_links` resolves; a mid-frontier
     human_review_queue auto-approves in memory (queue_auto_approve=True) rather
     than halting."""
@@ -123,7 +138,7 @@ def get_source_data_with_limit_and_offset(
     # (an absolute bound path), never repo_root/run_dir or project scope — so this
     # source read carries the real repo_root and no run_dir (None, the read
     # precedes any run-dir creation) rather than a fabricated cwd sentinel.
-    ctx = RunContext.for_non_production_run(repo_root(), None)
+    ctx = RunContext.for_stages_outside_a_run(repo_root(), None)
     return {
         source.id: read_input_data(source, ctx).iloc[offset:offset + limit]
         for source in sources
