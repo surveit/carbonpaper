@@ -30,7 +30,7 @@
 
 {% if manifest.is_test_run %}
 <p class="banner" style="background:#f3e8fd;border-color:#8a5cf6;color:#5a2a8c">
-    🧪 <strong>Workflow test</strong> — not a production run. It read the stage-result cache but wrote none, so it never affects a production run.
+    🧪 <strong>Workflow test</strong> — this was a test run. It automatically approves all human reviews, but does call LLMs and run code stages. It does not cache any results.
 </p>
 {% endif %}
 
