@@ -110,9 +110,23 @@ def test_a_reconnect_resumes_at_the_cursor_and_never_duplicates(tmp_path):
       console.log(JSON.stringify({opened: opened, received: received, states: states}));
     """, tmp_path)
 
-    assert out["opened"] == ["/events?from_seq=0", "/events?from_seq=2"]
+    # First connect carries no cursor, so the server opens on the tail; the
+    # reconnect carries one, because resuming is what the cursor is for.
+    assert out["opened"] == ["/events", "/events?from_seq=2"]
     assert out["received"] == [0, 1, 2]
     assert out["states"][-1] == "live"
+
+
+def test_a_drop_before_any_event_reconnects_to_the_tail_again(tmp_path):
+    """Nothing has been rendered yet, so there is no cursor to resume from and
+    asking for from_seq=0 would pull the whole log the tail default avoids."""
+    out = _run_in_node(_STREAM_JS + """
+      current.onerror();
+      scheduled.shift()();
+      console.log(JSON.stringify({opened: opened}));
+    """, tmp_path)
+
+    assert out["opened"] == ["/events", "/events"]
 
 
 def test_run_done_is_rendered_and_then_ends_the_stream(tmp_path):

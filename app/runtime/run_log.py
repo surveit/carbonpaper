@@ -131,27 +131,45 @@ def _count_logged_events(path: Path) -> int:
 
 def read_events_since(path: Path, from_seq: int) -> list[dict[str, Any]]:
     """The events in `path` with seq >= from_seq, in file order."""
-    # Cheap re-read of the JSONL file; a malformed trailing line — possible when
-    # read mid-write — is skipped and picked up by the next poll once complete.
-    # A missing file (the writer hasn't created it yet) reads as empty.
+    # Streamed line by line rather than slurped whole: the file reaches tens of
+    # MB on a large run, and there is no reason to hold all of it in memory to
+    # walk it once. A malformed line — possible when read mid-write — is skipped
+    # and picked up by the next poll once complete. A missing file (the writer
+    # hasn't created it yet) reads as empty.
+    #
+    # Every line is parsed. Measured on a 272k-event / 37MB log that is 0.24s,
+    # which is the honest price of asking a question about record contents. It
+    # would be tempting to read `seq` off the raw text and skip parsing the rest,
+    # but that couples the reader to json.dumps' key order — it would break
+    # silently, into slowness rather than an error, the moment someone reordered
+    # the writer's dict.
     try:
-        text = path.read_text(encoding="utf-8")
+        handle = path.open("r", encoding="utf-8")
     except OSError:
         return []
     out: list[dict[str, Any]] = []
-    for line in text.splitlines():
-        if not line.strip():
-            continue
-        try:
-            event = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        # Every event the writer emits carries a seq; a dict without one is
-        # skipped rather than assigned a fabricated position.
-        seq = event.get("seq")
-        if seq is not None and seq >= from_seq:
-            out.append(event)
+    with handle:
+        for line in handle:
+            if not line.strip():
+                continue
+            try:
+                event = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            # Every event the writer emits carries a seq; a dict without one is
+            # skipped rather than assigned a fabricated position.
+            seq = event.get("seq")
+            if seq is not None and seq >= from_seq:
+                out.append(event)
     return out
+
+
+def read_events_window(
+    path: Path, from_seq: int, limit: int | None = None
+) -> list[dict[str, Any]]:
+    """The events in `path` with seq >= from_seq, at most `limit` of them."""
+    events = read_events_since(path, from_seq)
+    return events if limit is None else events[:limit]
 
 
 # ── the per-unit detail sink ─────────────────────────────────────────────────
