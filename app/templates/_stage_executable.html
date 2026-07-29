@@ -1,6 +1,6 @@
-{# Executable handle for a stage — connector / llm / function / join /
-   aggregate / queue / publish. Used on both the static stage page and the
-   run-detail right panel.
+{# Executable handle for a stage — connector / llm / function / filter / join /
+   union / aggregate / queue / publish. Used on both the static stage page and
+   the run-detail right panel.
 
    Required context: stage, function_code (may be None).
    Optional context: llm_example {prompt, columns} — a rendered prompt
@@ -79,6 +79,29 @@
     {% else %}
     <p class="muted"><em>(function source not found on disk)</em></p>
     {% endif %}
+</section>
+{% endif %}
+
+{% if stage.filter %}
+<section class="exec-block">
+    <h2>🔎 Row filter</h2>
+    <p class="muted">Keeps the rows this predicate returns <code>True</code> for; every kept row passes through unchanged, in order.</p>
+    <dl class="kv">
+        <dt>function</dt><dd><code>{{ stage.filter.function or 'should_include' }}</code></dd>
+    </dl>
+    <h3>predicate</h3>
+    {# Inline code is the handle's only source — no module ref to resolve off disk. #}
+    <pre class="code">{{ stage.filter.code }}</pre>
+</section>
+{% endif %}
+
+{% if stage.union %}
+<section class="exec-block">
+    <h2>🧬 Union</h2>
+    <p class="muted">Concatenates its inputs in declared order — no configuration of its own; the schema-identical inputs fix what it computes.</p>
+    <dl class="kv">
+        <dt>inputs</dt><dd>{% for inp in stage.inputs %}<code>{{ inp.id }}</code>{% if not loop.last %}, {% endif %}{% endfor %}</dd>
+    </dl>
 </section>
 {% endif %}
 
