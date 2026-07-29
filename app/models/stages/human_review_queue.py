@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from app.models.schema import SCALAR_COLUMN_TYPES, STR_COLUMN_TYPE, TableSchema
-from app.models.stages.shared import find_predicate_column_issues, resolve_input_schema
+from app.models.stages.shared import find_predicate_column_issues
 
 if TYPE_CHECKING:
     from app.models.stage import QueueConfig, Stage
@@ -14,7 +14,9 @@ def find_queue_column_issues(stage: "Stage") -> list[str]:
     assert queue is not None  # Stage._handle_for_type guarantees this for type="human_review_queue"
     output_schema = stage.output_schema
     assert output_schema is not None  # Stage._schemas_declared runs first and requires one
-    input_schema = resolve_input_schema(stage, 0)
+    # EDGE-ONLY: the input edge's own schema, never the upstream producer's
+    # output_schema — this validates one `Stage` in isolation at construction time.
+    input_schema = stage.inputs[0].table_schema
     issues = _find_duplicate_added_names(stage.id, queue)
     issues += _find_filter_issues(stage.id, queue, input_schema)
     issues += _find_reviewed_source_issues(stage.id, queue, input_schema)

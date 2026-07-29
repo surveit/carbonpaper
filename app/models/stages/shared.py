@@ -16,16 +16,11 @@ COLUMN_ISSUE = (
 )
 
 
-def resolve_input_schema(stage: "Stage", index: int) -> "TableSchema":
-    """Deliberately EDGE-ONLY: a per-stage check must not reach for the upstream
-    producer's own output_schema — this runs on one `Stage` in isolation, at
-    construction time, so the producer may not even be present in whatever list
-    of stages the caller happens to hold."""
-    return stage.inputs[index].table_schema
-
-
 def resolve_input_columns(stage: "Stage", index: int) -> set[str]:
-    return {c.name for c in resolve_input_schema(stage, index).columns}
+    # EDGE-ONLY, deliberately: read the input edge's own schema, never the upstream
+    # producer's output_schema — this runs on one `Stage` in isolation at construction
+    # time, so that producer may not even be present in the caller's list of stages.
+    return {c.name for c in stage.inputs[index].table_schema.columns}
 
 
 def find_predicate_column_issues(

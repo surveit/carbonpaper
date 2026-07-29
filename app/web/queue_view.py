@@ -13,7 +13,6 @@ from fastapi import HTTPException
 
 from app.core.stage_cache import StageCacheEntry
 from app.models import Column, QueueConfig, Stage
-from app.models.stages.shared import resolve_input_schema
 from app.runtime.trace_links import RowTraceLinker
 from app.web.loading import QueueFingerprints, display_cell
 
@@ -168,7 +167,7 @@ def require_reviewed_column(stage_def: Stage, target: str) -> Column:
 
 
 def build_reviewed_fields(stage_def: Stage, queue: QueueConfig) -> list[ReviewedField]:
-    source_schema = resolve_input_schema(stage_def, 0)
+    source_schema = stage_def.inputs[0].table_schema
     fields = []
     for source, target in queue.reviewed_columns.items():
         declared_source = source_schema.column_for_name(source)
@@ -188,7 +187,7 @@ def describe_queued_columns(
     so a declared column the rows do not carry is reported in `schema_note`
     rather than rendered as an empty field."""
     names = [str(c) for c in snapshot.columns] if snapshot is not None else []
-    schema = resolve_input_schema(stage_def, 0)
+    schema = stage_def.inputs[0].table_schema
     declared = {column.name: column for column in schema.columns}
     primary_key = list(schema.primary_key or [])
     return DescribedColumns(

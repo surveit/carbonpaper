@@ -677,8 +677,7 @@ class Stage(StageDraft):
         {placeholder}, a human_review_queue reviewed source) or references via a
         where/filter predicate (aggregate `where`, human_review_queue `filter`)
         must resolve against that reference's own input edge —
-        `inputs[index].table_schema`, per
-        `app.models.stages.shared.resolve_input_schema` — and every column the
+        `inputs[index].table_schema` — and every column the
         config says the stage ADDS must be declared on its own output_schema.
         EDGE-ONLY: this says nothing about what an upstream producer itself
         declares, so it holds for a single stage in isolation, independent of
