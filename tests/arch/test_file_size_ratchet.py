@@ -2,6 +2,7 @@
 1. over ``_LLOC_CEILING`` and not in ``_ALLOWLIST`` — a new offender, split it;
 2. allowlisted but past ``_LLOC_CEILING * _BACKSTOP_MULTIPLIER`` — backstop violation;
 3. allowlisted while at/under the ceiling (or gone) — stale entry, remove it.
+The only fix for rule 1 is splitting the module; see `_describe_new_violation`.
 """
 from __future__ import annotations
 
@@ -98,9 +99,20 @@ def _count_logical_lines(path: Path) -> int:
 
 
 def _describe_new_violation(size: FileSize) -> str:
+    """The remedy this names is deliberately narrow: the ceiling exists to force a
+    split, so squeezing back under it any other way defeats the rule."""
     return (
         f"{size.path}  lloc={size.lloc} (> {_LLOC_CEILING}, not in _ALLOWLIST) — split it "
-        "into smaller modules; the allowlist must never grow"
+        "into smaller modules; the allowlist must never grow.\n"
+        "      The fix is a SPLIT, not a squeeze. LLOC counts statements, so the only way "
+        "to shrink one without moving code out is to write denser code: fusing several "
+        "named steps into one long expression, dropping an intermediate variable that was "
+        "carrying a name, inlining a small helper back into its caller. Do not. That "
+        "trades the readability this ceiling exists to protect, and leaves the next change "
+        "in the same trap with less room.\n"
+        "      Instead, move a cohesive group out to its own module (and if that is too "
+        "large for the change you are on, say so and stop: the split is the task, and a "
+        "human decides whether to take it now)."
     )
 
 
