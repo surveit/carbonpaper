@@ -24,6 +24,7 @@ from app.models import (
     HUMAN_REVIEW_QUEUE_CONTRACT_NOTE,
     NODE_TYPES,
     StageDraft,
+    find_workflow_compiler_warnings,
     StageType,
 )
 from app.runtime import stage_tests
@@ -113,6 +114,12 @@ human to review.
 # Per-stage tests
 Once a python-transform stage exists, generate_stage_tests derives its tests from the
 methodology; then loop edit_stage → run_stage_tests until they pass.
+
+# Finishing
+report_compiler_warnings(project_id) reports what is wrong with the workflow as
+WRITTEN — no code run. Dirty is fine while you build; `is_clean` must be true before
+you report the workflow finished. Blocking warnings mean a human cannot review what
+you are handing back.
 
 # Running
 Runs execute a stored version; save_version(project_id, message) creates one, then
@@ -269,6 +276,31 @@ def run_stage_tests(project_id: str, stage_id: str | None = None) -> dict[str, A
     stages = loader.load_workflow(pdir)
     report: stage_tests.StageTestsReport = stage_tests.run_stage_tests(stages, stage_id)
     return report.model_dump(mode="json")
+
+
+@mcp.tool()
+def report_compiler_warnings(project_id: str) -> dict[str, Any]:
+    """Every problem with this workflow AS WRITTEN, judged without running
+    anything: stages with no plain-language description, described stages with no
+    examples to check that description, code the review panel cannot show, and the
+    deliberate choices (cache off, row limit) a reviewer should be told about.
+
+    You MUST call this and find `is_clean` true before reporting the workflow
+    finished. It may be dirty while you are still building — that is expected — but
+    a workflow handed back with blocking warnings is one a human cannot review.
+
+    `blocking` lists what you have to fix; the rest is information you cannot clear
+    from the stage (a filter_rows can never carry examples) or that is a legitimate
+    authoring choice. This is NOT about whether examples pass — run_stage_tests
+    answers that, and it runs code."""
+    pdir = _resolve_existing_project(project_id)
+    stages = loader.load_workflow(pdir)
+    report = find_workflow_compiler_warnings(stages)
+    return {
+        "is_clean": report.is_clean,
+        "blocking": [w.model_dump(mode="json") for w in report.blocking],
+        "warnings": [w.model_dump(mode="json") for w in report.warnings],
+    }
 
 
 @mcp.tool()

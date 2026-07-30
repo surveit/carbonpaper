@@ -21,6 +21,7 @@ from fastapi.responses import (
 
 from app.core.errors import ProjectExistsError
 from app.models import (
+    find_workflow_compiler_warnings,
     validate_named_schema,
     validate_schema_library,
 )
@@ -339,6 +340,9 @@ async def project_workflow(request: Request, project_name: str):
             "stages": stages,
             "mermaid": mermaid,
             "coverage": coverage,
+            # From the TYPED stages only: warnings judge a valid workflow's quality,
+            # and a workflow that does not load has its load issues shown instead.
+            "compiler_warnings": find_workflow_compiler_warnings(listing.stages),
             "type_class": TYPE_CLASS,
             "type_glyph": TYPE_GLYPH,
         },
