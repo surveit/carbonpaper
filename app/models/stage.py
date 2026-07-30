@@ -1,20 +1,15 @@
-"""Stage-level contract: the node types, their executable-handle blocks, and the
-Stage model. Constructing a model validates it.
-
-Models ignore unknown keys (compiled stage JSON carries fields we pass through) but are
-strict about the fields declared here.
+"""Stage-level contract: the node types, the Stage model, the `function` handle,
+and every rule that spans more than one of its fields. Constructing a model
+validates it. Every other handle block and its per-type checks live in
+`app.models.stages.<type>`.
 """
 from __future__ import annotations
 
 import json
-import re
 from enum import Enum
-from pathlib import Path
-from typing import Any, ClassVar, Literal, Optional
+from typing import Any, ClassVar, Optional
 
 from pydantic import (
-    AliasChoices,
-    ConfigDict,
     Field,
     ValidationError,
     field_validator,
@@ -22,7 +17,6 @@ from pydantic import (
 )
 from pydantic.json_schema import SkipJsonSchema
 
-from app.core.llm.options import LLMModel
 from app.models.schema import (
     FunctionKind,
     SourceRef,
@@ -30,14 +24,36 @@ from app.models.schema import (
     _Base,
     _SNAKE_RE,
 )
+from app.models.stages.aggregate import AggregateConfig
 from app.models.stages.code import validate_inline_function_code
 from app.models.stages.filter_rows import FilterConfig
+from app.models.stages.human_review_queue import QueueConfig
+from app.models.stages.input_data import Connector
+from app.models.stages.join import JoinConfig
+from app.models.stages.llm_transform import (
+    LLMConfig,
+    find_llm_double_braced_column_issues,
+    find_llm_one_to_one_issues,
+)
+from app.models.stages.publish import PublishConfig
 from app.models.stages.stage_tests import StageTest, validate_stage_tests
 from app.models.stages.union import UnionConfig
-from app.core.prompt_template import find_template_fields
 from app.core.utils import compute_short_hash, format_errors
 
-# ── Enumerated vocabularies ──────────────────────────────────────────────────
+# Back-compat re-exports (`name as name` marks them intentional to Ruff): these
+# live in their per-type modules and nothing here references them, but
+# `from app.models.stage import …` is an import path callers already use.
+from app.models.stages.aggregate import AggFormula as AggFormula
+from app.models.stages.aggregate import AggregationOp as AggregationOp
+from app.models.stages.human_review_queue import RowReviewDecision as RowReviewDecision
+from app.models.stages.input_data import ConnectorKind as ConnectorKind
+from app.models.stages.input_data import FileFormat as FileFormat
+from app.models.stages.input_data import XlsxReadParams as XlsxReadParams
+from app.models.stages.join import JoinKey as JoinKey
+from app.models.stages.join import JoinType as JoinType
+from app.models.stages.publish import PublishFormat as PublishFormat
+
+# ── The node types ───────────────────────────────────────────────────────────
 class StageType(str, Enum):
     input_data = "input_data"
     llm_transform = "llm_transform"
@@ -87,127 +103,6 @@ def is_grain_and_order_preserving(stage_type: StageType) -> bool:
     return stage_type in _GRAIN_AND_ORDER_PRESERVING_TYPES
 
 
-class ConnectorKind(str, Enum):
-    file = "file"
-
-
-class FileFormat(str, Enum):
-    csv = "csv"
-    parquet = "parquet"
-    json = "json"
-    geojson = "geojson"
-    xlsx = "xlsx"
-
-
-class AggFormula(str, Enum):
-    sum = "sum"
-    mean = "mean"
-    count_ = "count"  # trailing underscore: `count` would shadow str.count
-    min = "min"
-    max = "max"
-    first = "first"
-    list = "list"
-
-
-class JoinType(str, Enum):
-    inner = "inner"
-    left = "left"
-    right = "right"
-    outer = "outer"
-
-
-class PublishFormat(str, Enum):
-    html_report = "html_report"
-    json = "json"
-    csv = "csv"
-    evidence_cards = "evidence_cards"
-
-
-# ── Executable-handle blocks (each self-validates) ───────────────────────────
-class Connector(_Base):
-    """input_data handle."""
-    # Every field changes what this stage computes (which file, what params) —
-    # see Stage.compute_definition_fingerprint.
-    FINGERPRINT_FIELDS: ClassVar[frozenset[str]] = frozenset({"kind", "params", "refresh", "notes"})
-    INCIDENTAL_FIELDS: ClassVar[frozenset[str]] = frozenset()
-
-    kind: ConnectorKind
-    params: dict[str, Any] = Field(
-        default_factory=dict,
-        description=(
-            "Connector parameters. For kind=file: params.path, when present, is the "
-            "ABSOLUTE path to the data file, plus optional params.format "
-            "(csv/parquet/json/geojson/xlsx). If the source material does not state "
-            "where the file lives, OMIT path entirely — the user binds a file when "
-            "starting a run. Never invent a path."
-        ),
-    )
-    refresh: str = "ad_hoc"
-    notes: Optional[str] = None
-
-    @model_validator(mode="after")
-    def _params_for_kind(self) -> "Connector":
-        if self.kind == ConnectorKind.file:
-            path = (self.params or {}).get("path")
-            if path is not None:
-                if not isinstance(path, str) or not path.strip():
-                    raise ValueError("connector params.path must be a non-empty string when present")
-                if not Path(path).is_absolute():
-                    raise ValueError(f"connector params.path must be an ABSOLUTE path, got {path!r}")
-            fmt = (self.params or {}).get("format")
-            if fmt is not None and fmt not in {f.value for f in FileFormat}:
-                raise ValueError(f"unknown file format {fmt!r}")
-        return self
-
-
-class XlsxReadParams(_Base):
-    # extra=ignore: callers pass the whole connector.params dict, incl. other formats' keys
-    model_config = ConfigDict(strict=True, extra="ignore")
-
-    sheet_name: str | int = 0
-    header_row: int = 0
-    first_column: int = 0
-    source_row_column: str | None = None
-
-
-class LLMConfig(_Base):
-    """llm_transform handle."""
-    # Every field changes what this stage computes (the prompt, the model, the
-    # sampling/response knobs) — see Stage.compute_definition_fingerprint.
-    FINGERPRINT_FIELDS: ClassVar[frozenset[str]] = frozenset({
-        "prompt_instructions", "prompt_data_template", "model", "temperature",
-        "max_retries", "response_format", "rubric", "tools", "batch_size",
-    })
-    INCIDENTAL_FIELDS: ClassVar[frozenset[str]] = frozenset()
-
-    prompt_instructions: str = ""
-    prompt_data_template: str = Field(
-        validation_alias=AliasChoices("prompt_data_template", "prompt_template"),
-        description=(
-            "Sent to the model once per input row, rendered with Python's "
-            "str.format_map over the row — inject a column as {column_name}. "
-            "Row-invariant guidance belongs in prompt_instructions."
-        ),
-    )
-    model: Optional[LLMModel] = None
-    temperature: float = 0.0
-    max_retries: int = 3
-    response_format: Literal["json", "text"] = "json"
-    rubric: Optional[dict[str, Any]] = None
-    tools: Optional[list[str]] = None
-    batch_size: int = Field(
-        default=1,
-        ge=1,
-        description=(
-            "Rows per model call (default 1). >1 amortizes the prompt_instructions "
-            "prefix across rows, which matters when that prefix is large; the runtime "
-            "still returns exactly one row out per row in. But batch-mates share one "
-            "context, so a row's answer can be influenced by them — keep 1 when each "
-            "row needs an independent judgment."
-        ),
-    )
-
-
 class PythonFunction(_Base):
     """Handle for python_row_function / python_frame_function (and publish). The
     row-vs-frame distinction lives in the stage `type`, not here — the runtime
@@ -253,120 +148,6 @@ class PythonFunction(_Base):
             return self
         validate_inline_function_code(self.code, self.function)
         return self
-
-
-class JoinKey(_Base):
-    left: str
-    right: str
-
-
-class JoinConfig(_Base):
-    """join handle. `keys` OR `on` is accepted.
-
-    The merged output contains: every LEFT column under its own name; each
-    RIGHT column under its own name unless a left column shares it, in which
-    case it appears as `<name>_r`; a key pair with the SAME name on both sides
-    collapses into one column (there is no `<key>_r`). `select` and the
-    stage's `output_schema` may only name these producible columns — anything
-    else is rejected when the stage is saved."""
-    # Every field changes what this stage computes (join type, keys, kept
-    # columns) — see Stage.compute_definition_fingerprint.
-    FINGERPRINT_FIELDS: ClassVar[frozenset[str]] = frozenset({"type", "keys", "on", "select"})
-    INCIDENTAL_FIELDS: ClassVar[frozenset[str]] = frozenset()
-
-    type: JoinType = JoinType.inner
-    keys: Optional[list[JoinKey]] = None
-    on: Optional[list[JoinKey]] = None
-    select: Optional[list[str]] = Field(
-        default=None,
-        description=(
-            "Columns to keep, applied after the merge. Each entry must be a "
-            "producible merged column: a left column name, an uncollided right "
-            "column name, or `<name>_r` for a right column whose name a left "
-            "column shares."
-        ),
-    )
-
-    @model_validator(mode="after")
-    def _need_keys_or_on(self) -> "JoinConfig":
-        if not (self.keys or self.on):
-            raise ValueError("join needs `keys` or `on`")
-        return self
-
-
-class AggregationOp(_Base):
-    output_column: str
-    formula: AggFormula
-    value_column: Optional[str] = None
-    where: Optional[str] = None
-
-    @model_validator(mode="after")
-    def _value_column_for_formula(self) -> "AggregationOp":
-        if self.formula != AggFormula.count_ and not self.value_column:
-            raise ValueError(
-                f"aggregation `{self.output_column}`: formula `{self.formula}` needs value_column"
-            )
-        return self
-
-
-class AggregateConfig(_Base):
-    """aggregate handle."""
-    # Every field changes what this stage computes (grouping, aggregations) —
-    # see Stage.compute_definition_fingerprint.
-    FINGERPRINT_FIELDS: ClassVar[frozenset[str]] = frozenset({"group_by", "aggregations"})
-    INCIDENTAL_FIELDS: ClassVar[frozenset[str]] = frozenset()
-
-    group_by: list[str]
-    aggregations: list[AggregationOp]
-
-
-class RowReviewDecision(str, Enum):
-    """A reviewer's verdict on one human_review_queue row, validated and applied
-    at the web/service boundary (app.services.review) and recorded as the review
-    stage's output row in the cache: `approve` keeps the AI score as final,
-    `modify` substitutes a human-entered score, `reject` leaves the human and
-    final scores null. EVERY verdict produces an output row — the review stage
-    emits one row per input row — so a rejected row reaches the stage's output
-    carrying its rejection, and excluding it is a downstream stage's job."""
-    approve = "approve"
-    modify = "modify"
-    reject = "reject"
-
-
-class QueueConfig(_Base):
-    """human_review_queue handle. A queued row is matched to a cached human
-    decision by fingerprinting the row itself (app.core.stage_cache) — no
-    column configuration is needed to enable that matching."""
-    # `filter`/`reviewer_instructions` change what the human is asked; routing,
-    # conflict_resolution, and estimated_volume_per_week describe how a
-    # decision is routed, not what is asked — see
-    # Stage.compute_definition_fingerprint.
-    FINGERPRINT_FIELDS: ClassVar[frozenset[str]] = frozenset({"filter", "reviewer_instructions"})
-    INCIDENTAL_FIELDS: ClassVar[frozenset[str]] = frozenset({
-        "routing", "conflict_resolution", "estimated_volume_per_week",
-    })
-
-    filter: Optional[str] = None
-    reviewer_instructions: Optional[str] = None
-    routing: Optional[str] = None
-    conflict_resolution: Optional[str] = None
-    estimated_volume_per_week: Optional[int] = None
-
-
-class PublishConfig(_Base):
-    """publish handle (runs alongside a `function` block)."""
-    # Every field changes what this stage computes (format, destination,
-    # template, layout) — see Stage.compute_definition_fingerprint.
-    FINGERPRINT_FIELDS: ClassVar[frozenset[str]] = frozenset({
-        "format", "destination", "template", "one_file_per", "cross_link",
-    })
-    INCIDENTAL_FIELDS: ClassVar[frozenset[str]] = frozenset()
-
-    format: Optional[PublishFormat] = None
-    destination: Optional[str] = None
-    template: Optional[str] = None
-    one_file_per: Optional[str] = None
-    cross_link: Optional[bool] = None
 
 
 class ReviewConfig(_Base):
@@ -627,7 +408,8 @@ class Stage(StageDraft):
         runtime derives (`output_schema.subtract(input_schema)`) is exactly the
         added columns and can never throw mid-run. Cross-stage checks (unique
         ids, inputs resolve, acyclic) live in `workflow.graph_issues`; a single
-        stage's invariants live on the stage."""
+        stage's invariants live on the stage. The schema comparison itself is
+        `app.models.stages.llm_transform.find_llm_one_to_one_issues`."""
         if self.type != StageType.llm_transform:
             return self
 
@@ -635,11 +417,9 @@ class Stage(StageDraft):
             raise ValueError(
                 f"llm_transform must have exactly one input, has {len(self.inputs)}"
             )
-        input_schema = self.inputs[0].table_schema
         output_schema = self.output_schema
         assert output_schema is not None  # _schemas_declared guarantees this off publish
-        issues = _find_primary_key_issues(input_schema, output_schema)
-        issues.extend(_find_additive_shape_issues(input_schema, output_schema))
+        issues = find_llm_one_to_one_issues(self.inputs[0].table_schema, output_schema)
         if issues:
             raise ValueError("llm_transform not strictly 1:1: " + "; ".join(issues))
         return self
@@ -654,25 +434,13 @@ class Stage(StageDraft):
         allowed, so this does not require any injection — only that a named input
         column is not escaped. Independent of the 1:1 grain contract: this is prompt
         wiring, not schema shape."""
-        if self.type != StageType.llm_transform or self.llm is None:
+        if self.type != StageType.llm_transform or self.llm is None or not self.inputs:
             return self
-        input_schema = self.inputs[0].table_schema if self.inputs else None
-        if input_schema is None:
-            return self
-        template = self.llm.prompt_data_template
-        injected = find_template_fields(template)
-        double_braced = [
-            column.name for column in input_schema.columns
-            if column.name not in injected
-            and re.search(r"\{\{\s*" + re.escape(column.name) + r"\s*\}\}", template)
-        ]
-        if double_braced:
-            raise ValueError(
-                f"llm_transform prompt_data_template double-braces input column(s) "
-                f"{sorted(double_braced)}: str.format_map treats double braces as an "
-                f"escaped literal and never injects the value. Use single braces "
-                f"around the column name."
-            )
+        issues = find_llm_double_braced_column_issues(
+            self.inputs[0].table_schema, self.llm.prompt_data_template
+        )
+        if issues:
+            raise ValueError("; ".join(issues))
         return self
 
     @model_validator(mode="after")
@@ -750,40 +518,6 @@ class Stage(StageDraft):
                                  app.runtime.lineage, for the trace to follow.
         """
         return is_grain_and_order_preserving(self.type)
-
-
-# ── llm_transform's 1:1 contract ─────────────────────────────────────────────
-# Helpers for Stage._llm_transform_one_to_one: it has already confirmed
-# `input_schema`/`output_schema` are both declared before calling these.
-
-
-def _find_primary_key_issues(input_schema: TableSchema, output_schema: TableSchema) -> list[str]:
-    issues: list[str] = []
-    input_pk, output_pk = input_schema.primary_key, output_schema.primary_key
-    if not input_pk:
-        issues.append("input schema declares no primary_key")
-    if not output_pk:
-        issues.append("output_schema declares no primary_key")
-    if input_pk and output_pk and set(input_pk) != set(output_pk):
-        issues.append(
-            f"input primary_key {input_pk} != output primary_key {output_pk}"
-        )
-    return issues
-
-
-def _find_additive_shape_issues(input_schema: TableSchema, output_schema: TableSchema) -> list[str]:
-    issues: list[str] = []
-    if not input_schema.is_subset_of(output_schema):
-        issues.append(
-            "output must keep every input column unchanged (a transform is "
-            f"additive: output ⊇ input); input columns "
-            f"{[c.name for c in input_schema.columns]} vs output columns "
-            f"{[c.name for c in output_schema.columns]}"
-        )
-    input_names = {c.name for c in input_schema.columns}
-    if not any(c.name not in input_names for c in output_schema.columns):
-        issues.append("output_schema adds no columns beyond the input")
-    return issues
 
 
 def validate_stage(stage: dict[str, Any]) -> list[str]:

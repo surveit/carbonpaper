@@ -1,13 +1,39 @@
-"""Config-column validation for a publish stage: `one_file_per`, when set,
-must resolve against the stage's input edge."""
+"""publish stage: the publish handle, its output-format vocabulary, and the
+config-column check that `one_file_per`, when set, resolves against the stage's
+input edge."""
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from enum import Enum
+from typing import TYPE_CHECKING, ClassVar, Optional
 
+from app.models.schema import _Base
 from app.models.stages.shared import COLUMN_ISSUE, resolve_input_columns
 
 if TYPE_CHECKING:
     from app.models.stage import Stage
+
+
+class PublishFormat(str, Enum):
+    html_report = "html_report"
+    json = "json"
+    csv = "csv"
+    evidence_cards = "evidence_cards"
+
+
+class PublishConfig(_Base):
+    """publish handle (runs alongside a `function` block)."""
+    # Every field changes what this stage computes (format, destination,
+    # template, layout) — see Stage.compute_definition_fingerprint.
+    FINGERPRINT_FIELDS: ClassVar[frozenset[str]] = frozenset({
+        "format", "destination", "template", "one_file_per", "cross_link",
+    })
+    INCIDENTAL_FIELDS: ClassVar[frozenset[str]] = frozenset()
+
+    format: Optional[PublishFormat] = None
+    destination: Optional[str] = None
+    template: Optional[str] = None
+    one_file_per: Optional[str] = None
+    cross_link: Optional[bool] = None
 
 
 def find_publish_column_issues(stage: "Stage") -> list[str]:

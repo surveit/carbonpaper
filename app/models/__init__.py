@@ -15,33 +15,24 @@ from app.models.schema import (
     is_valid_column_type,
 )
 from app.models.stage import (
-    AggFormula,
-    AggregateConfig,
-    AggregationOp,
-    Connector,
-    ConnectorKind,
-    FileFormat,
-    FilterConfig,
     FunctionKind,
-    StageInput,
-    JoinConfig,
-    JoinKey,
-    JoinType,
-    LLMConfig,
-    PublishConfig,
-    PublishFormat,
     PythonFunction,
-    QueueConfig,
     ReviewConfig,
-    RowReviewDecision,
     Stage,
     StageDraft,
+    StageInput,
     StageType,
-    UnionConfig,
-    XlsxReadParams,
     validate_stage,
 )
+from app.models.stages.aggregate import AggFormula, AggregateConfig, AggregationOp
+from app.models.stages.filter_rows import FilterConfig
+from app.models.stages.human_review_queue import QueueConfig, RowReviewDecision
+from app.models.stages.input_data import Connector, ConnectorKind, FileFormat, XlsxReadParams
+from app.models.stages.join import JoinConfig, JoinKey, JoinType
+from app.models.stages.llm_transform import LLMConfig
+from app.models.stages.publish import PublishConfig, PublishFormat
 from app.models.stages.stage_tests import StageTest
+from app.models.stages.union import UnionConfig
 from app.models.workflow import (
     Workflow,
     validate_inputs_resolve,

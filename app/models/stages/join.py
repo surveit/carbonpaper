@@ -1,11 +1,15 @@
-"""Column validation for a join stage, on both the input and output side:
-every join key's `.left`/`.right` must resolve against its side's stage input
-edge; and a declared output_schema (plus `select`) must be deliverable by the
-columns the merge actually produces."""
+"""join stage: the join handle and its key/type vocabularies, plus column
+validation on both sides — every join key's `.left`/`.right` must resolve
+against its side's stage input edge, and a declared output_schema (plus
+`select`) must be deliverable by the columns the merge actually produces."""
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from enum import Enum
+from typing import TYPE_CHECKING, ClassVar, Optional
 
+from pydantic import Field, model_validator
+
+from app.models.schema import _Base
 from app.models.stages.shared import (
     COLUMN_ISSUE,
     find_declared_vs_derived_issues,
@@ -14,12 +18,58 @@ from app.models.stages.shared import (
 
 if TYPE_CHECKING:
     from app.models.schema import TableSchema
-    from app.models.stage import JoinConfig, Stage
+    from app.models.stage import Stage
 
 SELECT_UNPRODUCIBLE_ISSUE = (
     "stage '{sid}': join.select references column '{col}' that the merge "
     "cannot produce (producible columns: {cols})"
 )
+
+
+class JoinType(str, Enum):
+    inner = "inner"
+    left = "left"
+    right = "right"
+    outer = "outer"
+
+
+class JoinKey(_Base):
+    left: str
+    right: str
+
+
+class JoinConfig(_Base):
+    """join handle. `keys` OR `on` is accepted.
+
+    The merged output contains: every LEFT column under its own name; each
+    RIGHT column under its own name unless a left column shares it, in which
+    case it appears as `<name>_r`; a key pair with the SAME name on both sides
+    collapses into one column (there is no `<key>_r`). `select` and the
+    stage's `output_schema` may only name these producible columns — anything
+    else is rejected when the stage is saved."""
+    # Every field changes what this stage computes (join type, keys, kept
+    # columns) — see Stage.compute_definition_fingerprint.
+    FINGERPRINT_FIELDS: ClassVar[frozenset[str]] = frozenset({"type", "keys", "on", "select"})
+    INCIDENTAL_FIELDS: ClassVar[frozenset[str]] = frozenset()
+
+    type: JoinType = JoinType.inner
+    keys: Optional[list[JoinKey]] = None
+    on: Optional[list[JoinKey]] = None
+    select: Optional[list[str]] = Field(
+        default=None,
+        description=(
+            "Columns to keep, applied after the merge. Each entry must be a "
+            "producible merged column: a left column name, an uncollided right "
+            "column name, or `<name>_r` for a right column whose name a left "
+            "column shares."
+        ),
+    )
+
+    @model_validator(mode="after")
+    def _need_keys_or_on(self) -> "JoinConfig":
+        if not (self.keys or self.on):
+            raise ValueError("join needs `keys` or `on`")
+        return self
 
 
 def find_join_column_issues(stage: "Stage") -> list[str]:
@@ -67,7 +117,7 @@ def find_join_output_issues(stage: "Stage") -> list[str]:
 
 
 def derive_join_output_types(
-    join: "JoinConfig", left: "TableSchema", right: "TableSchema"
+    join: JoinConfig, left: "TableSchema", right: "TableSchema"
 ) -> dict[str, str]:
     """The columns the join handle's merge emits, each mapped to its type —
     mirroring pandas merge(..., suffixes=("", "_r")): all left columns keep
