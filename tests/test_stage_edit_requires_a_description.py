@@ -1,4 +1,5 @@
-"""The authoring boundary refuses to WRITE a code-carrying stage with no summary.
+"""The authoring boundary refuses to WRITE a code-carrying stage whose description
+is not fully submitted.
 
 Enforced on the write path, not on the model or the shared draft validator — a
 stage stored before the field existed, or frozen in a version, must still load.
@@ -20,7 +21,8 @@ def _spec(stage_id="tag", **function_extra):
         "id": stage_id, "name": "Tag", "type": "python_row_function",
         "inputs": [{"id": "src", "schema": _SCHEMA}],
         "output_schema": _SCHEMA,
-        "function": {"kind": "inline", "code": _CODE, **function_extra},
+        "function": {"kind": "inline", "code": _CODE,
+                     "corner_cases": [], **function_extra},
     }
 
 
@@ -79,8 +81,25 @@ def test_a_config_only_stage_needs_no_summary(project):
     assert not any("summary" in issue for issue in result.issues)
 
 
-def test_corner_cases_are_not_required(project):
-    """A step may genuinely have none, and an agent padding the list to satisfy a
-    check would be inventing behaviour."""
+def test_an_empty_corner_case_list_is_a_valid_answer(project):
+    """A step may genuinely have no awkward inputs, and requiring a non-empty list
+    would make an agent pad it and invent behaviour."""
     result = add_stage_spec(project, json.dumps(_spec(summary="Passes rows through.")))
+    assert result.ok, result.issues
+
+
+def test_omitting_corner_cases_entirely_is_refused(project):
+    """`[]` and an absent key are the two states a reviewer most needs told apart:
+    "none" versus "never considered". Only the first may be written."""
+    spec = _spec(summary="Passes rows through.")
+    del spec["function"]["corner_cases"]
+    result = add_stage_spec(project, json.dumps(spec))
+    assert not result.ok
+    assert any("corner_cases` must be submitted" in issue for issue in result.issues)
+
+
+def test_stated_corner_cases_round_trip(project):
+    result = add_stage_spec(project, json.dumps(_spec(
+        summary="Passes rows through.",
+        corner_cases=[{"case": "`id` is blank", "expected": "the step fails"}])))
     assert result.ok, result.issues

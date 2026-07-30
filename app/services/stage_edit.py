@@ -98,8 +98,16 @@ def _current_specs(project_dir: Path) -> dict[str, dict]:
 _AUTHORED_CODE_HANDLES = ("function", "filter")
 
 
-def _find_missing_summary_issues(candidate: dict) -> list[str]:
-    """Refuse to WRITE a code-carrying stage with no `summary` ([] otherwise).
+def _find_description_issues(candidate: dict) -> list[str]:
+    """Refuse to WRITE a code-carrying stage whose description is not fully
+    submitted ([] otherwise): `summary` must be non-blank, and `corner_cases` must
+    be PRESENT — an empty list is a valid answer, an absent key is not.
+
+    The asymmetry is the point. A step may genuinely have no awkward inputs, so
+    requiring a non-empty list would make an agent pad it and invent behaviour. But
+    letting the key be omitted makes "none" and "I did not consider it"
+    indistinguishable, and those are the two states a reviewer most needs told
+    apart. `corner_cases: []` is an author saying so on the record.
 
     Enforced here rather than on the model, and rather than inside
     `validate_workflow_draft`: the model keeps `summary` optional and the draft
@@ -109,21 +117,28 @@ def _find_missing_summary_issues(candidate: dict) -> list[str]:
     editor, the MCP tools and the compiler agent alike, funnels through `_apply` —
     so a stage can only ARRIVE without a description, never be created without one.
 
-    A prose instruction in the type's contract notes asks for the summary; this is
-    what makes it true. `corner_cases` is deliberately not required: a step may
-    genuinely have none, and an agent padding the list to satisfy a check would be
-    inventing behaviour."""
+    A prose instruction in the type's contract notes asks for both; this is what
+    makes it true."""
     for handle in _AUTHORED_CODE_HANDLES:
         block = candidate.get(handle)
         if not isinstance(block, dict):
             continue
+        issues = []
         if not (block.get("summary") or "").strip():
-            return [
+            issues.append(
                 f"`{handle}.summary` is required: this stage's behaviour is authored "
                 f"code, and the person reviewing it reads prose, not Python. Write one "
                 f"or two plain sentences saying what the step does — the rule, not the "
                 f"implementation — in the same edit as the code."
-            ]
+            )
+        if "corner_cases" not in block:
+            issues.append(
+                f"`{handle}.corner_cases` must be submitted: one entry per input whose "
+                f"handling the summary does not state, each with the outcome it must "
+                f"produce. Send `[]` if this step genuinely has none — that is a valid "
+                f"answer, but it has to be said rather than left out."
+            )
+        return issues
     return []
 
 
@@ -151,7 +166,7 @@ def _apply(project_dir: Path, specs: dict[str, dict], stage_id: str, candidate: 
 
     resulting = {**specs, stage_id: candidate}
     issues = validate_workflow_draft(list(resulting.values()))
-    issues += _find_missing_summary_issues(candidate)
+    issues += _find_description_issues(candidate)
     if issues:
         return EditStageResult(ok=False, issues=issues)
 
