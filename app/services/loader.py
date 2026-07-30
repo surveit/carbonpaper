@@ -1,4 +1,4 @@
-"""Canonical load + save for a project's compiled stage files.
+"""Load + save for a project's compiled stage files.
 
 One JSON file per stage under `<project>/compiled/`. This module is the ONE place
 that knows the on-disk stage format, in both directions: nothing else should call
@@ -85,7 +85,7 @@ def load_workflow(project_dir: Path) -> list[Stage]:
 # ─── Serialize & save ────────────────────────────────────────────────────────
 
 def stage_to_spec_dict(stage: Stage) -> dict[str, Any]:
-    """The canonical dict form of a stage: field aliases restored (`schema`, not
+    """The spec-dict form of a stage: field aliases restored (`schema`, not
     `table_schema`), unset optionals dropped, enums/nested models JSON-normalised.
     This is the ONE definition of 'a stage as data' — the on-disk JSON is a dump
     of it, the belief hash is computed over it, and the raw-spec views render it,
@@ -94,7 +94,7 @@ def stage_to_spec_dict(stage: Stage) -> dict[str, Any]:
 
 
 def stage_to_json(stage: Stage) -> str:
-    """The canonical on-disk JSON text for one compiled stage — an indented dump
+    """The on-disk JSON text for one compiled stage — an indented dump
     equal to `json.dumps(stage_to_spec_dict(stage))`. The single source of the
     persisted format; write_stage and the raw-spec endpoints go through it."""
     return stage.model_dump_json(indent=2, by_alias=True, exclude_none=True)
@@ -114,7 +114,7 @@ def find_stage_file(compiled_dir: Path, stage_id: str) -> Path | None:
 
 
 def write_stage(path: Path, stage: Stage) -> None:
-    """Persist one validated stage to `path` in the canonical on-disk JSON."""
+    """Persist one validated stage to `path` as on-disk JSON."""
     path.write_text(stage_to_json(stage), encoding="utf-8")
 
 

@@ -10,19 +10,22 @@ from arch.predicates import (
     check_no_fabricated_numbers,
     check_no_import,
     check_no_raw_disk,
+    find_banned_words,
     find_check_prefixed_functions,
     find_production_run_imports,
 )
-from arch.scope import find_governed_files, scan_all_source
+from arch.scope import find_governed_files, scan_all_source, scan_all_text
 
 __all__ = [
     "find_governed_files",
     "scan_all_source",
+    "scan_all_text",
     "check_no_raw_disk",
     "check_no_fabricated_numbers",
     "check_no_import",
     "check_imports_are_stdlib_only",
     "check_no_dict_keys",
+    "find_banned_words",
     "find_check_prefixed_functions",
     "find_production_run_imports",
 ]

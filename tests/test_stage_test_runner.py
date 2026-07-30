@@ -1,4 +1,4 @@
-"""run_tests_for_stage: execution through the real handlers + canonical comparison."""
+"""run_tests_for_stage: execution through the real handlers + normalized comparison."""
 from app.models import Stage
 from app.runtime.stage_tests import find_failing_stage_tests, run_tests_for_stage
 

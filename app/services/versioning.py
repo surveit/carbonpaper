@@ -42,7 +42,7 @@ class WorkflowVersion(PersistedModel):
 
     collection: ClassVar[str] = "workflow_version"
     SCOPE: ClassVar[PersistenceScope] = PersistenceScope.PROJECT_READ
-    # Dump the embedded stages in their canonical spec-dict shape (field aliases
+    # Dump the embedded stages in their spec-dict shape (field aliases
     # restored, unset optionals dropped) — the same convention stage_to_spec_dict
     # uses, so a version's on-disk stage shape matches the working copy's.
     DUMP_OPTS: ClassVar[dict[str, Any]] = {"by_alias": True, "exclude_none": True}

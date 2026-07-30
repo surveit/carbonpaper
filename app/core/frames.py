@@ -78,7 +78,7 @@ def compute_frames_fingerprint(frames: Sequence[pd.DataFrame]) -> str:
 
 
 def compute_frame_fingerprint(frame: pd.DataFrame) -> str:
-    """compute_short_hash over the canonical JSON of a WHOLE frame: its column
+    """compute_short_hash over a JSON dump of a WHOLE frame: its column
     labels in their own order, then its cells row by row in their own order,
     each cell collapsed through `collapse_null_forms` exactly as a row cell is.
 
@@ -88,14 +88,14 @@ def compute_frame_fingerprint(frame: pd.DataFrame) -> str:
     input is a genuinely different input and must not resolve to the same
     cached output. The frame's index is not part of the identity — it does not
     survive the parquet round trip the payload takes."""
-    canonical = {
+    payload = {
         "columns": [str(label) for label in frame.columns],
         "rows": [
             [collapse_null_forms(cell) for cell in row]
             for row in frame.itertuples(index=False, name=None)
         ],
     }
-    return compute_short_hash(json.dumps(canonical, separators=(",", ":"), default=str))
+    return compute_short_hash(json.dumps(payload, separators=(",", ":"), default=str))
 
 
 class FrameStore:

@@ -435,7 +435,7 @@ def test_llm_transform_rejects_double_braced_input_column():
 
 
 def test_llm_transform_rejects_spaced_double_braced_input_column():
-    # The canonical Jinja spelling "{{ content }}" (with spaces) is also an escaped
+    # The usual Jinja spelling "{{ content }}" (with spaces) is also an escaped
     # literal under str.format_map — it must be rejected just like "{{content}}".
     with pytest.raises(ValidationError, match="double-brace"):
         m.Stage.model_validate(S(

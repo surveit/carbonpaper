@@ -509,12 +509,12 @@ class Stage(StageDraft):
 
     # Authored input→expected-output cases for python transforms — the stage's
     # reviewable behavior contract, run by app.runtime.stage_tests. None when the
-    # stage has none: the canonical dump must not carry a `tests` key for
+    # stage has none: the model dump must not carry a `tests` key for
     # stages without tests, or every pre-existing belief hash would change.
     tests: Optional[list[StageTest]] = None
 
     def compute_definition_fingerprint(self) -> str:
-        """sha1[:16] over the canonical JSON of the output-determining subset of
+        """sha1[:16] over a sorted-key JSON dump of the output-determining subset of
         this stage: {"type", "handle": <the type's handle block>, "output_schema"}.
         Every other Stage field (id, name, source, inputs, review, cache,
         limit, compiler_notes, eval, tests) is incidental — it does not change what
@@ -537,8 +537,8 @@ class Stage(StageDraft):
             self.output_schema.model_dump(mode="json", exclude_none=True)
             if self.output_schema is not None else None
         )
-        canonical = {"type": self.type, "handle": handle_dump, "output_schema": output_dump}
-        payload = json.dumps(canonical, sort_keys=True, separators=(",", ":"), default=str)
+        fields = {"type": self.type, "handle": handle_dump, "output_schema": output_dump}
+        payload = json.dumps(fields, sort_keys=True, separators=(",", ":"), default=str)
         return compute_short_hash(payload)
 
     def llm_reply_schema(self) -> Optional[TableSchema]:
@@ -569,7 +569,7 @@ class Stage(StageDraft):
     @field_validator("tests", mode="before")
     @classmethod
     def _empty_tests_means_absent(cls, v: Any) -> Any:
-        """Normalise `tests: []` to absent, so the canonical dump (and the
+        """Normalise `tests: []` to absent, so the model dump (and the
         belief hash computed over it) is identical whether the key was omitted
         or given empty."""
         return None if v == [] else v

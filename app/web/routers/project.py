@@ -99,7 +99,7 @@ def _schema_spec(schema: dict[str, Any]) -> dict[str, Any]:
     """One schema with loader bookkeeping (_filename/_order/_error) removed — the
     spec only. The schema model is `extra="forbid"`, so validation and the edit
     textarea must both see the spec, never the bookkeeping keys the loader injects."""
-    return {k: v for k, v in schema.items() if k not in node_review.CANONICAL_IGNORE_KEYS}
+    return {k: v for k, v in schema.items() if k not in node_review.HASH_IGNORED_KEYS}
 
 
 def _schema_json_map(schemas: list[dict[str, Any]]) -> dict[str, str]:
@@ -293,7 +293,7 @@ async def project_workflow(request: Request, project_name: str):
     navigable (the data-model→workflow nav lock is disabled pending a rethink);
     renders an empty state when no workflow is authored yet.
 
-    Belief colouring uses the SAME canonical spec (stage_to_spec_dict) the node-review
+    Belief colouring uses the SAME spec dict (stage_to_spec_dict) the node-review
     decide route and the /review/status poller use, so the FIRST paint agrees with the
     live recolour. When the workflow validates we colour off typed Stages; a workflow
     with a broken stage still renders (as a draft graph off raw dicts) so the reviewer
@@ -306,7 +306,7 @@ async def project_workflow(request: Request, project_name: str):
     coverage: dict[str, Any] | None
     stages: list[Any]
     if listing.stages:
-        # Valid workflow: colour by the canonical typed-stage spec (matches node_review
+        # Valid workflow: colour by the typed-stage spec dict (matches node_review
         # + /review/status), so an approved node paints green on first load.
         specs = [stage_to_spec_dict(s) for s in listing.stages]
         review_by_id = {
@@ -485,7 +485,7 @@ async def edit_schema(project_name: str, schema_name: str, json_text: str = Form
         )
 
     # Strip loader bookkeeping keys before validating/writing.
-    schema = {k: v for k, v in parsed.items() if k not in node_review.CANONICAL_IGNORE_KEYS}
+    schema = {k: v for k, v in parsed.items() if k not in node_review.HASH_IGNORED_KEYS}
 
     # Guard: no renaming a schema via edit (no writing one file's content under
     # another's name). The path name is authoritative.
