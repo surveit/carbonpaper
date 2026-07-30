@@ -53,17 +53,20 @@ def test_runtime_never_calls_save_or_delete_directly() -> None:
 
 def test_find_persisted_write_call_offenders_flags_a_save_call(tmp_path: Path) -> None:
     target = tmp_path / "m.py"
-    target.write_text("entry.save()\n")
+    target.write_text("entry.save()\n", encoding="utf-8")
     assert find_persisted_write_call_offenders([target]) == ["m.py: ['save']"]
 
 
 def test_find_persisted_write_call_offenders_flags_a_delete_call(tmp_path: Path) -> None:
     target = tmp_path / "m.py"
-    target.write_text("Entry.delete(entry_id)\n")
+    target.write_text("Entry.delete(entry_id)\n", encoding="utf-8")
     assert find_persisted_write_call_offenders([target]) == ["m.py: ['delete']"]
 
 
 def test_find_persisted_write_call_offenders_ignores_read_only_calls(tmp_path: Path) -> None:
     target = tmp_path / "m.py"
-    target.write_text("cache.get(project, sid, fp, ifp)\ncache.find_entries(project, sid, fp)\n")
+    target.write_text(
+        "cache.get(project, sid, fp, ifp)\ncache.find_entries(project, sid, fp)\n",
+        encoding="utf-8",
+    )
     assert find_persisted_write_call_offenders([target]) == []

@@ -153,7 +153,7 @@ def test_workflow_test_reports_a_stage_error_as_failure(demo):
     assert result["ok"] is False
     assert "boom" in result["error"]
     manifest = json.loads(
-        (demo / "runs" / result["run_id"] / "manifest.json").read_text("utf-8"))
+        (demo / "runs" / result["run_id"] / "manifest.json").read_text(encoding="utf-8"))
     assert manifest["status"] == "errors"
 
 

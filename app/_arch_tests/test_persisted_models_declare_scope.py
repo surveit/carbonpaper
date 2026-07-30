@@ -83,7 +83,7 @@ def test_project_read_write_models_define_read_only() -> None:
 
 def _write(tmp_path: Path, source: str) -> Path:
     target = tmp_path / "models.py"
-    target.write_text(source)
+    target.write_text(source, encoding="utf-8")
     return target
 
 
