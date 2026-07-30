@@ -90,9 +90,9 @@ def test_publish_not_grain_and_order_preserving():
 
 
 def test_join_and_aggregate_change_grain():
-    j = m.Stage.model_validate(S(id="j", type="join",
+    j = m.Stage.model_validate(S(id="j", type="enrich",
                                  inputs=[{"id": "a", "schema": _K}, {"id": "b", "schema": _K}],
-                                 join={"keys": [{"left": "k", "right": "k"}]},
+                                 join={"keys": [{"subject": "k", "reference": "k"}]},
                                  output_schema=_K))
     agg_in = {"columns": [{"name": "g"}, {"name": "x", "type": "int"}]}
     agg = m.Stage.model_validate(S(id="agg", type="aggregate",
@@ -274,8 +274,8 @@ def test_scorable_when_tapping_before_the_frame_stage(tmp_path):
 def test_join_changes_grain_so_not_scorable(tmp_path):
     meth = m.parse_workflow([
         _file_input("j1", tmp_path), _file_input("j2", tmp_path),
-        S(id="jn", type="join", inputs=[{"id": "j1", "schema": _K}, {"id": "j2", "schema": _K}],
-          join={"keys": [{"left": "k", "right": "k"}]}, output_schema=_K),
+        S(id="jn", type="enrich", inputs=[{"id": "j1", "schema": _K}, {"id": "j2", "schema": _K}],
+          join={"keys": [{"subject": "k", "reference": "k"}]}, output_schema=_K),
     ])
     v = resolve_eval_run_settings(meth, overrides=[], target="jn")
     assert v.can_score_declaratively is False

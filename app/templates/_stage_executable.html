@@ -121,16 +121,19 @@
 
 {% if stage.join %}
 <section class="exec-block">
-    <h2>🔗 Join</h2>
-    <dl class="kv">
-        <dt>type</dt><dd><code>{{ stage.join.type }}</code></dd>
-    </dl>
+    {% if stage.type == 'expand' %}
+    <h2>🌱 Expand</h2>
+    <p class="muted">The reference may match more than once, so one subject row can come out as several.</p>
+    {% else %}
+    <h2>🔗 Enrich</h2>
+    <p class="muted">At most one reference match per subject row — verified at run time, so the row count cannot change.</p>
+    {% endif %}
     <h3>keys</h3>
     <table class="join-keys">
-        <thead><tr><th>left</th><th>right</th></tr></thead>
+        <thead><tr><th>subject</th><th>reference</th></tr></thead>
         <tbody>
-            {% for k in (stage.join.keys or stage.join.on or []) %}
-            <tr><td><code>{{ k.left }}</code></td><td><code>{{ k.right }}</code></td></tr>
+            {% for k in stage.join.keys %}
+            <tr><td><code>{{ k.subject }}</code></td><td><code>{{ k.reference }}</code></td></tr>
             {% endfor %}
         </tbody>
     </table>

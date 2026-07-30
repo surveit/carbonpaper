@@ -5,14 +5,14 @@ from pydantic import ValidationError
 
 from app.models.stage import Stage
 
-_LEFT = {
+_SUBJECT = {
     "columns": [
         {"name": "facility_id", "type": "str"},
         {"name": "name", "type": "str"},
         {"name": "score", "type": "float"},
     ],
 }
-_RIGHT = {
+_REFERENCE = {
     "columns": [
         {"name": "facility_id", "type": "str"},
         {"name": "name", "type": "int"},
@@ -21,19 +21,18 @@ _RIGHT = {
 }
 
 
-def _join_stage(*, output_columns=None, select=None, left=_LEFT, right=_RIGHT,
+def _join_stage(*, output_columns=None, select=None, subject=_SUBJECT, reference=_REFERENCE,
                 keys=None):
     spec = {
         "id": "enrich",
-        "name": "Join facilities to filings",
-        "type": "join",
+        "name": "Enrich facilities with filings",
+        "type": "enrich",
         "inputs": [
-            {"id": "facilities", "schema": left},
-            {"id": "filings", "schema": right},
+            {"id": "facilities", "schema": subject},
+            {"id": "filings", "schema": reference},
         ],
         "join": {
-            "type": "left",
-            "keys": keys or [{"left": "facility_id", "right": "facility_id"}],
+            "keys": keys or [{"subject": "facility_id", "reference": "facility_id"}],
         },
     }
     if select is not None:
@@ -66,7 +65,7 @@ def test_declared_column_absent_from_merge_rejected():
     assert "bogus" in msg
 
 
-def test_right_collision_reachable_only_as_suffixed():
+def test_reference_collision_reachable_only_as_suffixed():
     stage = Stage.model_validate(_join_stage(
         output_columns=[{"name": "name_r", "type": "int"}],
     ))
@@ -77,7 +76,7 @@ def test_right_collision_reachable_only_as_suffixed():
     assert "name_r" in msg and "int" in msg
 
 
-def test_bare_collision_name_takes_left_type():
+def test_bare_collision_name_takes_subject_type():
     msg = _issues(_join_stage(
         output_columns=[{"name": "name", "type": "int"}],
     ))

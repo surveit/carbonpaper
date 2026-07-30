@@ -148,18 +148,18 @@ def test_the_key_covers_every_input_in_declared_order():
     assert calls == [2, 2]
 
 
-# ── join and aggregate: bounded primitives, not worth a hash ─────────────────
+# ── merges and aggregate: bounded primitives, not worth a hash ───────────────
 
 
 def _join_stage() -> Stage:
     return Stage.model_validate({
-        "id": "j", "name": "Join", "type": "join",
+        "id": "j", "name": "Enrich", "type": "enrich",
         "inputs": [{"id": "left", "schema": _X},
                    {"id": "right", "schema": {"columns": [{"name": "x", "type": "int"},
                                                           {"name": "z", "type": "str"}]}}],
         "output_schema": {"columns": [{"name": "x", "type": "int"},
                                       {"name": "z", "type": "str"}]},
-        "join": {"type": "inner", "keys": [{"left": "x", "right": "x"}]},
+        "join": {"keys": [{"subject": "x", "reference": "x"}]},
     })
 
 
@@ -174,17 +174,21 @@ def _aggregate_stage() -> Stage:
     })
 
 
-def test_join_computes_every_run_and_records_nothing():
-    """Fingerprinting a join's two input frames costs more than the merge a hit
+def test_enrich_computes_every_run_and_records_nothing():
+    """Fingerprinting a merge's two input frames costs more than the merge a hit
     would skip, so the stage is registered with caching off: it still produces
     its output, and leaves no entry behind."""
     stage = _join_stage()
-    left, right = pd.DataFrame({"x": [1, 2]}), pd.DataFrame({"x": [1], "z": ["a"]})
-    out = HANDLERS[StageType.join_].execute(
-        stage, {"left": left, "right": right}, _ctx())
-    assert out is not None and list(out["z"]) == ["a"]
+    subject = pd.DataFrame({"x": [1, 2]})
+    reference = pd.DataFrame({"x": [1], "z": ["a"]})
+    out = HANDLERS[StageType.enrich].execute(
+        stage, {"left": subject, "right": reference}, _ctx())
+    # Left-sided: BOTH subject rows survive, the unmatched one carrying a null
+    # rather than being dropped — an enrich never loses a subject row.
+    assert out is not None and len(out) == len(subject)
+    assert list(out["z"])[0] == "a" and pd.isna(list(out["z"])[1])
 
-    assert _cached_frame(stage, [left, right]) is None
+    assert _cached_frame(stage, [subject, reference]) is None
     assert _entries(stage) == []
 
 
@@ -296,7 +300,7 @@ def test_only_the_unbounded_frame_shaped_type_caches():
     """`python_frame_function` runs arbitrary user code, so a hit can skip
     unbounded work; `join`, `aggregate` and `publish` each opt out."""
     assert _frame_handler(StageType.python_frame_function).caches_frames is True
-    for stage_type in (StageType.join_, StageType.aggregate, StageType.publish):
+    for stage_type in (StageType.enrich, StageType.aggregate, StageType.publish):
         assert _frame_handler(stage_type).caches_frames is False
 
 

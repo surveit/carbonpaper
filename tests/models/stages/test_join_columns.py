@@ -9,12 +9,12 @@ from app.models import StageInput, JoinConfig, Stage
 from app.models.stages.join import find_join_column_issues
 
 
-def _join_stage(*, left_columns, right_columns, key_left, key_right, select=None):
-    join: dict = {"type": "inner", "keys": [{"left": key_left, "right": key_right}]}
+def _join_stage(*, left_columns, right_columns, key_subject, key_reference, select=None):
+    join: dict = {"keys": [{"subject": key_subject, "reference": key_reference}]}
     if select is not None:
         join["select"] = select
     return {
-        "id": "j", "type": "join", "name": "j",
+        "id": "j", "type": "enrich", "name": "j",
         "inputs": [
             {"id": "L", "schema": {"columns": [{"name": c, "type": "str", "nullable": False} for c in left_columns]}},
             {"id": "R", "schema": {"columns": [{"name": c, "type": "str", "nullable": False} for c in right_columns]}},
@@ -25,7 +25,7 @@ def _join_stage(*, left_columns, right_columns, key_left, key_right, select=None
 
 
 def test_both_keys_present_ok():
-    Stage.model_validate(_join_stage(left_columns=["a"], right_columns=["b"], key_left="a", key_right="b"))
+    Stage.model_validate(_join_stage(left_columns=["a"], right_columns=["b"], key_subject="a", key_reference="b"))
 
 
 def test_key_on_the_wrong_side_rejected():
@@ -33,17 +33,17 @@ def test_key_on_the_wrong_side_rejected():
     names them backwards (.left="b", .right="a") must be rejected on both
     sides, not silently matched by name across sides."""
     with pytest.raises(ValidationError):
-        Stage.model_validate(_join_stage(left_columns=["a"], right_columns=["b"], key_left="b", key_right="a"))
+        Stage.model_validate(_join_stage(left_columns=["a"], right_columns=["b"], key_subject="b", key_reference="a"))
 
 
 def test_left_key_missing_rejected():
     with pytest.raises(ValidationError):
-        Stage.model_validate(_join_stage(left_columns=["a"], right_columns=["b"], key_left="ghost", key_right="b"))
+        Stage.model_validate(_join_stage(left_columns=["a"], right_columns=["b"], key_subject="ghost", key_reference="b"))
 
 
 def test_right_key_missing_rejected():
     with pytest.raises(ValidationError):
-        Stage.model_validate(_join_stage(left_columns=["a"], right_columns=["b"], key_left="a", key_right="ghost"))
+        Stage.model_validate(_join_stage(left_columns=["a"], right_columns=["b"], key_subject="a", key_reference="ghost"))
 
 
 def test_select_referencing_absent_column_is_rejected_by_output_check():
@@ -52,7 +52,7 @@ def test_select_referencing_absent_column_is_rejected_by_output_check():
     separate output-schema check (find_join_output_issues)."""
     with pytest.raises(ValidationError):
         Stage.model_validate(_join_stage(
-            left_columns=["a"], right_columns=["b"], key_left="a", key_right="b", select=["ghost"],
+            left_columns=["a"], right_columns=["b"], key_subject="a", key_reference="b", select=["ghost"],
         ))
 
 
@@ -68,7 +68,7 @@ def test_find_join_column_issues_ignores_select():
     stage = Stage.model_construct(
         id="j",
         name="j",
-        type="join",
+        type="enrich",
         inputs=[
             StageInput.model_validate(
                 {"id": "L", "schema": {"columns": [{"name": "a", "type": "str", "nullable": False}]}}
@@ -78,7 +78,7 @@ def test_find_join_column_issues_ignores_select():
             ),
         ],
         join=JoinConfig.model_validate(
-            {"type": "inner", "keys": [{"left": "a", "right": "b"}], "select": ["ghost"]}
+            {"keys": [{"subject": "a", "reference": "b"}], "select": ["ghost"]}
         ),
     )
     assert find_join_column_issues(stage) == []

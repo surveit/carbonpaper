@@ -62,10 +62,10 @@ def test_workflow_cycle():
 # the graph checks are plain functions — test them directly (the point of the split).
 # Each RETURNS its issues (all of them) rather than raising on the first.
 def test_validate_inputs_resolve_reports_all_dangling():
-    s = Stage.model_validate(S(id="b", type="join",
+    s = Stage.model_validate(S(id="b", type="enrich",
                                inputs=[_in("ghost1", {"columns": [{"name": "x"}]}),
                                        _in("ghost2", {"columns": [{"name": "y"}]})],
-                               join={"keys": [{"left": "x", "right": "y"}]},
+                               join={"keys": [{"subject": "x", "reference": "y"}]},
                                output_schema={"columns": [{"name": "x"}, {"name": "y"}]}))
     issues = m.validate_inputs_resolve([s])
     assert len(issues) == 2  # both dangling inputs, not just the first
@@ -100,10 +100,10 @@ def test_validate_workflow_clean_is_empty(tmp_path):
 
 
 def test_validate_workflow_reports_issues():
-    s = Stage.model_validate(S(id="j", type="join",
+    s = Stage.model_validate(S(id="j", type="enrich",
                                inputs=[_in("a", {"columns": [{"name": "x"}]}),
                                        _in("b", {"columns": [{"name": "y"}]})],
-                               join={"keys": [{"left": "x", "right": "y"}]},
+                               join={"keys": [{"subject": "x", "reference": "y"}]},
                                output_schema={"columns": [{"name": "x"}, {"name": "y"}]}))
     issues = m.validate_workflow([s])
     assert issues  # both inputs dangle — reported, not raised
@@ -358,8 +358,8 @@ def test_validate_publish_is_terminal_reports_every_offending_edge():
     stages = [Stage.model_validate(s) for s in (
         _loader(), _publish("pub_a"), _publish("pub_b"),
         _reader("down_a", "pub_a"), _reader("down_b", "pub_b"),
-        S(id="down_c", type="join", inputs=[_in("pub_a", _X), _in("pub_b", _Y)],
-          join={"keys": [{"left": "x", "right": "y"}]},
+        S(id="down_c", type="enrich", inputs=[_in("pub_a", _X), _in("pub_b", _Y)],
+          join={"keys": [{"subject": "x", "reference": "y"}]},
           output_schema={"columns": [{"name": "x"}, {"name": "y"}]}),
     )]
     issues = m.validate_publish_is_terminal(stages)

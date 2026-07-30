@@ -349,7 +349,7 @@ def _registry(llm_shape):
         StageType.python_row_function: RowMapHandler(make_mapper=lambda s, c, src: lambda r, i: r),
         StageType.llm_transform: llm_shape,
         StageType.python_frame_function: frame,
-        StageType.join_: frame,
+        StageType.enrich: frame,
         StageType.aggregate: frame,
         StageType.human_review_queue: RowMapHandler(make_mapper=lambda s, c, src: lambda r, i: r),
         StageType.publish: frame,

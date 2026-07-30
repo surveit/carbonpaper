@@ -50,10 +50,20 @@ class StageType(str, Enum):
     #                           (group-by, pivot, dedup, multi-input merge).
     python_row_function = "python_row_function"
     python_frame_function = "python_frame_function"
-    # Trailing underscore: a member literally named `join` would shadow
-    # str.join on every instance. The value — what a compiled stage declares and
-    # StageType("join") looks up — is still "join".
-    join_ = "join"
+    # The two ways to bring a second frame's columns alongside a first. Both are
+    # LEFT-sided: every row of inputs[0] (the SUBJECT) survives, an unmatched one
+    # carrying nulls for the added columns, and an unmatched row of inputs[1] (the
+    # REFERENCE) is dropped — keeping it would emit a row with no subject. They
+    # differ only in the cardinality they permit, which is why it is the TYPE that
+    # carries it rather than a config flag:
+    #   enrich — the reference must be unique on the key (m:1), so the row count
+    #            and order come out unchanged. Verified at run time, not trusted.
+    #   expand — the reference may repeat (m:n), so one subject row may come out
+    #            as several. The row count grows and the runtime says by how much.
+    # Neither DROPS a subject row: `filter_rows` does that, where the loss is
+    # recorded per row and so stays visible to the tracer.
+    enrich = "enrich"
+    expand = "expand"
     aggregate = "aggregate"
     human_review_queue = "human_review_queue"
     publish = "publish"
@@ -107,13 +117,6 @@ class AggFormula(str, Enum):
     max = "max"
     first = "first"
     list = "list"
-
-
-class JoinType(str, Enum):
-    inner = "inner"
-    left = "left"
-    right = "right"
-    outer = "outer"
 
 
 class PublishFormat(str, Enum):
@@ -256,42 +259,36 @@ class PythonFunction(_Base):
 
 
 class JoinKey(_Base):
-    left: str
-    right: str
+    subject: str
+    reference: str
 
 
 class JoinConfig(_Base):
-    """join handle. `keys` OR `on` is accepted.
+    """The `join:` handle, shared by `enrich` and `expand` — they take exactly
+    the same configuration, because what differs between them (permitted
+    cardinality) is carried by the stage TYPE. See StageType.
 
-    The merged output contains: every LEFT column under its own name; each
-    RIGHT column under its own name unless a left column shares it, in which
-    case it appears as `<name>_r`; a key pair with the SAME name on both sides
-    collapses into one column (there is no `<key>_r`). `select` and the
+    The merged output contains: every SUBJECT column under its own name; each
+    REFERENCE column under its own name unless a subject column shares it, in
+    which case it appears as `<name>_r`; a key pair with the SAME name on both
+    sides collapses into one column (there is no `<key>_r`). `select` and the
     stage's `output_schema` may only name these producible columns — anything
     else is rejected when the stage is saved."""
-    # Every field changes what this stage computes (join type, keys, kept
-    # columns) — see Stage.compute_definition_fingerprint.
-    FINGERPRINT_FIELDS: ClassVar[frozenset[str]] = frozenset({"type", "keys", "on", "select"})
+    # Both fields change what this stage computes — see
+    # Stage.compute_definition_fingerprint.
+    FINGERPRINT_FIELDS: ClassVar[frozenset[str]] = frozenset({"keys", "select"})
     INCIDENTAL_FIELDS: ClassVar[frozenset[str]] = frozenset()
 
-    type: JoinType = JoinType.inner
-    keys: Optional[list[JoinKey]] = None
-    on: Optional[list[JoinKey]] = None
+    keys: list[JoinKey] = Field(min_length=1)
     select: Optional[list[str]] = Field(
         default=None,
         description=(
             "Columns to keep, applied after the merge. Each entry must be a "
-            "producible merged column: a left column name, an uncollided right "
-            "column name, or `<name>_r` for a right column whose name a left "
-            "column shares."
+            "producible merged column: a subject column name, an uncollided "
+            "reference column name, or `<name>_r` for a reference column whose "
+            "name a subject column shares."
         ),
     )
-
-    @model_validator(mode="after")
-    def _need_keys_or_on(self) -> "JoinConfig":
-        if not (self.keys or self.on):
-            raise ValueError("join needs `keys` or `on`")
-        return self
 
 
 class AggregationOp(_Base):
@@ -386,14 +383,16 @@ class StageInput(_Base):
 # ── Stage ────────────────────────────────────────────────────────────────────
 # type → which handle block it must carry, plus input arity. Keyed by the plain
 # value string, not the enum member: with `use_enum_values`, `self.type` is a
-# str at runtime, and str-enum members hash by *name* (StageType.join_ hashes
-# as "join_", not "join") — a member-keyed dict would silently miss the lookup.
+# str at runtime, and a str-enum member hashes by *name* rather than value — a
+# member-keyed dict would silently miss the lookup wherever the two differ.
 _TYPE_SPEC: dict[str, dict[str, Any]] = {
     "input_data":            {"handle": "connector", "requires_inputs": False, "min_inputs": 0},
     "llm_transform":         {"handle": "llm",       "requires_inputs": True,  "min_inputs": 1},
     "python_row_function":   {"handle": "function",  "requires_inputs": True,  "min_inputs": 1, "max_inputs": 1},
     "python_frame_function": {"handle": "function",  "requires_inputs": True,  "min_inputs": 1},
-    "join":                  {"handle": "join",      "requires_inputs": True,  "min_inputs": 2},
+    # Both merge types take exactly two inputs, in order: [0] subject, [1] reference.
+    "enrich":                {"handle": "join",     "requires_inputs": True,  "min_inputs": 2, "max_inputs": 2},
+    "expand":                {"handle": "join",     "requires_inputs": True,  "min_inputs": 2, "max_inputs": 2},
     "aggregate":             {"handle": "aggregate", "requires_inputs": True,  "min_inputs": 1},
     "human_review_queue":    {"handle": "queue",     "requires_inputs": True,  "min_inputs": 1},
     "publish":               {"handle": "publish",   "also_requires": ["function"], "requires_inputs": True, "min_inputs": 1},
@@ -596,7 +595,7 @@ class Stage(StageDraft):
         if max_inputs is not None and len(self.inputs) > max_inputs:
             raise ValueError(
                 f"type `{self.type}` takes <= {max_inputs} input(s), got {len(self.inputs)} "
-                f"(more than one input is a join, or use python_frame_function)"
+                f"(a second input is a merge's reference, or use python_frame_function)"
             )
         return self
 
@@ -677,7 +676,7 @@ class Stage(StageDraft):
 
     @model_validator(mode="after")
     def _config_columns_resolve(self) -> "Stage":
-        """Every column this stage's config directly names (a join key, an
+        """Every column this stage's config directly names (a merge key, an
         aggregate group_by/value_column, publish.one_file_per, an llm prompt
         {placeholder}) or references via a where/filter predicate (aggregate
         `where`, human_review_queue `filter`) must resolve against that
@@ -687,7 +686,7 @@ class Stage(StageDraft):
         for a single stage in isolation, independent of the rest of any
         workflow.
 
-        Runs after `_handle_for_type`, so the type-matched handle block (join/
+        Runs after `_handle_for_type`, so the type-matched handle block (merge/
         aggregate/publish/llm/queue) this dispatches on is already guaranteed
         present. Lazy-imports the dispatch, rather than importing it at module
         level like every other import in this file: `app.models.stages`
@@ -704,7 +703,7 @@ class Stage(StageDraft):
     @model_validator(mode="after")
     def _output_schema_deliverable(self) -> "Stage":
         """A declared output_schema must be deliverable by this stage's own
-        handle: for the types whose output is fixed by config (join, aggregate),
+        handle: for the types whose output is fixed by config (merge, aggregate),
         every declared column must be producible by name, with the declared type
         matching the derivation where it can be known (see
         app.models.stages.find_output_schema_issues). EDGE-ONLY and per-stage,
@@ -739,7 +738,8 @@ class Stage(StageDraft):
                                  produces one: a rejected row stays, carrying the
                                  rejection. Removing rows is a downstream filter
                                  stage's job, not this one's.
-          - join (fan-out) / aggregate (fan-in) → NO; grain changes are deferred
+          - enrich/expand (fan-out) / aggregate (fan-in) → NO; grain changes
+                                 are deferred
           - publish            → NO — handle_publish runs an authored function whose
                                  output is a table of artifact paths, not the input
                                  rows (and it is terminal — nothing downstream).

@@ -27,7 +27,8 @@ PREVIEWABLE_TYPES: set[str] = {
     "python_row_function",
     "python_frame_function",
     "llm_transform",
-    "join",
+    "enrich",
+    "expand",
     "aggregate",
 }
 
@@ -76,8 +77,8 @@ def run_stage_preview(
 
     `selected_indices` are positional row indices (0-based) into the first
     upstream input's dataframe — the same rows the panel shows in its input
-    preview. Other upstream inputs (e.g. the right side of a join) are passed
-    through whole, since "row N of a join" isn't well defined.
+    preview. Other upstream inputs (e.g. a merge's reference side) are passed
+    through whole, since "row N of a merge's reference" isn't well defined.
 
     Returns a dict: {columns, rows_total, preview (records), input_rows,
     truncated_to}. Never writes to disk.
@@ -116,7 +117,7 @@ def run_stage_preview(
     inputs[first_id] = base_df.iloc[valid].reset_index(drop=True)
 
     # Ephemeral context: no identity/stage_cache (this run has no project
-    # scope), and a pure handler (python/llm/join/aggregate) never writes — we
+    # scope), and a pure handler (python/llm/merge/aggregate) never writes — we
     # never call the runner, so no manifest/output is touched.
     ctx = RunContext.for_stages_outside_a_run(repo_root, run_dir)
 

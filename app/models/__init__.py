@@ -26,7 +26,6 @@ from app.models.stage import (
     StageInput,
     JoinConfig,
     JoinKey,
-    JoinType,
     LLMConfig,
     PublishConfig,
     PublishFormat,
@@ -94,7 +93,6 @@ from app.models.schema import SCALAR_COLUMN_TYPES
 # Kind/type vocabularies as string sets, derived from the enums so they stay in
 # lockstep with the models the runtime validates against.
 SCHEMA_KINDS: set[str] = {k.value for k in SchemaKind}
-JOIN_TYPES: set[str] = {j.value for j in JoinType}
 
 # The connector kinds the compiler may EMIT and the prompt advertises to the LLM
 # (the six listed below). This is deliberately broader than the ConnectorKind
@@ -181,19 +179,41 @@ NODE_TYPES: dict[str, dict[str, _Any]] = {
             "row-position provenance trail an upstream row-mapped stage preserves."
         ),
     },
-    "join": {
-        "summary": "Combine two or more upstream dataframes on keys.",
+    "enrich": {
+        "summary": "Add a reference table's columns to each row, one match at most.",
         "handle": "join",
         "requires_inputs": True,
         "min_inputs": 2,
+        "max_inputs": 2,
         "required": ["keys"],
-        "optional": ["type", "select", "on"],
+        "optional": ["select"],
         "notes": (
-            "Merges the FIRST TWO inputs only: inputs[0] is left, inputs[1] is right, and a "
-            "third declared input is never merged in. A right column whose name a left column "
-            "shares arrives as `<name>_r`; a key pair with the SAME name on both sides "
-            "collapses into one column. `select` and output_schema may name only columns the "
-            "merge produces — anything else is rejected when the stage is saved."
+            "inputs[0] is the SUBJECT, inputs[1] the REFERENCE. Every subject row survives "
+            "and the row count is UNCHANGED — the reference must be unique on the key, which "
+            "is verified at run time and fails the stage when it is not. An unmatched subject "
+            "row is kept with nulls in the added columns; an unmatched reference row is "
+            "dropped. Use `expand` when the reference legitimately repeats, and `filter_rows` "
+            "to drop subject rows — this stage never does. A reference column whose name a "
+            "subject column shares arrives as `<name>_r`; a key pair with the SAME name on "
+            "both sides collapses into one column. `select` and output_schema may name only "
+            "columns the merge produces — anything else is rejected when the stage is saved."
+        ),
+    },
+    "expand": {
+        "summary": "Pair each row with every reference row that matches, so rows may multiply.",
+        "handle": "join",
+        "requires_inputs": True,
+        "min_inputs": 2,
+        "max_inputs": 2,
+        "required": ["keys"],
+        "optional": ["select"],
+        "notes": (
+            "Identical configuration to `enrich`; the difference is that the reference MAY "
+            "repeat on the key, so one subject row can come out as several and the row count "
+            "grows. Prefer `enrich` unless the fan-out is intended — summing a subject column "
+            "after an expand double-counts it. inputs[0] is the SUBJECT, inputs[1] the "
+            "REFERENCE; unmatched subject rows are kept with nulls, unmatched reference rows "
+            "are dropped, and column naming follows the same rules as `enrich`."
         ),
     },
     "aggregate": {
@@ -285,7 +305,7 @@ NODE_TYPE_NAMES: set[str] = set(NODE_TYPES)
 
 __all__ = [
     "Coverage",
-    "StageType", "ConnectorKind", "FileFormat", "AggFormula", "JoinType",
+    "StageType", "ConnectorKind", "FileFormat", "AggFormula",
     "FunctionKind", "PublishFormat", "is_valid_column_type",
     "SourceRef", "Column", "TableSchema", "Connector", "LLMConfig",
     "PythonFunction", "JoinKey", "JoinConfig", "AggregationOp",
@@ -304,7 +324,7 @@ __all__ = [
     "StageOutputOverride", "ExpectedOutput", "ScoringMetric", "CodeScorer", "EvalConfig",
     "EvalRunSettings", "EvalRun",
     # compat vocabularies (rendered into the authoring prompts)
-    "SCALAR_COLUMN_TYPES", "SCHEMA_KINDS", "JOIN_TYPES", "CONNECTOR_KINDS",
+    "SCALAR_COLUMN_TYPES", "SCHEMA_KINDS", "CONNECTOR_KINDS",
     "NODE_TYPES", "NODE_TYPE_NAMES", "HUMAN_REVIEW_QUEUE_CONTRACT_NOTE",
     # individual column-type comparison handles
     "STR_COLUMN_TYPE", "JSON_COLUMN_TYPE", "LIST_JSON_COLUMN_TYPE",
