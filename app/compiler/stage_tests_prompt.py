@@ -52,8 +52,9 @@ Weight your search toward inputs where a careless implementation would hand back
 plausible WRONG value rather than fail — those are the ones that pass unnoticed.
 Where the honest outcome for such an input is that the step fails — case 5 of the
 worked example below gives the test for telling those inputs apart — say so: set
-`fails_saying` to a phrase the failure must mention, rather than asserting a number
-the description does not support.
+`expected` to null, which claims the step must fail on that input, rather than
+asserting a number the description does not support. Null is not the same claim as
+`[]`: `[]` says the step succeeds and hands back no rows.
 
 A worked example. Given the description "Reads the amount a filing reports in
 `income` and records it as a number in `income_usd`. An amount that cannot be
@@ -75,7 +76,7 @@ read is recorded as zero rather than guessed.", with one stated corner case
    income "not disclosed" -> income_usd 0.0
    Why: "cannot be read is recorded as zero".
 5. "an amount in another currency is not recorded as dollars"
-   income "45000 EUR" -> the step fails, saying the amount is not in dollars
+   income "45000 EUR" -> the step fails (`expected` is null)
    Why: nothing in the description or its corner cases mentions currency, yet
    `income_usd` names one. Recording 45000.0 books euros as dollars; recording
    0.0 throws away an amount that was reported. Neither is honest, so the case

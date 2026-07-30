@@ -149,14 +149,15 @@ class PythonFunction(StageConfig):
             "`def transform(df, ...) -> DataFrame` (inputs positional in declared order); "
             "publish `def transform(df, ..., output_dir, trace_links) -> DataFrame` (writes "
             "artifact files into output_dir; the returned frame lists them). When the "
-            "function meets an input it cannot handle honestly, it raises instead of "
-            "returning: the message names the input and says, in language a non-engineer "
-            "can read, why that input cannot be handled. Never let a guessed, defaulted or "
-            "zeroed value stand in for a real one. Raise because a column's declared type "
-            "does not state this step's real precondition — `income` may be declared text "
-            "while what the code actually requires is text that reads as a dollar amount, "
-            "and no scalar type can say that — so the raise is the only place that "
-            "precondition is ever stated."
+            "function meets an input it cannot handle honestly, it refuses instead of "
+            "returning: `raise StepRefused(\"...\")`, which needs no import — the name is "
+            "already in scope. The message names the input and says, in language a "
+            "non-engineer can read, why that input cannot be handled. Never let a guessed, "
+            "defaulted or zeroed value stand in for a real one. Refuse because a column's "
+            "declared type does not state this step's real precondition — `income` may be "
+            "declared text while what the code actually requires is text that reads as a "
+            "dollar amount, and no scalar type can say that — so the refusal is the only "
+            "place that precondition is ever stated."
         ),
     )
     module: Optional[str] = None

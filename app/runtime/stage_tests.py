@@ -14,6 +14,7 @@ from typing import Any, Literal
 import pandas as pd
 from pydantic import BaseModel
 
+from app.core.errors import StepRefused
 from app.core.frames import list_rows
 from app.models import Stage, TableSchema
 from app.models.stage import StageType
@@ -176,7 +177,7 @@ def _run_one_test(stage: Stage, test: StageTest) -> StageTestResult:
         actual = HANDLERS[StageType(stage.type)].execute(stage, input_frames, ctx)
     except Exception as exc:  # noqa: BLE001 — the function is authored code; any raise IS the result
         return _judge_raise(test, exc)
-    if test.fails_saying is not None:
+    if test.expected is None:
         return StageTestResult(
             test.name, "mismatch",
             message=f"expected the step to fail, got {_describe_output(actual)}",
@@ -197,22 +198,15 @@ def _describe_output(actual: Any) -> str:
 
 
 def _judge_raise(test: StageTest, exc: Exception) -> StageTestResult:
-    """A raise is what a failure case asked for; for a rows case it is an error."""
-    if test.fails_saying is None:
-        return StageTestResult(
-            test.name, "error", message=f"{type(exc).__name__}: {exc}"
-        )
-    # Matched against str(exc) alone, case-insensitively: including the exception's
-    # type name would let fails_saying pin a class rather than the refusal's wording.
-    if test.fails_saying.lower() in str(exc).lower():
+    """Only StepRefused satisfies a failure case; every other raise is an error.
+
+    The type carries the whole signal — nothing is matched against the message. A
+    step that refuses says so by raising StepRefused; a KeyError from the same input
+    is the step falling over, which is what the test was written to tell apart, and
+    it stays an error even on a test that expected a failure."""
+    if test.expected is None and isinstance(exc, StepRefused):
         return StageTestResult(test.name, "passed")
-    return StageTestResult(
-        test.name, "mismatch",
-        message=(
-            f"expected the step to fail saying {test.fails_saying!r}, "
-            f"it failed saying: {type(exc).__name__}: {exc}"
-        ),
-    )
+    return StageTestResult(test.name, "error", message=f"{type(exc).__name__}: {exc}")
 
 
 def _build_frame(rows: list[dict[str, Any]], schema: TableSchema | None) -> pd.DataFrame:
@@ -241,6 +235,10 @@ def _validate_test_against_schemas(
             f"input {ref.id}: {issue.message}"
             for issue in report.issues if issue.severity == Severity.error
         ]
+    if test.expected is None:
+        # A failure case states no output rows, so there is no output shape to
+        # lint — only its inputs, which a real run would still have to accept.
+        return "; ".join(problems) if problems else None
     expected_frame = _build_frame(test.expected, stage.output_schema)
     report = validate_dataframe(
         expected_frame, stage.output_schema, stage_id=stage.id, phase="output"
@@ -254,8 +252,10 @@ def _validate_test_against_schemas(
 
 def _compare(stage: Stage, test: StageTest, actual: pd.DataFrame) -> StageTestResult:
     # Python transforms always declare their output schema; publish (the
-    # schema-less terminal stage) cannot carry tests.
+    # schema-less terminal stage) cannot carry tests. And a failure case
+    # (expected is None) has already been judged by the time we compare rows.
     assert stage.output_schema is not None
+    assert test.expected is not None
     columns = [column.name for column in stage.output_schema.columns]
     expected_rows = [_select_cells(row, columns) for row in test.expected]
     actual_rows = [_select_cells(row, columns) for row in list_rows(actual)]

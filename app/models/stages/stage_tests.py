@@ -5,7 +5,15 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    SerializerFunctionWrapHandler,
+    ValidationError,
+    model_serializer,
+    model_validator,
+)
 
 from app.core.utils import format_errors
 from app.models.schema import TableSchema, _Base
@@ -15,12 +23,29 @@ STAGE_TEST_TYPES = frozenset({"python_row_function", "python_frame_function"})
 
 
 class StageTest(_Base):
-    """A rows case states `expected` rows; a failure case states `fails_saying`, a message substring."""
+    """A rows case states `expected` rows; a failure case states `expected: null`."""
     name: str
     description: Optional[str] = None
     inputs: dict[str, list[dict[str, Any]]]
-    expected: list[dict[str, Any]] = Field(default_factory=list)
-    fails_saying: Optional[str] = None
+    expected: Optional[list[dict[str, Any]]] = Field(
+        description=(
+            "The rows this input must produce — or null to claim the step must FAIL on "
+            "it, refusing to hand back a value it cannot stand behind. Null and [] are "
+            "different claims and never interchangeable: [] says the step succeeds and "
+            "returns no rows, null says it does not succeed at all. Always state one of "
+            "them explicitly; there is no default."
+        ),
+    )
+
+    @model_serializer(mode="wrap")
+    def _keep_a_failure_claim_visible(
+        self, handler: SerializerFunctionWrapHandler
+    ) -> dict[str, Any]:
+        """`expected: null` survives an exclude_none dump — dropping the key would
+        reload as a missing required field, and read as a forgotten one."""
+        data = handler(self)
+        data.setdefault("expected", None)
+        return data
 
 
 def validate_stage_tests(
@@ -29,9 +54,8 @@ def validate_stage_tests(
     """Raise ValueError if `tests` are malformed for a stage of `stage_type`
     with the declared `input_ids`: tests belong on python transforms only,
     names are non-empty and unique, each test supplies exactly the declared
-    inputs, a failure case states no expected rows, and a python_row_function
-    rows case is one row in → one row out (the type is 1:1 by construction, so
-    a test claiming otherwise is wrong)."""
+    inputs, and a python_row_function rows case is one row in → one row out
+    (the type is 1:1 by construction, so a test claiming otherwise is wrong)."""
     if not tests:
         return
     if stage_type not in STAGE_TEST_TYPES:
@@ -46,11 +70,6 @@ def validate_stage_tests(
     for test in tests:
         if not test.name.strip():
             raise ValueError("a test needs a non-empty name")
-        if test.fails_saying is not None and test.expected:
-            raise ValueError(
-                f"test {test.name!r}: a test with fails_saying claims the step "
-                f"fails, so it states no expected rows (got {len(test.expected)})"
-            )
         if set(test.inputs) != declared:
             raise ValueError(
                 f"test {test.name!r}: inputs keys {sorted(test.inputs)} "
@@ -127,9 +146,9 @@ def _validate_row_function_row_counts(test: StageTest) -> None:
             f"test {test.name!r}: a python_row_function test is one row in "
             f"(got {input_rows} in)"
         )
-    # A failure case's `expected` is already required to be empty by
-    # validate_stage_tests, so only a rows case has an output count left to hold.
-    if test.fails_saying is None and len(test.expected) != 1:
+    # A failure case (expected is None) claims no output rows at all, so only a
+    # rows case has an output count left to hold.
+    if test.expected is not None and len(test.expected) != 1:
         raise ValueError(
             f"test {test.name!r}: a python_row_function test is one row in → "
             f"one row out (got 1 in, {len(test.expected)} out)"
@@ -146,6 +165,8 @@ def _find_test_row_problems(
         for input_id, row_model in input_models.items()
         for problem in _find_row_problems(test.inputs[input_id], row_model)
     ]
+    if test.expected is None:
+        return problems  # a failure case claims no output rows to conform
     problems += [
         f"test {test.name!r}, expected rows: {problem}"
         for problem in _find_row_problems(test.expected, expected_model)

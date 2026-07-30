@@ -140,6 +140,17 @@ class ReviewValidationError(ValueError):
     without a numeric score)."""
 
 
+class StepRefused(Exception):
+    """Authored step code met an input it cannot handle honestly; the message says which, and why.
+
+    Raised by the inline/module python a python_row_function or python_frame_function
+    stage runs, where the alternative would be returning a guessed, defaulted or
+    zeroed value. The runtime seeds the name into inline code's namespace
+    (app.runtime.stages.python_functions), so authored code raises it without an
+    import. A stage test whose `expected` is None is satisfied by THIS type alone —
+    any other exception stays an error, so a bug cannot pass for a refusal."""
+
+
 class PredicateError(ValueError):
     """A `where`/`filter` expression (aggregate.where, human_review_queue.filter)
     falls outside the closed grammar `app.core.predicate.parse_predicate`
