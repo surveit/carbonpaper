@@ -210,6 +210,62 @@ def test_stage_tests_model_accepts_an_explicit_null_in_a_nullable_column():
     assert suite.tests[0].inputs["load"] == [{"amount": 1.0, "label": None}]
 
 
+_FAILURE_TEST = {
+    "name": "another_currency_is_not_recorded_as_dollars",
+    "inputs": {"load": [{"amount": 2.0}]},
+    "fails_saying": "not a dollar amount",
+}
+
+
+def test_failure_case_may_not_also_state_expected_rows():
+    both = dict(_FAILURE_TEST, expected=[{"amount": 2.0, "doubled": 4.0}])
+    with pytest.raises(ValidationError) as excinfo:
+        _row_suite_model().model_validate({"tests": [both]})
+    message = str(excinfo.value)
+    assert "another_currency_is_not_recorded_as_dollars" in message
+    assert "fails_saying" in message
+
+
+def test_row_function_failure_case_needs_no_expected_row():
+    """One row in and no rows out is the point of a failure case, so the
+    one-row-in-one-row-out rule does not apply to it."""
+    suite = _row_suite_model().model_validate({"tests": [_FAILURE_TEST]})
+    assert suite.tests[0].fails_saying == "not a dollar amount"
+    assert suite.tests[0].expected == []
+
+
+def test_row_function_failure_case_still_needs_exactly_one_input_row():
+    two_rows = dict(_FAILURE_TEST, inputs={"load": [{"amount": 1.0}, {"amount": 2.0}]})
+    with pytest.raises(ValidationError, match="one row in"):
+        _row_suite_model().model_validate({"tests": [two_rows]})
+
+
+def test_failure_case_input_rows_are_still_schema_checked():
+    bad = dict(_FAILURE_TEST, inputs={"load": [{"amount": "two"}]})
+    with pytest.raises(ValidationError) as excinfo:
+        _row_suite_model().model_validate({"tests": [bad]})
+    message = str(excinfo.value)
+    assert "another_currency_is_not_recorded_as_dollars" in message
+    assert "load" in message
+    assert "amount" in message
+
+
+def test_rows_case_omitting_expected_still_fails_the_row_function_arity_rule():
+    """`expected` defaulting to empty must not turn a rows case that states no
+    output rows into a case that passes validation."""
+    missing = {k: v for k, v in _GOOD_TEST.items() if k != "expected"}
+    with pytest.raises(ValidationError, match="one row in"):
+        _row_suite_model().model_validate({"tests": [missing]})
+
+
+def test_rows_case_wire_form_is_unchanged():
+    stage = Stage.model_validate(_row_stage([_GOOD_TEST]))
+    assert stage.tests is not None
+    assert stage.tests[0].fails_saying is None
+    assert stage.tests[0].expected == [{"amount": 2.0, "doubled": 4.0}]
+    assert "fails_saying" not in stage_to_spec_dict(stage)["tests"][0]
+
+
 def test_stage_tests_model_accepts_an_empty_input_case():
     """No rows means no columns to disagree with — an "empty upstream" case is
     legitimate, and the runtime builds its frame from the declared schema."""

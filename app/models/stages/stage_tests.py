@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
-from pydantic import BaseModel, ConfigDict, ValidationError, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 from app.core.utils import format_errors
 from app.models.schema import TableSchema, _Base
@@ -15,14 +15,12 @@ STAGE_TEST_TYPES = frozenset({"python_row_function", "python_frame_function"})
 
 
 class StageTest(_Base):
-    """One case: `inputs` maps each of the stage's declared upstream ids to that
-    input's rows; `expected` is the output rows those inputs must produce.
-    `name` is the case's stable handle — what it pins down, e.g.
-    "withdrawn_bill_maps_to_null"; `description` says why the case exists."""
+    """A rows case states `expected` rows; a failure case states `fails_saying`, a message substring."""
     name: str
     description: Optional[str] = None
     inputs: dict[str, list[dict[str, Any]]]
-    expected: list[dict[str, Any]]
+    expected: list[dict[str, Any]] = Field(default_factory=list)
+    fails_saying: Optional[str] = None
 
 
 def validate_stage_tests(
@@ -31,8 +29,9 @@ def validate_stage_tests(
     """Raise ValueError if `tests` are malformed for a stage of `stage_type`
     with the declared `input_ids`: tests belong on python transforms only,
     names are non-empty and unique, each test supplies exactly the declared
-    inputs, and a python_row_function test is one row in → one row out (the
-    type is 1:1 by construction, so a test claiming otherwise is wrong)."""
+    inputs, a failure case states no expected rows, and a python_row_function
+    rows case is one row in → one row out (the type is 1:1 by construction, so
+    a test claiming otherwise is wrong)."""
     if not tests:
         return
     if stage_type not in STAGE_TEST_TYPES:
@@ -47,6 +46,11 @@ def validate_stage_tests(
     for test in tests:
         if not test.name.strip():
             raise ValueError("a test needs a non-empty name")
+        if test.fails_saying is not None and test.expected:
+            raise ValueError(
+                f"test {test.name!r}: a test with fails_saying claims the step "
+                f"fails, so it states no expected rows (got {len(test.expected)})"
+            )
         if set(test.inputs) != declared:
             raise ValueError(
                 f"test {test.name!r}: inputs keys {sorted(test.inputs)} "
@@ -57,13 +61,7 @@ def validate_stage_tests(
         # per-type invariant being decided here.
         match stage_type:
             case "python_row_function":
-                input_rows = next(iter(test.inputs.values()), [])
-                if len(input_rows) != 1 or len(test.expected) != 1:
-                    raise ValueError(
-                        f"test {test.name!r}: a python_row_function test is "
-                        f"one row in → one row out (got {len(input_rows)} in, "
-                        f"{len(test.expected)} out)"
-                    )
+                _validate_row_function_row_counts(test)
             case "python_frame_function":
                 pass  # no per-type invariant: rows in and rows out are both free
             case _:
@@ -120,6 +118,22 @@ def build_stage_tests_model(
             return self
 
     return StageTestSuite
+
+
+def _validate_row_function_row_counts(test: StageTest) -> None:
+    input_rows = len(next(iter(test.inputs.values()), []))
+    if test.fails_saying is not None:
+        if input_rows != 1:
+            raise ValueError(
+                f"test {test.name!r}: a python_row_function test is one row in "
+                f"(got {input_rows} in)"
+            )
+        return
+    if input_rows != 1 or len(test.expected) != 1:
+        raise ValueError(
+            f"test {test.name!r}: a python_row_function test is one row in → "
+            f"one row out (got {input_rows} in, {len(test.expected)} out)"
+        )
 
 
 def _find_test_row_problems(
