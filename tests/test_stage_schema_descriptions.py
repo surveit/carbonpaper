@@ -10,7 +10,8 @@ from pydantic import BaseModel
 
 from app.models import NODE_TYPES
 from app.models.schema import Column
-from app.models.stage import Connector, PythonFunction, Stage
+from app.models.stage import PythonFunction, Stage
+from app.models.stages.input_data import Connector
 
 
 def _desc(model: type[BaseModel], field: str) -> str:

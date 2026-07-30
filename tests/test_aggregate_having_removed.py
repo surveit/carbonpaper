@@ -1,6 +1,6 @@
 import pytest
 from pydantic import ValidationError
-from app.models.stage import AggregateConfig
+from app.models.stages.aggregate import AggregateConfig
 
 
 def test_having_is_now_rejected():
