@@ -9,6 +9,7 @@ from app.models.node_contract_notes import (
 )
 from app.models.schema import (
     Column,
+    FunctionKind,
     JSON_COLUMN_TYPE,
     LIST_JSON_COLUMN_TYPE,
     RANGE_UNBOUNDED_MARKER,
@@ -18,8 +19,6 @@ from app.models.schema import (
     is_valid_column_type,
 )
 from app.models.stage import (
-    FunctionKind,
-    PythonFunction,
     ReviewConfig,
     Stage,
     StageDraft,
@@ -40,6 +39,7 @@ from app.models.stages.join import JoinConfig, JoinKey, JoinType
 from app.models.stages.llm_transform import LLMConfig
 from app.models.stages.publish import PublishConfig, PublishFormat
 from app.models.stages.union import UnionConfig
+from app.models.stages.code import PythonFunction
 from app.models.stages.stage_tests import StageTest
 from app.models.workflow import (
     Workflow,

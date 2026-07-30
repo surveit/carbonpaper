@@ -23,6 +23,26 @@
     endif %}{%
   endfor %}{% endmacro %}
 
+{# The corner cases the author stated: the inputs whose handling is not obvious
+   from the summary, each with the outcome it must produce. Folded, because the
+   summary is what a reviewer reads first and this is what they open when they want
+   to know how the awkward inputs are treated. Every entry is also handed to the
+   example deriver, so what is listed here is what the examples check. #}
+{% macro stage_corner_cases(cases) %}
+{% if cases %}
+<details class="stage-corners">
+  <summary>{{ cases|length }} corner case{% if cases|length != 1 %}s{% endif %}
+    <span class="muted">— inputs whose handling the summary does not state</span></summary>
+  <dl class="stage-corner-list">
+    {% for case in cases %}
+    <dt>{{ prose_with_column_chips(case.case) }}</dt>
+    <dd>{{ prose_with_column_chips(case.expected) }}</dd>
+    {% endfor %}
+  </dl>
+</details>
+{% endif %}
+{% endmacro %}
+
 {% macro stage_summary(text) %}
 {% if text %}
 <p class="stage-summary">{{ prose_with_column_chips(text) }}</p>
