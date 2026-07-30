@@ -175,15 +175,37 @@ def _run_one_test(stage: Stage, test: StageTest) -> StageTestResult:
     try:
         actual = HANDLERS[StageType(stage.type)].execute(stage, input_frames, ctx)
     except Exception as exc:  # noqa: BLE001 — the function is authored code; any raise IS the result
-        return StageTestResult(
-            test.name, "error", message=f"{type(exc).__name__}: {exc}"
-        )
+        return _judge_raise(test, exc)
     if not isinstance(actual, pd.DataFrame):
         return StageTestResult(
             test.name, "error",
             message=f"function returned {type(actual).__name__}, expected a DataFrame",
         )
+    if test.fails_saying is not None:
+        return StageTestResult(
+            test.name, "mismatch",
+            message=f"expected the step to fail, got {len(actual)} row(s)",
+        )
     return _compare(stage, test, actual)
+
+
+def _judge_raise(test: StageTest, exc: Exception) -> StageTestResult:
+    """A raise is what a failure case asked for; for a rows case it is an error."""
+    if test.fails_saying is None:
+        return StageTestResult(
+            test.name, "error", message=f"{type(exc).__name__}: {exc}"
+        )
+    # Matched against str(exc) alone, case-insensitively: including the exception's
+    # type name would let fails_saying pin a class rather than the refusal's wording.
+    if test.fails_saying.lower() in str(exc).lower():
+        return StageTestResult(test.name, "passed")
+    return StageTestResult(
+        test.name, "mismatch",
+        message=(
+            f"expected the step to fail saying {test.fails_saying!r}, "
+            f"it failed saying: {type(exc).__name__}: {exc}"
+        ),
+    )
 
 
 def _build_frame(rows: list[dict[str, Any]], schema: TableSchema | None) -> pd.DataFrame:

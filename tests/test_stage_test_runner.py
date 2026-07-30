@@ -111,6 +111,84 @@ def test_none_output_matches_expected_none():
     assert result.status == "passed"
 
 
+_REFUSES = (
+    "def transform(row):\n"
+    "    raise ValueError('not a dollar amount: 45000 EUR')\n"
+)
+
+
+def test_failure_case_passes_when_message_contains_substring():
+    stage = _row_stage(_REFUSES, [{
+        "name": "refuses_foreign_currency", "inputs": {"load": [{"amount": 1.0}]},
+        "fails_saying": "not a dollar amount",
+    }])
+    [result] = run_tests_for_stage(stage)
+    assert result.status == "passed"
+
+
+def test_failure_case_mismatches_and_carries_the_actual_message():
+    stage = _row_stage(
+        "def transform(row):\n    raise KeyError('income')\n",
+        [{"name": "refuses_foreign_currency", "inputs": {"load": [{"amount": 1.0}]},
+          "fails_saying": "not a dollar amount"}],
+    )
+    [result] = run_tests_for_stage(stage)
+    assert result.status == "mismatch"
+    assert "income" in (result.message or "")
+
+
+def test_failure_case_that_returns_rows_is_mismatch():
+    stage = _row_stage(_DOUBLE, [{
+        "name": "expects_refusal", "inputs": {"load": [{"amount": 2.0}]},
+        "fails_saying": "not a dollar amount",
+    }])
+    [result] = run_tests_for_stage(stage)
+    assert result.status == "mismatch"
+    assert "1 row(s)" in (result.message or "")
+
+
+def test_rows_case_raising_is_still_error():
+    stage = _row_stage(_REFUSES, [{
+        "name": "expects_rows", "inputs": {"load": [{"amount": 1.0}]},
+        "expected": [{"amount": 1.0, "doubled": 2.0}],
+    }])
+    [result] = run_tests_for_stage(stage)
+    assert result.status == "error"
+    assert "ValueError" in (result.message or "")
+
+
+def test_failure_case_substring_match_ignores_case():
+    stage = _row_stage(
+        "def transform(row):\n    raise ValueError('Not a dollar amount: 45000 EUR')\n",
+        [{"name": "refuses_foreign_currency", "inputs": {"load": [{"amount": 1.0}]},
+          "fails_saying": "not a dollar amount"}],
+    )
+    [result] = run_tests_for_stage(stage)
+    assert result.status == "passed"
+
+
+def test_failure_case_does_not_match_the_exception_type_name():
+    # str(KeyError('income')) is "'income'" — matching the type name too would let
+    # a test pin the exception class while pinning nothing about the refusal.
+    stage = _row_stage(
+        "def transform(row):\n    raise KeyError('income')\n",
+        [{"name": "names_the_type", "inputs": {"load": [{"amount": 1.0}]},
+          "fails_saying": "KeyError"}],
+    )
+    [result] = run_tests_for_stage(stage)
+    assert result.status == "mismatch"
+
+
+def test_find_failing_stage_tests_reports_a_failed_failure_case():
+    stage = _row_stage(
+        "def transform(row):\n    raise KeyError('income')\n",
+        [{"name": "refuses_foreign_currency", "inputs": {"load": [{"amount": 1.0}]},
+          "fails_saying": "not a dollar amount"}],
+    )
+    [failure] = find_failing_stage_tests([stage])
+    assert "refuses_foreign_currency" in failure and "mismatch" in failure
+
+
 def _frame_stage(code: str, tests: list[dict]) -> Stage:
     return parse_stage({
         "id": "reshape", "name": "Reshape", "type": "python_frame_function",
