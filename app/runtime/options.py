@@ -17,9 +17,9 @@ __all__ = [
 
 # ── Config knobs (env-overridable) ───────────────────────────────────────────
 CLAUDE_BIN = shutil.which("claude") or CLI_PATH
-DEFAULT_MODEL = os.environ.get("CW_LLM_MODEL", "haiku")
-DEFAULT_PARALLEL = int(os.environ.get("CW_LLM_PARALLEL", "4"))
-DEFAULT_TIMEOUT_S = int(os.environ.get("CW_LLM_TIMEOUT_S", "180"))
+DEFAULT_MODEL = os.environ.get("CARBONPAPER_LLM_MODEL", "haiku")
+DEFAULT_PARALLEL = int(os.environ.get("CARBONPAPER_LLM_PARALLEL", "4"))
+DEFAULT_TIMEOUT_S = int(os.environ.get("CARBONPAPER_LLM_TIMEOUT_S", "180"))
 
 
 def agent_available() -> bool:

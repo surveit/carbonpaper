@@ -19,13 +19,13 @@ __all__ = ["REPO_ROOT", "repo_root", "EXAMPLES_DIR"]
 
 # The projects storage root, defined once: examples/<name>/ working copies live
 # here. Both app.services and app.web read it; app.web.config re-exports it.
-# CW_EXAMPLES_DIR overrides the default — used to point the workspace at a temp
+# CARBONPAPER_EXAMPLES_DIR overrides the default — used to point the workspace at a temp
 # dir (a standalone CLI run, or a subprocess test); unset, it's the repo's
 # examples/. Read once at import; in-process callers still pass examples_dir
 # explicitly or monkeypatch this attribute.
 EXAMPLES_DIR = (
-    Path(os.environ["CW_EXAMPLES_DIR"])
-    if os.environ.get("CW_EXAMPLES_DIR")
+    Path(os.environ["CARBONPAPER_EXAMPLES_DIR"])
+    if os.environ.get("CARBONPAPER_EXAMPLES_DIR")
     else REPO_ROOT / "examples"
 )
 

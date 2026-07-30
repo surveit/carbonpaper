@@ -34,7 +34,7 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     # time (the test suite's autouse fixtures) wins over the on-disk defaults —
     # the app never reconfigures a store that's already set.
     configure_default_stores()
-    # Opt-in demo data: CW_SEED_DEMO=1 seeds the committed example bundles into
+    # Opt-in demo data: CARBONPAPER_SEED_DEMO=1 seeds the committed example bundles into
     # the workspace (seed-if-absent, never destructive); a normal boot leaves
     # this env var unset, so it does nothing. All seeding logic lives in
     # app.seeds — this is its one call site.

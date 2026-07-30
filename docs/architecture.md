@@ -83,7 +83,7 @@ is its only exit, strict-validating before freezing it into a version via
 
 ## `app/chat/`, `app/core/llm/`, tests
 `chat/` — a reusable PydanticAI chat engine (streaming, tools, file persistence), separate
-from the row-mapped `llm_transform` path; own env (`CW_CHAT_BACKEND`); one demo tool, not yet
-wired in. `core/llm/options.py` — the `LLMModel` menu. `tests/` (pytest; `conftest.py` forces
+from the row-mapped `llm_transform` path; one demo tool, not yet wired in.
+`core/llm/options.py` — the `LLMModel` menu. `tests/` (pytest; `conftest.py` forces
 `agent_available` False so no test can reach a real model); `.github/workflows/ci.yml`
 runs ruff + mypy + pytest on every PR.

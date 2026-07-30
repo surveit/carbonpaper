@@ -53,7 +53,7 @@ def seed_all(
 
 
 def seed_demo_data_if_enabled(examples_dir: Path | None = None) -> list[str]:
-    """The CW_SEED_DEMO=1 startup hook: when the env var is exactly "1",
+    """The CARBONPAPER_SEED_DEMO=1 startup hook: when the env var is exactly "1",
     seed `examples_dir` (default: the real workspace) from the committed
     fixtures; every other value, including unset, is a no-op. Always calls
     seed_all, which is seed-if-absent only (never destructive), so an
@@ -62,7 +62,7 @@ def seed_demo_data_if_enabled(examples_dir: Path | None = None) -> list[str]:
 
     app.main's lifespan makes exactly one call to this function after the
     store is configured; it carries no seeding decisions of its own."""
-    if os.environ.get("CW_SEED_DEMO") != "1":
+    if os.environ.get("CARBONPAPER_SEED_DEMO") != "1":
         return []
     return seed_all(examples_dir=examples_dir)
 

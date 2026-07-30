@@ -660,8 +660,8 @@ def test_the_documented_cli_runs_a_project_with_nothing_configured(tmp_path, mon
 
     db_path = tmp_path / "db" / "app.db"
     db_path.parent.mkdir(parents=True)
-    monkeypatch.setenv("CW_DB_PATH", str(db_path))
-    monkeypatch.setenv("CW_FRAMES_ROOT", str(tmp_path / "frames"))
+    monkeypatch.setenv("CARBONPAPER_DB_PATH", str(db_path))
+    monkeypatch.setenv("CARBONPAPER_FRAMES_ROOT", str(tmp_path / "frames"))
 
     project_dir = tmp_path / "project"
     configure_store(SqliteKvStore(str(db_path)))
