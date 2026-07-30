@@ -2,10 +2,15 @@
    union / aggregate / queue / publish. Used on both the static stage page and
    the run-detail right panel.
 
+   For the two authored-code handles (function / filter) this renders the
+   plain-language summary and the metadata only — the code itself is a separate
+   macro (_stage_code.html) the host renders LAST, after the test cases.
+
    Required context: stage, function_code (may be None).
    Optional context: llm_example {prompt, columns} — a rendered prompt
    from this run's actual input first row, for LLM stages. #}
 {% from "_schema_table.html" import schema_table %}
+{% from "_stage_code.html" import stage_summary %}
 
 {% if stage.connector %}
 <section class="exec-block">
@@ -81,31 +86,24 @@
 {% if stage.function %}
 <section class="exec-block">
     <h2>🐍 Python function</h2>
+    {{ stage_summary(stage.function.summary) }}
     <dl class="kv">
         <dt>kind</dt><dd>{{ stage.function.kind }}</dd>
         {% if stage.function.module %}<dt>module</dt><dd><code>{{ stage.function.module }}</code></dd>{% endif %}
         {% if stage.function.function %}<dt>function</dt><dd><code>{{ stage.function.function }}</code></dd>{% endif %}
         {% if stage.function.requirements %}<dt>requirements</dt><dd>{{ stage.function.requirements | join(', ') }}</dd>{% endif %}
     </dl>
-    {% if function_code %}
-    <h3>code</h3>
-    <pre class="code">{{ function_code }}</pre>
-    {% else %}
-    <p class="muted"><em>(function source not found on disk)</em></p>
-    {% endif %}
 </section>
 {% endif %}
 
 {% if stage.filter %}
 <section class="exec-block">
     <h2>🔎 Row filter</h2>
+    {{ stage_summary(stage.filter.summary) }}
     <p class="muted">Keeps the rows this predicate returns <code>True</code> for; every kept row passes through unchanged, in order.</p>
     <dl class="kv">
         <dt>function</dt><dd><code>{{ stage.filter.function or 'should_include' }}</code></dd>
     </dl>
-    <h3>predicate</h3>
-    {# Inline code is the handle's only source — no module ref to resolve off disk. #}
-    <pre class="code">{{ stage.filter.code }}</pre>
 </section>
 {% endif %}
 

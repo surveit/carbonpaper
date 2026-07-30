@@ -11,6 +11,7 @@
      type_class / type_glyph — the type-tag maps
 #}
 {% from "_schema_table.html" import schema_table %}
+{% from "_stage_code.html" import stage_code %}
 
 <div class="node-review-full" id="version-stage-panel" data-stage-id="{{ stage.id }}">
 
@@ -49,6 +50,7 @@
 
     <div class="pane" data-pane="transform">
       {% include "_stage_executable.html" %}
+      {{ stage_code(stage, function_code) }}
       {% if stage.eval %}
       <section class="eval-block">
         <h2>📊 Eval</h2>

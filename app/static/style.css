@@ -405,6 +405,29 @@ table.schema tr:last-child td { border-bottom: 0; }
 }
 .exec-block h2 { margin-top: 0; }
 
+/* The plain-language summary of an authored-code handle — the first thing read
+   in the Transform pane, and for a non-engineer the only readable statement of
+   what the step does, so it is set larger than the metadata under it. */
+.stage-summary {
+    font-size: 16px;
+    line-height: 1.55;
+    margin: 0 0 12px;
+    max-width: 70ch;
+}
+.stage-summary.missing { font-size: 14px; }
+
+/* Code comes LAST and folded: description → examples → code. */
+.code-block > details > summary {
+    cursor: pointer;
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+}
+/* A heading, not a link: the generic `details summary` accent colour reads as
+   one, and this disclosure sits at the same level as Python function / Tests. */
+.code-block > details > summary h2 { display: inline; color: var(--fg); }
+.code-block > details[open] > summary { margin-bottom: 12px; }
+
 .eval-block {
     background: var(--eval-bg);
     border-left: 4px solid var(--eval-border);

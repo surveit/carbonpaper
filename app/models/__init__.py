@@ -3,7 +3,10 @@
 Import from `app.models` (this aggregator) for the stable public surface.
 """
 from app.models.coverage import Coverage
-from app.models.node_contract_notes import HUMAN_REVIEW_QUEUE_CONTRACT_NOTE
+from app.models.node_contract_notes import (
+    CODE_SUMMARY_CONTRACT_NOTE,
+    HUMAN_REVIEW_QUEUE_CONTRACT_NOTE,
+)
 from app.models.schema import (
     Column,
     JSON_COLUMN_TYPE,
@@ -277,6 +280,16 @@ NODE_TYPES: dict[str, dict[str, _Any]] = {
     },
 }
 
+# The types whose handle carries authored code all owe a plain-language
+# `summary`. Folded into their notes here rather than repeated in each entry, so
+# every renderer of NODE_TYPES (the MCP instructions, the editing agent's
+# catalog) states the obligation without one of them being able to forget it.
+CODE_CARRYING_TYPES = ("python_row_function", "python_frame_function", "publish", "filter_rows")
+for _type_name in CODE_CARRYING_TYPES:
+    _spec = NODE_TYPES[_type_name]
+    _spec["notes"] = f"{_spec['notes']} {CODE_SUMMARY_CONTRACT_NOTE}"
+    _spec["optional"] = [*_spec["optional"], "summary"]
+
 NODE_TYPE_NAMES: set[str] = set(NODE_TYPES)
 
 __all__ = [
@@ -302,6 +315,7 @@ __all__ = [
     # compat vocabularies (rendered into the authoring prompts)
     "SCALAR_COLUMN_TYPES", "SCHEMA_KINDS", "JOIN_TYPES", "CONNECTOR_KINDS",
     "NODE_TYPES", "NODE_TYPE_NAMES", "HUMAN_REVIEW_QUEUE_CONTRACT_NOTE",
+    "CODE_SUMMARY_CONTRACT_NOTE", "CODE_CARRYING_TYPES",
     # individual column-type comparison handles
     "STR_COLUMN_TYPE", "JSON_COLUMN_TYPE", "LIST_JSON_COLUMN_TYPE",
     "RANGE_UNBOUNDED_MARKER",
