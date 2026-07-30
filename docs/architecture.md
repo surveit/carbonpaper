@@ -10,8 +10,11 @@ THE definition of what a workflow is. Constructing a model validates it;
 `validate_*` return issue lists, `parse_*` raise. **Dependency rule: imports nothing from
 runtime or web — keep it pure.** Checks the *spec*, distinct from RUNTIME data validation
 (`app/runtime/validation.py`, which checks dataframes).
-- `stage.py` — the 8 stage types, the executable-handle block each requires, and
-  `Stage.is_grain_preserving` (1:1 row correspondence — the eval gate depends on it).
+- `stage.py` — the stage types, the `Stage` model (which handle block each type requires,
+  and every rule a stored stage must satisfy), and `Stage.is_grain_preserving` (1:1 row
+  correspondence — the eval gate depends on it).
+- `stages/` — one module per stage type, holding that type's handle-config class and its
+  own validation helpers (`PythonFunction`, shared by three types, stays in `stage.py`).
 - `schema.py` — `Column`, `TableSchema`, column-type vocab. `workflow.py` — graph checks
   (unique ids, inputs resolve, cycles). `named_schemas.py` — named schemas + FK `references`.
   `eval.py` — `EvalConfig` + grain-preservation gate. `table.py` — `TableRef`.

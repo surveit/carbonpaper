@@ -6,7 +6,7 @@ from pydantic import ValidationError
 
 from app import models as m
 from app.core.llm import LLMModel
-from app.models.stage import Connector
+from app.models.stages.input_data import Connector
 
 
 def S(**kw):

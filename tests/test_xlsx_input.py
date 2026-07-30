@@ -7,7 +7,7 @@ import openpyxl
 import pytest
 from pydantic import ValidationError
 
-from app.models.stage import FileFormat, XlsxReadParams
+from app.models.stages.input_data import FileFormat, XlsxReadParams
 from app.runtime.stages.input_data import _read_xlsx
 
 
@@ -146,7 +146,7 @@ def test_bool_offset_param_raises(param):
 
 def test_authoring_surfaces_advertise_xlsx():
     from app.models import NODE_TYPES
-    from app.models.stage import Connector
+    from app.models.stages.input_data import Connector
 
     params_description = Connector.model_fields["params"].description or ""
     for fmt in FileFormat:

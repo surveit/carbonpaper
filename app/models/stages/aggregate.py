@@ -1,12 +1,16 @@
-"""Column validation for an aggregate stage, on both the input and output
-side: `group_by`, each aggregation's `value_column`, and every column an
-aggregation's `where` predicate references must resolve against the stage's
-input edge; and a declared output_schema must be deliverable by the columns
-group_by + the aggregations actually produce."""
+"""aggregate stage: the handle config, plus column validation on both the
+input and output side — `group_by`, each aggregation's `value_column`, and
+every column an aggregation's `where` references must resolve against the
+stage's input edge; and a declared output_schema must be deliverable by the
+columns group_by + the aggregations actually produce."""
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from enum import Enum
+from typing import TYPE_CHECKING, ClassVar, Optional
 
+from pydantic import model_validator
+
+from app.models.schema import _Base
 from app.models.stages.shared import (
     COLUMN_ISSUE,
     find_declared_vs_derived_issues,
@@ -16,15 +20,49 @@ from app.models.stages.shared import (
 
 if TYPE_CHECKING:
     from app.models.schema import TableSchema
-    from app.models.stage import AggregateConfig, Stage
+    from app.models.stage import Stage
+
+
+class AggFormula(str, Enum):
+    sum = "sum"
+    mean = "mean"
+    count_ = "count"  # trailing underscore: `count` would shadow str.count
+    min = "min"
+    max = "max"
+    first = "first"
+    list = "list"
+
+
+class AggregationOp(_Base):
+    output_column: str
+    formula: AggFormula
+    value_column: Optional[str] = None
+    where: Optional[str] = None
+
+    @model_validator(mode="after")
+    def _value_column_for_formula(self) -> "AggregationOp":
+        if self.formula != AggFormula.count_ and not self.value_column:
+            raise ValueError(
+                f"aggregation `{self.output_column}`: formula `{self.formula}` needs value_column"
+            )
+        return self
+
+
+class AggregateConfig(_Base):
+    """aggregate handle."""
+    # Every field changes what this stage computes (grouping, aggregations) —
+    # see Stage.compute_definition_fingerprint.
+    FINGERPRINT_FIELDS: ClassVar[frozenset[str]] = frozenset({"group_by", "aggregations"})
+    INCIDENTAL_FIELDS: ClassVar[frozenset[str]] = frozenset()
+
+    group_by: list[str]
+    aggregations: list[AggregationOp]
+
 
 # Aggregation formula names, compared as plain strings both by
 # derive_aggregate_output_types below and by the runtime handler
 # (app.runtime.stages.aggregate.handle_aggregate, which executes the same
 # dispatch on real data) — named here so the two sites can't drift apart.
-# Plain string, not the AggFormula enum: AggFormula lives on `Stage` in
-# app.models.stage, and importing it here at module scope would be circular
-# (stage.py imports this package back for its own model validator).
 AGG_FORMULA_COUNT = "count"
 AGG_FORMULA_LIST = "list"
 

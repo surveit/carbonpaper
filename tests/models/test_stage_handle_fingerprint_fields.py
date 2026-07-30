@@ -4,15 +4,13 @@ from __future__ import annotations
 
 import pytest
 
-from app.models.stage import (
-    AggregateConfig,
-    Connector,
-    JoinConfig,
-    LLMConfig,
-    PublishConfig,
-    PythonFunction,
-    QueueConfig,
-)
+from app.models.stage import PythonFunction
+from app.models.stages.aggregate import AggregateConfig
+from app.models.stages.human_review_queue import QueueConfig
+from app.models.stages.input_data import Connector
+from app.models.stages.join import JoinConfig
+from app.models.stages.llm_transform import LLMConfig
+from app.models.stages.publish import PublishConfig
 
 _HANDLE_CONFIG_CLASSES = [
     Connector, LLMConfig, PythonFunction, JoinConfig, AggregateConfig, QueueConfig, PublishConfig,
