@@ -111,6 +111,127 @@ def test_none_output_matches_expected_none():
     assert result.status == "passed"
 
 
+# No import line: the runtime seeds StepRefused into inline code's namespace, and
+# this is the only place that is exercised through the real handler.
+_REFUSES = (
+    "def transform(row):\n"
+    "    raise StepRefused('not a dollar amount: 45000 EUR')\n"
+)
+
+
+def test_failure_case_passes_when_the_step_refuses():
+    stage = _row_stage(_REFUSES, [{
+        "name": "refuses_foreign_currency", "inputs": {"load": [{"amount": 1.0}]},
+        "expected": None,
+    }])
+    [result] = run_tests_for_stage(stage)
+    assert result.status == "passed"
+
+
+def test_inline_code_raises_step_refused_without_importing_it():
+    # Proves the namespace seeding, not just the verdict: the same code with the
+    # name unseeded would die with NameError, which is an `error`, not `passed`.
+    stage = _row_stage(_REFUSES, [{
+        "name": "refuses_foreign_currency", "inputs": {"load": [{"amount": 1.0}]},
+        "expected": None,
+    }])
+    assert "import" not in _REFUSES
+    [result] = run_tests_for_stage(stage)
+    assert result.status == "passed"
+    assert "NameError" not in (result.message or "")
+
+
+def test_failure_case_is_error_when_the_step_raises_something_else():
+    # A KeyError is the step falling over, not refusing. Telling those apart is the
+    # whole point of pinning the TYPE: a buggy step must not certify as an honest
+    # refusal just because it happened to raise.
+    stage = _row_stage(
+        "def transform(row):\n    raise KeyError('income')\n",
+        [{"name": "refuses_foreign_currency", "inputs": {"load": [{"amount": 1.0}]},
+          "expected": None}],
+    )
+    [result] = run_tests_for_stage(stage)
+    assert result.status == "error"
+    assert "KeyError" in (result.message or "") and "income" in (result.message or "")
+
+
+def test_failure_case_that_returns_rows_is_mismatch():
+    stage = _row_stage(_DOUBLE, [{
+        "name": "expects_refusal", "inputs": {"load": [{"amount": 2.0}]},
+        "expected": None,
+    }])
+    [result] = run_tests_for_stage(stage)
+    assert result.status == "mismatch"
+    assert "1 row(s)" in (result.message or "")
+
+
+def test_failure_case_returning_a_non_dataframe_is_mismatch_not_crash():
+    # The expected-failure verdict is reached before the return value is known to
+    # be a frame, so the message must not reach for a row count it cannot have.
+    stage = _frame_stage(
+        "def transform(df):\n    return 7\n",
+        [{"name": "expects_refusal", "inputs": {"load": [{"amount": 2.0}]},
+          "expected": None}],
+    )
+    [result] = run_tests_for_stage(stage)
+    assert result.status == "mismatch"
+    assert "int" in (result.message or "")
+
+
+def test_failure_case_returning_zero_rows_is_mismatch_not_passed():
+    # The subtle one: a frame step that returns an EMPTY frame succeeded. Judging
+    # the failure claim by row count would read that as "no rows, so it must have
+    # failed" — so the returned-a-value verdict has to come before any comparison.
+    stage = _frame_stage(
+        "def transform(df):\n    return df.head(0)\n",
+        [{"name": "expects_refusal", "inputs": {"load": [{"amount": 2.0}]},
+          "expected": None}],
+    )
+    [result] = run_tests_for_stage(stage)
+    assert result.status == "mismatch"
+    assert "0 row(s)" in (result.message or "")
+
+
+def test_rows_case_raising_is_still_error():
+    stage = _row_stage(_REFUSES, [{
+        "name": "expects_rows", "inputs": {"load": [{"amount": 1.0}]},
+        "expected": [{"amount": 1.0, "doubled": 2.0}],
+    }])
+    [result] = run_tests_for_stage(stage)
+    assert result.status == "error"
+    assert "StepRefused" in (result.message or "")
+
+
+def test_failure_case_skips_expected_row_schema_checks_but_not_its_inputs():
+    # `expected` is None, so there is no output shape to lint — the output schema's
+    # non-nullable `amount` must not be judged against a phantom empty frame. The
+    # input rows are still checked: this one violates the input schema.
+    refuses = _row_stage(_REFUSES, [{
+        "name": "refuses_foreign_currency", "inputs": {"load": [{"amount": 1.0}]},
+        "expected": None,
+    }])
+    [ok] = run_tests_for_stage(refuses)
+    assert ok.status == "passed"
+
+    bad_input = _row_stage(_REFUSES, [{
+        "name": "null_amount", "inputs": {"load": [{"amount": None}]},
+        "expected": None,
+    }])
+    [malformed] = run_tests_for_stage(bad_input)
+    assert malformed.status == "malformed"
+    assert "null" in (malformed.message or "").lower()
+
+
+def test_find_failing_stage_tests_reports_a_failed_failure_case():
+    stage = _row_stage(
+        "def transform(row):\n    raise KeyError('income')\n",
+        [{"name": "refuses_foreign_currency", "inputs": {"load": [{"amount": 1.0}]},
+          "expected": None}],
+    )
+    [failure] = find_failing_stage_tests([stage])
+    assert "refuses_foreign_currency" in failure and "error" in failure
+
+
 def _frame_stage(code: str, tests: list[dict]) -> Stage:
     return parse_stage({
         "id": "reshape", "name": "Reshape", "type": "python_frame_function",

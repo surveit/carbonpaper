@@ -210,6 +210,75 @@ def test_stage_tests_model_accepts_an_explicit_null_in_a_nullable_column():
     assert suite.tests[0].inputs["load"] == [{"amount": 1.0, "label": None}]
 
 
+_FAILURE_TEST = {
+    "name": "another_currency_is_not_recorded_as_dollars",
+    "inputs": {"load": [{"amount": 2.0}]},
+    "expected": None,
+}
+
+
+def test_row_function_failure_case_needs_no_expected_row():
+    """One row in and no rows out is the point of a failure case, so the
+    one-row-in-one-row-out rule does not apply to it."""
+    suite = _row_suite_model().model_validate({"tests": [_FAILURE_TEST]})
+    assert suite.tests[0].expected is None
+
+
+def test_row_function_failure_case_still_needs_exactly_one_input_row():
+    two_rows = dict(_FAILURE_TEST, inputs={"load": [{"amount": 1.0}, {"amount": 2.0}]})
+    with pytest.raises(ValidationError, match="one row in"):
+        _row_suite_model().model_validate({"tests": [two_rows]})
+
+
+def test_failure_case_input_rows_are_still_schema_checked():
+    bad = dict(_FAILURE_TEST, inputs={"load": [{"amount": "two"}]})
+    with pytest.raises(ValidationError) as excinfo:
+        _row_suite_model().model_validate({"tests": [bad]})
+    message = str(excinfo.value)
+    assert "another_currency_is_not_recorded_as_dollars" in message
+    assert "load" in message
+    assert "amount" in message
+
+
+def test_a_test_omitting_expected_is_rejected():
+    """`expected` has no default: a case that forgets it must be rejected outright
+    rather than read as the claim that the step fails."""
+    missing = {k: v for k, v in _GOOD_TEST.items() if k != "expected"}
+    with pytest.raises(ValidationError, match="expected"):
+        _row_suite_model().model_validate({"tests": [missing]})
+
+
+def test_zero_expected_rows_is_not_a_failure_claim():
+    """[] and null are different claims: a frame step legitimately returns no rows,
+    and that case must survive validation as a rows case."""
+    suite = _frame_suite_model(_IN_SCHEMA).model_validate({"tests": [{
+        "name": "filters_everything_out",
+        "inputs": {"load": [{"amount": 1.0}]},
+        "expected": [],
+    }]})
+    assert suite.tests[0].expected == []
+
+
+def test_failure_case_survives_the_spec_dict_round_trip():
+    """The dump drops None-valued keys, so `expected: null` has to be written out
+    explicitly — dropped, it would reload as a case that forgot the field."""
+    stage = parse_stage(_row_stage([_FAILURE_TEST]))
+    spec = stage_to_spec_dict(stage)
+    assert spec["tests"][0]["expected"] is None
+    reloaded = parse_stage(spec)
+    assert reloaded.tests is not None
+    assert reloaded.tests[0].expected is None
+
+
+def test_rows_case_wire_form_is_unchanged():
+    stage = parse_stage(_row_stage([_GOOD_TEST]))
+    assert stage.tests is not None
+    assert stage.tests[0].expected == [{"amount": 2.0, "doubled": 4.0}]
+    assert stage_to_spec_dict(stage)["tests"][0]["expected"] == [
+        {"amount": 2.0, "doubled": 4.0}
+    ]
+
+
 def test_stage_tests_model_accepts_an_empty_input_case():
     """No rows means no columns to disagree with — an "empty upstream" case is
     legitimate, and the runtime builds its frame from the declared schema."""

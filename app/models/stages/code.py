@@ -11,6 +11,7 @@ from typing import ClassVar, Literal, Optional, Protocol
 
 from pydantic import Field, model_validator
 
+from app.models.errors import StepRefused
 from app.models.schema import FunctionKind, StageConfig, _Base
 from app.models.stage_base import StageBase, StageInput, StageType
 
@@ -26,10 +27,7 @@ SUMMARY_DESCRIPTION = (
     "status text says so, leaving the score blank\", never \"applies a regex to `status` "
     "and returns a dict\". No Python vocabulary (function, dict, DataFrame, None, "
     "regex); the only identifiers to use are column names the reader already sees in "
-    "the schema. Anything conditional or surprising about the behaviour — rows left "
-    "untouched, values deliberately blanked — belongs here, because it is what a "
-    "reviewer would otherwise have to read the code to find. Rewrite it whenever the "
-    "code changes."
+    "the schema."
 )
 
 # The instruction for `corner_cases`. Split from `summary` on purpose: the summary
@@ -148,7 +146,14 @@ class PythonFunction(StageConfig):
             "cannot reorder or fan out); python_frame_function "
             "`def transform(df, ...) -> DataFrame` (inputs positional in declared order); "
             "publish `def transform(df, ..., output_dir, trace_links) -> DataFrame` (writes "
-            "artifact files into output_dir; the returned frame lists them)."
+            "artifact files into output_dir; the returned frame lists them). When the "
+            "function meets an input it cannot handle, it refuses instead of "
+            f"returning: `raise {StepRefused.__name__}(\"...\")`, which needs no import — the name is "
+            "already in scope. The message names the input and says, in language a "
+            "non-engineer can read, why that input cannot be handled. "
+            "This helps narrow inputs further, for example if price expects a string like '$45,000.00' "
+            "then it should throw an error if it sees '€45.000,00' for example if it doesn't "
+            "have a forex conversion table and it will break sums downstream."
         ),
     )
     module: Optional[str] = None

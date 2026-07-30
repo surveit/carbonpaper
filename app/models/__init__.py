@@ -3,6 +3,7 @@
 Import from `app.models` (this aggregator) for the stable public surface.
 """
 from app.models.coverage import Coverage
+from app.models.errors import StepRefused
 from app.models.node_contract_notes import (
     CODE_SUMMARY_CONTRACT_NOTE,
     HUMAN_REVIEW_QUEUE_CONTRACT_NOTE,
@@ -326,6 +327,7 @@ NODE_TYPE_NAMES: set[str] = set(NODE_TYPES)
 
 __all__ = [
     "Coverage",
+    "StepRefused",
     "StageType", "ConnectorKind", "FileFormat", "AggFormula",
     "FunctionKind", "PublishFormat", "is_valid_column_type",
     "SourceRef", "Column", "TableSchema", "Connector", "LLMConfig",

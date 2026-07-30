@@ -11,6 +11,7 @@ from typing import Any, Callable
 import pandas as pd
 
 from app.models import FunctionKind, Stage
+from app.models.errors import StepRefused
 from app.models.stages.code import (
     PythonFrameFunctionStage,
     PythonRowFunctionStage,
@@ -35,7 +36,9 @@ def _load_python_function(stage: CodeCarryingStage) -> Callable[..., Any]:
         module = importlib.import_module(fn_spec.module)
         return getattr(module, fn_name)
     if fn_spec.kind == FunctionKind.inline:
-        ns: dict[str, Any] = {}
+        # StepRefused is seeded so authored code can `raise StepRefused(...)` with
+        # no import line — the refusal is meant to be the cheapest thing to write.
+        ns: dict[str, Any] = {StepRefused.__name__: StepRefused}
         exec(fn_spec.code or "", ns)
         fn = ns.get(fn_name) or ns.get("transform")
         if fn is None:

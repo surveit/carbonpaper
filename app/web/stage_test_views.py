@@ -98,7 +98,11 @@ def _shape_one_test(test: StageTest, result: StageTestResult) -> dict[str, Any]:
             {"stage_id": stage_id, "columns": _list_row_columns(rows), "rows": rows}
             for stage_id, rows in test.inputs.items()
         ],
-        "expected": {"columns": _list_row_columns(test.expected), "rows": test.expected},
+        # None, not an empty table: a failure case claims the step must fail, which
+        # the template must not render as "succeeded, returned nothing".
+        "expected": None if test.expected is None else {
+            "columns": _list_row_columns(test.expected), "rows": test.expected
+        },
         "diffs": [
             {"row": diff.row, "column": diff.column,
              "expected": diff.expected, "actual": diff.actual}

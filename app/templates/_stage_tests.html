@@ -38,6 +38,10 @@
     </table>
     {% else %}<p class="muted">no rows (empty input)</p>{% endif %}
     {% endfor %}
+    {% if view.expected is none %}
+    <h3>expected outcome</h3>
+    <p class="muted">the step refuses this input rather than returning a value</p>
+    {% else %}
     <h3>expected output</h3>
     {% if view.expected.rows %}
     <table class="test-rows">
@@ -49,6 +53,7 @@
       </tbody>
     </table>
     {% else %}<p class="muted">no rows (empty output)</p>{% endif %}
+    {% endif %}
     {% if view.message %}<p class="test-message">{{ view.message }}</p>{% endif %}
     {% if view.diffs %}
     <h3>differing cells</h3>
