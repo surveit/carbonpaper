@@ -2,7 +2,9 @@
    the plain-language `summary` leads the Transform pane, and the code itself is
    rendered LAST — after the executable block and after the test cases — because
    a non-engineer reviewer reads what the step does, then the examples that pin
-   it down, and only then the implementation. Both python_row_function /
+   it down, and only then the implementation. Ordering carries that, not folding:
+   the disclosure starts OPEN, because a collapsed block reads as absent rather
+   than as clickable. Both python_row_function /
    python_frame_function / publish (stage.function) and filter_rows
    (stage.filter) go through here, so the two read the same way.
 
@@ -10,9 +12,20 @@
    `function` handle (None when a module ref can't be found on disk); a filter's
    code is inline on the handle and needs no resolution. #}
 
+{# Prose carrying `backticks` around the column names it mentions, rendered with
+   the odd parts as inline code chips. The backticks are plain text in the data —
+   the authoring client writes them, no stage ever emits HTML — and every part is
+   still escaped. Same treatment as a figure's `basis` on the guide page, so a
+   column name reads the same wherever it is named. #}
+{% macro prose_with_column_chips(text) %}{%
+  for part in text.split('`') %}{%
+    if loop.index0 is odd %}<code>{{ part }}</code>{% else %}{{ part }}{%
+    endif %}{%
+  endfor %}{% endmacro %}
+
 {% macro stage_summary(text) %}
 {% if text %}
-<p class="stage-summary">{{ text }}</p>
+<p class="stage-summary">{{ prose_with_column_chips(text) }}</p>
 {% else %}
 <p class="stage-summary missing muted"><em>No plain-language summary — this step can only be
     reviewed by reading its code. Ask for one when the stage is next edited.</em></p>
@@ -22,7 +35,7 @@
 {% macro stage_code(stage, function_code) %}
 {% if stage.function %}
 <section class="exec-block code-block">
-    <details>
+    <details open>
         <summary><h2>💻 Code</h2><span class="muted">the implementation of the summary above</span></summary>
         {% if function_code %}
         <pre class="code">{{ function_code }}</pre>
@@ -34,7 +47,7 @@
 {% endif %}
 {% if stage.filter %}
 <section class="exec-block code-block">
-    <details>
+    <details open>
         <summary><h2>💻 Code</h2><span class="muted">the predicate behind the summary above</span></summary>
         <pre class="code">{{ stage.filter.code }}</pre>
     </details>

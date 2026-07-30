@@ -8,15 +8,15 @@
    open. #}
 {% if test_views or test_derivable %}
 <section class="exec-block test-report">
-  <h2>🧪 Tests
+  <h2>🧪 Example behavior
     {% if test_derivable %}
     <button type="button" class="btn" data-role="generate-tests"
-            title="Replaces this stage's tests with a fresh derivation from the methodology">Generate tests</button>
+            title="Replaces this stage's examples with a fresh derivation from the methodology">Generate examples</button>
     <span class="nr-edit-msg" data-role="generate-tests-msg"></span>
     {% endif %}
   </h2>
   {% if not test_views %}
-  <p class="muted">No tests yet.</p>
+  <p class="muted">No examples yet.</p>
   {% endif %}
   {% for view in test_views %}
   <details class="test-case" {% if view.status != "passed" %}open{% endif %}>

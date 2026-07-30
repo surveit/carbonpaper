@@ -100,6 +100,27 @@
         <span class="belief-chip belief-stale">edited · stale</span>
       </div>
 
+      {# Violations first, above the graph. A stage whose description contradicts its own
+         code is the one state where the page a reviewer trusts is actively wrong, so it
+         must not wait to be discovered by clicking that node. #}
+      {% if workflow_issues %}
+      {% set n = workflow_issues|length %}
+      <details class="wf-issues wf-issues-{{ workflow_issues[0].severity }}" open>
+        <summary><strong>⚠ {{ n }} issue{% if n != 1 %}s{% endif %}</strong>
+          <span class="muted">— step{% if n != 1 %}s{% endif %} whose description a reviewer
+            cannot rely on</span></summary>
+        <ul>
+          {% for issue in workflow_issues %}
+          <li class="wf-issue wf-issue-{{ issue.severity }}">
+            <span class="wf-issue-kind">{{ issue.kind }}</span>
+            <a href="#" data-stage-link="{{ issue.stage_id }}">{{ issue.stage_name }}</a>
+            <span class="muted">— {{ issue.detail }}</span>
+          </li>
+          {% endfor %}
+        </ul>
+      </details>
+      {% endif %}
+
       {% if stages and mermaid %}
       <div class="diagram-block">
         <div class="diagram-tools">

@@ -43,6 +43,7 @@ from app.web.loading import (
     load_stages_or_empty,
 )
 from app.web.project_view import shell_state
+from app.web.stage_test_views import build_workflow_issues
 
 router = APIRouter()
 
@@ -338,6 +339,7 @@ async def project_workflow(request: Request, project_name: str):
             "stages": stages,
             "mermaid": mermaid,
             "coverage": coverage,
+            "workflow_issues": build_workflow_issues(stages),
             "type_class": TYPE_CLASS,
             "type_glyph": TYPE_GLYPH,
         },

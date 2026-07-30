@@ -6,7 +6,6 @@ a run.) Also owns the immutable version snapshots the runner pins runs to.
 
 from __future__ import annotations
 
-from typing import Any
 
 from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
@@ -17,11 +16,12 @@ from app.services import project as project_service
 from app.services.errors import WorkflowLoadError
 from app.services.loader import resolve_function_code, stage_to_json, stage_to_spec_dict
 from app.models import Stage
-from app.models.stages.stage_tests import STAGE_TEST_TYPES, StageTest
-from app.runtime.stage_tests import StageTestResult, find_failing_stage_tests, run_tests_for_stage
+from app.models.stages.stage_tests import STAGE_TEST_TYPES
+from app.runtime.stage_tests import find_failing_stage_tests
 from app.web.config import EXAMPLES_DIR, templates
 from app.web.diagrams import TYPE_CLASS, TYPE_GLYPH, build_mermaid_graph
 from app.web.loading import find_stage, load_stages
+from app.web.stage_test_views import build_certification, shape_test_views
 
 router = APIRouter()
 
@@ -78,50 +78,11 @@ async def node_review_partial(request: Request, project: str, stage_id: str):
             "function_code": resolve_function_code(stage),
             "type_class": TYPE_CLASS,
             "type_glyph": TYPE_GLYPH,
-            "test_views": _shape_test_views(stage),
+            "test_views": (views := shape_test_views(stage)),
+            "certification": build_certification(stage, views),
             "test_derivable": stage.type in STAGE_TEST_TYPES,
         },
     )
-
-
-def _shape_test_views(stage: Stage) -> list[dict[str, Any]]:
-    """Pair each authored test with its run result, shaped for
-    _stage_tests.html ([] for stages without tests)."""
-    if not stage.tests:
-        return []
-    results = run_tests_for_stage(stage)
-    return [
-        _shape_one_test(test, result)
-        for test, result in zip(stage.tests, results)
-    ]
-
-
-def _shape_one_test(test: StageTest, result: StageTestResult) -> dict[str, Any]:
-    return {
-        "name": test.name,
-        "description": test.description,
-        "status": result.status,
-        "message": result.message,
-        "inputs": [
-            {"stage_id": stage_id, "columns": _list_row_columns(rows), "rows": rows}
-            for stage_id, rows in test.inputs.items()
-        ],
-        "expected": {"columns": _list_row_columns(test.expected), "rows": test.expected},
-        "diffs": [
-            {"row": diff.row, "column": diff.column,
-             "expected": diff.expected, "actual": diff.actual}
-            for diff in result.diffs
-        ],
-    }
-
-
-def _list_row_columns(rows: list[dict[str, Any]]) -> list[str]:
-    """Column order for rendering: first-appearance order across the rows."""
-    seen: dict[str, None] = {}
-    for row in rows:
-        for key in row:
-            seen.setdefault(key)
-    return list(seen)
 
 
 @router.post("/project/{project}/node/{stage_id}/decide")
