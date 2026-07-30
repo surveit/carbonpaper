@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, ClassVar, Optional
 from pydantic import Field, model_validator
 
 from app.models.schema import _Base
-from app.models.stages.code import validate_inline_function_code
+from app.models.stages.code import SUMMARY_DESCRIPTION, validate_inline_function_code
 
 if TYPE_CHECKING:
     from app.models.stage import Stage
@@ -22,11 +22,13 @@ class FilterConfig(_Base):
     Inline code is the only source for that predicate: a filter decides, and a
     decision that needs an importable module is doing more than deciding. There
     is deliberately no `kind`/`module` here, unlike PythonFunction."""
-    # Every field changes what this stage computes (the predicate it runs) —
-    # see Stage.compute_definition_fingerprint.
+    # Every field changes what this stage computes (the predicate it runs)
+    # except `summary`, which describes that predicate to a reader — see
+    # Stage.compute_definition_fingerprint.
     FINGERPRINT_FIELDS: ClassVar[frozenset[str]] = frozenset({"code", "function"})
-    INCIDENTAL_FIELDS: ClassVar[frozenset[str]] = frozenset()
+    INCIDENTAL_FIELDS: ClassVar[frozenset[str]] = frozenset({"summary"})
 
+    summary: Optional[str] = Field(default=None, description=SUMMARY_DESCRIPTION)
     code: str = Field(
         description=(
             "Inline Python defining `should_include` (or whatever `function` names). "
