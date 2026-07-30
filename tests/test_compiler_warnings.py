@@ -41,14 +41,14 @@ def test_a_described_and_exemplified_stage_warns_about_nothing():
 
 
 def test_a_config_only_stage_warns_about_nothing():
-    """A join's keys are config a reviewer reads directly — no description to miss."""
-    join = m.Stage.model_validate({
-        "id": "j", "name": "J", "type": "join",
+    """An enrich's keys are config a reviewer reads directly — no description to miss."""
+    enrich = m.Stage.model_validate({
+        "id": "j", "name": "J", "type": "enrich",
         "inputs": [{"id": "a", "schema": _SCHEMA}, {"id": "b", "schema": _SCHEMA}],
         "output_schema": _SCHEMA,
-        "join": {"type": "inner", "keys": [{"left": "id", "right": "id"}]},
+        "join": {"keys": [{"left": "id", "right": "id"}]},
     })
-    assert _kinds(join) == []
+    assert _kinds(enrich) == []
 
 
 # ── the blocking kinds ───────────────────────────────────────────────────────
