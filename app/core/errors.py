@@ -140,6 +140,12 @@ class ReviewValidationError(ValueError):
     without a numeric score)."""
 
 
+class ReviewGuideValidationError(ValueError):
+    """A review guide does not account for exactly its version's stages; the message
+    names the offending ids. Raised on WRITE, so a mismatched guide is never stored.
+    (Not ReviewValidationError above, which is about a row-review verdict.)"""
+
+
 class PredicateError(ValueError):
     """A `where`/`filter` expression (aggregate.where, human_review_queue.filter)
     falls outside the closed grammar `app.core.predicate.parse_predicate`
