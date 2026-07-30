@@ -32,6 +32,7 @@ from app.models.schema import (
 )
 from app.models.stages.code import validate_inline_function_code
 from app.models.stages.filter_rows import FilterConfig
+from app.models.stages.shared import find_internal_namespace_column_issues
 from app.models.stages.stage_tests import StageTest, validate_stage_tests
 from app.models.stages.union import UnionConfig
 from app.core.prompt_template import find_template_fields
@@ -602,6 +603,8 @@ class Stage(StageDraft):
 
     @model_validator(mode="after")
     def _schemas_declared(self) -> "Stage":
+        """Every schema this stage declares must be usable: non-empty, and naming no
+        column in the reserved `_` namespace (find_internal_namespace_column_issues)."""
         issues = [
             f"input `{ref.id}` declares a schema with no columns"
             for ref in self.inputs
@@ -611,6 +614,7 @@ class Stage(StageDraft):
             self.output_schema and self.output_schema.columns
         ):
             issues.append("declares no output_schema")
+        issues.extend(find_internal_namespace_column_issues(self))
         if issues:
             raise ValueError(f"type `{self.type}`: " + "; ".join(issues))
         return self

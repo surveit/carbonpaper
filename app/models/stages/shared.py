@@ -29,6 +29,39 @@ def resolve_input_columns(stage: "Stage", index: int) -> set[str]:
     return {c.name for c in stage.inputs[index].table_schema.columns}
 
 
+# The runtime spends this prefix on machinery — internal per-row columns, row
+# lineage, stored-stage bookkeeping — so a column declared inside it would be
+# indistinguishable from any of that (tests/arch/test_internal_columns_are_prefixed.py
+# holds the other end: every internal key stays under this prefix).
+INTERNAL_COLUMN_PREFIX = "_"
+
+INTERNAL_NAMESPACE_ISSUE = (
+    "a column name may not begin with `{prefix}` — that namespace is reserved for "
+    "the runtime's internal per-row columns"
+)
+
+
+def find_internal_namespace_column_issues(stage: "Stage") -> list[str]:
+    issues = [
+        f"input `{ref.id}` declares column {name!r}"
+        for ref in stage.inputs
+        for name in _internal_namespace_columns(ref.table_schema)
+    ]
+    if stage.output_schema is not None:
+        issues.extend(
+            f"output_schema declares column {name!r}"
+            for name in _internal_namespace_columns(stage.output_schema)
+        )
+    if issues:
+        issues.append(INTERNAL_NAMESPACE_ISSUE.format(prefix=INTERNAL_COLUMN_PREFIX))
+    return issues
+
+
+def _internal_namespace_columns(schema: "TableSchema") -> list[str]:
+    """`schema`'s own column names that sit in the reserved namespace."""
+    return [c.name for c in schema.columns if c.name.startswith(INTERNAL_COLUMN_PREFIX)]
+
+
 def find_predicate_column_issues(
     expr: str, *, stage_id: str, field: str, cols: set[str]
 ) -> list[str]:
