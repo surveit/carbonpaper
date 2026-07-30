@@ -6,7 +6,6 @@ from app.models.coverage import Coverage
 from app.models.node_contract_notes import HUMAN_REVIEW_QUEUE_CONTRACT_NOTE
 from app.models.schema import (
     Column,
-    INTERNAL_COLUMN_PREFIX,
     JSON_COLUMN_TYPE,
     LIST_JSON_COLUMN_TYPE,
     RANGE_UNBOUNDED_MARKER,
@@ -310,6 +309,4 @@ __all__ = [
     # individual column-type comparison handles
     "STR_COLUMN_TYPE", "JSON_COLUMN_TYPE", "LIST_JSON_COLUMN_TYPE",
     "RANGE_UNBOUNDED_MARKER",
-    # the column-name namespace the runtime reserves for its own machinery
-    "INTERNAL_COLUMN_PREFIX",
 ]

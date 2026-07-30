@@ -9,7 +9,6 @@ from typing import TYPE_CHECKING, Mapping
 
 from app.core.errors import PredicateError
 from app.core.predicate import parse_predicate
-from app.models.schema import INTERNAL_COLUMN_PREFIX
 
 if TYPE_CHECKING:
     from app.models.schema import TableSchema
@@ -30,6 +29,20 @@ def resolve_input_columns(stage: "Stage", index: int) -> set[str]:
     return {c.name for c in stage.inputs[index].table_schema.columns}
 
 
+# A leading underscore marks the MACHINERY's namespace, never a real column. It
+# is the STAGE contract that knows this, because it is the stage the runtime
+# executes: the row driver attaches its internal per-row columns there (`_error`,
+# `_usage`, `_deferred` — app/runtime/stages/execution.py) and strips them off
+# every mapped frame; row provenance rides `_trace_source_stage`/
+# `_trace_source_row` (app/runtime/lineage.py); and a stored stage's bookkeeping
+# keys (`_filename`, `_order`, `_error`) are stripped BY PREFIX before the stage
+# is compared or validated (app/services/{data_model,node_review}.py). We spend
+# that namespace liberally, so a declared column inside it would be
+# indistinguishable from machinery — silently stripped, summed as usage, or read
+# back as lineage. A plain TableSchema knows nothing of this and does not need
+# to: the ban is bought here, where the stage's schemas meet the runtime.
+INTERNAL_COLUMN_PREFIX = "_"
+
 INTERNAL_NAMESPACE_ISSUE = (
     "a column name may not begin with `{prefix}` — that namespace is reserved for "
     "the runtime's internal per-row columns"
@@ -38,24 +51,30 @@ INTERNAL_NAMESPACE_ISSUE = (
 
 def find_internal_namespace_column_issues(stage: "Stage") -> list[str]:
     """Every column `stage` declares — on its output_schema or on any input edge
-    — that sits in the `_`-prefixed namespace the runtime reserves for its own
-    per-row machinery (see `app.models.schema.INTERNAL_COLUMN_PREFIX`); [] when
-    none do, the only valid answer for a stored stage. Both sides are reported:
-    an input edge is this stage's own declaration of what it requires, and an
-    edge naming an internal column would claim the machinery is data."""
+    — that sits in the INTERNAL_COLUMN_PREFIX namespace; [] when none do, the
+    only valid answer for a stored stage. Both sides are reported: an input edge
+    is this stage's own declaration of what it requires, and an edge naming an
+    internal column would claim the machinery is data. Top-level columns only —
+    a `_`-prefixed key nested inside a `json` column is a value in that object,
+    not a column on the frame, so it collides with nothing."""
     issues = [
         f"input `{ref.id}` declares column {name!r}"
         for ref in stage.inputs
-        for name in ref.table_schema.find_internal_namespace_columns()
+        for name in _internal_namespace_columns(ref.table_schema)
     ]
     if stage.output_schema is not None:
         issues.extend(
             f"output_schema declares column {name!r}"
-            for name in stage.output_schema.find_internal_namespace_columns()
+            for name in _internal_namespace_columns(stage.output_schema)
         )
     if issues:
         issues.append(INTERNAL_NAMESPACE_ISSUE.format(prefix=INTERNAL_COLUMN_PREFIX))
     return issues
+
+
+def _internal_namespace_columns(schema: "TableSchema") -> list[str]:
+    """`schema`'s own column names that sit in the reserved namespace."""
+    return [c.name for c in schema.columns if c.name.startswith(INTERNAL_COLUMN_PREFIX)]
 
 
 def find_predicate_column_issues(

@@ -1,22 +1,14 @@
-"""The `_`-prefixed column namespace (`app.models.schema.INTERNAL_COLUMN_PREFIX`)
-is the runtime's, not a schema's: the row driver's internal columns, row lineage
-and stored-document bookkeeping all spend it, so a stage may never DECLARE a
-column there. Enforced on the Stage model, which is what stops the compiler from
-ever authoring one."""
+"""A stage may never DECLARE a column in the `_`-prefixed namespace the runtime
+spends on machinery (`app.models.stages.shared.INTERNAL_COLUMN_PREFIX`) — refused
+on the Stage model, which is what stops the compiler from ever authoring one. The
+converse half (every internal key the machinery spends is INSIDE that namespace)
+is tests/arch/test_internal_columns_are_prefixed.py."""
 from __future__ import annotations
 
 import pytest
 from pydantic import ValidationError
 
 from app import models as m
-from app.models.schema import INTERNAL_COLUMN_PREFIX
-from app.runtime.lineage import TRACE_SOURCE_ROW_KEY, TRACE_SOURCE_STAGE_KEY
-from app.runtime.stages.execution import (
-    ROW_DEFERRED_KEY,
-    ROW_ERROR_KEY,
-    ROW_USAGE_KEY,
-)
-from app.services.node_review import CANONICAL_IGNORE_KEYS
 
 
 def _row_function(output_schema: dict, input_columns: list[dict] | None = None) -> dict:
@@ -32,24 +24,6 @@ def _row_function(output_schema: dict, input_columns: list[dict] | None = None) 
             "code": "def transform(row: dict) -> dict:\n    return row\n",
         },
     }
-
-
-# ── every key the machinery spends lives in the reserved namespace ───────────
-@pytest.mark.parametrize(
-    "key",
-    [
-        ROW_ERROR_KEY,
-        ROW_USAGE_KEY,
-        ROW_DEFERRED_KEY,
-        TRACE_SOURCE_STAGE_KEY,
-        TRACE_SOURCE_ROW_KEY,
-        *sorted(CANONICAL_IGNORE_KEYS),
-    ],
-)
-def test_internal_keys_sit_under_the_reserved_prefix(key):
-    """If a new internal key were added outside the prefix, reserving the prefix
-    would no longer protect it — so each one is asserted to be inside."""
-    assert key.startswith(INTERNAL_COLUMN_PREFIX)
 
 
 # ── a stage may not declare a column there ──────────────────────────────────
@@ -118,8 +92,16 @@ def test_validate_stage_reports_it_as_a_non_fatal_issue():
     assert any("_error" in issue for issue in issues)
 
 
-def test_a_schema_reports_its_own_offending_columns():
-    schema = m.TableSchema.model_validate(
-        {"columns": [{"name": "a"}, {"name": "_b"}, {"name": "_c"}]}
+def test_a_plain_table_schema_is_indifferent_to_the_prefix():
+    """The ban belongs to the STAGE contract, not to schema primitives: a
+    TableSchema on its own knows nothing about the runtime and validates fine."""
+    schema = m.TableSchema.model_validate({"columns": [{"name": "a"}, {"name": "_b"}]})
+    assert [c.name for c in schema.columns] == ["a", "_b"]
+
+
+def test_every_offending_column_is_reported_not_just_the_first():
+    issues = m.validate_stage(
+        _row_function({"columns": [{"name": "id"}, {"name": "_b"}, {"name": "_c"}]})
     )
-    assert schema.find_internal_namespace_columns() == ["_b", "_c"]
+    joined = " ".join(issues)
+    assert "'_b'" in joined and "'_c'" in joined
