@@ -47,7 +47,7 @@ def test_python_row_function_is_grain_and_order_preserving():
 
 
 def test_python_row_function_rejects_multiple_inputs():
-    # a row function maps over one input's rows — two inputs is a join
+    # a row function maps over one input's rows — two inputs is an enrich/expand
     with pytest.raises(ValidationError):
         m.Stage.model_validate(S(id="t", type="python_row_function",
                                  inputs=[{"id": "a", "schema": _K}, {"id": "b", "schema": _K}],
@@ -89,11 +89,19 @@ def test_publish_not_grain_and_order_preserving():
     assert s.is_grain_and_order_preserving is False
 
 
-def test_join_and_aggregate_change_grain():
-    j = m.Stage.model_validate(S(id="j", type="join",
+def test_joins_and_aggregate_change_grain():
+    # enrich is registered as a frame handler, so even its m:1 shape is NOT
+    # grain-preserving: preservation is earned by the runtime driving the stage
+    # row by row, never asserted about an operation.
+    j = m.Stage.model_validate(S(id="j", type="enrich",
                                  inputs=[{"id": "a", "schema": _K}, {"id": "b", "schema": _K}],
                                  join={"keys": [{"left": "k", "right": "k"}]},
                                  output_schema=_K))
+    x = m.Stage.model_validate(S(id="x", type="expand",
+                                 inputs=[{"id": "a", "schema": _K}, {"id": "b", "schema": _K}],
+                                 join={"keys": [{"left": "k", "right": "k"}]},
+                                 output_schema=_K))
+    assert x.is_grain_and_order_preserving is False
     agg_in = {"columns": [{"name": "g"}, {"name": "x", "type": "int"}]}
     agg = m.Stage.model_validate(S(id="agg", type="aggregate",
                                    inputs=[{"id": "a", "schema": agg_in}],
@@ -271,10 +279,10 @@ def test_scorable_when_tapping_before_the_frame_stage(tmp_path):
     assert set(v.frontier) == {"a", "b"}
 
 
-def test_join_changes_grain_so_not_scorable(tmp_path):
+def test_expand_changes_grain_so_not_scorable(tmp_path):
     meth = m.parse_workflow([
         _file_input("j1", tmp_path), _file_input("j2", tmp_path),
-        S(id="jn", type="join", inputs=[{"id": "j1", "schema": _K}, {"id": "j2", "schema": _K}],
+        S(id="jn", type="expand", inputs=[{"id": "j1", "schema": _K}, {"id": "j2", "schema": _K}],
           join={"keys": [{"left": "k", "right": "k"}]}, output_schema=_K),
     ])
     v = resolve_eval_run_settings(meth, overrides=[], target="jn")

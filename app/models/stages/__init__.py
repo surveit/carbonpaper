@@ -21,11 +21,14 @@ if TYPE_CHECKING:
 
 # Dispatch keyed by the plain value string, not the StageType member — like
 # stage.py's `_TYPE_SPEC`, this must survive `use_enum_values`: at runtime
-# `stage.type` is a str, and a str-enum member hashes by *name*
-# (StageType.join_ hashes as "join_", not "join"), so a member-keyed dict would
-# silently miss the lookup.
+# `stage.type` is a str, and a str-enum member hashes by *name*, which differs
+# from the value for any member spelled with a trailing underscore, so a
+# member-keyed dict would silently miss the lookup.
 _VALIDATORS: dict[str, Callable[["Stage"], list[str]]] = {
-    "join": find_join_column_issues,
+    # enrich and expand differ only in permitted cardinality, which the runtime
+    # enforces; their column contract is identical.
+    "enrich": find_join_column_issues,
+    "expand": find_join_column_issues,
     "aggregate": find_aggregate_column_issues,
     "publish": find_publish_column_issues,
     "llm_transform": find_llm_prompt_column_issues,
@@ -47,7 +50,8 @@ def find_config_column_issues(stage: "Stage") -> list[str]:
 # have a derivation to check a declared output_schema against.
 _OUTPUT_VALIDATORS: dict[str, Callable[["Stage"], list[str]]] = {
     "aggregate": find_aggregate_output_issues,
-    "join": find_join_output_issues,
+    "enrich": find_join_output_issues,
+    "expand": find_join_output_issues,
     "union": find_union_output_issues,
     "filter_rows": find_filter_output_issues,
 }

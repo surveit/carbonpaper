@@ -26,7 +26,7 @@ from .execution import (
 from .filter_rows import make_filter_mapper
 from .human_review_queue import make_human_review_mapper
 from .input_data import preflight_input_data, read_input_data
-from .join import handle_join
+from .join import handle_enrich, handle_expand
 from .llm_transform import make_llm_row_mapper, run_llm_batches
 from .publish import handle_publish
 from .python_functions import handle_python_frame_function, make_python_row_mapper
@@ -43,12 +43,14 @@ HANDLERS: dict[StageType, StageHandler] = {
     # parallelism stays 1: the mapped function is user-authored code, not assumed thread-safe.
     StageType.python_row_function: RowMapHandler(make_python_row_mapper),
     StageType.python_frame_function: FrameHandler(handle_python_frame_function),
-    # caches_frames=False: join and aggregate are bounded vectorised primitives
-    # whose compute is lower-order than the hash of their own input, so
-    # fingerprinting the inputs costs more than the pandas operation a hit would
-    # skip — the cache would only ever slow them down. python_frame_function
-    # above runs arbitrary user code of unbounded cost and does cache.
-    StageType.join_: FrameHandler(handle_join, caches_frames=False),
+    # caches_frames=False: the joins (enrich/expand) and aggregate are bounded
+    # vectorised primitives whose compute is lower-order than the hash of their
+    # own input, so fingerprinting the inputs costs more than the pandas
+    # operation a hit would skip — the cache would only ever slow them down.
+    # python_frame_function above runs arbitrary user code of unbounded cost and
+    # does cache.
+    StageType.enrich: FrameHandler(handle_enrich, caches_frames=False),
+    StageType.expand: FrameHandler(handle_expand, caches_frames=False),
     StageType.aggregate: FrameHandler(handle_aggregate, caches_frames=False),
     StageType.llm_transform: LLMTransformHandler(
         make_llm_row_mapper,
@@ -65,7 +67,7 @@ HANDLERS: dict[StageType, StageHandler] = {
     # cached frame would skip the write and leave this run's artifacts absent.
     StageType.publish: FrameHandler(handle_publish, caches_frames=False),
     # caches_frames=False: concatenation is a bounded vectorised primitive,
-    # same reasoning as join/aggregate above.
+    # same reasoning as the joins/aggregate above.
     StageType.union: FrameHandler(handle_union, caches_frames=False),
     # Row-mapped with drops_rows: the runtime drives the predicate row by row
     # and does the selecting itself, so it holds the input ordinals that
@@ -94,7 +96,8 @@ __all__ = [
     "validate_registry_matches_model",
     "handle_aggregate",
     "make_human_review_mapper",
-    "handle_join",
+    "handle_enrich",
+    "handle_expand",
     "handle_publish",
     "handle_python_frame_function",
     "make_llm_row_mapper",

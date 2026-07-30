@@ -34,9 +34,9 @@ _HTML_TAG_PATTERN = re.compile(
 #   no app/templates/*.html this markup could move into.
 _ALLOWLIST: frozenset[tuple[str, int]] = frozenset(
     {
-        ("app/web/diagrams.py", 175),
-        ("app/web/diagrams.py", 344),
+        ("app/web/diagrams.py", 177),
         ("app/web/diagrams.py", 346),
+        ("app/web/diagrams.py", 348),
     }
 )
 

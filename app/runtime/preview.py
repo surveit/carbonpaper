@@ -27,7 +27,8 @@ PREVIEWABLE_TYPES: set[str] = {
     "python_row_function",
     "python_frame_function",
     "llm_transform",
-    "join",
+    "enrich",
+    "expand",
     "aggregate",
 }
 
@@ -76,7 +77,7 @@ def run_stage_preview(
 
     `selected_indices` are positional row indices (0-based) into the first
     upstream input's dataframe — the same rows the panel shows in its input
-    preview. Other upstream inputs (e.g. the right side of a join) are passed
+    preview. Other upstream inputs (e.g. a join's reference input) are passed
     through whole, since "row N of a join" isn't well defined.
 
     Returns a dict: {columns, rows_total, preview (records), input_rows,

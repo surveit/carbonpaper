@@ -69,13 +69,13 @@ def test_editing_a_summary_away_is_refused(project):
 
 
 def test_a_config_only_stage_needs_no_summary(project):
-    """A join's keys are config a reviewer reads directly — there is no authored
+    """An enrich's keys are config a reviewer reads directly — there is no authored
     code for prose to stand in for."""
     result = add_stage_spec(project, json.dumps({
-        "id": "j", "name": "J", "type": "join",
+        "id": "j", "name": "J", "type": "enrich",
         "inputs": [{"id": "src", "schema": _SCHEMA}, {"id": "src2", "schema": _SCHEMA}],
         "output_schema": _SCHEMA,
-        "join": {"type": "inner", "keys": [{"left": "id", "right": "id"}]},
+        "join": {"keys": [{"left": "id", "right": "id"}]},
     }))
     # Refused for the missing `src2` edge, never for a missing summary.
     assert not any("summary" in issue for issue in result.issues)

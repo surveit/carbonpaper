@@ -148,18 +148,18 @@ def test_the_key_covers_every_input_in_declared_order():
     assert calls == [2, 2]
 
 
-# ── join and aggregate: bounded primitives, not worth a hash ─────────────────
+# ── joins and aggregate: bounded primitives, not worth a hash ────────────────
 
 
-def _join_stage() -> Stage:
+def _enrich_stage() -> Stage:
     return Stage.model_validate({
-        "id": "j", "name": "Join", "type": "join",
+        "id": "j", "name": "Enrich", "type": "enrich",
         "inputs": [{"id": "left", "schema": _X},
                    {"id": "right", "schema": {"columns": [{"name": "x", "type": "int"},
                                                           {"name": "z", "type": "str"}]}}],
         "output_schema": {"columns": [{"name": "x", "type": "int"},
                                       {"name": "z", "type": "str"}]},
-        "join": {"type": "inner", "keys": [{"left": "x", "right": "x"}]},
+        "join": {"keys": [{"left": "x", "right": "x"}]},
     })
 
 
@@ -174,15 +174,17 @@ def _aggregate_stage() -> Stage:
     })
 
 
-def test_join_computes_every_run_and_records_nothing():
-    """Fingerprinting a join's two input frames costs more than the merge a hit
-    would skip, so the stage is registered with caching off: it still produces
-    its output, and leaves no entry behind."""
-    stage = _join_stage()
+def test_enrich_computes_every_run_and_records_nothing():
+    """Fingerprinting an enrich's two input frames costs more than the join a
+    hit would skip, so the stage is registered with caching off: it still
+    produces its output, and leaves no entry behind. Every subject row survives
+    the LEFT join — the unmatched one carries a null reference column."""
+    stage = _enrich_stage()
     left, right = pd.DataFrame({"x": [1, 2]}), pd.DataFrame({"x": [1], "z": ["a"]})
-    out = HANDLERS[StageType.join_].execute(
+    out = HANDLERS[StageType.enrich].execute(
         stage, {"left": left, "right": right}, _ctx())
-    assert out is not None and list(out["z"]) == ["a"]
+    assert out is not None and list(out["x"]) == [1, 2]
+    assert out["z"].tolist()[0] == "a" and pd.isna(out["z"].tolist()[1])
 
     assert _cached_frame(stage, [left, right]) is None
     assert _entries(stage) == []
@@ -294,9 +296,10 @@ def test_a_handler_that_returns_none_records_nothing():
 
 def test_only_the_unbounded_frame_shaped_type_caches():
     """`python_frame_function` runs arbitrary user code, so a hit can skip
-    unbounded work; `join`, `aggregate` and `publish` each opt out."""
+    unbounded work; `enrich`/`expand`, `aggregate` and `publish` each opt out."""
     assert _frame_handler(StageType.python_frame_function).caches_frames is True
-    for stage_type in (StageType.join_, StageType.aggregate, StageType.publish):
+    for stage_type in (StageType.enrich, StageType.expand, StageType.aggregate,
+                       StageType.publish):
         assert _frame_handler(stage_type).caches_frames is False
 
 

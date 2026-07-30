@@ -35,7 +35,7 @@ from app.models.stages.input_data import (
     FileFormat,
     XlsxReadParams,
 )
-from app.models.stages.join import JoinConfig, JoinKey, JoinType
+from app.models.stages.join import JoinConfig, JoinKey
 from app.models.stages.llm_transform import LLMConfig
 from app.models.stages.publish import PublishConfig, PublishFormat
 from app.models.stages.union import UnionConfig
@@ -93,7 +93,6 @@ from app.models.schema import SCALAR_COLUMN_TYPES
 # Kind/type vocabularies as string sets, derived from the enums so they stay in
 # lockstep with the models the runtime validates against.
 SCHEMA_KINDS: set[str] = {k.value for k in SchemaKind}
-JOIN_TYPES: set[str] = {j.value for j in JoinType}
 
 # The connector kinds the compiler may EMIT and the prompt advertises to the LLM
 # (the six listed below). This is deliberately broader than the ConnectorKind
@@ -103,7 +102,7 @@ CONNECTOR_KINDS: set[str] = {
     "file", "http", "scrape", "api", "manual_upload", "sql",
 }
 
-# ── The seven node types and their handle-block contract ─────────────────────
+# ── The node types and their handle-block contract ───────────────────────────
 # app.agents.compiler.prompt renders this into the editing agent's system prompt:
 # type -> {summary, handle, required, optional, min_inputs, requires_inputs,
 # also_requires?}. The Stage model does not expose this rendering shape, so the
@@ -158,7 +157,8 @@ NODE_TYPES: dict[str, dict[str, _Any]] = {
         "required": ["kind"],
         "optional": ["module", "function", "code", "requirements"],
         "notes": (
-            "Takes exactly ONE input — two or more is a join or a python_frame_function. "
+            "Takes exactly ONE input — to combine data from another input use enrich/expand, "
+            "or python_frame_function. "
             "`transform(row)` is handed a plain dict and must return a plain dict, and that "
             "dict IS the output row: a key you do not return is absent from the output, so "
             "carry columns through explicitly (`return {**row, ...}`). The function is shown "
@@ -180,19 +180,49 @@ NODE_TYPES: dict[str, dict[str, _Any]] = {
             "row-position provenance trail an upstream row-mapped stage preserves."
         ),
     },
-    "join": {
-        "summary": "Combine two or more upstream dataframes on keys.",
+    "enrich": {
+        "summary": "Adds reference columns to each subject row; the reference must be unique on the key (many-to-one).",
         "handle": "join",
         "requires_inputs": True,
         "min_inputs": 2,
         "required": ["keys"],
-        "optional": ["type", "select", "on"],
+        "optional": ["select"],
         "notes": (
-            "Merges the FIRST TWO inputs only: inputs[0] is left, inputs[1] is right, and a "
-            "third declared input is never merged in. A right column whose name a left column "
-            "shares arrives as `<name>_r`; a key pair with the SAME name on both sides "
-            "collapses into one column. `select` and output_schema may name only columns the "
-            "merge produces — anything else is rejected when the stage is saved."
+            "Takes EXACTLY TWO inputs: inputs[0] is the SUBJECT, inputs[1] is the REFERENCE. "
+            "Row count and order come out unchanged, because the reference is required to hold "
+            "at most ONE row per key: the runtime asks pandas to VERIFY that, so a reference "
+            "that repeats a key FAILS THE RUN rather than silently multiplying rows. Use "
+            "`expand` when the fan-out is intended. Every subject row survives — an unmatched "
+            "one carries nulls for the reference columns — and an unmatched reference row is "
+            "dropped. This stage NEVER drops a subject row: to drop rows (e.g. inner-join "
+            "semantics), follow it with a `filter_rows` on a reference column being non-null, "
+            "which records the row loss instead of hiding it. "
+            "A reference column whose name a subject column shares arrives as `<name>_r`; a key "
+            "pair with the SAME name on both sides collapses into one column. `select` and "
+            "output_schema may name only columns the join produces — anything else is rejected "
+            "when the stage is saved."
+        ),
+    },
+    "expand": {
+        "summary": "Joins reference rows into each subject row, fanning one subject row out to several (many-to-many).",
+        "handle": "join",
+        "requires_inputs": True,
+        "min_inputs": 2,
+        "required": ["keys"],
+        "optional": ["select"],
+        "notes": (
+            "Takes EXACTLY TWO inputs: inputs[0] is the SUBJECT, inputs[1] is the REFERENCE. "
+            "The reference MAY hold several rows per key, so one subject row may come out as "
+            "several — deliberate fan-out. Use `enrich` instead when the reference is meant to "
+            "be unique on the key and a repeat is a bug you want caught. Every subject row "
+            "survives — an unmatched one carries nulls for the reference columns — and an "
+            "unmatched reference row is dropped. This stage NEVER drops a subject row: to drop "
+            "rows (e.g. inner-join semantics), follow it with a `filter_rows` on a reference "
+            "column being non-null, which records the row loss instead of hiding it. "
+            "A reference column whose name a subject column shares arrives as `<name>_r`; a key "
+            "pair with the SAME name on both sides collapses into one column. `select` and "
+            "output_schema may name only columns the join produces — anything else is rejected "
+            "when the stage is saved."
         ),
     },
     "aggregate": {
@@ -294,7 +324,7 @@ NODE_TYPE_NAMES: set[str] = set(NODE_TYPES)
 
 __all__ = [
     "Coverage",
-    "StageType", "ConnectorKind", "FileFormat", "AggFormula", "JoinType",
+    "StageType", "ConnectorKind", "FileFormat", "AggFormula",
     "FunctionKind", "PublishFormat", "is_valid_column_type",
     "SourceRef", "Column", "TableSchema", "Connector", "LLMConfig",
     "PythonFunction", "JoinKey", "JoinConfig", "AggregationOp",
@@ -313,7 +343,7 @@ __all__ = [
     "StageOutputOverride", "ExpectedOutput", "ScoringMetric", "CodeScorer", "EvalConfig",
     "EvalRunSettings", "EvalRun",
     # compat vocabularies (rendered into the authoring prompts)
-    "SCALAR_COLUMN_TYPES", "SCHEMA_KINDS", "JOIN_TYPES", "CONNECTOR_KINDS",
+    "SCALAR_COLUMN_TYPES", "SCHEMA_KINDS", "CONNECTOR_KINDS",
     "NODE_TYPES", "NODE_TYPE_NAMES", "HUMAN_REVIEW_QUEUE_CONTRACT_NOTE",
     "CODE_SUMMARY_CONTRACT_NOTE", "CODE_CARRYING_TYPES",
     # individual column-type comparison handles
