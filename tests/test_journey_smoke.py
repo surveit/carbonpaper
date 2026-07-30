@@ -14,6 +14,7 @@ import app.services.run as run_service
 from app.main import app
 from app.services.project import create_project
 from app.services.versioning import list_versions
+from conftest import save_covering_guide
 
 client = TestClient(app)
 
@@ -51,8 +52,10 @@ def test_offline_journey_reaches_a_published_artifact(journey_project, tmp_path)
     assert resp.json()["ok"] is True, resp.text
 
     # Publish it — a run pins a PUBLISHED version, so the human-approval step is
-    # part of the journey: author -> version -> publish -> run -> artifact.
+    # part of the journey: author -> version -> guide -> publish -> run -> artifact.
+    # Publishing is gated on a review guide, so one is written before the POST.
     version_id = list_versions(journey_project)[0].version_id
+    save_covering_guide(journey_project, version_id)
     resp = client.post(f"/project/{PROJECT}/versions/{version_id}/publish",
                        follow_redirects=False)
     assert resp.status_code == 303, resp.text

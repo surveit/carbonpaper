@@ -6,8 +6,8 @@ import pandas as pd
 
 import app.services.run as run_service
 from app.models import Stage
-from app.services import versioning
 from app.services.versioning import WorkflowVersion, create_version_from_disk
+from conftest import publish_with_guide
 
 
 def _make_run_project(root):
@@ -26,7 +26,7 @@ def _make_run_project(root):
     }
     (root / "compiled" / "01_load.json").write_text(json.dumps(stage), encoding="utf-8")
     vid = create_version_from_disk(root, message="seed", reviewer="test").version_id
-    versioning.publish_version(root, vid, reviewer="human")
+    publish_with_guide(root, vid, reviewer="human")
     return vid
 
 

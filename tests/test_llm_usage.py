@@ -7,7 +7,7 @@ from app.core.agent.usage import LlmUsage
 from app.models import Stage
 from app.models.stage import StageType
 from app.runtime.stages import HANDLERS
-from conftest import contribution_of, make_run_context
+from conftest import contribution_of, make_run_context, publish_with_guide
 
 
 def test_summed_adds_fields_and_counts_calls():
@@ -72,7 +72,6 @@ def test_run_manifest_records_stage_llm_usage(tmp_path, monkeypatch):
     import json
 
     from app.runtime.runner import execute_run
-    from app.services import versioning
     from app.services.versioning import create_version_from_disk
 
     monkeypatch.setattr(lt, "call_llm", _fake_call_llm(
@@ -100,7 +99,7 @@ def test_run_manifest_records_stage_llm_usage(tmp_path, monkeypatch):
     (tmp_path / "compiled" / "01_load.json").write_text(json.dumps(load), encoding="utf-8")
     (tmp_path / "compiled" / "02_classify.json").write_text(json.dumps(classify), encoding="utf-8")
     vid = create_version_from_disk(tmp_path, message="seed", reviewer="test").version_id
-    versioning.publish_version(tmp_path, vid, reviewer="human")
+    publish_with_guide(tmp_path, vid, reviewer="human")
 
     manifest = execute_run(tmp_path, repo_root=tmp_path)
 

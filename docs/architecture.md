@@ -76,7 +76,8 @@ pinned: `resolve_version`, `load_run_stages`, `load_pinned_stage_def`); `loader.
 docstring; the content-hash invariant must not rot); `versioning.py` (`create_version_from_stages`
 is the ONE write path for a `WorkflowVersion` document, born unpublished; `publish_version`
 is the metadata-only human-approval act a run's `resolve_version_id` requires before it
-will pin to that version); `drafts.py` (disposable, mutable scratch — a `Draft` document
+will pin to that version, refused unless the version's review guide accounts for its
+stages); `drafts.py` (disposable, mutable scratch — a `Draft` document
 that may be invalid mid-edit, edited only through the editing agent's tools; `save_version`
 is its only exit, strict-validating before freezing it into a version via
 `create_version_from_stages`).

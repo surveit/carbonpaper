@@ -9,12 +9,36 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
+from app.models import ReviewGuide, ReviewGuideStep
 from app.runtime.context import (
     RunContext,
     RunIdentity,
 )
 from app.runtime.manifest import CONTRIBUTION_ATTR, StageContribution
+from app.services import versioning
 from app.core.stage_cache import ReadOnlyStageCache
+
+
+def save_covering_guide(project_dir: Path, version_id: str) -> versioning.WorkflowVersion:
+    """A guide narrating every stage of the version in one step — what publishing needs."""
+    stages = versioning.load_version(project_dir, version_id).stages
+    return versioning.save_version_guide(
+        project_dir,
+        version_id,
+        ReviewGuide(steps=[ReviewGuideStep(
+            title="How this workflow works",
+            prose="Every stage, narrated together.",
+            stage_ids=[stage.id for stage in stages],
+        )]),
+    )
+
+
+def publish_with_guide(
+    project_dir: Path, version_id: str, *, reviewer: str = "human"
+) -> versioning.WorkflowVersion:
+    """Publish past the review-guide gate, for a test whose subject is not the guide."""
+    save_covering_guide(project_dir, version_id)
+    return versioning.publish_version(project_dir, version_id, reviewer=reviewer)
 
 
 def contribution_of(frame: pd.DataFrame) -> StageContribution:

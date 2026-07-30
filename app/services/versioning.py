@@ -158,11 +158,13 @@ def create_version_from_disk(
 
 def publish_version(project_dir: Path, version_id: str, *, reviewer: str) -> WorkflowVersion:
     """Mark a version published: the metadata-only act that makes it eligible to
-    run (see app.runtime.runner.resolve_version_id). Idempotent — publishing an
-    already-published version returns it unchanged, keeping the FIRST
-    published_at/published_by rather than overwriting them with the second
-    caller's. Fails loudly (FileNotFoundError) if no such version is stored, or
-    if the stored document no longer validates (WorkflowLoadError)."""
+    run (see app.runtime.runner.resolve_version_id). Raises
+    ReviewGuideValidationError, naming the stages, unless the version carries a
+    guide accounting for them. Idempotent — publishing an already-published
+    version returns it unchanged, keeping the FIRST published_at/published_by
+    rather than overwriting them with the second caller's, and re-reading no
+    guide. Fails loudly (FileNotFoundError) if no such version is stored, or if
+    the stored document no longer validates (WorkflowLoadError)."""
     name = Path(project_dir).name
     doc_id = f"{name}/{version_id}"
     try:
@@ -173,11 +175,25 @@ def publish_version(project_dir: Path, version_id: str, *, reviewer: str) -> Wor
         raise _invalid_version_document(doc_id, exc) from exc
     if v.published:
         return v
+    _validate_guide_before_publish(v)
     v.published = True
     v.published_at = datetime.now().isoformat(timespec="seconds")
     v.published_by = reviewer
     v.save()
     return v
+
+
+def _validate_guide_before_publish(v: WorkflowVersion) -> None:
+    """A version becomes runnable only once a guide accounts for its stages."""
+    if v.guide is None:
+        raise ReviewGuideValidationError(
+            f"Cannot publish version '{v.version_id}': it has no review guide, so "
+            f"none of its stages is accounted for: {[stage.id for stage in v.stages]}"
+        )
+    # save_version_guide validates on write and a version's stages are frozen, so a
+    # stored guide reaching here mismatched means the document was written past that
+    # door. Re-validated rather than trusted: publication is what makes it runnable.
+    validate_review_guide(v.guide, v.stages)
 
 
 def save_version_guide(

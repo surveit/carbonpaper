@@ -1,7 +1,7 @@
 """Route tests for the versions LIST page: unpublished versions show a read-only
 status (Publish lives only on the version-detail page), publishing stamps the meta
-and redirects to that detail page, and the run trigger explains the published
-gate."""
+and redirects to that detail page — or is refused for want of a review guide — and
+the run trigger explains the published gate."""
 from __future__ import annotations
 
 import json
@@ -17,6 +17,7 @@ import app.web.routers.project as project_router
 import app.web.routers.runs as runs_router
 from app.main import app
 from app.services import versioning
+from conftest import save_covering_guide
 
 client = TestClient(app)
 
@@ -63,6 +64,7 @@ def test_publish_route_stamps_and_redirects_to_detail(project: Path) -> None:
     """Publish now redirects to the version's own detail page (you land back on the
     version you just approved), not the list."""
     meta = versioning.create_version_from_disk(project, message="v1", reviewer="local")
+    save_covering_guide(project, meta.version_id)
     resp = client.post(
         f"/project/demo/versions/{meta.version_id}/publish", follow_redirects=False
     )
@@ -71,6 +73,20 @@ def test_publish_route_stamps_and_redirects_to_detail(project: Path) -> None:
     assert versioning.load_version(project, meta.version_id).published
     page = client.get("/project/demo/workflow/versions")
     assert "unpublished" not in page.text
+
+
+def test_publish_route_refuses_a_version_with_no_guide(project: Path) -> None:
+    """The gate reaches the UI: 400 with a detail naming the stages nothing narrates,
+    and the version stays unpublished."""
+    meta = versioning.create_version_from_disk(project, message="v1", reviewer="local")
+    resp = client.post(
+        f"/project/demo/versions/{meta.version_id}/publish", follow_redirects=False
+    )
+    assert resp.status_code == 400
+    detail = resp.json()["detail"]
+    assert "no review guide" in detail
+    assert "load" in detail          # the stage nothing accounts for, named
+    assert not versioning.load_version(project, meta.version_id).published
 
 
 def test_run_of_unpublished_project_explains_publish_gate(project: Path) -> None:

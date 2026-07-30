@@ -16,8 +16,8 @@ from app.runtime.executor import _raise_if_run_failed, run_subset
 from app.runtime.manifest import RunManifest
 from app.runtime.stages import llm_transform as lt
 from app.services.loader import WorkflowLoadError
-from app.services import versioning
 from app.services.versioning import create_version_from_disk, list_versions
+from conftest import publish_with_guide
 
 
 # The two shapes every fixture in this file loads: the (name, val) items csv and
@@ -36,7 +36,7 @@ def _seed_version(root):
     a version before running against it; runs are also gated on published, so
     the seed must be published for a run against it to succeed."""
     vid = create_version_from_disk(root, message="test seed", reviewer="test").version_id
-    versioning.publish_version(root, vid, reviewer="human")
+    publish_with_guide(root, vid, reviewer="human")
     return vid
 
 

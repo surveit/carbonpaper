@@ -17,6 +17,7 @@ from pandas.testing import assert_frame_equal
 
 from app.runtime.runner import execute_run
 from app.services import versioning
+from conftest import publish_with_guide
 
 _ROWS = [{"name": "a", "val": 1}, {"name": "b", "val": 2}, {"name": "c", "val": 3}]
 
@@ -118,7 +119,7 @@ def _write_stage(root: Path, filename: str, spec: dict[str, object]) -> None:
 def _publish_a_version(root: Path) -> str:
     version = versioning.create_version_from_disk(
         root, message="cache e2e", reviewer="test")
-    versioning.publish_version(root, version.version_id, reviewer="human")
+    publish_with_guide(root, version.version_id, reviewer="human")
     return version.version_id
 
 

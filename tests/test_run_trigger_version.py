@@ -13,7 +13,8 @@ import app.web.routers.runs as runs_router
 import app.services.run as run_service
 from app.services import workspace
 from app.main import app
-from app.services.versioning import create_version_from_disk, list_versions, publish_version
+from app.services.versioning import create_version_from_disk, list_versions
+from conftest import publish_with_guide
 
 client = TestClient(app)
 
@@ -43,8 +44,8 @@ def project_two_versions(tmp_path, monkeypatch):
     time.sleep(1.1)
     v2 = create_version_from_disk(proj, message="v2", reviewer="test")
     # runs pin PUBLISHED versions, so publish both to isolate version SELECTION.
-    publish_version(proj, v1.version_id, reviewer="test")
-    publish_version(proj, v2.version_id, reviewer="test")
+    publish_with_guide(proj, v1.version_id, reviewer="test")
+    publish_with_guide(proj, v2.version_id, reviewer="test")
     monkeypatch.setattr(runs_router, "EXAMPLES_DIR", tmp_path)
     monkeypatch.setattr(workspace, "EXAMPLES_DIR", tmp_path)
     monkeypatch.setattr(run_service, "_run_in_background",
@@ -109,7 +110,7 @@ def test_run_picker_offers_only_published_versions(tmp_path, monkeypatch):
     published = create_version_from_disk(proj, message="approved", reviewer="test").version_id
     time.sleep(1.1)
     unpublished = create_version_from_disk(proj, message="draft", reviewer="test").version_id
-    publish_version(proj, published, reviewer="test")  # only the older one
+    publish_with_guide(proj, published, reviewer="test")  # only the older one
     monkeypatch.setattr(runs_router, "EXAMPLES_DIR", tmp_path)
     monkeypatch.setattr(workspace, "EXAMPLES_DIR", tmp_path)
 
@@ -161,8 +162,8 @@ def project_versions_diff_paths(tmp_path, monkeypatch):
     _author(b)
     v2 = create_version_from_disk(proj, message="v2 reads b.csv", reviewer="test")
     # runs pin PUBLISHED versions.
-    publish_version(proj, v1.version_id, reviewer="test")
-    publish_version(proj, v2.version_id, reviewer="test")
+    publish_with_guide(proj, v1.version_id, reviewer="test")
+    publish_with_guide(proj, v2.version_id, reviewer="test")
     monkeypatch.setattr(runs_router, "EXAMPLES_DIR", tmp_path)
     monkeypatch.setattr(workspace, "EXAMPLES_DIR", tmp_path)
     monkeypatch.setattr(run_service, "_run_in_background",

@@ -20,6 +20,7 @@ import app.web.routers.runs as runs_router
 from app.main import app
 from app.runtime.runner import execute_run
 from app.services import versioning
+from conftest import publish_with_guide
 
 client = TestClient(app)
 
@@ -76,7 +77,7 @@ def _run_once(project_dir: Path) -> str:
     """Snapshot + publish the working copy, run it, and return the run id."""
     version_id = versioning.create_version_from_disk(
         project_dir, message="v1", reviewer="test").version_id
-    versioning.publish_version(project_dir, version_id, reviewer="test")
+    publish_with_guide(project_dir, version_id, reviewer="test")
     return str(execute_run(project_dir, repo_root=project_dir)["run_id"])
 
 

@@ -21,6 +21,7 @@ from app.main import app
 from app.runtime.runner import execute_run
 from app.services import versioning
 from app.services.workflow_test import run_workflow_test
+from conftest import publish_with_guide
 
 client = TestClient(app)
 
@@ -60,7 +61,7 @@ def project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
         monkeypatch.setattr(mod, "EXAMPLES_DIR", tmp_path, raising=False)
     version_id = versioning.create_version_from_disk(
         pdir, message="v1", reviewer="test").version_id
-    versioning.publish_version(pdir, version_id, reviewer="test")
+    publish_with_guide(pdir, version_id, reviewer="test")
     return pdir
 
 

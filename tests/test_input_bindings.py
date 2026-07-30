@@ -10,9 +10,8 @@ from app.core.errors import MissingInputBindingError
 from app.models import Stage
 from app.runtime.runner import apply_run_bindings, validate_stages_ready, execute_run
 from app.runtime.stages.input_data import read_input_data
-from app.services import versioning
 from app.services.versioning import create_version_from_disk
-from conftest import make_run_context
+from conftest import make_run_context, publish_with_guide
 
 
 # Every input declares the schema it expects and every non-publish stage declares
@@ -146,7 +145,7 @@ def _make_bound_project(root, filename="a.csv"):
                            "params": {"path": str(data), "format": "csv"}}}
     (root / "compiled" / "01_load.json").write_text(json.dumps(stage), encoding="utf-8")
     vid = create_version_from_disk(root, message="seed", reviewer="test").version_id
-    versioning.publish_version(root, vid, reviewer="human")
+    publish_with_guide(root, vid, reviewer="human")
     return data
 
 
@@ -185,7 +184,7 @@ def test_unbound_input_leaves_no_run_dir(tmp_path):
              "connector": {"kind": "file", "params": {}}}
     (tmp_path / "compiled" / "01_load.json").write_text(json.dumps(stage), encoding="utf-8")
     vid = create_version_from_disk(tmp_path, message="seed", reviewer="test").version_id
-    versioning.publish_version(tmp_path, vid, reviewer="human")
+    publish_with_guide(tmp_path, vid, reviewer="human")
 
     with pytest.raises(MissingInputBindingError, match="load"):
         execute_run(tmp_path, repo_root=tmp_path)

@@ -13,17 +13,18 @@ import app.web.loading as loading
 from app.main import app
 from app.runtime.runner import prepare_run, run_prepared
 from app.runtime.stages import llm_transform as lt
-from app.services import review, versioning
+from app.services import review
 from app.core.stage_cache import StageCacheEntry
 from app.services.versioning import create_version_from_disk
 from app.models import RowReviewDecision
+from conftest import publish_with_guide
 
 PROJECT = "queue_route_journey"
 
 
 def _seed_version(root):
     vid = create_version_from_disk(root, message="test seed", reviewer="test").version_id
-    versioning.publish_version(root, vid, reviewer="human")
+    publish_with_guide(root, vid, reviewer="human")
 
 
 def _write_stage(root, filename, stage):

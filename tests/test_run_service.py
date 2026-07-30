@@ -7,9 +7,9 @@ import pytest
 
 import app.services.run as run_service
 from app.core.errors import NoVersionToRunError, RunNotFoundError
-from app.services import versioning
 from app.services import workspace
 from app.services.versioning import create_version_from_disk, list_versions
+from conftest import publish_with_guide
 
 # The run service takes a project NAME and resolves it under the workspace root;
 # every test drives that one project.
@@ -50,7 +50,7 @@ def _make_project(root):
 
 def _seed_version(root):
     vid = create_version_from_disk(root, message="seed", reviewer="test").version_id
-    versioning.publish_version(root, vid, reviewer="human")
+    publish_with_guide(root, vid, reviewer="human")
     return vid
 
 

@@ -10,10 +10,10 @@ from fastapi.testclient import TestClient
 import app.web.routers.runs as runs_router
 import app.services.run as run_service
 from app.main import app
-from app.services import versioning
 from app.services import workspace
 from app.services.versioning import create_version_from_disk
 from app.web.routers.runs import _read_bust_cache
+from conftest import publish_with_guide
 
 client = TestClient(app)
 
@@ -39,7 +39,7 @@ def project(tmp_path, monkeypatch):
                                            {"name": "val", "type": "int"}]}}
     (proj / "compiled" / "01_load.json").write_text(json.dumps(stage), encoding="utf-8")
     vid = create_version_from_disk(proj, message="seed", reviewer="test").version_id
-    versioning.publish_version(proj, vid, reviewer="human")
+    publish_with_guide(proj, vid, reviewer="human")
     monkeypatch.setattr(runs_router, "EXAMPLES_DIR", tmp_path)
     monkeypatch.setattr(workspace, "EXAMPLES_DIR", tmp_path)
     monkeypatch.setattr(run_service, "_run_in_background",

@@ -47,6 +47,14 @@ def _seed(project_dir: Path, stage: dict = _LOAD_STAGE) -> None:
     (compiled / "01_load.json").write_text(json.dumps(stage), encoding="utf-8")
 
 
+def _guide(step_ids: list[str], unnarrated: list[str]) -> ReviewGuide:
+    return ReviewGuide(
+        steps=[ReviewGuideStep(title="Load the docs", prose="Reads `doc_id`.",
+                               stage_ids=step_ids)],
+        unnarrated=unnarrated,
+    )
+
+
 # ── create_version_from_disk ─────────────────────────────────────────────────
 
 def test_create_version_returns_meta_and_round_trips(tmp_path):
@@ -235,6 +243,7 @@ def test_stored_version_missing_published_reads_as_unpublished(tmp_path):
 def test_publish_version_stamps_and_is_idempotent(tmp_path):
     _seed(tmp_path)
     vid = create_version_from_disk(tmp_path, message="x", reviewer="ada").version_id
+    save_version_guide(tmp_path, vid, _guide(["load"], []))  # publishing is gated on it
 
     meta = publish_version(tmp_path, vid, reviewer="human-1")
     assert meta.published is True
@@ -305,14 +314,6 @@ def _two_stage_version(project_dir: Path) -> str:
     return create_version_from_stages(
         project_dir, [_LOAD_STAGE, _TALLY_STAGE], message="two", reviewer="ada",
     ).version_id
-
-
-def _guide(step_ids: list[str], unnarrated: list[str]) -> ReviewGuide:
-    return ReviewGuide(
-        steps=[ReviewGuideStep(title="Load the docs", prose="Reads `doc_id`.",
-                               stage_ids=step_ids)],
-        unnarrated=unnarrated,
-    )
 
 
 def test_save_version_guide_round_trips(tmp_path):
@@ -420,3 +421,62 @@ def test_stored_version_predating_the_guide_field_still_loads(tmp_path):
     }
     get_store().write("workflow_version", f"{tmp_path.name}/{vid}", data)
     assert load_version(tmp_path, vid).guide is None
+
+
+# ── the publish gate ─────────────────────────────────────────────────────────
+
+def _write_guide_past_validation(project_dir: Path, version_id: str, guide: ReviewGuide) -> None:
+    """Put a guide on the stored document directly. save_version_guide validates on
+    write and a version's stages are frozen, so nothing else can reach this state."""
+    key = f"{project_dir.name}/{version_id}"
+    stored = get_store().read("workflow_version", key)
+    stored["guide"] = guide.model_dump()
+    get_store().write("workflow_version", key, stored)
+
+
+def test_publish_version_refuses_a_version_with_no_guide(tmp_path):
+    """The refusal names the stages nothing accounts for, so the reviewer can act on
+    it without opening the version."""
+    _seed(tmp_path)
+    vid = create_version_from_disk(tmp_path, message="x", reviewer="ada").version_id
+
+    with pytest.raises(ReviewGuideValidationError) as exc:
+        publish_version(tmp_path, vid, reviewer="human")
+    assert "no review guide" in str(exc.value)
+    assert "load" in str(exc.value)
+    assert load_version(tmp_path, vid).published is False
+
+
+def test_publish_version_succeeds_once_a_guide_accounts_for_every_stage(tmp_path):
+    """A stage left `unnarrated` is accounted for — the gate asks for a decision on
+    every stage, not prose about every stage."""
+    vid = _two_stage_version(tmp_path)
+    save_version_guide(tmp_path, vid, _guide(["load"], ["tally"]))
+
+    assert publish_version(tmp_path, vid, reviewer="human").published is True
+    assert load_version(tmp_path, vid).published is True
+
+
+def test_publish_version_refuses_a_guide_that_leaves_a_stage_out(tmp_path):
+    vid = _two_stage_version(tmp_path)
+    _write_guide_past_validation(tmp_path, vid, _guide(["load"], []))
+
+    with pytest.raises(ReviewGuideValidationError, match="tally"):
+        publish_version(tmp_path, vid, reviewer="human")
+    assert load_version(tmp_path, vid).published is False
+
+
+def test_publish_version_does_not_re_gate_an_already_published_version(tmp_path):
+    """The gate is on the unpublished -> published transition. A second publish
+    performs no act — it keeps the first publisher's stamp and never re-reads the
+    guide, so a version whose stored guide was later broken stays published (there
+    is no un-publishing for a refusal here to undo)."""
+    vid = _two_stage_version(tmp_path)
+    save_version_guide(tmp_path, vid, _guide(["load"], ["tally"]))
+    first = publish_version(tmp_path, vid, reviewer="human-1")
+    _write_guide_past_validation(tmp_path, vid, _guide(["load"], []))
+
+    again = publish_version(tmp_path, vid, reviewer="human-2")
+    assert again.published is True
+    assert again.published_by == "human-1"
+    assert again.published_at == first.published_at

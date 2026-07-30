@@ -16,6 +16,7 @@ import app.web.routers.runs as runs_router
 import app.services.run as run_service
 from app.main import app
 from app.services import versioning
+from conftest import publish_with_guide
 
 client = TestClient(app)
 
@@ -79,7 +80,7 @@ def test_run_this_version_gated_on_published(project: Path) -> None:
     assert unpub.status_code == 400
     assert "publish" in unpub.json()["detail"]
     # Published → 303 to the run page.
-    versioning.publish_version(project, vid, reviewer="local")
+    publish_with_guide(project, vid, reviewer="local")
     pub = client.post(f"/project/demo/workflow/version/{vid}/run", follow_redirects=False)
     assert pub.status_code == 303
     assert "/runs/" in pub.headers["location"]
@@ -101,7 +102,7 @@ def test_run_this_version_400s_not_500s_on_unbound_input(
     meta = versioning.create_version_from_stages(
         project, [unbound_stage], message="v-unbound", reviewer="local")
     vid = meta.version_id
-    versioning.publish_version(project, vid, reviewer="local")
+    publish_with_guide(project, vid, reviewer="local")
 
     resp = client.post(f"/project/demo/workflow/version/{vid}/run", follow_redirects=False)
     assert resp.status_code == 400

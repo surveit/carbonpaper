@@ -15,6 +15,7 @@ import app.services.run as run_service
 from app.main import app
 from app.services.project import create_project
 from app.services.versioning import list_versions
+from conftest import save_covering_guide
 from test_journey_smoke import _point_examples_dir_at, assert_run_ok
 
 client = TestClient(app)
@@ -45,8 +46,10 @@ def test_live_llm_journey_reaches_a_published_artifact(live_project, tmp_path):
     assert resp.json()["ok"] is True, resp.text
 
     # Publish it — a run pins a PUBLISHED version, so the human-approval step is
-    # part of the journey: author -> version -> publish -> run -> artifact.
+    # part of the journey: author -> version -> guide -> publish -> run -> artifact.
+    # Publishing is gated on a review guide, so one is written before the POST.
     version_id = list_versions(tmp_path / PROJECT)[0].version_id
+    save_covering_guide(tmp_path / PROJECT, version_id)
     resp = client.post(f"/project/{PROJECT}/versions/{version_id}/publish",
                        follow_redirects=False)
     assert resp.status_code == 303, resp.text

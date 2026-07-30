@@ -11,6 +11,7 @@ from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 from app.core.agent.store import MessageRole, PartType, open_session_store
+from app.core.errors import ReviewGuideValidationError
 from app.services import generation, node_review, stage_edit, versioning
 from app.services import project as project_service
 from app.services.errors import WorkflowLoadError
@@ -267,8 +268,11 @@ async def publish_version_route(project: str, version_id: str):
     """Record human approval on one version (the gate runs pin to). Idempotent;
     metadata only — stage content is never touched. A malformed version_id (any
     shape but the timestamp versioning.load_version expects) 404s through
-    that same FileNotFoundError. Publish is only ever posted from the version's own
-    detail page, so redirect back there (now showing published) in one hop."""
+    that same FileNotFoundError. A version whose review guide is missing or does not
+    account for its stages is refused as a 400 carrying the offending stage ids, the
+    same shape queue_decide reports a ReviewValidationError in. Publish is only ever
+    posted from the version's own detail page, so redirect back there (now showing
+    published) in one hop."""
     project_dir = EXAMPLES_DIR / project
     if not project_dir.is_dir():
         raise HTTPException(status_code=404, detail=f"No project '{project}'")
@@ -276,6 +280,8 @@ async def publish_version_route(project: str, version_id: str):
         versioning.publish_version(project_dir, version_id, reviewer="local")
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ReviewGuideValidationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     return RedirectResponse(
         url=f"/project/{project}/workflow/version/{version_id}", status_code=303
     )
