@@ -28,7 +28,7 @@ def _stage(stage_id="s", type_="python_row_function", handle="function", **kw):
         handle: block,
         **kw,
     }
-    return m.Stage.model_validate(spec)
+    return m.parse_stage(spec)
 
 
 def _kinds(stage):
@@ -42,7 +42,7 @@ def test_a_described_and_exemplified_stage_warns_about_nothing():
 
 def test_a_config_only_stage_warns_about_nothing():
     """An enrich's keys are config a reviewer reads directly — no description to miss."""
-    enrich = m.Stage.model_validate({
+    enrich = m.parse_stage({
         "id": "j", "name": "J", "type": "enrich",
         "inputs": [{"id": "a", "schema": _SCHEMA}, {"id": "b", "schema": _SCHEMA}],
         "output_schema": _SCHEMA,

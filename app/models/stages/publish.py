@@ -9,10 +9,9 @@ from typing import ClassVar, Literal, Optional
 from pydantic import Field
 
 from app.models.schema import StageConfig
-from app.models.stage_base import StageBase, StageInput, StageType
-from app.models.stages.code import PythonFunction, find_python_function_warnings
+from app.models.stage_base import StageInput, StageType
+from app.models.stages.code import CarriesPythonFunction
 from app.models.stages.shared import COLUMN_ISSUE, resolve_input_columns
-from app.models.stages.warnings import CompilerWarning
 
 
 class PublishFormat(str, Enum):
@@ -39,7 +38,7 @@ class PublishConfig(StageConfig):
     cross_link: Optional[bool] = None
 
 
-class PublishStage(StageBase):
+class PublishStage(CarriesPythonFunction):
     """The `publish` block is this stage's rendering config; the `function`
     block is the code it actually runs, so both are required and both are
     fingerprinted."""
@@ -48,20 +47,13 @@ class PublishStage(StageBase):
 
     type: Literal[StageType.publish]
     publish: PublishConfig
-    function: PythonFunction
     inputs: list[StageInput] = Field(default_factory=list, min_length=1)
 
     def fingerprint_blocks(self) -> dict[str, StageConfig]:
-        return {"publish": self.publish, "function": self.function}
+        return {"publish": self.publish, **super().fingerprint_blocks()}
 
     def find_config_column_issues(self) -> list[str]:
         return find_publish_column_issues(self)
-
-    def find_authored_code_block(self) -> PythonFunction:
-        return self.function
-
-    def find_handle_compiler_warnings(self) -> list[CompilerWarning]:
-        return find_python_function_warnings(self, self.function)
 
 
 def find_publish_column_issues(stage: "PublishStage") -> list[str]:

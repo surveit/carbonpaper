@@ -24,20 +24,11 @@ _OWNERS: dict[str, set[str]] = {
 # handle it does not own. THIS SET MAY ONLY SHRINK.
 _GRANDFATHERED: dict[str, set[str]] = {
     "function": {
-        "app/compiler/stage_tests.py",
         "app/models/stages/filter_rows.py",
         "app/runtime/stages/python_functions.py",
-        "app/services/loader.py",
-        "app/web/stage_test_views.py",
     },
-    "filter": {
-        "app/compiler/stage_tests.py",
-        "app/runtime/stages/filter_rows.py",
-        "app/web/stage_test_views.py",
-    },
-    "queue": {
-        "app/runtime/stages/human_review_queue.py",
-    },
+    "filter": set(),
+    "queue": set(),
 }
 
 
@@ -49,7 +40,7 @@ def _reads_handle(path: Path, attr: str) -> bool:
     this is enough to catch logic that has wandered out of its module.
     """
     try:
-        tree = ast.parse(path.read_text())
+        tree = ast.parse(path.read_text(encoding="utf-8"))
     except (SyntaxError, UnicodeDecodeError):
         return False
     receivers = {"stage", "stage_def", "self"}

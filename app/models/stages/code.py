@@ -176,11 +176,12 @@ class PythonFunction(StageConfig):
         return self
 
 
-def find_python_function_warnings(stage: StageBase, function: PythonFunction
+def find_python_function_warnings(stage: "CarriesPythonFunction"
                                   ) -> list[CompilerWarning]:
     """Compiler warnings about a `function` block — raised here, and only here,
     because this module owns it. A stage whose behaviour is authored code needs prose
     standing in for it, and the panel needs to be able to show that code."""
+    function = stage.function
     if not (function.summary or "").strip():
         return [warn(stage, "undescribed",
                      "no plain-language description — reviewable only by reading its code")]
@@ -191,9 +192,10 @@ def find_python_function_warnings(stage: StageBase, function: PythonFunction
     return []
 
 
-class _PythonFunctionStage(StageBase):
-    """Shared by the two python transforms: same `function` block, different
-    invocation (see StageType)."""
+class CarriesPythonFunction(StageBase):
+    """Every stage type whose behaviour is a `function` block — the two python
+    transforms and publish. Inherited rather than redeclared so `stage.function` is
+    read in this module and nowhere else."""
     function: PythonFunction
 
     def fingerprint_blocks(self) -> dict[str, StageConfig]:
@@ -203,7 +205,12 @@ class _PythonFunctionStage(StageBase):
         return self.function
 
     def find_handle_compiler_warnings(self) -> list[CompilerWarning]:
-        return find_python_function_warnings(self, self.function)
+        return find_python_function_warnings(self)
+
+
+class _PythonFunctionStage(CarriesPythonFunction):
+    """The two python transforms: the `function` block is the whole stage, unlike
+    publish, which pairs it with rendering config."""
 
 
 class PythonRowFunctionStage(_PythonFunctionStage):

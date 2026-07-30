@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Literal
 from app.models.schema import _Base
 
 if TYPE_CHECKING:
-    from app.models.stage import Stage
+    from app.models.stage_base import StageBase
 
 WarningKind = Literal[
     "undescribed",
@@ -54,7 +54,7 @@ class CompilerWarning(_Base):
         return FIXABLE[self.kind]
 
 
-def warn(stage: "Stage", kind: WarningKind, detail: str) -> CompilerWarning:
+def warn(stage: "StageBase", kind: WarningKind, detail: str) -> CompilerWarning:
     """A warning about `stage`, named for the reader rather than for the field."""
     return CompilerWarning(
         kind=kind, stage_id=stage.id, stage_name=stage.name, detail=detail
