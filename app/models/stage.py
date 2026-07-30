@@ -26,7 +26,12 @@ from app.models.schema import (
     _SNAKE_RE,
 )
 from app.models.stages.aggregate import AggregateConfig
-from app.models.stages.code import SUMMARY_DESCRIPTION, validate_inline_function_code
+from app.models.stages.code import (
+    CORNER_CASES_DESCRIPTION,
+    SUMMARY_DESCRIPTION,
+    CornerCase,
+    validate_inline_function_code,
+)
 from app.models.stages.filter_rows import FilterConfig
 from app.models.stages.human_review_queue import QueueConfig
 from app.models.stages.input_data import Connector
@@ -99,10 +104,13 @@ class PythonFunction(_Base):
     FINGERPRINT_FIELDS: ClassVar[frozenset[str]] = frozenset({
         "kind", "code", "module", "function", "requirements",
     })
-    INCIDENTAL_FIELDS: ClassVar[frozenset[str]] = frozenset({"summary"})
+    INCIDENTAL_FIELDS: ClassVar[frozenset[str]] = frozenset({"summary", "corner_cases"})
 
     kind: FunctionKind
     summary: Optional[str] = Field(default=None, description=SUMMARY_DESCRIPTION)
+    corner_cases: list[CornerCase] = Field(
+        default_factory=list, description=CORNER_CASES_DESCRIPTION
+    )
     code: Optional[str] = Field(
         default=None,
         description=(
