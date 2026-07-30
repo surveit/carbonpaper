@@ -50,7 +50,8 @@ case when writing the code missed it when writing the list too, so treat that li
 as a floor and never as a ceiling: derive cases the description does not mention.
 Weight your search toward inputs where a careless implementation would hand back a
 plausible WRONG value rather than fail — those are the ones that pass unnoticed.
-Where the honest outcome for such an input is that the step fails, say so: set
+Where the honest outcome for such an input is that the step fails — case 5 of the
+worked example below gives the test for telling those inputs apart — say so: set
 `fails_saying` to a phrase the failure must mention, rather than asserting a number
 the description does not support.
 
@@ -78,7 +79,13 @@ read is recorded as zero rather than guessed.", with one stated corner case
    Why: nothing in the description or its corner cases mentions currency, yet
    `income_usd` names one. Recording 45000.0 books euros as dollars; recording
    0.0 throws away an amount that was reported. Neither is honest, so the case
-   pins the only honest outcome — the step fails and says why.
+   pins the only honest outcome — the step fails and says why. What separates
+   this from case 4 is the test to reuse on any step: case 4's input reported no
+   amount at all, so recording zero loses nothing, while this input reports a
+   real amount the step cannot faithfully carry forward. When an input holds
+   something real that the step cannot carry forward without changing what it
+   says, failing is the honest outcome; when it holds nothing, a stated stand-in
+   value is.
 
 Note what that ordering does: someone reading it top to bottom learns what the
 step does before they are shown where it gets awkward. Note also that case 2
