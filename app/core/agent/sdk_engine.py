@@ -83,10 +83,17 @@ class ClaudeAgentSdkEngine:
         tool_labels: dict[str, str] | None = None,
         model: str = CLI_MODEL,
         max_turns: int | None = None,
+        builtin_tools: list[str] | None = None,
     ) -> None:
         self._system_prompt = system_prompt
         self._mcp_server = mcp_server
         self._allowed_tools = allowed_tools
+        # The CLI's own built-in tools (Bash, Read, Write, WebSearch, …) this run may
+        # see AT ALL, distinct from allowed_tools, which only pre-approves permission
+        # for tools already on offer. Empty — the default — leaves the turn with
+        # nothing but the caller's in-process MCP tools, so a structured-output run
+        # cannot drift into using the assistant toolset instead of answering.
+        self._builtin_tools = list(builtin_tools or [])
         # Present-tense labels shown in the chat while a tool runs, keyed by the
         # bare tool name; an unlabelled tool falls back to its bare name.
         self._tool_labels = tool_labels or {}
@@ -112,6 +119,11 @@ class ClaudeAgentSdkEngine:
             mcp_servers={MCP_SERVER_NAME: self._mcp_server},
             allowed_tools=self._allowed_tools,
             setting_sources=[],
+            # `tools` is the base set of built-ins on offer; `[]` disables every one.
+            tools=self._builtin_tools,
+            # Only the mcp_servers passed here — never a project/user/plugin .mcp.json
+            # the CLI would otherwise merge in, whose tools this run never asked for.
+            strict_mcp_config=True,
         )
         if self._max_turns is not None:
             kw["max_turns"] = self._max_turns

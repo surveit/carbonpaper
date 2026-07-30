@@ -4,6 +4,7 @@ fixture), so coroutines are driven with asyncio.run.
 from __future__ import annotations
 
 import asyncio
+import json
 from typing import Any
 
 import app.core.agent.sdk_engine as se
@@ -138,3 +139,68 @@ def test_stream_turn_passes_resume_into_options(monkeypatch: Any) -> None:
     )
     assert captured["resume"] == "prev-session"
     assert session_id == "sess-xyz"
+
+
+def test_stream_turn_emits_the_cli_init_as_a_system_event_carrying_json(
+    monkeypatch: Any,
+) -> None:
+    """The shape app.core.agent.diagnostics reads the tool inventory out of: kind
+    "system", subtype "init", and the inventory as the JSON body of `text`."""
+
+    class _System:
+        subtype = "init"
+        data = {"subtype": "init", "tools": ["Bash", "mcp__tools__submit_answer"],
+                "mcp_servers": [{"name": "tools", "status": "connected"}]}
+
+    async def fake_query(*, prompt: str, options: Any) -> Any:
+        yield _System()
+        yield _Done()
+
+    monkeypatch.setattr(se, "query", fake_query)
+    monkeypatch.setattr(se, "SystemMessage", _System)
+    monkeypatch.setattr(se, "AssistantMessage", _Asst)
+    monkeypatch.setattr(se, "UserMessage", _User)
+    monkeypatch.setattr(se, "ResultMessage", _Done)
+
+    events: list[dict[str, Any]] = []
+    engine = se.ClaudeAgentSdkEngine(system_prompt="sp", mcp_server=object(), allowed_tools=[])
+    asyncio.run(engine.stream_turn("hi", message_history=[], emit=events.append))
+
+    system_events = [e for e in events if e["kind"] == "system"]
+    assert len(system_events) == 1
+    assert system_events[0]["subtype"] == "init"
+    body = json.loads(system_events[0]["text"])
+    assert body["tools"] == ["Bash", "mcp__tools__submit_answer"]
+    assert body["mcp_servers"] == [{"name": "tools", "status": "connected"}]
+
+
+def test_options_disable_every_builtin_tool_by_default() -> None:
+    """`allowed_tools` only pre-approves permission; `tools` is what decides which
+    built-ins the turn can see at all. A structured-output run must see none."""
+    engine = se.ClaudeAgentSdkEngine(
+        system_prompt="sp",
+        mcp_server=object(),
+        allowed_tools=["mcp__tools__submit_answer"],
+    )
+    options = engine._options(None)
+    assert options.tools == []
+    assert options.allowed_tools == ["mcp__tools__submit_answer"]
+
+
+def test_options_forward_the_builtin_tools_a_caller_asked_for() -> None:
+    engine = se.ClaudeAgentSdkEngine(
+        system_prompt="sp",
+        mcp_server=object(),
+        allowed_tools=[],
+        builtin_tools=["WebSearch", "WebFetch"],
+    )
+    assert engine._options(None).tools == ["WebSearch", "WebFetch"]
+
+
+def test_options_load_no_mcp_servers_but_the_one_passed_in() -> None:
+    """Without this the CLI merges any project/user/plugin .mcp.json server into the
+    run, putting tools in the model's context that this engine never offered."""
+    engine = se.ClaudeAgentSdkEngine(
+        system_prompt="sp", mcp_server=object(), allowed_tools=[]
+    )
+    assert engine._options(None).strict_mcp_config is True
