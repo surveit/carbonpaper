@@ -40,9 +40,10 @@ app/chat/  PydanticAI chat · app/core/llm/  model menu · tests/  pytest (offli
   `stage_to_spec_dict` / `validate_workflow_draft`), or foreign JSON being parsed — and even
   there, parse into a model at the first point the shape is known.
 - **Banned words are enforced, not advisory.** `tests/arch/test_no_banned_words.py` fails on any
-  word in its `BANNED_WORDS` set across `.py`/`.md`/`.html`/`.js`/`.css` — currently "canonical",
-  which names a property without saying whose. Say the specific thing: a sorted-key JSON dump, the
-  spec-dict form, the on-disk text, `HASH_IGNORED_KEYS`.
+  word in its `BANNED_WORDS` set across `.py`/`.md`/`.html`/`.js`/`.css` — read that set for the
+  current list and the replacement each word owes you. The test file is the only place a banned
+  word may appear, so name the specific property instead: a sorted-key JSON dump, the spec-dict
+  form, the on-disk text, `HASH_IGNORED_KEYS`.
 - **Never weaken an arch test without human approval.** The import-linter contracts
   (`pyproject.toml`, run as `lint-imports`) and the AST invariant tests (`_arch_tests/`,
   `tests/arch/`) exist to fail on work in progress — that failure is the signal, not an obstacle.
