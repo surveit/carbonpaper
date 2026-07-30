@@ -14,9 +14,9 @@ from typing import Any, Literal
 import pandas as pd
 from pydantic import BaseModel
 
-from app.core.errors import StepRefused
 from app.core.frames import list_rows
 from app.models import Stage, TableSchema
+from app.models.errors import StepRefused
 from app.models.stage import StageType
 from app.models.stages.stage_tests import STAGE_TEST_TYPES, StageTest
 from app.runtime.context import RunContext

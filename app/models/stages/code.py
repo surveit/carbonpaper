@@ -11,6 +11,7 @@ from typing import ClassVar, Literal, Optional, Protocol
 
 from pydantic import Field, model_validator
 
+from app.models.errors import StepRefused
 from app.models.schema import FunctionKind, StageConfig, _Base
 from app.models.stage_base import StageBase, StageInput, StageType
 
@@ -150,7 +151,7 @@ class PythonFunction(StageConfig):
             "publish `def transform(df, ..., output_dir, trace_links) -> DataFrame` (writes "
             "artifact files into output_dir; the returned frame lists them). When the "
             "function meets an input it cannot handle honestly, it refuses instead of "
-            "returning: `raise StepRefused(\"...\")`, which needs no import — the name is "
+            f"returning: `raise {StepRefused.__name__}(\"...\")`, which needs no import — the name is "
             "already in scope. The message names the input and says, in language a "
             "non-engineer can read, why that input cannot be handled. Never let a guessed, "
             "defaulted or zeroed value stand in for a real one. Refuse because a column's "
