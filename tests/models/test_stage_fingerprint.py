@@ -44,6 +44,22 @@ def _queue_stage(**queue_overrides):
     })
 
 
+def _publish_stage(code="def transform(df, output_dir, trace_links):\n    return df\n", **overrides):
+    base = {
+        "id": "report",
+        "type": "publish",
+        "name": "report",
+        "inputs": [{
+            "id": "src",
+            "schema": {"columns": [{"name": "a", "type": "str", "nullable": False}]},
+        }],
+        "publish": {"format": "html_report", "destination": "out/"},
+        "function": {"kind": "inline", "code": code},
+    }
+    base.update(overrides)
+    return Stage.model_validate(base)
+
+
 def test_compute_definition_fingerprint_is_deterministic():
     stage = _row_function_stage()
     assert stage.compute_definition_fingerprint() == stage.compute_definition_fingerprint()
@@ -91,6 +107,22 @@ def test_compute_definition_fingerprint_for_queue_reacts_to_filter():
 def test_compute_definition_fingerprint_for_queue_reacts_to_reviewer_instructions():
     base = _queue_stage()
     changed = _queue_stage(reviewer_instructions="check twice")
+    assert base.compute_definition_fingerprint() != changed.compute_definition_fingerprint()
+
+
+def test_compute_definition_fingerprint_for_publish_reacts_to_function_code():
+    # The code a publish stage runs lives in its `function` handle, not in the
+    # `publish` handle named by _TYPE_SPEC — editing it must invalidate the cache.
+    base = _publish_stage()
+    changed = _publish_stage(
+        code="def transform(df, output_dir, trace_links):\n    return df.head(1)\n"
+    )
+    assert base.compute_definition_fingerprint() != changed.compute_definition_fingerprint()
+
+
+def test_compute_definition_fingerprint_for_publish_reacts_to_publish_handle():
+    base = _publish_stage()
+    changed = _publish_stage(publish={"format": "html_report", "destination": "elsewhere/"})
     assert base.compute_definition_fingerprint() != changed.compute_definition_fingerprint()
 
 

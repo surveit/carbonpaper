@@ -234,31 +234,42 @@ class Stage(StageDraft):
 
     def compute_definition_fingerprint(self) -> str:
         """sha1[:16] over a sorted-key JSON dump of the output-determining subset of
-        this stage: {"type", "handle": <the type's handle block>, "output_schema"}.
+        this stage: {"type", "handle": <the type's handle block>, "output_schema"},
+        plus one entry per handle the type ALSO requires — `publish` names `publish`
+        as its handle but RUNS the code in its `function` block, so that block is
+        fingerprinted too.
         Every other Stage field (id, name, source, inputs, review, cache,
         limit, compiler_notes, eval, tests) is incidental — it does not change what
         this stage computes — and stays out of the fingerprint, `cache`
         included: it decides whether the cache is consulted, not what the stage
-        computes, so flipping it must not invalidate an existing entry. The handle
+        computes, so flipping it must not invalidate an existing entry. Each handle
         block itself is trimmed to its class's own `FINGERPRINT_FIELDS` (every
         handle config class declares `FINGERPRINT_FIELDS`/`INCIDENTAL_FIELDS`
         explicitly, exhaustively over its own fields — see e.g. QueueConfig,
         whose `routing`/`conflict_resolution`/`estimated_volume_per_week`
         route or match a decision without changing what the human is asked)."""
         spec = _TYPE_SPEC[self.type]
-        handle = getattr(self, spec["handle"])
-        handle_dump = handle.model_dump(mode="json", exclude_none=True)
-        handle_dump = {
-            key: value for key, value in handle_dump.items()
-            if key in type(handle).FINGERPRINT_FIELDS
-        }
         output_dump = (
             self.output_schema.model_dump(mode="json", exclude_none=True)
             if self.output_schema is not None else None
         )
-        fields = {"type": self.type, "handle": handle_dump, "output_schema": output_dump}
+        fields: dict[str, Any] = {
+            "type": self.type,
+            "handle": self._dump_handle_for_fingerprint(spec["handle"]),
+            "output_schema": output_dump,
+        }
+        for extra in spec.get("also_requires", ()):
+            fields[extra] = self._dump_handle_for_fingerprint(extra)
         payload = json.dumps(fields, sort_keys=True, separators=(",", ":"), default=str)
         return compute_short_hash(payload)
+
+    def _dump_handle_for_fingerprint(self, handle_name: str) -> dict[str, Any]:
+        handle = getattr(self, handle_name)
+        dump = handle.model_dump(mode="json", exclude_none=True)
+        return {
+            key: value for key, value in dump.items()
+            if key in type(handle).FINGERPRINT_FIELDS
+        }
 
     def llm_reply_schema(self) -> Optional[TableSchema]:
         """What the model's reply itself must carry: `output_schema` minus the
