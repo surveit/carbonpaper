@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Mapping
 
 from app.core.errors import PredicateError
 from app.core.predicate import parse_predicate
+from app.models.schema import INTERNAL_COLUMN_PREFIX
 
 if TYPE_CHECKING:
     from app.models.schema import TableSchema
@@ -27,6 +28,34 @@ def resolve_input_columns(stage: "Stage", index: int) -> set[str]:
     isolation, at construction time, so the producer may not even be present
     in whatever list of stages the caller happens to hold."""
     return {c.name for c in stage.inputs[index].table_schema.columns}
+
+
+INTERNAL_NAMESPACE_ISSUE = (
+    "a column name may not begin with `{prefix}` — that namespace is reserved for "
+    "the runtime's internal per-row columns"
+)
+
+
+def find_internal_namespace_column_issues(stage: "Stage") -> list[str]:
+    """Every column `stage` declares — on its output_schema or on any input edge
+    — that sits in the `_`-prefixed namespace the runtime reserves for its own
+    per-row machinery (see `app.models.schema.INTERNAL_COLUMN_PREFIX`); [] when
+    none do, the only valid answer for a stored stage. Both sides are reported:
+    an input edge is this stage's own declaration of what it requires, and an
+    edge naming an internal column would claim the machinery is data."""
+    issues = [
+        f"input `{ref.id}` declares column {name!r}"
+        for ref in stage.inputs
+        for name in ref.table_schema.find_internal_namespace_columns()
+    ]
+    if stage.output_schema is not None:
+        issues.extend(
+            f"output_schema declares column {name!r}"
+            for name in stage.output_schema.find_internal_namespace_columns()
+        )
+    if issues:
+        issues.append(INTERNAL_NAMESPACE_ISSUE.format(prefix=INTERNAL_COLUMN_PREFIX))
+    return issues
 
 
 def find_predicate_column_issues(

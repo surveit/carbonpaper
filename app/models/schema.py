@@ -39,6 +39,19 @@ class _Base(BaseModel):
 # ── Identifiers ──────────────────────────────────────────────────────────────
 _SNAKE_RE = re.compile(r"^[a-z][a-z0-9_]*$")
 
+# A leading underscore marks the MACHINERY's namespace, never a real column: the
+# row driver attaches its internal per-row columns there (`_error`, `_usage`,
+# `_deferred` — app/runtime/stages/execution.py) and strips them off every
+# mapped frame; row provenance rides `_trace_source_stage`/`_trace_source_row`
+# (app/runtime/lineage.py); and a stored document's bookkeeping keys
+# (`_filename`, `_order`, `_error`) are stripped BY PREFIX before the document is
+# compared or validated (app/services/{data_model,node_review}.py). We spend that
+# namespace freely, so a real schema column inside it would be indistinguishable
+# from machinery — silently stripped, summed as usage, or read back as lineage.
+# Hence: no stage may DECLARE a column here (Stage._schemas_declared), which is
+# also what stops the compiler from ever authoring one.
+INTERNAL_COLUMN_PREFIX = "_"
+
 
 # Shared by every authored-code handle (python_row_function/python_frame_function,
 # publish's function block, filter_rows) — lives here, below `stage.py`, so a
@@ -105,7 +118,12 @@ def _is_range_bound(v: Any) -> bool:
 
 # ── Typed columns / schemas ──────────────────────────────────────────────────
 class Column(_Base):
-    name: str
+    name: str = Field(
+        description=(
+            "Column name, snake_case. It must NOT begin with an underscore: that "
+            "namespace belongs to the runtime's internal per-row columns."
+        ),
+    )
     type: str = Field(
         default="str",
         description=(
@@ -471,6 +489,17 @@ class TableSchema(_Base):
             lines.extend(_render_column(c, ""))
         lines.append("Any other key is invalid.")
         return "\n".join(lines)
+
+    def find_internal_namespace_columns(self) -> list[str]:
+        """The names of this schema's columns that sit in the reserved
+        INTERNAL_COLUMN_PREFIX namespace ([] when none do — the only valid
+        answer for a schema a stage declares). Its OWN columns only: a
+        `_`-prefixed key nested inside a `json` column is a value in that
+        object, not a column on the frame, so it collides with nothing."""
+        return [
+            c.name for c in self.columns
+            if c.name.startswith(INTERNAL_COLUMN_PREFIX)
+        ]
 
     def to_pydantic_model(self, name: str) -> type[BaseModel]:
         """Compile this schema to a Pydantic model class named `name`, one
