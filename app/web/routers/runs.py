@@ -441,6 +441,11 @@ async def run_detail(request: Request, project: str, run_id: str):
         request,
         "run_detail.html",
         {
+            # The run view renders inside the project shell, so it carries the nav
+            # state like every other section. `section: runs` keeps the Runs entry
+            # highlighted while looking at one run.
+            "state": shell_state(EXAMPLES_DIR / project),
+            "section": "runs",
             "project": project,
             "run_id": run_id,
             "manifest": manifest,

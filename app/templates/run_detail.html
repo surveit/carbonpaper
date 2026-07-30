@@ -1,7 +1,7 @@
-{% extends "base.html" %}
+{% extends "project_shell.html" %}
 {% block title %}Run {{ run_id }} · {{ project }}{% endblock %}
 
-{% block head_extra %}
+{% block section_head %}
 <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
 <script>
   onDiagramNode(function (stageId) { if (window._loadStage) window._loadStage(stageId); });
@@ -16,7 +16,7 @@
 <a href="/project/{{ project }}" class="back-link">← {{ project }}</a>
 {% endblock %}
 
-{% block content %}
+{% block section %}
 {% set total = manifest.stage_records | length %}
 {% set ok = manifest.stage_records | selectattr('status', 'equalto', 'ok') | list | length %}
 {% set warn = manifest.stage_records | selectattr('status', 'equalto', 'validation_warnings') | list | length %}
