@@ -18,6 +18,13 @@ CODE_SUMMARY_CONTRACT_NOTE = (
     "blank). Rewrite it in the same edit whenever the code changes."
 )
 
+# Deliberately one sentence: the field's own description carries the substance, and
+# repeating it here only gives the two places to drift apart.
+CODE_CORNER_CASES_CONTRACT_NOTE = (
+    "ALWAYS submit the handle's `corner_cases` alongside the summary, in the same edit "
+    "— an empty list if the step genuinely has none, but never omitted."
+)
+
 HUMAN_REVIEW_QUEUE_CONTRACT_NOTE = (
     "This type's output columns are FIXED by the runtime regardless of what "
     "output_schema declares: only `decision`, `ai_score`, `human_score`, "

@@ -416,6 +416,15 @@ table.schema tr:last-child td { border-bottom: 0; }
 }
 .stage-summary.missing { font-size: 14px; }
 
+/* Stated corner cases, folded under the summary (_stage_code.html). Sits between
+   the description and the badge because it is part of the description — the
+   examples check these too. */
+.stage-corners { max-width: 70ch; margin: 0 0 12px; font-size: 14px; }
+.stage-corners > summary { cursor: pointer; color: var(--muted); }
+.stage-corner-list { margin: 8px 0 0; }
+.stage-corner-list dt { font-weight: 500; margin-top: 8px; }
+.stage-corner-list dd { margin: 2px 0 0 18px; color: var(--muted); }
+
 /* Certification badge (_stage_certification.html) — sits directly under the
    summary, because the claim it makes is a claim ABOUT that summary. The `why`
    line is deliberately not hidden behind a disclosure: a green badge with no

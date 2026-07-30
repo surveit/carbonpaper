@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import json
 from enum import Enum
-from typing import Any, ClassVar, Optional
+from typing import Any, Optional
 
 from pydantic import (
     Field,
@@ -19,14 +19,13 @@ from pydantic import (
 from pydantic.json_schema import SkipJsonSchema
 
 from app.models.schema import (
-    FunctionKind,
     SourceRef,
     TableSchema,
     _Base,
     _SNAKE_RE,
 )
 from app.models.stages.aggregate import AggregateConfig
-from app.models.stages.code import SUMMARY_DESCRIPTION, validate_inline_function_code
+from app.models.stages.code import PythonFunction
 from app.models.stages.filter_rows import FilterConfig
 from app.models.stages.human_review_queue import QueueConfig
 from app.models.stages.input_data import Connector
@@ -89,55 +88,6 @@ def is_grain_and_order_preserving(stage_type: StageType) -> bool:
 
 
 # ── Executable-handle blocks (each self-validates) ───────────────────────────
-class PythonFunction(_Base):
-    """Handle for python_row_function / python_frame_function (and publish). The
-    row-vs-frame distinction lives in the stage `type`, not here — the runtime
-    reads the type to decide whether to invoke this per row or per frame."""
-    # Every field changes what this stage computes (the code/module it runs)
-    # except `summary`, which describes that code to a reader — see
-    # Stage.compute_definition_fingerprint.
-    FINGERPRINT_FIELDS: ClassVar[frozenset[str]] = frozenset({
-        "kind", "code", "module", "function", "requirements",
-    })
-    INCIDENTAL_FIELDS: ClassVar[frozenset[str]] = frozenset({"summary"})
-
-    kind: FunctionKind
-    summary: Optional[str] = Field(default=None, description=SUMMARY_DESCRIPTION)
-    code: Optional[str] = Field(
-        default=None,
-        description=(
-            "Inline Python defining `function` (default `transform`). Signature by stage "
-            "type: python_row_function `def transform(row: dict) -> dict` (1 row in, 1 out; "
-            "cannot reorder or fan out); python_frame_function "
-            "`def transform(df, ...) -> DataFrame` (inputs positional in declared order); "
-            "publish `def transform(df, ..., output_dir, trace_links) -> DataFrame` (writes "
-            "artifact files into output_dir; the returned frame lists them)."
-        ),
-    )
-    module: Optional[str] = None
-    function: Optional[str] = None
-    requirements: list[str] = Field(default_factory=list)
-
-    @model_validator(mode="after")
-    def _kind_fields(self) -> "PythonFunction":
-        if self.kind == FunctionKind.module and not self.module:
-            raise ValueError("function.kind=module needs `module`")
-        if self.kind == FunctionKind.inline and not self.code:
-            raise ValueError("function.kind=inline needs `code`")
-        return self
-
-    @model_validator(mode="after")
-    def _inline_code_is_runnable(self) -> "PythonFunction":
-        """Inline code must parse and define the function the runtime calls
-        (`transform` by default). Enforced here — a single stage's invariant — so
-        broken code (e.g. a bare body with a top-level `return`) is rejected at
-        write time instead of raising only when the runner exec()s it."""
-        if self.kind != FunctionKind.inline or not self.code:
-            return self
-        validate_inline_function_code(self.code, self.function)
-        return self
-
-
 class ReviewConfig(_Base):
     """Routes a stage's outputs into human review."""
     when: Optional[str] = None
