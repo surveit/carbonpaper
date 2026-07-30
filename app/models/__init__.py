@@ -3,11 +3,11 @@
 Import from `app.models` (this aggregator) for the stable public surface.
 """
 from app.models.compiler_warnings import (
-    CompilerWarning,
     CompilerWarningReport,
     find_stage_compiler_warnings,
     find_workflow_compiler_warnings,
 )
+from app.models.stages.warnings import CompilerWarning
 from app.models.coverage import Coverage
 from app.models.node_contract_notes import (
     CODE_SUMMARY_CONTRACT_NOTE,

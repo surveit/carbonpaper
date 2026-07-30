@@ -13,6 +13,7 @@ from pydantic import Field, model_validator
 
 from app.models.schema import FunctionKind, StageConfig, _Base
 from app.models.stage_base import StageBase, StageInput, StageType
+from app.models.stages.warnings import CompilerWarning, warn
 
 # The instruction an authoring client reads when it fills in `summary`. Python
 # code is the one block a non-engineer reviewer cannot read for themselves, so
@@ -175,6 +176,21 @@ class PythonFunction(StageConfig):
         return self
 
 
+def find_python_function_warnings(stage: StageBase, function: PythonFunction
+                                  ) -> list[CompilerWarning]:
+    """Compiler warnings about a `function` block — raised here, and only here,
+    because this module owns it. A stage whose behaviour is authored code needs prose
+    standing in for it, and the panel needs to be able to show that code."""
+    if not (function.summary or "").strip():
+        return [warn(stage, "undescribed",
+                     "no plain-language description — reviewable only by reading its code")]
+    if function.kind == FunctionKind.module:
+        return [warn(stage, "unreviewable_code",
+                     f"the code lives in module `{function.module}` rather than on the "
+                     f"stage, so the review panel cannot show it")]
+    return []
+
+
 class _PythonFunctionStage(StageBase):
     """Shared by the two python transforms: same `function` block, different
     invocation (see StageType)."""
@@ -185,6 +201,9 @@ class _PythonFunctionStage(StageBase):
 
     def find_authored_code_block(self) -> PythonFunction:
         return self.function
+
+    def find_handle_compiler_warnings(self) -> list[CompilerWarning]:
+        return find_python_function_warnings(self, self.function)
 
 
 class PythonRowFunctionStage(_PythonFunctionStage):

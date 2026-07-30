@@ -25,6 +25,7 @@ from app.models.schema import (
 )
 from app.models.stages.shared import find_internal_namespace_column_issues
 from app.models.stages.stage_tests import StageTest, validate_stage_tests
+from app.models.stages.warnings import CompilerWarning
 from app.core.utils import compute_short_hash
 
 if TYPE_CHECKING:
@@ -199,6 +200,12 @@ class StageBase(StageCommon):
         carries `summary` and `corner_cases`), None for a stage fixed entirely by
         config."""
         return None
+
+    def find_handle_compiler_warnings(self) -> list["CompilerWarning"]:
+        """What the module owning this type's config block has to say about the stage
+        as written. [] for a type whose behaviour is config a reviewer reads directly
+        — an enrich's keys, a union's inputs — with no prose standing in for it."""
+        return []
 
     def llm_reply_schema(self) -> Optional[TableSchema]:
         """What an llm_transform's model reply itself must carry; None for every

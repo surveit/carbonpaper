@@ -10,8 +10,9 @@ from pydantic import Field
 
 from app.models.schema import StageConfig
 from app.models.stage_base import StageBase, StageInput, StageType
-from app.models.stages.code import PythonFunction
+from app.models.stages.code import PythonFunction, find_python_function_warnings
 from app.models.stages.shared import COLUMN_ISSUE, resolve_input_columns
+from app.models.stages.warnings import CompilerWarning
 
 
 class PublishFormat(str, Enum):
@@ -58,6 +59,9 @@ class PublishStage(StageBase):
 
     def find_authored_code_block(self) -> PythonFunction:
         return self.function
+
+    def find_handle_compiler_warnings(self) -> list[CompilerWarning]:
+        return find_python_function_warnings(self, self.function)
 
 
 def find_publish_column_issues(stage: "PublishStage") -> list[str]:
