@@ -11,7 +11,8 @@ import pytest
 
 import pydantic
 
-from app.models import Stage
+from app.core.errors import ReviewGuideValidationError
+from app.models import ReviewGuide, ReviewGuideStep, Stage
 from app.core.persistence import get_store
 from app.services import loader, node_review
 from app.services.loader import WorkflowLoadError
@@ -23,6 +24,7 @@ from app.services.versioning import (
     load_version,
     load_version_stages,
     publish_version,
+    save_version_guide,
 )
 
 # Every input declares the schema it expects and every non-publish stage declares
@@ -286,3 +288,135 @@ def test_create_version_from_stages_invalid_raises_and_writes_nothing(tmp_path):
             tmp_path, [dangling_input], message="bad", reviewer="ada",
         )
     assert list_versions(tmp_path) == []
+
+
+# ── the version's review guide ───────────────────────────────────────────────
+
+_TALLY_STAGE = {
+    "id": "tally", "name": "Tally", "type": "input_data",
+    "connector": {"kind": "file"},
+    "output_schema": _ROWS_SCHEMA,
+}
+
+
+def _two_stage_version(project_dir: Path) -> str:
+    """A stored two-stage version, so a guide can place one stage and leave the
+    other unnarrated."""
+    return create_version_from_stages(
+        project_dir, [_LOAD_STAGE, _TALLY_STAGE], message="two", reviewer="ada",
+    ).version_id
+
+
+def _guide(step_ids: list[str], unnarrated: list[str]) -> ReviewGuide:
+    return ReviewGuide(
+        steps=[ReviewGuideStep(title="Load the docs", prose="Reads `doc_id`.",
+                               stage_ids=step_ids)],
+        unnarrated=unnarrated,
+    )
+
+
+def test_save_version_guide_round_trips(tmp_path):
+    """The stored guide comes back off the version unchanged — steps in order,
+    prose and stage_ids intact."""
+    vid = _two_stage_version(tmp_path)
+    saved = save_version_guide(tmp_path, vid, _guide(["load"], ["tally"]))
+
+    assert saved.guide is not None
+    reloaded = load_version(tmp_path, vid)
+    assert reloaded.guide == _guide(["load"], ["tally"])
+    assert [step.title for step in reloaded.guide.steps] == ["Load the docs"]
+
+
+def test_save_version_guide_replaces_an_earlier_guide(tmp_path):
+    vid = _two_stage_version(tmp_path)
+    save_version_guide(tmp_path, vid, _guide(["load"], ["tally"]))
+    save_version_guide(tmp_path, vid, _guide(["load", "tally"], []))
+
+    guide = load_version(tmp_path, vid).guide
+    assert guide is not None
+    assert guide.unnarrated == []
+    assert guide.collect_step_stage_ids() == ["load", "tally"]
+
+
+def test_save_version_guide_rejects_an_unknown_id_in_a_step(tmp_path):
+    vid = _two_stage_version(tmp_path)
+    with pytest.raises(ReviewGuideValidationError, match="ghost"):
+        save_version_guide(tmp_path, vid, _guide(["load", "ghost"], ["tally"]))
+    assert load_version(tmp_path, vid).guide is None
+
+
+def test_save_version_guide_rejects_an_unknown_id_in_unnarrated(tmp_path):
+    vid = _two_stage_version(tmp_path)
+    with pytest.raises(ReviewGuideValidationError, match="ghost"):
+        save_version_guide(tmp_path, vid, _guide(["load"], ["tally", "ghost"]))
+    assert load_version(tmp_path, vid).guide is None
+
+
+def test_save_version_guide_rejects_a_stage_accounted_for_nowhere(tmp_path):
+    """A version stage in neither a step nor `unnarrated` is a silent omission —
+    rejected, naming the stage, so leaving it out has to be said out loud."""
+    vid = _two_stage_version(tmp_path)
+    with pytest.raises(ReviewGuideValidationError, match="tally"):
+        save_version_guide(tmp_path, vid, _guide(["load"], []))
+    assert load_version(tmp_path, vid).guide is None
+
+
+def test_save_version_guide_rejects_a_stage_both_narrated_and_unnarrated(tmp_path):
+    vid = _two_stage_version(tmp_path)
+    with pytest.raises(ReviewGuideValidationError, match="load"):
+        save_version_guide(tmp_path, vid, _guide(["load", "tally"], ["load"]))
+    assert load_version(tmp_path, vid).guide is None
+
+
+def test_save_version_guide_rejects_a_stage_narrated_by_two_steps(tmp_path):
+    vid = _two_stage_version(tmp_path)
+    two_steps = ReviewGuide(
+        steps=[
+            ReviewGuideStep(title="First", prose="a", stage_ids=["load"]),
+            ReviewGuideStep(title="Second", prose="b", stage_ids=["load", "tally"]),
+        ],
+    )
+    with pytest.raises(ReviewGuideValidationError, match="more than once"):
+        save_version_guide(tmp_path, vid, two_steps)
+    assert load_version(tmp_path, vid).guide is None
+
+
+def test_save_version_guide_reports_every_offending_id_at_once(tmp_path):
+    """One rejection message carries every problem — the author fixes the guide in
+    one pass rather than one re-submit per bad id."""
+    vid = _two_stage_version(tmp_path)
+    with pytest.raises(ReviewGuideValidationError) as exc:
+        save_version_guide(tmp_path, vid, _guide(["ghost"], []))
+    message = str(exc.value)
+    assert "ghost" in message and "tally" in message and "load" in message
+
+
+def test_save_version_guide_unknown_version_raises_file_not_found(tmp_path):
+    with pytest.raises(FileNotFoundError):
+        save_version_guide(tmp_path, "nope", _guide([], []))
+
+
+def test_a_version_without_a_guide_stores_no_guide_key(tmp_path):
+    """DUMP_OPTS excludes None, so an unguided version's document carries no
+    `guide` key at all — the same shape as a document written before the field
+    existed (below)."""
+    _seed(tmp_path)
+    vid = create_version_from_disk(tmp_path, message="x", reviewer="ada").version_id
+    stored = get_store().read("workflow_version", f"{tmp_path.name}/{vid}")
+    assert "guide" not in stored
+    assert load_version(tmp_path, vid).guide is None
+
+
+def test_stored_version_predating_the_guide_field_still_loads(tmp_path):
+    """A WorkflowVersion-shaped dict with no `guide` key, written straight to the
+    store, loads with guide None — no migration needed for versions stored before
+    the field existed."""
+    vid = "20260101T000000"
+    data = {
+        "id": f"{tmp_path.name}/{vid}", "version_id": vid,
+        "created_at": "2026-01-01T00:00:00", "parent_version": None,
+        "message": "legacy", "reviewer": "human",
+        "stages": [], "schemas": [], "published": False,
+    }
+    get_store().write("workflow_version", f"{tmp_path.name}/{vid}", data)
+    assert load_version(tmp_path, vid).guide is None

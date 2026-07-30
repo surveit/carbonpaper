@@ -7,6 +7,7 @@ from app.models.node_contract_notes import (
     CODE_SUMMARY_CONTRACT_NOTE,
     HUMAN_REVIEW_QUEUE_CONTRACT_NOTE,
 )
+from app.models.review_guide import ReviewGuide, ReviewGuideStep
 from app.models.schema import (
     Column,
     FunctionKind,
@@ -323,7 +324,7 @@ for _type_name in CODE_CARRYING_TYPES:
 NODE_TYPE_NAMES: set[str] = set(NODE_TYPES)
 
 __all__ = [
-    "Coverage",
+    "Coverage", "ReviewGuide", "ReviewGuideStep",
     "StageType", "ConnectorKind", "FileFormat", "AggFormula",
     "FunctionKind", "PublishFormat", "is_valid_column_type",
     "SourceRef", "Column", "TableSchema", "Connector", "LLMConfig",
