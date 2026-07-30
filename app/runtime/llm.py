@@ -21,6 +21,8 @@ from app.models import LLMConfig
 from .options import (
     DEFAULT_MODEL,
     DEFAULT_TIMEOUT_S,
+    RESEARCH_MAX_TURNS,
+    RESEARCH_TIMEOUT_S,
     require_agent_backend,
 )
 from .run_log import (
@@ -98,15 +100,11 @@ def call_llm(
     tests that mock it) are unchanged."""
     if not llm_config.prompt_data_template:
         raise LLMError(f"stage {stage_id}: llm_transform has no prompt_data_template")
-    if llm_config.tools:
-        raise LLMError(
-            f"stage {stage_id}: llm.tools is not supported by the agent backend"
-        )
     task = render_prompt(llm_config.prompt_data_template, input_row)
     model_name = str(model or llm_config.model or DEFAULT_MODEL)
     return _run_agent(
         _compose_system(llm_config.prompt_instructions), task, reply_model, model_name,
-        llm_config.max_retries, usage_out,
+        llm_config.max_retries, usage_out, tools=llm_config.tools,
     )
 
 
@@ -127,6 +125,8 @@ def call_llm_batch(
     `instructions`, and passes a list-of-items `reply_schema`. Returns the
     validated `{"results": [...]}` as a plain dict."""
     model_name = str(model or llm_config.model or DEFAULT_MODEL)
+    # No tools here by construction: LLMConfig refuses tools with batch_size > 1,
+    # so a research stage never reaches the batch driver.
     return _run_agent(
         _compose_system(instructions), task, reply_schema, model_name,
         llm_config.max_retries, usage_out,
@@ -146,12 +146,18 @@ def _run_agent(
     model_name: str,
     max_retries: int,
     usage_out: list[LlmUsage] | None,
+    tools: list[str] | None = None,
 ) -> dict[str, Any]:
     """Run the structured-output Agent to a validated `target_schema`, dumped to a
     dict. `max_retries` handles TRANSIENT backend failures (a dropped CLI
     connection, a timeout) — a fresh Agent per attempt, every attempt's usage
     (success or failure) recorded, and the LAST failure re-raised so the caller
-    records a real error rather than a fabricated reply."""
+    records a real error rather than a fabricated reply.
+
+    `tools` grants the agent research tools alongside submit_answer. Granting any
+    switches the row onto the research budget — a much longer timeout and a much
+    higher turn cap — because searching and reading documents is the work, not
+    overhead on top of it."""
     require_agent_backend()
     # The run log's detail tier for whatever row/chunk is bound (nothing, outside
     # a logged run). The sink is captured HERE, on the caller's own thread, so it
@@ -159,6 +165,8 @@ def _run_agent(
     emit_llm_detail(LLM_PROMPT, text=task)
     forward = _forward_agent_events(current_detail_sink())
     attempts = max(1, (max_retries or 0) + 1)
+    researching = bool(tools)
+    timeout_s = RESEARCH_TIMEOUT_S if researching else DEFAULT_TIMEOUT_S
     last_exc: Exception | None = None
     for attempt in range(attempts):
         agent: Agent[BaseModel] = Agent(
@@ -166,10 +174,12 @@ def _run_agent(
             target_schema=target_schema,
             task=task,
             model=model_name,
+            extra_tools=list(tools or []),
+            max_turns=RESEARCH_MAX_TURNS if researching else None,
         )
         try:
             answer = run_sync(
-                asyncio.wait_for(agent.run(forward), timeout=DEFAULT_TIMEOUT_S)
+                asyncio.wait_for(agent.run(forward), timeout=timeout_s)
             )
             _record_usage(usage_out, agent)
             return answer.model_dump(mode="json")

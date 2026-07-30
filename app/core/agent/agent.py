@@ -45,12 +45,22 @@ class Agent(Generic[Model]):
         task: str,
         model: str = CLI_MODEL,
         max_attempts: int = 4,
+        extra_tools: list[str] | None = None,
+        max_turns: int | None = None,
     ) -> None:
         self._system_prompt = system_prompt
         self._target_schema = target_schema
         self._task = task
         self._model = model
         self._max_attempts = max_attempts
+        # Tools the agent may use BESIDES submit_answer. Empty for an agent that
+        # answers from its task alone; a research agent is granted search/fetch/read
+        # tools here. The caller owns the decision — this class does not police
+        # which names are grantable (see models.stages.llm_transform.GRANTABLE_TOOLS).
+        self._extra_tools = list(extra_tools or [])
+        # Turn cap. A research agent needs many more turns than a submit-only one,
+        # because every search and fetch costs a turn.
+        self._max_turns = max_turns
         # Per-run capture state, written by submit_answer during the run.
         self._answer: Model | None = None
         self._attempts = 0
@@ -148,7 +158,9 @@ class Agent(Generic[Model]):
         return ClaudeAgentSdkEngine(
             system_prompt=self._system_prompt,
             mcp_server=server,
-            allowed_tools=allowed,
+            # submit_answer stays first: it is the only way an answer is recorded,
+            # with or without research tools alongside it.
+            allowed_tools=allowed + self._extra_tools,
             model=self._model,
-            max_turns=self._max_attempts + 2,
+            max_turns=self._max_turns or (self._max_attempts + 2),
         )
