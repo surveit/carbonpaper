@@ -17,6 +17,7 @@ from pydantic import BaseModel
 from app.core.frames import list_rows
 from app.models import Stage, TableSchema
 from app.models.stage import StageType
+from app.models.stages.inner import scoped_row_schemas
 from app.models.stages.stage_tests import STAGE_TEST_TYPES, StageTest
 from app.runtime.context import RunContext
 from app.runtime.stages import HANDLERS
@@ -202,19 +203,27 @@ def _validate_test_against_schemas(
     """Schema-lint the test itself (error-severity issues only): its input
     rows against each declared input schema, its expected rows against the
     output schema. Returns a joined message, or None when the test is
-    well-formed."""
+    well-formed.
+
+    A stage declaring `inner.reads` is linted against the NARROWED schemas
+    instead: a case for it supplies the columns the stage reads and expects those
+    plus the columns it adds, so judging it against the whole row would reject
+    exactly the readable case the read-set exists to allow."""
+    scoped = scoped_row_schemas(stage)
+    input_schema, output_schema = scoped if scoped else (None, stage.output_schema)
     problems: list[str] = []
     for ref in stage.inputs:
         report = validate_dataframe(
-            input_frames[ref.id], ref.table_schema, stage_id=stage.id, phase="input"
+            input_frames[ref.id], input_schema or ref.table_schema,
+            stage_id=stage.id, phase="input"
         )
         problems += [
             f"input {ref.id}: {issue.message}"
             for issue in report.issues if issue.severity == Severity.error
         ]
-    expected_frame = _build_frame(test.expected, stage.output_schema)
+    expected_frame = _build_frame(test.expected, output_schema)
     report = validate_dataframe(
-        expected_frame, stage.output_schema, stage_id=stage.id, phase="output"
+        expected_frame, output_schema, stage_id=stage.id, phase="output"
     )
     problems += [
         f"expected rows: {issue.message}"
@@ -227,7 +236,12 @@ def _compare(stage: Stage, test: StageTest, actual: pd.DataFrame) -> StageTestRe
     # Python transforms always declare their output schema; publish (the
     # schema-less terminal stage) cannot carry tests.
     assert stage.output_schema is not None
-    columns = [column.name for column in stage.output_schema.columns]
+    # Compare over the narrowed row when the stage declares a read-set: the case
+    # only ever spoke about those columns, so holding it to the passthrough ones
+    # would diff cells it never claimed anything about.
+    scoped = scoped_row_schemas(stage)
+    compared = scoped[1] if scoped else stage.output_schema
+    columns = [column.name for column in compared.columns]
     expected_rows = [_select_cells(row, columns) for row in test.expected]
     actual_rows = [_select_cells(row, columns) for row in list_rows(actual)]
     if len(expected_rows) != len(actual_rows):

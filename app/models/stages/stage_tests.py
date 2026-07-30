@@ -95,6 +95,27 @@ def validate_test_rows(
         raise ValueError("; ".join(problems))
 
 
+def build_stage_tests_model_for_stage(stage: Any) -> type[BaseModel]:
+    """`build_stage_tests_model` bound to one `Stage`, narrowed to its declared
+    read-set when it has one — so an agent authoring cases for a stage that reads
+    2 of 16 columns is required to write 2-column rows, not 16-column ones."""
+    from app.models.stages.inner import scoped_row_schemas
+
+    scoped = scoped_row_schemas(stage)
+    if scoped is None:
+        return build_stage_tests_model(
+            stage.type,
+            {ref.id: ref.table_schema for ref in stage.inputs},
+            stage.output_schema,
+        )
+    input_row, expected_row = scoped
+    return build_stage_tests_model(
+        stage.type,
+        {ref.id: input_row for ref in stage.inputs},
+        expected_row,
+    )
+
+
 def build_stage_tests_model(
     stage_type: str,
     input_schemas: dict[str, TableSchema],

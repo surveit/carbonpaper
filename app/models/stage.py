@@ -32,6 +32,15 @@ from app.models.schema import (
 )
 from app.models.stages.code import validate_inline_function_code
 from app.models.stages.filter_rows import FilterConfig
+from app.models.stages.inner import (
+    InnerTransform,
+    compute_inner_adds,
+    find_inner_transform_issues,
+)
+from app.models.stages.llm_transform import (
+    find_additive_shape_issues,
+    find_primary_key_issues,
+)
 from app.models.stages.stage_tests import StageTest, validate_stage_tests
 from app.models.stages.union import UnionConfig
 from app.core.prompt_template import find_template_fields
@@ -419,6 +428,9 @@ class StageDraft(_Base):
     name: str
     inputs: list[StageInput] = Field(default_factory=list)
     output_schema: Optional[TableSchema] = None
+    # Which input columns a 1:1 stage READS — the half of its schema contract no
+    # derivation can recover. See app.models.stages.inner.
+    inner: Optional[InnerTransform] = None
 
     # executable handles (exactly one populated, per type — enforced by Stage)
     connector: Optional[Connector] = None
@@ -598,6 +610,26 @@ class Stage(StageDraft):
         return self
 
     @model_validator(mode="after")
+    def _inner_transform_resolves(self) -> "Stage":
+        """A declared `inner` must describe a transform of this stage's input."""
+        issues = find_inner_transform_issues(self)
+        if issues:
+            raise ValueError("; ".join(issues))
+        return self
+
+    def inner_adds(self) -> Optional[TableSchema]:
+        """The columns this stage APPENDS to its input, passthrough columns
+        excluded — see app.models.stages.inner.compute_inner_adds."""
+        return compute_inner_adds(self)
+
+    def inner_reads(self) -> Optional[list[str]]:
+        """The input columns this stage may look at, or None when it declares no
+        `inner`. None means EVERY input column — what a stage written before
+        `inner` existed gets — so a caller that scopes what the stage is shown
+        must treat it as "show everything", never as the empty set."""
+        return None if self.inner is None else list(self.inner.reads)
+
+    @model_validator(mode="after")
     def _llm_transform_one_to_one(self) -> "Stage":
         """An llm_transform maps one input row to one output row, so on its
         DECLARED schemas alone it must: take exactly one input; declare a
@@ -620,8 +652,8 @@ class Stage(StageDraft):
         input_schema = self.inputs[0].table_schema
         output_schema = self.output_schema
         assert output_schema is not None  # _schemas_declared guarantees this off publish
-        issues = _find_primary_key_issues(input_schema, output_schema)
-        issues.extend(_find_additive_shape_issues(input_schema, output_schema))
+        issues = find_primary_key_issues(input_schema, output_schema)
+        issues.extend(find_additive_shape_issues(input_schema, output_schema))
         if issues:
             raise ValueError("llm_transform not strictly 1:1: " + "; ".join(issues))
         return self
@@ -732,40 +764,6 @@ class Stage(StageDraft):
                                  app.runtime.lineage, for the trace to follow.
         """
         return is_grain_and_order_preserving(self.type)
-
-
-# ── llm_transform's 1:1 contract ─────────────────────────────────────────────
-# Helpers for Stage._llm_transform_one_to_one: it has already confirmed
-# `input_schema`/`output_schema` are both declared before calling these.
-
-
-def _find_primary_key_issues(input_schema: TableSchema, output_schema: TableSchema) -> list[str]:
-    issues: list[str] = []
-    input_pk, output_pk = input_schema.primary_key, output_schema.primary_key
-    if not input_pk:
-        issues.append("input schema declares no primary_key")
-    if not output_pk:
-        issues.append("output_schema declares no primary_key")
-    if input_pk and output_pk and set(input_pk) != set(output_pk):
-        issues.append(
-            f"input primary_key {input_pk} != output primary_key {output_pk}"
-        )
-    return issues
-
-
-def _find_additive_shape_issues(input_schema: TableSchema, output_schema: TableSchema) -> list[str]:
-    issues: list[str] = []
-    if not input_schema.is_subset_of(output_schema):
-        issues.append(
-            "output must keep every input column unchanged (a transform is "
-            f"additive: output ⊇ input); input columns "
-            f"{[c.name for c in input_schema.columns]} vs output columns "
-            f"{[c.name for c in output_schema.columns]}"
-        )
-    input_names = {c.name for c in input_schema.columns}
-    if not any(c.name not in input_names for c in output_schema.columns):
-        issues.append("output_schema adds no columns beyond the input")
-    return issues
 
 
 def validate_stage(stage: dict[str, Any]) -> list[str]:
