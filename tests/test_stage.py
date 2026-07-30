@@ -245,13 +245,16 @@ def test_join_min_inputs(t):
 @pytest.mark.parametrize("t", ["enrich", "expand"])
 def test_join_rejects_a_third_input(t):
     """A join reads inputs[0] and inputs[1] only, so a third declared input
-    would be silently ignored — refuse it instead."""
-    msg = _rejection_message(S(
-        id="j", type=t,
-        inputs=[{"id": i, "schema": _K_SCHEMA} for i in ("a", "b", "c")],
-        output_schema=_K_SCHEMA, join={"keys": [{"left": "k", "right": "k"}]},
-    ))
-    assert "takes <= 2 input(s), got 3" in msg
+    would be silently ignored — refuse it instead. Arity is declarative
+    (`max_length=2` on the field), so the refusal is a `too_long` error on
+    `inputs` rather than a hand-written message."""
+    with pytest.raises(ValidationError) as err:
+        m.parse_stage(S(
+            id="j", type=t,
+            inputs=[{"id": i, "schema": _K_SCHEMA} for i in ("a", "b", "c")],
+            output_schema=_K_SCHEMA, join={"keys": [{"left": "k", "right": "k"}]},
+        ))
+    assert [(e["loc"], e["type"]) for e in err.value.errors()] == [((t, "inputs"), "too_long")]
 
 
 # ── tightened fields ─────────────────────────────────────────────────────────

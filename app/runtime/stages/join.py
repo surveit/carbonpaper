@@ -29,10 +29,10 @@ def _join_reference_into_subject(
     inputs: dict[str, pd.DataFrame],
     validate: Optional[Literal["m:1"]],
 ) -> pd.DataFrame:
-    stage = narrow_stage(stage, JoinStage)
-    join_cfg = stage.join
-    subject = inputs[stage.inputs[0].id]
-    reference_id = stage.inputs[1].id
+    join_stage = narrow_stage(stage, JoinStage)
+    join_cfg = join_stage.join
+    subject = inputs[join_stage.inputs[0].id]
+    reference_id = join_stage.inputs[1].id
     reference = inputs[reference_id]
     keys = join_cfg.keys
     # how="left": every subject row survives, an unmatched one carrying nulls
@@ -48,7 +48,7 @@ def _join_reference_into_subject(
             validate=validate,
         )
     except pd.errors.MergeError as exc:
-        raise ValueError(_describe_cardinality_failure(stage, reference_id, exc)) from exc
+        raise ValueError(_describe_cardinality_failure(join_stage, reference_id, exc)) from exc
 
     select = join_cfg.select
     if select:

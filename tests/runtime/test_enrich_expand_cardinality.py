@@ -6,7 +6,7 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from app.models import parse_stage
+from app.models import Stage, parse_stage
 from app.runtime.stages.join import handle_enrich, handle_expand
 from conftest import make_run_context
 
