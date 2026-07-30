@@ -50,10 +50,19 @@ class StageType(str, Enum):
     #                           (group-by, pivot, dedup, multi-input merge).
     python_row_function = "python_row_function"
     python_frame_function = "python_frame_function"
-    # Trailing underscore: a member literally named `join` would shadow
-    # str.join on every instance. The value — what a compiled stage declares and
-    # StageType("join") looks up — is still "join".
-    join_ = "join"
+    # Two LEFT joins over exactly two inputs (inputs[0] = subject,
+    # inputs[1] = reference), differing ONLY in the cardinality they permit —
+    # which is why the TYPE carries it rather than a config field:
+    #   enrich — the reference must be unique on the key (m:1). The runtime asks
+    #            pandas to VERIFY that, so a non-unique reference fails the run
+    #            instead of silently multiplying rows.
+    #   expand — the reference may repeat (m:n): deliberate fan-out.
+    # Neither ever drops a subject row: an unmatched subject survives carrying
+    # nulls. Dropping rows is filter_rows' job, because filter_rows records
+    # per-row provenance and a join that silently discarded rows would be
+    # invisible downstream.
+    enrich = "enrich"
+    expand = "expand"
     aggregate = "aggregate"
     human_review_queue = "human_review_queue"
     publish = "publish"
@@ -105,14 +114,18 @@ class StageInput(_Base):
 # ── Stage ────────────────────────────────────────────────────────────────────
 # type → which handle block it must carry, plus input arity. Keyed by the plain
 # value string, not the enum member: with `use_enum_values`, `self.type` is a
-# str at runtime, and str-enum members hash by *name* (StageType.join_ hashes
-# as "join_", not "join") — a member-keyed dict would silently miss the lookup.
+# str at runtime, and str-enum members hash by *name*, which differs from the
+# value for any member spelled with a trailing underscore — a member-keyed dict
+# would silently miss the lookup.
 _TYPE_SPEC: dict[str, dict[str, Any]] = {
     "input_data":            {"handle": "connector", "requires_inputs": False, "min_inputs": 0},
     "llm_transform":         {"handle": "llm",       "requires_inputs": True,  "min_inputs": 1},
     "python_row_function":   {"handle": "function",  "requires_inputs": True,  "min_inputs": 1, "max_inputs": 1},
     "python_frame_function": {"handle": "function",  "requires_inputs": True,  "min_inputs": 1},
-    "join":                  {"handle": "join",      "requires_inputs": True,  "min_inputs": 2},
+    # max_inputs 2: the join reads inputs[0] and inputs[1] only, so a third
+    # declared input would be silently ignored.
+    "enrich":                {"handle": "join",      "requires_inputs": True,  "min_inputs": 2, "max_inputs": 2},
+    "expand":                {"handle": "join",      "requires_inputs": True,  "min_inputs": 2, "max_inputs": 2},
     "aggregate":             {"handle": "aggregate", "requires_inputs": True,  "min_inputs": 1},
     "human_review_queue":    {"handle": "queue",     "requires_inputs": True,  "min_inputs": 1},
     "publish":               {"handle": "publish",   "also_requires": ["function"], "requires_inputs": True, "min_inputs": 1},
@@ -315,7 +328,8 @@ class Stage(StageDraft):
         if max_inputs is not None and len(self.inputs) > max_inputs:
             raise ValueError(
                 f"type `{self.type}` takes <= {max_inputs} input(s), got {len(self.inputs)} "
-                f"(more than one input is a join, or use python_frame_function)"
+                f"(to combine data from another input, use enrich/expand — which take "
+                f"exactly two — or python_frame_function for more)"
             )
         return self
 
@@ -383,7 +397,8 @@ class Stage(StageDraft):
     @model_validator(mode="after")
     def _output_schema_deliverable(self) -> "Stage":
         """A declared output_schema must be deliverable by this stage's own
-        handle: for the types whose output is fixed by config (join, aggregate),
+        handle: for the types whose output is fixed by config (enrich/expand,
+        aggregate),
         every declared column must be producible by name, with the declared type
         matching the derivation where it can be known (see
         app.models.stages.find_output_schema_issues). EDGE-ONLY and per-stage,
@@ -418,7 +433,8 @@ class Stage(StageDraft):
                                  produces one: a rejected row stays, carrying the
                                  rejection. Removing rows is a downstream filter
                                  stage's job, not this one's.
-          - join (fan-out) / aggregate (fan-in) → NO; grain changes are deferred
+          - enrich / expand (a join may fan out) / aggregate (fan-in) → NO;
+                                 grain changes are deferred
           - publish            → NO — handle_publish runs an authored function whose
                                  output is a table of artifact paths, not the input
                                  rows (and it is terminal — nothing downstream).

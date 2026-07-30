@@ -31,7 +31,9 @@ validate the output, write `outputs/<stage>.parquet`, append to `manifest.json`.
 ## `stages/` — one module per stage type (`HANDLERS`)
 `input_data` connector `file` (csv/parquet/json/geojson; `_read_geojson` flattens a
 FeatureCollection); `python_row_function`/`python_frame_function`
-(`function: {kind: module|inline}`, row variant mapped per row); `join`; `aggregate`;
+(`function: {kind: module|inline}`, row variant mapped per row); `enrich`/`expand`
+(left join of inputs[1] into inputs[0]; `enrich` verifies m:1 and fails the run on a
+non-unique reference, `expand` allows m:n fan-out); `aggregate`;
 `llm_transform` (row-mapped, bounded parallelism);
 `human_review_queue` (row fingerprint → cached decision or halt);
 `publish` (a `function` module that writes artifacts).

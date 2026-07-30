@@ -63,13 +63,13 @@ def test_no_summary_is_unsummarised():
 
 
 def test_a_stage_whose_behaviour_is_not_code_is_not_applicable():
-    """A join's keys are config a reviewer reads directly — there is no authored
+    """An enrich's keys are config a reviewer reads directly — there is no authored
     description standing between them and the behaviour, so nothing to certify."""
     stage = m.Stage.model_validate({
-        "id": "j", "name": "J", "type": "join",
+        "id": "j", "name": "J", "type": "enrich",
         "inputs": [{"id": "a", "schema": _SCHEMA}, {"id": "b", "schema": _SCHEMA}],
         "output_schema": _SCHEMA,
-        "join": {"type": "inner", "keys": [{"left": "id", "right": "id"}]},
+        "join": {"keys": [{"left": "id", "right": "id"}]},
     })
     assert build_certification(stage, []).status == "n/a"
 

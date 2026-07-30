@@ -22,10 +22,10 @@ _PK_ID_SCHEMA = {"columns": [{"name": "id", "type": "str"}], "primary_key": ["id
 _K_SCHEMA = {"columns": [{"name": "k", "type": "str"}]}
 
 
-def _build_join_on_k(*, join):
-    """A two-input join on `k`, declared end to end, so a test can vary only
+def _build_enrich_on_k(*, join):
+    """A two-input enrich on `k`, declared end to end, so a test can vary only
     the `join` block."""
-    return S(id="j", type="join",
+    return S(id="j", type="enrich",
              inputs=[{"id": "a", "schema": _K_SCHEMA}, {"id": "b", "schema": _K_SCHEMA}],
              output_schema=_K_SCHEMA, join=join)
 
@@ -223,10 +223,23 @@ def test_unknown_type_raises():
         m.Stage.model_validate(S(id="x", type="frobnicate"))
 
 
-def test_join_min_inputs():
+@pytest.mark.parametrize("t", ["enrich", "expand"])
+def test_join_min_inputs(t):
     with pytest.raises(ValidationError):
-        m.Stage.model_validate(S(id="j", type="join", inputs=[{"id": "a"}],
+        m.Stage.model_validate(S(id="j", type=t, inputs=[{"id": "a"}],
                                  join={"keys": [{"left": "k", "right": "k"}]}))
+
+
+@pytest.mark.parametrize("t", ["enrich", "expand"])
+def test_join_rejects_a_third_input(t):
+    """A join reads inputs[0] and inputs[1] only, so a third declared input
+    would be silently ignored — refuse it instead."""
+    msg = _rejection_message(S(
+        id="j", type=t,
+        inputs=[{"id": i, "schema": _K_SCHEMA} for i in ("a", "b", "c")],
+        output_schema=_K_SCHEMA, join={"keys": [{"left": "k", "right": "k"}]},
+    ))
+    assert "takes <= 2 input(s), got 3" in msg
 
 
 # ── tightened fields ─────────────────────────────────────────────────────────
@@ -236,7 +249,7 @@ def test_name_is_required():
 
 
 def test_input_ids_property():
-    s = m.Stage.model_validate(_build_join_on_k(join={"keys": [{"left": "k", "right": "k"}]}))
+    s = m.Stage.model_validate(_build_enrich_on_k(join={"keys": [{"left": "k", "right": "k"}]}))
     assert s.input_ids == ["a", "b"]
 
 
@@ -260,18 +273,19 @@ def test_queue_needs_no_hash_source_declared():
 
 
 # ── fixes folded into the model ──────────────────────────────────────────────
-def test_join_accepts_on():
-    m.Stage.model_validate(_build_join_on_k(join={"on": [{"left": "k", "right": "k"}]}))
-
-
 def test_join_accepts_keys():
-    m.Stage.model_validate(_build_join_on_k(join={"keys": [{"left": "k", "right": "k"}]}))
+    m.Stage.model_validate(_build_enrich_on_k(join={"keys": [{"left": "k", "right": "k"}]}))
 
 
-def test_join_neither_raises():
+def test_join_without_keys_raises():
     with pytest.raises(ValidationError):
-        m.Stage.model_validate(S(id="j", type="join", inputs=[{"id": "a"}, {"id": "b"}],
-                                 join={"type": "inner"}))
+        m.Stage.model_validate(S(id="j", type="enrich", inputs=[{"id": "a"}, {"id": "b"}],
+                                 join={}))
+
+
+def test_join_with_empty_keys_raises():
+    with pytest.raises(ValidationError):
+        m.Stage.model_validate(_build_enrich_on_k(join={"keys": []}))
 
 
 def test_aggregate_output_column_required():
@@ -586,20 +600,23 @@ _RIGHT_SCHEMA = {"columns": [{"name": "id", "type": "str"}, {"name": "amount", "
 _HANDLE_BLOCK = {
     "python_row_function": {"function": _INLINE_ROW_FN},
     "python_frame_function": {"function": _INLINE_ROW_FN},
-    "join": {"join": {"keys": [{"left": "id", "right": "id"}]}},
+    "enrich": {"join": {"keys": [{"left": "id", "right": "id"}]}},
+    "expand": {"join": {"keys": [{"left": "id", "right": "id"}]}},
     "aggregate": {"aggregate": {"group_by": ["name"],
                                 "aggregations": [{"output_column": "n", "formula": "count"}]}},
     "human_review_queue": {"queue": {}},
     "publish": {"publish": {"format": "json"}, "function": _INLINE_ROW_FN},
 }
-_INPUT_IDS = {"join": ["facilities", "filings"]}
+_INPUT_IDS = {"enrich": ["facilities", "filings"], "expand": ["facilities", "filings"]}
 _OUTPUT_SCHEMA = {
-    "join": {"columns": [{"name": "id", "type": "str"}, {"name": "name", "type": "str"},
-                         {"name": "amount", "type": "int"}]},
+    "enrich": {"columns": [{"name": "id", "type": "str"}, {"name": "name", "type": "str"},
+                           {"name": "amount", "type": "int"}]},
+    "expand": {"columns": [{"name": "id", "type": "str"}, {"name": "name", "type": "str"},
+                           {"name": "amount", "type": "int"}]},
     "aggregate": {"columns": [{"name": "name", "type": "str"}, {"name": "n", "type": "int"}]},
 }
-NON_EXEMPT_TYPES = ["python_row_function", "python_frame_function", "join", "aggregate",
-                    "human_review_queue"]
+NON_EXEMPT_TYPES = ["python_row_function", "python_frame_function", "enrich", "expand",
+                    "aggregate", "human_review_queue"]
 
 
 def _schema_spec(stage_type, *, inputs_declared=True, declare_output=True):
@@ -651,7 +668,7 @@ def test_stage_rejects_missing_output_schema(t):
 
 
 def test_stage_locates_only_the_input_that_declares_no_schema():
-    msg = _rejection_message(_schema_spec("join", inputs_declared=[True, False]))
+    msg = _rejection_message(_schema_spec("enrich", inputs_declared=[True, False]))
     assert "inputs.1.schema" in msg
     assert "inputs.0.schema" not in msg
 

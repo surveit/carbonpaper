@@ -36,10 +36,10 @@ def _transform_of(stage: Stage | None) -> dict[str, Any]:
             if stage.llm else None
         )
         return {"kind": "llm", "detail": llm_detail}
-    if stage_type == StageType.join_.value:
-        pairs = (stage.join.keys or stage.join.on) if stage.join else None
+    if stage_type in (StageType.enrich.value, StageType.expand.value):
+        pairs = stage.join.keys if stage.join else None
         detail = ", ".join(f"{k.left}={k.right}" for k in pairs) if pairs else None
-        return {"kind": "join", "detail": detail}
+        return {"kind": stage_type, "detail": detail}
     return {"kind": stage_type, "detail": None}
 
 

@@ -1,13 +1,12 @@
-"""join stage: the handle config, plus column validation on both the input and
-output side — every join key's `.left`/`.right` must resolve against its side's
-stage input edge; and a declared output_schema (plus `select`) must be
-deliverable by the columns the merge actually produces."""
+"""enrich/expand stage: the shared join handle config, plus column validation on
+both the input and output side — every join key's `.left`/`.right` must resolve
+against its side's stage input edge; and a declared output_schema (plus
+`select`) must be deliverable by the columns the join actually produces."""
 from __future__ import annotations
 
-from enum import Enum
 from typing import TYPE_CHECKING, ClassVar, Optional
 
-from pydantic import Field, model_validator
+from pydantic import Field
 
 from app.models.schema import _Base
 from app.models.stages.shared import (
@@ -21,54 +20,39 @@ if TYPE_CHECKING:
     from app.models.stage import Stage
 
 
-class JoinType(str, Enum):
-    inner = "inner"
-    left = "left"
-    right = "right"
-    outer = "outer"
-
-
 class JoinKey(_Base):
     left: str
     right: str
 
 
 class JoinConfig(_Base):
-    """join handle. `keys` OR `on` is accepted.
+    """enrich/expand handle. Cardinality lives in the stage TYPE, not here.
 
-    The merged output contains: every LEFT column under its own name; each
+    The joined output contains: every LEFT column under its own name; each
     RIGHT column under its own name unless a left column shares it, in which
     case it appears as `<name>_r`; a key pair with the SAME name on both sides
     collapses into one column (there is no `<key>_r`). `select` and the
     stage's `output_schema` may only name these producible columns — anything
     else is rejected when the stage is saved."""
-    # Every field changes what this stage computes (join type, keys, kept
-    # columns) — see Stage.compute_definition_fingerprint.
-    FINGERPRINT_FIELDS: ClassVar[frozenset[str]] = frozenset({"type", "keys", "on", "select"})
+    # Every field changes what this stage computes (keys, kept columns) — see
+    # Stage.compute_definition_fingerprint.
+    FINGERPRINT_FIELDS: ClassVar[frozenset[str]] = frozenset({"keys", "select"})
     INCIDENTAL_FIELDS: ClassVar[frozenset[str]] = frozenset()
 
-    type: JoinType = JoinType.inner
-    keys: Optional[list[JoinKey]] = None
-    on: Optional[list[JoinKey]] = None
+    keys: list[JoinKey] = Field(min_length=1)
     select: Optional[list[str]] = Field(
         default=None,
         description=(
-            "Columns to keep, applied after the merge. Each entry must be a "
-            "producible merged column: a left column name, an uncollided right "
+            "Columns to keep, applied after the join. Each entry must be a "
+            "producible joined column: a left column name, an uncollided right "
             "column name, or `<name>_r` for a right column whose name a left "
             "column shares."
         ),
     )
 
-    @model_validator(mode="after")
-    def _need_keys_or_on(self) -> "JoinConfig":
-        if not (self.keys or self.on):
-            raise ValueError("join needs `keys` or `on`")
-        return self
-
 
 SELECT_UNPRODUCIBLE_ISSUE = (
-    "stage '{sid}': join.select references column '{col}' that the merge "
+    "stage '{sid}': join.select references column '{col}' that the {stype} "
     "cannot produce (producible columns: {cols})"
 )
 
@@ -77,11 +61,11 @@ def find_join_column_issues(stage: "Stage") -> list[str]:
     """Every join key whose `.left`/`.right` names a column absent from its
     resolved side's input."""
     join = stage.join
-    assert join is not None  # Stage._handle_for_type guarantees this for type="join"
+    assert join is not None  # Stage._handle_for_type guarantees this for enrich/expand
     left = resolve_input_columns(stage, 0)
     right = resolve_input_columns(stage, 1)
     issues: list[str] = []
-    for key in join.keys or join.on or []:
+    for key in join.keys:
         if key.left not in left:
             issues.append(
                 COLUMN_ISSUE.format(sid=stage.id, field="join key .left", col=key.left, cols=sorted(left))
@@ -97,22 +81,25 @@ def find_join_output_issues(stage: "Stage") -> list[str]:
     """Every declared output_schema column (and select entry) the join handle
     cannot deliver."""
     join = stage.join
-    assert join is not None  # Stage._handle_for_type guarantees this for type="join"
+    assert join is not None  # Stage._handle_for_type guarantees this for enrich/expand
     assert stage.output_schema is not None  # Stage._schemas_declared guarantees this off publish
     left = stage.inputs[0].table_schema
     right = stage.inputs[1].table_schema
-    merged = derive_join_output_types(join, left, right)
+    joined = derive_join_output_types(join, left, right)
+    stage_type = str(stage.type)
     issues = [
-        SELECT_UNPRODUCIBLE_ISSUE.format(sid=stage.id, col=entry, cols=sorted(merged))
+        SELECT_UNPRODUCIBLE_ISSUE.format(
+            sid=stage.id, col=entry, stype=stage_type, cols=sorted(joined)
+        )
         for entry in join.select or []
-        if entry not in merged
+        if entry not in joined
     ]
     effective = (
-        {name: merged[name] for name in join.select if name in merged}
-        if join.select else merged
+        {name: joined[name] for name in join.select if name in joined}
+        if join.select else joined
     )
     issues.extend(
-        find_declared_vs_derived_issues(stage.id, "join", stage.output_schema, effective)
+        find_declared_vs_derived_issues(stage.id, stage_type, stage.output_schema, effective)
     )
     return issues
 
@@ -120,19 +107,18 @@ def find_join_output_issues(stage: "Stage") -> list[str]:
 def derive_join_output_types(
     join: "JoinConfig", left: "TableSchema", right: "TableSchema"
 ) -> dict[str, str]:
-    """The columns the join handle's merge emits, each mapped to its type —
-    mirroring pandas merge(..., suffixes=("", "_r")): all left columns keep
+    """The columns the join handle emits, each mapped to its type — mirroring
+    pandas merge(..., suffixes=("", "_r")): all left columns keep
     their names and types; a right key whose pair shares the left key's name
     collapses into that left column; every other right column keeps its name
     unless it collides with a left column, in which case it appears as
     <name>_r. `select` projection is NOT applied here — the caller decides."""
-    keys = join.keys or join.on or []
-    collapsed_right_keys = {k.right for k in keys if k.left == k.right}
-    merged: dict[str, str] = {c.name: c.type for c in left.columns}
-    left_names = set(merged)
+    collapsed_right_keys = {k.right for k in join.keys if k.left == k.right}
+    joined: dict[str, str] = {c.name: c.type for c in left.columns}
+    left_names = set(joined)
     for column in right.columns:
         if column.name in collapsed_right_keys:
             continue
         name = column.name if column.name not in left_names else f"{column.name}_r"
-        merged[name] = column.type
-    return merged
+        joined[name] = column.type
+    return joined

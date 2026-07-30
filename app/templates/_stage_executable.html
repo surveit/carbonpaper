@@ -129,15 +129,17 @@
 
 {% if stage.join %}
 <section class="exec-block">
-    <h2>🔗 Join</h2>
-    <dl class="kv">
-        <dt>type</dt><dd><code>{{ stage.join.type }}</code></dd>
-    </dl>
-    <h3>keys</h3>
+    <h2>{% if stage.type == 'expand' %}🌿 Expand{% else %}🔗 Enrich{% endif %}</h2>
+    <p class="muted">{% if stage.type == 'expand' %}Left join, many-to-many: one subject row may come out as
+        several.{% else %}Left join, many-to-one: the reference is verified unique on the key, so the row
+        count and order are unchanged.{% endif %} Every subject row survives, an unmatched one carrying
+        nulls.</p>
+    <h3>keys <span class="muted">(subject = <code>{{ stage.inputs[0].id }}</code>, reference =
+        <code>{{ stage.inputs[1].id }}</code>)</span></h3>
     <table class="join-keys">
-        <thead><tr><th>left</th><th>right</th></tr></thead>
+        <thead><tr><th>subject</th><th>reference</th></tr></thead>
         <tbody>
-            {% for k in (stage.join.keys or stage.join.on or []) %}
+            {% for k in stage.join.keys %}
             <tr><td><code>{{ k.left }}</code></td><td><code>{{ k.right }}</code></td></tr>
             {% endfor %}
         </tbody>
