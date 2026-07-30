@@ -93,6 +93,40 @@ def _current_specs(project_dir: Path) -> dict[str, dict]:
     return {stage.id: stage_to_spec_dict(stage) for stage in workflow.stages}
 
 
+# The handles whose behaviour is authored code, so a reviewer cannot read the
+# stage without prose standing in for it — the two that carry `summary`.
+_AUTHORED_CODE_HANDLES = ("function", "filter")
+
+
+def _find_missing_summary_issues(candidate: dict) -> list[str]:
+    """Refuse to WRITE a code-carrying stage with no `summary` ([] otherwise).
+
+    Enforced here rather than on the model, and rather than inside
+    `validate_workflow_draft`: the model keeps `summary` optional and the draft
+    validator is shared with the loader, so requiring it in either place would
+    refuse every stage stored before the field existed, and every frozen version,
+    at load time. This is the authoring boundary — every write, from the node
+    editor, the MCP tools and the compiler agent alike, funnels through `_apply` —
+    so a stage can only ARRIVE without a description, never be created without one.
+
+    A prose instruction in the type's contract notes asks for the summary; this is
+    what makes it true. `corner_cases` is deliberately not required: a step may
+    genuinely have none, and an agent padding the list to satisfy a check would be
+    inventing behaviour."""
+    for handle in _AUTHORED_CODE_HANDLES:
+        block = candidate.get(handle)
+        if not isinstance(block, dict):
+            continue
+        if not (block.get("summary") or "").strip():
+            return [
+                f"`{handle}.summary` is required: this stage's behaviour is authored "
+                f"code, and the person reviewing it reads prose, not Python. Write one "
+                f"or two plain sentences saying what the step does — the rule, not the "
+                f"implementation — in the same edit as the code."
+            ]
+    return []
+
+
 def _strip_bookkeeping_keys(spec: dict) -> dict:
     """A submitted spec reduced to the keys the workflow stores — the form that
     goes into the in-memory `specs` map and onto disk."""
@@ -117,6 +151,7 @@ def _apply(project_dir: Path, specs: dict[str, dict], stage_id: str, candidate: 
 
     resulting = {**specs, stage_id: candidate}
     issues = validate_workflow_draft(list(resulting.values()))
+    issues += _find_missing_summary_issues(candidate)
     if issues:
         return EditStageResult(ok=False, issues=issues)
 

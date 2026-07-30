@@ -24,7 +24,7 @@ _LOAD = {
 _CLEAN = {
     "id": "clean", "name": "Clean", "type": "python_row_function",
     "inputs": [{"id": "load", "schema": _CLAIM}],
-    "function": {"kind": "inline",
+    "function": {"kind": "inline", "summary": "Test fixture step.",
                  "code": "def transform(row):\n    return {**row, 'cleaned': True}\n"},
     "output_schema": _CLEANED,
 }
@@ -40,7 +40,7 @@ _RANK = {
     "id": "rank", "name": "Rank", "type": "python_row_function",
     "inputs": [{"id": "score", "schema": {
         "columns": [{"name": "verdict", "type": "str", "nullable": True}]}}],
-    "function": {"kind": "inline",
+    "function": {"kind": "inline", "summary": "Test fixture step.",
                  "code": "def transform(row):\n    return {**row, 'rank': 1}\n"},
     "output_schema": {"columns": [
         {"name": "verdict", "type": "str", "nullable": True},
@@ -51,7 +51,7 @@ _REPORT = {
     "id": "report", "name": "Report", "type": "python_row_function",
     "inputs": [{"id": "rank", "schema": {
         "columns": [{"name": "rank", "type": "int", "nullable": False}]}}],
-    "function": {"kind": "inline",
+    "function": {"kind": "inline", "summary": "Test fixture step.",
                  "code": "def transform(row):\n    return {**row, 'note': 'x'}\n"},
     "output_schema": {"columns": [
         {"name": "rank", "type": "int", "nullable": False},
