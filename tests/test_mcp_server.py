@@ -71,6 +71,8 @@ def test_mcp_lists_the_authoring_tools(client):
         "generate_stage_tests",
         "run_stage_tests",
         "save_version",
+        "read_review_guide",
+        "write_review_guide",
     } <= names
 
 
@@ -478,6 +480,56 @@ def test_mcp_save_version_refuses_to_invent_a_project(tmp_path, monkeypatch):
     with pytest.raises(ValueError):
         server.save_version(project_id="no_such_project", message="nope")
     assert list(tmp_path.iterdir()) == []
+
+
+def _saved_version(tmp_path, monkeypatch) -> str:
+    from app.mcp import server
+    from app.services import workspace
+
+    workspace.set_projects_dir(tmp_path)
+    _write_compiled_workflow(tmp_path / "trail")
+    return server.save_version(project_id="trail", message="first cut")["version_id"]
+
+
+_GUIDE = {
+    "steps": [
+        {"title": "Double each amount", "prose": "Every `amount` is doubled as filed.",
+         "stage_ids": ["double"]},
+    ],
+    "unnarrated": ["load", "untested"],
+}
+
+
+def test_mcp_review_guide_round_trips_through_the_tool_boundary(tmp_path, monkeypatch):
+    """Driven through call_tool, because that is where the risk is: the guide arrives as
+    JSON the tool boundary must bind to a ReviewGuide, and comes back the same shape."""
+    from app.mcp import server
+
+    version_id = _saved_version(tmp_path, monkeypatch)
+    args = {"project_id": "trail", "version_id": version_id}
+    _content, before = asyncio.run(server.mcp.call_tool("read_review_guide", args))
+    assert before["result"] is None
+
+    asyncio.run(server.mcp.call_tool("write_review_guide", {**args, "guide": _GUIDE}))
+
+    _content, stored = asyncio.run(server.mcp.call_tool("read_review_guide", args))
+    assert stored["result"] == _GUIDE
+
+
+def test_mcp_write_review_guide_refuses_a_mismatch_naming_the_stage(tmp_path, monkeypatch):
+    """A guide that does not account for the version's stages is refused with the id
+    named, and the version keeps no guide rather than one that skips a stage."""
+    from app.mcp import server
+
+    version_id = _saved_version(tmp_path, monkeypatch)
+    args = {"project_id": "trail", "version_id": version_id}
+    partial = {"steps": _GUIDE["steps"], "unnarrated": ["load"]}  # 'untested' accounted for nowhere
+
+    with pytest.raises(Exception, match="untested"):
+        asyncio.run(server.mcp.call_tool("write_review_guide", {**args, "guide": partial}))
+
+    _content, stored = asyncio.run(server.mcp.call_tool("read_review_guide", args))
+    assert stored["result"] is None
 
 
 def test_read_tools_reject_unknown_project(tmp_path, monkeypatch):

@@ -30,8 +30,11 @@ _SYSTEM_PROMPT = (
     "blocks saving. When the proposal is finished, save_version once, with a message "
     "for the human reviewer explaining what changed and why. The resulting version "
     "is born UNPUBLISHED: only a human publishes it, and runs execute published "
-    "versions only. For a single-field tweak to the live workflow, edit_stage "
-    "remains the direct path."
+    "versions only. A workflow does not explain itself, so once it needs the human to "
+    "understand it before they act on it, call write_review_guide for the version "
+    "save_version returned: an ordered walkthrough, in the methodology's own terms, "
+    "saying what each part does and what a reviewer should check. For a "
+    "single-field tweak to the live workflow, edit_stage remains the direct path."
 )
 
 
