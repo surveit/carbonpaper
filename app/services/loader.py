@@ -13,9 +13,9 @@ from typing import Any
 
 from pydantic import ValidationError
 
-from app.core.paths import repo_root
 from app.models.workflow import Workflow, validate_workflow
 from app.models.stage import Stage
+from app.models.stages.module_source import resolve_module_source_path
 from app.core.utils import format_errors
 
 from .errors import WorkflowLoadError
@@ -121,12 +121,10 @@ def write_stage(path: Path, stage: Stage) -> None:
 # ─── Source & code reads ─────────────────────────────────────────────────────
 
 def read_module_code(module_path: str) -> str | None:
-    """Resolve module 'examples.lobbymap.code.foo' to a file path and read it."""
-    if not module_path:
-        return None
-    parts = module_path.split(".")
-    candidate = repo_root() / Path(*parts).with_suffix(".py")
-    if not candidate.exists():
+    """A module's source for DISPLAY, or None if unresolvable — the raw-handle
+    views must not fail the page. Execution paths digest it instead, and raise."""
+    candidate = resolve_module_source_path(module_path)
+    if candidate is None:
         return None
     try:
         return candidate.read_text(encoding="utf-8")

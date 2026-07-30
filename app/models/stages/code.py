@@ -12,6 +12,7 @@ from typing import ClassVar, Optional
 from pydantic import Field, model_validator
 
 from app.models.schema import FunctionKind, _Base
+from app.models.stages.module_source import compute_module_source_digest
 
 # The instruction an authoring client reads when it fills in `summary`. Python
 # code is the one handle a non-engineer reviewer cannot read for themselves, so
@@ -119,8 +120,11 @@ class PythonFunction(_Base):
     # Every field changes what this stage computes (the code/module it runs)
     # except `summary`, which describes that code to a reader — see
     # Stage.compute_definition_fingerprint.
+    # `module` names a path, so `module_digest` is what puts the referenced
+    # module's CONTENTS in the fingerprint; it is None for kind=inline, where
+    # `code` is already the implementation.
     FINGERPRINT_FIELDS: ClassVar[frozenset[str]] = frozenset({
-        "kind", "code", "module", "function", "requirements",
+        "kind", "code", "module", "module_digest", "function", "requirements",
     })
     INCIDENTAL_FIELDS: ClassVar[frozenset[str]] = frozenset({"summary", "corner_cases"})
 
@@ -141,13 +145,25 @@ class PythonFunction(_Base):
         ),
     )
     module: Optional[str] = None
+    module_digest: Optional[str] = Field(
+        default=None,
+        description=(
+            "Digest of the referenced module's source (kind=module only), pinning WHICH "
+            "code this stage runs — `module` alone names a path whose contents can change "
+            "under it. Derived from the module file when a kind=module handle is validated "
+            "without one; a persisted value is kept verbatim and the runtime refuses to run "
+            "the stage if the module's source no longer hashes to it."
+        ),
+    )
     function: Optional[str] = None
     requirements: list[str] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def _kind_fields(self) -> "PythonFunction":
-        if self.kind == FunctionKind.module and not self.module:
-            raise ValueError("function.kind=module needs `module`")
+        if self.kind == FunctionKind.module:
+            if not self.module:
+                raise ValueError("function.kind=module needs `module`")
+            self.module_digest = self.module_digest or compute_module_source_digest(self.module)
         if self.kind == FunctionKind.inline and not self.code:
             raise ValueError("function.kind=inline needs `code`")
         return self

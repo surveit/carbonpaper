@@ -11,6 +11,7 @@ from typing import Any, Callable
 import pandas as pd
 
 from app.models import FunctionKind, Stage
+from app.models.stages.module_source import verify_pinned_module_digest
 
 from ..context import RunContext
 from .execution import Row, RowMapper
@@ -24,6 +25,10 @@ def _load_python_function(stage: Stage) -> Callable[..., Any]:
     if fn_spec.kind == FunctionKind.module:
         if not fn_spec.module:
             raise ValueError(f"stage {stage.id}: function.kind=module without module")
+        assert fn_spec.module_digest is not None  # Stage validation pins it for kind=module
+        # Recomputed per stage start: the module lives outside the stage spec (and
+        # outside a frozen version), so drift is detected here rather than assumed away.
+        verify_pinned_module_digest(fn_spec.module, fn_spec.module_digest)
         module = importlib.import_module(fn_spec.module)
         return getattr(module, fn_name)
     if fn_spec.kind == FunctionKind.inline:
