@@ -71,7 +71,7 @@ def _invocations(probe: Path) -> Counter[str]:
 
 @pytest.fixture
 def project(tmp_path, monkeypatch):
-    monkeypatch.setattr(workspace, "EXAMPLES_DIR", tmp_path)
+    workspace.set_projects_dir(tmp_path)
     root = tmp_path / "demo"
     root.mkdir()
     return root

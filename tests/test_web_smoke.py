@@ -1,5 +1,5 @@
 """Route smoke tests: every page that renders stages must work on Stage objects
-(not dicts). Builds a small project in a tmp dir and points EXAMPLES_DIR at
+(not dicts). Builds a small project in a tmp dir and points the projects root at
 it — no shipped example data required."""
 from __future__ import annotations
 
@@ -9,14 +9,11 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-import app.web.config as web_config
 import app.web.loading as loading
-import app.web.routers.project as project_router
-import app.web.routers.node_review as node_review_router
-import app.web.routers.runs as runs_router
 import app.services.run as run_service
 from app.main import app
 from app.services import node_review
+from app.services import workspace
 
 client = TestClient(app)
 
@@ -48,7 +45,7 @@ _SCHEMA = {
 def demo_project(tmp_path, monkeypatch):
     """A demo project on disk (a compiled two-stage workflow + a one-schema data
     model whose library is APPROVED, so the workflow section is unlocked), with
-    EXAMPLES_DIR repointed at it in every module that captured the value by import."""
+    the projects root pointed at it via set_projects_dir."""
     demo = tmp_path / "demo"
     compiled = demo / "compiled"
     compiled.mkdir(parents=True)
@@ -59,8 +56,7 @@ def demo_project(tmp_path, monkeypatch):
     (schemas / "01_documents.json").write_text(
         json.dumps(_SCHEMA, indent=2), encoding="utf-8"
     )
-    for mod in (web_config, loading, project_router, node_review_router, runs_router):
-        monkeypatch.setattr(mod, "EXAMPLES_DIR", tmp_path, raising=False)
+    workspace.set_projects_dir(tmp_path)
     # Approve the data model so the workflow section unlocks — keyed to the live
     # library hash, exactly as the approve route does.
     live = loading.load_schemas(demo)

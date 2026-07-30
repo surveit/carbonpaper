@@ -13,6 +13,7 @@ from app.runtime.runner import prepare_run, run_prepared
 from app.runtime.stages import llm_transform as lt
 from app.services import versioning
 from app.services.versioning import create_version_from_disk
+from app.services import workspace
 
 
 # The three frame shapes this file's DAGs carry. Declared once so an upstream's
@@ -267,7 +268,7 @@ def test_multi_halt_run_renders_the_full_halted_at_list_through_the_web_layer(
     2-halt run — Part A's status consumers must render the whole `halted_at`
     list, not just the first (or a single scalar id, the pre-fork-aware
     shape)."""
-    monkeypatch.setattr(loading, "EXAMPLES_DIR", tmp_path)
+    workspace.set_projects_dir(tmp_path)
     project_dir = tmp_path / "multi_halt_web"
     _write_stage(project_dir, "01_load.json", _load_items_stage(project_dir))
     _write_stage(project_dir, "02_review_a.json", _queue_stage("review_a", "load"))
@@ -296,7 +297,7 @@ def test_legacy_scalar_halted_at_manifest_renders_one_queue_link(tmp_path, monke
     string. load_manifest normalizes it to a one-element list so run_detail.html
     renders a single review-queue link, not one per character (a `{% for %}`
     over a string iterates characters)."""
-    monkeypatch.setattr(loading, "EXAMPLES_DIR", tmp_path)
+    workspace.set_projects_dir(tmp_path)
     project_dir = tmp_path / "legacy_halt"
     _write_stage(project_dir, "01_load.json", _load_items_stage(project_dir))
     _write_stage(project_dir, "02_review.json", _queue_stage("review", "load"))
@@ -329,7 +330,7 @@ def test_manifest_paths_are_posix_on_every_platform(tmp_path, monkeypatch):
     """`output_path` and `queue_path` are persisted POSIX-style: the manifest
     is a portable JSON record, so identical runs must serialize identically
     regardless of the OS's native path separator."""
-    monkeypatch.setattr(loading, "EXAMPLES_DIR", tmp_path)
+    workspace.set_projects_dir(tmp_path)
     project_dir = tmp_path / "posix_paths"
     _write_stage(project_dir, "01_load.json", _load_items_stage(project_dir))
     _write_stage(project_dir, "02_review.json", _queue_stage("review", "load"))

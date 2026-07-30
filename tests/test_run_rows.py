@@ -16,6 +16,7 @@ from fastapi.testclient import TestClient
 
 import app.web.loading as loading
 from app.main import app
+from app.services import workspace
 
 PROJ = "testmeth"
 RUN = "run-0001"
@@ -59,7 +60,7 @@ def _write_run(
 
 @pytest.fixture()
 def examples_dir(tmp_path: Path, monkeypatch) -> Path:
-    monkeypatch.setattr(loading, "EXAMPLES_DIR", tmp_path)
+    workspace.set_projects_dir(tmp_path)
     return tmp_path
 
 

@@ -22,7 +22,7 @@ from app.evals.store import (
     load_eval_run,
 )
 from app.services.versioning import list_versions
-from app.web.config import EXAMPLES_DIR, REPO_ROOT, templates
+from app.web.config import projects_dir, REPO_ROOT, templates
 from app.web.loading import load_stages_or_empty, read_table
 from app.web.project_view import shell_state
 
@@ -191,7 +191,7 @@ async def trigger_eval_run(request: Request, project: str, eval_id: str):
 
 def _resolve_project_dir(project: str) -> Path:
     """The project working copy under examples/<name>/, 404 if it isn't one."""
-    project_dir = EXAMPLES_DIR / project
+    project_dir = projects_dir() / project
     if not project_dir.is_dir():
         raise HTTPException(status_code=404, detail=f"No project '{project}'")
     return project_dir

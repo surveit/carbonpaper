@@ -9,8 +9,8 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-import app.web.routers.runs as runs_router
 from app.main import app
+from app.services import workspace
 
 client = TestClient(app)
 
@@ -19,7 +19,7 @@ client = TestClient(app)
 def project(tmp_path, monkeypatch):
     proj = tmp_path / "demo"
     proj.mkdir(parents=True)
-    monkeypatch.setattr(runs_router, "EXAMPLES_DIR", tmp_path)
+    workspace.set_projects_dir(tmp_path)
     return proj
 
 

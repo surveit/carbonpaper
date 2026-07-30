@@ -12,11 +12,7 @@ import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
 
-import app.web.config as web_config
 import app.services.workspace as workspace
-import app.web.loading as loading
-import app.web.routers.project as project_router
-import app.web.routers.runs as runs_router
 from app.main import app
 from app.runtime.runner import execute_run
 from app.services import versioning
@@ -67,8 +63,7 @@ def project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
         json.dumps(_load_stage(data)), encoding="utf-8")
     (pdir / "compiled" / "02_classify.json").write_text(
         json.dumps(_classify_stage(PINNED_MARKER)), encoding="utf-8")
-    for mod in (web_config, workspace, loading, project_router, runs_router):
-        monkeypatch.setattr(mod, "EXAMPLES_DIR", tmp_path, raising=False)
+    workspace.set_projects_dir(tmp_path)
     return pdir
 
 

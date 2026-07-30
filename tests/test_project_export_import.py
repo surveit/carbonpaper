@@ -44,14 +44,19 @@ def test_round_trip_through_json_reproduces_the_source_and_mints_a_version(tmp_p
     docstring), so a fresh import always starts with a clean review slate —
     even though the source below has BOTH its data model and its one stage
     approved. Locked down explicitly so that scope doesn't silently drift
-    back to carrying approvals across the seam."""
+    back to carrying approvals across the seam.
+
+    A process has ONE workspace, so the two halves are two sequential states of
+    it — export out of the source root, repoint, import into the target root —
+    which is what a real export/import across machines actually does."""
     source_examples = tmp_path / "source_examples"
     target_examples = tmp_path / "target_examples"
     source_examples.mkdir()
     target_examples.mkdir()
+    workspace.set_projects_dir(source_examples)
 
     name = project.create_project(
-        "Round Trip Source", "Trace the shell companies.", source="test", examples_dir=source_examples)
+        "Round Trip Source", "Trace the shell companies.", source="test")
     pdir = source_examples / name
 
     data_model.write_data_model(pdir, _TINY_LIBRARY)
@@ -88,10 +93,13 @@ def test_round_trip_through_json_reproduces_the_source_and_mints_a_version(tmp_p
     source_decisions = node_review.load_node_decisions(pdir)
     assert node_review.approval_state_for(stage_to_spec_dict(stage), source_decisions)["state"] == "approved"
 
-    exported = export_project(name, examples_dir=source_examples)
+    exported = export_project(name)
     wf = WorkflowFile.model_validate_json(exported.to_json())
 
-    imported_name = import_project(wf, name="round_trip_target", examples_dir=target_examples)
+    # The WorkflowFile is now fully in memory — the source root is no longer
+    # needed, so the process moves to the target workspace to import into it.
+    workspace.set_projects_dir(target_examples)
+    imported_name = import_project(wf, name="round_trip_target")
     target_pdir = target_examples / imported_name
 
     assert (target_pdir / "document.md").read_text(encoding="utf-8") == "Trace the shell companies."

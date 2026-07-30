@@ -1,5 +1,5 @@
 """The trace endpoint returns the serialized trace, and maps tracer errors to
-HTTP status codes. Uses a temp EXAMPLES_DIR so it needs no committed run."""
+HTTP status codes. Uses a temp projects root so it needs no committed run."""
 from __future__ import annotations
 
 import json
@@ -8,9 +8,9 @@ import math
 import pandas as pd
 from fastapi.testclient import TestClient
 
-import app.web.loading as loading
 from app.main import app
 from test_trace_helpers import write_run
+from app.services import workspace
 
 
 def _project_run(tmp_path, monkeypatch):
@@ -22,9 +22,9 @@ def _project_run(tmp_path, monkeypatch):
         {"id": "seeds", "type": "input_data", "parents": [], "df": seeds},
         {"id": "enrich", "type": "python_row_function", "parents": ["seeds"], "df": enrich},
     ], run_id="R1")
-    # runs_dir() resolves against loading.EXAMPLES_DIR; point it at our temp tree
+    # runs_dir() resolves against the projects root; point it at our temp tree
     # (same pattern as tests/test_run_rows.py).
-    monkeypatch.setattr(loading, "EXAMPLES_DIR", tmp_path)
+    workspace.set_projects_dir(tmp_path)
     return TestClient(app)
 
 
@@ -49,7 +49,7 @@ def test_trace_endpoint_encodes_nan_and_infinity_as_null(tmp_path, monkeypatch):
         {"id": "seeds", "type": "input_data", "parents": [], "df": seeds},
         {"id": "enrich", "type": "python_row_function", "parents": ["seeds"], "df": enrich},
     ], run_id="R3")
-    monkeypatch.setattr(loading, "EXAMPLES_DIR", tmp_path)
+    workspace.set_projects_dir(tmp_path)
     client = TestClient(app)
     for row, expected in enumerate([None, None, None]):
         resp = client.get(f"/project/proj/runs/R3/stage/enrich/row/{row}/trace")
@@ -116,7 +116,7 @@ def test_trace_view_says_reshaping_not_traceable(tmp_path, monkeypatch):
         {"id": "seeds", "type": "input_data", "parents": [], "df": seeds},
         {"id": "dedup", "type": "python_frame_function", "parents": ["seeds"], "df": deduped},
     ], run_id="R2")
-    monkeypatch.setattr(loading, "EXAMPLES_DIR", tmp_path)
+    workspace.set_projects_dir(tmp_path)
     resp = TestClient(app).get("/project/proj/runs/R2/stage/dedup/row/0/trace/view")
     assert resp.status_code == 200
     assert "reshapes rows" in resp.text

@@ -9,10 +9,16 @@ from pathlib import Path
 from fastapi.templating import Jinja2Templates
 from markupsafe import Markup, escape
 
-# EXAMPLES_DIR (the projects storage root) is owned by app.services.workspace and
-# re-exported here (redundant alias = intentional re-export) so routers keep
-# importing it from app.web.config unchanged.
-from app.services.workspace import EXAMPLES_DIR as EXAMPLES_DIR
+# projects_dir() (the projects storage root) is owned by app.services.workspace
+# and re-exported here (redundant alias = intentional re-export) so routers keep
+# importing it from app.web.config unchanged. It is re-exported as a FUNCTION,
+# never as its return value: binding the path at import time would give every
+# router its own stale copy, which is exactly what set_projects_dir() exists to
+# avoid.
+from app.services.workspace import (
+    configure_projects_dir_from_env as configure_projects_dir_from_env,
+    projects_dir as projects_dir,
+)
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 APP_DIR = Path(__file__).resolve().parent.parent

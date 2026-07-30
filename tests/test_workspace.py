@@ -41,9 +41,10 @@ def _write_stage(compiled: Path, order: int, sid: str, stype: str, inputs: list[
 
 
 def test_list_project_names_only_dirs_with_compiled(tmp_path: Path) -> None:
+    workspace.set_projects_dir(tmp_path)
     _write_stage(tmp_path / "alpha" / "compiled", 1, "load", "input_data", [])
     (tmp_path / "not_a_project").mkdir()
-    assert workspace.list_project_names(tmp_path) == ["alpha"]
+    assert workspace.list_project_names() == ["alpha"]
 
 
 def test_workflow_summary_reports_ids_types_inputs_and_review_state(tmp_path: Path) -> None:

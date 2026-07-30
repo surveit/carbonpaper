@@ -6,6 +6,7 @@ import pytest
 
 from app.agents.compiler.tools import EditingContext, make_editing_tools
 from app.services import workspace
+from app.services.project import Project
 
 # Minimal valid config block per stage type (app/models/stage.py:
 # each type's stage model declares the ones it requires). Mirrors
@@ -38,9 +39,9 @@ _OUTPUT_SCHEMA_BY_TYPE: dict[str, dict] = {
 @pytest.fixture(autouse=True)
 def examples_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """Point the name-based service surface at a tmp examples root, so the tools —
-    which resolve names against workspace.EXAMPLES_DIR internally — read and
+    which resolve names against the projects root internally — read and
     write there rather than the real workspace."""
-    monkeypatch.setattr(workspace, "EXAMPLES_DIR", tmp_path)
+    workspace.set_projects_dir(tmp_path)
     return tmp_path
 
 
@@ -59,11 +60,14 @@ def _stage(sid: str, name: str, stype: str, inputs: list[str] | None = None) -> 
 
 
 def _seed(examples: Path, name: str) -> Path:
+    """A project on disk AND in the store. Identity is the Project record, so a
+    staged directory alone is not a project — list_projects() reads the store."""
     compiled = examples / name / "compiled"
     compiled.mkdir(parents=True, exist_ok=True)
     (compiled / "01_load.json").write_text(
         json.dumps(_stage("load", "Load rows", "input_data")), encoding="utf-8"
     )
+    Project(id=name).save()
     return examples / name
 
 

@@ -1,4 +1,4 @@
-"""workspace.py — the examples workspace: the projects storage root, name→directory
+"""workspace.py — the projects workspace: the projects storage root, name→directory
 resolution, the named-schema data-model reader, and project enumeration + workflow
 summaries. These back the editing agent's read tools and the status model. Uses the
 tolerant loader (a malformed compiled file becomes an issue, not an exception) and
@@ -15,26 +15,53 @@ from app.core.paths import REPO_ROOT, repo_root
 from app.services import node_review
 from app.services.loader import load_compiled_dir, stage_to_spec_dict
 
-__all__ = ["REPO_ROOT", "repo_root", "EXAMPLES_DIR"]
+__all__ = ["REPO_ROOT", "repo_root", "projects_dir", "set_projects_dir",
+           "configure_projects_dir_from_env"]
 
-# The projects storage root, defined once: examples/<name>/ working copies live
-# here. Both app.services and app.web read it; app.web.config re-exports it.
-# CARBONPAPER_EXAMPLES_DIR overrides the default — used to point the workspace at a temp
-# dir (a standalone CLI run, or a subprocess test); unset, it's the repo's
-# examples/. Read once at import; in-process callers still pass examples_dir
-# explicitly or monkeypatch this attribute.
-EXAMPLES_DIR = (
-    Path(os.environ["CARBONPAPER_EXAMPLES_DIR"])
-    if os.environ.get("CARBONPAPER_EXAMPLES_DIR")
-    else REPO_ROOT / "examples"
-)
+# The projects storage root: <root>/<name>/ working copies live here. There is
+# exactly ONE in a running process — the app does not serve multiple
+# workspaces, so no function takes a root as an argument. Configure it the way
+# the document store is configured (app.core.persistence.configure_store): call
+# set_projects_dir() once at a process boundary, and read it through
+# projects_dir() everywhere else.
+#
+# It is a FUNCTION, not a module constant, deliberately: a constant is captured
+# by value at import (`from ... import PROJECTS_DIR`), so repointing it would
+# have to reach into every module that imported a copy. A live read has one
+# source of truth.
+_projects_dir: Path | None = None
 
 
-def resolve_project_dir(name: str, examples_dir: Path | None = None) -> Path:
-    """Resolve a project NAME to its working-copy directory under the examples root,
-    refusing a name that would escape it (the name comes from the model, so a
+def set_projects_dir(path: Path) -> None:
+    """Point the process at its projects root. Called once at a process
+    boundary: app startup, the seeds CLI entry point, or the autouse test
+    fixture that gives each test its own tmp workspace."""
+    global _projects_dir
+    _projects_dir = Path(path)
+
+
+def projects_dir() -> Path:
+    """The projects storage root. Defaults to the repo's examples/ when nothing
+    has configured one, so an in-process caller that never calls
+    set_projects_dir() still resolves the real workspace."""
+    return _projects_dir if _projects_dir is not None else REPO_ROOT / "examples"
+
+
+def configure_projects_dir_from_env() -> None:
+    """Apply CARBONPAPER_PROJECTS_DIR when it is set; a no-op otherwise. Called from a
+    composition root (app.main's lifespan, the seeds CLI) — never at import
+    time, so a test's set_projects_dir() is not silently overridden by whatever
+    happened to be in the environment when the module first loaded."""
+    configured = os.environ.get("CARBONPAPER_PROJECTS_DIR")
+    if configured:
+        set_projects_dir(Path(configured))
+
+
+def resolve_project_dir(name: str) -> Path:
+    """Resolve a project NAME to its working-copy directory under the projects
+    root, refusing a name that would escape it (the name comes from the model, so a
     `../…` value must not read or write outside the workspace)."""
-    root = Path(examples_dir if examples_dir is not None else EXAMPLES_DIR).resolve()
+    root = projects_dir().resolve()
     candidate = (root / name).resolve()
     if not candidate.is_relative_to(root):
         raise ValueError(f"invalid project id '{name}'")
@@ -70,14 +97,16 @@ def load_schemas(project_dir: Path) -> list[dict[str, Any]]:
     return schemas
 
 
-def list_project_names(examples_dir: Path) -> list[str]:
-    """Sorted names of every project under `examples_dir` — a directory counts
-    only if it contains a `compiled/` subdirectory (an authored workflow)."""
-    if not examples_dir.is_dir():
+def list_project_names() -> list[str]:
+    """Sorted names of every project directory under the projects root — a
+    directory counts only if it contains a `compiled/` subdirectory (an authored
+    workflow)."""
+    root = projects_dir()
+    if not root.is_dir():
         return []
     return sorted(
         child.name
-        for child in examples_dir.iterdir()
+        for child in root.iterdir()
         if child.is_dir() and (child / "compiled").is_dir()
     )
 

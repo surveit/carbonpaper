@@ -18,7 +18,7 @@ from app.services.loader import resolve_function_code, stage_to_json, stage_to_s
 from app.models import Stage
 from app.models.stages.stage_tests import STAGE_TEST_TYPES
 from app.runtime.stage_tests import find_failing_stage_tests
-from app.web.config import EXAMPLES_DIR, templates
+from app.web.config import projects_dir, templates
 from app.web.diagrams import TYPE_CLASS, TYPE_GLYPH, build_mermaid_graph
 from app.web.loading import find_stage, load_stages
 from app.web.stage_test_views import build_certification, shape_test_views
@@ -42,7 +42,7 @@ async def review_status(project: str):
     swaps `mermaid` in place after a decision/edit so the workflow recolours without a
     full reload."""
     stages = load_stages(project).stages
-    decisions = node_review.load_node_decisions(EXAMPLES_DIR / project)
+    decisions = node_review.load_node_decisions(projects_dir() / project)
     review_by_id = _review_by_id(stages, decisions)
     coverage = node_review.coverage_for([stage_to_spec_dict(s) for s in stages], decisions)
     mermaid = build_mermaid_graph(stages, project, review_by_id=review_by_id)
@@ -65,7 +65,7 @@ async def node_review_partial(request: Request, project: str, stage_id: str):
     stage = find_stage(stages, stage_id)
     if stage is None:
         raise HTTPException(status_code=404, detail=f"No stage '{stage_id}' in {project}")
-    decisions = node_review.load_node_decisions(EXAMPLES_DIR / project)
+    decisions = node_review.load_node_decisions(projects_dir() / project)
     review = node_review.approval_state_for(stage_to_spec_dict(stage), decisions)
     return templates.TemplateResponse(
         request,
@@ -99,7 +99,7 @@ async def node_decide(
     chip flips without a reload."""
     if decision not in ("approve", "reject", "needs_changes"):
         raise HTTPException(status_code=400, detail=f"unknown decision '{decision}'")
-    project_dir = EXAMPLES_DIR / project
+    project_dir = projects_dir() / project
     if not project_dir.is_dir():
         raise HTTPException(status_code=404, detail=f"No project '{project}'")
 
@@ -139,7 +139,7 @@ async def node_edit(
     absent. Editing changes the spec's content hash, so an approved node
     auto-drops to edited_stale until re-approved; we return the new hash + state
     so the node flips live."""
-    project_dir = EXAMPLES_DIR / project
+    project_dir = projects_dir() / project
     if not project_dir.is_dir():
         raise HTTPException(status_code=404, detail=f"No project '{project}'")
 
@@ -171,7 +171,7 @@ async def node_generate_tests(project: str, stage_id: str):
     fails to load — both surface here as 400 with the underlying message; the button is
     destructive (REPLACES the stage's tests wholesale on completion), which is
     documented on the button's tooltip, not re-litigated here."""
-    project_dir = EXAMPLES_DIR / project
+    project_dir = projects_dir() / project
     if not project_dir.is_dir():
         raise HTTPException(status_code=404, detail=f"No project '{project}'")
     model = project_service.project_meta(project_dir).model or "sonnet"
@@ -224,7 +224,7 @@ async def create_version_route(project: str, message: str = Form(...)):
     version + freeze approval coverage at creation time. The parent is the latest
     existing version (None for the very first version). The JS redirects to the
     versions list on success."""
-    project_dir = EXAMPLES_DIR / project
+    project_dir = projects_dir() / project
     if not project_dir.is_dir():
         raise HTTPException(status_code=404, detail=f"No project '{project}'")
 
@@ -269,7 +269,7 @@ async def publish_version_route(project: str, version_id: str):
     shape but the timestamp versioning.load_version expects) 404s through
     that same FileNotFoundError. Publish is only ever posted from the version's own
     detail page, so redirect back there (now showing published) in one hop."""
-    project_dir = EXAMPLES_DIR / project
+    project_dir = projects_dir() / project
     if not project_dir.is_dir():
         raise HTTPException(status_code=404, detail=f"No project '{project}'")
     try:
