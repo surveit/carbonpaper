@@ -29,34 +29,19 @@ def resolve_input_columns(stage: "Stage", index: int) -> set[str]:
     return {c.name for c in stage.inputs[index].table_schema.columns}
 
 
-# A leading underscore marks the MACHINERY's namespace, never a real column. It
-# is the STAGE contract that knows this, because it is the stage the runtime
-# executes: the row driver attaches its internal per-row columns there (`_error`,
-# `_usage`, `_deferred` — app/runtime/stages/execution.py) and strips them off
-# every mapped frame; row provenance rides `_trace_source_stage`/
-# `_trace_source_row` (app/runtime/lineage.py); and a stored stage's bookkeeping
-# keys (`_filename`, `_order`, `_error`) are stripped BY PREFIX before the stage
-# is compared or validated (app/services/{data_model,node_review}.py). We spend
-# that namespace liberally, so a declared column inside it would be
-# indistinguishable from machinery — silently stripped, summed as usage, or read
-# back as lineage. A plain TableSchema knows nothing of this and does not need
-# to: the ban is bought here, where the stage's schemas meet the runtime.
+# The runtime spends this prefix on machinery — internal per-row columns, row
+# lineage, stored-stage bookkeeping — so a column declared inside it would be
+# indistinguishable from any of that (tests/arch/test_internal_columns_are_prefixed.py
+# holds the other end: every internal key stays under this prefix).
 INTERNAL_COLUMN_PREFIX = "_"
 
-INTERNAL_NAMESPACE_ISSUE = (
+RESERVED_PREFIX_ISSUE = (
     "a column name may not begin with `{prefix}` — that namespace is reserved for "
     "the runtime's internal per-row columns"
 )
 
 
 def find_internal_namespace_column_issues(stage: "Stage") -> list[str]:
-    """Every column `stage` declares — on its output_schema or on any input edge
-    — that sits in the INTERNAL_COLUMN_PREFIX namespace; [] when none do, the
-    only valid answer for a stored stage. Both sides are reported: an input edge
-    is this stage's own declaration of what it requires, and an edge naming an
-    internal column would claim the machinery is data. Top-level columns only —
-    a `_`-prefixed key nested inside a `json` column is a value in that object,
-    not a column on the frame, so it collides with nothing."""
     issues = [
         f"input `{ref.id}` declares column {name!r}"
         for ref in stage.inputs
@@ -68,7 +53,7 @@ def find_internal_namespace_column_issues(stage: "Stage") -> list[str]:
             for name in _internal_namespace_columns(stage.output_schema)
         )
     if issues:
-        issues.append(INTERNAL_NAMESPACE_ISSUE.format(prefix=INTERNAL_COLUMN_PREFIX))
+        issues.append(RESERVED_PREFIX_ISSUE.format(prefix=INTERNAL_COLUMN_PREFIX))
     return issues
 
 
