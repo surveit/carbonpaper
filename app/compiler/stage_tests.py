@@ -15,10 +15,7 @@ from app.core.agent.agent import Agent
 from app.core.agent.store import open_session_store
 from app.core.agent.turns import default_turn_manager
 from app.models import Stage
-from app.models.stages.stage_tests import (
-    STAGE_TEST_TYPES,
-    build_stage_tests_model,
-)
+from app.models.stages.stage_tests import build_stage_tests_model
 
 
 def start_stage_test_derivation_agent(
@@ -77,9 +74,10 @@ def build_stage_test_deriver(
 ) -> Agent[BaseModel]:
     """The derivation agent for one stage: target schema is the stage-bound
     suite model, so a malformed suite bounces inside the agent loop."""
-    if stage.type not in STAGE_TEST_TYPES:
+    if not stage.CARRIES_RUNNABLE_TESTS:
         raise ValueError(
-            f"tests can only be derived for python transforms, not `{stage.type}`"
+            f"tests can only be derived for stage types that can run them, "
+            f"not `{stage.type}`"
         )
     task = render_derivation_task(document, stage)  # raises if there is no output schema
     assert stage.output_schema is not None

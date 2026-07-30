@@ -17,7 +17,6 @@ from app.compiler.stage_tests import start_stage_test_derivation_agent
 from app.core.errors import GenerationError
 from app.models.review_guide import ReviewGuide
 from app.models.named_schemas import SchemaLibrary
-from app.models.stages.stage_tests import STAGE_TEST_TYPES
 from app.services import data_model, versioning
 from app.services.loader import load_workflow
 from app.services.project import find_document_path
@@ -41,11 +40,11 @@ def start_generation(project_dir: Path, *, document: str, model: str) -> str:
 
 
 def start_stage_test_generation(project_dir: Path, *, stage_id: str, model: str) -> str:
-    """Kick off STAGE-TEST derivation for one python-transform stage and return the id of
+    """Kick off STAGE-TEST derivation for one stage and return the id of
     the (hidden, view-only) chat session streaming the turn. Loads document.md and the
     stage's current compiled spec — raising ValueError if the project has no document,
-    `stage_id` names no stage in the compiled workflow, the stage is not a python
-    transform, or the stage has no output_schema (which a loaded stage always declares —
+    `stage_id` names no stage in the compiled workflow, the stage's type carries no
+    runnable tests, or the stage has no output_schema (which a loaded stage always declares —
     the check is a belt-and-braces guard, since tests need one to state expected rows).
     Every one of these checks runs BEFORE the
     session/turn are started, so a rejected stage never creates an orphaned session
@@ -61,9 +60,10 @@ def start_stage_test_generation(project_dir: Path, *, stage_id: str, model: str)
     stage = stages.get(stage_id)
     if stage is None:
         raise ValueError(f"no stage '{stage_id}' in {project_dir.name}")
-    if stage.type not in STAGE_TEST_TYPES:
+    if not stage.CARRIES_RUNNABLE_TESTS:
         raise ValueError(
-            f"tests can only be derived for python transforms, not `{stage.type}`"
+            f"tests can only be derived for stage types that can run them, "
+            f"not `{stage.type}`"
         )
     if stage.output_schema is None:
         raise ValueError(

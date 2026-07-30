@@ -7,6 +7,7 @@ from typing import ClassVar, Literal, Optional
 
 from pydantic import Field, model_validator
 
+from app.models.errors import StepRefused
 from app.models.schema import StageConfig
 from app.models.stage_base import StageBase, StageInput, StageType
 from app.models.stages.warnings import CompilerWarning, warn
@@ -40,7 +41,11 @@ class FilterConfig(StageConfig):
         description=(
             "Inline Python defining `should_include` (or whatever `function` names). "
             "Signature: `def should_include(row: dict) -> bool` — True keeps the "
-            "row. Returning anything other than a bool is an error."
+            "row. Returning anything other than a bool is an error. A row it cannot "
+            "honestly decide is refused, not guessed: "
+            f"`raise {StepRefused.__name__}(\"why\")` (no import needed). A guessed "
+            "False silently drops a row that belonged — e.g. a blank `status`, or a "
+            "code the predicate has never seen."
         ),
     )
     function: Optional[str] = Field(
@@ -63,6 +68,7 @@ class FilterConfig(StageConfig):
 
 class FilterRowsStage(StageBase):
     type: Literal[StageType.filter_rows]
+    CARRIES_RUNNABLE_TESTS: ClassVar[bool] = True
     filter: FilterConfig
     # Exactly one input: a predicate decides row by row, and two inputs is a
     # join or a python_frame_function.

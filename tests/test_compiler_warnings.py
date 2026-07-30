@@ -76,14 +76,30 @@ def test_module_code_is_blocking_because_the_panel_cannot_show_it():
     assert warnings[0].blocking
 
 
+def _publish_stage(stage_id="pub"):
+    """Authored code a reviewer must trust prose for, and no handler to run an example."""
+    return m.parse_stage({
+        "id": stage_id, "name": "Pub", "type": "publish",
+        "inputs": [{"id": "up", "schema": _SCHEMA}],
+        "publish": {"format": "csv"},
+        "function": {"kind": "inline", "summary": "Writes one file per row.",
+                     "code": "def transform(df, output_dir, trace_links):\n    return df"},
+    })
+
+
 # ── the non-blocking kinds ───────────────────────────────────────────────────
 def test_an_untestable_type_is_not_blocking():
-    """A filter_rows can never carry examples, so blocking would leave the agent no way to
-    finish."""
-    warnings = find_stage_compiler_warnings(
-        _stage(stage_id="filt", type_="filter_rows", handle="filter"))
+    """A publish stage can never carry examples, so blocking would leave the agent stuck."""
+    warnings = find_stage_compiler_warnings(_publish_stage())
     assert [w.kind for w in warnings] == ["untestable"]
     assert not warnings[0].blocking
+
+
+def test_a_filter_with_no_examples_is_unexemplified_not_untestable():
+    """filter_rows CAN carry examples, so the honest complaint is that it has none."""
+    warnings = find_stage_compiler_warnings(
+        _stage(stage_id="filt", type_="filter_rows", handle="filter"))
+    assert [w.kind for w in warnings] == ["unexemplified"]
 
 
 def test_cache_off_and_a_row_limit_are_notes_not_blockers():
@@ -98,7 +114,7 @@ def test_a_workflow_is_clean_when_nothing_blocking_remains():
     """`is_clean` is the agent's gate, so a note must not hold it shut."""
     report = find_workflow_compiler_warnings([
         _stage(stage_id="ok", tests=[_PASSING_EXAMPLE]),
-        _stage(stage_id="filt", type_="filter_rows", handle="filter"),
+        _publish_stage(),
     ])
     assert report.warnings and report.is_clean
     assert report.blocking == []
@@ -116,7 +132,7 @@ def test_a_workflow_with_one_undescribed_stage_is_not_clean():
 def test_blocking_warnings_sort_before_notes():
     """The page reads top-down and takes its colour from the first entry."""
     report = find_workflow_compiler_warnings([
-        _stage(stage_id="filt", type_="filter_rows", handle="filter"),
+        _publish_stage(),
         _stage(stage_id="silent", summary=None),
     ])
     assert [w.kind for w in report.warnings] == ["undescribed", "untestable"]

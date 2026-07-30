@@ -213,6 +213,7 @@ class CarriesPythonFunctionStage(StageBase):
 
 class PythonRowFunctionStage(CarriesPythonFunctionStage):
     type: Literal[StageType.python_row_function]
+    CARRIES_RUNNABLE_TESTS: ClassVar[bool] = True
     # Exactly one input: the runtime maps the function over one frame's rows, so
     # a second input is a join or a python_frame_function.
     inputs: list[StageInput] = Field(default_factory=list, min_length=1, max_length=1)
@@ -220,4 +221,5 @@ class PythonRowFunctionStage(CarriesPythonFunctionStage):
 
 class PythonFrameFunctionStage(CarriesPythonFunctionStage):
     type: Literal[StageType.python_frame_function]
+    CARRIES_RUNNABLE_TESTS: ClassVar[bool] = True
     inputs: list[StageInput] = Field(default_factory=list, min_length=1)

@@ -1036,7 +1036,6 @@ _GRANDFATHERED: frozenset[str] = frozenset(
         "tests/test_stage_certification.py::test_a_frame_function_is_certifiable_too",
         "tests/test_stage_certification.py::test_a_stage_whose_behaviour_is_not_code_is_not_applicable",
         "tests/test_stage_certification.py::test_any_non_passing_case_revokes_certification",
-        "tests/test_stage_certification.py::test_filter_rows_with_a_description_is_untestable_not_certified",
         "tests/test_stage_certification.py::test_filter_rows_with_no_description_is_undescribed_not_untestable",
         "tests/test_stage_certification.py::test_publish_carries_a_function_so_it_is_not_n_a",
         "tests/test_stage_edit.py::_seed_empty",

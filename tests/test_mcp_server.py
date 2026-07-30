@@ -162,8 +162,8 @@ def test_run_stage_tests_reports_summary_diffs_and_coverage(tmp_path, monkeypatc
     _write_compiled_workflow(pdir)
 
     report = server.run_stage_tests(project_id="trail")
-    assert set(report) == {"summary", "stages", "untested_python_stages"}
-    assert report["untested_python_stages"] == ["untested"]
+    assert set(report) == {"summary", "stages", "untested_stages"}
+    assert report["untested_stages"] == ["untested"]
     assert report["summary"]["failed"] == 1
     [run] = report["stages"]
     failing = next(o for o in run["results"] if o["name"] == "wrong")

@@ -9,7 +9,7 @@ from typing import Any, Literal, Optional
 from pydantic import BaseModel
 
 from app.models import Stage
-from app.models.stages.stage_tests import STAGE_TEST_TYPES, StageTest
+from app.models.stages.stage_tests import StageTest
 from app.runtime.stage_tests import STATUS_PASSED, StageTestResult, run_tests_for_stage
 
 CertificationStatus = Literal[
@@ -50,7 +50,7 @@ def build_certification(
         return StageCertification(status="n/a")
     if not _summary_of(stage):
         return StageCertification(status="unsummarised", total=len(test_views))
-    if stage.type not in STAGE_TEST_TYPES:
+    if not stage.CARRIES_RUNNABLE_TESTS:
         return StageCertification(status="untestable")
     if not test_views:
         return StageCertification(status="untested")

@@ -1,8 +1,8 @@
 {# Tests — the stage's authored input/output cases, one skimmable section per
    test. Context: test_views (see node_review._shape_one_test; [] when the stage
-   has no tests) and test_derivable (stage.type in STAGE_TEST_TYPES). The section
-   renders when there are cases to show OR the stage is a python transform that
-   could grow some via the Generate tests button — otherwise it's hidden, same as
+   has no tests) and test_derivable (stage.CARRIES_RUNNABLE_TESTS). The section
+   renders when there are cases to show OR the stage is one that could grow some
+   via the Generate tests button — otherwise it's hidden, same as
    before this button existed. Reads like a report: the headings alone give the
    case coverage; expanding a section shows the data. Non-passing sections start
    open. #}

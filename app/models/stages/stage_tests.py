@@ -18,9 +18,6 @@ from pydantic import (
 from app.core.utils import format_errors
 from app.models.schema import TableSchema, _Base
 
-# The stage types whose handlers can execute a test.
-STAGE_TEST_TYPES = frozenset({"python_row_function", "python_frame_function"})
-
 
 class StageTest(_Base):
     """A rows case states `expected` rows; a failure case states `expected: null`."""
@@ -51,17 +48,13 @@ class StageTest(_Base):
 def validate_stage_tests(
     stage_type: str, input_ids: list[str], tests: list[StageTest]
 ) -> None:
-    """Raise ValueError if `tests` are malformed for a stage of `stage_type`
-    with the declared `input_ids`: tests belong on python transforms only,
-    names are non-empty and unique, each test supplies exactly the declared
-    inputs, and a python_row_function rows case is one row in → one row out
-    (the type is 1:1 by construction, so a test claiming otherwise is wrong)."""
+    """Raise ValueError if `tests` are malformed for a stage of `stage_type` with the
+    declared `input_ids`: names non-empty and unique, each test supplying exactly the
+    declared inputs, and the per-type arity the `match` below spells out. WHETHER
+    `stage_type` may carry tests at all is the caller's gate
+    (StageBase.CARRIES_RUNNABLE_TESTS)."""
     if not tests:
         return
-    if stage_type not in STAGE_TEST_TYPES:
-        raise ValueError(
-            f"tests are only supported on python transforms, not `{stage_type}`"
-        )
     names = [test.name for test in tests]
     duplicates = sorted({n for n in names if names.count(n) > 1})
     if duplicates:
@@ -75,12 +68,14 @@ def validate_stage_tests(
                 f"test {test.name!r}: inputs keys {sorted(test.inputs)} "
                 f"must be exactly the stage's declared inputs {sorted(declared)}"
             )
-        # Exhaustive over STAGE_TEST_TYPES (membership is checked above): the
-        # fallthrough fires only when the set grows without the new type's
-        # per-type invariant being decided here.
+        # Exhaustive over the types declaring CARRIES_RUNNABLE_TESTS: the
+        # fallthrough fires the moment a stage class flips that on without its
+        # arity being decided here.
         match stage_type:
             case "python_row_function":
                 _validate_row_function_row_counts(test)
+            case "filter_rows":
+                _validate_filter_row_counts(test)
             case "python_frame_function":
                 pass  # no per-type invariant: rows in and rows out are both free
             case _:
@@ -152,6 +147,22 @@ def _validate_row_function_row_counts(test: StageTest) -> None:
         raise ValueError(
             f"test {test.name!r}: a python_row_function test is one row in → "
             f"one row out (got 1 in, {len(test.expected)} out)"
+        )
+
+
+def _validate_filter_row_counts(test: StageTest) -> None:
+    input_rows = len(next(iter(test.inputs.values()), []))
+    if input_rows != 1:
+        raise ValueError(
+            f"test {test.name!r}: a filter_rows test is one row in "
+            f"(got {input_rows} in)"
+        )
+    # A failure case (expected is None) claims no output rows at all. A rows case
+    # states the kept row ([row]) or the drop ([]) — never more than it was given.
+    if test.expected is not None and len(test.expected) > 1:
+        raise ValueError(
+            f"test {test.name!r}: a filter_rows test is one row in → that row or "
+            f"nothing (got 1 in, {len(test.expected)} out)"
         )
 
 

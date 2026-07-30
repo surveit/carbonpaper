@@ -1,9 +1,11 @@
 """StageTest shape checks + the Stage.tests field's serialization contract."""
+from typing import get_args
+
 import pytest
 from pydantic import ValidationError
 
-from app.models import parse_stage, StageTest, TableSchema
-from app.models.stages.stage_tests import build_stage_tests_model
+from app.models import Stage, parse_stage, StageTest, TableSchema
+from app.models.stages.stage_tests import build_stage_tests_model, validate_stage_tests
 from app.services.loader import stage_to_spec_dict
 
 _IN_SCHEMA = {"columns": [{"name": "amount", "type": "float", "nullable": False}]}
@@ -32,6 +34,21 @@ _GOOD_TEST = {
 }
 
 
+@pytest.mark.parametrize(
+    "stage_cls",
+    [cls for cls in get_args(get_args(Stage)[0]) if cls.CARRIES_RUNNABLE_TESTS],
+    ids=lambda cls: cls.__name__,
+)
+def test_every_testable_type_has_an_arity_rule(stage_cls):
+    """Flipping CARRIES_RUNNABLE_TESTS on without an arity rule hits the match's assert."""
+    stage_type = get_args(stage_cls.model_fields["type"].annotation)[0].value
+    validate_stage_tests(
+        stage_type,
+        ["load"],
+        [StageTest(name="one_row", inputs={"load": [{"a": 1}]}, expected=None)],
+    )
+
+
 def test_valid_test_parses_on_python_row_stage():
     stage = parse_stage(_row_stage([_GOOD_TEST]))
     assert stage.tests is not None
@@ -45,7 +62,7 @@ def test_tests_rejected_on_non_python_stage():
         "connector": {"kind": "file"},
         "tests": [{"name": "x", "inputs": {}, "expected": []}],
     }
-    with pytest.raises(ValidationError, match="python transforms"):
+    with pytest.raises(ValidationError, match="handler can run them"):
         parse_stage(bad)
 
 

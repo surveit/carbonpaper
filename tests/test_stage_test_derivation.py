@@ -99,7 +99,7 @@ def test_deriver_rejects_non_python_stages():
         "function": {"kind": "inline", "code": "def transform(df, output_dir):\n    return df\n"},
         "publish": {},
     })
-    with pytest.raises(ValueError, match="python transforms"):
+    with pytest.raises(ValueError, match="can run them"):
         build_stage_test_deriver(_DOC, bad)
 
 

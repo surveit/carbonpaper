@@ -16,7 +16,6 @@ from app.services import project as project_service
 from app.services.errors import WorkflowLoadError
 from app.services.loader import resolve_function_code, stage_to_json, stage_to_spec_dict
 from app.models import Stage
-from app.models.stages.stage_tests import STAGE_TEST_TYPES
 from app.runtime.stage_tests import find_failing_stage_tests
 from app.web.config import projects_dir, templates
 from app.web.diagrams import TYPE_CLASS, TYPE_GLYPH, build_mermaid_graph
@@ -80,7 +79,7 @@ async def node_review_partial(request: Request, project: str, stage_id: str):
             "type_glyph": TYPE_GLYPH,
             "test_views": (views := shape_test_views(stage)),
             "certification": build_certification(stage, views),
-            "test_derivable": stage.type in STAGE_TEST_TYPES,
+            "test_derivable": stage.CARRIES_RUNNABLE_TESTS,
         },
     )
 
@@ -164,9 +163,9 @@ async def node_edit(
 
 @router.post("/project/{project}/node/{stage_id}/generate-tests")
 async def node_generate_tests(project: str, stage_id: str):
-    """Kick off hidden stage-test derivation for one python-transform stage and
+    """Kick off hidden stage-test derivation for one stage and
     return the session id the JS poller watches. `generation.start_stage_test_generation`
-    raises ValueError for an unknown/non-python stage or a project with no document, and
+    raises ValueError for an unknown/untestable stage or a project with no document, and
     WorkflowLoadError (via its `load_workflow` call) if the compiled workflow itself
     fails to load — both surface here as 400 with the underlying message; the button is
     destructive (REPLACES the stage's tests wholesale on completion), which is
