@@ -1,6 +1,6 @@
-"""Architecture: a file-size ratchet on ``app/`` — physical line count. Three rules:
-1. over ``_LINE_CEILING`` and not in ``_ALLOWLIST`` — a new offender, split it;
-2. allowlisted but past ``_LINE_CEILING * _BACKSTOP_MULTIPLIER`` — backstop violation;
+"""Architecture: a file-size ratchet on ``app/`` — radon LLOC. Three rules:
+1. over ``_LLOC_CEILING`` and not in ``_ALLOWLIST`` — a new offender, split it;
+2. allowlisted but past ``_LLOC_CEILING * _BACKSTOP_MULTIPLIER`` — backstop violation;
 3. allowlisted while at/under the ceiling (or gone) — stale entry, remove it.
 """
 from __future__ import annotations
@@ -8,19 +8,24 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+from radon.raw import analyze
+
 from arch.test_complexity_ratchet import find_app_source_files
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _APP_ROOT = _REPO_ROOT / "app"
-_LINE_CEILING = 800
+# Logical lines, not physical: LLOC counts statements, so it does not move when a
+# formatter re-wraps a call across lines, and it does not bill comments against a
+# file's budget. 400 admits every file under app/ today (largest: 386).
+_LLOC_CEILING = 400
 _BACKSTOP_MULTIPLIER = 2
 
-# Pre-existing files over `_LINE_CEILING`, grandfathered in rather than
+# Pre-existing files over `_LLOC_CEILING`, grandfathered in rather than
 # forced into an immediate split. A ratchet: entries may only be removed,
 # never added — a new offender must be split into modules, not listed here.
 # Each entry names why it's here.
 #
-# Empty: app/runtime/runner.py (~1057 lines at the time this rule was added)
+# Empty: app/runtime/runner.py (~1057 physical lines when this rule was added)
 # was the sole entry, grandfathered pending a planned split. That split
 # landed (runner.py now holds only the production entry points; the shared
 # execution engine moved to app/runtime/executor.py), so no file under app/
@@ -30,20 +35,20 @@ _ALLOWLIST: frozenset[str] = frozenset()
 
 @dataclass(frozen=True)
 class FileSize:
-    """One file's measured physical line count.
+    """One file's measured logical line count.
 
     ``path`` is repo-relative with forward slashes (identical on Windows and
     CI Linux), matching `_ALLOWLIST`'s entries so the two compare directly.
     """
 
     path: str
-    lines: int
+    lloc: int
 
 
 def measure_file_sizes(paths: list[Path], repo_root: Path) -> list[FileSize]:
-    """Every file in `paths` at its measured physical line count."""
+    """Every file in `paths` at its measured logical line count."""
     return [
-        FileSize(path.relative_to(repo_root).as_posix(), _count_lines(path))
+        FileSize(path.relative_to(repo_root).as_posix(), _count_logical_lines(path))
         for path in paths
     ]
 
@@ -55,17 +60,17 @@ def find_ratchet_violations(sizes: list[FileSize], allowlist: frozenset[str]) ->
     offenders = [
         _describe_new_violation(size)
         for size in sizes
-        if size.lines > _LINE_CEILING and size.path not in allowlist
+        if size.lloc > _LLOC_CEILING and size.path not in allowlist
     ]
     offenders += [
         _describe_backstop_violation(by_path[entry])
         for entry in sorted(allowlist)
-        if entry in by_path and by_path[entry].lines > _LINE_CEILING * _BACKSTOP_MULTIPLIER
+        if entry in by_path and by_path[entry].lloc > _LLOC_CEILING * _BACKSTOP_MULTIPLIER
     ]
     offenders += [
         _describe_stale_entry(entry, by_path.get(entry))
         for entry in sorted(allowlist)
-        if entry not in by_path or by_path[entry].lines <= _LINE_CEILING
+        if entry not in by_path or by_path[entry].lloc <= _LLOC_CEILING
     ]
     return offenders
 
@@ -74,10 +79,10 @@ def test_files_do_not_exceed_the_file_size_ratchet() -> None:
     sizes = measure_file_sizes(find_app_source_files(_APP_ROOT), _REPO_ROOT)
     offenders = find_ratchet_violations(sizes, _ALLOWLIST)
     assert not offenders, (
-        f"file-size ratchet: a file over {_LINE_CEILING} physical lines must be split into "
-        "smaller modules, or — if pre-existing — named in the _ALLOWLIST frozenset in "
-        "tests/arch/test_file_size_ratchet.py; the allowlist may only shrink, never grow, and "
-        f"an allowlisted file may not exceed {_LINE_CEILING * _BACKSTOP_MULTIPLIER} lines "
+        f"file-size ratchet: a file over {_LLOC_CEILING} logical lines (radon LLOC) must be "
+        "split into smaller modules, or — if pre-existing — named in the _ALLOWLIST frozenset "
+        "in tests/arch/test_file_size_ratchet.py; the allowlist may only shrink, never grow, "
+        f"and an allowlisted file may not exceed {_LLOC_CEILING * _BACKSTOP_MULTIPLIER} LLOC "
         f"({_BACKSTOP_MULTIPLIER}x the ceiling) even while listed:\n  " + "\n  ".join(offenders)
     )
 
@@ -85,8 +90,8 @@ def test_files_do_not_exceed_the_file_size_ratchet() -> None:
 # --- measurement ---------------------------------------------------------
 
 
-def _count_lines(path: Path) -> int:
-    return len(path.read_text(encoding="utf-8").splitlines())
+def _count_logical_lines(path: Path) -> int:
+    return int(analyze(path.read_text(encoding="utf-8")).lloc)
 
 
 # --- offender messages -----------------------------------------------------
@@ -94,21 +99,21 @@ def _count_lines(path: Path) -> int:
 
 def _describe_new_violation(size: FileSize) -> str:
     return (
-        f"{size.path}  lines={size.lines} (> {_LINE_CEILING}, not in _ALLOWLIST) — split it "
+        f"{size.path}  lloc={size.lloc} (> {_LLOC_CEILING}, not in _ALLOWLIST) — split it "
         "into smaller modules; the allowlist must never grow"
     )
 
 
 def _describe_backstop_violation(size: FileSize) -> str:
     return (
-        f"{size.path}  lines={size.lines} (> {_LINE_CEILING * _BACKSTOP_MULTIPLIER}, the "
+        f"{size.path}  lloc={size.lloc} (> {_LLOC_CEILING * _BACKSTOP_MULTIPLIER}, the "
         f"{_BACKSTOP_MULTIPLIER}x backstop for an allowlisted file) — split it into smaller "
         "modules now; grandfathering is not a license to grow unboundedly"
     )
 
 
 def _describe_stale_entry(path: str, size: FileSize | None) -> str:
-    reason = "the file no longer exists" if size is None else f"it now measures {size.lines} (<= {_LINE_CEILING})"
+    reason = "the file no longer exists" if size is None else f"it now measures {size.lloc} (<= {_LLOC_CEILING})"
     return f"{path}  ({reason}) — remove the stale _ALLOWLIST entry"
 
 
@@ -116,39 +121,39 @@ def _describe_stale_entry(path: str, size: FileSize | None) -> str:
 
 
 def test_find_ratchet_violations_flags_an_unlisted_file_over_the_ceiling() -> None:
-    over = FileSize("app/big.py", _LINE_CEILING + 1)
+    over = FileSize("app/big.py", _LLOC_CEILING + 1)
     offenders = find_ratchet_violations([over], frozenset())
     assert len(offenders) == 1
     assert "app/big.py" in offenders[0] and "split" in offenders[0]
 
 
 def test_find_ratchet_violations_passes_a_file_under_the_ceiling() -> None:
-    under = FileSize("app/small.py", _LINE_CEILING - 1)
+    under = FileSize("app/small.py", _LLOC_CEILING - 1)
     assert find_ratchet_violations([under], frozenset()) == []
 
 
 def test_find_ratchet_violations_passes_an_allowlisted_file_over_the_ceiling() -> None:
-    over = FileSize("app/big.py", _LINE_CEILING + 1)
+    over = FileSize("app/big.py", _LLOC_CEILING + 1)
     assert find_ratchet_violations([over], frozenset({"app/big.py"})) == []
 
 
 def test_find_ratchet_violations_flags_an_allowlisted_file_past_the_backstop() -> None:
-    past_backstop = FileSize("app/big.py", _LINE_CEILING * _BACKSTOP_MULTIPLIER + 1)
+    past_backstop = FileSize("app/big.py", _LLOC_CEILING * _BACKSTOP_MULTIPLIER + 1)
     offenders = find_ratchet_violations([past_backstop], frozenset({"app/big.py"}))
     assert len(offenders) == 1
     assert "app/big.py" in offenders[0] and "backstop" in offenders[0]
 
 
 def test_find_ratchet_violations_passes_an_allowlisted_file_exactly_at_the_backstop() -> None:
-    at_backstop = FileSize("app/big.py", _LINE_CEILING * _BACKSTOP_MULTIPLIER)
+    at_backstop = FileSize("app/big.py", _LLOC_CEILING * _BACKSTOP_MULTIPLIER)
     assert find_ratchet_violations([at_backstop], frozenset({"app/big.py"})) == []
 
 
 def test_find_ratchet_violations_flags_a_stale_entry_when_now_under_the_ceiling() -> None:
-    shrunk = FileSize("app/big.py", _LINE_CEILING - 1)
+    shrunk = FileSize("app/big.py", _LLOC_CEILING - 1)
     offenders = find_ratchet_violations([shrunk], frozenset({"app/big.py"}))
     assert len(offenders) == 1
-    assert f"<= {_LINE_CEILING}" in offenders[0] and "remove" in offenders[0]
+    assert f"<= {_LLOC_CEILING}" in offenders[0] and "remove" in offenders[0]
 
 
 def test_find_ratchet_violations_flags_a_stale_entry_when_the_file_is_gone() -> None:
@@ -157,18 +162,29 @@ def test_find_ratchet_violations_flags_a_stale_entry_when_the_file_is_gone() -> 
     assert "no longer exists" in offenders[0] and "remove" in offenders[0]
 
 
-def test_measure_file_sizes_reads_relative_posix_path_and_counts_physical_lines(tmp_path: Path) -> None:
+def test_measure_file_sizes_reads_relative_posix_path_and_counts_logical_lines(tmp_path: Path) -> None:
     nested = tmp_path / "app" / "sub"
     nested.mkdir(parents=True)
     file = nested / "m.py"
     file.write_text("a = 1\nb = 2\nc = 3\n")
     [size] = measure_file_sizes([file], tmp_path)
     assert size.path == "app/sub/m.py"
-    assert size.lines == 3
+    assert size.lloc == 3
 
 
-def test_measure_file_sizes_counts_a_file_with_no_trailing_newline(tmp_path: Path) -> None:
+def test_measure_file_sizes_does_not_bill_comments_or_blank_lines(tmp_path: Path) -> None:
     file = tmp_path / "m.py"
-    file.write_text("a = 1\nb = 2")
+    file.write_text("# note\n\na = 1\n\n# more\nb = 2\n")
     [size] = measure_file_sizes([file], tmp_path)
-    assert size.lines == 2
+    assert size.lloc == 2
+
+
+def test_measure_file_sizes_is_unchanged_by_reformatting(tmp_path: Path) -> None:
+    """The ceiling must not move when a formatter re-wraps a call across lines."""
+    compact = tmp_path / "compact.py"
+    compact.write_text("run(a, b, c, d)\n")
+    exploded = tmp_path / "exploded.py"
+    exploded.write_text("run(\n    a,\n    b,\n    c,\n    d,\n)\n")
+    [one] = measure_file_sizes([compact], tmp_path)
+    [other] = measure_file_sizes([exploded], tmp_path)
+    assert one.lloc == other.lloc == 1
