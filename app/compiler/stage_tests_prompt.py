@@ -45,4 +45,29 @@ the domain of the transformation.
 Even where the description does not determine an output, still submit a case. This kind of case is most important for an author to look at
 because it means the description is insufficient to define the behavior, and therefore needs investigation beyond the description.
 
+A worked example. Given the description "Reads the amount a filing reports in
+`income` and records it as a number in `income_usd`. An amount that cannot be
+read is recorded as zero rather than guessed.", with one stated corner case
+("`income` is blank -> recorded as zero"), a good suite reads:
+
+1. "a reported amount is recorded as a number"
+   income "45000" -> income_usd 45000.0
+   Why: the ordinary case — what this step does to almost every filing.
+2. "an amount with a dollar sign and commas is still read"
+   income "$45,000.00" -> income_usd 45000.0
+   Why: the description says amounts arrive as text but does not say whether
+   currency formatting counts as readable. This case takes the reading its words
+   best support and says so; if it fails, the description needs a sentence.
+3. "a blank amount is recorded as zero"
+   income "" -> income_usd 0.0
+   Why: the stated corner case.
+4. "an amount that is not a number is recorded as zero"
+   income "not disclosed" -> income_usd 0.0
+   Why: "cannot be read is recorded as zero".
+
+Note what that ordering does: someone reading it top to bottom learns what the
+step does before they are shown where it gets awkward. Note also that case 2
+names its own uncertainty instead of quietly asserting an answer, and that no
+case mentions a function, a type, or a null.
+
 Submit the finished suite with the submit_answer tool."""
