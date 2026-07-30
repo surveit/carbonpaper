@@ -30,7 +30,7 @@ class Draft(PersistedModel):
 
     collection: ClassVar[str] = "draft"
     SCOPE: ClassVar[PersistenceScope] = PersistenceScope.PROJECT_READ
-    # Dump embedded stages in their canonical spec-dict shape (field aliases
+    # Dump embedded stages in their spec-dict shape (field aliases
     # restored, unset optionals dropped) — mirrors WorkflowVersion.DUMP_OPTS,
     # so a draft's on-disk stage shape matches a version's.
     DUMP_OPTS: ClassVar[dict[str, Any]] = {"by_alias": True, "exclude_none": True}

@@ -97,8 +97,8 @@ def test_create_version_freezes_coverage_from_node_decisions(tmp_path):
     node_decisions store — approving the working copy's current spec before
     versioning shows up as 100% approved coverage on the frozen version."""
     _seed(tmp_path)
-    canonical = loader.stage_to_spec_dict(Stage.model_validate(_LOAD_STAGE))
-    content_hash = node_review.node_content_hash(canonical)
+    spec = loader.stage_to_spec_dict(Stage.model_validate(_LOAD_STAGE))
+    content_hash = node_review.node_content_hash(spec)
     node_review.record_node_decision(
         tmp_path, stage_id="load", content_hash=content_hash,
         decision="approve", reviewer="human")

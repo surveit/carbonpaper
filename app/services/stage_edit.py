@@ -75,7 +75,7 @@ def _merge_patch(target: object, patch: object) -> object:
 
 
 def _current_specs(project_dir: Path) -> dict[str, dict]:
-    """The workflow's current stages as ``{id: canonical spec dict}``.
+    """The workflow's current stages as ``{id: spec dict}``.
 
     A workflow may legitimately be EMPTY — a project holds no stage files until its
     first stage is added — and that reads as ``{}``, the starting point the first
@@ -93,10 +93,10 @@ def _current_specs(project_dir: Path) -> dict[str, dict]:
     return {stage.id: stage_to_spec_dict(stage) for stage in workflow.stages}
 
 
-def _canonicalize_spec(spec: dict) -> dict:
+def _strip_bookkeeping_keys(spec: dict) -> dict:
     """A submitted spec reduced to the keys the workflow stores — the form that
     goes into the in-memory `specs` map and onto disk."""
-    return {k: v for k, v in spec.items() if k not in node_review.CANONICAL_IGNORE_KEYS}
+    return {k: v for k, v in spec.items() if k not in node_review.HASH_IGNORED_KEYS}
 
 
 def _apply(project_dir: Path, specs: dict[str, dict], stage_id: str, candidate: dict) -> EditStageResult:
@@ -108,7 +108,7 @@ def _apply(project_dir: Path, specs: dict[str, dict], stage_id: str, candidate: 
     The writer reports only whether the write succeeded; it does not compute the
     node's review colour (content hash / approval state). A caller that needs the
     new colour re-derives it from the freshly-written stage."""
-    candidate = _canonicalize_spec(candidate)
+    candidate = _strip_bookkeeping_keys(candidate)
     if candidate.get("id") != stage_id:
         return EditStageResult(
             ok=False,
@@ -196,7 +196,7 @@ def add_stage_specs(project_dir: Path, stages: Sequence[StageDraft]) -> AddStage
         if not outcome.ok:
             result.failed.append(StageFailure(stage.id, outcome.issues))
             continue
-        specs[stage.id] = _canonicalize_spec(spec)
+        specs[stage.id] = _strip_bookkeeping_keys(spec)
         result.added.append(stage.id)
     return result
 

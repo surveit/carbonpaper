@@ -1,4 +1,4 @@
-"""The canonical compiled-stage loader: tolerant per-file for the viewer,
+"""The compiled-stage loader: tolerant per-file for the viewer,
 strict (reject the whole workflow) for the runner."""
 from __future__ import annotations
 

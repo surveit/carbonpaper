@@ -6,7 +6,7 @@ Python across six packages. Vocabulary: **project**/**methodology**/**workflow**
 [overview.md](overview.md).
 
 ## `app/models/` — the schema layer (Pydantic)
-THE canonical definition of what a workflow is. Constructing a model validates it;
+THE definition of what a workflow is. Constructing a model validates it;
 `validate_*` return issue lists, `parse_*` raise. **Dependency rule: imports nothing from
 runtime or web — keep it pure.** Checks the *spec*, distinct from RUNTIME data validation
 (`app/runtime/validation.py`, which checks dataframes).
@@ -16,7 +16,7 @@ runtime or web — keep it pure.** Checks the *spec*, distinct from RUNTIME data
   (unique ids, inputs resolve, cycles). `named_schemas.py` — named schemas + FK `references`.
   `eval.py` — `EvalConfig` + grain-preservation gate. `table.py` — `TableRef`.
 
-**Loading is canonical + strict.** Stages persist as JSON (`compiled/<NN>_<stage_id>.json`,
+**Loading is normalizing + strict.** Stages persist as JSON (`compiled/<NN>_<stage_id>.json`,
 a validated `Stage`); `app/services/loader.py` is the one loader — the runner refuses a
 workflow with an invalid stage (`WorkflowLoadError`), the viewer (same loader) renders
 per-file issues. Typed `Stage` objects flow end-to-end.
@@ -68,9 +68,9 @@ working copy while the scratch re-run refuses to execute (409).
 
 ## `app/services/` — web-independent workflow logic
 `run.py` (the production run seam — start/resume/status, plus resolving what a run
-pinned: `resolve_version`, `load_run_stages`, `load_pinned_stage_def`); `loader.py` (canonical stage loader, above); `compilation.py` (compile persistence for
+pinned: `resolve_version`, `load_run_stages`, `load_pinned_stage_def`); `loader.py` (stage loader, above); `compilation.py` (compile persistence for
 `app/compiler`); `node_review.py` (content-hash approval over stage specs — read its
-docstring; the canonical-hash invariant must not rot); `versioning.py` (`create_version_from_stages`
+docstring; the content-hash invariant must not rot); `versioning.py` (`create_version_from_stages`
 is the ONE write path for a `WorkflowVersion` document, born unpublished; `publish_version`
 is the metadata-only human-approval act a run's `resolve_version_id` requires before it
 will pin to that version); `drafts.py` (disposable, mutable scratch — a `Draft` document

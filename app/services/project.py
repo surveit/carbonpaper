@@ -399,7 +399,7 @@ def describe_workflow(name: str, examples_dir: Path | None = None) -> dict[str, 
 
 
 def read_stage(name: str, stage_id: str, examples_dir: Path | None = None) -> str:
-    """The canonical JSON of one stage in a project's workflow. Raises ValueError if
+    """The on-disk JSON text of one stage in a project's workflow. Raises ValueError if
     the stage is not in the workflow."""
     project_dir = workspace.resolve_project_dir(name, examples_dir)
     stages = {c.stage.id: c.stage

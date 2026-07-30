@@ -146,3 +146,20 @@ def find_check_prefixed_functions(paths: list[Path]) -> list[str]:
             if name.startswith(("check_", "_check_")):
                 offenders.append(f"{path}:{lineno}  def {name}")
     return offenders
+
+
+def find_banned_words(paths: list[Path], banned: set[str], exempt: set[Path]) -> list[str]:
+    """Lines containing any of `banned` (case-insensitive substring, so a word's
+    inflections are caught too). `exempt` holds the rule file that must name the
+    words to ban them."""
+    resolved_exempt = {path.resolve() for path in exempt}
+    offenders: list[str] = []
+    for path in paths:
+        if path.resolve() in resolved_exempt:
+            continue
+        for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+            lowered = line.lower()
+            hits = sorted(word for word in banned if word in lowered)
+            if hits:
+                offenders.append(f"{path}:{lineno}  [{', '.join(hits)}]  {line.strip()}")
+    return offenders
