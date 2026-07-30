@@ -10,7 +10,7 @@ from pydantic import Field
 
 from app.models.schema import StageConfig
 from app.models.stage_base import StageInput, StageType
-from app.models.stages.code import CarriesPythonFunction
+from app.models.stages.code import CarriesPythonFunctionStage
 from app.models.stages.shared import COLUMN_ISSUE, resolve_input_columns
 
 
@@ -38,7 +38,7 @@ class PublishConfig(StageConfig):
     cross_link: Optional[bool] = None
 
 
-class PublishStage(CarriesPythonFunction):
+class PublishStage(CarriesPythonFunctionStage):
     """The `publish` block is this stage's rendering config; the `function`
     block is the code it actually runs, so both are required and both are
     fingerprinted."""

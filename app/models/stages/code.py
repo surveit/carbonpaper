@@ -176,7 +176,7 @@ class PythonFunction(StageConfig):
         return self
 
 
-def find_python_function_warnings(stage: "CarriesPythonFunction"
+def find_python_function_warnings(stage: "CarriesPythonFunctionStage"
                                   ) -> list[CompilerWarning]:
     """Compiler warnings about a `function` block — raised here, and only here,
     because this module owns it. A stage whose behaviour is authored code needs prose
@@ -192,10 +192,10 @@ def find_python_function_warnings(stage: "CarriesPythonFunction"
     return []
 
 
-class CarriesPythonFunction(StageBase):
-    """Every stage type whose behaviour is a `function` block — the two python
-    transforms and publish. Inherited rather than redeclared so `stage.function` is
-    read in this module and nowhere else."""
+class CarriesPythonFunctionStage(StageBase):
+    """The stage types whose behaviour is a `function` block: the two python
+    transforms, and publish, which adds rendering config alongside it. Declared once
+    here and inherited so `stage.function` is read in this module and nowhere else."""
     function: PythonFunction
 
     def fingerprint_blocks(self) -> dict[str, StageConfig]:
@@ -208,18 +208,13 @@ class CarriesPythonFunction(StageBase):
         return find_python_function_warnings(self)
 
 
-class _PythonFunctionStage(CarriesPythonFunction):
-    """The two python transforms: the `function` block is the whole stage, unlike
-    publish, which pairs it with rendering config."""
-
-
-class PythonRowFunctionStage(_PythonFunctionStage):
+class PythonRowFunctionStage(CarriesPythonFunctionStage):
     type: Literal[StageType.python_row_function]
     # Exactly one input: the runtime maps the function over one frame's rows, so
     # a second input is a join or a python_frame_function.
     inputs: list[StageInput] = Field(default_factory=list, min_length=1, max_length=1)
 
 
-class PythonFrameFunctionStage(_PythonFunctionStage):
+class PythonFrameFunctionStage(CarriesPythonFunctionStage):
     type: Literal[StageType.python_frame_function]
     inputs: list[StageInput] = Field(default_factory=list, min_length=1)
