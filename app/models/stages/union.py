@@ -7,11 +7,11 @@ from typing import ClassVar, Literal
 
 from pydantic import Field
 
-from app.models.schema import _Base
+from app.models.schema import StageConfig
 from app.models.stage_base import StageBase, StageInput, StageType
 
 
-class UnionConfig(_Base):
+class UnionConfig(StageConfig):
     """union config block. No fields: a union's behavior is fixed entirely by its
     (schema-identical) declared inputs, concatenated in declared order."""
     FINGERPRINT_FIELDS: ClassVar[frozenset[str]] = frozenset()
@@ -23,7 +23,7 @@ class UnionStage(StageBase):
     union: UnionConfig
     inputs: list[StageInput] = Field(default_factory=list, min_length=2)
 
-    def fingerprint_blocks(self) -> dict[str, _Base]:
+    def fingerprint_blocks(self) -> dict[str, StageConfig]:
         return {"union": self.union}
 
     def find_config_column_issues(self) -> list[str]:

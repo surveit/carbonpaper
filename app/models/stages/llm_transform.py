@@ -10,12 +10,12 @@ from pydantic import AliasChoices, Field, model_validator
 
 from app.core.llm.options import LLMModel
 from app.core.prompt_template import find_template_fields
-from app.models.schema import TableSchema, _Base
+from app.models.schema import StageConfig, TableSchema
 from app.models.stage_base import StageBase, StageInput, StageType
 from app.models.stages.shared import COLUMN_ISSUE, resolve_input_columns
 
 
-class LLMConfig(_Base):
+class LLMConfig(StageConfig):
     """llm_transform config block."""
     # Every field changes what this stage computes (the prompt, the model, the
     # sampling/response knobs) — see StageBase.compute_definition_fingerprint.
@@ -58,7 +58,7 @@ class LLMTransformStage(StageBase):
     llm: LLMConfig
     inputs: list[StageInput] = Field(default_factory=list, min_length=1)
 
-    def fingerprint_blocks(self) -> dict[str, _Base]:
+    def fingerprint_blocks(self) -> dict[str, StageConfig]:
         return {"llm": self.llm}
 
     def find_config_column_issues(self) -> list[str]:

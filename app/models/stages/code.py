@@ -7,11 +7,11 @@ from __future__ import annotations
 
 import ast
 
-from typing import ClassVar, Literal, Optional
+from typing import ClassVar, Literal, Optional, Protocol
 
 from pydantic import Field, model_validator
 
-from app.models.schema import FunctionKind, _Base
+from app.models.schema import FunctionKind, StageConfig, _Base
 from app.models.stage_base import StageBase, StageInput, StageType
 
 # The instruction an authoring client reads when it fills in `summary`. Python
@@ -70,6 +70,16 @@ class CornerCase(_Base):
     )
 
 
+class AuthoredCode(Protocol):
+    """What every authored-code block carries for a reviewer: the plain-language
+    account of the code, and the cases it must handle. Structural, so a config
+    class satisfies it by declaring the two fields —
+    `StageBase.find_authored_code_block` returns whichever block a stage has."""
+
+    summary: Optional[str]
+    corner_cases: list[CornerCase]
+
+
 def _binds_name(tree: ast.Module, name: str) -> bool:
     """True if a top-level def or assignment in `tree` binds `name` — i.e. what
     `exec`ing the code would expose for the runtime to look up and call."""
@@ -113,7 +123,7 @@ def validate_inline_function_code(
         )
 
 
-class PythonFunction(_Base):
+class PythonFunction(StageConfig):
     """Config block for python_row_function / python_frame_function (and publish). The
     row-vs-frame distinction lives in the stage `type`, not here — the runtime
     reads the type to decide whether to invoke this per row or per frame."""
@@ -170,7 +180,7 @@ class _PythonFunctionStage(StageBase):
     invocation (see StageType)."""
     function: PythonFunction
 
-    def fingerprint_blocks(self) -> dict[str, _Base]:
+    def fingerprint_blocks(self) -> dict[str, StageConfig]:
         return {"function": self.function}
 
     def find_authored_code_block(self) -> PythonFunction:

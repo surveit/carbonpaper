@@ -15,12 +15,13 @@ import pyarrow.lib as pa_lib
 
 from app.core.predicate import parse_predicate
 from app.models import RowReviewDecision, Stage
+from app.models.stages.human_review_queue import HumanReviewQueueStage
 from app.core.stage_cache import compute_row_fingerprint
 
 from ..context import RunContext
 from ..manifest import QueueStats, StageContribution
 from ..errors import HaltForReview
-from .execution import ROW_DEFERRED_KEY, Row, RowMapper
+from .execution import ROW_DEFERRED_KEY, Row, RowMapper, narrow_stage
 
 # The upstream AI score column a queue stage reviews. Named once so the two sites
 # that test for its presence (_approve_row and _pass_row_through) can't drift
@@ -74,9 +75,9 @@ class _QueueRowMapper:
     for a resumed run, the counts of the halt it is resuming."""
 
     def __init__(self, stage: Stage, ctx: RunContext, src: pd.DataFrame) -> None:
-        assert stage.queue is not None  # Stage validation: human_review_queue carries queue
+        queue = narrow_stage(stage, HumanReviewQueueStage).queue
         _require_project_scope(ctx, stage.id)
-        self._queueable = _compute_queueable_mask(src, stage.queue.filter, stage.id)
+        self._queueable = _compute_queueable_mask(src, queue.filter, stage.id)
 
     def __call__(self, row: Row, index: int) -> Row:
         if not self._queueable[index]:

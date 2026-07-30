@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import json
 from enum import Enum
-from typing import Any, ClassVar, Optional
+from typing import TYPE_CHECKING, Any, ClassVar, Optional
 
 from pydantic import (
     Field,
@@ -18,6 +18,7 @@ from pydantic import (
 
 from app.models.schema import (
     SourceRef,
+    StageConfig,
     TableSchema,
     _Base,
     _SNAKE_RE,
@@ -25,6 +26,10 @@ from app.models.schema import (
 from app.models.stages.shared import find_internal_namespace_column_issues
 from app.models.stages.stage_tests import StageTest, validate_stage_tests
 from app.core.utils import compute_short_hash
+
+if TYPE_CHECKING:
+    # app.models.stages.code imports this module, so the reference stays lazy.
+    from app.models.stages.code import AuthoredCode
 
 
 # ── Enumerated vocabularies ──────────────────────────────────────────────────
@@ -174,7 +179,7 @@ class StageBase(StageCommon):
     tests: Optional[list[StageTest]] = None
 
     # ── the per-type hooks a subclass answers ────────────────────────────────
-    def fingerprint_blocks(self) -> dict[str, _Base]:
+    def fingerprint_blocks(self) -> dict[str, StageConfig]:
         """The config blocks that decide what this stage computes, keyed by the
         name they are spelled with on the stage."""
         raise NotImplementedError
@@ -189,7 +194,7 @@ class StageBase(StageCommon):
         whose internals, not its config, fix the output."""
         return []
 
-    def find_authored_code_block(self) -> Optional[_Base]:
+    def find_authored_code_block(self) -> Optional["AuthoredCode"]:
         """The block holding code a reviewer would otherwise have to read (it
         carries `summary` and `corner_cases`), None for a stage fixed entirely by
         config."""
@@ -335,7 +340,7 @@ class StageBase(StageCommon):
         return is_grain_and_order_preserving(self.type)
 
 
-def _trim_block_to_fingerprint_fields(block: _Base) -> dict[str, Any]:
+def _trim_block_to_fingerprint_fields(block: StageConfig) -> dict[str, Any]:
     dump = block.model_dump(mode="json", exclude_none=True)
     return {
         key: value for key, value in dump.items()

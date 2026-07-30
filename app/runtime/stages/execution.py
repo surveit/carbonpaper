@@ -7,12 +7,13 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Any, Callable, NamedTuple, Protocol, runtime_checkable
+from typing import Any, Callable, NamedTuple, Protocol, TypeVar, runtime_checkable
 
 import pandas as pd
 
 from app.models import Stage
-from app.models.stage import StageType, is_grain_and_order_preserving
+from app.models.stage import StageBase, StageType, is_grain_and_order_preserving
+from app.models.stages.llm_transform import LLMTransformStage
 
 from app.core.agent.usage import LlmUsage
 from app.core.frames import list_rows
@@ -38,6 +39,21 @@ from .row_events import (
     emit_row_raised,
     emit_row_start,
 )
+
+_StageT = TypeVar("_StageT", bound=StageBase)
+
+
+def narrow_stage(stage: Stage, model: type[_StageT]) -> _StageT:
+    """`stage` as the per-type model the handler it was dispatched to is written
+    against. Raises when the type-keyed registry handed a handler a stage of
+    another type."""
+    if isinstance(stage, model):
+        return stage
+    raise TypeError(
+        f"stage {stage.id}: this handler runs a {model.__name__}, "
+        f"got a {type(stage).__name__}"
+    )
+
 
 # One row of a stage's input or output: column label → cell value.
 Row = dict[str, Any]
@@ -244,8 +260,7 @@ class LLMTransformHandler(RowMapHandler):
     def execute(
         self, stage: Stage, inputs: dict[str, pd.DataFrame], ctx: RunContext
     ) -> pd.DataFrame:
-        assert stage.llm is not None  # Stage validation: an llm_transform always carries llm
-        if stage.llm.batch_size > 1:
+        if narrow_stage(stage, LLMTransformStage).llm.batch_size > 1:
             return _run_batched(self, stage, inputs, ctx)
         return _run_row_mapper(self, stage, inputs, ctx)
 

@@ -9,7 +9,7 @@ from __future__ import annotations
 import datetime
 import re
 from enum import Enum
-from typing import Any, Literal, Optional, Sequence
+from typing import Any, ClassVar, Literal, Optional, Sequence
 
 from pydantic import (
     BaseModel,
@@ -34,6 +34,16 @@ class _Base(BaseModel):
         validate_default=True,
         populate_by_name=True,
     )
+
+
+class StageConfig(_Base):
+    """One stage type's config block. Every field is classified into exactly one
+    of the two sets below, so a field added to a block forces the decision of
+    whether it changes what the stage computes
+    (`tests/models/test_stage_config_fingerprint_fields.py` holds the partition;
+    `StageBase.compute_definition_fingerprint` reads FINGERPRINT_FIELDS)."""
+    FINGERPRINT_FIELDS: ClassVar[frozenset[str]]
+    INCIDENTAL_FIELDS: ClassVar[frozenset[str]]
 
 
 # ── Identifiers ──────────────────────────────────────────────────────────────

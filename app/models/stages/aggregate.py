@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, ClassVar, Literal, Optional
 
 from pydantic import Field, model_validator
 
-from app.models.schema import _Base
+from app.models.schema import StageConfig, _Base
 from app.models.stage_base import StageBase, StageInput, StageType
 from app.models.stages.shared import (
     COLUMN_ISSUE,
@@ -48,7 +48,7 @@ class AggregationOp(_Base):
         return self
 
 
-class AggregateConfig(_Base):
+class AggregateConfig(StageConfig):
     """aggregate config block."""
     # Every field changes what this stage computes (grouping, aggregations) —
     # see StageBase.compute_definition_fingerprint.
@@ -64,7 +64,7 @@ class AggregateStage(StageBase):
     aggregate: AggregateConfig
     inputs: list[StageInput] = Field(default_factory=list, min_length=1)
 
-    def fingerprint_blocks(self) -> dict[str, _Base]:
+    def fingerprint_blocks(self) -> dict[str, StageConfig]:
         return {"aggregate": self.aggregate}
 
     def find_config_column_issues(self) -> list[str]:

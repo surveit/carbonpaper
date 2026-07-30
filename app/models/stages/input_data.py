@@ -9,7 +9,7 @@ from typing import Any, ClassVar, Literal, Optional
 
 from pydantic import ConfigDict, Field, model_validator
 
-from app.models.schema import _Base
+from app.models.schema import StageConfig, _Base
 from app.models.stage_base import StageBase, StageType
 
 
@@ -25,7 +25,7 @@ class FileFormat(str, Enum):
     xlsx = "xlsx"
 
 
-class Connector(_Base):
+class Connector(StageConfig):
     """input_data config block."""
     # Every field changes what this stage computes (which file, what params) —
     # see StageBase.compute_definition_fingerprint.
@@ -65,7 +65,7 @@ class InputDataStage(StageBase):
     type: Literal[StageType.input_data]
     connector: Connector
 
-    def fingerprint_blocks(self) -> dict[str, _Base]:
+    def fingerprint_blocks(self) -> dict[str, StageConfig]:
         return {"connector": self.connector}
 
 

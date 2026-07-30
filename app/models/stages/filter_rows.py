@@ -7,7 +7,7 @@ from typing import ClassVar, Literal, Optional
 
 from pydantic import Field, model_validator
 
-from app.models.schema import _Base
+from app.models.schema import StageConfig
 from app.models.stage_base import StageBase, StageInput, StageType
 from app.models.stages.code import (
     CORNER_CASES_DESCRIPTION,
@@ -17,7 +17,7 @@ from app.models.stages.code import (
 )
 
 
-class FilterConfig(_Base):
+class FilterConfig(StageConfig):
     """filter_rows config block: an authored row predicate, `def should_include(row:
     dict) -> bool`. True keeps the row, False drops it; every kept row's
     columns pass through unchanged and its relative order is preserved.
@@ -67,7 +67,7 @@ class FilterRowsStage(StageBase):
     # join or a python_frame_function.
     inputs: list[StageInput] = Field(default_factory=list, min_length=1, max_length=1)
 
-    def fingerprint_blocks(self) -> dict[str, _Base]:
+    def fingerprint_blocks(self) -> dict[str, StageConfig]:
         return {"filter": self.filter}
 
     def find_output_schema_issues(self) -> list[str]:

@@ -17,12 +17,13 @@ from app.core.agent.usage import LlmUsage
 from app.core.frames import list_rows
 from app.models import Stage
 from app.models.schema import Column, TableSchema
+from app.models.stages.llm_transform import LLMTransformStage
 
 from ..context import RunContext
 from ..llm import call_llm, call_llm_batch, render_prompt
 from ..run_log import RunLog, bind_detail_sink, unbind_detail_sink
 
-from .execution import ROW_ERROR_KEY, ROW_USAGE_KEY, Row, RowMapper
+from .execution import ROW_ERROR_KEY, ROW_USAGE_KEY, Row, RowMapper, narrow_stage
 
 # The reply field carrying a batched result's item number — the rejoin handle.
 # Runtime-assigned per chunk (0-based), so it is always a small unique int the
@@ -34,8 +35,7 @@ _ROW_NUMBER_FIELD = "row_number"
 def make_llm_row_mapper(stage: Stage, ctx: RunContext, src: pd.DataFrame) -> RowMapper:
     """Build this execution's per-row mapper. A row's reply depends only on that
     row, so neither the input frame nor a row's position in it is read."""
-    llm = stage.llm
-    assert llm is not None  # Stage validation: llm_transform carries llm
+    llm = narrow_stage(stage, LLMTransformStage).llm
 
     # The reply spec (output_schema − input_schema), compiled to the model the
     # agent must satisfy. Stage validation guarantees an llm_transform is 1:1
@@ -92,8 +92,7 @@ def run_llm_batches(
     it actually covers. The rows returned carry their internal columns,
     un-stripped and unprojected — the shape assembles the stage's output frame
     from them."""
-    llm = stage.llm
-    assert llm is not None  # Stage validation: llm_transform carries llm
+    llm = narrow_stage(stage, LLMTransformStage).llm
     assert stage.output_schema is not None and stage.inputs[0].table_schema is not None
     batch_reply_schema = _build_batch_reply_schema(stage)
 

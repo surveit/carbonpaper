@@ -104,8 +104,12 @@ def apply_run_bindings(
             f"bindings target stage id(s) with no connector to bind: {unbindable}; "
             f"bindable stages are {sorted(connector_ids)}")
 
-    rebound = [
-        _merge_connector_params(stage, given[stage.id]) if stage.id in given else stage
+    rebound: list[Stage] = [
+        _merge_connector_params(stage, given[stage.id])
+        # `given`'s keys were just checked to be connector_ids, which is exactly
+        # the input_data stages — so the isinstance never rejects a bound stage.
+        if isinstance(stage, InputDataStage) and stage.id in given
+        else stage
         for stage in stages
     ]
     param_sources = {
@@ -114,7 +118,9 @@ def apply_run_bindings(
     return rebound, param_sources
 
 
-def _merge_connector_params(stage: Stage, binding: Mapping[str, Any]) -> Stage:
+def _merge_connector_params(
+    stage: InputDataStage, binding: Mapping[str, Any]
+) -> InputDataStage:
     """A copy of `stage` with `binding` merged over its connector params,
     re-validated as a whole Connector so a bad param fails at prepare, not
     mid-run."""

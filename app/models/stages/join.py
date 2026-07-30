@@ -51,7 +51,7 @@ class JoinConfig(StageConfig):
     )
 
 
-class _JoinStage(StageBase):
+class JoinStage(StageBase):
     """enrich and expand differ only in the cardinality the runtime enforces —
     the config, the arity and the column rules are the same."""
     join: JoinConfig
@@ -67,11 +67,11 @@ class _JoinStage(StageBase):
         return find_join_output_issues(self)
 
 
-class EnrichStage(_JoinStage):
+class EnrichStage(JoinStage):
     type: Literal[StageType.enrich]
 
 
-class ExpandStage(_JoinStage):
+class ExpandStage(JoinStage):
     type: Literal[StageType.expand]
 
 
@@ -81,7 +81,7 @@ SELECT_UNPRODUCIBLE_ISSUE = (
 )
 
 
-def find_join_column_issues(stage: "_JoinStage") -> list[str]:
+def find_join_column_issues(stage: "JoinStage") -> list[str]:
     """Every join key whose `.left`/`.right` names a column absent from its
     resolved side's input."""
     join = stage.join
@@ -100,7 +100,7 @@ def find_join_column_issues(stage: "_JoinStage") -> list[str]:
     return issues
 
 
-def find_join_output_issues(stage: "_JoinStage") -> list[str]:
+def find_join_output_issues(stage: "JoinStage") -> list[str]:
     """Every declared output_schema column (and select entry) the join handle
     cannot deliver."""
     join = stage.join

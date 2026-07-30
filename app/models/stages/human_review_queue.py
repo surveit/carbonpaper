@@ -8,7 +8,7 @@ from typing import ClassVar, Literal, Optional
 
 from pydantic import Field
 
-from app.models.schema import _Base
+from app.models.schema import StageConfig
 from app.models.stage_base import StageBase, StageInput, StageType
 from app.models.stages.shared import find_predicate_column_issues, resolve_input_columns
 
@@ -26,7 +26,7 @@ class RowReviewDecision(str, Enum):
     reject = "reject"
 
 
-class QueueConfig(_Base):
+class QueueConfig(StageConfig):
     """human_review_queue config block. A queued row is matched to a cached human
     decision by fingerprinting the row itself (app.core.stage_cache) — no
     column configuration is needed to enable that matching."""
@@ -51,7 +51,7 @@ class HumanReviewQueueStage(StageBase):
     queue: QueueConfig
     inputs: list[StageInput] = Field(default_factory=list, min_length=1)
 
-    def fingerprint_blocks(self) -> dict[str, _Base]:
+    def fingerprint_blocks(self) -> dict[str, StageConfig]:
         return {"queue": self.queue}
 
     def find_config_column_issues(self) -> list[str]:

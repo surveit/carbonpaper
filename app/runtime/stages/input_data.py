@@ -14,8 +14,10 @@ from typing import Any
 import pandas as pd
 
 from app.models import Stage, XlsxReadParams
+from app.models.stages.input_data import InputDataStage
 
 from ..context import RunContext
+from .execution import narrow_stage
 
 
 def preflight_input_data(stage: Stage) -> tuple[list[str], dict[str, Any] | None]:
@@ -27,8 +29,7 @@ def preflight_input_data(stage: Stage) -> tuple[list[str], dict[str, Any] | None
     None when the stage is not ready. The hash is a strong integrity signal for
     "which file was designated", not a read-time proof — the handler opens the
     file moments later."""
-    connector = stage.connector
-    assert connector is not None  # Stage validation: input_data carries connector
+    connector = narrow_stage(stage, InputDataStage).connector
     path_param = connector.params.get("path")
     if not path_param:
         return ([f"`{stage.id}`: no file bound — supply a run binding, or author "
@@ -43,9 +44,7 @@ def preflight_input_data(stage: Stage) -> tuple[list[str], dict[str, Any] | None
 
 
 def read_input_data(stage: Stage, ctx: RunContext) -> pd.DataFrame:
-    connector = stage.connector
-    assert connector is not None  # Stage validation: input_data carries connector
-    params = connector.params
+    params = narrow_stage(stage, InputDataStage).connector.params
 
     if "path" not in params:
         raise ValueError(

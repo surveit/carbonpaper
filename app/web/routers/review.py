@@ -15,6 +15,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 
 from app.core.errors import ReviewValidationError
 from app.models import RowReviewDecision, Stage
+from app.models.stages.llm_transform import LLMTransformStage
 from app.runtime.llm import render_prompt
 from app.services import review
 from app.core.stage_cache import StageCacheEntry
@@ -191,7 +192,9 @@ def _load_scored_stage(stages: list[Stage], stage_def: Stage) -> Stage | None:
 
 
 def _resolve_prompt_template(scored_def: Stage | None) -> str | None:
-    return scored_def.llm.prompt_data_template if scored_def and scored_def.llm else None
+    if not isinstance(scored_def, LLMTransformStage):
+        return None
+    return scored_def.llm.prompt_data_template
 
 
 def _read_table_or_none(path: Path) -> pd.DataFrame | None:

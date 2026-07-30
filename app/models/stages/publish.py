@@ -8,7 +8,7 @@ from typing import ClassVar, Literal, Optional
 
 from pydantic import Field
 
-from app.models.schema import _Base
+from app.models.schema import StageConfig
 from app.models.stage_base import StageBase, StageInput, StageType
 from app.models.stages.code import PythonFunction
 from app.models.stages.shared import COLUMN_ISSUE, resolve_input_columns
@@ -21,7 +21,7 @@ class PublishFormat(str, Enum):
     evidence_cards = "evidence_cards"
 
 
-class PublishConfig(_Base):
+class PublishConfig(StageConfig):
     """publish rendering config. The code a publish stage RUNS lives in its
     `function` block, not here."""
     # Every field changes what this stage computes (format, destination,
@@ -50,7 +50,7 @@ class PublishStage(StageBase):
     function: PythonFunction
     inputs: list[StageInput] = Field(default_factory=list, min_length=1)
 
-    def fingerprint_blocks(self) -> dict[str, _Base]:
+    def fingerprint_blocks(self) -> dict[str, StageConfig]:
         return {"publish": self.publish, "function": self.function}
 
     def find_config_column_issues(self) -> list[str]:
