@@ -31,6 +31,13 @@ app/chat/  PydanticAI chat · app/core/llm/  model menu · tests/  pytest (offli
   `app.services.generation`, which wraps the compiler). Both enforced by import-linter.
 - **Never `except Exception` or bare `except`.** Catch specific types — swallowing errors breaks
   fail-loudly. Enforced by Ruff `BLE001`.
+- **A system prompt states the model's ROLE in the wider system, and what becomes of its
+  output.** Not just the task: who reads the result, what it is shown beside, what the reader
+  is deciding, and what the model will *not* be told (e.g. the example deriver never sees the
+  code or the pass/fail). A model given only a task optimises the artifact; one given its place
+  optimises the reader's decision, and the two differ — ordering worked examples so they
+  *explain* rather than merely cover does not follow from the task alone. Include at least one
+  worked example of the output.
 - **No `dict[str, Any]` as a stand-in for a structured value.** A dict with a known, fixed set of
   keys is a missing model — define a Pydantic model (`PersistedModel` for a stored object) or
   reference an existing one, and pass *that*. A function returning `dict[str, Any]`, or a field
