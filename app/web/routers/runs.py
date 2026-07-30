@@ -41,6 +41,7 @@ from app.runtime.run_log import RUN_DONE, read_events_since, read_events_window
 from app.runtime.trace import trace_row, trace_to_dict
 from app.runtime.trace_view import build_trace_view
 from app.web.config import EXAMPLES_DIR, REPO_ROOT, templates
+from app.web.stage_test_views import build_certification, shape_test_views
 from app.web.diagrams import TYPE_CLASS, TYPE_GLYPH, build_mermaid_graph
 from app.web.loading import (
     build_llm_example,
@@ -509,6 +510,8 @@ async def run_stage_partial(
             "input_previews": input_previews,
             "function_code": function_code,
             "llm_example": llm_example,
+            "test_views": (views := shape_test_views(stage_def)),
+            "certification": build_certification(stage_def, views) if stage_def else None,
             "previewable": stage_def is not None and stage_def.type in PREVIEWABLE_TYPES,
             "type_glyph": TYPE_GLYPH,
             "type_class": TYPE_CLASS,
@@ -588,6 +591,10 @@ async def run_stage_lineage_panel(
             "stage_def": pinned.stage,
             "stage_def_error": pinned.error,
             "function_code": resolve_function_code(pinned.stage),
+            "test_views": (lineage_views := shape_test_views(pinned.stage)),
+            "certification": (
+                build_certification(pinned.stage, lineage_views) if pinned.stage else None
+            ),
             "preview": load_output_row(run_dir, stage_record.get("output_path"), row),
             "scoped_row": row,
             "type_glyph": TYPE_GLYPH,

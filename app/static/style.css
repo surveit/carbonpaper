@@ -416,7 +416,45 @@ table.schema tr:last-child td { border-bottom: 0; }
 }
 .stage-summary.missing { font-size: 14px; }
 
-/* Code comes LAST and folded: description → examples → code. */
+/* Certification badge (_stage_certification.html) — sits directly under the
+   summary, because the claim it makes is a claim ABOUT that summary. The `why`
+   line is deliberately not hidden behind a disclosure: a green badge with no
+   stated scope reads as "this step is correct", which it does not mean. */
+.stage-cert {
+    max-width: 70ch;
+    margin: 0 0 14px;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-left-width: 3px;
+    border-radius: 3px;
+}
+.stage-cert-line { margin: 0; font-size: 14px; }
+.stage-cert-why { margin: 6px 0 0; font-size: 13px; line-height: 1.5; }
+.stage-cert-badge {
+    display: inline-block; font-size: 11px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.4px; padding: 3px 10px; border-radius: 3px; margin-right: 8px;
+    border: 1px solid;
+}
+.stage-cert-certified { border-left-color: var(--belief-approved-bd); }
+.stage-cert-certified .stage-cert-badge {
+    background: var(--belief-approved-bg); color: #1f5a1f; border-color: var(--belief-approved-bd);
+}
+.stage-cert-failing { border-left-color: var(--belief-rejected-bd); }
+.stage-cert-failing .stage-cert-badge {
+    background: var(--belief-rejected-bg); color: #802020; border-color: var(--belief-rejected-bd);
+}
+.stage-cert-untested,
+.stage-cert-unsummarised { border-left-color: var(--belief-stale-bd); }
+.stage-cert-untested .stage-cert-badge,
+.stage-cert-unsummarised .stage-cert-badge {
+    background: var(--belief-stale-bg); color: #7a4a00; border-color: var(--belief-stale-bd);
+}
+.stage-cert-untestable { border-left-color: var(--belief-unreviewed-bd); }
+.stage-cert-untestable .stage-cert-badge {
+    background: var(--belief-unreviewed-bg); color: #4a5561; border-color: var(--belief-unreviewed-bd);
+}
+
+/* Code comes LAST, and open: description → examples → code. */
 .code-block > details > summary {
     cursor: pointer;
     display: flex;
