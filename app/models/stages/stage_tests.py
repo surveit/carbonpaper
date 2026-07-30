@@ -122,17 +122,17 @@ def build_stage_tests_model(
 
 def _validate_row_function_row_counts(test: StageTest) -> None:
     input_rows = len(next(iter(test.inputs.values()), []))
-    if test.fails_saying is not None:
-        if input_rows != 1:
-            raise ValueError(
-                f"test {test.name!r}: a python_row_function test is one row in "
-                f"(got {input_rows} in)"
-            )
-        return
-    if input_rows != 1 or len(test.expected) != 1:
+    if input_rows != 1:
+        raise ValueError(
+            f"test {test.name!r}: a python_row_function test is one row in "
+            f"(got {input_rows} in)"
+        )
+    # A failure case's `expected` is already required to be empty by
+    # validate_stage_tests, so only a rows case has an output count left to hold.
+    if test.fails_saying is None and len(test.expected) != 1:
         raise ValueError(
             f"test {test.name!r}: a python_row_function test is one row in → "
-            f"one row out (got {input_rows} in, {len(test.expected)} out)"
+            f"one row out (got 1 in, {len(test.expected)} out)"
         )
 
 

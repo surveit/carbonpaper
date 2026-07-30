@@ -147,6 +147,19 @@ def test_failure_case_that_returns_rows_is_mismatch():
     assert "1 row(s)" in (result.message or "")
 
 
+def test_failure_case_returning_a_non_dataframe_is_mismatch_not_crash():
+    # The expected-failure verdict is reached before the return value is known to
+    # be a frame, so the message must not reach for a row count it cannot have.
+    stage = _frame_stage(
+        "def transform(df):\n    return 7\n",
+        [{"name": "expects_refusal", "inputs": {"load": [{"amount": 2.0}]},
+          "fails_saying": "not a dollar amount"}],
+    )
+    [result] = run_tests_for_stage(stage)
+    assert result.status == "mismatch"
+    assert "int" in (result.message or "")
+
+
 def test_rows_case_raising_is_still_error():
     stage = _row_stage(_REFUSES, [{
         "name": "expects_rows", "inputs": {"load": [{"amount": 1.0}]},

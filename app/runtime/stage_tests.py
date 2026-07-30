@@ -176,17 +176,24 @@ def _run_one_test(stage: Stage, test: StageTest) -> StageTestResult:
         actual = HANDLERS[StageType(stage.type)].execute(stage, input_frames, ctx)
     except Exception as exc:  # noqa: BLE001 — the function is authored code; any raise IS the result
         return _judge_raise(test, exc)
+    if test.fails_saying is not None:
+        return StageTestResult(
+            test.name, "mismatch",
+            message=f"expected the step to fail, got {_describe_output(actual)}",
+        )
     if not isinstance(actual, pd.DataFrame):
         return StageTestResult(
             test.name, "error",
             message=f"function returned {type(actual).__name__}, expected a DataFrame",
         )
-    if test.fails_saying is not None:
-        return StageTestResult(
-            test.name, "mismatch",
-            message=f"expected the step to fail, got {len(actual)} row(s)",
-        )
     return _compare(stage, test, actual)
+
+
+def _describe_output(actual: Any) -> str:
+    """What the step returned instead of failing — row count only if it is a frame."""
+    if isinstance(actual, pd.DataFrame):
+        return f"{len(actual)} row(s)"
+    return type(actual).__name__
 
 
 def _judge_raise(test: StageTest, exc: Exception) -> StageTestResult:
