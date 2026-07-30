@@ -266,7 +266,7 @@ def test_the_cache_survives_a_process_restart_and_a_change_of_directory(tmp_path
     that both were read back off disk.
 
     The two runs are launched from DIFFERENT directories, neither of them the
-    project, with only CW_DB_PATH set and the frames root left to its default:
+    project, with only CARBONPAPER_DB_PATH set and the frames root left to its default:
     a frames root that resolved against the working directory rather than
     against the pinned database would send the two runs to different roots, and
     the second would miss the frame entry and recompute `totals`.
@@ -298,10 +298,10 @@ def _run_in_a_fresh_process(project: Path, *, db: Path, cwd: Path) -> None:
     store of its own — the faithful exercise of a restart, as
     tests/test_seed_cli.py is of a store-free process."""
     repo_root = Path(__file__).resolve().parents[1]
-    env = {k: v for k, v in os.environ.items() if k != "CW_FRAMES_ROOT"}
+    env = {k: v for k, v in os.environ.items() if k != "CARBONPAPER_FRAMES_ROOT"}
     result = subprocess.run(
         [sys.executable, "-m", "app.runtime.runner", str(project)],
-        cwd=cwd, env={**env, "PYTHONPATH": str(repo_root), "CW_DB_PATH": str(db)},
+        cwd=cwd, env={**env, "PYTHONPATH": str(repo_root), "CARBONPAPER_DB_PATH": str(db)},
         capture_output=True, text=True,
     )
     assert result.returncode == 0, (

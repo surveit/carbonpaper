@@ -21,14 +21,14 @@ def test_seed_cli_subprocess_bootstraps_the_store_and_seeds(tmp_path):
     masks in-process) crashed with 'document store not configured'.
 
     A subprocess is the only faithful exercise of a store-free process. It is
-    pointed at a temp workspace + temp DB via the CW_ env overrides so it never
+    pointed at a temp workspace + temp DB via the CARBONPAPER_ env overrides so it never
     touches the real examples/ or data/app.db."""
     examples_dir = tmp_path / "examples"
     examples_dir.mkdir()
     env = {
         **os.environ,
-        "CW_EXAMPLES_DIR": str(examples_dir),
-        "CW_DB_PATH": str(tmp_path / "app.db"),
+        "CARBONPAPER_EXAMPLES_DIR": str(examples_dir),
+        "CARBONPAPER_DB_PATH": str(tmp_path / "app.db"),
     }
     result = subprocess.run(
         [sys.executable, "-m", "app.seeds"],
@@ -90,7 +90,7 @@ def test_discover_workflow_files_returns_empty_list_for_a_missing_data_dir(tmp_p
 
 
 def test_seed_demo_data_if_enabled_is_a_noop_when_env_var_unset(tmp_path, monkeypatch):
-    monkeypatch.delenv("CW_SEED_DEMO", raising=False)
+    monkeypatch.delenv("CARBONPAPER_SEED_DEMO", raising=False)
     examples_dir = tmp_path / "examples"
     examples_dir.mkdir()
 
@@ -101,7 +101,7 @@ def test_seed_demo_data_if_enabled_is_a_noop_when_env_var_unset(tmp_path, monkey
 
 
 def test_seed_demo_data_if_enabled_seeds_when_env_var_is_1(tmp_path, monkeypatch):
-    monkeypatch.setenv("CW_SEED_DEMO", "1")
+    monkeypatch.setenv("CARBONPAPER_SEED_DEMO", "1")
     examples_dir = tmp_path / "examples"
     examples_dir.mkdir()
 
