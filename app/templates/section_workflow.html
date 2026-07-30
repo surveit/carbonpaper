@@ -81,16 +81,17 @@
 
 {# Compiler warnings — what is wrong with the workflow AS WRITTEN, judged without
    running anything. The same list the authoring agent must clear before it reports
-   the workflow finished (the report_compiler_warnings MCP tool), so a reviewer and
-   the agent look at one thing. Blocking entries first: those are the ones someone
-   can fix. Whether a step's examples PASS is a different question, answered by
-   running them, and is not here. #}
+   asked to sign off (the report_compiler_warnings MCP tool), so a reviewer and the
+   agent look at one thing. Blocking entries first: those are the ones someone can
+   fix. A warning does not stop anyone reviewing the workflow — it means their
+   attention is about to be spent on something already known. Whether a step's
+   examples PASS is a different question, answered by running them, and is not here. #}
 {% if compiler_warnings and compiler_warnings.warnings %}
 {% set blocking = compiler_warnings.blocking|length %}
 <details class="wf-issues wf-issues-{{ 'error' if blocking else 'note' }}" open>
   <summary>
-    {% if blocking %}<strong>⚠ {{ blocking }} to fix before this workflow can be reviewed</strong>
-    {% else %}<strong>Nothing blocking review</strong>{% endif %}
+    {% if blocking %}<strong>⚠ {{ blocking }} to fix before signing this workflow off</strong>
+    {% else %}<strong>Nothing left to fix</strong>{% endif %}
     <span class="muted">— {{ compiler_warnings.warnings|length }} compiler
       warning{% if compiler_warnings.warnings|length != 1 %}s{% endif %}</span></summary>
   <ul>

@@ -117,9 +117,14 @@ methodology; then loop edit_stage → run_stage_tests until they pass.
 
 # Finishing
 report_compiler_warnings(project_id) reports what is wrong with the workflow as
-WRITTEN — no code run. Dirty is fine while you build; `is_clean` must be true before
-you report the workflow finished. Blocking warnings mean a human cannot review what
-you are handing back.
+WRITTEN — no code run. Dirty is fine while you build.
+
+Two different things you can ask a human for, with different bars:
+- A look at a smoke test — run_workflow_test and a review of what came out. Fine with
+  warnings outstanding; say which ones are open.
+- FINAL SIGNOFF. Do not ask for this with any warning outstanding. Either clear it, or
+  state plainly why that specific warning is safe to ignore here. A warning you leave
+  unmentioned spends the reviewer's attention on something you already knew about.
 
 # Running
 Runs execute a stored version; save_version(project_id, message) creates one, then
@@ -285,14 +290,15 @@ def report_compiler_warnings(project_id: str) -> dict[str, Any]:
     examples to check that description, code the review panel cannot show, and the
     deliberate choices (cache off, row limit) a reviewer should be told about.
 
-    You MUST call this and find `is_clean` true before reporting the workflow
-    finished. It may be dirty while you are still building — that is expected — but
-    a workflow handed back with blocking warnings is one a human cannot review.
+    Call this before you ask a human for final signoff, and do not ask with any
+    warning outstanding: either clear it, or say plainly why that one is safe to
+    ignore here. Dirty while you are still building is expected, and you may ask for
+    a look at a smoke test with warnings open — just name which are open.
 
-    `blocking` lists what you have to fix; the rest is information you cannot clear
-    from the stage (a filter_rows can never carry examples) or that is a legitimate
-    authoring choice. This is NOT about whether examples pass — run_stage_tests
-    answers that, and it runs code."""
+    `blocking` lists the ones you can actually fix. The rest you cannot clear from
+    the stage (a filter_rows can never carry examples) or are a deliberate authoring
+    choice — still worth a sentence to the reviewer rather than silence. This is NOT
+    about whether examples pass: run_stage_tests answers that, and it runs code."""
     pdir = _resolve_existing_project(project_id)
     stages = loader.load_workflow(pdir)
     report = find_workflow_compiler_warnings(stages)

@@ -1,6 +1,6 @@
 """Compiler warnings: what is wrong with a workflow as WRITTEN, judged without
-running anything. The authoring agent must clear every blocking one before it
-reports the workflow finished, and the Workflow page shows the same list.
+running anything. The authoring agent clears these (or justifies each one it leaves)
+before asking a human to sign off, and the Workflow page shows the same list.
 Deliberately execution-free — see docs/architecture.md.
 """
 from __future__ import annotations
@@ -22,14 +22,13 @@ WarningKind = Literal[
     "row_limit",
 ]
 
-# Whether a kind BLOCKS the authoring agent from reporting the workflow done, and
-# the order the list is read in (blocking first).
+# Whether a kind is FIXABLE by editing the stage, and the order the list is read in
+# (fixable first).
 #
-# A kind only blocks if the agent can actually clear it. `untestable` cannot be
-# cleared on the stage at all — a filter_rows carries a description no example can
-# ever check — so blocking on it would leave the agent no way to finish. The other
-# two non-blocking kinds are deliberate authoring choices, worth showing a reviewer
-# and wrong to refuse.
+# `untestable` cannot be cleared on the stage at all — a filter_rows carries a
+# description no example can ever check — so treating it as fixable would leave the
+# agent no way to finish. The other two are deliberate authoring choices: wrong to
+# refuse, still worth telling a reviewer about.
 _BLOCKING: dict[str, bool] = {
     "undescribed": True,
     "unexemplified": True,
@@ -50,7 +49,9 @@ class CompilerWarning(_Base):
 
     @property
     def blocking(self) -> bool:
-        """Must this be cleared before the workflow can be reported finished?"""
+        """Can the authoring agent actually clear this one? A non-blocking warning is
+        not thereby unimportant — it still has to be explained to a reviewer rather
+        than left silent — it just cannot be fixed by editing the stage."""
         return _BLOCKING[self.kind]
 
 
@@ -65,8 +66,9 @@ class CompilerWarningReport(BaseModel):
 
     @property
     def is_clean(self) -> bool:
-        """True when nothing blocking remains — the authoring agent's gate. A
-        non-blocking warning is information, not a refusal."""
+        """True when nothing fixable remains. NOT a licence to ask for signoff with
+        the rest unmentioned: a non-blocking warning still owes the reviewer a
+        sentence saying why it is safe to ignore here."""
         return not self.blocking
 
 
