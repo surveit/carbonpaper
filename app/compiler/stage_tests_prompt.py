@@ -45,16 +45,12 @@ the domain of the transformation.
 Even where the description does not determine an output, still submit a case. This kind of case is most important for an author to look at
 because it means the description is insufficient to define the behavior, and therefore needs investigation beyond the description.
 
-The corner cases you are handed are the author's own list. An author who missed a
-case when writing the code missed it when writing the list too, so treat that list
-as a floor and never as a ceiling: derive cases the description does not mention.
-Weight your search toward inputs where a careless implementation would hand back a
-plausible WRONG value rather than fail — those are the ones that pass unnoticed.
-Where the honest outcome for such an input is that the step fails — case 5 of the
-worked example below gives the test for telling those inputs apart — say so: set
-`expected` to null, which claims the step must fail on that input, rather than
-asserting a number the description does not support. Null is not the same claim as
-`[]`: `[]` says the step succeeds and hands back no rows.
+The corner cases you are handed are the author's own list; a case missed in the
+code was missed in the list too. Treat it as a floor: derive cases the
+description never mentions, weighting the search toward inputs where a careless
+step returns a plausible WRONG value instead of failing — those pass unnoticed.
+Where failing is the honest outcome (case 5), set `expected` to null, which
+claims the step must fail. Null is not `[]`, which claims success with no rows.
 
 A worked example. Given the description "Reads the amount a filing reports in
 `income` and records it as a number in `income_usd`. An amount that cannot be
@@ -77,23 +73,15 @@ read is recorded as zero rather than guessed.", with one stated corner case
    Why: "cannot be read is recorded as zero".
 5. "an amount in another currency is not recorded as dollars"
    income "45000 EUR" -> the step fails (`expected` is null)
-   Why: nothing in the description or its corner cases mentions currency, yet
-   `income_usd` names one. Recording 45000.0 books euros as dollars; recording
-   0.0 throws away an amount that was reported. Neither is honest, so the case
-   pins the only honest outcome — the step fails and says why. What separates
-   this from case 4 is the test to reuse on any step: case 4's input reported no
-   amount at all, so recording zero loses nothing, while this input reports a
-   real amount the step cannot faithfully carry forward. When an input holds
-   something real that the step cannot carry forward without changing what it
-   says, failing is the honest outcome; when it holds nothing, a stated stand-in
-   value is.
+   Why: no corner case mentions currency, yet `income_usd` names one. 45000.0
+   books euros as dollars; 0.0 throws away a reported amount. Neither is honest.
+   The test to reuse: case 4's input reported nothing, so the stand-in value
+   loses nothing; this one reports something real the step cannot carry forward
+   faithfully, so failing is honest.
 
 Note what that ordering does: someone reading it top to bottom learns what the
 step does before they are shown where it gets awkward. Note also that case 2
 names its own uncertainty instead of quietly asserting an answer, and that no
-case mentions a function, a type, or a null. Case 5 is the one the stated corner
-cases never named: it comes from reading `income_usd` and asking what input would
-make a careless step return a plausible wrong number — which is what deriving
-beyond the author's list looks like in practice.
+case mentions a function, a type, or a null.
 
 Submit the finished suite with the submit_answer tool."""
