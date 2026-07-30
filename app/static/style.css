@@ -425,6 +425,34 @@ table.schema tr:last-child td { border-bottom: 0; }
 .stage-corner-list dt { font-weight: 500; margin-top: 8px; }
 .stage-corner-list dd { margin: 2px 0 0 18px; color: var(--muted); }
 
+/* Compiler warnings (section_workflow.html) — what is wrong with the workflow as
+   written, above the graph. Two severities only: blocking (someone can and must
+   fix it) and note (a legitimate choice, or something the stage cannot clear). */
+.wf-issues {
+    border: 1px solid var(--border);
+    border-left-width: 3px;
+    border-radius: 4px;
+    padding: 10px 16px;
+    margin: 0 0 16px;
+    max-width: 100ch;
+    background: white;
+}
+.wf-issues > summary { cursor: pointer; }
+.wf-issues-error { border-left-color: var(--belief-rejected-bd); background: var(--belief-rejected-bg); }
+.wf-issues-note  { border-left-color: var(--belief-unreviewed-bd); background: var(--belief-unreviewed-bg); }
+.wf-issues ul { margin: 10px 0 2px; padding: 0; list-style: none; }
+.wf-issue {
+    font-size: 13.5px; margin: 5px 0;
+    display: flex; flex-wrap: wrap; gap: 7px; align-items: baseline;
+}
+.wf-issue-kind {
+    flex: none; min-width: 118px; text-align: center;
+    font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px;
+    padding: 2px 7px; border-radius: 3px; border: 1px solid;
+}
+.wf-issue-error .wf-issue-kind { background: var(--belief-rejected-bg); color: #802020; border-color: var(--belief-rejected-bd); }
+.wf-issue-note  .wf-issue-kind { background: var(--belief-unreviewed-bg); color: #4a5561; border-color: var(--belief-unreviewed-bd); }
+
 /* Certification badge (_stage_certification.html) — sits directly under the
    summary, because the claim it makes is a claim ABOUT that summary. The `why`
    line is deliberately not hidden behind a disclosure: a green badge with no

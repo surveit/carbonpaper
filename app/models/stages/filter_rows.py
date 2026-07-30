@@ -9,6 +9,7 @@ from pydantic import Field, model_validator
 
 from app.models.schema import StageConfig
 from app.models.stage_base import StageBase, StageInput, StageType
+from app.models.stages.warnings import CompilerWarning, warn
 from app.models.stages.code import (
     CORNER_CASES_DESCRIPTION,
     SUMMARY_DESCRIPTION,
@@ -76,6 +77,9 @@ class FilterRowsStage(StageBase):
     def find_authored_code_block(self) -> FilterConfig:
         return self.filter
 
+    def find_handle_compiler_warnings(self) -> list[CompilerWarning]:
+        return find_filter_warnings(self)
+
 
 def find_filter_output_issues(stage: "FilterRowsStage") -> list[str]:
     """Issue naming any column where the declared output_schema disagrees with
@@ -89,3 +93,14 @@ def find_filter_output_issues(stage: "FilterRowsStage") -> list[str]:
         f"stage '{stage.id}': output_schema must equal its input schema; differs "
         f"on column(s) {differing}"
     ]
+
+
+def find_filter_warnings(stage: "FilterRowsStage") -> list[CompilerWarning]:
+    """Compiler warnings about `stage.filter` — raised here, and only here, because
+    this module owns the block. A predicate is authored code like any other, so it
+    needs prose standing in for it; there is no `module` variant to worry about,
+    since a filter's code is always inline."""
+    if not (stage.filter.summary or "").strip():
+        return [warn(stage, "undescribed",
+                     "no plain-language description — reviewable only by reading its code")]
+    return []

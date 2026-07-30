@@ -14,6 +14,7 @@ from pydantic import Field, model_validator
 from app.models.errors import StepRefused
 from app.models.schema import FunctionKind, StageConfig, _Base
 from app.models.stage_base import StageBase, StageInput, StageType
+from app.models.stages.warnings import CompilerWarning, warn
 
 # The instruction an authoring client reads when it fills in `summary`. Python
 # code is the one block a non-engineer reviewer cannot read for themselves, so
@@ -180,9 +181,26 @@ class PythonFunction(StageConfig):
         return self
 
 
-class _PythonFunctionStage(StageBase):
-    """Shared by the two python transforms: same `function` block, different
-    invocation (see StageType)."""
+def find_python_function_warnings(stage: "CarriesPythonFunctionStage"
+                                  ) -> list[CompilerWarning]:
+    """Compiler warnings about a `function` block — raised here, and only here,
+    because this module owns it. A stage whose behaviour is authored code needs prose
+    standing in for it, and the panel needs to be able to show that code."""
+    function = stage.function
+    if not (function.summary or "").strip():
+        return [warn(stage, "undescribed",
+                     "no plain-language description — reviewable only by reading its code")]
+    if function.kind == FunctionKind.module:
+        return [warn(stage, "unreviewable_code",
+                     f"the code lives in module `{function.module}` rather than on the "
+                     f"stage, so the review panel cannot show it")]
+    return []
+
+
+class CarriesPythonFunctionStage(StageBase):
+    """The stage types whose behaviour is a `function` block: the two python
+    transforms, and publish, which adds rendering config alongside it. Declared once
+    here and inherited so `stage.function` is read in this module and nowhere else."""
     function: PythonFunction
 
     def fingerprint_blocks(self) -> dict[str, StageConfig]:
@@ -191,14 +209,17 @@ class _PythonFunctionStage(StageBase):
     def find_authored_code_block(self) -> PythonFunction:
         return self.function
 
+    def find_handle_compiler_warnings(self) -> list[CompilerWarning]:
+        return find_python_function_warnings(self)
 
-class PythonRowFunctionStage(_PythonFunctionStage):
+
+class PythonRowFunctionStage(CarriesPythonFunctionStage):
     type: Literal[StageType.python_row_function]
     # Exactly one input: the runtime maps the function over one frame's rows, so
     # a second input is a join or a python_frame_function.
     inputs: list[StageInput] = Field(default_factory=list, min_length=1, max_length=1)
 
 
-class PythonFrameFunctionStage(_PythonFunctionStage):
+class PythonFrameFunctionStage(CarriesPythonFunctionStage):
     type: Literal[StageType.python_frame_function]
     inputs: list[StageInput] = Field(default_factory=list, min_length=1)

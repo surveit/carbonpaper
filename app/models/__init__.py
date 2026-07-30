@@ -2,6 +2,12 @@
 
 Import from `app.models` (this aggregator) for the stable public surface.
 """
+from app.models.compiler_warnings import (
+    CompilerWarningReport,
+    find_stage_compiler_warnings,
+    find_workflow_compiler_warnings,
+)
+from app.models.stages.warnings import CompilerWarning
 from app.models.coverage import Coverage
 from app.models.errors import StepRefused
 from app.models.node_contract_notes import (
@@ -331,6 +337,8 @@ __all__ = [
     "StageType", "ConnectorKind", "FileFormat", "AggFormula",
     "FunctionKind", "PublishFormat", "is_valid_column_type",
     "SourceRef", "Column", "TableSchema", "Connector", "LLMConfig",
+    "CompilerWarning", "CompilerWarningReport",
+    "find_stage_compiler_warnings", "find_workflow_compiler_warnings",
     "PythonFunction", "JoinKey", "JoinConfig", "AggregationOp",
     "AggregateConfig", "QueueConfig", "PublishConfig", "ReviewConfig",
     "RowReviewDecision", "UnionConfig", "FilterConfig",
