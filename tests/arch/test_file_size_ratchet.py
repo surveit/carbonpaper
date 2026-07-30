@@ -178,7 +178,7 @@ def test_measure_file_sizes_reads_relative_posix_path_and_counts_logical_lines(t
     nested = tmp_path / "app" / "sub"
     nested.mkdir(parents=True)
     file = nested / "m.py"
-    file.write_text("a = 1\nb = 2\nc = 3\n")
+    file.write_text("a = 1\nb = 2\nc = 3\n", encoding="utf-8")
     [size] = measure_file_sizes([file], tmp_path)
     assert size.path == "app/sub/m.py"
     assert size.lloc == 3
@@ -186,7 +186,7 @@ def test_measure_file_sizes_reads_relative_posix_path_and_counts_logical_lines(t
 
 def test_measure_file_sizes_does_not_bill_comments_or_blank_lines(tmp_path: Path) -> None:
     file = tmp_path / "m.py"
-    file.write_text("# note\n\na = 1\n\n# more\nb = 2\n")
+    file.write_text("# note\n\na = 1\n\n# more\nb = 2\n", encoding="utf-8")
     [size] = measure_file_sizes([file], tmp_path)
     assert size.lloc == 2
 
@@ -194,9 +194,9 @@ def test_measure_file_sizes_does_not_bill_comments_or_blank_lines(tmp_path: Path
 def test_measure_file_sizes_is_unchanged_by_reformatting(tmp_path: Path) -> None:
     """The ceiling must not move when a formatter re-wraps a call across lines."""
     compact = tmp_path / "compact.py"
-    compact.write_text("run(a, b, c, d)\n")
+    compact.write_text("run(a, b, c, d)\n", encoding="utf-8")
     exploded = tmp_path / "exploded.py"
-    exploded.write_text("run(\n    a,\n    b,\n    c,\n    d,\n)\n")
+    exploded.write_text("run(\n    a,\n    b,\n    c,\n    d,\n)\n", encoding="utf-8")
     [one] = measure_file_sizes([compact], tmp_path)
     [other] = measure_file_sizes([exploded], tmp_path)
     assert one.lloc == other.lloc == 1

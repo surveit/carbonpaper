@@ -153,11 +153,11 @@ def test_find_errors_module_offenders_permits_an_exception_in_errors_py(tmp_path
     Red/green proof that the filename filter actually suppresses a hit: the
     same class body in a differently-named file (below) IS flagged."""
     target = tmp_path / "errors.py"
-    target.write_text("class Boom(Exception):\n    pass\n")
+    target.write_text("class Boom(Exception):\n    pass\n", encoding="utf-8")
     assert find_errors_module_offenders([target], tmp_path) == []
 
 
 def test_find_errors_module_offenders_flags_an_exception_outside_errors_py(tmp_path: Path) -> None:
     target = tmp_path / "other.py"
-    target.write_text("class Boom(Exception):\n    pass\n")
+    target.write_text("class Boom(Exception):\n    pass\n", encoding="utf-8")
     assert find_errors_module_offenders([target], tmp_path) == ["other.py:1  class Boom"]
