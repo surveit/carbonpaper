@@ -13,7 +13,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, ClassVar, Sequence
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, ValidationError, field_validator
 
 from app.core.errors import ProjectExistsError
 from app.models import Coverage, SchemaLibrary, Stage, StageDraft
@@ -45,6 +45,16 @@ class Project(PersistedModel):
     model: str | None = None
     source: str | None = None
     authored_at: str | None = None
+
+
+class ProjectFile(BaseModel):
+    """The keys write_project_meta writes to project.json; each None when the file omits it."""
+
+    name: str | None = None
+    title: str | None = None
+    created_at: str | None = None
+    model: str | None = None
+    source: str | None = None
 
 
 # ─── Status models ────────────────────────────────────────────────────────────
@@ -236,6 +246,17 @@ def project_meta(pdir: Path) -> ProjectMeta:
         model=record.model,
         source=record.source,
     )
+
+
+def read_project_file(pdir: Path) -> ProjectFile | None:
+    """<pdir>/project.json as a ProjectFile; None when absent, ValueError when unreadable."""
+    path = Path(pdir) / "project.json"
+    if not path.is_file():
+        return None
+    try:
+        return ProjectFile.model_validate_json(path.read_text(encoding="utf-8"))
+    except (ValidationError, OSError, UnicodeDecodeError) as exc:
+        raise ValueError(f"{path}: {exc}") from exc
 
 
 def write_project_meta(pdir: Path, **fields: Any) -> dict[str, Any]:
@@ -546,6 +567,8 @@ def import_project(
 __all__ = [
     "Coverage",
     "Project",
+    "ProjectFile",
+    "read_project_file",
     "DataModelStatus",
     "WorkflowStatus",
     "RunsSummary",
