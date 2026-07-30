@@ -5,6 +5,11 @@ covering end-to-end is that round trip (carried through actual JSON text —
 WorkflowFile.to_json / model_validate_json, the form a real caller uses)."""
 from __future__ import annotations
 
+import json
+
+import pytest
+from pydantic import ValidationError
+
 from app.models import (
     Column,
     Connector,
@@ -110,3 +115,44 @@ def test_round_trip_through_json_reproduces_the_source_and_mints_a_version(tmp_p
         "approved": 0, "rejected": 0, "edited_stale": 0, "unreviewed": 1,
         "total": 1, "approved_pct": 0.0,
     }
+
+
+def test_a_bundle_from_before_per_type_stages_still_imports(tmp_path):
+    """A bundle exported by an older build carries every config block on every
+    stage, null for the ones its type does not use. Those keys are unknown on a
+    per-type stage model, so WorkflowFile drops the null ones on the way in —
+    a file already on disk must not become unimportable."""
+    legacy = json.dumps({
+        "name": "legacy", "document": "# doc", "model": "m", "source": "s",
+        "data_model": _TINY_LIBRARY.model_dump(mode="json"),
+        "stages": [{
+            "id": "load", "type": "input_data", "name": "Load",
+            "connector": {"kind": "file", "params": {"format": "csv"}},
+            "output_schema": {"columns": [{"name": "entity_id", "type": "str", "nullable": False}]},
+            "llm": None, "function": None, "join": None, "aggregate": None,
+            "queue": None, "publish": None, "union": None, "filter": None,
+        }],
+    })
+    wf = WorkflowFile.model_validate_json(legacy)
+    assert [stage.id for stage in wf.stages] == ["load"]
+    assert wf.stages[0].type == StageType.input_data
+
+
+def test_a_non_null_foreign_config_block_is_still_refused(tmp_path):
+    """Only NULL blocks are dropped: an input_data stage carrying a populated
+    `llm:` block is a real error and must not be silently discarded."""
+    bundle = json.dumps({
+        "name": "bad", "document": "# doc", "model": "m", "source": "s",
+        "data_model": _TINY_LIBRARY.model_dump(mode="json"),
+        "stages": [{
+            "id": "load", "type": "input_data", "name": "Load",
+            "connector": {"kind": "file", "params": {"format": "csv"}},
+            "output_schema": {"columns": [{"name": "entity_id", "type": "str", "nullable": False}]},
+            "llm": {"prompt_instructions": "do a thing"},
+        }],
+    })
+    with pytest.raises(ValidationError) as caught:
+        WorkflowFile.model_validate_json(bundle)
+    assert [(err["loc"], err["type"]) for err in caught.value.errors()] == [
+        (("stages", 0, "input_data", "llm"), "extra_forbidden")
+    ]

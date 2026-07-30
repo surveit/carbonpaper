@@ -13,7 +13,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Sequence
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 from app.core.errors import ProjectExistsError
 from app.models import Coverage, SchemaLibrary, Stage, StageDraft
@@ -460,6 +460,23 @@ class WorkflowFile(BaseModel):
     source: str
     data_model: SchemaLibrary
     stages: list[Stage]
+
+    @field_validator("stages", mode="before")
+    @classmethod
+    def _drop_null_stage_keys(cls, v: Any) -> Any:
+        """A bundle written before stages became per-type models carries every
+        config block, null for the ones its type does not use (`"llm": null` on an
+        input_data stage). Those keys are now unknown on the stage they land in, so
+        drop them here rather than fail an import of a file already on disk. Only
+        nulls: a NON-null block belonging to another type is a real error and still
+        raises."""
+        if not isinstance(v, list):
+            return v
+        return [
+            {key: value for key, value in stage.items() if value is not None}
+            if isinstance(stage, dict) else stage
+            for stage in v
+        ]
 
     def to_json(self) -> str:
         """Omits nulls: a stage model declares only the config blocks its own
