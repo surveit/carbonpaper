@@ -23,7 +23,7 @@ def _transform_of(stage: Stage | None) -> dict[str, Any]:
     # _Base sets use_enum_values, so stage.type is a plain str; compare by value.
     stage_type = str(stage.type)
     if stage_type == StageType.input_data.value:
-        path = stage.connector.params.get("path") if stage.connector else None
+        path = stage.connector.params.get("path")
         src = path or (stage.source.doc if stage.source else None)
         return {"kind": "source", "detail": src or "originates the rows"}
     if stage_type in (StageType.python_row_function.value, StageType.python_frame_function.value):
@@ -31,13 +31,12 @@ def _transform_of(stage: Stage | None) -> dict[str, Any]:
         # for an inline ref — never a partial snippet or a bare reference.
         return {"kind": "python", "detail": resolve_function_code(stage)}
     if stage_type == StageType.llm_transform.value:
-        llm_detail = (
-            {"instructions": stage.llm.prompt_instructions, "data_template": stage.llm.prompt_data_template}
-            if stage.llm else None
-        )
-        return {"kind": "llm", "detail": llm_detail}
+        return {"kind": "llm", "detail": {
+            "instructions": stage.llm.prompt_instructions,
+            "data_template": stage.llm.prompt_data_template,
+        }}
     if stage_type in (StageType.enrich.value, StageType.expand.value):
-        pairs = stage.join.keys if stage.join else None
+        pairs = stage.join.keys
         detail = ", ".join(f"{k.left}={k.right}" for k in pairs) if pairs else None
         return {"kind": stage_type, "detail": detail}
     return {"kind": stage_type, "detail": None}

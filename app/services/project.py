@@ -452,7 +452,7 @@ def _resolve_project_dir_to_write(name: str, examples_dir: Path | None) -> Path:
 class WorkflowFile(BaseModel):
     """A portable project — methodology + data model + workflow stages — as one
     pydantic-serialized document. Not review state, not input data (a run-time
-    concern per #135). Serialize with `model_dump_json`, load with `model_validate_json`."""
+    concern per #135). Serialize with `to_json`, load with `model_validate_json`."""
 
     name: str
     document: str
@@ -460,6 +460,12 @@ class WorkflowFile(BaseModel):
     source: str
     data_model: SchemaLibrary
     stages: list[Stage]
+
+    def to_json(self) -> str:
+        """Omits nulls: a stage model declares only the config blocks its own
+        type carries, so a null block of some other type would be an unknown key
+        on the way back in."""
+        return self.model_dump_json(indent=2, exclude_none=True)
 
 
 def export_project(name: str, *, examples_dir: Path | None = None) -> WorkflowFile:

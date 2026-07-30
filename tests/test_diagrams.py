@@ -1,7 +1,7 @@
 """Rendering of run status onto the workflow mermaid graph."""
 from __future__ import annotations
 
-from app.models import Stage
+from app.models import parse_stage
 from app.web.diagrams import build_mermaid_graph
 
 
@@ -92,7 +92,7 @@ def test_typed_stage_input_renders_the_same_as_the_equivalent_draft_dict(tmp_pat
     """build_mermaid_graph also accepts real Stage objects (the isinstance(s,
     Stage) branch of _node_view) — pinned so the two input shapes stay
     interchangeable."""
-    stage = Stage.model_validate({
+    stage = parse_stage({
         "id": "load", "name": "Load", "type": "input_data",
         "connector": {"kind": "file",
                       "params": {"path": str(tmp_path / "d.csv"), "format": "csv"}},

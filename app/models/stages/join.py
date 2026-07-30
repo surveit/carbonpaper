@@ -4,11 +4,12 @@ against its side's stage input edge; and a declared output_schema (plus
 `select`) must be deliverable by the columns the join actually produces."""
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, ClassVar, Optional
+from typing import TYPE_CHECKING, ClassVar, Literal, Optional
 
 from pydantic import Field
 
-from app.models.schema import _Base
+from app.models.schema import StageConfig, _Base
+from app.models.stage_base import StageBase, StageInput, StageType
 from app.models.stages.shared import (
     COLUMN_ISSUE,
     find_declared_vs_derived_issues,
@@ -17,7 +18,6 @@ from app.models.stages.shared import (
 
 if TYPE_CHECKING:
     from app.models.schema import TableSchema
-    from app.models.stage import Stage
 
 
 class JoinKey(_Base):
@@ -25,7 +25,7 @@ class JoinKey(_Base):
     right: str
 
 
-class JoinConfig(_Base):
+class JoinConfig(StageConfig):
     """enrich/expand handle. Cardinality lives in the stage TYPE, not here.
 
     The joined output contains: every LEFT column under its own name; each
@@ -51,17 +51,40 @@ class JoinConfig(_Base):
     )
 
 
+class _JoinStage(StageBase):
+    """enrich and expand differ only in the cardinality the runtime enforces —
+    the config, the arity and the column rules are the same."""
+    join: JoinConfig
+    inputs: list[StageInput] = Field(default_factory=list, min_length=2, max_length=2)
+
+    def fingerprint_blocks(self) -> dict[str, StageConfig]:
+        return {"join": self.join}
+
+    def find_config_column_issues(self) -> list[str]:
+        return find_join_column_issues(self)
+
+    def find_output_schema_issues(self) -> list[str]:
+        return find_join_output_issues(self)
+
+
+class EnrichStage(_JoinStage):
+    type: Literal[StageType.enrich]
+
+
+class ExpandStage(_JoinStage):
+    type: Literal[StageType.expand]
+
+
 SELECT_UNPRODUCIBLE_ISSUE = (
     "stage '{sid}': join.select references column '{col}' that the {stype} "
     "cannot produce (producible columns: {cols})"
 )
 
 
-def find_join_column_issues(stage: "Stage") -> list[str]:
+def find_join_column_issues(stage: "_JoinStage") -> list[str]:
     """Every join key whose `.left`/`.right` names a column absent from its
     resolved side's input."""
     join = stage.join
-    assert join is not None  # Stage._handle_for_type guarantees this for enrich/expand
     left = resolve_input_columns(stage, 0)
     right = resolve_input_columns(stage, 1)
     issues: list[str] = []
@@ -77,12 +100,11 @@ def find_join_column_issues(stage: "Stage") -> list[str]:
     return issues
 
 
-def find_join_output_issues(stage: "Stage") -> list[str]:
+def find_join_output_issues(stage: "_JoinStage") -> list[str]:
     """Every declared output_schema column (and select entry) the join handle
     cannot deliver."""
     join = stage.join
-    assert join is not None  # Stage._handle_for_type guarantees this for enrich/expand
-    assert stage.output_schema is not None  # Stage._schemas_declared guarantees this off publish
+    assert stage.output_schema is not None  # StageBase._schemas_declared guarantees this
     left = stage.inputs[0].table_schema
     right = stage.inputs[1].table_schema
     joined = derive_join_output_types(join, left, right)

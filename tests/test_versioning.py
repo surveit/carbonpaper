@@ -11,7 +11,7 @@ import pytest
 
 import pydantic
 
-from app.models import Stage
+from app.models import StageBase, parse_stage
 from app.core.persistence import get_store
 from app.services import loader, node_review
 from app.services.loader import WorkflowLoadError
@@ -64,7 +64,7 @@ def test_create_version_returns_meta_and_round_trips(tmp_path):
     assert load_version(tmp_path, meta.version_id) == meta
 
     [stage] = load_version_stages(tmp_path, meta.version_id)
-    assert isinstance(stage, Stage)
+    assert isinstance(stage, StageBase)
     assert stage.id == "load"
 
 
@@ -97,7 +97,7 @@ def test_create_version_freezes_coverage_from_node_decisions(tmp_path):
     node_decisions store — approving the working copy's current spec before
     versioning shows up as 100% approved coverage on the frozen version."""
     _seed(tmp_path)
-    spec = loader.stage_to_spec_dict(Stage.model_validate(_LOAD_STAGE))
+    spec = loader.stage_to_spec_dict(parse_stage(_LOAD_STAGE))
     content_hash = node_review.node_content_hash(spec)
     node_review.record_node_decision(
         tmp_path, stage_id="load", content_hash=content_hash,
@@ -267,7 +267,7 @@ def test_create_version_from_stages_valid_is_loadable_and_unpublished(tmp_path):
     assert meta.reviewer == "ada"
 
     [stage] = load_version_stages(tmp_path, meta.version_id)
-    assert isinstance(stage, Stage)
+    assert isinstance(stage, StageBase)
     assert stage.id == "load"
 
 

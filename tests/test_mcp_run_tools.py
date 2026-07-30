@@ -5,7 +5,7 @@ import json
 import pandas as pd
 
 import app.services.run as run_service
-from app.models import Stage
+from app.models import parse_stage
 from app.services import versioning
 from app.services.versioning import WorkflowVersion, create_version_from_disk
 
@@ -62,7 +62,7 @@ def _make_workflow_test_project(root):
     WorkflowVersion(
         id=f"{root.name}/v1", version_id="v1", created_at="2026-07-10T00:00:00",
         message="seed", reviewer="test", published=False,
-        stages=[Stage.model_validate(s) for s in (load, _CLASSIFY)],
+        stages=[parse_stage(s) for s in (load, _CLASSIFY)],
     ).save()
 
 

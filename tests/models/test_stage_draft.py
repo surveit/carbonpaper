@@ -5,12 +5,18 @@ a client can act on."""
 from __future__ import annotations
 
 import json
+from typing import get_args
 
 import pytest
 from pydantic import ValidationError
 
-from app.models import Stage, StageDraft
+from app.models import StageDraft, parse_stage
+from app.models.stage import Stage, StageCommon
 from app.seeds.seed import discover_workflow_files
+
+# Every member of the `Stage` union, read off the union itself so a new stage
+# type cannot be added without these structural checks covering it.
+_STAGE_CLASSES = get_args(get_args(Stage)[0])
 
 # The four Stage fields StageDraft does not take: `tests` is written by
 # generate_stage_tests, `eval`/`review` are human-authored, `source` is
@@ -32,8 +38,8 @@ def test_every_committed_example_stage_round_trips_through_a_draft():
 
     for raw in stages:
         submitted = {k: v for k, v in raw.items() if k not in DROPPED_FIELDS}
-        rebuilt = Stage.model_validate(StageDraft.model_validate(submitted).to_stage_spec())
-        original = Stage.model_validate(raw)
+        rebuilt = parse_stage(StageDraft.model_validate(submitted).to_stage_spec())
+        original = parse_stage(raw)
         expected = {
             k: v for k, v in original.model_dump(exclude_none=True).items()
             if k not in DROPPED_FIELDS
@@ -43,7 +49,7 @@ def test_every_committed_example_stage_round_trips_through_a_draft():
 
 def test_round_trip_covers_more_than_one_stage_type():
     """Guards the round-trip above against going vacuous: it only proves
-    anything about the handle blocks the fixtures actually populate."""
+    anything about the config block the fixtures actually populate."""
     types = {raw["type"] for raw in _read_committed_example_stages()}
     assert len(types) > 1, types
 
@@ -67,7 +73,7 @@ def test_an_input_schema_round_trips_under_the_key_a_compiled_stage_spells():
     spec = draft.to_stage_spec()
     assert set(spec["inputs"][0]) == {"id", "schema"}
 
-    rebuilt = Stage.model_validate(spec)
+    rebuilt = parse_stage(spec)
     assert rebuilt.inputs[0].table_schema is not None
     assert [c.name for c in rebuilt.inputs[0].table_schema.columns] == ["filing_id"]
 
@@ -91,7 +97,7 @@ def test_a_stage_that_breaks_a_cross_field_rule_parses_as_a_draft_and_is_refused
     draft = StageDraft.model_validate(broken)  # must not raise
 
     with pytest.raises(ValidationError, match="primary_key"):
-        Stage.model_validate(draft.to_stage_spec())
+        parse_stage(draft.to_stage_spec())
 
 
 def test_schema_omits_the_fields_no_authoring_client_writes():
@@ -100,12 +106,15 @@ def test_schema_omits_the_fields_no_authoring_client_writes():
     assert "compiler_notes" in properties, "the authoring agent does set this one"
 
 
-def test_stage_extends_the_draft_so_the_shared_fields_are_declared_once():
-    """The two models held together by inheritance, not by two field lists kept
-    in step by hand: a field added to the draft is a Stage field automatically,
-    and Stage adds only what the server itself writes."""
-    assert issubclass(Stage, StageDraft)
-    assert set(Stage.model_fields) - set(StageDraft.model_fields) == set(DROPPED_FIELDS)
+@pytest.mark.parametrize("stage_cls", _STAGE_CLASSES, ids=lambda c: c.__name__)
+def test_every_stage_class_shares_the_drafts_field_list(stage_cls):
+    """The draft and the stored models held together by a common base, not by
+    field lists kept in step by hand: a field added to StageCommon is on both,
+    and a stage class adds only its own config blocks plus what the server
+    itself writes."""
+    assert issubclass(stage_cls, StageCommon) and issubclass(StageDraft, StageCommon)
+    extra = set(stage_cls.model_fields) - set(StageDraft.model_fields)
+    assert extra == set(DROPPED_FIELDS), stage_cls.__name__
 
 
 def test_the_draft_carries_no_cross_field_validator_of_its_own():
@@ -139,13 +148,14 @@ def test_an_unknown_field_is_still_refused():
 
 
 def test_stage_keeps_the_server_owned_fields_the_draft_drops():
-    """The drop is the draft's behavior alone — inheriting it would make `Stage`
-    unable to hold the tests and provenance a stored stage carries."""
-    stage = Stage.model_validate({
+    """The drop is the draft's behavior alone — a stored stage has to hold the
+    tests and provenance it drops, and does not declare the bookkeeping field
+    that records the drop."""
+    stage = parse_stage({
         "id": "load", "type": "input_data", "name": "Load",
         "connector": {"kind": "file"}, "source": {"section": "para 3"},
         "output_schema": {"columns": [{"name": "filing_id", "type": "str"}]},
     })
 
     assert stage.source is not None
-    assert stage.dropped_server_owned_fields == []
+    assert "dropped_server_owned_fields" not in type(stage).model_fields

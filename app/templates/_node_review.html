@@ -7,7 +7,7 @@
    Context (GET /project/{project}/node/{id}/review-partial):
      project      — str
      stage        — the loaded Stage (.id .type .name .inputs[].table_schema
-                    .output_schema + the transform handle: llm/function/join/…)
+                    .output_schema + the transform config block: llm/function/join/…)
      review       — approval_state_for(stage, …) {state, current_hash, matched_decision}
      raw_json     — stage_to_json(stage) for the Spec editor
      function_code — python source for a function stage (may be None)

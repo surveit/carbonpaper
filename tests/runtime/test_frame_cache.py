@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 
 from app.core.stage_cache import ReadOnlyStageCache, StageCache, StageCacheEntry
-from app.models import Stage
+from app.models import parse_stage, Stage
 from app.models.stage import StageType
 from app.runtime.context import RunIdentity
 from app.runtime.manifest import CONTRIBUTION_ATTR
@@ -21,7 +21,7 @@ _DOUBLING_CODE = "def transform(df):\n    return df.assign(y=df['x'] * 2)\n"
 
 
 def _frame_stage(code: str = _DOUBLING_CODE, *, cache: bool = True) -> Stage:
-    return Stage.model_validate({
+    return parse_stage({
         "id": "double", "name": "Double", "type": "python_frame_function",
         "inputs": [{"id": "src", "schema": _X}], "cache": cache,
         "output_schema": {
@@ -126,7 +126,7 @@ def test_reordering_the_input_rows_invalidates_the_cached_frame():
 
 
 def _two_input_stage() -> Stage:
-    return Stage.model_validate({
+    return parse_stage({
         "id": "merge", "name": "Merge", "type": "python_frame_function",
         "inputs": [{"id": "left", "schema": _X}, {"id": "right", "schema": _X}],
         "output_schema": _X,
@@ -152,7 +152,7 @@ def test_the_key_covers_every_input_in_declared_order():
 
 
 def _enrich_stage() -> Stage:
-    return Stage.model_validate({
+    return parse_stage({
         "id": "j", "name": "Enrich", "type": "enrich",
         "inputs": [{"id": "left", "schema": _X},
                    {"id": "right", "schema": {"columns": [{"name": "x", "type": "int"},
@@ -164,7 +164,7 @@ def _enrich_stage() -> Stage:
 
 
 def _aggregate_stage() -> Stage:
-    return Stage.model_validate({
+    return parse_stage({
         "id": "agg", "name": "Agg", "type": "aggregate",
         "inputs": [{"id": "src", "schema": {"columns": [{"name": "g", "type": "str"}]}}],
         "output_schema": {"columns": [{"name": "g", "type": "str"},
@@ -317,7 +317,7 @@ def test_publish_runs_its_side_effect_every_run_and_writes_no_entry(tmp_path):
         "    CALLS.append(len(df))\n"
         "    return pd.DataFrame({'path': [output_dir]})\n"
     )
-    stage = Stage.model_validate({
+    stage = parse_stage({
         "id": "pub", "name": "Publish", "type": "publish",
         "inputs": [{"id": "src", "schema": _X}],
         "publish": {"destination": "build/"},

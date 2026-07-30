@@ -13,7 +13,7 @@ from typing import Any, ClassVar
 from pydantic import BaseModel, Field, ValidationError
 
 from app.core.errors import DocumentNotFound, DraftNotFoundError
-from app.models import Stage, validate_workflow
+from app.models import Stage, parse_stage, validate_workflow
 from app.core.persistence import PersistedModel, PersistenceScope
 from app.core.utils import format_errors, generate_word_triplet_id
 from app.services import versioning, workspace
@@ -225,7 +225,7 @@ def _load(project_dir: Path, draft_id: str) -> Draft:
 def _parse_stage(stage_json: str) -> Stage:
     """Parse `stage_json` as one `Stage`, raising `ValueError` (with readable
     per-field errors) for anything MALFORMED: invalid JSON, not a JSON object,
-    or failing `Stage.model_validate`. `Stage` validation is per-stage only —
+    or failing `parse_stage`. `Stage` validation is per-stage only —
     it does not check whether `inputs` reference a stage id that exists
     elsewhere in the draft, which is a cross-stage graph concern (see
     app.models.workflow.check_inputs_resolve) and stays allowed here."""
@@ -233,7 +233,7 @@ def _parse_stage(stage_json: str) -> Stage:
     if not isinstance(obj, dict):
         raise ValueError("stage_json must be a JSON object")
     try:
-        return Stage.model_validate(obj)
+        return parse_stage(obj)
     except ValidationError as exc:
         raise ValueError("; ".join(format_errors(exc))) from exc
 

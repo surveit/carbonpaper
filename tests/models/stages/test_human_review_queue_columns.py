@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from app.models import Stage
+from app.models import parse_stage
 
 
 def _queue_stage(*, filter_expr, edge_columns):
@@ -19,13 +19,13 @@ def _queue_stage(*, filter_expr, edge_columns):
 
 def test_filter_missing_column_rejected():  # argcritic bug 4
     with pytest.raises(ValidationError):
-        Stage.model_validate(_queue_stage(
+        parse_stage(_queue_stage(
             filter_expr="writer_confirmed == True", edge_columns=["claim_id", "assertion_text"],
         ))
 
 
 def test_filter_valid_column_clean():
-    Stage.model_validate(_queue_stage(
+    parse_stage(_queue_stage(
         filter_expr="assertion_text IS NOT NULL", edge_columns=["claim_id", "assertion_text"],
     ))
 
@@ -37,5 +37,5 @@ def test_no_filter_is_clean():
         "output_schema": {"columns": [{"name": "claim_id", "type": "str", "nullable": False}]},
         "queue": {},
     }
-    Stage.model_validate(stage)
+    parse_stage(stage)
 

@@ -5,7 +5,7 @@ import pytest
 from pydantic import ValidationError
 
 from app import models as m
-from app.models import Stage
+from app.models import parse_stage
 
 _K = {"columns": [{"name": "k"}]}
 
@@ -62,7 +62,7 @@ def test_workflow_cycle():
 # the graph checks are plain functions — test them directly (the point of the split).
 # Each RETURNS its issues (all of them) rather than raising on the first.
 def test_validate_inputs_resolve_reports_all_dangling():
-    s = Stage.model_validate(S(id="b", type="enrich",
+    s = parse_stage(S(id="b", type="enrich",
                                inputs=[_in("ghost1", {"columns": [{"name": "x"}]}),
                                        _in("ghost2", {"columns": [{"name": "y"}]})],
                                join={"keys": [{"left": "x", "right": "y"}]},
@@ -73,17 +73,17 @@ def test_validate_inputs_resolve_reports_all_dangling():
 
 
 def test_detect_cycle_reports_cycle():
-    a = Stage.model_validate(S(id="a", type="python_frame_function", inputs=[_in("b")], output_schema=_K,
+    a = parse_stage(S(id="a", type="python_frame_function", inputs=[_in("b")], output_schema=_K,
                                function={"kind": "inline", "code": "def transform(row): return row"}))
-    b = Stage.model_validate(S(id="b", type="python_frame_function", inputs=[_in("a")], output_schema=_K,
+    b = parse_stage(S(id="b", type="python_frame_function", inputs=[_in("a")], output_schema=_K,
                                function={"kind": "inline", "code": "def transform(row): return row"}))
     assert m.detect_cycle([a, b])  # non-empty
 
 
 def test_detect_cycle_empty_when_acyclic(tmp_path):
-    a = Stage.model_validate(S(id="a", type="input_data", output_schema=_K,
+    a = parse_stage(S(id="a", type="input_data", output_schema=_K,
                                connector={"kind": "file", "params": {"path": str(tmp_path / "d.csv")}}))
-    b = Stage.model_validate(S(id="b", type="python_frame_function", inputs=[_in("a")], output_schema=_K,
+    b = parse_stage(S(id="b", type="python_frame_function", inputs=[_in("a")], output_schema=_K,
                                function={"kind": "inline", "code": "def transform(row): return row"}))
     assert m.detect_cycle([a, b]) == []
 
@@ -92,7 +92,7 @@ def test_detect_cycle_empty_when_acyclic(tmp_path):
 # check on already-validated stages and returns all issues at once ([] means clean).
 def test_validate_workflow_clean_is_empty(tmp_path):
     stages = [
-        Stage.model_validate(S(id="load", type="input_data", output_schema=_K,
+        parse_stage(S(id="load", type="input_data", output_schema=_K,
                                connector={"kind": "file",
                                           "params": {"path": str(tmp_path / "d.csv"), "format": "csv"}})),
     ]
@@ -100,7 +100,7 @@ def test_validate_workflow_clean_is_empty(tmp_path):
 
 
 def test_validate_workflow_reports_issues():
-    s = Stage.model_validate(S(id="j", type="enrich",
+    s = parse_stage(S(id="j", type="enrich",
                                inputs=[_in("a", {"columns": [{"name": "x"}]}),
                                        _in("b", {"columns": [{"name": "y"}]})],
                                join={"keys": [{"left": "x", "right": "y"}]},
@@ -132,12 +132,12 @@ def _llm_1to1_dict(**over):
 
 
 def test_llm_transform_valid_1to1_constructs():
-    assert Stage.model_validate(_llm_1to1_dict()).id == "score"
+    assert parse_stage(_llm_1to1_dict()).id == "score"
 
 
 def test_llm_transform_pk_mismatch_rejected():
     with pytest.raises(ValidationError, match="primary_key"):
-        Stage.model_validate(_llm_1to1_dict(output_schema={
+        parse_stage(_llm_1to1_dict(output_schema={
             "columns": [{"name": "id", "type": "str"}, {"name": "text", "type": "str"},
                         {"name": "score", "type": "int"}],
             "primary_key": ["text"]}))
@@ -145,14 +145,14 @@ def test_llm_transform_pk_mismatch_rejected():
 
 def test_llm_transform_drops_input_column_rejected():
     with pytest.raises(ValidationError, match="text"):
-        Stage.model_validate(_llm_1to1_dict(output_schema={
+        parse_stage(_llm_1to1_dict(output_schema={
             "columns": [{"name": "id", "type": "str"}, {"name": "score", "type": "int"}],
             "primary_key": ["id"]}))  # dropped `text`
 
 
 def test_llm_transform_modifies_column_schema_rejected():
     with pytest.raises(ValidationError, match="text"):
-        Stage.model_validate(_llm_1to1_dict(output_schema={
+        parse_stage(_llm_1to1_dict(output_schema={
             "columns": [{"name": "id", "type": "str"}, {"name": "text", "type": "int"},
                         {"name": "score", "type": "int"}],
             "primary_key": ["id"]}))  # `text` str -> int
@@ -160,7 +160,7 @@ def test_llm_transform_modifies_column_schema_rejected():
 
 def test_llm_transform_adds_nothing_rejected():
     with pytest.raises(ValidationError, match="adds no columns"):
-        Stage.model_validate(_llm_1to1_dict(output_schema={
+        parse_stage(_llm_1to1_dict(output_schema={
             "columns": [{"name": "id", "type": "str"}, {"name": "text", "type": "str"}],
             "primary_key": ["id"]}))  # adds no new column
 
@@ -227,8 +227,8 @@ def test_check_edge_schemas_clean_when_input_is_a_projection():
 def test_check_edge_schemas_flags_phantom_column():
     # `down` requires `quote`, which `up` does not produce — the #36 phantom.
     stages = [
-        Stage.model_validate(_producer()),
-        Stage.model_validate(_consumer({"columns": [{"name": "quote", "type": "str"}]})),
+        parse_stage(_producer()),
+        parse_stage(_consumer({"columns": [{"name": "quote", "type": "str"}]})),
     ]
     issues = m.validate_edge_schemas(stages)
     assert len(issues) == 1
@@ -249,10 +249,10 @@ def test_check_edge_schemas_clean_when_producer_non_null_feeds_nullable_requirem
 
 def test_check_edge_schemas_flags_required_non_null_fed_by_nullable_producer():
     stages = [
-        Stage.model_validate(_producer(output_schema={"columns": [
+        parse_stage(_producer(output_schema={"columns": [
             {"name": "id", "type": "str"},
             {"name": "score", "type": "int", "nullable": True}]})),
-        Stage.model_validate(_consumer(
+        parse_stage(_consumer(
             {"columns": [{"name": "score", "type": "int", "nullable": False}]})),
     ]
     issues = m.validate_edge_schemas(stages)
@@ -262,8 +262,8 @@ def test_check_edge_schemas_flags_required_non_null_fed_by_nullable_producer():
 
 def test_check_edge_schemas_flags_type_disagreement():
     stages = [
-        Stage.model_validate(_producer()),
-        Stage.model_validate(_consumer({"columns": [{"name": "score", "type": "str"}]})),
+        parse_stage(_producer()),
+        parse_stage(_consumer({"columns": [{"name": "score", "type": "str"}]})),
     ]
     issues = m.validate_edge_schemas(stages)
     assert len(issues) == 1
@@ -274,14 +274,14 @@ def _publish_upstream_stages():
     """`down` reads `pub`, the one stage type exempt from declaring an
     output_schema — built without the graph validator, which rejects the edge."""
     return [
-        Stage.model_validate(_producer()),
-        Stage.model_validate(
+        parse_stage(_producer()),
+        parse_stage(
             S(id="pub", type="publish",
               inputs=[{"id": "up", "schema": {"columns": [{"name": "id", "type": "str"}]}}],
               publish={"format": "json"},
               function={"kind": "inline",
                         "code": "def transform(df, output_dir): return df"})),
-        Stage.model_validate(
+        parse_stage(
             _consumer({"columns": [{"name": "anything", "type": "str"}]}, id="down",
                       inputs=[{"id": "pub",
                                "schema": {"columns": [{"name": "anything", "type": "str"}]}}])),
@@ -308,7 +308,7 @@ def test_check_edge_schemas_raises_on_an_input_naming_no_stage():
     """A dangling input is a programming error here, not a finding: callers run
     validate_inputs_resolve first (graph_issues does), so reaching this means
     stage validation was bypassed."""
-    stages = [Stage.model_validate(_consumer({"columns": [{"name": "id", "type": "str"}]}))]
+    stages = [parse_stage(_consumer({"columns": [{"name": "id", "type": "str"}]}))]
     with pytest.raises(ValueError, match="references no stage"):
         m.validate_edge_schemas(stages)
 
@@ -317,7 +317,7 @@ def test_graph_issues_reports_a_dangling_input_instead_of_raising():
     """graph_issues short-circuits before validate_edge_schemas when an input
     dangles, so an invalid-but-reportable workflow still comes back as issues."""
     issues = m.validate_workflow(
-        [Stage.model_validate(_consumer({"columns": [{"name": "id", "type": "str"}]}))])
+        [parse_stage(_consumer({"columns": [{"name": "id", "type": "str"}]}))])
     assert issues == ["`down`: input `up` references no stage"]
 
 
@@ -347,7 +347,7 @@ def _loader():
 
 
 def test_validate_publish_is_terminal_flags_stage_reading_a_publish():
-    stages = [Stage.model_validate(s) for s in
+    stages = [parse_stage(s) for s in
               (_loader(), _publish(), _reader("down", "pub"))]
     issues = m.validate_publish_is_terminal(stages)
     assert len(issues) == 1
@@ -355,7 +355,7 @@ def test_validate_publish_is_terminal_flags_stage_reading_a_publish():
 
 
 def test_validate_publish_is_terminal_reports_every_offending_edge():
-    stages = [Stage.model_validate(s) for s in (
+    stages = [parse_stage(s) for s in (
         _loader(), _publish("pub_a"), _publish("pub_b"),
         _reader("down_a", "pub_a"), _reader("down_b", "pub_b"),
         S(id="down_c", type="enrich", inputs=[_in("pub_a", _X), _in("pub_b", _Y)],
@@ -367,12 +367,12 @@ def test_validate_publish_is_terminal_reports_every_offending_edge():
 
 
 def test_validate_publish_is_terminal_clean_when_publish_is_terminal():
-    stages = [Stage.model_validate(s) for s in (_loader(), _publish())]
+    stages = [parse_stage(s) for s in (_loader(), _publish())]
     assert m.validate_publish_is_terminal(stages) == []
 
 
 def test_validate_publish_is_terminal_clean_with_several_unconsumed_publishes():
-    stages = [Stage.model_validate(s) for s in
+    stages = [parse_stage(s) for s in
               (_loader(), _publish("pub_a"), _publish("pub_b"), _publish("pub_c"))]
     assert m.validate_publish_is_terminal(stages) == []
 

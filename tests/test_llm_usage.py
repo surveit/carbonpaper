@@ -4,7 +4,7 @@ import pandas as pd
 
 import app.runtime.stages.llm_transform as lt
 from app.core.agent.usage import LlmUsage
-from app.models import Stage
+from app.models import parse_stage, Stage
 from app.models.stage import StageType
 from app.runtime.stages import HANDLERS
 from conftest import contribution_of, make_run_context
@@ -22,7 +22,7 @@ def test_summed_of_nothing_is_the_zero_instance():
 
 
 def _llm_stage() -> Stage:
-    return Stage.model_validate({
+    return parse_stage({
         "id": "classify", "name": "Classify", "type": "llm_transform",
         "inputs": [{"id": "load", "schema": {
             "columns": [{"name": "id", "type": "str"}, {"name": "text", "type": "str"}],

@@ -3,7 +3,7 @@ in the step's own description."""
 import pytest
 
 from app.compiler.stage_tests import build_stage_test_deriver, render_derivation_task
-from app.models import Stage
+from app.models import parse_stage, Stage
 
 _CODE = "def transform(row):\n    return {**row, 'doubled': row['amount'] * 2}\n"
 _SUMMARY = "Doubles the reported `amount` into `doubled`."
@@ -14,7 +14,7 @@ def _python_stage(*, summary=_SUMMARY, corner_cases=None) -> Stage:
     function = {"kind": "inline", "code": _CODE, "summary": summary}
     if corner_cases is not None:
         function["corner_cases"] = corner_cases
-    return Stage.model_validate({
+    return parse_stage({
         "id": "double", "name": "Double", "type": "python_row_function",
         "inputs": [{"id": "load", "schema": {"columns": [
             {"name": "amount", "type": "float", "nullable": False},
@@ -53,7 +53,7 @@ def test_task_never_contains_the_stage_code():
 
 def test_task_never_contains_existing_tests():
     stage = _python_stage()
-    stage = Stage.model_validate({**stage.model_dump(by_alias=True, exclude_none=True),
+    stage = parse_stage({**stage.model_dump(by_alias=True, exclude_none=True),
         "tests": [{"name": "stale_case",
                    "inputs": {"load": [{"amount": 1.0}]},
                    "expected": [{"amount": 1.0, "doubled": 2.0}]}]})
@@ -90,7 +90,7 @@ def test_a_stage_with_no_summary_cannot_derive_examples():
 
 
 def test_deriver_rejects_non_python_stages():
-    bad = Stage.model_validate({
+    bad = parse_stage({
         "id": "pub", "name": "Publish", "type": "publish",
         "inputs": [{"id": "double", "schema": {"columns": [
             {"name": "amount", "type": "float", "nullable": False},

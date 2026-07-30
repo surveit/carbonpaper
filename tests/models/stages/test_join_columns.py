@@ -5,8 +5,8 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from app.models import StageInput, JoinConfig, Stage
-from app.models.stages.join import find_join_column_issues
+from app.models import parse_stage, StageInput, JoinConfig
+from app.models.stages.join import JoinStage, find_join_column_issues
 
 
 def _enrich_stage(*, left_columns, right_columns, key_left, key_right, select=None):
@@ -25,7 +25,7 @@ def _enrich_stage(*, left_columns, right_columns, key_left, key_right, select=No
 
 
 def test_both_keys_present_ok():
-    Stage.model_validate(_enrich_stage(left_columns=["a"], right_columns=["b"], key_left="a", key_right="b"))
+    parse_stage(_enrich_stage(left_columns=["a"], right_columns=["b"], key_left="a", key_right="b"))
 
 
 def test_key_on_the_wrong_side_rejected():
@@ -33,17 +33,17 @@ def test_key_on_the_wrong_side_rejected():
     names them backwards (.left="b", .right="a") must be rejected on both
     sides, not silently matched by name across sides."""
     with pytest.raises(ValidationError):
-        Stage.model_validate(_enrich_stage(left_columns=["a"], right_columns=["b"], key_left="b", key_right="a"))
+        parse_stage(_enrich_stage(left_columns=["a"], right_columns=["b"], key_left="b", key_right="a"))
 
 
 def test_left_key_missing_rejected():
     with pytest.raises(ValidationError):
-        Stage.model_validate(_enrich_stage(left_columns=["a"], right_columns=["b"], key_left="ghost", key_right="b"))
+        parse_stage(_enrich_stage(left_columns=["a"], right_columns=["b"], key_left="ghost", key_right="b"))
 
 
 def test_right_key_missing_rejected():
     with pytest.raises(ValidationError):
-        Stage.model_validate(_enrich_stage(left_columns=["a"], right_columns=["b"], key_left="a", key_right="ghost"))
+        parse_stage(_enrich_stage(left_columns=["a"], right_columns=["b"], key_left="a", key_right="ghost"))
 
 
 def test_select_referencing_absent_column_is_rejected_by_output_check():
@@ -51,7 +51,7 @@ def test_select_referencing_absent_column_is_rejected_by_output_check():
     but `select` naming a column the join can't produce IS rejected, by the
     separate output-schema check (find_join_output_issues)."""
     with pytest.raises(ValidationError):
-        Stage.model_validate(_enrich_stage(
+        parse_stage(_enrich_stage(
             left_columns=["a"], right_columns=["b"], key_left="a", key_right="b", select=["ghost"],
         ))
 
@@ -65,7 +65,7 @@ def test_find_join_column_issues_ignores_select():
     would otherwise reject the whole Stage at construction time (see
     test_select_referencing_absent_column_is_rejected_by_output_check
     above, which goes through that check instead)."""
-    stage = Stage.model_construct(
+    stage = JoinStage.model_construct(
         id="j",
         name="j",
         type="enrich",

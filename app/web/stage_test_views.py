@@ -64,18 +64,16 @@ def build_certification(
 
 def _carries_authored_code(stage: Stage) -> bool:
     """Is this stage's behaviour authored code a reviewer would otherwise have to
-    read? True for the `function` and `filter` handles — the two that ask for a
+    read? True for the `function` and `filter` blocks — the two that ask for a
     `summary` — and false for a stage fixed entirely by config."""
-    return stage.function is not None or stage.filter is not None
+    return stage.find_authored_code_block() is not None
 
 
 def _summary_of(stage: Stage) -> Optional[str]:
-    """The stage's plain-language summary, off whichever authored-code handle it
+    """The stage's plain-language summary, off whichever authored-code block it
     carries."""
-    for handle in (stage.function, stage.filter):
-        if handle is not None and handle.summary:
-            return handle.summary
-    return None
+    block = stage.find_authored_code_block()
+    return block.summary if block is not None else None
 
 
 def shape_test_views(stage: Optional[Stage]) -> list[dict[str, Any]]:

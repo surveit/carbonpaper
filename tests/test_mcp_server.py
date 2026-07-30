@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from app.models import StageDraft
+from app.models import parse_stage, StageDraft
 
 HEADERS = {
     "Accept": "application/json, text/event-stream",
@@ -150,9 +150,8 @@ def _write_compiled_workflow(pdir: Path) -> None:
          "inputs": [{"id": "load", "schema": _IN_SCHEMA}], "output_schema": _OUT_SCHEMA,
          "function": {"kind": "inline", "code": _DOUBLE}},
     ]
-    from app.models import Stage
     for spec in stages:
-        write_stage(compiled / f"{spec['id']}.json", Stage.model_validate(spec))
+        write_stage(compiled / f"{spec['id']}.json", parse_stage(spec))
 
 
 def test_run_stage_tests_reports_summary_diffs_and_coverage(tmp_path, monkeypatch):

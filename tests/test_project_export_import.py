@@ -2,7 +2,7 @@
 working copy through the service loaders into a WorkflowFile; import_project
 writes a WorkflowFile back through the service writers. The behavior worth
 covering end-to-end is that round trip (carried through actual JSON text —
-model_dump_json / model_validate_json, the form a real caller uses)."""
+WorkflowFile.to_json / model_validate_json, the form a real caller uses)."""
 from __future__ import annotations
 
 from app.models import (
@@ -13,10 +13,10 @@ from app.models import (
     NamedSchema,
     SchemaKind,
     SchemaLibrary,
-    Stage,
     StageType,
     TableSchema,
 )
+from app.models.stages.input_data import InputDataStage
 from app.services import data_model, node_review, project, versioning, workspace
 from app.services.loader import load_compiled_dir, stage_to_spec_dict, write_stage
 from app.services.project import WorkflowFile, export_project, import_project
@@ -30,7 +30,7 @@ _TINY_LIBRARY = SchemaLibrary(schemas=[NamedSchema(
 
 
 def test_round_trip_through_json_reproduces_the_source_and_mints_a_version(tmp_path):
-    """export_project -> model_dump_json -> model_validate_json ->
+    """export_project -> to_json -> model_validate_json ->
     import_project under a NEW name into a fresh workspace reproduces the
     source project's document, data model, and compiled stage, and mints
     exactly one version on import.
@@ -60,7 +60,7 @@ def test_round_trip_through_json_reproduces_the_source_and_mints_a_version(tmp_p
 
     compiled = pdir / "compiled"
     compiled.mkdir()
-    stage = Stage(
+    stage = InputDataStage(
         id="load_entities", name="Load Entities", type=StageType.input_data,
         connector=Connector(kind=ConnectorKind.file, params={"format": "csv"}),
         # The `entity` schema this project's data model declares.
@@ -84,7 +84,7 @@ def test_round_trip_through_json_reproduces_the_source_and_mints_a_version(tmp_p
     assert node_review.approval_state_for(stage_to_spec_dict(stage), source_decisions)["state"] == "approved"
 
     exported = export_project(name, examples_dir=source_examples)
-    wf = WorkflowFile.model_validate_json(exported.model_dump_json())
+    wf = WorkflowFile.model_validate_json(exported.to_json())
 
     imported_name = import_project(wf, name="round_trip_target", examples_dir=target_examples)
     target_pdir = target_examples / imported_name

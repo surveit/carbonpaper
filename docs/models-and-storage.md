@@ -2,8 +2,9 @@
 
 ## Data model — `app/models/` — IMPLEMENTED
 
-The workflow contract is a single Pydantic module: `Stage`, `Workflow`,
-and the handle blocks (`Connector`, `LLMConfig`, `PythonFunction`, `JoinConfig`,
+The workflow contract is a Pydantic package: `Stage` (a discriminated union over one
+model per stage type — parse with `parse_stage`), `Workflow`, and the config blocks
+(`Connector`, `LLMConfig`, `PythonFunction`, `JoinConfig`,
 `AggregateConfig`, …) plus `Column` / `TableSchema`. **Constructing a model
 validates it** — the model *is* the contract, so there's no separate validator to
 keep in sync.
@@ -27,7 +28,7 @@ case: `validate_workflow(stages) -> list[str]` and `validate_stage(stage) -> lis
 reads the on-disk compiled-stage JSON (`compiled/<NN>_<stage_id>.json`, the JSON
 dump of the validated `Stage` model; the `NN_` prefix orders the stage list in
 the UI); everything past it speaks `Stage` objects, not dicts. Two entry points,
-both parsing each file through `Stage.model_validate`:
+both parsing each file through `parse_stage`:
 - `load_workflow` — strict, for the runner. Any invalid stage or
   cross-stage issue raises `WorkflowLoadError`, and the runner refuses to
   execute the workflow.

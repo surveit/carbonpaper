@@ -1,4 +1,4 @@
-{# Macros for the two halves of an authored-code handle. They live in a macro
+{# Macros for the two halves of an authored-code block. They live in a macro
    file, rather than inline in _stage_executable.html, for one mechanical reason:
    the host pulls that template in with {% include %}, which renders it without
    exporting its macros — and `stage_code` has to be callable by the HOST, after
@@ -9,8 +9,8 @@
    (stage.filter) go through here, so the two read the same way.
 
    stage_code(stage, function_code): function_code is the resolved source for a
-   `function` handle (None when a module ref can't be found on disk); a filter's
-   code is inline on the handle and needs no resolution. #}
+   `function` block (None when a module ref can't be found on disk); a filter's
+   code is inline on the block and needs no resolution. #}
 
 {# Prose carrying `backticks` around the column names it mentions, rendered with
    the odd parts as inline code chips. The backticks are plain text in the data —

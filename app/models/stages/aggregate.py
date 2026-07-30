@@ -1,4 +1,4 @@
-"""aggregate stage: the handle config, plus column validation on both the
+"""aggregate stage: the config block, plus column validation on both the
 input and output side — `group_by`, each aggregation's `value_column`, and
 every column an aggregation's `where` references must resolve against the
 stage's input edge; and a declared output_schema must be deliverable by the
@@ -6,11 +6,12 @@ columns group_by + the aggregations actually produce."""
 from __future__ import annotations
 
 from enum import Enum
-from typing import TYPE_CHECKING, ClassVar, Optional
+from typing import TYPE_CHECKING, ClassVar, Literal, Optional
 
-from pydantic import model_validator
+from pydantic import Field, model_validator
 
 from app.models.schema import _Base
+from app.models.stage_base import StageBase, StageInput, StageType
 from app.models.stages.shared import (
     COLUMN_ISSUE,
     find_declared_vs_derived_issues,
@@ -20,7 +21,6 @@ from app.models.stages.shared import (
 
 if TYPE_CHECKING:
     from app.models.schema import TableSchema
-    from app.models.stage import Stage
 
 
 class AggFormula(str, Enum):
@@ -49,14 +49,29 @@ class AggregationOp(_Base):
 
 
 class AggregateConfig(_Base):
-    """aggregate handle."""
+    """aggregate config block."""
     # Every field changes what this stage computes (grouping, aggregations) —
-    # see Stage.compute_definition_fingerprint.
+    # see StageBase.compute_definition_fingerprint.
     FINGERPRINT_FIELDS: ClassVar[frozenset[str]] = frozenset({"group_by", "aggregations"})
     INCIDENTAL_FIELDS: ClassVar[frozenset[str]] = frozenset()
 
     group_by: list[str]
     aggregations: list[AggregationOp]
+
+
+class AggregateStage(StageBase):
+    type: Literal[StageType.aggregate]
+    aggregate: AggregateConfig
+    inputs: list[StageInput] = Field(default_factory=list, min_length=1)
+
+    def fingerprint_blocks(self) -> dict[str, _Base]:
+        return {"aggregate": self.aggregate}
+
+    def find_config_column_issues(self) -> list[str]:
+        return find_aggregate_column_issues(self)
+
+    def find_output_schema_issues(self) -> list[str]:
+        return find_aggregate_output_issues(self)
 
 
 # Aggregation formula names, compared as plain strings both by
@@ -67,12 +82,11 @@ AGG_FORMULA_COUNT = "count"
 AGG_FORMULA_LIST = "list"
 
 
-def find_aggregate_column_issues(stage: "Stage") -> list[str]:
+def find_aggregate_column_issues(stage: "AggregateStage") -> list[str]:
     """Every `group_by` entry, aggregation `value_column`, and column an
     aggregation's `where` references that is absent from the resolved single
     input."""
     aggregate = stage.aggregate
-    assert aggregate is not None  # Stage._handle_for_type guarantees this for type="aggregate"
     cols = resolve_input_columns(stage, 0)
     issues = [
         COLUMN_ISSUE.format(sid=stage.id, field="aggregate.group_by", col=g, cols=sorted(cols))
@@ -98,14 +112,13 @@ def find_aggregate_column_issues(stage: "Stage") -> list[str]:
     return issues
 
 
-def find_aggregate_output_issues(stage: "Stage") -> list[str]:
-    """Every declared output_schema column the aggregate handle cannot deliver:
+def find_aggregate_output_issues(stage: "AggregateStage") -> list[str]:
+    """Every declared output_schema column the aggregate config cannot deliver:
     a name outside group_by + aggregation output columns, or a type the
     derivation contradicts. Type checks apply only where the derivation can know
     the type."""
     aggregate = stage.aggregate
-    assert aggregate is not None  # Stage._handle_for_type guarantees this for type="aggregate"
-    assert stage.output_schema is not None  # Stage._schemas_declared guarantees this off publish
+    assert stage.output_schema is not None  # StageBase._schemas_declared guarantees this
     edge = stage.inputs[0].table_schema
     derived = derive_aggregate_output_types(aggregate, edge)
     return find_declared_vs_derived_issues(stage.id, "aggregate", stage.output_schema, derived)
@@ -114,7 +127,7 @@ def find_aggregate_output_issues(stage: "Stage") -> list[str]:
 def derive_aggregate_output_types(
     aggregate: "AggregateConfig", edge: "TableSchema"
 ) -> dict[str, str | None]:
-    """The columns the aggregate handle emits, each mapped to its derived type
+    """The columns the aggregate config emits, each mapped to its derived type
     (None = unknowable): every group_by column carries its edge type through
     unchanged, and each aggregation's output column follows its formula —
     count->int and mean->float unconditionally; sum->the value column's type

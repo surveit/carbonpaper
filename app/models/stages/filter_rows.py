@@ -1,13 +1,14 @@
-"""filter_rows stage: handle config, plus the output-side check — it keeps a
+"""filter_rows stage: the config block, plus the output-side check — it keeps a
 subset of its single input's rows unchanged, so a declared output_schema must
 equal the input schema."""
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, ClassVar, Optional
+from typing import ClassVar, Literal, Optional
 
 from pydantic import Field, model_validator
 
 from app.models.schema import _Base
+from app.models.stage_base import StageBase, StageInput, StageType
 from app.models.stages.code import (
     CORNER_CASES_DESCRIPTION,
     SUMMARY_DESCRIPTION,
@@ -15,12 +16,9 @@ from app.models.stages.code import (
     validate_inline_function_code,
 )
 
-if TYPE_CHECKING:
-    from app.models.stage import Stage
-
 
 class FilterConfig(_Base):
-    """filter_rows handle: an authored row predicate, `def should_include(row:
+    """filter_rows config block: an authored row predicate, `def should_include(row:
     dict) -> bool`. True keeps the row, False drops it; every kept row's
     columns pass through unchanged and its relative order is preserved.
 
@@ -29,7 +27,7 @@ class FilterConfig(_Base):
     is deliberately no `kind`/`module` here, unlike PythonFunction."""
     # Every field changes what this stage computes (the predicate it runs)
     # except `summary`, which describes that predicate to a reader — see
-    # Stage.compute_definition_fingerprint.
+    # StageBase.compute_definition_fingerprint.
     FINGERPRINT_FIELDS: ClassVar[frozenset[str]] = frozenset({"code", "function"})
     INCIDENTAL_FIELDS: ClassVar[frozenset[str]] = frozenset({"summary", "corner_cases"})
 
@@ -62,10 +60,27 @@ class FilterConfig(_Base):
         return self
 
 
-def find_filter_output_issues(stage: "Stage") -> list[str]:
+class FilterRowsStage(StageBase):
+    type: Literal[StageType.filter_rows]
+    filter: FilterConfig
+    # Exactly one input: a predicate decides row by row, and two inputs is a
+    # join or a python_frame_function.
+    inputs: list[StageInput] = Field(default_factory=list, min_length=1, max_length=1)
+
+    def fingerprint_blocks(self) -> dict[str, _Base]:
+        return {"filter": self.filter}
+
+    def find_output_schema_issues(self) -> list[str]:
+        return find_filter_output_issues(self)
+
+    def find_authored_code_block(self) -> FilterConfig:
+        return self.filter
+
+
+def find_filter_output_issues(stage: "FilterRowsStage") -> list[str]:
     """Issue naming any column where the declared output_schema disagrees with
     the single input's schema."""
-    assert stage.output_schema is not None  # Stage._schemas_declared guarantees this off publish
+    assert stage.output_schema is not None  # StageBase._schemas_declared guarantees this
     input_schema = stage.inputs[0].table_schema
     differing = sorted(stage.output_schema.differing_column_names(input_schema))
     if not differing:

@@ -1,4 +1,4 @@
-"""Tests for app/models/stage.py — node types, handle blocks, the Stage model."""
+"""Tests for app/models/stage.py — node types, config blocks, the Stage union."""
 from __future__ import annotations
 
 import pytest
@@ -65,7 +65,7 @@ def test_table_schema_ok():
 
 # ── per-type stage contract ──────────────────────────────────────────────────
 def test_valid_input_data(tmp_path):
-    s = m.Stage.model_validate(S(
+    s = m.parse_stage(S(
         id="load", type="input_data",
         connector={"kind": "file", "params": {"path": str(tmp_path / "d.csv"), "format": "csv"}},
         output_schema={"columns": [{"name": "id", "type": "str"}]}))
@@ -73,7 +73,7 @@ def test_valid_input_data(tmp_path):
 
 
 def test_valid_llm_transform():
-    s = m.Stage.model_validate(S(
+    s = m.parse_stage(S(
         id="extract", type="llm_transform",
         inputs=[{"id": "load", "schema": {"columns": [{"name": "id", "type": "str"}],
                                           "primary_key": ["id"]}}],
@@ -83,15 +83,21 @@ def test_valid_llm_transform():
     assert s.llm.prompt_data_template == "do {id}"
 
 
-def test_missing_handle_block_raises():
-    with pytest.raises(ValidationError):
-        m.Stage.model_validate(S(id="x", type="llm_transform", inputs=[{"id": "a"}]))
+def test_missing_config_block_is_a_structured_missing_error():
+    """The type's own model declares `llm` required, so the refusal is pydantic's
+    own `missing` against that field — not a hand-written cross-field message."""
+    with pytest.raises(ValidationError) as exc:
+        m.parse_stage(S(id="x", type="llm_transform", inputs=[{"id": "a"}]))
+    assert any(
+        e["loc"] == ("llm_transform", "llm") and e["type"] == "missing"
+        for e in exc.value.errors()
+    )
 
 
 # ── llm_transform's 1:1 contract (_llm_transform_one_to_one) ──────────────────
 def test_llm_transform_rejects_more_than_one_input():
     with pytest.raises(ValidationError, match="exactly one input, has 2"):
-        m.Stage.model_validate(S(
+        m.parse_stage(S(
             id="extract", type="llm_transform",
             inputs=[{"id": "a", "schema": _PK_ID_SCHEMA}, {"id": "b", "schema": _PK_ID_SCHEMA}],
             output_schema={"columns": [{"name": "id", "type": "str"}], "primary_key": ["id"]},
@@ -102,7 +108,7 @@ def test_llm_transform_rejects_input_with_no_declared_schema():
     # `schema` is a required field on StageInput, so this never reaches
     # _llm_transform_one_to_one — pydantic rejects the input itself.
     with pytest.raises(ValidationError, match="inputs.0.schema"):
-        m.Stage.model_validate(S(
+        m.parse_stage(S(
             id="extract", type="llm_transform",
             inputs=[{"id": "a"}],
             output_schema={"columns": [{"name": "id", "type": "str"}], "primary_key": ["id"]},
@@ -111,7 +117,7 @@ def test_llm_transform_rejects_input_with_no_declared_schema():
 
 def test_llm_transform_rejects_missing_output_schema():
     with pytest.raises(ValidationError, match="declares no output_schema"):
-        m.Stage.model_validate(S(
+        m.parse_stage(S(
             id="extract", type="llm_transform",
             inputs=[{"id": "a", "schema": {"columns": [{"name": "id", "type": "str"}],
                                            "primary_key": ["id"]}}],
@@ -120,7 +126,7 @@ def test_llm_transform_rejects_missing_output_schema():
 
 def test_llm_transform_rejects_input_schema_with_no_primary_key():
     with pytest.raises(ValidationError, match="input schema declares no primary_key"):
-        m.Stage.model_validate(S(
+        m.parse_stage(S(
             id="extract", type="llm_transform",
             inputs=[{"id": "a", "schema": {
                 "columns": [{"name": "id", "type": "str"}, {"name": "text", "type": "str"}]}}],
@@ -131,7 +137,7 @@ def test_llm_transform_rejects_input_schema_with_no_primary_key():
 
 def test_llm_transform_rejects_output_schema_with_no_primary_key():
     with pytest.raises(ValidationError, match="output_schema declares no primary_key"):
-        m.Stage.model_validate(S(
+        m.parse_stage(S(
             id="extract", type="llm_transform",
             inputs=[{"id": "a", "schema": {"columns": [{"name": "id", "type": "str"}],
                                            "primary_key": ["id"]}}],
@@ -142,7 +148,7 @@ def test_llm_transform_rejects_output_schema_with_no_primary_key():
 
 def test_llm_transform_rejects_mismatched_primary_keys():
     with pytest.raises(ValidationError, match=r"input primary_key \['id'\] != output primary_key \['other'\]"):
-        m.Stage.model_validate(S(
+        m.parse_stage(S(
             id="extract", type="llm_transform",
             inputs=[{"id": "a", "schema": {"columns": [{"name": "id", "type": "str"}],
                                            "primary_key": ["id"]}}],
@@ -153,7 +159,7 @@ def test_llm_transform_rejects_mismatched_primary_keys():
 
 def test_llm_transform_rejects_output_that_drops_an_input_column():
     with pytest.raises(ValidationError, match="output must keep every input column unchanged"):
-        m.Stage.model_validate(S(
+        m.parse_stage(S(
             id="extract", type="llm_transform",
             inputs=[{"id": "a", "schema": {
                 "columns": [{"name": "id", "type": "str"}, {"name": "text", "type": "str"}],
@@ -165,7 +171,7 @@ def test_llm_transform_rejects_output_that_drops_an_input_column():
 
 def test_llm_transform_rejects_output_that_adds_no_columns():
     with pytest.raises(ValidationError, match="adds no columns beyond the input"):
-        m.Stage.model_validate(S(
+        m.parse_stage(S(
             id="extract", type="llm_transform",
             inputs=[{"id": "a", "schema": {"columns": [{"name": "id", "type": "str"}],
                                            "primary_key": ["id"]}}],
@@ -173,13 +179,19 @@ def test_llm_transform_rejects_output_that_adds_no_columns():
             llm={"prompt_template": "do {id}"}))
 
 
-def test_publish_also_requires_function():
-    with pytest.raises(ValidationError):
-        m.Stage.model_validate(S(id="p", type="publish", inputs=[{"id": "a"}], publish={"format": "json"}))
+def test_publish_requires_the_function_block_it_actually_runs():
+    """PublishStage declares BOTH blocks required: `publish` is the rendering
+    config, `function` is the code the stage runs."""
+    with pytest.raises(ValidationError) as exc:
+        m.parse_stage(S(id="p", type="publish", inputs=[{"id": "a"}], publish={"format": "json"}))
+    assert any(
+        e["loc"] == ("publish", "function") and e["type"] == "missing"
+        for e in exc.value.errors()
+    )
 
 
 def test_publish_config_is_typed():
-    s = m.Stage.model_validate(S(
+    s = m.parse_stage(S(
         id="p", type="publish", inputs=[{"id": "a", "schema": _PK_ID_SCHEMA}],
         publish={"format": "json"}, function={"kind": "inline", "code": "def transform(row): return row"}))
     assert s.publish.format == m.PublishFormat.json
@@ -187,7 +199,7 @@ def test_publish_config_is_typed():
 
 def test_python_function_inline_needs_code():
     with pytest.raises(ValidationError):
-        m.Stage.model_validate(S(id="t", type="python_frame_function", inputs=[{"id": "a"}],
+        m.parse_stage(S(id="t", type="python_frame_function", inputs=[{"id": "a"}],
                                  function={"kind": "inline"}))
 
 
@@ -195,18 +207,18 @@ def test_python_function_inline_code_must_compile():
     # a bare body with a top-level `return` does not compile — the exact error the
     # runtime hits when it exec()s the code, now caught at validation time.
     with pytest.raises(ValidationError):
-        m.Stage.model_validate(S(id="t", type="python_row_function", inputs=[{"id": "a"}],
+        m.parse_stage(S(id="t", type="python_row_function", inputs=[{"id": "a"}],
                                  function={"kind": "inline", "code": "row['x'] = 1\nreturn row"}))
 
 
 def test_python_function_inline_code_must_define_transform():
     with pytest.raises(ValidationError):
-        m.Stage.model_validate(S(id="t", type="python_row_function", inputs=[{"id": "a"}],
+        m.parse_stage(S(id="t", type="python_row_function", inputs=[{"id": "a"}],
                                  function={"kind": "inline", "code": "x = 1"}))
 
 
 def test_python_function_inline_valid_transform_ok():
-    m.Stage.model_validate(S(id="t", type="python_row_function",
+    m.parse_stage(S(id="t", type="python_row_function",
                              inputs=[{"id": "a", "schema": _PK_ID_SCHEMA}],
                              output_schema=_PK_ID_SCHEMA,
                              function={"kind": "inline", "code": "def transform(row): return row"}))
@@ -214,19 +226,19 @@ def test_python_function_inline_valid_transform_ok():
 
 def test_bad_id_snake_case(tmp_path):
     with pytest.raises(ValidationError):
-        m.Stage.model_validate(S(id="BadId", type="input_data",
+        m.parse_stage(S(id="BadId", type="input_data",
                                  connector={"kind": "file", "params": {"path": str(tmp_path / "d.csv")}}))
 
 
 def test_unknown_type_raises():
     with pytest.raises(ValidationError):
-        m.Stage.model_validate(S(id="x", type="frobnicate"))
+        m.parse_stage(S(id="x", type="frobnicate"))
 
 
 @pytest.mark.parametrize("t", ["enrich", "expand"])
 def test_join_min_inputs(t):
     with pytest.raises(ValidationError):
-        m.Stage.model_validate(S(id="j", type=t, inputs=[{"id": "a"}],
+        m.parse_stage(S(id="j", type=t, inputs=[{"id": "a"}],
                                  join={"keys": [{"left": "k", "right": "k"}]}))
 
 
@@ -245,16 +257,16 @@ def test_join_rejects_a_third_input(t):
 # ── tightened fields ─────────────────────────────────────────────────────────
 def test_name_is_required():
     with pytest.raises(ValidationError):
-        m.Stage.model_validate({"id": "x", "type": "input_data", "connector": {"kind": "file"}})
+        m.parse_stage({"id": "x", "type": "input_data", "connector": {"kind": "file"}})
 
 
 def test_input_ids_property():
-    s = m.Stage.model_validate(_build_enrich_on_k(join={"keys": [{"left": "k", "right": "k"}]}))
+    s = m.parse_stage(_build_enrich_on_k(join={"keys": [{"left": "k", "right": "k"}]}))
     assert s.input_ids == ["a", "b"]
 
 
 def test_source_parses_as_sourceref(tmp_path):
-    s = m.Stage.model_validate(S(id="load", type="input_data",
+    s = m.parse_stage(S(id="load", type="input_data",
                                  connector={"kind": "file", "params": {"path": str(tmp_path / "d.csv")}},
                                  output_schema=_PK_ID_SCHEMA,
                                  source={"doc": "x.md", "section": "S1", "lines": [1, 2]}))
@@ -265,7 +277,7 @@ def test_queue_needs_no_hash_source_declared():
     # A human_review_queue row is matched to a cached decision by fingerprinting
     # the row itself (app.core.stage_cache) — no upstream primary_key or
     # explicit column list is required to build the stage.
-    s = m.Stage.model_validate(S(
+    s = m.parse_stage(S(
         id="rev", type="human_review_queue", inputs=[{"id": "a", "schema": _PK_ID_SCHEMA}],
         output_schema=_PK_ID_SCHEMA, queue={},
     ))
@@ -274,28 +286,28 @@ def test_queue_needs_no_hash_source_declared():
 
 # ── fixes folded into the model ──────────────────────────────────────────────
 def test_join_accepts_keys():
-    m.Stage.model_validate(_build_enrich_on_k(join={"keys": [{"left": "k", "right": "k"}]}))
+    m.parse_stage(_build_enrich_on_k(join={"keys": [{"left": "k", "right": "k"}]}))
 
 
 def test_join_without_keys_raises():
     with pytest.raises(ValidationError):
-        m.Stage.model_validate(S(id="j", type="enrich", inputs=[{"id": "a"}, {"id": "b"}],
+        m.parse_stage(S(id="j", type="enrich", inputs=[{"id": "a"}, {"id": "b"}],
                                  join={}))
 
 
 def test_join_with_empty_keys_raises():
     with pytest.raises(ValidationError):
-        m.Stage.model_validate(_build_enrich_on_k(join={"keys": []}))
+        m.parse_stage(_build_enrich_on_k(join={"keys": []}))
 
 
 def test_aggregate_output_column_required():
     with pytest.raises(ValidationError):
-        m.Stage.model_validate(S(id="agg", type="aggregate", inputs=[{"id": "a"}],
+        m.parse_stage(S(id="agg", type="aggregate", inputs=[{"id": "a"}],
                                  aggregate={"group_by": ["g"], "aggregations": [{"formula": "sum", "value_column": "x"}]}))
 
 
 def test_aggregate_valid():
-    m.Stage.model_validate(S(
+    m.parse_stage(S(
         id="agg", type="aggregate",
         inputs=[{"id": "a", "schema": {"columns": [{"name": "g", "type": "str"},
                                                    {"name": "x", "type": "int"}]}}],
@@ -330,7 +342,7 @@ def test_unknown_file_format_rejected(tmp_path):
 
 
 def test_model_enum_accepts_known():
-    s = m.Stage.model_validate(S(
+    s = m.parse_stage(S(
         id="e", type="llm_transform",
         inputs=[{"id": "a", "schema": {"columns": [{"name": "id", "type": "str"}],
                                        "primary_key": ["id"]}}],
@@ -342,7 +354,7 @@ def test_model_enum_accepts_known():
 
 def test_model_enum_rejects_unknown():
     with pytest.raises(ValidationError):
-        m.Stage.model_validate(S(id="e", type="llm_transform", inputs=[{"id": "a"}],
+        m.parse_stage(S(id="e", type="llm_transform", inputs=[{"id": "a"}],
                                  llm={"prompt_template": "p", "model": "gpt-9"}))
 
 
@@ -356,7 +368,7 @@ def test_validate_stage_helper(tmp_path):
 
 # ── PR: typed stage contract ─────────────────────────────────────────────────
 def test_inputs_are_refs_with_schema():
-    s = m.Stage.model_validate(S(
+    s = m.parse_stage(S(
         id="x", type="python_frame_function",
         inputs=[{"id": "a", "schema": {"primary_key": ["k"],
                                        "columns": [{"name": "k", "type": "str"}]}}],
@@ -402,20 +414,20 @@ def test_file_connector_empty_path_rejected():
 
 def test_file_connector_rejects_unknown_format(tmp_path):
     with pytest.raises(ValidationError, match="unknown file format"):
-        m.Stage.model_validate(S(id="load", type="input_data",
+        m.parse_stage(S(id="load", type="input_data",
                                  connector={"kind": "file",
                                             "params": {"path": str(tmp_path / "d.csv"), "format": "derived"}}))
 
 
 def test_unknown_keys_rejected():
     with pytest.raises(ValidationError):
-        m.Stage.model_validate(S(id="rev", type="human_review_queue",
+        m.parse_stage(S(id="rev", type="human_review_queue",
                                  inputs=[{"id": "a"}],
                                  queue={"hash_colums": ["x"]}))  # typo'd key must fail
 
 
 def test_enum_fields_are_plain_strings(tmp_path):
-    s = m.Stage.model_validate(S(id="load", type="input_data",
+    s = m.parse_stage(S(id="load", type="input_data",
                                  connector={"kind": "file", "params": {"path": str(tmp_path / "d.csv")}},
                                  output_schema=_PK_ID_SCHEMA))
     assert s.type == "input_data" and isinstance(s.type, str)
@@ -429,7 +441,7 @@ def test_aggregation_requires_value_column_except_count():
 
 
 def test_stage_eval_block_is_kept(tmp_path):
-    s = m.Stage.model_validate(S(id="load", type="input_data",
+    s = m.parse_stage(S(id="load", type="input_data",
                                  connector={"kind": "file", "params": {"path": str(tmp_path / "d.csv")}},
                                  output_schema=_PK_ID_SCHEMA,
                                  eval={"metrics": ["recall"]}))
@@ -439,7 +451,7 @@ def test_stage_eval_block_is_kept(tmp_path):
 def test_llm_transform_rejects_double_braced_input_column():
     # {{content}} is an escaped literal via str.format_map; the data never injects.
     with pytest.raises(ValidationError, match="double-brace"):
-        m.Stage.model_validate(S(
+        m.parse_stage(S(
             id="extract", type="llm_transform",
             inputs=[{"id": "load", "schema": {
                 "columns": [{"name": "content", "type": "str"}], "primary_key": ["content"]}}],
@@ -452,7 +464,7 @@ def test_llm_transform_rejects_spaced_double_braced_input_column():
     # The usual Jinja spelling "{{ content }}" (with spaces) is also an escaped
     # literal under str.format_map — it must be rejected just like "{{content}}".
     with pytest.raises(ValidationError, match="double-brace"):
-        m.Stage.model_validate(S(
+        m.parse_stage(S(
             id="extract", type="llm_transform",
             inputs=[{"id": "load", "schema": {
                 "columns": [{"name": "content", "type": "str"}], "primary_key": ["content"]}}],
@@ -463,7 +475,7 @@ def test_llm_transform_rejects_spaced_double_braced_input_column():
 
 def test_llm_transform_allows_prompt_that_injects_nothing():
     # Unusual but not strictly wrong — must NOT be rejected by the double-brace check.
-    s = m.Stage.model_validate(S(
+    s = m.parse_stage(S(
         id="extract", type="llm_transform",
         inputs=[{"id": "load", "schema": {
             "columns": [{"name": "content", "type": "str"}], "primary_key": ["content"]}}],
@@ -474,7 +486,7 @@ def test_llm_transform_allows_prompt_that_injects_nothing():
 
 
 def test_llm_transform_accepts_single_brace_input_column():
-    s = m.Stage.model_validate(S(
+    s = m.parse_stage(S(
         id="extract", type="llm_transform",
         inputs=[{"id": "load", "schema": {
             "columns": [{"name": "content", "type": "str"}], "primary_key": ["content"]}}],
@@ -528,7 +540,7 @@ def test_data_template_required():
 def test_double_brace_checks_data_template_not_instructions():
     # {{text}} in prompt_data_template is the mistake the validator exists to catch.
     with pytest.raises(ValidationError, match="double-brace"):
-        m.Stage.model_validate(S(
+        m.parse_stage(S(
             id="extract", type="llm_transform",
             inputs=[{"id": "load", "schema": {
                 "columns": [{"name": "text", "type": "str"}], "primary_key": ["text"]}}],
@@ -539,7 +551,7 @@ def test_double_brace_checks_data_template_not_instructions():
     # The SAME {{text}} placed only in prompt_instructions, with a valid
     # single-braced prompt_data_template, must NOT raise — the validator only
     # inspects the per-row template, never the instructions.
-    s = m.Stage.model_validate(S(
+    s = m.parse_stage(S(
         id="extract", type="llm_transform",
         inputs=[{"id": "load", "schema": {
             "columns": [{"name": "text", "type": "str"}], "primary_key": ["text"]}}],
@@ -583,7 +595,7 @@ def test_output_schema_issues_raise_at_stage_construction():
         "output_schema": {"columns": [{"name": "undeclared_extra", "type": "str"}]},
     }
     with pytest.raises(ValidationError, match="undeclared_extra"):
-        m.Stage.model_validate(spec)
+        m.parse_stage(spec)
 
 
 # ── mandatory input/output schemas ───────────────────────────────────────────
@@ -648,7 +660,7 @@ def _input_data_spec(tmp_path, *, declare_output=True):
 
 def _rejection_message(spec) -> str:
     with pytest.raises(ValidationError) as err:
-        m.Stage.model_validate(spec)
+        m.parse_stage(spec)
     return str(err.value)
 
 
@@ -675,7 +687,7 @@ def test_stage_locates_only_the_input_that_declares_no_schema():
 
 @pytest.mark.parametrize("t", NON_EXEMPT_TYPES)
 def test_fully_declared_stage_accepted(t):
-    assert m.Stage.model_validate(_schema_spec(t)).output_schema is not None
+    assert m.parse_stage(_schema_spec(t)).output_schema is not None
 
 
 def test_input_data_rejects_missing_output_schema(tmp_path):
@@ -687,12 +699,12 @@ def test_input_data_rejects_missing_output_schema(tmp_path):
 
 
 def test_input_data_with_output_schema_accepted(tmp_path):
-    assert m.Stage.model_validate(_input_data_spec(tmp_path)).output_schema is not None
+    assert m.parse_stage(_input_data_spec(tmp_path)).output_schema is not None
 
 
 def test_publish_without_output_schema_accepted():
     """publish emits files, not a table — its output side is exempt."""
-    s = m.Stage.model_validate(_schema_spec("publish", declare_output=False))
+    s = m.parse_stage(_schema_spec("publish", declare_output=False))
     assert s.output_schema is None
 
 
@@ -704,7 +716,7 @@ def test_publish_rejects_input_that_declares_no_schema():
 
 
 def test_publish_fully_declared_accepted():
-    s = m.Stage.model_validate(_schema_spec("publish"))
+    s = m.parse_stage(_schema_spec("publish"))
     assert s.inputs[0].table_schema is not None
 
 

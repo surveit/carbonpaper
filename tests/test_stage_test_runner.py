@@ -1,5 +1,5 @@
 """run_tests_for_stage: execution through the real handlers + normalized comparison."""
-from app.models import Stage
+from app.models import parse_stage, Stage
 from app.runtime.stage_tests import find_failing_stage_tests, run_tests_for_stage
 
 _IN_SCHEMA = {"columns": [{"name": "amount", "type": "float", "nullable": False}]}
@@ -10,7 +10,7 @@ _OUT_SCHEMA = {"columns": [
 
 
 def _row_stage(code: str, tests: list[dict]) -> Stage:
-    return Stage.model_validate({
+    return parse_stage({
         "id": "double", "name": "Double", "type": "python_row_function",
         "inputs": [{"id": "load", "schema": _IN_SCHEMA}],
         "output_schema": _OUT_SCHEMA,
@@ -112,7 +112,7 @@ def test_none_output_matches_expected_none():
 
 
 def _frame_stage(code: str, tests: list[dict]) -> Stage:
-    return Stage.model_validate({
+    return parse_stage({
         "id": "reshape", "name": "Reshape", "type": "python_frame_function",
         "inputs": [{"id": "load", "schema": _IN_SCHEMA}],
         "output_schema": _IN_SCHEMA,
@@ -142,7 +142,7 @@ def test_omitted_column_in_expected_row_claims_none():
         {"name": "amount", "type": "float", "nullable": False},
         {"name": "label", "type": "str", "nullable": True},
     ]}
-    stage = Stage.model_validate({
+    stage = parse_stage({
         "id": "labelled", "name": "Labelled", "type": "python_frame_function",
         "inputs": [{"id": "load", "schema": _IN_SCHEMA}],
         "output_schema": labelled_schema,
@@ -230,7 +230,7 @@ _MERGED_SCHEMA = {"columns": [
 
 
 def _multi_input_frame_stage(code: str, tests: list[dict]) -> Stage:
-    return Stage.model_validate({
+    return parse_stage({
         "id": "merge", "name": "Merge", "type": "python_frame_function",
         "inputs": [
             {"id": "left", "schema": _LEFT_SCHEMA},
@@ -264,7 +264,7 @@ def test_multi_input_frame_positional_order_is_declared_order():
     # passed frames in dict order (or the wrong order) this would return
     # the `right` input's row instead of `left`'s.
     id_schema = {"columns": [{"name": "id", "type": "str", "nullable": False}]}
-    stage = Stage.model_validate({
+    stage = parse_stage({
         "id": "first", "name": "First", "type": "python_frame_function",
         "inputs": [
             {"id": "left", "schema": id_schema},
@@ -300,7 +300,7 @@ def test_find_failing_stage_tests_names_stage_and_test():
 
 
 def test_stage_without_tests_contributes_no_failures():
-    plain = Stage.model_validate({
+    plain = parse_stage({
         "id": "load", "name": "Load", "type": "input_data",
         "connector": {"kind": "file"},
         "output_schema": _IN_SCHEMA,

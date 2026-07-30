@@ -40,9 +40,9 @@ class _Base(BaseModel):
 _SNAKE_RE = re.compile(r"^[a-z][a-z0-9_]*$")
 
 
-# Shared by every authored-code handle (python_row_function/python_frame_function,
+# Shared by every authored-code block (python_row_function/python_frame_function,
 # publish's function block, filter_rows) — lives here, below `stage.py`, so a
-# handle-config class defined in its own module can use it without a cycle.
+# config class defined in its own module can use it without a cycle.
 class FunctionKind(str, Enum):
     inline = "inline"
     module = "module"
@@ -53,7 +53,7 @@ SCALAR_COLUMN_TYPES: set[str] = {"str", "int", "float", "bool", "datetime", "dat
 STRUCTURED_COLUMN_TYPES: set[str] = {"json"}
 _LIST_RE = re.compile(r"^list\[(.+)\]$")
 
-# Named handles for the column-type values compared individually below (by
+# Named constants for the column-type values compared individually below (by
 # _annotation_for/_render_column in this module, and by app.runtime.validation)
 # — as opposed to the scalar/structured *sets* above, which are membership-tested
 # as a whole.

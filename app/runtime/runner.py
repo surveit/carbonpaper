@@ -21,6 +21,7 @@ from app.core.errors import MissingInputBindingError, NoVersionToRunError
 from app.core.frames import PARQUET_SUFFIX
 from app.core.store_config import configure_default_stores
 from app.models import Connector, Stage, StageType
+from app.models.stages.input_data import InputDataStage
 from app.core.run_status import RunStatus, StageStatus
 from app.services.errors import WorkflowLoadError
 from app.services import versioning
@@ -95,7 +96,7 @@ def apply_run_bindings(
 
     Fails loudly on a binding keyed to a stage id that does not exist or
     carries no connector, and on a binding value that is not a dict of params."""
-    connector_ids = {s.id for s in stages if s.connector is not None}
+    connector_ids = {s.id for s in stages if isinstance(s, InputDataStage)}
     given = dict(bindings or {})
     unbindable = sorted(set(given) - connector_ids)
     if unbindable:
@@ -121,7 +122,6 @@ def _merge_connector_params(stage: Stage, binding: Mapping[str, Any]) -> Stage:
         raise ValueError(
             f"binding for `{stage.id}` must be a dict of connector params, "
             f"got {type(binding).__name__}: {binding!r}")
-    assert stage.connector is not None  # caller filters to connector-carrying stages
     try:
         connector = Connector.model_validate({
             **stage.connector.model_dump(),

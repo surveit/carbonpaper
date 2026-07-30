@@ -1,6 +1,6 @@
 """The node-review Transform pane shows what the step actually computes, for
-every executable handle — including the two that carry no `function` block:
-filter_rows' predicate and union's declared inputs. A stage type whose handle
+every transform config block — including the two that carry no `function` block:
+filter_rows' predicate and union's declared inputs. A stage type whose config block
 the panel doesn't render reads as an empty Transform pane, which is worse than
 useless: it says "nothing happens here"."""
 import json

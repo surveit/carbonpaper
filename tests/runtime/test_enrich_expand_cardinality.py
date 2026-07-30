@@ -6,7 +6,7 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from app.models import Stage
+from app.models import parse_stage
 from app.runtime.stages.join import handle_enrich, handle_expand
 from conftest import make_run_context
 
@@ -15,7 +15,7 @@ _REFERENCE = {"columns": [{"name": "x", "type": "int"}, {"name": "z", "type": "s
 
 
 def _join_stage(stage_type: str) -> Stage:
-    return Stage.model_validate({
+    return parse_stage({
         "id": "m", "name": "Join", "type": stage_type,
         "inputs": [{"id": "subject", "schema": _SUBJECT},
                    {"id": "reference", "schema": _REFERENCE}],
