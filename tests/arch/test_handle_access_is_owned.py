@@ -19,7 +19,8 @@ _OWNERS: dict[str, set[str]] = {
     "queue": {"app/models/stages/human_review_queue.py"},
 }
 
-# Existing readers, to be worked down. Each entry is a file that reaches into a
+# Existing readers, to be worked down (🟢 #327 tracks it, including whether a type's
+# runtime handler counts as a co-owner). Each entry is a file that reaches into a
 # handle it does not own. THIS SET MAY ONLY SHRINK.
 _GRANDFATHERED: dict[str, set[str]] = {
     "function": {
