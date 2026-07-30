@@ -51,12 +51,15 @@ type's registered shape disagrees with that core fact, and
 `tests/test_handler_registry.py` pins the same per-type equality in CI.
 
 ## `app/compiler/` — prose → LLM generation engines
-Two generators, each an `app.core.agent` Agent targeting a model schema: `data_model.py`
-(document → `SchemaLibrary`, the nouns a human then approves) and `stage_tests.py` (one
-python-transform stage + the document → its `StageTest` cases, derived code-blind). Both
-submit through `submit_answer`, so a schema-invalid reply is **re-asked inside the agent's
-own loop**, not just parse-checked. `app/services/generation.py` drives them and persists
-what comes back. Workflow stages are authored one at a time through `app/services/stage_edit.py`.
+Three generators, each an `app.core.agent` Agent targeting a model schema: `data_model.py`
+(document → `SchemaLibrary`, the nouns a human then approves), `stage_tests.py` (one
+python-transform stage + the document → its `StageTest` cases, derived code-blind), and
+`review_guide.py` (one saved version's frozen stages + the document → its `ReviewGuide`).
+All three submit through `submit_answer`, so a schema-invalid reply is **re-asked inside
+the agent's own loop**, not just parse-checked. `app/services/generation.py` drives them
+and persists what comes back. The guide author is given the version's stages and no tool
+that reads a project, so it cannot narrate the working copy the version was cut from.
+Workflow stages are authored one at a time through `app/services/stage_edit.py`.
 
 ## `app/web/` — the web layer  → `app/AGENTS.md`
 Thin `app/main.py` (~40 lines); routes under `/project/{project}/…`. Routers: `project.py`
@@ -65,7 +68,9 @@ lists every version newest-first, `/workflow/version/{id}` is one immutable vers
 read-only detail with Publish/Run-this-version; the mutable editor stays at `/workflow`),
 `runs.py` (trigger/list/detail/status-poll, rows + CSV, scratch preview, resume, plus
 running one specific pinned version), `review.py` (review queue), `node_review.py` (node
-approval + editing + version creation + publish — the only writer to `compiled/`).
+approval + editing + version creation + publish — the only writer to `compiled/`),
+`guide.py` (`POST /workflow/version/{id}/guide` — starts review-guide authoring for one
+version, watched through node_review's generation-session status endpoint).
 `web/{config,loading,diagrams}.py` — paths + Jinja · viewer reads over the loader ·
 mermaid/ER builders. Everything a run page states about the workflow — its graph, each
 stage's source and schemas, the lineage panel, and the scratch re-run's handler — is read

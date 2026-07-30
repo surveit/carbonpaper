@@ -17,7 +17,9 @@ from starlette.routing import Route
 from app.core.store_config import configure_default_stores
 from app.seeds.seed import seed_demo_data_if_enabled
 from app.web.config import STATIC_DIR, configure_projects_dir_from_env
-from app.web.routers import admin, editing, evals, project, node_review, review, runs
+from app.web.routers import (
+    admin, editing, evals, guide, project, node_review, review, runs,
+)
 
 from app.web.chat_router import router as chat_router
 from app.mcp.server import handle_streamable_http, run_session_manager
@@ -58,6 +60,7 @@ app.include_router(runs.router)
 app.include_router(evals.router)
 app.include_router(review.router)
 app.include_router(node_review.router)
+app.include_router(guide.router)
 app.include_router(admin.router)
 
 # The compiler's chat-driven editing entry ('Edit with agent' -> a chat session).
