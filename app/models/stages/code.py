@@ -150,9 +150,9 @@ class PythonFunction(StageConfig):
             "function meets an input it cannot handle, it refuses instead of "
             f"returning: `raise {StepRefused.__name__}(\"...\")`, which needs no import — the name is "
             "already in scope. The message names the input and says, in language a "
-            "non-engineer can read, why that input cannot be handled."
-            "This helps narrow inputs further, for example if price expects a string like '$45,000.00'"
-            "then it should throw an error if it sees '€45.000,00' for example if it doesn't"
+            "non-engineer can read, why that input cannot be handled. "
+            "This helps narrow inputs further, for example if price expects a string like '$45,000.00' "
+            "then it should throw an error if it sees '€45.000,00' for example if it doesn't "
             "have a forex conversion table and it will break sums downstream."
         ),
     )
