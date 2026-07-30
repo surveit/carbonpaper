@@ -8,7 +8,12 @@ from typing import TYPE_CHECKING, ClassVar, Optional
 from pydantic import Field, model_validator
 
 from app.models.schema import _Base
-from app.models.stages.code import SUMMARY_DESCRIPTION, validate_inline_function_code
+from app.models.stages.code import (
+    CORNER_CASES_DESCRIPTION,
+    SUMMARY_DESCRIPTION,
+    CornerCase,
+    validate_inline_function_code,
+)
 
 if TYPE_CHECKING:
     from app.models.stage import Stage
@@ -26,9 +31,12 @@ class FilterConfig(_Base):
     # except `summary`, which describes that predicate to a reader — see
     # Stage.compute_definition_fingerprint.
     FINGERPRINT_FIELDS: ClassVar[frozenset[str]] = frozenset({"code", "function"})
-    INCIDENTAL_FIELDS: ClassVar[frozenset[str]] = frozenset({"summary"})
+    INCIDENTAL_FIELDS: ClassVar[frozenset[str]] = frozenset({"summary", "corner_cases"})
 
     summary: Optional[str] = Field(default=None, description=SUMMARY_DESCRIPTION)
+    corner_cases: list[CornerCase] = Field(
+        default_factory=list, description=CORNER_CASES_DESCRIPTION
+    )
     code: str = Field(
         description=(
             "Inline Python defining `should_include` (or whatever `function` names). "

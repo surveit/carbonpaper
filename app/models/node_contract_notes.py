@@ -18,6 +18,20 @@ CODE_SUMMARY_CONTRACT_NOTE = (
     "blank). Rewrite it in the same edit whenever the code changes."
 )
 
+CODE_CORNER_CASES_CONTRACT_NOTE = (
+    "ALSO write the handle's `corner_cases` in that same edit: one entry per input "
+    "whose handling a reader could not predict from the summary, each paired with the "
+    "outcome it must produce. Blank or unparseable values, boundaries (say which side "
+    "is inclusive), ties, duplicates, empty input, values outside an expected set. "
+    "Keep them OUT of the summary, which has to stay short enough to actually be read "
+    "— but do not leave them unsaid, because a description that is true about the "
+    "common path and silent about the awkward input is how a reviewer approves a step "
+    "that does the wrong thing. Both the summary and these cases are handed to the "
+    "agent that derives this step's examples, and every case you state becomes an "
+    "example the code must satisfy — so state the outcome the methodology gives, never "
+    "one you are inventing to match the code you just wrote."
+)
+
 HUMAN_REVIEW_QUEUE_CONTRACT_NOTE = (
     "This type's output columns are FIXED by the runtime regardless of what "
     "output_schema declares: only `decision`, `ai_score`, `human_score`, "

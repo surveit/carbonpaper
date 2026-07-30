@@ -10,7 +10,7 @@
    Optional context: llm_example {prompt, columns} — a rendered prompt
    from this run's actual input first row, for LLM stages. #}
 {% from "_schema_table.html" import schema_table %}
-{% from "_stage_code.html" import stage_summary %}
+{% from "_stage_code.html" import stage_summary, stage_corner_cases %}
 {% from "_stage_certification.html" import stage_certification %}
 
 {% if stage.connector %}
@@ -88,6 +88,7 @@
 <section class="exec-block">
     <h2>🐍 Code transformation</h2>
     {{ stage_summary(stage.function.summary) }}
+    {{ stage_corner_cases(stage.function.corner_cases) }}
     {{ stage_certification(certification) }}
     {# No `kind` row: its two values are `inline` (the code is in the Code block
        below, so saying so tells a reviewer nothing) and `module` (the code lives in
@@ -107,6 +108,7 @@
 <section class="exec-block">
     <h2>🔎 Row filter</h2>
     {{ stage_summary(stage.filter.summary) }}
+    {{ stage_corner_cases(stage.filter.corner_cases) }}
     {{ stage_certification(certification) }}
     <p class="muted">Keeps the rows this predicate returns <code>True</code> for; every kept row passes through unchanged, in order.</p>
     <dl class="kv">
