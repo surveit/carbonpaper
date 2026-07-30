@@ -35,7 +35,7 @@ def resolve_input_columns(stage: "Stage", index: int) -> set[str]:
 # holds the other end: every internal key stays under this prefix).
 INTERNAL_COLUMN_PREFIX = "_"
 
-RESERVED_PREFIX_ISSUE = (
+INTERNAL_NAMESPACE_ISSUE = (
     "a column name may not begin with `{prefix}` — that namespace is reserved for "
     "the runtime's internal per-row columns"
 )
@@ -53,7 +53,7 @@ def find_internal_namespace_column_issues(stage: "Stage") -> list[str]:
             for name in _internal_namespace_columns(stage.output_schema)
         )
     if issues:
-        issues.append(RESERVED_PREFIX_ISSUE.format(prefix=INTERNAL_COLUMN_PREFIX))
+        issues.append(INTERNAL_NAMESPACE_ISSUE.format(prefix=INTERNAL_COLUMN_PREFIX))
     return issues
 
 
