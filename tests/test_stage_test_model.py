@@ -262,16 +262,16 @@ def test_zero_expected_rows_is_not_a_failure_claim():
 def test_failure_case_survives_the_spec_dict_round_trip():
     """The dump drops None-valued keys, so `expected: null` has to be written out
     explicitly — dropped, it would reload as a case that forgot the field."""
-    stage = Stage.model_validate(_row_stage([_FAILURE_TEST]))
+    stage = parse_stage(_row_stage([_FAILURE_TEST]))
     spec = stage_to_spec_dict(stage)
     assert spec["tests"][0]["expected"] is None
-    reloaded = Stage.model_validate(spec)
+    reloaded = parse_stage(spec)
     assert reloaded.tests is not None
     assert reloaded.tests[0].expected is None
 
 
 def test_rows_case_wire_form_is_unchanged():
-    stage = Stage.model_validate(_row_stage([_GOOD_TEST]))
+    stage = parse_stage(_row_stage([_GOOD_TEST]))
     assert stage.tests is not None
     assert stage.tests[0].expected == [{"amount": 2.0, "doubled": 4.0}]
     assert stage_to_spec_dict(stage)["tests"][0]["expected"] == [
