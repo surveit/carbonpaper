@@ -56,6 +56,32 @@ def _tool_call_event(**args: Any) -> dict[str, Any]:
             "label": "submit_answer"}
 
 
+# The tool list the CLI actually advertised in the failing live-llm run of CI run
+# 30549321524 (claude_code_version 2.1.195), read off that run's events.jsonl. The
+# built-ins are the drift surface a one-shot structured-output turn must not be shown.
+_CI_ADVERTISED_TOOLS = [
+    "Task", "Bash", "CronCreate", "CronDelete", "CronList", "DesignSync", "Edit",
+    "EnterWorktree", "ExitWorktree", "Monitor", "NotebookEdit", "PushNotification",
+    "Read", "RemoteTrigger", "ScheduleWakeup", "SendMessage", "Skill", "TaskCreate",
+    "TaskGet", "TaskList", "TaskOutput", "TaskStop", "TaskUpdate", "ToolSearch",
+    "WebFetch", "WebSearch", "Workflow", "Write", "mcp__tools__submit_answer",
+]
+
+
+def _init_event(*, tools: list[str], text: str | None = None) -> dict[str, Any]:
+    """One CLI init as the ENGINE emits it: kind "system", subtype "init", and the
+    inventory as the JSON body of `text` (matching sdk_engine.stream_turn)."""
+    body = json.dumps({
+        "type": "system", "subtype": "init",
+        "session_id": "bb443cc3-9afb-4dfb-844d-581e04d61679",
+        "tools": tools,
+        "mcp_servers": [{"name": "tools", "status": "connected"}],
+        "model": "claude-haiku-4-5-20251001",
+        "claude_code_version": "2.1.195",
+    })
+    return {"kind": "system", "subtype": "init", "text": body if text is None else text}
+
+
 def _agent(*, max_attempts: int = 4) -> "Agent[_Point]":
     return Agent(system_prompt="sp", target_schema=_Point, task="make a point", max_attempts=max_attempts)
 
@@ -187,6 +213,65 @@ def test_failure_still_reports_the_handler_issues_of_a_rejected_submission(
     assert "1 tool_call event(s)" in message
     assert "1 reached the handler" in message
     assert "y" in message  # the missing-field issue from submit_answer
+
+
+def test_failure_reads_the_tool_inventory_out_of_the_engines_init_event(
+    monkeypatch: Any,
+) -> None:
+    # The init arrives as kind "system" / subtype "init" with the inventory inside its
+    # JSON `text`; a reader that matches on kind "init" sees nothing and reports every
+    # failure as "no init". Fixture shape and tool list come from the real CI artifact.
+    message = _failure_message(
+        monkeypatch,
+        lambda agent: _FakeEngine(
+            agent.submit_answer,
+            [],
+            events=[
+                _init_event(tools=_CI_ADVERTISED_TOOLS),
+                {"kind": "text", "text": "This statement is about money."},
+            ],
+        ),
+    )
+    assert "submit_answer advertised=yes" in message
+    assert "mcp servers: tools=connected" in message
+    assert "no init reported" not in message
+
+
+def test_failure_reports_a_tool_the_init_never_advertised(monkeypatch: Any) -> None:
+    # advertised=NO is the environment fault (the MCP server did not connect), which
+    # must not read the same as the model declining to call a tool it was offered.
+    message = _failure_message(
+        monkeypatch,
+        lambda agent: _FakeEngine(
+            agent.submit_answer, [], events=[_init_event(tools=["Bash", "Read"])]
+        ),
+    )
+    assert "submit_answer advertised=NO" in message
+
+
+def test_failure_counts_an_unreadable_init_instead_of_reading_it_as_absent(
+    monkeypatch: Any,
+) -> None:
+    # This code runs while rendering an error, so a truncated body must not raise —
+    # and must not silently become "no init", the reading that hides an init entirely.
+    message = _failure_message(
+        monkeypatch,
+        lambda agent: _FakeEngine(
+            agent.submit_answer,
+            [],
+            events=[_init_event(tools=[], text='{"tools": ["Bash"')],
+        ),
+    )
+    assert "1 init(s) unreadable" in message
+    assert "no init reported" not in message
+
+
+def test_failure_reports_no_init_when_the_engine_emitted_none(monkeypatch: Any) -> None:
+    message = _failure_message(
+        monkeypatch,
+        lambda agent: _FakeEngine(agent.submit_answer, [], events=[]),
+    )
+    assert "tool availability: (no init reported)" in message
 
 
 def test_run_forwards_events_to_an_opted_in_caller_and_still_summarizes(
