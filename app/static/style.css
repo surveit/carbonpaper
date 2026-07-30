@@ -871,6 +871,19 @@ table.data-preview td.cell-url {
     word-break: break-all;
 }
 table.data-preview td.cell-url a { color: var(--accent, #1a3a72); }
+/* Clipped text cells: hover shows the full value (title attr), click expands
+   the cell in place so long text wraps instead of being cut off. */
+table.data-preview td.cell-clip { cursor: zoom-in; }
+table.data-preview td.cell-clip.expanded {
+    white-space: pre-wrap;
+    max-width: 640px;
+    min-width: 320px;
+    overflow: visible;
+    text-overflow: clip;
+    overflow-wrap: anywhere;
+    background: #fffbe8;
+    cursor: zoom-out;
+}
 table.data-preview th {
     background: var(--code-bg);
     font-weight: 600;
