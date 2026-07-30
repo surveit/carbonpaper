@@ -27,6 +27,7 @@ from app.models import (
 from app.services import generation, node_review, project, versioning
 from app.services.loader import resolve_function_code, stage_to_json, stage_to_spec_dict
 from app.web.config import EXAMPLES_DIR, templates
+from app.web.stage_test_views import build_certification, shape_test_views
 from app.web.diagrams import (
     SCHEMA_KIND_CLASS,
     SCHEMA_KIND_GLYPH,
@@ -422,6 +423,8 @@ async def version_stage_partial(
             "stage": stage,
             "raw_json": stage_to_json(stage),
             "function_code": resolve_function_code(stage),
+            "test_views": (views := shape_test_views(stage)),
+            "certification": build_certification(stage, views),
             "type_class": TYPE_CLASS,
             "type_glyph": TYPE_GLYPH,
         },
