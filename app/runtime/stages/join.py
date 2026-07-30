@@ -7,8 +7,10 @@ from typing import Literal, Optional
 import pandas as pd
 
 from app.models import Stage
+from app.models.stages.join import JoinStage
 
 from ..context import RunContext
+from .execution import narrow_stage
 
 
 def handle_enrich(stage: Stage, inputs: dict[str, pd.DataFrame], ctx: RunContext) -> pd.DataFrame:
@@ -27,10 +29,10 @@ def _join_reference_into_subject(
     inputs: dict[str, pd.DataFrame],
     validate: Optional[Literal["m:1"]],
 ) -> pd.DataFrame:
-    join_cfg = stage.join
-    assert join_cfg is not None  # Stage validation: enrich/expand carries join_cfg
-    subject = inputs[stage.inputs[0].id]
-    reference_id = stage.inputs[1].id
+    join_stage = narrow_stage(stage, JoinStage)
+    join_cfg = join_stage.join
+    subject = inputs[join_stage.inputs[0].id]
+    reference_id = join_stage.inputs[1].id
     reference = inputs[reference_id]
     keys = join_cfg.keys
     # how="left": every subject row survives, an unmatched one carrying nulls
@@ -46,7 +48,7 @@ def _join_reference_into_subject(
             validate=validate,
         )
     except pd.errors.MergeError as exc:
-        raise ValueError(_describe_cardinality_failure(stage, reference_id, exc)) from exc
+        raise ValueError(_describe_cardinality_failure(join_stage, reference_id, exc)) from exc
 
     select = join_cfg.select
     if select:
@@ -56,11 +58,10 @@ def _join_reference_into_subject(
 
 
 def _describe_cardinality_failure(
-    stage: Stage, reference_id: str, exc: pd.errors.MergeError
+    stage: "JoinStage", reference_id: str, exc: pd.errors.MergeError
 ) -> str:
     """Why an enrich refused to run, with the three real fixes."""
     # pandas' own message is appended because it names the duplicated key values.
-    assert stage.join is not None  # only reachable from the join handlers
     pairs = ", ".join(f"{k.left}={k.right}" for k in stage.join.keys)
     return (
         f"stage '{stage.id}': enrich requires at most one row of reference input "

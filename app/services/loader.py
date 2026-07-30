@@ -15,7 +15,8 @@ from pydantic import ValidationError
 
 from app.core.paths import repo_root
 from app.models.workflow import Workflow, validate_workflow
-from app.models.stage import Stage
+from app.models.stage import Stage, parse_stage
+from app.models.stages.code import PythonFunction
 from app.core.utils import format_errors
 
 from .errors import WorkflowLoadError
@@ -51,7 +52,7 @@ def load_compiled_dir(compiled_dir: Path) -> list[CompiledStageFile]:
             entry.issues.append("file contains no stage object")
             continue
         try:
-            entry.stage = Stage.model_validate(data)
+            entry.stage = parse_stage(data)
         except ValidationError as err:
             entry.issues.extend(format_errors(err))
     return entries
@@ -135,9 +136,12 @@ def read_module_code(module_path: str) -> str | None:
 
 
 def resolve_function_code(stage_def: Stage | None) -> str | None:
-    """Python source for a stage's function handle: the module file for a module
-    ref, or the inline code string. None if the stage has neither."""
-    fn = stage_def.function if stage_def else None
+    """Python source for a stage's `function` block: the module file for a module
+    ref, or the inline code string. None for a stage whose authored code is a
+    filter predicate (inline on its own block) or that has none."""
+    fn = stage_def.find_authored_code_block() if stage_def else None
+    if not isinstance(fn, PythonFunction):
+        return None
     if fn and fn.kind == "module" and fn.module:
         return read_module_code(fn.module)
     if fn and fn.kind == "inline":

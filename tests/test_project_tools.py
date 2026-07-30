@@ -7,10 +7,10 @@ import pytest
 from app.agents.compiler.tools import EditingContext, make_editing_tools
 from app.services import workspace
 
-# Minimal valid handle block per stage type (app/models/stage.py:
-# Stage._handle_for_type requires exactly one, keyed by `type`). Mirrors
+# Minimal valid config block per stage type (app/models/stage.py:
+# each type's stage model declares the ones it requires). Mirrors
 # tests/test_workspace.py's _HANDLE_BY_TYPE so every fixture stage here
-# round-trips through Stage.model_validate rather than landing in `issues`.
+# round-trips through parse_stage rather than landing in `issues`.
 _HANDLE_BY_TYPE: dict[str, dict] = {
     "input_data": {"connector": {"kind": "file"}},
     "llm_transform": {"llm": {"model": "claude-sonnet-4-6", "prompt_template": "score {row}"}},

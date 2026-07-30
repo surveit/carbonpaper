@@ -91,7 +91,7 @@ def test_set_stage_rejects_non_object_json(examples: Path) -> None:
 
 def test_set_stage_rejects_malformed_stage_missing_field(examples: Path) -> None:
     """A stage missing required fields (here: `name` and the `connector`
-    handle block a type=input_data stage needs) is the agent's error — reject
+    config block a type=input_data stage needs) is the agent's error — reject
     it back to the agent, don't store it."""
     draft = drafts.create_draft("demo", examples_dir=examples)
     malformed = {"id": "load", "type": "input_data", "output_schema": _ROWS_SCHEMA}

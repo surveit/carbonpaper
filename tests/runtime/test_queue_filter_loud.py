@@ -3,14 +3,14 @@ import pandas as pd
 import pytest
 from app.runtime.context import RunIdentity
 from app.runtime.stages import HANDLERS
-from app.models import Stage
+from app.models import parse_stage
 from app.models.stage import StageType
 from app.core.stage_cache import StageCacheEntry
 from conftest import make_run_context
 
 
 def test_bad_filter_raises_instead_of_skipping_review(tmp_path):
-    stage = Stage.model_validate({
+    stage = parse_stage({
         "id": "q", "type": "human_review_queue", "name": "q",
         # The edge DECLARES `nonexistent` — otherwise the filter's column
         # reference would be rejected when the stage is built, and this test is
@@ -37,7 +37,7 @@ def test_a_cell_the_filter_cannot_answer_names_the_stage_and_the_filter(tmp_path
     false. What the operator sees must still be this stage's own message —
     naming the stage id and the filter text — not the bare numpy error the
     comparison raises underneath."""
-    stage = Stage.model_validate({
+    stage = parse_stage({
         "id": "q", "type": "human_review_queue", "name": "q",
         "inputs": [{"id": "a", "schema": {"columns": [
             {"name": "claim_id", "type": "str", "nullable": False},

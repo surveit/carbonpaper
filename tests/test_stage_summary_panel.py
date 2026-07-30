@@ -9,6 +9,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
+from app.models import parse_stage
 
 _IN_SCHEMA = {"columns": [
     {"name": "bill_id", "type": "str", "nullable": False},
@@ -80,7 +81,6 @@ def test_a_stage_without_a_summary_says_so(client: TestClient) -> None:
 
 def test_a_summary_does_not_change_what_the_stage_computes() -> None:
     """`summary` is INCIDENTAL: rewording it must not stale an approved belief."""
-    from app.models import Stage
 
     # The handle is its own name so the reworded copy can unpack it: mypy infers a
     # heterogeneous dict literal's values as a union, which `**` cannot spread.
@@ -91,8 +91,8 @@ def test_a_summary_does_not_change_what_the_stage_computes() -> None:
         "output_schema": _OUT_SCHEMA,
         "function": function,
     }
-    with_summary = Stage.model_validate(spec)
-    reworded = Stage.model_validate({**spec, "function": {
+    with_summary = parse_stage(spec)
+    reworded = parse_stage({**spec, "function": {
         **function, "summary": "Totally different wording."}})
     assert (with_summary.compute_definition_fingerprint()
             == reworded.compute_definition_fingerprint())

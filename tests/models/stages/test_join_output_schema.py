@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from app.models.stage import Stage
+from app.models.stage import parse_stage
 
 _LEFT = {
     "columns": [
@@ -44,7 +44,7 @@ def _join_stage(*, output_columns=None, select=None, left=_LEFT, right=_RIGHT,
 
 def _issues(stage_dict) -> str:
     with pytest.raises(ValidationError) as err:
-        Stage.model_validate(stage_dict)
+        parse_stage(stage_dict)
     return str(err.value)
 
 
@@ -66,7 +66,7 @@ def test_declared_column_absent_from_join_rejected():
 
 
 def test_right_collision_reachable_only_as_suffixed():
-    stage = Stage.model_validate(_join_stage(
+    stage = parse_stage(_join_stage(
         output_columns=[{"name": "name_r", "type": "int"}],
     ))
     assert stage.id == "add_filings"
@@ -109,7 +109,7 @@ def test_select_projection_limits_declared():
 
 @pytest.mark.parametrize("stage_type", ["enrich", "expand"])
 def test_valid_join_passes(stage_type):
-    stage = Stage.model_validate(_join_stage(
+    stage = parse_stage(_join_stage(
         stage_type=stage_type,
         select=["facility_id", "name", "name_r", "amount"],
         output_columns=[

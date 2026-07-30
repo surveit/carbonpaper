@@ -15,10 +15,10 @@ routers in `app/web/routers/`, which import the Runner (`app.runtime`) and the s
 ## The stage panel — 3 tiers (`run_stage_partial` → `_run_stage_panel.html`)
 **Inputs │ Transform │ Outputs**:
 - **Inputs** — each input's schema + upstream preview, per-row checkboxes for the scratch re-run.
-- **Transform** — the *raw* executable handle (`_stage_executable.html`): llm prompt+model+tools,
+- **Transform** — the *raw* transform config block (`_stage_executable.html`): llm prompt+model+tools,
   join keys, aggregate ops, connector/queue/publish spec — plus the scratch re-run
-  result. An authored-code handle (`function` / `filter`) reads **description → examples → code**:
-  the handle's plain-language `summary` leads, the test cases follow, and the source is rendered
+  result. An authored-code block (`function` / `filter`) reads **description → examples → code**:
+  the block's plain-language `summary` leads, the test cases follow, and the source is rendered
   last and folded (`_stage_code.html`), because the reviewer is a journalist, not an engineer.
   One pane serves **both** the Schema and Current-run tiers (its `data-pane` names both):
   the definition the run pinned *is* what the current run transformed with, so switching tiers

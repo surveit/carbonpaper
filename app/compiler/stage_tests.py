@@ -150,23 +150,20 @@ def render_derivation_task(document: str, stage: Stage) -> str:
 
 
 def _authored_summary(stage: Stage) -> str | None:
-    """The stage's plain-language summary, off whichever authored-code handle it
+    """The stage's plain-language summary, off whichever authored-code block it
     carries."""
-    for handle in (stage.function, stage.filter):
-        if handle is not None and handle.summary:
-            return handle.summary
-    return None
+    block = stage.find_authored_code_block()
+    return block.summary if block is not None else None
 
 
 def _render_corner_cases(stage: Stage) -> str:
     """The declared corner cases, each an input and the outcome it must produce.
     Empty string when none are declared — the deriver still has to find edge cases
     itself, it just has none stated for it."""
-    for handle in (stage.function, stage.filter):
-        if handle is None or not handle.corner_cases:
-            continue
-        cases = "\n".join(
-            f"- {case.case} -> {case.expected}" for case in handle.corner_cases
-        )
-        return f"\nStated corner cases (each MUST become at least one example):\n{cases}\n"
-    return ""
+    block = stage.find_authored_code_block()
+    if block is None or not block.corner_cases:
+        return ""
+    cases = "\n".join(
+        f"- {case.case} -> {case.expected}" for case in block.corner_cases
+    )
+    return f"\nStated corner cases (each MUST become at least one example):\n{cases}\n"

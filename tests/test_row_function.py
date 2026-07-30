@@ -6,7 +6,7 @@ import pandas as pd
 import pytest
 from pydantic import ValidationError
 
-from app.models import Stage
+from app.models import parse_stage
 from app.runtime.stages import HANDLERS
 from conftest import make_run_context
 
@@ -17,7 +17,7 @@ _X_COLUMN = [{"name": "x", "type": "int"}]
 
 
 def _stage(code, inputs=("src",), output_columns=_X_COLUMN):
-    return Stage.model_validate({
+    return parse_stage({
         "id": "t", "name": "t", "type": "python_row_function",
         "inputs": [{"id": i, "schema": {"columns": _X_COLUMN}} for i in inputs],
         "output_schema": {"columns": output_columns},
@@ -59,7 +59,8 @@ def test_row_function_rejects_non_dict_return():
 
 def test_row_function_rejects_multiple_inputs():
     # python_row_function's max_inputs=1 is enforced by Stage validation itself
-    # (Stage._handle_for_type), so a 2-input stage can't even be constructed.
+    # (PythonRowFunctionStage declares inputs max_length=1), so a 2-input stage
+    # can't even be constructed.
     code = "def transform(row):\n    return {'x': row['x']}\n"
     with pytest.raises(ValidationError):
         _stage(code, inputs=("a", "b"))

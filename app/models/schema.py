@@ -9,7 +9,7 @@ from __future__ import annotations
 import datetime
 import re
 from enum import Enum
-from typing import Any, Literal, Optional, Sequence
+from typing import Any, ClassVar, Literal, Optional, Sequence
 
 from pydantic import (
     BaseModel,
@@ -36,13 +36,23 @@ class _Base(BaseModel):
     )
 
 
+class StageConfig(_Base):
+    """One stage type's config block. Every field is classified into exactly one
+    of the two sets below, so a field added to a block forces the decision of
+    whether it changes what the stage computes
+    (`tests/models/test_stage_config_fingerprint_fields.py` holds the partition;
+    `StageBase.compute_definition_fingerprint` reads FINGERPRINT_FIELDS)."""
+    FINGERPRINT_FIELDS: ClassVar[frozenset[str]]
+    INCIDENTAL_FIELDS: ClassVar[frozenset[str]]
+
+
 # ── Identifiers ──────────────────────────────────────────────────────────────
 _SNAKE_RE = re.compile(r"^[a-z][a-z0-9_]*$")
 
 
-# Shared by every authored-code handle (python_row_function/python_frame_function,
+# Shared by every authored-code block (python_row_function/python_frame_function,
 # publish's function block, filter_rows) — lives here, below `stage.py`, so a
-# handle-config class defined in its own module can use it without a cycle.
+# config class defined in its own module can use it without a cycle.
 class FunctionKind(str, Enum):
     inline = "inline"
     module = "module"
@@ -53,7 +63,7 @@ SCALAR_COLUMN_TYPES: set[str] = {"str", "int", "float", "bool", "datetime", "dat
 STRUCTURED_COLUMN_TYPES: set[str] = {"json"}
 _LIST_RE = re.compile(r"^list\[(.+)\]$")
 
-# Named handles for the column-type values compared individually below (by
+# Named constants for the column-type values compared individually below (by
 # _annotation_for/_render_column in this module, and by app.runtime.validation)
 # — as opposed to the scalar/structured *sets* above, which are membership-tested
 # as a whole.

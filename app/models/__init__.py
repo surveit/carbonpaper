@@ -21,9 +21,11 @@ from app.models.schema import (
 from app.models.stage import (
     ReviewConfig,
     Stage,
+    StageBase,
     StageDraft,
     StageInput,
     StageType,
+    parse_stage,
     validate_stage,
 )
 from app.models.stages.aggregate import AggFormula, AggregateConfig, AggregationOp
@@ -102,15 +104,16 @@ CONNECTOR_KINDS: set[str] = {
     "file", "http", "scrape", "api", "manual_upload", "sql",
 }
 
-# ── The node types and their handle-block contract ───────────────────────────
+# ── The node types as prompt copy ────────────────────────────────────────────
 # app.agents.compiler.prompt renders this into the editing agent's system prompt:
-# type -> {summary, handle, required, optional, min_inputs, requires_inputs,
-# also_requires?}. The Stage model does not expose this rendering shape, so the
-# spec is kept here as plain data purely for prompt rendering.
+# type -> {summary, blocks, required, optional, min_inputs, requires_inputs}.
+# `blocks` names the config blocks that type's stage model requires. The models
+# do not expose this rendering shape, so the copy is kept here as plain data
+# purely for prompt rendering.
 NODE_TYPES: dict[str, dict[str, _Any]] = {
     "input_data": {
         "summary": "Declares a source dataset with a typed schema.",
-        "handle": "connector",
+        "blocks": ["connector"],
         "requires_inputs": False,
         "min_inputs": 0,
         "required": ["kind"],
@@ -129,7 +132,7 @@ NODE_TYPES: dict[str, dict[str, _Any]] = {
     },
     "llm_transform": {
         "summary": "Row-by-row LLM call producing structured output.",
-        "handle": "llm",
+        "blocks": ["llm"],
         "requires_inputs": True,
         "min_inputs": 1,
         "required": ["prompt_data_template"],
@@ -151,7 +154,7 @@ NODE_TYPES: dict[str, dict[str, _Any]] = {
     },
     "python_row_function": {
         "summary": "Deterministic Python run once per row: one row in → one row out (cannot fan rows out/in or reorder).",
-        "handle": "function",
+        "blocks": ["function"],
         "requires_inputs": True,
         "min_inputs": 1,
         "required": ["kind"],
@@ -167,7 +170,7 @@ NODE_TYPES: dict[str, dict[str, _Any]] = {
     },
     "python_frame_function": {
         "summary": "Deterministic Python over the whole dataframe(s); may reshape (dedup, pivot, multi-input merge).",
-        "handle": "function",
+        "blocks": ["function"],
         "requires_inputs": True,
         "min_inputs": 1,
         "required": ["kind"],
@@ -182,7 +185,7 @@ NODE_TYPES: dict[str, dict[str, _Any]] = {
     },
     "enrich": {
         "summary": "Adds reference columns to each subject row; the reference must be unique on the key (many-to-one).",
-        "handle": "join",
+        "blocks": ["join"],
         "requires_inputs": True,
         "min_inputs": 2,
         "required": ["keys"],
@@ -205,7 +208,7 @@ NODE_TYPES: dict[str, dict[str, _Any]] = {
     },
     "expand": {
         "summary": "Joins reference rows into each subject row, fanning one subject row out to several (many-to-many).",
-        "handle": "join",
+        "blocks": ["join"],
         "requires_inputs": True,
         "min_inputs": 2,
         "required": ["keys"],
@@ -227,7 +230,7 @@ NODE_TYPES: dict[str, dict[str, _Any]] = {
     },
     "aggregate": {
         "summary": "Structured group-by aggregation.",
-        "handle": "aggregate",
+        "blocks": ["aggregate"],
         "requires_inputs": True,
         "min_inputs": 1,
         "required": ["group_by", "aggregations"],
@@ -243,7 +246,7 @@ NODE_TYPES: dict[str, dict[str, _Any]] = {
     },
     "human_review_queue": {
         "summary": "Pulls flagged rows for human decision; halts the run.",
-        "handle": "queue",
+        "blocks": ["queue"],
         "requires_inputs": True,
         "min_inputs": 1,
         "required": [],
@@ -259,8 +262,7 @@ NODE_TYPES: dict[str, dict[str, _Any]] = {
     },
     "publish": {
         "summary": "Render a final artifact (html, json, csv, cards).",
-        "handle": "publish",
-        "also_requires": ["function"],
+        "blocks": ["publish", "function"],
         "requires_inputs": True,
         "min_inputs": 1,
         "required": [],
@@ -280,7 +282,7 @@ NODE_TYPES: dict[str, dict[str, _Any]] = {
     },
     "union": {
         "summary": "Concatenate two or more upstream dataframes with an identical schema.",
-        "handle": "union",
+        "blocks": ["union"],
         "requires_inputs": True,
         "min_inputs": 2,
         "required": [],
@@ -294,7 +296,7 @@ NODE_TYPES: dict[str, dict[str, _Any]] = {
     },
     "filter_rows": {
         "summary": "Keep the rows an authored predicate returns True for.",
-        "handle": "filter",
+        "blocks": ["filter"],
         "requires_inputs": True,
         "min_inputs": 1,
         "required": ["code"],
@@ -310,7 +312,7 @@ NODE_TYPES: dict[str, dict[str, _Any]] = {
     },
 }
 
-# The types whose handle carries authored code all owe a plain-language
+# The types whose config carries authored code all owe a plain-language
 # `summary`. Folded into their notes here rather than repeated in each entry, so
 # every renderer of NODE_TYPES (the MCP instructions, the editing agent's
 # catalog) states the obligation without one of them being able to forget it.
@@ -330,7 +332,8 @@ __all__ = [
     "PythonFunction", "JoinKey", "JoinConfig", "AggregationOp",
     "AggregateConfig", "QueueConfig", "PublishConfig", "ReviewConfig",
     "RowReviewDecision", "UnionConfig", "FilterConfig",
-    "StageInput", "Stage", "StageDraft", "StageTest", "XlsxReadParams", "validate_stage",
+    "StageInput", "Stage", "StageBase", "StageDraft", "StageTest", "XlsxReadParams",
+    "parse_stage", "validate_stage",
     "Workflow", "parse_workflow", "validate_workflow", "validate_workflow_draft",
     "validate_unique_ids", "validate_inputs_resolve", "detect_cycle",
     "validate_publish_is_terminal", "validate_edge_schemas",
@@ -346,7 +349,7 @@ __all__ = [
     "SCALAR_COLUMN_TYPES", "SCHEMA_KINDS", "CONNECTOR_KINDS",
     "NODE_TYPES", "NODE_TYPE_NAMES", "HUMAN_REVIEW_QUEUE_CONTRACT_NOTE",
     "CODE_SUMMARY_CONTRACT_NOTE", "CODE_CARRYING_TYPES",
-    # individual column-type comparison handles
+    # individual column-type comparison constants
     "STR_COLUMN_TYPE", "JSON_COLUMN_TYPE", "LIST_JSON_COLUMN_TYPE",
     "RANGE_UNBOUNDED_MARKER",
 ]

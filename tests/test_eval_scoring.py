@@ -15,7 +15,7 @@ from app.evals.scoring import score_expected_outputs
 def _stage(id_, output_cols, tmp_path):
     """A minimal input_data stage declaring `output_cols` — enough for scoring,
     which reads only stage ids and output schemas."""
-    return m.Stage.model_validate({
+    return m.parse_stage({
         "id": id_, "type": "input_data", "name": id_,
         "connector": {"kind": "file", "params": {"path": str(tmp_path / f"{id_}.csv")}},
         "output_schema": {"columns": output_cols},

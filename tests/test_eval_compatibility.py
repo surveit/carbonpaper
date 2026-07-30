@@ -15,7 +15,7 @@ def S(**kw):
 
 
 def _file_input(id_, tmp_path, cols=("k",)):
-    return m.Stage.model_validate(S(
+    return m.parse_stage(S(
         id=id_, type="input_data",
         connector={"kind": "file", "params": {"path": str(tmp_path / f"{id_}.csv")}},
         output_schema={"columns": [{"name": c} for c in cols]}))
@@ -27,7 +27,7 @@ def _input_refs(inputs):
     that does not exist as a Stage) must be paired with the schema to declare."""
     refs = []
     for upstream in inputs:
-        if isinstance(upstream, m.Stage):
+        if isinstance(upstream, m.StageBase):
             refs.append({"id": upstream.id, "schema": upstream.output_schema})
         else:
             id_, cols = upstream
@@ -36,7 +36,7 @@ def _input_refs(inputs):
 
 
 def _row(id_, inputs, output_schema=None, **kw):
-    return m.Stage.model_validate(S(
+    return m.parse_stage(S(
         id=id_, type="python_row_function",
         inputs=_input_refs(inputs),
         function={"kind": "inline", "code": "def transform(row): return row"},
@@ -44,7 +44,7 @@ def _row(id_, inputs, output_schema=None, **kw):
 
 
 def _frame(id_, inputs, output_schema=None, **kw):
-    return m.Stage.model_validate(S(
+    return m.parse_stage(S(
         id=id_, type="python_frame_function",
         inputs=_input_refs(inputs),
         function={"kind": "inline", "code": "def transform(row): return row"},
@@ -52,7 +52,7 @@ def _frame(id_, inputs, output_schema=None, **kw):
 
 
 def _agg(id_, inputs, output_schema=None):
-    return m.Stage.model_validate(S(
+    return m.parse_stage(S(
         id=id_, type="aggregate", inputs=_input_refs(inputs),
         aggregate={"group_by": ["k"],
                    "aggregations": [{"formula": "sum", "output_column": "t",
@@ -123,7 +123,7 @@ def test_override_stage_has_no_output_schema(tmp_path):
     # would raise on it -- the precondition must report it, not let
     # validate_eval_compatibility crash.
     src = _file_input("src", tmp_path, cols=["k", "v", "quote"])
-    pub = m.Stage.model_validate(S(
+    pub = m.parse_stage(S(
         id="pub", type="publish", inputs=_input_refs([src]),
         publish={"format": "json"},
         function={"kind": "inline", "code": "def transform(df, output_dir): return df"}))
@@ -147,7 +147,7 @@ def test_eval_dataset_table_missing_a_column_of_override_schema(tmp_path):
 
 
 def test_dataset_schema_types_shared_column_differently(tmp_path):
-    src = m.Stage.model_validate(S(
+    src = m.parse_stage(S(
         id="src", type="input_data",
         connector={"kind": "file", "params": {"path": str(tmp_path / "src.csv")}},
         output_schema={"columns": [

@@ -29,7 +29,7 @@ def _row_function(output_schema: dict, input_columns: list[dict] | None = None) 
 # ── a stage may not declare a column there ──────────────────────────────────
 def test_output_schema_column_with_a_leading_underscore_is_refused():
     with pytest.raises(ValidationError) as err:
-        m.Stage.model_validate(
+        m.parse_stage(
             _row_function({"columns": [{"name": "id"}, {"name": "_error"}]})
         )
     assert "_error" in str(err.value)
@@ -38,7 +38,7 @@ def test_output_schema_column_with_a_leading_underscore_is_refused():
 
 def test_an_input_edge_column_with_a_leading_underscore_is_refused():
     with pytest.raises(ValidationError) as err:
-        m.Stage.model_validate(
+        m.parse_stage(
             _row_function(
                 {"columns": [{"name": "id"}]},
                 input_columns=[{"name": "id"}, {"name": "_usage"}],
@@ -51,13 +51,13 @@ def test_an_input_edge_column_with_a_leading_underscore_is_refused():
 def test_a_column_named_only_with_an_underscore_is_refused():
     """Not just the keys the runtime happens to use today — the whole namespace."""
     with pytest.raises(ValidationError):
-        m.Stage.model_validate(
+        m.parse_stage(
             _row_function({"columns": [{"name": "id"}, {"name": "_anything"}]})
         )
 
 
 def test_an_underscore_inside_a_column_name_is_fine():
-    stage = m.Stage.model_validate(
+    stage = m.parse_stage(
         _row_function({"columns": [{"name": "id"}, {"name": "issue_area"}]})
     )
     assert [c.name for c in stage.output_schema.columns] == ["id", "issue_area"]
@@ -66,7 +66,7 @@ def test_an_underscore_inside_a_column_name_is_fine():
 def test_an_underscore_prefixed_key_nested_in_a_json_column_is_fine():
     """A key inside a json object is a value on the frame's cell, not a column on
     the frame, so it collides with no machinery."""
-    stage = m.Stage.model_validate(
+    stage = m.parse_stage(
         _row_function(
             {
                 "columns": [

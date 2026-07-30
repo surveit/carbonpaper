@@ -7,7 +7,7 @@ import pandas as pd
 import pytest
 
 from app.core.errors import MissingInputBindingError
-from app.models import Stage
+from app.models import parse_stage, Stage
 from app.runtime.runner import apply_run_bindings, validate_stages_ready, execute_run
 from app.runtime.stages.input_data import read_input_data
 from app.services import versioning
@@ -24,7 +24,7 @@ _X_SCHEMA = {"columns": [{"name": "x", "type": "int"}]}
 
 def _input_stage(stage_id: str, path: str | None) -> Stage:
     params: dict = {"path": path, "format": "csv"} if path else {}
-    return Stage.model_validate({
+    return parse_stage({
         "id": stage_id, "name": stage_id, "type": "input_data",
         "connector": {"kind": "file", "params": params},
         "output_schema": _X_SCHEMA,
@@ -32,7 +32,7 @@ def _input_stage(stage_id: str, path: str | None) -> Stage:
 
 
 def _connectorless_stage(stage_id: str, input_id: str) -> Stage:
-    return Stage.model_validate({
+    return parse_stage({
         "id": stage_id, "name": stage_id, "type": "python_row_function",
         "inputs": [{"id": input_id, "schema": _X_SCHEMA}],
         "output_schema": _X_SCHEMA,

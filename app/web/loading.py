@@ -20,6 +20,7 @@ from pydantic import ValidationError
 from app.core.errors import NoVersionToRunError
 from app.core.frames import PARQUET_SUFFIX
 from app.models import Stage, StageType
+from app.models.stages.llm_transform import LLMTransformStage
 from app.runtime.manifest import load_manifest_model
 from app.core.run_status import StageStatus
 from app.services.run import resolve_version
@@ -170,8 +171,7 @@ def list_file_inputs(project: str, version_id: str | None = None) -> list[dict[s
         {"stage_id": s.id, "name": s.name,
          "path": str((s.connector.params or {}).get("path") or "")}
         for s in stages
-        if s.type == StageType.input_data and s.connector is not None
-        and s.connector.kind == "file"
+        if s.type == StageType.input_data and s.connector.kind == "file"
     ]
 
 
@@ -460,7 +460,10 @@ def build_llm_example(
     Returns {rendered, source_id} on success, {error} if no input or render
     fails, or None if the stage isn't an LLM stage.
     """
-    template = stage_def.llm.prompt_data_template if stage_def and stage_def.llm else None
+    template = (
+        stage_def.llm.prompt_data_template
+        if isinstance(stage_def, LLMTransformStage) else None
+    )
     if not template:
         return None
     for ip in input_previews:

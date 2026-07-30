@@ -23,7 +23,7 @@ def capture_lobbying_bundle() -> Path:
     Read-only on the source."""
     ensure_store_configured()
     wf = export_project(_SOURCE_PROJECT_NAME, examples_dir=_SOURCE_REPO_ROOT / "examples")
-    _FIXTURE_PATH.write_text(wf.model_dump_json(indent=2), encoding="utf-8")
+    _FIXTURE_PATH.write_text(wf.to_json(), encoding="utf-8")
     return _FIXTURE_PATH
 
 

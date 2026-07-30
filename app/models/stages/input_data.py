@@ -1,15 +1,16 @@
-"""input_data stage: the connector handle that names a source dataset, the
+"""input_data stage: the connector block that names a source dataset, the
 file-format vocabulary it validates `params.format` against, and the typed
 read parameters an xlsx source is read with."""
 from __future__ import annotations
 
 from enum import Enum
 from pathlib import Path
-from typing import Any, ClassVar, Optional
+from typing import Any, ClassVar, Literal, Optional
 
 from pydantic import ConfigDict, Field, model_validator
 
-from app.models.schema import _Base
+from app.models.schema import StageConfig, _Base
+from app.models.stage_base import StageBase, StageType
 
 
 class ConnectorKind(str, Enum):
@@ -24,10 +25,10 @@ class FileFormat(str, Enum):
     xlsx = "xlsx"
 
 
-class Connector(_Base):
-    """input_data handle."""
+class Connector(StageConfig):
+    """input_data config block."""
     # Every field changes what this stage computes (which file, what params) —
-    # see Stage.compute_definition_fingerprint.
+    # see StageBase.compute_definition_fingerprint.
     FINGERPRINT_FIELDS: ClassVar[frozenset[str]] = frozenset({"kind", "params", "refresh", "notes"})
     INCIDENTAL_FIELDS: ClassVar[frozenset[str]] = frozenset()
 
@@ -58,6 +59,14 @@ class Connector(_Base):
             if fmt is not None and fmt not in {f.value for f in FileFormat}:
                 raise ValueError(f"unknown file format {fmt!r}")
         return self
+
+
+class InputDataStage(StageBase):
+    type: Literal[StageType.input_data]
+    connector: Connector
+
+    def fingerprint_blocks(self) -> dict[str, StageConfig]:
+        return {"connector": self.connector}
 
 
 class XlsxReadParams(_Base):

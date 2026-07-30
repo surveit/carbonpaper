@@ -39,24 +39,24 @@ def _ref(path="x.csv", cols=("k",)):
 
 # ── is_grain_and_order_preserving (fixed by stage type) ────────────────────────────────
 def test_python_frame_function_not_grain_preserving():
-    assert m.Stage.model_validate(_py("t", ["a"])).is_grain_and_order_preserving is False
+    assert m.parse_stage(_py("t", ["a"])).is_grain_and_order_preserving is False
 
 
 def test_python_row_function_is_grain_and_order_preserving():
-    assert m.Stage.model_validate(_py("t", ["a"], granularity="row")).is_grain_and_order_preserving is True
+    assert m.parse_stage(_py("t", ["a"], granularity="row")).is_grain_and_order_preserving is True
 
 
 def test_python_row_function_rejects_multiple_inputs():
     # a row function maps over one input's rows — two inputs is an enrich/expand
     with pytest.raises(ValidationError):
-        m.Stage.model_validate(S(id="t", type="python_row_function",
+        m.parse_stage(S(id="t", type="python_row_function",
                                  inputs=[{"id": "a", "schema": _K}, {"id": "b", "schema": _K}],
                                  function={"kind": "inline", "code": "def transform(row): return row"},
                                  output_schema=_K))
 
 
 def test_llm_is_grain_and_order_preserving():
-    s = m.Stage.model_validate(S(
+    s = m.parse_stage(S(
         id="e", type="llm_transform",
         inputs=[{"id": "a", "schema": {"columns": [{"name": "id", "type": "str"}],
                                        "primary_key": ["id"]}}],
@@ -67,14 +67,14 @@ def test_llm_is_grain_and_order_preserving():
 
 
 def test_input_data_is_grain_and_order_preserving(tmp_path):
-    assert m.Stage.model_validate(_file_input("load", tmp_path)).is_grain_and_order_preserving is True
+    assert m.parse_stage(_file_input("load", tmp_path)).is_grain_and_order_preserving is True
 
 
 def test_human_review_queue_is_grain_and_order_preserving():
     # The runtime maps the queue handler per row and it emits every one of them
     # — a rejected row stays, carrying its rejection — so it is 1:1 in input
     # order, and an eval pathway through a queue stage is row-alignable.
-    s = m.Stage.model_validate(S(id="rev", type="human_review_queue",
+    s = m.parse_stage(S(id="rev", type="human_review_queue",
                                  inputs=[{"id": "a", "schema": _K}], queue={},
                                  output_schema=_K))
     assert s.is_grain_and_order_preserving is True
@@ -83,7 +83,7 @@ def test_human_review_queue_is_grain_and_order_preserving():
 def test_publish_not_grain_and_order_preserving():
     # handle_publish runs an authored function whose output is a table of
     # artifact paths — different rows from its input, never row-alignable.
-    s = m.Stage.model_validate(S(id="pub", type="publish",
+    s = m.parse_stage(S(id="pub", type="publish",
                                  inputs=[{"id": "a", "schema": _K}], publish={},
                                  function={"kind": "inline", "code": "def transform(row): return row"}))
     assert s.is_grain_and_order_preserving is False
@@ -93,17 +93,17 @@ def test_joins_and_aggregate_change_grain():
     # enrich is registered as a frame handler, so even its m:1 shape is NOT
     # grain-preserving: preservation is earned by the runtime driving the stage
     # row by row, never asserted about an operation.
-    j = m.Stage.model_validate(S(id="j", type="enrich",
+    j = m.parse_stage(S(id="j", type="enrich",
                                  inputs=[{"id": "a", "schema": _K}, {"id": "b", "schema": _K}],
                                  join={"keys": [{"left": "k", "right": "k"}]},
                                  output_schema=_K))
-    x = m.Stage.model_validate(S(id="x", type="expand",
+    x = m.parse_stage(S(id="x", type="expand",
                                  inputs=[{"id": "a", "schema": _K}, {"id": "b", "schema": _K}],
                                  join={"keys": [{"left": "k", "right": "k"}]},
                                  output_schema=_K))
     assert x.is_grain_and_order_preserving is False
     agg_in = {"columns": [{"name": "g"}, {"name": "x", "type": "int"}]}
-    agg = m.Stage.model_validate(S(id="agg", type="aggregate",
+    agg = m.parse_stage(S(id="agg", type="aggregate",
                                    inputs=[{"id": "a", "schema": agg_in}],
                                    aggregate={"group_by": ["g"],
                                               "aggregations": [{"formula": "sum", "output_column": "t",

@@ -26,7 +26,7 @@ def _stage(*, summary=None, type_="python_row_function", handle="function"):
             "summary": summary,
             "code": "def should_include(row):\n    return True",
         }
-    return m.Stage.model_validate(spec)
+    return m.parse_stage(spec)
 
 
 def _views(*statuses):
@@ -65,7 +65,7 @@ def test_no_summary_is_unsummarised():
 def test_a_stage_whose_behaviour_is_not_code_is_not_applicable():
     """An enrich's keys are config a reviewer reads directly — there is no authored
     description standing between them and the behaviour, so nothing to certify."""
-    stage = m.Stage.model_validate({
+    stage = m.parse_stage({
         "id": "j", "name": "J", "type": "enrich",
         "inputs": [{"id": "a", "schema": _SCHEMA}, {"id": "b", "schema": _SCHEMA}],
         "output_schema": _SCHEMA,
@@ -99,7 +99,7 @@ def test_filter_rows_with_no_description_is_undescribed_not_untestable():
 def test_publish_carries_a_function_so_it_is_not_n_a():
     """A publish stage's behaviour is authored code too, so a missing description
     there is a real gap rather than nothing to say."""
-    stage = m.Stage.model_validate({
+    stage = m.parse_stage({
         "id": "pub", "name": "Pub", "type": "publish",
         "inputs": [{"id": "up", "schema": _SCHEMA}],
         "publish": {"format": "csv"},

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.models import Stage
+from app.models import parse_stage
 
 
 def _row_function_stage(input_id="src", **overrides):
@@ -16,7 +16,7 @@ def _row_function_stage(input_id="src", **overrides):
         "function": {"kind": "inline", "code": "def transform(row):\n    return row\n"},
     }
     base.update(overrides)
-    return Stage.model_validate(base)
+    return parse_stage(base)
 
 
 def _queue_stage(**queue_overrides):
@@ -28,7 +28,7 @@ def _queue_stage(**queue_overrides):
         "estimated_volume_per_week": 10,
     }
     queue.update(queue_overrides)
-    return Stage.model_validate({
+    return parse_stage({
         "id": "review",
         "type": "human_review_queue",
         "name": "review",
@@ -44,6 +44,22 @@ def _queue_stage(**queue_overrides):
     })
 
 
+def _publish_stage(code="def transform(df, output_dir, trace_links):\n    return df\n", **overrides):
+    base = {
+        "id": "report",
+        "type": "publish",
+        "name": "report",
+        "inputs": [{
+            "id": "src",
+            "schema": {"columns": [{"name": "a", "type": "str", "nullable": False}]},
+        }],
+        "publish": {"format": "html_report", "destination": "out/"},
+        "function": {"kind": "inline", "code": code},
+    }
+    base.update(overrides)
+    return parse_stage(base)
+
+
 def test_compute_definition_fingerprint_is_deterministic():
     stage = _row_function_stage()
     assert stage.compute_definition_fingerprint() == stage.compute_definition_fingerprint()
@@ -55,7 +71,7 @@ def test_compute_definition_fingerprint_ignores_incidental_fields():
     assert a.compute_definition_fingerprint() == b.compute_definition_fingerprint()
 
 
-def test_compute_definition_fingerprint_changes_with_handle_content():
+def test_compute_definition_fingerprint_changes_with_config_block_content():
     a = _row_function_stage()
     b = _row_function_stage(
         function={"kind": "inline", "code": "def transform(row):\n    row['x'] = 1\n    return row\n"}
@@ -94,14 +110,31 @@ def test_compute_definition_fingerprint_for_queue_reacts_to_reviewer_instruction
     assert base.compute_definition_fingerprint() != changed.compute_definition_fingerprint()
 
 
+def test_compute_definition_fingerprint_for_publish_reacts_to_function_code():
+    # The code a publish stage runs lives in its `function` block, not in the
+    # `publish` block — PublishStage fingerprints both, so editing the code must
+    # invalidate the cache.
+    base = _publish_stage()
+    changed = _publish_stage(
+        code="def transform(df, output_dir, trace_links):\n    return df.head(1)\n"
+    )
+    assert base.compute_definition_fingerprint() != changed.compute_definition_fingerprint()
+
+
+def test_compute_definition_fingerprint_for_publish_reacts_to_publish_block():
+    base = _publish_stage()
+    changed = _publish_stage(publish={"format": "html_report", "destination": "elsewhere/"})
+    assert base.compute_definition_fingerprint() != changed.compute_definition_fingerprint()
+
+
 def test_compute_definition_fingerprint_survives_a_stored_round_trip():
     # A version-embedded stage is dumped/reloaded through
     # model_dump(mode="json", by_alias=True, exclude_none=True) —
     # app.services.loader.stage_to_spec_dict's exact dump options, the shape
     # a WorkflowVersion stores. Round-tripping a queue stage through that dump
-    # (a rich handle block, QueueConfig, plus output_schema's nested Column
+    # (a rich config block, QueueConfig, plus output_schema's nested Column
     # list) must reproduce the same fingerprint.
     stage = _queue_stage()
     dumped = stage.model_dump(mode="json", by_alias=True, exclude_none=True)
-    reloaded = Stage.model_validate(dumped)
+    reloaded = parse_stage(dumped)
     assert stage.compute_definition_fingerprint() == reloaded.compute_definition_fingerprint()

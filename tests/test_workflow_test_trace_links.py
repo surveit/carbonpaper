@@ -10,7 +10,7 @@ import json
 import pandas as pd
 import pytest
 
-from app.models import Stage
+from app.models import parse_stage
 from app.services import workspace
 from app.services.versioning import WorkflowVersion
 from app.services.workflow_test import run_workflow_test
@@ -54,7 +54,7 @@ def demo(tmp_path, monkeypatch):
     WorkflowVersion(
         id="demo/v1", version_id="v1", created_at="2026-07-10T00:00:00",
         message="seed", reviewer="test", published=False,
-        stages=[Stage.model_validate(s) for s in (load, _PUBLISH)],
+        stages=[parse_stage(s) for s in (load, _PUBLISH)],
     ).save()
     return demo
 

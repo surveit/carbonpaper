@@ -10,7 +10,7 @@ from fastapi.testclient import TestClient
 import app.web.loading as loading
 from app.core.errors import TraceLinksUnavailableError
 from app.main import app
-from app.models import Stage
+from app.models import parse_stage, Stage
 from app.runtime.context import RunContext
 from app.runtime.stages.publish import handle_publish
 from app.runtime.trace_links import RowTraceLinker
@@ -68,7 +68,7 @@ _NAME_COLUMN = [{"name": "name", "type": "str"}]
 
 
 def _publish_stage(code: str, input_columns=_NAME_COLUMN) -> Stage:
-    return Stage.model_validate({
+    return parse_stage({
         "id": "report",
         "type": "publish",
         "name": "Report",

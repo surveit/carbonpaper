@@ -1,26 +1,24 @@
-"""llm_transform stage: the handle config, the prompt-wiring checks (every
+"""llm_transform stage: the config block, the prompt-wiring checks (every
 `{placeholder}` resolves against the input edge, and no input column is
 double-braced), and the 1:1 additive contract its declared schemas must meet."""
 from __future__ import annotations
 
 import re
-from typing import TYPE_CHECKING, Any, ClassVar, Literal, Optional
+from typing import Any, ClassVar, Literal, Optional
 
-from pydantic import AliasChoices, Field
+from pydantic import AliasChoices, Field, model_validator
 
 from app.core.llm.options import LLMModel
 from app.core.prompt_template import find_template_fields
-from app.models.schema import TableSchema, _Base
+from app.models.schema import StageConfig, TableSchema
+from app.models.stage_base import StageBase, StageInput, StageType
 from app.models.stages.shared import COLUMN_ISSUE, resolve_input_columns
 
-if TYPE_CHECKING:
-    from app.models.stage import Stage
 
-
-class LLMConfig(_Base):
-    """llm_transform handle."""
+class LLMConfig(StageConfig):
+    """llm_transform config block."""
     # Every field changes what this stage computes (the prompt, the model, the
-    # sampling/response knobs) — see Stage.compute_definition_fingerprint.
+    # sampling/response knobs) — see StageBase.compute_definition_fingerprint.
     FINGERPRINT_FIELDS: ClassVar[frozenset[str]] = frozenset({
         "prompt_instructions", "prompt_data_template", "model", "temperature",
         "max_retries", "response_format", "rubric", "tools", "batch_size",
@@ -55,12 +53,53 @@ class LLMConfig(_Base):
     )
 
 
-def find_llm_prompt_column_issues(stage: "Stage") -> list[str]:
+class LLMTransformStage(StageBase):
+    type: Literal[StageType.llm_transform]
+    llm: LLMConfig
+    inputs: list[StageInput] = Field(default_factory=list, min_length=1)
+
+    def fingerprint_blocks(self) -> dict[str, StageConfig]:
+        return {"llm": self.llm}
+
+    def find_config_column_issues(self) -> list[str]:
+        return find_llm_prompt_column_issues(self)
+
+    def llm_reply_schema(self) -> Optional[TableSchema]:
+        """What the model's reply itself must carry: `output_schema` minus the
+        input schema — the columns this stage ADDS, since an llm_transform
+        passes its input columns through untouched and the runtime rejoins them
+        itself. This is the single definition of that spec: the runtime compiles
+        the reply model from it (app.runtime.stages.llm_transform) and the stage
+        panel displays it, so neither can drift from the other.
+
+        None unless both schemas are declared. When they are,
+        `_llm_transform_one_to_one` has already guaranteed the difference is
+        well defined, so `subtract` cannot throw."""
+        if not self.inputs:
+            return None
+        input_schema = self.inputs[0].table_schema
+        if self.output_schema is None or input_schema is None:
+            return None
+        return self.output_schema.subtract(input_schema)
+
+    @model_validator(mode="after")
+    def _one_to_one(self) -> "LLMTransformStage":
+        """Enforced here — a stage carries its own contract — so the reply spec
+        the runtime derives (`output_schema.subtract(input_schema)`) is exactly
+        the added columns and can never throw mid-run. This is about schema
+        SHAPE, not config columns, so it is not part of
+        find_config_column_issues."""
+        issues = find_llm_one_to_one_issues(self)
+        if issues:
+            raise ValueError("llm_transform not strictly 1:1: " + "; ".join(issues))
+        return self
+
+
+def find_llm_prompt_column_issues(stage: "LLMTransformStage") -> list[str]:
     """Every way the prompt template's column references are wrong: a
     `{placeholder}` absent from the resolved input, or an input column that is
     double-braced and so never injected."""
     llm = stage.llm
-    assert llm is not None  # Stage._handle_for_type guarantees this for type="llm_transform"
     cols = resolve_input_columns(stage, 0)
     injected = find_template_fields(llm.prompt_data_template)
     issues = [
@@ -99,7 +138,7 @@ def find_double_braced_input_issues(
     ]
 
 
-def find_llm_one_to_one_issues(stage: "Stage") -> list[str]:
+def find_llm_one_to_one_issues(stage: "LLMTransformStage") -> list[str]:
     """An llm_transform maps one input row to one output row, so on its
     DECLARED schemas alone it must: take exactly one input; declare a
     primary_key on both that input's schema and its output_schema, naming
@@ -113,7 +152,7 @@ def find_llm_one_to_one_issues(stage: "Stage") -> list[str]:
         return [f"llm_transform must have exactly one input, has {len(stage.inputs)}"]
     input_schema = stage.inputs[0].table_schema
     output_schema = stage.output_schema
-    assert output_schema is not None  # Stage._schemas_declared guarantees this off publish
+    assert output_schema is not None  # StageBase._schemas_declared guarantees this
     issues = _find_primary_key_issues(input_schema, output_schema)
     issues.extend(_find_additive_shape_issues(input_schema, output_schema))
     return issues

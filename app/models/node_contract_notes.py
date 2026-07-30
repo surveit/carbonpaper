@@ -9,7 +9,7 @@ from __future__ import annotations
 # python stage is a journalist, not an engineer: the summary is the only part of
 # the stage they can check, and the stage page leads with it.
 CODE_SUMMARY_CONTRACT_NOTE = (
-    "ALWAYS write the handle's `summary` alongside the code: one or two plain "
+    "ALWAYS write the block's `summary` alongside the code: one or two plain "
     "sentences telling a non-engineer what this step does and why, in the "
     "methodology's own words. It is what the stage page leads with — the code is "
     "shown last, folded — because the human reviewing this stage reads prose, not "
@@ -21,7 +21,7 @@ CODE_SUMMARY_CONTRACT_NOTE = (
 # Deliberately one sentence: the field's own description carries the substance, and
 # repeating it here only gives the two places to drift apart.
 CODE_CORNER_CASES_CONTRACT_NOTE = (
-    "ALWAYS submit the handle's `corner_cases` alongside the summary, in the same edit "
+    "ALWAYS submit the block's `corner_cases` alongside the summary, in the same edit "
     "— an empty list if the step genuinely has none, but never omitted."
 )
 

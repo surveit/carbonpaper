@@ -312,9 +312,10 @@ def add_stage(project_id: str, stages: list[StageDraft]) -> dict[str, Any]:
     """Create NEW stages in the workflow. `stages` is a LIST — submit every stage
     you are ready to author in ONE call; a list of one is the single-stage case.
     Each is a FULL stage: id (new and unique — use edit_stage to change an
-    existing one), name, type, the type's handle block (e.g. connector / llm /
-    function), output_schema, and inputs. read_stage on a similar existing stage
-    shows the shape.
+    existing one), name, type, the config block(s) its type requires — connector
+    / llm / function / join / aggregate / queue / union / filter, and `publish`
+    needs BOTH its `publish` block and a `function` block — output_schema, and
+    inputs. read_stage on a similar existing stage shows the shape.
 
     Order does not matter: the batch is sorted by the `inputs` each stage
     declares, so a stage may name another stage in the SAME call as an input, or

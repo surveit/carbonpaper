@@ -1,20 +1,21 @@
-"""The python-code handle and its validation: the inline code a python_row_function /
+"""The python-code block and its validation: the inline code a python_row_function /
 python_frame_function (or a publish stage's function block) carries must parse,
 compile, and define the function the runtime calls. Also holds the wording of the
-`summary` every authored-code handle asks for, so PythonFunction and FilterConfig
+`summary` every authored-code block asks for, so PythonFunction and FilterConfig
 cannot drift apart."""
 from __future__ import annotations
 
 import ast
 
-from typing import ClassVar, Optional
+from typing import ClassVar, Literal, Optional, Protocol
 
 from pydantic import Field, model_validator
 
-from app.models.schema import FunctionKind, _Base
+from app.models.schema import FunctionKind, StageConfig, _Base
+from app.models.stage_base import StageBase, StageInput, StageType
 
 # The instruction an authoring client reads when it fills in `summary`. Python
-# code is the one handle a non-engineer reviewer cannot read for themselves, so
+# code is the one block a non-engineer reviewer cannot read for themselves, so
 # the summary — not the code — is what the stage page leads with; it is written
 # alongside the code, from the methodology, and says the RULE rather than the
 # implementation.
@@ -69,6 +70,16 @@ class CornerCase(_Base):
     )
 
 
+class AuthoredCode(Protocol):
+    """What every authored-code block carries for a reviewer: the plain-language
+    account of the code, and the cases it must handle. Structural, so a config
+    class satisfies it by declaring the two fields —
+    `StageBase.find_authored_code_block` returns whichever block a stage has."""
+
+    summary: Optional[str]
+    corner_cases: list[CornerCase]
+
+
 def _binds_name(tree: ast.Module, name: str) -> bool:
     """True if a top-level def or assignment in `tree` binds `name` — i.e. what
     `exec`ing the code would expose for the runtime to look up and call."""
@@ -112,13 +123,13 @@ def validate_inline_function_code(
         )
 
 
-class PythonFunction(_Base):
-    """Handle for python_row_function / python_frame_function (and publish). The
+class PythonFunction(StageConfig):
+    """Config block for python_row_function / python_frame_function (and publish). The
     row-vs-frame distinction lives in the stage `type`, not here — the runtime
     reads the type to decide whether to invoke this per row or per frame."""
     # Every field changes what this stage computes (the code/module it runs)
     # except `summary`, which describes that code to a reader — see
-    # Stage.compute_definition_fingerprint.
+    # StageBase.compute_definition_fingerprint.
     FINGERPRINT_FIELDS: ClassVar[frozenset[str]] = frozenset({
         "kind", "code", "module", "function", "requirements",
     })
@@ -162,3 +173,27 @@ class PythonFunction(_Base):
             return self
         validate_inline_function_code(self.code, self.function)
         return self
+
+
+class _PythonFunctionStage(StageBase):
+    """Shared by the two python transforms: same `function` block, different
+    invocation (see StageType)."""
+    function: PythonFunction
+
+    def fingerprint_blocks(self) -> dict[str, StageConfig]:
+        return {"function": self.function}
+
+    def find_authored_code_block(self) -> PythonFunction:
+        return self.function
+
+
+class PythonRowFunctionStage(_PythonFunctionStage):
+    type: Literal[StageType.python_row_function]
+    # Exactly one input: the runtime maps the function over one frame's rows, so
+    # a second input is a join or a python_frame_function.
+    inputs: list[StageInput] = Field(default_factory=list, min_length=1, max_length=1)
+
+
+class PythonFrameFunctionStage(_PythonFunctionStage):
+    type: Literal[StageType.python_frame_function]
+    inputs: list[StageInput] = Field(default_factory=list, min_length=1)

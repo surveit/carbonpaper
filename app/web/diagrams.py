@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.models import Stage
+from app.models import Stage, StageBase
 from app.core.run_status import StageStatus
 
 
@@ -221,7 +221,7 @@ def _node_view(s: Stage | dict[str, Any]) -> dict[str, Any]:
     project shell's workflow section passes draft dicts straight off disk (which may
     not yet validate) — both render the same graph. `input_ids` normalises the
     `inputs` shorthand (bare id string or {id: ...}) the Stage model also accepts."""
-    if isinstance(s, Stage):
+    if isinstance(s, StageBase):
         return {
             "id": s.id,
             "name": s.name,

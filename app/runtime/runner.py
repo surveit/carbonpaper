@@ -21,6 +21,7 @@ from app.core.errors import MissingInputBindingError, NoVersionToRunError
 from app.core.frames import PARQUET_SUFFIX
 from app.core.store_config import configure_default_stores
 from app.models import Connector, Stage, StageType
+from app.models.stages.input_data import InputDataStage
 from app.core.run_status import RunStatus, StageStatus
 from app.services.errors import WorkflowLoadError
 from app.services import versioning
@@ -95,7 +96,7 @@ def apply_run_bindings(
 
     Fails loudly on a binding keyed to a stage id that does not exist or
     carries no connector, and on a binding value that is not a dict of params."""
-    connector_ids = {s.id for s in stages if s.connector is not None}
+    connector_ids = {s.id for s in stages if isinstance(s, InputDataStage)}
     given = dict(bindings or {})
     unbindable = sorted(set(given) - connector_ids)
     if unbindable:
@@ -103,8 +104,12 @@ def apply_run_bindings(
             f"bindings target stage id(s) with no connector to bind: {unbindable}; "
             f"bindable stages are {sorted(connector_ids)}")
 
-    rebound = [
-        _merge_connector_params(stage, given[stage.id]) if stage.id in given else stage
+    rebound: list[Stage] = [
+        _merge_connector_params(stage, given[stage.id])
+        # `given`'s keys were just checked to be connector_ids, which is exactly
+        # the input_data stages — so the isinstance never rejects a bound stage.
+        if isinstance(stage, InputDataStage) and stage.id in given
+        else stage
         for stage in stages
     ]
     param_sources = {
@@ -113,7 +118,9 @@ def apply_run_bindings(
     return rebound, param_sources
 
 
-def _merge_connector_params(stage: Stage, binding: Mapping[str, Any]) -> Stage:
+def _merge_connector_params(
+    stage: InputDataStage, binding: Mapping[str, Any]
+) -> InputDataStage:
     """A copy of `stage` with `binding` merged over its connector params,
     re-validated as a whole Connector so a bad param fails at prepare, not
     mid-run."""
@@ -121,7 +128,6 @@ def _merge_connector_params(stage: Stage, binding: Mapping[str, Any]) -> Stage:
         raise ValueError(
             f"binding for `{stage.id}` must be a dict of connector params, "
             f"got {type(binding).__name__}: {binding!r}")
-    assert stage.connector is not None  # caller filters to connector-carrying stages
     try:
         connector = Connector.model_validate({
             **stage.connector.model_dump(),

@@ -395,7 +395,7 @@ table.schema tr:last-child td { border-bottom: 0; }
     color: var(--fg);
 }
 
-/* Executable handle blocks */
+/* Transform config blocks */
 .exec-block {
     background: var(--exec-bg);
     border-left: 4px solid var(--exec-border);
@@ -405,7 +405,7 @@ table.schema tr:last-child td { border-bottom: 0; }
 }
 .exec-block h2 { margin-top: 0; }
 
-/* The plain-language summary of an authored-code handle — the first thing read
+/* The plain-language summary of an authored-code block — the first thing read
    in the Transform pane, and for a non-engineer the only readable statement of
    what the step does, so it is set larger than the metadata under it. */
 .stage-summary {
