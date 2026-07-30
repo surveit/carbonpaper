@@ -28,6 +28,44 @@
 {% set done = ok + warn %}
 {% set is_running = manifest.status == 'running' %}
 
+{# ── Scroll model. The run view is a working surface, so it fills the viewport and
+      each column scrolls on its own instead of the whole document scrolling as one
+      long page. ── #}
+<style>
+  body { height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+  /* width:100% is load-bearing. style.css centres main with `margin: 0 auto`, and
+     auto inline margins on a flex item defeat the default `align-self: stretch` —
+     main would size to its own content instead of the viewport. */
+  main { flex: 1 1 auto; min-height: 0; padding-bottom: 14px;
+         width: 100%; box-sizing: border-box; }
+  /* style.css gives the footer `margin-top: 48px` for a document-flow page. Here
+     that is just a band of dead space between the panes and the footer. */
+  footer { margin-top: 0; }
+  /* stretch, not start: the columns must be able to fill the shell's height. */
+  .app-shell { height: 100%; align-items: stretch; }
+  .app-side { height: 100%; overflow-y: auto; position: static; padding-right: 6px; }
+  /* app-main does NOT scroll — its child does, so there is one scrollbar per pane. */
+  .app-main { height: 100%; min-height: 0; overflow: hidden; }
+  .run-main { min-width: 0; height: 100%; overflow-y: auto; padding-right: 6px; }
+
+  /* Scroll-edge fade. The mask insets only on the side that still has content, so a
+     pane parked at the top is not fading its own first line; the JS below keeps
+     --ft/--fb in step with scroll position. */
+  .fade-scroll { --ft: 0px; --fb: 0px;
+    -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 var(--ft),
+      #000 calc(100% - var(--fb)), transparent 100%);
+    mask-image: linear-gradient(to bottom, transparent 0, #000 var(--ft),
+      #000 calc(100% - var(--fb)), transparent 100%); }
+
+  @media (max-width: 1000px) {
+    body { height: auto; overflow: visible; }
+    main { padding-bottom: 48px; }
+    .app-shell, .app-side, .app-main, .run-main { height: auto; overflow: visible; }
+  }
+</style>
+
+<div class="run-main fade-scroll">
+
 {% if manifest.is_test_run %}
 <p class="banner" style="background:#f3e8fd;border-color:#8a5cf6;color:#5a2a8c">
     🧪 <strong>Workflow test</strong> — this was a test run. It automatically approves all human reviews, but does call LLMs and run code stages. It does not cache any results.
@@ -246,6 +284,31 @@
       }
     }
     timer = setInterval(poll, 2000); poll();
+  }
+})();
+</script>
+
+</div>{# /.run-main #}
+
+<script>
+(function () {
+  // Keep each pane's edge fade in step with its scroll position: inset the mask only
+  // on the side that still has content off-screen.
+  const FADE = 20;
+  function paintFade(el) {
+    const room = el.scrollHeight - el.clientHeight;
+    el.style.setProperty('--ft', room > 1 && el.scrollTop > 2 ? FADE + 'px' : '0px');
+    el.style.setProperty('--fb', room > 1 && el.scrollTop < room - 2 ? FADE + 'px' : '0px');
+  }
+  const faders = document.querySelectorAll('.fade-scroll');
+  faders.forEach(el => {
+    paintFade(el);
+    el.addEventListener('scroll', () => paintFade(el), { passive: true });
+  });
+  // Content height changes when a stage panel loads or the sidebar collapses.
+  if (window.ResizeObserver) {
+    const ro = new ResizeObserver(() => faders.forEach(paintFade));
+    faders.forEach(el => ro.observe(el));
   }
 })();
 </script>
