@@ -51,6 +51,14 @@ app/chat/  PydanticAI chat · app/core/llm/  model menu · tests/  pytest (offli
   allowlist entry to an existing one is a human decision on the record. When an arch test blocks
   the change you were about to make, reroute the change and say in the PR which test caught you
   and what you did differently.
+- **A module at the size ceiling gets split, not squeezed.** The file-size ratchet
+  (`tests/arch/test_file_size_ratchet.py`) fails a file in `app/` over the LLOC ceiling, and the
+  only sanctioned way back under is moving a cohesive group of code out to its own module. Never
+  buy the statements back by writing denser code — fusing named steps into one long expression,
+  dropping an intermediate variable that was carrying a name, inlining a small helper into its
+  caller. That spends the readability the ceiling exists to protect and leaves the next change
+  with even less room. If the split is bigger than the change you are on, say so in the PR and
+  let a human decide whether to take it now.
 - **Planning docs stay out of the repo.** Design specs, implementation/execution plans,
   brainstorming or "rethink" notes, and refactor/migration roadmaps are ephemeral working
   artifacts — keep them in scratch or the PR description, never commit them. Committed docs
