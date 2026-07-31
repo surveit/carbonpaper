@@ -17,7 +17,8 @@ from pydantic import BaseModel, field_validator
 
 from app.core.errors import ProjectExistsError
 from app.models import Coverage, SchemaLibrary, Stage, StageDraft
-from app.models.review_guide import ReviewGuide
+from app.models.review_guide import ReviewGuideDraft
+from app.services.versioning import ReviewGuide
 from app.core.persistence import PersistedModel, PersistenceScope
 from app.core.run_status import RunStatus
 from app.services import data_model, node_review, stage_edit, versioning, workspace
@@ -521,15 +522,23 @@ def remove_stage(name: str, stage_id: str) -> EditStageResult:
 
 
 def read_review_guide(name: str, version_id: str) -> ReviewGuide | None:
-    """The guide stored on one version, or None when it carries none — never a stand-in."""
-    project_dir = workspace.resolve_project_dir(name)
-    return versioning.load_version(project_dir, version_id).guide
+    """The newest guide written for one version, or None — never a stand-in."""
+    # Loaded for its existence check alone: None has to mean "no guide written",
+    # never "no such version", which raises FileNotFoundError from here.
+    versioning.load_version(workspace.resolve_project_dir(name), version_id)
+    return versioning.find_latest_review_guide(name, version_id)
 
 
-def write_review_guide(name: str, version_id: str, guide: ReviewGuide) -> ReviewGuide:
-    """Store `guide` on one version, replacing any earlier one; a mismatch raises, unwritten."""
+def write_review_guide(
+    name: str, version_id: str, draft: ReviewGuideDraft
+) -> ReviewGuide:
+    """Append a guide to one version; a mismatch raises and nothing is written."""
+    guide = ReviewGuide(
+        project=name, version_id=version_id,
+        steps=draft.steps, unnarrated=draft.unnarrated,
+    )
     # save_version_guide validates before writing and raises otherwise, so past this line
-    # `guide` is what the version carries.
+    # `guide` is what a reader of that version now gets.
     versioning.save_version_guide(_resolve_project_dir_to_write(name), version_id, guide)
     return guide
 

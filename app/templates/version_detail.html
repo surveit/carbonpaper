@@ -55,7 +55,7 @@
 
 {# Offered only where a version has no guide: the reader who wants the walkthrough
    is the one who needs the way to get it written. #}
-{% if not version.guide %}
+{% if not version_guide %}
 {% with project = state.name, guide_version_id = version.version_id %}
 {% include "_generate_guide.html" %}
 {% endwith %}

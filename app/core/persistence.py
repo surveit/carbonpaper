@@ -270,8 +270,7 @@ class PersistedModel(BaseModel):
 
     @model_validator(mode="after")
     def _stamp_one_creation_instant(self) -> Self:
-        """A never-saved record was created and updated at the same instant, not two
-        microseconds apart — the two factories fire independently."""
+        """One instant, not two: the factories fire microseconds apart."""
         if not {"created_at", "updated_at"} & self.model_fields_set:
             object.__setattr__(self, "updated_at", self.created_at)
         return self

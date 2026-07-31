@@ -512,7 +512,8 @@ def test_mcp_review_guide_round_trips_through_the_tool_boundary(tmp_path, monkey
     asyncio.run(server.mcp.call_tool("write_review_guide", {**args, "guide": _GUIDE}))
 
     _content, stored = asyncio.run(server.mcp.call_tool("read_review_guide", args))
-    assert stored["result"] == _GUIDE
+    assert stored["result"]["steps"] == _GUIDE["steps"]
+    assert stored["result"]["unnarrated"] == _GUIDE["unnarrated"]
 
 
 def test_mcp_write_review_guide_refuses_a_mismatch_naming_the_stage(tmp_path, monkeypatch):

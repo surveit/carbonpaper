@@ -1,7 +1,5 @@
-"""The authored walkthrough of a workflow version: ordered steps, each narrating
-the stages it names. Anything readable off the stages themselves (their names,
-types, order, the columns they write) is deliberately absent — it is read off the
-stages at render time instead of being frozen here.
+"""A review guide as AUTHORED — what a human or agent writes. The stored record it
+becomes is `app.services.versioning.ReviewGuide`, which adds the address.
 """
 from __future__ import annotations
 
@@ -28,12 +26,8 @@ class ReviewGuideStep(_Base):
     stage_ids: list[str]
 
 
-class ReviewGuide(_Base):
-    """`unnarrated` names the stages no step covers, so leaving one out is a decision."""
+class ReviewGuideDraft(_Base):
+    """A guide as written, before it is addressed to a version and stored."""
 
     steps: list[ReviewGuideStep]
     unnarrated: list[str] = Field(default_factory=list)
-
-    def collect_step_stage_ids(self) -> list[str]:
-        """Every stage id the steps name, in step order, repeats included."""
-        return [stage_id for step in self.steps for stage_id in step.stage_ids]
