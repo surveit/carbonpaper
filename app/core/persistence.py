@@ -11,6 +11,7 @@ import sqlite3
 from datetime import datetime
 from enum import Enum
 from threading import RLock
+from uuid import uuid4
 from typing import Any, ClassVar, Iterator, Protocol, Self
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -234,6 +235,13 @@ class PersistedModel(BaseModel):
     `app/_arch_tests/test_persisted_models_declare_scope.py`, which flags an
     undeclared subclass at review time.
 
+    `id` defaults to a fresh random value, so a record that is only ever reached
+    through `load(id)` with an id kept elsewhere needs no id of its own. A caller
+    MAY pass one, and must whenever the record has to be findable without it:
+    `read_all`/`list` select by id PREFIX and the store offers no query by field,
+    so a project-scoped record composes `f"{project}/{local_id}"` or it cannot be
+    listed per project.
+
     `created_at`/`updated_at` are stamped automatically, so a subclass never
     hand-rolls them: on a fresh construct (no stored value yet) both
     default_factory to now; on load from the store, the stored values are
@@ -252,7 +260,7 @@ class PersistedModel(BaseModel):
         populate_by_name=True,
     )
 
-    id: str
+    id: str = Field(default_factory=lambda: uuid4().hex)
     created_at: str = Field(default_factory=_now_iso)
     updated_at: str = Field(default_factory=_now_iso)
     collection: ClassVar[str]
