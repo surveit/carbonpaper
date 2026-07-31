@@ -27,6 +27,7 @@ from app.models import (
     find_workflow_compiler_warnings,
     StageType,
 )
+from app.models.review_guide import ReviewGuide
 from app.runtime import stage_tests
 from app.services import generation
 from app.services import loader
@@ -107,9 +108,23 @@ the whole graph before it is stored.
    JSON Merge Patch), remove_stage(project_id, stage_id) to undo a stage you added
    (refused while another stage still lists it in `inputs`).
 
+# The review guide, and why it exists
+A workflow you author is not self-explaining. The human who owns the methodology has to
+decide whether it does what they meant — and they read the stage graph, not the code. The
+review guide is the prose that makes that decision possible: an ordered walkthrough,
+each step naming the stages it covers and saying what a reviewer should check.
+
+8. write_review_guide(project_id, version_id, guide) — write it once the workflow needs a
+   human to understand it before acting on it, which is any version you expect to be
+   published or run. Nothing derives one and nothing seeds one; you write it from a blank
+   page. read_review_guide shows what a version already carries.
+   Write it FOR the methodology's owner, not a programmer: use the document's terms of
+   art, wrap column names in `backticks`, and say what could be quietly wrong rather than
+   restating the stage names and order the page already shows.
+
 Added stages land `unreviewed`. REVIEW AND APPROVAL ARE HUMAN-ONLY, in the web UI, and
-only a human publishes. Your job ends at a saved version with a workflow test run for the
-human to review.
+only a human publishes. Your job ends at a saved version carrying a review guide, with a
+workflow test run for the human to review.
 
 # Per-stage tests
 Once a python-transform stage exists, generate_stage_tests derives its tests from the
@@ -468,6 +483,22 @@ def save_version(
     except _STAGE_TOOL_ERRORS as exc:
         return {"ok": False, "issues": [str(exc)]}
     return {"ok": True, "issues": [], "version_id": version.version_id}
+
+
+@mcp.tool()
+def read_review_guide(project_id: str, version_id: str) -> ReviewGuide | None:
+    """The review guide stored on one saved version, or null when it has none. Read
+    before writing so you amend it rather than replace someone's work."""
+    _resolve_existing_project(project_id)
+    return project_service.read_review_guide(project_id, version_id)
+
+
+@mcp.tool()
+def write_review_guide(project_id: str, version_id: str, guide: ReviewGuide) -> ReviewGuide:
+    """Store the walkthrough a human reads to understand what this version of the
+    workflow does. Replaces any guide already on that version, whole."""
+    _resolve_existing_project(project_id)
+    return project_service.write_review_guide(project_id, version_id, guide)
 
 
 @mcp.tool()

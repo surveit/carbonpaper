@@ -17,6 +17,7 @@ from pydantic import BaseModel, field_validator
 
 from app.core.errors import ProjectExistsError
 from app.models import Coverage, SchemaLibrary, Stage, StageDraft
+from app.models.review_guide import ReviewGuide
 from app.core.persistence import PersistedModel, PersistenceScope
 from app.core.run_status import RunStatus
 from app.services import data_model, node_review, stage_edit, versioning, workspace
@@ -447,6 +448,20 @@ def remove_stage(name: str, stage_id: str) -> EditStageResult:
     return stage_edit.remove_stage_spec(_resolve_project_dir_to_write(name), stage_id)
 
 
+def read_review_guide(name: str, version_id: str) -> ReviewGuide | None:
+    """The guide stored on one version, or None when it carries none — never a stand-in."""
+    project_dir = workspace.resolve_project_dir(name)
+    return versioning.load_version(project_dir, version_id).guide
+
+
+def write_review_guide(name: str, version_id: str, guide: ReviewGuide) -> ReviewGuide:
+    """Store `guide` on one version, replacing any earlier one; a mismatch raises, unwritten."""
+    # save_version_guide validates before writing and raises otherwise, so past this line
+    # `guide` is what the version carries.
+    versioning.save_version_guide(_resolve_project_dir_to_write(name), version_id, guide)
+    return guide
+
+
 def _resolve_project_dir_to_write(name: str) -> Path:
     """The directory of an EXISTING project, for the stage writers. A name with no
     project directory raises: writing a stage must never bring a project into being,
@@ -562,6 +577,8 @@ __all__ = [
     "read_stage",
     "edit_stage",
     "add_stage",
+    "read_review_guide",
+    "write_review_guide",
     "WorkflowFile",
     "export_project",
     "import_project",

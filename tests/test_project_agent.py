@@ -20,6 +20,8 @@ _EXPECTED_TOOL_NAMES = {
     "set_draft_stage",
     "remove_draft_stage",
     "save_version",
+    "read_review_guide",
+    "write_review_guide",
 }
 
 
