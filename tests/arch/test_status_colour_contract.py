@@ -1,8 +1,8 @@
-"""Architecture: the diagram's stroke palettes are the ones style.css declares.
+"""Architecture: style.css owns the palettes, and each run-state ink stays readable.
 
-A mermaid `style` line carries a literal hex, so the graph cannot reference a CSS
-custom property. This reads the properties back out of style.css and compares, so
-the two copies fail loudly instead of drifting behind a comment promising they match.
+A mermaid `style` line carries a literal hex, so the graph cannot reference a custom
+property; these rules read the properties back out of style.css and compare. They also
+measure every `--state-*-ink` against the `-bg` tint it is printed on.
 """
 from __future__ import annotations
 
@@ -13,6 +13,14 @@ from app.web.diagrams import REVIEW_STROKE, _STATUS_STROKE
 
 _STYLESHEET = Path(__file__).resolve().parents[2] / "app" / "static" / "style.css"
 _DECLARATION = re.compile(r"--([a-z0-9-]+)\s*:\s*(#[0-9a-fA-F]{3,8})\s*;")
+
+# The three roles a run state declares: `--state-<name>` is the stroke/border/fill,
+# `--state-<name>-bg` the tint behind it, `--state-<name>-ink` text on that tint.
+_STATE_PREFIX = "state-"
+_TINT_SUFFIX = "-bg"
+_INK_SUFFIX = "-ink"
+# WCAG 2.1 AA for body text. Run-state chips are 11px, so this is the floor, not a goal.
+_MIN_CONTRAST = 4.5
 
 # REVIEW_STROKE belief → the style.css property carrying that belief's stroke.
 _BELIEF_PROPERTY = {
@@ -38,12 +46,44 @@ def read_declared_colours() -> dict[str, str]:
 
 
 def find_state_accent_colours() -> dict[str, str]:
-    """The `--state-*` accents (fg/stroke), i.e. every state property bar its `-bg` tint."""
+    """The `--state-*` accents: every state property that is neither a tint nor an ink."""
     return {
         name: value
         for name, value in read_declared_colours().items()
-        if name.startswith("state-") and not name.endswith("-bg")
+        if name.startswith(_STATE_PREFIX)
+        and not name.endswith((_TINT_SUFFIX, _INK_SUFFIX))
     }
+
+
+def find_state_ink_and_tint(declared: dict[str, str]) -> dict[str, tuple[str, str | None]]:
+    """State name → (its ink, the tint that ink prints on, or None when undeclared)."""
+    return {
+        name[len(_STATE_PREFIX):-len(_INK_SUFFIX)]: (
+            value, declared.get(name[: -len(_INK_SUFFIX)] + _TINT_SUFFIX)
+        )
+        for name, value in declared.items()
+        if name.startswith(_STATE_PREFIX) and name.endswith(_INK_SUFFIX)
+    }
+
+
+def measure_contrast_ratio(foreground: str, background: str) -> float:
+    """WCAG 2.1 relative-luminance contrast of two `#rgb`/`#rrggbb` colours, 1.0–21.0."""
+    lighter, darker = sorted(
+        (read_relative_luminance(foreground), read_relative_luminance(background)),
+        reverse=True,
+    )
+    return (lighter + 0.05) / (darker + 0.05)
+
+
+def read_relative_luminance(colour: str) -> float:
+    digits = colour.lstrip("#")
+    if len(digits) == 3:
+        digits = "".join(d * 2 for d in digits)
+    if len(digits) != 6:
+        raise ValueError(f"{colour!r} is not a #rgb or #rrggbb colour — cannot measure it")
+    channels = [int(digits[i:i + 2], 16) / 255 for i in (0, 2, 4)]
+    linear = [c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4 for c in channels]
+    return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2]
 
 
 def test_every_run_status_stroke_is_a_declared_state_colour() -> None:
@@ -72,6 +112,32 @@ def test_every_review_stroke_matches_its_belief_property() -> None:
         "REVIEW_STROKE (app/web/diagrams.py) has drifted from the --belief-* palette in "
         f"style.css — belief: (python, property, css) {mismatched}. The legend chip and "
         "the workflow node would show different colours for the same belief."
+    )
+
+
+def test_every_state_ink_is_readable_on_its_tint() -> None:
+    pairs = find_state_ink_and_tint(read_declared_colours())
+    assert pairs, "style.css declares no --state-*-ink properties"
+    illegible = {
+        state: (ink, tint, round(measure_contrast_ratio(ink, tint), 2))
+        for state, (ink, tint) in pairs.items()
+        if tint is not None and measure_contrast_ratio(ink, tint) < _MIN_CONTRAST
+    }
+    assert not illegible, (
+        f"--state-*-ink below WCAG AA {_MIN_CONTRAST}:1 on its own --state-*-bg tint — "
+        f"state: (ink, tint, ratio) {illegible}. Darken the ink; do not darken the tint, "
+        "which the base colour is also drawn against."
+    )
+
+
+def test_every_state_ink_has_a_tint_to_be_read_on() -> None:
+    orphaned = sorted(
+        state for state, (_ink, tint) in find_state_ink_and_tint(read_declared_colours()).items()
+        if tint is None
+    )
+    assert not orphaned, (
+        f"{orphaned} declare a --state-<name>-ink with no --state-<name>-bg, so the rule "
+        "above silently measures nothing for them. Declare the tint or drop the ink."
     )
 
 
