@@ -27,7 +27,6 @@ def _build_tools(ctx: BaseModel) -> list:
     assert isinstance(ctx, _Ctx)
 
     def echo() -> str:
-        """Echo the context label."""
         return ctx.label
 
     return [echo]
@@ -40,6 +39,7 @@ def register_dummy_agent() -> Iterator[None]:
         AgentConfig(
             system_prompt="sp",
             tool_schemas={"echo": {}},
+            tool_descriptions={"echo": "Echo the context label."},
             tool_labels={"echo": "Echoing"},
             context_schema=_Ctx,
         ),

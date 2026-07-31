@@ -13,6 +13,7 @@ from claude_agent_sdk import SdkMcpTool
 from pydantic import BaseModel
 
 from app.agents.compiler.tools import (
+    TOOL_DESCRIPTIONS,
     TOOL_SCHEMAS,
     EditingContext,
     make_editing_tools,
@@ -28,7 +29,9 @@ def examples_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 
 def _build(name: str) -> tuple[Any, list[str], list[SdkMcpTool[Any]]]:
-    return build_mcp_server(make_editing_tools(EditingContext(project_id=name)), TOOL_SCHEMAS)
+    return build_mcp_server(
+        make_editing_tools(EditingContext(project_id=name)), TOOL_SCHEMAS, TOOL_DESCRIPTIONS
+    )
 
 
 def _call(tool: SdkMcpTool[Any], args: dict[str, Any]) -> dict[str, Any]:

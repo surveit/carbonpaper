@@ -11,6 +11,7 @@ from pydantic import BaseModel
 
 from app.agents.compiler.prompt import EDITING_SYSTEM_PROMPT
 from app.agents.compiler.tools import (
+    TOOL_DESCRIPTIONS,
     TOOL_LABELS,
     TOOL_SCHEMAS,
     EditingContext,
@@ -21,6 +22,7 @@ from app.core.agent.registry import AgentConfig, register
 CONFIG = AgentConfig(
     system_prompt=EDITING_SYSTEM_PROMPT,
     tool_schemas=TOOL_SCHEMAS,
+    tool_descriptions=TOOL_DESCRIPTIONS,
     tool_labels=TOOL_LABELS,
     context_schema=EditingContext,
 )
