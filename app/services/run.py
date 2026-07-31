@@ -18,7 +18,7 @@ from app.runtime.runner import (
     run_prepared,
 )
 from app.services.errors import WorkflowLoadError
-from app.services.versioning import load_version_stages
+from app.services.versioning import WorkflowVersion, load_version
 from app.services.workspace import repo_root, resolve_project_dir
 
 
@@ -89,10 +89,8 @@ def resolve_version(project: str, version_id: str | None) -> str:
     return resolve_version_id(resolve_project_dir(project), version_id)
 
 
-def load_run_stages(project: str, manifest: dict[str, Any]) -> list[Stage]:
-    """The stages of the version this run pinned, from that version's frozen
-    document — never `compiled/`, which drifts as the working copy is edited.
-    Raises RunVersionUnresolvableError rather than falling back to it."""
+def load_run_version(project: str, manifest: dict[str, Any]) -> WorkflowVersion:
+    """The frozen version this run pinned. Never falls back to `compiled/` — raises."""
     version_id = manifest.get("workflow_version")
     if not version_id:
         raise RunVersionUnresolvableError(
@@ -100,12 +98,17 @@ def load_run_stages(project: str, manifest: dict[str, Any]) -> list[Stage]:
             "manifest, so the workflow it executed cannot be identified."
         )
     try:
-        return load_version_stages(resolve_project_dir(project), str(version_id))
+        return load_version(resolve_project_dir(project), str(version_id))
     except (FileNotFoundError, WorkflowLoadError) as exc:
         raise RunVersionUnresolvableError(
             f"This run of '{project}' pinned workflow version "
             f"'{version_id}', which could not be read: {exc}"
         ) from exc
+
+
+def load_run_stages(project: str, manifest: dict[str, Any]) -> list[Stage]:
+    """The stages of the version this run pinned — the definitions it executed."""
+    return load_run_version(project, manifest).stages
 
 
 @dataclass(frozen=True)
