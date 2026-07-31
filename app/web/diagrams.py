@@ -10,7 +10,9 @@ from app.models import Stage, StageBase
 from app.core.run_status import StageStatus
 
 
-# Stage-type → CSS class for workflow node + badges.
+# Stage-type → CSS class for workflow node + badges. Every StageType must appear in
+# both maps: an unmapped type falls back to `custom`, the red palette that elsewhere
+# means error. tests/arch/test_stage_type_presentation.py fails when one is missing.
 TYPE_CLASS = {
     "input_data": "input",
     "llm_transform": "llm",
@@ -21,6 +23,9 @@ TYPE_CLASS = {
     "aggregate": "aggregate",
     "human_review_queue": "human",
     "publish": "publish",
+    # Row-set operations: union stacks frames, filter_rows drops subject rows.
+    "union": "rowset",
+    "filter_rows": "rowset",
 }
 
 TYPE_GLYPH = {
@@ -33,6 +38,8 @@ TYPE_GLYPH = {
     "aggregate": "📊",
     "human_review_queue": "👤",
     "publish": "📤",
+    "union": "➕",
+    "filter_rows": "🔽",
 }
 
 
@@ -205,8 +212,9 @@ def _collect_table_fk_edges(schemas: list[dict[str, Any]], names: set[Any]) -> l
 
 
 # Node-review BELIEF → stroke colour. Distinct from the type fill (classDef) and
-# from run status: this is "do we trust HOW this node is modeled". Kept identical
-# to the --belief-* palette in style.css so a legend chip equals the workflow stroke.
+# from run status: this is "do we trust HOW this node is modeled". Identical to the
+# --belief-* palette in style.css so a legend chip equals the workflow stroke —
+# enforced by tests/arch/test_status_colour_contract.py.
 REVIEW_STROKE = {
     "approved": ("#2a8a2a", "3px"),       # trusted → green
     "unreviewed": ("#9aa3ad", "1.5px"),   # not yet reviewed → grey
@@ -258,7 +266,7 @@ def build_mermaid_graph(
     """Generate a Mermaid flowchart from stages (typed Stages or raw draft dicts).
 
     If status_by_id is given, each node gets a status glyph in its label and a
-    coloured stroke override (green/amber/red/grey) layered over its type class.
+    run-state stroke override (see _STATUS_STROKE) layered over its type class.
 
     If review_by_id is given (stage_id → belief state in {approved, unreviewed,
     rejected, edited_stale}), each node's STROKE is coloured by belief instead —
@@ -282,6 +290,7 @@ def build_mermaid_graph(
         "    classDef aggregate fill:#f0f0e6,stroke:#888533,color:#000",
         "    classDef human fill:#fce8f4,stroke:#c0399a,color:#000",
         "    classDef publish fill:#e8f8e8,stroke:#3aa83a,color:#000",
+        "    classDef rowset fill:#ecebfb,stroke:#5b4ec8,color:#000",
         "    classDef custom fill:#fde8e8,stroke:#cc3333,color:#000",
     ]
     return "\n".join(lines)
@@ -299,14 +308,18 @@ _STATUS_GLYPH: dict[str, str] = {
     StageStatus.CANCELLED: "✖",
     StageStatus.PENDING: "…",
 }
+# Run STATUS → stroke colour. Seven statuses, five colours: _STATUS_GLYPH above
+# carries the distinction the shared colour drops (running ⟳ vs warnings ⚠,
+# cancelled ✖ vs pending …). Every colour here is one of the five --state-*
+# properties in style.css, enforced by tests/arch/test_status_colour_contract.py.
 _STATUS_STROKE: dict[str, tuple[str, str]] = {
-    StageStatus.OK: ("#2a8a2a", "3px"),                 # complete → green
-    StageStatus.RUNNING: ("#e0a800", "3px"),            # in progress → yellow
-    StageStatus.VALIDATION_WARNINGS: ("#cc8a00", "3px"),
-    StageStatus.ERROR: ("#cc2a2a", "3px"),              # errored → red
-    StageStatus.AWAITING_REVIEW: ("#2a6ac8", "4px"),
-    StageStatus.CANCELLED: ("#8a8a8a", "3px"),          # cancelled → grey
-    StageStatus.PENDING: ("#cfcfcf", "1px"),
+    StageStatus.OK: ("#2f7d32", "3px"),                    # done
+    StageStatus.RUNNING: ("#a8690b", "3px"),               # warning
+    StageStatus.VALIDATION_WARNINGS: ("#a8690b", "3px"),   # warning
+    StageStatus.ERROR: ("#b3261e", "3px"),                 # failed
+    StageStatus.AWAITING_REVIEW: ("#2a6ac8", "4px"),       # needs a human
+    StageStatus.CANCELLED: ("#7b8089", "3px"),             # idle
+    StageStatus.PENDING: ("#7b8089", "1px"),               # idle
 }
 
 
