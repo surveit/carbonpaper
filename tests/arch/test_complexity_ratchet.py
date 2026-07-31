@@ -183,16 +183,16 @@ def _describe_violation(m: FunctionComplexity) -> str:
 
 def test_find_app_source_files_includes_arch_tests_subdir(tmp_path: Path) -> None:
     (tmp_path / "_arch_tests").mkdir()
-    (tmp_path / "_arch_tests" / "test_x.py").write_text("")
-    (tmp_path / "mod.py").write_text("")
+    (tmp_path / "_arch_tests" / "test_x.py").write_text("", encoding="utf-8")
+    (tmp_path / "mod.py").write_text("", encoding="utf-8")
     files = find_app_source_files(tmp_path)
     assert {path.name for path in files} == {"test_x.py", "mod.py"}
 
 
 def test_find_app_source_files_excludes_pycache(tmp_path: Path) -> None:
     (tmp_path / "__pycache__").mkdir()
-    (tmp_path / "__pycache__" / "mod.py").write_text("")
-    (tmp_path / "mod.py").write_text("")
+    (tmp_path / "__pycache__" / "mod.py").write_text("", encoding="utf-8")
+    (tmp_path / "mod.py").write_text("", encoding="utf-8")
     files = find_app_source_files(tmp_path)
     assert [path.name for path in files] == ["mod.py"]
 
@@ -203,10 +203,10 @@ def test_find_app_source_files_excludes_vendor_but_includes_arch_tests(tmp_path:
     `_arch_tests/` — this rule's one deliberate difference from
     `arch.scope` — stays in scope."""
     (tmp_path / "_vendor").mkdir()
-    (tmp_path / "_vendor" / "third_party.py").write_text("")
+    (tmp_path / "_vendor" / "third_party.py").write_text("", encoding="utf-8")
     (tmp_path / "_arch_tests").mkdir()
-    (tmp_path / "_arch_tests" / "test_x.py").write_text("")
-    (tmp_path / "mod.py").write_text("")
+    (tmp_path / "_arch_tests" / "test_x.py").write_text("", encoding="utf-8")
+    (tmp_path / "mod.py").write_text("", encoding="utf-8")
     files = find_app_source_files(tmp_path)
     assert {path.name for path in files} == {"test_x.py", "mod.py"}
 
@@ -219,15 +219,15 @@ def test_find_app_source_files_ignores_a_dot_directory_in_the_scanned_root_prefi
     `arch.scope`'s module docstring documents for its own scan)."""
     root = tmp_path / ".claude" / "worktrees" / "x" / "app"
     root.mkdir(parents=True)
-    (root / "mod.py").write_text("")
+    (root / "mod.py").write_text("", encoding="utf-8")
     files = find_app_source_files(root)
     assert [path.name for path in files] == ["mod.py"]
 
 
 def test_find_app_source_files_excludes_a_dot_directory_inside_the_scanned_tree(tmp_path: Path) -> None:
     (tmp_path / ".hidden").mkdir()
-    (tmp_path / ".hidden" / "mod.py").write_text("")
-    (tmp_path / "mod.py").write_text("")
+    (tmp_path / ".hidden" / "mod.py").write_text("", encoding="utf-8")
+    (tmp_path / "mod.py").write_text("", encoding="utf-8")
     files = find_app_source_files(tmp_path)
     assert [path.name for path in files] == ["mod.py"]
 
@@ -241,7 +241,7 @@ def test_measure_function_complexities_reads_relative_posix_path(tmp_path: Path)
     nested = tmp_path / "app" / "sub"
     nested.mkdir(parents=True)
     file = nested / "m.py"
-    file.write_text("def go(x):\n    if x:\n        return 1\n    return 2\n")
+    file.write_text("def go(x):\n    if x:\n        return 1\n    return 2\n", encoding="utf-8")
     [measurement] = measure_function_complexities([file], tmp_path)
     assert measurement.path == "app/sub/m.py"
     assert measurement.function == "go"
@@ -250,7 +250,7 @@ def test_measure_function_complexities_reads_relative_posix_path(tmp_path: Path)
 
 def test_measure_function_complexities_qualifies_a_method_as_class_dot_method(tmp_path: Path) -> None:
     file = tmp_path / "m.py"
-    file.write_text("class Foo:\n    def bar(self, x):\n        if x:\n            return 1\n        return 2\n")
+    file.write_text("class Foo:\n    def bar(self, x):\n        if x:\n            return 1\n        return 2\n", encoding="utf-8")
     [measurement] = measure_function_complexities([file], tmp_path)
     assert measurement.function == "Foo.bar"
 
@@ -264,7 +264,7 @@ def test_measure_function_complexities_qualifies_a_closure_as_parent_dot_angle_n
         "            return 1\n"
         "        return 2\n"
         "    return inner(x)\n"
-    )
+    , encoding="utf-8")
     measurements = measure_function_complexities([file], tmp_path)
     assert {m.function for m in measurements} == {"outer", "outer.<inner>"}
 
@@ -280,7 +280,7 @@ def test_measure_function_complexities_qualifies_nested_closures_recursively(tmp
         "            return 2\n"
         "        return innermost\n"
         "    return inner\n"
-    )
+    , encoding="utf-8")
     measurements = measure_function_complexities([file], tmp_path)
     assert {m.function for m in measurements} == {"outer", "outer.<inner>", "outer.<inner>.<innermost>"}
 
@@ -334,7 +334,7 @@ def test_measure_function_complexities_excludes_overload_stubs_but_keeps_the_imp
         "        if x:\n"
         "            return 1\n"
         "        return 2\n"
-    )
+    , encoding="utf-8")
     measurements = measure_function_complexities([file], tmp_path)
     assert [(m.function, m.line) for m in measurements] == [("Foo.go", 7)]
 
@@ -349,7 +349,7 @@ def test_measure_function_complexities_qualifies_a_closure_inside_a_method(tmp_p
         "                return 1\n"
         "            return 2\n"
         "        return inner(x)\n"
-    )
+    , encoding="utf-8")
     measurements = measure_function_complexities([file], tmp_path)
     assert {m.function for m in measurements} == {"Foo.bar", "Foo.bar.<inner>"}
 
@@ -372,7 +372,7 @@ def test_measure_function_complexities_surfaces_both_blocks_of_a_platform_condit
         "else:\n"
         "    def foo(x):\n"
         "        return 3\n"
-    )
+    , encoding="utf-8")
     measurements = measure_function_complexities([file], tmp_path)
     assert [(m.function, m.line) for m in measurements] == [("foo", 2), ("foo", 7)]
 

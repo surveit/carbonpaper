@@ -6,6 +6,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
+from app.services import workspace
 
 _IN_SCHEMA = {"columns": [{"name": "amount", "type": "float", "nullable": False}]}
 _OUT_SCHEMA = {"columns": [
@@ -38,12 +39,9 @@ def _seed_project(root: Path, expected_doubled: float) -> None:
 
 @pytest.fixture
 def client(tmp_path: Path, monkeypatch) -> TestClient:
-    # The routers read the module-level EXAMPLES_DIR constant; point every
+    # The routers read the projects root live; point it once
     # module that imported it at the temp root.
-    import app.web.loading as loading
-    import app.web.routers.node_review as node_review_router
-    monkeypatch.setattr(node_review_router, "EXAMPLES_DIR", tmp_path)
-    monkeypatch.setattr(loading, "EXAMPLES_DIR", tmp_path)
+    workspace.set_projects_dir(tmp_path)
     return TestClient(app)
 
 

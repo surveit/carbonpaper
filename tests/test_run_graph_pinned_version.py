@@ -11,11 +11,7 @@ import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
 
-import app.web.config as web_config
 import app.services.workspace as workspace
-import app.web.loading as loading
-import app.web.routers.project as project_router
-import app.web.routers.runs as runs_router
 from app.core.errors import RunVersionUnresolvableError
 from app.main import app
 from app.runtime.runner import execute_run
@@ -50,8 +46,7 @@ def project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     pd.DataFrame({"name": ["a", "b"], "val": [1, 2]}).to_csv(data, index=False)
     (pdir / "compiled" / "01_load.json").write_text(
         json.dumps(_input_stage(PINNED_ID, "Pinned stage", data)), encoding="utf-8")
-    for mod in (web_config, workspace, loading, project_router, runs_router):
-        monkeypatch.setattr(mod, "EXAMPLES_DIR", tmp_path, raising=False)
+    workspace.set_projects_dir(tmp_path)
     return pdir
 
 
@@ -124,7 +119,7 @@ def test_row_trace_view_graph_stays_on_the_pinned_version(project: Path) -> None
     # covers every traced node and renders. Read off the working copy the traced
     # stage id would be unknown and the page would fall back to no graph at all.
     assert "flowchart LR" in page.text
-    assert f'click {PINNED_ID} call loadStage' in page.text
+    assert f'click {PINNED_ID} call dvNode' in page.text
 
 
 # ─── Unresolvable pinned version: loud and visible, never a substitute ───────

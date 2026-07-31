@@ -106,7 +106,7 @@ def test_find_disallowed_fastapi_importers_flags_a_non_web_module(tmp_path: Path
     target = tmp_path / "app" / "compiler"
     target.mkdir(parents=True)
     offender = target / "router.py"
-    offender.write_text("from fastapi import APIRouter\n")
+    offender.write_text("from fastapi import APIRouter\n", encoding="utf-8")
     assert find_disallowed_fastapi_importers([offender], tmp_path) == [
         "app/compiler/router.py  imports fastapi"
     ]
@@ -116,7 +116,7 @@ def test_find_disallowed_fastapi_importers_permits_a_web_module(tmp_path: Path) 
     target = tmp_path / "app" / "web" / "routers"
     target.mkdir(parents=True)
     permitted = target / "project.py"
-    permitted.write_text("from fastapi import APIRouter\n")
+    permitted.write_text("from fastapi import APIRouter\n", encoding="utf-8")
     assert find_disallowed_fastapi_importers([permitted], tmp_path) == []
 
 
@@ -124,5 +124,5 @@ def test_find_disallowed_fastapi_importers_permits_the_entrypoint(tmp_path: Path
     target = tmp_path / "app"
     target.mkdir(parents=True)
     entrypoint = target / "main.py"
-    entrypoint.write_text("from fastapi import FastAPI\n")
+    entrypoint.write_text("from fastapi import FastAPI\n", encoding="utf-8")
     assert find_disallowed_fastapi_importers([entrypoint], tmp_path) == []

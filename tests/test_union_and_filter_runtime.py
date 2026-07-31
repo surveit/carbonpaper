@@ -8,7 +8,7 @@ import pandas as pd
 import pytest
 
 from app.core.errors import SubsetRunError
-from app.models import Stage, Workflow
+from app.models import parse_stage, Stage, Workflow
 from app.runtime.executor import run_subset
 from app.runtime.trace import trace_row
 
@@ -16,7 +16,7 @@ _AB_SCHEMA = {"columns": [{"name": "a", "type": "str"}, {"name": "b", "type": "i
 
 
 def _union_stage(sid: str, input_ids: list[str]) -> Stage:
-    return Stage.model_validate({
+    return parse_stage({
         "id": sid, "name": sid, "type": "union",
         "inputs": [{"id": i, "schema": _AB_SCHEMA} for i in input_ids],
         "output_schema": _AB_SCHEMA,
@@ -25,7 +25,7 @@ def _union_stage(sid: str, input_ids: list[str]) -> Stage:
 
 
 def _filter_stage(sid: str, input_id: str, predicate_code: str) -> Stage:
-    return Stage.model_validate({
+    return parse_stage({
         "id": sid, "name": sid, "type": "filter_rows",
         "inputs": [{"id": input_id, "schema": _AB_SCHEMA}],
         "output_schema": _AB_SCHEMA,
@@ -40,7 +40,7 @@ def _load_stage(sid: str, df: pd.DataFrame, tmp_path) -> Stage:
     actually executes."""
     path = tmp_path / f"{sid}.csv"
     df.to_csv(path, index=False)
-    return Stage.model_validate({
+    return parse_stage({
         "id": sid, "name": sid, "type": "input_data",
         "connector": {"kind": "file", "params": {"path": str(path), "format": "csv"}},
         "output_schema": _AB_SCHEMA,
@@ -192,7 +192,7 @@ def test_a_row_mapper_that_may_not_drop_still_rejects_a_none_row(tmp_path):
     loud error it was."""
     src = pd.DataFrame({"a": ["x"], "b": [1]})
     load = _load_stage("src", src, tmp_path)
-    mapper = Stage.model_validate({
+    mapper = parse_stage({
         "id": "m", "name": "m", "type": "python_row_function",
         "inputs": [{"id": "src", "schema": _AB_SCHEMA}],
         "output_schema": _AB_SCHEMA,

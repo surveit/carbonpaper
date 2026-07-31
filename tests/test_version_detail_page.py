@@ -8,14 +8,10 @@ import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
 
-import app.web.config as web_config
-import app.web.loading as loading
-import app.web.routers.node_review as node_review_router
-import app.web.routers.project as project_router
-import app.web.routers.runs as runs_router
 import app.services.run as run_service
 from app.main import app
 from app.services import versioning
+from app.services import workspace
 
 client = TestClient(app)
 
@@ -43,8 +39,7 @@ def project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     data = pdir / "a.csv"
     pd.DataFrame({"name": ["x", "y"], "val": [1, 2]}).to_csv(data, index=False)
     (compiled / "01_load.json").write_text(json.dumps(_stage(data)), encoding="utf-8")
-    for mod in (web_config, loading, node_review_router, project_router, runs_router):
-        monkeypatch.setattr(mod, "EXAMPLES_DIR", tmp_path, raising=False)
+    workspace.set_projects_dir(tmp_path)
     monkeypatch.setattr(run_service, "_run_in_background",
                         lambda target, *args: target(*args))
     return pdir

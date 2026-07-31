@@ -9,7 +9,7 @@ import pandas as pd
 import pytest
 
 from app.core.agent.usage import LlmUsage
-from app.models import Stage
+from app.models import parse_stage
 from app.models.stage import StageType
 from app.runtime.cancellation import request_cancel
 from app.runtime.context import RunIdentity
@@ -35,7 +35,7 @@ _X_COLUMN = [{"name": "x", "type": "int"}]
 
 
 def _row_stage(output_schema=None, input_columns=_X_COLUMN):
-    return Stage.model_validate({
+    return parse_stage({
         "id": "t", "name": "t", "type": "python_row_function",
         "inputs": [{"id": "src", "schema": {"columns": input_columns}}],
         "output_schema": output_schema or {"columns": input_columns},
@@ -44,7 +44,7 @@ def _row_stage(output_schema=None, input_columns=_X_COLUMN):
 
 
 def _two_input_stage():
-    return Stage.model_validate({
+    return parse_stage({
         "id": "t2", "name": "t2", "type": "python_frame_function",
         "inputs": [{"id": "a", "schema": {"columns": _X_COLUMN}},
                    {"id": "b", "schema": {"columns": _X_COLUMN}}],
@@ -349,7 +349,8 @@ def _registry(llm_shape):
         StageType.python_row_function: RowMapHandler(make_mapper=lambda s, c, src: lambda r, i: r),
         StageType.llm_transform: llm_shape,
         StageType.python_frame_function: frame,
-        StageType.join_: frame,
+        StageType.enrich: frame,
+        StageType.expand: frame,
         StageType.aggregate: frame,
         StageType.human_review_queue: RowMapHandler(make_mapper=lambda s, c, src: lambda r, i: r),
         StageType.publish: frame,

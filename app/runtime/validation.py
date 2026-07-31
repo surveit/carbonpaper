@@ -6,26 +6,49 @@ output_schema. Results are returned as structured records, not raised.
 from __future__ import annotations
 
 import math
+import re
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 
 import pandas as pd
 
-from app.models import Column, RANGE_UNBOUNDED_MARKER, STR_COLUMN_TYPE, TableSchema
+from app.core.frames import (
+    CELL_TYPE_PREDICATES,
+    dtype_proves_cell_type,
+    is_null_form,
+    is_sequence_cell,
+)
+from app.models import (
+    Column,
+    JSON_COLUMN_TYPE,
+    RANGE_UNBOUNDED_MARKER,
+    SCALAR_COLUMN_TYPES,
+    STR_COLUMN_TYPE,
+    TableSchema,
+)
 
 
-# Map our type vocabulary to permissive pandas dtype checks.
-PY_TYPE_OF = {
-    "str": str,
-    "int": int,
-    "float": float,
-    "bool": bool,
-    "datetime": "datetime",
-    "date": "date",
-    "dict": dict,
-    "json": object,
-}
+# ── Type checking ────────────────────────────────────────────────────────────
+# The value-level "may this cell sit in a column declared as T?" predicates
+# live in app.core.frames, which owns the pandas knowledge they are made of
+# (numpy scalars, extension dtypes, null forms). What lives here is the part
+# that needs the DECLARED-TYPE VOCABULARY — `json`, `list[X]`, the scalar set —
+# which is app.models domain knowledge that app.core is forbidden to import
+# (pyproject.toml: "app.core does not import the domain models"). So frames
+# keys its predicates on plain strings and this module, the one place that can
+# see both sides, pins the two vocabularies together.
+_LIST_TYPE_RE = re.compile(r"^list\[(.+)\]$")
+
+# Keep the vocabulary honest: every scalar the models accept must have a check.
+assert set(CELL_TYPE_PREDICATES) == SCALAR_COLUMN_TYPES, (
+    "app.core.frames.CELL_TYPE_PREDICATES drifted from "
+    f"SCALAR_COLUMN_TYPES: {SCALAR_COLUMN_TYPES ^ set(CELL_TYPE_PREDICATES)}"
+)
+
+# How many offending values to name in an Issue message.
+_TYPE_SAMPLE_N = 3
 
 
 class Severity(str, Enum):
@@ -89,6 +112,7 @@ def validate_dataframe(
             continue
         series = df[name]
         report.issues.extend(_find_nullability_issues(series, col))
+        report.issues.extend(_find_type_issues(series, col))
         report.issues.extend(_find_numeric_range_issues(series, col))
         report.issues.extend(_find_enum_issues(series, col))
 
@@ -116,6 +140,56 @@ def _find_nullability_issues(series: pd.Series, col: Column) -> list[Issue]:
     return []
 
 
+def _value_check_for(type_name: str) -> Callable[[Any], bool] | None:
+    """The predicate a value must satisfy for a column declared `type_name`, or
+    None when the type admits anything (`json`, or a type we have no opinion
+    on). Scalars are answered by app.core.frames; what this adds is the
+    declared-type grammar around them — `json` and `list[X]`."""
+    scalar = CELL_TYPE_PREDICATES.get(type_name)
+    if scalar is not None:
+        return scalar
+    if type_name == JSON_COLUMN_TYPE:
+        return None  # `json` is an open object shape — any value goes.
+    match = _LIST_TYPE_RE.match(type_name)
+    if match:
+        element_check = _value_check_for(match.group(1).strip())
+
+        def _is_list_of(v: Any) -> bool:
+            if not is_sequence_cell(v):
+                return False
+            if element_check is None:
+                return True
+            return all(element_check(x) for x in v if not is_null_form(x))
+
+        return _is_list_of
+    return None
+
+
+def _find_type_issues(series: pd.Series, col: Column) -> list[Issue]:
+    """Values that do not match the column's declared type. Nulls are skipped —
+    reporting them is `_find_nullability_issues`' job."""
+    check = _value_check_for(col.type)
+    if check is None:
+        return []
+    if dtype_proves_cell_type(series, col.type):
+        return []
+    non_null = series[~series.map(is_null_form)]
+    if not len(non_null):
+        return []
+    offenders = [v for v in non_null if not check(v)]
+    if not offenders:
+        return []
+    sample = ", ".join(repr(v) for v in offenders[:_TYPE_SAMPLE_N])
+    ellipsis = "…" if len(offenders) > _TYPE_SAMPLE_N else ""
+    return [
+        Issue(
+            "error", col.name,
+            f"{len(offenders)} value(s) not of declared type '{col.type}' "
+            f"(e.g. {sample}{ellipsis})",
+        )
+    ]
+
+
 def _find_numeric_range_issues(series: pd.Series, col: Column) -> list[Issue]:
     col_range = col.range
     if not (col_range and col.type in {"int", "float"}):
@@ -132,7 +206,7 @@ def _find_numeric_range_issues(series: pd.Series, col: Column) -> list[Issue]:
         if bad:
             return [Issue("warning", col.name, f"{bad} value(s) outside range [{lo}, {hi}]")]
     except TypeError:
-        pass  # mixed types — the type check below will catch it
+        pass  # mixed types — _find_type_issues reports them
     return []
 
 

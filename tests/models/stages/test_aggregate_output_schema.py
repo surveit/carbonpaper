@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from app.models.stage import Stage
+from app.models.stage import parse_stage
 
 
 def _aggregate_stage(*, output_columns, aggregations):
@@ -28,7 +28,7 @@ def _aggregate_stage(*, output_columns, aggregations):
 
 def _issues(stage_dict) -> str:
     with pytest.raises(ValidationError) as err:
-        Stage.model_validate(stage_dict)
+        parse_stage(stage_dict)
     return str(err.value)
 
 
@@ -63,7 +63,7 @@ def test_mean_output_declared_non_float_rejected():
 
 
 def test_sum_of_int_declared_int_accepted():
-    stage = Stage.model_validate(_aggregate_stage(
+    stage = parse_stage(_aggregate_stage(
         output_columns=[{"name": "total", "type": "int"}],
         aggregations=[
             {"output_column": "total", "formula": "sum", "value_column": "revenue"},
@@ -84,7 +84,7 @@ def test_sum_of_int_declared_str_rejected():
 
 def test_sum_of_str_declared_str_accepted():
     # pandas sum of a string column concatenates, so sum over str derives str.
-    stage = Stage.model_validate(_aggregate_stage(
+    stage = parse_stage(_aggregate_stage(
         output_columns=[{"name": "all_regions", "type": "str"}],
         aggregations=[
             {"output_column": "all_regions", "formula": "sum", "value_column": "region"},
@@ -104,7 +104,7 @@ def test_sum_of_str_declared_int_rejected():
 
 
 def test_list_op_declared_list_of_value_type_accepted():
-    stage = Stage.model_validate(_aggregate_stage(
+    stage = parse_stage(_aggregate_stage(
         output_columns=[{"name": "regions", "type": "list[str]"}],
         aggregations=[
             {"output_column": "regions", "formula": "list", "value_column": "region"},
@@ -132,7 +132,7 @@ def test_group_by_column_type_must_match_edge():
 
 
 def test_valid_aggregate_passes():
-    stage = Stage.model_validate(_aggregate_stage(
+    stage = parse_stage(_aggregate_stage(
         output_columns=[
             {"name": "company", "type": "str"},
             {"name": "n", "type": "int"},

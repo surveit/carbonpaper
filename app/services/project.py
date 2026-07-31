@@ -1,8 +1,8 @@
-"""The project lifecycle service: a project is a directory under examples/<name>/.
-
-project_meta degrades TRUTHFULLY for legacy projects with no project.json — it never
-invents a model or a creation date. import_project is import-if-absent: a name clash
-raises rather than replacing.
+"""The project lifecycle service. A project's identity is the Project record (see
+below), not its examples/<name>/ working-copy directory — a directory may exist
+without a name clash. project_meta degrades TRUTHFULLY when no record can be
+found or built — it never invents a model or a creation date. import_project is
+import-if-absent: a name clash raises rather than replacing.
 """
 
 from __future__ import annotations
@@ -11,16 +11,41 @@ import json
 import re
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any, ClassVar, Sequence
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 from app.core.errors import ProjectExistsError
 from app.models import Coverage, SchemaLibrary, Stage, StageDraft
+from app.models.review_guide import ReviewGuide
+from app.core.persistence import PersistedModel, PersistenceScope
 from app.core.run_status import RunStatus
 from app.services import data_model, node_review, stage_edit, versioning, workspace
 from app.services.loader import load_compiled_dir, stage_to_json, write_stage
 from app.services.stage_edit import AddStagesResult, EditStageResult
+
+
+# ─── Project identity record ───────────────────────────────────────────────────
+
+
+class Project(PersistedModel):
+    """A project's identity record, stored in the "project" collection. `id` is
+    the sanitized project name (see sanitize_project_name) — the source of
+    truth for "does this project exist", not examples/<name>/ existing on
+    disk. `authored_at` is the project's OWN creation date as a domain fact —
+    distinct from PersistedModel's `created_at`/`updated_at`, which stamp
+    when this RECORD was written (e.g. by a migration backfill, possibly long
+    after the project itself was made). `authored_at` is None when that date
+    is genuinely unknown (a legacy project with no project.json to read it
+    from) — never inferred from the record's own `created_at`."""
+
+    collection: ClassVar[str] = "project"
+    SCOPE: ClassVar[PersistenceScope] = PersistenceScope.PROJECT_READ
+
+    title: str | None = None
+    model: str | None = None
+    source: str | None = None
+    authored_at: str | None = None
 
 
 # ─── Status models ────────────────────────────────────────────────────────────
@@ -195,44 +220,22 @@ def _runs_summary(pdir: Path) -> RunsSummary:
 
 def project_meta(pdir: Path) -> ProjectMeta:
     """The project's identity card (ProjectMeta): name / title / created_at / model /
-    source.
+    source, read from the Project record.
 
-    Reads examples/<name>/project.json when present (the record a gated-authored
-    project will carry). For a LEGACY project with no project.json, degrade
-    TRUTHFULLY rather than fabricate:
-      - name       : the directory name (always known).
-      - title      : project.json's title, else None (no invented prose title).
-      - created_at : project.json's value, else None. The create flow always writes
-                     it, so a None here means a legacy project that predates it —
-                     reported as unknown, never an inferred date.
-      - model      : project.json's value, else None — "unknown". We do NOT guess a
-                     default model; a wrong provenance is worse than an honest gap.
-      - source     : project.json's value, else None.
-
-    Always returns name from the dir even if project.json is malformed, so a corrupt
-    file degrades to legacy behaviour instead of raising."""
+    For a directory with no record, degrades TRUTHFULLY rather than fabricate:
+    only `name` (the directory name, always known) is set; title / created_at /
+    model / source are all None."""
     pdir = Path(pdir)
     name = pdir.name
-
-    raw: dict[str, Any] = {}
-    pj = pdir / "project.json"
-    if pj.is_file():
-        try:
-            loaded = json.loads(pj.read_text(encoding="utf-8"))
-            if isinstance(loaded, dict):
-                raw = loaded
-        except (json.JSONDecodeError, OSError):
-            raw = {}
-
+    record = Project.load_or_none(name)
+    if record is None:
+        return ProjectMeta(name=name, title=None, created_at=None, model=None, source=None)
     return ProjectMeta(
-        name=raw.get("name") or name,
-        title=raw.get("title"),
-        # project.json's value, else None — the create flow always sets it; a None is
-        # an honest "unknown" for a legacy project, never an inferred date.
-        created_at=raw.get("created_at"),
-        # model is None ("unknown") for legacy — never a fabricated default.
-        model=raw.get("model"),
-        source=raw.get("source"),
+        name=name,
+        title=record.title,
+        created_at=record.authored_at,
+        model=record.model,
+        source=record.source,
     )
 
 
@@ -337,7 +340,7 @@ def project_state(pdir: Path) -> ProjectState:
 
 # ─── Editing-agent service surface (name-based) ───────────────────────────────
 # Thin wrappers the editing agent's tools call. Each takes a project NAME, resolves
-# EXAMPLES_DIR/<name> internally, and returns in-memory objects (never a Path) via
+# <projects root>/<name> internally, and returns in-memory objects (never a Path) via
 # the loader/services — so the agent tools never build a filesystem path. The name
 # comes from the model, so it is validated to stay inside the workspace.
 
@@ -358,50 +361,58 @@ def create_project(
     *,
     model: str = "sonnet",
     source: str,
-    examples_dir: Path | None = None,
 ) -> str:
     """Create the examples/<name>/ working copy for a NEW project: sanitize the
     name, write document.md (the source of record) and project.json (real model +
-    created_at + source — never fabricated). Returns the sanitized name. Raises
-    ValueError on an empty document and ProjectExistsError on a name clash."""
+    created_at + source — never fabricated), and record the project's identity
+    (a Project) in the store. Returns the sanitized name.
+
+    Raises ValueError on an empty document. Raises ProjectExistsError on a
+    name clash — but a name clash means a Project record already exists for
+    `safe_name`, NOT that examples/<name>/ happens to exist as a directory: an
+    unrelated or empty directory (e.g. input files a user staged there by
+    hand) is not a clash and is written into. examples/<name>/document.md
+    existing IS a clash (it's a project's actual content) and is refused with
+    a distinguishable message, so a caller can tell the two refusals apart."""
     safe_name = sanitize_project_name(name)
     doc = document.strip()
     if not doc:
         raise ValueError("The methodology document is empty.")
-    root = Path(examples_dir) if examples_dir is not None else workspace.EXAMPLES_DIR
-    project_dir = root / safe_name
-    if project_dir.exists():
+    if Project.exists(safe_name):
         raise ProjectExistsError(
-            f"examples/{safe_name}/ already exists — choose a different name."
+            f"project '{safe_name}' already exists — choose a different name."
         )
-    project_dir.mkdir(parents=True)
+    project_dir = workspace.projects_dir() / safe_name
+    if (project_dir / "document.md").is_file():
+        raise ProjectExistsError(
+            f"{safe_name}/document.md already exists — choose a different name."
+        )
+    project_dir.mkdir(parents=True, exist_ok=True)
     (project_dir / "document.md").write_text(doc, encoding="utf-8")
+    created_at = datetime.now().isoformat(timespec="seconds")
     write_project_meta(
-        project_dir,
-        name=safe_name,
-        title=None,
-        created_at=datetime.now().isoformat(timespec="seconds"),
-        model=model,
-        source=source,
+        project_dir, name=safe_name, title=None, created_at=created_at, model=model, source=source,
     )
+    Project(id=safe_name, title=None, model=model, source=source, authored_at=created_at).save()
     return safe_name
 
 
-def list_projects(examples_dir: Path | None = None) -> list[str]:
-    """The names of every authored project in the workspace."""
-    return workspace.list_project_names(Path(examples_dir) if examples_dir is not None else workspace.EXAMPLES_DIR)
+def list_projects() -> list[str]:
+    """The names of every project in the workspace. The source of truth is the
+    Project store — never directory existence, and never a filesystem scan."""
+    return sorted(record.id for record in Project.list())
 
 
-def describe_workflow(name: str, examples_dir: Path | None = None) -> dict[str, Any]:
+def describe_workflow(name: str) -> dict[str, Any]:
     """A compact summary of one project's workflow (stage ids/types/inputs/review
     state), read through the tolerant loader."""
-    return workspace.project_workflow_summary(workspace.resolve_project_dir(name, examples_dir))
+    return workspace.project_workflow_summary(workspace.resolve_project_dir(name))
 
 
-def read_stage(name: str, stage_id: str, examples_dir: Path | None = None) -> str:
-    """The canonical JSON of one stage in a project's workflow. Raises ValueError if
+def read_stage(name: str, stage_id: str) -> str:
+    """The on-disk JSON text of one stage in a project's workflow. Raises ValueError if
     the stage is not in the workflow."""
-    project_dir = workspace.resolve_project_dir(name, examples_dir)
+    project_dir = workspace.resolve_project_dir(name)
     stages = {c.stage.id: c.stage
               for c in load_compiled_dir(project_dir / "compiled") if c.stage is not None}
     stage = stages.get(stage_id)
@@ -410,38 +421,52 @@ def read_stage(name: str, stage_id: str, examples_dir: Path | None = None) -> st
     return stage_to_json(stage)
 
 
-def edit_stage(name: str, stage_id: str, changes_json: str, examples_dir: Path | None = None) -> EditStageResult:
+def edit_stage(name: str, stage_id: str, changes_json: str) -> EditStageResult:
     """Apply a JSON Merge Patch to one stage of a project's workflow (validated
     before it writes; nothing written on failure)."""
-    return stage_edit.patch_stage_spec(_resolve_project_dir_to_write(name, examples_dir), stage_id, changes_json)
+    return stage_edit.patch_stage_spec(_resolve_project_dir_to_write(name), stage_id, changes_json)
 
 
-def add_stage(name: str, stage_json: str, examples_dir: Path | None = None) -> EditStageResult:
+def add_stage(name: str, stage_json: str) -> EditStageResult:
     """Add a new stage to a project's workflow (validated before it writes; nothing
     written on failure). The first stage of a project starts its workflow."""
-    return stage_edit.add_stage_spec(_resolve_project_dir_to_write(name, examples_dir), stage_json)
+    return stage_edit.add_stage_spec(_resolve_project_dir_to_write(name), stage_json)
 
 
 def add_stages(
-    name: str, stages: Sequence[StageDraft], examples_dir: Path | None = None
+    name: str, stages: Sequence[StageDraft]
 ) -> AddStagesResult:
     """Add several new stages to a project's workflow in one pass — ordered by
     their declared inputs, each validated against the whole graph, partial
     success kept. See `stage_edit.add_stage_specs`."""
-    return stage_edit.add_stage_specs(_resolve_project_dir_to_write(name, examples_dir), stages)
+    return stage_edit.add_stage_specs(_resolve_project_dir_to_write(name), stages)
 
 
-def remove_stage(name: str, stage_id: str, examples_dir: Path | None = None) -> EditStageResult:
+def remove_stage(name: str, stage_id: str) -> EditStageResult:
     """Delete one stage from a project's workflow (the reduced workflow is validated
     first; nothing is deleted when another stage still inputs from it)."""
-    return stage_edit.remove_stage_spec(_resolve_project_dir_to_write(name, examples_dir), stage_id)
+    return stage_edit.remove_stage_spec(_resolve_project_dir_to_write(name), stage_id)
 
 
-def _resolve_project_dir_to_write(name: str, examples_dir: Path | None) -> Path:
+def read_review_guide(name: str, version_id: str) -> ReviewGuide | None:
+    """The guide stored on one version, or None when it carries none — never a stand-in."""
+    project_dir = workspace.resolve_project_dir(name)
+    return versioning.load_version(project_dir, version_id).guide
+
+
+def write_review_guide(name: str, version_id: str, guide: ReviewGuide) -> ReviewGuide:
+    """Store `guide` on one version, replacing any earlier one; a mismatch raises, unwritten."""
+    # save_version_guide validates before writing and raises otherwise, so past this line
+    # `guide` is what the version carries.
+    versioning.save_version_guide(_resolve_project_dir_to_write(name), version_id, guide)
+    return guide
+
+
+def _resolve_project_dir_to_write(name: str) -> Path:
     """The directory of an EXISTING project, for the stage writers. A name with no
     project directory raises: writing a stage must never bring a project into being,
     now that the first stage creates the workflow's compiled/ dir."""
-    project_dir = workspace.resolve_project_dir(name, examples_dir)
+    project_dir = workspace.resolve_project_dir(name)
     if not project_dir.is_dir():
         raise ValueError(f"no project '{name}' in the workspace")
     return project_dir
@@ -452,7 +477,7 @@ def _resolve_project_dir_to_write(name: str, examples_dir: Path | None) -> Path:
 class WorkflowFile(BaseModel):
     """A portable project — methodology + data model + workflow stages — as one
     pydantic-serialized document. Not review state, not input data (a run-time
-    concern per #135). Serialize with `model_dump_json`, load with `model_validate_json`."""
+    concern per #135). Serialize with `to_json`, load with `model_validate_json`."""
 
     name: str
     document: str
@@ -461,12 +486,35 @@ class WorkflowFile(BaseModel):
     data_model: SchemaLibrary
     stages: list[Stage]
 
+    @field_validator("stages", mode="before")
+    @classmethod
+    def _drop_null_stage_keys(cls, v: Any) -> Any:
+        """A bundle written before stages became per-type models carries every
+        config block, null for the ones its type does not use (`"llm": null` on an
+        input_data stage). Those keys are now unknown on the stage they land in, so
+        drop them here rather than fail an import of a file already on disk. Only
+        nulls: a NON-null block belonging to another type is a real error and still
+        raises."""
+        if not isinstance(v, list):
+            return v
+        return [
+            {key: value for key, value in stage.items() if value is not None}
+            if isinstance(stage, dict) else stage
+            for stage in v
+        ]
 
-def export_project(name: str, *, examples_dir: Path | None = None) -> WorkflowFile:
+    def to_json(self) -> str:
+        """Omits nulls: a stage model declares only the config blocks its own
+        type carries, so a null block of some other type would be an unknown key
+        on the way back in."""
+        return self.model_dump_json(indent=2, exclude_none=True)
+
+
+def export_project(name: str) -> WorkflowFile:
     """Read project `name`'s working copy through the loaders into a WorkflowFile —
     read-only. Raises FileNotFoundError if no such project; ValueError if it has no
     recorded model/source/document (never fabricated)."""
-    pdir = workspace.resolve_project_dir(name, examples_dir)
+    pdir = workspace.resolve_project_dir(name)
     meta = project_meta(pdir)
     if meta.model is None or meta.source is None:
         raise ValueError(
@@ -488,16 +536,18 @@ def export_project(name: str, *, examples_dir: Path | None = None) -> WorkflowFi
 
 
 def import_project(
-    wf: WorkflowFile, *, name: str | None = None, examples_dir: Path | None = None,
+    wf: WorkflowFile, *, name: str | None = None,
 ) -> str:
     """Write `wf` into the workspace under `name` (default: `wf.name`) through the
-    existing service writers, then mint one version when it carries stages. Import-if-
-    absent only: raises ProjectExistsError on a name clash. Returns the sanitized name."""
+    existing service writers, then mint one version when it carries stages.
+    Import-if-absent only: create_project's own clash check (a Project record
+    already exists, or examples/<name>/document.md already exists) raises
+    ProjectExistsError — this function adds no clash check of its own, so a
+    bare/incidental directory of the target name does not block import.
+    Returns the sanitized name."""
     target = sanitize_project_name(name or wf.name)
-    pdir = workspace.resolve_project_dir(target, examples_dir)
-    if pdir.exists():
-        raise ProjectExistsError(f"examples/{target}/ already exists — choose a different name.")
-    create_project(target, wf.document, model=wf.model, source=wf.source, examples_dir=examples_dir)
+    pdir = workspace.resolve_project_dir(target)
+    create_project(target, wf.document, model=wf.model, source=wf.source)
     data_model.write_data_model(pdir, wf.data_model)
     for i, stage in enumerate(wf.stages, start=1):
         stage_path = pdir / "compiled" / f"{i:02d}_{stage.id}.json"
@@ -510,6 +560,7 @@ def import_project(
 
 __all__ = [
     "Coverage",
+    "Project",
     "DataModelStatus",
     "WorkflowStatus",
     "RunsSummary",
@@ -526,6 +577,8 @@ __all__ = [
     "read_stage",
     "edit_stage",
     "add_stage",
+    "read_review_guide",
+    "write_review_guide",
     "WorkflowFile",
     "export_project",
     "import_project",

@@ -24,8 +24,10 @@ from app.models import (
     HUMAN_REVIEW_QUEUE_CONTRACT_NOTE,
     NODE_TYPES,
     StageDraft,
+    find_workflow_compiler_warnings,
     StageType,
 )
+from app.models.review_guide import ReviewGuide
 from app.runtime import stage_tests
 from app.services import generation
 from app.services import loader
@@ -106,13 +108,38 @@ the whole graph before it is stored.
    JSON Merge Patch), remove_stage(project_id, stage_id) to undo a stage you added
    (refused while another stage still lists it in `inputs`).
 
+# The review guide, and why it exists
+A workflow you author is not self-explaining. The human who owns the methodology has to
+decide whether it does what they meant — and they read the stage graph, not the code. The
+review guide is the prose that makes that decision possible: an ordered walkthrough,
+each step naming the stages it covers and saying what a reviewer should check.
+
+8. write_review_guide(project_id, version_id, guide) — write it once the workflow needs a
+   human to understand it before acting on it, which is any version you expect to be
+   published or run. Nothing derives one and nothing seeds one; you write it from a blank
+   page. read_review_guide shows what a version already carries.
+   Write it FOR the methodology's owner, not a programmer: use the document's terms of
+   art, wrap column names in `backticks`, and say what could be quietly wrong rather than
+   restating the stage names and order the page already shows.
+
 Added stages land `unreviewed`. REVIEW AND APPROVAL ARE HUMAN-ONLY, in the web UI, and
-only a human publishes. Your job ends at a saved version with a workflow test run for the
-human to review.
+only a human publishes. Your job ends at a saved version carrying a review guide, with a
+workflow test run for the human to review.
 
 # Per-stage tests
 Once a python-transform stage exists, generate_stage_tests derives its tests from the
 methodology; then loop edit_stage → run_stage_tests until they pass.
+
+# Finishing
+report_compiler_warnings(project_id) reports what is wrong with the workflow as
+WRITTEN — no code run. Dirty is fine while you build.
+
+Two different things you can ask a human for, with different bars:
+- A look at a smoke test — run_workflow_test and a review of what came out. Fine with
+  warnings outstanding; say which ones are open.
+- FINAL SIGNOFF. Do not ask for this with any warning outstanding. Either clear it, or
+  state plainly why that specific warning is safe to ignore here. A warning you leave
+  unmentioned spends the reviewer's attention on something you already knew about.
 
 # Running
 Runs execute a stored version; save_version(project_id, message) creates one, then
@@ -272,6 +299,32 @@ def run_stage_tests(project_id: str, stage_id: str | None = None) -> dict[str, A
 
 
 @mcp.tool()
+def report_compiler_warnings(project_id: str) -> dict[str, Any]:
+    """Every problem with this workflow AS WRITTEN, judged without running
+    anything: stages with no plain-language description, described stages with no
+    examples to check that description, code the review panel cannot show, and the
+    deliberate choices (cache off, row limit) a reviewer should be told about.
+
+    Call this before you ask a human for final signoff, and do not ask with any
+    warning outstanding: either clear it, or say plainly why that one is safe to
+    ignore here. Dirty while you are still building is expected, and you may ask for
+    a look at a smoke test with warnings open — just name which are open.
+
+    `blocking` lists the ones you can actually fix. The rest you cannot clear from
+    the stage (a filter_rows can never carry examples) or are a deliberate authoring
+    choice — still worth a sentence to the reviewer rather than silence. This is NOT
+    about whether examples pass: run_stage_tests answers that, and it runs code."""
+    pdir = _resolve_existing_project(project_id)
+    stages = loader.load_workflow(pdir)
+    report = find_workflow_compiler_warnings(stages)
+    return {
+        "is_clean": report.is_clean,
+        "blocking": [w.model_dump(mode="json") for w in report.blocking],
+        "warnings": [w.model_dump(mode="json") for w in report.warnings],
+    }
+
+
+@mcp.tool()
 def read_data_model(project_id: str) -> list[dict[str, Any]]:
     """The project's data model: every named schema as JSON (empty list if none
     generated yet)."""
@@ -312,9 +365,10 @@ def add_stage(project_id: str, stages: list[StageDraft]) -> dict[str, Any]:
     """Create NEW stages in the workflow. `stages` is a LIST — submit every stage
     you are ready to author in ONE call; a list of one is the single-stage case.
     Each is a FULL stage: id (new and unique — use edit_stage to change an
-    existing one), name, type, the type's handle block (e.g. connector / llm /
-    function), output_schema, and inputs. read_stage on a similar existing stage
-    shows the shape.
+    existing one), name, type, the config block(s) its type requires — connector
+    / llm / function / join / aggregate / queue / union / filter, and `publish`
+    needs BOTH its `publish` block and a `function` block — output_schema, and
+    inputs. read_stage on a similar existing stage shows the shape.
 
     Order does not matter: the batch is sorted by the `inputs` each stage
     declares, so a stage may name another stage in the SAME call as an input, or
@@ -429,6 +483,22 @@ def save_version(
     except _STAGE_TOOL_ERRORS as exc:
         return {"ok": False, "issues": [str(exc)]}
     return {"ok": True, "issues": [], "version_id": version.version_id}
+
+
+@mcp.tool()
+def read_review_guide(project_id: str, version_id: str) -> ReviewGuide | None:
+    """The review guide stored on one saved version, or null when it has none. Read
+    before writing so you amend it rather than replace someone's work."""
+    _resolve_existing_project(project_id)
+    return project_service.read_review_guide(project_id, version_id)
+
+
+@mcp.tool()
+def write_review_guide(project_id: str, version_id: str, guide: ReviewGuide) -> ReviewGuide:
+    """Store the walkthrough a human reads to understand what this version of the
+    workflow does. Replaces any guide already on that version, whole."""
+    _resolve_existing_project(project_id)
+    return project_service.write_review_guide(project_id, version_id, guide)
 
 
 @mcp.tool()

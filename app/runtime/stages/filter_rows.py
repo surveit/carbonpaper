@@ -10,14 +10,14 @@ from typing import Any, Callable
 import pandas as pd
 
 from app.models import Stage
+from app.models.stages.filter_rows import FilterRowsStage
 
 from ..context import RunContext
-from .execution import Row, RowMapper
+from .execution import Row, RowMapper, narrow_stage
 
 
 def _load_predicate(stage: Stage) -> Callable[[dict[str, Any]], object]:
-    cfg = stage.filter
-    assert cfg is not None  # Stage validation: filter_rows always carries filter
+    cfg = narrow_stage(stage, FilterRowsStage).filter
     fn_name = cfg.function or "should_include"
     ns: dict[str, Any] = {}
     exec(cfg.code, ns)

@@ -93,5 +93,5 @@ async def export_project_route(project_name: str):
     wf = export_project(name)
     dest = REPO_ROOT / "exports" / f"{name}.json"
     dest.parent.mkdir(parents=True, exist_ok=True)
-    dest.write_text(wf.model_dump_json(indent=2), encoding="utf-8")
+    dest.write_text(wf.to_json(), encoding="utf-8")
     return _redirect_to_admin(f"Exported '{name}' to {dest}.")

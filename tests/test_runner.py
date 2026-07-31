@@ -10,7 +10,7 @@ import pytest
 import app.runtime.runner as runner
 from app.core.errors import NoVersionToRunError, SubsetRunError
 from app.core.run_status import RunStatus
-from app.models import Stage, Workflow
+from app.models import parse_stage, Workflow
 from app.runtime.runner import execute_run, resume_run
 from app.runtime.executor import _raise_if_run_failed, run_subset
 from app.runtime.manifest import RunManifest
@@ -387,12 +387,12 @@ def test_run_subset_surfaces_the_real_row_failure_message(tmp_path, monkeypatch)
     monkeypatch.setattr(lt, "call_llm", boom)
     # Path-free connector: `load`'s output is injected below, so no file exists
     # or is read — declaring one would be a fabricated fixture value.
-    load = Stage.model_validate({
+    load = parse_stage({
         "id": "load", "name": "Load items", "type": "input_data",
         "connector": {"kind": "file"},
         "output_schema": _ID_TEXT_SCHEMA,
     })
-    score = Stage.model_validate({
+    score = parse_stage({
         "id": "score", "name": "Score items", "type": "llm_transform",
         "inputs": [{"id": "load", "schema": _ID_TEXT_SCHEMA}],
         "output_schema": {
@@ -420,12 +420,12 @@ def test_run_subset_preserves_partial_work_in_the_manifest_on_a_mid_frontier_err
     # manifest on disk at that moment must already show the completed upstream
     # stage as ok and the failing stage's error — partial work is preserved for a
     # caller (workflow test / eval) to read back, not lost to a save-at-the-end.
-    load = Stage.model_validate({
+    load = parse_stage({
         "id": "load", "name": "Load items", "type": "input_data",
         "connector": {"kind": "file"},
         "output_schema": _ID_TEXT_SCHEMA,
     })
-    clean = Stage.model_validate({
+    clean = parse_stage({
         "id": "clean", "name": "Clean rows", "type": "python_row_function",
         "inputs": [{"id": "load", "schema": {
             "columns": [{"name": "id", "type": "str"}, {"name": "text", "type": "str"}]}}],
@@ -433,7 +433,7 @@ def test_run_subset_preserves_partial_work_in_the_manifest_on_a_mid_frontier_err
             "columns": [{"name": "id", "type": "str"}, {"name": "text", "type": "str"}]},
         "function": {"kind": "inline", "code": "def transform(row): return row"},
     })
-    boom = Stage.model_validate({
+    boom = parse_stage({
         "id": "score", "name": "Score rows", "type": "python_row_function",
         "inputs": [{"id": "clean", "schema": {
             "columns": [{"name": "id", "type": "str"}, {"name": "text", "type": "str"}]}}],
@@ -660,8 +660,8 @@ def test_the_documented_cli_runs_a_project_with_nothing_configured(tmp_path, mon
 
     db_path = tmp_path / "db" / "app.db"
     db_path.parent.mkdir(parents=True)
-    monkeypatch.setenv("CW_DB_PATH", str(db_path))
-    monkeypatch.setenv("CW_FRAMES_ROOT", str(tmp_path / "frames"))
+    monkeypatch.setenv("CARBONPAPER_DB_PATH", str(db_path))
+    monkeypatch.setenv("CARBONPAPER_FRAMES_ROOT", str(tmp_path / "frames"))
 
     project_dir = tmp_path / "project"
     configure_store(SqliteKvStore(str(db_path)))

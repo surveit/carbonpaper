@@ -7,11 +7,12 @@ from fastapi.testclient import TestClient
 import app.web.routers.evals as evals_router
 from app.core.errors import EvalNotScorableError
 from app.main import app
-from app.models import EvalConfig, ExpectedOutput, FileFormat, Stage, TableRef
+from app.models import parse_stage, EvalConfig, ExpectedOutput, FileFormat, TableRef
 from app.models.schema import TableSchema
 from app.evals.runner import run_eval
 from app.evals.store import load_eval_run, save_eval_config
 from app.services.versioning import WorkflowVersion
+from app.services import workspace
 
 def _load(tmp_path):
     return {
@@ -45,7 +46,7 @@ def project(tmp_path):
     WorkflowVersion(
         id="demo/v1", version_id="v1", created_at="2026-07-10T00:00:00",
         message="seed", reviewer="test",
-        stages=[Stage.model_validate(_load(tmp_path)), Stage.model_validate(_CLASSIFY)],
+        stages=[parse_stage(_load(tmp_path)), parse_stage(_CLASSIFY)],
     ).save()
 
     data = demo / "eval_data"
@@ -123,7 +124,7 @@ def test_run_eval_through_a_queue_stage_records_an_error_never_a_score(project):
     WorkflowVersion(
         id="demo/v-queue", version_id="v-queue", created_at="2026-07-12T00:00:00",
         message="queue pathway", reviewer="test",
-        stages=[Stage.model_validate(_load(repo_root)), Stage.model_validate(_QUEUE_REVIEW)],
+        stages=[parse_stage(_load(repo_root)), parse_stage(_QUEUE_REVIEW)],
     ).save()
     pd.DataFrame({"doc_id": ["a", "b"], "score": [1, 2], "final_score": [1, 2]}).to_csv(
         demo / "eval_data" / "queue_cases.csv", index=False)
@@ -170,7 +171,7 @@ def test_run_eval_scores_an_explicit_unpublished_version(project):
     WorkflowVersion(
         id="demo/v2-draft", version_id="v2-draft", created_at="2026-07-11T00:00:00",
         message="agent draft", reviewer="agent",
-        stages=[Stage.model_validate(_load(repo_root)), Stage.model_validate(_CLASSIFY)],
+        stages=[parse_stage(_load(repo_root)), parse_stage(_CLASSIFY)],
         published=False,
     ).save()
     run = run_eval(demo, config, repo_root, version_id="v2-draft")
@@ -186,7 +187,7 @@ def test_run_eval_none_version_id_resolves_to_newest_overall(project):
     WorkflowVersion(
         id="demo/v2-draft", version_id="v2-draft", created_at="2026-07-11T00:00:00",
         message="agent draft", reviewer="agent",
-        stages=[Stage.model_validate(_load(repo_root)), Stage.model_validate(_CLASSIFY)],
+        stages=[parse_stage(_load(repo_root)), parse_stage(_CLASSIFY)],
         published=False,
     ).save()
     run = run_eval(demo, config, repo_root)
@@ -218,7 +219,7 @@ def test_trigger_route_runs_and_redirects_to_the_run(project, monkeypatch):
     """POST .../run scores the eval and 303-redirects to its new run page."""
     repo_root, demo, config = project
     save_eval_config(demo, config)
-    monkeypatch.setattr(evals_router, "EXAMPLES_DIR", repo_root)
+    workspace.set_projects_dir(repo_root)
     monkeypatch.setattr(evals_router, "REPO_ROOT", repo_root)
 
     r = TestClient(app).post("/project/demo/evals/label_check/run", follow_redirects=False)
@@ -230,7 +231,7 @@ def test_trigger_route_400s_when_not_runnable(project, monkeypatch):
     """An eval with no dataset can't be run; the route reports 400, not a redirect."""
     repo_root, demo, config = project
     save_eval_config(demo, config.model_copy(update={"table": None}))
-    monkeypatch.setattr(evals_router, "EXAMPLES_DIR", repo_root)
+    workspace.set_projects_dir(repo_root)
     monkeypatch.setattr(evals_router, "REPO_ROOT", repo_root)
 
     r = TestClient(app).post("/project/demo/evals/label_check/run", follow_redirects=False)
@@ -246,10 +247,10 @@ def test_trigger_route_scores_an_explicitly_selected_unpublished_version(project
     WorkflowVersion(
         id="demo/v2-draft", version_id="v2-draft", created_at="2026-07-11T00:00:00",
         message="agent draft", reviewer="agent",
-        stages=[Stage.model_validate(_load(repo_root)), Stage.model_validate(_CLASSIFY)],
+        stages=[parse_stage(_load(repo_root)), parse_stage(_CLASSIFY)],
         published=False,
     ).save()
-    monkeypatch.setattr(evals_router, "EXAMPLES_DIR", repo_root)
+    workspace.set_projects_dir(repo_root)
     monkeypatch.setattr(evals_router, "REPO_ROOT", repo_root)
 
     r = TestClient(app).post(
@@ -265,7 +266,7 @@ def test_trigger_route_404s_when_selected_version_does_not_exist(project, monkey
     500 -- the route reports 404 with the reason."""
     repo_root, demo, config = project
     save_eval_config(demo, config)
-    monkeypatch.setattr(evals_router, "EXAMPLES_DIR", repo_root)
+    workspace.set_projects_dir(repo_root)
     monkeypatch.setattr(evals_router, "REPO_ROOT", repo_root)
 
     r = TestClient(app).post(

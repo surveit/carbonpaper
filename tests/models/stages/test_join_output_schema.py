@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from app.models.stage import Stage
+from app.models.stage import parse_stage
 
 _LEFT = {
     "columns": [
@@ -22,17 +22,16 @@ _RIGHT = {
 
 
 def _join_stage(*, output_columns=None, select=None, left=_LEFT, right=_RIGHT,
-                keys=None):
+                keys=None, stage_type="enrich"):
     spec = {
-        "id": "enrich",
-        "name": "Join facilities to filings",
-        "type": "join",
+        "id": "add_filings",
+        "name": "Enrich facilities with filings",
+        "type": stage_type,
         "inputs": [
             {"id": "facilities", "schema": left},
             {"id": "filings", "schema": right},
         ],
         "join": {
-            "type": "left",
             "keys": keys or [{"left": "facility_id", "right": "facility_id"}],
         },
     }
@@ -45,12 +44,12 @@ def _join_stage(*, output_columns=None, select=None, left=_LEFT, right=_RIGHT,
 
 def _issues(stage_dict) -> str:
     with pytest.raises(ValidationError) as err:
-        Stage.model_validate(stage_dict)
+        parse_stage(stage_dict)
     return str(err.value)
 
 
 def test_select_entry_not_derivable_rejected():
-    # The runtime silently drops a select entry the merge lacks; save time
+    # The runtime silently drops a select entry the join lacks; save time
     # rejects it instead.
     msg = _issues(_join_stage(
         select=["facility_id", "amount_typo"],
@@ -59,7 +58,7 @@ def test_select_entry_not_derivable_rejected():
     assert "join.select" in msg
 
 
-def test_declared_column_absent_from_merge_rejected():
+def test_declared_column_absent_from_join_rejected():
     msg = _issues(_join_stage(
         output_columns=[{"name": "bogus", "type": "str"}],
     ))
@@ -67,10 +66,10 @@ def test_declared_column_absent_from_merge_rejected():
 
 
 def test_right_collision_reachable_only_as_suffixed():
-    stage = Stage.model_validate(_join_stage(
+    stage = parse_stage(_join_stage(
         output_columns=[{"name": "name_r", "type": "int"}],
     ))
-    assert stage.id == "enrich"
+    assert stage.id == "add_filings"
     msg = _issues(_join_stage(
         output_columns=[{"name": "name_r", "type": "str"}],
     ))
@@ -99,7 +98,7 @@ def test_declared_type_mismatch_rejected():
 
 
 def test_select_projection_limits_declared():
-    # `score` survives the merge but select excludes it.
+    # `score` survives the join but select excludes it.
     msg = _issues(_join_stage(
         select=["facility_id", "amount"],
         output_columns=[{"name": "score", "type": "float"}],
@@ -108,8 +107,10 @@ def test_select_projection_limits_declared():
 
 
 
-def test_valid_join_passes():
-    stage = Stage.model_validate(_join_stage(
+@pytest.mark.parametrize("stage_type", ["enrich", "expand"])
+def test_valid_join_passes(stage_type):
+    stage = parse_stage(_join_stage(
+        stage_type=stage_type,
         select=["facility_id", "name", "name_r", "amount"],
         output_columns=[
             {"name": "facility_id", "type": "str"},
@@ -118,4 +119,4 @@ def test_valid_join_passes():
             {"name": "amount", "type": "int"},
         ],
     ))
-    assert stage.id == "enrich"
+    assert stage.id == "add_filings"

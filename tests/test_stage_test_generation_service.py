@@ -49,7 +49,7 @@ def _seed_project(project_dir: Path, *, existing_tests: list[dict] | None = None
         "id": "double", "name": "Double", "type": "python_row_function",
         "inputs": [{"id": "load", "schema": _IN_SCHEMA}],
         "output_schema": _OUT_SCHEMA,
-        "function": {"kind": "inline",
+        "function": {"kind": "inline", "summary": "Test fixture step.", "corner_cases": [],
                      "code": "def transform(row):\n    return {**row, 'doubled': row['amount'] * 2}\n"},
     }
     if existing_tests is not None:
@@ -154,7 +154,7 @@ def test_finish_stage_tests_preserves_null_cells(tmp_path: Path):
         "id": "double", "name": "Double", "type": "python_row_function",
         "inputs": [{"id": "load", "schema": _IN_SCHEMA}],
         "output_schema": out_schema,
-        "function": {"kind": "inline",
+        "function": {"kind": "inline", "summary": "Test fixture step.", "corner_cases": [],
                      "code": "def transform(row):\n    return {**row, 'flag': None}\n"},
     }), encoding="utf-8")
 

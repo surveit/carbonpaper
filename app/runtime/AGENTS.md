@@ -31,7 +31,9 @@ validate the output, write `outputs/<stage>.parquet`, append to `manifest.json`.
 ## `stages/` — one module per stage type (`HANDLERS`)
 `input_data` connector `file` (csv/parquet/json/geojson; `_read_geojson` flattens a
 FeatureCollection); `python_row_function`/`python_frame_function`
-(`function: {kind: module|inline}`, row variant mapped per row); `join`; `aggregate`;
+(`function: {kind: module|inline}`, row variant mapped per row); `enrich`/`expand`
+(left join of inputs[1] into inputs[0]; `enrich` verifies m:1 and fails the run on a
+non-unique reference, `expand` allows m:n fan-out); `aggregate`;
 `llm_transform` (row-mapped, bounded parallelism);
 `human_review_queue` (row fingerprint → cached decision or halt);
 `publish` (a `function` module that writes artifacts).
@@ -80,9 +82,15 @@ stays the source of truth for stage status; this log is only ever the drill-down
   `~/.local/bin/claude.exe`). The agent is the ONLY backend — no fallback of any kind.
 - `llm.py` `call_llm` renders the stage's prompt and runs a headless structured-output
   `app.core.agent.agent.Agent` whose `target_schema` is the stage's compiled reply model, so
-  the reply is validated by construction rather than parsed from prose. A stage declaring
-  `llm.tools` fails loudly — the agent backend doesn't support tools. Run per row by the
+  the reply is validated by construction rather than parsed from prose. Run per row by the
   row driver under bounded parallelism.
+- **A stage declaring `llm.tools` researches.** The names (from
+  `models.stages.llm_transform.GRANTABLE_TOOLS`) are granted to the agent alongside
+  `submit_answer`, and the row moves onto the research budget — `RESEARCH_TIMEOUT_S` and
+  `RESEARCH_MAX_TURNS` instead of `DEFAULT_TIMEOUT_S` and the submit-only turn cap — because
+  searching and reading documents is the work, not overhead on top of it. Such a stage is NOT
+  a pure function of its input row: re-running it may legitimately return a different answer,
+  so `Stage.cache: false` belongs on it unless the answer is genuinely expected to be stable.
 
 `validation.py` — DATA validation of a dataframe against an `output_schema` (columns, types,
 ranges, nullability, PK uniqueness), distinct from the stage schemas in `app/models/`.

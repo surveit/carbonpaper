@@ -9,7 +9,10 @@ from __future__ import annotations
 from typing import Any
 
 from app.models import Stage
-from app.models.stage import StageType
+from app.models.stages.code import PythonFrameFunctionStage, PythonRowFunctionStage
+from app.models.stages.input_data import InputDataStage
+from app.models.stages.join import EnrichStage, ExpandStage
+from app.models.stages.llm_transform import LLMTransformStage
 from app.services.loader import resolve_function_code
 
 
@@ -20,27 +23,25 @@ def _transform_of(stage: Stage | None) -> dict[str, Any]:
     compiled DAG may not be loadable)."""
     if stage is None:
         return {"kind": "unknown", "detail": None}
-    # _Base sets use_enum_values, so stage.type is a plain str; compare by value.
-    stage_type = str(stage.type)
-    if stage_type == StageType.input_data.value:
-        path = stage.connector.params.get("path") if stage.connector else None
+    if isinstance(stage, InputDataStage):
+        path = stage.connector.params.get("path")
         src = path or (stage.source.doc if stage.source else None)
         return {"kind": "source", "detail": src or "originates the rows"}
-    if stage_type in (StageType.python_row_function.value, StageType.python_frame_function.value):
+    if isinstance(stage, (PythonRowFunctionStage, PythonFrameFunctionStage)):
         # Full source: the whole module file for a module ref, the inline code
         # for an inline ref — never a partial snippet or a bare reference.
         return {"kind": "python", "detail": resolve_function_code(stage)}
-    if stage_type == StageType.llm_transform.value:
-        llm_detail = (
-            {"instructions": stage.llm.prompt_instructions, "data_template": stage.llm.prompt_data_template}
-            if stage.llm else None
-        )
-        return {"kind": "llm", "detail": llm_detail}
-    if stage_type == StageType.join_.value:
-        pairs = (stage.join.keys or stage.join.on) if stage.join else None
+    if isinstance(stage, LLMTransformStage):
+        return {"kind": "llm", "detail": {
+            "instructions": stage.llm.prompt_instructions,
+            "data_template": stage.llm.prompt_data_template,
+        }}
+    if isinstance(stage, (EnrichStage, ExpandStage)):
+        pairs = stage.join.keys
         detail = ", ".join(f"{k.left}={k.right}" for k in pairs) if pairs else None
-        return {"kind": "join", "detail": detail}
-    return {"kind": stage_type, "detail": None}
+        # _Base sets use_enum_values, so stage.type is a plain str.
+        return {"kind": str(stage.type), "detail": detail}
+    return {"kind": str(stage.type), "detail": None}
 
 
 def build_trace_view(trace: dict[str, Any], stages: dict[str, Stage]) -> dict[str, Any]:

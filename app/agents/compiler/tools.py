@@ -6,10 +6,13 @@ passes as `project_id`. A missing stage or column raises, never an invented defa
 
 from __future__ import annotations
 
+import json
 from typing import Annotated, Any, Callable
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
+from app.core.utils import format_errors
+from app.models.review_guide import ReviewGuide
 from app.services import drafts, project as project_service
 from app.services.drafts import DraftDetail, DraftEdit, DraftView, SaveResult
 
@@ -56,8 +59,9 @@ def make_editing_tools(ctx: EditingContext) -> list[Callable[..., Any]]:
     def add_stage(project_id: str, stage_json: str) -> dict[str, Any]:
         """Create a NEW stage in a project's workflow. `stage_json` is a full
         stage as JSON: id (new and unique — use edit_stage to change an existing
-        one), name, type, the type's handle block (e.g. connector / llm / function),
-        MANDATORY output_schema, and inputs each with a MANDATORY `schema`. Every id
+        one), name, type, the config block(s) its type requires (connector / llm /
+        function / ...; `publish` needs BOTH its `publish` block and a `function`
+        block), MANDATORY output_schema, and inputs each with a MANDATORY `schema`. Every id
         listed in `inputs` must ALREADY be a stage in this workflow — a dangling input
         is rejected. The stage-type catalog is
         in your instructions; read_stage on a similar existing stage shows the
@@ -120,6 +124,18 @@ def make_editing_tools(ctx: EditingContext) -> list[Callable[..., Any]]:
         Save once per finished proposal, not per edit."""
         return drafts.save_version(project_id, draft_id, message=message)
 
+    def read_review_guide(project_id: str, version_id: str) -> ReviewGuide | None:
+        """The review guide stored on one saved version, or null when it has none.
+        Read before writing so you amend rather than replace someone's work."""
+        return project_service.read_review_guide(project_id, version_id)
+
+    def write_review_guide(project_id: str, version_id: str, guide_json: str) -> ReviewGuide:
+        """Store the walkthrough a human reads to understand what this version of the
+        workflow does. Replaces any guide already on that version, whole."""
+        return project_service.write_review_guide(
+            project_id, version_id, _parse_guide(guide_json)
+        )
+
     return [
         list_projects,
         get_current_project,
@@ -133,7 +149,20 @@ def make_editing_tools(ctx: EditingContext) -> list[Callable[..., Any]]:
         set_draft_stage,
         remove_draft_stage,
         save_version,
+        read_review_guide,
+        write_review_guide,
     ]
+
+
+def _parse_guide(guide_json: str) -> ReviewGuide:
+    """Parse one guide, raising ValueError with the readable per-field errors."""
+    obj = json.loads(guide_json)
+    if not isinstance(obj, dict):
+        raise ValueError("guide_json must be a JSON object")
+    try:
+        return ReviewGuide.model_validate(obj)
+    except ValidationError as exc:
+        raise ValueError("; ".join(format_errors(exc))) from exc
 
 
 # ── tool input schemas + display labels ──────────────────────────────────────
@@ -171,8 +200,9 @@ TOOL_SCHEMAS: dict[str, ToolInputSchema] = {
         "stage_json": Annotated[
             str,
             "The complete NEW stage as a JSON object (encoded as a string): id "
-            "(new and unique), name, type, the type's handle block (connector / "
-            "llm / function / ...), MANDATORY output_schema, and inputs each with a "
+            "(new and unique), name, type, the config block(s) its type requires "
+            "(connector / llm / function / ...; `publish` needs BOTH its `publish` "
+            "block and a `function` block), MANDATORY output_schema, and inputs each with a "
             "MANDATORY `schema`. Every id in inputs "
             "must already be a stage in this workflow, or it is rejected.",
         ],
@@ -222,6 +252,27 @@ TOOL_SCHEMAS: dict[str, ToolInputSchema] = {
             "deciding whether to publish it.",
         ],
     },
+    "read_review_guide": {
+        "project_id": Annotated[str, "The project id (call get_current_project first)."],
+        "version_id": Annotated[
+            str,
+            "The version whose guide to read — the id save_version returned for it.",
+        ],
+    },
+    "write_review_guide": {
+        "project_id": Annotated[str, "The project id (call get_current_project first)."],
+        "version_id": Annotated[
+            str,
+            "The version this guide describes — the id save_version returned for it. The "
+            "guide is validated against THAT version's stages.",
+        ],
+        "guide_json": Annotated[
+            str,
+            "The complete guide as a JSON object (encoded as a string): `steps`, each "
+            "with `title`, `prose` and `stage_ids`, plus `unnarrated`. Sent whole every "
+            "time — it replaces any earlier guide rather than merging into it.",
+        ],
+    },
 }
 
 
@@ -242,5 +293,7 @@ TOOL_LABELS: dict[str, str] = {
     "set_draft_stage": "Editing the draft",
     "remove_draft_stage": "Removing a draft stage",
     "save_version": "Saving the draft as a version",
+    "read_review_guide": "Reading the review guide",
+    "write_review_guide": "Writing the review guide",
     "ToolSearch": "Looking up a tool",
 }

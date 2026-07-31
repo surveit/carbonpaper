@@ -1,11 +1,13 @@
 """Frames are addressed by (collection, id) like the document store, but stored one
 parquet file per frame under a root directory. Also owns the value-level pandas
-knowledge the stage cache keys under - null forms, numpy scalars, frame identity."""
+knowledge the stage cache and the schema checks key under - null forms, numpy
+scalars, extension dtypes, what a cell's Python type says about it, frame identity."""
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Any
+import datetime as _dt
 import json
 import math
 
@@ -54,6 +56,119 @@ def collapse_null_forms(value: object) -> object:
     return value
 
 
+def is_null_form(value: object) -> bool:
+    """Whether `value` is one of the pandas null forms — the boolean sibling of
+    `collapse_null_forms`, and expressed as that function so there is exactly
+    one place in the codebase that enumerates them. Nothing but a null form
+    collapses to None (everything else falls through unchanged), so `is None`
+    on the collapsed result is an exact test. In particular this does NOT ask
+    `pd.isna`: see `collapse_null_forms` for why an array-valued cell makes
+    that call unsafe. The four enumerated forms are what a cell can carry out
+    of parquet or a DataFrame constructor; a hand-built `np.float32('nan')` or
+    bare `np.datetime64('NaT')` in an object column reads as non-null here,
+    which `pd.isna` would have called null."""
+    return collapse_null_forms(value) is None
+
+
+def is_sequence_cell(value: object) -> bool:
+    """Whether pandas would present `value` as a multi-valued cell. A frame
+    column declared as a list of something round-trips through parquet as a
+    numpy array, not a list, so a caller checking "is this cell a list" must
+    accept `ndarray` alongside the Python sequence it wrote."""
+    return isinstance(value, (list, tuple, np.ndarray))
+
+
+# ── Cell-level type predicates ───────────────────────────────────────────────
+# "May this cell sit in a column whose declared type is named T?" — one
+# predicate per name in `CELL_TYPE_PREDICATES` below. The names are plain
+# strings the caller supplies: the declared-type vocabulary is domain
+# knowledge that lives in `app.models`, which `app.core` may not import (see
+# pyproject.toml's "app.core does not import the domain models" contract), so
+# a caller pins its own vocabulary against these keys instead.
+#
+# Deliberately permissive where pandas is lossy (numpy scalars, int-valued
+# floats), deliberately strict where the distinction is real (a bool is not an
+# int).
+
+
+def _is_bool_cell(value: Any) -> bool:
+    return isinstance(value, (bool, np.bool_))
+
+
+def _is_int_cell(value: Any) -> bool:
+    # A Python bool is a subclass of int, but a column declared `int` that
+    # holds True/False is a real mismatch — reject it explicitly.
+    if _is_bool_cell(value):
+        return False
+    if isinstance(value, (int, np.integer)):
+        return True
+    # An int column carrying a null is promoted to float64 by pandas, so a
+    # whole-valued float is an int that survived a lossy round-trip, not a
+    # type error. 1.5 in an int column still is one.
+    return isinstance(value, (float, np.floating)) and float(value).is_integer()
+
+
+def _is_float_cell(value: Any) -> bool:
+    # Ints in a float column are fine (pandas will not preserve the
+    # distinction anyway); bools are not.
+    return isinstance(value, (float, np.floating)) or _is_int_cell(value)
+
+
+def _is_str_cell(value: Any) -> bool:
+    # np.str_ subclasses str; pandas `string` dtype yields plain str.
+    return isinstance(value, str)
+
+
+def _is_datetime_cell(value: Any) -> bool:
+    # datetime.datetime covers pd.Timestamp (a subclass of it).
+    return isinstance(value, (_dt.datetime, np.datetime64))
+
+
+def _is_date_cell(value: Any) -> bool:
+    # datetime.date covers datetime.datetime and pd.Timestamp: pandas has no
+    # date-only dtype, so a `date` column round-trips as a Timestamp.
+    return isinstance(value, (_dt.date, np.datetime64))
+
+
+CELL_TYPE_PREDICATES: Mapping[str, Callable[[Any], bool]] = {
+    "str": _is_str_cell,
+    "int": _is_int_cell,
+    "float": _is_float_cell,
+    "bool": _is_bool_cell,
+    "datetime": _is_datetime_cell,
+    "date": _is_date_cell,
+}
+
+
+def dtype_proves_cell_type(series: pd.Series, type_name: str) -> bool:
+    """Whether the series' dtype alone proves every cell satisfies the
+    predicate `type_name` names — the fast path that lets a caller skip
+    per-cell inspection. Covers the numpy dtypes and the pandas nullable
+    extension dtypes (`boolean`, `Int64`, `Float64`, `string`); object dtype
+    proves nothing, so it always returns False."""
+    dtype = series.dtype
+    types = pd.api.types
+    if types.is_object_dtype(dtype):
+        return False  # the interesting case: cells must be inspected
+    if type_name == "bool":
+        return bool(types.is_bool_dtype(dtype))
+    if type_name == "int":
+        # A float dtype may be an int column that met a null — not provable
+        # from the dtype, so fall through to the per-cell predicate, which
+        # accepts whole-valued floats (see _is_int_cell).
+        return bool(types.is_integer_dtype(dtype) and not types.is_bool_dtype(dtype))
+    if type_name == "float":
+        return bool(
+            (types.is_float_dtype(dtype) or types.is_integer_dtype(dtype))
+            and not types.is_bool_dtype(dtype)
+        )
+    if type_name == "str":
+        return isinstance(dtype, pd.StringDtype)
+    if type_name in ("datetime", "date"):
+        return bool(types.is_datetime64_any_dtype(dtype))
+    return False
+
+
 def convert_cell_to_json_native(value: object) -> object:
     """A `json.dumps` default for frame cells: a numpy scalar becomes its Python
     equivalent via `.item()` (so a numeric cell survives as a JSON number rather
@@ -78,7 +193,7 @@ def compute_frames_fingerprint(frames: Sequence[pd.DataFrame]) -> str:
 
 
 def compute_frame_fingerprint(frame: pd.DataFrame) -> str:
-    """compute_short_hash over the canonical JSON of a WHOLE frame: its column
+    """compute_short_hash over a JSON dump of a WHOLE frame: its column
     labels in their own order, then its cells row by row in their own order,
     each cell collapsed through `collapse_null_forms` exactly as a row cell is.
 
@@ -88,14 +203,14 @@ def compute_frame_fingerprint(frame: pd.DataFrame) -> str:
     input is a genuinely different input and must not resolve to the same
     cached output. The frame's index is not part of the identity — it does not
     survive the parquet round trip the payload takes."""
-    canonical = {
+    payload = {
         "columns": [str(label) for label in frame.columns],
         "rows": [
             [collapse_null_forms(cell) for cell in row]
             for row in frame.itertuples(index=False, name=None)
         ],
     }
-    return compute_short_hash(json.dumps(canonical, separators=(",", ":"), default=str))
+    return compute_short_hash(json.dumps(payload, separators=(",", ":"), default=str))
 
 
 class FrameStore:

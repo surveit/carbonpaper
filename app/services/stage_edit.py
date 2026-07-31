@@ -13,7 +13,7 @@ from pathlib import Path
 
 from typing import Sequence
 
-from app.models import Stage, StageDraft
+from app.models import StageDraft, parse_stage
 from app.models.workflow import (
     detect_cycle,
     sort_stages_by_dependency,
@@ -75,7 +75,7 @@ def _merge_patch(target: object, patch: object) -> object:
 
 
 def _current_specs(project_dir: Path) -> dict[str, dict]:
-    """The workflow's current stages as ``{id: canonical spec dict}``.
+    """The workflow's current stages as ``{id: spec dict}``.
 
     A workflow may legitimately be EMPTY — a project holds no stage files until its
     first stage is added — and that reads as ``{}``, the starting point the first
@@ -93,10 +93,59 @@ def _current_specs(project_dir: Path) -> dict[str, dict]:
     return {stage.id: stage_to_spec_dict(stage) for stage in workflow.stages}
 
 
-def _canonicalize_spec(spec: dict) -> dict:
+# The config blocks whose behaviour is authored code, so a reviewer cannot read the
+# stage without prose standing in for it — the two that carry `summary`.
+_AUTHORED_CODE_BLOCKS = ("function", "filter")
+
+
+def _find_description_issues(candidate: dict) -> list[str]:
+    """Refuse to WRITE a code-carrying stage whose description is not fully
+    submitted ([] otherwise): `summary` must be non-blank, and `corner_cases` must
+    be PRESENT — an empty list is a valid answer, an absent key is not.
+
+    The asymmetry is the point. A step may genuinely have no awkward inputs, so
+    requiring a non-empty list would make an agent pad it and invent behaviour. But
+    letting the key be omitted makes "none" and "I did not consider it"
+    indistinguishable, and those are the two states a reviewer most needs told
+    apart. `corner_cases: []` is an author saying so on the record.
+
+    Enforced here rather than on the model, and rather than inside
+    `validate_workflow_draft`: the model keeps `summary` optional and the draft
+    validator is shared with the loader, so requiring it in either place would
+    refuse every stage stored before the field existed, and every frozen version,
+    at load time. This is the authoring boundary — every write, from the node
+    editor, the MCP tools and the compiler agent alike, funnels through `_apply` —
+    so a stage can only ARRIVE without a description, never be created without one.
+
+    A prose instruction in the type's contract notes asks for both; this is what
+    makes it true."""
+    for block_name in _AUTHORED_CODE_BLOCKS:
+        block = candidate.get(block_name)
+        if not isinstance(block, dict):
+            continue
+        issues = []
+        if not (block.get("summary") or "").strip():
+            issues.append(
+                f"`{block_name}.summary` is required: this stage's behaviour is authored "
+                f"code, and the person reviewing it reads prose, not Python. Write one "
+                f"or two plain sentences saying what the step does — the rule, not the "
+                f"implementation — in the same edit as the code."
+            )
+        if "corner_cases" not in block:
+            issues.append(
+                f"`{block_name}.corner_cases` must be submitted: one entry per input whose "
+                f"handling the summary does not state, each with the outcome it must "
+                f"produce. Send `[]` if this step genuinely has none — that is a valid "
+                f"answer, but it has to be said rather than left out."
+            )
+        return issues
+    return []
+
+
+def _strip_bookkeeping_keys(spec: dict) -> dict:
     """A submitted spec reduced to the keys the workflow stores — the form that
     goes into the in-memory `specs` map and onto disk."""
-    return {k: v for k, v in spec.items() if k not in node_review.CANONICAL_IGNORE_KEYS}
+    return {k: v for k, v in spec.items() if k not in node_review.HASH_IGNORED_KEYS}
 
 
 def _apply(project_dir: Path, specs: dict[str, dict], stage_id: str, candidate: dict) -> EditStageResult:
@@ -108,7 +157,7 @@ def _apply(project_dir: Path, specs: dict[str, dict], stage_id: str, candidate: 
     The writer reports only whether the write succeeded; it does not compute the
     node's review colour (content hash / approval state). A caller that needs the
     new colour re-derives it from the freshly-written stage."""
-    candidate = _canonicalize_spec(candidate)
+    candidate = _strip_bookkeeping_keys(candidate)
     if candidate.get("id") != stage_id:
         return EditStageResult(
             ok=False,
@@ -117,10 +166,11 @@ def _apply(project_dir: Path, specs: dict[str, dict], stage_id: str, candidate: 
 
     resulting = {**specs, stage_id: candidate}
     issues = validate_workflow_draft(list(resulting.values()))
+    issues += _find_description_issues(candidate)
     if issues:
         return EditStageResult(ok=False, issues=issues)
 
-    validated_stage = Stage.model_validate(candidate)
+    validated_stage = parse_stage(candidate)
     # Overwrite the stage's existing file if it has one; a new stage is named by
     # its id (file order is irrelevant — the workflow order is the input_ids DAG).
     compiled_dir = project_dir / "compiled"
@@ -196,7 +246,7 @@ def add_stage_specs(project_dir: Path, stages: Sequence[StageDraft]) -> AddStage
         if not outcome.ok:
             result.failed.append(StageFailure(stage.id, outcome.issues))
             continue
-        specs[stage.id] = _canonicalize_spec(spec)
+        specs[stage.id] = _strip_bookkeeping_keys(spec)
         result.added.append(stage.id)
     return result
 

@@ -1,0 +1,76 @@
+{# Macros for the two halves of an authored-code block. They live in a macro
+   file, rather than inline in _stage_executable.html, for one mechanical reason:
+   the host pulls that template in with {% include %}, which renders it without
+   exporting its macros — and `stage_code` has to be callable by the HOST, after
+   its sibling include of _stage_tests.html. That ordering is the point: a
+   non-engineer reviewer reads what the step does, then the examples that pin it
+   down, and only then the implementation. Both python_row_function /
+   python_frame_function / publish (stage.function) and filter_rows
+   (stage.filter) go through here, so the two read the same way.
+
+   stage_code(stage, function_code): function_code is the resolved source for a
+   `function` block (None when a module ref can't be found on disk); a filter's
+   code is inline on the block and needs no resolution. #}
+
+{# Prose carrying `backticks` around the column names it mentions, rendered with
+   the odd parts as inline code chips. The backticks are plain text in the data —
+   the authoring client writes them (see SUMMARY_DESCRIPTION), no stage ever emits
+   HTML — and every part is still escaped. Same treatment a figure's `basis` gets,
+   so a column name reads the same wherever it is named. #}
+{% macro prose_with_column_chips(text) %}{%
+  for part in text.split('`') %}{%
+    if loop.index0 is odd %}<code>{{ part }}</code>{% else %}{{ part }}{%
+    endif %}{%
+  endfor %}{% endmacro %}
+
+{# The corner cases the author stated: the inputs whose handling is not obvious
+   from the summary, each with the outcome it must produce. Folded, because the
+   summary is what a reviewer reads first and this is what they open when they want
+   to know how the awkward inputs are treated. Every entry is also handed to the
+   example deriver, so what is listed here is what the examples check. #}
+{% macro stage_corner_cases(cases) %}
+{% if cases %}
+<details class="stage-corners">
+  <summary>{{ cases|length }} corner case{% if cases|length != 1 %}s{% endif %}
+    <span class="muted">— inputs whose handling the summary does not state</span></summary>
+  <dl class="stage-corner-list">
+    {% for case in cases %}
+    <dt>{{ prose_with_column_chips(case.case) }}</dt>
+    <dd>{{ prose_with_column_chips(case.expected) }}</dd>
+    {% endfor %}
+  </dl>
+</details>
+{% endif %}
+{% endmacro %}
+
+{% macro stage_summary(text) %}
+{% if text %}
+<p class="stage-summary">{{ prose_with_column_chips(text) }}</p>
+{% else %}
+<p class="stage-summary missing muted"><em>No plain-language summary — this step can only be
+    reviewed by reading its code. Ask for one when the stage is next edited.</em></p>
+{% endif %}
+{% endmacro %}
+
+{% macro stage_code(stage, function_code) %}
+{% if stage.function %}
+<section class="exec-block code-block">
+    <details open>
+        <summary><h2>💻 Code</h2><span class="muted">the implementation of the summary above</span></summary>
+        {% if function_code %}
+        <pre class="code">{{ function_code }}</pre>
+        {% else %}
+        <p class="muted"><em>(function source not found on disk)</em></p>
+        {% endif %}
+    </details>
+</section>
+{% endif %}
+{% if stage.filter %}
+<section class="exec-block code-block">
+    <details open>
+        <summary><h2>💻 Code</h2><span class="muted">the predicate behind the summary above</span></summary>
+        <pre class="code">{{ stage.filter.code }}</pre>
+    </details>
+</section>
+{% endif %}
+{% endmacro %}

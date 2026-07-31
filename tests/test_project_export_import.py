@@ -2,8 +2,13 @@
 working copy through the service loaders into a WorkflowFile; import_project
 writes a WorkflowFile back through the service writers. The behavior worth
 covering end-to-end is that round trip (carried through actual JSON text —
-model_dump_json / model_validate_json, the form a real caller uses)."""
+WorkflowFile.to_json / model_validate_json, the form a real caller uses)."""
 from __future__ import annotations
+
+import json
+
+import pytest
+from pydantic import ValidationError
 
 from app.models import (
     Column,
@@ -13,10 +18,10 @@ from app.models import (
     NamedSchema,
     SchemaKind,
     SchemaLibrary,
-    Stage,
     StageType,
     TableSchema,
 )
+from app.models.stages.input_data import InputDataStage
 from app.services import data_model, node_review, project, versioning, workspace
 from app.services.loader import load_compiled_dir, stage_to_spec_dict, write_stage
 from app.services.project import WorkflowFile, export_project, import_project
@@ -30,7 +35,7 @@ _TINY_LIBRARY = SchemaLibrary(schemas=[NamedSchema(
 
 
 def test_round_trip_through_json_reproduces_the_source_and_mints_a_version(tmp_path):
-    """export_project -> model_dump_json -> model_validate_json ->
+    """export_project -> to_json -> model_validate_json ->
     import_project under a NEW name into a fresh workspace reproduces the
     source project's document, data model, and compiled stage, and mints
     exactly one version on import.
@@ -39,14 +44,19 @@ def test_round_trip_through_json_reproduces_the_source_and_mints_a_version(tmp_p
     docstring), so a fresh import always starts with a clean review slate —
     even though the source below has BOTH its data model and its one stage
     approved. Locked down explicitly so that scope doesn't silently drift
-    back to carrying approvals across the seam."""
+    back to carrying approvals across the seam.
+
+    A process has ONE workspace, so the two halves are two sequential states of
+    it — export out of the source root, repoint, import into the target root —
+    which is what a real export/import across machines actually does."""
     source_examples = tmp_path / "source_examples"
     target_examples = tmp_path / "target_examples"
     source_examples.mkdir()
     target_examples.mkdir()
+    workspace.set_projects_dir(source_examples)
 
     name = project.create_project(
-        "Round Trip Source", "Trace the shell companies.", source="test", examples_dir=source_examples)
+        "Round Trip Source", "Trace the shell companies.", source="test")
     pdir = source_examples / name
 
     data_model.write_data_model(pdir, _TINY_LIBRARY)
@@ -60,7 +70,7 @@ def test_round_trip_through_json_reproduces_the_source_and_mints_a_version(tmp_p
 
     compiled = pdir / "compiled"
     compiled.mkdir()
-    stage = Stage(
+    stage = InputDataStage(
         id="load_entities", name="Load Entities", type=StageType.input_data,
         connector=Connector(kind=ConnectorKind.file, params={"format": "csv"}),
         # The `entity` schema this project's data model declares.
@@ -83,10 +93,13 @@ def test_round_trip_through_json_reproduces_the_source_and_mints_a_version(tmp_p
     source_decisions = node_review.load_node_decisions(pdir)
     assert node_review.approval_state_for(stage_to_spec_dict(stage), source_decisions)["state"] == "approved"
 
-    exported = export_project(name, examples_dir=source_examples)
-    wf = WorkflowFile.model_validate_json(exported.model_dump_json())
+    exported = export_project(name)
+    wf = WorkflowFile.model_validate_json(exported.to_json())
 
-    imported_name = import_project(wf, name="round_trip_target", examples_dir=target_examples)
+    # The WorkflowFile is now fully in memory — the source root is no longer
+    # needed, so the process moves to the target workspace to import into it.
+    workspace.set_projects_dir(target_examples)
+    imported_name = import_project(wf, name="round_trip_target")
     target_pdir = target_examples / imported_name
 
     assert (target_pdir / "document.md").read_text(encoding="utf-8") == "Trace the shell companies."
@@ -110,3 +123,44 @@ def test_round_trip_through_json_reproduces_the_source_and_mints_a_version(tmp_p
         "approved": 0, "rejected": 0, "edited_stale": 0, "unreviewed": 1,
         "total": 1, "approved_pct": 0.0,
     }
+
+
+def test_a_bundle_from_before_per_type_stages_still_imports(tmp_path):
+    """A bundle exported by an older build carries every config block on every
+    stage, null for the ones its type does not use. Those keys are unknown on a
+    per-type stage model, so WorkflowFile drops the null ones on the way in —
+    a file already on disk must not become unimportable."""
+    legacy = json.dumps({
+        "name": "legacy", "document": "# doc", "model": "m", "source": "s",
+        "data_model": _TINY_LIBRARY.model_dump(mode="json"),
+        "stages": [{
+            "id": "load", "type": "input_data", "name": "Load",
+            "connector": {"kind": "file", "params": {"format": "csv"}},
+            "output_schema": {"columns": [{"name": "entity_id", "type": "str", "nullable": False}]},
+            "llm": None, "function": None, "join": None, "aggregate": None,
+            "queue": None, "publish": None, "union": None, "filter": None,
+        }],
+    })
+    wf = WorkflowFile.model_validate_json(legacy)
+    assert [stage.id for stage in wf.stages] == ["load"]
+    assert wf.stages[0].type == StageType.input_data
+
+
+def test_a_non_null_foreign_config_block_is_still_refused(tmp_path):
+    """Only NULL blocks are dropped: an input_data stage carrying a populated
+    `llm:` block is a real error and must not be silently discarded."""
+    bundle = json.dumps({
+        "name": "bad", "document": "# doc", "model": "m", "source": "s",
+        "data_model": _TINY_LIBRARY.model_dump(mode="json"),
+        "stages": [{
+            "id": "load", "type": "input_data", "name": "Load",
+            "connector": {"kind": "file", "params": {"format": "csv"}},
+            "output_schema": {"columns": [{"name": "entity_id", "type": "str", "nullable": False}]},
+            "llm": {"prompt_instructions": "do a thing"},
+        }],
+    })
+    with pytest.raises(ValidationError) as caught:
+        WorkflowFile.model_validate_json(bundle)
+    assert [(err["loc"], err["type"]) for err in caught.value.errors()] == [
+        (("stages", 0, "input_data", "llm"), "extra_forbidden")
+    ]

@@ -2,12 +2,12 @@
 chronological story/graph payload the template renders."""
 from __future__ import annotations
 
-from app.models import Stage
+from app.models import parse_stage, Stage
 from app.runtime.trace_view import build_trace_view
 
 
 def _stage(data: dict) -> Stage:
-    return Stage.model_validate(data)
+    return parse_stage(data)
 
 
 # The columns the traced rows carry: seeds emits facility_id, enrich adds score.

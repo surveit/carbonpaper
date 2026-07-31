@@ -12,14 +12,26 @@ from app.core.llm_sdk import CLI_PATH
 
 __all__ = [
     "CLAUDE_BIN", "DEFAULT_MODEL", "DEFAULT_PARALLEL", "DEFAULT_TIMEOUT_S",
+    "RESEARCH_MAX_TURNS", "RESEARCH_TIMEOUT_S",
     "LLMError", "agent_available", "require_agent_backend",
 ]
 
 # ── Config knobs (env-overridable) ───────────────────────────────────────────
 CLAUDE_BIN = shutil.which("claude") or CLI_PATH
-DEFAULT_MODEL = os.environ.get("CW_LLM_MODEL", "haiku")
-DEFAULT_PARALLEL = int(os.environ.get("CW_LLM_PARALLEL", "4"))
-DEFAULT_TIMEOUT_S = int(os.environ.get("CW_LLM_TIMEOUT_S", "180"))
+DEFAULT_MODEL = os.environ.get("CARBONPAPER_LLM_MODEL", "haiku")
+DEFAULT_PARALLEL = int(os.environ.get("CARBONPAPER_LLM_PARALLEL", "4"))
+DEFAULT_TIMEOUT_S = int(os.environ.get("CARBONPAPER_LLM_TIMEOUT_S", "180"))
+
+# A stage granted research tools works on a completely different clock: it searches,
+# fetches documents, and reads them before it can answer. The 180s row timeout above
+# would kill every such row, so research rows get their own budget.
+RESEARCH_TIMEOUT_S = int(os.environ.get("CW_LLM_RESEARCH_TIMEOUT_S", "3600"))
+# Every search and fetch costs a turn, so the submit-only cap (max_attempts + 2)
+# would end the run mid-investigation.
+RESEARCH_MAX_TURNS = int(os.environ.get("CW_LLM_RESEARCH_MAX_TURNS", "80"))
+# NOTE: research rows still run at DEFAULT_PARALLEL. Per-stage parallelism would
+# need plumbing through LLMTransformHandler, which fixes it at construction; not
+# a correctness issue, since cost is per row either way.
 
 
 def agent_available() -> bool:

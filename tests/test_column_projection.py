@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from app.models import Stage
+from app.models import parse_stage
 from app.models.stage import StageType
 from app.runtime.context import RunContext, RunIdentity
 from app.runtime.stages import HANDLERS
@@ -16,7 +16,7 @@ from conftest import contribution_of, make_run_context
 def _llm_stage(input_columns, output_columns, pk=("id",)):
     """A valid strictly-1:1 llm_transform stage — input schema and output_schema
     share a primary_key and output ⊇ input, as Stage validation requires."""
-    return Stage.model_validate({
+    return parse_stage({
         "id": "evidence_extraction", "name": "Extract evidence", "type": "llm_transform",
         "inputs": [{"id": "load", "schema": {"columns": input_columns, "primary_key": list(pk)}}],
         "output_schema": {"columns": output_columns, "primary_key": list(pk)},
@@ -78,7 +78,7 @@ def _queue_stage(output_schema, flt=None):
     queue = {}
     if flt is not None:
         queue["filter"] = flt
-    return Stage.model_validate({
+    return parse_stage({
         "id": "review", "name": "Human review", "type": "human_review_queue",
         "inputs": [{"id": "scored", "schema": {"columns": _SCORED_COLUMNS}}],
         "output_schema": output_schema,

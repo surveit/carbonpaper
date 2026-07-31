@@ -9,7 +9,6 @@ import pandas as pd
 from fastapi.testclient import TestClient
 
 import app.runtime.runner as runner
-import app.web.loading as loading
 from app.main import app
 from app.runtime.runner import prepare_run, run_prepared
 from app.runtime.stages import llm_transform as lt
@@ -17,6 +16,7 @@ from app.services import review, versioning
 from app.core.stage_cache import StageCacheEntry
 from app.services.versioning import create_version_from_disk
 from app.models import RowReviewDecision
+from app.services import workspace
 
 PROJECT = "queue_route_journey"
 
@@ -114,7 +114,7 @@ def _build_and_halt(tmp_path, monkeypatch):
     both rows snapshotted. Returns (project_dir, run_id, run_dir, snapshot,
     fingerprints) — fingerprints is the sidecar dict, its `input_fingerprints`
     list POSITIONALLY aligned to `snapshot`'s row order."""
-    monkeypatch.setattr(loading, "EXAMPLES_DIR", tmp_path)
+    workspace.set_projects_dir(tmp_path)
     monkeypatch.setattr(
         lt, "call_llm", lambda stage_id, llm_config, row, **kw: {"score": 1}
     )
@@ -331,7 +331,7 @@ def test_e2e_decide_approve_modify_and_reject_then_resume_completes(tmp_path, mo
     and the rejection recorded on it. No decisions/ directory is created under
     the project dir — every write goes through the cache."""
     project = "queue_route_e2e"
-    monkeypatch.setattr(loading, "EXAMPLES_DIR", tmp_path)
+    workspace.set_projects_dir(tmp_path)
 
     project_dir = tmp_path / project
     _write_stage(project_dir, "01_load.json", _e2e_load_stage(project_dir))

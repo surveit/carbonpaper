@@ -1,7 +1,7 @@
 """Rendering of run status onto the workflow mermaid graph."""
 from __future__ import annotations
 
-from app.models import Stage
+from app.models import parse_stage
 from app.web.diagrams import build_mermaid_graph
 
 
@@ -25,7 +25,7 @@ def test_plain_stage_with_no_status_or_review_renders_the_bare_node() -> None:
     graph = build_mermaid_graph(stages, "demo")
     assert graph.startswith("flowchart LR")
     assert '    s1["<b>⬆️ Stage One</b><br/><span' in graph
-    assert 'click s1 call loadStage("s1") "Open stage"' in graph
+    assert 'click s1 call dvNode("s1") "Open stage"' in graph
     assert "]:::input" in graph
     assert "stroke:" not in graph.split("classDef")[0]
     assert "    classDef custom fill:#fde8e8,stroke:#cc3333,color:#000" in graph
@@ -92,7 +92,7 @@ def test_typed_stage_input_renders_the_same_as_the_equivalent_draft_dict(tmp_pat
     """build_mermaid_graph also accepts real Stage objects (the isinstance(s,
     Stage) branch of _node_view) — pinned so the two input shapes stay
     interchangeable."""
-    stage = Stage.model_validate({
+    stage = parse_stage({
         "id": "load", "name": "Load", "type": "input_data",
         "connector": {"kind": "file",
                       "params": {"path": str(tmp_path / "d.csv"), "format": "csv"}},

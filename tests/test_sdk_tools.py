@@ -23,7 +23,7 @@ from app.services import workspace
 
 @pytest.fixture(autouse=True)
 def examples_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    monkeypatch.setattr(workspace, "EXAMPLES_DIR", tmp_path)
+    workspace.set_projects_dir(tmp_path)
     return tmp_path
 
 
@@ -60,7 +60,7 @@ def test_allowed_names_cover_every_tool(examples_root: Path) -> None:
     _seed(examples_root, "congresswatch")
     _server, allowed, _tools = _build("congresswatch")
     assert set(allowed) == {f"mcp__tools__{n}" for n in TOOL_SCHEMAS}
-    assert len(allowed) == 12
+    assert len(allowed) == 14
 
 
 def test_read_stage_handler_returns_text_content(examples_root: Path) -> None:

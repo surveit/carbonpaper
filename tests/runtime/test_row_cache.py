@@ -11,7 +11,7 @@ from app.core.stage_cache import (
     StageCacheEntry,
     compute_row_fingerprint,
 )
-from app.models import Stage
+from app.models import parse_stage, Stage
 from app.models.stage import StageType
 from app.runtime.context import RunIdentity
 from app.runtime.stages import HANDLERS
@@ -30,7 +30,7 @@ _DOUBLING_CODE = "def transform(row):\n    return {**row, 'y': row['x'] * 2}\n"
 
 
 def _row_stage(code: str = _DOUBLING_CODE, *, cache: bool = True) -> Stage:
-    return Stage.model_validate({
+    return parse_stage({
         "id": "double", "name": "Double", "type": "python_row_function",
         "inputs": [{"id": "src", "schema": {"columns": [{"name": "x", "type": "int"}]}}],
         "cache": cache,
@@ -41,7 +41,7 @@ def _row_stage(code: str = _DOUBLING_CODE, *, cache: bool = True) -> Stage:
 
 
 def _llm_stage(*, batch_size: int = 1, instructions: str = "score it") -> Stage:
-    return Stage.model_validate({
+    return parse_stage({
         "id": "score", "name": "Score", "type": "llm_transform",
         "inputs": [{"id": "src", "schema": {
             "columns": [{"name": "x", "type": "int"}], "primary_key": ["x"]}}],

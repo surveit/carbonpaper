@@ -6,7 +6,7 @@ import pandas as pd
 import pytest
 
 from app.core.errors import NoWorkflowTestSourceError, NoWorkflowTestVersionError
-from app.models import Stage
+from app.models import parse_stage
 from app.services import workspace
 from app.services.workflow_test import run_workflow_test
 from app.services.versioning import WorkflowVersion
@@ -78,7 +78,7 @@ def _seed(demo, stage_dicts, *, version_id="v1", published=False, created_at="20
     WorkflowVersion(
         id=f"{demo.name}/{version_id}", version_id=version_id, created_at=created_at,
         message="seed", reviewer="test", published=published,
-        stages=[Stage.model_validate(s) for s in stage_dicts],
+        stages=[parse_stage(s) for s in stage_dicts],
     ).save()
 
 
@@ -87,7 +87,7 @@ def demo(tmp_path, monkeypatch):
     """A `demo` project dir with a 4-row source file bound at an absolute path,
     reachable by name through the workspace (pointed at tmp_path). The workflow-test
     service takes the project NAME `demo` and resolves it to this directory."""
-    monkeypatch.setattr(workspace, "EXAMPLES_DIR", tmp_path)
+    workspace.set_projects_dir(tmp_path)
     demo = tmp_path / "demo"
     (demo / "data").mkdir(parents=True)
     pd.DataFrame({"doc_id": ["a", "b", "c", "d"], "score": [1, -1, 2, -3]}).to_csv(
@@ -153,7 +153,7 @@ def test_workflow_test_reports_a_stage_error_as_failure(demo):
     assert result["ok"] is False
     assert "boom" in result["error"]
     manifest = json.loads(
-        (demo / "runs" / result["run_id"] / "manifest.json").read_text("utf-8"))
+        (demo / "runs" / result["run_id"] / "manifest.json").read_text(encoding="utf-8"))
     assert manifest["status"] == "errors"
 
 
@@ -190,7 +190,7 @@ def test_workflow_test_raises_when_no_source_stage(demo):
     WorkflowVersion(
         id=f"{demo.name}/v1", version_id="v1", created_at="2026-07-10T00:00:00",
         message="seed", reviewer="test", published=True,
-        stages=[Stage.model_validate(standalone)],
+        stages=[parse_stage(standalone)],
     ).save()
     with pytest.raises(NoWorkflowTestSourceError):
         run_workflow_test("demo")

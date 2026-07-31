@@ -28,7 +28,7 @@ def _synchronous_background(monkeypatch):
 def project_dir(tmp_path, monkeypatch):
     """A workspace pointed at tmp_path with one project dir `proj/`; the service
     resolves the name `proj` to this directory."""
-    monkeypatch.setattr(workspace, "EXAMPLES_DIR", tmp_path)
+    workspace.set_projects_dir(tmp_path)
     return tmp_path / _PROJECT
 
 

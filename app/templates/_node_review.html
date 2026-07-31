@@ -7,7 +7,7 @@
    Context (GET /project/{project}/node/{id}/review-partial):
      project      — str
      stage        — the loaded Stage (.id .type .name .inputs[].table_schema
-                    .output_schema + the transform handle: llm/function/join/…)
+                    .output_schema + the transform config block: llm/function/join/…)
      review       — approval_state_for(stage, …) {state, current_hash, matched_decision}
      raw_json     — stage_to_json(stage) for the Spec editor
      function_code — python source for a function stage (may be None)
@@ -18,6 +18,7 @@
                     button in _stage_tests.html (python transforms only)
 #}
 {% from "_schema_table.html" import schema_table %}
+{% from "_stage_code.html" import stage_code %}
 {% set state = review.state %}
 {% set belief_label = {'approved':'approved','unreviewed':'unreviewed','rejected':'rejected','edited_stale':'edited · stale'} %}
 
@@ -77,8 +78,11 @@
 
     {# ── Transform: how this step computes (+ eval / review routing) ── #}
     <div class="pane" data-pane="transform">
+      {# summary (in the executable block) → examples → code: the code is last
+         because it is the least readable statement of what this step does. #}
       {% include "_stage_executable.html" %}
       {% include "_stage_tests.html" %}
+      {{ stage_code(stage, function_code) }}
       {% if stage.eval %}
       <section class="eval-block">
         <h2>📊 Eval</h2>

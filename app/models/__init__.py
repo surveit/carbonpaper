@@ -2,10 +2,21 @@
 
 Import from `app.models` (this aggregator) for the stable public surface.
 """
+from app.models.compiler_warnings import (
+    CompilerWarningReport,
+    find_stage_compiler_warnings,
+    find_workflow_compiler_warnings,
+)
+from app.models.stages.warnings import CompilerWarning
 from app.models.coverage import Coverage
-from app.models.node_contract_notes import HUMAN_REVIEW_QUEUE_CONTRACT_NOTE
+from app.models.errors import StepRefused
+from app.models.node_contract_notes import (
+    CODE_SUMMARY_CONTRACT_NOTE,
+    HUMAN_REVIEW_QUEUE_CONTRACT_NOTE,
+)
 from app.models.schema import (
     Column,
+    FunctionKind,
     JSON_COLUMN_TYPE,
     LIST_JSON_COLUMN_TYPE,
     RANGE_UNBOUNDED_MARKER,
@@ -15,32 +26,29 @@ from app.models.schema import (
     is_valid_column_type,
 )
 from app.models.stage import (
-    AggFormula,
-    AggregateConfig,
-    AggregationOp,
+    ReviewConfig,
+    Stage,
+    StageBase,
+    StageDraft,
+    StageInput,
+    StageType,
+    parse_stage,
+    validate_stage,
+)
+from app.models.stages.aggregate import AggFormula, AggregateConfig, AggregationOp
+from app.models.stages.filter_rows import FilterConfig
+from app.models.stages.human_review_queue import QueueConfig, RowReviewDecision
+from app.models.stages.input_data import (
     Connector,
     ConnectorKind,
     FileFormat,
-    FilterConfig,
-    FunctionKind,
-    StageInput,
-    JoinConfig,
-    JoinKey,
-    JoinType,
-    LLMConfig,
-    PublishConfig,
-    PublishFormat,
-    PythonFunction,
-    QueueConfig,
-    ReviewConfig,
-    RowReviewDecision,
-    Stage,
-    StageDraft,
-    StageType,
-    UnionConfig,
     XlsxReadParams,
-    validate_stage,
 )
+from app.models.stages.join import JoinConfig, JoinKey
+from app.models.stages.llm_transform import LLMConfig
+from app.models.stages.publish import PublishConfig, PublishFormat
+from app.models.stages.union import UnionConfig
+from app.models.stages.code import PythonFunction
 from app.models.stages.stage_tests import StageTest
 from app.models.workflow import (
     Workflow,
@@ -94,7 +102,6 @@ from app.models.schema import SCALAR_COLUMN_TYPES
 # Kind/type vocabularies as string sets, derived from the enums so they stay in
 # lockstep with the models the runtime validates against.
 SCHEMA_KINDS: set[str] = {k.value for k in SchemaKind}
-JOIN_TYPES: set[str] = {j.value for j in JoinType}
 
 # The connector kinds the compiler may EMIT and the prompt advertises to the LLM
 # (the six listed below). This is deliberately broader than the ConnectorKind
@@ -104,15 +111,16 @@ CONNECTOR_KINDS: set[str] = {
     "file", "http", "scrape", "api", "manual_upload", "sql",
 }
 
-# ── The seven node types and their handle-block contract ─────────────────────
+# ── The node types as prompt copy ────────────────────────────────────────────
 # app.agents.compiler.prompt renders this into the editing agent's system prompt:
-# type -> {summary, handle, required, optional, min_inputs, requires_inputs,
-# also_requires?}. The Stage model does not expose this rendering shape, so the
-# spec is kept here as plain data purely for prompt rendering.
+# type -> {summary, blocks, required, optional, min_inputs, requires_inputs}.
+# `blocks` names the config blocks that type's stage model requires. The models
+# do not expose this rendering shape, so the copy is kept here as plain data
+# purely for prompt rendering.
 NODE_TYPES: dict[str, dict[str, _Any]] = {
     "input_data": {
         "summary": "Declares a source dataset with a typed schema.",
-        "handle": "connector",
+        "blocks": ["connector"],
         "requires_inputs": False,
         "min_inputs": 0,
         "required": ["kind"],
@@ -131,7 +139,7 @@ NODE_TYPES: dict[str, dict[str, _Any]] = {
     },
     "llm_transform": {
         "summary": "Row-by-row LLM call producing structured output.",
-        "handle": "llm",
+        "blocks": ["llm"],
         "requires_inputs": True,
         "min_inputs": 1,
         "required": ["prompt_data_template"],
@@ -153,13 +161,14 @@ NODE_TYPES: dict[str, dict[str, _Any]] = {
     },
     "python_row_function": {
         "summary": "Deterministic Python run once per row: one row in → one row out (cannot fan rows out/in or reorder).",
-        "handle": "function",
+        "blocks": ["function"],
         "requires_inputs": True,
         "min_inputs": 1,
         "required": ["kind"],
         "optional": ["module", "function", "code", "requirements"],
         "notes": (
-            "Takes exactly ONE input — two or more is a join or a python_frame_function. "
+            "Takes exactly ONE input — to combine data from another input use enrich/expand, "
+            "or python_frame_function. "
             "`transform(row)` is handed a plain dict and must return a plain dict, and that "
             "dict IS the output row: a key you do not return is absent from the output, so "
             "carry columns through explicitly (`return {**row, ...}`). The function is shown "
@@ -168,7 +177,7 @@ NODE_TYPES: dict[str, dict[str, _Any]] = {
     },
     "python_frame_function": {
         "summary": "Deterministic Python over the whole dataframe(s); may reshape (dedup, pivot, multi-input merge).",
-        "handle": "function",
+        "blocks": ["function"],
         "requires_inputs": True,
         "min_inputs": 1,
         "required": ["kind"],
@@ -181,24 +190,54 @@ NODE_TYPES: dict[str, dict[str, _Any]] = {
             "row-position provenance trail an upstream row-mapped stage preserves."
         ),
     },
-    "join": {
-        "summary": "Combine two or more upstream dataframes on keys.",
-        "handle": "join",
+    "enrich": {
+        "summary": "Adds reference columns to each subject row; the reference must be unique on the key (many-to-one).",
+        "blocks": ["join"],
         "requires_inputs": True,
         "min_inputs": 2,
         "required": ["keys"],
-        "optional": ["type", "select", "on"],
+        "optional": ["select"],
         "notes": (
-            "Merges the FIRST TWO inputs only: inputs[0] is left, inputs[1] is right, and a "
-            "third declared input is never merged in. A right column whose name a left column "
-            "shares arrives as `<name>_r`; a key pair with the SAME name on both sides "
-            "collapses into one column. `select` and output_schema may name only columns the "
-            "merge produces — anything else is rejected when the stage is saved."
+            "Takes EXACTLY TWO inputs: inputs[0] is the SUBJECT, inputs[1] is the REFERENCE. "
+            "Row count and order come out unchanged, because the reference is required to hold "
+            "at most ONE row per key: the runtime asks pandas to VERIFY that, so a reference "
+            "that repeats a key FAILS THE RUN rather than silently multiplying rows. Use "
+            "`expand` when the fan-out is intended. Every subject row survives — an unmatched "
+            "one carries nulls for the reference columns — and an unmatched reference row is "
+            "dropped. This stage NEVER drops a subject row: to drop rows (e.g. inner-join "
+            "semantics), follow it with a `filter_rows` on a reference column being non-null, "
+            "which records the row loss instead of hiding it. "
+            "A reference column whose name a subject column shares arrives as `<name>_r`; a key "
+            "pair with the SAME name on both sides collapses into one column. `select` and "
+            "output_schema may name only columns the join produces — anything else is rejected "
+            "when the stage is saved."
+        ),
+    },
+    "expand": {
+        "summary": "Joins reference rows into each subject row, fanning one subject row out to several (many-to-many).",
+        "blocks": ["join"],
+        "requires_inputs": True,
+        "min_inputs": 2,
+        "required": ["keys"],
+        "optional": ["select"],
+        "notes": (
+            "Takes EXACTLY TWO inputs: inputs[0] is the SUBJECT, inputs[1] is the REFERENCE. "
+            "The reference MAY hold several rows per key, so one subject row may come out as "
+            "several — deliberate fan-out. Use `enrich` instead when the reference is meant to "
+            "be unique on the key and a repeat is a bug you want caught. Every subject row "
+            "survives — an unmatched one carries nulls for the reference columns — and an "
+            "unmatched reference row is dropped. This stage NEVER drops a subject row: to drop "
+            "rows (e.g. inner-join semantics), follow it with a `filter_rows` on a reference "
+            "column being non-null, which records the row loss instead of hiding it. "
+            "A reference column whose name a subject column shares arrives as `<name>_r`; a key "
+            "pair with the SAME name on both sides collapses into one column. `select` and "
+            "output_schema may name only columns the join produces — anything else is rejected "
+            "when the stage is saved."
         ),
     },
     "aggregate": {
         "summary": "Structured group-by aggregation.",
-        "handle": "aggregate",
+        "blocks": ["aggregate"],
         "requires_inputs": True,
         "min_inputs": 1,
         "required": ["group_by", "aggregations"],
@@ -214,7 +253,7 @@ NODE_TYPES: dict[str, dict[str, _Any]] = {
     },
     "human_review_queue": {
         "summary": "Pulls flagged rows for human decision; halts the run.",
-        "handle": "queue",
+        "blocks": ["queue"],
         "requires_inputs": True,
         "min_inputs": 1,
         "required": [],
@@ -230,8 +269,7 @@ NODE_TYPES: dict[str, dict[str, _Any]] = {
     },
     "publish": {
         "summary": "Render a final artifact (html, json, csv, cards).",
-        "handle": "publish",
-        "also_requires": ["function"],
+        "blocks": ["publish", "function"],
         "requires_inputs": True,
         "min_inputs": 1,
         "required": [],
@@ -251,7 +289,7 @@ NODE_TYPES: dict[str, dict[str, _Any]] = {
     },
     "union": {
         "summary": "Concatenate two or more upstream dataframes with an identical schema.",
-        "handle": "union",
+        "blocks": ["union"],
         "requires_inputs": True,
         "min_inputs": 2,
         "required": [],
@@ -265,7 +303,7 @@ NODE_TYPES: dict[str, dict[str, _Any]] = {
     },
     "filter_rows": {
         "summary": "Keep the rows an authored predicate returns True for.",
-        "handle": "filter",
+        "blocks": ["filter"],
         "requires_inputs": True,
         "min_inputs": 1,
         "required": ["code"],
@@ -281,17 +319,31 @@ NODE_TYPES: dict[str, dict[str, _Any]] = {
     },
 }
 
+# The types whose config carries authored code all owe a plain-language
+# `summary`. Folded into their notes here rather than repeated in each entry, so
+# every renderer of NODE_TYPES (the MCP instructions, the editing agent's
+# catalog) states the obligation without one of them being able to forget it.
+CODE_CARRYING_TYPES = ("python_row_function", "python_frame_function", "publish", "filter_rows")
+for _type_name in CODE_CARRYING_TYPES:
+    _spec = NODE_TYPES[_type_name]
+    _spec["notes"] = f"{_spec['notes']} {CODE_SUMMARY_CONTRACT_NOTE}"
+    _spec["optional"] = [*_spec["optional"], "summary"]
+
 NODE_TYPE_NAMES: set[str] = set(NODE_TYPES)
 
 __all__ = [
     "Coverage",
-    "StageType", "ConnectorKind", "FileFormat", "AggFormula", "JoinType",
+    "StepRefused",
+    "StageType", "ConnectorKind", "FileFormat", "AggFormula",
     "FunctionKind", "PublishFormat", "is_valid_column_type",
     "SourceRef", "Column", "TableSchema", "Connector", "LLMConfig",
+    "CompilerWarning", "CompilerWarningReport",
+    "find_stage_compiler_warnings", "find_workflow_compiler_warnings",
     "PythonFunction", "JoinKey", "JoinConfig", "AggregationOp",
     "AggregateConfig", "QueueConfig", "PublishConfig", "ReviewConfig",
     "RowReviewDecision", "UnionConfig", "FilterConfig",
-    "StageInput", "Stage", "StageDraft", "StageTest", "XlsxReadParams", "validate_stage",
+    "StageInput", "Stage", "StageBase", "StageDraft", "StageTest", "XlsxReadParams",
+    "parse_stage", "validate_stage",
     "Workflow", "parse_workflow", "validate_workflow", "validate_workflow_draft",
     "validate_unique_ids", "validate_inputs_resolve", "detect_cycle",
     "validate_publish_is_terminal", "validate_edge_schemas",
@@ -304,9 +356,10 @@ __all__ = [
     "StageOutputOverride", "ExpectedOutput", "ScoringMetric", "CodeScorer", "EvalConfig",
     "EvalRunSettings", "EvalRun",
     # compat vocabularies (rendered into the authoring prompts)
-    "SCALAR_COLUMN_TYPES", "SCHEMA_KINDS", "JOIN_TYPES", "CONNECTOR_KINDS",
+    "SCALAR_COLUMN_TYPES", "SCHEMA_KINDS", "CONNECTOR_KINDS",
     "NODE_TYPES", "NODE_TYPE_NAMES", "HUMAN_REVIEW_QUEUE_CONTRACT_NOTE",
-    # individual column-type comparison handles
+    "CODE_SUMMARY_CONTRACT_NOTE", "CODE_CARRYING_TYPES",
+    # individual column-type comparison constants
     "STR_COLUMN_TYPE", "JSON_COLUMN_TYPE", "LIST_JSON_COLUMN_TYPE",
     "RANGE_UNBOUNDED_MARKER",
 ]

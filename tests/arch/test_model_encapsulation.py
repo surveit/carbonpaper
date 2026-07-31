@@ -236,12 +236,12 @@ def test_find_mutation_sites_ignores_a_plain_read() -> None:
 def test_find_source_files_excludes_owner_and_exempt_paths(tmp_path: Path) -> None:
     owner_dir = tmp_path / "core" / "models"
     owner_dir.mkdir(parents=True)
-    (owner_dir / "workflow.py").write_text("")
+    (owner_dir / "workflow.py").write_text("", encoding="utf-8")
     exempt_file = tmp_path / "services" / "drafts.py"
     exempt_file.parent.mkdir(parents=True)
-    exempt_file.write_text("")
+    exempt_file.write_text("", encoding="utf-8")
     other_file = tmp_path / "services" / "runner.py"
-    other_file.write_text("")
+    other_file.write_text("", encoding="utf-8")
     rule = ProtectedAttributeRule(
         attribute="stages",
         owner=owner_dir,
@@ -254,7 +254,7 @@ def test_find_source_files_excludes_owner_and_exempt_paths(tmp_path: Path) -> No
 def test_find_source_files_raises_when_scope_is_empty(tmp_path: Path) -> None:
     owner_dir = tmp_path / "only_file_lives_here"
     owner_dir.mkdir(parents=True)
-    (owner_dir / "m.py").write_text("")
+    (owner_dir / "m.py").write_text("", encoding="utf-8")
     rule = ProtectedAttributeRule(attribute="stages", owner=owner_dir, rationale="test")
     with pytest.raises(ValueError, match="governs no source files"):
         find_source_files(tmp_path, rule)

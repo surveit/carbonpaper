@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.models import Stage
+from app.models import Stage, StageBase
 from app.core.run_status import StageStatus
 
 
@@ -16,7 +16,8 @@ TYPE_CLASS = {
     "llm_transform": "llm",
     "python_row_function": "python",
     "python_frame_function": "python",
-    "join": "join",
+    "enrich": "join",
+    "expand": "join",
     "aggregate": "aggregate",
     "human_review_queue": "human",
     "publish": "publish",
@@ -27,7 +28,8 @@ TYPE_GLYPH = {
     "llm_transform": "✨",
     "python_row_function": "🔂",
     "python_frame_function": "🧨",
-    "join": "🔗",
+    "enrich": "🔗",
+    "expand": "🌿",
     "aggregate": "📊",
     "human_review_queue": "👤",
     "publish": "📤",
@@ -219,7 +221,7 @@ def _node_view(s: Stage | dict[str, Any]) -> dict[str, Any]:
     project shell's workflow section passes draft dicts straight off disk (which may
     not yet validate) — both render the same graph. `input_ids` normalises the
     `inputs` shorthand (bare id string or {id: ...}) the Stage model also accepts."""
-    if isinstance(s, Stage):
+    if isinstance(s, StageBase):
         return {
             "id": s.id,
             "name": s.name,
@@ -311,15 +313,15 @@ _STATUS_STROKE: dict[str, tuple[str, str]] = {
 def _render_workflow_node_lines(
     n: dict[str, Any], status_by_id: dict[str, str], review_by_id: dict[str, str]
 ) -> list[str]:
-    """One node's flowchart declaration, click handler, and (if a run status
-    or node-review belief applies) a stroke-override `style` line."""
+    """One node's flowchart declaration, click handler (always the one dispatcher,
+    static/diagram_nodes.js), and (if a status/belief applies) a `style` line."""
     sid = n["id"]
     stype = n["type"]
     status = status_by_id.get(sid)
     label = _build_workflow_node_label(n, status)
     lines = [
         f"    {sid}[{label}]:::{TYPE_CLASS.get(stype, 'custom')}",
-        f'    click {sid} call loadStage("{sid}") "Open stage"',
+        f'    click {sid} call dvNode("{sid}") "Open stage"',
     ]
     stroke_line = _resolve_stroke_line(sid, status, review_by_id.get(sid))
     if stroke_line is not None:

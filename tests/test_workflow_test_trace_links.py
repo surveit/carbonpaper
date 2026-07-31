@@ -10,7 +10,7 @@ import json
 import pandas as pd
 import pytest
 
-from app.models import Stage
+from app.models import parse_stage
 from app.services import workspace
 from app.services.versioning import WorkflowVersion
 from app.services.workflow_test import run_workflow_test
@@ -43,8 +43,7 @@ _PUBLISH = {
 
 @pytest.fixture
 def demo(tmp_path, monkeypatch):
-    monkeypatch.setattr(workspace, "EXAMPLES_DIR", tmp_path)
-    monkeypatch.setattr(loading, "EXAMPLES_DIR", tmp_path)
+    workspace.set_projects_dir(tmp_path)
     demo = tmp_path / "demo"
     (demo / "data").mkdir(parents=True)
     pd.DataFrame({"doc_id": ["a", "b"]}).to_csv(demo / "data" / "rows.csv", index=False)
@@ -54,7 +53,7 @@ def demo(tmp_path, monkeypatch):
     WorkflowVersion(
         id="demo/v1", version_id="v1", created_at="2026-07-10T00:00:00",
         message="seed", reviewer="test", published=False,
-        stages=[Stage.model_validate(s) for s in (load, _PUBLISH)],
+        stages=[parse_stage(s) for s in (load, _PUBLISH)],
     ).save()
     return demo
 
@@ -75,7 +74,7 @@ def test_publish_stage_trace_links_works_in_a_workflow_test(demo):
 
     # The URL resolves through the SAME route a production run's trace links use
     # — reachable because the workflow test wrote a real manifest under runs/.
-    manifest = json.loads((demo / "runs" / run_id / "manifest.json").read_text("utf-8"))
+    manifest = json.loads((demo / "runs" / run_id / "manifest.json").read_text(encoding="utf-8"))
     assert manifest["is_test_run"] is True
     assert loading.runs_dir("demo") == demo / "runs"
     assert (demo / "runs" / run_id / "manifest.json").exists()

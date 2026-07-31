@@ -1,4 +1,4 @@
-"""Isolated by repointing both workspace.EXAMPLES_DIR and admin.py's own captured
+"""Isolated by repointing the projects root and admin.py's own captured
 REPO_ROOT; patching only one leaves the tests writing into the real workspace.
 """
 from __future__ import annotations
@@ -18,13 +18,13 @@ _LOBBYING = "lobbying_issue_triage"
 
 @pytest.fixture(autouse=True)
 def workspace_root(tmp_path, monkeypatch):
-    """A fresh examples/ root (workspace.EXAMPLES_DIR) plus its containing repo
+    """A fresh projects root plus its containing repo
     root (admin_router.REPO_ROOT, the base for exported bundles) — the same
     examples/ + exports/ layout the real repo has, so path handling in
     export_project matches production."""
     examples_dir = tmp_path / "examples"
     examples_dir.mkdir()
-    monkeypatch.setattr(workspace, "EXAMPLES_DIR", examples_dir)
+    workspace.set_projects_dir(examples_dir)
     monkeypatch.setattr(admin_router, "REPO_ROOT", tmp_path, raising=False)
     return examples_dir
 
@@ -41,7 +41,7 @@ def test_load_bundle_redirects_and_the_project_appears(workspace_root):
 
     assert r.status_code == 303
     assert r.headers["location"].startswith("/admin")
-    assert _LOBBYING in project.list_projects(examples_dir=workspace_root)
+    assert _LOBBYING in project.list_projects()
     assert _LOBBYING in client.get("/admin").text
 
 
@@ -51,7 +51,7 @@ def test_loading_the_same_bundle_twice_does_not_crash(workspace_root):
 
     assert first.status_code == 303
     assert second.status_code == 303
-    assert _LOBBYING in project.list_projects(examples_dir=workspace_root)
+    assert _LOBBYING in project.list_projects()
 
 
 def test_export_project_writes_a_workflow_file_json(workspace_root):

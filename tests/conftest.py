@@ -43,6 +43,31 @@ def fresh_frame_store(tmp_path):
 
 
 @pytest.fixture(autouse=True)
+def fresh_workspace(tmp_path):
+    """Each test gets its own projects root, so nothing reads or writes the real
+    examples/. There is only ever ONE workspace in a process — this points it at
+    a temp dir, exactly as fresh_store points the document store at :memory:.
+    A test that wants the directory itself takes the `projects_root` fixture.
+
+    The directory is NOT created here: an absent projects root is a real state
+    the code already handles (list_project_names returns [], create_project
+    mkdirs its parents), and leaving it uncreated keeps tests that stage the
+    directory themselves working unchanged."""
+    from app.services.workspace import set_projects_dir
+    set_projects_dir(tmp_path / "examples")
+
+
+@pytest.fixture
+def projects_root(tmp_path, fresh_workspace):
+    """The temp projects root fresh_workspace configured — for a test that needs
+    to stage a project directory on disk or assert on what was written. Created
+    on demand, so taking this fixture also guarantees the directory exists."""
+    root = tmp_path / "examples"
+    root.mkdir(parents=True, exist_ok=True)
+    return root
+
+
+@pytest.fixture(autouse=True)
 def reset_cancellation_registry():
     """The cancel registry is process-global and production never removes keys
     (see app.runtime.cancellation), so reset it around each test to keep runs

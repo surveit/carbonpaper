@@ -1,10 +1,10 @@
-{% extends "base.html" %}
+{% extends "project_shell.html" %}
 {% block title %}Run {{ run_id }} · {{ project }}{% endblock %}
 
-{% block head_extra %}
+{% block section_head %}
 <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
 <script>
-  window.loadStage = function (stageId) { if (window._loadStage) window._loadStage(stageId); };
+  onDiagramNode(function (stageId) { if (window._loadStage) window._loadStage(stageId); });
   document.addEventListener("DOMContentLoaded", function () {
     mermaid.initialize({ startOnLoad: true, theme: "default",
       flowchart: { curve: "basis", padding: 20, useMaxWidth: true }, securityLevel: "loose" });
@@ -16,7 +16,7 @@
 <a href="/project/{{ project }}" class="back-link">← {{ project }}</a>
 {% endblock %}
 
-{% block content %}
+{% block section %}
 {% set total = manifest.stage_records | length %}
 {% set ok = manifest.stage_records | selectattr('status', 'equalto', 'ok') | list | length %}
 {% set warn = manifest.stage_records | selectattr('status', 'equalto', 'validation_warnings') | list | length %}
@@ -28,9 +28,51 @@
 {% set done = ok + warn %}
 {% set is_running = manifest.status == 'running' %}
 
+{# ── Scroll model. The run view is a working surface, so it fills the viewport and
+      each column scrolls on its own instead of the whole document scrolling as one
+      long page. ── #}
+<style>
+  body { height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+  /* width:100% is load-bearing. style.css centres main with `margin: 0 auto`, and
+     auto inline margins on a flex item defeat the default `align-self: stretch` —
+     main would size to its own content instead of the viewport. */
+  main { flex: 1 1 auto; min-height: 0; padding-bottom: 14px;
+         width: 100%; box-sizing: border-box; }
+  /* style.css gives the footer `margin-top: 48px` for a document-flow page. Here
+     that is just a band of dead space between the panes and the footer. */
+  footer { margin-top: 0; }
+  /* stretch, not start: the columns must be able to fill the shell's height. */
+  .app-shell { height: 100%; align-items: stretch; }
+  .app-side { height: 100%; overflow-y: auto; position: static; padding-right: 6px; }
+  /* app-main does NOT scroll — its child does, so there is one scrollbar per pane. */
+  .app-main { height: 100%; min-height: 0; overflow: hidden; }
+  /* The shell is the run and (when the pinned version carries one) the review
+     guide beside it; the guide's own columns rule lives in _run_guide.html. */
+  .run-shell { height: 100%; min-height: 0; }
+  .run-main { min-width: 0; height: 100%; overflow-y: auto; padding-right: 6px; }
+
+  /* Scroll-edge fade. The mask insets only on the side that still has content, so a
+     pane parked at the top is not fading its own first line; the JS below keeps
+     --ft/--fb in step with scroll position. */
+  .fade-scroll { --ft: 0px; --fb: 0px;
+    -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 var(--ft),
+      #000 calc(100% - var(--fb)), transparent 100%);
+    mask-image: linear-gradient(to bottom, transparent 0, #000 var(--ft),
+      #000 calc(100% - var(--fb)), transparent 100%); }
+
+  @media (max-width: 1000px) {
+    body { height: auto; overflow: visible; }
+    main { padding-bottom: 48px; }
+    .app-shell, .app-side, .app-main, .run-shell, .run-main { height: auto; overflow: visible; }
+  }
+</style>
+
+<div class="run-shell{% if guide %} with-guide{% endif %}" id="run-shell">
+<div class="run-main fade-scroll">
+
 {% if manifest.is_test_run %}
 <p class="banner" style="background:#f3e8fd;border-color:#8a5cf6;color:#5a2a8c">
-    🧪 <strong>Workflow test</strong> — not a production run. It read the stage-result cache but wrote none, so it never affects a production run.
+    🧪 <strong>Workflow test</strong> — this was a test run. It automatically approves all human reviews, but does call LLMs and run code stages. It does not cache any results.
 </p>
 {% endif %}
 
@@ -115,11 +157,20 @@
     <div class="empty-state"><h2>Select a stage</h2><p>Click any node in the workflow to load its run details.</p></div>
 </div>
 
+<details class="raw-yaml"><summary>Raw manifest</summary><pre>{{ manifest | tojson(indent=2) }}</pre></details>
+
 {# ── Run log: live-tailed lifecycle events (stage/row start·done·error),
       streamed over SSE from runs/<id>/events.jsonl. Opens for a live run AND a
       finished one — the endpoint drains the file then ends either way, so this
-      is also how you investigate a past run. ── #}
+      is also how you investigate a past run.
+
+      It lives at the very bottom, in its own titled section: the events cover
+      the WHOLE run, not the stage loaded in the panel above, and sitting
+      directly under that panel made it read as part of the stage detail. ── #}
 <style>
+  .run-log-section { margin-top: 2.4rem; border-top: 2px solid var(--border); padding-top: 1.1rem; }
+  .run-log-section > h2 { margin: 0 0 .15rem; }
+  .run-log-section > .lede { margin-bottom: .8rem; }
   .run-log-panel .run-log-toolbar { display: flex; gap: 1.2em; align-items: center; margin: .4em 0; font-size: .85em; }
   .run-log { max-height: 22em; overflow: auto; font-size: .82em; line-height: 1.45; }
   .run-log a.run-log-row { display: block; color: inherit; text-decoration: none; }
@@ -129,27 +180,37 @@
   .run-log .run-log-detail-head { color: #8a5cf6; }
   .run-log .run-log-detail-body { display: block; white-space: pre-wrap; max-height: 6.5em; overflow: auto; margin: 0 0 .3em 2em; padding-left: .6em; border-left: 2px solid #d7cdf5; }
 </style>
-<details class="run-log-panel" id="run-log-panel" open>
-    <summary>Run log <span id="run-log-count" class="muted"></span></summary>
-    <div class="run-log-toolbar">
-        <label><input type="checkbox" id="run-log-errors-only"> errors only</label>
-        <label title="Show each row's prompt, thinking, submitted response, and the verdict on it"><input type="checkbox" id="run-log-detail"> LLM detail</label>
-        <button type="button" id="run-log-clear" class="btn">clear view</button>
-        <span id="run-log-state" class="muted"></span>
-    </div>
-    <pre id="run-log" class="run-log"></pre>
-    <p class="muted" style="font-size:.8em">A row marked <code>cached</code> was replayed from the stage-result cache: it ran no code and called no model, so it has no LLM detail.</p>
-</details>
+<section class="run-log-section" id="run-log-section">
+    <h2>Run log</h2>
+    <p class="lede">Every lifecycle event for this whole run — all stages, in the order they happened. Not scoped to the stage selected above.</p>
+    <details class="run-log-panel" id="run-log-panel" open>
+        <summary>Events <span id="run-log-count" class="muted"></span></summary>
+        <div class="run-log-toolbar">
+            <label><input type="checkbox" id="run-log-errors-only"> errors only</label>
+            <label title="Show each row's prompt, thinking, submitted response, and the verdict on it"><input type="checkbox" id="run-log-detail"> LLM detail</label>
+            <button type="button" id="run-log-clear" class="btn">clear view</button>
+            <span id="run-log-state" class="muted"></span>
+        </div>
+        {# The panel opens on the last {{ event_tail }} events — a row-per-event log
+           of a large stage runs to hundreds of thousands, which is neither readable
+           nor renderable. This walks back through the rest a page at a time. #}
+        <button type="button" id="run-log-older" class="btn" hidden
+                style="font-size:.8em;margin-bottom:.3em">load older</button>
+        <pre id="run-log" class="run-log"></pre>
+        <p class="muted" style="font-size:.8em">A row marked <code>cached</code> was replayed from the stage-result cache: it ran no code and called no model, so it has no LLM detail.</p>
+    </details>
+</section>
 
 {# The panel's behaviour lives in /static/run_log.js — filtering and reconnect
    are the parts with tests (tests/test_run_log_client.py), which needs them
    loadable outside a page. #}
 <script src="/static/run_log.js"></script>
 <script>
-  initRunLog({ project: {{ project | tojson }}, runId: {{ run_id | tojson }} });
+  initRunLog({
+    project: {{ project | tojson }}, runId: {{ run_id | tojson }},
+    pageSize: {{ event_tail | tojson }},
+  });
 </script>
-
-<details class="raw-yaml"><summary>Raw manifest</summary><pre>{{ manifest | tojson(indent=2) }}</pre></details>
 
 <script>
 (function () {
@@ -228,6 +289,37 @@
     }
     timer = setInterval(poll, 2000); poll();
   }
+})();
+</script>
+
+</div>{# /.run-main #}
+
+{% if guide %}{% include "_run_guide.html" %}{% endif %}
+
+</div>{# /.run-shell #}
+
+<script>
+(function () {
+  // Keep each pane's edge fade in step with its scroll position: inset the mask only
+  // on the side that still has content off-screen.
+  const FADE = 20;
+  function paintFade(el) {
+    const room = el.scrollHeight - el.clientHeight;
+    el.style.setProperty('--ft', room > 1 && el.scrollTop > 2 ? FADE + 'px' : '0px');
+    el.style.setProperty('--fb', room > 1 && el.scrollTop < room - 2 ? FADE + 'px' : '0px');
+  }
+  const faders = document.querySelectorAll('.fade-scroll');
+  faders.forEach(el => {
+    paintFade(el);
+    el.addEventListener('scroll', () => paintFade(el), { passive: true });
+  });
+  // Content height changes when a stage panel loads or the sidebar collapses.
+  if (window.ResizeObserver) {
+    const ro = new ResizeObserver(() => faders.forEach(paintFade));
+    faders.forEach(el => ro.observe(el));
+  }
+  // Collapsing the review-guide rail changes a pane's height without scrolling it.
+  window._paintFades = () => faders.forEach(paintFade);
 })();
 </script>
 {% endblock %}

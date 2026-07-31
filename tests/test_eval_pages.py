@@ -1,7 +1,7 @@
 """Route tests for the eval read pages (app/web/routers/evals.py). Builds a demo
 project on disk — a compiled two-stage workflow, one valid+compatible eval with an
 attached dataset, plus one leftover config that no longer validates — points
-EXAMPLES_DIR/REPO_ROOT at it, and checks each page renders the truthful state."""
+the projects root and REPO_ROOT at it, and checks each page renders the truthful state."""
 from __future__ import annotations
 
 import json
@@ -10,10 +10,7 @@ import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
 
-import app.web.config as web_config
-import app.web.loading as loading
 import app.web.routers.evals as evals_router
-import app.web.routers.project as project_router
 from app.main import app
 from app.models import (
     EvalConfig,
@@ -27,6 +24,7 @@ from app.models.schema import TableSchema
 from app.core.persistence import get_store
 from app.evals.store import save_eval_config, save_eval_run
 from app.services.versioning import WorkflowVersion
+from app.services import workspace
 
 client = TestClient(app)
 
@@ -53,7 +51,7 @@ _TARGET = {
 def demo_project(tmp_path, monkeypatch):
     """A demo project with a compiled override→target workflow and one compatible
     eval whose dataset is on disk, plus a stale config that fails EvalConfig
-    validation. Repoints EXAMPLES_DIR (project lookup) and REPO_ROOT (dataset path
+    validation. Repoints the projects root (project lookup) and REPO_ROOT (dataset path
     resolution) at tmp_path in every module that captured them by import."""
     demo = tmp_path / "demo"
     compiled = demo / "compiled"
@@ -61,8 +59,7 @@ def demo_project(tmp_path, monkeypatch):
     (compiled / "01_load.json").write_text(json.dumps(_override(tmp_path)), encoding="utf-8")
     (compiled / "02_classify.json").write_text(json.dumps(_TARGET), encoding="utf-8")
 
-    for mod in (web_config, loading, evals_router, project_router):
-        monkeypatch.setattr(mod, "EXAMPLES_DIR", tmp_path, raising=False)
+    workspace.set_projects_dir(tmp_path)
     monkeypatch.setattr(evals_router, "REPO_ROOT", tmp_path, raising=False)
 
     # The eval dataset: the override stage's output columns + the checked column.
@@ -129,7 +126,7 @@ def test_eval_run_page_renders_a_seeded_run():
                                  frontier=["classify"], blocking_stages=[]),
         metrics={"accuracy": 1.0},
     )
-    save_eval_run(evals_router.EXAMPLES_DIR / "demo", run)
+    save_eval_run(evals_router.projects_dir() / "demo", run)
 
     r = client.get("/project/demo/evals/label_check/runs/run1")
     assert r.status_code == 200

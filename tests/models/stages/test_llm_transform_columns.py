@@ -7,7 +7,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from app.models import Stage
+from app.models import parse_stage
 
 
 def _llm_stage(prompt_template):
@@ -28,12 +28,12 @@ def _llm_stage(prompt_template):
 
 def test_prompt_field_missing_from_edge_schema_rejected():
     with pytest.raises(ValidationError):
-        Stage.model_validate(_llm_stage("judge {a} and also {ghost}"))
+        parse_stage(_llm_stage("judge {a} and also {ghost}"))
 
 
 def test_prompt_field_present_ok():
-    Stage.model_validate(_llm_stage("judge {a}"))
+    parse_stage(_llm_stage("judge {a}"))
 
 
 def test_prompt_with_no_fields_is_clean():
-    Stage.model_validate(_llm_stage("judge the row"))
+    parse_stage(_llm_stage("judge the row"))

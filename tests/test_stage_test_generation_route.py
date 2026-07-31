@@ -17,6 +17,7 @@ from app.core.agent.turns import TurnManager
 from app.models import TableSchema
 from app.models.stages.stage_tests import build_stage_tests_model
 from app.main import app
+from app.services import workspace
 
 _IN_SCHEMA = {"columns": [{"name": "amount", "type": "float", "nullable": False}]}
 _OUT_SCHEMA = {"columns": [
@@ -43,13 +44,13 @@ def _seed_project(root: Path) -> Path:
         "id": "double", "name": "Double", "type": "python_row_function",
         "inputs": [{"id": "load", "schema": _IN_SCHEMA}],
         "output_schema": _OUT_SCHEMA,
-        "function": {"kind": "inline",
+        "function": {"kind": "inline", "summary": "Test fixture step.", "corner_cases": [],
                      "code": "def transform(row):\n    return {**row, 'doubled': row['amount'] * 2}\n"},
     }), encoding="utf-8")
     (compiled / "03_publish.json").write_text(json.dumps({
         "id": "publish", "name": "Publish", "type": "publish",
         "inputs": [{"id": "double", "schema": _OUT_SCHEMA}],
-        "function": {"kind": "inline", "code": "def transform(df, output_dir):\n    return df\n"},
+        "function": {"kind": "inline", "summary": "Test fixture step.", "corner_cases": [], "code": "def transform(df, output_dir):\n    return df\n"},
         "publish": {},
     }), encoding="utf-8")
     return project_dir
@@ -128,10 +129,7 @@ def client(tmp_path: Path, monkeypatch):
     across the POST and the follow-up status polls, not be torn down after each
     request (starlette's TestClient tears down a fresh portal per call unless
     it's used as `with TestClient(app) as client:`)."""
-    import app.web.loading as loading
-    import app.web.routers.node_review as node_review_router
-    monkeypatch.setattr(node_review_router, "EXAMPLES_DIR", tmp_path)
-    monkeypatch.setattr(loading, "EXAMPLES_DIR", tmp_path)
+    workspace.set_projects_dir(tmp_path)
     with TestClient(app) as c:
         yield c
 
@@ -209,7 +207,7 @@ def test_generate_tests_rejects_python_stage_without_output_schema(client: TestC
     (project_dir / "compiled" / "02_double.json").write_text(json.dumps({
         "id": "double", "name": "Double", "type": "python_row_function",
         "inputs": [{"id": "load", "schema": _IN_SCHEMA}],
-        "function": {"kind": "inline",
+        "function": {"kind": "inline", "summary": "Test fixture step.", "corner_cases": [],
                      "code": "def transform(row):\n    return {**row, 'doubled': row['amount'] * 2}\n"},
     }), encoding="utf-8")
     before = len(SessionStore().list_sessions())

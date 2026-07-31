@@ -108,22 +108,62 @@ def build_stage_test_deriver(
 
 
 def render_derivation_task(document: str, stage: Stage) -> str:
-    """The deriver's task string: methodology + stage identity + schemas.
-    Deliberately renders nothing else from the stage — not the function
-    block, not existing tests. The agent correlates the stage id/name
-    against the document itself to learn what the stage must do."""
-    inputs = "\n\n".join(
-        f"Input `{ref.id}` schema:\n{ref.table_schema.to_prompt()}"
-        for ref in stage.inputs
-    )
+    """The deriver's task string: the stage's DESCRIPTION — its `summary` and its
+    `corner_cases` — plus its identity and schemas.
+
+    The description, not the methodology document, is deliberately the whole
+    input. The examples exist to answer one question: does this step's code do what
+    its description says? An agent that had read the methodology could derive a
+    correct-looking case the description never implies, and the suite would then
+    certify the methodology rather than the description a reviewer actually reads.
+    So the deriver is shown exactly what the reviewer is shown, and nothing else —
+    not the code, not the document, not existing examples.
+
+    `document` is accepted and unused for that reason; it stays in the signature
+    because the caller holds it and removing it would invite passing it back in.
+
+    Raises ValueError when the stage has no summary: there is no description to
+    derive from, and a suite derived from something else would make the panel's
+    "checked against the code" claim untrue."""
+    summary = _authored_summary(stage)
+    if not summary:
+        raise ValueError(
+            f"stage `{stage.id}` has no summary — examples are derived from a step's "
+            f"description, so write one first (there is nothing to check the code against)"
+        )
     if stage.output_schema is None:
         raise ValueError(
             f"stage `{stage.id}` has no output schema — tests need one to state expected rows"
         )
+    inputs = "\n\n".join(
+        f"Input `{ref.id}` schema:\n{ref.table_schema.to_prompt()}"
+        for ref in stage.inputs
+    )
     return (
-        f"----- METHODOLOGY DOCUMENT -----\n{document}\n"
-        f"----- END DOCUMENT -----\n\n"
-        f"Derive tests for stage `{stage.id}` ({stage.type}): {stage.name}\n\n"
+        f"----- DESCRIPTION OF `{stage.id}` -----\n{summary}\n"
+        f"{_render_corner_cases(stage)}"
+        f"----- END DESCRIPTION -----\n\n"
+        f"Derive examples for stage `{stage.id}` ({stage.type}): {stage.name}\n\n"
         f"{inputs}\n\n"
         f"Output schema:\n{stage.output_schema.to_prompt()}"
     )
+
+
+def _authored_summary(stage: Stage) -> str | None:
+    """The stage's plain-language summary, off whichever authored-code block it
+    carries."""
+    block = stage.find_authored_code_block()
+    return block.summary if block is not None else None
+
+
+def _render_corner_cases(stage: Stage) -> str:
+    """The declared corner cases, each an input and the outcome it must produce.
+    Empty string when none are declared — the deriver still has to find edge cases
+    itself, it just has none stated for it."""
+    block = stage.find_authored_code_block()
+    if block is None or not block.corner_cases:
+        return ""
+    cases = "\n".join(
+        f"- {case.case} -> {case.expected}" for case in block.corner_cases
+    )
+    return f"\nStated corner cases (each MUST become at least one example):\n{cases}\n"

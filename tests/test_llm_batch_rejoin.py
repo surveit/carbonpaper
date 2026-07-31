@@ -3,7 +3,7 @@ from __future__ import annotations
 import pandas as pd
 from conftest import contribution_of, make_run_context
 
-from app.models import Stage
+from app.models import parse_stage, Stage
 from app.models.stage import StageType
 from app.runtime.stages import HANDLERS
 from app.runtime.stages import llm_transform as lt
@@ -14,7 +14,7 @@ _SRC = pd.DataFrame({"post_id": ["a", "b", "c"], "text": ["ta", "tb", "tc"]})
 
 
 def _stage(batch_size: int = 3, max_retries: int = 0) -> Stage:
-    return Stage.model_validate({
+    return parse_stage({
         "id": "process", "name": "Process", "type": "llm_transform",
         "inputs": [{"id": "load", "schema": {
             "columns": [{"name": "post_id", "type": "str"}, {"name": "text", "type": "str"}],

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-from app.models import Stage
-from app.models.stages import find_config_column_issues
+from app.models import parse_stage
 from app.models.stages.shared import (
     COLUMN_ISSUE,
     find_predicate_column_issues,
@@ -10,7 +9,7 @@ from app.models.stages.shared import (
 
 
 def _stage_with_edge_schema(columns):
-    return Stage.model_validate({
+    return parse_stage({
         "id": "agg", "type": "aggregate", "name": "agg",
         "inputs": [{"id": "src", "schema": {
             "columns": [{"name": c, "type": "str", "nullable": False} for c in columns],
@@ -42,10 +41,10 @@ def test_find_predicate_column_issues_turns_a_parse_failure_into_one_issue_not_r
     assert "s" in issues[0]
 
 
-def test_find_config_column_issues_is_empty_for_a_type_with_no_validator():
-    load = Stage.model_validate({
+def test_find_config_column_issues_is_empty_for_a_type_that_names_no_column():
+    load = parse_stage({
         "id": "load", "type": "input_data", "name": "load",
         "connector": {"kind": "file", "params": {}},
         "output_schema": {"columns": [{"name": "a", "type": "str", "nullable": False}]},
     })
-    assert find_config_column_issues(load) == []
+    assert load.find_config_column_issues() == []

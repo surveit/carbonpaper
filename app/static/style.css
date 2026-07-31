@@ -395,7 +395,7 @@ table.schema tr:last-child td { border-bottom: 0; }
     color: var(--fg);
 }
 
-/* Executable handle blocks */
+/* Transform config blocks */
 .exec-block {
     background: var(--exec-bg);
     border-left: 4px solid var(--exec-border);
@@ -404,6 +404,104 @@ table.schema tr:last-child td { border-bottom: 0; }
     margin: 16px 0;
 }
 .exec-block h2 { margin-top: 0; }
+
+/* The plain-language summary of an authored-code block — the first thing read
+   in the Transform pane, and for a non-engineer the only readable statement of
+   what the step does, so it is set larger than the metadata under it. */
+.stage-summary {
+    font-size: 16px;
+    line-height: 1.55;
+    margin: 0 0 12px;
+    max-width: 70ch;
+}
+.stage-summary.missing { font-size: 14px; }
+
+/* Stated corner cases, folded under the summary (_stage_code.html). Sits between
+   the description and the badge because it is part of the description — the
+   examples check these too. */
+.stage-corners { max-width: 70ch; margin: 0 0 12px; font-size: 14px; }
+.stage-corners > summary { cursor: pointer; color: var(--muted); }
+.stage-corner-list { margin: 8px 0 0; }
+.stage-corner-list dt { font-weight: 500; margin-top: 8px; }
+.stage-corner-list dd { margin: 2px 0 0 18px; color: var(--muted); }
+
+/* Compiler warnings (section_workflow.html) — what is wrong with the workflow as
+   written, above the graph. Two severities only: blocking (someone can and must
+   fix it) and note (a legitimate choice, or something the stage cannot clear). */
+.wf-issues {
+    border: 1px solid var(--border);
+    border-left-width: 3px;
+    border-radius: 4px;
+    padding: 10px 16px;
+    margin: 0 0 16px;
+    max-width: 100ch;
+    background: white;
+}
+.wf-issues > summary { cursor: pointer; }
+.wf-issues-error { border-left-color: var(--belief-rejected-bd); background: var(--belief-rejected-bg); }
+.wf-issues-note  { border-left-color: var(--belief-unreviewed-bd); background: var(--belief-unreviewed-bg); }
+.wf-issues ul { margin: 10px 0 2px; padding: 0; list-style: none; }
+.wf-issue {
+    font-size: 13.5px; margin: 5px 0;
+    display: flex; flex-wrap: wrap; gap: 7px; align-items: baseline;
+}
+.wf-issue-kind {
+    flex: none; min-width: 118px; text-align: center;
+    font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px;
+    padding: 2px 7px; border-radius: 3px; border: 1px solid;
+}
+.wf-issue-error .wf-issue-kind { background: var(--belief-rejected-bg); color: #802020; border-color: var(--belief-rejected-bd); }
+.wf-issue-note  .wf-issue-kind { background: var(--belief-unreviewed-bg); color: #4a5561; border-color: var(--belief-unreviewed-bd); }
+
+/* Certification badge (_stage_certification.html) — sits directly under the
+   summary, because the claim it makes is a claim ABOUT that summary. The `why`
+   line is deliberately not hidden behind a disclosure: a green badge with no
+   stated scope reads as "this step is correct", which it does not mean. */
+.stage-cert {
+    max-width: 70ch;
+    margin: 0 0 14px;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-left-width: 3px;
+    border-radius: 3px;
+}
+.stage-cert-line { margin: 0; font-size: 14px; }
+.stage-cert-why { margin: 6px 0 0; font-size: 13px; line-height: 1.5; }
+.stage-cert-badge {
+    display: inline-block; font-size: 11px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.4px; padding: 3px 10px; border-radius: 3px; margin-right: 8px;
+    border: 1px solid;
+}
+.stage-cert-certified { border-left-color: var(--belief-approved-bd); }
+.stage-cert-certified .stage-cert-badge {
+    background: var(--belief-approved-bg); color: #1f5a1f; border-color: var(--belief-approved-bd);
+}
+.stage-cert-failing { border-left-color: var(--belief-rejected-bd); }
+.stage-cert-failing .stage-cert-badge {
+    background: var(--belief-rejected-bg); color: #802020; border-color: var(--belief-rejected-bd);
+}
+.stage-cert-untested,
+.stage-cert-unsummarised { border-left-color: var(--belief-stale-bd); }
+.stage-cert-untested .stage-cert-badge,
+.stage-cert-unsummarised .stage-cert-badge {
+    background: var(--belief-stale-bg); color: #7a4a00; border-color: var(--belief-stale-bd);
+}
+.stage-cert-untestable { border-left-color: var(--belief-unreviewed-bd); }
+.stage-cert-untestable .stage-cert-badge {
+    background: var(--belief-unreviewed-bg); color: #4a5561; border-color: var(--belief-unreviewed-bd);
+}
+
+/* Code comes LAST, and open: description → examples → code. */
+.code-block > details > summary {
+    cursor: pointer;
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+}
+/* A heading, not a link: the generic `details summary` accent colour reads as
+   one, and this disclosure sits at the same level as Python function / Tests. */
+.code-block > details > summary h2 { display: inline; color: var(--fg); }
+.code-block > details[open] > summary { margin-bottom: 12px; }
 
 .eval-block {
     background: var(--eval-bg);
@@ -871,6 +969,19 @@ table.data-preview td.cell-url {
     word-break: break-all;
 }
 table.data-preview td.cell-url a { color: var(--accent, #1a3a72); }
+/* Clipped text cells: hover shows the full value (title attr), click expands
+   the cell in place so long text wraps instead of being cut off. */
+table.data-preview td.cell-clip { cursor: zoom-in; }
+table.data-preview td.cell-clip.expanded {
+    white-space: pre-wrap;
+    max-width: 640px;
+    min-width: 320px;
+    overflow: visible;
+    text-overflow: clip;
+    overflow-wrap: anywhere;
+    background: #fffbe8;
+    cursor: zoom-out;
+}
 table.data-preview th {
     background: var(--code-bg);
     font-weight: 600;
@@ -1810,6 +1921,13 @@ td.row-num, th.row-num { text-align: right; color: #98a1b3; font-variant-numeric
 .diagram-viewport svg g.node.wf-node-active > circle,
 .diagram-viewport svg g.node.wf-node-active > path { stroke: #2f43c9 !important; stroke-width: 3px !important; }
 .diagram-viewport svg g.node.wf-node-active { filter: drop-shadow(0 0 4px rgba(47,67,201,.55)); }
+
+/* Stage nodes carry mermaid's .clickable (and its pointer cursor) because the graph
+   DECLARES a click handler — whether or not this page listens for one. onDiagramNode()
+   sets data-diagram-clickable on <html>, so the cursor promises a click only where one
+   is actually wired. See static/diagram_nodes.js. */
+.mermaid g.node.clickable { cursor: default; }
+html[data-diagram-clickable] .mermaid g.node.clickable { cursor: pointer; }
 
 /* ── Workflow: graph on top, stage detail full-width below (master-detail layout). ── */
 .wf-top .diagram-viewport { max-height: 56vh; }        /* cap so the detail below stays reachable */

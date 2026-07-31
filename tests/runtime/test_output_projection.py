@@ -6,7 +6,7 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from app.models import Stage
+from app.models import parse_stage, Stage
 from app.models.stage import StageType
 from app.runtime.context import RunContext
 from app.runtime.manifest import StageContribution
@@ -17,7 +17,7 @@ from app.runtime.stages.execution import _project_onto_declared_columns
 def _rating_stage() -> Stage:
     """A row-mapped stage declaring three output columns. The id is distinct
     from every column name so a message can be checked for both."""
-    return Stage.model_validate({
+    return parse_stage({
         "id": "rate", "name": "Rate", "type": "python_row_function",
         "inputs": [{"id": "load", "schema": {"columns": [{"name": "id", "type": "str"}]}}],
         "output_schema": {"columns": [
@@ -54,7 +54,7 @@ def test_human_review_queue_output_missing_a_declared_column_raises(tmp_path):
     """The queue handler projects through the same row driver, so a column its
     rows never carry fails there too — it is not quietly dropped from the frame
     a downstream stage then consumes."""
-    stage = Stage.model_validate({
+    stage = parse_stage({
         "id": "q", "name": "Review", "type": "human_review_queue",
         "inputs": [{"id": "load", "schema": {"columns": [
             {"name": "claim_id", "type": "str", "nullable": False}]}}],

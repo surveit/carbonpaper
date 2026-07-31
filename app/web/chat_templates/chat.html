@@ -56,8 +56,7 @@
   </header>
 
   {% if backend_error %}
-    <div class="warn"><strong>Backend unavailable:</strong> {{ backend_error }}<br>
-      Run the server with <code>CW_CHAT_BACKEND=dev</code> to try the pipeline with the scripted dev model.</div>
+    <div class="warn"><strong>Backend unavailable:</strong> {{ backend_error }}</div>
   {% endif %}
 
   <div id="log">

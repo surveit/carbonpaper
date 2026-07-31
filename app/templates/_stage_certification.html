@@ -1,0 +1,40 @@
+{# The certification badge that sits directly under an authored-code stage's
+   plain-language summary: has that summary been checked against the code, and on
+   how many cases. Context: certification (app.web.stage_test_views.StageCertification).
+
+   The wording is the point of this partial. A reviewer who cannot read the code
+   is trusting the sentence above it, so the badge has to say exactly what earns
+   that trust and exactly what it does not cover — the tests are authored from the
+   methodology, never by running the code, so passing means the description and
+   the code AGREE ON THESE CASES. It is not a correctness proof, and a green badge
+   must not read like one. #}
+{% macro stage_certification(certification) %}
+{% if certification and certification.status != "n/a" %}
+<div class="stage-cert stage-cert-{{ certification.status }}">
+  {% if certification.status == "certified" %}
+  <p class="stage-cert-line"><span class="stage-cert-badge">✓ Tested by independent AI agent</span></p>
+  <p class="stage-cert-why muted">An agent with knowledge only of this description
+    independently generated {{ certification.total }}
+    example{% if certification.total != 1 %}s{% endif %} and verified they all pass.</p>
+  {% elif certification.status == "failing" %}
+  <p class="stage-cert-line"><span class="stage-cert-badge">⚠ Violations found by independent AI agent</span></p>
+  <p class="stage-cert-why muted">An agent with knowledge only of this description generated
+    examples and found disagreements. This likely means expert guidance is needed to resolve
+    nuanced decisions. Review the failing examples below.</p>
+  {% elif certification.status == "untested" %}
+  <p class="stage-cert-line"><span class="stage-cert-badge">— Not yet tested</span></p>
+  <p class="stage-cert-why muted">No agent has checked this description against the code. It may
+    be accurate; nothing has verified it. Use <em>Generate examples</em> below to derive them
+    from the description.</p>
+  {% elif certification.status == "untestable" %}
+  <p class="stage-cert-line"><span class="stage-cert-badge">— Cannot be tested</span></p>
+  <p class="stage-cert-why muted">This kind of step cannot carry examples, so nothing can check
+    the description above against its code. Read the code to review it.</p>
+  {% elif certification.status == "unsummarised" %}
+  <p class="stage-cert-line"><span class="stage-cert-badge">— Nothing to test</span></p>
+  <p class="stage-cert-why muted">This step has no description, so there is nothing for an agent
+    to test against and no way to review it without reading the code.</p>
+  {% endif %}
+</div>
+{% endif %}
+{% endmacro %}

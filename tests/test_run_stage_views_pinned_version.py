@@ -12,11 +12,7 @@ import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
 
-import app.web.config as web_config
 import app.services.workspace as workspace
-import app.web.loading as loading
-import app.web.routers.project as project_router
-import app.web.routers.runs as runs_router
 from app.main import app
 from app.runtime.runner import execute_run
 from app.services import versioning
@@ -67,8 +63,7 @@ def project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
         json.dumps(_load_stage(data)), encoding="utf-8")
     (pdir / "compiled" / "02_classify.json").write_text(
         json.dumps(_classify_stage(PINNED_MARKER)), encoding="utf-8")
-    for mod in (web_config, workspace, loading, project_router, runs_router):
-        monkeypatch.setattr(mod, "EXAMPLES_DIR", tmp_path, raising=False)
+    workspace.set_projects_dir(tmp_path)
     return pdir
 
 
@@ -148,6 +143,27 @@ def test_scratch_preview_executes_the_stage_that_ran_not_the_working_copy(
     body = _scratch_preview(run_id).json()
     assert body["ok"] is True
     assert [row["label"] for row in body["preview"]] == [PINNED_MARKER]
+
+
+# ─── Transform reads the same under either tier ─────────────────────────────
+
+def test_transform_pane_serves_both_the_schema_and_current_run_tiers(
+    project: Path,
+) -> None:
+    """The definition the run pinned IS what the current run transformed with,
+    so one pane answers both tiers. Two panes would leave "Current run ›
+    Transform" — the tier the panel opens on — showing less than Schema does."""
+    run_id = _run_once(project)
+
+    html = _stage_panel(run_id).text
+    assert 'data-pane="schema-transform run-transform"' in html
+    assert 'data-pane="schema-transform"' not in html
+    assert 'data-pane="run-transform"' not in html
+    # The handle and the scratch re-run result both live in that one pane.
+    pane = html.split('data-pane="schema-transform run-transform"', 1)[1]
+    pane = pane.split("data-pane=", 1)[0]
+    assert PINNED_MARKER in pane
+    assert 'class="scratch-result"' in pane
 
 
 # ─── Unresolvable pinned version: loud and visible, never a substitute ───────

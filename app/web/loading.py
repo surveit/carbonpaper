@@ -20,13 +20,14 @@ from pydantic import ValidationError
 from app.core.errors import NoVersionToRunError
 from app.core.frames import PARQUET_SUFFIX
 from app.models import Stage, StageType
+from app.models.stages.llm_transform import LLMTransformStage
 from app.runtime.manifest import load_manifest_model
 from app.core.run_status import StageStatus
 from app.services.run import resolve_version
 from app.services.loader import CompiledStageFile, load_compiled_dir
 from app.services.versioning import list_versions, load_version_stages
 from app.services.workspace import load_schemas, resolve_project_dir
-from app.web.config import EXAMPLES_DIR
+from app.web.config import projects_dir
 
 
 # ─── Projects & stages ──────────────────────────────────────────────────
@@ -47,10 +48,10 @@ def list_projects() -> list[dict[str, Any]]:
     not appear only once generation finishes. A dir with none of those markers is
     not a project and is omitted. A run counts only if it has a manifest.json
     (mirrors list_runs), so the count is real runs, never inflated."""
-    if not EXAMPLES_DIR.exists():
+    if not projects_dir().exists():
         return []
     cards: list[dict[str, Any]] = []
-    for p in sorted(EXAMPLES_DIR.iterdir()):
+    for p in sorted(projects_dir().iterdir()):
         if not p.is_dir():
             continue
         card = _build_project_card(p)
@@ -123,7 +124,7 @@ class StageListing:
 
 
 def load_stages(project: str) -> StageListing:
-    compiled_dir = EXAMPLES_DIR / project / "compiled"
+    compiled_dir = projects_dir() / project / "compiled"
     if not compiled_dir.is_dir():
         raise HTTPException(status_code=404, detail=f"No compiled stages for {project}")
     entries = load_compiled_dir(compiled_dir)
@@ -144,7 +145,7 @@ def load_stages_or_empty(project: str) -> StageListing:
     """Like load_stages, but returns an EMPTY listing instead of 404 when the project
     has no compiled/ workflow yet. For the shell's workflow section, which renders the
     locked/empty page (not an error) for a project that has no workflow authored."""
-    compiled_dir = EXAMPLES_DIR / project / "compiled"
+    compiled_dir = projects_dir() / project / "compiled"
     if not compiled_dir.is_dir():
         return StageListing(stages=[], issues=[], order={})
     return load_stages(project)
@@ -170,8 +171,7 @@ def list_file_inputs(project: str, version_id: str | None = None) -> list[dict[s
         {"stage_id": s.id, "name": s.name,
          "path": str((s.connector.params or {}).get("path") or "")}
         for s in stages
-        if s.type == StageType.input_data and s.connector is not None
-        and s.connector.kind == "file"
+        if s.type == StageType.input_data and s.connector.kind == "file"
     ]
 
 
@@ -211,7 +211,7 @@ def save_uploaded_input(project_dir: Path, stage_id: str, filename: str, src) ->
 # ─── Runs & manifests ────────────────────────────────────────────────────────
 
 def runs_dir(project: str) -> Path:
-    return EXAMPLES_DIR / project / "runs"
+    return projects_dir() / project / "runs"
 
 
 def load_manifest(run_dir: Path) -> dict[str, Any]:
@@ -460,7 +460,10 @@ def build_llm_example(
     Returns {rendered, source_id} on success, {error} if no input or render
     fails, or None if the stage isn't an LLM stage.
     """
-    template = stage_def.llm.prompt_data_template if stage_def and stage_def.llm else None
+    template = (
+        stage_def.llm.prompt_data_template
+        if isinstance(stage_def, LLMTransformStage) else None
+    )
     if not template:
         return None
     for ip in input_previews:

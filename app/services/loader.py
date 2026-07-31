@@ -1,4 +1,4 @@
-"""Canonical load + save for a project's compiled stage files.
+"""Load + save for a project's compiled stage files.
 
 One JSON file per stage under `<project>/compiled/`. This module is the ONE place
 that knows the on-disk stage format, in both directions: nothing else should call
@@ -15,7 +15,8 @@ from pydantic import ValidationError
 
 from app.core.paths import repo_root
 from app.models.workflow import Workflow, validate_workflow
-from app.models.stage import Stage
+from app.models.stage import Stage, parse_stage
+from app.models.stages.code import PythonFunction
 from app.core.utils import format_errors
 
 from .errors import WorkflowLoadError
@@ -51,7 +52,7 @@ def load_compiled_dir(compiled_dir: Path) -> list[CompiledStageFile]:
             entry.issues.append("file contains no stage object")
             continue
         try:
-            entry.stage = Stage.model_validate(data)
+            entry.stage = parse_stage(data)
         except ValidationError as err:
             entry.issues.extend(format_errors(err))
     return entries
@@ -85,7 +86,7 @@ def load_workflow(project_dir: Path) -> list[Stage]:
 # ─── Serialize & save ────────────────────────────────────────────────────────
 
 def stage_to_spec_dict(stage: Stage) -> dict[str, Any]:
-    """The canonical dict form of a stage: field aliases restored (`schema`, not
+    """The spec-dict form of a stage: field aliases restored (`schema`, not
     `table_schema`), unset optionals dropped, enums/nested models JSON-normalised.
     This is the ONE definition of 'a stage as data' — the on-disk JSON is a dump
     of it, the belief hash is computed over it, and the raw-spec views render it,
@@ -94,7 +95,7 @@ def stage_to_spec_dict(stage: Stage) -> dict[str, Any]:
 
 
 def stage_to_json(stage: Stage) -> str:
-    """The canonical on-disk JSON text for one compiled stage — an indented dump
+    """The on-disk JSON text for one compiled stage — an indented dump
     equal to `json.dumps(stage_to_spec_dict(stage))`. The single source of the
     persisted format; write_stage and the raw-spec endpoints go through it."""
     return stage.model_dump_json(indent=2, by_alias=True, exclude_none=True)
@@ -114,7 +115,7 @@ def find_stage_file(compiled_dir: Path, stage_id: str) -> Path | None:
 
 
 def write_stage(path: Path, stage: Stage) -> None:
-    """Persist one validated stage to `path` in the canonical on-disk JSON."""
+    """Persist one validated stage to `path` as on-disk JSON."""
     path.write_text(stage_to_json(stage), encoding="utf-8")
 
 
@@ -135,9 +136,12 @@ def read_module_code(module_path: str) -> str | None:
 
 
 def resolve_function_code(stage_def: Stage | None) -> str | None:
-    """Python source for a stage's function handle: the module file for a module
-    ref, or the inline code string. None if the stage has neither."""
-    fn = stage_def.function if stage_def else None
+    """Python source for a stage's `function` block: the module file for a module
+    ref, or the inline code string. None for a stage whose authored code is a
+    filter predicate (inline on its own block) or that has none."""
+    fn = stage_def.find_authored_code_block() if stage_def else None
+    if not isinstance(fn, PythonFunction):
+        return None
     if fn and fn.kind == "module" and fn.module:
         return read_module_code(fn.module)
     if fn and fn.kind == "inline":

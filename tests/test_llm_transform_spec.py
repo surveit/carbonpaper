@@ -10,7 +10,7 @@ import pandas as pd
 import pytest
 from pydantic import ValidationError
 
-from app.models import Stage
+from app.models import parse_stage
 from app.models.stage import StageType
 from app.runtime.stages import HANDLERS
 from app.runtime.stages import llm_transform as lt
@@ -18,7 +18,7 @@ from conftest import contribution_of, make_run_context
 
 
 def _stage():
-    return Stage.model_validate({
+    return parse_stage({
         "id": "score", "name": "score", "type": "llm_transform",
         "inputs": [{"id": "load", "schema": {
             "columns": [{"name": "id", "type": "str"}, {"name": "text", "type": "str"}],

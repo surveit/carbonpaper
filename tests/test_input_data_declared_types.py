@@ -11,12 +11,13 @@ import pandas as pd
 import pytest
 
 from app.models import Stage
+from app.models.stage import parse_stage
 from app.runtime.stages.input_data import read_input_data
 from conftest import make_run_context
 
 
 def _stage(path: Path, columns: list[dict], **params: object) -> Stage:
-    return Stage.model_validate({
+    return parse_stage({
         "id": "load", "name": "load", "type": "input_data",
         "connector": {"kind": "file", "params": {"path": str(path), **params}},
         "output_schema": {"columns": columns},

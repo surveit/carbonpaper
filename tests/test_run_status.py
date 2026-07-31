@@ -9,12 +9,12 @@ import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
 
-import app.web.loading as loading
 from app.core.run_status import RunStatus, StageStatus
 from app.main import app
 from app.runtime.runner import execute_run
 from app.services import versioning
 from app.services.versioning import create_version_from_disk
+from app.services import workspace
 
 # The exact value sets, derived by grepping every `record["status"]` /
 # `manifest["status"]` literal the runner writes (app/runtime/runner.py) and
@@ -111,7 +111,7 @@ def test_a_real_run_produces_enum_statuses_that_round_trip_to_bare_strings(tmp_p
 
 
 def test_a_real_run_renders_bare_status_through_the_web_layer(tmp_path, monkeypatch) -> None:
-    monkeypatch.setattr(loading, "EXAMPLES_DIR", tmp_path)
+    workspace.set_projects_dir(tmp_path)
     project_dir = tmp_path / PROJECT
     _make_project(project_dir)
     _seed_and_publish(project_dir)

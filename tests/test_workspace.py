@@ -4,14 +4,14 @@ from pathlib import Path
 from app.services import workspace
 
 
-# Stage validation (app/models/stage.py: Stage._handle_for_type) requires one
-# handle block per type — an input_data stage needs `connector`, an
+# Stage validation (each type's model under app/models/stages/) requires one
+# config block per type — an input_data stage needs `connector`, an
 # llm_transform stage needs `llm` — or the tolerant loader reports it as an
 # issue rather than a parsed stage (see tests/test_loader.py's _valid fixture
-# for the same pattern). Minimal valid handles per type, added only when the
+# for the same pattern). Minimal valid config blocks per type, added only when the
 # type needs one, so a stage written by this helper always round-trips through
-# Stage.model_validate.
-def _handle_by_type(root: Path) -> dict[str, dict]:
+# parse_stage.
+def _config_block_by_type(root: Path) -> dict[str, dict]:
     return {
         "input_data": {"connector": {"kind": "file",
                                       "params": {"path": str(root / "data" / "items.csv"), "format": "csv"}}},
@@ -29,7 +29,7 @@ _LLM_OUT_SCHEMA = {"primary_key": ["doc_id"],
 def _write_stage(compiled: Path, order: int, sid: str, stype: str, inputs: list[str]) -> None:
     compiled.mkdir(parents=True, exist_ok=True)
     stage: dict = {"id": sid, "name": f"{sid} step", "type": stype}
-    stage.update(_handle_by_type(compiled.parent).get(stype, {}))
+    stage.update(_config_block_by_type(compiled.parent).get(stype, {}))
     # Every input declares the schema it expects and every non-publish stage
     # declares its output_schema (app/models/stage.py: Stage._schemas_declared).
     # llm_transform is additionally strictly 1:1: its input and output schemas
@@ -41,9 +41,10 @@ def _write_stage(compiled: Path, order: int, sid: str, stype: str, inputs: list[
 
 
 def test_list_project_names_only_dirs_with_compiled(tmp_path: Path) -> None:
+    workspace.set_projects_dir(tmp_path)
     _write_stage(tmp_path / "alpha" / "compiled", 1, "load", "input_data", [])
     (tmp_path / "not_a_project").mkdir()
-    assert workspace.list_project_names(tmp_path) == ["alpha"]
+    assert workspace.list_project_names() == ["alpha"]
 
 
 def test_workflow_summary_reports_ids_types_inputs_and_review_state(tmp_path: Path) -> None:

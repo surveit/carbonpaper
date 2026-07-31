@@ -2,7 +2,7 @@
 import pytest
 from pydantic import ValidationError
 
-from app.models import Stage, StageTest, TableSchema
+from app.models import parse_stage, StageTest, TableSchema
 from app.models.stages.stage_tests import build_stage_tests_model
 from app.services.loader import stage_to_spec_dict
 
@@ -33,7 +33,7 @@ _GOOD_TEST = {
 
 
 def test_valid_test_parses_on_python_row_stage():
-    stage = Stage.model_validate(_row_stage([_GOOD_TEST]))
+    stage = parse_stage(_row_stage([_GOOD_TEST]))
     assert stage.tests is not None
     test: StageTest = stage.tests[0]
     assert test.name == "doubles_a_positive_amount"
@@ -46,13 +46,13 @@ def test_tests_rejected_on_non_python_stage():
         "tests": [{"name": "x", "inputs": {}, "expected": []}],
     }
     with pytest.raises(ValidationError, match="python transforms"):
-        Stage.model_validate(bad)
+        parse_stage(bad)
 
 
 def test_test_inputs_must_match_declared_inputs():
     wrong_key = {**_GOOD_TEST, "inputs": {"not_load": [{"amount": 1.0}]}}
     with pytest.raises(ValidationError, match="declared inputs"):
-        Stage.model_validate(_row_stage([wrong_key]))
+        parse_stage(_row_stage([wrong_key]))
 
 
 def test_multi_input_test_missing_one_input_is_rejected():
@@ -73,36 +73,36 @@ def test_multi_input_test_missing_one_input_is_rejected():
         }],
     }
     with pytest.raises(ValidationError, match="declared inputs"):
-        Stage.model_validate(stage)
+        parse_stage(stage)
 
 
 def test_row_function_test_is_one_row_in_one_row_out():
     two_rows = {**_GOOD_TEST,
                 "inputs": {"load": [{"amount": 1.0}, {"amount": 2.0}]}}
     with pytest.raises(ValidationError, match="one row"):
-        Stage.model_validate(_row_stage([two_rows]))
+        parse_stage(_row_stage([two_rows]))
 
 
 def test_duplicate_test_names_rejected():
     with pytest.raises(ValidationError, match="duplicate"):
-        Stage.model_validate(_row_stage([_GOOD_TEST, dict(_GOOD_TEST)]))
+        parse_stage(_row_stage([_GOOD_TEST, dict(_GOOD_TEST)]))
 
 
 def test_stage_without_tests_serializes_without_tests_key():
     # stage_to_spec_dict feeds the node belief hash: adding the field must not
     # change the dump of any existing stage, or all approvals drop to stale.
-    spec = stage_to_spec_dict(Stage.model_validate(_row_stage()))
+    spec = stage_to_spec_dict(parse_stage(_row_stage()))
     assert "tests" not in spec
 
 
 def test_empty_tests_list_normalizes_to_absent():
-    spec = stage_to_spec_dict(Stage.model_validate(_row_stage([])))
+    spec = stage_to_spec_dict(parse_stage(_row_stage([])))
     assert "tests" not in spec
 
 
 def test_tests_round_trip_through_spec_dict():
-    spec = stage_to_spec_dict(Stage.model_validate(_row_stage([_GOOD_TEST])))
-    reloaded = Stage.model_validate(spec)
+    spec = stage_to_spec_dict(parse_stage(_row_stage([_GOOD_TEST])))
+    reloaded = parse_stage(spec)
     assert reloaded.tests is not None
     assert reloaded.tests[0].inputs == {"load": [{"amount": 2.0}]}
     assert reloaded.tests[0].expected == [{"amount": 2.0, "doubled": 4.0}]
@@ -208,6 +208,75 @@ def test_stage_tests_model_accepts_an_explicit_null_in_a_nullable_column():
         "expected": [{"amount": 1.0, "label": None}],
     }]})
     assert suite.tests[0].inputs["load"] == [{"amount": 1.0, "label": None}]
+
+
+_FAILURE_TEST = {
+    "name": "another_currency_is_not_recorded_as_dollars",
+    "inputs": {"load": [{"amount": 2.0}]},
+    "expected": None,
+}
+
+
+def test_row_function_failure_case_needs_no_expected_row():
+    """One row in and no rows out is the point of a failure case, so the
+    one-row-in-one-row-out rule does not apply to it."""
+    suite = _row_suite_model().model_validate({"tests": [_FAILURE_TEST]})
+    assert suite.tests[0].expected is None
+
+
+def test_row_function_failure_case_still_needs_exactly_one_input_row():
+    two_rows = dict(_FAILURE_TEST, inputs={"load": [{"amount": 1.0}, {"amount": 2.0}]})
+    with pytest.raises(ValidationError, match="one row in"):
+        _row_suite_model().model_validate({"tests": [two_rows]})
+
+
+def test_failure_case_input_rows_are_still_schema_checked():
+    bad = dict(_FAILURE_TEST, inputs={"load": [{"amount": "two"}]})
+    with pytest.raises(ValidationError) as excinfo:
+        _row_suite_model().model_validate({"tests": [bad]})
+    message = str(excinfo.value)
+    assert "another_currency_is_not_recorded_as_dollars" in message
+    assert "load" in message
+    assert "amount" in message
+
+
+def test_a_test_omitting_expected_is_rejected():
+    """`expected` has no default: a case that forgets it must be rejected outright
+    rather than read as the claim that the step fails."""
+    missing = {k: v for k, v in _GOOD_TEST.items() if k != "expected"}
+    with pytest.raises(ValidationError, match="expected"):
+        _row_suite_model().model_validate({"tests": [missing]})
+
+
+def test_zero_expected_rows_is_not_a_failure_claim():
+    """[] and null are different claims: a frame step legitimately returns no rows,
+    and that case must survive validation as a rows case."""
+    suite = _frame_suite_model(_IN_SCHEMA).model_validate({"tests": [{
+        "name": "filters_everything_out",
+        "inputs": {"load": [{"amount": 1.0}]},
+        "expected": [],
+    }]})
+    assert suite.tests[0].expected == []
+
+
+def test_failure_case_survives_the_spec_dict_round_trip():
+    """The dump drops None-valued keys, so `expected: null` has to be written out
+    explicitly — dropped, it would reload as a case that forgot the field."""
+    stage = parse_stage(_row_stage([_FAILURE_TEST]))
+    spec = stage_to_spec_dict(stage)
+    assert spec["tests"][0]["expected"] is None
+    reloaded = parse_stage(spec)
+    assert reloaded.tests is not None
+    assert reloaded.tests[0].expected is None
+
+
+def test_rows_case_wire_form_is_unchanged():
+    stage = parse_stage(_row_stage([_GOOD_TEST]))
+    assert stage.tests is not None
+    assert stage.tests[0].expected == [{"amount": 2.0, "doubled": 4.0}]
+    assert stage_to_spec_dict(stage)["tests"][0]["expected"] == [
+        {"amount": 2.0, "doubled": 4.0}
+    ]
 
 
 def test_stage_tests_model_accepts_an_empty_input_case():

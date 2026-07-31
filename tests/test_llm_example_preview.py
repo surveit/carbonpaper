@@ -3,12 +3,12 @@ for an llm_transform stage — rendered from prompt_data_template (the
 per-row part), not the row-invariant prompt_instructions."""
 from __future__ import annotations
 
-from app.models import Stage
+from app.models import parse_stage, Stage
 from app.web.loading import build_llm_example
 
 
 def _llm_stage() -> Stage:
-    return Stage.model_validate({
+    return parse_stage({
         "id": "score", "type": "llm_transform", "name": "Score",
         "inputs": [{"id": "load", "schema": {
             "columns": [{"name": "id", "type": "str"}, {"name": "quote", "type": "str"}],
@@ -34,7 +34,7 @@ def test_no_input_rows_reports_error():
 
 
 def test_non_llm_stage_returns_none():
-    stage = Stage.model_validate({
+    stage = parse_stage({
         "id": "load", "name": "Load", "type": "input_data",
         "output_schema": {"columns": [{"name": "quote", "type": "str"}]},
         "connector": {"kind": "file"},

@@ -34,13 +34,15 @@ from app.services.errors import WorkflowLoadError
 from app.services.loader import load_workflow, resolve_function_code
 from app.services.versioning import list_versions
 from app.services import run as run_service
+from app.services.run_guide import build_run_guide_view
 from app.runtime.cancellation import request_cancel
 from app.runtime.errors import PreviewError
 from app.runtime.preview import PREVIEWABLE_TYPES, run_stage_preview
-from app.runtime.run_log import RUN_DONE, read_events_since
+from app.runtime.run_log import RUN_DONE, read_events_since, read_events_window
 from app.runtime.trace import trace_row, trace_to_dict
 from app.runtime.trace_view import build_trace_view
-from app.web.config import EXAMPLES_DIR, REPO_ROOT, templates
+from app.web.config import projects_dir, REPO_ROOT, templates
+from app.web.stage_test_views import build_certification, shape_test_views
 from app.web.diagrams import TYPE_CLASS, TYPE_GLYPH, build_mermaid_graph
 from app.web.loading import (
     build_llm_example,
@@ -56,6 +58,7 @@ from app.web.loading import (
     runs_dir,
 )
 from app.web.project_view import shell_state
+from app.web.run_stage_panel import not_executed_panel
 
 router = APIRouter()
 
@@ -65,10 +68,16 @@ router = APIRouter()
 _EVENT_POLL_INTERVAL_S = 0.5
 _IDLE_POLLS_BEFORE_TERMINAL_STOP = 2
 
+# The run log's page size: how many events the SSE feed opens on, and how many
+# one "load older" fetch brings back. The template reads EVENT_TAIL too, so the
+# panel's "showing N of M" is sized by the same number the stream is.
+EVENT_TAIL = 500
+EVENT_PAGE_MAX = 5000
+
 
 @router.post("/project/{project}/run")
 async def trigger_run(request: Request, project: str):
-    project_dir = EXAMPLES_DIR / project
+    project_dir = projects_dir() / project
     if not project_dir.is_dir():
         raise HTTPException(status_code=404, detail=f"No project '{project}'")
     # Set up the run (writes an initial `running` manifest), kick off execution
@@ -105,7 +114,7 @@ async def trigger_run_of_version(project: str, version_id: str):
     (400), and MissingInputBindingError/ValueError for a version whose stages
     aren't run-ready (e.g. an unbound file input) (400). Same
     background-and-redirect flow as trigger_run."""
-    project_dir = EXAMPLES_DIR / project
+    project_dir = projects_dir() / project
     if not project_dir.is_dir():
         raise HTTPException(status_code=404, detail=f"No project '{project}'")
     try:
@@ -183,7 +192,7 @@ async def run_inputs(project: str, version_id: str | None = None):
     path}]). The run form fetches this when the version dropdown changes so its
     path fields describe the version about to run — a different version can author
     different input stages/paths. `version_id` None resolves to the latest."""
-    project_dir = EXAMPLES_DIR / project
+    project_dir = projects_dir() / project
     if not project_dir.is_dir():
         raise HTTPException(status_code=404, detail=f"No project '{project}'")
     return JSONResponse(list_file_inputs(project, version_id))
@@ -201,7 +210,7 @@ async def upload_input(
     a path, so we save those bytes server-side (uploads/<stage_id>/<name>) and
     hand back the saved copy's path for the field. The disk copy runs in a
     threadpool so a large upload doesn't stall the event loop."""
-    project_dir = EXAMPLES_DIR / project
+    project_dir = projects_dir() / project
     if not project_dir.is_dir():
         raise HTTPException(status_code=404, detail=f"No project '{project}'")
     if not file.filename:
@@ -217,7 +226,7 @@ async def runs_index(request: Request, project: str):
     """RUNS section of the project shell: the runs list, framed by the sidebar. Passes
     the SAME project_state the other sections do (so the sidebar / next-action agree)
     plus the manifest-backed run rows. 404 if the project dir doesn't exist."""
-    pdir = EXAMPLES_DIR / project
+    pdir = projects_dir() / project
     if not pdir.is_dir():
         raise HTTPException(status_code=404, detail=f"No project '{project}'")
     # A stored version that no longer validates raises WorkflowLoadError from
@@ -323,16 +332,64 @@ def _artifact_links(project: str, run_id: str, run_dir: Path, manifest: dict) ->
 
 @router.get("/project/{project}/runs/{run_id}/events")
 async def stream_run_events(
-    project: str, run_id: str, request: Request, from_seq: int = 0
+    project: str,
+    run_id: str,
+    request: Request,
+    from_seq: int | None = None,
+    tail: int = EVENT_TAIL,
 ):
-    """SSE tail of this run's event log, live or finished."""
+    """SSE tail of this run's event log, live or finished.
+
+    Defaults to the LAST `tail` events, not the whole log: a row-per-event log
+    of a 135k-row stage runs to 270k events, and streaming all of them is a feed
+    no one can read arriving faster than a browser can render it. Older events
+    are a page fetch away (/events/page); `from_seq` still replays from an exact
+    cursor, which is what a reconnect uses.
+    """
     run_dir = runs_dir(project) / run_id
     load_manifest(run_dir)  # 404s if the run doesn't exist
+    start = (
+        _tail_start_seq(run_dir / "events.jsonl", tail)
+        if from_seq is None
+        else max(from_seq, 0)
+    )
     return StreamingResponse(
-        _tail_run_events(run_dir, request, from_seq),
+        _tail_run_events(run_dir, request, start),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+def _tail_start_seq(events_path: Path, tail: int) -> int:
+    """The seq to open a stream at so it yields the last `tail` events."""
+    # One read of the log, and the answer comes off the parsed events rather than
+    # from arithmetic on seq: taking `highest - tail` would assume seq has no
+    # gaps, which is true of what the writer emits today but is not a property
+    # the log itself carries.
+    events = read_events_since(events_path, 0)
+    if not events:
+        return 0
+    if tail <= 0:
+        return int(events[-1]["seq"]) + 1      # start past the end: nothing old
+    return 0 if len(events) <= tail else int(events[-tail]["seq"])
+
+
+@router.get("/project/{project}/runs/{run_id}/events/page")
+async def run_events_page(
+    project: str, run_id: str, before_seq: int, limit: int = EVENT_TAIL
+):
+    """The page of events immediately BEFORE `before_seq` — "load older"."""
+    # Backwards paging only. Newer events arrive on the SSE feed, so a forwards
+    # page would be a second route to the same events with its own cursor to
+    # keep in step; there is nothing for it to do.
+    run_dir = runs_dir(project) / run_id
+    load_manifest(run_dir)  # 404s if the run doesn't exist
+    limit = max(1, min(limit, EVENT_PAGE_MAX))
+    start = max(0, before_seq - limit)
+    events = read_events_window(
+        run_dir / "events.jsonl", start, limit=max(0, before_seq - start)
+    )
+    return {"events": events, "first_seq": start, "has_more": start > 0}
 
 
 async def _tail_run_events(
@@ -386,12 +443,21 @@ async def run_detail(request: Request, project: str, run_id: str):
         request,
         "run_detail.html",
         {
+            # The run view renders inside the project shell, so it carries the nav
+            # state like every other section. `section: runs` keeps the Runs entry
+            # highlighted while looking at one run.
+            "state": shell_state(projects_dir() / project),
+            "section": "runs",
             "project": project,
             "run_id": run_id,
             "manifest": manifest,
             "mermaid": graph.mermaid,
             "graph_error": graph.error,
+            "event_tail": EVENT_TAIL,
             "artifact_links": artifact_links,
+            # None when the pinned version carries no guide — the panel is then
+            # not rendered at all, rather than standing in for one with prose.
+            "guide": build_run_guide_view(project, manifest),
             "type_glyph": TYPE_GLYPH,
             "type_class": TYPE_CLASS,
         },
@@ -412,16 +478,18 @@ async def run_stage_partial(
         (s for s in manifest.get("stage_records", []) if s.get("stage_id") == stage_id),
         None,
     )
-    if stage_record is None:
-        raise HTTPException(status_code=404, detail=f"No stage '{stage_id}' in run")
-
-    output_preview = load_output_preview(run_dir, stage_record.get("output_path"))
 
     # The panel's Schema tier and Transform detail describe what THIS run
     # executed, so they read the version it pinned. With no resolvable version
     # there is no stage definition to show and the panel says why.
     pinned = run_service.load_pinned_stage_def(project, manifest, stage_id)
     stage_def = pinned.stage
+    if stage_record is None:
+        # A stage the graph draws but this run never executed (a workflow test
+        # injects its input stages) — see app.web.run_stage_panel.
+        return not_executed_panel(request, project, run_id, manifest, stage_id, pinned)
+
+    output_preview = load_output_preview(run_dir, stage_record.get("output_path"))
     output_by_id = {
         s.get("stage_id"): s.get("output_path") for s in manifest.get("stage_records", [])
     }
@@ -451,6 +519,8 @@ async def run_stage_partial(
             "input_previews": input_previews,
             "function_code": function_code,
             "llm_example": llm_example,
+            "test_views": (views := shape_test_views(stage_def)),
+            "certification": build_certification(stage_def, views) if stage_def else None,
             "previewable": stage_def is not None and stage_def.type in PREVIEWABLE_TYPES,
             "type_glyph": TYPE_GLYPH,
             "type_class": TYPE_CLASS,
@@ -530,6 +600,10 @@ async def run_stage_lineage_panel(
             "stage_def": pinned.stage,
             "stage_def_error": pinned.error,
             "function_code": resolve_function_code(pinned.stage),
+            "test_views": (lineage_views := shape_test_views(pinned.stage)),
+            "certification": (
+                build_certification(pinned.stage, lineage_views) if pinned.stage else None
+            ),
             "preview": load_output_row(run_dir, stage_record.get("output_path"), row),
             "scoped_row": row,
             "type_glyph": TYPE_GLYPH,
@@ -678,7 +752,7 @@ async def resume_run_route(project: str, run_id: str):
     NOT already complete (so this serves BOTH: a halted run after its review
     decisions, AND an ERRORED run after the bug is fixed — it re-runs the failed
     stage + downstream and reuses completed upstream outputs)."""
-    project_dir = EXAMPLES_DIR / project
+    project_dir = projects_dir() / project
     if not project_dir.is_dir():
         raise HTTPException(status_code=404, detail=f"No project '{project}'")
     run_dir = runs_dir(project) / run_id

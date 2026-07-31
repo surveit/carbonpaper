@@ -8,15 +8,15 @@
    open. #}
 {% if test_views or test_derivable %}
 <section class="exec-block test-report">
-  <h2>🧪 Tests
+  <h2>🧪 Example behavior
     {% if test_derivable %}
     <button type="button" class="btn" data-role="generate-tests"
-            title="Replaces this stage's tests with a fresh derivation from the methodology">Generate tests</button>
+            title="Replaces this stage's examples with a fresh derivation from the methodology">Generate examples</button>
     <span class="nr-edit-msg" data-role="generate-tests-msg"></span>
     {% endif %}
   </h2>
   {% if not test_views %}
-  <p class="muted">No tests yet.</p>
+  <p class="muted">No examples yet.</p>
   {% endif %}
   {% for view in test_views %}
   <details class="test-case" {% if view.status != "passed" %}open{% endif %}>
@@ -38,6 +38,10 @@
     </table>
     {% else %}<p class="muted">no rows (empty input)</p>{% endif %}
     {% endfor %}
+    {% if view.expected is none %}
+    <h3>expected outcome</h3>
+    <p class="muted">the step refuses this input rather than returning a value</p>
+    {% else %}
     <h3>expected output</h3>
     {% if view.expected.rows %}
     <table class="test-rows">
@@ -49,6 +53,7 @@
       </tbody>
     </table>
     {% else %}<p class="muted">no rows (empty output)</p>{% endif %}
+    {% endif %}
     {% if view.message %}<p class="test-message">{{ view.message }}</p>{% endif %}
     {% if view.diffs %}
     <h3>differing cells</h3>

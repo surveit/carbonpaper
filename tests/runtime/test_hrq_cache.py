@@ -9,7 +9,7 @@ import pandas as pd
 import pytest
 
 import app.runtime.runner as runner
-from app.models import RowReviewDecision, Stage
+from app.models import parse_stage, RowReviewDecision, Stage
 from app.models.stage import StageType
 from app.runtime.cancellation import request_cancel
 from app.runtime.context import RunIdentity
@@ -58,7 +58,7 @@ def _stage(
         queue["reviewer_instructions"] = reviewer_instructions
     if flt is not None:
         queue["filter"] = flt
-    return Stage.model_validate({
+    return parse_stage({
         "id": "review", "name": "Review", "type": "human_review_queue",
         "inputs": [{"id": "scored", "schema": {"columns": input_columns}}],
         "output_schema": {"columns": [*input_columns, *_REVIEW_COLUMNS]},
@@ -442,7 +442,7 @@ def test_every_row_rejected_still_emits_every_row_with_the_declared_columns(tmp_
     columns output_schema declares. A queue stage can no longer hand a
     non-empty input on as a zero-row frame at all, whatever the reviewer
     decided."""
-    stage = Stage.model_validate({
+    stage = parse_stage({
         "id": "review", "name": "Review", "type": "human_review_queue",
         "inputs": [{"id": "scored", "schema": {"columns": _SCORED_COLUMNS}}],
         "output_schema": {"columns": [{"name": "id", "type": "str"},

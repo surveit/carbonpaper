@@ -12,8 +12,8 @@ build/
 
 # Process-wide document store (SQLite; app/core/persistence.py), configured at
 # app startup (app/main.py lifespan) to <repo_root>/data/app.db by default. Path
-# is overridable via CW_DB_PATH. Anchored to the repo root (leading /) so it
-# doesn't also match a same-named dir elsewhere in the tree, e.g. the committed
+# is overridable via CARBONPAPER_DB_PATH. Anchored to the repo root (leading /)
+# so it doesn't also match a same-named dir elsewhere in the tree, e.g. the committed
 # app/seeds/data/ fixtures.
 /data/
 
