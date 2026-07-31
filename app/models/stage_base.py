@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 from collections.abc import Sequence
 from enum import Enum
-from typing import TYPE_CHECKING, Any, ClassVar, Optional, get_args
+from typing import TYPE_CHECKING, Any, ClassVar, NamedTuple, Optional, get_args
 
 from pydantic import (
     Field,
@@ -92,6 +92,41 @@ def is_grain_and_order_preserving(stage_type: StageType) -> bool:
     same order? Fixed entirely by stage type — see the
     StageBase.is_grain_and_order_preserving property for the per-type contract."""
     return stage_type in _GRAIN_AND_ORDER_PRESERVING_TYPES
+
+
+class PositionalCross(NamedTuple):
+    # subject_input: the input edge whose rows the output's rows correspond to,
+    #   1:1 and in order. input_count: how many input edges the type has — a
+    #   stage recording a different number is not the shape this fact describes,
+    #   so the caller must refuse to cross it rather than index the wrong edge.
+    subject_input: int
+    input_count: int
+
+
+# Which input a row of this type came from BY POSITION. Distinct from
+# _GRAIN_AND_ORDER_PRESERVING_TYPES above, which says whether the RUNTIME drives
+# the type row by row — that fact fixes caching and the eval gate, and the
+# handler registry is held to it. The two coincide for the row-driven types and
+# come apart at enrich: a join is handed whole frames, so it is not row-driven,
+# yet its output still carries exactly one row per subject row in subject order.
+# Absent here means a row does not positionally correspond to any one input's:
+# input_data originates rows; expand (m:n), aggregate and python_frame_function
+# reshape; filter_rows and union record explicit per-row lineage instead
+# (app.runtime.lineage).
+_POSITIONAL_CROSS: dict[StageType, PositionalCross] = {
+    StageType.python_row_function: PositionalCross(0, 1),
+    StageType.llm_transform: PositionalCross(0, 1),
+    StageType.human_review_queue: PositionalCross(0, 1),
+    # m:1 verified against the reference, and an unmatched subject row survives
+    # carrying nulls, so output row i IS subject row i. Input 1 is the reference
+    # the row was decorated FROM, not the row's parent.
+    StageType.enrich: PositionalCross(0, 2),
+}
+
+
+def find_positional_cross(stage_type: StageType) -> PositionalCross | None:
+    """How to cross this stage type on row ordinal alone; None where nothing can."""
+    return _POSITIONAL_CROSS.get(stage_type)
 
 
 # ── Shared blocks ────────────────────────────────────────────────────────────

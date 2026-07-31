@@ -163,3 +163,71 @@ def test_handler_lineage_reaches_the_executor_channel():
     ]
     # The ordinal carriers never reach the persisted frame.
     assert not [c for c in out.columns if c.startswith("_trace")]
+
+
+# ── crossing without a sidecar (runs recorded before lineage was captured) ────
+# The positional-cross fact (app.models.stage.find_positional_cross) is owed to
+# PR #348, which observed that an enrich is crossable on ordinal alone — m:1 is
+# verified and an unmatched subject row survives, so output row i IS subject row
+# i. That needs nothing recorded, so it reaches back to runs already on disk.
+
+
+def _enrich_run_without_sidecar(tmp_path):
+    return write_run(tmp_path, [
+        {"id": "filings", "type": "input_data", "parents": [], "df": FILINGS},
+        {"id": "contracts", "type": "input_data", "parents": [], "df": CONTRACTS},
+        {"id": "j", "type": "enrich", "parents": ["filings", "contracts"], "df": JOINED},
+    ])
+
+
+def test_enrich_crosses_on_ordinal_with_no_sidecar(tmp_path):
+    trace = trace_row(_enrich_run_without_sidecar(tmp_path), "j", 0)
+    assert [s.stage_id for s in trace.steps] == ["j", "filings"]
+    assert trace.end.reached_origin is True
+
+
+def test_without_a_sidecar_there_is_no_branch_to_offer(tmp_path):
+    """Honest rather than empty-handed: the walk still reaches the origin, it
+    just cannot offer the reference side, because nothing recorded it."""
+    trace = trace_row(_enrich_run_without_sidecar(tmp_path), "j", 0)
+    assert trace.steps[0].branches == []
+
+
+def test_columns_new_is_only_what_the_enrich_added(tmp_path):
+    """Without the positional parent this read as EVERY column, overstating what
+    the join contributed."""
+    trace = trace_row(_enrich_run_without_sidecar(tmp_path), "j", 0)
+    assert trace.steps[0].columns_new == ["agency"]
+
+
+def test_expand_still_stops_without_a_sidecar(tmp_path):
+    """m:n fan-out means output row i need NOT be subject row i, so there is no
+    positional cross to fall back on — only a recorded one will do."""
+    run_dir = write_run(tmp_path, [
+        {"id": "filings", "type": "input_data", "parents": [], "df": FILINGS},
+        {"id": "contracts", "type": "input_data", "parents": [], "df": CONTRACTS},
+        {"id": "j", "type": "expand", "parents": ["filings", "contracts"], "df": JOINED},
+    ])
+    trace = trace_row(run_dir, "j", 0)
+    assert [s.stage_id for s in trace.steps] == ["j"]
+    assert trace.end.reached_origin is False
+
+
+def test_a_recorded_sidecar_wins_over_the_positional_fallback(tmp_path):
+    """Both routes agree on the spine; only the recorded one carries the branch,
+    so the fallback must not shadow it."""
+    trace = trace_row(_join_run(tmp_path), "j", 0)
+    assert [s.stage_id for s in trace.steps] == ["j", "filings"]
+    assert trace.steps[0].branches == [RowParent("contracts", 0, EdgeKind.derivation.value)]
+
+
+def test_wrong_recorded_arity_refuses_to_cross(tmp_path):
+    """A missing input edge (one without a declared schema is absent from the
+    manifest) makes the subject index untrustworthy — refuse, don't guess."""
+    run_dir = write_run(tmp_path, [
+        {"id": "filings", "type": "input_data", "parents": [], "df": FILINGS},
+        {"id": "j", "type": "enrich", "parents": ["filings"], "df": JOINED},
+    ])
+    trace = trace_row(run_dir, "j", 0)
+    assert [s.stage_id for s in trace.steps] == ["j"]
+    assert trace.end.reached_origin is False

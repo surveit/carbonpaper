@@ -17,11 +17,13 @@ from pydantic import (
 from pydantic.json_schema import SkipJsonSchema
 
 from app.models.stage_base import (  # noqa: F401  (re-exported: the stage vocabulary lives here)
+    PositionalCross,
     ReviewConfig,
     StageBase,
     StageCommon,
     StageInput,
     StageType,
+    find_positional_cross,
     is_grain_and_order_preserving,
 )
 from app.models.stages.aggregate import AggregateConfig, AggregateStage
