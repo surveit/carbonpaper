@@ -10,8 +10,9 @@ from typing import Callable
 from pydantic import BaseModel
 
 from app.compiler.stage_tests_prompt import STAGE_TESTS_SYSTEM_PROMPT
+from app.compiler.turn_failure import persist_derivation_failure
 from app.core.agent.agent import Agent
-from app.core.agent.store import SessionStore, open_session_store
+from app.core.agent.store import open_session_store
 from app.core.agent.turns import default_turn_manager
 from app.models import Stage
 from app.models.stages.stage_tests import (
@@ -58,7 +59,7 @@ def start_stage_test_derivation_agent(
         try:
             on_answer(agent.answer)
         except Exception as exc:
-            _persist_derivation_failure(store, session_id, exc)
+            persist_derivation_failure(store, session_id, exc)
             raise
 
     default_turn_manager().start(
@@ -69,19 +70,6 @@ def start_stage_test_derivation_agent(
         on_done=_on_done,
     )
     return session_id
-
-
-def _persist_derivation_failure(store: SessionStore, session_id: str, error: Exception) -> None:
-    """Append a synthetic assistant message reporting `error` to `session_id`'s stored
-    transcript, so the failure survives past the in-memory turn buffer: a client that
-    was not watching the live turn still sees it on reload. Runs before the caller
-    re-raises `error`."""
-    messages = list(store.load(session_id)["messages"])
-    messages.append({
-        "role": "assistant",
-        "parts": [{"type": "text", "text": f"derivation failed: {error}"}],
-    })
-    store.save_messages(session_id, messages)
 
 
 def build_stage_test_deriver(

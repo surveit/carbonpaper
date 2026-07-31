@@ -1,7 +1,7 @@
-"""LLM generation of a project's data model and of one stage's tests.
-
-The turns run on the server event loop, so every `start_*` entry here must be called
-from an async context. Stage-test generation REPLACES that stage's tests wholesale.
+"""LLM generation of a project's data model, of one stage's tests, and of one saved
+version's review guide. The turns run on the server event loop, so every `start_*` entry
+here must be called from an async context. Stage-test generation REPLACES that stage's
+tests wholesale; guide generation refuses a version that already carries one.
 """
 from __future__ import annotations
 
@@ -12,11 +12,13 @@ from pathlib import Path
 from pydantic import BaseModel
 
 from app.compiler.data_model import start_data_model_generation_agent
+from app.compiler.review_guide import start_review_guide_generation_agent
 from app.compiler.stage_tests import start_stage_test_derivation_agent
 from app.core.errors import GenerationError
+from app.models.review_guide import ReviewGuide
 from app.models.named_schemas import SchemaLibrary
 from app.models.stages.stage_tests import STAGE_TEST_TYPES
-from app.services import data_model
+from app.services import data_model, versioning
 from app.services.loader import load_workflow
 from app.services.project import find_document_path
 from app.services.stage_edit import patch_stage_spec
@@ -76,6 +78,38 @@ def start_stage_test_generation(project_dir: Path, *, stage_id: str, model: str)
     )
 
 
+def start_review_guide_generation(
+    project_dir: Path, *, version_id: str, model: str
+) -> str:
+    """Kick REVIEW-GUIDE authoring for one saved version and return the id of the
+    (hidden, view-only) chat session streaming the turn.
+
+    The stages handed to the agent are read off the VERSION — `versioning.load_version`,
+    never `load_workflow` — so the guide narrates the frozen snapshot and not the working
+    copy, which has usually moved on. Raises FileNotFoundError for an unknown version,
+    and ValueError when the project has no methodology document (the guide's vocabulary
+    comes from it) or when the version already carries a guide, which this would replace.
+    Both checks run BEFORE the session is created, so a refusal leaves no orphaned
+    session. Must be called from the server event loop."""
+    version = versioning.load_version(project_dir, version_id)
+    if version.guide is not None:
+        raise ValueError(
+            f"version '{version_id}' already has a review guide — edit it with the "
+            "authoring agent rather than regenerating over it"
+        )
+    doc_path = find_document_path(project_dir)
+    if doc_path is None:
+        raise ValueError(f"{project_dir.name} has no document to write a guide from")
+    return start_review_guide_generation_agent(
+        stages=version.stages,
+        version_id=version.version_id,
+        project_id=project_dir.name,
+        document=doc_path.read_text(encoding="utf-8"),
+        model=model,
+        on_answer=lambda guide: _finish_review_guide(project_dir, version_id, guide),
+    )
+
+
 def _finish_data_model(project_dir: Path, answer: SchemaLibrary | None) -> None:
     """Completion hook for the data-model turn (runs on the event loop): if the agent submitted
     a valid data model (`answer`), persist the schemas. The create-flow stops here — the
@@ -84,6 +118,23 @@ def _finish_data_model(project_dir: Path, answer: SchemaLibrary | None) -> None:
     if answer is None:
         return
     data_model.write_data_model(project_dir, answer)
+
+
+def _finish_review_guide(
+    project_dir: Path, version_id: str, guide: ReviewGuide | None
+) -> None:
+    """Completion hook for the guide turn (runs on the event loop): store the submitted
+    guide on the version. Nothing submitted raises rather than leaving the journalist
+    looking at an unexplained empty panel; `save_version_guide` validates the guide
+    against the version's frozen stages and raises ReviewGuideValidationError, unwritten,
+    if it does not account for them. Either error is persisted into the session's
+    transcript by the caller's on_done hook before it re-raises."""
+    if guide is None:
+        raise GenerationError(
+            f"review-guide generation for version '{version_id}' in {project_dir.name} "
+            "did not submit a guide"
+        )
+    versioning.save_version_guide(project_dir, version_id, guide)
 
 
 def _finish_stage_tests(project_dir: Path, stage_id: str, answer: BaseModel | None) -> None:

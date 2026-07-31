@@ -53,6 +53,14 @@
 <p class="muted"><b>{{ cov.approved }}</b>/{{ cov.total }} nodes approved when this version was cut.</p>
 {% endif %}
 
+{# Offered only where a version has no guide: the reader who wants the walkthrough
+   is the one who needs the way to get it written. #}
+{% if not version.guide %}
+{% with project = state.name, guide_version_id = version.version_id %}
+{% include "_generate_guide.html" %}
+{% endwith %}
+{% endif %}
+
 <div class="wf-stack"><div class="wf-top">
   <div class="diagram-block">
     <div class="diagram-tools">

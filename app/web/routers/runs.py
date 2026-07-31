@@ -34,7 +34,7 @@ from app.services.errors import WorkflowLoadError
 from app.services.loader import load_workflow, resolve_function_code
 from app.services.versioning import list_versions
 from app.services import run as run_service
-from app.services.run_guide import build_run_guide_view
+from app.services.run_guide import build_run_guide_view, find_guideless_version_id
 from app.runtime.cancellation import request_cancel
 from app.runtime.errors import PreviewError
 from app.runtime.preview import PREVIEWABLE_TYPES, run_stage_preview
@@ -458,6 +458,9 @@ async def run_detail(request: Request, project: str, run_id: str):
             # None when the pinned version carries no guide — the panel is then
             # not rendered at all, rather than standing in for one with prose.
             "guide": build_run_guide_view(project, manifest),
+            # Set only when a guide could still be written for this run's version:
+            # the version id the Generate-guide offer targets in the panel's place.
+            "guideless_version": find_guideless_version_id(project, manifest),
             "type_glyph": TYPE_GLYPH,
             "type_class": TYPE_CLASS,
         },

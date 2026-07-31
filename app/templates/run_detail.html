@@ -50,6 +50,15 @@
      guide beside it; the guide's own columns rule lives in _run_guide.html. */
   .run-shell { height: 100%; min-height: 0; }
   .run-main { min-width: 0; height: 100%; overflow-y: auto; padding-right: 6px; }
+  /* The same column, for a pinned version that carries no guide: the offer to write
+     one stands where the guide will, so the run does not reflow once it exists. */
+  .run-shell.needs-guide { display: grid; grid-template-columns: minmax(0, 1fr) 360px;
+                           gap: 18px; align-items: stretch; }
+  .run-guide-missing { min-width: 0; height: 100%; overflow-y: auto;
+                       border-left: 1px solid var(--border); padding-left: 18px; }
+  .run-guide-missing h2 { font-size: 12px; text-transform: uppercase;
+                          letter-spacing: .06em; color: var(--muted); margin: 0 0 4px; }
+  .run-guide-missing .guide-cta p { font-size: 11.5px; line-height: 1.5; }
 
   /* Scroll-edge fade. The mask insets only on the side that still has content, so a
      pane parked at the top is not fading its own first line; the JS below keeps
@@ -64,10 +73,12 @@
     body { height: auto; overflow: visible; }
     main { padding-bottom: 48px; }
     .app-shell, .app-side, .app-main, .run-shell, .run-main { height: auto; overflow: visible; }
+    .run-shell.needs-guide { grid-template-columns: 1fr; }
+    .run-guide-missing { height: auto; overflow: visible; border-left: 0; padding-left: 0; }
   }
 </style>
 
-<div class="run-shell{% if guide %} with-guide{% endif %}" id="run-shell">
+<div class="run-shell{% if guide %} with-guide{% elif guideless_version %} needs-guide{% endif %}" id="run-shell">
 <div class="run-main fade-scroll">
 
 {% if manifest.is_test_run %}
@@ -294,7 +305,15 @@
 
 </div>{# /.run-main #}
 
-{% if guide %}{% include "_run_guide.html" %}{% endif %}
+{% if guide %}{% include "_run_guide.html" %}
+{% elif guideless_version %}
+{# The version this run pinned carries no guide. Say so where the guide would be, and
+   offer to write one against THAT version — not the working copy the run never saw. #}
+<aside class="run-guide-missing fade-scroll">
+  <h2>Review guide</h2>
+  {% with guide_version_id = guideless_version %}{% include "_generate_guide.html" %}{% endwith %}
+</aside>
+{% endif %}
 
 </div>{# /.run-shell #}
 
