@@ -12,8 +12,9 @@ from typing import Any, ClassVar
 
 from pydantic import Field, ValidationError
 
-from app.core.errors import DocumentNotFound
+from app.core.errors import DocumentNotFound, ReviewGuideValidationError
 from app.models import Coverage, Stage
+from app.models.review_guide import ReviewGuide
 from app.models.workflow import parse_workflow
 from app.core.persistence import PersistedModel, PersistenceScope, get_store
 from app.core.utils import format_errors
@@ -54,6 +55,10 @@ class WorkflowVersion(PersistedModel):
     coverage: Coverage = Field(default_factory=_no_coverage)
     stages: list[Stage] = Field(default_factory=list)
     schemas: list[dict[str, Any]] = Field(default_factory=list)
+    # Written after creation, by save_version_guide — a version is born without one.
+    # DUMP_OPTS' exclude_none drops the key entirely while it is None, which is also
+    # the shape of every version document written before this field existed.
+    guide: ReviewGuide | None = None
     published: bool = False
     published_at: str | None = None
     published_by: str | None = None
@@ -176,6 +181,69 @@ def publish_version(project_dir: Path, version_id: str, *, reviewer: str) -> Wor
     return v
 
 
+def save_version_guide(
+    project_dir: Path, version_id: str, guide: ReviewGuide
+) -> WorkflowVersion:
+    """Replaces any earlier guide. Validates first, so a mismatched one is never written."""
+    v = load_version(project_dir, version_id)
+    validate_review_guide(guide, v.stages)
+    v.guide = guide
+    v.save()
+    return v
+
+
+def validate_review_guide(guide: ReviewGuide, stages: list[Stage]) -> None:
+    """Raises ReviewGuideValidationError naming every offending stage id."""
+    issues = _find_review_guide_issues(guide, stages)
+    if issues:
+        raise ReviewGuideValidationError(
+            "review guide does not match the version's stages: " + "; ".join(issues)
+        )
+
+
+def _find_review_guide_issues(guide: ReviewGuide, stages: list[Stage]) -> list[str]:
+    """All the ways `guide` misaccounts for `stages`, not the first — one rejection, whole story."""
+    stage_ids = [stage.id for stage in stages]
+    return (
+        _find_unknown_stage_ids(guide, stage_ids)
+        + _find_unaccounted_stage_ids(guide, stage_ids)
+        + _find_doubly_placed_stage_ids(guide)
+        + _find_repeated_step_stage_ids(guide)
+    )
+
+
+def _find_unknown_stage_ids(guide: ReviewGuide, stage_ids: list[str]) -> list[str]:
+    known = set(stage_ids)
+    named = [*guide.collect_step_stage_ids(), *guide.unnarrated]
+    unknown = sorted({stage_id for stage_id in named if stage_id not in known})
+    if not unknown:
+        return []
+    return [f"names stage id(s) this version does not have: {unknown}"]
+
+
+def _find_unaccounted_stage_ids(guide: ReviewGuide, stage_ids: list[str]) -> list[str]:
+    placed = {*guide.collect_step_stage_ids(), *guide.unnarrated}
+    unaccounted = [stage_id for stage_id in stage_ids if stage_id not in placed]
+    if not unaccounted:
+        return []
+    return [f"stage(s) in no step and not listed unnarrated: {unaccounted}"]
+
+
+def _find_doubly_placed_stage_ids(guide: ReviewGuide) -> list[str]:
+    both = sorted(set(guide.collect_step_stage_ids()) & set(guide.unnarrated))
+    if not both:
+        return []
+    return [f"stage(s) narrated by a step AND listed unnarrated: {both}"]
+
+
+def _find_repeated_step_stage_ids(guide: ReviewGuide) -> list[str]:
+    named = guide.collect_step_stage_ids()
+    repeated = sorted({stage_id for stage_id in named if named.count(stage_id) > 1})
+    if not repeated:
+        return []
+    return [f"stage(s) narrated more than once across the steps: {repeated}"]
+
+
 def _invalid_version_document(doc_id: str, exc: ValidationError) -> WorkflowLoadError:
     """A stored version document no longer validates — store corruption, or a
     version written under older model rules (e.g. a repo-relative path from
@@ -264,4 +332,6 @@ __all__ = [
     "create_version_from_disk",
     "create_version_from_stages",
     "publish_version",
+    "save_version_guide",
+    "validate_review_guide",
 ]
