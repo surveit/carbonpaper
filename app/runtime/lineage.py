@@ -78,7 +78,7 @@ def concatenated_inputs_lineage(
     stage: "Stage", inputs: dict[str, pd.DataFrame]
 ) -> RowLineage:
     """Lineage for a stage that emitted its inputs concatenated in declared
-    order (union), derived from their row counts alone — the runtime knows the
+    order (union), computed from their row counts alone — the runtime knows the
     lengths it handed over, so the stage is not consulted."""
     source_stage: list[str] = []
     source_row: list[int] = []

@@ -16,7 +16,7 @@ from app.services import versioning
 from app.services.project import save_working_copy_as_version
 from app.services import workspace
 
-# The exact value sets, derived by grepping every `record["status"]` /
+# The exact value sets, collected by grepping every `record["status"]` /
 # `manifest["status"]` literal the runner writes (app/runtime/runner.py) and
 # the status_glyph/status_stroke maps that key off them (app/web/diagrams.py).
 STAGE_STATUS_VALUES = {

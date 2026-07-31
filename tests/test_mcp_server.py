@@ -182,7 +182,7 @@ def test_run_stage_tests_scopes_to_one_stage(tmp_path, monkeypatch):
     assert report["summary"]["tests_total"] == 2
 
 
-def test_generate_stage_tests_kicks_the_derivation_turn(tmp_path, monkeypatch):
+def test_generate_stage_tests_kicks_the_generation_turn(tmp_path, monkeypatch):
     from app.mcp import server
 
     workspace.set_projects_dir(tmp_path)

@@ -12,7 +12,7 @@ from app.models.schema import StageConfig, _Base
 from app.models.stage_base import StageBase, StageInput, StageType
 from app.models.stages.shared import (
     COLUMN_ISSUE,
-    find_declared_vs_derived_issues,
+    find_declared_vs_computed_issues,
     resolve_input_columns,
 )
 
@@ -107,7 +107,7 @@ def find_join_output_issues(stage: "JoinStage") -> list[str]:
     assert stage.output_schema is not None  # StageBase._schemas_declared guarantees this
     left = stage.inputs[0].table_schema
     right = stage.inputs[1].table_schema
-    joined = derive_join_output_types(join, left, right)
+    joined = compute_join_output_types(join, left, right)
     stage_type = str(stage.type)
     issues = [
         SELECT_UNPRODUCIBLE_ISSUE.format(
@@ -121,12 +121,12 @@ def find_join_output_issues(stage: "JoinStage") -> list[str]:
         if join.select else joined
     )
     issues.extend(
-        find_declared_vs_derived_issues(stage.id, stage_type, stage.output_schema, effective)
+        find_declared_vs_computed_issues(stage.id, stage_type, stage.output_schema, effective)
     )
     return issues
 
 
-def derive_join_output_types(
+def compute_join_output_types(
     join: "JoinConfig", left: "TableSchema", right: "TableSchema"
 ) -> dict[str, str]:
     """The columns the join handle emits, each mapped to its type — mirroring

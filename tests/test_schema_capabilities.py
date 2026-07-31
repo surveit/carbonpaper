@@ -266,8 +266,8 @@ def test_subtract_nested_field_spec_difference_throws():
         b.subtract(a)
 
 
-def test_spec_column_fields_derived_from_model():
-    """The fields subtract compares for spec-equality are DERIVED from the
+def test_spec_column_fields_read_off_the_model():
+    """The fields subtract compares for spec-equality are READ OFF the
     Column model (every field except the prose ones), so a newly added schema
     capability is compared automatically instead of being silently ignored."""
     from app.models import schema as sch

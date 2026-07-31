@@ -1,4 +1,4 @@
-"""add_stage takes a LIST: these pin the batch outcome model — order derived, partial
+"""add_stage takes a LIST: these pin the batch outcome model — order resolved, partial
 success kept, an unorderable batch refused whole. Every assertion checks the STORED
 workflow, not just the payload, since "added" is worth nothing if it is not on disk."""
 from __future__ import annotations

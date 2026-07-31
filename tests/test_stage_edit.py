@@ -74,7 +74,7 @@ def test_edit_after_approval_drops_to_edited_stale(tmp_path: Path) -> None:
                                      decision="approve", reviewer="human")
     result = stage_edit.edit_stage_spec(pdir, "score", json.dumps({**_VALID, "name": "Score rows v2"}))
     assert result.ok is True
-    # The writer no longer reports colour; re-derive it the way the review layer
+    # The writer no longer reports colour; recompute it the way the review layer
     # (and the node-edit route) does — the approved node still drops to amber.
     edited = json.loads((pdir / "compiled" / "02_score.json").read_text(encoding="utf-8"))
     spec = loader.stage_to_spec_dict(parse_stage(edited))

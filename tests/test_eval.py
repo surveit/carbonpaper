@@ -171,7 +171,7 @@ def test_eval_config_table_optional():
 
 def test_eval_config_no_key_or_input_columns_fields():
     # `key` and `input_columns` are not part of the contract: the injected
-    # columns are derived from override_stage's output schema, not authored.
+    # columns are computed from override_stage's output schema, not authored.
     cfg = m.EvalConfig.model_validate({
         "id": "e1", "project": "lobbymap", "name": "E1",
         "override_stage": "a", "target_stage": "b",

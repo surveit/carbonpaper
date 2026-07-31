@@ -7,15 +7,15 @@ from app.core.agent.store import SessionStore
 
 # The marker the status route matches on to report a failed generation turn
 # (app/web/routers/node_review.py, generation_session_status).
-DERIVATION_FAILURE_PREFIX = "derivation failed: "
+GENERATION_FAILURE_PREFIX = "generation failed: "
 
 
-def persist_derivation_failure(
+def persist_generation_failure(
     store: SessionStore, session_id: str, error: Exception
 ) -> None:
     messages = list(store.load(session_id)["messages"])
     messages.append({
         "role": "assistant",
-        "parts": [{"type": "text", "text": f"{DERIVATION_FAILURE_PREFIX}{error}"}],
+        "parts": [{"type": "text", "text": f"{GENERATION_FAILURE_PREFIX}{error}"}],
     })
     store.save_messages(session_id, messages)

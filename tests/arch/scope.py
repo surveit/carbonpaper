@@ -1,4 +1,4 @@
-"""Location-derived scope: an arch test in an ``_arch_tests/`` folder governs the
+"""Scope taken from location: an arch test in an ``_arch_tests/`` folder governs the
 subtree it sits in — no hardcoded path. Exemptions are checked on the path RELATIVE
 to the scan base: the checkout may itself live under a hidden directory (e.g. a git
 worktree under ``.claude/``), whose absolute parts would match ``startswith(".")``.

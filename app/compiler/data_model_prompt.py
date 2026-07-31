@@ -1,7 +1,7 @@
 """The data-model authoring system prompt.
 
 The emit SHAPE is not described here — it is carried by the `submit_answer` tool's input
-schema (derived from `SchemaLibrary`); this prompt carries only the role and the
+schema (built from `SchemaLibrary`); this prompt carries only the role and the
 methodology guidance.
 """
 from __future__ import annotations

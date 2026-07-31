@@ -1,4 +1,4 @@
-"""Eval config/run storage (the document store), plus status derivation.
+"""Eval config/run storage (the document store), plus the status rule.
 Configs are mutable authored documents (write is upsert); runs are immutable,
 minted by the runner and only read here. Both are project-scoped by document id,
 so a project with no eval activity returns empty rather than needing scaffolding.

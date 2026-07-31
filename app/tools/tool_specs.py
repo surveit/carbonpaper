@@ -101,13 +101,13 @@ schemas are the vocabulary you author the workflow's stages against.""",
     "generate_stage_tests": ToolSpec(
         name="generate_stage_tests",
         description="""\
-Derive tests for one stage that can run them FROM THE METHODOLOGY. The
-derivation is code-blind by construction: the deriver only ever sees the
+Generate tests for one stage that can run them FROM THE METHODOLOGY. The
+generation is code-blind by construction: the generator only ever sees the
 methodology document plus the data model / stage schemas, never the stage's
 code or any existing tests — so calling this right after generating or
 editing the code cannot anchor the tests on the implementation (that would
 assert the code equals itself). Starts a background turn and returns
-immediately; on completion the derived suite REPLACES the stage's tests
+immediately; on completion the generated suite REPLACES the stage's tests
 wholesale. Fails loudly if the stage's type carries no runnable tests, or it
 has no output schema.""",
     ),
@@ -200,7 +200,7 @@ with edit_stage to see which tests the new code fails — the report carries a
 summary plus, per test, its status and any cell diffs, and lists
 `untested_stages` (testable stages with no tests, a coverage gap).
 This does NOT edit tests: a failing test means the code disagrees with the
-frozen test, and the fix is to the code (or to re-derive via
+frozen test, and the fix is to the code (or to regenerate via
 generate_stage_tests), never to bend the test to the code.""",
     ),
     "run_workflow": ToolSpec(

@@ -44,7 +44,7 @@ def test_declared_column_not_producible_rejected():
 
 
 def test_count_output_declared_non_int_rejected():
-    # count derives int regardless of the input types.
+    # count gives int regardless of the input types.
     msg = _issues(_aggregate_stage(
         output_columns=[{"name": "n", "type": "str"}],
         aggregations=[{"output_column": "n", "formula": "count"}],
@@ -83,7 +83,7 @@ def test_sum_of_int_declared_str_rejected():
 
 
 def test_sum_of_str_declared_str_accepted():
-    # pandas sum of a string column concatenates, so sum over str derives str.
+    # pandas sum of a string column concatenates, so sum over str gives str.
     stage = parse_stage(_aggregate_stage(
         output_columns=[{"name": "all_regions", "type": "str"}],
         aggregations=[

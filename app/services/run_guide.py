@@ -1,7 +1,7 @@
 """Pairs a run's pinned review guide with the stages it names, so the run page can
 show each authored step beside the definitions it talks about. Everything the guide
 deliberately does not store — a stage's name, type, place in the execution order and
-the columns it writes — is derived here, off the same pinned version."""
+the columns it writes — is read off the stages here, from the same pinned version."""
 from __future__ import annotations
 
 from dataclasses import dataclass

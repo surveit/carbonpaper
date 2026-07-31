@@ -50,7 +50,7 @@ def find_governed_files(app_root: Path, tests_root: Path) -> list[Path]:
 
 
 def find_python_files(root: Path) -> list[Path]:
-    """Recursive, minus `_TESTS_EXEMPT_PARTS` (derived from the complexity ratchet's
+    """Recursive, minus `_TESTS_EXEMPT_PARTS` (taken from the complexity ratchet's
     set, so a future shared exemption reaches both scanners). Parts are checked on
     the path relative to `root`: this repo's worktrees can live under a
     dot-directory, whose absolute parts would spuriously exempt the whole tree."""

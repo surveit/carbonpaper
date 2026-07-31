@@ -53,7 +53,7 @@
     <h3>prompt data template</h3>
     <pre class="prompt">{{ stage.llm.prompt_data_template }}</pre>
     {# The reply spec the runtime compiles the model's response format from —
-       stage.llm_reply_schema() is that exact object, not a re-derivation. #}
+       stage.llm_reply_schema() is that exact object, not a rebuilt copy. #}
     {% set reply_schema = stage.llm_reply_schema() %}
     {% if reply_schema %}
     <h3>expected reply schema</h3>

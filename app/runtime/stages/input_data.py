@@ -114,11 +114,11 @@ def _read_dtype(
     """The `dtype=` map for a guessing format, or None when there is nothing to pin."""
     # Keyed Hashable, not str: pandas types `dtype=` as Mapping[Hashable, ...], whose
     # key is invariant, so a dict[str, ...] is not assignable to it.
-    derived: dict[Hashable, Any] = {name: str for name in _text_on_disk_columns(schema, fmt)}
+    pinned: dict[Hashable, Any] = {name: str for name in _text_on_disk_columns(schema, fmt)}
     # An explicit `dtype` param wins per column name: the author's declaration of how
     # to READ the file beats what we infer from the declaration of what it CONTAINS.
-    derived.update(params.get("dtype") or {})
-    return derived or None
+    pinned.update(params.get("dtype") or {})
+    return pinned or None
 
 
 def _text_on_disk_columns(schema: TableSchema | None, fmt: str) -> list[str]:
@@ -143,7 +143,7 @@ def _text_on_disk_columns(schema: TableSchema | None, fmt: str) -> list[str]:
 def _date_columns(schema: TableSchema | None, fmt: str, params: dict[str, Any]) -> list[str]:
     """Columns to run through pd.to_datetime: the authored `parse_dates`, then declared dates."""
     columns = list(params.get("parse_dates", []))
-    # Only formats whose values arrive untyped (csv, json) contribute derived
+    # Only formats whose values arrive untyped (csv, json) contribute declared
     # columns — parquet, xlsx and geojson carry real types already.
     if schema is None or fmt not in _INFERRING_FORMATS:
         return columns
@@ -155,7 +155,7 @@ def _date_columns(schema: TableSchema | None, fmt: str, params: dict[str, Any]) 
 
 def _read_geojson(path: Path) -> pd.DataFrame:
     """Flatten a GeoJSON FeatureCollection into a DataFrame: one row per
-    feature, columns = feature properties plus geometry-derived `lon`/`lat`
+    feature, columns = feature properties plus `lon`/`lat` read off the geometry
     (point centroid). Keeps input_data honest for vector sources like the
     Trase Indonesia mills file, which the `csv`/`json` paths can't parse."""
     geo = json.loads(path.read_text(encoding="utf-8"))

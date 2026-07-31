@@ -12,6 +12,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 import app.compiler.stage_tests as compiler_stage_tests
+from app.compiler.turn_failure import GENERATION_FAILURE_PREFIX
 from app.core.agent.store import SessionStore
 from app.core.agent.turns import TurnManager
 from app.models import TableSchema
@@ -32,7 +33,7 @@ _OUT_SCHEMA = {"columns": [
 def _seed_project(root: Path) -> Path:
     """A project (alpha) with a document and a three-stage workflow
     load -> double -> publish. `double` (python_row_function) is the stage tests
-    are derived for; `publish` and `load` are non-python controls for the
+    are generated for; `publish` and `load` are non-python controls for the
     button/template assertions."""
     project_dir = root / "alpha"
     project_dir.mkdir(parents=True)
@@ -76,12 +77,12 @@ def _valid_suite() -> Any:
     })
 
 
-class _FakeDeriverAgent:
-    """Stands in for the stage-test deriver Agent: stream_turn 'submits' a valid
+class _FakeGeneratorAgent:
+    """Stands in for the stage-test generator Agent: stream_turn 'submits' a valid
     suite and returns a transcript, exactly as the real submit_answer + engine
     would during the turn."""
 
-    task = "derive tests for stage `double` and submit them"
+    task = "generate tests for stage `double` and submit them"
 
     def __init__(self) -> None:
         self._answer: Any = None
@@ -95,18 +96,18 @@ class _FakeDeriverAgent:
 
         class _Engine:
             async def stream_turn(self, prompt: str, *, message_history: Any, emit: Any, resume: Any):
-                emit({"kind": "text", "text": "derived"})
+                emit({"kind": "text", "text": "generated"})
                 agent._answer = _valid_suite()
-                return [{"role": "assistant", "parts": [{"type": "text", "text": "derived"}]}], None
+                return [{"role": "assistant", "parts": [{"type": "text", "text": "generated"}]}], None
 
         return _Engine()
 
 
-class _FakeDeriverAgentNoAnswer:
-    """A deriver whose turn ends without ever calling submit_answer — exercises
+class _FakeGeneratorAgentNoAnswer:
+    """A generator whose turn ends without ever calling submit_answer — exercises
     the no-answer -> GenerationError -> persisted-failure path."""
 
-    task = "derive tests for stage `double` and submit them"
+    task = "generate tests for stage `double` and submit them"
 
     def __init__(self) -> None:
         self._answer: Any = None
@@ -127,7 +128,7 @@ class _FakeDeriverAgentNoAnswer:
 @pytest.fixture
 def client(tmp_path: Path, monkeypatch):
     """The review-partial's TestClient fixture (tests/test_stage_test_panel.py),
-    but held open as a context manager: the derivation turn is fire-and-forget
+    but held open as a context manager: the generation turn is fire-and-forget
     background work on the client's own event loop, so that loop must survive
     across the POST and the follow-up status polls, not be torn down after each
     request (starlette's TestClient tears down a fresh portal per call unless
@@ -147,15 +148,15 @@ def _poll_until_inactive(client: TestClient, project: str, sid: str, *,
         if not data["active"]:
             return data
         time.sleep(interval)
-    pytest.fail("derivation did not finish within the poll timeout")
+    pytest.fail("generation did not finish within the poll timeout")
 
 
 # ── POST generate-tests ──────────────────────────────────────────────────────
 
-def test_generate_tests_derives_and_patches_the_stage(client: TestClient, tmp_path: Path, monkeypatch):
+def test_generate_tests_generates_and_patches_the_stage(client: TestClient, tmp_path: Path, monkeypatch):
     project_dir = _seed_project(tmp_path)
     monkeypatch.setattr(compiler_stage_tests, "default_turn_manager", lambda: TurnManager())
-    monkeypatch.setattr(compiler_stage_tests, "build_stage_test_deriver", lambda *a, **k: _FakeDeriverAgent())
+    monkeypatch.setattr(compiler_stage_tests, "build_stage_test_generator", lambda *a, **k: _FakeGeneratorAgent())
 
     response = client.post("/project/alpha/node/double/generate-tests")
 
@@ -182,11 +183,11 @@ def test_generate_tests_rejects_non_python_stage(client: TestClient, tmp_path: P
     assert len(SessionStore().list_sessions()) == before  # no orphaned session
 
 
-def test_status_reports_error_after_failed_derivation(client: TestClient, tmp_path: Path, monkeypatch):
+def test_status_reports_error_after_failed_generation(client: TestClient, tmp_path: Path, monkeypatch):
     project_dir = _seed_project(tmp_path)
     monkeypatch.setattr(compiler_stage_tests, "default_turn_manager", lambda: TurnManager())
     monkeypatch.setattr(
-        compiler_stage_tests, "build_stage_test_deriver", lambda *a, **k: _FakeDeriverAgentNoAnswer()
+        compiler_stage_tests, "build_stage_test_generator", lambda *a, **k: _FakeGeneratorAgentNoAnswer()
     )
 
     response = client.post("/project/alpha/node/double/generate-tests")
@@ -195,14 +196,14 @@ def test_status_reports_error_after_failed_derivation(client: TestClient, tmp_pa
     status = _poll_until_inactive(client, "alpha", sid)
 
     assert status["error"] is not None
-    assert status["error"].startswith("derivation failed: ")
+    assert status["error"].startswith(GENERATION_FAILURE_PREFIX)
     stage = json.loads((project_dir / "compiled" / "02_double.json").read_text(encoding="utf-8"))
-    assert "tests" not in stage  # nothing written on a failed derivation
+    assert "tests" not in stage  # nothing written on a failed generation
 
 
 def test_generate_tests_rejects_python_stage_without_output_schema(client: TestClient, tmp_path: Path):
-    """`double` is a python_row_function (tests are derivable for its TYPE), and every
-    stage bar publish must declare an output_schema — which derived tests need anyway, to
+    """`double` is a python_row_function (tests can be generated for its TYPE), and every
+    stage bar publish must declare an output_schema — which generated tests need anyway, to
     state their expected rows. A stored stage lacking one no longer parses, so the route
     rejects it while loading the workflow: 400, naming the missing declaration, and no
     orphaned session, the same as the wrong-TYPE case above."""

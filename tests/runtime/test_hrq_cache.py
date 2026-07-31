@@ -539,7 +539,7 @@ def test_cache_is_read_once_per_stage_execution(tmp_path, monkeypatch):
 
 
 def test_queue_stats_hold_when_every_row_is_served_from_the_cache(tmp_path, monkeypatch):
-    """The counts are derived from the assembled frame, not accumulated as rows
+    """The counts are computed from the assembled frame, not accumulated as rows
     are mapped, so they survive a run where the driver's cache answers EVERY row
     and the mapper is never called once — decided rows replaying a human's
     verdict and passed-through rows replaying their own recorded output."""

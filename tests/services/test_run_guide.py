@@ -1,4 +1,4 @@
-"""What the run page derives around a version's authored review guide. Project
+"""What the run page reads off the workflow around a version's authored review guide. Project
 scoping is by directory name under a repointed projects dir, isolated per test by
 the autouse in-memory store (conftest.fresh_store)."""
 from __future__ import annotations
@@ -131,7 +131,7 @@ def test_an_unresolvable_version_is_not_offered_a_guide(project_dir, manifest):
     assert find_guideless_version_id("demo", manifest) is None
 
 
-# ── the derived facts ────────────────────────────────────────────────────────
+# ── the facts read off the stages ────────────────────────────────────────────
 
 def test_a_step_carries_its_authored_prose_and_title(project_dir):
     view = build_run_guide_view("demo", _manifest(_version_with_guide(project_dir)))
@@ -155,7 +155,7 @@ def test_each_stage_carries_its_definition_from_the_pinned_version(project_dir):
     assert loaded.stage.type == "input_data"
 
 
-def test_written_columns_are_derived_per_stage(project_dir):
+def test_written_columns_are_read_off_each_stage(project_dir):
     view = build_run_guide_view("demo", _manifest(_version_with_guide(project_dir)))
 
     written = {

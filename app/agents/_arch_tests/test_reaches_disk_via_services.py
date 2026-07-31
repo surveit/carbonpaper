@@ -1,6 +1,6 @@
 """Architecture: the methodology-editing agent reaches state through services, not disk.
 
-Scope is this feature's own subtree, derived from where this test lives.
+Scope is this feature's own subtree, taken from where this test lives.
 """
 from __future__ import annotations
 

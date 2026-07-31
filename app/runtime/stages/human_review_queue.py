@@ -69,7 +69,7 @@ class _QueueRowMapper:
     row (one frame-wide evaluation, so a filter that cannot be evaluated fails
     before any row is mapped). A row's outcome is then a lookup by position.
 
-    Nothing is accumulated across rows. The item counts are derived in
+    Nothing is accumulated across rows. The item counts are computed in
     `finish_mapped_rows` from the assembled frame, so a map that raises instead
     (a cancel) reports nothing and leaves whatever the manifest already held:
     for a resumed run, the counts of the halt it is resuming."""
@@ -97,7 +97,7 @@ class _QueueRowMapper:
         can produce. Returns after the counts when no row was deferred. The
         halt carries the same `contribution`, because on that path the raise is
         this stage's only return path into the manifest."""
-        contribution.human_review_queue_stats = _derive_queue_stats(df)
+        contribution.human_review_queue_stats = _compute_queue_stats(df)
         pending = _find_pending_reviews(df)
         if not pending:
             return
@@ -212,7 +212,7 @@ def _approve_row(row: Row, index: int) -> Row:
 # --- finish_mapped_rows: the deferred rows, the snapshot and its sidecar ------
 
 
-def _derive_queue_stats(df: pd.DataFrame) -> QueueStats:
+def _compute_queue_stats(df: pd.DataFrame) -> QueueStats:
     """The stage's item counts, read off the assembled frame rather than
     accumulated as rows are mapped: a row the driver's cache served never
     reaches the mapper, and every count is a property of the row it produced.

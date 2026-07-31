@@ -135,7 +135,7 @@ class LLMTransformStage(StageBase):
     @model_validator(mode="after")
     def _one_to_one(self) -> "LLMTransformStage":
         """Enforced here — a stage carries its own contract — so the reply spec
-        the runtime derives (`output_schema.subtract(input_schema)`) is exactly
+        the runtime computes (`output_schema.subtract(input_schema)`) is exactly
         the added columns and can never throw mid-run. This is about schema
         SHAPE, not config columns, so it is not part of
         find_config_column_issues."""
@@ -195,7 +195,7 @@ def find_llm_one_to_one_issues(stage: "LLMTransformStage") -> list[str]:
     the same columns; keep every input column unchanged (a transform never
     rewrites an existing column's schema); and add at least one new column.
 
-    Checked so the reply spec the runtime derives
+    Checked so the reply spec the runtime computes
     (`output_schema.subtract(input_schema)`) is exactly the added columns and
     can never throw mid-run."""
     if len(stage.inputs) != 1:

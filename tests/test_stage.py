@@ -427,7 +427,7 @@ def test_file_connector_rejects_unknown_format(tmp_path):
     with pytest.raises(ValidationError, match="unknown file format"):
         m.parse_stage(S(id="load", type="input_data",
                                  connector={"kind": "file",
-                                            "params": {"path": str(tmp_path / "d.csv"), "format": "derived"}}))
+                                            "params": {"path": str(tmp_path / "d.csv"), "format": "invented"}}))
 
 
 def test_unknown_keys_rejected():
@@ -588,7 +588,7 @@ def test_both_fields_round_trip():
     assert reloaded.prompt_data_template == cfg.prompt_data_template
 
 
-# ── schema-derived output deliverability ─────────────────────────────────────
+# ── schema-driven output deliverability ─────────────────────────────────────
 def test_output_schema_issues_raise_at_stage_construction():
     """The deliverability check is a Stage model validator: an undeliverable
     declared column fails construction, naming the column."""

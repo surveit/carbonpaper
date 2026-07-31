@@ -165,7 +165,7 @@ def _apply(project_dir: Path, specs: dict[str, dict], stage_id: str, candidate: 
 
     The writer reports only whether the write succeeded; it does not compute the
     node's review colour (content hash / approval state). A caller that needs the
-    new colour re-derives it from the freshly-written stage."""
+    new colour recomputes it from the freshly-written stage."""
     candidate = _strip_bookkeeping_keys(candidate)
     if candidate.get("id") != stage_id:
         return EditStageResult(

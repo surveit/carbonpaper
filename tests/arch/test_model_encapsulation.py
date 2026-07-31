@@ -61,7 +61,7 @@ _RULES: tuple[ProtectedAttributeRule, ...] = (
         rationale=(
             "TableSchema.columns is app/models' to search, project, or "
             "filter — a caller that needs 'the column names of this schema' "
-            "or 'the columns matching X' is re-deriving a primitive the "
+            "or 'the columns matching X' is re-implementing a primitive the "
             "schema should expose (see TableSchema.subtract/is_subset_of for "
             "the whole-schema equivalent already avoided this way)."
         ),
@@ -73,7 +73,7 @@ _RULES: tuple[ProtectedAttributeRule, ...] = (
         rationale=(
             "Workflow.stages is app/models' to index, project, or "
             "filter — a caller that needs 'the stage with this id' or 'the "
-            "ids of these stages' is re-deriving a primitive Workflow should "
+            "ids of these stages' is re-implementing a primitive Workflow should "
             "expose (see Workflow.index_stages_by_id, added for exactly the "
             "three sites that used to hand-roll {stage.id: stage for stage "
             "in workflow.stages})."

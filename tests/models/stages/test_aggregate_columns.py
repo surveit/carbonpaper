@@ -23,8 +23,8 @@ def _aggregate_stage(*, group_by, edge_columns, value_column=None, where=None, f
             "columns": [{"name": c, "type": "str", "nullable": False} for c in edge_columns],
         }}],
         # The aggregated column's declared type must match the formula's
-        # derivation: count derives int; sum over these all-str edge columns
-        # derives str (concatenation) — see derive_aggregate_output_types.
+        # computed type: count gives int; sum over these all-str edge columns
+        # gives str (concatenation) — see compute_aggregate_output_types.
         "output_schema": {"columns": [{"name": group_by[0], "type": "str", "nullable": False},
                                       {"name": "n", "type": output_n_type, "nullable": False}]},
         "aggregate": {"group_by": group_by, "aggregations": [aggregation]},
@@ -50,7 +50,7 @@ def test_value_column_missing_rejected():
 def test_value_column_present_ok():
     parse_stage(_aggregate_stage(
         group_by=["a"], edge_columns=["a", "n"], value_column="n", formula="sum",
-        output_n_type="str",  # sum over a str edge column derives str
+        output_n_type="str",  # sum over a str edge column gives str
     ))
 
 
