@@ -13,16 +13,18 @@ import pydantic
 
 from app.core.errors import ReviewGuideValidationError
 from app.models import StageBase, parse_stage
-from app.models.review_guide import ReviewGuide, ReviewGuideStep
+from app.models.review_guide import ReviewGuideStep
 from app.core.persistence import get_store
 from app.services import loader, node_review
 from app.services.loader import WorkflowLoadError
 from app.services.versioning import (
+    ReviewGuide,
     WorkflowVersion,
     create_version_from_disk,
     create_version_from_stages,
     list_versions,
     load_version,
+    find_latest_review_guide,
     load_version_stages,
     publish_version,
     save_version_guide,
@@ -308,32 +310,76 @@ def _two_stage_version(project_dir: Path) -> str:
     ).version_id
 
 
-def _guide(step_ids: list[str], unnarrated: list[str]) -> ReviewGuide:
+def _guide(
+    project_dir: Path, version_id: str, step_ids: list[str], unnarrated: list[str],
+) -> ReviewGuide:
     return ReviewGuide(
+        project=project_dir.name,
+        version_id=version_id,
         steps=[ReviewGuideStep(title="Load the docs", prose="Reads `doc_id`.",
                                stage_ids=step_ids)],
         unnarrated=unnarrated,
     )
 
 
-def test_save_version_guide_round_trips(tmp_path):
-    """The stored guide comes back off the version unchanged — steps in order,
-    prose and stage_ids intact."""
+def test_a_guide_is_found_by_its_backpointers(tmp_path):
+    """No caller writes a storage key: the id autogenerates and the backpointers find it."""
+    guide = ReviewGuide(project="demo", version_id="20260101T000000", steps=[])
+
+    assert guide.id and guide.id != "demo/20260101T000000"
+    assert "id" not in ReviewGuide.model_json_schema()["required"]
+
+
+def _recording_write(real_write, collections: list[str]):
+    """A DocumentStore.write that appends each written collection to `collections`."""
+    def write(collection, id, data, schema_version=1):
+        collections.append(collection)
+        real_write(collection, id, data, schema_version)
+    return write
+
+
+def test_save_version_guide_round_trips_as_its_own_document(tmp_path):
+    """The guide is stored in its own collection, found by its backpointers, and comes
+    back unchanged — steps in order, prose and stage_ids intact."""
     vid = _two_stage_version(tmp_path)
-    saved = save_version_guide(tmp_path, vid, _guide(["load"], ["tally"]))
+    saved = save_version_guide(tmp_path, vid, _guide(tmp_path, vid, ["load"], ["tally"]))
 
-    assert saved.guide is not None
-    reloaded = load_version(tmp_path, vid)
-    assert reloaded.guide == _guide(["load"], ["tally"])
-    assert [step.title for step in reloaded.guide.steps] == ["Load the docs"]
+    stored = get_store().read("review_guide", saved.id)
+    assert (stored["project"], stored["version_id"]) == (tmp_path.name, vid)
+
+    reloaded = find_latest_review_guide(tmp_path.name, vid)
+    assert reloaded is not None
+    assert reloaded.unnarrated == ["tally"]
+    assert reloaded.collect_step_stage_ids() == ["load"]
+    assert [(s.title, s.prose) for s in reloaded.steps] == [("Load the docs", "Reads `doc_id`.")]
 
 
-def test_save_version_guide_replaces_an_earlier_guide(tmp_path):
+def test_saving_a_guide_does_not_rewrite_the_version_document(tmp_path, monkeypatch):
+    """The invariant this storage shape exists to restore: a version document is
+    written once, at creation. Saving a guide writes the guide's collection and
+    nothing else, and leaves the frozen snapshot — updated_at included — as it
+    was. The recorded writes are the load-bearing assertion: a re-save of an
+    unchanged version within the same second would leave the body identical
+    (updated_at has 1-second resolution) yet still rewrite the document."""
     vid = _two_stage_version(tmp_path)
-    save_version_guide(tmp_path, vid, _guide(["load"], ["tally"]))
-    save_version_guide(tmp_path, vid, _guide(["load", "tally"], []))
+    doc_id = f"{tmp_path.name}/{vid}"
+    store = get_store()
+    before = store.read("workflow_version", doc_id)
+    written: list[str] = []
+    monkeypatch.setattr(store, "write", _recording_write(store.write, written))
 
-    guide = load_version(tmp_path, vid).guide
+    save_version_guide(tmp_path, vid, _guide(tmp_path, vid, ["load"], ["tally"]))
+
+    assert written == ["review_guide"]
+    assert store.read("workflow_version", doc_id) == before
+
+
+def test_the_newest_guide_is_the_one_a_reader_gets(tmp_path):
+    vid = _two_stage_version(tmp_path)
+    save_version_guide(tmp_path, vid, _guide(tmp_path, vid, ["load"], ["tally"]))
+    save_version_guide(tmp_path, vid, _guide(tmp_path, vid, ["load", "tally"], []))
+
+    guide = find_latest_review_guide(tmp_path.name, vid)
     assert guide is not None
     assert guide.unnarrated == []
     assert guide.collect_step_stage_ids() == ["load", "tally"]
@@ -342,15 +388,15 @@ def test_save_version_guide_replaces_an_earlier_guide(tmp_path):
 def test_save_version_guide_rejects_an_unknown_id_in_a_step(tmp_path):
     vid = _two_stage_version(tmp_path)
     with pytest.raises(ReviewGuideValidationError, match="ghost"):
-        save_version_guide(tmp_path, vid, _guide(["load", "ghost"], ["tally"]))
-    assert load_version(tmp_path, vid).guide is None
+        save_version_guide(tmp_path, vid, _guide(tmp_path, vid, ["load", "ghost"], ["tally"]))
+    assert find_latest_review_guide(tmp_path.name, vid) is None
 
 
 def test_save_version_guide_rejects_an_unknown_id_in_unnarrated(tmp_path):
     vid = _two_stage_version(tmp_path)
     with pytest.raises(ReviewGuideValidationError, match="ghost"):
-        save_version_guide(tmp_path, vid, _guide(["load"], ["tally", "ghost"]))
-    assert load_version(tmp_path, vid).guide is None
+        save_version_guide(tmp_path, vid, _guide(tmp_path, vid, ["load"], ["tally", "ghost"]))
+    assert find_latest_review_guide(tmp_path.name, vid) is None
 
 
 def test_save_version_guide_rejects_a_stage_accounted_for_nowhere(tmp_path):
@@ -358,20 +404,22 @@ def test_save_version_guide_rejects_a_stage_accounted_for_nowhere(tmp_path):
     rejected, naming the stage, so leaving it out has to be said out loud."""
     vid = _two_stage_version(tmp_path)
     with pytest.raises(ReviewGuideValidationError, match="tally"):
-        save_version_guide(tmp_path, vid, _guide(["load"], []))
-    assert load_version(tmp_path, vid).guide is None
+        save_version_guide(tmp_path, vid, _guide(tmp_path, vid, ["load"], []))
+    assert find_latest_review_guide(tmp_path.name, vid) is None
 
 
 def test_save_version_guide_rejects_a_stage_both_narrated_and_unnarrated(tmp_path):
     vid = _two_stage_version(tmp_path)
     with pytest.raises(ReviewGuideValidationError, match="load"):
-        save_version_guide(tmp_path, vid, _guide(["load", "tally"], ["load"]))
-    assert load_version(tmp_path, vid).guide is None
+        save_version_guide(tmp_path, vid, _guide(tmp_path, vid, ["load", "tally"], ["load"]))
+    assert find_latest_review_guide(tmp_path.name, vid) is None
 
 
 def test_save_version_guide_rejects_a_stage_narrated_by_two_steps(tmp_path):
     vid = _two_stage_version(tmp_path)
     two_steps = ReviewGuide(
+        project=tmp_path.name,
+        version_id=vid,
         steps=[
             ReviewGuideStep(title="First", prose="a", stage_ids=["load"]),
             ReviewGuideStep(title="Second", prose="b", stage_ids=["load", "tally"]),
@@ -379,7 +427,7 @@ def test_save_version_guide_rejects_a_stage_narrated_by_two_steps(tmp_path):
     )
     with pytest.raises(ReviewGuideValidationError, match="more than once"):
         save_version_guide(tmp_path, vid, two_steps)
-    assert load_version(tmp_path, vid).guide is None
+    assert find_latest_review_guide(tmp_path.name, vid) is None
 
 
 def test_save_version_guide_reports_every_offending_id_at_once(tmp_path):
@@ -387,37 +435,73 @@ def test_save_version_guide_reports_every_offending_id_at_once(tmp_path):
     one pass rather than one re-submit per bad id."""
     vid = _two_stage_version(tmp_path)
     with pytest.raises(ReviewGuideValidationError) as exc:
-        save_version_guide(tmp_path, vid, _guide(["ghost"], []))
+        save_version_guide(tmp_path, vid, _guide(tmp_path, vid, ["ghost"], []))
     message = str(exc.value)
     assert "ghost" in message and "tally" in message and "load" in message
 
 
 def test_save_version_guide_unknown_version_raises_file_not_found(tmp_path):
     with pytest.raises(FileNotFoundError):
-        save_version_guide(tmp_path, "nope", _guide([], []))
+        save_version_guide(tmp_path, "nope", _guide(tmp_path, "nope", [], []))
 
 
-def test_a_version_without_a_guide_stores_no_guide_key(tmp_path):
-    """DUMP_OPTS excludes None, so an unguided version's document carries no
-    `guide` key at all — the same shape as a document written before the field
-    existed (below)."""
-    _seed(tmp_path)
-    vid = create_version_from_disk(tmp_path, message="x", reviewer="ada").version_id
-    stored = get_store().read("workflow_version", f"{tmp_path.name}/{vid}")
-    assert "guide" not in stored
-    assert load_version(tmp_path, vid).guide is None
+def test_save_version_guide_rejects_a_guide_addressed_to_another_version(tmp_path):
+    """The guide carries its own (project, version) address, so a guide built for
+    one version and saved against another is a caller bug, not a relocation."""
+    vid = _two_stage_version(tmp_path)
+    other = _guide(tmp_path, "20990101T000000", ["load"], ["tally"])
+    with pytest.raises(ValueError, match="20990101T000000"):
+        save_version_guide(tmp_path, vid, other)
+    assert find_latest_review_guide(tmp_path.name, vid) is None
 
 
-def test_stored_version_predating_the_guide_field_still_loads(tmp_path):
-    """A WorkflowVersion-shaped dict with no `guide` key, written straight to the
-    store, loads with guide None — no migration needed for versions stored before
-    the field existed."""
+def test_find_latest_review_guide_is_none_when_no_guide_was_saved(tmp_path):
+    vid = _two_stage_version(tmp_path)
+    assert find_latest_review_guide(tmp_path.name, vid) is None
+
+
+def test_writing_a_second_guide_appends_and_the_newest_one_wins(tmp_path):
+    """Guides append rather than overwrite, so an earlier one is still readable; the
+    version's live guide is the newest written for it."""
+    vid = _two_stage_version(tmp_path)
+    first = save_version_guide(tmp_path, vid, _guide(tmp_path, vid, ["load"], ["tally"]))
+    second = save_version_guide(tmp_path, vid, _guide(tmp_path, vid, ["tally"], ["load"]))
+
+    assert first.id != second.id
+    assert {g.id for g in ReviewGuide.list()} == {first.id, second.id}
+    assert find_latest_review_guide(tmp_path.name, vid).id == second.id
+
+
+def test_a_guide_for_another_version_is_not_returned(tmp_path):
+    """The backpointer is what selects, so a sibling version's guide never leaks in."""
+    vid = _two_stage_version(tmp_path)
+    save_version_guide(tmp_path, vid, _guide(tmp_path, vid, ["load"], ["tally"]))
+
+    assert find_latest_review_guide(tmp_path.name, "20200101T000000") is None
+    assert find_latest_review_guide("another_project", vid) is None
+
+
+def test_a_version_document_carries_no_guide_key(tmp_path):
+    """A version's document holds the frozen workflow only; the guide is a
+    separate document, so nothing about a version changes when one is written."""
+    vid = _two_stage_version(tmp_path)
+    save_version_guide(tmp_path, vid, _guide(tmp_path, vid, ["load"], ["tally"]))
+    assert "guide" not in get_store().read("workflow_version", f"{tmp_path.name}/{vid}")
+
+
+def test_a_version_document_with_an_embedded_guide_fails_loudly(tmp_path):
+    """A version document written while the guide was a field on WorkflowVersion
+    carries a `guide` key, which the model now forbids: it raises rather than
+    loading with the authored prose silently dropped. The fix is a store
+    migration — move the payload into the review_guide collection."""
     vid = "20260101T000000"
     data = {
         "id": f"{tmp_path.name}/{vid}", "version_id": vid,
         "created_at": "2026-01-01T00:00:00", "parent_version": None,
         "message": "legacy", "reviewer": "human",
         "stages": [], "schemas": [], "published": False,
+        "guide": {"steps": [], "unnarrated": []},
     }
     get_store().write("workflow_version", f"{tmp_path.name}/{vid}", data)
-    assert load_version(tmp_path, vid).guide is None
+    with pytest.raises(WorkflowLoadError, match="guide"):
+        load_version(tmp_path, vid)

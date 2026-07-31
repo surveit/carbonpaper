@@ -1,11 +1,7 @@
-"""The authored walkthrough of a workflow version: ordered steps, each narrating
-the stages it names. Anything derivable from the stages themselves (their names,
-types, order, the columns they write) is deliberately absent — it is read off the
-stages at render time instead of being frozen here.
+"""One step of a review guide's walkthrough. The guide itself is a stored record
+(`app.services.versioning.ReviewGuide`), which embeds these.
 """
 from __future__ import annotations
-
-from pydantic import Field
 
 from app.models.schema import _Base
 
@@ -16,14 +12,3 @@ class ReviewGuideStep(_Base):
     title: str
     prose: str
     stage_ids: list[str]
-
-
-class ReviewGuide(_Base):
-    """`unnarrated` names the stages no step covers, so leaving one out is a decision."""
-
-    steps: list[ReviewGuideStep]
-    unnarrated: list[str] = Field(default_factory=list)
-
-    def collect_step_stage_ids(self) -> list[str]:
-        """Every stage id the steps name, in step order, repeats included."""
-        return [stage_id for step in self.steps for stage_id in step.stage_ids]
