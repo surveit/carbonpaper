@@ -8,11 +8,12 @@ from pathlib import Path
 import pandas as pd
 
 from app.runtime.trace import (
-    _is_row_preserving,
+    _find_positional_cross,
     _load_manifest,
     _origin,
     _parents,
     _stages_by_id,
+    _subject_parent_id,
 )
 
 
@@ -52,16 +53,28 @@ def write_run(tmp_path: Path, stages: list[dict], run_id: str = "T1") -> Path:
     return run_dir
 
 
-def test_is_row_preserving_matches_the_model_classification():
-    # Sourced from the model's is_grain_and_order_preserving, not a tracer-local
-    # list — llm_transform and human_review_queue both cross; an unknown type is
-    # never trusted.
-    for stage_type in ("input_data", "python_row_function", "llm_transform",
-                       "human_review_queue"):
-        assert _is_row_preserving(stage_type) is True
-    for stage_type in ("python_frame_function", "enrich", "expand", "aggregate", "publish"):
-        assert _is_row_preserving(stage_type) is False
-    assert _is_row_preserving("not_a_stage_type") is False
+def test_positional_cross_matches_the_model_classification():
+    # Sourced from the model's find_positional_cross, not a tracer-local list.
+    # The row-driven types cross via their single input; enrich crosses via its
+    # SUBJECT input while declaring two edges; input_data originates rows and so
+    # crosses nothing. An unknown type is never trusted.
+    for stage_type in ("python_row_function", "llm_transform", "human_review_queue"):
+        assert _find_positional_cross(stage_type) == (0, 1)
+    assert _find_positional_cross("enrich") == (0, 2)
+    for stage_type in ("input_data", "python_frame_function", "expand", "aggregate",
+                       "publish", "union", "filter_rows", "not_a_stage_type"):
+        assert _find_positional_cross(stage_type) is None
+
+
+def test_subject_parent_id_refuses_an_arity_the_type_does_not_have():
+    # The guard that stops an inconsistent manifest sending the walk down the
+    # wrong branch: a join records its subject first, so indexing is only safe
+    # once the recorded edge count matches the type's.
+    assert _subject_parent_id("enrich", ["subject", "reference"]) == "subject"
+    assert _subject_parent_id("enrich", ["subject"]) is None
+    assert _subject_parent_id("python_row_function", ["seeds"]) == "seeds"
+    assert _subject_parent_id("python_row_function", ["left", "right"]) is None
+    assert _subject_parent_id("expand", ["subject", "reference"]) is None
 
 
 def test_parents_reads_input_phases_and_ignores_output_phase():

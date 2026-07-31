@@ -16,7 +16,7 @@ import pandas as pd
 
 from app.core.errors import RowOutOfRange, StageNotInRun
 from app.core.frames import PARQUET_SUFFIX
-from app.models.stage import StageType, is_grain_and_order_preserving
+from app.models.stage import PositionalCross, StageType, find_positional_cross
 from app.runtime.lineage import (
     TRACE_SOURCE_ROW_KEY,
     TRACE_SOURCE_STAGE_KEY,
@@ -24,24 +24,23 @@ from app.runtime.lineage import (
 )
 
 
-def _is_row_preserving(stage_type: str) -> bool:
-    """True when this stage type guarantees output row i came from input row i by
-    position, so the walk can cross the hop on ordinal alone.
+def _find_positional_cross(stage_type: str) -> PositionalCross | None:
+    """Which input edge this stage's rows came from by position, or None for none.
 
-    Delegates to the model's single classification
-    (is_grain_and_order_preserving) rather than a tracer-local list — a newly
-    preserving type, or a reclassified one, is picked up here automatically. This
-    reads a static type taxonomy, not the run's compiled methodology, so the
-    tracer stays self-contained on the run directory. A manifest type that isn't
-    a known StageType (a foreign or future run) is never trusted. Membership is
-    necessary but not sufficient: crossing is still gated on matching parent/child
-    row counts too (the len(parent_df) != len(df) guard below). The runtime guarantees
-    preservation by driving row-mapped stage types per-row (see app/runtime/stages/execution.py).
+    Delegates to the model's single classification rather than a tracer-local
+    list — a newly crossable type, or a reclassified one, is picked up here
+    automatically. This reads a static type taxonomy, not the run's compiled
+    methodology, so the tracer stays self-contained on the run directory. A
+    manifest type that isn't a known StageType (a foreign or future run) is
+    never trusted. The fact is necessary but not sufficient: crossing is still
+    gated on the stage recording the expected number of input edges (so an
+    inconsistent manifest can't send the walk down the wrong branch) and on
+    matching parent/child row counts (the len(parent_df) != len(df) guard below).
     """
     try:
-        return is_grain_and_order_preserving(StageType(stage_type))
+        return find_positional_cross(StageType(stage_type))
     except ValueError:
-        return False
+        return None
 
 
 @dataclass
@@ -154,22 +153,33 @@ def _new_columns(child: pd.DataFrame, parent: pd.DataFrame | None) -> list[str]:
 
 
 def _not_preserving_message(stage_type: str) -> str:
-    """The stop message when a stage can't be crossed: the stage isn't row-
-    preserving, so the ancestry isn't positionally recoverable. Names the stage
-    type and points at the tracking issue. Also reached defensively for a
-    row-preserving type carrying the wrong parent arity (len(parents) != 1)."""
+    """The stop message when a stage can't be crossed. Names the type and the issue."""
     return (f"stops at {stage_type} — it reshapes rows, so row-level lineage "
             "across it needs recording (issue #58)")
 
 
+def _subject_parent_id(stage_type: str, parents: list[str]) -> str | None:
+    """The input edge this row positionally came from, or None if none pins one down."""
+    cross = _find_positional_cross(stage_type)
+    if cross is None or len(parents) != cross.input_count:
+        return None
+    return parents[cross.subject_input]
+
+
 def _columns_parent_id(
-    parents: list[str], lineage_hop: tuple[str, int] | None
+    stage_type: str, parents: list[str], lineage_hop: tuple[str, int] | None
 ) -> str | None:
     """The id of the row's ACTUAL parent for `columns_new` purposes: the
-    lineage-recorded one when there is one, else the single input edge when
-    there is exactly one — None when neither pins down a single parent."""
+    lineage-recorded one when there is one, else the subject input edge this
+    type's rows positionally come from — None when neither pins down a single
+    parent. For a join that means the SUBJECT input, so the columns the join
+    brought over from its reference read as new at the join, which is where
+    they entered this row."""
     if lineage_hop is not None:
         return lineage_hop[0]
+    subject = _subject_parent_id(stage_type, parents)
+    if subject is not None:
+        return subject
     return parents[0] if len(parents) == 1 else None
 
 
@@ -216,18 +226,20 @@ def _advance(
 ) -> tuple[str, int] | TraceEnd:
     """The next `(stage_id, row_ordinal)` to visit from `(sid, r)`, or the
     `TraceEnd` the walk stops on here: an `input_data` origin, no recorded
-    input edge, a recorded lineage hop, or an ordinal cross across a single
-    row-preserving input. A row-preserving stage with more than one parent (or
-    the wrong arity) is treated as not row-preserving — position can't be trusted."""
+    input edge, a recorded lineage hop, or an ordinal cross into the input this
+    type's rows positionally come from. A stage recording a different number of
+    input edges than its type has is not crossed — the manifest disagrees with
+    the type, so position can't be trusted."""
     if stage_type == StageType.input_data:
         return TraceEnd(True, sid, "input_data stage — the rows originate here")
     if not parents:
         return TraceEnd(False, sid, "the manifest records no input edge for this stage")
     if lineage_hop is not None:
         return _advance_via_lineage(run_dir, by_id, sid, parents, lineage_hop)
-    if not _is_row_preserving(stage_type) or len(parents) != 1:
+    subject = _subject_parent_id(stage_type, parents)
+    if subject is None:
         return TraceEnd(False, sid, _not_preserving_message(stage_type))
-    return _advance_positionally(run_dir, by_id, sid, parents[0], r, df)
+    return _advance_positionally(run_dir, by_id, sid, subject, r, df)
 
 
 def trace_row(run_dir: Path, stage_id: str, row_ordinal: int) -> Trace:
@@ -260,7 +272,7 @@ def trace_row(run_dir: Path, stage_id: str, row_ordinal: int) -> Trace:
 
         parents = _parents(record)
         lineage_hop = _lineage_hop(run_dir, sid, r)
-        columns_parent_id = _columns_parent_id(parents, lineage_hop)
+        columns_parent_id = _columns_parent_id(stage_type, parents, lineage_hop)
         parent_df = (
             _read_output(run_dir, by_id[columns_parent_id])
             if columns_parent_id in by_id else None

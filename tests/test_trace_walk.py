@@ -58,6 +58,69 @@ def test_human_review_queue_traces_positionally(tmp_path):
     assert trace.end.reached_origin is True
 
 
+def _join_run(tmp_path, join_type: str):
+    """A join run: subject 'permits' (3 rows) + reference 'owners', joined by
+    `join_type` into 'joined', which carries one row per subject row in subject
+    order and gains the reference's 'owner' column."""
+    permits = pd.DataFrame({"facility_id": ["a", "b", "c"], "name": ["A", "B", "C"]})
+    owners = pd.DataFrame({"facility_id": ["a", "b", "c"], "owner": ["X", "Y", "Z"]})
+    joined = permits.assign(owner=["X", "Y", "Z"])
+    return write_run(tmp_path, [
+        {"id": "permits", "type": "input_data", "parents": [], "df": permits},
+        {"id": "owners", "type": "input_data", "parents": [], "df": owners},
+        {"id": "joined", "type": join_type,
+         "parents": ["permits", "owners"], "df": joined},
+    ])
+
+
+def test_enrich_crosses_into_its_subject_input(tmp_path):
+    # enrich is m:1 and never drops a subject row, so output row i IS subject
+    # row i — the walk crosses it on ordinal into inputs[0], ignoring the
+    # reference. It is NOT row-DRIVEN (a join gets whole frames), which is why
+    # this rides find_positional_cross and not is_grain_and_order_preserving.
+    run_dir = _join_run(tmp_path, "enrich")
+    trace = trace_row(run_dir, "joined", 1)
+    assert [s.stage_id for s in trace.steps] == ["joined", "permits"]
+    assert [s.row_ordinal for s in trace.steps] == [1, 1]
+    assert trace.steps[0].row["name"] == "B"
+    assert trace.steps[1].row["name"] == "B"        # landed on the right subject row
+    assert trace.end.reached_origin is True
+
+
+def test_enrich_reports_only_the_joined_in_columns_as_new(tmp_path):
+    # columns_new is taken against the SUBJECT, so the column the join brought
+    # over reads as new at the join and the subject's own columns do not. Before
+    # the subject was resolvable this reported every column as new.
+    run_dir = _join_run(tmp_path, "enrich")
+    trace = trace_row(run_dir, "joined", 0)
+    assert trace.steps[0].columns_new == ["owner"]
+
+
+def test_expand_still_stops_because_it_fans_out(tmp_path):
+    # m:n: output row i need not be subject row i, so there is nothing to cross
+    # on until expand records per-row lineage of its own.
+    run_dir = _join_run(tmp_path, "expand")
+    trace = trace_row(run_dir, "joined", 0)
+    assert [s.stage_id for s in trace.steps] == ["joined"]
+    assert trace.end.reached_origin is False
+    assert "#58" in trace.end.message
+
+
+def test_enrich_with_one_recorded_edge_refuses_to_guess(tmp_path):
+    # A manifest disagreeing with the type (one edge where enrich has two) must
+    # not be indexed into: the single edge might be the REFERENCE, and crossing
+    # into it would report a confidently wrong ancestor.
+    permits = pd.DataFrame({"facility_id": ["a", "b"], "name": ["A", "B"]})
+    joined = permits.assign(owner=["X", "Y"])
+    run_dir = write_run(tmp_path, [
+        {"id": "owners", "type": "input_data", "parents": [], "df": permits},
+        {"id": "joined", "type": "enrich", "parents": ["owners"], "df": joined},
+    ])
+    trace = trace_row(run_dir, "joined", 0)
+    assert [s.stage_id for s in trace.steps] == ["joined"]
+    assert trace.end.reached_origin is False
+
+
 def test_stop_at_reshaping_stage_points_at_issue_58(tmp_path):
     run_dir = _chain(tmp_path, "python_frame_function")
     trace = trace_row(run_dir, "enrich", 0)
