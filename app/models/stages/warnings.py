@@ -49,8 +49,7 @@ class CompilerWarning(_Base):
     @property
     def blocking(self) -> bool:
         """Can editing the stage clear this? A non-blocking warning is not thereby
-        unimportant — it still owes a reviewer a sentence rather than silence — it
-        just cannot be fixed by editing the stage."""
+        unimportant."""
         return FIXABLE[self.kind]
 
 

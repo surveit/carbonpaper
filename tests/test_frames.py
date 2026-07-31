@@ -78,9 +78,8 @@ def test_is_null_form_rejects_non_nulls_including_falsy_ones(value):
 
 @pytest.mark.parametrize("cell", [[1, 2], (1, 2), np.array([1, 2]), {"a": 1}, {1, 2}])
 def test_is_null_form_survives_an_array_valued_cell(cell):
-    """The reason this is expressed as collapse_null_forms rather than pd.isna:
-    pd.isna on a list/array cell returns an elementwise array whose truth value
-    is ambiguous. Each of these must simply answer False."""
+    """pd.isna on an array cell returns an elementwise array; each of these must answer
+    False."""
     assert not is_null_form(cell)
 
 

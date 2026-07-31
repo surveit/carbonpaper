@@ -354,8 +354,8 @@ def test_save_version_guide_rejects_an_unknown_id_in_unnarrated(tmp_path):
 
 
 def test_save_version_guide_rejects_a_stage_accounted_for_nowhere(tmp_path):
-    """A version stage in neither a step nor `unnarrated` is a silent omission —
-    rejected, naming the stage, so leaving it out has to be said out loud."""
+    """A stage in neither a step nor `unnarrated` is a silent omission — refused, naming
+    it."""
     vid = _two_stage_version(tmp_path)
     with pytest.raises(ReviewGuideValidationError, match="tally"):
         save_version_guide(tmp_path, vid, _guide(["load"], []))
@@ -383,8 +383,7 @@ def test_save_version_guide_rejects_a_stage_narrated_by_two_steps(tmp_path):
 
 
 def test_save_version_guide_reports_every_offending_id_at_once(tmp_path):
-    """One rejection message carries every problem — the author fixes the guide in
-    one pass rather than one re-submit per bad id."""
+    """One message carries every problem, so the author fixes the guide in one pass."""
     vid = _two_stage_version(tmp_path)
     with pytest.raises(ReviewGuideValidationError) as exc:
         save_version_guide(tmp_path, vid, _guide(["ghost"], []))
@@ -398,9 +397,8 @@ def test_save_version_guide_unknown_version_raises_file_not_found(tmp_path):
 
 
 def test_a_version_without_a_guide_stores_no_guide_key(tmp_path):
-    """DUMP_OPTS excludes None, so an unguided version's document carries no
-    `guide` key at all — the same shape as a document written before the field
-    existed (below)."""
+    """DUMP_OPTS excludes None, so an unguided version's document has no `guide` key at
+    all."""
     _seed(tmp_path)
     vid = create_version_from_disk(tmp_path, message="x", reviewer="ada").version_id
     stored = get_store().read("workflow_version", f"{tmp_path.name}/{vid}")
@@ -409,9 +407,7 @@ def test_a_version_without_a_guide_stores_no_guide_key(tmp_path):
 
 
 def test_stored_version_predating_the_guide_field_still_loads(tmp_path):
-    """A WorkflowVersion-shaped dict with no `guide` key, written straight to the
-    store, loads with guide None — no migration needed for versions stored before
-    the field existed."""
+    """A stored document with no `guide` key loads with guide None — no migration needed."""
     vid = "20260101T000000"
     data = {
         "id": f"{tmp_path.name}/{vid}", "version_id": vid,

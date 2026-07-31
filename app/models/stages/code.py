@@ -183,9 +183,8 @@ class PythonFunction(StageConfig):
 
 def find_python_function_warnings(stage: "CarriesPythonFunctionStage"
                                   ) -> list[CompilerWarning]:
-    """Compiler warnings about a `function` block — raised here, and only here,
-    because this module owns it. A stage whose behaviour is authored code needs prose
-    standing in for it, and the panel needs to be able to show that code."""
+    """Warnings about a `function` block — raised here and only here, since this module owns
+    it."""
     function = stage.function
     if not (function.summary or "").strip():
         return [warn(stage, "undescribed",
@@ -198,9 +197,8 @@ def find_python_function_warnings(stage: "CarriesPythonFunctionStage"
 
 
 class CarriesPythonFunctionStage(StageBase):
-    """The stage types whose behaviour is a `function` block: the two python
-    transforms, and publish, which adds rendering config alongside it. Declared once
-    here and inherited so `stage.function` is read in this module and nowhere else."""
+    """Stage types whose behaviour is a `function` block; declared once so `.function` is read
+    here."""
     function: PythonFunction
 
     def fingerprint_blocks(self) -> dict[str, StageConfig]:

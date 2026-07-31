@@ -128,8 +128,8 @@ def test_project_id_cannot_escape_the_workspace(examples_root: Path) -> None:
 # ── the review-guide tools ───────────────────────────────────────────────────
 
 def _versioned(examples: Path, name: str) -> tuple[list[Callable], str]:
-    """A saved two-stage version, reached the way the agent reaches one: draft the
-    stages, then save. Two stages, so a guide can narrate one and leave the other out."""
+    """A saved version drafted then saved the way the agent does — two stages, so one can be
+    left out."""
     _seed(examples, name)
     tools = _tools(name)
     draft = _tool(tools, "create_draft")(name)
@@ -159,8 +159,8 @@ def _guide(step_ids: list[str], unnarrated: list[str]) -> str:
 
 
 def test_read_review_guide_is_null_until_one_is_written(examples_root: Path) -> None:
-    """A version is born without a guide, and nothing seeds one — the tool says so
-    rather than returning an empty guide that would read as an authored decision."""
+    """Nothing seeds a guide: null, not an empty guide that would read as an authored
+    decision."""
     tools, version_id = _versioned(examples_root, "alpha")
     assert _tool(tools, "read_review_guide")("alpha", version_id) is None
 
@@ -187,8 +187,8 @@ def test_write_review_guide_round_trips_through_read(examples_root: Path) -> Non
 def test_write_review_guide_rejects_a_mismatch_naming_the_stage(
     examples_root: Path, step_ids: list[str], unnarrated: list[str], named: str
 ) -> None:
-    """Each way a guide can misaccount for its version's stages is refused with the
-    offending id in the message — the agent can fix it without reading the version."""
+    """Refused with the offending id named, so the agent can fix it without reading the
+    version."""
     tools, version_id = _versioned(examples_root, "alpha")
     with pytest.raises(ReviewGuideValidationError, match=named):
         _tool(tools, "write_review_guide")("alpha", version_id, _guide(step_ids, unnarrated))
@@ -212,8 +212,8 @@ def test_write_review_guide_rejects_a_stage_narrated_by_two_steps(examples_root:
 
 
 def test_write_review_guide_rejects_an_invented_field(examples_root: Path) -> None:
-    """The guide model forbids extras, so a field the agent made up is refused rather
-    than dropped — a guide that silently loses what was written is worse than none."""
+    """Extras are forbidden: a guide that silently loses what was written is worse than
+    none."""
     tools, version_id = _versioned(examples_root, "alpha")
     invented = json.dumps(
         {

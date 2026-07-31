@@ -202,9 +202,8 @@ class StageBase(StageCommon):
         return None
 
     def find_handle_compiler_warnings(self) -> list["CompilerWarning"]:
-        """What the module owning this type's config block has to say about the stage
-        as written. [] for a type whose behaviour is config a reviewer reads directly
-        — an enrich's keys, a union's inputs — with no prose standing in for it."""
+        """What the module owning this type's config block says; [] when a reviewer reads the
+        config directly."""
         return []
 
     def llm_reply_schema(self) -> Optional[TableSchema]:
