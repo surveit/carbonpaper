@@ -27,7 +27,7 @@ _CLASSIFY = {
     "id": "classify", "type": "python_row_function", "name": "Label by sign",
     "inputs": [{"id": "load", "schema": {"columns": [{"name": "doc_id", "type": "str"},
                                                      {"name": "score", "type": "int"}]}}],
-    "function": {"kind": "inline", "code":
+    "function": {"code":
                  "def transform(row):\n"
                  "    return {'doc_id': row['doc_id'], 'score': row['score'],\n"
                  "            'label': 'pos' if row['score'] >= 0 else 'neg'}"},

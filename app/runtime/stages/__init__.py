@@ -23,6 +23,7 @@ from .execution import (
     StageHandler,
     validate_registry_matches_model,
 )
+from .external import make_external_row_mapper
 from .filter_rows import make_filter_mapper
 from .human_review_queue import make_human_review_mapper
 from .input_data import preflight_input_data, read_input_data
@@ -76,6 +77,14 @@ HANDLERS: dict[StageType, StageHandler] = {
     StageType.filter_rows: RowMapHandler(
         make_filter_mapper, drops_rows=True, caches_rows=False
     ),
+    # The same row-mapped shape as python_row_function — the runtime drives the
+    # single input's rows one at a time and never shows the mapper the frame, so
+    # an external stage cannot fan out, fan in, or reorder either. Its mapper
+    # differs because its code is not Python this process imports: it is a
+    # separate program, spawned once per row. Row caching stays on: a stage that
+    # must re-reach the outside world every run declares `cache: false`, the
+    # existing per-stage knob for exactly that.
+    StageType.external: RowMapHandler(make_external_row_mapper),
 }
 
 # A mis-shaped registration (e.g. a frame handler for a type the model declares
@@ -95,6 +104,7 @@ __all__ = [
     "StageHandler",
     "validate_registry_matches_model",
     "handle_aggregate",
+    "make_external_row_mapper",
     "make_human_review_mapper",
     "handle_enrich",
     "handle_expand",

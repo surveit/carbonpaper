@@ -27,6 +27,9 @@ TYPE_CLASS = {
     # Row-set operations: union stacks frames, filter_rows drops subject rows.
     "union": "rowset",
     "filter_rows": "rowset",
+    # Its own class, not `python`: the code is a separate program this page
+    # cannot show, which is the one thing a reader must not miss.
+    "external": "external",
 }
 
 TYPE_GLYPH = {
@@ -41,6 +44,7 @@ TYPE_GLYPH = {
     "publish": "📤",
     "union": "➕",
     "filter_rows": "🔽",
+    "external": "🚀",
 }
 
 

@@ -196,7 +196,7 @@ def test_a_row_mapper_that_may_not_drop_still_rejects_a_none_row(tmp_path):
         "id": "m", "name": "m", "type": "python_row_function",
         "inputs": [{"id": "src", "schema": _AB_SCHEMA}],
         "output_schema": _AB_SCHEMA,
-        "function": {"kind": "inline", "code": "def transform(row): return None"},
+        "function": {"code": "def transform(row): return None"},
     })
     workflow = Workflow(stages=[load, mapper])
 

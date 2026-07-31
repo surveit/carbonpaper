@@ -44,6 +44,8 @@ function ochip(n){ return `<span class="row-chip" data-stage="${esc(n.stage_id)}
 function verb(n){
   const k = n.transform.kind, sid = n.stage_id;
   if(k==='python') return `run python ${tlink(sid, sid + '()')}`;
+  // An external stage ran a separate program, not code this app can show.
+  if(k==='command') return `run the command in ${tlink(sid, sid)}`;
   if(k==='llm') return `ask the LLM in ${tlink(sid, sid)}`;
   if(k==='enrich') return `enrich with ${tlink(sid, sid)}`;
   if(k==='expand') return `expand with ${tlink(sid, sid)}`;

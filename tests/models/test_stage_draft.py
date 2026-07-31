@@ -66,7 +66,7 @@ def test_an_input_schema_round_trips_under_the_key_a_compiled_stage_spells():
             "columns": [{"name": "filing_id", "type": "str"}],
             "primary_key": ["filing_id"],
         }}],
-        "function": {"kind": "inline", "code": "def transform(row):\n    return row\n"},
+        "function": {"code": "def transform(row):\n    return row\n"},
         "output_schema": {"columns": [{"name": "filing_id", "type": "str"}]},
     })
 

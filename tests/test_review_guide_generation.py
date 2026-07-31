@@ -37,7 +37,7 @@ _LOAD = {
 _DOUBLE = {
     "id": "double", "name": "Double", "type": "python_row_function",
     "inputs": [{"id": "load", "schema": _ROWS}], "output_schema": _DOUBLED,
-    "function": {"kind": "inline", "summary": "Doubles the amount.", "corner_cases": [],
+    "function": {"summary": "Doubles the amount.", "corner_cases": [],
                  "code": "def transform(row):\n    return {**row, 'doubled': row['amount'] * 2}\n"},
 }
 # Added to the WORKING COPY after the version is cut, never to the version itself:
@@ -45,7 +45,7 @@ _DOUBLE = {
 _TRIPLE = {
     "id": "triple", "name": "Triple", "type": "python_row_function",
     "inputs": [{"id": "load", "schema": _ROWS}], "output_schema": _DOUBLED,
-    "function": {"kind": "inline", "summary": "Triples the amount.", "corner_cases": [],
+    "function": {"summary": "Triples the amount.", "corner_cases": [],
                  "code": "def transform(row):\n    return {**row, 'doubled': row['amount'] * 3}\n"},
 }
 

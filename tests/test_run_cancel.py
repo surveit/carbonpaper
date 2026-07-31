@@ -51,7 +51,7 @@ def _two_stage_project(root):
     consume = {"id": "consume", "name": "Consume items", "type": "python_frame_function",
                "inputs": [{"id": "load", "schema": _NAME_VAL_SCHEMA}],
                "output_schema": _NAME_VAL_SCHEMA,
-               "function": {"kind": "inline",
+               "function": {
                             "code": "def transform(df):\n    return df\n"}}
     (root / "compiled" / "02_consume.json").write_text(json.dumps(consume), encoding="utf-8")
 
@@ -137,7 +137,7 @@ def _three_stage_llm_project(root):
         "id": "downstream", "name": "Downstream", "type": "python_frame_function",
         "inputs": [{"id": "score", "schema": _SCORED_SCHEMA}],
         "output_schema": _SCORED_SCHEMA,
-        "function": {"kind": "inline", "code": "def transform(df):\n    return df\n"},
+        "function": {"code": "def transform(df):\n    return df\n"},
     }
     (root / "compiled" / "01_load.json").write_text(json.dumps(load), encoding="utf-8")
     (root / "compiled" / "02_score.json").write_text(json.dumps(score), encoding="utf-8")

@@ -15,6 +15,7 @@ from markupsafe import Markup, escape
 # never as its return value: binding the path at import time would give every
 # router its own stale copy, which is exactly what set_projects_dir() exists to
 # avoid.
+from app.models.stages.external import NOT_REPRODUCIBLE_NOTE
 from app.services.workspace import (
     configure_projects_dir_from_env as configure_projects_dir_from_env,
     projects_dir as projects_dir,
@@ -53,3 +54,7 @@ def _time_element(v: object, attrs: str) -> Markup:
 
 templates.env.filters["friendly_time"] = friendly_time
 templates.env.filters["relative_time"] = relative_time
+# A global, not per-route context: `_stage_executable.html` renders an external
+# stage on four different pages, and the sentence must be the model's own so the
+# page and the authoring prompt cannot come to say different things.
+templates.env.globals["external_not_reproducible_note"] = NOT_REPRODUCIBLE_NOTE

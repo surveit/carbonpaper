@@ -41,7 +41,7 @@ _LOAD_STAGE_TMPL = {
 _CLASSIFY = {
     "id": "classify", "type": "python_row_function", "name": "Label by sign",
     "inputs": [{"id": "load", "schema": _LOAD_SCHEMA}],
-    "function": {"kind": "inline", "code":
+    "function": {"code":
                  "def transform(row):\n"
                  "    return {'doc_id': row['doc_id'], 'score': row['score'],\n"
                  "            'label': 'pos' if row['score'] >= 0 else 'neg'}"},

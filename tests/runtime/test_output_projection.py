@@ -25,7 +25,7 @@ def _rating_stage() -> Stage:
             {"name": "score", "type": "int"},
             {"name": "verdict", "type": "str"},
         ]},
-        "function": {"kind": "inline", "code": "def transform(row): return row"},
+        "function": {"code": "def transform(row): return row"},
     })
 
 

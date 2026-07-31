@@ -53,7 +53,7 @@ def _write_project(root: Path) -> Path:
         "id": "clean", "name": "Clean", "type": "python_row_function",
         "inputs": [{"id": "load", "schema": {"columns": _LOADED}}],
         "output_schema": {"columns": _DOUBLED},
-        "function": {"kind": "inline", "code": _clean_code(probe)},
+        "function": {"code": _clean_code(probe)},
     }), encoding="utf-8")
     return probe
 

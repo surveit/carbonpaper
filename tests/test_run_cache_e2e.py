@@ -88,19 +88,19 @@ def _write_project(
         "id": "clean", "name": "Clean", "type": "python_row_function",
         "inputs": [{"id": "load", "schema": {"columns": _LOADED}}],
         "output_schema": {"columns": _CLEANED},
-        "function": {"kind": "inline", "code": _clean_code(probe, edit=clean_edit)},
+        "function": {"code": _clean_code(probe, edit=clean_edit)},
     })
     _write_stage(root, "03_flag", {
         "id": "flag", "name": "Flag", "type": "python_row_function",
         "inputs": [{"id": "clean", "schema": {"columns": _CLEANED}}], "cache": flag_cache,
         "output_schema": {"columns": _FLAGGED},
-        "function": {"kind": "inline", "code": _flag_code(probe)},
+        "function": {"code": _flag_code(probe)},
     })
     _write_stage(root, "04_totals", {
         "id": "totals", "name": "Totals", "type": "python_frame_function",
         "inputs": [{"id": "flag", "schema": {"columns": _FLAGGED}}],
         "output_schema": {"columns": _TOTALLED},
-        "function": {"kind": "inline", "code": _totals_code(probe, edit=totals_edit)},
+        "function": {"code": _totals_code(probe, edit=totals_edit)},
     })
     return probe
 

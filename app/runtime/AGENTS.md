@@ -33,12 +33,18 @@ validate the output, write `outputs/<stage>.parquet`, append to `manifest.json`.
 ## `stages/` — one module per stage type (`HANDLERS`)
 `input_data` connector `file` (csv/parquet/json/geojson; `_read_geojson` flattens a
 FeatureCollection); `python_row_function`/`python_frame_function`
-(`function: {kind: module|inline}`, row variant mapped per row); `enrich`/`expand`
+(the `function` block's `code`, row variant mapped per row); `enrich`/`expand`
 (left join of inputs[1] into inputs[0]; `enrich` verifies m:1 and fails the run on a
 non-unique reference, `expand` allows m:n fan-out); `aggregate`;
 `llm_transform` (row-mapped, bounded parallelism);
 `human_review_queue` (row fingerprint → cached decision or halt);
-`publish` (a `function` module that writes artifacts).
+`publish` (a `function` that writes artifacts);
+`external` (row-mapped too, for work that reaches outside the workflow — the one type that
+runs a separate program: its `external:` block's argv is spawned ONCE PER ROW with no shell,
+the row goes in as JSON on stdin and one JSON row comes back on stdout, and `timeout_seconds`
+is enforced by killing the child. A non-zero exit, a timeout, or stdout that is not one JSON
+object fails the stage, naming the stage and the row; the child's stderr goes to the run log
+as an `external_stderr` detail event).
 
 **Row caching is a property of the handler SHAPE, not of a stage type.** `RowMapHandler`
 wraps the one line of per-row compute (`execution._open_row_caching`), so `python_row_function`
@@ -65,7 +71,8 @@ tail (`GET /project/{p}/runs/{id}/events`) and after-the-fact investigation. The
 stays the source of truth for stage status; this log is only ever the drill-down.
 - **Two levels.** 0 = lifecycle (`run_start`, `stage_start`/`stage_done`,
   `row_start`/`row_ok`/`row_error`); 1 = LLM detail (`llm_prompt`, `llm_thinking`,
-  `llm_text`, `llm_response`, `llm_tool_result`, `llm_error`), off by default on the run
+  `llm_text`, `llm_response`, `llm_tool_result`, `llm_error`) plus an external stage's
+  `external_stderr`, off by default on the run
   page and revealed by a client-side filter over the same feed. `llm_response` is the
   answer the model submitted; `llm_tool_result` is the verdict that came back on it, and
   is the only record of a call the tool layer rejected before the tool function ran.

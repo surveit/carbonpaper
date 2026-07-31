@@ -26,7 +26,7 @@ def _frame_stage(code: str = _DOUBLING_CODE, *, cache: bool = True) -> Stage:
         "inputs": [{"id": "src", "schema": _X}], "cache": cache,
         "output_schema": {
             "columns": [{"name": "x", "type": "int"}, {"name": "y", "type": "int"}]},
-        "function": {"kind": "inline", "code": code},
+        "function": {"code": code},
     })
 
 
@@ -130,7 +130,7 @@ def _two_input_stage() -> Stage:
         "id": "merge", "name": "Merge", "type": "python_frame_function",
         "inputs": [{"id": "left", "schema": _X}, {"id": "right", "schema": _X}],
         "output_schema": _X,
-        "function": {"kind": "inline",
+        "function": {
                      "code": "def transform(left, right):\n    return left\n"},
     })
 
@@ -321,7 +321,7 @@ def test_publish_runs_its_side_effect_every_run_and_writes_no_entry(tmp_path):
         "id": "pub", "name": "Publish", "type": "publish",
         "inputs": [{"id": "src", "schema": _X}],
         "publish": {"destination": "build/"},
-        "function": {"kind": "inline", "code": code},
+        "function": {"code": code},
     })
     handler = HANDLERS[StageType.publish]
     for run_id in ("run1", "run2"):

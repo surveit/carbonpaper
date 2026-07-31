@@ -2,6 +2,8 @@
 chronological story/graph payload the template renders."""
 from __future__ import annotations
 
+import sys
+
 from app.models import parse_stage, Stage
 from app.runtime.trace_view import build_trace_view
 
@@ -29,7 +31,7 @@ def _stages() -> dict[str, Stage]:
             "id": "enrich", "type": "python_row_function", "name": "Enrich",
             "inputs": [{"id": "seeds", "schema": _SEEDS_SCHEMA}],
             "output_schema": _ENRICH_SCHEMA,
-            "function": {"kind": "inline", "code": "def transform(row):\n    return row"},
+            "function": {"code": "def transform(row):\n    return row"},
         }),
     }
 
@@ -73,6 +75,20 @@ def test_node_carries_transform_detail_from_compiled_stage():
     enrich = view["nodes"][-1]
     assert enrich["transform"]["kind"] == "python"
     assert "def transform(row)" in enrich["transform"]["detail"]
+
+
+def test_an_external_node_carries_its_command_and_never_claims_to_be_python():
+    # No source to show: `kind: python` would promise code this app does not have.
+    stages = _stages()
+    stages["enrich"] = _stage({
+        "id": "enrich", "type": "external", "name": "Enrich",
+        "inputs": [{"id": "seeds", "schema": _SEEDS_SCHEMA}],
+        "output_schema": _ENRICH_SCHEMA,
+        "external": {"command": [sys.executable, "-m", "json.tool"], "timeout_seconds": 30},
+    })
+    transform = build_trace_view(_trace(), stages)["nodes"][-1]["transform"]
+    assert transform["kind"] == "command"
+    assert transform["detail"] == f"{sys.executable} -m json.tool"
 
 
 def test_edges_connect_consecutive_and_carry_the_source_row():

@@ -18,7 +18,7 @@ def _stage(*, summary=None, type_="python_row_function", handle="function"):
     }
     if handle == "function":
         spec["function"] = {
-            "kind": "inline", "summary": summary,
+            "summary": summary,
             "code": "def transform(row):\n    return row",
         }
     else:
@@ -87,7 +87,7 @@ def test_a_code_carrying_type_that_cannot_run_examples_is_untestable():
         "id": "pub", "name": "Pub", "type": "publish",
         "inputs": [{"id": "up", "schema": _SCHEMA}],
         "publish": {"format": "csv"},
-        "function": {"kind": "inline", "summary": "Writes one file per row.",
+        "function": {"summary": "Writes one file per row.",
                      "code": "def transform(df, output_dir, trace_links):\n    return df"},
     })
     assert build_certification(stage, []).status == "untestable"
@@ -118,7 +118,7 @@ def test_publish_carries_a_function_so_it_is_not_n_a():
         "id": "pub", "name": "Pub", "type": "publish",
         "inputs": [{"id": "up", "schema": _SCHEMA}],
         "publish": {"format": "csv"},
-        "function": {"kind": "inline",
+        "function": {
                      "code": "def transform(df, output_dir, trace_links):\n    return df"},
     })
     assert build_certification(stage, []).status == "unsummarised"

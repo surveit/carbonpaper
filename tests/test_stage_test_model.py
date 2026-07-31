@@ -25,7 +25,7 @@ def _row_stage(tests=None) -> dict:
         "id": "double", "name": "Double the amount", "type": "python_row_function",
         "inputs": [{"id": "load", "schema": _IN_SCHEMA}],
         "output_schema": _OUT_SCHEMA,
-        "function": {"kind": "inline",
+        "function": {
                      "code": "def transform(row):\n    return {**row, 'doubled': row['amount'] * 2}\n"},
     }
     if tests is not None:
@@ -143,7 +143,7 @@ def test_multi_input_test_missing_one_input_is_rejected():
             {"id": "right", "schema": right_schema},
         ],
         "output_schema": left_schema,
-        "function": {"kind": "inline", "code": "def transform(a, b):\n    return a\n"},
+        "function": {"code": "def transform(a, b):\n    return a\n"},
         "tests": [{
             "name": "only_left_supplied",
             "inputs": {"left": [{"id": "x"}]},

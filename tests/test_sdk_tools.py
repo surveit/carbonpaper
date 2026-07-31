@@ -185,7 +185,7 @@ def test_draft_stage_input_schema_round_trips_in_alias_form(examples_root: Path)
         "type": "python_row_function",
         "inputs": [{"id": "load", "schema": upstream_schema}],
         "output_schema": {"columns": [{"name": "id", "type": "str"}], "primary_key": ["id"]},
-        "function": {"kind": "inline", "code": "def transform(row): return row"},
+        "function": {"code": "def transform(row): return row"},
     }
 
     created = _call(by_name["create_draft"], {"project_id": "congresswatch"})

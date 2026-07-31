@@ -60,7 +60,7 @@ def _row_stage(code: str) -> Stage:
         "id": "tag", "name": "Tag", "type": "python_row_function",
         "inputs": [{"id": "load", "schema": _SCHEMA}],
         "output_schema": _SCHEMA,
-        "function": {"kind": "inline", "summary": "Passes the row through.", "code": code},
+        "function": {"summary": "Passes the row through.", "code": code},
         "tests": [{"name": "passes_a_row_through", "inputs": {"load": [{"status": "active"}]},
                    "expected": [{"status": "active"}]}],
     })

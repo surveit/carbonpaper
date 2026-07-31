@@ -24,7 +24,7 @@ def test_workflow_clean(tmp_path):
         S(id="load", type="input_data", output_schema=_K,
           connector={"kind": "file", "params": {"path": str(tmp_path / "d.csv"), "format": "csv"}}),
         S(id="extract", type="python_frame_function", inputs=[_in("load")],
-          function={"kind": "inline", "code": "def transform(row): return row"},
+          function={"code": "def transform(row): return row"},
           output_schema=_K),
     ])
     assert [s.id for s in wf.stages] == ["load", "extract"]
@@ -44,7 +44,7 @@ def test_workflow_dangling_input():
     with pytest.raises(ValidationError):
         m.parse_workflow([
             S(id="b", type="python_frame_function", inputs=[_in("ghost")],
-              function={"kind": "inline", "code": "def transform(row): return row"},
+              function={"code": "def transform(row): return row"},
               output_schema=_K),
         ])
 
@@ -53,9 +53,9 @@ def test_workflow_cycle():
     with pytest.raises(ValidationError):
         m.parse_workflow([
             S(id="a", type="python_frame_function", inputs=[_in("b")], output_schema=_K,
-              function={"kind": "inline", "code": "def transform(row): return row"}),
+              function={"code": "def transform(row): return row"}),
             S(id="b", type="python_frame_function", inputs=[_in("a")], output_schema=_K,
-              function={"kind": "inline", "code": "def transform(row): return row"}),
+              function={"code": "def transform(row): return row"}),
         ])
 
 
@@ -74,9 +74,9 @@ def test_validate_inputs_resolve_reports_all_dangling():
 
 def test_detect_cycle_reports_cycle():
     a = parse_stage(S(id="a", type="python_frame_function", inputs=[_in("b")], output_schema=_K,
-                               function={"kind": "inline", "code": "def transform(row): return row"}))
+                               function={"code": "def transform(row): return row"}))
     b = parse_stage(S(id="b", type="python_frame_function", inputs=[_in("a")], output_schema=_K,
-                               function={"kind": "inline", "code": "def transform(row): return row"}))
+                               function={"code": "def transform(row): return row"}))
     assert m.detect_cycle([a, b])  # non-empty
 
 
@@ -84,7 +84,7 @@ def test_detect_cycle_empty_when_acyclic(tmp_path):
     a = parse_stage(S(id="a", type="input_data", output_schema=_K,
                                connector={"kind": "file", "params": {"path": str(tmp_path / "d.csv")}}))
     b = parse_stage(S(id="b", type="python_frame_function", inputs=[_in("a")], output_schema=_K,
-                               function={"kind": "inline", "code": "def transform(row): return row"}))
+                               function={"code": "def transform(row): return row"}))
     assert m.detect_cycle([a, b]) == []
 
 
@@ -197,7 +197,7 @@ def _consumer(input_schema, **over):
     base = dict(
         id="down", type="python_frame_function",
         inputs=[{"id": "up", "schema": input_schema}],
-        function={"kind": "inline", "code": "def transform(df): return df"},
+        function={"code": "def transform(df): return df"},
         output_schema=input_schema,
     )
     base.update(over)
@@ -279,7 +279,7 @@ def _publish_upstream_stages():
             S(id="pub", type="publish",
               inputs=[{"id": "up", "schema": {"columns": [{"name": "id", "type": "str"}]}}],
               publish={"format": "json"},
-              function={"kind": "inline",
+              function={
                         "code": "def transform(df, output_dir): return df"})),
         parse_stage(
             _consumer({"columns": [{"name": "anything", "type": "str"}]}, id="down",
@@ -329,7 +329,7 @@ def test_graph_issues_reports_a_dangling_input_instead_of_raising():
 def _publish(stage_id="pub", inputs=("load",)):
     return S(id=stage_id, type="publish", inputs=[_in(i) for i in inputs],
              publish={"format": "json"},
-             function={"kind": "inline", "code": "def transform(df, output_dir): return df"})
+             function={"code": "def transform(df, output_dir): return df"})
 
 
 _X = {"columns": [{"name": "x"}]}
@@ -338,7 +338,7 @@ _Y = {"columns": [{"name": "y"}]}
 
 def _reader(stage_id, upstream):
     return S(id=stage_id, type="python_frame_function", inputs=[_in(upstream)],
-             function={"kind": "inline", "code": "def transform(df): return df"},
+             function={"code": "def transform(df): return df"},
              output_schema=_K)
 
 

@@ -59,7 +59,7 @@ def _raising_stage(stage_id, input_id, name="Boom", schema=_ID_VAL_SCHEMA):
     return {"id": stage_id, "name": name, "type": "python_frame_function",
             "inputs": [{"id": input_id, "schema": schema}],
             "output_schema": schema,
-            "function": {"kind": "inline",
+            "function": {
                          "code": "def transform(df):\n    raise ValueError('boom')\n"}}
 
 
@@ -69,7 +69,7 @@ def _passthrough_stage(stage_id, input_id, name="Passthrough", schema=_ID_VAL_SC
     return {"id": stage_id, "name": name, "type": "python_frame_function",
             "inputs": [{"id": input_id, "schema": schema}],
             "output_schema": schema,
-            "function": {"kind": "inline",
+            "function": {
                          "code": "def transform(df):\n    return df\n"}}
 
 

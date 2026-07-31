@@ -193,14 +193,14 @@ def test_publish_requires_the_function_block_it_actually_runs():
 def test_publish_config_is_typed():
     s = m.parse_stage(S(
         id="p", type="publish", inputs=[{"id": "a", "schema": _PK_ID_SCHEMA}],
-        publish={"format": "json"}, function={"kind": "inline", "code": "def transform(row): return row"}))
+        publish={"format": "json"}, function={"code": "def transform(row): return row"}))
     assert s.publish.format == m.PublishFormat.json
 
 
-def test_python_function_inline_needs_code():
+def test_python_function_needs_code():
     with pytest.raises(ValidationError):
         m.parse_stage(S(id="t", type="python_frame_function", inputs=[{"id": "a"}],
-                                 function={"kind": "inline"}))
+                                 function={}))
 
 
 def test_python_function_inline_code_must_compile():
@@ -208,20 +208,20 @@ def test_python_function_inline_code_must_compile():
     # runtime hits when it exec()s the code, now caught at validation time.
     with pytest.raises(ValidationError):
         m.parse_stage(S(id="t", type="python_row_function", inputs=[{"id": "a"}],
-                                 function={"kind": "inline", "code": "row['x'] = 1\nreturn row"}))
+                                 function={"code": "row['x'] = 1\nreturn row"}))
 
 
 def test_python_function_inline_code_must_define_transform():
     with pytest.raises(ValidationError):
         m.parse_stage(S(id="t", type="python_row_function", inputs=[{"id": "a"}],
-                                 function={"kind": "inline", "code": "x = 1"}))
+                                 function={"code": "x = 1"}))
 
 
 def test_python_function_inline_valid_transform_ok():
     m.parse_stage(S(id="t", type="python_row_function",
                              inputs=[{"id": "a", "schema": _PK_ID_SCHEMA}],
                              output_schema=_PK_ID_SCHEMA,
-                             function={"kind": "inline", "code": "def transform(row): return row"}))
+                             function={"code": "def transform(row): return row"}))
 
 
 def test_bad_id_snake_case(tmp_path):
@@ -384,7 +384,7 @@ def test_inputs_are_refs_with_schema():
         inputs=[{"id": "a", "schema": {"primary_key": ["k"],
                                        "columns": [{"name": "k", "type": "str"}]}}],
         output_schema={"columns": [{"name": "k", "type": "str"}]},
-        function={"kind": "inline", "code": "def transform(row): return row"},
+        function={"code": "def transform(row): return row"},
     ))
     assert s.input_ids == ["a"]
     assert s.inputs[0].table_schema is not None
@@ -397,7 +397,7 @@ def test_inputs_bare_id_shorthand_normalises_then_fails_on_the_missing_schema():
     issues = m.validate_stage(S(
         id="x", type="python_frame_function", inputs=["a"],
         output_schema=_K_SCHEMA,
-        function={"kind": "inline", "code": "def transform(row): return row"},
+        function={"code": "def transform(row): return row"},
     ))
     assert any("inputs.0.schema" in issue for issue in issues)
 
@@ -614,7 +614,7 @@ def test_output_schema_issues_raise_at_stage_construction():
 # two one-sided exemptions: input_data takes no inputs (but still declares its
 # output), publish emits files not a table (but still declares its inputs).
 
-_INLINE_ROW_FN = {"kind": "inline", "code": "def transform(row): return row"}
+_INLINE_ROW_FN = {"code": "def transform(row): return row"}
 _LEFT_SCHEMA = {"columns": [{"name": "id", "type": "str"}, {"name": "name", "type": "str"}],
                 "primary_key": ["id"]}
 _RIGHT_SCHEMA = {"columns": [{"name": "id", "type": "str"}, {"name": "amount", "type": "int"}],

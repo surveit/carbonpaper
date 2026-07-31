@@ -9,8 +9,10 @@
    (stage.filter) go through here, so the two read the same way.
 
    stage_code(stage, function_code): function_code is the resolved source for a
-   `function` block (None when a module ref can't be found on disk); a filter's
-   code is inline on the block and needs no resolution. #}
+   `function` block, which is the code the stage itself carries; a filter's code
+   is on its own block and needs no resolution. An `external` stage has no code
+   block at all — it runs a separate program, shown as its command in
+   _stage_executable.html. #}
 
 {# Prose carrying `backticks` around the column names it mentions, rendered with
    the odd parts as inline code chips. The backticks are plain text in the data —
@@ -57,11 +59,7 @@
 <section class="exec-block code-block">
     <details open>
         <summary><h2>💻 Code</h2><span class="muted">the implementation of the summary above</span></summary>
-        {% if function_code %}
-        <pre class="code">{{ function_code }}</pre>
-        {% else %}
-        <p class="muted"><em>(function source not found on disk)</em></p>
-        {% endif %}
+        <pre class="code">{{ stage.function.code }}</pre>
     </details>
 </section>
 {% endif %}

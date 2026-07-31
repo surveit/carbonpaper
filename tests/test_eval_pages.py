@@ -40,7 +40,7 @@ _TARGET = {
     "id": "classify", "type": "python_row_function", "name": "Classify each row",
     "inputs": [{"id": "load", "schema": {"columns": [{"name": "doc_id", "type": "str"},
                                                      {"name": "text", "type": "str"}]}}],
-    "function": {"kind": "inline", "code": "def transform(row): return row"},
+    "function": {"code": "def transform(row): return row"},
     "output_schema": {"columns": [{"name": "doc_id", "type": "str"},
                                   {"name": "text", "type": "str"},
                                   {"name": "label", "type": "str"}]},

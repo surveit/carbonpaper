@@ -282,7 +282,7 @@ def test_create_version_from_stages_invalid_raises_and_writes_nothing(tmp_path):
         "id": "consume", "name": "Consume", "type": "python_frame_function",
         "inputs": [{"id": "no-such-stage", "schema": _ROWS_SCHEMA}],
         "output_schema": _ROWS_SCHEMA,
-        "function": {"kind": "inline", "code": "def transform(df):\n    return df\n"},
+        "function": {"code": "def transform(df):\n    return df\n"},
     }
     with pytest.raises(pydantic.ValidationError):
         create_version_from_stages(

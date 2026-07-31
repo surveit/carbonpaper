@@ -20,7 +20,6 @@ def _row_function(output_schema: dict, input_columns: list[dict] | None = None) 
         "inputs": [{"id": "up", "schema": {"columns": input_columns or [{"name": "id"}]}}],
         "output_schema": output_schema,
         "function": {
-            "kind": "inline",
             "code": "def transform(row: dict) -> dict:\n    return row\n",
         },
     }

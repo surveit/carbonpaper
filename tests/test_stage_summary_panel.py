@@ -41,7 +41,7 @@ def _seed_project(root: Path) -> None:
         "type": "python_row_function",
         "inputs": [{"id": "load", "schema": _IN_SCHEMA}],
         "output_schema": _OUT_SCHEMA,
-        "function": {"kind": "inline", "summary": _SUMMARY, "code": _CODE},
+        "function": {"summary": _SUMMARY, "code": _CODE},
         "tests": [{
             "name": "withdrawn_status_sets_the_flag",
             "inputs": {"load": [{"bill_id": "HB1", "status": "Withdrawn"}]},
@@ -53,7 +53,7 @@ def _seed_project(root: Path) -> None:
         "type": "python_row_function",
         "inputs": [{"id": "flag_withdrawn", "schema": _OUT_SCHEMA}],
         "output_schema": _OUT_SCHEMA,
-        "function": {"kind": "inline", "code": "def transform(row):\n    return row\n"},
+        "function": {"code": "def transform(row):\n    return row\n"},
     }), encoding="utf-8")
 
 
@@ -82,7 +82,7 @@ def test_a_summary_does_not_change_what_the_stage_computes() -> None:
 
     # The handle is its own name so the reworded copy can unpack it: mypy infers a
     # heterogeneous dict literal's values as a union, which `**` cannot spread.
-    function = {"kind": "inline", "summary": _SUMMARY, "code": _CODE}
+    function = {"summary": _SUMMARY, "code": _CODE}
     spec = {
         "id": "flag", "name": "Flag", "type": "python_row_function",
         "inputs": [{"id": "load", "schema": _IN_SCHEMA}],

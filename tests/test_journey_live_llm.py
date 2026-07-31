@@ -132,7 +132,7 @@ def _workflow_stages(source_path: str) -> list[dict]:
             "id": "report", "name": "Publish classified claims", "type": "publish",
             "inputs": [{"id": "classify", "schema": classified_schema}],
             "publish": {"format": "csv", "destination": "report/"},
-            "function": {"kind": "inline", "code": (
+            "function": {"code": (
                 "import pandas as pd\n"
                 "from pathlib import Path\n"
                 "\n"

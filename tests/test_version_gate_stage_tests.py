@@ -27,7 +27,7 @@ def _seed_project(root: Path, expected_doubled: float) -> None:
         "id": "double", "name": "Double", "type": "python_row_function",
         "inputs": [{"id": "load", "schema": _IN_SCHEMA}],
         "output_schema": _OUT_SCHEMA,
-        "function": {"kind": "inline",
+        "function": {
                      "code": "def transform(row):\n    return {**row, 'doubled': row['amount'] * 2}\n"},
         "tests": [{
             "name": "doubles_two",

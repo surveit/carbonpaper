@@ -4,6 +4,9 @@ The gate the authoring agent must clear, and the list the Workflow page shows.
 """
 from __future__ import annotations
 
+import pytest
+from pydantic import ValidationError
+
 from app import models as m
 from app.models import find_stage_compiler_warnings, find_workflow_compiler_warnings
 
@@ -16,11 +19,6 @@ _PASSING_EXAMPLE = {"name": "passes_through",
 def _stage(stage_id="s", type_="python_row_function", handle="function", **kw):
     block = {"summary": kw.pop("summary", "Passes every row through unchanged."),
              "code": _CODE if handle == "function" else "def should_include(row):\n    return True"}
-    if handle == "function":
-        block = {"kind": kw.pop("kind", "inline"), **block}
-        if block["kind"] == "module":
-            block = {**block, "module": kw.pop("module", "pkg.mod")}
-            block.pop("code")
     spec = {
         "id": stage_id, "name": stage_id.replace("_", " ").title(), "type": type_,
         "inputs": [{"id": "up", "schema": _SCHEMA}],
@@ -69,11 +67,14 @@ def test_missing_description_outranks_missing_examples():
     assert _kinds(_stage(summary=None)) == ["undescribed"]
 
 
-def test_module_code_is_blocking_because_the_panel_cannot_show_it():
-    warnings = find_stage_compiler_warnings(
-        _stage(kind="module", module="pkg.mod", tests=[_PASSING_EXAMPLE]))
-    assert [w.kind for w in warnings] == ["unreviewable_code"]
-    assert warnings[0].blocking
+def test_a_function_block_cannot_point_at_code_the_panel_could_not_show():
+    # There is no `module` field to set, so the unreviewable-code case the
+    # warning used to report cannot be expressed at all.
+    assert "module" not in m.PythonFunction.model_fields
+    assert m.PythonFunction.model_fields["code"].is_required()
+    with pytest.raises(ValidationError, match="module"):
+        # `function=` here replaces the block _stage would have built.
+        _stage(function={"summary": "Passes rows through.", "module": "pkg.mod"})
 
 
 def _publish_stage(stage_id="pub"):
@@ -82,7 +83,7 @@ def _publish_stage(stage_id="pub"):
         "id": stage_id, "name": "Pub", "type": "publish",
         "inputs": [{"id": "up", "schema": _SCHEMA}],
         "publish": {"format": "csv"},
-        "function": {"kind": "inline", "summary": "Writes one file per row.",
+        "function": {"summary": "Writes one file per row.",
                      "code": "def transform(df, output_dir, trace_links):\n    return df"},
     })
 

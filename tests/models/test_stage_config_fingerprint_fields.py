@@ -8,6 +8,7 @@ from typing import get_args
 from app.models.stage import PythonFunction, Stage
 from app.models.stage_base import StageBase
 from app.models.stages.aggregate import AggregateConfig
+from app.models.stages.external import ExternalConfig
 from app.models.stages.human_review_queue import QueueConfig
 from app.models.stages.input_data import Connector
 from app.models.stages.join import JoinConfig
@@ -20,7 +21,7 @@ from app.models.stages.union import UnionConfig
 # reaches the fingerprint cannot skip the classification below.
 _CONFIG_CLASSES = [
     Connector, LLMConfig, PythonFunction, JoinConfig, AggregateConfig, QueueConfig,
-    PublishConfig, UnionConfig, FilterConfig,
+    PublishConfig, UnionConfig, FilterConfig, ExternalConfig,
 ]
 
 

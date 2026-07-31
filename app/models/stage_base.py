@@ -70,6 +70,10 @@ class StageType(str, Enum):
     # app.runtime.lineage) so app.runtime.trace can still cross them.
     union = "union"
     filter_rows = "filter_rows"
+    # Shaped on python_row_function — one input, mapped per row — but it runs a
+    # separate program, named as an argv by its `external:` block instead of the
+    # `function:` block every python type carries.
+    external = "external"
 
 
 # The stage types that guarantee output row i came from input row i — 1:1 and in
@@ -83,6 +87,7 @@ _GRAIN_AND_ORDER_PRESERVING_TYPES: frozenset[StageType] = frozenset({
     StageType.python_row_function,
     StageType.llm_transform,
     StageType.human_review_queue,
+    StageType.external,
 })
 
 
@@ -360,6 +365,9 @@ class StageBase(StageCommon):
           - publish            → NO — handle_publish runs an authored function whose
                                  output is a table of artifact paths, not the input
                                  rows (and it is terminal — nothing downstream).
+          - external           → yes — one process per input row, in that row's
+                                 position; it sees neither the frame nor its own
+                                 row number, so it cannot fan out or reorder.
           - filter_rows / union → NO — a filter drops rows, a union interleaves rows
                                  from several inputs, so neither is 1:1-by-position.
                                  Each output row's exact source (stage id + row
