@@ -14,7 +14,7 @@ from threading import RLock
 from uuid import uuid4
 from typing import Any, ClassVar, Iterator, Protocol, Self
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.core.errors import DocumentNotFound
 
@@ -188,7 +188,11 @@ def is_store_configured() -> bool:
 
 
 def _now_iso() -> str:
-    return datetime.now().isoformat(timespec="seconds")
+    # Microseconds, not seconds: `created_at` is what newest-first ordering sorts on
+    # (AgentSession.list, and any "latest record wins" read), and a second-resolution
+    # stamp ties for every record written in the same second. Fixed-width ISO, so
+    # lexicographic comparison stays chronological.
+    return datetime.now().isoformat(timespec="microseconds")
 
 
 class PersistenceScope(str, Enum):
@@ -263,6 +267,14 @@ class PersistedModel(BaseModel):
     id: str = Field(default_factory=lambda: uuid4().hex)
     created_at: str = Field(default_factory=_now_iso)
     updated_at: str = Field(default_factory=_now_iso)
+
+    @model_validator(mode="after")
+    def _stamp_one_creation_instant(self) -> Self:
+        """A never-saved record was created and updated at the same instant, not two
+        microseconds apart — the two factories fire independently."""
+        if not {"created_at", "updated_at"} & self.model_fields_set:
+            object.__setattr__(self, "updated_at", self.created_at)
+        return self
     collection: ClassVar[str]
     SCOPE: ClassVar[PersistenceScope]
     SCHEMA_VERSION: ClassVar[int] = 1

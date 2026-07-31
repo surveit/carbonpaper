@@ -156,6 +156,16 @@ def test_a_caller_supplied_id_still_wins(configured):
     assert sorted(w.name for w in _Widget.list("proj/")) == ["x", "y"]
 
 
+def test_two_records_written_in_the_same_second_order_deterministically(configured):
+    """created_at is what newest-first reads sort on, so it must separate records
+    written back-to-back — a second-resolution stamp ties and the order goes random."""
+    first = _Widget(name="first")
+    second = _Widget(name="second")
+
+    assert first.created_at != second.created_at
+    assert first.created_at < second.created_at
+
+
 def test_load_or_none_missing(configured):
     assert _Widget.load_or_none("absent") is None
 
