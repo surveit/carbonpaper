@@ -1,0 +1,138 @@
+{% extends "_layout.html" %}
+{% block title %}{{ stage.name }} · {{ run.project }} · {{ run.run_id }}{% endblock %}
+{% block content %}
+
+<p class="crumb"><a href="{{ index_href }}">← review packet</a></p>
+<h1>{{ stage.name }}</h1>
+<p class="lede">
+  <code>{{ stage.stage_id }}</code> · {{ stage.type }} ·
+  <strong class="s-{{ stage.status }}">{{ stage.status }}</strong> ·
+  {{ stage.row_count }} rows out · {{ stage.elapsed_ms }} ms
+</p>
+
+{% if stage.error %}
+<section>
+<h2 class="bad">This stage failed</h2>
+<pre class="err">{{ stage.error }}</pre>
+</section>
+{% endif %}
+
+{% if stage.notes %}
+<section>
+<h2>Notes the run recorded</h2>
+<ul>{% for note in stage.notes %}<li>{{ note }}</li>{% endfor %}</ul>
+</section>
+{% endif %}
+
+<section>
+<h2>What this step does</h2>
+{% if transform is none %}
+  <p class="warn">
+    The stage definition is not available.
+    {% if stage.definition_error %}{{ stage.definition_error }}{% else %}
+    The workflow version this run pinned defines no stage with this id.{% endif %}
+  </p>
+{% else %}
+  {% if transform.summary %}
+    <p class="summary">{{ transform.summary }}</p>
+  {% else %}
+    <p class="note">This step carries no plain-language summary.</p>
+  {% endif %}
+
+  {% if transform.corner_cases %}
+    <h3>Corner cases the author named</h3>
+    <table>
+    <thead><tr><th>when</th><th>what must happen</th></tr></thead>
+    <tbody>
+    {% for corner in transform.corner_cases %}
+      <tr><td>{{ corner.case }}</td><td>{{ corner.expected }}</td></tr>
+    {% endfor %}
+    </tbody>
+    </table>
+  {% endif %}
+
+  {% if transform.prompt_instructions or transform.prompt_data_template %}
+    <h3>What the model was asked</h3>
+    {% if transform.model %}<p class="note">Model: <code>{{ transform.model }}</code></p>{% endif %}
+    {% if transform.prompt_instructions %}
+      <h4>Instructions (sent once, per call)</h4>
+      <pre>{{ transform.prompt_instructions }}</pre>
+    {% endif %}
+    {% if transform.prompt_data_template %}
+      <h4>Per-row template</h4>
+      <pre>{{ transform.prompt_data_template }}</pre>
+      <p class="note">Fields in <code>{{ '{{ braces }}' }}</code> are filled from each input row.
+        The exact text sent for each row is in <code>events.jsonl</code>.</p>
+    {% endif %}
+  {% endif %}
+
+  {% if transform.code %}
+    <h3>The code that ran</h3>
+    <pre class="code">{{ transform.code }}</pre>
+  {% endif %}
+
+  <details>
+    <summary>Full stage definition (JSON)</summary>
+    <pre class="code">{{ transform.spec_json }}</pre>
+  </details>
+{% endif %}
+</section>
+
+<section>
+<h2>Checks</h2>
+{% if stage.validations %}
+<table>
+<thead><tr><th>check</th><th>result</th><th class="num">rows</th><th>issues</th></tr></thead>
+<tbody>
+{% for check in stage.validations %}
+<tr>
+  <td>{{ check.label }}</td>
+  <td>{% if check.ok %}<span class="good">passed</span>{% else %}<span class="bad">failed</span>{% endif %}</td>
+  <td class="num">{{ check.rows if check.rows is not none else "—" }}</td>
+  <td>
+    {% if check.issues %}
+      <ul class="issues">
+      {% for issue in check.issues %}
+        <li><span class="sev-{{ issue.severity }}">{{ issue.severity }}</span>
+            {% if issue.column %}<code>{{ issue.column }}</code>{% endif %}
+            {{ issue.message }}</li>
+      {% endfor %}
+      </ul>
+    {% else %}<span class="muted">none</span>{% endif %}
+  </td>
+</tr>
+{% endfor %}
+</tbody>
+</table>
+{% else %}
+<p class="note">This stage declared no schema, so nothing was checked against one.</p>
+{% endif %}
+</section>
+
+<section>
+<h2>What came out</h2>
+{% if table is none %}
+  <p class="note">This stage recorded no output file.</p>
+{% elif table.unreadable %}
+  <p class="warn">The output file could not be read back: {{ table.unreadable }}</p>
+{% else %}
+  <p class="note">
+    {{ table.rows_total }} rows.
+    {% if table.capped %}Showing the first {{ table.rows|length }} —
+      {% if data_href %}<a href="{{ data_href }}">the CSV</a> holds all of them{% else %}the CSV holds all of them{% endif %}.
+    {% elif data_href %}Also available as <a href="{{ data_href }}">CSV</a>.{% endif %}
+  </p>
+  <div class="scroll">
+  <table class="data">
+  <thead><tr>{% for column in table.columns %}<th>{{ column }}</th>{% endfor %}</tr></thead>
+  <tbody>
+  {% for row in table.rows %}
+    <tr>{% for cell in row %}<td>{{ cell }}</td>{% endfor %}</tr>
+  {% endfor %}
+  </tbody>
+  </table>
+  </div>
+{% endif %}
+</section>
+
+{% endblock %}

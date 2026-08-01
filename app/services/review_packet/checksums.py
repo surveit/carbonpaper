@@ -1,0 +1,40 @@
+"""SHA-256 of every file in a finished packet, in `shasum -a 256` format so a
+reviewer verifies the folder with `shasum -c checksums.txt` and no other tool."""
+from __future__ import annotations
+
+import hashlib
+from pathlib import Path
+
+CHECKSUMS_FILE = "checksums.txt"
+
+_READ_CHUNK_BYTES = 1 << 20
+
+
+def write_checksums(root: Path) -> str:
+    """Covers every file under `root` but itself. Returns the packet-relative path."""
+    # Itself, because a manifest cannot carry the hash of the file it is written into.
+    lines = [
+        f"{compute_sha256(path)}  {path.relative_to(root).as_posix()}"
+        for path in _list_packet_files(root)
+    ]
+    (root / CHECKSUMS_FILE).write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return CHECKSUMS_FILE
+
+
+def compute_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(_READ_CHUNK_BYTES), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _list_packet_files(root: Path) -> list[Path]:
+    return sorted(
+        path
+        for path in root.rglob("*")
+        if path.is_file() and path.name != CHECKSUMS_FILE
+    )
+
+
+__all__ = ["CHECKSUMS_FILE", "compute_sha256", "write_checksums"]

@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}review packet{% endblock %}</title>
+<link rel="stylesheet" href="{{ assets }}">
+</head>
+<body>
+<div class="wrap">
+{% block content %}{% endblock %}
+<footer class="foot">
+  Review packet for run <code>{{ run.run_id }}</code> of project <code>{{ run.project }}</code>.
+  Every file in this folder is listed with its SHA-256 in <a href="{{ checksums_href }}">checksums.txt</a>.
+</footer>
+</div>
+</body>
+</html>
