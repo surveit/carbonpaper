@@ -126,8 +126,7 @@ def test_a_version_that_already_has_a_guide_is_not_offered_one(project_dir):
 
 @pytest.mark.parametrize("manifest", [{"stage_records": []}, _manifest("20200101T000000")])
 def test_an_unresolvable_version_is_not_offered_a_guide(project_dir, manifest):
-    """A guide is stored ON a version. With no readable version there is nothing to
-    store one against, so the run page must not offer to write one."""
+    """A guide is stored ON a version, so no readable version means nothing to offer."""
     _version_with_guide(project_dir)
     assert find_guideless_version_id("demo", manifest) is None
 

@@ -62,9 +62,7 @@ def build_run_guide_view(project: str, manifest: dict[str, Any]) -> RunGuideView
 
 
 def find_guideless_version_id(project: str, manifest: dict[str, Any]) -> str | None:
-    """The pinned version's id when it resolves and carries NO guide — the one case
-    where the run page can offer to write one. None when the version cannot be read (a
-    guide could not be stored against it) or already has a guide."""
+    """The pinned version's id when it resolves and carries NO guide; None otherwise."""
     try:
         version = load_run_version(project, manifest)
     except RunVersionUnresolvableError:

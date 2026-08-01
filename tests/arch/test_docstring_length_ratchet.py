@@ -40,7 +40,6 @@ _GRANDFATHERED: frozenset[str] = frozenset(
         "app/compiler/data_model.py::_frame",
         "app/compiler/data_model.py::build_data_model_agent",
         "app/compiler/data_model.py::start_data_model_generation_agent",
-        "app/compiler/stage_tests.py::_persist_derivation_failure",
         "app/compiler/stage_tests.py::_render_corner_cases",
         "app/compiler/stage_tests.py::build_stage_test_deriver",
         "app/compiler/stage_tests.py::render_derivation_task",

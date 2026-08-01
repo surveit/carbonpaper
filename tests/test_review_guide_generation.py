@@ -72,9 +72,7 @@ def _guide_of(stage_ids: list[str]) -> ReviewGuide:
 
 
 class _FakeAuthor:
-    """The guide-authoring Agent, faked: stream_turn 'submits' `answer` exactly as the
-    real submit_answer tool would during the turn. `answer=None` is the turn that ends
-    having submitted nothing."""
+    """Faked guide-authoring Agent; `answer=None` is a turn that submits nothing."""
 
     task = "make a guide for this version"
 
@@ -123,10 +121,8 @@ def _poll_until_inactive(client: TestClient, sid: str, *, timeout: float = 5.0) 
 def test_the_author_is_given_the_versions_stages_not_the_working_copy(
     tmp_path: Path, monkeypatch: Any
 ) -> None:
-    """The discriminating test for this whole feature. The working copy gains a stage
-    AFTER the version is cut; the agent must still be built from the version's two
-    frozen stages, because a guide naming `triple` would describe a workflow the
-    version does not contain — and `save_version_guide` would reject it."""
+    """The discriminating test: the working copy gains a stage AFTER the version is
+    cut."""
     project_dir = _seed_project(tmp_path)
     version = versioning.create_version_from_disk(
         project_dir, message="v1", reviewer="local"
@@ -182,9 +178,8 @@ def test_render_guide_task_carries_the_request_the_document_and_the_stages(
 
 
 def test_the_author_holds_no_tool_but_submit_answer(tmp_path: Path) -> None:
-    """The scoping guarantee is structural, not a matter of prompt discipline: the turn
-    is offered one tool and no built-ins, so there is no path by which the agent could
-    reach the working copy even if it wanted to."""
+    """Structural, not prompt discipline: one tool and no built-ins, so no path exists at
+    all."""
     project_dir = _seed_project(tmp_path)
     version = versioning.create_version_from_disk(
         project_dir, message="v1", reviewer="local"
@@ -290,8 +285,7 @@ def test_finish_with_no_guide_raises_and_writes_nothing(tmp_path: Path) -> None:
 
 
 def test_finish_refuses_a_guide_that_misses_a_stage(tmp_path: Path) -> None:
-    """A guide narrating only `load` accounts for nothing else, so the version keeps
-    none rather than gaining one that talks past half its stages."""
+    """A guide accounting for only some stages leaves the version with none at all."""
     project_dir = _seed_project(tmp_path)
     version = versioning.create_version_from_disk(
         project_dir, message="v1", reviewer="local"
