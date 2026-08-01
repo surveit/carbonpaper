@@ -80,6 +80,13 @@
 
 {% include "_run_header.html" %}
 
+{% if not is_running %}
+<p class="banner">📦 <a href="/project/{{ project }}/runs/{{ run_id }}/packet.zip">Download review packet</a>
+    <span class="muted">— this run's data, records, workflow and methodology as an offline
+    folder someone outside can fact-check without this app.</span>
+</p>
+{% endif %}
+
 {# ── The workflow is the main object: full width, on top. Built from the version
       this run pinned; with graph_error set NO graph is drawn, because the
       working copy may not be what ran. ── #}
