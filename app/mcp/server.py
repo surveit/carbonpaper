@@ -132,8 +132,8 @@ Once a python-transform stage exists, generate_stage_tests derives its tests fro
 methodology; then loop edit_stage → run_stage_tests until they pass.
 
 # Finishing
-report_compiler_warnings(project_id) reports what is wrong with the workflow as
-WRITTEN — no code run. Dirty is fine while you build.
+report_compiler_warnings(project_id) reports what is wrong with the workflow,
+including any stage whose examples do not pass. Dirty is fine while you build.
 
 Two different things you can ask a human for, with different bars:
 - A look at a smoke test — run_workflow_test and a review of what came out. Fine with
@@ -267,7 +267,8 @@ def run_stage_tests(project_id: str, stage_id: str | None = None) -> dict[str, A
 def report_compiler_warnings(project_id: str) -> dict[str, Any]:
     pdir = _resolve_existing_project(project_id)
     stages = loader.load_workflow(pdir)
-    report = find_workflow_compiler_warnings(stages)
+    failing = stage_tests.run_stage_tests(stages).count_failing_by_stage()
+    report = find_workflow_compiler_warnings(stages, failing)
     return {
         "is_clean": report.is_clean,
         "blocking": [w.model_dump(mode="json") for w in report.blocking],

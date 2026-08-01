@@ -28,6 +28,7 @@ from app.models import (
 from app.services import generation, node_review, project, versioning
 from app.services.loader import resolve_function_code, stage_to_json, stage_to_spec_dict
 from app.web.config import projects_dir, templates
+from app.runtime.stage_tests import run_stage_tests
 from app.web.stage_test_views import build_certification, shape_test_views
 from app.web.diagrams import (
     SCHEMA_KIND_CLASS,
@@ -342,7 +343,11 @@ async def project_workflow(request: Request, project_name: str):
             "coverage": coverage,
             # From the TYPED stages only: warnings judge a valid workflow's quality,
             # and a workflow that does not load has its load issues shown instead.
-            "compiler_warnings": find_workflow_compiler_warnings(listing.stages),
+            # The examples are RUN here — the whole suite is sub-second — so a stage
+            # whose examples disagree with its code says so in the same list.
+            "compiler_warnings": find_workflow_compiler_warnings(
+                listing.stages,
+                run_stage_tests(listing.stages).count_failing_by_stage()),
             "type_class": TYPE_CLASS,
             "type_glyph": TYPE_GLYPH,
         },

@@ -51,11 +51,12 @@ generate_stage_tests), never to bend the test to the code.""",
     # The signoff protocol this used to restate (clear every warning first, or say
     # why one is safe to leave) is in INSTRUCTIONS' "Finishing" section already.
     "report_compiler_warnings": """\
-Every problem with this workflow AS WRITTEN, judged without running anything:
-undescribed stages, descriptions no examples check, code the review panel
-cannot show, and deliberate choices (cache off, row limit) a reviewer should be
-told about. `blocking` is the subset you can clear by editing the stage.
-Whether examples PASS is run_stage_tests' question — it runs code; this does not.""",
+Every problem with this workflow: undescribed stages, descriptions no examples
+check, examples that do not pass, code the review panel cannot show, and
+deliberate choices (cache off, row limit) a reviewer should be told about.
+`blocking` is the subset you can clear by editing the stage. This DOES run the
+examples — a workflow whose examples disagree with its code is not
+signed-off-able — but run_stage_tests is what tells you which case failed.""",
     "read_data_model": """\
 The project's data model: every named schema as JSON (empty list if none
 generated yet).""",

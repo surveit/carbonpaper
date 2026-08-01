@@ -120,3 +120,32 @@ def test_blocking_warnings_sort_before_notes():
         _stage(stage_id="silent", summary=None),
     ])
     assert [w.kind for w in report.warnings] == ["undescribed", "untestable"]
+
+
+# ── examples that do not pass ────────────────────────────────────────────────
+def test_failing_examples_are_blocking():
+    """Examples disagreeing with the code is not signed-off-able."""
+    warnings = find_stage_compiler_warnings(_stage(tests=[_PASSING_EXAMPLE]), failing_examples=1)
+    assert [w.kind for w in warnings] == ["examples_failing"]
+    assert warnings[0].blocking
+    assert "1 of its 1 examples" in warnings[0].detail
+
+
+def test_examples_are_judged_statically_when_the_caller_ran_nothing():
+    """Omitting the count judges the stage as written — the pre-existing behaviour."""
+    assert _kinds(_stage(tests=[_PASSING_EXAMPLE])) == []
+
+
+def test_missing_examples_outranks_failing_ones():
+    """A stage with no examples cannot also have failing ones; report the absence."""
+    assert _kinds(_stage(), ) == ["unexemplified"]
+
+
+def test_a_workflow_with_a_failing_example_is_not_clean():
+    report = find_workflow_compiler_warnings(
+        [_stage(stage_id="ok", tests=[_PASSING_EXAMPLE]),
+         _stage(stage_id="broken", tests=[_PASSING_EXAMPLE])],
+        {"broken": 2},
+    )
+    assert not report.is_clean
+    assert [(w.stage_id, w.kind) for w in report.blocking] == [("broken", "examples_failing")]

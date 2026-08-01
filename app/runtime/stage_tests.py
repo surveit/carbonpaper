@@ -72,6 +72,14 @@ class StageTestsReport(BaseModel):
     stages: list[StageTestRun]
     untested_python_stages: list[str]
 
+    def count_failing_by_stage(self) -> dict[str, int]:
+        """Stage id -> failing example count, omitting the clean ones."""
+        counts = {
+            run.stage_id: sum(1 for r in run.results if r.status != "passed")
+            for run in self.stages
+        }
+        return {stage_id: n for stage_id, n in counts.items() if n}
+
 
 def run_stage_tests(
     stages: list[Stage], stage_id: str | None = None
