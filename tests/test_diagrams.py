@@ -32,9 +32,7 @@ def test_plain_stage_with_no_status_or_review_renders_the_bare_node() -> None:
 
 
 def test_every_node_class_gets_the_same_neutral_surface() -> None:
-    """No classDef fill separates one stage type from another — the label's glyph
-    and type-name subtitle say which type it is, so the stroke (run status, else
-    review belief) is the only colour a node carries."""
+    """Stroke is a node's only colour: the glyph and type-name subtitle carry the type."""
     surfaces = {
         line.strip().split(" ", 2)[2]
         for line in build_mermaid_graph([], "demo").splitlines()
