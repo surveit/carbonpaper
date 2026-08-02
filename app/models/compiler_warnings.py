@@ -23,9 +23,8 @@ class CompilerWarningReport(BaseModel):
 
     @property
     def is_clean(self) -> bool:
-        """True when nothing fixable remains. NOT a licence to ask for signoff with
-        the rest unmentioned: a non-blocking warning still owes the reviewer a
-        sentence saying why it is safe to ignore here."""
+        """True when nothing fixable remains; a non-blocking warning still owes the reviewer a
+        sentence."""
         return not self.blocking
 
 
@@ -39,11 +38,7 @@ def find_workflow_compiler_warnings(stages: list[Stage]) -> CompilerWarningRepor
 
 
 def find_stage_compiler_warnings(stage: Stage) -> list[CompilerWarning]:
-    """Every compiler warning for `stage` alone.
-
-    Judged on the stage as written: no code is run, no examples are executed, no
-    project on disk is read. Whether a stage's examples PASS is a different question,
-    answered by running them, and is not a compiler warning."""
+    """Every warning for `stage` alone, judged as written — no code runs, no disk is read."""
     warnings = stage.find_handle_compiler_warnings()
     # A stage with no description has nothing for examples to check, so complaining
     # about the examples too would be noise — fix the description first.
@@ -53,8 +48,7 @@ def find_stage_compiler_warnings(stage: Stage) -> list[CompilerWarning]:
 
 
 def _find_unchecked_description_warnings(stage: Stage) -> list[CompilerWarning]:
-    """A description nothing checks against the code — asked only of a stage that
-    HAS authored code, since a config-only stage has no description to check."""
+    """A description nothing checks against the code; only a stage with authored code has one."""
     if stage.find_authored_code_block() is None:
         return []
     if stage.type not in STAGE_TEST_TYPES:
@@ -69,8 +63,7 @@ def _find_unchecked_description_warnings(stage: Stage) -> list[CompilerWarning]:
 
 
 def _find_deliberate_choice_warnings(stage: Stage) -> list[CompilerWarning]:
-    """Settings that are legitimate but change what a reviewer is looking at, and are
-    invisible everywhere else. Stage's own fields, no config block involved."""
+    """Legitimate settings that change what a reviewer sees and are invisible everywhere else."""
     warnings = []
     if not stage.cache:
         warnings.append(warn(stage, "nondeterministic",

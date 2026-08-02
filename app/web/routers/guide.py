@@ -16,8 +16,7 @@ router = APIRouter()
 
 @router.post("/project/{project}/workflow/version/{version_id}/guide")
 async def generate_version_guide(project: str, version_id: str):
-    """Returns the session id the button polls; 400 when there is nothing to write
-    from, or a guide to preserve."""
+    """Returns the session id the button polls; 400 when there is nothing to write from."""
     project_dir = projects_dir() / project
     if not project_dir.is_dir():
         raise HTTPException(status_code=404, detail=f"No project '{project}'")

@@ -38,8 +38,8 @@ def start_review_guide_generation_agent(
     model: str,
     on_answer: Callable[[ReviewGuide | None], None],
 ) -> str:
-    """Start guide authoring for `stages` as a hidden, view-only live turn; returns its
-    session id. Must be called from the server event loop."""
+    """Returns the hidden view-only session's id. Must be called from the server event
+    loop."""
     store = open_session_store()
     session_id = store.create(
         title=f"Generation · review guide · {version_id}",

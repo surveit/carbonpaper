@@ -81,16 +81,10 @@ def start_stage_test_generation(project_dir: Path, *, stage_id: str, model: str)
 def start_review_guide_generation(
     project_dir: Path, *, version_id: str, model: str
 ) -> str:
-    """Kick REVIEW-GUIDE authoring for one saved version and return the id of the
-    (hidden, view-only) chat session streaming the turn.
-
-    The stages handed to the agent are read off the VERSION — `versioning.load_version`,
-    never `load_workflow` — so the guide narrates the frozen snapshot and not the working
-    copy, which has usually moved on. Raises FileNotFoundError for an unknown version,
-    and ValueError when the project has no methodology document (the guide's vocabulary
-    comes from it) or when the version already carries a guide, which this would replace.
-    Both checks run BEFORE the session is created, so a refusal leaves no orphaned
-    session. Must be called from the server event loop."""
+    """Stages come off the VERSION, not the working copy. Must be called from the server
+    event loop."""
+    # Both refusals below run BEFORE the session is created, so neither leaves an
+    # orphaned session behind.
     version = versioning.load_version(project_dir, version_id)
     if version.guide is not None:
         raise ValueError(
@@ -123,12 +117,8 @@ def _finish_data_model(project_dir: Path, answer: SchemaLibrary | None) -> None:
 def _finish_review_guide(
     project_dir: Path, version_id: str, guide: ReviewGuide | None
 ) -> None:
-    """Completion hook for the guide turn (runs on the event loop): store the submitted
-    guide on the version. Nothing submitted raises rather than leaving the journalist
-    looking at an unexplained empty panel; `save_version_guide` validates the guide
-    against the version's frozen stages and raises ReviewGuideValidationError, unwritten,
-    if it does not account for them. Either error is persisted into the session's
-    transcript by the caller's on_done hook before it re-raises."""
+    """Completion hook for the guide turn; either raise below reaches the transcript via the
+    caller."""
     if guide is None:
         raise GenerationError(
             f"review-guide generation for version '{version_id}' in {project_dir.name} "

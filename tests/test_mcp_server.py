@@ -501,8 +501,7 @@ _GUIDE = {
 
 
 def test_mcp_review_guide_round_trips_through_the_tool_boundary(tmp_path, monkeypatch):
-    """Driven through call_tool, because that is where the risk is: the guide arrives as
-    JSON the tool boundary must bind to a ReviewGuide, and comes back the same shape."""
+    """Through call_tool, where the risk is: JSON the boundary must bind to a ReviewGuide."""
     from app.mcp import server
 
     version_id = _saved_version(tmp_path, monkeypatch)
@@ -517,8 +516,8 @@ def test_mcp_review_guide_round_trips_through_the_tool_boundary(tmp_path, monkey
 
 
 def test_mcp_write_review_guide_refuses_a_mismatch_naming_the_stage(tmp_path, monkeypatch):
-    """A guide that does not account for the version's stages is refused with the id
-    named, and the version keeps no guide rather than one that skips a stage."""
+    """Refused with the id named, and the version keeps no guide rather than one skipping a
+    stage."""
     from app.mcp import server
 
     version_id = _saved_version(tmp_path, monkeypatch)

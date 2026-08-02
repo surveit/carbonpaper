@@ -4,7 +4,6 @@ a concrete agent registers itself at import, so its module must be imported firs
 """
 from __future__ import annotations
 
-import inspect
 import json
 from typing import Any, Callable
 
@@ -25,6 +24,7 @@ class AgentConfig(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
     system_prompt: str
     tool_schemas: dict[str, dict[str, object]]
+    tool_descriptions: dict[str, str]
     tool_labels: dict[str, str]
     model: str = "sonnet"
     context_schema: type[BaseModel]
@@ -52,7 +52,9 @@ def build_engine(agent_id: str, context: dict[str, Any]) -> ClaudeAgentSdkEngine
     config, build_tools = _registry[agent_id]
     ctx = config.context_schema.model_validate(context)
     tools = build_tools(ctx)
-    server, allowed, _wrapped = build_mcp_server(tools, config.tool_schemas)
+    server, allowed, _wrapped = build_mcp_server(
+        tools, config.tool_schemas, config.tool_descriptions
+    )
     return ClaudeAgentSdkEngine(
         system_prompt=config.system_prompt,
         mcp_server=server,
@@ -71,22 +73,21 @@ def build_engine(agent_id: str, context: dict[str, Any]) -> ClaudeAgentSdkEngine
 def build_mcp_server(
     tools: list[Callable[..., Any]],
     tool_schemas: dict[str, dict[str, object]],
+    tool_descriptions: dict[str, str],
 ) -> tuple[McpSdkServerConfig, list[str], list[SdkMcpTool[Any]]]:
-    """Wrap tool callables as an in-process SDK-MCP server.
-
-    Returns `(server, allowed_tool_names, wrapped_tools)`:
-    - `server` goes into `ClaudeAgentOptions.mcp_servers`;
-    - each allowed name is `f"mcp__{MCP_SERVER_NAME}__{fn.__name__}"`;
-    - `wrapped_tools` is the `SdkMcpTool` list (the server dict exposes no public
-      accessor for it) so callers can invoke a handler directly.
-    """
-    wrapped = [_wrap(fn, tool_schemas[fn.__name__]) for fn in tools]
+    """Returns `(server, allowed_tool_names, wrapped_tools)`; a missing schema or description
+    raises."""
+    wrapped = [
+        _wrap(fn, tool_schemas[fn.__name__], tool_descriptions[fn.__name__]) for fn in tools
+    ]
     server = create_sdk_mcp_server(MCP_SERVER_NAME, tools=wrapped)
     allowed = [f"mcp__{MCP_SERVER_NAME}__{fn.__name__}" for fn in tools]
     return server, allowed, wrapped
 
 
-def _wrap(fn: Callable[..., Any], schema: dict[str, object]) -> SdkMcpTool[Any]:
+def _wrap(
+    fn: Callable[..., Any], schema: dict[str, object], description: str
+) -> SdkMcpTool[Any]:
     async def handler(args: dict[str, Any]) -> dict[str, Any]:
         try:
             return _as_content(fn(**args))
@@ -96,10 +97,6 @@ def _wrap(fn: Callable[..., Any], schema: dict[str, object]) -> SdkMcpTool[Any]:
                 "is_error": True,
             }
 
-    # The full docstring is the model-facing description — it carries the usage
-    # guidance (read before edit, pass the full stage JSON, id must match). Using
-    # only the first line would drop exactly what the model needs.
-    description = inspect.getdoc(fn) or fn.__name__
     return tool(fn.__name__, description, schema)(handler)
 
 

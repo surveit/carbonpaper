@@ -65,8 +65,7 @@ def test_a_description_with_no_examples_is_blocking():
 
 
 def test_missing_description_outranks_missing_examples():
-    """One warning per stage on this axis — fix the description first, then the
-    examples that check it. Reporting both would be noise."""
+    """One warning per stage on this axis: fix the description first. Both at once is noise."""
     assert _kinds(_stage(summary=None)) == ["undescribed"]
 
 
@@ -79,8 +78,8 @@ def test_module_code_is_blocking_because_the_panel_cannot_show_it():
 
 # ── the non-blocking kinds ───────────────────────────────────────────────────
 def test_an_untestable_type_is_not_blocking():
-    """A filter_rows can never carry examples, so blocking on it would leave the
-    agent no way to finish — but a reviewer still needs telling."""
+    """A filter_rows can never carry examples, so blocking would leave the agent no way to
+    finish."""
     warnings = find_stage_compiler_warnings(
         _stage(stage_id="filt", type_="filter_rows", handle="filter"))
     assert [w.kind for w in warnings] == ["untestable"]

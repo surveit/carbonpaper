@@ -96,10 +96,7 @@ def find_filter_output_issues(stage: "FilterRowsStage") -> list[str]:
 
 
 def find_filter_warnings(stage: "FilterRowsStage") -> list[CompilerWarning]:
-    """Compiler warnings about `stage.filter` — raised here, and only here, because
-    this module owns the block. A predicate is authored code like any other, so it
-    needs prose standing in for it; there is no `module` variant to worry about,
-    since a filter's code is always inline."""
+    """Warnings about `stage.filter` — raised here and only here, since this module owns it."""
     if not (stage.filter.summary or "").strip():
         return [warn(stage, "undescribed",
                      "no plain-language description — reviewable only by reading its code")]

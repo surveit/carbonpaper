@@ -57,8 +57,7 @@ def test_version_detail_renders_frozen_graph_and_publish(project: Path) -> None:
 
 
 def test_version_detail_offers_to_generate_a_missing_guide(project: Path) -> None:
-    """Publish is refused without a guide, so the page that carries the Publish
-    control must also carry the way to get one."""
+    """Publish is refused without a guide, so its page must carry the way to get one."""
     meta = versioning.create_version_from_disk(project, message="v1", reviewer="local")
 
     page = client.get(f"/project/demo/workflow/version/{meta.version_id}")

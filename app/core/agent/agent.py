@@ -24,6 +24,14 @@ Model = TypeVar("Model", bound=BaseModel)
 # tool_call event, which is how a failed run counts the model's own calls.
 SUBMIT_ANSWER_TOOL = "submit_answer"
 
+# What the model reads about that tool, passed explicitly to build_mcp_server so the
+# text is a registry entry rather than whatever the method's docstring happens to say.
+SUBMIT_ANSWER_DESCRIPTION = """\
+Submit your completed answer as this tool's arguments, matching this tool's
+input schema exactly. Call it once, when the ENTIRE answer is ready. If it is
+rejected, fix the reported problems and call submit_answer again. Once it is
+accepted you are done — do not restate the answer."""
+
 
 class Agent(Generic[Model]):
     """A headless agent that produces a validated `target_schema` instance.
@@ -126,10 +134,6 @@ class Agent(Generic[Model]):
         return self._last_usage
 
     def submit_answer(self, **fields: Any) -> str:
-        """Submit your completed answer as this tool's arguments, matching this tool's
-        input schema exactly. Call it once, when the ENTIRE answer is ready. If it is
-        rejected, fix the reported problems and call submit_answer again. Once it is
-        accepted you are done — do not restate the answer."""
         # Validates `fields` into target_schema and CAPTURES the instance on success —
         # that captured object is what run() returns, so the agent never re-emits it. On
         # failure it raises; the registry's tool wrapper turns the raise into an is_error
@@ -153,7 +157,9 @@ class Agent(Generic[Model]):
         caller driving the agent as a live turn: turns.start(engine=agent.build_engine()...)."""
         input_schema = self._target_schema.model_json_schema()
         server, allowed, _wrapped = build_mcp_server(
-            [self.submit_answer], {SUBMIT_ANSWER_TOOL: input_schema}
+            [self.submit_answer],
+            {SUBMIT_ANSWER_TOOL: input_schema},
+            {SUBMIT_ANSWER_TOOL: SUBMIT_ANSWER_DESCRIPTION},
         )
         return ClaudeAgentSdkEngine(
             system_prompt=self._system_prompt,

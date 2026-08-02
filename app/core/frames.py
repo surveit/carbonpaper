@@ -57,24 +57,13 @@ def collapse_null_forms(value: object) -> object:
 
 
 def is_null_form(value: object) -> bool:
-    """Whether `value` is one of the pandas null forms — the boolean sibling of
-    `collapse_null_forms`, and expressed as that function so there is exactly
-    one place in the codebase that enumerates them. Nothing but a null form
-    collapses to None (everything else falls through unchanged), so `is None`
-    on the collapsed result is an exact test. In particular this does NOT ask
-    `pd.isna`: see `collapse_null_forms` for why an array-valued cell makes
-    that call unsafe. The four enumerated forms are what a cell can carry out
-    of parquet or a DataFrame constructor; a hand-built `np.float32('nan')` or
-    bare `np.datetime64('NaT')` in an object column reads as non-null here,
-    which `pd.isna` would have called null."""
+    """Not a pd.isna test: an np.float32 nan or bare np.datetime64 NaT reads as non-null here."""
     return collapse_null_forms(value) is None
 
 
 def is_sequence_cell(value: object) -> bool:
-    """Whether pandas would present `value` as a multi-valued cell. A frame
-    column declared as a list of something round-trips through parquet as a
-    numpy array, not a list, so a caller checking "is this cell a list" must
-    accept `ndarray` alongside the Python sequence it wrote."""
+    """Whether pandas presents the cell as multi-valued — parquet returns a written list as
+    ndarray."""
     return isinstance(value, (list, tuple, np.ndarray))
 
 
@@ -141,11 +130,8 @@ CELL_TYPE_PREDICATES: Mapping[str, Callable[[Any], bool]] = {
 
 
 def dtype_proves_cell_type(series: pd.Series, type_name: str) -> bool:
-    """Whether the series' dtype alone proves every cell satisfies the
-    predicate `type_name` names — the fast path that lets a caller skip
-    per-cell inspection. Covers the numpy dtypes and the pandas nullable
-    extension dtypes (`boolean`, `Int64`, `Float64`, `string`); object dtype
-    proves nothing, so it always returns False."""
+    """Whether the dtype alone proves every cell matches `type_name`; object dtype proves
+    nothing."""
     dtype = series.dtype
     types = pd.api.types
     if types.is_object_dtype(dtype):
