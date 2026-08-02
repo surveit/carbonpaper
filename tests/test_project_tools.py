@@ -3,9 +3,12 @@ from pathlib import Path
 from typing import Callable
 
 import pytest
+from pydantic import ValidationError
 
 from app.agents.compiler.tools import EditingContext, make_editing_tools
+from app.core.agent.tool_spec import BoundToolSpec
 from app.core.errors import ReviewGuideValidationError
+from app.models.review_guide import ReviewGuide, ReviewGuideStep
 from app.services import workspace
 from app.services.project import Project
 
@@ -46,7 +49,7 @@ def examples_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     return tmp_path
 
 
-def _tools(name: str) -> list[Callable]:
+def _tools(name: str) -> list[BoundToolSpec]:
     return make_editing_tools(EditingContext(project_id=name))
 
 
@@ -72,10 +75,10 @@ def _seed(examples: Path, name: str) -> Path:
     return examples / name
 
 
-def _tool(tools: list[Callable], fn_name: str) -> Callable:
-    for tool in tools:
-        if tool.__name__ == fn_name:
-            return tool
+def _tool(specs: list[BoundToolSpec], fn_name: str) -> Callable:
+    for spec in specs:
+        if spec.name == fn_name:
+            return spec.fn
     raise AssertionError(f"tool {fn_name!r} not registered")
 
 
@@ -127,7 +130,7 @@ def test_project_id_cannot_escape_the_workspace(examples_root: Path) -> None:
 
 # ── the review-guide tools ───────────────────────────────────────────────────
 
-def _versioned(examples: Path, name: str) -> tuple[list[Callable], str]:
+def _versioned(examples: Path, name: str) -> tuple[list[BoundToolSpec], str]:
     """A saved version drafted then saved the way the agent does — two stages, so one can be
     left out."""
     _seed(examples, name)
@@ -143,18 +146,16 @@ def _versioned(examples: Path, name: str) -> tuple[list[Callable], str]:
     return tools, saved.version_id
 
 
-def _guide(step_ids: list[str], unnarrated: list[str]) -> str:
-    return json.dumps(
-        {
-            "steps": [
-                {
-                    "title": "Score each row",
-                    "prose": "Every row keeps its `id` and is scored as reported.",
-                    "stage_ids": step_ids,
-                }
-            ],
-            "unnarrated": unnarrated,
-        }
+def _guide(step_ids: list[str], unnarrated: list[str]) -> ReviewGuide:
+    return ReviewGuide(
+        steps=[
+            ReviewGuideStep(
+                title="Score each row",
+                prose="Every row keeps its `id` and is scored as reported.",
+                stage_ids=step_ids,
+            )
+        ],
+        unnarrated=unnarrated,
     )
 
 
@@ -197,34 +198,31 @@ def test_write_review_guide_rejects_a_mismatch_naming_the_stage(
 
 def test_write_review_guide_rejects_a_stage_narrated_by_two_steps(examples_root: Path) -> None:
     tools, version_id = _versioned(examples_root, "alpha")
-    two_steps = json.dumps(
-        {
-            "steps": [
-                {"title": "Load", "prose": "Reads the rows.", "stage_ids": ["load"]},
-                {"title": "Load again", "prose": "Reads them again.", "stage_ids": ["load"]},
-            ],
-            "unnarrated": ["score"],
-        }
+    two_steps = ReviewGuide(
+        steps=[
+            ReviewGuideStep(title="Load", prose="Reads the rows.", stage_ids=["load"]),
+            ReviewGuideStep(title="Load again", prose="Reads them again.", stage_ids=["load"]),
+        ],
+        unnarrated=["score"],
     )
     with pytest.raises(ReviewGuideValidationError, match="load"):
         _tool(tools, "write_review_guide")("alpha", version_id, two_steps)
     assert _tool(tools, "read_review_guide")("alpha", version_id) is None
 
 
-def test_write_review_guide_rejects_an_invented_field(examples_root: Path) -> None:
+def test_write_review_guide_rejects_an_invented_field() -> None:
     """Extras are forbidden: a guide that silently loses what was written is worse than
     none."""
-    tools, version_id = _versioned(examples_root, "alpha")
-    invented = json.dumps(
-        {
-            "steps": [{"title": "Load", "prose": "Reads the rows.", "stage_ids": ["load"],
-                       "confidence": "high"}],
-            "unnarrated": ["score"],
-        }
-    )
-    with pytest.raises(ValueError, match="confidence"):
-        _tool(tools, "write_review_guide")("alpha", version_id, invented)
-    assert _tool(tools, "read_review_guide")("alpha", version_id) is None
+    # The tool takes a ReviewGuide, so a field the agent invents is refused when the
+    # tool boundary binds its JSON — before any tool code runs.
+    with pytest.raises(ValidationError, match="confidence"):
+        ReviewGuide.model_validate(
+            {
+                "steps": [{"title": "Load", "prose": "Reads the rows.",
+                           "stage_ids": ["load"], "confidence": "high"}],
+                "unnarrated": ["score"],
+            }
+        )
 
 
 def test_a_rejected_write_leaves_the_stored_guide_untouched(examples_root: Path) -> None:

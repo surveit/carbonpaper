@@ -9,7 +9,7 @@ import ast
 from pathlib import Path
 
 from app.agents.compiler.tools import TOOL_DESCRIPTIONS, TOOL_LABELS, TOOL_SCHEMAS
-from app.mcp.tool_descriptions import TOOL_DESCRIPTIONS as MCP_TOOL_DESCRIPTIONS
+from app.mcp.tool_specs import TOOL_SPECS
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _MCP_SERVER = _REPO_ROOT / "app/mcp/server.py"
@@ -58,7 +58,7 @@ def test_every_mcp_tool_declares_its_description() -> None:
     assert not undeclared, (
         "an @mcp.tool without an explicit `description=` falls back to the function's "
         "docstring, making the model-facing prompt a side effect of how the function "
-        f"is documented — add an entry to app/mcp/tool_descriptions.py for: {undeclared}"
+        f"is documented — add an entry to app/mcp/tool_specs.py for: {undeclared}"
     )
 
 
@@ -66,13 +66,13 @@ def test_no_mcp_tool_carries_a_docstring() -> None:
     documented = [name for name, _, doc in find_mcp_tools(_MCP_SERVER) if doc is not None]
     assert not documented, (
         "a docstring on an MCP tool reads as the model-facing description even when it "
-        f"is not one — move it to app/mcp/tool_descriptions.py: {documented}"
+        f"is not one — move it to app/mcp/tool_specs.py: {documented}"
     )
 
 
 def test_mcp_descriptions_cover_exactly_the_registered_tools() -> None:
     registered = {name for name, _, _ in find_mcp_tools(_MCP_SERVER)}
-    assert set(MCP_TOOL_DESCRIPTIONS) == registered
+    assert set(TOOL_SPECS) == registered
 
 
 def test_no_editing_tool_carries_a_docstring() -> None:
@@ -91,10 +91,6 @@ def test_editing_tool_registries_cover_exactly_the_tools() -> None:
 
 
 def test_every_description_is_non_empty() -> None:
-    blank = [
-        name
-        for registry in (MCP_TOOL_DESCRIPTIONS, TOOL_DESCRIPTIONS)
-        for name, text in registry.items()
-        if not text.strip()
-    ]
+    blank = [name for name, spec in TOOL_SPECS.items() if not spec.description.strip()]
+    blank += [name for name, text in TOOL_DESCRIPTIONS.items() if not text.strip()]
     assert not blank

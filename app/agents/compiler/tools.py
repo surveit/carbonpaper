@@ -6,12 +6,11 @@ passes as `project_id`. A missing stage or column raises, never an invented defa
 
 from __future__ import annotations
 
-import json
 from typing import Annotated, Any, Callable
 
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel
 
-from app.core.utils import format_errors
+from app.core.agent.tool_spec import BoundToolSpec
 from app.models.review_guide import ReviewGuide
 from app.services import drafts, project as project_service
 from app.services.drafts import DraftDetail, DraftEdit, DraftView, SaveResult
@@ -23,7 +22,7 @@ class EditingContext(BaseModel):
     project_id: str
 
 
-def make_editing_tools(ctx: EditingContext) -> list[Callable[..., Any]]:
+def make_editing_tools(ctx: EditingContext) -> list[BoundToolSpec]:
     def list_projects() -> list[str]:
         return project_service.list_projects()
 
@@ -66,12 +65,12 @@ def make_editing_tools(ctx: EditingContext) -> list[Callable[..., Any]]:
     def read_review_guide(project_id: str, version_id: str) -> ReviewGuide | None:
         return project_service.read_review_guide(project_id, version_id)
 
-    def write_review_guide(project_id: str, version_id: str, guide_json: str) -> ReviewGuide:
-        return project_service.write_review_guide(
-            project_id, version_id, _parse_guide(guide_json)
-        )
+    def write_review_guide(
+        project_id: str, version_id: str, guide: ReviewGuide
+    ) -> ReviewGuide:
+        return project_service.write_review_guide(project_id, version_id, guide)
 
-    return [
+    tools: list[Callable[..., Any]] = [
         list_projects,
         get_current_project,
         describe_workflow,
@@ -87,17 +86,16 @@ def make_editing_tools(ctx: EditingContext) -> list[Callable[..., Any]]:
         read_review_guide,
         write_review_guide,
     ]
-
-
-def _parse_guide(guide_json: str) -> ReviewGuide:
-    """Parse one guide, raising ValueError with the readable per-field errors."""
-    obj = json.loads(guide_json)
-    if not isinstance(obj, dict):
-        raise ValueError("guide_json must be a JSON object")
-    try:
-        return ReviewGuide.model_validate(obj)
-    except ValidationError as exc:
-        raise ValueError("; ".join(format_errors(exc))) from exc
+    return [
+        BoundToolSpec(
+            name=fn.__name__,
+            description=TOOL_DESCRIPTIONS[fn.__name__],
+            fn=fn,
+            input_schema=TOOL_SCHEMAS[fn.__name__],
+            label=TOOL_LABELS[fn.__name__],
+        )
+        for fn in tools
+    ]
 
 
 # ── tool input schemas + display labels ──────────────────────────────────────
@@ -201,11 +199,11 @@ TOOL_SCHEMAS: dict[str, ToolInputSchema] = {
             "The version this guide describes — the id save_version returned for it. The "
             "guide is validated against THAT version's stages.",
         ],
-        "guide_json": Annotated[
-            str,
-            "The complete guide as a JSON object (encoded as a string): `steps`, each "
-            "with `title`, `prose` and `stage_ids`, plus `unnarrated`. Sent whole every "
-            "time — it replaces any earlier guide rather than merging into it.",
+        "guide": Annotated[
+            ReviewGuide,
+            "The complete guide: `steps`, each with `title`, `prose` and `stage_ids`, "
+            "plus `unnarrated`. Sent whole every time — it replaces any earlier guide "
+            "rather than merging into it.",
         ],
     },
 }
@@ -213,8 +211,7 @@ TOOL_SCHEMAS: dict[str, ToolInputSchema] = {
 
 # Present-tense labels shown in the chat while a tool runs (e.g. "Reading the
 # workflow…"), keyed by the bare tool name. The full args/result stay available
-# behind a click-to-expand disclosure in the UI. "ToolSearch" is the CLI's own
-# built-in that loads a deferred MCP tool's schema before first use.
+# behind a click-to-expand disclosure in the UI.
 TOOL_LABELS: dict[str, str] = {
     "list_projects": "Listing projects",
     "get_current_project": "Checking the current project",
@@ -230,7 +227,6 @@ TOOL_LABELS: dict[str, str] = {
     "save_version": "Saving the draft as a version",
     "read_review_guide": "Reading the review guide",
     "write_review_guide": "Writing the review guide",
-    "ToolSearch": "Looking up a tool",
 }
 
 

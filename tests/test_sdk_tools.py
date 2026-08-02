@@ -12,13 +12,9 @@ import pytest
 from claude_agent_sdk import SdkMcpTool
 from pydantic import BaseModel
 
-from app.agents.compiler.tools import (
-    TOOL_DESCRIPTIONS,
-    TOOL_SCHEMAS,
-    EditingContext,
-    make_editing_tools,
-)
-from app.core.agent.registry import _as_content, build_mcp_server
+from app.agents.compiler.tools import EditingContext, make_editing_tools
+from app.core.agent.registry import build_mcp_server
+from app.core.agent.tool_spec import as_tool_content
 from app.services import workspace
 
 
@@ -29,9 +25,7 @@ def examples_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 
 def _build(name: str) -> tuple[Any, list[str], list[SdkMcpTool[Any]]]:
-    return build_mcp_server(
-        make_editing_tools(EditingContext(project_id=name)), TOOL_SCHEMAS, TOOL_DESCRIPTIONS
-    )
+    return build_mcp_server(make_editing_tools(EditingContext(project_id=name)))
 
 
 def _call(tool: SdkMcpTool[Any], args: dict[str, Any]) -> dict[str, Any]:
@@ -62,7 +56,8 @@ def _seed(examples: Path, name: str) -> Path:
 def test_allowed_names_cover_every_tool(examples_root: Path) -> None:
     _seed(examples_root, "congresswatch")
     _server, allowed, _tools = _build("congresswatch")
-    assert set(allowed) == {f"mcp__tools__{n}" for n in TOOL_SCHEMAS}
+    specs = make_editing_tools(EditingContext(project_id="congresswatch"))
+    assert set(allowed) == {f"mcp__tools__{spec.name}" for spec in specs}
     assert len(allowed) == 14
 
 
@@ -119,7 +114,7 @@ def test_draft_round_trip_creates_an_unpublished_version(examples_root: Path) ->
     assert edit_result["issues"] == []
 
     # read_draft round-trips the stage as a full Stage dump (unset optionals
-    # come back as explicit nulls — registry._as_content doesn't exclude_none)
+    # come back as explicit nulls — tool_spec.as_tool_content doesn't exclude_none)
     # but every field the agent WROTE survives unchanged, in alias form.
     read_back = _call(
         by_name["read_draft"],
@@ -179,7 +174,7 @@ def test_draft_stage_input_schema_round_trips_in_alias_form(examples_root: Path)
     """A stage's `inputs[].schema` — Pydantic's StageInput.table_schema field,
     aliased to the wire name `schema` — must come back to the agent under
     `schema`, the same key the agent wrote, never the python field name
-    `table_schema`. Exercises registry._as_content's by_alias=True dump for
+    `table_schema`. Exercises tool_spec.as_tool_content's by_alias=True dump for
     the one aliased field on Stage."""
     _server, _allowed, tools = _build("congresswatch")
     by_name = {t.name: t for t in tools}
@@ -233,5 +228,5 @@ def test_as_content_serializes_a_pydantic_model_to_its_fields() -> None:
         ok: bool
         label: str
 
-    out = _as_content(_Sample(ok=True, label="draft"))
+    out = as_tool_content(_Sample(ok=True, label="draft"))
     assert json.loads(out["content"][0]["text"]) == {"ok": True, "label": "draft"}
