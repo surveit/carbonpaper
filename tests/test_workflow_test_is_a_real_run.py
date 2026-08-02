@@ -15,6 +15,7 @@ import pytest
 
 from app.runtime.runner import execute_run
 from app.services import versioning, workspace
+from app.services import project as project_service
 from app.services.workflow_test import run_workflow_test
 
 _ROWS = [{"name": "a", "val": 1}, {"name": "b", "val": 2}, {"name": "c", "val": 3}]
@@ -58,7 +59,7 @@ def _write_project(root: Path) -> Path:
 
 
 def _publish(root: Path) -> str:
-    version = versioning.create_version_from_disk(root, message="e2e", reviewer="test")
+    version = project_service.save_working_copy_as_version(root, message="e2e", reviewer="test")
     versioning.publish_version(root, version.version_id, reviewer="human")
     return version.version_id
 

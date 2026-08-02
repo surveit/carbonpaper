@@ -12,6 +12,7 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 from app.services import versioning
+from app.services import project as project_service
 from app.services import workspace
 
 client = TestClient(app)
@@ -41,14 +42,14 @@ def test_versions_list_shows_read_only_unpublished_status(project: Path) -> None
     """The LIST shows published state read-only — no Publish form/button. Publishing
     is an approval act gated behind having looked at the version, so the action lives
     only on the version-detail page."""
-    versioning.create_version_from_disk(project, message="v1", reviewer="local")
+    project_service.save_working_copy_as_version(project, message="v1", reviewer="local")
     page = client.get("/project/demo/workflow/versions")
     assert page.status_code == 200
     assert "unpublished" in page.text
 
 
 def test_versions_list_never_contains_a_publish_form(project: Path) -> None:
-    versioning.create_version_from_disk(project, message="v1", reviewer="local")
+    project_service.save_working_copy_as_version(project, message="v1", reviewer="local")
     page = client.get("/project/demo/workflow/versions")
     assert "/publish" not in page.text
     assert "<button type=\"submit\">Publish</button>" not in page.text
@@ -57,7 +58,7 @@ def test_versions_list_never_contains_a_publish_form(project: Path) -> None:
 def test_publish_route_stamps_and_redirects_to_detail(project: Path) -> None:
     """Publish now redirects to the version's own detail page (you land back on the
     version you just approved), not the list."""
-    meta = versioning.create_version_from_disk(project, message="v1", reviewer="local")
+    meta = project_service.save_working_copy_as_version(project, message="v1", reviewer="local")
     resp = client.post(
         f"/project/demo/versions/{meta.version_id}/publish", follow_redirects=False
     )
@@ -69,7 +70,7 @@ def test_publish_route_stamps_and_redirects_to_detail(project: Path) -> None:
 
 
 def test_run_of_unpublished_project_explains_publish_gate(project: Path) -> None:
-    versioning.create_version_from_disk(project, message="v1", reviewer="local")
+    project_service.save_working_copy_as_version(project, message="v1", reviewer="local")
     resp = client.post("/project/demo/run", follow_redirects=False)
     assert resp.status_code == 400
     assert "publish" in resp.json()["detail"]
@@ -99,6 +100,6 @@ def test_workflow_renders_the_editor(project: Path) -> None:
 
 
 def test_workflow_versions_list_rows_link_to_version_detail(project: Path) -> None:
-    meta = versioning.create_version_from_disk(project, message="v1", reviewer="local")
+    meta = project_service.save_working_copy_as_version(project, message="v1", reviewer="local")
     page = client.get("/project/demo/workflow/versions")
     assert f"/workflow/version/{meta.version_id}" in page.text

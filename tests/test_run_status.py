@@ -13,7 +13,7 @@ from app.core.run_status import RunStatus, StageStatus
 from app.main import app
 from app.runtime.runner import execute_run
 from app.services import versioning
-from app.services.versioning import create_version_from_disk
+from app.services.project import save_working_copy_as_version
 from app.services import workspace
 
 # The exact value sets, derived by grepping every `record["status"]` /
@@ -81,7 +81,7 @@ def _make_project(root) -> None:
 
 
 def _seed_and_publish(project_dir) -> None:
-    vid = create_version_from_disk(project_dir, message="seed", reviewer="test").version_id
+    vid = save_working_copy_as_version(project_dir, message="seed", reviewer="test").version_id
     versioning.publish_version(project_dir, vid, reviewer="human")
 
 

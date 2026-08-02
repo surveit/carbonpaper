@@ -11,7 +11,7 @@ import app.services.run as run_service
 from app.main import app
 from app.services import versioning
 from app.services import workspace
-from app.services.versioning import create_version_from_disk
+from app.services.project import save_working_copy_as_version
 from app.web.routers.runs import _read_bust_cache
 
 client = TestClient(app)
@@ -37,7 +37,7 @@ def project(tmp_path, monkeypatch):
              "output_schema": {"columns": [{"name": "name", "type": "str"},
                                            {"name": "val", "type": "int"}]}}
     (proj / "compiled" / "01_load.json").write_text(json.dumps(stage), encoding="utf-8")
-    vid = create_version_from_disk(proj, message="seed", reviewer="test").version_id
+    vid = save_working_copy_as_version(proj, message="seed", reviewer="test").version_id
     versioning.publish_version(proj, vid, reviewer="human")
     workspace.set_projects_dir(tmp_path)
     monkeypatch.setattr(run_service, "_run_in_background",

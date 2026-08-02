@@ -515,7 +515,6 @@ _GRANDFATHERED: frozenset[str] = frozenset(
         "app/services/stage_edit.py::remove_stage_spec",
         "app/services/versioning.py::WorkflowVersion",
         "app/services/versioning.py::_invalid_version_document",
-        "app/services/versioning.py::create_version_from_disk",
         "app/services/versioning.py::create_version_from_stages",
         "app/services/versioning.py::find_latest_version_id",
         "app/services/versioning.py::list_versions",

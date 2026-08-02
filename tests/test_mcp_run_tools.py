@@ -7,7 +7,8 @@ import pandas as pd
 import app.services.run as run_service
 from app.models import parse_stage
 from app.services import versioning
-from app.services.versioning import WorkflowVersion, create_version_from_disk
+from app.services.project import save_working_copy_as_version
+from app.services.versioning import WorkflowVersion
 from app.services import workspace
 
 
@@ -26,7 +27,7 @@ def _make_run_project(root):
                                       {"name": "val", "type": "int"}]},
     }
     (root / "compiled" / "01_load.json").write_text(json.dumps(stage), encoding="utf-8")
-    vid = create_version_from_disk(root, message="seed", reviewer="test").version_id
+    vid = save_working_copy_as_version(root, message="seed", reviewer="test").version_id
     versioning.publish_version(root, vid, reviewer="human")
     return vid
 

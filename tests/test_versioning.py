@@ -17,9 +17,9 @@ from app.models.review_guide import ReviewGuide, ReviewGuideStep
 from app.core.persistence import get_store
 from app.services import loader, node_review
 from app.services.loader import WorkflowLoadError
+from app.services.project import save_working_copy_as_version
 from app.services.versioning import (
     WorkflowVersion,
-    create_version_from_disk,
     create_version_from_stages,
     list_versions,
     load_version,
@@ -48,13 +48,13 @@ def _seed(project_dir: Path, stage: dict = _LOAD_STAGE) -> None:
     (compiled / "01_load.json").write_text(json.dumps(stage), encoding="utf-8")
 
 
-# ── create_version_from_disk ─────────────────────────────────────────────────
+# ── save_working_copy_as_version ─────────────────────────────────────────────────
 
 def test_create_version_returns_meta_and_round_trips(tmp_path):
-    """create_version_from_disk's return value, list_versions, load_version and
+    """save_working_copy_as_version's return value, list_versions, load_version and
     load_version_stages all agree on the same version."""
     _seed(tmp_path)
-    meta = create_version_from_disk(tmp_path, message="first cut", reviewer="ada")
+    meta = save_working_copy_as_version(tmp_path, message="first cut", reviewer="ada")
 
     assert meta.message == "first cut"
     assert meta.reviewer == "ada"
@@ -88,8 +88,8 @@ def test_create_version_records_parent(tmp_path, monkeypatch):
     import app.services.versioning as versioning_module
     monkeypatch.setattr(versioning_module, "datetime", _AdvancingClock)
 
-    first = create_version_from_disk(tmp_path, message="v1", reviewer="ada")
-    second = create_version_from_disk(tmp_path, message="v2", reviewer="ada",
+    first = save_working_copy_as_version(tmp_path, message="v1", reviewer="ada")
+    second = save_working_copy_as_version(tmp_path, message="v2", reviewer="ada",
                                       parent_version=first.version_id)
     assert second.version_id != first.version_id
     assert second.parent_version == first.version_id
@@ -106,7 +106,7 @@ def test_create_version_freezes_coverage_from_node_decisions(tmp_path):
         tmp_path, stage_id="load", content_hash=content_hash,
         decision="approve", reviewer="human")
 
-    meta = create_version_from_disk(tmp_path, message="x", reviewer="test")
+    meta = save_working_copy_as_version(tmp_path, message="x", reviewer="test")
     assert meta.coverage.model_dump() == {
         "approved": 1, "rejected": 0, "edited_stale": 0, "unreviewed": 0,
         "total": 1, "approved_pct": 100.0,
@@ -118,12 +118,12 @@ def test_create_version_no_compiled_dir_raises_file_not_found(tmp_path):
     loudly and saves nothing, distinctly from an invalid-but-present workflow
     (WorkflowLoadError, below)."""
     with pytest.raises(FileNotFoundError):
-        create_version_from_disk(tmp_path, message="x", reviewer="test")
+        save_working_copy_as_version(tmp_path, message="x", reviewer="test")
     assert list_versions(tmp_path) == []
 
 
 def test_create_version_invalid_workflow_raises_and_writes_nothing(tmp_path):
-    """create_version_from_disk strict-loads before it snapshots: an invalid
+    """save_working_copy_as_version strict-loads before it snapshots: an invalid
     working copy raises WorkflowLoadError and saves NOTHING, so no invalid
     workflow can be immortalised as a version."""
     (tmp_path / "compiled").mkdir()
@@ -134,7 +134,7 @@ def test_create_version_invalid_workflow_raises_and_writes_nothing(tmp_path):
     (tmp_path / "compiled" / "01_load.json").write_text(json.dumps(bad), encoding="utf-8")
 
     with pytest.raises(WorkflowLoadError) as exc:
-        create_version_from_disk(tmp_path, message="x", reviewer="test")
+        save_working_copy_as_version(tmp_path, message="x", reviewer="test")
     assert any("params.path" in i for i in exc.value.issues)
     assert list_versions(tmp_path) == []
 
@@ -154,8 +154,8 @@ def test_create_version_twice_within_a_second_overwrites(tmp_path, monkeypatch):
     import app.services.versioning as versioning_module
     monkeypatch.setattr(versioning_module, "datetime", _FixedClock)
 
-    create_version_from_disk(tmp_path, message="first", reviewer="test")
-    create_version_from_disk(tmp_path, message="second", reviewer="test")
+    save_working_copy_as_version(tmp_path, message="first", reviewer="test")
+    save_working_copy_as_version(tmp_path, message="second", reviewer="test")
 
     [only] = list_versions(tmp_path)
     assert only.message == "second"
@@ -167,8 +167,8 @@ def test_versions_are_scoped_per_project(tmp_path):
     proj_a, proj_b = tmp_path / "alpha", tmp_path / "beta"
     _seed(proj_a)
     _seed(proj_b)
-    meta_a = create_version_from_disk(proj_a, message="a", reviewer="test")
-    meta_b = create_version_from_disk(proj_b, message="b", reviewer="test")
+    meta_a = save_working_copy_as_version(proj_a, message="a", reviewer="test")
+    meta_b = save_working_copy_as_version(proj_b, message="b", reviewer="test")
     assert [v.version_id for v in list_versions(proj_a)] == [meta_a.version_id]
     assert [v.version_id for v in list_versions(proj_b)] == [meta_b.version_id]
 
@@ -194,7 +194,7 @@ def test_list_versions_errors_on_a_corrupt_document(tmp_path):
     and make the version invisible while its id still occupies the store. The
     remedy for legacy/corrupt documents is a store migration, not tolerance."""
     _seed(tmp_path)
-    create_version_from_disk(tmp_path, message="good", reviewer="test")
+    save_working_copy_as_version(tmp_path, message="good", reviewer="test")
     get_store().write("workflow_version", f"{tmp_path.name}/20260101T000000", {"bogus": "data"})
     with pytest.raises(WorkflowLoadError, match="20260101T000000"):
         list_versions(tmp_path)
@@ -235,7 +235,7 @@ def test_stored_version_missing_published_reads_as_unpublished(tmp_path):
 
 def test_publish_version_stamps_and_is_idempotent(tmp_path):
     _seed(tmp_path)
-    vid = create_version_from_disk(tmp_path, message="x", reviewer="ada").version_id
+    vid = save_working_copy_as_version(tmp_path, message="x", reviewer="ada").version_id
 
     meta = publish_version(tmp_path, vid, reviewer="human-1")
     assert meta.published is True
@@ -400,7 +400,7 @@ def test_a_version_without_a_guide_stores_no_guide_key(tmp_path):
     """DUMP_OPTS excludes None, so an unguided version's document has no `guide` key at
     all."""
     _seed(tmp_path)
-    vid = create_version_from_disk(tmp_path, message="x", reviewer="ada").version_id
+    vid = save_working_copy_as_version(tmp_path, message="x", reviewer="ada").version_id
     stored = get_store().read("workflow_version", f"{tmp_path.name}/{vid}")
     assert "guide" not in stored
     assert load_version(tmp_path, vid).guide is None

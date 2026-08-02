@@ -20,7 +20,7 @@ from app.core.persistence import PersistedModel, PersistenceScope, get_store
 from app.core.utils import format_errors
 from app.services import node_review
 from app.services.errors import WorkflowLoadError
-from app.services.loader import load_workflow, stage_to_spec_dict
+from app.services.loader import stage_to_spec_dict
 from app.services.workspace import load_schemas
 
 
@@ -120,41 +120,6 @@ def create_version_from_stages(
     )
     v.save()
     return v
-
-
-def create_version_from_disk(
-    project_dir: Path,
-    *,
-    message: str,
-    reviewer: str,
-    parent_version: str | None = None,
-) -> WorkflowVersion:
-    """Snapshot the working copy's compiled stages + schemas into a new Version
-    document. Returns the saved WorkflowVersion. A thin adapter over create_version_from_stages:
-    the working copy is strict-loaded first, through the same loader the
-    runner uses (WorkflowLoadError, saving nothing, if it is not a valid
-    workflow), then handed to create_version_from_stages as spec dicts — the
-    single write chokepoint."""
-    project_dir = Path(project_dir)
-    compiled_src = project_dir / "compiled"
-    if not compiled_src.is_dir():
-        raise FileNotFoundError(
-            f"Cannot create a version: no compiled/ workflow at {compiled_src}"
-        )
-
-    # Validate BEFORE writing anything: a version is, by invariant, a loadable
-    # workflow. On failure load_workflow raises WorkflowLoadError and we save
-    # nothing — an invalid workflow can never be immortalised as a version. (The
-    # run-path strict load then only guards on-read corruption of an
-    # already-valid snapshot.)
-    stages = load_workflow(project_dir)
-    return create_version_from_stages(
-        project_dir,
-        [stage_to_spec_dict(s) for s in stages],
-        message=message,
-        reviewer=reviewer,
-        parent_version=parent_version,
-    )
 
 
 def publish_version(project_dir: Path, version_id: str, *, reviewer: str) -> WorkflowVersion:
@@ -329,7 +294,6 @@ __all__ = [
     "validate_version_exists",
     "load_version",
     "load_version_stages",
-    "create_version_from_disk",
     "create_version_from_stages",
     "publish_version",
     "save_version_guide",

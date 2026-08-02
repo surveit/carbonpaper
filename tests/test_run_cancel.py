@@ -11,7 +11,7 @@ from app.runtime.cancellation import consume_cancel, request_cancel
 from app.runtime.runner import prepare_run, run_prepared
 from app.runtime.stages import llm_transform as lt
 from app.services import versioning
-from app.services.versioning import create_version_from_disk
+from app.services.project import save_working_copy_as_version
 
 
 # The two shapes the fixtures below load: the (name, val) items csv, and the
@@ -29,7 +29,7 @@ _SCORED_SCHEMA = {"columns": [{"name": "id", "type": "str"},
 
 
 def _seed_version(root):
-    vid = create_version_from_disk(root, message="test seed", reviewer="test").version_id
+    vid = save_working_copy_as_version(root, message="test seed", reviewer="test").version_id
     versioning.publish_version(root, vid, reviewer="human")
     return vid
 

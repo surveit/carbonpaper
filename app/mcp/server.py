@@ -362,7 +362,7 @@ def save_version(
     try:
         if parent_version is not None:
             versioning.validate_version_exists(pdir, parent_version)
-        version = versioning.create_version_from_disk(
+        version = project_service.save_working_copy_as_version(
             pdir, message=message, reviewer="agent", parent_version=parent_version
         )
     except _STAGE_TOOL_ERRORS as exc:
