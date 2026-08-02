@@ -28,7 +28,19 @@ def test_plain_stage_with_no_status_or_review_renders_the_bare_node() -> None:
     assert 'click s1 call dvNode("s1") "Open stage"' in graph
     assert "]:::input" in graph
     assert "stroke:" not in graph.split("classDef")[0]
-    assert "    classDef custom fill:#fde8e8,stroke:#cc3333,color:#000" in graph
+    assert "    classDef input fill:#f7f7f4,stroke:#d4d4d0,color:#1a1a1a" in graph
+
+
+def test_every_node_class_gets_the_same_neutral_surface() -> None:
+    """No classDef fill separates one stage type from another — the label's glyph
+    and type-name subtitle say which type it is, so the stroke (run status, else
+    review belief) is the only colour a node carries."""
+    surfaces = {
+        line.strip().split(" ", 2)[2]
+        for line in build_mermaid_graph([], "demo").splitlines()
+        if line.strip().startswith("classDef ")
+    }
+    assert len(surfaces) == 1, f"stage types are still fill-coded: {sorted(surfaces)}"
 
 
 def test_notes_eval_and_review_indicators_all_appear() -> None:
