@@ -147,8 +147,6 @@ a { color: var(--accent); }
     font-size: 13px;
     color: var(--muted);
 }
-.legend-sep { color: var(--border); font-size: 16px; }
-.legend-icon { font-size: 13px; }
 
 /* Type badges */
 .badge, .type-tag {
@@ -630,10 +628,6 @@ details pre { margin-top: 6px; max-height: 480px; overflow: auto; }
 .left-pane .workflow {
     margin: 0 0 16px;
     padding: 14px;
-}
-.left-pane .legend {
-    margin-bottom: 10px;
-    font-size: 12px;
 }
 
 .right-pane {
@@ -1169,9 +1163,6 @@ table.data-preview.scratch th { background: #f3ecd0; }
 .alert.warn { background: var(--state-warn-bg); color: var(--state-warn-ink); }
 .alert.awaiting { background: var(--state-review-bg); color: var(--state-review-ink); }
 .alert.cancelled { background: var(--state-idle-bg); color: var(--state-idle-ink); }
-.lede .lg { padding: 0 .25rem; border-radius: 3px; font-weight: 600; }
-.lg-done { color: var(--state-done-ink); } .lg-run { color: var(--state-warn-ink); }
-.lg-err { color: var(--state-failed-ink); } .lg-pend { color: var(--state-idle-ink); }
 
 .workflow-full { width: 100%; margin: 1rem 0 .3rem; }
 .stage-panel-full { margin-top: 1.2rem; border-top: 2px solid var(--border); padding-top: 1rem; min-height: 120px; }
@@ -1215,7 +1206,7 @@ td.row-num, th.row-num { text-align: right; color: #98a1b3; font-variant-numeric
 
 /* ═══ Node review / workflow versioning ══════════════════ */
 
-/* Belief chips — legend rows, the node-review state line, and (inline) hints. */
+/* Belief chips — the legend row, the node-review state line, and (inline) hints. */
 .belief-chip {
     display: inline-block;
     padding: 3px 10px;
@@ -1232,12 +1223,11 @@ td.row-num, th.row-num { text-align: right; color: #98a1b3; font-variant-numeric
 .belief-rejected   { background: var(--belief-rejected-bg);   color: #802020; border-color: var(--belief-rejected-bd); }
 .belief-stale      { background: var(--belief-stale-bg);      color: #7a4a00; border-color: var(--belief-stale-bd); }
 
-/* Legend label + the second (belief) legend row on the project page. */
+/* The label naming which axis a legend row explains. */
 .legend-label {
     font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px;
     color: var(--muted); font-weight: 700; margin-right: 2px;
 }
-.belief-legend { margin-top: -14px; }
 
 /* Coverage badge (header) + shared coverage bar (header + versions table). */
 .coverage-badge {
