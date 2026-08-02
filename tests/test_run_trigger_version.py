@@ -12,7 +12,8 @@ from fastapi.testclient import TestClient
 import app.services.run as run_service
 from app.services import workspace
 from app.main import app
-from app.services.versioning import create_version_from_disk, list_versions, publish_version
+from app.services.project import save_working_copy_as_version
+from app.services.versioning import list_versions, publish_version
 
 client = TestClient(app)
 
@@ -36,11 +37,11 @@ def project_two_versions(tmp_path, monkeypatch):
              "connector": {"kind": "file",
                            "params": {"path": str(data), "format": "csv"}}}
     (proj / "compiled" / "01_load.json").write_text(json.dumps(stage), encoding="utf-8")
-    v1 = create_version_from_disk(proj, message="v1", reviewer="test")
+    v1 = save_working_copy_as_version(proj, message="v1", reviewer="test")
     # version ids are second-resolution timestamps; without this the two versions
     # can land in the same wall-clock second and collide.
     time.sleep(1.1)
-    v2 = create_version_from_disk(proj, message="v2", reviewer="test")
+    v2 = save_working_copy_as_version(proj, message="v2", reviewer="test")
     # runs pin PUBLISHED versions, so publish both to isolate version SELECTION.
     publish_version(proj, v1.version_id, reviewer="test")
     publish_version(proj, v2.version_id, reviewer="test")
@@ -104,9 +105,9 @@ def test_run_picker_offers_only_published_versions(tmp_path, monkeypatch):
     an unpublished (agent-minted or not-yet-approved) version is never offered."""
     proj = tmp_path / "demo"
     _seed_load_stage(proj)
-    published = create_version_from_disk(proj, message="approved", reviewer="test").version_id
+    published = save_working_copy_as_version(proj, message="approved", reviewer="test").version_id
     time.sleep(1.1)
-    unpublished = create_version_from_disk(proj, message="draft", reviewer="test").version_id
+    unpublished = save_working_copy_as_version(proj, message="draft", reviewer="test").version_id
     publish_version(proj, published, reviewer="test")  # only the older one
     workspace.set_projects_dir(tmp_path)
 
@@ -122,7 +123,7 @@ def test_run_form_hidden_when_no_published_version(tmp_path, monkeypatch):
     instead of a run form — nothing is runnable."""
     proj = tmp_path / "demo"
     _seed_load_stage(proj)
-    create_version_from_disk(proj, message="unpublished", reviewer="test")  # never published
+    save_working_copy_as_version(proj, message="unpublished", reviewer="test")  # never published
     workspace.set_projects_dir(tmp_path)
 
     resp = client.get("/project/demo/runs")
@@ -152,10 +153,10 @@ def project_versions_diff_paths(tmp_path, monkeypatch):
             encoding="utf-8")
 
     _author(a)
-    v1 = create_version_from_disk(proj, message="v1 reads a.csv", reviewer="test")
+    v1 = save_working_copy_as_version(proj, message="v1 reads a.csv", reviewer="test")
     time.sleep(1.1)
     _author(b)
-    v2 = create_version_from_disk(proj, message="v2 reads b.csv", reviewer="test")
+    v2 = save_working_copy_as_version(proj, message="v2 reads b.csv", reviewer="test")
     # runs pin PUBLISHED versions.
     publish_version(proj, v1.version_id, reviewer="test")
     publish_version(proj, v2.version_id, reviewer="test")

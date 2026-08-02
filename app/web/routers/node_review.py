@@ -232,7 +232,7 @@ async def create_version_route(project: str, message: str = Form(...)):
     # snapshot, so it must not immortalise a python transform that fails its
     # own tests. Absent tests don't block — the gate holds existing
     # tests to green, it does not require them. The gate only applies when a
-    # compiled workflow exists; without one, versioning.create_version_from_disk's own
+    # compiled workflow exists; without one, save_working_copy_as_version's own
     # FileNotFoundError reports the missing workflow as a 400 below.
     if (project_dir / "compiled").is_dir():
         failing = find_failing_stage_tests(load_stages(project).stages)
@@ -240,7 +240,7 @@ async def create_version_route(project: str, message: str = Form(...)):
             return JSONResponse({"ok": False, "issues": failing}, status_code=400)
 
     try:
-        version = versioning.create_version_from_disk(
+        version = project_service.save_working_copy_as_version(
             project_dir,
             message=message,
             reviewer="local",
@@ -249,7 +249,7 @@ async def create_version_route(project: str, message: str = Form(...)):
     except FileNotFoundError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except WorkflowLoadError as exc:
-        # create_version_from_disk validates the working copy first; hand its
+        # save_working_copy_as_version validates the working copy first; hand its
         # itemized issue report to the save handler (which renders `issues`) as
         # a structured 400 — the same shape trigger_run uses — never a bare 500.
         return JSONResponse(

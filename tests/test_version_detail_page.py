@@ -11,6 +11,7 @@ from fastapi.testclient import TestClient
 import app.services.run as run_service
 from app.main import app
 from app.services import versioning
+from app.services import project as project_service
 from app.models.review_guide import ReviewGuide, ReviewGuideStep
 from app.services import workspace
 
@@ -47,7 +48,7 @@ def project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 
 def test_version_detail_renders_frozen_graph_and_publish(project: Path) -> None:
-    meta = versioning.create_version_from_disk(project, message="v1", reviewer="local")
+    meta = project_service.save_working_copy_as_version(project, message="v1", reviewer="local")
     page = client.get(f"/project/demo/workflow/version/{meta.version_id}")
     assert page.status_code == 200
     assert meta.version_id in page.text
@@ -58,7 +59,7 @@ def test_version_detail_renders_frozen_graph_and_publish(project: Path) -> None:
 
 def test_version_detail_offers_to_generate_a_missing_guide(project: Path) -> None:
     """Publish is refused without a guide, so its page must carry the way to get one."""
-    meta = versioning.create_version_from_disk(project, message="v1", reviewer="local")
+    meta = project_service.save_working_copy_as_version(project, message="v1", reviewer="local")
 
     page = client.get(f"/project/demo/workflow/version/{meta.version_id}")
 
@@ -83,7 +84,7 @@ def _save_covering_guide(project_dir: Path, version_id: str) -> None:
 
 
 def test_version_detail_drops_the_offer_once_a_guide_exists(project: Path) -> None:
-    meta = versioning.create_version_from_disk(project, message="v1", reviewer="local")
+    meta = project_service.save_working_copy_as_version(project, message="v1", reviewer="local")
     _save_covering_guide(project, meta.version_id)
 
     page = client.get(f"/project/demo/workflow/version/{meta.version_id}")
@@ -103,7 +104,7 @@ def test_run_this_version_404_for_nonexistent_version(project: Path) -> None:
 
 
 def test_run_this_version_gated_on_published(project: Path) -> None:
-    meta = versioning.create_version_from_disk(project, message="v1", reviewer="local")
+    meta = project_service.save_working_copy_as_version(project, message="v1", reviewer="local")
     vid = meta.version_id
     # Unpublished → 400 explaining the publish gate.
     unpub = client.post(f"/project/demo/workflow/version/{vid}/run", follow_redirects=False)

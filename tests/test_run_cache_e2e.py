@@ -17,6 +17,7 @@ from pandas.testing import assert_frame_equal
 
 from app.runtime.runner import execute_run
 from app.services import versioning
+from app.services import project as project_service
 
 _ROWS = [{"name": "a", "val": 1}, {"name": "b", "val": 2}, {"name": "c", "val": 3}]
 
@@ -116,7 +117,7 @@ def _write_stage(root: Path, filename: str, spec: dict[str, object]) -> None:
 
 
 def _publish_a_version(root: Path) -> str:
-    version = versioning.create_version_from_disk(
+    version = project_service.save_working_copy_as_version(
         root, message="cache e2e", reviewer="test")
     versioning.publish_version(root, version.version_id, reviewer="human")
     return version.version_id

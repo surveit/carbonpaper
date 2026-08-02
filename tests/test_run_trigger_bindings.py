@@ -13,7 +13,7 @@ import app.services.run as run_service
 from app.main import app
 from app.services import versioning
 from app.services import workspace
-from app.services.versioning import create_version_from_disk
+from app.services.project import save_working_copy_as_version
 
 client = TestClient(app)
 
@@ -33,7 +33,7 @@ def project(tmp_path, monkeypatch):
              "connector": {"kind": "file",
                            "params": {"path": str(data), "format": "csv"}}}
     (proj / "compiled" / "01_load.json").write_text(json.dumps(stage), encoding="utf-8")
-    vid = create_version_from_disk(proj, message="seed", reviewer="test").version_id
+    vid = save_working_copy_as_version(proj, message="seed", reviewer="test").version_id
     versioning.publish_version(proj, vid, reviewer="human")
     workspace.set_projects_dir(tmp_path)
     monkeypatch.setattr(run_service, "_run_in_background",
@@ -69,12 +69,12 @@ def test_unbound_input_returns_400(project):
     stage = json.loads(compiled.read_text(encoding="utf-8"))
     stage["connector"]["params"] = {}
     compiled.write_text(json.dumps(stage), encoding="utf-8")
-    # version ids are second-resolution timestamps (versioning.create_version_from_disk);
+    # version ids are second-resolution timestamps (project_service.save_working_copy_as_version);
     # without this the fixture's version and this one can land in the same
     # wall-clock second and silently clobber each other, unrelated to what this
     # test is checking.
     time.sleep(1.1)
-    vid = create_version_from_disk(project, message="unbound", reviewer="test").version_id
+    vid = save_working_copy_as_version(project, message="unbound", reviewer="test").version_id
     versioning.publish_version(project, vid, reviewer="human")
 
     resp = client.post("/project/demo/run",

@@ -9,7 +9,8 @@ import app.services.run as run_service
 from app.core.errors import NoVersionToRunError, RunNotFoundError
 from app.services import versioning
 from app.services import workspace
-from app.services.versioning import create_version_from_disk, list_versions
+from app.services.project import save_working_copy_as_version
+from app.services.versioning import list_versions
 
 # The run service takes a project NAME and resolves it under the workspace root;
 # every test drives that one project.
@@ -49,7 +50,7 @@ def _make_project(root):
 
 
 def _seed_version(root):
-    vid = create_version_from_disk(root, message="seed", reviewer="test").version_id
+    vid = save_working_copy_as_version(root, message="seed", reviewer="test").version_id
     versioning.publish_version(root, vid, reviewer="human")
     return vid
 

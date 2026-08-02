@@ -14,7 +14,7 @@ from app.runtime.runner import prepare_run, run_prepared
 from app.runtime.stages import llm_transform as lt
 from app.services import review, versioning
 from app.core.stage_cache import StageCacheEntry
-from app.services.versioning import create_version_from_disk
+from app.services.project import save_working_copy_as_version
 from app.models import RowReviewDecision
 from app.services import workspace
 
@@ -22,7 +22,7 @@ PROJECT = "queue_route_journey"
 
 
 def _seed_version(root):
-    vid = create_version_from_disk(root, message="test seed", reviewer="test").version_id
+    vid = save_working_copy_as_version(root, message="test seed", reviewer="test").version_id
     versioning.publish_version(root, vid, reviewer="human")
 
 

@@ -22,6 +22,7 @@ from app.core.errors import GenerationError, ReviewGuideValidationError
 from app.main import app
 from app.models.review_guide import ReviewGuide, ReviewGuideStep
 from app.services import versioning, workspace
+from app.services import project as project_service
 
 _ROWS = {"columns": [{"name": "amount", "type": "float", "nullable": False}]}
 _DOUBLED = {"columns": [
@@ -124,7 +125,7 @@ def test_the_author_is_given_the_versions_stages_not_the_working_copy(
     """The discriminating test: the working copy gains a stage AFTER the version is
     cut."""
     project_dir = _seed_project(tmp_path)
-    version = versioning.create_version_from_disk(
+    version = project_service.save_working_copy_as_version(
         project_dir, message="v1", reviewer="local"
     )
     _add_stage_to_the_working_copy(project_dir)
@@ -161,7 +162,7 @@ def test_render_guide_task_carries_the_request_the_document_and_the_stages(
     tmp_path: Path,
 ) -> None:
     project_dir = _seed_project(tmp_path)
-    version = versioning.create_version_from_disk(
+    version = project_service.save_working_copy_as_version(
         project_dir, message="v1", reviewer="local"
     )
 
@@ -181,7 +182,7 @@ def test_the_author_holds_no_tool_but_submit_answer(tmp_path: Path) -> None:
     """Structural, not prompt discipline: one tool and no built-ins, so no path exists at
     all."""
     project_dir = _seed_project(tmp_path)
-    version = versioning.create_version_from_disk(
+    version = project_service.save_working_copy_as_version(
         project_dir, message="v1", reviewer="local"
     )
 
@@ -216,7 +217,7 @@ def test_start_refuses_a_version_that_already_has_a_guide(
     tmp_path: Path, monkeypatch: Any
 ) -> None:
     project_dir = _seed_project(tmp_path)
-    version = versioning.create_version_from_disk(
+    version = project_service.save_working_copy_as_version(
         project_dir, message="v1", reviewer="local"
     )
     versioning.save_version_guide(
@@ -239,7 +240,7 @@ def test_start_refuses_a_project_with_no_document(
 ) -> None:
     project_dir = _seed_project(tmp_path)
     (project_dir / "document.md").unlink()
-    version = versioning.create_version_from_disk(
+    version = project_service.save_working_copy_as_version(
         project_dir, message="v1", reviewer="local"
     )
     store = SessionStore()
@@ -259,7 +260,7 @@ def test_start_refuses_a_project_with_no_document(
 
 def test_finish_stores_the_guide_on_the_version(tmp_path: Path) -> None:
     project_dir = _seed_project(tmp_path)
-    version = versioning.create_version_from_disk(
+    version = project_service.save_working_copy_as_version(
         project_dir, message="v1", reviewer="local"
     )
 
@@ -274,7 +275,7 @@ def test_finish_stores_the_guide_on_the_version(tmp_path: Path) -> None:
 
 def test_finish_with_no_guide_raises_and_writes_nothing(tmp_path: Path) -> None:
     project_dir = _seed_project(tmp_path)
-    version = versioning.create_version_from_disk(
+    version = project_service.save_working_copy_as_version(
         project_dir, message="v1", reviewer="local"
     )
 
@@ -287,7 +288,7 @@ def test_finish_with_no_guide_raises_and_writes_nothing(tmp_path: Path) -> None:
 def test_finish_refuses_a_guide_that_misses_a_stage(tmp_path: Path) -> None:
     """A guide accounting for only some stages leaves the version with none at all."""
     project_dir = _seed_project(tmp_path)
-    version = versioning.create_version_from_disk(
+    version = project_service.save_working_copy_as_version(
         project_dir, message="v1", reviewer="local"
     )
 
@@ -306,7 +307,7 @@ def test_post_generates_the_guide_and_stores_it_on_the_version(
     client: TestClient, tmp_path: Path, monkeypatch: Any
 ) -> None:
     project_dir = _seed_project(tmp_path)
-    version = versioning.create_version_from_disk(
+    version = project_service.save_working_copy_as_version(
         project_dir, message="v1", reviewer="local"
     )
     monkeypatch.setattr(compiler_review_guide, "default_turn_manager", lambda: TurnManager())
@@ -328,7 +329,7 @@ def test_post_reports_a_turn_that_submitted_nothing(
     client: TestClient, tmp_path: Path, monkeypatch: Any
 ) -> None:
     project_dir = _seed_project(tmp_path)
-    version = versioning.create_version_from_disk(
+    version = project_service.save_working_copy_as_version(
         project_dir, message="v1", reviewer="local"
     )
     monkeypatch.setattr(compiler_review_guide, "default_turn_manager", lambda: TurnManager())
@@ -363,7 +364,7 @@ def test_post_for_a_version_that_already_has_a_guide_is_400(
     client: TestClient, tmp_path: Path
 ) -> None:
     project_dir = _seed_project(tmp_path)
-    version = versioning.create_version_from_disk(
+    version = project_service.save_working_copy_as_version(
         project_dir, message="v1", reviewer="local"
     )
     versioning.save_version_guide(

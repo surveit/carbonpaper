@@ -73,7 +73,7 @@ def test_run_manifest_records_stage_llm_usage(tmp_path, monkeypatch):
 
     from app.runtime.runner import execute_run
     from app.services import versioning
-    from app.services.versioning import create_version_from_disk
+    from app.services.project import save_working_copy_as_version
 
     monkeypatch.setattr(lt, "call_llm", _fake_call_llm(
         {"score": 5}, LlmUsage(input_tokens=10, output_tokens=4, cost_usd=0.001, calls=1)))
@@ -99,7 +99,7 @@ def test_run_manifest_records_stage_llm_usage(tmp_path, monkeypatch):
                 "llm": {"prompt_template": "{text}"}}
     (tmp_path / "compiled" / "01_load.json").write_text(json.dumps(load), encoding="utf-8")
     (tmp_path / "compiled" / "02_classify.json").write_text(json.dumps(classify), encoding="utf-8")
-    vid = create_version_from_disk(tmp_path, message="seed", reviewer="test").version_id
+    vid = save_working_copy_as_version(tmp_path, message="seed", reviewer="test").version_id
     versioning.publish_version(tmp_path, vid, reviewer="human")
 
     manifest = execute_run(tmp_path, repo_root=tmp_path)
