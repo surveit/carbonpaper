@@ -33,17 +33,17 @@ def _override(tmp_path):
         "id": "load", "type": "input_data", "name": "Load documents",
         "connector": {"kind": "file",
                       "params": {"path": str(tmp_path / "data" / "docs.csv"), "format": "csv"}},
-        "output_schema": {"columns": [{"name": "doc_id", "type": "str"},
-                                      {"name": "text", "type": "str"}]},
+        "output_schema": {"columns": [{"name": "doc_id", "type": "str", "nullable": True},
+                                      {"name": "text", "type": "str", "nullable": True}]},
     }
 _TARGET = {
     "id": "classify", "type": "python_row_function", "name": "Classify each row",
-    "inputs": [{"id": "load", "schema": {"columns": [{"name": "doc_id", "type": "str"},
-                                                     {"name": "text", "type": "str"}]}}],
+    "inputs": [{"id": "load", "schema": {"columns": [{"name": "doc_id", "type": "str", "nullable": True},
+                                                     {"name": "text", "type": "str", "nullable": True}]}}],
     "function": {"kind": "inline", "code": "def transform(row): return row"},
-    "output_schema": {"columns": [{"name": "doc_id", "type": "str"},
-                                  {"name": "text", "type": "str"},
-                                  {"name": "label", "type": "str"}]},
+    "output_schema": {"columns": [{"name": "doc_id", "type": "str", "nullable": True},
+                                  {"name": "text", "type": "str", "nullable": True},
+                                  {"name": "label", "type": "str", "nullable": True}]},
 }
 
 
@@ -70,8 +70,8 @@ def demo_project(tmp_path, monkeypatch):
     dataset = TableRef(
         path="demo/eval_data/cases.csv", format=FileFormat.csv,
         table_schema=TableSchema(columns=[
-            {"name": "doc_id", "type": "str"}, {"name": "text", "type": "str"},
-            {"name": "label", "type": "str"}]),
+            {"name": "doc_id", "type": "str", "nullable": True}, {"name": "text", "type": "str", "nullable": True},
+            {"name": "label", "type": "str", "nullable": True}]),
     )
     save_eval_config(demo, EvalConfig(
         id="label_check", project="demo", name="Label check",

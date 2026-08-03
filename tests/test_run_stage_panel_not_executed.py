@@ -23,7 +23,7 @@ from conftest import pinned_stages
 client = TestClient(app)
 
 PROJECT = "not_executed_panel"
-_COLUMNS = [{"name": "name", "type": "str"}, {"name": "val", "type": "int"}]
+_COLUMNS = [{"name": "name", "type": "str", "nullable": True}, {"name": "val", "type": "int", "nullable": True}]
 
 
 def _stages(data_path: Path) -> list[dict]:
@@ -40,7 +40,7 @@ def _stages(data_path: Path) -> list[dict]:
             "function": {"kind": "inline",
                          "code": 'def transform(row):\n    return {**row, "label": "x"}\n'},
             "output_schema": {
-                "columns": [*_COLUMNS, {"name": "label", "type": "str"}]},
+                "columns": [*_COLUMNS, {"name": "label", "type": "str", "nullable": True}]},
         },
     ]
 

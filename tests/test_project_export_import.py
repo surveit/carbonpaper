@@ -29,7 +29,7 @@ from app.services.project import WorkflowFile, export_project, import_project
 _TINY_LIBRARY = SchemaLibrary(schemas=[NamedSchema(
     name="entity", kind=SchemaKind.input, title="Entity",
     columns=[NamedColumn(name="entity_id", type="str", nullable=False),
-             NamedColumn(name="entity_name", type="str")],
+             NamedColumn(name="entity_name", type="str", nullable=True)],
     primary_key=["entity_id"],
 )])
 
@@ -76,7 +76,7 @@ def test_round_trip_through_json_reproduces_the_source_and_mints_a_version(tmp_p
         # The `entity` schema this project's data model declares.
         output_schema=TableSchema(
             columns=[Column(name="entity_id", type="str", nullable=False),
-                     Column(name="entity_name", type="str")],
+                     Column(name="entity_name", type="str", nullable=True)],
             primary_key=["entity_id"],
         ),
     )

@@ -14,7 +14,7 @@ def S(**kw):
     return kw
 
 
-_K = {"columns": [{"name": "k"}]}
+_K = {"columns": [{"name": "k", "type": "str", "nullable": True}]}
 
 
 def _file_input(id_, tmp_path, output_schema=_K):
@@ -34,7 +34,7 @@ def _py(id_, inputs, granularity="frame", schema=_K, **kw):
 
 def _ref(path="x.csv", cols=("k",)):
     return {"path": path, "format": "csv",
-            "table_schema": {"columns": [{"name": c} for c in cols]}}
+            "table_schema": {"columns": [{"name": c, "type": "str", "nullable": True} for c in cols]}}
 
 
 # ── is_grain_and_order_preserving (fixed by stage type) ────────────────────────────────
@@ -58,9 +58,9 @@ def test_python_row_function_rejects_multiple_inputs():
 def test_llm_is_grain_and_order_preserving():
     s = m.parse_stage(S(
         id="e", type="llm_transform",
-        inputs=[{"id": "a", "schema": {"columns": [{"name": "id", "type": "str"}],
+        inputs=[{"id": "a", "schema": {"columns": [{"name": "id", "type": "str", "nullable": True}],
                                        "primary_key": ["id"]}}],
-        output_schema={"columns": [{"name": "id", "type": "str"}, {"name": "out", "type": "str"}],
+        output_schema={"columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "out", "type": "str", "nullable": True}],
                        "primary_key": ["id"]},
         llm={"prompt_template": "p"}))
     assert s.is_grain_and_order_preserving is True
@@ -102,14 +102,14 @@ def test_joins_and_aggregate_change_grain():
                                  join={"keys": [{"left": "k", "right": "k"}]},
                                  output_schema=_K))
     assert x.is_grain_and_order_preserving is False
-    agg_in = {"columns": [{"name": "g"}, {"name": "x", "type": "int"}]}
+    agg_in = {"columns": [{"name": "g", "type": "str", "nullable": True}, {"name": "x", "type": "int", "nullable": True}]}
     agg = m.parse_stage(S(id="agg", type="aggregate",
                                    inputs=[{"id": "a", "schema": agg_in}],
                                    aggregate={"group_by": ["g"],
                                               "aggregations": [{"formula": "sum", "output_column": "t",
                                                                 "value_column": "x"}]},
-                                   output_schema={"columns": [{"name": "g"},
-                                                              {"name": "t", "type": "int"}]}))
+                                   output_schema={"columns": [{"name": "g", "type": "str", "nullable": True},
+                                                              {"name": "t", "type": "int", "nullable": True}]}))
     assert j.is_grain_and_order_preserving is False    # fan-out
     assert agg.is_grain_and_order_preserving is False  # fan-in
 

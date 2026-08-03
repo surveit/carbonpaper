@@ -29,8 +29,8 @@ def test_llm_transform_drops_undeclared_columns_including_former_hardcoded_ids(m
     # would have force-kept. output_schema doesn't declare them, so they're dropped
     # (and recorded), not resurrected.
     stage = _llm_stage(
-        input_columns=[{"name": "id", "type": "str"}, {"name": "text", "type": "str"}],
-        output_columns=[{"name": "id", "type": "str"}, {"name": "text", "type": "str"},
+        input_columns=[{"name": "id", "type": "str", "nullable": True}, {"name": "text", "type": "str", "nullable": True}],
+        output_columns=[{"name": "id", "type": "str", "nullable": True}, {"name": "text", "type": "str", "nullable": True},
                         {"name": "score", "type": "int", "nullable": False}],
     )
     monkeypatch.setattr(lt, "call_llm",
@@ -49,10 +49,10 @@ def test_llm_transform_declared_input_column_rides_through(monkeypatch):
     # reply spec (never asked of the model) yet kept because output_schema declares
     # it. It survives by declaration, not because the runtime knows the name.
     stage = _llm_stage(
-        input_columns=[{"name": "id", "type": "str"}, {"name": "text", "type": "str"},
-                       {"name": "entity_id", "type": "str"}],
-        output_columns=[{"name": "id", "type": "str"}, {"name": "text", "type": "str"},
-                        {"name": "entity_id", "type": "str"},
+        input_columns=[{"name": "id", "type": "str", "nullable": True}, {"name": "text", "type": "str", "nullable": True},
+                       {"name": "entity_id", "type": "str", "nullable": True}],
+        output_columns=[{"name": "id", "type": "str", "nullable": True}, {"name": "text", "type": "str", "nullable": True},
+                        {"name": "entity_id", "type": "str", "nullable": True},
                         {"name": "score", "type": "int", "nullable": False}],
     )
     monkeypatch.setattr(lt, "call_llm", lambda *a, **k: {"score": 5})
@@ -68,9 +68,9 @@ def test_llm_transform_declared_input_column_rides_through(monkeypatch):
 # The columns `_src_scored()` below actually builds — what the queue stage's one
 # input edge declares.
 _SCORED_COLUMNS = [
-    {"name": "entity_id", "type": "str"}, {"name": "evidence_id", "type": "str"},
-    {"name": "quote", "type": "str"}, {"name": "score", "type": "int"},
-    {"name": "benchmark_id", "type": "str"}, {"name": "query_id", "type": "str"},
+    {"name": "entity_id", "type": "str", "nullable": True}, {"name": "evidence_id", "type": "str", "nullable": True},
+    {"name": "quote", "type": "str", "nullable": True}, {"name": "score", "type": "int", "nullable": True},
+    {"name": "benchmark_id", "type": "str", "nullable": True}, {"name": "query_id", "type": "str", "nullable": True},
 ]
 
 
@@ -109,8 +109,8 @@ def _queue_test_ctx(tmp_path, project: str) -> RunContext:
 
 def test_human_review_queue_keeps_only_declared_columns(tmp_path):
     stage = _queue_stage(
-        output_schema={"columns": [{"name": "evidence_id", "type": "str"},
-                                    {"name": "final_score", "type": "int"}]},
+        output_schema={"columns": [{"name": "evidence_id", "type": "str", "nullable": True},
+                                    {"name": "final_score", "type": "int", "nullable": True}]},
         flt="entity_id == 'nope'",
     )
     ctx = _queue_test_ctx(tmp_path, "keeps-declared-columns")
@@ -126,9 +126,9 @@ def test_human_review_queue_carried_columns_survive_by_being_declared(tmp_path):
     # `quote` survives because it's declared in output_schema, not because the
     # runtime keeps a magic list of column names.
     stage = _queue_stage(
-        output_schema={"columns": [{"name": "evidence_id", "type": "str"},
-                                    {"name": "final_score", "type": "int"},
-                                    {"name": "quote", "type": "str"}]},
+        output_schema={"columns": [{"name": "evidence_id", "type": "str", "nullable": True},
+                                    {"name": "final_score", "type": "int", "nullable": True},
+                                    {"name": "quote", "type": "str", "nullable": True}]},
         flt="entity_id == 'nope'",
     )
     ctx = _queue_test_ctx(tmp_path, "carried-columns-survive")

@@ -7,7 +7,7 @@ from __future__ import annotations
 from app import models as m
 from app.models import find_stage_compiler_warnings, find_workflow_compiler_warnings
 
-_SCHEMA = {"columns": [{"name": "id", "type": "str"}], "primary_key": ["id"]}
+_SCHEMA = {"columns": [{"name": "id", "type": "str", "nullable": True}], "primary_key": ["id"]}
 _CODE = "def transform(row):\n    return row"
 _PASSING_EXAMPLE = {"name": "passes_through",
                     "inputs": {"up": [{"id": "r1"}]}, "expected": [{"id": "r1"}]}

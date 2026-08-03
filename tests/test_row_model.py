@@ -16,7 +16,7 @@ def _model(cols):
 def test_valid_row_roundtrips():
     model = _model([
         {"name": "score", "type": "int", "nullable": False},
-        {"name": "note", "type": "str"},
+        {"name": "note", "type": "str", "nullable": True},
     ])
     got = model.model_validate({"score": 3, "note": None})
     assert got.model_dump() == {"score": 3, "note": None}
@@ -24,7 +24,7 @@ def test_valid_row_roundtrips():
 
 def test_missing_key_rejected():
     # nullable ≠ omittable: every declared column must appear in the reply
-    model = _model([{"name": "note", "type": "str"}])
+    model = _model([{"name": "note", "type": "str", "nullable": True}])
     with pytest.raises(ValidationError):
         model.model_validate({})
 

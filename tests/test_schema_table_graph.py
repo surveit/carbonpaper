@@ -12,14 +12,14 @@ _SCHEMAS = [
         "name": "a",
         "kind": "reference",
         "title": "A lookup table",
-        "columns": [{"name": "id", "type": "str"}],
+        "columns": [{"name": "id", "type": "str", "nullable": True}],
     },
     {
         "name": "b",
         "kind": "computed",
         "columns": [
-            {"name": "a_id", "type": "str", "references": "a"},
-            {"name": "a_other", "type": "str", "references": "a.id"},
+            {"name": "a_id", "type": "str", "references": "a", "nullable": True},
+            {"name": "a_other", "type": "str", "references": "a.id", "nullable": True},
         ],
     },
 ]
@@ -48,8 +48,8 @@ def test_self_and_unresolved_references_draw_no_edge():
             "name": "x",
             "kind": "computed",
             "columns": [
-                {"name": "x_id", "type": "str", "references": "x"},
-                {"name": "z_id", "type": "str", "references": "zzz"},
+                {"name": "x_id", "type": "str", "references": "x", "nullable": True},
+                {"name": "z_id", "type": "str", "references": "zzz", "nullable": True},
             ],
         }
     ]
@@ -59,14 +59,14 @@ def test_self_and_unresolved_references_draw_no_edge():
 
 def test_title_identical_to_name_suppresses_the_subtitle_span():
     schemas = [{"name": "a", "kind": "reference", "title": "a",
-                "columns": [{"name": "id", "type": "str"}]}]
+                "columns": [{"name": "id", "type": "str", "nullable": True}]}]
     src = build_schema_table_graph(schemas)
     assert src.count("<b>a</b>") == 1
     assert "<span" not in src
 
 
 def test_schema_with_no_name_draws_no_node():
-    schemas = [{"kind": "reference", "columns": [{"name": "id", "type": "str"}]}]
+    schemas = [{"kind": "reference", "columns": [{"name": "id", "type": "str", "nullable": True}]}]
     src = build_schema_table_graph(schemas)
     assert src == "\n".join([
         "flowchart LR",
@@ -79,7 +79,7 @@ def test_schema_with_no_name_draws_no_node():
 
 
 def test_unrecognized_kind_gets_the_custom_class():
-    schemas = [{"name": "a", "kind": "weird", "columns": [{"name": "id", "type": "str"}]}]
+    schemas = [{"name": "a", "kind": "weird", "columns": [{"name": "id", "type": "str", "nullable": True}]}]
     src = build_schema_table_graph(schemas)
     assert ":::custom" in src
 
@@ -89,9 +89,9 @@ def test_no_fabricated_edges_without_references():
     no edge — the graph under-claims rather than inventing dataflow."""
     schemas = [
         {"name": "comment", "kind": "computed",
-         "columns": [{"name": "comment_id", "type": "str"}]},
+         "columns": [{"name": "comment_id", "type": "str", "nullable": True}]},
         {"name": "coverage_summary", "kind": "computed",
-         "columns": [{"name": "comment_count", "type": "int"}]},
+         "columns": [{"name": "comment_count", "type": "int", "nullable": True}]},
     ]
     src = build_schema_table_graph(schemas)
     assert "-->" not in src

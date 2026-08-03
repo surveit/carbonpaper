@@ -29,8 +29,8 @@ def _config(checks):
 
 
 def test_exact_metric_counts_matching_rows(tmp_path):
-    override = _stage("ov", [{"name": "doc_id", "type": "str"}], tmp_path)
-    target = _stage("tg", [{"name": "doc_id", "type": "str"}, {"name": "label", "type": "str"}], tmp_path)
+    override = _stage("ov", [{"name": "doc_id", "type": "str", "nullable": True}], tmp_path)
+    target = _stage("tg", [{"name": "doc_id", "type": "str", "nullable": True}, {"name": "label", "type": "str", "nullable": True}], tmp_path)
     config = _config([ExpectedOutput(output_column="label", metric="exact")])
     dataset = pd.DataFrame({"doc_id": ["a", "b", "c"], "label": ["x", "y", "z"]})
     target_df = pd.DataFrame({"doc_id": ["a", "b", "c"], "label": ["x", "WRONG", "z"]})
@@ -41,8 +41,8 @@ def test_exact_metric_counts_matching_rows(tmp_path):
 
 
 def test_abs_tol_metric_uses_tolerance(tmp_path):
-    override = _stage("ov", [{"name": "k", "type": "str"}], tmp_path)
-    target = _stage("tg", [{"name": "k", "type": "str"}, {"name": "amt", "type": "float"}], tmp_path)
+    override = _stage("ov", [{"name": "k", "type": "str", "nullable": True}], tmp_path)
+    target = _stage("tg", [{"name": "k", "type": "str", "nullable": True}, {"name": "amt", "type": "float", "nullable": True}], tmp_path)
     config = _config([ExpectedOutput(output_column="amt", metric="abs_tol", tolerance=0.5)])
     dataset = pd.DataFrame({"k": ["a", "b"], "amt": [10.0, 20.0]})
     target_df = pd.DataFrame({"k": ["a", "b"], "amt": [10.4, 21.0]})  # within, then outside
@@ -52,8 +52,8 @@ def test_abs_tol_metric_uses_tolerance(tmp_path):
 
 
 def test_sign_metric_compares_sign_only(tmp_path):
-    override = _stage("ov", [{"name": "k", "type": "str"}], tmp_path)
-    target = _stage("tg", [{"name": "k", "type": "str"}, {"name": "delta", "type": "float"}], tmp_path)
+    override = _stage("ov", [{"name": "k", "type": "str", "nullable": True}], tmp_path)
+    target = _stage("tg", [{"name": "k", "type": "str", "nullable": True}, {"name": "delta", "type": "float", "nullable": True}], tmp_path)
     config = _config([ExpectedOutput(output_column="delta", metric="sign")])
     dataset = pd.DataFrame({"k": ["a", "b"], "delta": [5.0, -5.0]})
     target_df = pd.DataFrame({"k": ["a", "b"], "delta": [99.0, 3.0]})  # same sign, then not
@@ -63,8 +63,8 @@ def test_sign_metric_compares_sign_only(tmp_path):
 
 
 def test_row_count_mismatch_raises_grain_violation(tmp_path):
-    override = _stage("ov", [{"name": "k", "type": "str"}], tmp_path)
-    target = _stage("tg", [{"name": "k", "type": "str"}, {"name": "label", "type": "str"}], tmp_path)
+    override = _stage("ov", [{"name": "k", "type": "str", "nullable": True}], tmp_path)
+    target = _stage("tg", [{"name": "k", "type": "str", "nullable": True}, {"name": "label", "type": "str", "nullable": True}], tmp_path)
     config = _config([ExpectedOutput(output_column="label", metric="exact")])
     dataset = pd.DataFrame({"k": ["a", "b", "c"], "label": ["x", "y", "z"]})
     target_df = pd.DataFrame({"k": ["a", "b"], "label": ["x", "y"]})  # a row dropped
@@ -78,8 +78,8 @@ def test_checked_column_clashing_with_override_is_read_from_output_prefixed_colu
     the expected value lives in the deconflicted `output.<name>` dataset column —
     the scorer must compare THAT to the target's own `<name>`, not the injected
     `override.<name>`."""
-    override = _stage("ov", [{"name": "label", "type": "str"}], tmp_path)   # override emits `label`
-    target = _stage("tg", [{"name": "label", "type": "str"}], tmp_path)     # target also emits `label`
+    override = _stage("ov", [{"name": "label", "type": "str", "nullable": True}], tmp_path)   # override emits `label`
+    target = _stage("tg", [{"name": "label", "type": "str", "nullable": True}], tmp_path)     # target also emits `label`
     config = _config([ExpectedOutput(output_column="label", metric="exact")])
     dataset = pd.DataFrame({"override.label": ["in1", "in2"], "output.label": ["x", "y"]})
     target_df = pd.DataFrame({"label": ["x", "WRONG"]})

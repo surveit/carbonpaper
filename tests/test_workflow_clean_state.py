@@ -15,7 +15,7 @@ from test_journey_smoke import _point_examples_dir_at
 
 client = TestClient(app)
 
-_SCHEMA = {"columns": [{"name": "id", "type": "str"}], "primary_key": ["id"]}
+_SCHEMA = {"columns": [{"name": "id", "type": "str", "nullable": True}], "primary_key": ["id"]}
 _CLEAN_LINE = "0 errors, 0 warnings"
 
 _LOAD = {
