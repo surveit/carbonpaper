@@ -71,6 +71,7 @@ class StageType(str, Enum):
     # app.runtime.lineage) so app.runtime.trace can still cross them.
     union = "union"
     filter_rows = "filter_rows"
+    starlark_row_function = "starlark_row_function"
 
 
 # The stage types that guarantee output row i came from input row i — 1:1 and in
