@@ -12,3 +12,7 @@ class LLMModel(str, Enum):
     sonnet = "sonnet"
     opus = "opus"
     claude_sonnet_4_6 = "claude-sonnet-4-6"
+
+    def __str__(self) -> str:
+        """The wire id, not `LLMModel.x` — this is the string handed to the CLI."""
+        return self.value
