@@ -16,6 +16,7 @@ import app.services.workspace as workspace
 from app.main import app
 from app.runtime.runner import execute_run
 from app.services import versioning
+from app.services import project as project_service
 from app.services.workflow_test import run_workflow_test
 
 client = TestClient(app)
@@ -53,7 +54,7 @@ def project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
         (pdir / "compiled" / f"{index:02d}_{stage['id']}.json").write_text(
             json.dumps(stage), encoding="utf-8")
     workspace.set_projects_dir(tmp_path)
-    version_id = versioning.create_version_from_disk(
+    version_id = project_service.save_working_copy_as_version(
         pdir, message="v1", reviewer="test").version_id
     versioning.publish_version(pdir, version_id, reviewer="test")
     return pdir

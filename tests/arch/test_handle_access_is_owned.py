@@ -33,12 +33,8 @@ _GRANDFATHERED: dict[str, set[str]] = {
 
 
 def _reads_handle(path: Path, attr: str) -> bool:
-    """Does this file read `<something>.<attr>` where the something is a stage?
-
-    Matched on the attribute name against a receiver called `stage`/`stage_def`/`s`
-    or `self` — deliberately syntactic. A stricter check would need type inference;
-    this is enough to catch logic that has wandered out of its module.
-    """
+    """Deliberately syntactic — `<stage|stage_def|self>.<attr>`; a stricter check needs
+    types."""
     try:
         tree = ast.parse(path.read_text(encoding="utf-8"))
     except (SyntaxError, UnicodeDecodeError):
@@ -70,8 +66,8 @@ def test_a_stage_handle_is_read_only_by_the_module_that_owns_it() -> None:
 
 
 def test_the_grandfathered_list_is_honest() -> None:
-    """Every grandfathered entry must still read the handle. A stale entry hides that
-    the boundary has already been reached, so the list can never shrink to empty."""
+    """A stale entry hides that the boundary was reached, so the list could never reach
+    empty."""
     stale = [
         f"stage.{attr}: {rel} no longer reads it — drop it from _GRANDFATHERED"
         for attr, files in _GRANDFATHERED.items()

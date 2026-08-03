@@ -1,7 +1,7 @@
-"""LLM generation of a project's data model and of one stage's tests.
-
-The turns run on the server event loop, so every `start_*` entry here must be called
-from an async context. Stage-test generation REPLACES that stage's tests wholesale.
+"""LLM generation of a project's data model, of one stage's tests, and of one saved
+version's review guide. The turns run on the server event loop, so every `start_*` entry
+here must be called from an async context. Stage-test generation REPLACES that stage's
+tests wholesale; guide generation refuses a version that already carries one.
 """
 from __future__ import annotations
 
@@ -12,11 +12,12 @@ from pathlib import Path
 from pydantic import BaseModel
 
 from app.compiler.data_model import start_data_model_generation_agent
+from app.compiler.review_guide import start_review_guide_generation_agent
 from app.compiler.stage_tests import start_stage_test_derivation_agent
 from app.core.errors import GenerationError
+from app.models.review_guide import ReviewGuide
 from app.models.named_schemas import SchemaLibrary
-from app.models.stages.stage_tests import STAGE_TEST_TYPES
-from app.services import data_model
+from app.services import data_model, versioning
 from app.services.loader import load_workflow
 from app.services.project import find_document_path
 from app.services.stage_edit import patch_stage_spec
@@ -39,11 +40,11 @@ def start_generation(project_dir: Path, *, document: str, model: str) -> str:
 
 
 def start_stage_test_generation(project_dir: Path, *, stage_id: str, model: str) -> str:
-    """Kick off STAGE-TEST derivation for one python-transform stage and return the id of
+    """Kick off STAGE-TEST derivation for one stage and return the id of
     the (hidden, view-only) chat session streaming the turn. Loads document.md and the
     stage's current compiled spec — raising ValueError if the project has no document,
-    `stage_id` names no stage in the compiled workflow, the stage is not a python
-    transform, or the stage has no output_schema (which a loaded stage always declares —
+    `stage_id` names no stage in the compiled workflow, the stage's type carries no
+    runnable tests, or the stage has no output_schema (which a loaded stage always declares —
     the check is a belt-and-braces guard, since tests need one to state expected rows).
     Every one of these checks runs BEFORE the
     session/turn are started, so a rejected stage never creates an orphaned session
@@ -59,9 +60,10 @@ def start_stage_test_generation(project_dir: Path, *, stage_id: str, model: str)
     stage = stages.get(stage_id)
     if stage is None:
         raise ValueError(f"no stage '{stage_id}' in {project_dir.name}")
-    if stage.type not in STAGE_TEST_TYPES:
+    if not stage.CARRIES_RUNNABLE_TESTS:
         raise ValueError(
-            f"tests can only be derived for python transforms, not `{stage.type}`"
+            f"tests can only be derived for stage types that can run them, "
+            f"not `{stage.type}`"
         )
     if stage.output_schema is None:
         raise ValueError(
@@ -76,6 +78,32 @@ def start_stage_test_generation(project_dir: Path, *, stage_id: str, model: str)
     )
 
 
+def start_review_guide_generation(
+    project_dir: Path, *, version_id: str, model: str
+) -> str:
+    """Stages come off the VERSION, not the working copy. Must be called from the server
+    event loop."""
+    # Both refusals below run BEFORE the session is created, so neither leaves an
+    # orphaned session behind.
+    version = versioning.load_version(project_dir, version_id)
+    if version.guide is not None:
+        raise ValueError(
+            f"version '{version_id}' already has a review guide — edit it with the "
+            "authoring agent rather than regenerating over it"
+        )
+    doc_path = find_document_path(project_dir)
+    if doc_path is None:
+        raise ValueError(f"{project_dir.name} has no document to write a guide from")
+    return start_review_guide_generation_agent(
+        stages=version.stages,
+        version_id=version.version_id,
+        project_id=project_dir.name,
+        document=doc_path.read_text(encoding="utf-8"),
+        model=model,
+        on_answer=lambda guide: _finish_review_guide(project_dir, version_id, guide),
+    )
+
+
 def _finish_data_model(project_dir: Path, answer: SchemaLibrary | None) -> None:
     """Completion hook for the data-model turn (runs on the event loop): if the agent submitted
     a valid data model (`answer`), persist the schemas. The create-flow stops here — the
@@ -84,6 +112,19 @@ def _finish_data_model(project_dir: Path, answer: SchemaLibrary | None) -> None:
     if answer is None:
         return
     data_model.write_data_model(project_dir, answer)
+
+
+def _finish_review_guide(
+    project_dir: Path, version_id: str, guide: ReviewGuide | None
+) -> None:
+    """Completion hook for the guide turn; either raise below reaches the transcript via the
+    caller."""
+    if guide is None:
+        raise GenerationError(
+            f"review-guide generation for version '{version_id}' in {project_dir.name} "
+            "did not submit a guide"
+        )
+    versioning.save_version_guide(project_dir, version_id, guide)
 
 
 def _finish_stage_tests(project_dir: Path, stage_id: str, answer: BaseModel | None) -> None:

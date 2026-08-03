@@ -35,15 +35,14 @@ def test_research_tools_are_accepted():
 
 
 def test_bash_is_grantable():
-    """Bash buys document extraction (pdftotext and friends). Whether a stage should
-    have it is the pipeline author's call, not this module's."""
+    """Bash buys document extraction (pdftotext and friends); granting it is the author's
+    call."""
     assert _config(tools=["Bash"]).tools == ["Bash"]
 
 
 @pytest.mark.parametrize("tool", ["websearch", "web_search", "Websearch", "Fetch"])
 def test_unknown_tool_names_are_refused(tool):
-    """Typo protection: a misspelled name would grant nothing and leave the stage
-    quietly unable to do its work. Names are case-sensitive."""
+    """Names are case-sensitive: a misspelled one would grant nothing, silently."""
     with pytest.raises(ValidationError) as err:
         _config(tools=[tool])
     assert "unknown tool name" in str(err.value)
@@ -84,8 +83,8 @@ def test_agent_without_extra_tools_is_submit_only():
 
 # ── plumbing: the research budget ────────────────────────────────────────────
 def _capture(monkeypatch):
-    """Run call_llm against a stubbed agent, returning the Agent kwargs and the
-    timeout the runtime applied."""
+    """Run call_llm against a stubbed agent, returning the Agent kwargs and the timeout
+    applied."""
     seen: dict = {}
 
     class StubAgent:

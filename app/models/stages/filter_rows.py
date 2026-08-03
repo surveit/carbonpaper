@@ -3,10 +3,12 @@ subset of its single input's rows unchanged, so a declared output_schema must
 equal the input schema."""
 from __future__ import annotations
 
-from typing import ClassVar, Literal, Optional
+from collections.abc import Sequence
+from typing import Any, ClassVar, Literal, Optional
 
 from pydantic import Field, model_validator
 
+from app.models.errors import StepRefused
 from app.models.schema import StageConfig
 from app.models.stage_base import StageBase, StageInput, StageType
 from app.models.stages.warnings import CompilerWarning, warn
@@ -16,6 +18,7 @@ from app.models.stages.code import (
     CornerCase,
     validate_inline_function_code,
 )
+from app.models.stages.stage_tests import FilterRowsStageTest
 
 
 class FilterConfig(StageConfig):
@@ -40,7 +43,11 @@ class FilterConfig(StageConfig):
         description=(
             "Inline Python defining `should_include` (or whatever `function` names). "
             "Signature: `def should_include(row: dict) -> bool` — True keeps the "
-            "row. Returning anything other than a bool is an error."
+            "row. Returning anything other than a bool is an error. A row it cannot "
+            "honestly decide is refused, not guessed: "
+            f"`raise {StepRefused.__name__}(\"why\")` (no import needed). A guessed "
+            "False silently drops a row that belonged — e.g. a blank `status`, or a "
+            "code the predicate has never seen."
         ),
     )
     function: Optional[str] = Field(
@@ -63,10 +70,12 @@ class FilterConfig(StageConfig):
 
 class FilterRowsStage(StageBase):
     type: Literal[StageType.filter_rows]
+    CARRIES_RUNNABLE_TESTS: ClassVar[bool] = True
     filter: FilterConfig
     # Exactly one input: a predicate decides row by row, and two inputs is a
     # join or a python_frame_function.
     inputs: list[StageInput] = Field(default_factory=list, min_length=1, max_length=1)
+    tests: Optional[Sequence[FilterRowsStageTest]] = None
 
     def fingerprint_blocks(self) -> dict[str, StageConfig]:
         return {"filter": self.filter}
@@ -96,11 +105,29 @@ def find_filter_output_issues(stage: "FilterRowsStage") -> list[str]:
 
 
 def find_filter_warnings(stage: "FilterRowsStage") -> list[CompilerWarning]:
-    """Compiler warnings about `stage.filter` — raised here, and only here, because
-    this module owns the block. A predicate is authored code like any other, so it
-    needs prose standing in for it; there is no `module` variant to worry about,
-    since a filter's code is always inline."""
+    """Warnings about `stage.filter` — raised here and only here, since this module owns it."""
     if not (stage.filter.summary or "").strip():
         return [warn(stage, "undescribed",
                      "no plain-language description — reviewable only by reading its code")]
     return []
+
+# Authoring notes for this module's stage type(s), as the plain-data shape the
+# authoring prompts render. Assembled into NODE_TYPES by app.models.stages.
+NODE_TYPE_SPECS: dict[str, dict[str, Any]] = {
+    "filter_rows": {
+        "summary": "Keep the rows an authored predicate returns True for.",
+        "blocks": ["filter"],
+        "requires_inputs": True,
+        "min_inputs": 1,
+        "required": ["code"],
+        "optional": ["function"],
+        "notes": (
+            "Takes exactly ONE input. The predicate is INLINE code only — there is no "
+            "kind/module here; a filter that needs an importable module is doing more "
+            "than deciding. `should_include(row)` is handed a plain dict and "
+            "must return a bool — True keeps the row, False drops it; any other return "
+            "type is a run-time error. Kept rows preserve their original relative order "
+            "and every column unchanged, so output_schema must equal the input schema."
+        ),
+    },
+}

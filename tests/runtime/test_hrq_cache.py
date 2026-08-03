@@ -19,7 +19,7 @@ from app.runtime.stages import HANDLERS, human_review_queue
 from app.runtime.stages.human_review_queue import NOT_REVIEWED
 from app.services import review, versioning
 from app.core.stage_cache import StageCache, compute_row_fingerprint
-from app.services.versioning import create_version_from_disk
+from app.services.project import save_working_copy_as_version
 from conftest import contribution_of, make_run_context
 
 PROJECT = "hrq-cache-tests"
@@ -690,7 +690,7 @@ def _write_stage(root, filename, stage):
 
 
 def _seed_version(root):
-    vid = create_version_from_disk(root, message="test seed", reviewer="test").version_id
+    vid = save_working_copy_as_version(root, message="test seed", reviewer="test").version_id
     versioning.publish_version(root, vid, reviewer="human")
 
 

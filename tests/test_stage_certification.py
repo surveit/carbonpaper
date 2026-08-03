@@ -81,12 +81,27 @@ def test_a_frame_function_is_certifiable_too():
     assert build_certification(stage, _views("passed")).status == "certified"
 
 
-def test_filter_rows_with_a_description_is_untestable_not_certified():
-    """filter_rows is outside STAGE_TEST_TYPES, so no example can ever certify its
-    description. `untestable` says that out loud — claiming `certified` would be a
-    badge nothing backs, and `n/a` would hide a description nothing can check."""
-    stage = _stage(summary="Keeps active rows.", type_="filter_rows", handle="filter")
+def test_a_code_carrying_type_that_cannot_run_examples_is_untestable():
+    """publish has a description no example can ever check, so `untestable`, not `n/a`."""
+    stage = m.parse_stage({
+        "id": "pub", "name": "Pub", "type": "publish",
+        "inputs": [{"id": "up", "schema": _SCHEMA}],
+        "publish": {"format": "csv"},
+        "function": {"kind": "inline", "summary": "Writes one file per row.",
+                     "code": "def transform(df, output_dir, trace_links):\n    return df"},
+    })
     assert build_certification(stage, []).status == "untestable"
+
+
+def test_filter_rows_with_a_description_and_no_examples_is_untested():
+    """A filter CAN be exemplified, so the gap is that nobody wrote one, not that none can."""
+    stage = _stage(summary="Keeps active rows.", type_="filter_rows", handle="filter")
+    assert build_certification(stage, []).status == "untested"
+
+
+def test_filter_rows_with_passing_examples_is_certified():
+    stage = _stage(summary="Keeps active rows.", type_="filter_rows", handle="filter")
+    assert build_certification(stage, _views("passed")).status == "certified"
 
 
 def test_filter_rows_with_no_description_is_undescribed_not_untestable():

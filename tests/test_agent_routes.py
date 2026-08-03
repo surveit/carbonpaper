@@ -14,6 +14,7 @@ from pydantic import BaseModel
 from app.web.chat_router import _store
 from app.core.agent import registry
 from app.core.agent.registry import AgentConfig, register
+from app.core.agent.bound_tool import BoundToolSpec
 from app.main import app
 
 client = TestClient(app)
@@ -27,22 +28,24 @@ def _build_tools(ctx: BaseModel) -> list:
     assert isinstance(ctx, _Ctx)
 
     def echo() -> str:
-        """Echo the context label."""
         return ctx.label
 
-    return [echo]
+    return [
+        BoundToolSpec(
+            name="echo",
+            description="Echo the context label.",
+            fn=echo,
+            input_schema={},
+            label="Echoing",
+        )
+    ]
 
 
 @pytest.fixture(autouse=True)
 def register_dummy_agent() -> Iterator[None]:
     register(
         "dummy",
-        AgentConfig(
-            system_prompt="sp",
-            tool_schemas={"echo": {}},
-            tool_labels={"echo": "Echoing"},
-            context_schema=_Ctx,
-        ),
+        AgentConfig(system_prompt="sp", context_schema=_Ctx),
         _build_tools,
     )
     yield

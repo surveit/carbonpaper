@@ -77,3 +77,27 @@ class XlsxReadParams(_Base):
     header_row: int = 0
     first_column: int = 0
     source_row_column: str | None = None
+
+# Authoring notes for this module's stage type(s), as the plain-data shape the
+# authoring prompts render. Assembled into NODE_TYPES by app.models.stages.
+NODE_TYPE_SPECS: dict[str, dict[str, Any]] = {
+    "input_data": {
+        "summary": "Declares a source dataset with a typed schema.",
+        "blocks": ["connector"],
+        "requires_inputs": False,
+        "min_inputs": 0,
+        "required": ["kind"],
+        "optional": ["params", "refresh", "notes"],
+        "notes": (
+            "When the methodology names a specific static file, params.path may "
+            "carry it and MUST be an ABSOLUTE path; when the source does not say "
+            "where the data lives, omit path — the user binds a file when starting "
+            "a run. Never invent a path. "
+            "For format=xlsx, optional params select the sheet and skip leading "
+            "rows or columns: sheet_name (name or 0-based position, default first "
+            "sheet), header_row (0-based index of the header row, default 0) and "
+            "first_column (0-based index of the first column read, default 0). "
+            "Takes no inputs, but must still declare its output_schema."
+        ),
+    },
+}

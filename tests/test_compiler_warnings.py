@@ -65,8 +65,7 @@ def test_a_description_with_no_examples_is_blocking():
 
 
 def test_missing_description_outranks_missing_examples():
-    """One warning per stage on this axis — fix the description first, then the
-    examples that check it. Reporting both would be noise."""
+    """One warning per stage on this axis: fix the description first. Both at once is noise."""
     assert _kinds(_stage(summary=None)) == ["undescribed"]
 
 
@@ -77,14 +76,30 @@ def test_module_code_is_blocking_because_the_panel_cannot_show_it():
     assert warnings[0].blocking
 
 
+def _publish_stage(stage_id="pub"):
+    """Authored code a reviewer must trust prose for, and no handler to run an example."""
+    return m.parse_stage({
+        "id": stage_id, "name": "Pub", "type": "publish",
+        "inputs": [{"id": "up", "schema": _SCHEMA}],
+        "publish": {"format": "csv"},
+        "function": {"kind": "inline", "summary": "Writes one file per row.",
+                     "code": "def transform(df, output_dir, trace_links):\n    return df"},
+    })
+
+
 # ── the non-blocking kinds ───────────────────────────────────────────────────
 def test_an_untestable_type_is_not_blocking():
-    """A filter_rows can never carry examples, so blocking on it would leave the
-    agent no way to finish — but a reviewer still needs telling."""
-    warnings = find_stage_compiler_warnings(
-        _stage(stage_id="filt", type_="filter_rows", handle="filter"))
+    """A publish stage can never carry examples, so blocking would leave the agent stuck."""
+    warnings = find_stage_compiler_warnings(_publish_stage())
     assert [w.kind for w in warnings] == ["untestable"]
     assert not warnings[0].blocking
+
+
+def test_a_filter_with_no_examples_is_unexemplified_not_untestable():
+    """filter_rows CAN carry examples, so the honest complaint is that it has none."""
+    warnings = find_stage_compiler_warnings(
+        _stage(stage_id="filt", type_="filter_rows", handle="filter"))
+    assert [w.kind for w in warnings] == ["unexemplified"]
 
 
 def test_cache_off_and_a_row_limit_are_notes_not_blockers():
@@ -99,7 +114,7 @@ def test_a_workflow_is_clean_when_nothing_blocking_remains():
     """`is_clean` is the agent's gate, so a note must not hold it shut."""
     report = find_workflow_compiler_warnings([
         _stage(stage_id="ok", tests=[_PASSING_EXAMPLE]),
-        _stage(stage_id="filt", type_="filter_rows", handle="filter"),
+        _publish_stage(),
     ])
     assert report.warnings and report.is_clean
     assert report.blocking == []
@@ -117,7 +132,36 @@ def test_a_workflow_with_one_undescribed_stage_is_not_clean():
 def test_blocking_warnings_sort_before_notes():
     """The page reads top-down and takes its colour from the first entry."""
     report = find_workflow_compiler_warnings([
-        _stage(stage_id="filt", type_="filter_rows", handle="filter"),
+        _publish_stage(),
         _stage(stage_id="silent", summary=None),
     ])
     assert [w.kind for w in report.warnings] == ["undescribed", "untestable"]
+
+
+# ── examples that do not pass ────────────────────────────────────────────────
+def test_failing_examples_are_blocking():
+    """Examples disagreeing with the code is not signed-off-able."""
+    warnings = find_stage_compiler_warnings(_stage(tests=[_PASSING_EXAMPLE]), failing_examples=1)
+    assert [w.kind for w in warnings] == ["examples_failing"]
+    assert warnings[0].blocking
+    assert "1 of its 1 examples" in warnings[0].detail
+
+
+def test_examples_are_judged_statically_when_the_caller_ran_nothing():
+    """Omitting the count judges the stage as written — the pre-existing behaviour."""
+    assert _kinds(_stage(tests=[_PASSING_EXAMPLE])) == []
+
+
+def test_missing_examples_outranks_failing_ones():
+    """A stage with no examples cannot also have failing ones; report the absence."""
+    assert _kinds(_stage(), ) == ["unexemplified"]
+
+
+def test_a_workflow_with_a_failing_example_is_not_clean():
+    report = find_workflow_compiler_warnings(
+        [_stage(stage_id="ok", tests=[_PASSING_EXAMPLE]),
+         _stage(stage_id="broken", tests=[_PASSING_EXAMPLE])],
+        {"broken": 2},
+    )
+    assert not report.is_clean
+    assert [(w.stage_id, w.kind) for w in report.blocking] == [("broken", "examples_failing")]

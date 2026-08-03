@@ -4,7 +4,7 @@ stage's input edge."""
 from __future__ import annotations
 
 from enum import Enum
-from typing import ClassVar, Literal, Optional
+from typing import Any, ClassVar, Literal, Optional
 
 from pydantic import Field
 
@@ -70,3 +70,28 @@ def find_publish_column_issues(stage: "PublishStage") -> list[str]:
             sid=stage.id, field="publish.one_file_per", col=publish.one_file_per, cols=sorted(cols)
         )
     ]
+
+# Authoring notes for this module's stage type(s), as the plain-data shape the
+# authoring prompts render. Assembled into NODE_TYPES by app.models.stages.
+NODE_TYPE_SPECS: dict[str, dict[str, Any]] = {
+    "publish": {
+        "summary": "Render a final artifact (html, json, csv, cards).",
+        "blocks": ["publish", "function"],
+        "requires_inputs": True,
+        "min_inputs": 1,
+        "required": [],
+        "optional": ["format", "destination", "template", "one_file_per", "cross_link"],
+        "notes": (
+            "Published output must be INTERROGABLE: every row or claim it renders links "
+            "back to that row's provenance. Declare the keyword `trace_links` on the "
+            "function — `def transform(df, output_dir, trace_links)` — and the runtime "
+            "hands it a linker for this run; per row emit "
+            "`trace_links.build_row_trace_url(\"<the input stage's id>\", row_ordinal)` as "
+            "an href, where row_ordinal is that row's 0-based position in the input frame "
+            "AS RECEIVED. Iterate the frame in order (enumerate it) and do not sort, "
+            "filter, or dedup before reading the ordinal — position is the only key the "
+            "trace has. Omit the keyword for a format that cannot carry a link (csv, json). "
+            "The one type exempt from declaring an output_schema: it emits files, not a table."
+        ),
+    },
+}

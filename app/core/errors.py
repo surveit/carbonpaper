@@ -141,9 +141,8 @@ class ReviewValidationError(ValueError):
 
 
 class ReviewGuideValidationError(ValueError):
-    """A review guide does not account for exactly its version's stages; the message
-    names the offending ids. Raised on WRITE, so a mismatched guide is never stored.
-    (Not ReviewValidationError above, which is about a row-review verdict.)"""
+    """A guide does not account for exactly its version's stages; raised on WRITE, so none is
+    stored."""
 
 
 class PredicateError(ValueError):

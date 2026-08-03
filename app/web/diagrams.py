@@ -10,7 +10,10 @@ from app.models import Stage, StageBase
 from app.core.run_status import StageStatus
 
 
-# Stage-type → CSS class for workflow node + badges.
+# Stage-type → CSS class for workflow node + badges. Every StageType must appear in
+# both maps: an unmapped type falls back to `custom`, the red badge palette that
+# elsewhere means error. tests/arch/test_stage_type_presentation.py fails when one
+# is missing.
 TYPE_CLASS = {
     "input_data": "input",
     "llm_transform": "llm",
@@ -21,6 +24,9 @@ TYPE_CLASS = {
     "aggregate": "aggregate",
     "human_review_queue": "human",
     "publish": "publish",
+    # Row-set operations: union stacks frames, filter_rows drops subject rows.
+    "union": "rowset",
+    "filter_rows": "rowset",
 }
 
 TYPE_GLYPH = {
@@ -33,6 +39,8 @@ TYPE_GLYPH = {
     "aggregate": "📊",
     "human_review_queue": "👤",
     "publish": "📤",
+    "union": "➕",
+    "filter_rows": "🔽",
 }
 
 
@@ -151,8 +159,8 @@ def build_schema_table_graph(schemas: list[dict[str, Any]]) -> str:
         lines.extend(_render_table_node_block(s))
     lines.extend(_collect_table_fk_edges(schemas, names))
 
-    # Same kind-fill palette as the workflow graph's classDefs, keyed through
-    # SCHEMA_KIND_CLASS so a node here matches the kind's .type-tag chip.
+    # One fill per schema kind, keyed through SCHEMA_KIND_CLASS so a node here
+    # matches the kind's .type-tag chip.
     lines += [
         "    classDef input fill:#e8f4f8,stroke:#3a8ca8,color:#000",
         "    classDef aggregate fill:#f0f0e6,stroke:#888533,color:#000",
@@ -204,9 +212,10 @@ def _collect_table_fk_edges(schemas: list[dict[str, Any]], names: set[Any]) -> l
     return edges
 
 
-# Node-review BELIEF → stroke colour. Distinct from the type fill (classDef) and
-# from run status: this is "do we trust HOW this node is modeled". Kept identical
-# to the --belief-* palette in style.css so a legend chip equals the workflow stroke.
+# Node-review BELIEF → stroke colour. Distinct from run status: this is "do we
+# trust HOW this node is modeled". Identical to the --belief-* palette in
+# style.css so a legend chip equals the workflow stroke — enforced by
+# tests/arch/test_status_colour_contract.py.
 REVIEW_STROKE = {
     "approved": ("#2a8a2a", "3px"),       # trusted → green
     "unreviewed": ("#9aa3ad", "1.5px"),   # not yet reviewed → grey
@@ -255,17 +264,7 @@ def build_mermaid_graph(
     status_by_id: dict[str, str] | None = None,
     review_by_id: dict[str, str] | None = None,
 ) -> str:
-    """Generate a Mermaid flowchart from stages (typed Stages or raw draft dicts).
-
-    If status_by_id is given, each node gets a status glyph in its label and a
-    coloured stroke override (green/amber/red/grey) layered over its type class.
-
-    If review_by_id is given (stage_id → belief state in {approved, unreviewed,
-    rejected, edited_stale}), each node's STROKE is coloured by belief instead —
-    the type fill is unchanged, so stroke encodes trust while fill encodes type.
-    When both are given, run status takes precedence (a live run's colour wins
-    over the standing belief). When both are None, behaves exactly as before.
-    """
+    """Mermaid flowchart from typed Stages or draft dicts. Stroke = run status, else belief."""
     nodes = [_node_view(s) for s in stages]
     lines = ["flowchart LR"]
     for n in nodes:
@@ -274,17 +273,23 @@ def build_mermaid_graph(
         sid = n["id"]
         for upstream in n["input_ids"]:
             lines.append(f"    {upstream} --> {sid}")
-    lines += [
-        "    classDef input fill:#e8f4f8,stroke:#3a8ca8,color:#000",
-        "    classDef llm fill:#fff4e6,stroke:#cc7a00,color:#000",
-        "    classDef python fill:#eef2f7,stroke:#4a5e85,color:#000",
-        "    classDef join fill:#f4ecfa,stroke:#7b3aa8,color:#000",
-        "    classDef aggregate fill:#f0f0e6,stroke:#888533,color:#000",
-        "    classDef human fill:#fce8f4,stroke:#c0399a,color:#000",
-        "    classDef publish fill:#e8f8e8,stroke:#3aa83a,color:#000",
-        "    classDef custom fill:#fde8e8,stroke:#cc3333,color:#000",
-    ]
+    lines.extend(_render_node_classdefs())
     return "\n".join(lines)
+
+
+# One neutral surface for every stage type: the node's glyph and its type-name
+# subtitle say which type it is, leaving the stroke as the node's only colour —
+# run status, or node-review belief. Values are style.css's --exec-bg / --border /
+# --fg, so a node sits on the same neutral as the rest of the page.
+_NODE_SURFACE = "fill:#f7f7f4,stroke:#d4d4d0,color:#1a1a1a"
+# What TYPE_CLASS falls back to for a stage type it does not map.
+_FALLBACK_NODE_CLASS = "custom"
+
+
+def _render_node_classdefs() -> list[str]:
+    """A `classDef` per class `_render_workflow_node_lines` can emit, all the same surface."""
+    classes = sorted(set(TYPE_CLASS.values()) | {_FALLBACK_NODE_CLASS})
+    return [f"    classDef {name} {_NODE_SURFACE}" for name in classes]
 
 
 # Keyed by StageStatus but typed `dict[str, ...]`: status_by_id (below) carries
@@ -299,14 +304,18 @@ _STATUS_GLYPH: dict[str, str] = {
     StageStatus.CANCELLED: "✖",
     StageStatus.PENDING: "…",
 }
+# Run STATUS → stroke colour. Seven statuses, five colours: _STATUS_GLYPH above
+# carries the distinction the shared colour drops (running ⟳ vs warnings ⚠,
+# cancelled ✖ vs pending …). Every colour here is one of the five --state-*
+# properties in style.css, enforced by tests/arch/test_status_colour_contract.py.
 _STATUS_STROKE: dict[str, tuple[str, str]] = {
-    StageStatus.OK: ("#2a8a2a", "3px"),                 # complete → green
-    StageStatus.RUNNING: ("#e0a800", "3px"),            # in progress → yellow
-    StageStatus.VALIDATION_WARNINGS: ("#cc8a00", "3px"),
-    StageStatus.ERROR: ("#cc2a2a", "3px"),              # errored → red
-    StageStatus.AWAITING_REVIEW: ("#2a6ac8", "4px"),
-    StageStatus.CANCELLED: ("#8a8a8a", "3px"),          # cancelled → grey
-    StageStatus.PENDING: ("#cfcfcf", "1px"),
+    StageStatus.OK: ("#2f7d32", "3px"),                    # done
+    StageStatus.RUNNING: ("#a8690b", "3px"),               # warning
+    StageStatus.VALIDATION_WARNINGS: ("#a8690b", "3px"),   # warning
+    StageStatus.ERROR: ("#b3261e", "3px"),                 # failed
+    StageStatus.AWAITING_REVIEW: ("#2a6ac8", "4px"),       # needs a human
+    StageStatus.CANCELLED: ("#7b8089", "3px"),             # idle
+    StageStatus.PENDING: ("#7b8089", "1px"),               # idle
 }
 
 
@@ -320,7 +329,7 @@ def _render_workflow_node_lines(
     status = status_by_id.get(sid)
     label = _build_workflow_node_label(n, status)
     lines = [
-        f"    {sid}[{label}]:::{TYPE_CLASS.get(stype, 'custom')}",
+        f"    {sid}[{label}]:::{TYPE_CLASS.get(stype, _FALLBACK_NODE_CLASS)}",
         f'    click {sid} call dvNode("{sid}") "Open stage"',
     ]
     stroke_line = _resolve_stroke_line(sid, status, review_by_id.get(sid))

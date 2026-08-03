@@ -7,13 +7,18 @@ from __future__ import annotations
 
 import ast
 
-from typing import ClassVar, Literal, Optional, Protocol
+from collections.abc import Sequence
+from typing import Any, ClassVar, Literal, Optional, Protocol
 
 from pydantic import Field, model_validator
 
 from app.models.errors import StepRefused
 from app.models.schema import FunctionKind, StageConfig, _Base
 from app.models.stage_base import StageBase, StageInput, StageType
+from app.models.stages.stage_tests import (
+    PythonFrameFunctionStageTest,
+    PythonRowFunctionStageTest,
+)
 from app.models.stages.warnings import CompilerWarning, warn
 
 # The instruction an authoring client reads when it fills in `summary`. Python
@@ -183,9 +188,8 @@ class PythonFunction(StageConfig):
 
 def find_python_function_warnings(stage: "CarriesPythonFunctionStage"
                                   ) -> list[CompilerWarning]:
-    """Compiler warnings about a `function` block — raised here, and only here,
-    because this module owns it. A stage whose behaviour is authored code needs prose
-    standing in for it, and the panel needs to be able to show that code."""
+    """Warnings about a `function` block — raised here and only here, since this module owns
+    it."""
     function = stage.function
     if not (function.summary or "").strip():
         return [warn(stage, "undescribed",
@@ -198,9 +202,8 @@ def find_python_function_warnings(stage: "CarriesPythonFunctionStage"
 
 
 class CarriesPythonFunctionStage(StageBase):
-    """The stage types whose behaviour is a `function` block: the two python
-    transforms, and publish, which adds rendering config alongside it. Declared once
-    here and inherited so `stage.function` is read in this module and nowhere else."""
+    """Stage types whose behaviour is a `function` block; declared once so `.function` is read
+    here."""
     function: PythonFunction
 
     def fingerprint_blocks(self) -> dict[str, StageConfig]:
@@ -215,11 +218,51 @@ class CarriesPythonFunctionStage(StageBase):
 
 class PythonRowFunctionStage(CarriesPythonFunctionStage):
     type: Literal[StageType.python_row_function]
+    CARRIES_RUNNABLE_TESTS: ClassVar[bool] = True
     # Exactly one input: the runtime maps the function over one frame's rows, so
     # a second input is a join or a python_frame_function.
     inputs: list[StageInput] = Field(default_factory=list, min_length=1, max_length=1)
+    tests: Optional[Sequence[PythonRowFunctionStageTest]] = None
 
 
 class PythonFrameFunctionStage(CarriesPythonFunctionStage):
     type: Literal[StageType.python_frame_function]
+    CARRIES_RUNNABLE_TESTS: ClassVar[bool] = True
     inputs: list[StageInput] = Field(default_factory=list, min_length=1)
+    tests: Optional[Sequence[PythonFrameFunctionStageTest]] = None
+
+# Authoring notes for this module's stage type(s), as the plain-data shape the
+# authoring prompts render. Assembled into NODE_TYPES by app.models.stages.
+NODE_TYPE_SPECS: dict[str, dict[str, Any]] = {
+    "python_row_function": {
+        "summary": "Deterministic Python run once per row: one row in → one row out (cannot fan rows out/in or reorder).",
+        "blocks": ["function"],
+        "requires_inputs": True,
+        "min_inputs": 1,
+        "required": ["kind"],
+        "optional": ["module", "function", "code", "requirements"],
+        "notes": (
+            "Takes exactly ONE input — to combine data from another input use enrich/expand, "
+            "or python_frame_function. "
+            "`transform(row)` is handed a plain dict and must return a plain dict, and that "
+            "dict IS the output row: a key you do not return is absent from the output, so "
+            "carry columns through explicitly (`return {**row, ...}`). The function is shown "
+            "neither the frame nor the row's position, so it cannot fan out, drop or reorder."
+        ),
+    },
+    "python_frame_function": {
+        "summary": "Deterministic Python over the whole dataframe(s); may reshape (dedup, pivot, multi-input merge).",
+        "blocks": ["function"],
+        "requires_inputs": True,
+        "min_inputs": 1,
+        "required": ["kind"],
+        "optional": ["module", "function", "code", "requirements"],
+        "notes": (
+            "The runtime calls `transform(*frames)`: one POSITIONAL parameter per declared "
+            "input, in `inputs` order — never by name, never a dict of frames. It receives no "
+            "output_dir and no trace_links; writing files is publish's job. Return the output "
+            "DataFrame. Rows may be added, dropped or reordered here, so this stage breaks the "
+            "row-position provenance trail an upstream row-mapped stage preserves."
+        ),
+    },
+}

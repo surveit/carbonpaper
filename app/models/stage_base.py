@@ -7,8 +7,9 @@ Sits below `app/models/stages/*`, which define those per-type models, and below
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from enum import Enum
-from typing import TYPE_CHECKING, Any, ClassVar, Optional
+from typing import TYPE_CHECKING, Any, ClassVar, Optional, get_args
 
 from pydantic import (
     Field,
@@ -151,6 +152,22 @@ class StageBase(StageCommon):
     # False for the one type that emits files rather than a table (publish).
     REQUIRES_OUTPUT_SCHEMA: ClassVar[bool] = True
 
+    # True for the types whose registered handler can execute one authored
+    # StageTest — the types that may carry `tests`. A subclass that flips this on
+    # also redeclares `tests` with the StageTest subclass stating its own arity;
+    # __init_subclass__ below refuses the class otherwise.
+    CARRIES_RUNNABLE_TESTS: ClassVar[bool] = False
+
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        """A type whose handler runs tests must name the StageTest subclass stating its arity."""
+        super().__init_subclass__(**kwargs)
+        own_fields = vars(cls).get("__annotations__", {})
+        if cls.CARRIES_RUNNABLE_TESTS and "tests" not in own_fields:
+            raise TypeError(
+                f"{cls.__name__} carries runnable tests but declares no `tests` field of "
+                f"its own — name the StageTest subclass whose `expected` states its arity"
+            )
+
     inputs: list[StageInput] = Field(
         default_factory=list,
         description=(
@@ -177,7 +194,7 @@ class StageBase(StageCommon):
     # reviewable behavior contract, run by app.runtime.stage_tests. None when the
     # stage has none: the model dump must not carry a `tests` key for
     # stages without tests, or every pre-existing belief hash would change.
-    tests: Optional[list[StageTest]] = None
+    tests: Optional[Sequence[StageTest]] = None
 
     # ── the per-type hooks a subclass answers ────────────────────────────────
     def fingerprint_blocks(self) -> dict[str, StageConfig]:
@@ -202,9 +219,8 @@ class StageBase(StageCommon):
         return None
 
     def find_handle_compiler_warnings(self) -> list["CompilerWarning"]:
-        """What the module owning this type's config block has to say about the stage
-        as written. [] for a type whose behaviour is config a reviewer reads directly
-        — an enrich's keys, a union's inputs — with no prose standing in for it."""
+        """What the module owning this type's config block says; [] when a reviewer reads the
+        config directly."""
         return []
 
     def llm_reply_schema(self) -> Optional[TableSchema]:
@@ -260,7 +276,13 @@ class StageBase(StageCommon):
 
     @model_validator(mode="after")
     def _tests_shape(self) -> "StageBase":
-        validate_stage_tests(self.type, self.input_ids, self.tests or [])
+        """Tests belong only on a type whose handler can run them, at that type's arity."""
+        if self.tests and not self.CARRIES_RUNNABLE_TESTS:
+            raise ValueError(
+                f"tests are only supported on stage types whose handler can run "
+                f"them, not `{self.type}`"
+            )
+        validate_stage_tests(self.input_ids, list(self.tests or []))
         return self
 
     @model_validator(mode="after")
@@ -345,6 +367,14 @@ class StageBase(StageCommon):
                                  app.runtime.lineage, for the trace to follow.
         """
         return is_grain_and_order_preserving(self.type)
+
+
+def find_stage_test_class(stage_cls: type[StageBase]) -> type[StageTest]:
+    """The StageTest subclass this stage type's `tests` field holds — its test arity."""
+    sequence_type, _none_type = get_args(stage_cls.model_fields["tests"].annotation)
+    (test_class,) = get_args(sequence_type)
+    assert issubclass(test_class, StageTest)  # __init_subclass__ admits nothing else
+    return test_class
 
 
 def _trim_block_to_fingerprint_fields(block: StageConfig) -> dict[str, Any]:

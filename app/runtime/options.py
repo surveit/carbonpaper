@@ -8,6 +8,7 @@ import os
 import shutil
 
 from app.core.errors import LLMError
+from app.core.llm import LLMModel
 from app.core.llm_sdk import CLI_PATH
 
 __all__ = [
@@ -18,7 +19,14 @@ __all__ = [
 
 # ── Config knobs (env-overridable) ───────────────────────────────────────────
 CLAUDE_BIN = shutil.which("claude") or CLI_PATH
-DEFAULT_MODEL = os.environ.get("CARBONPAPER_LLM_MODEL", "haiku")
+# What an `llm_transform` naming no model runs on. Pinned like every LLMModel value, and
+# refused at import if the override names something off the menu — a stage that omits
+# `llm.model` records nothing about which model answered, so the default is the only
+# thing left saying what a run's rows were produced by.
+DEFAULT_MODEL = LLMModel.parse(
+    os.environ.get("CARBONPAPER_LLM_MODEL", LLMModel.claude_haiku_4_5.value),
+    source="CARBONPAPER_LLM_MODEL",
+)
 DEFAULT_PARALLEL = int(os.environ.get("CARBONPAPER_LLM_PARALLEL", "4"))
 DEFAULT_TIMEOUT_S = int(os.environ.get("CARBONPAPER_LLM_TIMEOUT_S", "180"))
 

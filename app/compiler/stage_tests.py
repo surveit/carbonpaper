@@ -10,14 +10,13 @@ from typing import Callable
 from pydantic import BaseModel
 
 from app.compiler.stage_tests_prompt import STAGE_TESTS_SYSTEM_PROMPT
+from app.compiler.turn_failure import persist_derivation_failure
 from app.core.agent.agent import Agent
-from app.core.agent.store import SessionStore, open_session_store
+from app.core.agent.store import open_session_store
 from app.core.agent.turns import default_turn_manager
 from app.models import Stage
-from app.models.stages.stage_tests import (
-    STAGE_TEST_TYPES,
-    build_stage_tests_model,
-)
+from app.models.stage_base import find_stage_test_class
+from app.models.stages.stage_tests import build_stage_tests_model
 
 
 def start_stage_test_derivation_agent(
@@ -58,7 +57,7 @@ def start_stage_test_derivation_agent(
         try:
             on_answer(agent.answer)
         except Exception as exc:
-            _persist_derivation_failure(store, session_id, exc)
+            persist_derivation_failure(store, session_id, exc)
             raise
 
     default_turn_manager().start(
@@ -71,34 +70,22 @@ def start_stage_test_derivation_agent(
     return session_id
 
 
-def _persist_derivation_failure(store: SessionStore, session_id: str, error: Exception) -> None:
-    """Append a synthetic assistant message reporting `error` to `session_id`'s stored
-    transcript, so the failure survives past the in-memory turn buffer: a client that
-    was not watching the live turn still sees it on reload. Runs before the caller
-    re-raises `error`."""
-    messages = list(store.load(session_id)["messages"])
-    messages.append({
-        "role": "assistant",
-        "parts": [{"type": "text", "text": f"derivation failed: {error}"}],
-    })
-    store.save_messages(session_id, messages)
-
-
 def build_stage_test_deriver(
     document: str, stage: Stage, *, model: str = "sonnet"
 ) -> Agent[BaseModel]:
     """The derivation agent for one stage: target schema is the stage-bound
     suite model, so a malformed suite bounces inside the agent loop."""
-    if stage.type not in STAGE_TEST_TYPES:
+    if not stage.CARRIES_RUNNABLE_TESTS:
         raise ValueError(
-            f"tests can only be derived for python transforms, not `{stage.type}`"
+            f"tests can only be derived for stage types that can run them, "
+            f"not `{stage.type}`"
         )
     task = render_derivation_task(document, stage)  # raises if there is no output schema
     assert stage.output_schema is not None
     return Agent(
         system_prompt=STAGE_TESTS_SYSTEM_PROMPT,
         target_schema=build_stage_tests_model(
-            stage.type,
+            find_stage_test_class(type(stage)),
             {ref.id: ref.table_schema for ref in stage.inputs},
             stage.output_schema,
         ),

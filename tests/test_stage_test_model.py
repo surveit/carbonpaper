@@ -1,9 +1,17 @@
 """StageTest shape checks + the Stage.tests field's serialization contract."""
+from typing import ClassVar, Literal, get_args
+
 import pytest
 from pydantic import ValidationError
 
-from app.models import parse_stage, StageTest, TableSchema
-from app.models.stages.stage_tests import build_stage_tests_model
+from app.models import Stage, parse_stage, StageTest, TableSchema
+from app.models.stage_base import StageBase, StageType, find_stage_test_class
+from app.models.stages.stage_tests import (
+    FilterRowsStageTest,
+    PythonFrameFunctionStageTest,
+    PythonRowFunctionStageTest,
+    build_stage_tests_model,
+)
 from app.services.loader import stage_to_spec_dict
 
 _IN_SCHEMA = {"columns": [{"name": "amount", "type": "float", "nullable": False}]}
@@ -32,6 +40,76 @@ _GOOD_TEST = {
 }
 
 
+@pytest.mark.parametrize(
+    "stage_cls",
+    [cls for cls in get_args(get_args(Stage)[0]) if cls.CARRIES_RUNNABLE_TESTS],
+    ids=lambda cls: cls.__name__,
+)
+def test_every_testable_type_declares_its_own_stage_test_class(stage_cls):
+    """Inheriting StageTest would silently take the loosest arity, so each type names its own."""
+    test_class = find_stage_test_class(stage_cls)
+    assert test_class is not StageTest
+    assert "expected" in vars(test_class)["__annotations__"]
+
+
+def test_a_testable_type_naming_no_stage_test_class_is_refused_at_definition():
+    with pytest.raises(TypeError, match="StageTest subclass"):
+
+        class Untyped(StageBase):
+            type: Literal[StageType.python_row_function]
+            CARRIES_RUNNABLE_TESTS: ClassVar[bool] = True
+
+
+@pytest.mark.parametrize(
+    "test_class", [PythonRowFunctionStageTest, FilterRowsStageTest],
+    ids=lambda cls: cls.__name__,
+)
+def test_a_per_row_test_supplying_no_inputs_is_rejected(test_class):
+    """No input at all is a malformed test, not a test with zero rows in."""
+    with pytest.raises(ValidationError, match="at least 1 item"):
+        test_class(name="no_inputs", inputs={}, expected=None)
+
+
+@pytest.mark.parametrize(
+    "test_class", [PythonRowFunctionStageTest, FilterRowsStageTest],
+    ids=lambda cls: cls.__name__,
+)
+def test_a_per_row_test_is_one_row_in(test_class):
+    with pytest.raises(ValidationError, match="at most 1 item"):
+        test_class(name="two_in", inputs={"load": [{"a": 1}, {"a": 2}]}, expected=None)
+
+
+def test_a_row_function_test_states_exactly_one_expected_row():
+    with pytest.raises(ValidationError, match="at most 1 item"):
+        PythonRowFunctionStageTest(
+            name="fans_out", inputs={"load": [{"a": 1}]}, expected=[{"a": 1}, {"a": 2}]
+        )
+    with pytest.raises(ValidationError, match="at least 1 item"):
+        PythonRowFunctionStageTest(
+            name="fans_in", inputs={"load": [{"a": 1}]}, expected=[]
+        )
+
+
+def test_a_filter_test_states_the_kept_row_the_drop_or_a_refusal():
+    """A filter keeps its row or drops it; it can neither fan out nor invent a row."""
+    kept = FilterRowsStageTest(
+        name="kept", inputs={"load": [{"a": 1}]}, expected=[{"a": 1}]
+    )
+    dropped = FilterRowsStageTest(name="dropped", inputs={"load": [{"a": 1}]}, expected=[])
+    assert kept.expected == [{"a": 1}] and dropped.expected == []
+    with pytest.raises(ValidationError, match="at most 1 item"):
+        FilterRowsStageTest(
+            name="fans_out", inputs={"load": [{"a": 1}]}, expected=[{"a": 1}, {"a": 1}]
+        )
+
+
+def test_a_frame_function_test_is_free_on_both_sides():
+    test = PythonFrameFunctionStageTest(
+        name="regroups", inputs={"load": [{"a": 1}, {"a": 2}]}, expected=[]
+    )
+    assert test.inputs == {"load": [{"a": 1}, {"a": 2}]} and test.expected == []
+
+
 def test_valid_test_parses_on_python_row_stage():
     stage = parse_stage(_row_stage([_GOOD_TEST]))
     assert stage.tests is not None
@@ -45,7 +123,7 @@ def test_tests_rejected_on_non_python_stage():
         "connector": {"kind": "file"},
         "tests": [{"name": "x", "inputs": {}, "expected": []}],
     }
-    with pytest.raises(ValidationError, match="python transforms"):
+    with pytest.raises(ValidationError, match="handler can run them"):
         parse_stage(bad)
 
 
@@ -79,7 +157,7 @@ def test_multi_input_test_missing_one_input_is_rejected():
 def test_row_function_test_is_one_row_in_one_row_out():
     two_rows = {**_GOOD_TEST,
                 "inputs": {"load": [{"amount": 1.0}, {"amount": 2.0}]}}
-    with pytest.raises(ValidationError, match="one row"):
+    with pytest.raises(ValidationError, match="at most 1 item"):
         parse_stage(_row_stage([two_rows]))
 
 
@@ -110,7 +188,7 @@ def test_tests_round_trip_through_spec_dict():
 
 def _row_suite_model():
     return build_stage_tests_model(
-        "python_row_function",
+        PythonRowFunctionStageTest,
         {"load": TableSchema.model_validate(_IN_SCHEMA)},
         TableSchema.model_validate(_OUT_SCHEMA),
     )
@@ -130,7 +208,7 @@ def test_stage_tests_model_rejects_wrong_input_ids():
 def test_stage_tests_model_rejects_row_function_fan_out():
     bad = dict(_GOOD_TEST, expected=[{"amount": 2.0, "doubled": 4.0},
                                      {"amount": 3.0, "doubled": 6.0}])
-    with pytest.raises(ValidationError, match="one row in"):
+    with pytest.raises(ValidationError, match="at most 1 item"):
         _row_suite_model().model_validate({"tests": [bad]})
 
 
@@ -173,7 +251,7 @@ def test_stage_tests_model_rejects_a_wrongly_typed_cell():
 
 def _frame_suite_model(in_schema: dict) -> type:
     return build_stage_tests_model(
-        "python_frame_function",
+        PythonFrameFunctionStageTest,
         {"load": TableSchema.model_validate(in_schema)},
         TableSchema.model_validate(in_schema),
     )
@@ -210,6 +288,82 @@ def test_stage_tests_model_accepts_an_explicit_null_in_a_nullable_column():
     assert suite.tests[0].inputs["load"] == [{"amount": 1.0, "label": None}]
 
 
+_KEYED_SCHEMA = {
+    "columns": [
+        {"name": "client", "type": "str", "nullable": False},
+        {"name": "paid", "type": "float", "nullable": False},
+    ],
+    "primary_key": ["client"],
+}
+
+
+def test_stage_tests_model_rejects_an_input_frame_repeating_a_primary_key():
+    """Each row is well-formed alone, so only a cross-row check catches this."""
+    bad = {
+        "name": "one_client_paid_two_firms",
+        "inputs": {"load": [{"client": "Gamma", "paid": 10000.0},
+                            {"client": "Gamma", "paid": 15000.0}]},
+        "expected": [{"client": "Gamma", "paid": 25000.0}],
+    }
+    with pytest.raises(ValidationError) as excinfo:
+        _frame_suite_model(_KEYED_SCHEMA).model_validate({"tests": [bad]})
+    message = str(excinfo.value)
+    assert "one_client_paid_two_firms" in message
+    assert "load" in message
+    assert "Primary key duplicated" in message
+
+
+def test_stage_tests_model_rejects_an_input_frame_repeating_a_whole_row():
+    """The runner rejects exact duplicate input rows for every stage type."""
+    bad = {
+        "name": "the_same_row_twice",
+        "inputs": {"load": [{"amount": 1.0, "label": "a"},
+                            {"amount": 1.0, "label": "a"}]},
+        "expected": [{"amount": 1.0, "label": "a"}],
+    }
+    with pytest.raises(ValidationError) as excinfo:
+        _frame_suite_model(_TWO_COLUMN_SCHEMA).model_validate({"tests": [bad]})
+    message = str(excinfo.value)
+    assert "the_same_row_twice" in message
+    assert "exact duplicate rows" in message
+
+
+def test_stage_tests_model_rejects_expected_rows_repeating_a_primary_key():
+    bad = {
+        "name": "two_rows_for_one_client",
+        "inputs": {"load": [{"client": "Gamma", "paid": 10000.0}]},
+        "expected": [{"client": "Gamma", "paid": 10000.0},
+                     {"client": "Gamma", "paid": 15000.0}],
+    }
+    with pytest.raises(ValidationError) as excinfo:
+        _frame_suite_model(_KEYED_SCHEMA).model_validate({"tests": [bad]})
+    message = str(excinfo.value)
+    assert "expected rows" in message
+    assert "Primary key duplicated" in message
+
+
+def test_stage_tests_model_accepts_distinct_rows_under_a_primary_key():
+    suite = _frame_suite_model(_KEYED_SCHEMA).model_validate({"tests": [{
+        "name": "two_clients_each_paid",
+        "inputs": {"load": [{"client": "Gamma", "paid": 10000.0},
+                            {"client": "Delta", "paid": 15000.0}]},
+        "expected": [{"client": "Gamma", "paid": 10000.0},
+                     {"client": "Delta", "paid": 15000.0}],
+    }]})
+    assert len(suite.tests[0].inputs["load"]) == 2
+
+
+def test_stage_tests_model_accepts_repeated_expected_rows_under_no_key():
+    """A run applies the duplicate-row rule to a stage's INPUTS only."""
+    # So a step that legitimately emits identical rows can still state that.
+    suite = _frame_suite_model(_TWO_COLUMN_SCHEMA).model_validate({"tests": [{
+        "name": "one_row_in_two_identical_rows_out",
+        "inputs": {"load": [{"amount": 1.0, "label": "a"}]},
+        "expected": [{"amount": 1.0, "label": "a"}, {"amount": 1.0, "label": "a"}],
+    }]})
+    assert len(suite.tests[0].expected) == 2
+
+
 _FAILURE_TEST = {
     "name": "another_currency_is_not_recorded_as_dollars",
     "inputs": {"load": [{"amount": 2.0}]},
@@ -226,7 +380,7 @@ def test_row_function_failure_case_needs_no_expected_row():
 
 def test_row_function_failure_case_still_needs_exactly_one_input_row():
     two_rows = dict(_FAILURE_TEST, inputs={"load": [{"amount": 1.0}, {"amount": 2.0}]})
-    with pytest.raises(ValidationError, match="one row in"):
+    with pytest.raises(ValidationError, match="at most 1 item"):
         _row_suite_model().model_validate({"tests": [two_rows]})
 
 
@@ -283,7 +437,7 @@ def test_stage_tests_model_accepts_an_empty_input_case():
     """No rows means no columns to disagree with — an "empty upstream" case is
     legitimate, and the runtime builds its frame from the declared schema."""
     model = build_stage_tests_model(
-        "python_frame_function",
+        PythonFrameFunctionStageTest,
         {"load": TableSchema.model_validate(_IN_SCHEMA)},
         TableSchema.model_validate(_OUT_SCHEMA),
     )

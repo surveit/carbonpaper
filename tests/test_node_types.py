@@ -1,16 +1,16 @@
 from typing import get_args
 
-from app import models
+from app.models.stages import node_types
 from app.models.stage import Stage, StageType
 
 
 def test_node_types_match_stage_type_enum() -> None:
-    registry_keys = set(models.NODE_TYPES.keys())
+    registry_keys = set(node_types.NODE_TYPES.keys())
     enum_values = {s.value for s in StageType}
     missing_from_registry = enum_values - registry_keys
     missing_from_enum = registry_keys - enum_values
     assert registry_keys == enum_values, (
-        f"app.models.NODE_TYPES and StageType enum have drifted. "
+        f"app.node_types.NODE_TYPES and StageType enum have drifted. "
         f"In StageType but not NODE_TYPES: {missing_from_registry}. "
         f"In NODE_TYPES but not StageType: {missing_from_enum}."
     )
@@ -35,4 +35,4 @@ def test_every_stage_model_names_the_blocks_NODE_TYPES_advertises() -> None:
             name for name, field in cls.model_fields.items()
             if field.is_required() and name not in ("id", "name", "type")
         }
-        assert required == set(models.NODE_TYPES[stage_type]["blocks"]), stage_type
+        assert required == set(node_types.NODE_TYPES[stage_type]["blocks"]), stage_type

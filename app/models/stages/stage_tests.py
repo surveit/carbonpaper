@@ -1,9 +1,9 @@
-"""StageTest — one authored input→expected-output case for a python transform, plus the
-shape and row validation the Stage model runs when it carries tests.
+"""StageTest — one authored input→expected-output case for a python transform, and the
+per-stage-type subclasses whose `expected` type IS that type's output arity.
 A test is authored from the methodology, never produced by executing the stage's own code."""
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Annotated, Any, Optional, TypeAlias
 
 from pydantic import (
     BaseModel,
@@ -11,31 +11,48 @@ from pydantic import (
     Field,
     SerializerFunctionWrapHandler,
     ValidationError,
+    create_model,
     model_serializer,
     model_validator,
 )
 
+import pandas as pd
+
+from app.core.frame_checks import find_frame_violations, find_primary_key_violations
 from app.core.utils import format_errors
 from app.models.schema import TableSchema, _Base
 
-# The stage types whose handlers can execute a test.
-STAGE_TEST_TYPES = frozenset({"python_row_function", "python_frame_function"})
+# One row: column name → cell value. WHICH columns is not knowable here — it comes
+# from the stage's own declared schema, checked at validate_test_rows — so this is a
+# dynamic boundary, not a model waiting to be written.
+DataRow: TypeAlias = dict[str, Any]
+# The upstream stage a test's input rows stand in for.
+StageId: TypeAlias = str
+
+_INPUTS_DESCRIPTION = (
+    "Rows fed to the stage, keyed by the upstream stage id they come from — exactly "
+    "its declared input ids. Every row states every column, nulls explicit."
+)
+_EXPECTED_DESCRIPTION = (
+    "The rows the step must produce, or null to claim it must FAIL rather than return "
+    "a value it cannot stand behind. [] is not null: [] is success with no rows. "
+    "State one; no default."
+)
+
+# Exactly one input holding exactly one row: what a step the runtime invokes per row
+# is handed by a test of it.
+_OneInputRow: TypeAlias = Annotated[
+    dict[StageId, Annotated[list[DataRow], Field(min_length=1, max_length=1)]],
+    Field(min_length=1, max_length=1),
+]
 
 
 class StageTest(_Base):
     """A rows case states `expected` rows; a failure case states `expected: null`."""
     name: str
     description: Optional[str] = None
-    inputs: dict[str, list[dict[str, Any]]]
-    expected: Optional[list[dict[str, Any]]] = Field(
-        description=(
-            "The rows this input must produce — or null to claim the step must FAIL on "
-            "it, refusing to hand back a value it cannot stand behind. Null and [] are "
-            "different claims and never interchangeable: [] says the step succeeds and "
-            "returns no rows, null says it does not succeed at all. Always state one of "
-            "them explicitly; there is no default."
-        ),
-    )
+    inputs: dict[StageId, list[DataRow]] = Field(description=_INPUTS_DESCRIPTION)
+    expected: Optional[list[DataRow]] = Field(description=_EXPECTED_DESCRIPTION)
 
     @model_serializer(mode="wrap")
     def _keep_a_failure_claim_visible(
@@ -48,20 +65,32 @@ class StageTest(_Base):
         return data
 
 
-def validate_stage_tests(
-    stage_type: str, input_ids: list[str], tests: list[StageTest]
-) -> None:
-    """Raise ValueError if `tests` are malformed for a stage of `stage_type`
-    with the declared `input_ids`: tests belong on python transforms only,
-    names are non-empty and unique, each test supplies exactly the declared
-    inputs, and a python_row_function rows case is one row in → one row out
-    (the type is 1:1 by construction, so a test claiming otherwise is wrong)."""
-    if not tests:
-        return
-    if stage_type not in STAGE_TEST_TYPES:
-        raise ValueError(
-            f"tests are only supported on python transforms, not `{stage_type}`"
-        )
+class PythonRowFunctionStageTest(StageTest):
+    """One row in → that one row out, or a refusal."""
+    inputs: _OneInputRow = Field(description=_INPUTS_DESCRIPTION)
+    expected: Optional[Annotated[list[DataRow], Field(min_length=1, max_length=1)]] = (
+        Field(description=_EXPECTED_DESCRIPTION)
+    )
+
+
+class FilterRowsStageTest(StageTest):
+    """One row in → that row kept, dropped (`[]`), or a refusal."""
+    inputs: _OneInputRow = Field(description=_INPUTS_DESCRIPTION)
+    expected: Optional[Annotated[list[DataRow], Field(max_length=1)]] = Field(
+        description=_EXPECTED_DESCRIPTION
+    )
+
+
+class PythonFrameFunctionStageTest(StageTest):
+    """Any rows in → any rows out, or a refusal: a frame function may reshape freely."""
+    expected: Optional[list[DataRow]] = Field(description=_EXPECTED_DESCRIPTION)
+
+
+def validate_stage_tests(input_ids: list[StageId], tests: list[StageTest]) -> None:
+    """Raise ValueError unless names are non-empty and unique and each test supplies
+    exactly `input_ids`. Per-type row arity is the StageTest subclass's job, and
+    WHETHER a type may carry tests at all is the caller's
+    (StageBase.CARRIES_RUNNABLE_TESTS)."""
     names = [test.name for test in tests]
     duplicates = sorted({n for n in names if names.count(n) > 1})
     if duplicates:
@@ -75,20 +104,10 @@ def validate_stage_tests(
                 f"test {test.name!r}: inputs keys {sorted(test.inputs)} "
                 f"must be exactly the stage's declared inputs {sorted(declared)}"
             )
-        # Exhaustive over STAGE_TEST_TYPES (membership is checked above): the
-        # fallthrough fires only when the set grows without the new type's
-        # per-type invariant being decided here.
-        match stage_type:
-            case "python_row_function":
-                _validate_row_function_row_counts(test)
-            case "python_frame_function":
-                pass  # no per-type invariant: rows in and rows out are both free
-            case _:
-                raise AssertionError(f"unhandled stage test type: {stage_type}")
 
 
 def validate_test_rows(
-    input_schemas: dict[str, TableSchema],
+    input_schemas: dict[StageId, TableSchema],
     output_schema: TableSchema,
     tests: list[StageTest],
 ) -> None:
@@ -112,18 +131,32 @@ def validate_test_rows(
         raise ValueError("; ".join(problems))
 
 
+def validate_test_frames(
+    input_schemas: dict[StageId, TableSchema],
+    output_schema: TableSchema,
+    tests: list[StageTest],
+) -> None:
+    """Raise ValueError if a test's rows break a cross-row rule a real run enforces."""
+    # The row-by-row checks (validate_test_rows) cannot see these: a row is
+    # well-formed on its own and the suite still states a frame no stage could
+    # ever be handed. Assumes validate_stage_tests passed.
+    problems = [
+        problem
+        for test in tests
+        for problem in _find_test_frame_problems(test, input_schemas, output_schema)
+    ]
+    if problems:
+        raise ValueError("; ".join(problems))
+
+
 def build_stage_tests_model(
-    stage_type: str,
-    input_schemas: dict[str, TableSchema],
+    test_class: type[StageTest],
+    input_schemas: dict[StageId, TableSchema],
     output_schema: TableSchema,
 ) -> type[BaseModel]:
-    """A pydantic model of shape ``{"tests": [StageTest, ...]}`` whose
-    validation is bound to one stage's context: the shape rules
-    validate_stage_tests enforces (inputs match the declared upstream ids,
-    row functions are one row in → one row out) and the row conformance
-    validate_test_rows enforces both run at model_validate time. Built per
-    stage so an agent's submit_answer tool can reject a malformed suite inside
-    the agent loop instead of at stage-write time."""
+    """A ``{"tests": [test_class, ...]}`` model bound to one stage's inputs and output
+    schema, so an agent's submit_answer rejects a malformed suite inside the agent
+    loop rather than at stage-write time."""
 
     class StageTestSuite(BaseModel):
         tests: list[StageTest]
@@ -132,32 +165,22 @@ def build_stage_tests_model(
 
         @model_validator(mode="after")
         def _stage_rules(self) -> "StageTestSuite":
-            validate_stage_tests(stage_type, list(input_schemas), self.tests)
+            validate_stage_tests(list(input_schemas), self.tests)
             validate_test_rows(input_schemas, output_schema, self.tests)
+            validate_test_frames(input_schemas, output_schema, self.tests)
             return self
 
-    return StageTestSuite
-
-
-def _validate_row_function_row_counts(test: StageTest) -> None:
-    input_rows = len(next(iter(test.inputs.values()), []))
-    if input_rows != 1:
-        raise ValueError(
-            f"test {test.name!r}: a python_row_function test is one row in "
-            f"(got {input_rows} in)"
-        )
-    # A failure case (expected is None) claims no output rows at all, so only a
-    # rows case has an output count left to hold.
-    if test.expected is not None and len(test.expected) != 1:
-        raise ValueError(
-            f"test {test.name!r}: a python_row_function test is one row in → "
-            f"one row out (got 1 in, {len(test.expected)} out)"
-        )
+    # `list[test_class]` is a runtime type, so it enters through an Any-typed handle
+    # rather than the static annotation grammar.
+    element_type: Any = test_class
+    return create_model(
+        StageTestSuite.__name__, __base__=StageTestSuite, tests=(list[element_type], ...)
+    )
 
 
 def _find_test_row_problems(
     test: StageTest,
-    input_models: dict[str, type[BaseModel]],
+    input_models: dict[StageId, type[BaseModel]],
     expected_model: type[BaseModel],
 ) -> list[str]:
     problems = [
@@ -174,8 +197,35 @@ def _find_test_row_problems(
     return problems
 
 
+def _find_test_frame_problems(
+    test: StageTest,
+    input_schemas: dict[StageId, TableSchema],
+    output_schema: TableSchema,
+) -> list[str]:
+    # An input frame must pass every rule the runner applies to a stage input
+    # (key uniqueness AND no exact duplicate rows); the expected rows only the one
+    # it applies to a stage output (key uniqueness). A test states frames a real
+    # run would have to accept — no stricter, no looser.
+    problems = [
+        f"test {test.name!r}, input {input_id!r}: {violation.message}"
+        for input_id, schema in input_schemas.items()
+        for violation in find_frame_violations(
+            pd.DataFrame(test.inputs[input_id]), primary_key=schema.primary_key
+        )
+    ]
+    if test.expected is None:
+        return problems  # a failure case claims no output rows to form a frame
+    problems += [
+        f"test {test.name!r}, expected rows: {violation.message}"
+        for violation in find_primary_key_violations(
+            pd.DataFrame(test.expected), output_schema.primary_key
+        )
+    ]
+    return problems
+
+
 def _find_row_problems(
-    rows: list[dict[str, Any]], row_model: type[BaseModel]
+    rows: list[DataRow], row_model: type[BaseModel]
 ) -> list[str]:
     problems: list[str] = []
     for index, row in enumerate(rows):

@@ -61,6 +61,15 @@ def build_run_guide_view(project: str, manifest: dict[str, Any]) -> RunGuideView
     )
 
 
+def find_guideless_version_id(project: str, manifest: dict[str, Any]) -> str | None:
+    """The pinned version's id when it resolves and carries NO guide; None otherwise."""
+    try:
+        version = load_run_version(project, manifest)
+    except RunVersionUnresolvableError:
+        return None
+    return None if version.guide is not None else version.version_id
+
+
 def list_written_columns(stage: Stage) -> list[str]:
     """Columns the output adds to the stage's first input — the subject side of a join."""
     if stage.output_schema is None:

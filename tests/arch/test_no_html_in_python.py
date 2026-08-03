@@ -27,16 +27,17 @@ _HTML_TAG_PATTERN = re.compile(
 # rule targets. A ratchet: new entries are forbidden — a new offender must be
 # fixed, not added here.
 #
-# - app/web/diagrams.py:175,344,346: a Mermaid flowchart node label embeds a
-#   `<span style=...>` fragment for in-node text styling. Mermaid.js reads
-#   this as diagram source, rendered client-side by the Mermaid library, not
-#   as a page fragment produced by this app's own Jinja templates — there is
-#   no app/templates/*.html this markup could move into.
+# - app/web/diagrams.py: a Mermaid flowchart node label embeds a `<span
+#   style=...>` fragment for in-node text styling. Mermaid.js reads this as
+#   diagram source, rendered client-side by the Mermaid library, not as a page
+#   fragment produced by this app's own Jinja templates — there is no
+#   app/templates/*.html this markup could move into. Keyed by line number, so
+#   an edit above one of them re-anchors the entry rather than adding one.
 _ALLOWLIST: frozenset[tuple[str, int]] = frozenset(
     {
-        ("app/web/diagrams.py", 177),
-        ("app/web/diagrams.py", 346),
-        ("app/web/diagrams.py", 348),
+        ("app/web/diagrams.py", 185),
+        ("app/web/diagrams.py", 355),
+        ("app/web/diagrams.py", 357),
     }
 )
 

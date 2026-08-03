@@ -34,7 +34,7 @@ from app.services.errors import WorkflowLoadError
 from app.services.loader import load_workflow, resolve_function_code
 from app.services.versioning import list_versions
 from app.services import run as run_service
-from app.services.run_guide import build_run_guide_view
+from app.services.run_guide import build_run_guide_view, find_guideless_version_id
 from app.runtime.cancellation import request_cancel
 from app.runtime.errors import PreviewError
 from app.runtime.preview import PREVIEWABLE_TYPES, run_stage_preview
@@ -48,7 +48,6 @@ from app.web.loading import (
     build_llm_example,
     list_file_inputs,
     save_uploaded_input,
-    list_runs,
     load_manifest,
     load_output_preview,
     load_output_row,
@@ -58,6 +57,8 @@ from app.web.loading import (
     runs_dir,
 )
 from app.web.project_view import shell_state
+from app.web.run_header import build_live_view, build_run_header
+from app.web.run_index import build_run_index_rows
 from app.web.run_stage_panel import not_executed_panel
 
 router = APIRouter()
@@ -238,7 +239,7 @@ async def runs_index(request: Request, project: str):
         {
             "state": shell_state(pdir),
             "section": "runs",
-            "runs": list_runs(project),
+            "runs": build_run_index_rows(project),
             # Only PUBLISHED versions are runnable (resolve_version_id gates on it),
             # so the run form's version picker offers only those — never an
             # unpublished version the run would then reject.
@@ -273,6 +274,9 @@ async def run_status(project: str, run_id: str):
                    "awaiting": _count(StageStatus.AWAITING_REVIEW),
                    "cancelled": _count(StageStatus.CANCELLED)},
         "stages": [{"stage_id": s["stage_id"], "status": s.get("status")} for s in mstages],
+        # The header parts that move while a run is in flight; the run page
+        # updates them in place rather than fetching a second endpoint.
+        "header": build_live_view(project, run_id, manifest).model_dump(),
         "mermaid": graph.mermaid,
         "graph_error": graph.error,
     })
@@ -298,36 +302,6 @@ def build_run_graph(
         mermaid=build_mermaid_graph(stages, project, status_by_id=status_by_id),
         error=None,
     )
-
-
-def _artifact_links(project: str, run_id: str, run_dir: Path, manifest: dict) -> list[dict]:
-    """Browsable links to the files a completed run published.
-
-    Only returns links once the run has finished AND a publish stage completed —
-    linking to the files it actually wrote under artifacts/ (preferring a
-    browsable index.html) rather than a hardcoded guess. Empty for in-progress or
-    never-published runs, so the page shows no banner."""
-    if manifest.get("status") in (RunStatus.RUNNING, None):
-        return []
-    has_ok_publish = any(
-        s.get("type") == "publish"
-        and s.get("status") in (StageStatus.OK, StageStatus.VALIDATION_WARNINGS)
-        for s in manifest.get("stage_records", [])
-    )
-    artifacts_root = run_dir / "artifacts"
-    if not (has_ok_publish and artifacts_root.is_dir()):
-        return []
-    files = sorted(f for f in artifacts_root.rglob("*") if f.is_file())
-    index = next((f for f in files if f.name == "index.html"), None)
-    if index is not None:
-        files = [index]
-    return [
-        {
-            "name": f.name,
-            "url": f"/project/{project}/runs/{run_id}/artifact/{f.relative_to(artifacts_root).as_posix()}",
-        }
-        for f in files
-    ]
 
 
 @router.get("/project/{project}/runs/{run_id}/events")
@@ -437,7 +411,6 @@ async def run_detail(request: Request, project: str, run_id: str):
     manifest = load_manifest(run_dir)
     status_by_id = {s["stage_id"]: s.get("status", "") for s in manifest.get("stage_records", [])}
     graph = build_run_graph(project, manifest, status_by_id)
-    artifact_links = _artifact_links(project, run_id, run_dir, manifest)
 
     return templates.TemplateResponse(
         request,
@@ -454,10 +427,15 @@ async def run_detail(request: Request, project: str, run_id: str):
             "mermaid": graph.mermaid,
             "graph_error": graph.error,
             "event_tail": EVENT_TAIL,
-            "artifact_links": artifact_links,
+            # The grounding line, the CTA and the stage strip — everything above
+            # the graph (app.web.run_header).
+            "header": build_run_header(project, run_id, run_dir, manifest),
             # None when the pinned version carries no guide — the panel is then
             # not rendered at all, rather than standing in for one with prose.
             "guide": build_run_guide_view(project, manifest),
+            # Set only when a guide could still be written for this run's version:
+            # the version id the Generate-guide offer targets in the panel's place.
+            "guideless_version": find_guideless_version_id(project, manifest),
             "type_glyph": TYPE_GLYPH,
             "type_class": TYPE_CLASS,
         },

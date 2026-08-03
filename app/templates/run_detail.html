@@ -17,15 +17,6 @@
 {% endblock %}
 
 {% block section %}
-{% set total = manifest.stage_records | length %}
-{% set ok = manifest.stage_records | selectattr('status', 'equalto', 'ok') | list | length %}
-{% set warn = manifest.stage_records | selectattr('status', 'equalto', 'validation_warnings') | list | length %}
-{% set err = manifest.stage_records | selectattr('status', 'equalto', 'error') | list | length %}
-{% set running = manifest.stage_records | selectattr('status', 'equalto', 'running') | list | length %}
-{% set pending = manifest.stage_records | selectattr('status', 'equalto', 'pending') | list | length %}
-{% set awaiting = manifest.stage_records | selectattr('status', 'equalto', 'awaiting_review') | list | length %}
-{% set cancelled = manifest.stage_records | selectattr('status', 'equalto', 'cancelled') | list | length %}
-{% set done = ok + warn %}
 {% set is_running = manifest.status == 'running' %}
 
 {# ── Scroll model. The run view is a working surface, so it fills the viewport and
@@ -50,6 +41,15 @@
      guide beside it; the guide's own columns rule lives in _run_guide.html. */
   .run-shell { height: 100%; min-height: 0; }
   .run-main { min-width: 0; height: 100%; overflow-y: auto; padding-right: 6px; }
+  /* The same column, for a pinned version that carries no guide: the offer to write
+     one stands where the guide will, so the run does not reflow once it exists. */
+  .run-shell.needs-guide { display: grid; grid-template-columns: minmax(0, 1fr) 360px;
+                           gap: 18px; align-items: stretch; }
+  .run-guide-missing { min-width: 0; height: 100%; overflow-y: auto;
+                       border-left: 1px solid var(--border); padding-left: 18px; }
+  .run-guide-missing h2 { font-size: 12px; text-transform: uppercase;
+                          letter-spacing: .06em; color: var(--muted); margin: 0 0 4px; }
+  .run-guide-missing .guide-cta p { font-size: 11.5px; line-height: 1.5; }
 
   /* Scroll-edge fade. The mask insets only on the side that still has content, so a
      pane parked at the top is not fading its own first line; the JS below keeps
@@ -64,92 +64,28 @@
     body { height: auto; overflow: visible; }
     main { padding-bottom: 48px; }
     .app-shell, .app-side, .app-main, .run-shell, .run-main { height: auto; overflow: visible; }
+    .run-shell.needs-guide { grid-template-columns: 1fr; }
+    .run-guide-missing { height: auto; overflow: visible; border-left: 0; padding-left: 0; }
   }
 </style>
 
-<div class="run-shell{% if guide %} with-guide{% endif %}" id="run-shell">
+<div class="run-shell{% if guide %} with-guide{% elif guideless_version %} needs-guide{% endif %}" id="run-shell">
 <div class="run-main fade-scroll">
 
-{% if manifest.is_test_run %}
-<p class="banner" style="background:#f3e8fd;border-color:#8a5cf6;color:#5a2a8c">
-    🧪 <strong>Workflow test</strong> — this was a test run. It automatically approves all human reviews, but does call LLMs and run code stages. It does not cache any results.
-</p>
-{% endif %}
-
-<div class="run-topbar">
-    <h1>Run <code>{{ run_id }}</code></h1>
-    <p class="stage-id">started {{ manifest.started_at | friendly_time }}{% if manifest.finished_at %} · finished {{ manifest.finished_at | friendly_time }}{% endif %}</p>
-    <p class="stage-id ran-against">ran against workflow version
-        {% if manifest.workflow_version %}<a href="/project/{{ project }}/workflow/version/{{ manifest.workflow_version }}"><code>{{ manifest.workflow_version }}</code></a>{% else %}<span class="muted">(unversioned)</span>{% endif %}
-    </p>
-</div>
-
-{# ── Progress: steps to-do / in-progress / complete. Warnings & errors are a
-      separate strip that only appears when there's something to report. ── #}
-<div class="run-progress">
-    <span id="run-spinner" class="spinner" {% if not is_running %}hidden{% endif %}></span>
-    <span id="overall-status" class="overall-status status-{{ manifest.status }}">{{ manifest.status }}</span>
-    <div class="progress-track"><div id="progress-fill" class="progress-fill" style="width: {{ (100 * done / total) if total else 0 }}%"></div></div>
-    <span id="progress-counts" class="progress-counts">
-        <b>{{ done }}/{{ total }}</b> complete · <span id="pc-running">{{ running }}</span> in&nbsp;progress · <span id="pc-todo">{{ pending }}</span> to&nbsp;do
-    </span>
-    {% if is_running %}
-    <form method="post" action="/project/{{ project }}/runs/{{ run_id }}/cancel" id="cancel-run-form">
-        <button type="submit" class="btn danger" id="cancel-run-btn">✕ Cancel run</button>
-    </form>
-    {% endif %}
-</div>
-
-<div id="alert-strip" class="alert-strip" {% if not (warn or err or awaiting or cancelled) %}hidden{% endif %}>
-    <span id="al-err" class="alert err" {% if not err %}hidden{% endif %}>✗ <b>{{ err }}</b> error{% if err != 1 %}s{% endif %}</span>
-    <span id="al-warn" class="alert warn" {% if not warn %}hidden{% endif %}>⚠ <b>{{ warn }}</b> warning{% if warn != 1 %}s{% endif %}</span>
-    <span id="al-awaiting" class="alert awaiting" {% if not awaiting %}hidden{% endif %}>👤 <b>{{ awaiting }}</b> awaiting review</span>
-    <span id="al-cancelled" class="alert cancelled" {% if not cancelled %}hidden{% endif %}>✖ <b>{{ cancelled }}</b> cancelled</span>
-</div>
-
-{% if (err or manifest.status == 'cancelled') and not is_running %}
-<div class="rerun-bar">
-    <form action="/project/{{ project }}/runs/{{ run_id }}/resume" method="post">
-        {% if err %}
-        <button type="submit" class="btn primary">↻ Re-run failed stage{% if err != 1 %}s{% endif %}</button>
-        {% else %}
-        <button type="submit" class="btn primary">↻ Resume cancelled run</button>
-        {% endif %}
-    </form>
-    {% if err %}
-    <span class="muted">Re-runs the failed stage{% if err != 1 %}s{% endif %} + everything downstream. Completed stages are kept (their outputs are reused — no re-running, no new LLM calls).</span>
-    {% else %}
-    <span class="muted">Continues from where the run was cancelled. Completed stages are kept (their outputs are reused — no re-running, no new LLM calls).</span>
-    {% endif %}
-</div>
-{% endif %}
-
-{% if manifest.halted_at %}
-<p class="banner banner-review">
-    ⏸ Run halted for human review — items need decisions before downstream stages can run.
-    {% for stage_id in manifest.halted_at %}
-    <a href="/project/{{ project }}/runs/{{ run_id }}/queue/{{ stage_id }}" class="btn primary">Open review queue: {{ stage_id }} →</a>
-    {% endfor %}
-</p>
-{% endif %}
-{% if artifact_links %}
-<p class="banner">📤 Generated outputs:
-    {% for a in artifact_links %}<a href="{{ a.url }}">{{ a.name }}</a>{% if not loop.last %} · {% endif %}{% endfor %}
-</p>
-{% endif %}
+{% include "_run_header.html" %}
 
 {# ── The workflow is the main object: full width, on top. Built from the version
       this run pinned; with graph_error set NO graph is drawn, because the
       working copy may not be what ran. ── #}
 {% if graph_error %}
-<p class="banner banner-review" id="graph-error">⚠ Workflow graph unavailable — {{ graph_error }}</p>
+<p class="banner banner-warn" id="graph-error">⚠ Workflow graph unavailable — {{ graph_error }}</p>
 {% else %}
 <div class="workflow workflow-full">
     <pre class="mermaid">
 {{ mermaid }}
     </pre>
 </div>
-<p class="lede">Click any node above to inspect that stage below. Border: <span class="lg lg-done">green</span> complete · <span class="lg lg-run">yellow</span> in progress · <span class="lg lg-err">red</span> error · <span class="lg lg-pend">grey</span> pending.</p>
+<p class="lede">Click any node above to inspect that stage below.</p>
 {% endif %}
 
 {# ── Stage detail panel, below the workflow, full width. ── #}
@@ -239,51 +175,65 @@
   window._loadStage = loadStage;
   if (location.hash) loadStage(decodeURIComponent(location.hash.slice(1)));
 
-  // ── Cancel button: disable + relabel immediately on submit so a second
-  //    click can't fire a second request while the redirect is in flight.
-  //    The poller above (or the full reload on a non-live page) handles
-  //    picking up the resulting `cancelled` status. ──
-  const cancelForm = document.getElementById('cancel-run-form');
-  if (cancelForm) {
-    cancelForm.addEventListener('submit', function () {
-      const btn = document.getElementById('cancel-run-btn');
-      if (btn) { btn.disabled = true; btn.textContent = 'Cancelling…'; }
+  // ── CTA forms (cancel, re-run, resume): disable + relabel the button on
+  //    submit so a second click can't fire a second request while the redirect
+  //    is in flight. The poller below (or the full reload on a non-live page)
+  //    picks up the resulting status. ──
+  document.querySelectorAll('form.cta-form').forEach(function (form) {
+    form.addEventListener('submit', function () {
+      const btn = form.querySelector('button[type=submit]');
+      if (btn) { btn.disabled = true; btn.textContent = 'Working…'; }
     });
-  }
+  });
 
-  // ── Live progress poller ──
+  // ── Live progress poller. It refreshes the three things that move while a run
+  //    is in flight — the elapsed duration, the CTA's aside (which stage is on),
+  //    and the stage strip with its counts — plus the graph, and reloads once on
+  //    the terminal transition (where the CTA itself changes). ──
   const RUNNING = {{ is_running | tojson }};
   if (RUNNING) {
     const statusUrl = `/project/${encodeURIComponent(PROJECT)}/runs/${encodeURIComponent(RUN_ID)}/status`;
     const mermaidEl = document.querySelector('pre.mermaid');
     let lastSig = null, timer = null;
     const $ = id => document.getElementById(id);
-    const show = (el, on) => { if (el) el.hidden = !on; };
 
     function rerenderWorkflow(src) {
       if (!mermaidEl || !window.mermaid) return;
       mermaidEl.removeAttribute('data-processed'); mermaidEl.textContent = src;
       try { mermaid.run({ nodes: [mermaidEl] }); } catch (e) {}
     }
+    function paintStrip(stages, tallies) {
+      const strip = $('stage-strip');
+      if (strip) {
+        stages.forEach(function (s) {
+          const square = strip.querySelector(`i[data-stage-id="${CSS.escape(s.stage_id)}"]`);
+          if (!square) return;
+          square.className = 'status-' + s.status;
+          square.title = `${s.stage_id} — ${s.status}`;
+        });
+      }
+      const counts = $('strip-counts');
+      if (counts) {
+        counts.replaceChildren(...tallies.map(function (t) {
+          const span = document.createElement('span');
+          const dot = document.createElement('i');
+          dot.className = 'status-' + t.status;
+          span.append(dot, `${t.count} ${t.label}`);
+          return span;
+        }));
+      }
+    }
     async function poll() {
       let d; try { const r = await fetch(statusUrl, { cache: 'no-store' }); if (!r.ok) return; d = await r.json(); } catch (e) { return; }
-      const c = d.counts;
-      const os = $('overall-status'); if (os) { os.textContent = d.status; os.className = 'overall-status status-' + d.status; }
-      const fill = $('progress-fill'); if (fill && c.total) fill.style.width = (100 * c.done / c.total) + '%';
-      const pc = $('progress-counts'); if (pc) pc.innerHTML = `<b>${c.done}/${c.total}</b> complete · ${c.running} in&nbsp;progress · ${c.pending} to&nbsp;do`;
-      // alert strip
-      const anyAlert = c.err || c.warn || c.awaiting || c.cancelled;
-      show($('alert-strip'), anyAlert);
-      show($('al-err'), c.err); if ($('al-err')) $('al-err').innerHTML = `✗ <b>${c.err}</b> error${c.err!=1?'s':''}`;
-      show($('al-warn'), c.warn); if ($('al-warn')) $('al-warn').innerHTML = `⚠ <b>${c.warn}</b> warning${c.warn!=1?'s':''}`;
-      show($('al-awaiting'), c.awaiting); if ($('al-awaiting')) $('al-awaiting').innerHTML = `👤 <b>${c.awaiting}</b> awaiting review`;
-      show($('al-cancelled'), c.cancelled); if ($('al-cancelled')) $('al-cancelled').innerHTML = `✖ <b>${c.cancelled}</b> cancelled`;
+      const h = d.header;
+      const duration = $('run-duration'); if (duration && h.duration) duration.textContent = h.duration;
+      const aside = $('cta-aside'); if (aside) aside.textContent = h.aside || '';
+      paintStrip(d.stages, h.tallies);
 
       const sig = d.stages.map(s => s.status).join(',');
       if (sig !== lastSig) { lastSig = sig; rerenderWorkflow(d.mermaid); }
       if (d.terminal) {
         if (timer) clearInterval(timer);
-        show($('run-spinner'), false);
         setTimeout(() => location.reload(), 600);
       }
     }
@@ -294,7 +244,15 @@
 
 </div>{# /.run-main #}
 
-{% if guide %}{% include "_run_guide.html" %}{% endif %}
+{% if guide %}{% include "_run_guide.html" %}
+{% elif guideless_version %}
+{# The version this run pinned carries no guide. Say so where the guide would be, and
+   offer to write one against THAT version — not the working copy the run never saw. #}
+<aside class="run-guide-missing fade-scroll">
+  <h2>Review guide</h2>
+  {% with guide_version_id = guideless_version %}{% include "_generate_guide.html" %}{% endwith %}
+</aside>
+{% endif %}
 
 </div>{# /.run-shell #}
 

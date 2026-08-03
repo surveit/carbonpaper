@@ -15,6 +15,7 @@ if TYPE_CHECKING:
 WarningKind = Literal[
     "undescribed",
     "unexemplified",
+    "examples_failing",
     "unreviewable_code",
     "untestable",
     "nondeterministic",
@@ -24,6 +25,11 @@ WarningKind = Literal[
 # Whether editing the stage can clear a kind, and the order the list is read in
 # (fixable first).
 #
+# `examples_failing` is the one kind that cannot be judged from the stage alone —
+# running the examples is what answers it — so the caller runs them and hands the
+# result in. It is fixable: either the code or the description is wrong, and both
+# are edits to this stage.
+#
 # `untestable` cannot be cleared on the stage at all — a filter_rows carries a
 # description no example can ever check — so treating it as fixable would leave the
 # authoring agent no way to finish. The other two are deliberate authoring choices:
@@ -31,6 +37,7 @@ WarningKind = Literal[
 FIXABLE: dict[str, bool] = {
     "undescribed": True,
     "unexemplified": True,
+    "examples_failing": True,
     "unreviewable_code": True,
     "untestable": False,
     "nondeterministic": False,
@@ -49,8 +56,7 @@ class CompilerWarning(_Base):
     @property
     def blocking(self) -> bool:
         """Can editing the stage clear this? A non-blocking warning is not thereby
-        unimportant — it still owes a reviewer a sentence rather than silence — it
-        just cannot be fixed by editing the stage."""
+        unimportant."""
         return FIXABLE[self.kind]
 
 

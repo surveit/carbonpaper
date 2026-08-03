@@ -24,7 +24,7 @@
 {# The stage definition comes from the version this run pinned; with
    stage_def_error set NOTHING is shown in its place. #}
 {% if stage_def_error %}
-<p class="banner banner-review" id="stage-def-error">⚠ Stage definition unavailable — {{ stage_def_error }}</p>
+<p class="banner banner-warn" id="stage-def-error">⚠ Stage definition unavailable — {{ stage_def_error }}</p>
 {% endif %}
 
 {% if stage.error %}
