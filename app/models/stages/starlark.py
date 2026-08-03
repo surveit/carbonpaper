@@ -10,23 +10,22 @@ from typing import Any, ClassVar, Literal, Optional
 import starlark
 from pydantic import Field, model_validator
 
-from app.core.starlark_source import compile_starlark_module, find_bound_function
+from app.core.starlark_source import (
+    DEFAULT_FUNCTION_NAME,
+    REFUSE_BUILTIN,
+    compile_starlark_module,
+    find_bound_function,
+)
 from app.models.schema import StageConfig
 from app.models.stage_base import StageBase, StageInput, StageType
 from app.models.stages.code import CORNER_CASES_DESCRIPTION, SUMMARY_DESCRIPTION, CornerCase
 from app.models.stages.stage_tests import StarlarkRowFunctionStageTest
 from app.models.stages.warnings import CompilerWarning, warn
 
-# The name `validate_starlark_function_code` calls when it does not find `function`
-# bound — the runtime's own default (app.runtime.starlark_code registers the same
-# fallback name independently, since the model layer may not import the runtime).
-_DEFAULT_FUNCTION_NAME = "transform"
-
-# The builtin registered so write-time validation compiles source in the same
-# shape execution does: Starlark resolves free variables STATICALLY at module
-# load, so source whose body calls `refuse()` fails to load unless the name is
-# already bound — even though this stub is never actually called.
-_REFUSE_BUILTIN = "refuse"
+# REFUSE_BUILTIN is registered so write-time validation compiles source in the
+# same shape execution does: Starlark resolves free variables STATICALLY at
+# module load, so source whose body calls `refuse()` fails to load unless the
+# name is already bound — even though this stub is never actually called.
 
 _FUNCTION_DESCRIPTION = (
     "Name of the function to call within `code`, defaulting to `transform`. `code` "
@@ -57,14 +56,14 @@ def _refuse_stub(reason: str) -> None:
 
 
 def validate_starlark_function_code(code: str, function: str | None) -> None:
-    """Raise ValueError unless `code` binds `function` (or `transform`) to a function."""
-    wanted = function or _DEFAULT_FUNCTION_NAME
+    """Raise ValueError unless executing `code` binds `function` to a function."""
+    wanted = function or DEFAULT_FUNCTION_NAME
     candidates = (
-        (wanted,) if wanted == _DEFAULT_FUNCTION_NAME
-        else (wanted, _DEFAULT_FUNCTION_NAME)
+        (wanted,) if wanted == DEFAULT_FUNCTION_NAME
+        else (wanted, DEFAULT_FUNCTION_NAME)
     )
     try:
-        module = compile_starlark_module(code, {_REFUSE_BUILTIN: _refuse_stub})
+        module = compile_starlark_module(code, {REFUSE_BUILTIN: _refuse_stub})
         bound = find_bound_function(module, candidates)
     except starlark.StarlarkError as exc:
         raise ValueError(

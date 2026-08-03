@@ -6,13 +6,13 @@ from typing import Any
 
 import starlark
 
-from app.core.starlark_source import compile_starlark_module, find_bound_function
+from app.core.starlark_source import REFUSE_BUILTIN, compile_starlark_module, find_bound_function
 from app.models.errors import StepRefused
 
-# The builtin an author calls to refuse a row. Injected as a Python callable that
-# raises StepRefused; the Rust frames discard the exception object and render its
-# CLASS NAME into the message, which is what _find_refusal_message matches.
-REFUSE_BUILTIN = "refuse"
+# REFUSE_BUILTIN (imported above) is the builtin an author calls to refuse a
+# row. Injected as a Python callable that raises StepRefused; the Rust frames
+# discard the exception object and render its CLASS NAME into the message,
+# which is what _find_refusal_message matches.
 
 # starlark-pyo3 renders an injected callable's exception as
 # "error: <ClassName>: <message>" on its own line. Derived from the class so the

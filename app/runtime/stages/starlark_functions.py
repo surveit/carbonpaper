@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 
 import pandas as pd
 
+from app.core.starlark_source import DEFAULT_FUNCTION_NAME
 from app.models import Stage
 from app.models.stages.starlark import StarlarkRowFunctionStage
 
@@ -19,18 +20,12 @@ if TYPE_CHECKING:
     # nothing off it, so the import stays out of the runtime graph.
     from ..context import RunContext
 
-# Matches app.models.stages.starlark._DEFAULT_FUNCTION_NAME: the name execution
-# falls back to when `function` is unset or the explicit empty string a saved
-# stage may carry (see StarlarkFunction.function's write-time `wanted = function
-# or default` idiom).
-_DEFAULT_FUNCTION = "transform"
-
 
 def make_starlark_row_mapper(stage: Stage, ctx: RunContext, src: pd.DataFrame) -> RowMapper:
     """Compile once; the mapper sees one marshalled row and nothing else."""
     block = narrow_stage(stage, StarlarkRowFunctionStage).starlark
-    function_name = block.function or _DEFAULT_FUNCTION
-    handle = compile_starlark_function(block.code, function_name, _DEFAULT_FUNCTION)
+    function_name = block.function or DEFAULT_FUNCTION_NAME
+    handle = compile_starlark_function(block.code, function_name, DEFAULT_FUNCTION_NAME)
     if handle is None:
         raise ValueError(
             f"starlark_row_function stage {stage.id}: code does not define "
