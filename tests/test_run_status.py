@@ -55,8 +55,8 @@ def test_run_status_matches_the_values_the_runner_produces() -> None:
 
 
 def test_css_class_pattern_renders_bare_not_qualified() -> None:
-    """Locks in the exact template pattern app/templates/run_detail.html uses
-    (`class="status-{{ manifest.status }}"`) against a real enum member."""
+    # Locks in the template pattern _stage_strip.html uses (`class="status-{{
+    # square.status }}"`) against a real enum member.
     assert f"status-{RunStatus.OK}" == "status-ok"
     assert f"status-{StageStatus.VALIDATION_WARNINGS}" == "status-validation_warnings"
 

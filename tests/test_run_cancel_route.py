@@ -96,8 +96,8 @@ def _write_status_manifest(examples_dir: Path, stage_statuses: list[tuple[str, s
 def test_run_status_counts_include_a_cancelled_stage(examples_dir, client):
     """A stage cancelled mid-fan-out (runner's `except RunCancelled` branch,
     app/runtime/runner.py) must be counted, not silently dropped from every
-    bucket — app/templates/run_detail.html's `al-cancelled` chip reads this
-    same `counts.cancelled` field."""
+    bucket — the run page's stage strip counts the same seven statuses this
+    `counts` map does."""
     _write_one_stage_project(examples_dir)
     _write_status_manifest(examples_dir, [
         ("load", "ok"),
