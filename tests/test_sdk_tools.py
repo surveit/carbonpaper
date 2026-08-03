@@ -12,7 +12,7 @@ import pytest
 from claude_agent_sdk import SdkMcpTool
 from pydantic import BaseModel
 
-from app.agents.compiler.tools import EditingContext, make_editing_tools
+from app.tools.editing import EditingContext, make_editing_tools
 from app.core.agent.registry import build_mcp_server
 from app.core.agent.bound_tool import as_tool_content
 from app.services import workspace

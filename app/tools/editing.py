@@ -14,7 +14,7 @@ from app.core.agent.bound_tool import BoundToolSpec
 from app.models import StageDraft
 from app.models.review_guide import ReviewGuide
 from app.services import drafts, project as project_service
-from app.agents.tool_specs import SAVE_VERSION_FROM_DRAFT, TOOL_SPECS
+from app.tools.tool_specs import SAVE_VERSION_FROM_DRAFT, TOOL_SPECS
 from app.services.drafts import DraftDetail, DraftEdit, DraftView, SaveResult
 
 

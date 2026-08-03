@@ -27,7 +27,7 @@ from app.models import (
     find_workflow_compiler_warnings,
     StageType,
 )
-from app.agents.tool_specs import SAVE_VERSION_FROM_WORKING_COPY, TOOL_SPECS
+from app.tools.tool_specs import SAVE_VERSION_FROM_WORKING_COPY, TOOL_SPECS
 from app.models.review_guide import ReviewGuide
 from app.runtime import stage_tests
 from app.services import generation

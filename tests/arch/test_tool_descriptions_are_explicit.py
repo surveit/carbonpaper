@@ -8,12 +8,12 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
-from app.agents.compiler.tools import TOOL_LABELS, TOOL_SCHEMAS, _DESCRIPTIONS
-from app.agents.tool_specs import TOOL_SPECS
+from app.tools.editing import TOOL_LABELS, TOOL_SCHEMAS, _DESCRIPTIONS
+from app.tools.tool_specs import TOOL_SPECS
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _MCP_SERVER = _REPO_ROOT / "app/mcp/server.py"
-_EDITING_TOOLS = _REPO_ROOT / "app/agents/compiler/tools.py"
+_EDITING_TOOLS = _REPO_ROOT / "app/tools/editing.py"
 
 
 def find_mcp_tools(path: Path) -> list[tuple[str, ast.expr | None, str | None]]:
@@ -72,7 +72,7 @@ def test_no_mcp_tool_carries_a_docstring() -> None:
 
 def test_mcp_descriptions_cover_exactly_the_registered_tools() -> None:
     registered = {name for name, _, _ in find_mcp_tools(_MCP_SERVER)}
-    # save_version is described per-surface (see app.agents.tool_specs); every other
+    # save_version is described per-surface (see app.tools.tool_specs); every other
     # MCP tool reads the shared registry.
     assert registered - set(TOOL_SPECS) == {"save_version"}
     assert set(TOOL_SPECS) - registered <= {"get_current_project", "create_draft",

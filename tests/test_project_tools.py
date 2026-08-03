@@ -5,7 +5,7 @@ from typing import Callable
 import pytest
 from pydantic import ValidationError
 
-from app.agents.compiler.tools import EditingContext, make_editing_tools
+from app.tools.editing import EditingContext, make_editing_tools
 from app.core.agent.bound_tool import BoundToolSpec
 from app.core.errors import ReviewGuideValidationError
 from app.models.review_guide import ReviewGuide, ReviewGuideStep
