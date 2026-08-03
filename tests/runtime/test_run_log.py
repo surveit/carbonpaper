@@ -43,10 +43,10 @@ _RAISING_CODE = "def transform(row):\n    raise ValueError('bad row')\n"
 def _row_stage(code: str = _DOUBLING_CODE) -> Stage:
     return parse_stage({
         "id": "double", "name": "Double", "type": "python_row_function",
-        "inputs": [{"id": "src", "schema": {"columns": [{"name": "x", "type": "int"}]}}],
+        "inputs": [{"id": "src", "schema": {"columns": [{"name": "x", "type": "int", "nullable": True}]}}],
         "cache": True,
         "output_schema": {
-            "columns": [{"name": "x", "type": "int"}, {"name": "y", "type": "int"}]},
+            "columns": [{"name": "x", "type": "int", "nullable": True}, {"name": "y", "type": "int", "nullable": True}]},
         "function": {"kind": "inline", "code": code},
     })
 
@@ -55,9 +55,9 @@ def _llm_stage(batch_size: int) -> Stage:
     return parse_stage({
         "id": "score", "name": "Score", "type": "llm_transform",
         "inputs": [{"id": "src", "schema": {
-            "columns": [{"name": "x", "type": "int"}], "primary_key": ["x"]}}],
+            "columns": [{"name": "x", "type": "int", "nullable": True}], "primary_key": ["x"]}}],
         "output_schema": {
-            "columns": [{"name": "x", "type": "int"}, {"name": "verdict", "type": "str"}],
+            "columns": [{"name": "x", "type": "int", "nullable": True}, {"name": "verdict", "type": "str", "nullable": True}],
             "primary_key": ["x"]},
         "llm": {"prompt_instructions": "score it", "prompt_data_template": "{x}",
                 "batch_size": batch_size},
@@ -190,7 +190,7 @@ def test_a_run_writes_its_lifecycle_spine_to_the_run_dir(tmp_path):
     source = parse_stage({
         "id": "src", "name": "Source", "type": "input_data",
         "connector": {"kind": "file"},
-        "output_schema": {"columns": [{"name": "x", "type": "int"}]},
+        "output_schema": {"columns": [{"name": "x", "type": "int", "nullable": True}]},
     })
     run_dir = tmp_path / "runs" / "subset1"
     run_subset(

@@ -19,21 +19,21 @@ def _load(tmp_path):
         "id": "load", "type": "input_data", "name": "Load rows",
         "connector": {"kind": "file",
                       "params": {"path": str(tmp_path / "data" / "rows.csv"), "format": "csv"}},
-        "output_schema": {"columns": [{"name": "doc_id", "type": "str"},
-                                      {"name": "score", "type": "int"}]},
+        "output_schema": {"columns": [{"name": "doc_id", "type": "str", "nullable": True},
+                                      {"name": "score", "type": "int", "nullable": True}]},
     }
 # label = "pos" iff score >= 0 — a deterministic classifier we can predict.
 _CLASSIFY = {
     "id": "classify", "type": "python_row_function", "name": "Label by sign",
-    "inputs": [{"id": "load", "schema": {"columns": [{"name": "doc_id", "type": "str"},
-                                                     {"name": "score", "type": "int"}]}}],
+    "inputs": [{"id": "load", "schema": {"columns": [{"name": "doc_id", "type": "str", "nullable": True},
+                                                     {"name": "score", "type": "int", "nullable": True}]}}],
     "function": {"kind": "inline", "code":
                  "def transform(row):\n"
                  "    return {'doc_id': row['doc_id'], 'score': row['score'],\n"
                  "            'label': 'pos' if row['score'] >= 0 else 'neg'}"},
-    "output_schema": {"columns": [{"name": "doc_id", "type": "str"},
-                                  {"name": "score", "type": "int"},
-                                  {"name": "label", "type": "str"}]},
+    "output_schema": {"columns": [{"name": "doc_id", "type": "str", "nullable": True},
+                                  {"name": "score", "type": "int", "nullable": True},
+                                  {"name": "label", "type": "str", "nullable": True}]},
 }
 
 
@@ -59,8 +59,8 @@ def project(tmp_path):
         override_stage="load", target_stage="classify",
         table=TableRef(path="demo/eval_data/cases.csv", format=FileFormat.csv,
                        table_schema=TableSchema(columns=[
-                           {"name": "doc_id", "type": "str"}, {"name": "score", "type": "int"},
-                           {"name": "label", "type": "str"}])),
+                           {"name": "doc_id", "type": "str", "nullable": True}, {"name": "score", "type": "int", "nullable": True},
+                           {"name": "label", "type": "str", "nullable": True}])),
         expected_outputs=[ExpectedOutput(output_column="label", metric="exact")])
     return tmp_path, demo, config
 
@@ -97,11 +97,11 @@ def test_run_eval_writes_a_per_row_result_table(project):
 # through it is row-alignable and no longer vetoed before it runs.
 _QUEUE_REVIEW = {
     "id": "review", "type": "human_review_queue", "name": "Review scores",
-    "inputs": [{"id": "load", "schema": {"columns": [{"name": "doc_id", "type": "str"},
-                                                     {"name": "score", "type": "int"}]}}],
+    "inputs": [{"id": "load", "schema": {"columns": [{"name": "doc_id", "type": "str", "nullable": True},
+                                                     {"name": "score", "type": "int", "nullable": True}]}}],
     "queue": {},
-    "output_schema": {"columns": [{"name": "doc_id", "type": "str"},
-                                  {"name": "score", "type": "int"},
+    "output_schema": {"columns": [{"name": "doc_id", "type": "str", "nullable": True},
+                                  {"name": "score", "type": "int", "nullable": True},
                                   {"name": "final_score", "type": "int", "nullable": True}]},
 }
 
@@ -133,7 +133,7 @@ def test_run_eval_through_a_queue_stage_records_an_error_never_a_score(project):
         override_stage="load", target_stage="review",
         table=TableRef(path="demo/eval_data/queue_cases.csv", format=FileFormat.csv,
                        table_schema=TableSchema(columns=[
-                           {"name": "doc_id", "type": "str"}, {"name": "score", "type": "int"},
+                           {"name": "doc_id", "type": "str", "nullable": True}, {"name": "score", "type": "int", "nullable": True},
                            {"name": "final_score", "type": "int", "nullable": True}])),
         expected_outputs=[ExpectedOutput(output_column="final_score", metric="exact")])
 

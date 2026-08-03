@@ -63,11 +63,11 @@ def test_an_input_schema_round_trips_under_the_key_a_compiled_stage_spells():
         "type": "python_row_function",
         "name": "Flag rows",
         "inputs": [{"id": "raw", "schema": {
-            "columns": [{"name": "filing_id", "type": "str"}],
+            "columns": [{"name": "filing_id", "type": "str", "nullable": True}],
             "primary_key": ["filing_id"],
         }}],
         "function": {"kind": "inline", "code": "def transform(row):\n    return row\n"},
-        "output_schema": {"columns": [{"name": "filing_id", "type": "str"}]},
+        "output_schema": {"columns": [{"name": "filing_id", "type": "str", "nullable": True}]},
     })
 
     spec = draft.to_stage_spec()
@@ -87,9 +87,9 @@ def test_a_stage_that_breaks_a_cross_field_rule_parses_as_a_draft_and_is_refused
         "type": "llm_transform",
         "name": "Score rows",
         # an input schema with no primary_key -> the 1:1 rule is uncheckable
-        "inputs": [{"id": "raw", "schema": {"columns": [{"name": "text", "type": "str"}]}}],
+        "inputs": [{"id": "raw", "schema": {"columns": [{"name": "text", "type": "str", "nullable": True}]}}],
         "output_schema": {"columns": [
-            {"name": "text", "type": "str"}, {"name": "score", "type": "float"},
+            {"name": "text", "type": "str", "nullable": True}, {"name": "score", "type": "float", "nullable": True},
         ]},
         "llm": {"prompt_data_template": "score this"},
     }
@@ -154,7 +154,7 @@ def test_stage_keeps_the_server_owned_fields_the_draft_drops():
     stage = parse_stage({
         "id": "load", "type": "input_data", "name": "Load",
         "connector": {"kind": "file"}, "source": {"section": "para 3"},
-        "output_schema": {"columns": [{"name": "filing_id", "type": "str"}]},
+        "output_schema": {"columns": [{"name": "filing_id", "type": "str", "nullable": True}]},
     })
 
     assert stage.source is not None

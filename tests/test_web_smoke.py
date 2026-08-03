@@ -22,22 +22,22 @@ def _load(tmp_path):
         "id": "load", "type": "input_data", "name": "Load documents",
         "connector": {"kind": "file",
                       "params": {"path": str(tmp_path / "data" / "docs.csv"), "format": "csv"}},
-        "output_schema": {"columns": [{"name": "doc_id", "type": "str"}]},
+        "output_schema": {"columns": [{"name": "doc_id", "type": "str", "nullable": True}]},
     }
 _EXTRACT = {
     "id": "extract", "type": "llm_transform", "name": "Extract evidence pieces",
-    "inputs": [{"id": "load", "schema": {"columns": [{"name": "doc_id", "type": "str"}],
+    "inputs": [{"id": "load", "schema": {"columns": [{"name": "doc_id", "type": "str", "nullable": True}],
                                          "primary_key": ["doc_id"]}}],
     "llm": {"prompt_template": "You are reading a document {doc_id}. Extract evidence."},
-    "output_schema": {"columns": [{"name": "doc_id", "type": "str"},
-                                  {"name": "evidence_id", "type": "str"}],
+    "output_schema": {"columns": [{"name": "doc_id", "type": "str", "nullable": True},
+                                  {"name": "evidence_id", "type": "str", "nullable": True}],
                       "primary_key": ["doc_id"]},
 }
 _SCHEMA = {
     "name": "documents", "title": "Documents", "kind": "input",
     "description": "The source documents this project reads.",
     "primary_key": ["doc_id"],
-    "columns": [{"name": "doc_id", "type": "str", "description": "stable id"}],
+    "columns": [{"name": "doc_id", "type": "str", "description": "stable id", "nullable": True}],
 }
 
 

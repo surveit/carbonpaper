@@ -15,7 +15,7 @@ from conftest import make_run_context
 
 PROJECT = "frame-cache-tests"
 
-_X = {"columns": [{"name": "x", "type": "int"}]}
+_X = {"columns": [{"name": "x", "type": "int", "nullable": True}]}
 
 _DOUBLING_CODE = "def transform(df):\n    return df.assign(y=df['x'] * 2)\n"
 
@@ -25,7 +25,7 @@ def _frame_stage(code: str = _DOUBLING_CODE, *, cache: bool = True) -> Stage:
         "id": "double", "name": "Double", "type": "python_frame_function",
         "inputs": [{"id": "src", "schema": _X}], "cache": cache,
         "output_schema": {
-            "columns": [{"name": "x", "type": "int"}, {"name": "y", "type": "int"}]},
+            "columns": [{"name": "x", "type": "int", "nullable": True}, {"name": "y", "type": "int", "nullable": True}]},
         "function": {"kind": "inline", "code": code},
     })
 
@@ -155,10 +155,10 @@ def _enrich_stage() -> Stage:
     return parse_stage({
         "id": "j", "name": "Enrich", "type": "enrich",
         "inputs": [{"id": "left", "schema": _X},
-                   {"id": "right", "schema": {"columns": [{"name": "x", "type": "int"},
-                                                          {"name": "z", "type": "str"}]}}],
-        "output_schema": {"columns": [{"name": "x", "type": "int"},
-                                      {"name": "z", "type": "str"}]},
+                   {"id": "right", "schema": {"columns": [{"name": "x", "type": "int", "nullable": True},
+                                                          {"name": "z", "type": "str", "nullable": True}]}}],
+        "output_schema": {"columns": [{"name": "x", "type": "int", "nullable": True},
+                                      {"name": "z", "type": "str", "nullable": True}]},
         "join": {"keys": [{"left": "x", "right": "x"}]},
     })
 
@@ -166,9 +166,9 @@ def _enrich_stage() -> Stage:
 def _aggregate_stage() -> Stage:
     return parse_stage({
         "id": "agg", "name": "Agg", "type": "aggregate",
-        "inputs": [{"id": "src", "schema": {"columns": [{"name": "g", "type": "str"}]}}],
-        "output_schema": {"columns": [{"name": "g", "type": "str"},
-                                      {"name": "n", "type": "int"}]},
+        "inputs": [{"id": "src", "schema": {"columns": [{"name": "g", "type": "str", "nullable": True}]}}],
+        "output_schema": {"columns": [{"name": "g", "type": "str", "nullable": True},
+                                      {"name": "n", "type": "int", "nullable": True}]},
         "aggregate": {"group_by": ["g"], "aggregations": [
             {"output_column": "n", "formula": "count"}]},
     })

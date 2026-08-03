@@ -47,8 +47,8 @@ def _load_quotes_stage(root):
             "connector": {"kind": "file",
                           "params": {"path": str(csv_path), "format": "csv"}},
             "output_schema": {
-                "columns": [{"name": "id", "type": "str"},
-                            {"name": "quote", "type": "str"}],
+                "columns": [{"name": "id", "type": "str", "nullable": True},
+                            {"name": "quote", "type": "str", "nullable": True}],
                 "primary_key": ["id"]}}
 
 
@@ -58,13 +58,13 @@ def _load_quotes_stage(root):
 # (app/models/stage.py: Stage._schemas_declared), and the runtime PROJECTS the
 # stage's output onto exactly those columns.
 _REVIEW_COLUMNS = [
-    {"name": "ai_score", "type": "float"},
-    {"name": "human_score", "type": "float"},
-    {"name": "final_score", "type": "float"},
-    {"name": "review_notes", "type": "str"},
-    {"name": "reviewer_id", "type": "str"},
-    {"name": "reviewed_at", "type": "str"},
-    {"name": "decision", "type": "str"},
+    {"name": "ai_score", "type": "float", "nullable": True},
+    {"name": "human_score", "type": "float", "nullable": True},
+    {"name": "final_score", "type": "float", "nullable": True},
+    {"name": "review_notes", "type": "str", "nullable": True},
+    {"name": "reviewer_id", "type": "str", "nullable": True},
+    {"name": "reviewed_at", "type": "str", "nullable": True},
+    {"name": "decision", "type": "str", "nullable": True},
 ]
 
 
@@ -76,10 +76,10 @@ def _score_stage():
     prompt sent."""
     return {"id": "score", "name": "Score quotes", "type": "llm_transform",
             "inputs": [{"id": "load", "schema": {
-                "columns": [{"name": "id", "type": "str"}, {"name": "quote", "type": "str"}],
+                "columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "quote", "type": "str", "nullable": True}],
                 "primary_key": ["id"]}}],
             "output_schema": {
-                "columns": [{"name": "id", "type": "str"}, {"name": "quote", "type": "str"},
+                "columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "quote", "type": "str", "nullable": True},
                             {"name": "score", "type": "int", "nullable": False}],
                 "primary_key": ["id"]},
             "llm": {"prompt_instructions": "Score each quote for tone.",
@@ -91,12 +91,12 @@ def _review_stage():
     so the run halts and snapshots both rows."""
     return {"id": "review", "name": "Review scores", "type": "human_review_queue",
             "inputs": [{"id": "score", "schema": {
-                "columns": [{"name": "id", "type": "str"}, {"name": "quote", "type": "str"},
-                            {"name": "score", "type": "int"}],
+                "columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "quote", "type": "str", "nullable": True},
+                            {"name": "score", "type": "int", "nullable": True}],
                 "primary_key": ["id"]}}],
             "output_schema": {
-                "columns": [{"name": "id", "type": "str"}, {"name": "quote", "type": "str"},
-                            {"name": "score", "type": "int"}] + _REVIEW_COLUMNS,
+                "columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "quote", "type": "str", "nullable": True},
+                            {"name": "score", "type": "int", "nullable": True}] + _REVIEW_COLUMNS,
                 "primary_key": ["id"]},
             "queue": {}}
 
@@ -308,18 +308,18 @@ def _e2e_load_stage(root):
     return {"id": "load", "name": "Load items", "type": "input_data",
             "connector": {"kind": "file", "params": {"path": str(csv_path), "format": "csv"}},
             "output_schema": {
-                "columns": [{"name": "id", "type": "str"}, {"name": "score", "type": "int"}],
+                "columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "score", "type": "int", "nullable": True}],
                 "primary_key": ["id"]}}
 
 
 def _e2e_review_stage():
     return {"id": "review", "name": "Review items", "type": "human_review_queue",
             "inputs": [{"id": "load", "schema": {
-                "columns": [{"name": "id", "type": "str"}, {"name": "score", "type": "int"}],
+                "columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "score", "type": "int", "nullable": True}],
                 "primary_key": ["id"]}}],
             "output_schema": {
-                "columns": [{"name": "id", "type": "str"},
-                            {"name": "score", "type": "int"}] + _REVIEW_COLUMNS,
+                "columns": [{"name": "id", "type": "str", "nullable": True},
+                            {"name": "score", "type": "int", "nullable": True}] + _REVIEW_COLUMNS,
                 "primary_key": ["id"]},
             "queue": {}}
 

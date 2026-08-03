@@ -22,10 +22,10 @@ from conftest import pinned_stages
 
 _ROWS = [{"name": "a", "val": 1}, {"name": "b", "val": 2}, {"name": "c", "val": 3}]
 
-_LOADED = [{"name": "name", "type": "str"}, {"name": "val", "type": "int"}]
-_CLEANED = [*_LOADED, {"name": "doubled", "type": "int"}]
-_FLAGGED = [*_CLEANED, {"name": "big", "type": "bool"}]
-_TOTALLED = [*_FLAGGED, {"name": "total", "type": "int"}]
+_LOADED = [{"name": "name", "type": "str", "nullable": True}, {"name": "val", "type": "int", "nullable": True}]
+_CLEANED = [*_LOADED, {"name": "doubled", "type": "int", "nullable": True}]
+_FLAGGED = [*_CLEANED, {"name": "big", "type": "bool", "nullable": True}]
+_TOTALLED = [*_FLAGGED, {"name": "total", "type": "int", "nullable": True}]
 
 # One fully-computing run's probe tally over `_ROWS`: a row-mapped stage's body
 # runs once per row, a frame-shaped stage's once for the whole frame.
