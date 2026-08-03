@@ -27,11 +27,11 @@ LOAD_ID = "load"
 CLASSIFY_ID = "classify"
 KEEP_ID = "keep"
 
-_LOAD_SCHEMA = {"columns": [{"name": "name", "type": "str"},
-                            {"name": "val", "type": "int"}]}
-_CLASSIFY_SCHEMA = {"columns": [{"name": "name", "type": "str"},
-                                {"name": "val", "type": "int"},
-                                {"name": "label", "type": "str"}]}
+_LOAD_SCHEMA = {"columns": [{"name": "name", "type": "str", "nullable": True},
+                            {"name": "val", "type": "int", "nullable": True}]}
+_CLASSIFY_SCHEMA = {"columns": [{"name": "name", "type": "str", "nullable": True},
+                                {"name": "val", "type": "int", "nullable": True},
+                                {"name": "label", "type": "str", "nullable": True}]}
 
 # Uppercases `name` where val > 1 (a changed cell) and adds `label` (an added
 # column), so the classify diff has one of each to show.

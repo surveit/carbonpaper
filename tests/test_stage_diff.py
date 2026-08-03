@@ -24,8 +24,11 @@ from app.web.stage_diff import (
 LOAD_ID = "load"
 _LOAD_PATH = f"outputs/{LOAD_ID}.parquet"
 
-_IN_COLUMNS = [{"name": "name", "type": "str"}, {"name": "val", "type": "int"}]
-_OUT_COLUMNS = _IN_COLUMNS + [{"name": "label", "type": "str"}]
+_IN_COLUMNS = [
+    {"name": "name", "type": "str", "nullable": True},
+    {"name": "val", "type": "int", "nullable": True},
+]
+_OUT_COLUMNS = _IN_COLUMNS + [{"name": "label", "type": "str", "nullable": True}]
 
 
 def _row_stage(output_columns: list[dict] | None = None) -> Stage:
@@ -116,7 +119,7 @@ def test_a_column_the_stage_dropped_is_named(tmp_path: Path) -> None:
     _write_output(tmp_path, LOAD_ID, pd.DataFrame({"name": ["a"], "val": [1]}))
     out_rel = _write_output(tmp_path, "classify", pd.DataFrame({"name": ["a"]}))
 
-    diff = _diff(tmp_path, _row_stage([{"name": "name", "type": "str"}]), out_rel)
+    diff = _diff(tmp_path, _row_stage([{"name": "name", "type": "str", "nullable": True}]), out_rel)
 
     assert diff is not None
     assert diff.removed_column_names == ["val"]
