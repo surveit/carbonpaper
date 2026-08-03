@@ -24,14 +24,14 @@ from conftest import pinned_stages, resumed_stages
 
 # The three frame shapes this file's DAGs carry. Declared once so an upstream's
 # output_schema and its downstream's input `schema` cannot drift apart.
-_ID_VAL_SCHEMA = {"columns": [{"name": "id", "type": "str"},
-                              {"name": "val", "type": "int"}],
+_ID_VAL_SCHEMA = {"columns": [{"name": "id", "type": "str", "nullable": True},
+                              {"name": "val", "type": "int", "nullable": True}],
                   "primary_key": ["id"]}
-_ID_TEXT_SCHEMA = {"columns": [{"name": "id", "type": "str"},
-                               {"name": "text", "type": "str"}],
+_ID_TEXT_SCHEMA = {"columns": [{"name": "id", "type": "str", "nullable": True},
+                               {"name": "text", "type": "str", "nullable": True}],
                    "primary_key": ["id"]}
-_SCORED_SCHEMA = {"columns": [{"name": "id", "type": "str"},
-                              {"name": "text", "type": "str"},
+_SCORED_SCHEMA = {"columns": [{"name": "id", "type": "str", "nullable": True},
+                              {"name": "text", "type": "str", "nullable": True},
                               {"name": "score", "type": "int", "nullable": False}],
                   "primary_key": ["id"]}
 

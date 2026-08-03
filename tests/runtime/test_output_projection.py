@@ -19,11 +19,11 @@ def _rating_stage() -> Stage:
     from every column name so a message can be checked for both."""
     return parse_stage({
         "id": "rate", "name": "Rate", "type": "python_row_function",
-        "inputs": [{"id": "load", "schema": {"columns": [{"name": "id", "type": "str"}]}}],
+        "inputs": [{"id": "load", "schema": {"columns": [{"name": "id", "type": "str", "nullable": True}]}}],
         "output_schema": {"columns": [
-            {"name": "id", "type": "str"},
-            {"name": "score", "type": "int"},
-            {"name": "verdict", "type": "str"},
+            {"name": "id", "type": "str", "nullable": True},
+            {"name": "score", "type": "int", "nullable": True},
+            {"name": "verdict", "type": "str", "nullable": True},
         ]},
         "function": {"kind": "inline", "code": "def transform(row): return row"},
     })
@@ -60,8 +60,8 @@ def test_human_review_queue_output_missing_a_declared_column_raises(tmp_path):
             {"name": "claim_id", "type": "str", "nullable": False}]}}],
         "output_schema": {"columns": [
             {"name": "claim_id", "type": "str", "nullable": False},
-            {"name": "decision", "type": "str"},
-            {"name": "reviewer_note", "type": "str"},   # no row outcome produces this
+            {"name": "decision", "type": "str", "nullable": True},
+            {"name": "reviewer_note", "type": "str", "nullable": True},   # no row outcome produces this
         ]},
         "queue": {"filter": None},
     })

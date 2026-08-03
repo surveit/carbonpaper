@@ -17,13 +17,13 @@ def _load_stage(demo):
         "id": "load", "type": "input_data", "name": "Load rows",
         "connector": {"kind": "file",
                       "params": {"path": str(demo / "data" / "rows.csv"), "format": "csv"}},
-        "output_schema": {"columns": [{"name": "doc_id", "type": "str"},
-                                      {"name": "score", "type": "int"}]},
+        "output_schema": {"columns": [{"name": "doc_id", "type": "str", "nullable": True},
+                                      {"name": "score", "type": "int", "nullable": True}]},
     }
 
 
-_LOAD_SCHEMA = {"columns": [{"name": "doc_id", "type": "str"},
-                            {"name": "score", "type": "int"}]}
+_LOAD_SCHEMA = {"columns": [{"name": "doc_id", "type": "str", "nullable": True},
+                            {"name": "score", "type": "int", "nullable": True}]}
 
 _CLASSIFY = {
     "id": "classify", "type": "python_row_function", "name": "Label by sign",
@@ -32,9 +32,9 @@ _CLASSIFY = {
                  "def transform(row):\n"
                  "    return {'doc_id': row['doc_id'], 'score': row['score'],\n"
                  "            'label': 'pos' if row['score'] >= 0 else 'neg'}"},
-    "output_schema": {"columns": [{"name": "doc_id", "type": "str"},
-                                  {"name": "score", "type": "int"},
-                                  {"name": "label", "type": "str"}]},
+    "output_schema": {"columns": [{"name": "doc_id", "type": "str", "nullable": True},
+                                  {"name": "score", "type": "int", "nullable": True},
+                                  {"name": "label", "type": "str", "nullable": True}]},
 }
 
 _BOOM = {
@@ -42,8 +42,8 @@ _BOOM = {
     "inputs": [{"id": "load", "schema": _LOAD_SCHEMA}],
     "function": {"kind": "inline", "code":
                  "def transform(row):\n    raise ValueError('boom')"},
-    "output_schema": {"columns": [{"name": "doc_id", "type": "str"},
-                                  {"name": "score", "type": "int"}]},
+    "output_schema": {"columns": [{"name": "doc_id", "type": "str", "nullable": True},
+                                  {"name": "score", "type": "int", "nullable": True}]},
 }
 
 _CLASSIFY_SCHEMA = _CLASSIFY["output_schema"]
@@ -61,8 +61,8 @@ _PUBLISH = {
 }
 
 # A human_review_queue whose hash resolves off the upstream primary_key.
-_LOAD_PK_SCHEMA = {"columns": [{"name": "doc_id", "type": "str"},
-                               {"name": "score", "type": "int"}],
+_LOAD_PK_SCHEMA = {"columns": [{"name": "doc_id", "type": "str", "nullable": True},
+                               {"name": "score", "type": "int", "nullable": True}],
                    "primary_key": ["doc_id"]}
 _QUEUE = {
     "id": "review", "type": "human_review_queue", "name": "Review rows",

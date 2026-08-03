@@ -19,7 +19,7 @@ from conftest import make_run_context, pinned_stages
 # its output_schema (app/models/stage.py: Stage._schemas_declared). The stages
 # these two helpers build are only ever bound/preflighted, never executed, so the
 # schema names the single column of the csv the file-writing tests here create.
-_X_SCHEMA = {"columns": [{"name": "x", "type": "int"}]}
+_X_SCHEMA = {"columns": [{"name": "x", "type": "int", "nullable": True}]}
 
 
 def _input_stage(stage_id: str, path: str | None) -> Stage:
@@ -132,8 +132,8 @@ def test_connectorless_stage_has_no_preflight(tmp_path):
 
 # ── prepare_run integration ─────────────────────────────────────────────────
 
-_ROWS_SCHEMA = {"columns": [{"name": "name", "type": "str"},
-                            {"name": "val", "type": "int"}]}
+_ROWS_SCHEMA = {"columns": [{"name": "name", "type": "str", "nullable": True},
+                            {"name": "val", "type": "int", "nullable": True}]}
 
 
 def _make_bound_project(root, filename="a.csv"):

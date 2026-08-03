@@ -7,7 +7,7 @@ from pydantic import ValidationError
 from app import models as m
 from app.models import parse_stage
 
-_K = {"columns": [{"name": "k"}]}
+_K = {"columns": [{"name": "k", "type": "str", "nullable": True}]}
 
 
 def S(**kw):
@@ -63,10 +63,10 @@ def test_workflow_cycle():
 # Each RETURNS its issues (all of them) rather than raising on the first.
 def test_validate_inputs_resolve_reports_all_dangling():
     s = parse_stage(S(id="b", type="enrich",
-                               inputs=[_in("ghost1", {"columns": [{"name": "x"}]}),
-                                       _in("ghost2", {"columns": [{"name": "y"}]})],
+                               inputs=[_in("ghost1", {"columns": [{"name": "x", "type": "str", "nullable": True}]}),
+                                       _in("ghost2", {"columns": [{"name": "y", "type": "str", "nullable": True}]})],
                                join={"keys": [{"left": "x", "right": "y"}]},
-                               output_schema={"columns": [{"name": "x"}, {"name": "y"}]}))
+                               output_schema={"columns": [{"name": "x", "type": "str", "nullable": True}, {"name": "y", "type": "str", "nullable": True}]}))
     issues = m.validate_inputs_resolve([s])
     assert len(issues) == 2  # both dangling inputs, not just the first
     assert all("references no stage" in i for i in issues)
@@ -101,10 +101,10 @@ def test_validate_workflow_clean_is_empty(tmp_path):
 
 def test_validate_workflow_reports_issues():
     s = parse_stage(S(id="j", type="enrich",
-                               inputs=[_in("a", {"columns": [{"name": "x"}]}),
-                                       _in("b", {"columns": [{"name": "y"}]})],
+                               inputs=[_in("a", {"columns": [{"name": "x", "type": "str", "nullable": True}]}),
+                                       _in("b", {"columns": [{"name": "y", "type": "str", "nullable": True}]})],
                                join={"keys": [{"left": "x", "right": "y"}]},
-                               output_schema={"columns": [{"name": "x"}, {"name": "y"}]}))
+                               output_schema={"columns": [{"name": "x", "type": "str", "nullable": True}, {"name": "y", "type": "str", "nullable": True}]}))
     issues = m.validate_workflow([s])
     assert issues  # both inputs dangle — reported, not raised
 
@@ -117,13 +117,13 @@ def _llm_1to1_dict(**over):
     base = dict(
         id="score", type="llm_transform", inputs=[{
             "id": "load",
-            "schema": {"columns": [{"name": "id", "type": "str"},
-                                   {"name": "text", "type": "str"}],
+            "schema": {"columns": [{"name": "id", "type": "str", "nullable": True},
+                                   {"name": "text", "type": "str", "nullable": True}],
                        "primary_key": ["id"]},
         }],
-        output_schema={"columns": [{"name": "id", "type": "str"},
-                                   {"name": "text", "type": "str"},
-                                   {"name": "score", "type": "int"}],
+        output_schema={"columns": [{"name": "id", "type": "str", "nullable": True},
+                                   {"name": "text", "type": "str", "nullable": True},
+                                   {"name": "score", "type": "int", "nullable": True}],
                        "primary_key": ["id"]},
         llm={"prompt_template": "score {text}"},
     )
@@ -138,37 +138,37 @@ def test_llm_transform_valid_1to1_constructs():
 def test_llm_transform_pk_mismatch_rejected():
     with pytest.raises(ValidationError, match="primary_key"):
         parse_stage(_llm_1to1_dict(output_schema={
-            "columns": [{"name": "id", "type": "str"}, {"name": "text", "type": "str"},
-                        {"name": "score", "type": "int"}],
+            "columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "text", "type": "str", "nullable": True},
+                        {"name": "score", "type": "int", "nullable": True}],
             "primary_key": ["text"]}))
 
 
 def test_llm_transform_drops_input_column_rejected():
     with pytest.raises(ValidationError, match="text"):
         parse_stage(_llm_1to1_dict(output_schema={
-            "columns": [{"name": "id", "type": "str"}, {"name": "score", "type": "int"}],
+            "columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "score", "type": "int", "nullable": True}],
             "primary_key": ["id"]}))  # dropped `text`
 
 
 def test_llm_transform_modifies_column_schema_rejected():
     with pytest.raises(ValidationError, match="text"):
         parse_stage(_llm_1to1_dict(output_schema={
-            "columns": [{"name": "id", "type": "str"}, {"name": "text", "type": "int"},
-                        {"name": "score", "type": "int"}],
+            "columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "text", "type": "int", "nullable": True},
+                        {"name": "score", "type": "int", "nullable": True}],
             "primary_key": ["id"]}))  # `text` str -> int
 
 
 def test_llm_transform_adds_nothing_rejected():
     with pytest.raises(ValidationError, match="adds no columns"):
         parse_stage(_llm_1to1_dict(output_schema={
-            "columns": [{"name": "id", "type": "str"}, {"name": "text", "type": "str"}],
+            "columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "text", "type": "str", "nullable": True}],
             "primary_key": ["id"]}))  # adds no new column
 
 
 def test_parse_workflow_rejects_ineligible_llm_transform():
     """The load seam (parse_workflow → Stage construction) rejects a non-1:1 stage."""
     bad = _llm_1to1_dict(output_schema={
-        "columns": [{"name": "id", "type": "str"}, {"name": "text", "type": "str"}],
+        "columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "text", "type": "str", "nullable": True}],
         "primary_key": ["id"]})
     with pytest.raises(ValidationError, match="adds no columns"):
         m.parse_workflow([bad])
@@ -183,9 +183,9 @@ def _producer(**over):
     base = dict(
         id="up", type="input_data",
         connector={"kind": "file"},
-        output_schema={"columns": [{"name": "id", "type": "str"},
-                                   {"name": "text", "type": "str"},
-                                   {"name": "score", "type": "int"}]},
+        output_schema={"columns": [{"name": "id", "type": "str", "nullable": True},
+                                   {"name": "text", "type": "str", "nullable": True},
+                                   {"name": "score", "type": "int", "nullable": True}]},
     )
     base.update(over)
     return S(**base)
@@ -207,9 +207,9 @@ def _consumer(input_schema, **over):
 def test_check_edge_schemas_clean_when_input_is_exact_copy():
     stages = m.parse_workflow([
         _producer(),
-        _consumer({"columns": [{"name": "id", "type": "str"},
-                               {"name": "text", "type": "str"},
-                               {"name": "score", "type": "int"}]}),
+        _consumer({"columns": [{"name": "id", "type": "str", "nullable": True},
+                               {"name": "text", "type": "str", "nullable": True},
+                               {"name": "score", "type": "int", "nullable": True}]}),
     ]).stages
     assert m.validate_edge_schemas(stages) == []
 
@@ -219,7 +219,7 @@ def test_check_edge_schemas_clean_when_input_is_a_projection():
     # not identity) — `down` needs just `score`, `up` produces it.
     stages = m.parse_workflow([
         _producer(),
-        _consumer({"columns": [{"name": "score", "type": "int"}]}),
+        _consumer({"columns": [{"name": "score", "type": "int", "nullable": True}]}),
     ]).stages
     assert m.validate_edge_schemas(stages) == []
 
@@ -228,7 +228,7 @@ def test_check_edge_schemas_flags_phantom_column():
     # `down` requires `quote`, which `up` does not produce — the #36 phantom.
     stages = [
         parse_stage(_producer()),
-        parse_stage(_consumer({"columns": [{"name": "quote", "type": "str"}]})),
+        parse_stage(_consumer({"columns": [{"name": "quote", "type": "str", "nullable": True}]})),
     ]
     issues = m.validate_edge_schemas(stages)
     assert len(issues) == 1
@@ -240,7 +240,7 @@ def test_check_edge_schemas_clean_when_producer_non_null_feeds_nullable_requirem
     # input schema requires it only as nullable — a compatible (safe) edge.
     stages = m.parse_workflow([
         _producer(output_schema={"columns": [
-            {"name": "id", "type": "str"},
+            {"name": "id", "type": "str", "nullable": True},
             {"name": "score", "type": "int", "nullable": False}]}),
         _consumer({"columns": [{"name": "score", "type": "int", "nullable": True}]}),
     ]).stages
@@ -250,7 +250,7 @@ def test_check_edge_schemas_clean_when_producer_non_null_feeds_nullable_requirem
 def test_check_edge_schemas_flags_required_non_null_fed_by_nullable_producer():
     stages = [
         parse_stage(_producer(output_schema={"columns": [
-            {"name": "id", "type": "str"},
+            {"name": "id", "type": "str", "nullable": True},
             {"name": "score", "type": "int", "nullable": True}]})),
         parse_stage(_consumer(
             {"columns": [{"name": "score", "type": "int", "nullable": False}]})),
@@ -263,7 +263,7 @@ def test_check_edge_schemas_flags_required_non_null_fed_by_nullable_producer():
 def test_check_edge_schemas_flags_type_disagreement():
     stages = [
         parse_stage(_producer()),
-        parse_stage(_consumer({"columns": [{"name": "score", "type": "str"}]})),
+        parse_stage(_consumer({"columns": [{"name": "score", "type": "str", "nullable": True}]})),
     ]
     issues = m.validate_edge_schemas(stages)
     assert len(issues) == 1
@@ -277,14 +277,14 @@ def _publish_upstream_stages():
         parse_stage(_producer()),
         parse_stage(
             S(id="pub", type="publish",
-              inputs=[{"id": "up", "schema": {"columns": [{"name": "id", "type": "str"}]}}],
+              inputs=[{"id": "up", "schema": {"columns": [{"name": "id", "type": "str", "nullable": True}]}}],
               publish={"format": "json"},
               function={"kind": "inline",
                         "code": "def transform(df, output_dir): return df"})),
         parse_stage(
-            _consumer({"columns": [{"name": "anything", "type": "str"}]}, id="down",
+            _consumer({"columns": [{"name": "anything", "type": "str", "nullable": True}]}, id="down",
                       inputs=[{"id": "pub",
-                               "schema": {"columns": [{"name": "anything", "type": "str"}]}}])),
+                               "schema": {"columns": [{"name": "anything", "type": "str", "nullable": True}]}}])),
     ]
 
 
@@ -308,7 +308,7 @@ def test_check_edge_schemas_raises_on_an_input_naming_no_stage():
     """A dangling input is a programming error here, not a finding: callers run
     validate_inputs_resolve first (graph_issues does), so reaching this means
     stage validation was bypassed."""
-    stages = [parse_stage(_consumer({"columns": [{"name": "id", "type": "str"}]}))]
+    stages = [parse_stage(_consumer({"columns": [{"name": "id", "type": "str", "nullable": True}]}))]
     with pytest.raises(ValueError, match="references no stage"):
         m.validate_edge_schemas(stages)
 
@@ -317,7 +317,7 @@ def test_graph_issues_reports_a_dangling_input_instead_of_raising():
     """graph_issues short-circuits before validate_edge_schemas when an input
     dangles, so an invalid-but-reportable workflow still comes back as issues."""
     issues = m.validate_workflow(
-        [parse_stage(_consumer({"columns": [{"name": "id", "type": "str"}]}))])
+        [parse_stage(_consumer({"columns": [{"name": "id", "type": "str", "nullable": True}]}))])
     assert issues == ["`down`: input `up` references no stage"]
 
 
@@ -332,8 +332,8 @@ def _publish(stage_id="pub", inputs=("load",)):
              function={"kind": "inline", "code": "def transform(df, output_dir): return df"})
 
 
-_X = {"columns": [{"name": "x"}]}
-_Y = {"columns": [{"name": "y"}]}
+_X = {"columns": [{"name": "x", "type": "str", "nullable": True}]}
+_Y = {"columns": [{"name": "y", "type": "str", "nullable": True}]}
 
 
 def _reader(stage_id, upstream):
@@ -360,7 +360,7 @@ def test_validate_publish_is_terminal_reports_every_offending_edge():
         _reader("down_a", "pub_a"), _reader("down_b", "pub_b"),
         S(id="down_c", type="enrich", inputs=[_in("pub_a", _X), _in("pub_b", _Y)],
           join={"keys": [{"left": "x", "right": "y"}]},
-          output_schema={"columns": [{"name": "x"}, {"name": "y"}]}),
+          output_schema={"columns": [{"name": "x", "type": "str", "nullable": True}, {"name": "y", "type": "str", "nullable": True}]}),
     )]
     issues = m.validate_publish_is_terminal(stages)
     assert len(issues) == 4  # every offending edge in one pass, not just the first
@@ -393,7 +393,7 @@ def test_parse_workflow_rejects_nonconformant_edge():
     with pytest.raises(ValidationError, match="quote"):
         m.parse_workflow([
             _producer(),
-            _consumer({"columns": [{"name": "quote", "type": "str"}]}),
+            _consumer({"columns": [{"name": "quote", "type": "str", "nullable": True}]}),
         ])
 
 

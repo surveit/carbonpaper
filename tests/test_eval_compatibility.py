@@ -18,7 +18,7 @@ def _file_input(id_, tmp_path, cols=("k",)):
     return m.parse_stage(S(
         id=id_, type="input_data",
         connector={"kind": "file", "params": {"path": str(tmp_path / f"{id_}.csv")}},
-        output_schema={"columns": [{"name": c} for c in cols]}))
+        output_schema={"columns": [{"name": c, "type": "str", "nullable": True} for c in cols]}))
 
 
 def _input_refs(inputs):
@@ -31,7 +31,7 @@ def _input_refs(inputs):
             refs.append({"id": upstream.id, "schema": upstream.output_schema})
         else:
             id_, cols = upstream
-            refs.append({"id": id_, "schema": {"columns": [{"name": c} for c in cols]}})
+            refs.append({"id": id_, "schema": {"columns": [{"name": c, "type": "str", "nullable": True} for c in cols]}})
     return refs
 
 
@@ -62,7 +62,7 @@ def _agg(id_, inputs, output_schema=None):
 
 def _ref(path="x.csv", cols=("k",)):
     return {"path": path, "format": "csv",
-            "table_schema": {"columns": [{"name": c} for c in cols]}}
+            "table_schema": {"columns": [{"name": c, "type": "str", "nullable": True} for c in cols]}}
 
 
 def _config(**over):
@@ -81,7 +81,7 @@ def _config(**over):
 def _stages(tmp_path):
     src = _file_input("src", tmp_path, cols=["k", "v", "quote"])
     tgt = _row("tgt", [src], output_schema={
-        "columns": [{"name": "k"}, {"name": "score", "type": "float"}]})
+        "columns": [{"name": "k", "type": "str", "nullable": True}, {"name": "score", "type": "float", "nullable": True}]})
     return [src, tgt]
 
 
@@ -128,7 +128,7 @@ def test_override_stage_has_no_output_schema(tmp_path):
         publish={"format": "json"},
         function={"kind": "inline", "code": "def transform(df, output_dir): return df"}))
     tgt = _row("tgt", [src], output_schema={
-        "columns": [{"name": "k"}, {"name": "score", "type": "float"}]})
+        "columns": [{"name": "k", "type": "str", "nullable": True}, {"name": "score", "type": "float", "nullable": True}]})
     report = validate_eval_compatibility(_config(override_stage="pub"), [src, pub, tgt])
     assert isinstance(report, CompatibilityReport)
     assert report.ok is False
@@ -140,7 +140,7 @@ def test_eval_dataset_table_missing_a_column_of_override_schema(tmp_path):
     # override's schema declares `extra_col`, which the eval-dataset table lacks.
     src = _file_input("src", tmp_path, cols=["k", "v", "quote", "extra_col"])
     tgt = _row("tgt", [src], output_schema={
-        "columns": [{"name": "k"}, {"name": "score", "type": "float"}]})
+        "columns": [{"name": "k", "type": "str", "nullable": True}, {"name": "score", "type": "float", "nullable": True}]})
     report = validate_eval_compatibility(_config(), [src, tgt])
     assert report.ok is False
     assert any("extra_col" in p for p in report.problems)
@@ -151,16 +151,16 @@ def test_dataset_schema_types_shared_column_differently(tmp_path):
         id="src", type="input_data",
         connector={"kind": "file", "params": {"path": str(tmp_path / "src.csv")}},
         output_schema={"columns": [
-            {"name": "k"}, {"name": "v", "type": "int"}, {"name": "quote"}]}))
+            {"name": "k", "type": "str", "nullable": True}, {"name": "v", "type": "int", "nullable": True}, {"name": "quote", "type": "str", "nullable": True}]}))
     tgt = _row("tgt", [src], output_schema={
-        "columns": [{"name": "k"}, {"name": "score", "type": "float"}]})
+        "columns": [{"name": "k", "type": "str", "nullable": True}, {"name": "score", "type": "float", "nullable": True}]})
     config = _config(table=_ref(cols=["k", "quote", "expected_score"]))
     # override table_schema types `v` as str (default) but stage declares int.
     config = config.model_copy(update={"table": m.TableRef.model_validate({
         "path": "x.csv", "format": "csv",
         "table_schema": {"columns": [
-            {"name": "k"}, {"name": "v", "type": "str"}, {"name": "quote"},
-            {"name": "expected_score"}]}})})
+            {"name": "k", "type": "str", "nullable": True}, {"name": "v", "type": "str", "nullable": True}, {"name": "quote", "type": "str", "nullable": True},
+            {"name": "expected_score", "type": "str", "nullable": True}]}})})
     report = validate_eval_compatibility(config, [src, tgt])
     assert report.ok is False
     assert any("v" in p for p in report.problems)
@@ -169,7 +169,7 @@ def test_dataset_schema_types_shared_column_differently(tmp_path):
 def test_reference_override_missing_a_column_of_its_stage_schema(tmp_path):
     src = _file_input("src", tmp_path, cols=["k", "v", "quote"])
     tgt = _row("tgt", [src], output_schema={
-        "columns": [{"name": "k"}, {"name": "score", "type": "float"}]})
+        "columns": [{"name": "k", "type": "str", "nullable": True}, {"name": "score", "type": "float", "nullable": True}]})
     ref_stage = _file_input("ref_stage", tmp_path, cols=["k", "extra"])
     config = _config(reference_overrides=[
         {"stage_id": "ref_stage", "table": _ref(cols=["k"])}])
@@ -194,7 +194,7 @@ def test_expected_output_column_not_in_target_schema(tmp_path):
 def test_abs_tol_metric_on_str_typed_target_column(tmp_path):
     src = _file_input("src", tmp_path, cols=["k", "v", "quote"])
     tgt = _row("tgt", [src], output_schema={
-        "columns": [{"name": "k"}, {"name": "score", "type": "str"}]})
+        "columns": [{"name": "k", "type": "str", "nullable": True}, {"name": "score", "type": "str", "nullable": True}]})
     config = _config()
     report = validate_eval_compatibility(config, [src, tgt])
     assert report.ok is False
@@ -204,9 +204,9 @@ def test_abs_tol_metric_on_str_typed_target_column(tmp_path):
 def test_grain_blocking_stage_without_code_scorer(tmp_path):
     src = _file_input("src", tmp_path, cols=["k", "v", "quote"])
     agg = _agg("agg", [src], output_schema={
-        "columns": [{"name": "k"}, {"name": "t"}]})
+        "columns": [{"name": "k", "type": "str", "nullable": True}, {"name": "t", "type": "str", "nullable": True}]})
     tgt = _row("tgt", [agg], output_schema={
-        "columns": [{"name": "k"}, {"name": "score", "type": "float"}]})
+        "columns": [{"name": "k", "type": "str", "nullable": True}, {"name": "score", "type": "float", "nullable": True}]})
     report = validate_eval_compatibility(_config(), [src, agg, tgt])
     assert report.ok is False
     assert any("agg" in p for p in report.problems)
@@ -215,9 +215,9 @@ def test_grain_blocking_stage_without_code_scorer(tmp_path):
 def test_grain_blocking_stage_with_code_scorer_is_not_a_problem(tmp_path):
     src = _file_input("src", tmp_path, cols=["k", "v", "quote"])
     agg = _agg("agg", [src], output_schema={
-        "columns": [{"name": "k"}, {"name": "t"}]})
+        "columns": [{"name": "k", "type": "str", "nullable": True}, {"name": "t", "type": "str", "nullable": True}]})
     tgt = _row("tgt", [agg], output_schema={
-        "columns": [{"name": "k"}, {"name": "score", "type": "float"}]})
+        "columns": [{"name": "k", "type": "str", "nullable": True}, {"name": "score", "type": "float", "nullable": True}]})
     config = _config(code={"module": "evals.mod", "function": "score"})
     report = validate_eval_compatibility(config, [src, agg, tgt])
     assert report.ok is True
@@ -239,9 +239,9 @@ def test_stages_list_has_a_structural_problem(tmp_path):
     # Workflow.model_validate uncaught — it should surface as a problem string.
     src = _file_input("src", tmp_path, cols=["k", "v", "quote"])
     tgt = _row("tgt", [src], output_schema={
-        "columns": [{"name": "k"}, {"name": "score", "type": "float"}]})
+        "columns": [{"name": "k", "type": "str", "nullable": True}, {"name": "score", "type": "float", "nullable": True}]})
     dangling = _row("dangling", [("missing_input", ["k"])],
-                    output_schema={"columns": [{"name": "k"}]})
+                    output_schema={"columns": [{"name": "k", "type": "str", "nullable": True}]})
     report = validate_eval_compatibility(_config(), [src, tgt, dangling])
     assert report.ok is False
     assert any("structural problems" in p for p in report.problems)
@@ -253,9 +253,9 @@ def test_target_not_reachable_from_override_is_broken(tmp_path):
     # target is "b", neither downstream of the other.
     src = _file_input("src", tmp_path, cols=["k", "v", "quote"])
     branch_a = _row("a", [src], output_schema={
-        "columns": [{"name": "k"}, {"name": "score", "type": "float"}]})
+        "columns": [{"name": "k", "type": "str", "nullable": True}, {"name": "score", "type": "float", "nullable": True}]})
     branch_b = _row("b", [src], output_schema={
-        "columns": [{"name": "k"}, {"name": "score", "type": "float"}]})
+        "columns": [{"name": "k", "type": "str", "nullable": True}, {"name": "score", "type": "float", "nullable": True}]})
     config = _config(override_stage="a", target_stage="b")
     report = validate_eval_compatibility(config, [src, branch_a, branch_b])
     assert report.ok is False
@@ -292,8 +292,8 @@ def test_coverage_check_rejects_bare_name_on_a_conflicting_column(tmp_path):
     # `override.v`, not a bare `v`.
     src = _file_input("src", tmp_path, cols=["k", "v", "quote"])
     tgt = _row("tgt", [src], output_schema={
-        "columns": [{"name": "k"}, {"name": "v", "type": "str"},
-                    {"name": "score", "type": "float"}]})
+        "columns": [{"name": "k", "type": "str", "nullable": True}, {"name": "v", "type": "str", "nullable": True},
+                    {"name": "score", "type": "float", "nullable": True}]})
     config = _config(
         expected_outputs=[{"output_column": "score", "metric": "abs_tol", "tolerance": 1},
                           {"output_column": "v", "metric": "exact"}],
@@ -306,8 +306,8 @@ def test_coverage_check_rejects_bare_name_on_a_conflicting_column(tmp_path):
 def test_coverage_check_accepts_conflict_aware_injected_name(tmp_path):
     src = _file_input("src", tmp_path, cols=["k", "v", "quote"])
     tgt = _row("tgt", [src], output_schema={
-        "columns": [{"name": "k"}, {"name": "v", "type": "str"},
-                    {"name": "score", "type": "float"}]})
+        "columns": [{"name": "k", "type": "str", "nullable": True}, {"name": "v", "type": "str", "nullable": True},
+                    {"name": "score", "type": "float", "nullable": True}]})
     config = _config(
         expected_outputs=[{"output_column": "score", "metric": "abs_tol", "tolerance": 1},
                           {"output_column": "v", "metric": "exact"}],
@@ -321,7 +321,7 @@ def test_coverage_check_accepts_conflict_aware_injected_name(tmp_path):
 def test_get_injected_columns_no_conflict_named_after_target(tmp_path):
     override = _file_input("src", tmp_path, cols=["k", "v"])
     target = _row("tgt", [override], output_schema={
-        "columns": [{"name": "k"}, {"name": "score", "type": "float"}]})
+        "columns": [{"name": "k", "type": "str", "nullable": True}, {"name": "score", "type": "float", "nullable": True}]})
     injected = get_injected_columns(override, target, ["score"])
     names = [c.name for c in injected]
     assert set(names) == {"k", "v"}
@@ -331,7 +331,7 @@ def test_get_injected_columns_no_conflict_named_after_target(tmp_path):
 def test_get_injected_columns_conflict_renames_override_side(tmp_path):
     override = _file_input("src", tmp_path, cols=["k", "score"])
     target = _row("tgt", [override], output_schema={
-        "columns": [{"name": "k"}, {"name": "score", "type": "float"}]})
+        "columns": [{"name": "k", "type": "str", "nullable": True}, {"name": "score", "type": "float", "nullable": True}]})
     injected = get_injected_columns(override, target, ["score"])
     names = [c.name for c in injected]
     assert set(names) == {"k", "override.score"}
@@ -341,7 +341,7 @@ def test_get_injected_columns_conflict_renames_override_side(tmp_path):
 def test_get_injected_columns_is_the_override_side_of_the_column_rule(tmp_path):
     override = _file_input("src", tmp_path, cols=["k", "score"])
     target = _row("tgt", [override], output_schema={
-        "columns": [{"name": "k"}, {"name": "score", "type": "float"}]})
+        "columns": [{"name": "k", "type": "str", "nullable": True}, {"name": "score", "type": "float", "nullable": True}]})
     injected = get_injected_columns(override, target, ["score"])
     assert {c.name for c in injected} == {"k", "override.score"}
 
@@ -358,6 +358,6 @@ def test_get_injected_columns_raises_for_checked_column_not_on_target(tmp_path):
     # (validate_eval_compatibility) must verify before calling in here -- it is
     # not silently skipped.
     override = _file_input("src", tmp_path, cols=["k"])
-    target = _row("tgt", [override], output_schema={"columns": [{"name": "k"}]})
+    target = _row("tgt", [override], output_schema={"columns": [{"name": "k", "type": "str", "nullable": True}]})
     with pytest.raises(ValueError, match="not_emitted"):
         get_injected_columns(override, target, ["not_emitted"])

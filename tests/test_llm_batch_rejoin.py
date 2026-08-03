@@ -17,10 +17,10 @@ def _stage(batch_size: int = 3, max_retries: int = 0) -> Stage:
     return parse_stage({
         "id": "process", "name": "Process", "type": "llm_transform",
         "inputs": [{"id": "load", "schema": {
-            "columns": [{"name": "post_id", "type": "str"}, {"name": "text", "type": "str"}],
+            "columns": [{"name": "post_id", "type": "str", "nullable": True}, {"name": "text", "type": "str", "nullable": True}],
             "primary_key": ["post_id"]}}],
         "output_schema": {"columns": [
-            {"name": "post_id", "type": "str"}, {"name": "text", "type": "str"},
+            {"name": "post_id", "type": "str", "nullable": True}, {"name": "text", "type": "str", "nullable": True},
             {"name": "label", "type": "str", "nullable": True}], "primary_key": ["post_id"]},
         # max_retries 0 → exactly one batched call, so the mock's reply is the
         # whole story (no retry masking a drop).
