@@ -141,6 +141,29 @@ def test_the_module_is_compiled_once_and_reused(monkeypatch):
     assert len(parse_calls) == parse_calls_after_compile
 
 
+def test_recursion_is_not_rejected_it_compiles_and_runs():
+    # Regression: the authoring guidance once claimed Starlark has no recursion,
+    # alongside `import`/`while`/`class`/`try-except` (which genuinely are rejected
+    # at parse time — see test_rejects_python_constructs_starlark_does_not_have in
+    # tests/test_starlark_stage_model.py). A self-terminating recursive function is
+    # accepted and runs to completion.
+    handle = _compiled(
+        "def fact(n):\n    if n <= 1:\n        return 1\n    return n * fact(n - 1)\n"
+        "def transform(row):\n    return {'r': fact(row['n'])}\n"
+    )
+    assert handle({"n": 5}) == {"r": 120}
+
+
+def test_unbounded_recursion_overflows_the_call_stack_not_a_refusal():
+    # What actually bounds recursion: not a parse-time rejection, a run-time
+    # call-stack limit. Pinned so "recursion cannot hang" rests on an observed
+    # failure mode, not on the (false) claim that recursion is rejected outright.
+    handle = _compiled("def transform(row):\n    return transform(row)\n")
+    with pytest.raises(starlark.StarlarkError) as err:
+        handle({})
+    assert "Starlark call stack overflow" in str(err.value)
+
+
 def test_the_error_rendering_the_refusal_contract_depends_on_is_unchanged():
     # Pins the exact starlark-pyo3 rendering the sentinel match relies on. If this
     # fails the binding changed its error format — re-derive the matcher in

@@ -81,6 +81,18 @@ def test_rejects_python_constructs_starlark_does_not_have(source):
         StarlarkFunction(code=source)
 
 
+def test_a_self_terminating_recursive_function_saves():
+    # Regression: recursion is NOT in the reject list above — a self-terminating
+    # recursive function must validate at save time, since it runs fine (see
+    # tests/runtime/test_starlark_code.py for the runtime-level pin, including
+    # the call-stack limit that bounds an UNbounded recursion instead).
+    source = (
+        "def fact(n):\n    if n <= 1:\n        return 1\n    return n * fact(n - 1)\n"
+        "def transform(row):\n    return {'r': fact(row['n'])}\n"
+    )
+    assert StarlarkFunction(code=source).code == source
+
+
 def test_stage_requires_exactly_one_input():
     with pytest.raises(ValidationError):
         _stage(inputs=[_INPUT, StageInput(id="load2", schema=_SCHEMA)])
