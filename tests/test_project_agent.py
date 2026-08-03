@@ -5,7 +5,7 @@ factory's output (stable, our own names). The engine wiring is covered by
 tests/test_project_chat_sdk.py."""
 from __future__ import annotations
 
-from app.agents.compiler.tools import EditingContext, make_editing_tools
+from app.tools.editing import EditingContext, make_editing_tools
 
 _EXPECTED_TOOL_NAMES = {
     "list_projects",

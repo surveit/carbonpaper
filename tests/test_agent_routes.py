@@ -14,7 +14,7 @@ from pydantic import BaseModel
 from app.web.chat_router import _store
 from app.core.agent import registry
 from app.core.agent.registry import AgentConfig, register
-from app.core.agent.tool_spec import BoundToolSpec
+from app.core.agent.bound_tool import BoundToolSpec
 from app.main import app
 
 client = TestClient(app)

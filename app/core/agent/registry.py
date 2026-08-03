@@ -10,7 +10,7 @@ from claude_agent_sdk import McpSdkServerConfig, SdkMcpTool, create_sdk_mcp_serv
 from pydantic import BaseModel, ConfigDict
 
 from app.core.agent.sdk_engine import MCP_SERVER_NAME, ClaudeAgentSdkEngine
-from app.core.agent.tool_spec import BoundToolSpec
+from app.core.agent.bound_tool import BoundToolSpec
 
 
 class AgentConfig(BaseModel):

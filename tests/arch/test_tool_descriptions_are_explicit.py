@@ -8,12 +8,12 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
-from app.agents.compiler.tools import TOOL_DESCRIPTIONS, TOOL_LABELS, TOOL_SCHEMAS
-from app.mcp.tool_specs import TOOL_SPECS
+from app.tools.editing import TOOL_LABELS, TOOL_SCHEMAS, _DESCRIPTIONS
+from app.tools.tool_specs import TOOL_SPECS
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _MCP_SERVER = _REPO_ROOT / "app/mcp/server.py"
-_EDITING_TOOLS = _REPO_ROOT / "app/agents/compiler/tools.py"
+_EDITING_TOOLS = _REPO_ROOT / "app/tools/editing.py"
 
 
 def find_mcp_tools(path: Path) -> list[tuple[str, ast.expr | None, str | None]]:
@@ -58,7 +58,7 @@ def test_every_mcp_tool_declares_its_description() -> None:
     assert not undeclared, (
         "an @mcp.tool without an explicit `description=` falls back to the function's "
         "docstring, making the model-facing prompt a side effect of how the function "
-        f"is documented — add an entry to app/mcp/tool_specs.py for: {undeclared}"
+        f"is documented — add an entry to app/services/tool_specs.py for: {undeclared}"
     )
 
 
@@ -66,13 +66,18 @@ def test_no_mcp_tool_carries_a_docstring() -> None:
     documented = [name for name, _, doc in find_mcp_tools(_MCP_SERVER) if doc is not None]
     assert not documented, (
         "a docstring on an MCP tool reads as the model-facing description even when it "
-        f"is not one — move it to app/mcp/tool_specs.py: {documented}"
+        f"is not one — move it to app/services/tool_specs.py: {documented}"
     )
 
 
 def test_mcp_descriptions_cover_exactly_the_registered_tools() -> None:
     registered = {name for name, _, _ in find_mcp_tools(_MCP_SERVER)}
-    assert set(TOOL_SPECS) == registered
+    # save_version is described per-surface (see app.tools.tool_specs); every other
+    # MCP tool reads the shared registry.
+    assert registered - set(TOOL_SPECS) == {"save_version"}
+    assert set(TOOL_SPECS) - registered <= {"get_current_project", "create_draft",
+                                            "read_draft", "set_draft_stage",
+                                            "remove_draft_stage"}
 
 
 def test_no_editing_tool_carries_a_docstring() -> None:
@@ -85,12 +90,12 @@ def test_no_editing_tool_carries_a_docstring() -> None:
 
 def test_editing_tool_registries_cover_exactly_the_tools() -> None:
     tools = set(find_editing_tool_names(_EDITING_TOOLS))
-    assert set(TOOL_DESCRIPTIONS) == tools
+    assert set(_DESCRIPTIONS) >= tools
     assert set(TOOL_SCHEMAS) == tools
     assert tools <= set(TOOL_LABELS)
 
 
 def test_every_description_is_non_empty() -> None:
     blank = [name for name, spec in TOOL_SPECS.items() if not spec.description.strip()]
-    blank += [name for name, text in TOOL_DESCRIPTIONS.items() if not text.strip()]
+    blank += [name for name, spec in _DESCRIPTIONS.items() if not spec.description.strip()]
     assert not blank

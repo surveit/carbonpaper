@@ -10,9 +10,11 @@ from typing import Annotated, Any, Callable
 
 from pydantic import BaseModel
 
-from app.core.agent.tool_spec import BoundToolSpec
+from app.core.agent.bound_tool import BoundToolSpec
+from app.models import StageDraft
 from app.models.review_guide import ReviewGuide
 from app.services import drafts, project as project_service
+from app.tools.tool_specs import SAVE_VERSION_FROM_DRAFT, TOOL_SPECS
 from app.services.drafts import DraftDetail, DraftEdit, DraftView, SaveResult
 
 
@@ -39,9 +41,8 @@ def make_editing_tools(ctx: EditingContext) -> list[BoundToolSpec]:
         result = project_service.edit_stage(project_id, stage_id, changes_json)
         return {"ok": result.ok, "issues": result.issues}
 
-    def add_stage(project_id: str, stage_json: str) -> dict[str, Any]:
-        result = project_service.add_stage(project_id, stage_json)
-        return {"ok": result.ok, "issues": result.issues}
+    def add_stage(project_id: str, stages: list[StageDraft]) -> dict[str, Any]:
+        return project_service.add_stages_reporting_drops(project_id, stages)
 
     def remove_stage(project_id: str, stage_id: str) -> dict[str, Any]:
         result = project_service.remove_stage(project_id, stage_id)
@@ -89,7 +90,7 @@ def make_editing_tools(ctx: EditingContext) -> list[BoundToolSpec]:
     return [
         BoundToolSpec(
             name=fn.__name__,
-            description=TOOL_DESCRIPTIONS[fn.__name__],
+            description=_DESCRIPTIONS[fn.__name__].description,
             fn=fn,
             input_schema=TOOL_SCHEMAS[fn.__name__],
             label=TOOL_LABELS[fn.__name__],
@@ -130,14 +131,13 @@ TOOL_SCHEMAS: dict[str, ToolInputSchema] = {
     },
     "add_stage": {
         "project_id": Annotated[str, "The project id (call get_current_project first)."],
-        "stage_json": Annotated[
-            str,
-            "The complete NEW stage as a JSON object (encoded as a string): id "
-            "(new and unique), name, type, the config block(s) its type requires "
-            "(connector / llm / function / ...; `publish` needs BOTH its `publish` "
-            "block and a `function` block), MANDATORY output_schema, and inputs each with a "
-            "MANDATORY `schema`. Every id in inputs "
-            "must already be a stage in this workflow, or it is rejected.",
+        "stages": Annotated[
+            list[StageDraft],
+            "The complete NEW stages: each with id (new and unique), name, type, the "
+            "config block(s) its type requires (connector / llm / function / ...; "
+            "`publish` needs BOTH its `publish` block and a `function` block), MANDATORY "
+            "output_schema, and inputs each with a MANDATORY `schema`. Every id in inputs "
+            "must already be a stage in this workflow or in this same call.",
         ],
     },
     "remove_stage": {
@@ -207,6 +207,12 @@ TOOL_SCHEMAS: dict[str, ToolInputSchema] = {
         ],
     },
 }
+
+
+# This agent's own view of the shared registry: every tool as described there,
+# except save_version — the agent freezes a DRAFT, the glassbox server snapshots the
+# working copy, so the two carry different prose under one name (see issue #357).
+_DESCRIPTIONS = TOOL_SPECS | {"save_version": SAVE_VERSION_FROM_DRAFT}
 
 
 # Present-tense labels shown in the chat while a tool runs (e.g. "Reading the

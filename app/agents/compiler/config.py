@@ -8,9 +8,9 @@ from __future__ import annotations
 from pydantic import BaseModel
 
 from app.agents.compiler.prompt import EDITING_SYSTEM_PROMPT
-from app.agents.compiler.tools import EditingContext, make_editing_tools
+from app.tools.editing import EditingContext, make_editing_tools
 from app.core.agent.registry import AgentConfig, register
-from app.core.agent.tool_spec import BoundToolSpec
+from app.core.agent.bound_tool import BoundToolSpec
 
 CONFIG = AgentConfig(
     system_prompt=EDITING_SYSTEM_PROMPT,
