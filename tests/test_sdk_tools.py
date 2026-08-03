@@ -241,7 +241,7 @@ def _seed_bound_input(examples: Path, tmp_path: Path, name: str, csv_text: str) 
     stage = {
         "id": "load", "name": "Load rows", "type": "input_data",
         "connector": {"kind": "file", "params": {"path": str(csv)}},
-        "output_schema": {"columns": [{"name": "status", "type": "str"}]},
+        "output_schema": {"columns": [{"name": "status", "type": "str", "nullable": True}]},
     }
     (compiled / "01_load.json").write_text(json.dumps(stage), encoding="utf-8")
 

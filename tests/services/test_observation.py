@@ -24,8 +24,8 @@ def _seed_project(root: Path, name: str, csv_path: Path | None) -> Path:
     stage = {
         "id": "load", "name": "Load rows", "type": "input_data",
         "connector": {"kind": "file", "params": params},
-        "output_schema": {"columns": [{"name": "status", "type": "str"},
-                                      {"name": "zip", "type": "str"}]},
+        "output_schema": {"columns": [{"name": "status", "type": "str", "nullable": True},
+                                      {"name": "zip", "type": "str", "nullable": True}]},
     }
     (compiled / "01_load.json").write_text(json.dumps(stage), encoding="utf-8")
     return root / name

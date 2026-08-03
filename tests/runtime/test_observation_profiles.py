@@ -82,8 +82,8 @@ def _input_stage(path: Path | None, columns: list[dict]):
 def test_profiles_the_bound_file_honouring_declared_types(tmp_path: Path) -> None:
     path = tmp_path / "in.csv"
     path.write_text("zip,status\n02134,filed\n90210,granted\n", encoding="utf-8")
-    stage = _input_stage(path, [{"name": "zip", "type": "str"},
-                                {"name": "status", "type": "str"}])
+    stage = _input_stage(path, [{"name": "zip", "type": "str", "nullable": True},
+                                {"name": "status", "type": "str", "nullable": True}])
     profile = profile_input_stage(stage)
     zip_col = profile.column_named("zip")
     assert zip_col is not None
@@ -92,13 +92,13 @@ def test_profiles_the_bound_file_honouring_declared_types(tmp_path: Path) -> Non
 
 
 def test_unbound_path_raises_rather_than_profiling_nothing(tmp_path: Path) -> None:
-    stage = _input_stage(None, [{"name": "a", "type": "str"}])
+    stage = _input_stage(None, [{"name": "a", "type": "str", "nullable": True}])
     with pytest.raises(ValueError, match="no file bound"):
         profile_input_stage(stage)
 
 
 def test_missing_file_raises(tmp_path: Path) -> None:
-    stage = _input_stage(tmp_path / "gone.csv", [{"name": "a", "type": "str"}])
+    stage = _input_stage(tmp_path / "gone.csv", [{"name": "a", "type": "str", "nullable": True}])
     with pytest.raises(FileNotFoundError):
         profile_input_stage(stage)
 
@@ -108,9 +108,9 @@ def test_non_input_stage_is_refused(tmp_path: Path) -> None:
         "id": "agg", "name": "agg", "type": "aggregate",
         "aggregate": {"group_by": ["a"],
                       "aggregations": [{"output_column": "n", "formula": "count"}]},
-        "inputs": [{"id": "load", "schema": {"columns": [{"name": "a", "type": "str"}]}}],
-        "output_schema": {"columns": [{"name": "a", "type": "str"},
-                                      {"name": "n", "type": "int"}]},
+        "inputs": [{"id": "load", "schema": {"columns": [{"name": "a", "type": "str", "nullable": True}]}}],
+        "output_schema": {"columns": [{"name": "a", "type": "str", "nullable": True},
+                                      {"name": "n", "type": "int", "nullable": True}]},
     })
     with pytest.raises(ValueError, match="not `input_data`"):
         profile_input_stage(stage)
