@@ -7,10 +7,15 @@
    that trust and exactly what it does not cover — the tests are authored from the
    methodology, never by running the code, so passing means the description and
    the code AGREE ON THESE CASES. It is not a correctness proof, and a green badge
-   must not read like one. #}
+   must not read like one.
+
+   `n/a` is grey and says "nothing to check", never a green tick: no example ran and
+   nothing was verified, so a tick would claim a check that never happened. Only the
+   config-only blocks call it in that state — a stage whose behaviour is a prompt has
+   prose a reviewer cannot check either, which is a different thing to say. #}
 {% macro stage_certification(certification) %}
-{% if certification and certification.status != "n/a" %}
-<div class="stage-cert stage-cert-{{ certification.status }}">
+{% if certification %}
+<div class="stage-cert stage-cert-{{ 'na' if certification.status == 'n/a' else certification.status }}">
   {% if certification.status == "certified" %}
   <p class="stage-cert-line"><span class="stage-cert-badge">✓ Tested by independent AI agent</span></p>
   <p class="stage-cert-why muted">An agent with knowledge only of this description
@@ -34,6 +39,11 @@
   <p class="stage-cert-line"><span class="stage-cert-badge">— Nothing to test</span></p>
   <p class="stage-cert-why muted">This step has no description, so there is nothing for an agent
     to test against and no way to review it without reading the code.</p>
+  {% elif certification.status == "n/a" %}
+  <p class="stage-cert-line"><span class="stage-cert-badge">— Nothing to check</span></p>
+  <p class="stage-cert-why muted">This step is settings, not code: no description stands between
+    you and what it does, so there is nothing for an agent to check one against the other. The
+    settings below are the whole step.</p>
   {% endif %}
 </div>
 {% endif %}

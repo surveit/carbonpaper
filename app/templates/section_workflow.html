@@ -104,6 +104,17 @@
     {% endfor %}
   </ul>
 </details>
+{% elif compiler_warnings %}
+{# Nothing wrong, said out loud. Silence here is what a reviewer sees when nobody has
+   looked, so a clean workflow has to be distinguishable from an unexamined one. The
+   count is all it claims: these checks read the workflow, they do not run it, so they
+   say nothing about the numbers a run produces. #}
+<div class="wf-issues wf-issues-clean">
+  <p class="wf-clean-line"><strong>✓ 0 errors, 0 warnings</strong></p>
+  <p class="wf-clean-why muted">Nothing in this workflow is flagged as written. These
+    checks are made without running anything, so they say nothing about the numbers a
+    run produces.</p>
+</div>
 {% endif %}
 
 {# ── Graph full-width on top, node review docked full-width below. ── #}

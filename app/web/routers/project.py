@@ -345,9 +345,13 @@ async def project_workflow(request: Request, project_name: str):
             # and a workflow that does not load has its load issues shown instead.
             # The examples are RUN here — the whole suite is sub-second — so a stage
             # whose examples disagree with its code says so in the same list.
+            # None, not an empty report, when nothing typed loaded: the template
+            # renders an empty report as "nothing is wrong", which zero stages have
+            # not earned.
             "compiler_warnings": find_workflow_compiler_warnings(
                 listing.stages,
-                run_stage_tests(listing.stages).count_failing_by_stage()),
+                run_stage_tests(listing.stages).count_failing_by_stage(),
+            ) if listing.stages else None,
             "type_class": TYPE_CLASS,
             "type_glyph": TYPE_GLYPH,
         },
