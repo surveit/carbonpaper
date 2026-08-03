@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import ast
 
+from collections.abc import Sequence
 from typing import ClassVar, Literal, Optional, Protocol
 
 from pydantic import Field, model_validator
@@ -14,6 +15,10 @@ from pydantic import Field, model_validator
 from app.models.errors import StepRefused
 from app.models.schema import FunctionKind, StageConfig, _Base
 from app.models.stage_base import StageBase, StageInput, StageType
+from app.models.stages.stage_tests import (
+    PythonFrameFunctionStageTest,
+    PythonRowFunctionStageTest,
+)
 from app.models.stages.warnings import CompilerWarning, warn
 
 # The instruction an authoring client reads when it fills in `summary`. Python
@@ -217,9 +222,11 @@ class PythonRowFunctionStage(CarriesPythonFunctionStage):
     # Exactly one input: the runtime maps the function over one frame's rows, so
     # a second input is a join or a python_frame_function.
     inputs: list[StageInput] = Field(default_factory=list, min_length=1, max_length=1)
+    tests: Optional[Sequence[PythonRowFunctionStageTest]] = None
 
 
 class PythonFrameFunctionStage(CarriesPythonFunctionStage):
     type: Literal[StageType.python_frame_function]
     CARRIES_RUNNABLE_TESTS: ClassVar[bool] = True
     inputs: list[StageInput] = Field(default_factory=list, min_length=1)
+    tests: Optional[Sequence[PythonFrameFunctionStageTest]] = None

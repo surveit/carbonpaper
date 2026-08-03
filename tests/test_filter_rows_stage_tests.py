@@ -58,7 +58,7 @@ def test_a_drop_is_not_read_as_a_refusal():
 
 
 def test_two_input_rows_are_rejected():
-    with pytest.raises(ValidationError, match="one row in"):
+    with pytest.raises(ValidationError, match="at most 1 item"):
         _filter_stage(_KEEP_ACTIVE, [{
             "name": "two_rows_in",
             "inputs": {"load": [{"status": "active"}, {"status": "closed"}]},
@@ -68,7 +68,7 @@ def test_two_input_rows_are_rejected():
 
 def test_two_expected_rows_out_of_one_are_rejected():
     """A filter cannot fan out — it keeps the row it was given or drops it."""
-    with pytest.raises(ValidationError, match="that row or nothing"):
+    with pytest.raises(ValidationError, match="at most 1 item"):
         _filter_stage(_KEEP_ACTIVE, [{
             "name": "fans_out", "inputs": {"load": [{"status": "active"}]},
             "expected": [{"status": "active"}, {"status": "active"}],
