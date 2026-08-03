@@ -27,7 +27,7 @@ from app.models import (
     find_workflow_compiler_warnings,
     StageType,
 )
-from app.mcp.tool_descriptions import TOOL_DESCRIPTIONS
+from app.mcp.tool_specs import TOOL_SPECS
 from app.models.review_guide import ReviewGuide
 from app.runtime import stage_tests
 from app.services import generation
@@ -216,24 +216,24 @@ async def run_session_manager() -> AsyncIterator[None]:
             _active_manager = None
 
 
-@mcp.tool(description=TOOL_DESCRIPTIONS["list_projects"])
+@mcp.tool(description=TOOL_SPECS["list_projects"].description)
 def list_projects() -> list[str]:
     return project_service.list_projects()
 
 
-@mcp.tool(description=TOOL_DESCRIPTIONS["create_project"])
+@mcp.tool(description=TOOL_SPECS["create_project"].description)
 def create_project(name: str, document: str) -> dict[str, Any]:
     project_id = project_service.create_project(name, document, source="mcp")
     return {"project_id": project_id, "next": "generate_data_model"}
 
 
-@mcp.tool(description=TOOL_DESCRIPTIONS["get_project_status"])
+@mcp.tool(description=TOOL_SPECS["get_project_status"].description)
 def get_project_status(project_id: str) -> dict[str, Any]:
     pdir = _resolve_existing_project(project_id)
     return project_service.project_state(pdir).model_dump(mode="json")
 
 
-@mcp.tool(description=TOOL_DESCRIPTIONS["generate_data_model"])
+@mcp.tool(description=TOOL_SPECS["generate_data_model"].description)
 async def generate_data_model(project_id: str) -> dict[str, Any]:
     pdir = _resolve_existing_project(project_id)
     document = _read_document(pdir, project_id)
@@ -242,7 +242,7 @@ async def generate_data_model(project_id: str) -> dict[str, Any]:
     return {"status": "started", "watch": f"/chat/{session_id}", "poll": "get_project_status"}
 
 
-@mcp.tool(description=TOOL_DESCRIPTIONS["generate_stage_tests"])
+@mcp.tool(description=TOOL_SPECS["generate_stage_tests"].description)
 async def generate_stage_tests(project_id: str, stage_id: str) -> dict[str, Any]:
     pdir = _resolve_existing_project(project_id)
     model = project_service.project_meta(pdir).model or "sonnet"
@@ -255,7 +255,7 @@ async def generate_stage_tests(project_id: str, stage_id: str) -> dict[str, Any]
     }
 
 
-@mcp.tool(description=TOOL_DESCRIPTIONS["run_stage_tests"])
+@mcp.tool(description=TOOL_SPECS["run_stage_tests"].description)
 def run_stage_tests(project_id: str, stage_id: str | None = None) -> dict[str, Any]:
     pdir = _resolve_existing_project(project_id)
     stages = loader.load_workflow(pdir)
@@ -263,7 +263,7 @@ def run_stage_tests(project_id: str, stage_id: str | None = None) -> dict[str, A
     return report.model_dump(mode="json")
 
 
-@mcp.tool(description=TOOL_DESCRIPTIONS["report_compiler_warnings"])
+@mcp.tool(description=TOOL_SPECS["report_compiler_warnings"].description)
 def report_compiler_warnings(project_id: str) -> dict[str, Any]:
     pdir = _resolve_existing_project(project_id)
     stages = loader.load_workflow(pdir)
@@ -276,29 +276,29 @@ def report_compiler_warnings(project_id: str) -> dict[str, Any]:
     }
 
 
-@mcp.tool(description=TOOL_DESCRIPTIONS["read_data_model"])
+@mcp.tool(description=TOOL_SPECS["read_data_model"].description)
 def read_data_model(project_id: str) -> list[dict[str, Any]]:
     pdir = _resolve_existing_project(project_id)
     return workspace.load_schemas(pdir)
 
 
-@mcp.tool(description=TOOL_DESCRIPTIONS["describe_workflow"])
+@mcp.tool(description=TOOL_SPECS["describe_workflow"].description)
 def describe_workflow(project_id: str) -> dict[str, Any]:
     _resolve_existing_project(project_id)
     return project_service.describe_workflow(project_id)
 
 
-@mcp.tool(description=TOOL_DESCRIPTIONS["read_stage"])
+@mcp.tool(description=TOOL_SPECS["read_stage"].description)
 def read_stage(project_id: str, stage_id: str) -> str:
     return project_service.read_stage(project_id, stage_id)
 
 
-@mcp.tool(description=TOOL_DESCRIPTIONS["edit_stage"])
+@mcp.tool(description=TOOL_SPECS["edit_stage"].description)
 def edit_stage(project_id: str, stage_id: str, changes_json: str) -> dict[str, Any]:
     return catch_stage_edit_refusals(lambda: project_service.edit_stage(project_id, stage_id, changes_json))
 
 
-@mcp.tool(description=TOOL_DESCRIPTIONS["add_stage"])
+@mcp.tool(description=TOOL_SPECS["add_stage"].description)
 def add_stage(project_id: str, stages: list[StageDraft]) -> dict[str, Any]:
     try:
         outcome = project_service.add_stages(project_id, stages)
@@ -337,7 +337,7 @@ def _find_dropped_field_warnings(stages: list[StageDraft], added: list[str]) -> 
     ]
 
 
-@mcp.tool(description=TOOL_DESCRIPTIONS["remove_stage"])
+@mcp.tool(description=TOOL_SPECS["remove_stage"].description)
 def remove_stage(project_id: str, stage_id: str) -> dict[str, Any]:
     return catch_stage_edit_refusals(lambda: project_service.remove_stage(project_id, stage_id))
 
@@ -355,7 +355,7 @@ def catch_stage_edit_refusals(edit: Callable[[], EditStageResult]) -> dict[str, 
     return {"ok": result.ok, "issues": result.issues}
 
 
-@mcp.tool(description=TOOL_DESCRIPTIONS["save_version"])
+@mcp.tool(description=TOOL_SPECS["save_version"].description)
 def save_version(
     project_id: str, message: str, parent_version: str | None = None
 ) -> dict[str, Any]:
@@ -371,19 +371,19 @@ def save_version(
     return {"ok": True, "issues": [], "version_id": version.version_id}
 
 
-@mcp.tool(description=TOOL_DESCRIPTIONS["read_review_guide"])
+@mcp.tool(description=TOOL_SPECS["read_review_guide"].description)
 def read_review_guide(project_id: str, version_id: str) -> ReviewGuide | None:
     _resolve_existing_project(project_id)
     return project_service.read_review_guide(project_id, version_id)
 
 
-@mcp.tool(description=TOOL_DESCRIPTIONS["write_review_guide"])
+@mcp.tool(description=TOOL_SPECS["write_review_guide"].description)
 def write_review_guide(project_id: str, version_id: str, guide: ReviewGuide) -> ReviewGuide:
     _resolve_existing_project(project_id)
     return project_service.write_review_guide(project_id, version_id, guide)
 
 
-@mcp.tool(description=TOOL_DESCRIPTIONS["run_workflow"])
+@mcp.tool(description=TOOL_SPECS["run_workflow"].description)
 def run_workflow(project_id: str, version_id: str | None = None) -> dict[str, Any]:
     _resolve_existing_project(project_id)  # loud if the project doesn't exist
     try:
@@ -393,7 +393,7 @@ def run_workflow(project_id: str, version_id: str | None = None) -> dict[str, An
     return {"run_id": run_id, "status": run_service.read_run_status(project_id, run_id)["status"]}
 
 
-@mcp.tool(description=TOOL_DESCRIPTIONS["get_run_status"])
+@mcp.tool(description=TOOL_SPECS["get_run_status"].description)
 def get_run_status(project_id: str, run_id: str) -> dict[str, Any]:
     _resolve_existing_project(project_id)  # loud if the project doesn't exist
     try:
@@ -402,7 +402,7 @@ def get_run_status(project_id: str, run_id: str) -> dict[str, Any]:
         return {"ok": False, "error": str(exc)}
 
 
-@mcp.tool(description=TOOL_DESCRIPTIONS["run_workflow_test"])
+@mcp.tool(description=TOOL_SPECS["run_workflow_test"].description)
 def run_workflow_test(
     project_id: str, version_id: str | None = None, limit: int = 20, offset: int = 0,
 ) -> dict[str, Any]:

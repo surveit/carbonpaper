@@ -12,6 +12,7 @@ from pydantic import BaseModel, ValidationError
 
 from app.core.agent.diagnostics import AgentRunDiagnostics, summarize_run
 from app.core.agent.registry import build_mcp_server
+from app.core.agent.tool_spec import BoundToolSpec
 from app.core.agent.sdk_engine import CLI_MODEL, ClaudeAgentSdkEngine
 from app.core.agent.usage import LlmUsage
 from app.core.errors import GenerationError
@@ -156,11 +157,15 @@ class Agent(Generic[Model]):
         that never submits a valid answer cannot loop forever. Used by run(), and by a
         caller driving the agent as a live turn: turns.start(engine=agent.build_engine()...)."""
         input_schema = self._target_schema.model_json_schema()
-        server, allowed, _wrapped = build_mcp_server(
-            [self.submit_answer],
-            {SUBMIT_ANSWER_TOOL: input_schema},
-            {SUBMIT_ANSWER_TOOL: SUBMIT_ANSWER_DESCRIPTION},
-        )
+        server, allowed, _wrapped = build_mcp_server([
+            BoundToolSpec(
+                name=SUBMIT_ANSWER_TOOL,
+                description=SUBMIT_ANSWER_DESCRIPTION,
+                fn=self.submit_answer,
+                input_schema=input_schema,
+                label="Submitting the answer",
+            )
+        ])
         return ClaudeAgentSdkEngine(
             system_prompt=self._system_prompt,
             mcp_server=server,

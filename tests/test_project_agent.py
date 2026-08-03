@@ -27,4 +27,4 @@ _EXPECTED_TOOL_NAMES = {
 
 def test_editing_tools_factory_yields_expected_tool_names() -> None:
     tools = make_editing_tools(EditingContext(project_id="alpha"))
-    assert {tool.__name__ for tool in tools} == _EXPECTED_TOOL_NAMES
+    assert {spec.name for spec in tools} == _EXPECTED_TOOL_NAMES

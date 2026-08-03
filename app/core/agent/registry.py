@@ -4,18 +4,13 @@ a concrete agent registers itself at import, so its module must be imported firs
 """
 from __future__ import annotations
 
-import json
 from typing import Any, Callable
 
-from claude_agent_sdk import (
-    McpSdkServerConfig,
-    SdkMcpTool,
-    create_sdk_mcp_server,
-    tool,
-)
+from claude_agent_sdk import McpSdkServerConfig, SdkMcpTool, create_sdk_mcp_server
 from pydantic import BaseModel, ConfigDict
 
 from app.core.agent.sdk_engine import MCP_SERVER_NAME, ClaudeAgentSdkEngine
+from app.core.agent.tool_spec import BoundToolSpec
 
 
 class AgentConfig(BaseModel):
@@ -23,15 +18,15 @@ class AgentConfig(BaseModel):
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
     system_prompt: str
-    tool_schemas: dict[str, dict[str, object]]
-    tool_descriptions: dict[str, str]
-    tool_labels: dict[str, str]
     model: str = "sonnet"
     context_schema: type[BaseModel]
+    # Labels for tools this agent does not own — e.g. the CLI's own ToolSearch
+    # built-in, which has no BoundToolSpec here but still renders in the chat.
+    extra_tool_labels: dict[str, str] = {}
 
 
-# Given a validated context, return the in-process tool callables for one agent.
-BuildTools = Callable[[BaseModel], list[Callable[..., Any]]]
+# Given a validated context, return the bound tools for one agent.
+BuildTools = Callable[[BaseModel], list[BoundToolSpec]]
 
 _registry: dict[str, tuple[AgentConfig, BuildTools]] = {}
 
@@ -51,70 +46,28 @@ def build_engine(agent_id: str, context: dict[str, Any]) -> ClaudeAgentSdkEngine
     an in-process SDK-MCP server, and returns the ready engine."""
     config, build_tools = _registry[agent_id]
     ctx = config.context_schema.model_validate(context)
-    tools = build_tools(ctx)
-    server, allowed, _wrapped = build_mcp_server(
-        tools, config.tool_schemas, config.tool_descriptions
-    )
+    specs = build_tools(ctx)
+    server, allowed, _wrapped = build_mcp_server(specs)
     return ClaudeAgentSdkEngine(
         system_prompt=config.system_prompt,
         mcp_server=server,
         allowed_tools=allowed,
-        tool_labels=config.tool_labels,
+        tool_labels={s.name: s.label for s in specs} | config.extra_tool_labels,
         model=config.model,
     )
 
 
 # ── claude_agent_sdk MCP wrapping (generic) ──────────────────────────────────
-# Wrapping a set of plain callables as an in-process MCP server is generic infra:
-# it depends only on the callables and their input schemas, not on what any tool
-# does. The server is mounted under the fixed generic name MCP_SERVER_NAME.
+# Mounting a set of bound tools as an in-process MCP server is generic infra: it
+# depends only on the specs, not on what any tool does. The server is mounted
+# under the fixed generic name MCP_SERVER_NAME.
 
 
 def build_mcp_server(
-    tools: list[Callable[..., Any]],
-    tool_schemas: dict[str, dict[str, object]],
-    tool_descriptions: dict[str, str],
+    specs: list[BoundToolSpec],
 ) -> tuple[McpSdkServerConfig, list[str], list[SdkMcpTool[Any]]]:
-    """Returns `(server, allowed_tool_names, wrapped_tools)`; a missing schema or description
-    raises."""
-    wrapped = [
-        _wrap(fn, tool_schemas[fn.__name__], tool_descriptions[fn.__name__]) for fn in tools
-    ]
+    """Returns `(server, allowed_tool_names, wrapped_tools)`."""
+    wrapped = [spec.as_sdk_tool() for spec in specs]
     server = create_sdk_mcp_server(MCP_SERVER_NAME, tools=wrapped)
-    allowed = [f"mcp__{MCP_SERVER_NAME}__{fn.__name__}" for fn in tools]
+    allowed = [f"mcp__{MCP_SERVER_NAME}__{spec.name}" for spec in specs]
     return server, allowed, wrapped
-
-
-def _wrap(
-    fn: Callable[..., Any], schema: dict[str, object], description: str
-) -> SdkMcpTool[Any]:
-    async def handler(args: dict[str, Any]) -> dict[str, Any]:
-        try:
-            return _as_content(fn(**args))
-        except Exception as exc:  # noqa: BLE001 — tool boundary: any tool failure is surfaced to the model as an error, never swallowed or faked
-            return {
-                "content": [{"type": "text", "text": f"ERROR: {exc}"}],
-                "is_error": True,
-            }
-
-    return tool(fn.__name__, description, schema)(handler)
-
-
-def _as_content(value: object) -> dict[str, Any]:
-    if isinstance(value, str):
-        text = value
-    else:
-        # by_alias + exclude_none so a model carrying Stage(s) (e.g. a draft view)
-        # comes back to the agent in the SAME spec-dict form it writes stages
-        # in — aliased (`schema`, not `table_schema`) and without the unset-optional
-        # nulls, matching loader.stage_to_spec_dict. Additive for every other
-        # model-returning tool: an alias-free model (DraftView, DraftEdit,
-        # SaveResult, ...) dumps equivalently (a dropped null re-parses as its
-        # default).
-        dumpable = (
-            value.model_dump(mode="json", by_alias=True, exclude_none=True)
-            if isinstance(value, BaseModel)
-            else value
-        )
-        text = json.dumps(dumpable, default=str, indent=2)
-    return {"content": [{"type": "text", "text": text}]}
