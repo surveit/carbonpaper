@@ -12,7 +12,7 @@ from pydantic import BaseModel, ValidationError
 
 from app.core.agent.diagnostics import AgentRunDiagnostics, summarize_run
 from app.core.agent.registry import build_mcp_server
-from app.core.agent.tool_spec import BoundToolSpec
+from app.core.agent.bound_tool import BoundToolSpec
 from app.core.agent.sdk_engine import CLI_MODEL, ClaudeAgentSdkEngine
 from app.core.agent.usage import LlmUsage
 from app.core.errors import GenerationError

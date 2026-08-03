@@ -27,7 +27,7 @@ from app.models import (
     find_workflow_compiler_warnings,
     StageType,
 )
-from app.mcp.tool_specs import TOOL_SPECS
+from app.services.tool_specs import SAVE_VERSION_FROM_WORKING_COPY, TOOL_SPECS
 from app.models.review_guide import ReviewGuide
 from app.runtime import stage_tests
 from app.services import generation
@@ -38,7 +38,7 @@ from app.services import versioning
 from app.services import workflow_test as workflow_test_service
 from app.services import workspace
 from app.services.errors import WorkflowLoadError
-from app.services.stage_edit import AddStagesResult, EditStageResult
+from app.services.stage_edit import EditStageResult
 
 # Domain failures a run/workflow-test tool turns into {ok: False, error: str(exc)} — a
 # loud, honest verdict rather than a traceback or a fabricated run id/status.
@@ -300,41 +300,7 @@ def edit_stage(project_id: str, stage_id: str, changes_json: str) -> dict[str, A
 
 @mcp.tool(description=TOOL_SPECS["add_stage"].description)
 def add_stage(project_id: str, stages: list[StageDraft]) -> dict[str, Any]:
-    try:
-        outcome = project_service.add_stages(project_id, stages)
-    except _STAGE_TOOL_ERRORS as exc:
-        outcome = AddStagesResult(batch_issues=[str(exc)])
-
-    result: dict[str, Any] = {
-        "ok": not (outcome.failed or outcome.batch_issues),
-        "added": outcome.added,
-        "failed": [{"id": f.id, "issues": f.issues} for f in outcome.failed],
-        "skipped": [{"id": s.id, "because": s.because} for s in outcome.skipped],
-        "issues": outcome.batch_issues + [i for f in outcome.failed for i in f.issues],
-    }
-    warnings = _find_dropped_field_warnings(stages, outcome.added)
-    if warnings:
-        result["warnings"] = warnings
-    return result
-
-
-def _find_dropped_field_warnings(stages: list[StageDraft], added: list[str]) -> list[str]:
-    """One entry per STORED stage that echoed back fields only the server writes,
-    naming the stage so a batch does not lose which one carried them, plus one
-    trailing entry saying who does write them. A stage that was not stored is not
-    warned about — nothing was dropped from the workflow on its behalf."""
-    stored = set(added)
-    named = [
-        f"`{s.id}`: ignored server-owned fields: {', '.join(s.dropped_server_owned_fields)}"
-        for s in stages
-        if s.id in stored and s.dropped_server_owned_fields
-    ]
-    if not named:
-        return []
-    return named + [
-        "only the server writes these: tests come from generate_stage_tests, "
-        "review is human-only."
-    ]
+    return project_service.add_stages_reporting_drops(project_id, stages)
 
 
 @mcp.tool(description=TOOL_SPECS["remove_stage"].description)
@@ -355,7 +321,7 @@ def catch_stage_edit_refusals(edit: Callable[[], EditStageResult]) -> dict[str, 
     return {"ok": result.ok, "issues": result.issues}
 
 
-@mcp.tool(description=TOOL_SPECS["save_version"].description)
+@mcp.tool(description=SAVE_VERSION_FROM_WORKING_COPY.description)
 def save_version(
     project_id: str, message: str, parent_version: str | None = None
 ) -> dict[str, Any]:
