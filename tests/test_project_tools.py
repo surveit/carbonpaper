@@ -104,7 +104,7 @@ def test_edit_stage_tool_writes_and_reports_ok(examples_root: Path) -> None:
     out = _tool(tools, "edit_stage")(
         "alpha", "load", json.dumps(_stage("load", "Load rows v2", "input_data"))
     )
-    # The tool reports only ok + issues; the node's review colour is derived by the
+    # The tool reports only ok + issues; the node's review colour is computed by the
     # review layer, not returned by the writer.
     assert out["ok"] is True and out == {"ok": True, "issues": []}
     assert "Load rows v2" in (pdir / "compiled" / "01_load.json").read_text(encoding="utf-8")

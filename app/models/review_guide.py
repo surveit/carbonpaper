@@ -1,5 +1,5 @@
 """The authored walkthrough of a workflow version: ordered steps, each narrating
-the stages it names. Anything derivable from the stages themselves (their names,
+the stages it names. Anything readable off the stages themselves (their names,
 types, order, the columns they write) is deliberately absent — it is read off the
 stages at render time instead of being frozen here.
 """

@@ -86,32 +86,32 @@ OUTPUT_UNPRODUCIBLE_ISSUE = (
 )
 OUTPUT_TYPE_ISSUE = (
     "stage '{sid}': output_schema declares column '{col}' as {declared!r} but the "
-    "{block} config produces {derived!r}"
+    "{block} config produces {produced!r}"
 )
 
 
-def find_declared_vs_derived_issues(
-    stage_id: str, block_name: str, declared: "TableSchema", derived: Mapping[str, str | None]
+def find_declared_vs_computed_issues(
+    stage_id: str, block_name: str, declared: "TableSchema", computed: Mapping[str, str | None]
 ) -> list[str]:
     """Issues for a declared output schema against the columns a config block can
-    actually produce: `derived` maps each producible column name to its derived
+    actually produce: `computed` maps each producible column name to its computed
     type, or None where the type is unknowable (e.g. a sum over a value column
     the edge schema does not name). Every declared column must be producible by
-    name; where the derived
+    name; where the computed
     type is known, the declared `type` must equal it. Nullability/enum/range are
     deliberately NOT compared — they are claims about data, not about what the
     config block can produce."""
     issues: list[str] = []
     for column in declared.columns:
-        if column.name not in derived:
+        if column.name not in computed:
             issues.append(OUTPUT_UNPRODUCIBLE_ISSUE.format(
-                sid=stage_id, col=column.name, block=block_name, cols=sorted(derived),
+                sid=stage_id, col=column.name, block=block_name, cols=sorted(computed),
             ))
             continue
-        derived_type = derived[column.name]
-        if derived_type is not None and column.type != derived_type:
+        computed_type = computed[column.name]
+        if computed_type is not None and column.type != computed_type:
             issues.append(OUTPUT_TYPE_ISSUE.format(
                 sid=stage_id, col=column.name, block=block_name,
-                declared=column.type, derived=derived_type,
+                declared=column.type, produced=computed_type,
             ))
     return issues

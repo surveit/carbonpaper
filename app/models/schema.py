@@ -227,7 +227,7 @@ Column.model_rebuild()
 # A producer's output column and a consumer's declared copy of it must match on
 # SPEC, but may legitimately differ in prose (description/source). The spec
 # fields are everything the Column model declares except its identity (`name`)
-# and prose (`description`, `source`) — derived from the model, so a newly added
+# and prose (`description`, `source`) — read off the model, so a newly added
 # capability is compared automatically instead of being silently ignored.
 _PROSE_COLUMN_FIELDS = frozenset({"name", "description", "source"})
 _SPEC_COLUMN_FIELDS: tuple[str, ...] = tuple(

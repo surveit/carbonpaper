@@ -1,4 +1,4 @@
-"""Derive the override-stage columns an eval-dataset file must inject: the override
+"""The override-stage columns an eval-dataset file must inject: the override
 stage's whole output, deconflicted against the checks' expected-output names.
 A check's target column may share a name with an override output column; a flat
 table can't hold both, so the injected input becomes `override.<name>` and the
@@ -21,8 +21,8 @@ def get_output_columns_from_stage(stage: Stage) -> list[Column]:
 def get_injected_columns(
     override: Stage, target: Stage, check_output_columns: list[str],
 ) -> list[Column]:
-    """The override-stage columns of the eval-dataset schema this derivation
-    builds for this override/target/check set, deconflicted against the
+    """The override-stage columns of the eval-dataset schema built for this
+    override/target/check set, deconflicted against the
     checks' expected-output columns -- what a caller needs to check that an
     eval-dataset file covers `override`'s output specifically."""
     injected, _ = _deconflicted_columns(override, target, check_output_columns)

@@ -47,7 +47,7 @@ SUMMARY_DESCRIPTION = (
 # cases either bloat it or go unsaid — and unsaid is how a description ends up
 # TRUE but incomplete, agreeing with the code on the common path while saying
 # nothing about the input that will actually bite. Both fields are handed to the
-# example deriver, so anything named here becomes a case that must pass.
+# test generator, so anything named here becomes a case that must pass.
 CORNER_CASES_DESCRIPTION = (
     "The inputs where this step's behaviour is not obvious from the summary, each paired "
     "with what must happen. Write one entry per case, from the methodology, at the same "
@@ -57,7 +57,7 @@ CORNER_CASES_DESCRIPTION = (
     "plain language as the summary (\"the row is left unchanged\", \"the step fails\", "
     "\"treated as zero\"), never the implementation. If a case is genuinely undecided by "
     "the methodology, say so in `expected` and name the reading you chose. These are "
-    "handed to the agent that derives this step's examples, so each entry becomes a case "
+    "handed to the agent that generates this step's examples, so each entry becomes a case "
     "the code must satisfy: do not list a case whose outcome you are inventing."
 )
 

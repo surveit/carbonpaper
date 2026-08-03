@@ -1,8 +1,8 @@
-"""The deriver bridge: task assembly is code-blind, document-blind, and grounded
+"""The generator bridge: task assembly is code-blind, document-blind, and grounded
 in the step's own description."""
 import pytest
 
-from app.compiler.stage_tests import build_stage_test_deriver, render_derivation_task
+from app.compiler.stage_tests import build_stage_test_generator, render_generation_task
 from app.models import parse_stage, Stage
 
 _CODE = "def transform(row):\n    return {**row, 'doubled': row['amount'] * 2}\n"
@@ -28,7 +28,7 @@ def _python_stage(*, summary=_SUMMARY, corner_cases=None) -> Stage:
 
 
 def test_task_contains_the_description_schemas_and_stage_meta():
-    task = render_derivation_task(_DOC, _python_stage())
+    task = render_generation_task(_DOC, _python_stage())
     assert _SUMMARY in task
     assert "Double" in task            # stage name rendered
     assert "double" in task            # stage id rendered
@@ -38,15 +38,15 @@ def test_task_contains_the_description_schemas_and_stage_meta():
 
 def test_task_never_contains_the_methodology_document():
     """The examples exist to check the code against the DESCRIPTION. An agent that
-    had read the methodology could derive a case the description never implies, and
+    had read the methodology could write a case the description never implies, and
     the suite would then certify the methodology instead."""
-    task = render_derivation_task(_DOC, _python_stage())
+    task = render_generation_task(_DOC, _python_stage())
     assert _DOC not in task
     assert "METHODOLOGY" not in task
 
 
 def test_task_never_contains_the_stage_code():
-    task = render_derivation_task(_DOC, _python_stage())
+    task = render_generation_task(_DOC, _python_stage())
     assert "def transform" not in task
     assert _CODE not in task
 
@@ -57,14 +57,14 @@ def test_task_never_contains_existing_tests():
         "tests": [{"name": "stale_case",
                    "inputs": {"load": [{"amount": 1.0}]},
                    "expected": [{"amount": 1.0, "doubled": 2.0}]}]})
-    task = render_derivation_task(_DOC, stage)
+    task = render_generation_task(_DOC, stage)
     assert "stale_case" not in task
 
 
 def test_stated_corner_cases_are_rendered_with_their_expected_outcome():
-    """Both halves must reach the deriver: a case with no stated outcome is one it
+    """Both halves must reach the generator: a case with no stated outcome is one it
     would have to invent."""
-    task = render_derivation_task(_DOC, _python_stage(corner_cases=[
+    task = render_generation_task(_DOC, _python_stage(corner_cases=[
         {"case": "`amount` is blank", "expected": "the step fails"},
         {"case": "`amount` is negative", "expected": "the row is kept unchanged"},
     ]))
@@ -75,21 +75,21 @@ def test_stated_corner_cases_are_rendered_with_their_expected_outcome():
 
 
 def test_no_corner_cases_still_renders_a_task():
-    """Declaring none is legal — the deriver still has to find edge cases itself,
+    """Declaring none is legal — the generator still has to find edge cases itself,
     it just has none stated for it."""
-    task = render_derivation_task(_DOC, _python_stage(corner_cases=[]))
+    task = render_generation_task(_DOC, _python_stage(corner_cases=[]))
     assert _SUMMARY in task
     assert "corner case" not in task.lower()
 
 
-def test_a_stage_with_no_summary_cannot_derive_examples():
-    """There is no description to check the code against, so deriving anything
+def test_a_stage_with_no_summary_cannot_generate_examples():
+    """There is no description to check the code against, so generating anything
     would make the panel's 'checked against the code' claim untrue."""
     with pytest.raises(ValueError, match="has no summary"):
-        render_derivation_task(_DOC, _python_stage(summary=None))
+        render_generation_task(_DOC, _python_stage(summary=None))
 
 
-def test_deriver_rejects_non_python_stages():
+def test_generator_rejects_non_python_stages():
     bad = parse_stage({
         "id": "pub", "name": "Publish", "type": "publish",
         "inputs": [{"id": "double", "schema": {"columns": [
@@ -100,11 +100,11 @@ def test_deriver_rejects_non_python_stages():
         "publish": {},
     })
     with pytest.raises(ValueError, match="can run them"):
-        build_stage_test_deriver(_DOC, bad)
+        build_stage_test_generator(_DOC, bad)
 
 
-def test_deriver_target_schema_is_stage_bound():
-    agent = build_stage_test_deriver(_DOC, _python_stage())
+def test_generator_target_schema_is_stage_bound():
+    agent = build_stage_test_generator(_DOC, _python_stage())
     with pytest.raises(Exception, match="declared inputs"):
         agent._target_schema.model_validate({"tests": [{
             "name": "x", "inputs": {"ghost": [{"amount": 1.0}]},

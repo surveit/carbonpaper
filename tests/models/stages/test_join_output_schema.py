@@ -48,7 +48,7 @@ def _issues(stage_dict) -> str:
     return str(err.value)
 
 
-def test_select_entry_not_derivable_rejected():
+def test_select_entry_not_producible_rejected():
     # The runtime silently drops a select entry the join lacks; save time
     # rejects it instead.
     msg = _issues(_join_stage(

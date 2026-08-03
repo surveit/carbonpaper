@@ -87,7 +87,7 @@ the whole graph before it is stored.
 # Setup
 1. create_project(name, document) — the methodology prose becomes the project's source
    of record. Returns the project_id every other tool takes.
-2. generate_data_model(project_id) — derives the named schemas from the document. Runs in
+2. generate_data_model(project_id) — generates the named schemas from the document. Runs in
    the background; poll get_project_status until schemas appear.
 3. The HUMAN approves the data model in the web UI. No tool approves it.
 
@@ -117,7 +117,7 @@ each step naming the stages it covers and saying what a reviewer should check.
 
 8. write_review_guide(project_id, version_id, guide) — write it once the workflow needs a
    human to understand it before acting on it, which is any version you expect to be
-   published or run. Nothing derives one and nothing seeds one; you write it from a blank
+   published or run. Nothing generates one and nothing seeds one; you write it from a blank
    page. read_review_guide shows what a version already carries.
    Write it FOR the methodology's owner, not a programmer: use the document's terms of
    art, wrap column names in `backticks`, and say what could be quietly wrong rather than
@@ -128,7 +128,7 @@ only a human publishes. Your job ends at a saved version carrying a review guide
 workflow test run for the human to review.
 
 # Per-stage tests
-Once a python-transform stage exists, generate_stage_tests derives its tests from the
+Once a python-transform stage exists, generate_stage_tests writes its tests from the
 methodology; then loop edit_stage → run_stage_tests until they pass.
 
 # Finishing
@@ -251,7 +251,7 @@ async def generate_stage_tests(project_id: str, stage_id: str) -> dict[str, Any]
         "status": "started",
         "watch": f"/chat/{session_id}",
         "poll": "get_project_status",
-        "note": "read_stage to see the derived tests once done",
+        "note": "read_stage to see the generated tests once done",
     }
 
 

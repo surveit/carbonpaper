@@ -165,7 +165,7 @@ def test_declared_list_column_without_list_columns_param_is_left_as_text(tmp_pat
 
 # ── Precedence and fallbacks ─────────────────────────────────────────────────
 
-def test_explicit_dtype_param_wins_over_the_derived_one(tmp_path):
+def test_explicit_dtype_param_wins_over_the_pinned_one(tmp_path):
     path = _csv(tmp_path, "id\n002\n")
     df = _read(path, [{"name": "id", "type": "str"}], dtype={"id": "int64"})
     assert list(df["id"]) == [2]
@@ -223,7 +223,7 @@ def test_parquet_types_are_taken_from_the_file_not_the_declaration(tmp_path):
 
 
 @pytest.mark.parametrize("fmt", ["parquet", "geojson", "xlsx"])
-def test_typed_formats_do_not_get_a_derived_dtype(fmt):
+def test_typed_formats_do_not_get_a_pinned_dtype(fmt):
     from app.runtime.stages.input_data import _read_dtype
     from app.models import TableSchema
 

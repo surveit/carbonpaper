@@ -30,7 +30,7 @@ def _configure_default_document_store() -> None:
 def _configure_default_frame_store() -> None:
     """A cache entry spans both stores — the row payload in the document store,
     the frame payload in the frame store — so the two roots must move together.
-    The default frames root is derived from the document store's own location
+    The default frames root is computed from the document store's own location
     rather than from an independent relative literal: pinning `CARBONPAPER_DB_PATH`
     alone carries the frames with it, instead of silently leaving them resolving
     against the process's working directory, where a run launched from

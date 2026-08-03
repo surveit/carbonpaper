@@ -1,5 +1,5 @@
 """The one thing llm_transform adds over a plain LLM call: it compiles the
-derived reply spec — output_schema − input_schema — to the Pydantic model the
+computed reply spec — output_schema − input_schema — to the Pydantic model the
 agent backend enforces. The call mechanism itself is unchanged (llm.call_llm
 per row, driven by the runtime's row driver)."""
 from __future__ import annotations

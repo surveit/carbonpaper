@@ -53,7 +53,7 @@ type's registered shape disagrees with that core fact, and
 ## `app/compiler/` — prose → LLM generation engines
 Three generators, each an `app.core.agent` Agent targeting a model schema: `data_model.py`
 (document → `SchemaLibrary`, the nouns a human then approves), `stage_tests.py` (one
-python-transform stage + the document → its `StageTest` cases, derived code-blind), and
+python-transform stage + the document → its `StageTest` cases, generated code-blind), and
 `review_guide.py` (one saved version's frozen stages + the document → its `ReviewGuide`).
 All three submit through `submit_answer`, so a schema-invalid reply is **re-asked inside
 the agent's own loop**, not just parse-checked. `app/services/generation.py` drives them

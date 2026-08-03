@@ -12,7 +12,12 @@ from arch import find_banned_words, scan_all_text
 
 # "canonical to whom, by what rule?" — say what actually holds: a sorted-key JSON
 # dump, the spec-dict form, the on-disk text, HASH_IGNORED_KEYS.
-BANNED_WORDS = {"canonical"}
+#
+# "deriv*" — we do not derive anything here. An LLM turn that writes a stage's
+# example test cases GENERATES them (test generation). A value computed from
+# other values is computed from / read off / built from / follows from the
+# thing it comes from — name that thing.
+BANNED_WORDS = {"canonical", "deriv"}
 
 _SCANNED_SUFFIXES = (".py", ".md", ".html", ".js", ".css")
 

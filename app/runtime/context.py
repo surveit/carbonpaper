@@ -108,7 +108,7 @@ class RunContext(BaseModel):
 
     def attach_run_log(self, log: RunLog) -> RunContext:
         """A copy of this context carrying `log` — the executor's one attachment point."""
-        # The only derivation of a context: the log's lifetime is the run's, so
+        # The only copy-with-change a context allows: the log's lifetime is the run's, so
         # it cannot be set by the constructors (which run before the run's
         # directory is being written to) without leaking a writer thread when a
         # prepared run is never executed.

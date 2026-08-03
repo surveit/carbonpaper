@@ -14,7 +14,7 @@
      type_class / type_glyph — the type-tag maps
      test_views — shaped per-test run results for _stage_tests.html
                     ([] for stages without tests; see node_review._shape_one_test)
-     test_derivable — stage.CARRIES_RUNNABLE_TESTS; gates the Generate tests
+     can_generate_tests — stage.CARRIES_RUNNABLE_TESTS; gates the Generate tests
                     button in _stage_tests.html
 #}
 {% from "_schema_table.html" import schema_table %}
@@ -208,8 +208,8 @@
     }
   }
 
-  // ── Generate tests: kick a hidden derivation turn, poll its status, then
-  //    re-fetch this whole panel via window._loadStage so the freshly derived
+  // ── Generate tests: kick a hidden generation turn, poll its status, then
+  //    re-fetch this whole panel via window._loadStage so the freshly generated
   //    suite renders (mirrors how a decision/edit refreshes the graph). ──
   const genBtn = panel.querySelector('[data-role="generate-tests"]');
   const genMsg = panel.querySelector('[data-role="generate-tests-msg"]');
@@ -250,7 +250,7 @@
   async function startGenerateTests() {
     if (!genBtn) return;
     genBtn.disabled = true;
-    genBtn.textContent = 'Deriving tests…';
+    genBtn.textContent = 'Generating tests…';
     if (genMsg) { genMsg.textContent = ''; genMsg.className = 'nr-edit-msg'; }
     try {
       const r = await fetch(GENERATE_TESTS_URL, { method: 'POST' });
@@ -263,7 +263,7 @@
       }
       pollGenerateTestsStatus(d.session);
     } catch (e) {
-      if (genMsg) { genMsg.textContent = 'Failed to start derivation.'; genMsg.className = 'nr-edit-msg err'; }
+      if (genMsg) { genMsg.textContent = 'Failed to start generation.'; genMsg.className = 'nr-edit-msg err'; }
       resetGenerateTestsButton();
     }
   }

@@ -317,7 +317,7 @@ def test_coverage_check_accepts_conflict_aware_injected_name(tmp_path):
     assert report.problems == []
 
 
-# ── get_injected_columns (the shared derivation) ──────────────────────────────
+# ── get_injected_columns (the shared column rule) ──────────────────────────────
 def test_get_injected_columns_no_conflict_named_after_target(tmp_path):
     override = _file_input("src", tmp_path, cols=["k", "v"])
     target = _row("tgt", [override], output_schema={
@@ -338,7 +338,7 @@ def test_get_injected_columns_conflict_renames_override_side(tmp_path):
     assert len(names) == len(set(names))  # never a duplicate column name
 
 
-def test_get_injected_columns_is_the_override_side_of_the_derivation(tmp_path):
+def test_get_injected_columns_is_the_override_side_of_the_column_rule(tmp_path):
     override = _file_input("src", tmp_path, cols=["k", "score"])
     target = _row("tgt", [override], output_schema={
         "columns": [{"name": "k"}, {"name": "score", "type": "float"}]})

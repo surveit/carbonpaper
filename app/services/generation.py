@@ -13,7 +13,10 @@ from pydantic import BaseModel
 
 from app.compiler.data_model import start_data_model_generation_agent
 from app.compiler.review_guide import start_review_guide_generation_agent
-from app.compiler.stage_tests import start_stage_test_derivation_agent
+from app.compiler.stage_tests import start_stage_test_generation_agent
+# Re-exported for the status route: only services may import app.compiler, and the
+# route must match the marker on the same string the turn writes.
+from app.compiler.turn_failure import GENERATION_FAILURE_PREFIX as GENERATION_FAILURE_PREFIX
 from app.core.errors import GenerationError
 from app.models.review_guide import ReviewGuide
 from app.models.named_schemas import SchemaLibrary
@@ -40,7 +43,7 @@ def start_generation(project_dir: Path, *, document: str, model: str) -> str:
 
 
 def start_stage_test_generation(project_dir: Path, *, stage_id: str, model: str) -> str:
-    """Kick off STAGE-TEST derivation for one stage and return the id of
+    """Kick off STAGE-TEST generation for one stage and return the id of
     the (hidden, view-only) chat session streaming the turn. Loads document.md and the
     stage's current compiled spec — raising ValueError if the project has no document,
     `stage_id` names no stage in the compiled workflow, the stage's type carries no
@@ -48,28 +51,28 @@ def start_stage_test_generation(project_dir: Path, *, stage_id: str, model: str)
     the check is a belt-and-braces guard, since tests need one to state expected rows).
     Every one of these checks runs BEFORE the
     session/turn are started, so a rejected stage never creates an orphaned session
-    (build_stage_test_deriver / render_derivation_task would raise the same errors, but only
+    (build_stage_test_generator / render_generation_task would raise the same errors, but only
     after the session already exists). On completion, `_finish_stage_tests`
     REPLACES the stage's tests wholesale with whatever suite the agent submitted — no
     human-touched marker exists yet, so this is a destructive regenerate (documented on the
     generate-tests button/route). Must be called from the server event loop."""
     doc_path = find_document_path(project_dir)
     if doc_path is None:
-        raise ValueError(f"{project_dir.name} has no document to derive tests from")
+        raise ValueError(f"{project_dir.name} has no document to generate tests from")
     stages = {stage.id: stage for stage in load_workflow(project_dir)}
     stage = stages.get(stage_id)
     if stage is None:
         raise ValueError(f"no stage '{stage_id}' in {project_dir.name}")
     if not stage.CARRIES_RUNNABLE_TESTS:
         raise ValueError(
-            f"tests can only be derived for stage types that can run them, "
+            f"tests can only be generated for stage types that can run them, "
             f"not `{stage.type}`"
         )
     if stage.output_schema is None:
         raise ValueError(
             f"stage `{stage_id}` has no output schema — tests need one to state expected rows"
         )
-    return start_stage_test_derivation_agent(
+    return start_stage_test_generation_agent(
         document=doc_path.read_text(encoding="utf-8"),
         stage=stage,
         project_id=project_dir.name,
@@ -128,7 +131,7 @@ def _finish_review_guide(
 
 
 def _finish_stage_tests(project_dir: Path, stage_id: str, answer: BaseModel | None) -> None:
-    """Completion hook for the stage-test-derivation turn (runs on the event loop):
+    """Completion hook for the stage-test-generation turn (runs on the event loop):
     REPLACES `stage_id`'s tests wholesale with the submitted suite — the whole `tests`
     array, not a merge of individual cases, since no human-touched marker exists yet to
     tell an authored case from a stale one.
@@ -139,23 +142,23 @@ def _finish_stage_tests(project_dir: Path, stage_id: str, answer: BaseModel | No
     patch that stage_edit.patch_stage_spec refuses (it validates the whole resulting
     workflow before writing) raises GenerationError naming the reported issues —
     never a silent no-op. Either GenerationError is caught by the caller
-    (start_stage_test_derivation_agent's on_done hook), which persists it into the
+    (start_stage_test_generation_agent's on_done hook), which persists it into the
     session's transcript before re-raising."""
     if answer is None:
         raise GenerationError(
-            f"stage-test derivation for '{stage_id}' in {project_dir.name} "
+            f"stage-test generation for '{stage_id}' in {project_dir.name} "
             "did not submit a suite"
         )
     patch = answer.model_dump(mode="json", by_alias=True, exclude_none=True)
     if not patch.get("tests"):
         raise GenerationError(
-            f"stage-test derivation for '{stage_id}' in {project_dir.name} "
+            f"stage-test generation for '{stage_id}' in {project_dir.name} "
             "submitted an empty test suite"
         )
     patch_text = json.dumps(patch)
     result = patch_stage_spec(project_dir, stage_id, patch_text)
     if not result.ok:
         raise GenerationError(
-            f"stage-test derivation for '{stage_id}' in {project_dir.name} "
+            f"stage-test generation for '{stage_id}' in {project_dir.name} "
             "failed to patch: " + "; ".join(result.issues)
         )

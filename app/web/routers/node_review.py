@@ -79,7 +79,7 @@ async def node_review_partial(request: Request, project: str, stage_id: str):
             "type_glyph": TYPE_GLYPH,
             "test_views": (views := shape_test_views(stage)),
             "certification": build_certification(stage, views),
-            "test_derivable": stage.CARRIES_RUNNABLE_TESTS,
+            "can_generate_tests": stage.CARRIES_RUNNABLE_TESTS,
         },
     )
 
@@ -148,7 +148,7 @@ async def node_edit(
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     if not result.ok:
         return JSONResponse({"ok": False, "issues": result.issues}, status_code=400)
-    # The writer reports only success; re-derive the node's colour here from the
+    # The writer reports only success; recompute the node's colour here from the
     # freshly-written stage, the same way review_status colours the workflow, so
     # the caller can flip the node live without a full reload.
     stage = find_stage(load_stages(project).stages, stage_id)
@@ -163,7 +163,7 @@ async def node_edit(
 
 @router.post("/project/{project}/node/{stage_id}/generate-tests")
 async def node_generate_tests(project: str, stage_id: str):
-    """Kick off hidden stage-test derivation for one stage and
+    """Kick off hidden stage-test generation for one stage and
     return the session id the JS poller watches. `generation.start_stage_test_generation`
     raises ValueError for an unknown/untestable stage or a project with no document, and
     WorkflowLoadError (via its `load_workflow` call) if the compiled workflow itself
@@ -185,23 +185,23 @@ async def node_generate_tests(project: str, stage_id: str):
 
 @router.get("/project/{project}/generation-session/{sid}/status")
 async def generation_session_status(project: str, sid: str):
-    """Poll target for a hidden derivation session: `active` mirrors the session's
+    """Poll target for a hidden generation session: `active` mirrors the session's
     `active_turn` (truthy while the turn runs); once inactive, `error` reports the
-    persisted failure text if `app.compiler.stage_tests._persist_derivation_failure`
-    appended one (an assistant message starting `derivation failed: `), else None."""
+    persisted failure text if `app.compiler.turn_failure.persist_generation_failure`
+    appended one (an assistant message starting `generation failed: `), else None."""
     del project  # URL-namespaced only; sessions are looked up by id, not by project.
     store = open_session_store()
     if not store.exists(sid):
         raise HTTPException(status_code=404, detail=f"No session '{sid}'")
     session = store.load(sid)
     active = bool(session["active_turn"])
-    error = None if active else _find_derivation_failure(session["messages"])
+    error = None if active else _find_generation_failure(session["messages"])
     return JSONResponse({"active": active, "error": error})
 
 
-def _find_derivation_failure(messages: list[dict]) -> str | None:
-    """The persisted derivation-failure text among a session's messages (see
-    `_persist_derivation_failure`), or None if none of them report one."""
+def _find_generation_failure(messages: list[dict]) -> str | None:
+    """The persisted generation-failure text among a session's messages (see
+    `persist_generation_failure`), or None if none of them report one."""
     for message in messages:
         if message.get("role") != MessageRole.assistant:
             continue
@@ -209,7 +209,7 @@ def _find_derivation_failure(messages: list[dict]) -> str | None:
             part.get("text", "") for part in message.get("parts", [])
             if part.get("type") == PartType.text
         )
-        if text.startswith("derivation failed: "):
+        if text.startswith(generation.GENERATION_FAILURE_PREFIX):
             return text
     return None
 

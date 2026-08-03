@@ -326,7 +326,7 @@ class StageBase(StageCommon):
         """A declared output_schema must be deliverable by this stage's own
         config: for the types whose output is fixed by config (join, aggregate,
         union, filter_rows), every declared column must be producible by name,
-        with the declared type matching the derivation where it can be known.
+        with the declared type matching what the config computes, where that can be known.
         EDGE-ONLY and per-stage, like _config_columns_resolve."""
         issues = self.find_output_schema_issues()
         if issues:

@@ -90,9 +90,9 @@ def test_binding_connectorless_stage_rejected(tmp_path):
     # Bindings override connector params; a stage with no connector has nothing
     # to bind, whatever its type. Generic rule — no file/type special-casing.
     stages = [_input_stage("load", str(tmp_path / "a.csv")),
-              _connectorless_stage("derive", "load")]
-    with pytest.raises(ValueError, match="derive"):
-        apply_run_bindings(stages, {"derive": {"path": str(tmp_path / "b.csv")}})
+              _connectorless_stage("score", "load")]
+    with pytest.raises(ValueError, match="score"):
+        apply_run_bindings(stages, {"score": {"path": str(tmp_path / "b.csv")}})
 
 
 def test_original_stages_untouched(tmp_path):
@@ -125,7 +125,7 @@ def test_ready_stage_yields_provenance_record(tmp_path):
 def test_connectorless_stage_has_no_preflight(tmp_path):
     data = tmp_path / "a.csv"
     pd.DataFrame({"x": [1]}).to_csv(data, index=False)
-    stages = [_input_stage("load", str(data)), _connectorless_stage("derive", "load")]
+    stages = [_input_stage("load", str(data)), _connectorless_stage("score", "load")]
     records = validate_stages_ready(stages, {"load": "workflow"})
     assert set(records) == {"load"}
 

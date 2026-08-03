@@ -96,13 +96,13 @@ def _build_injected_outputs(
 ) -> dict[str, pd.DataFrame]:
     """The tables seeded as stage outputs before the subset runs: the eval dataset
     as the override stage's output, plus each reference override's table."""
-    outputs = {config.override_stage: _derive_override_output(override, target, config, dataset)}
+    outputs = {config.override_stage: _compute_override_output(override, target, config, dataset)}
     for ref in config.reference_overrides:
         outputs[ref.stage_id] = _read_table_ref(repo_root, ref.table)
     return outputs
 
 
-def _derive_override_output(
+def _compute_override_output(
     override: Stage, target: Stage, config: EvalConfig, dataset: pd.DataFrame,
 ) -> pd.DataFrame:
     """Compute the override stage's output from the eval dataset: take its injected
