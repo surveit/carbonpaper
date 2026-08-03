@@ -25,7 +25,10 @@ routers in `app/web/routers/`, which import the Runner (`app.runtime`) and the s
   here would show the same thing twice and push you off "Current run" mid-panel.
 - **Outputs** — output schema + preview + **validation rendered as part of the output** (input
   + output issues from the manifest). URL cells are full clickable links. Compiler notes live
-  on `/compile`, not here.
+  on `/compile`, not here. For a 1:1 stage (`python_row_function`, `llm_transform`) the preview
+  reads as a **diff against the stage's input** (added columns tinted, changed cells marked);
+  a `filter_rows` stage carries a dropped-rows report above its preview. Both come from
+  `app.web.stage_diff`, which returns None — plain pane — whenever alignment can't be verified.
 
 ## Live progress + scratch re-run
 `POST /project/<m>/run` → `prepare_run` (initial `running` manifest) → background thread →

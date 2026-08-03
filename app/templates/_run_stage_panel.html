@@ -135,7 +135,14 @@
 
   {# ─────────── RUN × OUTPUTS ─────────── #}
   <div class="pane" data-pane="run-outputs" hidden>
-    {% if preview and preview.preview %}
+    {# Stage-aware diff (app.web.stage_diff): a row_aligned diff REPLACES the
+       plain preview table below (same rows, annotated against the input); a
+       dropped_rows report sits ABOVE it. diff is None for out-of-scope stage
+       types and whenever alignment can't be verified — the pane then reads
+       exactly as before. #}
+    {% if diff %}{% include "_stage_diff.html" %}{% endif %}
+    {% if diff and diff.kind == 'row_aligned' %}
+    {% elif preview and preview.preview %}
     <div class="preview-block">
       <div class="preview-head">output data {% set shown = preview.preview | length %}<span class="muted">· {% if preview.rows_total > shown %}first {{ shown }} of {% endif %}{{ "{:,}".format(preview.rows_total) }} row{% if preview.rows_total != 1 %}s{% endif %}</span>
         <span class="preview-actions">· <a href="/project/{{ project }}/runs/{{ run_id }}/stage/{{ stage.stage_id }}/rows">view all rows</a>

@@ -2,7 +2,7 @@
 
 The screens a workflow *operator* (vs. its author) uses: watching a run,
 reviewing flagged rows, and approving/versioning the workflow itself. Code:
-`app/web/routers/{runs,review,node_review}.py` + `app/templates/`
+`app/web/routers/{runs,run_lineage,review,node_review}.py` + `app/templates/`
 (`run_detail.html`, `_run_stage_panel.html`, `queue.html`, `_node_review.html`,
 `versions.html`) + `app/static/style.css`. All routes live under
 `/project/{project}/…`.
@@ -45,6 +45,15 @@ after injection — without that, the panel's JS (tabs + scratch tool) is dead.
   output (not just the first-5 preview); `…/rows.csv` downloads it uncapped,
   UTF-8 behind a byte-order mark so accented rows open correctly in Excel on
   Windows (`loading.csv_download_body`).
+- **Stage-aware diff in Outputs** (`app.web.stage_diff` → `_stage_diff.html`):
+  a 1:1 stage's (`python_row_function`, `llm_transform`) output preview is a
+  positional diff against its input — columns the stage added are tinted and
+  named in words, changed cells carry the replaced value struck through, and
+  the summary line counts changes over the whole frame. A `filter_rows` stage
+  shows which input rows it dropped (read off its lineage sidecar, never
+  guessed) above the normal preview. Every other stage type keeps the plain
+  pane, and any stage whose alignment can't be verified (missing frame,
+  row-count mismatch, absent sidecar) falls back to the plain pane.
 
 ## Review queue (`queue.html`)
 
