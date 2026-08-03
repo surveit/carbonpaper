@@ -37,21 +37,7 @@ from .stages import PREFLIGHTS
 
 
 def resolve_version_id(project_dir: Path, version_id: str | None) -> str:
-    """Resolve the workflow version a run will be pinned to. Every run MUST target a
-    real, PUBLISHED version — we never blank it, never fabricate one, never
-    silently read the working copy, and never CREATE one as a run side effect.
-    A run is read-only with respect to versions.
-
-    - If `version_id` is given, it must name an existing, published version; we
-      fail loudly otherwise rather than redirecting to some other snapshot or
-      silently running an unreviewed draft.
-    - If `version_id` is None, pin to the newest PUBLISHED version (an
-      unpublished version more recent than it is skipped).
-    - If no version exists, or none is published, raise NoVersionToRunError. A
-      run will not immortalise the working copy as a version (that is what let
-      an invalid working copy poison "the latest" and fail every subsequent
-      run), and a run will not treat an unreviewed draft as runnable.
-    """
+    """Never creates a version: a run is read-only with respect to versions."""
     if version_id is not None:
         # Validate the requested version exists (load_version fails loudly if
         # its version.json is missing) — a caller asking for a specific id
@@ -78,24 +64,7 @@ def resolve_version_id(project_dir: Path, version_id: str | None) -> str:
 def apply_run_bindings(
     stages: list[Stage], bindings: Mapping[str, Mapping[str, Any]] | None
 ) -> tuple[list[Stage], dict[str, str]]:
-    """Apply per-run bindings to just-loaded stages. A binding is a dict of
-    connector params, keyed by stage id, merged over that stage's connector
-    params for this run only. Bound stages are replaced by re-validated copies
-    (the Connector model enforces its own param rules — e.g. a `path` must be
-    absolute); the given stages are never mutated, so the version snapshot
-    stays immutable.
-
-    This function knows nothing about what any param MEANS — that a connector
-    reads a file, needs a path, has a format. Param semantics live in the
-    Connector model (validation) and in each stage type's preflight
-    (run-readiness — see stages.PREFLIGHTS).
-
-    Returns (stages, param_sources): param_sources maps every
-    connector-carrying stage id to where its effective params came from —
-    "run" (a binding was applied) or "workflow" (authored params, untouched).
-
-    Fails loudly on a binding keyed to a stage id that does not exist or
-    carries no connector, and on a binding value that is not a dict of params."""
+    """Also returns each connector stage's param source: "run" (a binding applied) or "workflow"."""
     connector_ids = {s.id for s in stages if isinstance(s, InputDataStage)}
     given = dict(bindings or {})
     unbindable = sorted(set(given) - connector_ids)
@@ -121,9 +90,7 @@ def apply_run_bindings(
 def _merge_connector_params(
     stage: InputDataStage, binding: Mapping[str, Any]
 ) -> InputDataStage:
-    """A copy of `stage` with `binding` merged over its connector params,
-    re-validated as a whole Connector so a bad param fails at prepare, not
-    mid-run."""
+    """Re-validates the whole Connector so a bad param fails at prepare, not mid-run."""
     if not isinstance(binding, Mapping):
         raise ValueError(
             f"binding for `{stage.id}` must be a dict of connector params, "
@@ -141,12 +108,7 @@ def _merge_connector_params(
 def validate_stages_ready(
     stages: list[Stage], param_sources: dict[str, str]
 ) -> dict[str, dict[str, Any]]:
-    """Run each stage type's preflight — the stage-owned readiness check and
-    provenance record (stages.PREFLIGHTS) — over the whole workflow, BEFORE the
-    run dir is created. Every issue is aggregated into one
-    MissingInputBindingError so a caller fixes all unready stages in one pass.
-    Returns the provenance records keyed by stage id, each tagged with where
-    its params came from ("run" binding or the "workflow" itself)."""
+    """Aggregates every stage's preflight issues into one error, so a caller fixes them in one pass."""
     issues: list[str] = []
     records: dict[str, dict[str, Any]] = {}
     for stage in stages:
@@ -171,53 +133,7 @@ def prepare_run(
     bindings: Mapping[str, Mapping[str, Any]] | None = None,
     bust_cache: bool = False,
 ) -> dict[str, Any]:
-    """Create the run dir + id and write an initial `running` manifest (all
-    stages pending) so a caller can redirect to the run page immediately and
-    poll it while execution proceeds in the background. Returns a dict with the
-    run_id, run_dir, ctx, ordered stages and the manifest.
-
-    The run is PINNED to a workflow version: stages are loaded from the version's
-    immutable snapshot (versioning.load_version_stages), never from the live
-    `compiled/` working copy, so working-copy edits can never affect this run.
-    `version_id` resolution is documented on resolve_version_id (None -> the
-    newest PUBLISHED version; a project with no published version raises
-    NoVersionToRunError); the resolved id is recorded in the manifest as
-    `workflow_version`.
-
-    `limits` is a per-RUN row-cap override: {stage_id: N} truncates that
-    stage's output to its first N rows for this run only, overriding any
-    static `limit:` in the stage spec. `offsets` ({stage_id: M}) drops the
-    first M rows BEFORE the cap is applied — together they page through a
-    deterministic ordering (offset 5 + limit 3 = rows 6-8). Both are recorded
-    in the manifest (`limit_overrides` / `offset_overrides`) so the slice is
-    part of the run's provenance and survives a halt/resume. Unknown stage
-    ids fail loudly.
-
-    `bindings` is a per-run connector-param override: {stage_id: params dict}
-    merged over that stage's connector params for this run only (see
-    apply_run_bindings — the runner attaches no meaning to the params; the
-    Connector model validates them and each stage type's preflight decides
-    run-readiness). Each preflight's provenance record — for an input stage,
-    the absolute path plus a sha256 + byte count streamed now — lands in the
-    manifest (`input_bindings`), tagged with the params' source
-    (`"run"`/`"workflow"`). A binding naming a stage with no connector fails
-    loudly (ValueError); a stage whose preflight finds it unready — no file
-    bound, or the bound file absent — fails loudly (MissingInputBindingError,
-    aggregating every unready stage).
-
-    `bust_cache` recomputes everything: the run skips every stage-cache READ
-    while still recording what it computes, so the cache ends the run
-    re-pinned rather than stale. It is recorded in the manifest and re-applied
-    on resume, like the row slicing above. For a human_review_queue stage that
-    means no prior decision is replayed — every queueable row halts again and
-    the humans are re-asked.
-
-    Raises NoVersionToRunError (no version exists, or none is published) or
-    WorkflowLoadError (from the version snapshot's strict load) before the run
-    dir is created, so a run with no published version — or an invalid
-    workflow — never leaves a run behind.
-    The same holds for a binding/preflight failure: it is raised before the
-    run dir is created."""
+    """Writes an all-pending `running` manifest up front, so a caller can poll while the run executes."""
     workflow_version = resolve_version_id(project_dir, version_id)
     stages = versioning.load_version_stages(project_dir, workflow_version)
     stages, param_sources = apply_run_bindings(stages, bindings)
@@ -271,10 +187,7 @@ def prepare_run(
 
 
 def run_prepared(prep: dict[str, Any]) -> dict[str, Any]:
-    """Execute a run previously set up by prepare_run(). Suitable for running in
-    a background thread (the manifest is updated on disk as stages complete).
-    Returns the final manifest as a plain JSON-native dict — the same shape a
-    reader parses off disk."""
+    """Safe to run in a background thread; the manifest is updated on disk as stages complete."""
     manifest = _execute_stages(prep["ordered"], prep["ctx"], prep["manifest"],
                                prep["run_dir"], outputs_so_far={})
     return manifest.to_dict()
@@ -289,12 +202,6 @@ def execute_run(
     bindings: Mapping[str, Mapping[str, Any]] | None = None,
     bust_cache: bool = False,
 ) -> dict[str, Any]:
-    """Run the workflow once (synchronous). Returns the manifest dict. `version_id`
-    pins the run to a workflow version (None -> newest published; none published ->
-    NoVersionToRunError); see prepare_run / resolve_version_id.
-    `limits`/`offsets` are per-run row slicing overrides; `bindings` is the
-    per-run connector-param override; `bust_cache` recomputes everything; see
-    prepare_run."""
     return run_prepared(
         prepare_run(project_dir, repo_root, version_id,
                     limits=limits, offsets=offsets, bindings=bindings,
@@ -303,9 +210,6 @@ def execute_run(
 
 
 def resume_run(project_dir: Path, run_id: str, repo_root: Path) -> dict[str, Any]:
-    """Resume a previously halted run. Loads existing outputs from disk,
-    re-runs the halted queue stage (decisions now exist), continues
-    downstream, updates the same manifest in place."""
     run_dir = project_dir / "runs" / run_id
     manifest = load_manifest_model(run_dir)
 

@@ -22,19 +22,8 @@ JsonDict = dict[str, Any]
 
 
 def validate_id(id: str) -> str:
-    """Return ``id`` if it is safe to use as a storage key and relative-path
-    component, else raise ``ValueError``. A composite id (``<project>/<local>``)
-    may contain ``/``, but never an empty or ``..`` segment, a leading ``/``, a
-    backslash, a NUL, or a colon — so an id sourced from a model or an upload
-    can't escape its collection when a backend turns it into a file path. This
-    rejects an absolute path under any OS convention: POSIX-absolute (``/x``) is
-    caught by the leading-``/`` check, and the colon ban catches every
-    Windows-absolute form — drive-absolute (``C:/x``, ``C:\\x``) and
-    drive-relative (``C:x``) alike, plus NTFS alternate-data-stream names
-    (``name:stream``) — on every OS, including when validation runs on Linux.
-    That last part matters because ``pathlib.Path(id).is_absolute()`` follows
-    whatever platform it runs on and would let ``C:/x`` through unchanged there,
-    so this check tests for ``:`` directly instead of deferring to pathlib."""
+    """Bans ``:``: ``Path.is_absolute()`` is platform-dependent and lets ``C:/x`` through
+    on Linux."""
     if not id or id != id.strip():
         raise ValueError(f"empty or untrimmed id: {id!r}")
     if id.startswith("/") or "\\" in id or "\x00" in id or ":" in id:
@@ -45,18 +34,8 @@ def validate_id(id: str) -> str:
 
 
 class SqliteKvStore:
-    """DocumentStore backed by one SQLite table: opaque JSON bodies keyed by
-    (collection, id). Writes are atomic; WAL mode lets readers run concurrently
-    with a writer. `db_path` is a file path or ":memory:" (tests).
-
-    ONE connection serves every caller (`check_same_thread=False`), and callers
-    are multi-threaded — a run's row driver computes rows in a worker pool, the
-    web app serves requests concurrently. A shared `sqlite3.Connection` does not
-    tolerate interleaved `execute`/`commit`, so `_lock` serializes every method
-    that touches it. It is reentrant because the scan helper is called by
-    methods that already hold it, and it is held across a scan's full
-    materialization: a cursor consumed after the lock is released would be read
-    while another thread is mid-statement."""
+    """ONE connection serves every (multi-threaded) caller, so reentrant `_lock` must wrap
+    every statement."""
 
     def __init__(self, db_path: str) -> None:
         self._lock = RLock()
@@ -129,11 +108,8 @@ class SqliteKvStore:
         return parsed
 
     def _scan(self, columns: str, collection: str, prefix: str) -> list[tuple[Any, ...]]:
-        """Every matching row, MATERIALIZED under the lock — a lazily-consumed
-        cursor would be read while another thread holds the connection.
-
-        `columns` is an internal literal, never user input. Prefix match is an
-        index-friendly range on the (collection, id) primary key."""
+        """`columns` is an internal literal, never user input; rows are materialized under
+        the lock."""
         with self._lock:
             if prefix:
                 hi = prefix[:-1] + chr(ord(prefix[-1]) + 1)
@@ -170,8 +146,6 @@ _store: DocumentStore | None = None
 
 
 def configure_store(store: DocumentStore) -> None:
-    """Install the process-wide document store. App startup calls this once with a
-    SqliteKvStore('data/app.db'); each test installs a fresh SqliteKvStore(':memory:')."""
     global _store
     _store = store
 
@@ -191,32 +165,8 @@ def _now_iso() -> str:
 
 
 class PersistenceScope(str, Enum):
-    """Permission profile FOR RUN ACTIVITY over the two storage scopes every
-    caller already knows: a run's own directory-lifetime, and the project. The
-    authoring surface (a human or an authoring agent writing a version, a
-    draft, or a chat session) always has full project-scope read/write
-    directly — this enum constrains only what code executing INSIDE a run may
-    touch:
-
-    - RUN: run-scope only, no project-scope access at all — the record is
-      produced by one run and is meaningless outside it.
-    - PROJECT_READ: run activity may read the project scope, never write. A
-      run may read a human-authored artifact (e.g. the version it executes)
-      but never write one.
-    - PROJECT_READ_WRITE: run activity may read AND write the project scope —
-      the only profile that grants a write outliving the run. The only model
-      carrying it is the stage-result cache; any model carrying it must
-      define `read_only`, the safe read-only view every such cross-run
-      writable channel must offer.
-
-    Design invariant: exactly one PersistedModel subclass may carry
-    SCOPE = PROJECT_READ_WRITE — the single deliberate channel that lets run
-    activity write something outliving the run; broadening it would blur the
-    line this scope exists to hold. StageCacheEntry (app.core.stage_cache)
-    is that one subclass; both the "every subclass declares SCOPE" rule and
-    the "PROJECT_READ_WRITE implies read_only" rule are enforced by the arch
-    tests in app/_arch_tests/test_persisted_models_declare_scope.py.
-    """
+    """Constrains only code executing INSIDE a run; the authoring surface always has full
+    project access."""
 
     RUN = "run"
     PROJECT_READ = "project_read"
@@ -224,26 +174,8 @@ class PersistenceScope(str, Enum):
 
 
 class PersistedModel(BaseModel):
-    """Base for every stored record. A subclass sets `collection` (the table name)
-    and carries an `id` (its primary key); save()/load()/list() go through the
-    configured DocumentStore, so nothing above this class touches storage. The
-    body is serialized as JSON. Every subclass also declares `SCOPE` — see
-    `PersistenceScope` — with no base-class default. Nothing at runtime reads
-    `SCOPE`; the sole enforcement is the AST arch test
-    `test_persisted_models_declare_scope` in
-    `app/_arch_tests/test_persisted_models_declare_scope.py`, which flags an
-    undeclared subclass at review time.
-
-    `created_at`/`updated_at` are stamped automatically, so a subclass never
-    hand-rolls them: on a fresh construct (no stored value yet) both
-    default_factory to now; on load from the store, the stored values are
-    present in the input dict so the factory never fires, and the original
-    values survive. `save()` re-stamps `updated_at` to now on every call, so it
-    always reflects the last write while `created_at` stays at first-construct
-    time.
-
-    Its own strict config mirrors app.models._Base without importing it, so the
-    storage layer stays free of an app.models dependency."""
+    """Nothing reads `SCOPE` at runtime; only `test_persisted_models_declare_scope` enforces
+    it."""
 
     model_config = ConfigDict(
         extra="forbid",
