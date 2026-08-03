@@ -6,13 +6,16 @@ directory · **methodology** = the authored prose (`methodology_raw.md`) ·
 **workflow** = the stage graph it compiles to. What/why + features → `docs/overview.md`;
 code map → `docs/architecture.md`; quickstart → `README.md`.
 
-## The 11 stage types
+## The 12 stage types
 `input_data` · `llm_transform` · `python_row_function` · `python_frame_function` · `enrich` ·
-`expand` · `aggregate` · `human_review_queue` · `publish` · `union` · `filter_rows`. Prefer
-`python_row_function` (runtime-enforced 1:1) unless the logic needs the whole frame. `enrich`
-and `expand` are both LEFT joins of a reference input into a subject input, differing only in
-permitted cardinality (m:1, verified; vs m:n fan-out); neither drops a subject row — that is
-`filter_rows`' job.
+`expand` · `aggregate` · `human_review_queue` · `publish` · `union` · `filter_rows` ·
+`external`. Prefer `python_row_function` (runtime-enforced 1:1) unless the logic needs the
+whole frame. `enrich` and `expand` are both LEFT joins of a reference input into a subject
+input, differing only in permitted cardinality (m:1, verified; vs m:n fan-out); neither drops
+a subject row — that is `filter_rows`' job. `external` is the row-mapped type for work that
+reaches OUTSIDE the workflow; it is the only type that runs a separate program — an argv +
+timeout named by its `external:` block instead of carrying code, spawned once per row with
+the row as JSON on stdin.
 
 ## Repo layout
 ```

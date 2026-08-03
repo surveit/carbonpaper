@@ -36,7 +36,7 @@ def _row_stage(code: str = _DOUBLING_CODE, *, cache: bool = True) -> Stage:
         "cache": cache,
         "output_schema": {
             "columns": [{"name": "x", "type": "int"}, {"name": "y", "type": "int"}]},
-        "function": {"kind": "inline", "code": code},
+        "function": {"code": code},
     })
 
 

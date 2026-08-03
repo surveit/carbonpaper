@@ -14,7 +14,7 @@ def _row_stage(code: str, tests: list[dict]) -> Stage:
         "id": "double", "name": "Double", "type": "python_row_function",
         "inputs": [{"id": "load", "schema": _IN_SCHEMA}],
         "output_schema": _OUT_SCHEMA,
-        "function": {"kind": "inline", "code": code},
+        "function": {"code": code},
         "tests": tests,
     })
 
@@ -237,7 +237,7 @@ def _frame_stage(code: str, tests: list[dict]) -> Stage:
         "id": "reshape", "name": "Reshape", "type": "python_frame_function",
         "inputs": [{"id": "load", "schema": _IN_SCHEMA}],
         "output_schema": _IN_SCHEMA,
-        "function": {"kind": "inline", "code": code},
+        "function": {"code": code},
         "tests": tests,
     })
 
@@ -267,7 +267,7 @@ def test_omitted_column_in_expected_row_claims_none():
         "id": "labelled", "name": "Labelled", "type": "python_frame_function",
         "inputs": [{"id": "load", "schema": _IN_SCHEMA}],
         "output_schema": labelled_schema,
-        "function": {"kind": "inline", "code": (
+        "function": {"code": (
             # dtype=object keeps the returned None a real None; pandas' default
             # str dtype would store it as NaN, which is a different value here.
             "import pandas as pd\n"
@@ -358,7 +358,7 @@ def _multi_input_frame_stage(code: str, tests: list[dict]) -> Stage:
             {"id": "right", "schema": _RIGHT_SCHEMA},
         ],
         "output_schema": _MERGED_SCHEMA,
-        "function": {"kind": "inline", "code": code},
+        "function": {"code": code},
         "tests": tests,
     })
 
@@ -392,7 +392,7 @@ def test_multi_input_frame_positional_order_is_declared_order():
             {"id": "right", "schema": id_schema},
         ],
         "output_schema": id_schema,
-        "function": {"kind": "inline", "code": "def transform(a, b):\n    return a\n"},
+        "function": {"code": "def transform(a, b):\n    return a\n"},
         "tests": [{
             "name": "returns_first_declared_input",
             "inputs": {

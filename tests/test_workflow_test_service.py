@@ -28,7 +28,7 @@ _LOAD_SCHEMA = {"columns": [{"name": "doc_id", "type": "str"},
 _CLASSIFY = {
     "id": "classify", "type": "python_row_function", "name": "Label by sign",
     "inputs": [{"id": "load", "schema": _LOAD_SCHEMA}],
-    "function": {"kind": "inline", "code":
+    "function": {"code":
                  "def transform(row):\n"
                  "    return {'doc_id': row['doc_id'], 'score': row['score'],\n"
                  "            'label': 'pos' if row['score'] >= 0 else 'neg'}"},
@@ -40,7 +40,7 @@ _CLASSIFY = {
 _BOOM = {
     "id": "boom", "type": "python_row_function", "name": "Always errors",
     "inputs": [{"id": "load", "schema": _LOAD_SCHEMA}],
-    "function": {"kind": "inline", "code":
+    "function": {"code":
                  "def transform(row):\n    raise ValueError('boom')"},
     "output_schema": {"columns": [{"name": "doc_id", "type": "str"},
                                   {"name": "score", "type": "int"}]},
@@ -51,7 +51,7 @@ _CLASSIFY_SCHEMA = _CLASSIFY["output_schema"]
 _PUBLISH = {
     "id": "publish_report", "type": "publish", "name": "Publish",
     "inputs": [{"id": "classify", "schema": _CLASSIFY_SCHEMA}],
-    "function": {"kind": "inline", "code":
+    "function": {"code":
                  "def transform(df, output_dir):\n"
                  "    import os\n"
                  "    path = os.path.join(output_dir, 'report.json')\n"
@@ -184,7 +184,7 @@ def test_workflow_test_raises_when_no_source_stage(demo):
         "id": "standalone", "type": "python_frame_function", "name": "No source",
         "inputs": [{"id": "upstream", "schema": _LOAD_SCHEMA}],
         "output_schema": _LOAD_SCHEMA,
-        "function": {"kind": "inline", "code": "def transform(df):\n    return df"},
+        "function": {"code": "def transform(df):\n    return df"},
     }
     # Build the version document directly; the guard fires before Workflow build.
     WorkflowVersion(

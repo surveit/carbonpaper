@@ -36,6 +36,10 @@ LLM_ERROR = "llm_error"
 # the tools the model was actually offered) — not the model's words, but the
 # only record of what the model had to work with.
 LLM_SYSTEM = "llm_system"
+# What an external stage's per-row process wrote to stderr. Emitted at
+# LEVEL_DETAIL: it is the only record of what a program that failed to hand back
+# a row was doing, and nothing else in the run can show it.
+EXTERNAL_STDERR = "external_stderr"
 
 # Where a row's output came from, stamped on every terminal row event. A cache
 # hit ran no code and called no model, so it has no start and no LLM detail —

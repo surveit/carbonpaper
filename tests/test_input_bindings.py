@@ -36,7 +36,7 @@ def _connectorless_stage(stage_id: str, input_id: str) -> Stage:
         "id": stage_id, "name": stage_id, "type": "python_row_function",
         "inputs": [{"id": input_id, "schema": _X_SCHEMA}],
         "output_schema": _X_SCHEMA,
-        "function": {"kind": "inline", "code": "def transform(row):\n    return row\n"},
+        "function": {"code": "def transform(row):\n    return row\n"},
     })
 
 

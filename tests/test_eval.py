@@ -28,7 +28,7 @@ def _py(id_, inputs, granularity="frame", schema=_K, **kw):
     output_schema — the inline transform is the identity."""
     type_ = "python_row_function" if granularity == "row" else "python_frame_function"
     return S(id=id_, type=type_, inputs=[{"id": i, "schema": schema} for i in inputs],
-             function={"kind": "inline", "code": "def transform(row): return row"},
+             function={"code": "def transform(row): return row"},
              output_schema=schema, **kw)
 
 
@@ -51,7 +51,7 @@ def test_python_row_function_rejects_multiple_inputs():
     with pytest.raises(ValidationError):
         m.parse_stage(S(id="t", type="python_row_function",
                                  inputs=[{"id": "a", "schema": _K}, {"id": "b", "schema": _K}],
-                                 function={"kind": "inline", "code": "def transform(row): return row"},
+                                 function={"code": "def transform(row): return row"},
                                  output_schema=_K))
 
 
@@ -85,7 +85,7 @@ def test_publish_not_grain_and_order_preserving():
     # artifact paths — different rows from its input, never row-alignable.
     s = m.parse_stage(S(id="pub", type="publish",
                                  inputs=[{"id": "a", "schema": _K}], publish={},
-                                 function={"kind": "inline", "code": "def transform(row): return row"}))
+                                 function={"code": "def transform(row): return row"}))
     assert s.is_grain_and_order_preserving is False
 
 

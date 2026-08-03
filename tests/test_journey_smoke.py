@@ -156,7 +156,7 @@ def _workflow_stages(authored_path: str) -> list[dict]:
         {
             "id": "flag", "name": "Flag rows over threshold", "type": "python_row_function",
             "inputs": [{"id": "load", "schema": load_schema}],
-            "function": {"kind": "inline", "code": (
+            "function": {"code": (
                 "def transform(row):\n"
                 "    row[\"flagged\"] = row[\"val\"] > 1\n"
                 "    return row\n"
@@ -166,7 +166,7 @@ def _workflow_stages(authored_path: str) -> list[dict]:
         {
             "id": "totals", "name": "Total per flag", "type": "python_frame_function",
             "inputs": [{"id": "flag", "schema": flag_schema}],
-            "function": {"kind": "inline", "code": (
+            "function": {"code": (
                 "def transform(df):\n"
                 "    return df.groupby(\"flagged\", as_index=False)[\"val\"].sum()\n"
             )},
@@ -176,7 +176,7 @@ def _workflow_stages(authored_path: str) -> list[dict]:
             "id": "report", "name": "Publish totals", "type": "publish",
             "inputs": [{"id": "totals", "schema": totals_schema}],
             "publish": {"format": "csv", "destination": "report/"},
-            "function": {"kind": "inline", "code": (
+            "function": {"code": (
                 "import pandas as pd\n"
                 "from pathlib import Path\n"
                 "\n"

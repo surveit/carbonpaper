@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import datetime
 import re
-from enum import Enum
 from typing import Any, ClassVar, Literal, Optional, Sequence
 
 from pydantic import (
@@ -48,14 +47,6 @@ class StageConfig(_Base):
 
 # ── Identifiers ──────────────────────────────────────────────────────────────
 _SNAKE_RE = re.compile(r"^[a-z][a-z0-9_]*$")
-
-
-# Shared by every authored-code block (python_row_function/python_frame_function,
-# publish's function block, filter_rows) — lives here, below `stage.py`, so a
-# config class defined in its own module can use it without a cycle.
-class FunctionKind(str, Enum):
-    inline = "inline"
-    module = "module"
 
 
 # ── Column-type vocabulary ───────────────────────────────────────────────────

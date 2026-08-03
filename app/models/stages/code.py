@@ -13,7 +13,7 @@ from typing import ClassVar, Literal, Optional, Protocol
 from pydantic import Field, model_validator
 
 from app.models.errors import StepRefused
-from app.models.schema import FunctionKind, StageConfig, _Base
+from app.models.schema import StageConfig, _Base
 from app.models.stage_base import StageBase, StageInput, StageType
 from app.models.stages.stage_tests import (
     PythonFrameFunctionStageTest,
@@ -130,24 +130,23 @@ def validate_inline_function_code(
 class PythonFunction(StageConfig):
     """Config block for python_row_function / python_frame_function (and publish). The
     row-vs-frame distinction lives in the stage `type`, not here — the runtime
-    reads the type to decide whether to invoke this per row or per frame."""
-    # Every field changes what this stage computes (the code/module it runs)
-    # except `summary`, which describes that code to a reader — see
+    reads the type to decide whether to invoke this per row or per frame. The code is
+    always held here, in the stage, so the stage page always shows what runs."""
+    # Every field changes what this stage computes (the code it runs) except
+    # `summary`/`corner_cases`, which describe that code to a reader — see
     # StageBase.compute_definition_fingerprint.
     FINGERPRINT_FIELDS: ClassVar[frozenset[str]] = frozenset({
-        "kind", "code", "module", "function", "requirements",
+        "code", "function", "requirements",
     })
     INCIDENTAL_FIELDS: ClassVar[frozenset[str]] = frozenset({"summary", "corner_cases"})
 
-    kind: FunctionKind
     summary: Optional[str] = Field(default=None, description=SUMMARY_DESCRIPTION)
     corner_cases: list[CornerCase] = Field(
         default_factory=list, description=CORNER_CASES_DESCRIPTION
     )
-    code: Optional[str] = Field(
-        default=None,
+    code: str = Field(
         description=(
-            "Inline Python defining `function` (default `transform`). Signature by stage "
+            "REQUIRED. Inline Python defining `function` (default `transform`). Signature by stage "
             "type: python_row_function `def transform(row: dict) -> dict` (1 row in, 1 out; "
             "cannot reorder or fan out); python_frame_function "
             "`def transform(df, ...) -> DataFrame` (inputs positional in declared order); "
@@ -162,17 +161,8 @@ class PythonFunction(StageConfig):
             "have a forex conversion table and it will break sums downstream."
         ),
     )
-    module: Optional[str] = None
     function: Optional[str] = None
     requirements: list[str] = Field(default_factory=list)
-
-    @model_validator(mode="after")
-    def _kind_fields(self) -> "PythonFunction":
-        if self.kind == FunctionKind.module and not self.module:
-            raise ValueError("function.kind=module needs `module`")
-        if self.kind == FunctionKind.inline and not self.code:
-            raise ValueError("function.kind=inline needs `code`")
-        return self
 
     @model_validator(mode="after")
     def _inline_code_is_runnable(self) -> "PythonFunction":
@@ -180,8 +170,6 @@ class PythonFunction(StageConfig):
         (`transform` by default). Enforced here — a single stage's invariant — so
         broken code (e.g. a bare body with a top-level `return`) is rejected at
         write time instead of raising only when the runner exec()s it."""
-        if self.kind != FunctionKind.inline or not self.code:
-            return self
         validate_inline_function_code(self.code, self.function)
         return self
 
@@ -194,10 +182,6 @@ def find_python_function_warnings(stage: "CarriesPythonFunctionStage"
     if not (function.summary or "").strip():
         return [warn(stage, "undescribed",
                      "no plain-language description — reviewable only by reading its code")]
-    if function.kind == FunctionKind.module:
-        return [warn(stage, "unreviewable_code",
-                     f"the code lives in module `{function.module}` rather than on the "
-                     f"stage, so the review panel cannot show it")]
     return []
 
 

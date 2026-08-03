@@ -31,7 +31,7 @@ _SOURCES = {"columns": [_DOC_ID, _SOURCE]}
 _FLAGGED = {"columns": [_DOC_ID, _FLAG]}
 _ATTACHED = {"columns": [_DOC_ID, _FLAG, _SOURCE]}
 
-_ROW_FUNCTION = {"kind": "inline", "code": "def transform(row):\n    return row\n"}
+_ROW_FUNCTION = {"code": "def transform(row):\n    return row\n"}
 
 # load_rows → add_flag → keep_flagged ─┐
 #                        load_sources ─┴→ attach_source
@@ -220,7 +220,6 @@ def test_a_publish_stage_declaring_no_output_schema_writes_nothing():
         "id": "write_it", "name": "Write it", "type": "publish",
         "inputs": [{"id": "attach_source", "schema": _ATTACHED}],
         "publish": {"format": "csv", "destination": "out/"},
-        "function": {"kind": "inline",
-                     "code": "def transform(df, output_dir):\n    return df\n"},
+        "function": {                     "code": "def transform(df, output_dir):\n    return df\n"},
     })
     assert list_written_columns(publish) == []

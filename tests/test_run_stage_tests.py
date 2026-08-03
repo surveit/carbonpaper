@@ -17,7 +17,7 @@ def _row_stage(stage_id: str, tests: list[dict]) -> Stage:
         "id": stage_id, "name": stage_id, "type": "python_row_function",
         "inputs": [{"id": "load", "schema": _IN_SCHEMA}],
         "output_schema": _OUT_SCHEMA,
-        "function": {"kind": "inline", "code": _DOUBLE},
+        "function": {"code": _DOUBLE},
         "tests": tests,
     })
 
@@ -27,7 +27,7 @@ def _frame_stage(stage_id: str, tests: list[dict]) -> Stage:
         "id": stage_id, "name": stage_id, "type": "python_frame_function",
         "inputs": [{"id": "load", "schema": _IN_SCHEMA}],
         "output_schema": _IN_SCHEMA,
-        "function": {"kind": "inline", "code": "def transform(df):\n    return df\n"},
+        "function": {"code": "def transform(df):\n    return df\n"},
         "tests": tests,
     })
 

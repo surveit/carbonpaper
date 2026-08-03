@@ -176,7 +176,7 @@ def _two_stage_project(root, rows: list[dict]):
         "id": "consume", "name": "Consume items", "type": "python_frame_function",
         "inputs": [{"id": "load", "schema": _NAME_VAL_SCHEMA}],
         "output_schema": _NAME_VAL_SCHEMA,
-        "function": {"kind": "inline",
+        "function": {
                      "code": "def transform(df):\n    return df\n"},
     }
     (root / "compiled" / "01_load.json").write_text(
@@ -240,13 +240,13 @@ def _output_schema_violation_project(root, transform_code: str):
         "id": "shape", "name": "Shape items", "type": "python_frame_function",
         "inputs": [{"id": "load", "schema": _NAME_VAL_SCHEMA}],
         "output_schema": _NAME_VAL_SCHEMA,
-        "function": {"kind": "inline", "code": transform_code},
+        "function": {"code": transform_code},
     }
     tail = {
         "id": "tail", "name": "Tail", "type": "python_frame_function",
         "inputs": [{"id": "shape", "schema": _NAME_VAL_SCHEMA}],
         "output_schema": _NAME_VAL_SCHEMA,
-        "function": {"kind": "inline", "code": "def transform(df):\n    return df\n"},
+        "function": {"code": "def transform(df):\n    return df\n"},
     }
     for filename, stage in (("01_load.json", load), ("02_shape.json", shape),
                             ("03_tail.json", tail)):
@@ -310,7 +310,7 @@ def test_output_validation_error_other_than_a_missing_column_also_errors_the_sta
         "inputs": [{"id": "load", "schema": _NAME_VAL_SCHEMA}],
         "output_schema": {"columns": [{"name": "name", "type": "str"},
                                       {"name": "val", "type": "int", "nullable": False}]},
-        "function": {"kind": "inline",
+        "function": {
                      "code": "def transform(df):\n    df['val'] = None\n    return df\n"},
     }
     (tmp_path / "compiled" / "01_load.json").write_text(json.dumps(load), encoding="utf-8")
@@ -432,7 +432,7 @@ def test_run_subset_preserves_partial_work_in_the_manifest_on_a_mid_frontier_err
             "columns": [{"name": "id", "type": "str"}, {"name": "text", "type": "str"}]}}],
         "output_schema": {
             "columns": [{"name": "id", "type": "str"}, {"name": "text", "type": "str"}]},
-        "function": {"kind": "inline", "code": "def transform(row): return row"},
+        "function": {"code": "def transform(row): return row"},
     })
     boom = parse_stage({
         "id": "score", "name": "Score rows", "type": "python_row_function",
@@ -440,7 +440,7 @@ def test_run_subset_preserves_partial_work_in_the_manifest_on_a_mid_frontier_err
             "columns": [{"name": "id", "type": "str"}, {"name": "text", "type": "str"}]}}],
         "output_schema": {
             "columns": [{"name": "id", "type": "str"}, {"name": "score", "type": "int"}]},
-        "function": {"kind": "inline",
+        "function": {
                      "code": "def transform(row):\n    raise ValueError('kaboom')"},
     })
     workflow = Workflow(stages=[load, clean, boom])
@@ -691,7 +691,7 @@ def _add_frame_stage(root):
         "inputs": [{"id": "load", "schema": _NAME_VAL_SCHEMA}],
         "output_schema": {"columns": [*_NAME_VAL_SCHEMA["columns"],
                                       {"name": "double", "type": "int"}]},
-        "function": {"kind": "inline", "code": _FRAME_STAGE_CODE},
+        "function": {"code": _FRAME_STAGE_CODE},
     }), encoding="utf-8")
 
 

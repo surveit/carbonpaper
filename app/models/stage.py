@@ -30,6 +30,7 @@ from app.models.stages.code import (
     PythonFunction,
     PythonRowFunctionStage,
 )
+from app.models.stages.external import ExternalConfig, ExternalStage
 from app.models.stages.filter_rows import FilterConfig, FilterRowsStage
 from app.models.stages.human_review_queue import HumanReviewQueueStage, QueueConfig
 from app.models.stages.input_data import Connector, InputDataStage
@@ -57,6 +58,7 @@ Stage = Annotated[
         PublishStage,
         UnionStage,
         FilterRowsStage,
+        ExternalStage,
     ],
     Field(discriminator="type"),
 ]
@@ -102,6 +104,7 @@ class StageDraft(StageCommon):
     publish: Optional[PublishConfig] = None
     union: Optional[UnionConfig] = None
     filter: Optional[FilterConfig] = None
+    external: Optional[ExternalConfig] = None
 
     # Which SERVER_OWNED_STAGE_FIELDS the submitted draft carried, for the caller
     # to warn about. Bookkeeping about one submission, not part of a stage: kept

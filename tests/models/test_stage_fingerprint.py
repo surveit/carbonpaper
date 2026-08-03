@@ -13,7 +13,7 @@ def _row_function_stage(input_id="src", **overrides):
             "schema": {"columns": [{"name": "a", "type": "str", "nullable": False}]},
         }],
         "output_schema": {"columns": [{"name": "a", "type": "str", "nullable": False}]},
-        "function": {"kind": "inline", "code": "def transform(row):\n    return row\n"},
+        "function": {"code": "def transform(row):\n    return row\n"},
     }
     base.update(overrides)
     return parse_stage(base)
@@ -54,7 +54,7 @@ def _publish_stage(code="def transform(df, output_dir, trace_links):\n    return
             "schema": {"columns": [{"name": "a", "type": "str", "nullable": False}]},
         }],
         "publish": {"format": "html_report", "destination": "out/"},
-        "function": {"kind": "inline", "code": code},
+        "function": {"code": code},
     }
     base.update(overrides)
     return parse_stage(base)
@@ -74,7 +74,7 @@ def test_compute_definition_fingerprint_ignores_incidental_fields():
 def test_compute_definition_fingerprint_changes_with_config_block_content():
     a = _row_function_stage()
     b = _row_function_stage(
-        function={"kind": "inline", "code": "def transform(row):\n    row['x'] = 1\n    return row\n"}
+        function={"code": "def transform(row):\n    row['x'] = 1\n    return row\n"}
     )
     assert a.compute_definition_fingerprint() != b.compute_definition_fingerprint()
 

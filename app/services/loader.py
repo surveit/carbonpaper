@@ -13,7 +13,6 @@ from typing import Any
 
 from pydantic import ValidationError
 
-from app.core.paths import repo_root
 from app.models.workflow import Workflow, validate_workflow
 from app.models.stage import Stage, parse_stage
 from app.models.stages.code import PythonFunction
@@ -121,29 +120,11 @@ def write_stage(path: Path, stage: Stage) -> None:
 
 # ─── Source & code reads ─────────────────────────────────────────────────────
 
-def read_module_code(module_path: str) -> str | None:
-    """Resolve module 'examples.lobbymap.code.foo' to a file path and read it."""
-    if not module_path:
-        return None
-    parts = module_path.split(".")
-    candidate = repo_root() / Path(*parts).with_suffix(".py")
-    if not candidate.exists():
-        return None
-    try:
-        return candidate.read_text(encoding="utf-8")
-    except OSError:
-        return None
-
-
 def resolve_function_code(stage_def: Stage | None) -> str | None:
-    """Python source for a stage's `function` block: the module file for a module
-    ref, or the inline code string. None for a stage whose authored code is a
-    filter predicate (inline on its own block) or that has none."""
+    """Python source for a stage's `function` block: the code the stage itself
+    carries. None for a stage whose authored code is a filter predicate (which
+    lives on its own block) or that carries none."""
     fn = stage_def.find_authored_code_block() if stage_def else None
     if not isinstance(fn, PythonFunction):
         return None
-    if fn and fn.kind == "module" and fn.module:
-        return read_module_code(fn.module)
-    if fn and fn.kind == "inline":
-        return fn.code
-    return None
+    return fn.code

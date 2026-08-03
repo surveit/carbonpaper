@@ -68,7 +68,7 @@ def test_strict_load_catches_cross_stage_issues(tmp_path):
     dangling = {"id": "x", "name": "X", "type": "python_frame_function",
                 "inputs": [{"id": "missing_upstream",
                             "schema": {"columns": [{"name": "k"}]}}],
-                "function": {"kind": "inline", "code": "def transform(row): return row"},
+                "function": {"code": "def transform(row): return row"},
                 "output_schema": {"columns": [{"name": "k"}]}}
     _write(tmp_path, "01_x.json", dangling)
     with pytest.raises(WorkflowLoadError) as exc:

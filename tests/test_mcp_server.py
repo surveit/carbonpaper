@@ -139,7 +139,7 @@ def _write_compiled_workflow(pdir: Path) -> None:
          "output_schema": _IN_SCHEMA},
         {"id": "double", "name": "Double", "type": "python_row_function",
          "inputs": [{"id": "load", "schema": _IN_SCHEMA}], "output_schema": _OUT_SCHEMA,
-         "function": {"kind": "inline", "code": _DOUBLE},
+         "function": {"code": _DOUBLE},
          "tests": [
              {"name": "doubles", "inputs": {"load": [{"amount": 2.0}]},
               "expected": [{"amount": 2.0, "doubled": 4.0}]},
@@ -148,7 +148,7 @@ def _write_compiled_workflow(pdir: Path) -> None:
          ]},
         {"id": "untested", "name": "Untested", "type": "python_row_function",
          "inputs": [{"id": "load", "schema": _IN_SCHEMA}], "output_schema": _OUT_SCHEMA,
-         "function": {"kind": "inline", "code": _DOUBLE}},
+         "function": {"code": _DOUBLE}},
     ]
     for spec in stages:
         write_stage(compiled / f"{spec['id']}.json", parse_stage(spec))

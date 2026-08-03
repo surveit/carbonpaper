@@ -21,7 +21,7 @@ def _spec(stage_id="tag", **function_extra):
         "id": stage_id, "name": "Tag", "type": "python_row_function",
         "inputs": [{"id": "src", "schema": _SCHEMA}],
         "output_schema": _SCHEMA,
-        "function": {"kind": "inline", "code": _CODE,
+        "function": {"code": _CODE,
                      "corner_cases": [], **function_extra},
     }
 

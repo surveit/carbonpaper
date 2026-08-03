@@ -11,7 +11,7 @@ _DOC = "----doc text----"
 
 
 def _python_stage(*, summary=_SUMMARY, corner_cases=None) -> Stage:
-    function = {"kind": "inline", "code": _CODE, "summary": summary}
+    function = {"code": _CODE, "summary": summary}
     if corner_cases is not None:
         function["corner_cases"] = corner_cases
     return parse_stage({
@@ -96,7 +96,7 @@ def test_deriver_rejects_non_python_stages():
             {"name": "amount", "type": "float", "nullable": False},
             {"name": "doubled", "type": "float", "nullable": False},
         ]}}],
-        "function": {"kind": "inline", "code": "def transform(df, output_dir):\n    return df\n"},
+        "function": {"code": "def transform(df, output_dir):\n    return df\n"},
         "publish": {},
     })
     with pytest.raises(ValueError, match="can run them"):

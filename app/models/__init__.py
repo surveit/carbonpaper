@@ -16,7 +16,6 @@ from app.models.node_contract_notes import (
 )
 from app.models.schema import (
     Column,
-    FunctionKind,
     JSON_COLUMN_TYPE,
     LIST_JSON_COLUMN_TYPE,
     RANGE_UNBOUNDED_MARKER,
@@ -26,6 +25,7 @@ from app.models.schema import (
     is_valid_column_type,
 )
 from app.models.stage import (
+    ExternalConfig,
     ReviewConfig,
     Stage,
     StageBase,
@@ -164,9 +164,12 @@ NODE_TYPES: dict[str, dict[str, _Any]] = {
         "blocks": ["function"],
         "requires_inputs": True,
         "min_inputs": 1,
-        "required": ["kind"],
-        "optional": ["module", "function", "code", "requirements"],
+        "required": ["code"],
+        "optional": ["function", "requirements"],
         "notes": (
+            "The code is INLINE, in the stage — there is no way to point at code elsewhere "
+            "here, so the stage page always shows what the stage runs. Work that reaches "
+            "outside the workflow runs as its own program: that is an `external` stage. "
             "Takes exactly ONE input — to combine data from another input use enrich/expand, "
             "or python_frame_function. "
             "`transform(row)` is handed a plain dict and must return a plain dict, and that "
@@ -180,9 +183,10 @@ NODE_TYPES: dict[str, dict[str, _Any]] = {
         "blocks": ["function"],
         "requires_inputs": True,
         "min_inputs": 1,
-        "required": ["kind"],
-        "optional": ["module", "function", "code", "requirements"],
+        "required": ["code"],
+        "optional": ["function", "requirements"],
         "notes": (
+            "The code is INLINE, same as python_row_function and for the same reason. "
             "The runtime calls `transform(*frames)`: one POSITIONAL parameter per declared "
             "input, in `inputs` order — never by name, never a dict of frames. It receives no "
             "output_dir and no trace_links; writing files is publish's job. Return the output "
@@ -310,11 +314,39 @@ NODE_TYPES: dict[str, dict[str, _Any]] = {
         "optional": ["function"],
         "notes": (
             "Takes exactly ONE input. The predicate is INLINE code only — there is no "
-            "kind/module here; a filter that needs an importable module is doing more "
+            "way to point at code elsewhere here; a filter that needs one is doing more "
             "than deciding. `should_include(row)` is handed a plain dict and "
             "must return a bool — True keeps the row, False drops it; any other return "
             "type is a run-time error. Kept rows preserve their original relative order "
             "and every column unchanged, so output_schema must equal the input schema."
+        ),
+    },
+    "external": {
+        "summary": (
+            "A separate PROGRAM run once per row, for work that REACHES OUTSIDE the "
+            "workflow — the network, a real browser, another machine."
+        ),
+        "blocks": ["external"],
+        "requires_inputs": True,
+        "min_inputs": 1,
+        "required": ["command", "timeout_seconds"],
+        "optional": [],
+        "notes": (
+            "Choose this ONLY when the work genuinely reaches outside the workflow; "
+            "deterministic per-row logic is a python_row_function. Same grain as one: "
+            "exactly ONE input, one row in and one row out, no frame and no row "
+            "position, so it cannot fan out, drop or reorder. It carries NO "
+            "`function:` block and no code at all: its handle is `external:`, "
+            "carrying `command` (the argv LIST, never a shell string) and "
+            "`timeout_seconds`. The runtime spawns `command` fresh FOR EVERY ROW with "
+            "no shell, writes that row to stdin as one JSON object, closes stdin, and "
+            "reads one JSON object back from stdout; a non-zero exit, a timeout, or "
+            "stdout that is not one JSON object fails the stage. One process per row "
+            "is what makes the timeout a kill and the cleanup an exit, and it is why "
+            "no state can cross rows. `command[0]` must resolve to an executable when "
+            "the stage is saved. Because the program runs outside this app, the stage "
+            "page states that the stage is neither reproducible nor reviewable, and no "
+            "authored test can pin it."
         ),
     },
 }
@@ -335,13 +367,14 @@ __all__ = [
     "Coverage",
     "StepRefused",
     "StageType", "ConnectorKind", "FileFormat", "AggFormula",
-    "FunctionKind", "PublishFormat", "is_valid_column_type",
+    "PublishFormat", "is_valid_column_type",
     "SourceRef", "Column", "TableSchema", "Connector", "LLMConfig",
     "CompilerWarning", "CompilerWarningReport",
     "find_stage_compiler_warnings", "find_workflow_compiler_warnings",
     "PythonFunction", "JoinKey", "JoinConfig", "AggregationOp",
     "AggregateConfig", "QueueConfig", "PublishConfig", "ReviewConfig",
     "RowReviewDecision", "UnionConfig", "FilterConfig",
+    "ExternalConfig",
     "StageInput", "Stage", "StageBase", "StageDraft", "StageTest", "XlsxReadParams",
     "parse_stage", "validate_stage",
     "Workflow", "parse_workflow", "validate_workflow", "validate_workflow_draft",

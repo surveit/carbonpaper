@@ -21,7 +21,7 @@ def _stage(code, inputs=("src",), output_columns=_X_COLUMN):
         "id": "t", "name": "t", "type": "python_row_function",
         "inputs": [{"id": i, "schema": {"columns": _X_COLUMN}} for i in inputs],
         "output_schema": {"columns": output_columns},
-        "function": {"kind": "inline", "code": code},
+        "function": {"code": code},
     })
 
 

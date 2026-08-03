@@ -54,7 +54,7 @@ def test_create_draft_seeded_from_version(examples: Path) -> None:
 _DANGLING_INPUT_STAGE = dict(
     _STAGE, id="later", type="python_row_function",
     inputs=[{"id": "missing", "schema": _ROWS_SCHEMA}],
-    function={"kind": "inline", "code": "def transform(row): return row"},
+    function={"code": "def transform(row): return row"},
 )
 del _DANGLING_INPUT_STAGE["connector"]
 

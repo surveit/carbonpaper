@@ -39,7 +39,7 @@ def _row_stage(output_schema=None, input_columns=_X_COLUMN):
         "id": "t", "name": "t", "type": "python_row_function",
         "inputs": [{"id": "src", "schema": {"columns": input_columns}}],
         "output_schema": output_schema or {"columns": input_columns},
-        "function": {"kind": "inline", "code": "def transform(row):\n    return row\n"},
+        "function": {"code": "def transform(row):\n    return row\n"},
     })
 
 
@@ -49,7 +49,7 @@ def _two_input_stage():
         "inputs": [{"id": "a", "schema": {"columns": _X_COLUMN}},
                    {"id": "b", "schema": {"columns": _X_COLUMN}}],
         "output_schema": {"columns": _X_COLUMN},
-        "function": {"kind": "inline", "code": "def transform(a, b):\n    return a\n"},
+        "function": {"code": "def transform(a, b):\n    return a\n"},
     })
 
 

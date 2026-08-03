@@ -176,6 +176,9 @@ a { color: var(--accent); }
 .badge.human,    .type-tag.human    { background: #fce8f4; color: #802660; border-color: #c0399a; }
 .badge.publish,  .type-tag.publish  { background: #e8f8e8; color: #1f5a1f; border-color: #3aa83a; }
 .badge.rowset,   .type-tag.rowset   { background: #ecebfb; color: #332a8a; border-color: #5b4ec8; }
+/* external: amber, the one type whose code this app does not hold. Not the
+   `custom` red, which means a type we failed to recognise. */
+.badge.external, .type-tag.external { background: #fdf1e3; color: #7a4a00; border-color: #c08a3a; }
 .badge.custom,   .type-tag.custom   { background: #fde8e8; color: #802020; border-color: #cc3333; }
 
 /* Run-state badges — one state each, so a badge, its pill, its stage border and
@@ -419,6 +422,17 @@ table.schema tr:last-child td { border-bottom: 0; }
     margin: 16px 0;
 }
 .exec-block h2 { margin-top: 0; }
+/* The standing caveat on an external stage: not reproducible, not reviewable
+   from the page. Warning-coloured because it is a limit on what the page can
+   tell you, not a per-run problem. */
+.exec-block .external-caveat {
+    background: var(--warn-bg);
+    border: 1px solid var(--warn-border);
+    color: #7a4a00;
+    padding: 10px 12px;
+    border-radius: 4px;
+    margin: 12px 0 0;
+}
 
 /* The plain-language summary of an authored-code block — the first thing read
    in the Transform pane, and for a non-engineer the only readable statement of

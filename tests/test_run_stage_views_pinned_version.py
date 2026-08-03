@@ -46,7 +46,7 @@ def _classify_stage(marker: str) -> dict:
         "inputs": [{"id": LOAD_ID,
                     "schema": {"columns": [{"name": "name", "type": "str"},
                                            {"name": "val", "type": "int"}]}}],
-        "function": {"kind": "inline",
+        "function": {
                      "code": f'def transform(row):\n    return {{**row, "label": "{marker}"}}\n'},
         "output_schema": {"columns": [{"name": "name", "type": "str"},
                                       {"name": "val", "type": "int"},

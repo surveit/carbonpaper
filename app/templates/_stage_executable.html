@@ -1,12 +1,14 @@
-{# The transform config block for a stage — connector / llm / function / filter / join /
-   union / aggregate / queue / publish. Used on both the static stage page and
-   the run-detail right panel.
+{# The transform config block for a stage — connector / llm / external / function /
+   filter / join / union / aggregate / queue / publish. Used on both the static stage
+   page and the run-detail right panel.
 
    For the two authored-code blocks (function / filter) this renders the
    plain-language summary and the metadata only — the code itself is a separate
    macro (_stage_code.html) the host renders LAST, after the test cases.
 
    Required context: stage, function_code (may be None).
+   `external_not_reproducible_note` is a template global (app/web/config.py), not
+   per-route context.
    Optional context: llm_example {prompt, columns} — a rendered prompt
    from this run's actual input first row, for LLM stages. #}
 {% from "_schema_table.html" import schema_table %}
@@ -84,19 +86,31 @@
 </section>
 {% endif %}
 
+{% if stage.external %}
+<section class="exec-block">
+    <h2>🌐 Reaches outside the workflow</h2>
+    {# The command and its timeout are all this page can state about an external
+       stage: the argv is spawned once per row with no shell, and command[0] is
+       checked to resolve when the stage is saved. The caveat below follows from
+       the stage TYPE, not from anything an author asserted. #}
+    <dl class="kv">
+        <dt>command</dt><dd><code>{% for part in stage.external.command %}{{ part }}{% if not loop.last %} {% endif %}{% endfor %}</code></dd>
+        <dt>timeout</dt><dd>{{ stage.external.timeout_seconds }}s per row, then the process is killed</dd>
+    </dl>
+    <p class="external-caveat">{{ external_not_reproducible_note }}</p>
+</section>
+{% endif %}
+
 {% if stage.function %}
 <section class="exec-block">
     <h2>🐍 Code transformation</h2>
     {{ stage_summary(stage.function.summary) }}
     {{ stage_corner_cases(stage.function.corner_cases) }}
     {{ stage_certification(certification) }}
-    {# No `kind` row: its two values are `inline` (the code is in the Code block
-       below, so saying so tells a reviewer nothing) and `module` (the code lives in
-       a file on disk) — and the `module` row already states that case. The whole
-       list is dropped when none of its rows apply, which is every inline stage. #}
-    {% if stage.function.module or stage.function.function or stage.function.requirements %}
+    {# The code itself is the Code block below, so this list carries only what the
+       code does not say for itself. Dropped when none of its rows apply. #}
+    {% if stage.function.function or stage.function.requirements %}
     <dl class="kv">
-        {% if stage.function.module %}<dt>module</dt><dd><code>{{ stage.function.module }}</code></dd>{% endif %}
         {% if stage.function.function %}<dt>function</dt><dd><code>{{ stage.function.function }}</code></dd>{% endif %}
         {% if stage.function.requirements %}<dt>requirements</dt><dd>{{ stage.function.requirements | join(', ') }}</dd>{% endif %}
     </dl>
