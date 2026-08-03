@@ -120,6 +120,7 @@
 {% if stage.union %}
 <section class="exec-block">
     <h2>🧬 Union</h2>
+    {{ stage_certification(certification) }}
     <p class="muted">Concatenates its inputs in declared order — no configuration of its own; the schema-identical inputs fix what it computes.</p>
     <dl class="kv">
         <dt>inputs</dt><dd>{% for inp in stage.inputs %}<code>{{ inp.id }}</code>{% if not loop.last %}, {% endif %}{% endfor %}</dd>
@@ -130,6 +131,7 @@
 {% if stage.join %}
 <section class="exec-block">
     <h2>{% if stage.type == 'expand' %}🌿 Expand{% else %}🔗 Enrich{% endif %}</h2>
+    {{ stage_certification(certification) }}
     <p class="muted">{% if stage.type == 'expand' %}Left join, many-to-many: one subject row may come out as
         several.{% else %}Left join, many-to-one: the reference is verified unique on the key, so the row
         count and order are unchanged.{% endif %} Every subject row survives, an unmatched one carrying
@@ -154,6 +156,7 @@
 {% if stage.aggregate %}
 <section class="exec-block">
     <h2>📊 Aggregate</h2>
+    {{ stage_certification(certification) }}
     <h3>group by</h3>
     <p>{% for g in stage.aggregate.group_by %}<code>{{ g }}</code>{% if not loop.last %}, {% endif %}{% endfor %}</p>
     <h3>aggregations</h3>
