@@ -24,6 +24,9 @@ is ready; if it is rejected, fix the reported issues and call it again.
   only to evaluate the pipeline.
 - Wire foreign keys with a column's `references` ("<schema>" or "<schema>.<column>")
   wherever one table points at another, so the data model is a connected graph.
+- Declare a column's `enum` whenever its vocabulary is CLOSED — a fixed set of values the
+  methodology itself names (a status, a category, a reason code), not free text. The set is
+  enforced wherever the column is used, so a closed vocabulary left as bare `str` gives that up.
 - NEVER fabricate data values, URLs, or numbers — encode STRUCTURE only; record genuine
   ambiguity in a schema's or a column's `description`.
 
