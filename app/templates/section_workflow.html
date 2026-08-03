@@ -109,19 +109,10 @@
 {# ── Graph full-width on top, node review docked full-width below. ── #}
 <div class="wf-stack">
     <div class="wf-top">
+      {# Belief has no text fallback in the node — the stroke is its only channel,
+         so it is the one axis the graph needs a legend for. A node's type is
+         spelled out in its own label (glyph + type-name subtitle). #}
       <div class="legend">
-        <span class="legend-label">type</span>
-        <span class="badge input">▶ input_data</span>
-        <span class="badge llm">✦ llm_transform</span>
-        <span class="badge python">🔂 python_row_function</span>
-        <span class="badge python">🧨 python_frame_function</span>
-        <span class="badge join">🔗 enrich</span>
-        <span class="badge join">🌿 expand</span>
-        <span class="badge aggregate">Σ aggregate</span>
-        <span class="badge human">👤 human_review_queue</span>
-        <span class="badge publish">📤 publish</span>
-      </div>
-      <div class="legend belief-legend">
         <span class="legend-label">belief</span>
         <span class="belief-chip belief-approved">approved</span>
         <span class="belief-chip belief-unreviewed">unreviewed</span>

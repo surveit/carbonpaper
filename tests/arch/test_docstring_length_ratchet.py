@@ -547,7 +547,6 @@ _GRANDFATHERED: frozenset[str] = frozenset(
         "app/web/diagrams.py::_render_table_node_block",
         "app/web/diagrams.py::_render_workflow_node_lines",
         "app/web/diagrams.py::_resolve_stroke_line",
-        "app/web/diagrams.py::build_mermaid_graph",
         "app/web/diagrams.py::build_schema_er_diagram",
         "app/web/diagrams.py::build_schema_table_graph",
         "app/web/loading.py::QueueFingerprints",
