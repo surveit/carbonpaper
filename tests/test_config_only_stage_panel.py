@@ -5,6 +5,7 @@ tick would claim a check that never happened.
 """
 import json
 from pathlib import Path
+from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
@@ -22,7 +23,7 @@ _SCORED = {"columns": [{"name": "id", "type": "str", "nullable": False},
 def _seed_project(root: Path) -> None:
     compiled = root / "alpha" / "compiled"
     compiled.mkdir(parents=True)
-    stages = [
+    stages: list[dict[str, Any]] = [
         {"id": "q1", "name": "Q1", "type": "input_data",
          "connector": {"kind": "file"}, "output_schema": _SCHEMA},
         {"id": "q2", "name": "Q2", "type": "input_data",
