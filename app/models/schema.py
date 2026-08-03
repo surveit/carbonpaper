@@ -132,9 +132,8 @@ class Column(_Base):
         default=None,
         description=(
             "The closed set of values a `str` column may hold — declare it whenever the "
-            "vocabulary is fixed and known at authoring time. Enforced, not decorative: it "
-            "compiles to a Literal an LLM reply cannot escape, and a run flags any value "
-            "outside the set."
+            "vocabulary is fixed and known at authoring time. Enforced at runtime, not "
+            "decorative."
         ),
     )
     fields: Optional[list["Column"]] = Field(
