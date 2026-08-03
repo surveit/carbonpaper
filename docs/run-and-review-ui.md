@@ -11,10 +11,12 @@ reviewing flagged rows, and approving/versioning the workflow itself. Code:
 
 `GET /project/{p}/runs/{run_id}`.
 
-- **Progress framing** (not error-counting): the header shows *complete /
-  in-progress / to-do* with a bar, a spinner while active, and an overall status.
-  Warnings/errors/awaiting live in a **separate alert strip** that only appears
-  when there's something to report.
+- **The header** (`app/web/run_header.py` → `_run_header.html`) is three things: a
+  grounding line (start, duration, run id, pinned version + its message), one
+  CTA chosen by run state, and the **stage strip** — one square per stage in
+  topological order, coloured by status, with labelled counts beneath. The run's
+  status is never spelled out in words; you read it off the CTA. The squares
+  divide the header's width so every stage is drawn whatever the stage count.
 - **The workflow graph is the main object**: full width, on top; the stage
   detail panel sits below it. Per-state borders via `build_mermaid_graph` status
   strokes: green=complete, yellow=in-progress, red=error, grey=pending,
