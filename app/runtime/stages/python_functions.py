@@ -1,5 +1,5 @@
 """Handlers for the python_row_function and python_frame_function stage types -
-the two grains of running authored python over the input, differing only in
+the two grains of running python over the input, differing only in
 what the function is shown (a row dict or the whole frame).
 """
 
@@ -17,12 +17,12 @@ from app.models.stages.code import (
 )
 from app.models.stages.publish import PublishStage
 
-from ..authored_code import load_authored_function
+from ..code import load_function
 from ..context import RunContext
 from .execution import Row, RowMapper, narrow_stage
 
 
-# The three types whose behaviour is an authored `function` block.
+# The three types whose behaviour is a `function` block.
 CodeCarryingStage = PythonRowFunctionStage | PythonFrameFunctionStage | PublishStage
 
 
@@ -36,7 +36,7 @@ def _load_python_function(stage: CodeCarryingStage) -> Callable[..., Any]:
         module = importlib.import_module(fn_spec.module)
         return getattr(module, fn_name)
     if fn_spec.kind == FunctionKind.inline:
-        fn = load_authored_function(fn_spec.code or "", fn_name, "transform")
+        fn = load_function(fn_spec.code or "", fn_name, "transform")
         if fn is None:
             raise ValueError(f"Inline function 'transform' not defined for stage {stage.id}")
         return fn
@@ -54,7 +54,7 @@ def handle_python_frame_function(stage: Stage, inputs: dict[str, pd.DataFrame], 
 
 def make_python_row_mapper(stage: Stage, ctx: RunContext, src: pd.DataFrame) -> RowMapper:
     """Resolve the stage's function once; the runtime maps it over the single
-    input's rows — one dict in, one dict out. The authored function is shown
+    input's rows — one dict in, one dict out. The function is shown
     neither the frame nor a row's position in it, so it cannot fan out, fan in,
     or reorder."""
     fn = _load_python_function(narrow_stage(stage, PythonRowFunctionStage))

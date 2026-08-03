@@ -1,4 +1,4 @@
-"""The one module that exec's a stage's authored python: what it returns, and what
+"""The one module that exec's a stage's python: what it returns, and what
 that code can see without importing it."""
 from __future__ import annotations
 
@@ -6,32 +6,32 @@ import pytest
 
 from app.models import Stage, parse_stage
 from app.models.errors import StepRefused
-from app.runtime.authored_code import load_authored_function
+from app.runtime.code import load_function
 from app.runtime.stage_tests import run_tests_for_stage
 
 _SCHEMA = {"columns": [{"name": "status", "type": "str", "nullable": False}]}
 
 
 def test_the_named_function_is_returned():
-    fn = load_authored_function("def keep(row):\n    return True\n", "keep", "should_include")
+    fn = load_function("def keep(row):\n    return True\n", "keep", "should_include")
     assert fn is not None and fn({}) is True
 
 
 def test_the_default_name_is_the_fallback():
     """`function` may name a function the code does not bind; the default still wins over None."""
-    fn = load_authored_function("def should_include(row):\n    return True\n",
-                                "keep", "should_include")
+    fn = load_function("def should_include(row):\n    return True\n",
+                       "keep", "should_include")
     assert fn is not None and fn({}) is True
 
 
 def test_neither_name_bound_returns_none():
-    assert load_authored_function("x = 1\n", "keep", "should_include") is None
+    assert load_function("x = 1\n", "keep", "should_include") is None
 
 
-def test_authored_code_sees_step_refused_without_importing_it():
+def test_the_code_sees_step_refused_without_importing_it():
     code = "def should_include(row):\n    raise StepRefused('cannot tell')\n"
     assert "import" not in code
-    fn = load_authored_function(code, "should_include", "should_include")
+    fn = load_function(code, "should_include", "should_include")
     assert fn is not None
     with pytest.raises(StepRefused):
         fn({})

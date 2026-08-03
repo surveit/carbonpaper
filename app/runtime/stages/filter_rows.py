@@ -1,4 +1,4 @@
-"""Handler for the filter_rows stage type: an authored `should_include(row) ->
+"""Handler for the filter_rows stage type: a `should_include(row) ->
 bool` predicate, mapped over rows by the runtime's row driver. Keeping a row is
 returning it; dropping one is returning None — the driver does the selecting,
 so which input ordinals survived (this stage's lineage) is something it knows
@@ -12,7 +12,7 @@ import pandas as pd
 from app.models import Stage
 from app.models.stages.filter_rows import FilterRowsStage
 
-from ..authored_code import load_authored_function
+from ..code import load_function
 from ..context import RunContext
 from .execution import Row, RowMapper, narrow_stage
 
@@ -20,7 +20,7 @@ from .execution import Row, RowMapper, narrow_stage
 def _load_predicate(stage: Stage) -> Callable[[dict[str, Any]], object]:
     cfg = narrow_stage(stage, FilterRowsStage).filter
     fn_name = cfg.function or "should_include"
-    fn = load_authored_function(cfg.code, fn_name, "should_include")
+    fn = load_function(cfg.code, fn_name, "should_include")
     if fn is None:
         raise ValueError(f"inline 'should_include' not defined for stage {stage.id}")
     return fn
