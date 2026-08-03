@@ -6,10 +6,16 @@
 <script>
   onDiagramNode(function (stageId) { if (window._loadStage) window._loadStage(stageId); });
   document.addEventListener("DOMContentLoaded", function () {
-    mermaid.initialize({ startOnLoad: true, theme: "default",
-      flowchart: { curve: "basis", padding: 20, useMaxWidth: true }, securityLevel: "loose" });
+    // startOnLoad:false + useMaxWidth:false — diagram_viewport.js renders the graph and
+    // sizes the svg itself, so zoom is real and a focused node can be centred.
+    mermaid.initialize({
+      startOnLoad: false, theme: "default",
+      flowchart: { curve: "basis", padding: 20, useMaxWidth: false },
+      securityLevel: "loose"
+    });
   });
 </script>
+<script src="/static/diagram_viewport.js"></script>
 {% endblock %}
 
 {% block header_extra %}
@@ -80,12 +86,20 @@
 {% if graph_error %}
 <p class="banner banner-warn" id="graph-error">⚠ Workflow graph unavailable — {{ graph_error }}</p>
 {% else %}
-<div class="workflow workflow-full">
-    <pre class="mermaid">
+<div class="workflow workflow-full diagram-block">
+    <div class="diagram-tools">
+      <button type="button" data-zoom="in" title="Zoom in">+</button>
+      <button type="button" data-zoom="out" title="Zoom out">−</button>
+      <button type="button" data-zoom="reset" title="Fit to width">reset</button>
+      <button type="button" class="diagram-fs" title="Fullscreen">⛶ fullscreen</button>
+      <span class="muted diagram-hint">drag to pan · ⌘/Ctrl-scroll to zoom · click a node or a guide step to focus it</span>
+    </div>
+    <div class="diagram-viewport">
+      <pre class="mermaid">
 {{ mermaid }}
-    </pre>
+      </pre>
+    </div>
 </div>
-<p class="lede">Click any node above to inspect that stage below.</p>
 {% endif %}
 
 {# ── Stage detail panel, below the workflow, full width. ── #}
@@ -154,6 +168,18 @@
   const RUN_ID = {{ run_id | tojson }};
   const panel = document.getElementById('stage-panel');
 
+  const viewport = document.querySelector('.diagram-viewport');
+
+  // Outline the node and centre it, zooming to at least half size so it is readable.
+  // A re-render can replace the svg mid-click, so a miss retries a few times.
+  function focusGraphNode(stageId, tries) {
+    if (!viewport || !viewport._focusNode) return;
+    if (!viewport._focusNode(stageId, 0.5) && (tries || 0) < 8) {
+      setTimeout(() => focusGraphNode(stageId, (tries || 0) + 1), 250);
+    }
+  }
+  window._focusGraphNode = focusGraphNode;
+
   async function loadStage(stageId) {
     if (!stageId) return;
     panel.classList.add('loading');
@@ -169,7 +195,9 @@
         old.replaceWith(s);
       });
       if (location.hash !== `#${stageId}`) history.replaceState(null, '', `#${stageId}`);
-      panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      // The graph moves to the stage; the page does not. Scrolling down to the panel
+      // took the diagram off screen, which is the thing the click was about.
+      focusGraphNode(stageId);
     } finally { panel.classList.remove('loading'); }
   }
   window._loadStage = loadStage;
@@ -200,7 +228,13 @@
     function rerenderWorkflow(src) {
       if (!mermaidEl || !window.mermaid) return;
       mermaidEl.removeAttribute('data-processed'); mermaidEl.textContent = src;
-      try { mermaid.run({ nodes: [mermaidEl] }); } catch (e) {}
+      try {
+        mermaid.run({ nodes: [mermaidEl] });
+        // The svg is new: re-measure it, then put the outline back on the open stage.
+        if (viewport && viewport._refit) viewport._refit();
+        const open = location.hash ? decodeURIComponent(location.hash.slice(1)) : '';
+        if (open) focusGraphNode(open);
+      } catch (e) {}
     }
     function paintStrip(stages, tallies) {
       const strip = $('stage-strip');
