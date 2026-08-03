@@ -1,11 +1,7 @@
-"""`type` and `nullable` are required on a Column, and the requirement REACHES the
-authoring agent.
-
-An agent fills columns in through the `submit_answer` tool, whose input schema is
-`target_schema.model_json_schema()` (app/core/agent/agent.py). So a field being
-required on the model is only half of it — these pin that it also lands in the
-`required` list of the schema the agent is handed, which is the channel that makes
-an undecided column unsubmittable rather than silently loosest.
+"""`type` and `nullable` are required on a Column, and that requirement REACHES the
+authoring agent: an agent writes columns through `submit_answer`, whose input schema is
+`target_schema.model_json_schema()` (app/core/agent/agent.py). Being required on the
+model is only half of it — these pin that it also lands in that schema's `required`.
 """
 from __future__ import annotations
 
@@ -20,8 +16,7 @@ _OWED = {"type", "nullable"}
 
 
 def _defs(model) -> dict:
-    """A model's `$defs`; a self-referential model (Column.fields) puts its own
-    entry there rather than at the top level."""
+    # A self-referential model (Column.fields) puts its own entry in $defs, not at top level.
     return model.model_json_schema()["$defs"]
 
 
@@ -58,9 +53,8 @@ def test_the_requirement_reaches_the_schema_library_the_data_model_agent_submits
 
 
 def test_the_requirement_reaches_the_submit_answer_tool_input_schema():
-    """The end of the chain: the expression `Agent.build_engine` hands the tool as
-    its `input_schema` — `advertise_more_than_one_argument(target_schema
-    .model_json_schema())` — carries the requirement through unflattened."""
+    # The end of the chain: this expression is verbatim what `Agent.build_engine` hands
+    # the tool as its `input_schema`, so it proves the requirement survives that wrapping.
     input_schema = advertise_more_than_one_argument(SchemaLibrary.model_json_schema())
     assert _OWED <= set(input_schema["$defs"]["NamedColumn"]["required"])
 

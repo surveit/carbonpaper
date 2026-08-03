@@ -27,6 +27,9 @@ is ready; if it is rejected, fix the reported issues and call it again.
 - Declare a column's `enum` whenever its vocabulary is CLOSED — a fixed set of values the
   methodology itself names (a status, a category, a reason code), not free text. The set is
   enforced wherever the column is used, so a closed vocabulary left as bare `str` gives that up.
+- Every column must state its `type` and its `nullable`. Both are DECISIONS, and there is no
+  default to fall back on: declare the tightest of each that the methodology actually
+  guarantees, and leave a column loose only where looseness is the honest answer.
 - NEVER fabricate data values, URLs, or numbers — encode STRUCTURE only; record genuine
   ambiguity in a schema's or a column's `description`.
 
@@ -37,4 +40,25 @@ model captures their method.
 - `title`: a 2-5 word gloss in the method's own vocabulary ("the watchlist", "raw
   export rows") — what the table IS, not a restatement of its name.
 - `description`: 2-4 sentences on what the table is and why the method needs it — its
-  role, not a column tour (the columns render separately)."""
+  role, not a column tour (the columns render separately).
+
+# A worked example: how tight is each column?
+For a method that reads quarterly lobbying filings and totals what each client reported,
+four columns of the `filing` table:
+
+- `filing_row_id` — `str`, not null. The quarter plus the source row; the primary key.
+- `income` — `str`, NULLABLE, no enum. Loose ON PURPOSE: this is the amount AS FILED, and
+  real filings carry "$45,000", "" and "see attached" alike. Typing it `float` here would
+  move parsing into the data model, where the only thing it could do with "see attached" is
+  guess a number.
+- `income_usd` — `float`, NOT NULL. Tight on purpose: a later stage reads `income` into it
+  and REFUSES a figure it cannot read rather than recording a zero, so every value that
+  exists is one a person can stand behind.
+- `filing_type` — `str`, not null, `enum` ["original", "amendment", "termination"]. The
+  three the filing form itself offers; a fourth value is a bug, not a new category.
+
+Note that `income` and `income_usd` describe the same money and disagree on type, on
+nullability, and on tightness. That is the judgement to make column by column: tighten
+where the method guarantees the value, and stay loose where the source is simply what
+arrived — a loose column keeps the refusal available to the stage that parses it, and
+tightening it early would trade that refusal for a guess."""
