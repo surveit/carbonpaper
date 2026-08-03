@@ -10,8 +10,10 @@ from pathlib import Path
 
 import pytest
 
+from app.web.config import templates
 from app.web.run_header import (
     ArtifactLink,
+    VersionNote,
     build_run_header,
     choose_run_cta,
     find_halted_stage_ids,
@@ -195,6 +197,47 @@ def test_an_unresolvable_version_carries_the_reason_not_a_blank_message(tmp_path
     assert note.version_id == "20990101T000000"
     assert note.message is None
     assert note.error is not None and "could not be read" in note.error
+
+
+# ─── The version reads as what it says, not as its id ───────────────────────
+
+VERSION_ID = "20260803T163854"
+MESSAGE = "Registrations are logged and counted separately, not dropped"
+
+
+def _render_version_line(tmp_path: Path, note: VersionNote) -> str:
+    workspace.set_projects_dir(tmp_path)
+    run_dir = tmp_path / PROJECT / "runs" / RUN
+    run_dir.mkdir(parents=True, exist_ok=True)
+    header = build_run_header(PROJECT, RUN, run_dir, _manifest("ok", [("load", "ok")]))
+    return templates.env.get_template("_run_header.html").render(
+        project=PROJECT, run_id=RUN, header=header.model_copy(update={"version": note})
+    )
+
+
+def test_the_version_link_reads_as_its_message_not_its_timestamp_id(tmp_path: Path):
+    html = _render_version_line(
+        tmp_path, VersionNote(version_id=VERSION_ID, message=MESSAGE))
+
+    assert f'/workflow/version/{VERSION_ID}">“{MESSAGE}”</a>' in html
+    # The id is the href and nothing else — it is a key, not something to read.
+    assert f"<code>{VERSION_ID}</code>" not in html
+
+
+def test_a_version_carrying_no_message_stays_clickable_under_its_id(tmp_path: Path):
+    """The message is optional, so it cannot be the only link text there is."""
+    html = _render_version_line(tmp_path, VersionNote(version_id=VERSION_ID))
+
+    assert f'/workflow/version/{VERSION_ID}"><code>{VERSION_ID}</code></a>' in html
+
+
+def test_an_unreadable_version_states_the_reason_beside_its_id(tmp_path: Path):
+    html = _render_version_line(
+        tmp_path,
+        VersionNote(version_id=VERSION_ID, error="version could not be read: gone"))
+
+    assert f'/workflow/version/{VERSION_ID}"><code>{VERSION_ID}</code></a>' in html
+    assert "this version could not be read" in html
 
 
 @pytest.mark.parametrize("seconds,expected", [
