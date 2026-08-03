@@ -10,7 +10,7 @@ import json
 
 import pytest
 
-from app.models.stages.code import SUMMARY_MAX_CHARS
+from app.models.stages.code import SUMMARY_DESCRIPTION, SUMMARY_MAX_CHARS
 from app.services.stage_edit import add_stage_spec, edit_stage_spec
 
 _SCHEMA = {"columns": [{"name": "id", "type": "str"}], "primary_key": ["id"]}
@@ -107,7 +107,13 @@ def test_stated_corner_cases_round_trip(project):
 
 
 
-# ── the 255-character hard limit ─────────────────────────────────────────────
+# ── the summary hard limit ───────────────────────────────────────────────────
+def test_the_field_description_states_the_limit_this_path_refuses_on():
+    # SUMMARY_DESCRIPTION is what an authoring client is shown before it writes; a
+    # number spelled out there would outlive the one these tests pin
+    assert str(SUMMARY_MAX_CHARS) in SUMMARY_DESCRIPTION
+
+
 def test_a_summary_over_the_limit_is_refused(project):
     """Enforced on write, so a long one can never be authored."""
     result = add_stage_spec(project, json.dumps(_spec(summary="x" * (SUMMARY_MAX_CHARS + 1))))
