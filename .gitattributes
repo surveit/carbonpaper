@@ -1,0 +1,3 @@
+# CI runs these on Linux; a CRLF checkout on a developer machine would make the
+# committed shebang unrunnable there and is pointless for a file only bash reads.
+.github/scripts/*.sh text eol=lf
