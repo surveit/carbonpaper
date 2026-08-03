@@ -15,6 +15,7 @@ from app.runtime.runner import execute_run
 from app.services import versioning
 from app.services.project import save_working_copy_as_version
 from app.services import workspace
+from conftest import pinned_stages
 
 # The exact value sets, collected by grepping every `record["status"]` /
 # `manifest["status"]` literal the runner writes (app/runtime/runner.py) and
@@ -89,7 +90,7 @@ def test_a_real_run_produces_enum_statuses_that_round_trip_to_bare_strings(tmp_p
     _make_project(tmp_path)
     _seed_and_publish(tmp_path)
 
-    manifest = execute_run(tmp_path, repo_root=tmp_path)
+    manifest = execute_run(tmp_path, tmp_path, *pinned_stages(tmp_path))
 
     # The producer's in-memory manifest carries real enum members, not plain
     # str — and they still equal / stringify as the bare value.
@@ -116,7 +117,7 @@ def test_a_real_run_renders_bare_status_through_the_web_layer(tmp_path, monkeypa
     _make_project(project_dir)
     _seed_and_publish(project_dir)
 
-    manifest = execute_run(project_dir, repo_root=project_dir)
+    manifest = execute_run(project_dir, project_dir, *pinned_stages(project_dir))
     run_id = manifest["run_id"]
 
     client = TestClient(app)

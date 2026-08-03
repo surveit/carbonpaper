@@ -17,6 +17,7 @@ from app.main import app
 from app.runtime.runner import execute_run
 from app.services import versioning
 from app.services import project as project_service
+from conftest import pinned_stages
 
 client = TestClient(app)
 
@@ -73,7 +74,7 @@ def _run_once(project_dir: Path) -> str:
     version_id = project_service.save_working_copy_as_version(
         project_dir, message="v1", reviewer="test").version_id
     versioning.publish_version(project_dir, version_id, reviewer="test")
-    return str(execute_run(project_dir, repo_root=project_dir)["run_id"])
+    return str(execute_run(project_dir, project_dir, *pinned_stages(project_dir))["run_id"])
 
 
 def _drift_the_working_copy(project_dir: Path) -> None:

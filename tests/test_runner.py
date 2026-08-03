@@ -1,14 +1,14 @@
 from __future__ import annotations
 
 import json
-import sys
 import time
 
 import pandas as pd
 import pytest
 
-import app.runtime.runner as runner
+import app.runtime.__main__ as runtime_cli
 from app.core.errors import NoVersionToRunError, SubsetRunError
+from app.services import run as run_service
 from app.core.run_status import RunStatus
 from app.models import parse_stage, Workflow
 from app.runtime.runner import execute_run, resume_run
@@ -19,6 +19,7 @@ from app.services.loader import WorkflowLoadError
 from app.services import versioning
 from app.services.project import save_working_copy_as_version
 from app.services.versioning import list_versions
+from conftest import pinned_stages, resumed_stages
 
 
 # The two shapes every fixture in this file loads: the (name, val) items csv and
@@ -59,7 +60,7 @@ def _make_project(root):
 def test_limit_truncates_and_is_recorded(tmp_path):
     _make_project(tmp_path)
     _seed_version(tmp_path)
-    manifest = execute_run(tmp_path, repo_root=tmp_path)
+    manifest = execute_run(tmp_path, tmp_path, *pinned_stages(tmp_path))
 
     assert manifest["status"] == "ok"
     [rec] = manifest["stage_records"]
@@ -82,7 +83,7 @@ def test_per_run_limit_and_offset_slice_and_are_recorded(tmp_path):
     # offset 1 drops row 0, then limit 3 keeps rows 1-3.
     _make_project(tmp_path)
     _seed_version(tmp_path)
-    manifest = execute_run(tmp_path, repo_root=tmp_path,
+    manifest = execute_run(tmp_path, tmp_path, *pinned_stages(tmp_path),
                            limits={"load": 3}, offsets={"load": 1})
 
     [rec] = manifest["stage_records"]
@@ -111,7 +112,7 @@ def test_bust_cache_is_recorded_on_the_manifest(tmp_path):
     reader (and the resume) knows this run refused every cache read."""
     _make_project(tmp_path)
     _seed_version(tmp_path)
-    manifest = execute_run(tmp_path, repo_root=tmp_path, bust_cache=True)
+    manifest = execute_run(tmp_path, tmp_path, *pinned_stages(tmp_path), bust_cache=True)
 
     assert manifest["bust_cache"] is True
     on_disk = json.loads(
@@ -123,41 +124,38 @@ def test_bust_cache_is_recorded_on_the_manifest(tmp_path):
 def test_an_ordinary_run_records_bust_cache_false(tmp_path):
     _make_project(tmp_path)
     _seed_version(tmp_path)
-    manifest = execute_run(tmp_path, repo_root=tmp_path)
+    manifest = execute_run(tmp_path, tmp_path, *pinned_stages(tmp_path))
     assert manifest["bust_cache"] is False
 
 
-def test_cli_bust_cache_flag_reaches_execute_run(tmp_path, monkeypatch):
-    """`python -m app.runtime.runner <project> --bust-cache` threads the flag
-    into the run; without it the run is not busted."""
+def test_cli_bust_cache_flag_reaches_the_run(monkeypatch):
+    """--bust-cache threads into the run; without it the run is not busted."""
     calls: list[bool] = []
 
-    def fake_execute_run(project_dir, repo_root, version_id=None, limits=None,
-                         offsets=None, bindings=None, bust_cache=False):
+    def fake_execute(project, *, version_id=None, bindings=None, limits=None,
+                     offsets=None, bust_cache=False):
         calls.append(bust_cache)
         return {"run_id": "r", "workflow_version": "v", "status": RunStatus.OK,
                 "stage_records": []}
 
-    monkeypatch.setattr(runner, "execute_run", fake_execute_run)
-    monkeypatch.setattr(sys, "argv", ["runner", str(tmp_path), "--bust-cache"])
-    assert runner.main() == 0
-    monkeypatch.setattr(sys, "argv", ["runner", str(tmp_path)])
-    assert runner.main() == 0
+    monkeypatch.setattr(run_service, "execute", fake_execute)
+    assert runtime_cli.main(["proj", "--bust-cache"]) == 0
+    assert runtime_cli.main(["proj"]) == 0
     assert calls == [True, False]
 
 
-def test_cli_rejects_an_unknown_flag(tmp_path, monkeypatch):
-    monkeypatch.setattr(sys, "argv", ["runner", str(tmp_path), "--nope"])
-    assert runner.main() == 1
+def test_cli_rejects_an_unknown_flag():
+    with pytest.raises(SystemExit):
+        runtime_cli.main(["proj", "--nope"])
 
 
 def test_per_run_override_for_unknown_stage_id_fails_loudly(tmp_path):
     _make_project(tmp_path)
     _seed_version(tmp_path)
     with pytest.raises(ValueError, match="unknown stage id"):
-        execute_run(tmp_path, repo_root=tmp_path, limits={"nope": 3})
+        execute_run(tmp_path, tmp_path, *pinned_stages(tmp_path), limits={"nope": 3})
     with pytest.raises(ValueError, match="unknown stage id"):
-        execute_run(tmp_path, repo_root=tmp_path, offsets={"nope": 1})
+        execute_run(tmp_path, tmp_path, *pinned_stages(tmp_path), offsets={"nope": 1})
 
 
 def _two_stage_project(root, rows: list[dict]):
@@ -194,7 +192,7 @@ def test_duplicate_input_rows_fail_the_stage(tmp_path):
         {"name": "a", "val": 1},
     ])
     _seed_version(tmp_path)
-    manifest = execute_run(tmp_path, repo_root=tmp_path)
+    manifest = execute_run(tmp_path, tmp_path, *pinned_stages(tmp_path))
 
     records = {r["stage_id"]: r for r in manifest["stage_records"]}
     assert records["load"]["status"] == "ok"     # producing dupes isn't the error…
@@ -214,7 +212,7 @@ def test_distinct_input_rows_pass(tmp_path):
         {"name": "a", "val": 2},
     ])
     _seed_version(tmp_path)
-    manifest = execute_run(tmp_path, repo_root=tmp_path)
+    manifest = execute_run(tmp_path, tmp_path, *pinned_stages(tmp_path))
     assert manifest["status"] == "ok"
     records = {r["stage_id"]: r for r in manifest["stage_records"]}
     assert records["consume"]["status"] == "ok"
@@ -260,7 +258,7 @@ def test_output_missing_a_declared_column_errors_the_stage_and_blocks_downstream
     _output_schema_violation_project(
         tmp_path, "def transform(df):\n    return df[['name']]\n")
     _seed_version(tmp_path)
-    manifest = execute_run(tmp_path, repo_root=tmp_path)
+    manifest = execute_run(tmp_path, tmp_path, *pinned_stages(tmp_path))
 
     records = {r["stage_id"]: r for r in manifest["stage_records"]}
     assert records["load"]["status"] == "ok"
@@ -281,7 +279,7 @@ def test_warning_only_output_report_does_not_error_the_stage(tmp_path):
     _output_schema_violation_project(
         tmp_path, "def transform(df):\n    df['extra'] = 1\n    return df\n")
     _seed_version(tmp_path)
-    manifest = execute_run(tmp_path, repo_root=tmp_path)
+    manifest = execute_run(tmp_path, tmp_path, *pinned_stages(tmp_path))
 
     records = {r["stage_id"]: r for r in manifest["stage_records"]}
     assert records["shape"]["status"] != "error"
@@ -316,7 +314,7 @@ def test_output_validation_error_other_than_a_missing_column_also_errors_the_sta
     (tmp_path / "compiled" / "01_load.json").write_text(json.dumps(load), encoding="utf-8")
     (tmp_path / "compiled" / "02_blank.json").write_text(json.dumps(blank), encoding="utf-8")
     _seed_version(tmp_path)
-    manifest = execute_run(tmp_path, repo_root=tmp_path)
+    manifest = execute_run(tmp_path, tmp_path, *pinned_stages(tmp_path))
 
     record = {r["stage_id"]: r for r in manifest["stage_records"]}["blank"]
     assert record["status"] == "error"
@@ -363,7 +361,7 @@ def test_llm_generation_failure_surfaces_as_error_status_not_raised(tmp_path, mo
     monkeypatch.setattr(lt, "call_llm", boom)
     _llm_transform_project(tmp_path)
     _seed_version(tmp_path)
-    manifest = execute_run(tmp_path, repo_root=tmp_path)
+    manifest = execute_run(tmp_path, tmp_path, *pinned_stages(tmp_path))
 
     records = {r["stage_id"]: r for r in manifest["stage_records"]}
     rec = records["score"]
@@ -489,7 +487,7 @@ def test_run_without_a_version_fails_loudly(tmp_path):
     disk — no run dir, no fabricated version."""
     _make_project(tmp_path)  # valid working copy, but no version created
     with pytest.raises(NoVersionToRunError):
-        execute_run(tmp_path, repo_root=tmp_path)
+        execute_run(tmp_path, tmp_path, *pinned_stages(tmp_path))
     assert not (tmp_path / "runs").exists()
     assert list_versions(tmp_path) == []
 
@@ -504,7 +502,7 @@ def test_unpublished_latest_is_skipped_for_an_older_published_version(tmp_path):
     time.sleep(1)  # version ids are second-resolution
     save_working_copy_as_version(tmp_path, message="unpublished newer", reviewer="test")
 
-    manifest = execute_run(tmp_path, repo_root=tmp_path)
+    manifest = execute_run(tmp_path, tmp_path, *pinned_stages(tmp_path))
     assert manifest["workflow_version"] == published_id
     assert manifest["status"] == "ok"
 
@@ -517,7 +515,7 @@ def test_run_with_no_published_version_fails_loudly(tmp_path):
     save_working_copy_as_version(tmp_path, message="unpublished", reviewer="test")
 
     with pytest.raises(NoVersionToRunError):
-        execute_run(tmp_path, repo_root=tmp_path)
+        execute_run(tmp_path, tmp_path, *pinned_stages(tmp_path))
     assert not (tmp_path / "runs").exists()
 
 
@@ -528,7 +526,7 @@ def test_run_with_explicit_unpublished_id_fails_loudly(tmp_path):
     unpublished_id = save_working_copy_as_version(tmp_path, message="unpublished", reviewer="test").version_id
 
     with pytest.raises(NoVersionToRunError):
-        execute_run(tmp_path, repo_root=tmp_path, version_id=unpublished_id)
+        execute_run(tmp_path, tmp_path, *pinned_stages(tmp_path), version_id=unpublished_id)
     assert not (tmp_path / "runs").exists()
 
 
@@ -573,7 +571,7 @@ def test_invalid_workflow_never_becomes_a_version_and_run_never_pins_stale(tmp_p
 
     # A run refuses (no version) and does NOT auto-create one — nothing on disk.
     with pytest.raises(NoVersionToRunError):
-        execute_run(tmp_path, repo_root=tmp_path)
+        execute_run(tmp_path, tmp_path, *pinned_stages(tmp_path))
     assert list_versions(tmp_path) == []
     assert not (tmp_path / "runs").exists()
 
@@ -589,11 +587,11 @@ def test_invalid_workflow_never_becomes_a_version_and_run_never_pins_stale(tmp_p
     (tmp_path / "compiled" / "01_load.json").write_text(
         json.dumps(good), encoding="utf-8")
     with pytest.raises(NoVersionToRunError):
-        execute_run(tmp_path, repo_root=tmp_path)
+        execute_run(tmp_path, tmp_path, *pinned_stages(tmp_path))
 
     # Explicit creation, then the run succeeds against that version.
     _seed_version(tmp_path)
-    manifest = execute_run(tmp_path, repo_root=tmp_path)
+    manifest = execute_run(tmp_path, tmp_path, *pinned_stages(tmp_path))
     assert manifest["status"] == "ok"
 
 
@@ -642,7 +640,7 @@ def test_resume_reapplies_run_bindings_for_a_pending_input_stage(tmp_path):
     }
     (run_dir / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
 
-    result = resume_run(tmp_path, run_id, repo_root=tmp_path)
+    result = resume_run(tmp_path, run_id, tmp_path, *resumed_stages(tmp_path, run_id))
 
     [rec] = result["stage_records"]
     assert rec["status"] == "ok", rec.get("error")
@@ -650,8 +648,10 @@ def test_resume_reapplies_run_bindings_for_a_pending_input_stage(tmp_path):
     assert list(out["name"]) == ["bound-row"]
 
 
-def test_the_documented_cli_runs_a_project_with_nothing_configured(tmp_path, monkeypatch):
-    """`python -m app.runtime.runner <project_dir>` is a standalone process: no
+def test_the_documented_cli_runs_a_project_with_nothing_configured(
+    tmp_path, monkeypatch, projects_root
+):
+    """`python -m app.runtime <project>` is a standalone process: no
     server lifespan wired storage for it, so its own entry point must. Seeds a
     version through an on-disk store, then drops BOTH process-wide stores to
     simulate the fresh process the CLI actually runs in."""
@@ -664,7 +664,7 @@ def test_the_documented_cli_runs_a_project_with_nothing_configured(tmp_path, mon
     monkeypatch.setenv("CARBONPAPER_DB_PATH", str(db_path))
     monkeypatch.setenv("CARBONPAPER_FRAMES_ROOT", str(tmp_path / "frames"))
 
-    project_dir = tmp_path / "project"
+    project_dir = projects_root / "project"
     configure_store(SqliteKvStore(str(db_path)))
     _make_project(project_dir)
     _add_frame_stage(project_dir)
@@ -672,9 +672,8 @@ def test_the_documented_cli_runs_a_project_with_nothing_configured(tmp_path, mon
 
     monkeypatch.setattr(persistence_module, "_store", None)
     monkeypatch.setattr(frames_module, "_frame_store", None)
-    monkeypatch.setattr(sys, "argv", ["runner", str(project_dir)])
 
-    assert runner.main() == 0
+    assert runtime_cli.main(["project"]) == 0
     assert persistence_module.is_store_configured()
     assert frames_module.is_frame_store_configured()
     assert list((project_dir / "runs").iterdir())
@@ -705,7 +704,7 @@ def test_a_frame_stage_succeeds_with_no_frame_store_configured(tmp_path, monkeyp
     _seed_version(tmp_path)
     monkeypatch.setattr(frames_module, "_frame_store", None)
 
-    manifest = execute_run(tmp_path, repo_root=tmp_path)
+    manifest = execute_run(tmp_path, tmp_path, *pinned_stages(tmp_path))
 
     assert manifest["status"] == "ok"
     record = next(r for r in manifest["stage_records"] if r["stage_id"] == "totals")

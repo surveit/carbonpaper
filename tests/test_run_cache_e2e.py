@@ -18,6 +18,7 @@ from pandas.testing import assert_frame_equal
 from app.runtime.runner import execute_run
 from app.services import versioning
 from app.services import project as project_service
+from conftest import pinned_stages
 
 _ROWS = [{"name": "a", "val": 1}, {"name": "b", "val": 2}, {"name": "c", "val": 3}]
 
@@ -130,7 +131,7 @@ def _run_and_read(
     output frame read back off disk."""
     if (project / "runs").exists():
         time.sleep(1.05)  # run ids are second-resolution: one dir per run
-    manifest = execute_run(project, repo_root=project, bust_cache=bust_cache)
+    manifest = execute_run(project, project, *pinned_stages(project), bust_cache=bust_cache)
     assert manifest["status"] == "ok", manifest
     run_dir = project / "runs" / manifest["run_id"]
     return {
@@ -301,8 +302,12 @@ def _run_in_a_fresh_process(project: Path, *, db: Path, cwd: Path) -> None:
     repo_root = Path(__file__).resolve().parents[1]
     env = {k: v for k, v in os.environ.items() if k != "CARBONPAPER_FRAMES_ROOT"}
     result = subprocess.run(
-        [sys.executable, "-m", "app.runtime.runner", str(project)],
-        cwd=cwd, env={**env, "PYTHONPATH": str(repo_root), "CARBONPAPER_DB_PATH": str(db)},
+        [sys.executable, "-m", "app.runtime", project.name],
+        cwd=cwd,
+        env={**env, "PYTHONPATH": str(repo_root), "CARBONPAPER_DB_PATH": str(db),
+             # The CLI takes a project NAME, so the fresh process needs the root to
+             # resolve it under — the one thing a different cwd must not change.
+             "CARBONPAPER_PROJECTS_DIR": str(project.parent)},
         capture_output=True, text=True,
     )
     assert result.returncode == 0, (

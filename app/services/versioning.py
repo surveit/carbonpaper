@@ -12,7 +12,7 @@ from typing import Any, ClassVar
 
 from pydantic import Field, ValidationError
 
-from app.core.errors import DocumentNotFound, ReviewGuideValidationError
+from app.core.errors import DocumentNotFound, NoVersionToRunError, ReviewGuideValidationError
 from app.models import Coverage, Stage
 from app.models.review_guide import ReviewGuide
 from app.models.workflow import parse_workflow
@@ -124,7 +124,7 @@ def create_version_from_stages(
 
 def publish_version(project_dir: Path, version_id: str, *, reviewer: str) -> WorkflowVersion:
     """Mark a version published: the metadata-only act that makes it eligible to
-    run (see app.runtime.runner.resolve_version_id). Idempotent — publishing an
+    run (see resolve_version_id below). Idempotent — publishing an
     already-published version returns it unchanged, keeping the FIRST
     published_at/published_by rather than overwriting them with the second
     caller's. Fails loudly (FileNotFoundError) if no such version is stored, or
@@ -241,11 +241,45 @@ def list_versions(project_dir: Path) -> list[WorkflowVersion]:
 
 def find_latest_version_id(project_dir: Path) -> str | None:
     """The newest stored version's id whatever its published state, or None when the
-    project has no version yet. Not a substitute for
-    app.runtime.runner.resolve_version_id, which a production run uses because it
-    gates on publication."""
+    project has no version yet. Not a substitute for resolve_version_id, which a
+    production run uses because it gates on publication."""
     versions = list_versions(project_dir)  # newest-first
     return versions[0].version_id if versions else None
+
+
+def resolve_version_id(project_dir: Path, version_id: str | None) -> str:
+    """The PUBLISHED version a run pins to; None means the newest published one."""
+    # A run is read-only with respect to versions: it never blanks the id, never
+    # fabricates one, never silently reads the working copy, and never CREATES a
+    # version as a side effect. Callers compose resolve_version_id ->
+    # load_version_stages -> run, so the runner is handed a resolved snapshot and
+    # reads no versions itself.
+    if version_id is not None:
+        # load_version fails loudly on a missing version — a caller asking for a
+        # specific id must not be silently redirected to some other snapshot, and
+        # an unreviewed draft must not run just because it was named.
+        version = load_version(project_dir, version_id)
+        if not version.published:
+            raise NoVersionToRunError(
+                f"Version '{version_id}' of '{project_dir.name}' is not published. "
+                f"A run pins a published version — publish it first."
+            )
+        return version_id
+
+    # Newest PUBLISHED, so a more recent unpublished version is skipped rather
+    # than run unreviewed.
+    for version in list_versions(project_dir):  # newest-first
+        if version.published:
+            return version.version_id
+
+    # Never immortalise the working copy as a version to have something to run —
+    # that is what let an invalid working copy poison "the latest" and fail every
+    # subsequent run.
+    raise NoVersionToRunError(
+        f"No published version to run for '{project_dir.name}'. A run "
+        f"targets a published version and never creates one — save a version "
+        f"and publish it first."
+    )
 
 
 def validate_version_exists(project_dir: Path, version_id: str) -> None:
@@ -291,6 +325,7 @@ __all__ = [
     "WorkflowVersion",
     "list_versions",
     "find_latest_version_id",
+    "resolve_version_id",
     "validate_version_exists",
     "load_version",
     "load_version_stages",

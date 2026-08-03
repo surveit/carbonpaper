@@ -1,14 +1,17 @@
 # app/runtime — the Runner (workflow executor)
 
 Executes a workflow and persists the result. Does not import the compiler or the web app.
-Loads stages through `app/services/loader.py: load_workflow`, which parses each compiled
-stage spec into a `Stage` and raises `WorkflowLoadError` if any stage or cross-stage check
-fails — an invalid workflow is refused before the runner does any work.
+**It reads no workflow versions.** A caller resolves which version to pin and loads that
+snapshot (`app/services/versioning.py`: `resolve_version_id` → `load_version_stages`) and
+hands the runner the stages; `app/services/run.py` is the one place that composes this for
+a production run. An import-linter contract forbids `app/runtime/runner.py` from importing
+`app.services` at all, so the arrow between them points one way only.
 
 ## `runner.py` — the executor
-`topological_sort` → `execute_run(project_dir, repo_root)`. Per stage: validate declared
-inputs (`validation.py`), reject duplicate input rows, dispatch to the type's handler,
-validate the output, write `outputs/<stage>.parquet`, append to `manifest.json`.
+`topological_sort` → `execute_run(project_dir, repo_root, stages, workflow_version)`. Per
+stage: validate declared inputs (`validation.py`), reject duplicate input rows, dispatch to
+the type's handler, validate the output, write `outputs/<stage>.parquet`, append to
+`manifest.json`.
 - **Duplicate-input throw (every stage type):** fails the stage if any input dataframe has
   exact duplicate full-content rows — the error names the input id + 0-based row numbers.
   Identity is a content hash over the whole row; `primary_key` plays no part (optional, may
@@ -103,6 +106,9 @@ warning-severity issues only. Input-side issues alone still only warn.
 
 ## Run / debug
 ```
-python -m app.runtime.runner <project_dir>
+python -m app.runtime <project>
 ```
+`__main__.py` is the CLI: it drives `app/services/run.py` (which resolves the newest
+published version and loads its stages), never `runner.py` directly. `<project>` is a
+NAME under the projects root, so a project outside it needs `CARBONPAPER_PROJECTS_DIR`.
 Outputs: `runs/<id>/{manifest.json, events.jsonl, outputs/*.parquet, artifacts/, queue/}`.

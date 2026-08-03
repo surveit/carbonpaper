@@ -12,7 +12,7 @@ from app.runtime.runner import apply_run_bindings, validate_stages_ready, execut
 from app.runtime.stages.input_data import read_input_data
 from app.services import versioning
 from app.services.project import save_working_copy_as_version
-from conftest import make_run_context
+from conftest import make_run_context, pinned_stages
 
 
 # Every input declares the schema it expects and every non-publish stage declares
@@ -155,7 +155,7 @@ def test_run_binding_recorded_with_hash_and_source(tmp_path):
     other = tmp_path / "b.csv"
     pd.DataFrame({"name": ["z"], "val": [9]}).to_csv(other, index=False)
 
-    manifest = execute_run(tmp_path, repo_root=tmp_path,
+    manifest = execute_run(tmp_path, tmp_path, *pinned_stages(tmp_path),
                            bindings={"load": {"path": str(other)}})
 
     assert manifest["status"] == "ok"
@@ -170,7 +170,7 @@ def test_run_binding_recorded_with_hash_and_source(tmp_path):
 
 def test_workflow_path_recorded_as_workflow_source(tmp_path):
     data = _make_bound_project(tmp_path)
-    manifest = execute_run(tmp_path, repo_root=tmp_path)
+    manifest = execute_run(tmp_path, tmp_path, *pinned_stages(tmp_path))
     rec = manifest["input_bindings"]["load"]
     assert rec["source"] == "workflow"
     assert rec["path"] == str(data)
@@ -188,14 +188,14 @@ def test_unbound_input_leaves_no_run_dir(tmp_path):
     versioning.publish_version(tmp_path, vid, reviewer="human")
 
     with pytest.raises(MissingInputBindingError, match="load"):
-        execute_run(tmp_path, repo_root=tmp_path)
+        execute_run(tmp_path, tmp_path, *pinned_stages(tmp_path))
     assert not (tmp_path / "runs").exists()
 
 
 def test_bound_file_must_exist_before_run_dir(tmp_path):
     _make_bound_project(tmp_path)
     with pytest.raises(MissingInputBindingError, match="ghost"):
-        execute_run(tmp_path, repo_root=tmp_path,
+        execute_run(tmp_path, tmp_path, *pinned_stages(tmp_path),
                     bindings={"load": {"path": str(tmp_path / "ghost.csv")}})
     assert not (tmp_path / "runs").exists()
 
@@ -205,7 +205,7 @@ def test_handler_ignores_repo_root_for_file_inputs(tmp_path):
     _make_bound_project(tmp_path)
     elsewhere = tmp_path / "unrelated_repo_root"
     elsewhere.mkdir()
-    manifest = execute_run(tmp_path, repo_root=elsewhere)
+    manifest = execute_run(tmp_path, elsewhere, *pinned_stages(tmp_path))
     assert manifest["status"] == "ok"
     assert manifest["stage_records"][0]["output_row_count"] == 2
 

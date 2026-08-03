@@ -3,17 +3,23 @@ from __future__ import annotations
 import json
 
 import pandas as pd
+import pytest
 from fastapi.testclient import TestClient
 
 import app.runtime.executor as executor
 import app.runtime.runner as runner
 import app.web.loading as loading
+from app.core.errors import RunVersionUnresolvableError
 from app.main import app
 from app.runtime.runner import prepare_run, run_prepared
 from app.runtime.stages import llm_transform as lt
+from app.services import run as run_service
 from app.services import versioning
+from app.services.errors import WorkflowLoadError
+from app.services.loader import load_workflow
 from app.services.project import save_working_copy_as_version
 from app.services import workspace
+from conftest import pinned_stages, resumed_stages
 
 
 # The three frame shapes this file's DAGs carry. Declared once so an upstream's
@@ -142,7 +148,7 @@ def test_error_blocks_transitive_downstream_in_a_chain(tmp_path):
     _write_stage(tmp_path, "03_tail.json", _passthrough_stage("tail", "boom"))
     _seed_version(tmp_path)
 
-    manifest = run_prepared(prepare_run(tmp_path, repo_root=tmp_path))
+    manifest = run_prepared(prepare_run(tmp_path, tmp_path, *pinned_stages(tmp_path)))
 
     assert manifest["status"] == "errors"
     assert _stage_status(manifest, "load") == "ok"
@@ -164,7 +170,7 @@ def test_error_in_one_fork_lets_the_independent_fork_finish(tmp_path):
     _write_stage(tmp_path, "04_good.json", _passthrough_stage("good_tail", "load"))
     _seed_version(tmp_path)
 
-    manifest = run_prepared(prepare_run(tmp_path, repo_root=tmp_path))
+    manifest = run_prepared(prepare_run(tmp_path, tmp_path, *pinned_stages(tmp_path)))
 
     assert manifest["status"] == "errors"
     assert _stage_status(manifest, "load") == "ok"
@@ -189,7 +195,7 @@ def test_halt_in_one_fork_lets_the_independent_fork_finish(tmp_path):
     _write_stage(tmp_path, "04_good.json", _passthrough_stage("good_tail", "load"))
     _seed_version(tmp_path)
 
-    manifest = run_prepared(prepare_run(tmp_path, repo_root=tmp_path))
+    manifest = run_prepared(prepare_run(tmp_path, tmp_path, *pinned_stages(tmp_path)))
 
     assert manifest["status"] == "awaiting_review"
     assert manifest["halted_at"] == ["review"]
@@ -213,7 +219,7 @@ def test_two_parallel_halts_each_block_only_their_own_downstream(tmp_path):
     _write_stage(tmp_path, "05_tail_b.json", _passthrough_stage("tail_b", "review_b"))
     _seed_version(tmp_path)
 
-    manifest = run_prepared(prepare_run(tmp_path, repo_root=tmp_path))
+    manifest = run_prepared(prepare_run(tmp_path, tmp_path, *pinned_stages(tmp_path)))
 
     assert manifest["status"] == "awaiting_review"
     assert set(manifest["halted_at"]) == {"review_a", "review_b"}
@@ -242,7 +248,7 @@ def test_halted_queue_stages_item_counts_reach_the_run_manifest(tmp_path):
                  _filtered_queue_stage("review", "load", "val > 3"))
     _seed_version(tmp_path)
 
-    manifest = run_prepared(prepare_run(tmp_path, repo_root=tmp_path))
+    manifest = run_prepared(prepare_run(tmp_path, tmp_path, *pinned_stages(tmp_path)))
 
     assert manifest["status"] == "awaiting_review"
     assert _stage_status(manifest, "review") == "awaiting_review"
@@ -275,7 +281,7 @@ def test_multi_halt_run_renders_the_full_halted_at_list_through_the_web_layer(
     _write_stage(project_dir, "03_review_b.json", _queue_stage("review_b", "load"))
     _seed_version(project_dir)
 
-    manifest = run_prepared(prepare_run(project_dir, repo_root=project_dir))
+    manifest = run_prepared(prepare_run(project_dir, project_dir, *pinned_stages(project_dir)))
     run_id = manifest["run_id"]
 
     client = TestClient(app)
@@ -303,7 +309,7 @@ def test_legacy_scalar_halted_at_manifest_renders_one_queue_link(tmp_path, monke
     _write_stage(project_dir, "02_review.json", _queue_stage("review", "load"))
     _seed_version(project_dir)
 
-    halted = run_prepared(prepare_run(project_dir, repo_root=project_dir))
+    halted = run_prepared(prepare_run(project_dir, project_dir, *pinned_stages(project_dir)))
     run_id = halted["run_id"]
 
     # Rewrite the on-disk manifest to the legacy scalar shape.
@@ -336,7 +342,7 @@ def test_manifest_paths_are_posix_on_every_platform(tmp_path, monkeypatch):
     _write_stage(project_dir, "02_review.json", _queue_stage("review", "load"))
     _seed_version(project_dir)
 
-    halted = run_prepared(prepare_run(project_dir, repo_root=project_dir))
+    halted = run_prepared(prepare_run(project_dir, project_dir, *pinned_stages(project_dir)))
 
     manifest_path = project_dir / "runs" / halted["run_id"] / "manifest.json"
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -363,7 +369,7 @@ def test_resume_pops_stale_halted_at_before_re_executing(tmp_path, monkeypatch):
     _write_stage(tmp_path, "02_review.json", _queue_stage("review", "load"))
     _seed_version(tmp_path)
 
-    halted = run_prepared(prepare_run(tmp_path, repo_root=tmp_path))
+    halted = run_prepared(prepare_run(tmp_path, tmp_path, *pinned_stages(tmp_path)))
     assert halted["halted_at"] == ["review"]  # the halted run recorded the marker
 
     captured: dict[str, bool] = {}
@@ -374,7 +380,8 @@ def test_resume_pops_stale_halted_at_before_re_executing(tmp_path, monkeypatch):
         return real_execute(ordered, ctx, manifest, run_dir, outputs_so_far)
 
     monkeypatch.setattr(runner, "_execute_stages", capture)
-    runner.resume_run(tmp_path, halted["run_id"], tmp_path)
+    runner.resume_run(tmp_path, halted["run_id"], tmp_path,
+                      *resumed_stages(tmp_path, halted["run_id"]))
 
     assert captured["halted_at_present"] is False
 
@@ -390,7 +397,7 @@ def test_error_and_halt_together_report_errors_but_keep_stage_awaiting_review(tm
     _write_stage(tmp_path, "03_review.json", _queue_stage("review", "load"))
     _seed_version(tmp_path)
 
-    manifest = run_prepared(prepare_run(tmp_path, repo_root=tmp_path))
+    manifest = run_prepared(prepare_run(tmp_path, tmp_path, *pinned_stages(tmp_path)))
 
     assert manifest["status"] == "errors"
     assert _stage_status(manifest, "boom") == "error"
@@ -426,7 +433,7 @@ def test_cancel_after_a_halt_clears_halted_at_and_reports_cancelled(tmp_path, mo
 
     monkeypatch.setattr(executor, "consume_cancel", fake_consume_cancel)
 
-    manifest = run_prepared(prepare_run(tmp_path, repo_root=tmp_path))
+    manifest = run_prepared(prepare_run(tmp_path, tmp_path, *pinned_stages(tmp_path)))
 
     assert manifest["status"] == "cancelled"
     assert manifest["cancelled_at"] == "good_tail"
@@ -470,7 +477,7 @@ def test_row_error_stage_blocks_downstream_and_resume_is_not_stale(tmp_path, mon
                  _passthrough_stage("good_tail", "load", schema=_ID_TEXT_SCHEMA))
     _seed_version(tmp_path)
 
-    first = run_prepared(prepare_run(tmp_path, repo_root=tmp_path))
+    first = run_prepared(prepare_run(tmp_path, tmp_path, *pinned_stages(tmp_path)))
 
     assert first["status"] == "errors"
     assert _stage_status(first, "score") == "error"
@@ -484,7 +491,8 @@ def test_row_error_stage_blocks_downstream_and_resume_is_not_stale(tmp_path, mon
     # Remove the failure and resume the same run: score re-runs (both rows now
     # succeed), and tail runs on score's real output rather than a stale frame.
     failing["id"] = None
-    resumed = runner.resume_run(tmp_path, first["run_id"], tmp_path)
+    resumed = runner.resume_run(tmp_path, first["run_id"], tmp_path,
+                            *resumed_stages(tmp_path, first["run_id"]))
 
     assert resumed["status"] == "ok"
     assert _stage_status(resumed, "score") == "ok"
@@ -515,7 +523,7 @@ def test_resume_after_error_reruns_the_errored_stage_and_its_downstream(tmp_path
     _write_stage(tmp_path, "03_tail.json", _passthrough_stage("tail", "mid"))
     _seed_version(tmp_path)
 
-    prep = prepare_run(tmp_path, repo_root=tmp_path)  # preflight hashes the valid file
+    prep = prepare_run(tmp_path, tmp_path, *pinned_stages(tmp_path))  # preflight hashes the valid file
     csv_path.write_text("", encoding="utf-8")          # now empty -> read errors at run
     first = run_prepared(prep)
 
@@ -530,7 +538,8 @@ def test_resume_after_error_reruns_the_errored_stage_and_its_downstream(tmp_path
 
     # Restore the input so load can succeed, then resume the same run.
     pd.DataFrame({"id": ["a", "b"], "val": [1, 2]}).to_csv(csv_path, index=False)
-    resumed = runner.resume_run(tmp_path, first["run_id"], tmp_path)
+    resumed = runner.resume_run(tmp_path, first["run_id"], tmp_path,
+                            *resumed_stages(tmp_path, first["run_id"]))
 
     assert resumed["status"] == "ok"
     assert _stage_status(resumed, "load") == "ok"
@@ -538,3 +547,67 @@ def test_resume_after_error_reruns_the_errored_stage_and_its_downstream(tmp_path
     assert _stage_status(resumed, "tail") == "ok"
     tail_out = pd.read_parquet(outputs / "tail.parquet")
     assert list(tail_out["val"]) == [1, 2]  # real data, not a stale empty frame
+
+
+# ── A resume executes the version its run pinned, and nothing else ───────────
+
+def test_resume_refuses_stages_belonging_to_another_version(tmp_path):
+    """The runner is handed stages, so it re-checks they are the pinned ones."""
+    workspace.set_projects_dir(tmp_path)
+    project_dir = tmp_path / "wrong_version"
+    _write_stage(project_dir, "01_load.json", _load_items_stage(project_dir))
+    _write_stage(project_dir, "02_review.json", _queue_stage("review", "load"))
+    _seed_version(project_dir)
+
+    halted = run_prepared(prepare_run(project_dir, project_dir, *pinned_stages(project_dir)))
+    stages, _ = resumed_stages(project_dir, halted["run_id"])
+
+    with pytest.raises(ValueError, match="pinned to workflow version"):
+        runner.resume_run(project_dir, halted["run_id"], project_dir, stages, "20990101T000000")
+
+
+def test_resume_reads_the_pinned_version_not_the_working_copy(tmp_path):
+    """Regression: an invalid working copy must not block resuming a valid pinned run."""
+    workspace.set_projects_dir(tmp_path)
+    project_dir = tmp_path / "drifted_copy"
+    _write_stage(project_dir, "01_load.json", _load_items_stage(project_dir))
+    _write_stage(project_dir, "02_review.json", _queue_stage("review", "load"))
+    _seed_version(project_dir)
+
+    halted = run_prepared(prepare_run(project_dir, project_dir, *pinned_stages(project_dir)))
+    assert halted["status"] == "awaiting_review"
+
+    # Break the working copy AFTER the run pinned its version. The pinned
+    # snapshot is untouched, so the resume must still find loadable stages.
+    _write_stage(project_dir, "01_load.json", {"id": "load", "type": "input_data"})
+    with pytest.raises(WorkflowLoadError):
+        load_workflow(project_dir)
+
+    stages, workflow_version = resumed_stages(project_dir, halted["run_id"])
+    assert [s.id for s in stages] == ["load", "review"]
+    assert workflow_version == halted["workflow_version"]
+
+    response = TestClient(app).post(
+        f"/project/drifted_copy/runs/{halted['run_id']}/resume", follow_redirects=False)
+    assert response.status_code == 303
+
+
+def test_resume_of_a_run_with_no_pinned_version_fails_loudly(tmp_path):
+    """A run naming no snapshot cannot be resumed — refuse rather than guess which."""
+    # `workflow_version: null` is the manifest's own unpinned shape (what a subset
+    # run writes), not a corrupted file: RunManifest requires the KEY, so an absent
+    # one fails at parse time and never reaches this guard.
+    workspace.set_projects_dir(tmp_path)
+    project_dir = tmp_path / "unpinned"
+    _write_stage(project_dir, "01_load.json", _load_items_stage(project_dir))
+    _write_stage(project_dir, "02_review.json", _queue_stage("review", "load"))
+    _seed_version(project_dir)
+
+    halted = run_prepared(prepare_run(project_dir, project_dir, *pinned_stages(project_dir)))
+    manifest_path = project_dir / "runs" / halted["run_id"] / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["workflow_version"] = None
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    with pytest.raises(RunVersionUnresolvableError, match="records no workflow version"):
+        run_service.read_pinned_version("unpinned", halted["run_id"])
