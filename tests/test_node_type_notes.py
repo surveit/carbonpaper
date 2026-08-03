@@ -1,6 +1,10 @@
 from __future__ import annotations
 
-from app.models import CODE_SUMMARY_CONTRACT_NOTE, HUMAN_REVIEW_QUEUE_CONTRACT_NOTE
+from app.models import (
+    CODE_CORNER_CASES_CONTRACT_NOTE,
+    CODE_SUMMARY_CONTRACT_NOTE,
+    HUMAN_REVIEW_QUEUE_CONTRACT_NOTE,
+)
 from app.models.stages.node_types import CODE_CARRYING_TYPES, NODE_TYPES
 
 
@@ -57,6 +61,16 @@ def test_summary_budget_note_reaches_every_code_carrying_type():
     for stage_type in CODE_CARRYING_TYPES:
         assert CODE_SUMMARY_CONTRACT_NOTE in NODE_TYPES[stage_type]["notes"], stage_type
     assert CODE_SUMMARY_CONTRACT_NOTE in EDITING_SYSTEM_PROMPT
+
+
+def test_corner_cases_note_reaches_every_code_carrying_type():
+    # stage_edit refuses a write that omits `corner_cases`; this is the note that tells
+    # an author the key is mandatory and `[]` is the way to say "none"
+    from app.agents.compiler.prompt import EDITING_SYSTEM_PROMPT
+
+    for stage_type in CODE_CARRYING_TYPES:
+        assert CODE_CORNER_CASES_CONTRACT_NOTE in NODE_TYPES[stage_type]["notes"], stage_type
+    assert CODE_CORNER_CASES_CONTRACT_NOTE in EDITING_SYSTEM_PROMPT
 
 
 def test_publish_note_names_the_trace_link_helper():

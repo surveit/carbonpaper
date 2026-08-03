@@ -38,8 +38,9 @@ SUMMARY_DESCRIPTION = (
     "status text says so, leaving the score blank\", never \"applies a regex to `status` "
     "and returns a dict\". No Python vocabulary (function, dict, DataFrame, None, "
     "regex); the only identifiers to use are column names the reader already sees in "
-    "the schema. HARD LIMIT: 255 characters, refused above that — say the rule and "
-    "stop. Anything conditional or surprising belongs in `corner_cases`, not here."
+    f"the schema. HARD LIMIT: {SUMMARY_MAX_CHARS} characters, refused above that — say "
+    "the rule and stop. Anything conditional or surprising belongs in `corner_cases`, "
+    "not here."
 )
 
 # The instruction for `corner_cases`. Split from `summary` on purpose: the summary
