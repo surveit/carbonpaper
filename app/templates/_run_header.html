@@ -1,0 +1,56 @@
+{#
+  RUN HEADER — three elements, in this order:
+
+    1. the grounding line: when it started, how long it took, the run id, the
+       version it pinned and that version's message, and (for a test run) a chip
+       whose tooltip carries what a test run does;
+    2. the CTA row: exactly ONE primary action, chosen by run state
+       (app.web.run_header.choose_run_cta). The state is never spelled out — you
+       read it off the button, and a run that finished clean has no imperative
+       button at all, only its outputs;
+    3. the stage strip and its labelled counts.
+
+  A run has no name (`run_id` IS the start timestamp), so there is no <h1> here.
+
+  Context: project, run_id, header = app.web.run_header.RunHeader
+#}
+<div class="run-header">
+  <p class="run-ground">
+    {%- if header.started_at %}<span>started {{ header.started_at | relative_time }}</span>{% endif %}
+    {%- if header.live.duration %}<span class="sep">·</span><span>{{ header.live.duration_verb }}
+      <span id="run-duration">{{ header.live.duration }}</span></span>{% endif %}
+    <span class="sep">·</span><code class="run-id">{{ run_id }}</code>
+    {%- if header.version.version_id %}
+    <span class="sep">·</span><span>version
+      <a href="/project/{{ project }}/workflow/version/{{ header.version.version_id }}"><code>{{ header.version.version_id }}</code></a>
+      {%- if header.version.message %} “{{ header.version.message }}”
+      {%- elif header.version.error %} <span class="unresolved" title="{{ header.version.error }}">— this version could not be read</span>
+      {%- endif %}</span>
+    {%- else %}
+    <span class="sep">·</span><span class="unresolved">no workflow version recorded</span>
+    {%- endif %}
+    {%- if header.is_test_run %}
+    <span class="sep">·</span><span class="flagchip"
+      title="A workflow test, not a production run: it automatically approves every human review, but it does call LLMs and run code stages, and it caches nothing.">test run</span>
+    {%- endif %}
+  </p>
+
+  {% if header.cta.primary or header.cta.aside %}
+  <div class="cta-row">
+    {%- for action in [header.cta.primary] + header.cta.secondary %}{% if action %}
+    {%- if action.method == 'post' %}
+    <form method="post" action="{{ action.url }}" class="cta-form">
+      <button type="submit" class="btn {{ action.kind }}">{{ action.label }}</button>
+    </form>
+    {%- else %}
+    <a href="{{ action.url }}" class="btn {{ action.kind }}">{{ action.label }}</a>
+    {%- endif %}
+    {%- endif %}{% endfor %}
+    <span class="cta-aside" id="cta-aside">{{ header.cta.aside or '' }}</span>
+  </div>
+  {% endif %}
+
+  {% with strip = header.strip, show_counts = true, strip_id = 'stage-strip' %}
+    {% include "_stage_strip.html" %}
+  {% endwith %}
+</div>
