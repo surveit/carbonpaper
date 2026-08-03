@@ -77,14 +77,14 @@ def test_all_stages_run_aggregates_counts():
 
 def test_untested_python_stage_is_listed_not_run():
     report = run_stage_tests(_workflow())
-    assert report.untested_python_stages == ["untested"]
+    assert report.untested_stages == ["untested"]
 
 
 def test_single_stage_id_scopes_the_run():
     report = run_stage_tests(_workflow(), stage_id="double")
     assert [run.stage_id for run in report.stages] == ["double"]
     assert report.summary.tests_total == 2
-    assert report.untested_python_stages == []
+    assert report.untested_stages == []
 
 
 def test_mismatch_surfaces_cell_diffs_in_outcome():

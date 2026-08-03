@@ -209,7 +209,7 @@ def test_start_raises_before_session_for_non_python_stage(tmp_path: Path, monkey
     monkeypatch.setattr(compiler_stage_tests, "open_session_store", lambda: store)
 
     before = len(store.list_sessions())
-    with pytest.raises(ValueError, match="python transform"):
+    with pytest.raises(ValueError, match="can run them"):
         generation.start_stage_test_generation(project_dir, stage_id="load", model="sonnet")
 
     assert len(store.list_sessions()) == before  # no orphaned session

@@ -1,5 +1,5 @@
-"""Run a python transform's authored tests against its actual code, executing each
-through the SAME handler registry the real runner uses.
+"""Run a stage's authored tests against its actual code, executing each through
+the SAME handler registry the real runner uses.
 
 Comparison is on the output_schema's columns, counts None and float NaN as one
 absence, and compares both sides as a multiset, so no test pins an ordering.
@@ -18,7 +18,7 @@ from app.core.frames import list_rows
 from app.models import Stage, TableSchema
 from app.models.errors import StepRefused
 from app.models.stage import StageType
-from app.models.stages.stage_tests import STAGE_TEST_TYPES, StageTest
+from app.models.stages.stage_tests import StageTest
 from app.runtime.context import RunContext
 from app.runtime.stages import HANDLERS
 from app.runtime.validation import Severity, validate_dataframe
@@ -70,7 +70,7 @@ class TestRunSummary(BaseModel):
 class StageTestsReport(BaseModel):
     summary: TestRunSummary
     stages: list[StageTestRun]
-    untested_python_stages: list[str]
+    untested_stages: list[str]
 
 
 def run_stage_tests(
@@ -78,16 +78,16 @@ def run_stage_tests(
 ) -> StageTestsReport:
     """Run authored stage tests against their current code and report the result.
 
-    With `stage_id` None, run every python-transform stage that carries tests;
-    with a `stage_id`, run just that stage (raising ValueError if it names no
-    stage, or names one whose type carries no runnable tests). Either way,
-    `untested_python_stages` lists the in-scope python transforms that have no
-    tests — a coverage gap the caller should see, not a failure."""
+    With `stage_id` None, run every stage that can carry tests and does; with a
+    `stage_id`, run just that stage (raising ValueError if it names no stage, or
+    names one whose type carries no runnable tests). Either way,
+    `untested_stages` lists the in-scope stages that have no tests — a coverage
+    gap the caller should see, not a failure."""
     targets = _select_target_stages(stages, stage_id)
     runs = [_run_one_stage(stage) for stage in targets if stage.tests]
     untested = [stage.id for stage in targets if not stage.tests]
     return StageTestsReport(
-        summary=_summarize(runs), stages=runs, untested_python_stages=untested
+        summary=_summarize(runs), stages=runs, untested_stages=untested
     )
 
 
@@ -95,7 +95,7 @@ def run_tests_for_stage(stage: Stage) -> list[StageTestResult]:
     """Execute each of `stage.tests` through the stage's registered handler
     and compare to its expected rows. Raises ValueError for stage types whose
     tests cannot execute (the model forbids authoring them there anyway)."""
-    if stage.type not in STAGE_TEST_TYPES:
+    if not stage.CARRIES_RUNNABLE_TESTS:
         raise ValueError(
             f"stage {stage.id} ({stage.type}) does not carry runnable tests"
         )
@@ -103,7 +103,7 @@ def run_tests_for_stage(stage: Stage) -> list[StageTestResult]:
 
 
 def find_failing_stage_tests(stages: list[Stage]) -> list[str]:
-    """The version gate's check: run every python transform's tests and
+    """The version gate's check: run every stage's authored tests and
     return one human-readable line per test the stage fails ([] = gate open).
     Stages without tests contribute nothing — the gate holds existing tests to
     green; it does not require tests to exist."""
@@ -121,13 +121,13 @@ def find_failing_stage_tests(stages: list[Stage]) -> list[str]:
 
 
 def _select_target_stages(stages: list[Stage], stage_id: str | None) -> list[Stage]:
-    """The python-transform stages a run covers: all of them when `stage_id` is
-    None, or exactly the named one — raising ValueError if it is absent or is not
-    a stage type that carries runnable tests."""
+    """The stages a run covers: every one that can carry runnable tests when
+    `stage_id` is None, or exactly the named one — raising ValueError if it is
+    absent or is not a stage type that carries runnable tests."""
     if stage_id is None:
-        return [stage for stage in stages if stage.type in STAGE_TEST_TYPES]
+        return [stage for stage in stages if stage.CARRIES_RUNNABLE_TESTS]
     stage = _find_stage(stages, stage_id)
-    if stage.type not in STAGE_TEST_TYPES:
+    if not stage.CARRIES_RUNNABLE_TESTS:
         raise ValueError(
             f"stage {stage_id} ({stage.type}) does not carry runnable tests"
         )
@@ -166,12 +166,11 @@ def _run_one_test(stage: Stage, test: StageTest) -> StageTestResult:
     malformed = _validate_test_against_schemas(stage, test, input_frames)
     if malformed:
         return StageTestResult(test.name, "malformed", message=malformed)
-    # Ephemeral context: authored tests run only python_row_function /
-    # python_frame_function (STAGE_TEST_TYPES), neither of which reads
-    # repo_root/run_dir or needs project scope — so both are None (no run on
-    # disk), no identity, no cache. A stage reaching for run disk under this
-    # context fails loudly via require_run_dir rather than touching a fabricated
-    # path.
+    # Ephemeral context: every type declaring CARRIES_RUNNABLE_TESTS runs
+    # authored code over its own input and reads neither repo_root/run_dir nor
+    # project scope — so both are None (no run on disk), no identity, no cache. A
+    # stage reaching for run disk under this context fails loudly via
+    # require_run_dir rather than touching a fabricated path.
     ctx = RunContext.for_stages_outside_a_run(None, None)
     try:
         actual = HANDLERS[StageType(stage.type)].execute(stage, input_frames, ctx)

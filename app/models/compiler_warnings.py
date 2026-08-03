@@ -8,7 +8,6 @@ from __future__ import annotations
 from pydantic import BaseModel
 
 from app.models.stage import Stage
-from app.models.stages.stage_tests import STAGE_TEST_TYPES
 from app.models.stages.warnings import FIXABLE, CompilerWarning, warn
 
 
@@ -51,7 +50,7 @@ def _find_unchecked_description_warnings(stage: Stage) -> list[CompilerWarning]:
     """A description nothing checks against the code; only a stage with authored code has one."""
     if stage.find_authored_code_block() is None:
         return []
-    if stage.type not in STAGE_TEST_TYPES:
+    if not stage.CARRIES_RUNNABLE_TESTS:
         return [warn(stage, "untestable",
                      f"a {stage.type} cannot carry examples, so nothing can check its "
                      f"description against its code")]

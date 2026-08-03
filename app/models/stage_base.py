@@ -151,6 +151,11 @@ class StageBase(StageCommon):
     # False for the one type that emits files rather than a table (publish).
     REQUIRES_OUTPUT_SCHEMA: ClassVar[bool] = True
 
+    # True for the types whose registered handler can execute one authored
+    # StageTest — the types that may carry `tests`. A subclass that flips this on
+    # also owes validate_stage_tests a rule for its own input/output arity.
+    CARRIES_RUNNABLE_TESTS: ClassVar[bool] = False
+
     inputs: list[StageInput] = Field(
         default_factory=list,
         description=(
@@ -259,6 +264,12 @@ class StageBase(StageCommon):
 
     @model_validator(mode="after")
     def _tests_shape(self) -> "StageBase":
+        """Tests belong only on a type whose handler can run them, at that type's arity."""
+        if self.tests and not self.CARRIES_RUNNABLE_TESTS:
+            raise ValueError(
+                f"tests are only supported on stage types whose handler can run "
+                f"them, not `{self.type}`"
+            )
         validate_stage_tests(self.type, self.input_ids, self.tests or [])
         return self
 

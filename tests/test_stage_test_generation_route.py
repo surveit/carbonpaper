@@ -175,7 +175,7 @@ def test_generate_tests_rejects_non_python_stage(client: TestClient, tmp_path: P
     response = client.post("/project/alpha/node/publish/generate-tests")
 
     assert response.status_code == 400
-    assert "python transform" in response.json()["detail"]
+    assert "can run them" in response.json()["detail"]
     assert len(SessionStore().list_sessions()) == before  # no orphaned session
 
 
