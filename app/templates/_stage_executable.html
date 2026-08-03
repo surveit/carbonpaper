@@ -104,6 +104,20 @@
 </section>
 {% endif %}
 
+{% if stage.starlark %}
+<section class="exec-block">
+    <h2>🛡️ Sandboxed code transformation</h2>
+    {{ stage_summary(stage.starlark.summary) }}
+    {{ stage_corner_cases(stage.starlark.corner_cases) }}
+    {{ stage_certification(certification) }}
+    {% if stage.starlark.function %}
+    <dl class="kv">
+        <dt>function</dt><dd><code>{{ stage.starlark.function }}</code></dd>
+    </dl>
+    {% endif %}
+</section>
+{% endif %}
+
 {% if stage.filter %}
 <section class="exec-block">
     <h2>🔎 Row filter</h2>

@@ -93,6 +93,7 @@ def _origin(stage_type: str) -> str:
     return {
         "input_data": "source",
         "python_row_function": "computed",
+        "starlark_row_function": "computed",
         "llm_transform": "llm",
     }.get(stage_type, "other")
 

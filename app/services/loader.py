@@ -17,6 +17,7 @@ from app.core.paths import repo_root
 from app.models.workflow import Workflow, validate_workflow
 from app.models.stage import Stage, parse_stage
 from app.models.stages.code import PythonFunction
+from app.models.stages.starlark import StarlarkFunction
 from app.core.utils import format_errors
 
 from .errors import WorkflowLoadError
@@ -136,14 +137,17 @@ def read_module_code(module_path: str) -> str | None:
 
 
 def resolve_function_code(stage_def: Stage | None) -> str | None:
-    """Python source for a stage's `function` block: the module file for a module
-    ref, or the inline code string. None for a stage whose authored code is a
-    filter predicate (inline on its own block) or that has none."""
+    """Source for a stage's `function` (Python) or `starlark` block: the module
+    file for a Python module ref, else the inline code string. None for a stage
+    whose authored code is a filter predicate (inline on its own block) or that
+    has none."""
     fn = stage_def.find_authored_code_block() if stage_def else None
+    if isinstance(fn, StarlarkFunction):
+        return fn.code
     if not isinstance(fn, PythonFunction):
         return None
-    if fn and fn.kind == "module" and fn.module:
+    if fn.kind == "module" and fn.module:
         return read_module_code(fn.module)
-    if fn and fn.kind == "inline":
+    if fn.kind == "inline":
         return fn.code
     return None

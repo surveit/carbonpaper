@@ -26,6 +26,7 @@ from .stages import HANDLERS
 PREVIEWABLE_TYPES: set[str] = {
     "python_row_function",
     "python_frame_function",
+    "starlark_row_function",
     "llm_transform",
     "enrich",
     "expand",

@@ -4,13 +4,15 @@
    exporting its macros — and `stage_code` has to be callable by the HOST, after
    its sibling include of _stage_tests.html. That ordering is the point: a
    non-engineer reviewer reads what the step does, then the examples that pin it
-   down, and only then the implementation. Both python_row_function /
-   python_frame_function / publish (stage.function) and filter_rows
-   (stage.filter) go through here, so the two read the same way.
+   down, and only then the implementation. python_row_function /
+   python_frame_function / publish (stage.function), filter_rows (stage.filter),
+   and starlark_row_function (stage.starlark) all go through here, so every
+   authored-code stage reads the same way.
 
    stage_code(stage, function_code): function_code is the resolved source for a
    `function` block (None when a module ref can't be found on disk); a filter's
-   code is inline on the block and needs no resolution. #}
+   or a starlark stage's code is inline on its own block and needs no
+   resolution. #}
 
 {# Prose carrying `backticks` around the column names it mentions, rendered with
    the odd parts as inline code chips. The backticks are plain text in the data —
@@ -70,6 +72,14 @@
     <details open>
         <summary><h2>💻 Code</h2><span class="muted">the predicate behind the summary above</span></summary>
         <pre class="code">{{ stage.filter.code }}</pre>
+    </details>
+</section>
+{% endif %}
+{% if stage.starlark %}
+<section class="exec-block code-block">
+    <details open>
+        <summary><h2>💻 Code</h2><span class="muted">the implementation of the summary above</span></summary>
+        <pre class="code">{{ stage.starlark.code }}</pre>
     </details>
 </section>
 {% endif %}
