@@ -110,10 +110,10 @@ def test_patch_changes_only_named_field_and_preserves_the_rest(tmp_path: Path) -
 
 def test_patch_deep_merges_nested_object(tmp_path: Path) -> None:
     pdir = _seed(tmp_path)
-    result = stage_edit.patch_stage_spec(pdir, "score", json.dumps({"llm": {"model": "opus"}}))
+    result = stage_edit.patch_stage_spec(pdir, "score", json.dumps({"llm": {"model": "claude-opus-5"}}))
     assert result.ok is True
     after = _score(pdir)
-    assert after["llm"]["model"] == "opus"
+    assert after["llm"]["model"] == "claude-opus-5"
     # the sibling key inside llm is NOT dropped (deep merge, not whole-object replace)
     assert after["llm"]["prompt_data_template"] == "score {doc_id}"
 

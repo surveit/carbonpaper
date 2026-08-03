@@ -351,14 +351,22 @@ def test_model_enum_accepts_known():
                                        "primary_key": ["id"]}}],
         output_schema={"columns": [{"name": "id", "type": "str"}, {"name": "out", "type": "str"}],
                        "primary_key": ["id"]},
-        llm={"prompt_template": "p", "model": "haiku"}))
-    assert s.llm.model == LLMModel.haiku
+        llm={"prompt_template": "p", "model": "claude-haiku-4-5"}))
+    assert s.llm.model == LLMModel.claude_haiku_4_5
 
 
 def test_model_enum_rejects_unknown():
     with pytest.raises(ValidationError):
         m.parse_stage(S(id="e", type="llm_transform", inputs=[{"id": "a"}],
                                  llm={"prompt_template": "p", "model": "gpt-9"}))
+
+
+def test_model_enum_rejects_unversioned_alias():
+    # A stage naming "haiku" would run on whatever the CLI maps that to today and
+    # something else after the next release, with nothing in the spec to show it moved.
+    with pytest.raises(ValidationError):
+        m.parse_stage(S(id="e", type="llm_transform", inputs=[{"id": "a"}],
+                                 llm={"prompt_template": "p", "model": "haiku"}))
 
 
 # ── non-fatal helper ─────────────────────────────────────────────────────────
