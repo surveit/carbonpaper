@@ -26,6 +26,11 @@ from app.models.stages.warnings import CompilerWarning, warn
 # the summary — not the code — is what the stage page leads with; it is written
 # alongside the code, from the methodology, and says the RULE rather than the
 # implementation.
+# A summary a non-engineer will actually read is short. Enforced on WRITE
+# (services.stage_edit), not on the model: stages stored before the limit — and every
+# frozen version — must still load.
+SUMMARY_MAX_CHARS = 255
+
 SUMMARY_DESCRIPTION = (
     "REQUIRED in practice: one or two plain sentences telling a non-engineer what this "
     "step does, written from the methodology at the same time as the code. State the "
@@ -33,7 +38,8 @@ SUMMARY_DESCRIPTION = (
     "status text says so, leaving the score blank\", never \"applies a regex to `status` "
     "and returns a dict\". No Python vocabulary (function, dict, DataFrame, None, "
     "regex); the only identifiers to use are column names the reader already sees in "
-    "the schema."
+    "the schema. HARD LIMIT: 255 characters, refused above that — say the rule and "
+    "stop. Anything conditional or surprising belongs in `corner_cases`, not here."
 )
 
 # The instruction for `corner_cases`. Split from `summary` on purpose: the summary
