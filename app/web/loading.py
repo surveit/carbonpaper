@@ -237,6 +237,22 @@ def read_table(path: Path) -> pd.DataFrame:
     return pd.read_parquet(path) if path.suffix == PARQUET_SUFFIX else pd.read_csv(path)
 
 
+# Excel on Windows reads a .csv in the machine's legacy code page (cp1252 on a
+# Western install) unless the file opens with a UTF-8 byte-order mark. Without
+# the mark, a run whose rows hold French or Dutch text downloads clean and then
+# renders as "mÃ©rite" for a Windows reviewer while the same file is fine on
+# macOS — the reviewer reads mojibake and cannot judge the row. The mark costs
+# the readers that do not need it nothing: pandas.read_csv strips a leading BOM
+# on its default encoding, so re-importing a downloaded file through an
+# `input_data` csv connector keeps its first column name intact.
+_UTF8_BOM = "\ufeff"
+
+
+def csv_download_body(df: pd.DataFrame) -> bytes:
+    """`df` as CSV download bytes: UTF-8 behind a byte-order mark (see `_UTF8_BOM`)."""
+    return (_UTF8_BOM + df.to_csv(index=False)).encode("utf-8")
+
+
 def manifest_stage(run_dir: Path, stage_id: str) -> dict[str, Any]:
     """The manifest record for one stage of a run; 404 if run or stage missing."""
     manifest = load_manifest(run_dir)

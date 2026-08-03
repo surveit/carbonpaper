@@ -48,6 +48,7 @@ from app.web.stage_test_views import build_certification, shape_test_views
 from app.web.diagrams import TYPE_CLASS, TYPE_GLYPH, build_mermaid_graph
 from app.web.loading import (
     build_llm_example,
+    csv_download_body,
     list_file_inputs,
     save_uploaded_input,
     load_manifest,
@@ -537,12 +538,14 @@ async def run_stage_rows(
 @router.get("/project/{project}/runs/{run_id}/stage/{stage_id}/rows.csv")
 async def run_stage_rows_csv(project: str, run_id: str, stage_id: str):
     """One stage's complete output as a CSV download (no row cap)."""
+    # UTF-8 behind a byte-order mark, so accented rows survive Excel on
+    # Windows — `csv_download_body` carries the why.
     run_dir = runs_dir(project) / run_id
     stage_record = manifest_stage(run_dir, stage_id)
     df = read_output_df(run_dir, stage_record.get("output_path"))
     filename = f"{project}__{run_id}__{stage_id}.csv"
     return Response(
-        content=df.to_csv(index=False),
+        content=csv_download_body(df),
         media_type="text/csv; charset=utf-8",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )

@@ -42,7 +42,9 @@ after injection — without that, the panel's JS (tabs + scratch tool) is dead.
   `llm_transform`) lives in Inputs (row picker) and shows its result in
   Transform. Nothing is persisted.
 - **Full-table view + CSV**: `…/stage/{sid}/rows` renders the entire stage
-  output (not just the first-5 preview); `…/rows.csv` downloads it uncapped.
+  output (not just the first-5 preview); `…/rows.csv` downloads it uncapped,
+  UTF-8 behind a byte-order mark so accented rows open correctly in Excel on
+  Windows (`loading.csv_download_body`).
 
 ## Review queue (`queue.html`)
 
