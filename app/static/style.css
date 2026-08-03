@@ -1150,11 +1150,21 @@ table.data-preview.scratch th { background: #f3ecd0; }
 .cta-aside { font-size: .82rem; color: var(--muted); }
 
 /* ── The stage strip (_stage_strip.html): one square per stage in topological
-      order, coloured by status. Status only — the squares are not links. ── */
-.stage-strip { display: inline-flex; gap: 3px; align-items: flex-end; vertical-align: -2px; }
-.stage-strip i { display: block; width: 26px; height: 16px; border-radius: 3px; flex: none; }
-.stage-strip.compact { gap: 2px; }
-.stage-strip.compact i { width: 8px; height: 10px; border-radius: 2px; }
+      order, coloured by status. Status only — the squares are not links.
+
+      The squares divide the row's width rather than each claiming 26px, because
+      a fixed width silently drops the overflow: the reader counts fewer squares
+      than the tally beneath claims, with no sign any are missing. They grow to
+      26px and no further, so a short workflow looks as it always did. Below
+      ~3px each the row can still overflow — that is 60+ stages in the narrowest
+      column, and the floor is what keeps a single failed stage visible. ── */
+.stage-strip { display: flex; gap: 3px; align-items: flex-end; width: 100%; }
+.stage-strip i { display: block; height: 16px; border-radius: 3px;
+    flex: 1 1 0; min-width: 3px; max-width: 26px; }
+/* The runs-index twin sits inline in a table cell, so it keeps its intrinsic
+   width — the cell, not the strip, decides how much room there is. */
+.stage-strip.compact { display: inline-flex; gap: 2px; width: auto; vertical-align: -2px; }
+.stage-strip.compact i { width: 8px; height: 10px; border-radius: 2px; flex: none; max-width: none; }
 .strip-counts { display: flex; flex-wrap: wrap; gap: .95rem; margin: .5rem 0 0;
     font-size: .8rem; color: var(--muted); }
 .strip-counts span { display: flex; align-items: center; gap: .4em; }
