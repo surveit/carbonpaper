@@ -4,7 +4,7 @@ against its side's stage input edge; and a declared output_schema (plus
 `select`) must be deliverable by the columns the join actually produces."""
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, ClassVar, Literal, Optional
+from typing import Any, TYPE_CHECKING, ClassVar, Literal, Optional
 
 from pydantic import Field
 
@@ -144,3 +144,53 @@ def derive_join_output_types(
         name = column.name if column.name not in left_names else f"{column.name}_r"
         joined[name] = column.type
     return joined
+
+# Authoring notes for this module's stage type(s), as the plain-data shape the
+# authoring prompts render. Assembled into NODE_TYPES by app.models.stages.
+NODE_TYPE_SPECS: dict[str, dict[str, Any]] = {
+    "enrich": {
+        "summary": "Adds reference columns to each subject row; the reference must be unique on the key (many-to-one).",
+        "blocks": ["join"],
+        "requires_inputs": True,
+        "min_inputs": 2,
+        "required": ["keys"],
+        "optional": ["select"],
+        "notes": (
+            "Takes EXACTLY TWO inputs: inputs[0] is the SUBJECT, inputs[1] is the REFERENCE. "
+            "Row count and order come out unchanged, because the reference is required to hold "
+            "at most ONE row per key: the runtime asks pandas to VERIFY that, so a reference "
+            "that repeats a key FAILS THE RUN rather than silently multiplying rows. Use "
+            "`expand` when the fan-out is intended. Every subject row survives — an unmatched "
+            "one carries nulls for the reference columns — and an unmatched reference row is "
+            "dropped. This stage NEVER drops a subject row: to drop rows (e.g. inner-join "
+            "semantics), follow it with a `filter_rows` on a reference column being non-null, "
+            "which records the row loss instead of hiding it. "
+            "A reference column whose name a subject column shares arrives as `<name>_r`; a key "
+            "pair with the SAME name on both sides collapses into one column. `select` and "
+            "output_schema may name only columns the join produces — anything else is rejected "
+            "when the stage is saved."
+        ),
+    },
+    "expand": {
+        "summary": "Joins reference rows into each subject row, fanning one subject row out to several (many-to-many).",
+        "blocks": ["join"],
+        "requires_inputs": True,
+        "min_inputs": 2,
+        "required": ["keys"],
+        "optional": ["select"],
+        "notes": (
+            "Takes EXACTLY TWO inputs: inputs[0] is the SUBJECT, inputs[1] is the REFERENCE. "
+            "The reference MAY hold several rows per key, so one subject row may come out as "
+            "several — deliberate fan-out. Use `enrich` instead when the reference is meant to "
+            "be unique on the key and a repeat is a bug you want caught. Every subject row "
+            "survives — an unmatched one carries nulls for the reference columns — and an "
+            "unmatched reference row is dropped. This stage NEVER drops a subject row: to drop "
+            "rows (e.g. inner-join semantics), follow it with a `filter_rows` on a reference "
+            "column being non-null, which records the row loss instead of hiding it. "
+            "A reference column whose name a subject column shares arrives as `<name>_r`; a key "
+            "pair with the SAME name on both sides collapses into one column. `select` and "
+            "output_schema may name only columns the join produces — anything else is rejected "
+            "when the stage is saved."
+        ),
+    },
+}

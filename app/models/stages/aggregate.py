@@ -6,7 +6,7 @@ columns group_by + the aggregations actually produce."""
 from __future__ import annotations
 
 from enum import Enum
-from typing import TYPE_CHECKING, ClassVar, Literal, Optional
+from typing import Any, TYPE_CHECKING, ClassVar, Literal, Optional
 
 from pydantic import Field, model_validator
 
@@ -156,3 +156,24 @@ def derive_aggregate_output_types(
         else:  # min / max / first: the value column's own type
             derived[op.output_column] = value_type
     return derived
+
+# Authoring notes for this module's stage type(s), as the plain-data shape the
+# authoring prompts render. Assembled into NODE_TYPES by app.models.stages.
+NODE_TYPE_SPECS: dict[str, dict[str, Any]] = {
+    "aggregate": {
+        "summary": "Structured group-by aggregation.",
+        "blocks": ["aggregate"],
+        "requires_inputs": True,
+        "min_inputs": 1,
+        "required": ["group_by", "aggregations"],
+        "optional": [],
+        "notes": (
+            "Output columns are exactly group_by plus each aggregation's output_column — every "
+            "other input column is DROPPED, so carry anything needed downstream via group_by "
+            "or a `first` aggregation. formula `count` takes no value_column; every other "
+            "formula requires one. Declared output types must match "
+            "the derivation: count->int, mean->float, min/max/first->the value column's type, "
+            "list->list[<that type>]."
+        ),
+    },
+}

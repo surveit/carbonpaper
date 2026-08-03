@@ -3,7 +3,7 @@ must share an identical schema (prose aside), and a declared output_schema
 must equal that shared schema."""
 from __future__ import annotations
 
-from typing import ClassVar, Literal
+from typing import Any, ClassVar, Literal
 
 from pydantic import Field
 
@@ -61,3 +61,22 @@ def find_union_output_issues(stage: "UnionStage") -> list[str]:
         f"stage '{stage.id}': output_schema disagrees with the union's shared "
         f"input schema on column(s) {differing}"
     ]
+
+# Authoring notes for this module's stage type(s), as the plain-data shape the
+# authoring prompts render. Assembled into NODE_TYPES by app.models.stages.
+NODE_TYPE_SPECS: dict[str, dict[str, Any]] = {
+    "union": {
+        "summary": "Concatenate two or more upstream dataframes with an identical schema.",
+        "blocks": ["union"],
+        "requires_inputs": True,
+        "min_inputs": 2,
+        "required": [],
+        "optional": [],
+        "notes": (
+            "No configuration — pass `union: {}`. Every input must declare an IDENTICAL "
+            "schema (same columns, same types); a mismatch is refused when the stage is "
+            "saved, naming the differing columns. Concatenates the inputs in declared "
+            "order; output_schema must equal that shared schema."
+        ),
+    },
+}

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel
 
-from app.models import NODE_TYPES
+from app.models.stages.node_types import NODE_TYPES
 from app.models.schema import Column
 from app.models.stage import PythonFunction, StageBase
 from app.models.stages.input_data import Connector

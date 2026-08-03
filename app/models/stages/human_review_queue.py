@@ -4,7 +4,7 @@ predicate references must resolve against the stage's input edge."""
 from __future__ import annotations
 
 from enum import Enum
-from typing import ClassVar, Literal, Optional
+from typing import Any, ClassVar, Literal, Optional
 
 from pydantic import Field
 
@@ -69,3 +69,24 @@ def find_queue_filter_column_issues(stage: "HumanReviewQueueStage") -> list[str]
         return []
     cols = resolve_input_columns(stage, 0)
     return find_predicate_column_issues(queue.filter, stage_id=stage.id, field="queue.filter", cols=cols)
+
+# Authoring notes for this module's stage type(s), as the plain-data shape the
+# authoring prompts render. Assembled into NODE_TYPES by app.models.stages.
+NODE_TYPE_SPECS: dict[str, dict[str, Any]] = {
+    "human_review_queue": {
+        "summary": "Pulls flagged rows for human decision; halts the run.",
+        "blocks": ["queue"],
+        "requires_inputs": True,
+        "min_inputs": 1,
+        "required": [],
+        "optional": ["filter", "reviewer_instructions",
+                     "routing", "conflict_resolution", "estimated_volume_per_week"],
+        "notes": (
+            "Reviewed rows are matched to a cached human decision by "
+            "fingerprinting the row itself — no column configuration is needed. "
+            "Editing `filter` or `reviewer_instructions` changes the stage's "
+            "definition fingerprint, so every previously cached decision for "
+            "this stage stops matching and every row is asked again."
+        ),
+    },
+}

@@ -239,3 +239,30 @@ def _find_additive_shape_issues(input_schema: TableSchema, output_schema: TableS
     if not any(c.name not in input_names for c in output_schema.columns):
         issues.append("output_schema adds no columns beyond the input")
     return issues
+
+# Authoring notes for this module's stage type(s), as the plain-data shape the
+# authoring prompts render. Assembled into NODE_TYPES by app.models.stages.
+NODE_TYPE_SPECS: dict[str, dict[str, Any]] = {
+    "llm_transform": {
+        "summary": "Row-by-row LLM call producing structured output.",
+        "blocks": ["llm"],
+        "requires_inputs": True,
+        "min_inputs": 1,
+        "required": ["prompt_data_template"],
+        "optional": ["model", "temperature", "response_format", "max_retries",
+                     "rubric", "tools"],
+        "notes": (
+            "Author it as TWO fields: prompt_instructions is the row-invariant guidance "
+            "(role, methodology, how to weigh evidence/sources) and MUST NOT depend on "
+            "any row value — the same instructions run over every input row, so keeping "
+            "them byte-stable and separate from per-row data lets the runtime cache that "
+            "prefix, cutting latency (and cost on a per-token backend). "
+            "prompt_data_template is the minimal per-row input framing, rendered with "
+            "Python's str.format_map: inject a column as {column_name}. "
+            "Its single input's schema must declare a primary_key, and its output_schema "
+            "must be strictly ADDITIVE and 1:1: the SAME primary_key as that input, every "
+            "input column unchanged, plus at least one new column (one input row -> one "
+            "output row)."
+        ),
+    },
+}

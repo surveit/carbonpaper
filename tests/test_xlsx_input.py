@@ -145,7 +145,7 @@ def test_bool_offset_param_raises(param):
 
 
 def test_authoring_surfaces_advertise_xlsx():
-    from app.models import NODE_TYPES
+    from app.models.stages.node_types import NODE_TYPES
     from app.models.stages.input_data import Connector
 
     params_description = Connector.model_fields["params"].description or ""

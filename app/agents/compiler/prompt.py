@@ -5,7 +5,8 @@ so the prompt names no specific project."""
 
 from __future__ import annotations
 
-from app.models import HUMAN_REVIEW_QUEUE_CONTRACT_NOTE, NODE_TYPES
+from app.models import HUMAN_REVIEW_QUEUE_CONTRACT_NOTE
+from app.models.stages.node_types import NODE_TYPES
 
 # Runtime facts that live beside NODE_TYPES rather than inside a type's own
 # `notes`, keyed by the type they qualify; rendered as extra note lines.

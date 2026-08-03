@@ -4,7 +4,7 @@ equal the input schema."""
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import ClassVar, Literal, Optional
+from typing import Any, ClassVar, Literal, Optional
 
 from pydantic import Field, model_validator
 
@@ -110,3 +110,24 @@ def find_filter_warnings(stage: "FilterRowsStage") -> list[CompilerWarning]:
         return [warn(stage, "undescribed",
                      "no plain-language description — reviewable only by reading its code")]
     return []
+
+# Authoring notes for this module's stage type(s), as the plain-data shape the
+# authoring prompts render. Assembled into NODE_TYPES by app.models.stages.
+NODE_TYPE_SPECS: dict[str, dict[str, Any]] = {
+    "filter_rows": {
+        "summary": "Keep the rows an authored predicate returns True for.",
+        "blocks": ["filter"],
+        "requires_inputs": True,
+        "min_inputs": 1,
+        "required": ["code"],
+        "optional": ["function"],
+        "notes": (
+            "Takes exactly ONE input. The predicate is INLINE code only — there is no "
+            "kind/module here; a filter that needs an importable module is doing more "
+            "than deciding. `should_include(row)` is handed a plain dict and "
+            "must return a bool — True keeps the row, False drops it; any other return "
+            "type is a run-time error. Kept rows preserve their original relative order "
+            "and every column unchanged, so output_schema must equal the input schema."
+        ),
+    },
+}
