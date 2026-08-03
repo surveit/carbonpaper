@@ -85,6 +85,7 @@ _GRAIN_AND_ORDER_PRESERVING_TYPES: frozenset[StageType] = frozenset({
     StageType.python_row_function,
     StageType.llm_transform,
     StageType.human_review_queue,
+    StageType.starlark_row_function,
 })
 
 
@@ -382,6 +383,8 @@ class StageBase(StageCommon):
         because position IS the identity through a grain-preserving path. Fixed
         entirely by stage type (the module function is_grain_and_order_preserving):
           - python_row_function → yes (runtime maps it per row, in emit order — enforced 1:1)
+          - starlark_row_function → yes (same calling convention as python_row_function,
+                                 sandboxed by construction)
           - python_frame_function → NO (may reshape OR reorder the frame)
           - llm_transform      → yes (per-row 1:1 in emit order in v1; a fan-out LLM
                                  like doc→pieces is out of scope until fan-out evals)

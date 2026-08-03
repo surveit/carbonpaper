@@ -5,7 +5,7 @@ Starlark module to point at."""
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import ClassVar, Literal, Optional
+from typing import Any, ClassVar, Literal, Optional
 
 import starlark
 from pydantic import Field, model_validator
@@ -123,3 +123,30 @@ def find_starlark_warnings(stage: "StarlarkRowFunctionStage") -> list[CompilerWa
         return [warn(stage, "undescribed",
                      "no plain-language description — reviewable only by reading its code")]
     return []
+
+# Authoring notes for this module's stage type(s), as the plain-data shape the
+# authoring prompts render. Assembled into NODE_TYPES by app.models.stages.
+NODE_TYPE_SPECS: dict[str, dict[str, Any]] = {
+    "starlark_row_function": {
+        "summary": "Sandboxed Starlark run once per row: one row in → one row out. Prefer this over python_row_function.",
+        "blocks": ["starlark"],
+        "requires_inputs": True,
+        "min_inputs": 1,
+        "required": ["code"],
+        "optional": ["function"],
+        "notes": (
+            "PREFER THIS over python_row_function for row transforms. Starlark is Python's "
+            "syntax minus imports, file and network access, classes, while, recursion and "
+            "try/except, so the step cannot read or write anything outside its row. "
+            "`transform(row)` is handed a plain dict and must return a plain dict, and that "
+            "dict IS the output row: a key you do not return is absent, so carry columns "
+            "through explicitly (`return {**row, ...}`). Values arrive as strings, numbers, "
+            "booleans, None, lists and dicts; dates and timestamps arrive as ISO-8601 "
+            "strings and every missing value arrives as None. An integer beyond 2**63-1 "
+            "stops the step rather than losing precision. Call `refuse(\"reason\")` to "
+            "decline a row you cannot honestly process. Module-level variables freeze after "
+            "load — keep state in locals. Use python_row_function only when the step "
+            "genuinely needs a Python library."
+        ),
+    },
+}

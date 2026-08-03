@@ -20,6 +20,7 @@ from app.models.stages.input_data import NODE_TYPE_SPECS as _INPUT_DATA
 from app.models.stages.join import NODE_TYPE_SPECS as _JOIN
 from app.models.stages.llm_transform import NODE_TYPE_SPECS as _LLM_TRANSFORM
 from app.models.stages.publish import NODE_TYPE_SPECS as _PUBLISH
+from app.models.stages.starlark import NODE_TYPE_SPECS as _STARLARK
 from app.models.stages.union import NODE_TYPE_SPECS as _UNION
 
 # app.agents.compiler.prompt and app.mcp.server render this into their system
@@ -37,13 +38,17 @@ NODE_TYPES: dict[str, dict[str, Any]] = {
     **_PUBLISH,
     **_UNION,
     **_FILTER_ROWS,
+    **_STARLARK,
 }
 
 # The types whose config carries authored code all owe a plain-language `summary` and
 # a `corner_cases` list — both refused on write by app.services.stage_edit. Applied
 # here rather than written into each entry, so a new code-carrying type cannot ship
 # having forgotten them.
-CODE_CARRYING_TYPES = ("python_row_function", "python_frame_function", "publish", "filter_rows")
+CODE_CARRYING_TYPES = (
+    "python_row_function", "python_frame_function", "publish", "filter_rows",
+    "starlark_row_function",
+)
 for _type_name in CODE_CARRYING_TYPES:
     _spec = NODE_TYPES[_type_name]
     _spec["notes"] = (

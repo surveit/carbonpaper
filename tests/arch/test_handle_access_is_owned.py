@@ -17,6 +17,7 @@ _OWNERS: dict[str, set[str]] = {
     "function": {"app/models/stages/code.py"},
     "filter": {"app/models/stages/filter_rows.py"},
     "queue": {"app/models/stages/human_review_queue.py"},
+    "starlark": {"app/models/stages/starlark.py"},
 }
 
 # Existing readers, to be worked down (🟢 #327 tracks it, including whether a type's
@@ -29,6 +30,7 @@ _GRANDFATHERED: dict[str, set[str]] = {
     },
     "filter": set(),
     "queue": set(),
+    "starlark": set(),
 }
 
 
