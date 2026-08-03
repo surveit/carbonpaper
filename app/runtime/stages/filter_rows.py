@@ -10,9 +10,9 @@ from typing import Any, Callable
 import pandas as pd
 
 from app.models import Stage
-from app.models.errors import StepRefused
 from app.models.stages.filter_rows import FilterRowsStage
 
+from ..authored_code import load_authored_function
 from ..context import RunContext
 from .execution import Row, RowMapper, narrow_stage
 
@@ -20,11 +20,7 @@ from .execution import Row, RowMapper, narrow_stage
 def _load_predicate(stage: Stage) -> Callable[[dict[str, Any]], object]:
     cfg = narrow_stage(stage, FilterRowsStage).filter
     fn_name = cfg.function or "should_include"
-    # StepRefused is seeded so the predicate can `raise StepRefused(...)` with no
-    # import line — a row it cannot decide must be cheaper to refuse than to guess.
-    ns: dict[str, Any] = {StepRefused.__name__: StepRefused}
-    exec(cfg.code, ns)
-    fn = ns.get(fn_name) or ns.get("should_include")
+    fn = load_authored_function(cfg.code, fn_name, "should_include")
     if fn is None:
         raise ValueError(f"inline 'should_include' not defined for stage {stage.id}")
     return fn

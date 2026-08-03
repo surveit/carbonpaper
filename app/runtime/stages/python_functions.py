@@ -11,13 +11,13 @@ from typing import Any, Callable
 import pandas as pd
 
 from app.models import FunctionKind, Stage
-from app.models.errors import StepRefused
 from app.models.stages.code import (
     PythonFrameFunctionStage,
     PythonRowFunctionStage,
 )
 from app.models.stages.publish import PublishStage
 
+from ..authored_code import load_authored_function
 from ..context import RunContext
 from .execution import Row, RowMapper, narrow_stage
 
@@ -36,11 +36,7 @@ def _load_python_function(stage: CodeCarryingStage) -> Callable[..., Any]:
         module = importlib.import_module(fn_spec.module)
         return getattr(module, fn_name)
     if fn_spec.kind == FunctionKind.inline:
-        # StepRefused is seeded so authored code can `raise StepRefused(...)` with
-        # no import line — the refusal is meant to be the cheapest thing to write.
-        ns: dict[str, Any] = {StepRefused.__name__: StepRefused}
-        exec(fn_spec.code or "", ns)
-        fn = ns.get(fn_name) or ns.get("transform")
+        fn = load_authored_function(fn_spec.code or "", fn_name, "transform")
         if fn is None:
             raise ValueError(f"Inline function 'transform' not defined for stage {stage.id}")
         return fn
