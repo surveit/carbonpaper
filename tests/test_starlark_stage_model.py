@@ -33,6 +33,27 @@ def test_validate_docstring_says_it_executes_the_code():
     assert "execut" in (validate_starlark_function_code.__doc__ or "").lower()
 
 
+def test_a_list_holding_a_function_is_rejected_at_save():
+    # Regression: `module[name]` raises identically whether `name` is directly
+    # a function or a container merely HOLDING one (serde walks the whole
+    # value graph), so the ownership check alone once let this save.
+    code = "def f(row):\n    return row\ntransform = [f]\n"
+    with pytest.raises(ValueError):
+        StarlarkFunction(code=code)
+
+
+def test_a_dict_holding_a_function_is_rejected_at_save():
+    code = "def f(row):\n    return row\ntransform = {'f': f}\n"
+    with pytest.raises(ValueError):
+        StarlarkFunction(code=code)
+
+
+def test_a_lambda_bound_to_the_wanted_name_is_accepted_at_save():
+    # Deliberate: a lambda IS a function, so it is accepted like a `def`.
+    code = "transform = lambda row: row\n"
+    assert StarlarkFunction(code=code).code == code
+
+
 def test_accepts_source_defining_transform():
     assert StarlarkFunction(code=GOOD).code == GOOD
 

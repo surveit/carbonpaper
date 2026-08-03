@@ -1,9 +1,11 @@
 import datetime as dt
+import inspect
 
 import numpy as np
 import pandas as pd
 import pytest
 
+import app.runtime.stages.starlark_marshal as starlark_marshal
 from app.runtime.stages.starlark_marshal import MAX_EXACT_INT, marshal_row_for_starlark
 
 
@@ -42,6 +44,15 @@ def test_oversized_int_raises_naming_the_column_rather_than_losing_precision():
 
 def test_the_boundary_value_itself_is_allowed():
     assert marshal_row_for_starlark({"n": MAX_EXACT_INT}) == {"n": MAX_EXACT_INT}
+
+
+def test_max_exact_int_comment_does_not_claim_float_conversion_mechanism():
+    # Regression: the comment above MAX_EXACT_INT stated the same false
+    # mechanism corrected in the error message below — "converts an int to a
+    # float, silently losing the exact value" is false right at the boundary:
+    # 2**63 and 2**63+1 (both above MAX_EXACT_INT) still cross the Starlark
+    # boundary exactly; observable loss only starts at 2**64.
+    assert "converts an int to a float" not in inspect.getsource(starlark_marshal)
 
 
 def test_oversized_int_message_states_the_guarantee_not_a_false_mechanism():

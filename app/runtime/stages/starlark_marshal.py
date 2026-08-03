@@ -9,9 +9,9 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-# Above this, starlark-pyo3 converts an int to a float, silently losing the exact
-# value (observed: 2**70+7 → 1.18e+21). Signed-64 max is the boundary held to, so
-# an id or an amount can never be quietly rewritten.
+# The largest magnitude guaranteed to cross the Starlark boundary with its exact
+# digits intact (observed loss above it: 2**70+7 → 1.18e+21). Signed-64 max is
+# the boundary held to, so an id or an amount can never be quietly rewritten.
 MAX_EXACT_INT = 2**63 - 1
 
 

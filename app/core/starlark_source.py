@@ -8,7 +8,7 @@ from typing import Callable, Mapping, Sequence
 
 import starlark
 
-_UNSERIALIZABLE_FUNCTION_MARKER = "not supported on type `function`"
+_FUNCTION_TYPE_NAME = "function"
 
 # The function name validation falls back to, and execution falls back to in
 # turn — one definition so the two layers cannot drift apart.
@@ -37,18 +37,39 @@ def find_bound_function(module: starlark.Module, names: Sequence[str]) -> str | 
 
 
 def _is_bound_function(module: starlark.Module, name: str) -> bool:
-    # Not interpolated into Starlark source (see the `__getitem__` probe below),
-    # but still validated: a malformed name is a config error, not "unbound".
+    # `name` is interpolated into a Starlark expression in `_bound_value_type`
+    # below; a non-identifier (stage config, not a trusted literal) could
+    # otherwise inject arbitrary Starlark into that probe.
     if not name.isidentifier():
         raise ValueError(f"Not a valid Starlark identifier: {name!r}")
+    # Two questions, two primitives, because neither alone answers "is this
+    # name bound to a function":
+    if not _module_binds(module, name):
+        return False
+    return _bound_value_type(module, name) == _FUNCTION_TYPE_NAME
+
+
+def _module_binds(module: starlark.Module, name: str) -> bool:
     # `module[name]` reads only what THIS module's own top-level statements
     # bound — unlike evaluating `name` as a Starlark expression, it never falls
-    # back to a standard-library name (`len`, `dict`, `fail`, ...) that the code
-    # never bound itself, and it still sees a name that genuinely shadows one.
-    # A bound function is the one value this binding can't marshal to Python,
-    # so failing to marshal it for exactly that reason is itself the signal.
+    # back to a standard-library name (`len`, `dict`, `fail`, ...) that the
+    # code never bound itself. It raises for any value it cannot marshal to
+    # Python (a function, a `range`, a container HOLDING one, ...); a bound
+    # plain value (int, str, list of ints, ...) or an unbound name both just
+    # return — the two are not distinguished here because it doesn't matter:
+    # neither is ever a function, which is all this check needs to settle.
     try:
         module[name]
-    except starlark.StarlarkError as exc:
-        return _UNSERIALIZABLE_FUNCTION_MARKER in str(exc)
+    except starlark.StarlarkError:
+        return True
     return False
+
+
+def _bound_value_type(module: starlark.Module, name: str) -> str:
+    # Ownership is already settled by `_module_binds`; this asks what the
+    # bound value itself IS — unlike `module[name]`, which raises identically
+    # whether `name` is directly a function or merely a container holding one
+    # somewhere inside it (serde walks the whole graph), `type(name)` reports
+    # only the immediate value's type.
+    probe = starlark.parse("<probe>", f"type({name})")
+    return str(starlark.eval(module, probe, starlark.Globals.standard()))

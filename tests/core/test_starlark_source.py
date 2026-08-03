@@ -73,6 +73,40 @@ def test_a_name_bound_to_a_non_function_returns_none():
     assert find_bound_function(module, ("transform",)) is None
 
 
+def test_a_name_bound_to_type_range_returns_none():
+    module = compile_starlark_module("transform = range(5)\n", {})
+    assert find_bound_function(module, ("transform",)) is None
+
+
+def test_a_list_holding_a_function_is_not_itself_a_function():
+    # Regression: serde::serialize walks the whole value graph, so a name bound
+    # to a LIST that merely CONTAINS a function raises the identical
+    # "not supported on type `function`" message __getitem__ raises for a name
+    # genuinely bound to a function. String-matching on that message alone
+    # cannot tell the two apart — the ownership check (__getitem__) only
+    # answers "is something unmarshallable bound here", never "is that
+    # something itself a function". A second, TYPE-only check settles it.
+    module = compile_starlark_module(
+        "def f(row):\n    return row\ntransform = [f]\n", {}
+    )
+    assert find_bound_function(module, ("transform",)) is None
+
+
+def test_a_dict_holding_a_function_is_not_itself_a_function():
+    module = compile_starlark_module(
+        "def f(row):\n    return row\ntransform = {'f': f}\n", {}
+    )
+    assert find_bound_function(module, ("transform",)) is None
+
+
+def test_a_lambda_bound_to_the_name_is_accepted_as_a_function():
+    # Deliberate: a lambda IS a function (same `type() == "function"`, same
+    # callability as a `def`), so binding one to the wanted name is accepted,
+    # not merely tolerated by accident.
+    module = compile_starlark_module("transform = lambda row: row\n", {})
+    assert find_bound_function(module, ("transform",)) == "transform"
+
+
 def test_the_first_bound_name_wins_when_several_are_given():
     module = compile_starlark_module("def relabel(row):\n    return row\n", {})
     assert find_bound_function(module, ("transform", "relabel")) == "relabel"
@@ -87,14 +121,17 @@ def test_an_injected_builtin_is_callable_from_the_source():
     assert starlark.eval(module, probe, starlark.Globals.standard()) == 6
 
 
-def test_a_module_rebinding_an_unrelated_builtin_does_not_confuse_the_probe():
-    # Regression guard for an earlier probe design: it evaluated `type(name)` as
-    # Starlark source, so a module that rebinds `type` itself (to something not
-    # callable) broke the PROBE EXPRESSION, not the lookup of `transform`. The
-    # current probe reads `module[name]` directly and never runs `type(...)`,
-    # so this rebinding cannot interfere with finding `transform`.
+def test_a_module_rebinding_type_itself_raises_rather_than_misreporting():
+    # Known, accepted edge case: the TYPE half of the check (see
+    # _is_bound_function) evaluates `type(<name>)` against the real module, so
+    # a module that ALSO rebinds `type` itself (to something uncallable) breaks
+    # that probe expression for every OTHER name, not just `type`. This is
+    # deliberately left to propagate as a StarlarkError — fail loud on a bizarre
+    # adversarial pattern — rather than attempting to special-case it into a
+    # silent (and possibly wrong) True/False.
     module = compile_starlark_module("type = 5\ndef transform(row):\n    return row\n", {})
-    assert find_bound_function(module, ("transform",)) == "transform"
+    with pytest.raises(starlark.StarlarkError):
+        find_bound_function(module, ("transform",))
 
 
 def test_a_non_identifier_name_is_rejected_rather_than_read_as_unbound():
