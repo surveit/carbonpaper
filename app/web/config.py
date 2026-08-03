@@ -1,13 +1,17 @@
-"""Shared web-layer configuration: filesystem paths and the Jinja2 template
-environment used by every router."""
+"""Shared web-layer configuration: filesystem paths, the static-asset mount, and
+the Jinja2 template environment used by every router."""
 
 from __future__ import annotations
 
+import os
 from datetime import date, datetime
 from pathlib import Path
 
 from fastapi.templating import Jinja2Templates
 from markupsafe import Markup, escape
+from starlette.responses import Response
+from starlette.staticfiles import StaticFiles
+from starlette.types import Scope
 
 # projects_dir() (the projects storage root) is owned by app.services.workspace
 # and re-exported here (redundant alias = intentional re-export) so routers keep
@@ -26,6 +30,26 @@ TEMPLATES_DIR = APP_DIR / "templates"
 STATIC_DIR = APP_DIR / "static"
 
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
+
+
+class RevalidatedStaticFiles(StaticFiles):
+    # Without a Cache-Control header a browser is free to invent a freshness
+    # lifetime from the asset's age and serve it without asking, so an edited
+    # stylesheet can go unseen for hours across an ordinary reload — the page
+    # then renders with markup from this build and CSS from an older one, which
+    # reads as a missing rule rather than a stale file. "no-cache" still stores
+    # the asset and still answers from it; it only requires the ETag be checked
+    # first, so a hit costs one 304 and no body.
+    def file_response(
+        self,
+        full_path: str | os.PathLike[str],
+        stat_result: os.stat_result,
+        scope: Scope,
+        status_code: int = 200,
+    ) -> Response:
+        response = super().file_response(full_path, stat_result, scope, status_code)
+        response.headers["Cache-Control"] = "no-cache"
+        return response
 
 
 def friendly_time(v: object) -> Markup:

@@ -11,12 +11,13 @@ from contextlib import asynccontextmanager
 from typing import AsyncIterator
 
 from fastapi import FastAPI
-from fastapi.staticfiles import StaticFiles
 from starlette.routing import Route
 
 from app.core.store_config import configure_default_stores
 from app.seeds.seed import seed_demo_data_if_enabled
-from app.web.config import STATIC_DIR, configure_projects_dir_from_env
+from app.web.config import (
+    STATIC_DIR, RevalidatedStaticFiles, configure_projects_dir_from_env,
+)
 from app.web.routers import (
     admin, editing, evals, guide, project, node_review, review, runs,
 )
@@ -53,7 +54,7 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
 
 
 app = FastAPI(title="Workflow", lifespan=lifespan)
-app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+app.mount("/static", RevalidatedStaticFiles(directory=str(STATIC_DIR)), name="static")
 
 app.include_router(project.router)
 app.include_router(runs.router)
