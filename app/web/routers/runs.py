@@ -31,7 +31,7 @@ from app.core.errors import (
 )
 from app.core.run_status import RunStatus, StageStatus
 from app.services.errors import WorkflowLoadError
-from app.services.loader import load_workflow, resolve_function_code
+from app.services.loader import resolve_function_code
 from app.services.versioning import list_versions
 from app.services import run as run_service
 from app.services.run_guide import build_run_guide_view, find_guideless_version_id
@@ -736,16 +736,18 @@ async def resume_run_route(project: str, run_id: str):
     run_dir = runs_dir(project) / run_id
     if not (run_dir / "manifest.json").exists():
         raise HTTPException(status_code=404, detail="Run not found")
-    # Validate the compiled workflow synchronously so load errors surface as a 400
-    # here rather than being swallowed on the background thread below.
+    # Resume executes the version the run PINNED, so that snapshot is what has to
+    # load — validating the live working copy here would block resuming a valid
+    # run because of an unrelated edit. The seam loads it synchronously and only
+    # then goes to a background thread (the re-run is LLM-heavy), so a bad
+    # snapshot surfaces as a 400 here rather than dying where nothing reports it.
     try:
-        load_workflow(project_dir)
+        run_service.resume(project, run_id)
+    except RunVersionUnresolvableError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except WorkflowLoadError as exc:
-        return JSONResponse({"detail": "compiled workflow failed validation",
+        return JSONResponse({"detail": "pinned workflow version failed validation",
                              "issues": exc.issues}, status_code=400)
-    # Resume re-runs the queue stage + downstream (LLM-heavy) — do it in the
-    # background and redirect immediately so the page can poll progress.
-    run_service.resume(project, run_id)
     return RedirectResponse(
         url=f"/project/{project}/runs/{run_id}",
         status_code=303,

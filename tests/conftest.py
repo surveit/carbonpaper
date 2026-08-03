@@ -13,8 +13,27 @@ from app.runtime.context import (
     RunContext,
     RunIdentity,
 )
-from app.runtime.manifest import CONTRIBUTION_ATTR, StageContribution
+from app.runtime.manifest import CONTRIBUTION_ATTR, StageContribution, load_manifest_model
 from app.core.stage_cache import ReadOnlyStageCache
+from app.models import Stage
+from app.services.versioning import load_version_stages, resolve_version_id
+
+
+def pinned_stages(project_dir: Path, version_id: str | None = None) -> tuple[list[Stage], str]:
+    """The (stages, version id) a run pins, for splatting into the runner's entry points."""
+    # What every production caller now composes before calling in: resolve which
+    # version to pin, then load that snapshot. The runner reads no versions itself.
+    workflow_version = resolve_version_id(project_dir, version_id)
+    return load_version_stages(project_dir, workflow_version), workflow_version
+
+
+def resumed_stages(project_dir: Path, run_id: str) -> tuple[list[Stage], str]:
+    """The (stages, version id) a resume must execute: the version THIS run pinned."""
+    # Read off the manifest, not the newest published version, so a resume stays on
+    # the snapshot the halted run started on even if a newer one was published since.
+    workflow_version = load_manifest_model(project_dir / "runs" / run_id).workflow_version
+    assert workflow_version, f"run {run_id} records no workflow_version"
+    return load_version_stages(project_dir, workflow_version), workflow_version
 
 
 def contribution_of(frame: pd.DataFrame) -> StageContribution:

@@ -7,7 +7,7 @@ from app.core.agent.usage import LlmUsage
 from app.models import parse_stage, Stage
 from app.models.stage import StageType
 from app.runtime.stages import HANDLERS
-from conftest import contribution_of, make_run_context
+from conftest import contribution_of, make_run_context, pinned_stages
 
 
 def test_summed_adds_fields_and_counts_calls():
@@ -102,7 +102,7 @@ def test_run_manifest_records_stage_llm_usage(tmp_path, monkeypatch):
     vid = save_working_copy_as_version(tmp_path, message="seed", reviewer="test").version_id
     versioning.publish_version(tmp_path, vid, reviewer="human")
 
-    manifest = execute_run(tmp_path, repo_root=tmp_path)
+    manifest = execute_run(tmp_path, tmp_path, *pinned_stages(tmp_path))
 
     assert manifest["status"] == "ok", manifest
     record = next(r for r in manifest["stage_records"] if r["stage_id"] == "classify")

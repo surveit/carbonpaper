@@ -17,6 +17,7 @@ from app.core.stage_cache import StageCacheEntry
 from app.services.project import save_working_copy_as_version
 from app.models import RowReviewDecision
 from app.services import workspace
+from conftest import pinned_stages, resumed_stages
 
 PROJECT = "queue_route_journey"
 
@@ -125,7 +126,7 @@ def _build_and_halt(tmp_path, monkeypatch):
     _write_stage(project_dir, "03_review.json", _review_stage())
     _seed_version(project_dir)
 
-    manifest = run_prepared(prepare_run(project_dir, repo_root=project_dir))
+    manifest = run_prepared(prepare_run(project_dir, project_dir, *pinned_stages(project_dir)))
     assert manifest["status"] == "awaiting_review"
     assert manifest["halted_at"] == ["review"]
 
@@ -338,7 +339,7 @@ def test_e2e_decide_approve_modify_and_reject_then_resume_completes(tmp_path, mo
     _write_stage(project_dir, "02_review.json", _e2e_review_stage())
     _seed_version(project_dir)
 
-    manifest = run_prepared(prepare_run(project_dir, repo_root=project_dir))
+    manifest = run_prepared(prepare_run(project_dir, project_dir, *pinned_stages(project_dir)))
     assert manifest["status"] == "awaiting_review"
     run_id = manifest["run_id"]
 
@@ -372,7 +373,8 @@ def test_e2e_decide_approve_modify_and_reject_then_resume_completes(tmp_path, mo
         assert entry is not None
         assert set(entry.frozen_input) == {"id", "score"}
 
-    resumed = runner.resume_run(project_dir, run_id, project_dir)
+    resumed = runner.resume_run(project_dir, run_id, project_dir,
+                            *resumed_stages(project_dir, run_id))
     assert resumed["status"] == "ok"
 
     out = pd.read_parquet(run_dir / "outputs" / "review.parquet").set_index("id")

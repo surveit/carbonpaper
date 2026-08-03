@@ -20,7 +20,7 @@ from app.runtime.stages.human_review_queue import NOT_REVIEWED
 from app.services import review, versioning
 from app.core.stage_cache import StageCache, compute_row_fingerprint
 from app.services.project import save_working_copy_as_version
-from conftest import contribution_of, make_run_context
+from conftest import contribution_of, make_run_context, pinned_stages, resumed_stages
 
 PROJECT = "hrq-cache-tests"
 
@@ -725,7 +725,7 @@ def test_resume_reattaches_cached_decisions_written_via_the_seam(tmp_path):
     _write_stage(project_dir, "02_review.json", _review_stage_full())
     _seed_version(project_dir)
 
-    halted = run_prepared(prepare_run(project_dir, repo_root=project_dir))
+    halted = run_prepared(prepare_run(project_dir, project_dir, *pinned_stages(project_dir)))
     assert halted["status"] == "awaiting_review"
     run_id = halted["run_id"]
 
@@ -736,7 +736,8 @@ def test_resume_reattaches_cached_decisions_written_via_the_seam(tmp_path):
 
     _approve_every_row(snapshot, fingerprints, project=project_dir.name)
 
-    resumed = runner.resume_run(project_dir, run_id, project_dir)
+    resumed = runner.resume_run(project_dir, run_id, project_dir,
+                            *resumed_stages(project_dir, run_id))
     assert resumed["status"] == "ok"
     out = pd.read_parquet(run_dir / "outputs" / "review.parquet")
     assert sorted(out["final_score"].tolist()) == [1, 2]
@@ -754,7 +755,7 @@ def test_resume_replays_the_runs_bust_cache(tmp_path):
     _seed_version(project_dir)
 
     halted = run_prepared(
-        prepare_run(project_dir, repo_root=project_dir, bust_cache=True))
+        prepare_run(project_dir, project_dir, *pinned_stages(project_dir), bust_cache=True))
     assert halted["status"] == "awaiting_review"
     run_id = halted["run_id"]
 
@@ -765,5 +766,6 @@ def test_resume_replays_the_runs_bust_cache(tmp_path):
     fingerprints = _read_fingerprints(run_dir / "queue" / "review.parquet")
     _approve_every_row(snapshot, fingerprints, project=project_dir.name)
 
-    resumed = runner.resume_run(project_dir, run_id, project_dir)
+    resumed = runner.resume_run(project_dir, run_id, project_dir,
+                            *resumed_stages(project_dir, run_id))
     assert resumed["status"] == "awaiting_review"

@@ -165,13 +165,26 @@ type = "protected"
 protected_modules = ["app.runtime.runner"]
 allowed_importers = ["app.services.run"]
 # app.runtime.runner holds the production run-lifecycle entry points (prepare_run,
-# execute_run, run_prepared, resume_run, resolve_version_id) — the only functions that
-# create a production run record under runs/. A non-production run (an eval, or a test
+# execute_run, run_prepared, resume_run) — the only functions that create a production
+# run record under runs/. A non-production run (an eval, or a test
 # run) reaches the shared execution engine through app.runtime.executor (run_subset /
 # _execute_stages), never these entry points, so it can never mint a production run.
-# app.services.run is the SOLE importer: the web run UI (app.web.routers.runs) and its
-# version resolver (app.web.loading) drive runs through that service seam rather than
-# importing the runner directly, so this stays a single named door into production runs.
+# app.services.run is the SOLE importer: the web run UI (app.web.routers.runs), its
+# version resolver (app.web.loading) and the CLI (app.runtime.__main__) drive runs
+# through that service seam rather than importing the runner directly, so this stays a
+# single named door into production runs.
+
+[[tool.importlinter.contracts]]
+name = "the runner reads no services module — a caller hands it a version's stages"
+type = "forbidden"
+source_modules = ["app.runtime.runner"]
+forbidden_modules = ["app.services"]
+# The other half of the door above. The runner executes the stages it is given;
+# resolving WHICH version to pin and loading that snapshot are version lifecycle and
+# live in app.services.versioning (resolve_version_id / load_version_stages), which
+# app.services.run composes before calling in. Without this the arrow runs both ways —
+# app.services.run -> app.runtime.runner -> app.services.versioning — and "services sits
+# below the runtime" stops being true of the one module that most needs it to be.
 
 # NB: "app.seeds reaches the store through services" is enforced as an AST allowlist
 # in app/seeds/_arch_tests/test_seed_reaches_store_via_services.py (check_no_import),
