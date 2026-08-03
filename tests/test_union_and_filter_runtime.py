@@ -12,7 +12,7 @@ from app.models import parse_stage, Stage, Workflow
 from app.runtime.executor import run_subset
 from app.runtime.trace import trace_row
 
-_AB_SCHEMA = {"columns": [{"name": "a", "type": "str"}, {"name": "b", "type": "int"}]}
+_AB_SCHEMA = {"columns": [{"name": "a", "type": "str", "nullable": True}, {"name": "b", "type": "int", "nullable": True}]}
 
 
 def _union_stage(sid: str, input_ids: list[str]) -> Stage:

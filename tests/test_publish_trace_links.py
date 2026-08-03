@@ -64,7 +64,7 @@ def transform(df, output_dir):
 """
 
 
-_NAME_COLUMN = [{"name": "name", "type": "str"}]
+_NAME_COLUMN = [{"name": "name", "type": "str", "nullable": True}]
 
 
 def _publish_stage(code: str, input_columns=_NAME_COLUMN) -> Stage:
@@ -125,8 +125,8 @@ def test_a_link_emitted_into_published_html_resolves(tmp_path, monkeypatch):
     ctx = RunContext.for_workflow_run(
         repo_root=tmp_path, run_dir=run_dir, project="proj", run_id="R1",
     )
-    enrich_columns = [{"name": "facility_id", "type": "str"}, *_NAME_COLUMN,
-                      {"name": "score", "type": "int"}]
+    enrich_columns = [{"name": "facility_id", "type": "str", "nullable": True}, *_NAME_COLUMN,
+                      {"name": "score", "type": "int", "nullable": True}]
     handle_publish(
         _publish_stage(_LINKING_PUBLISH_CODE, input_columns=enrich_columns),
         {"enrich": enrich}, ctx)

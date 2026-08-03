@@ -16,7 +16,7 @@ from app.services.versioning import WorkflowVersion
 from app.services.workflow_test import run_workflow_test
 from app.web import loading
 
-_LOAD_SCHEMA = {"columns": [{"name": "doc_id", "type": "str"}]}
+_LOAD_SCHEMA = {"columns": [{"name": "doc_id", "type": "str", "nullable": True}]}
 
 _LOAD = {
     "id": "load", "type": "input_data", "name": "Load rows",

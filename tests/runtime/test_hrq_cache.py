@@ -32,18 +32,18 @@ def _run_queue_stage(stage: Stage, inputs: dict[str, pd.DataFrame], ctx) -> pd.D
 
 
 # The upstream columns `_src()` builds — the default input edge below.
-_SCORED_COLUMNS = [{"name": "id", "type": "str"}, {"name": "score", "type": "int"}]
-_FLAGGED_COLUMNS = [*_SCORED_COLUMNS, {"name": "flag", "type": "str"}]
+_SCORED_COLUMNS = [{"name": "id", "type": "str", "nullable": True}, {"name": "score", "type": "int", "nullable": True}]
+_FLAGGED_COLUMNS = [*_SCORED_COLUMNS, {"name": "flag", "type": "str", "nullable": True}]
 
 # The columns the queue stage itself adds to every row it emits, whichever of the
 # three outcomes the row took (see _pass_row_through / review._build_output_row).
 # The stage's output is projected onto its declared columns, so output_schema has
 # to name these as well as the upstream ones it carries through.
 _REVIEW_COLUMNS = [
-    {"name": "ai_score", "type": "int"}, {"name": "human_score", "type": "float"},
-    {"name": "final_score", "type": "float"}, {"name": "review_notes", "type": "str"},
-    {"name": "reviewer_id", "type": "str"}, {"name": "reviewed_at", "type": "str"},
-    {"name": "decision", "type": "str"},
+    {"name": "ai_score", "type": "int", "nullable": True}, {"name": "human_score", "type": "float", "nullable": True},
+    {"name": "final_score", "type": "float", "nullable": True}, {"name": "review_notes", "type": "str", "nullable": True},
+    {"name": "reviewer_id", "type": "str", "nullable": True}, {"name": "reviewed_at", "type": "str", "nullable": True},
+    {"name": "decision", "type": "str", "nullable": True},
 ]
 
 
@@ -445,8 +445,8 @@ def test_every_row_rejected_still_emits_every_row_with_the_declared_columns(tmp_
     stage = parse_stage({
         "id": "review", "name": "Review", "type": "human_review_queue",
         "inputs": [{"id": "scored", "schema": {"columns": _SCORED_COLUMNS}}],
-        "output_schema": {"columns": [{"name": "id", "type": "str"},
-                                      {"name": "score", "type": "int"}]},
+        "output_schema": {"columns": [{"name": "id", "type": "str", "nullable": True},
+                                      {"name": "score", "type": "int", "nullable": True}]},
         "queue": {},
     })
     src = _src(2)
@@ -636,7 +636,7 @@ def test_nullable_extension_dtype_cells_reach_the_reviewer_as_plain_numpy_values
         "flag": pd.array([True, None], dtype="boolean"),
     })
     snapshot, _fingerprints = _halt_and_read_snapshot(
-        _stage(input_columns=[*_SCORED_COLUMNS, {"name": "flag", "type": "bool"}]),
+        _stage(input_columns=[*_SCORED_COLUMNS, {"name": "flag", "type": "bool", "nullable": True}]),
         {"scored": src}, _ctx(tmp_path))
 
     assert list(snapshot.columns) == ["id", "score", "flag"]
@@ -706,7 +706,7 @@ def _load_stage(root):
 def _review_stage_full():
     return {"id": "review", "name": "Review", "type": "human_review_queue",
             "inputs": [{"id": "load", "schema": {
-                "columns": [{"name": "id", "type": "str"}, {"name": "score", "type": "int"}],
+                "columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "score", "type": "int", "nullable": True}],
                 "primary_key": ["id"]}}],
             "output_schema": {"columns": [*_SCORED_COLUMNS, *_REVIEW_COLUMNS]},
             "queue": {}}

@@ -117,14 +117,13 @@ def _is_range_bound(v: Any) -> bool:
 class Column(_Base):
     name: str
     type: str = Field(
-        default="str",
         description=(
             "Column type: a scalar (str, int, float, bool, date, datetime); `json` (a nested "
             "object — give its shape with `fields`, or an open string->scalar map with "
             "`value_type`); or `list[X]` of any of these (e.g. list[str], list[json])."
         ),
     )
-    nullable: bool = True
+    nullable: bool
     description: Optional[str] = None
     range: Optional[list[Any]] = None
     source: Optional[str] = None

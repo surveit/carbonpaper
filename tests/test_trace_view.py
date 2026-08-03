@@ -13,10 +13,10 @@ def _stage(data: dict) -> Stage:
 # The columns the traced rows carry: seeds emits facility_id, enrich adds score.
 # Every input declares the schema it expects and every non-publish stage declares
 # its output_schema (app/models/stage.py: Stage._schemas_declared).
-_SEEDS_SCHEMA = {"columns": [{"name": "facility_id", "type": "str"}],
+_SEEDS_SCHEMA = {"columns": [{"name": "facility_id", "type": "str", "nullable": True}],
                  "primary_key": ["facility_id"]}
-_ENRICH_SCHEMA = {"columns": [{"name": "facility_id", "type": "str"},
-                              {"name": "score", "type": "int"}],
+_ENRICH_SCHEMA = {"columns": [{"name": "facility_id", "type": "str", "nullable": True},
+                              {"name": "score", "type": "int", "nullable": True}],
                   "primary_key": ["facility_id"]}
 
 
@@ -88,10 +88,10 @@ def test_trace_shows_instructions_and_data():
     stages["score"] = _stage({
         "id": "score", "type": "llm_transform", "name": "Score",
         "inputs": [{"id": "enrich", "schema": {
-            "columns": [{"name": "facility_id", "type": "str"}, {"name": "score", "type": "int"}],
+            "columns": [{"name": "facility_id", "type": "str", "nullable": True}, {"name": "score", "type": "int", "nullable": True}],
             "primary_key": ["facility_id"]}}],
         "output_schema": {
-            "columns": [{"name": "facility_id", "type": "str"}, {"name": "score", "type": "int"},
+            "columns": [{"name": "facility_id", "type": "str", "nullable": True}, {"name": "score", "type": "int", "nullable": True},
                         {"name": "rating", "type": "int", "nullable": False}],
             "primary_key": ["facility_id"]},
         "llm": {"prompt_instructions": "Rate for relevance.",

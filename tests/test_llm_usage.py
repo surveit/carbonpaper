@@ -25,11 +25,11 @@ def _llm_stage() -> Stage:
     return parse_stage({
         "id": "classify", "name": "Classify", "type": "llm_transform",
         "inputs": [{"id": "load", "schema": {
-            "columns": [{"name": "id", "type": "str"}, {"name": "text", "type": "str"}],
+            "columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "text", "type": "str", "nullable": True}],
             "primary_key": ["id"],
         }}],
         "output_schema": {"columns": [
-            {"name": "id", "type": "str"}, {"name": "text", "type": "str"},
+            {"name": "id", "type": "str", "nullable": True}, {"name": "text", "type": "str", "nullable": True},
             {"name": "score", "type": "int", "nullable": True},
         ], "primary_key": ["id"]},
         "llm": {"prompt_template": "{text}"},
@@ -86,14 +86,14 @@ def test_run_manifest_records_stage_llm_usage(tmp_path, monkeypatch):
             "connector": {"kind": "file", "params": {
                 "path": str(tmp_path / "data" / "in.csv"), "format": "csv"}},
             "output_schema": {"columns": [
-                {"name": "id", "type": "str"}, {"name": "text", "type": "str"}],
+                {"name": "id", "type": "str", "nullable": True}, {"name": "text", "type": "str", "nullable": True}],
                 "primary_key": ["id"]}}
     classify = {"id": "classify", "name": "Classify", "type": "llm_transform",
                 "inputs": [{"id": "load", "schema": {"columns": [
-                    {"name": "id", "type": "str"}, {"name": "text", "type": "str"}],
+                    {"name": "id", "type": "str", "nullable": True}, {"name": "text", "type": "str", "nullable": True}],
                     "primary_key": ["id"]}}],
                 "output_schema": {"columns": [
-                    {"name": "id", "type": "str"}, {"name": "text", "type": "str"},
+                    {"name": "id", "type": "str", "nullable": True}, {"name": "text", "type": "str", "nullable": True},
                     {"name": "score", "type": "int", "nullable": True}],
                     "primary_key": ["id"]},
                 "llm": {"prompt_template": "{text}"}}

@@ -13,7 +13,7 @@ import pytest
 from app.models.stages.code import SUMMARY_DESCRIPTION, SUMMARY_MAX_CHARS
 from app.services.stage_edit import add_stage_spec, edit_stage_spec
 
-_SCHEMA = {"columns": [{"name": "id", "type": "str"}], "primary_key": ["id"]}
+_SCHEMA = {"columns": [{"name": "id", "type": "str", "nullable": True}], "primary_key": ["id"]}
 _CODE = "def transform(row):\n    return row\n"
 
 

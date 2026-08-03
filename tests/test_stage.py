@@ -18,8 +18,8 @@ def S(**kw):
 # Every stage must declare a schema on each input and (bar publish) an
 # output_schema, so tests aimed at some OTHER part of the contract still have to
 # carry both. These are the smallest ones that satisfy it.
-_PK_ID_SCHEMA = {"columns": [{"name": "id", "type": "str"}], "primary_key": ["id"]}
-_K_SCHEMA = {"columns": [{"name": "k", "type": "str"}]}
+_PK_ID_SCHEMA = {"columns": [{"name": "id", "type": "str", "nullable": True}], "primary_key": ["id"]}
+_K_SCHEMA = {"columns": [{"name": "k", "type": "str", "nullable": True}]}
 
 
 def _build_enrich_on_k(*, join):
@@ -34,7 +34,7 @@ def _build_enrich_on_k(*, join):
 @pytest.mark.parametrize("t", ["str", "int", "float", "bool", "datetime", "date",
                                 "json", "list[str]", "list[list[int]]"])
 def test_column_type_valid(t):
-    kw = {"name": "c", "type": t}
+    kw = {"name": "c", "type": t, "nullable": True}
     if t == "json":
         kw["value_type"] = "str"  # a json column must declare fields or value_type
     assert m.Column.model_validate(kw).type == t
@@ -43,22 +43,22 @@ def test_column_type_valid(t):
 @pytest.mark.parametrize("t", ["weird", "List[str]", "list[]", "int32", "array", "dict"])
 def test_column_type_invalid(t):
     with pytest.raises(ValidationError):
-        m.Column.model_validate({"name": "c", "type": t})
+        m.Column.model_validate({"name": "c", "type": t, "nullable": True})
 
 
 def test_table_schema_duplicate_column():
     with pytest.raises(ValidationError):
-        m.TableSchema.model_validate({"columns": [{"name": "a"}, {"name": "a"}]})
+        m.TableSchema.model_validate({"columns": [{"name": "a", "type": "str", "nullable": True}, {"name": "a", "type": "str", "nullable": True}]})
 
 
 def test_table_schema_pk_must_be_declared():
     with pytest.raises(ValidationError):
-        m.TableSchema.model_validate({"columns": [{"name": "a"}], "primary_key": ["missing"]})
+        m.TableSchema.model_validate({"columns": [{"name": "a", "type": "str", "nullable": True}], "primary_key": ["missing"]})
 
 
 def test_table_schema_ok():
     s = m.TableSchema.model_validate(
-        {"columns": [{"name": "a", "type": "str"}, {"name": "b", "type": "int"}], "primary_key": ["a"]}
+        {"columns": [{"name": "a", "type": "str", "nullable": True}, {"name": "b", "type": "int", "nullable": True}], "primary_key": ["a"]}
     )
     assert len(s.columns) == 2
 
@@ -68,16 +68,16 @@ def test_valid_input_data(tmp_path):
     s = m.parse_stage(S(
         id="load", type="input_data",
         connector={"kind": "file", "params": {"path": str(tmp_path / "d.csv"), "format": "csv"}},
-        output_schema={"columns": [{"name": "id", "type": "str"}]}))
+        output_schema={"columns": [{"name": "id", "type": "str", "nullable": True}]}))
     assert s.type == m.StageType.input_data
 
 
 def test_valid_llm_transform():
     s = m.parse_stage(S(
         id="extract", type="llm_transform",
-        inputs=[{"id": "load", "schema": {"columns": [{"name": "id", "type": "str"}],
+        inputs=[{"id": "load", "schema": {"columns": [{"name": "id", "type": "str", "nullable": True}],
                                           "primary_key": ["id"]}}],
-        output_schema={"columns": [{"name": "id", "type": "str"}, {"name": "out", "type": "str"}],
+        output_schema={"columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "out", "type": "str", "nullable": True}],
                        "primary_key": ["id"]},
         llm={"prompt_template": "do {id}", "tools": ["WebSearch"]}))
     assert s.llm.prompt_data_template == "do {id}"
@@ -100,7 +100,7 @@ def test_llm_transform_rejects_more_than_one_input():
         m.parse_stage(S(
             id="extract", type="llm_transform",
             inputs=[{"id": "a", "schema": _PK_ID_SCHEMA}, {"id": "b", "schema": _PK_ID_SCHEMA}],
-            output_schema={"columns": [{"name": "id", "type": "str"}], "primary_key": ["id"]},
+            output_schema={"columns": [{"name": "id", "type": "str", "nullable": True}], "primary_key": ["id"]},
             llm={"prompt_template": "do it"}))
 
 
@@ -111,7 +111,7 @@ def test_llm_transform_rejects_input_with_no_declared_schema():
         m.parse_stage(S(
             id="extract", type="llm_transform",
             inputs=[{"id": "a"}],
-            output_schema={"columns": [{"name": "id", "type": "str"}], "primary_key": ["id"]},
+            output_schema={"columns": [{"name": "id", "type": "str", "nullable": True}], "primary_key": ["id"]},
             llm={"prompt_template": "do it"}))
 
 
@@ -119,7 +119,7 @@ def test_llm_transform_rejects_missing_output_schema():
     with pytest.raises(ValidationError, match="declares no output_schema"):
         m.parse_stage(S(
             id="extract", type="llm_transform",
-            inputs=[{"id": "a", "schema": {"columns": [{"name": "id", "type": "str"}],
+            inputs=[{"id": "a", "schema": {"columns": [{"name": "id", "type": "str", "nullable": True}],
                                            "primary_key": ["id"]}}],
             llm={"prompt_template": "do it"}))
 
@@ -129,9 +129,9 @@ def test_llm_transform_rejects_input_schema_with_no_primary_key():
         m.parse_stage(S(
             id="extract", type="llm_transform",
             inputs=[{"id": "a", "schema": {
-                "columns": [{"name": "id", "type": "str"}, {"name": "text", "type": "str"}]}}],
-            output_schema={"columns": [{"name": "id", "type": "str"}, {"name": "text", "type": "str"},
-                                       {"name": "score", "type": "int"}], "primary_key": ["id"]},
+                "columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "text", "type": "str", "nullable": True}]}}],
+            output_schema={"columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "text", "type": "str", "nullable": True},
+                                       {"name": "score", "type": "int", "nullable": True}], "primary_key": ["id"]},
             llm={"prompt_template": "do {id}"}))
 
 
@@ -139,10 +139,10 @@ def test_llm_transform_rejects_output_schema_with_no_primary_key():
     with pytest.raises(ValidationError, match="output_schema declares no primary_key"):
         m.parse_stage(S(
             id="extract", type="llm_transform",
-            inputs=[{"id": "a", "schema": {"columns": [{"name": "id", "type": "str"}],
+            inputs=[{"id": "a", "schema": {"columns": [{"name": "id", "type": "str", "nullable": True}],
                                            "primary_key": ["id"]}}],
-            output_schema={"columns": [{"name": "id", "type": "str"},
-                                       {"name": "score", "type": "int"}]},
+            output_schema={"columns": [{"name": "id", "type": "str", "nullable": True},
+                                       {"name": "score", "type": "int", "nullable": True}]},
             llm={"prompt_template": "do {id}"}))
 
 
@@ -150,10 +150,10 @@ def test_llm_transform_rejects_mismatched_primary_keys():
     with pytest.raises(ValidationError, match=r"input primary_key \['id'\] != output primary_key \['other'\]"):
         m.parse_stage(S(
             id="extract", type="llm_transform",
-            inputs=[{"id": "a", "schema": {"columns": [{"name": "id", "type": "str"}],
+            inputs=[{"id": "a", "schema": {"columns": [{"name": "id", "type": "str", "nullable": True}],
                                            "primary_key": ["id"]}}],
-            output_schema={"columns": [{"name": "id", "type": "str"}, {"name": "other", "type": "str"},
-                                       {"name": "score", "type": "int"}], "primary_key": ["other"]},
+            output_schema={"columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "other", "type": "str", "nullable": True},
+                                       {"name": "score", "type": "int", "nullable": True}], "primary_key": ["other"]},
             llm={"prompt_template": "do {id}"}))
 
 
@@ -162,9 +162,9 @@ def test_llm_transform_rejects_output_that_drops_an_input_column():
         m.parse_stage(S(
             id="extract", type="llm_transform",
             inputs=[{"id": "a", "schema": {
-                "columns": [{"name": "id", "type": "str"}, {"name": "text", "type": "str"}],
+                "columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "text", "type": "str", "nullable": True}],
                 "primary_key": ["id"]}}],
-            output_schema={"columns": [{"name": "id", "type": "str"}, {"name": "score", "type": "int"}],
+            output_schema={"columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "score", "type": "int", "nullable": True}],
                            "primary_key": ["id"]},
             llm={"prompt_template": "do {id}"}))
 
@@ -173,9 +173,9 @@ def test_llm_transform_rejects_output_that_adds_no_columns():
     with pytest.raises(ValidationError, match="adds no columns beyond the input"):
         m.parse_stage(S(
             id="extract", type="llm_transform",
-            inputs=[{"id": "a", "schema": {"columns": [{"name": "id", "type": "str"}],
+            inputs=[{"id": "a", "schema": {"columns": [{"name": "id", "type": "str", "nullable": True}],
                                            "primary_key": ["id"]}}],
-            output_schema={"columns": [{"name": "id", "type": "str"}], "primary_key": ["id"]},
+            output_schema={"columns": [{"name": "id", "type": "str", "nullable": True}], "primary_key": ["id"]},
             llm={"prompt_template": "do {id}"}))
 
 
@@ -312,9 +312,9 @@ def test_aggregate_output_column_required():
 def test_aggregate_valid():
     m.parse_stage(S(
         id="agg", type="aggregate",
-        inputs=[{"id": "a", "schema": {"columns": [{"name": "g", "type": "str"},
-                                                   {"name": "x", "type": "int"}]}}],
-        output_schema={"columns": [{"name": "g", "type": "str"}, {"name": "total", "type": "int"}]},
+        inputs=[{"id": "a", "schema": {"columns": [{"name": "g", "type": "str", "nullable": True},
+                                                   {"name": "x", "type": "int", "nullable": True}]}}],
+        output_schema={"columns": [{"name": "g", "type": "str", "nullable": True}, {"name": "total", "type": "int", "nullable": True}]},
         aggregate={"group_by": ["g"],
                    "aggregations": [{"formula": "sum", "output_column": "total",
                                      "value_column": "x"}]}))
@@ -347,9 +347,9 @@ def test_unknown_file_format_rejected(tmp_path):
 def test_model_enum_accepts_known():
     s = m.parse_stage(S(
         id="e", type="llm_transform",
-        inputs=[{"id": "a", "schema": {"columns": [{"name": "id", "type": "str"}],
+        inputs=[{"id": "a", "schema": {"columns": [{"name": "id", "type": "str", "nullable": True}],
                                        "primary_key": ["id"]}}],
-        output_schema={"columns": [{"name": "id", "type": "str"}, {"name": "out", "type": "str"}],
+        output_schema={"columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "out", "type": "str", "nullable": True}],
                        "primary_key": ["id"]},
         llm={"prompt_template": "p", "model": "claude-haiku-4-5"}))
     assert s.llm.model == LLMModel.claude_haiku_4_5
@@ -382,8 +382,8 @@ def test_inputs_are_refs_with_schema():
     s = m.parse_stage(S(
         id="x", type="python_frame_function",
         inputs=[{"id": "a", "schema": {"primary_key": ["k"],
-                                       "columns": [{"name": "k", "type": "str"}]}}],
-        output_schema={"columns": [{"name": "k", "type": "str"}]},
+                                       "columns": [{"name": "k", "type": "str", "nullable": True}]}}],
+        output_schema={"columns": [{"name": "k", "type": "str", "nullable": True}]},
         function={"kind": "inline", "code": "def transform(row): return row"},
     ))
     assert s.input_ids == ["a"]
@@ -465,9 +465,9 @@ def test_llm_transform_rejects_double_braced_input_column():
         m.parse_stage(S(
             id="extract", type="llm_transform",
             inputs=[{"id": "load", "schema": {
-                "columns": [{"name": "content", "type": "str"}], "primary_key": ["content"]}}],
-            output_schema={"columns": [{"name": "content", "type": "str"},
-                                       {"name": "out", "type": "str"}], "primary_key": ["content"]},
+                "columns": [{"name": "content", "type": "str", "nullable": True}], "primary_key": ["content"]}}],
+            output_schema={"columns": [{"name": "content", "type": "str", "nullable": True},
+                                       {"name": "out", "type": "str", "nullable": True}], "primary_key": ["content"]},
             llm={"prompt_template": "Analyze {{content}} now"}))
 
 
@@ -478,9 +478,9 @@ def test_llm_transform_rejects_spaced_double_braced_input_column():
         m.parse_stage(S(
             id="extract", type="llm_transform",
             inputs=[{"id": "load", "schema": {
-                "columns": [{"name": "content", "type": "str"}], "primary_key": ["content"]}}],
-            output_schema={"columns": [{"name": "content", "type": "str"},
-                                       {"name": "out", "type": "str"}], "primary_key": ["content"]},
+                "columns": [{"name": "content", "type": "str", "nullable": True}], "primary_key": ["content"]}}],
+            output_schema={"columns": [{"name": "content", "type": "str", "nullable": True},
+                                       {"name": "out", "type": "str", "nullable": True}], "primary_key": ["content"]},
             llm={"prompt_template": "Analyze {{ content }} now"}))
 
 
@@ -489,9 +489,9 @@ def test_llm_transform_allows_prompt_that_injects_nothing():
     s = m.parse_stage(S(
         id="extract", type="llm_transform",
         inputs=[{"id": "load", "schema": {
-            "columns": [{"name": "content", "type": "str"}], "primary_key": ["content"]}}],
-        output_schema={"columns": [{"name": "content", "type": "str"},
-                                   {"name": "out", "type": "str"}], "primary_key": ["content"]},
+            "columns": [{"name": "content", "type": "str", "nullable": True}], "primary_key": ["content"]}}],
+        output_schema={"columns": [{"name": "content", "type": "str", "nullable": True},
+                                   {"name": "out", "type": "str", "nullable": True}], "primary_key": ["content"]},
         llm={"prompt_template": "score the row"}))
     assert s.llm is not None
 
@@ -500,9 +500,9 @@ def test_llm_transform_accepts_single_brace_input_column():
     s = m.parse_stage(S(
         id="extract", type="llm_transform",
         inputs=[{"id": "load", "schema": {
-            "columns": [{"name": "content", "type": "str"}], "primary_key": ["content"]}}],
-        output_schema={"columns": [{"name": "content", "type": "str"},
-                                   {"name": "out", "type": "str"}], "primary_key": ["content"]},
+            "columns": [{"name": "content", "type": "str", "nullable": True}], "primary_key": ["content"]}}],
+        output_schema={"columns": [{"name": "content", "type": "str", "nullable": True},
+                                   {"name": "out", "type": "str", "nullable": True}], "primary_key": ["content"]},
         llm={"prompt_template": "Analyze {content} now"}))
     assert s.llm.prompt_data_template == "Analyze {content} now"
 
@@ -554,9 +554,9 @@ def test_double_brace_checks_data_template_not_instructions():
         m.parse_stage(S(
             id="extract", type="llm_transform",
             inputs=[{"id": "load", "schema": {
-                "columns": [{"name": "text", "type": "str"}], "primary_key": ["text"]}}],
-            output_schema={"columns": [{"name": "text", "type": "str"},
-                                       {"name": "out", "type": "str"}], "primary_key": ["text"]},
+                "columns": [{"name": "text", "type": "str", "nullable": True}], "primary_key": ["text"]}}],
+            output_schema={"columns": [{"name": "text", "type": "str", "nullable": True},
+                                       {"name": "out", "type": "str", "nullable": True}], "primary_key": ["text"]},
             llm={"prompt_template": "Analyze {{text}} now"}))
 
     # The SAME {{text}} placed only in prompt_instructions, with a valid
@@ -565,9 +565,9 @@ def test_double_brace_checks_data_template_not_instructions():
     s = m.parse_stage(S(
         id="extract", type="llm_transform",
         inputs=[{"id": "load", "schema": {
-            "columns": [{"name": "text", "type": "str"}], "primary_key": ["text"]}}],
-        output_schema={"columns": [{"name": "text", "type": "str"},
-                                   {"name": "out", "type": "str"}], "primary_key": ["text"]},
+            "columns": [{"name": "text", "type": "str", "nullable": True}], "primary_key": ["text"]}}],
+        output_schema={"columns": [{"name": "text", "type": "str", "nullable": True},
+                                   {"name": "out", "type": "str", "nullable": True}], "primary_key": ["text"]},
         llm={"prompt_instructions": "Never echo {{text}} verbatim.",
              "prompt_template": "Analyze {text} now"}))
     assert s.llm is not None
@@ -598,12 +598,12 @@ def test_output_schema_issues_raise_at_stage_construction():
         "type": "aggregate",
         # `rows` carries a schema so the mandate is satisfied and the
         # deliverability issue below is the one that surfaces.
-        "inputs": [{"id": "rows", "schema": {"columns": [{"name": "company", "type": "str"}]}}],
+        "inputs": [{"id": "rows", "schema": {"columns": [{"name": "company", "type": "str", "nullable": True}]}}],
         "aggregate": {
             "group_by": ["company"],
             "aggregations": [{"output_column": "n", "formula": "count"}],
         },
-        "output_schema": {"columns": [{"name": "undeclared_extra", "type": "str"}]},
+        "output_schema": {"columns": [{"name": "undeclared_extra", "type": "str", "nullable": True}]},
     }
     with pytest.raises(ValidationError, match="undeclared_extra"):
         m.parse_stage(spec)
@@ -615,9 +615,9 @@ def test_output_schema_issues_raise_at_stage_construction():
 # output), publish emits files not a table (but still declares its inputs).
 
 _INLINE_ROW_FN = {"kind": "inline", "code": "def transform(row): return row"}
-_LEFT_SCHEMA = {"columns": [{"name": "id", "type": "str"}, {"name": "name", "type": "str"}],
+_LEFT_SCHEMA = {"columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "name", "type": "str", "nullable": True}],
                 "primary_key": ["id"]}
-_RIGHT_SCHEMA = {"columns": [{"name": "id", "type": "str"}, {"name": "amount", "type": "int"}],
+_RIGHT_SCHEMA = {"columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "amount", "type": "int", "nullable": True}],
                  "primary_key": ["id"]}
 
 _HANDLE_BLOCK = {
@@ -632,11 +632,11 @@ _HANDLE_BLOCK = {
 }
 _INPUT_IDS = {"enrich": ["facilities", "filings"], "expand": ["facilities", "filings"]}
 _OUTPUT_SCHEMA = {
-    "enrich": {"columns": [{"name": "id", "type": "str"}, {"name": "name", "type": "str"},
-                           {"name": "amount", "type": "int"}]},
-    "expand": {"columns": [{"name": "id", "type": "str"}, {"name": "name", "type": "str"},
-                           {"name": "amount", "type": "int"}]},
-    "aggregate": {"columns": [{"name": "name", "type": "str"}, {"name": "n", "type": "int"}]},
+    "enrich": {"columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "name", "type": "str", "nullable": True},
+                           {"name": "amount", "type": "int", "nullable": True}]},
+    "expand": {"columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "name", "type": "str", "nullable": True},
+                           {"name": "amount", "type": "int", "nullable": True}]},
+    "aggregate": {"columns": [{"name": "name", "type": "str", "nullable": True}, {"name": "n", "type": "int", "nullable": True}]},
 }
 NON_EXEMPT_TYPES = ["python_row_function", "python_frame_function", "enrich", "expand",
                     "aggregate", "human_review_queue"]
@@ -761,11 +761,11 @@ def test_output_schema_issues_surface_in_draft_validation():
         "type": "aggregate",
         # `rows` carries a schema so the mandate is satisfied and the
         # deliverability issue below is the one that surfaces.
-        "inputs": [{"id": "rows", "schema": {"columns": [{"name": "company", "type": "str"}]}}],
+        "inputs": [{"id": "rows", "schema": {"columns": [{"name": "company", "type": "str", "nullable": True}]}}],
         "aggregate": {
             "group_by": ["company"],
             "aggregations": [{"output_column": "n", "formula": "count"}],
         },
-        "output_schema": {"columns": [{"name": "undeclared_extra", "type": "str"}]},
+        "output_schema": {"columns": [{"name": "undeclared_extra", "type": "str", "nullable": True}]},
     }])
     assert any("undeclared_extra" in issue for issue in issues)

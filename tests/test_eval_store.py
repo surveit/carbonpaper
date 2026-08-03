@@ -29,7 +29,7 @@ from app.services.versioning import WorkflowVersion
 
 def _ref(path="x.csv", cols=("k",)):
     return {"path": path, "format": "csv",
-            "table_schema": {"columns": [{"name": c} for c in cols]}}
+            "table_schema": {"columns": [{"name": c, "type": "str", "nullable": True} for c in cols]}}
 
 
 def _config(**over):

@@ -5,7 +5,7 @@ from pydantic import ValidationError
 
 from app.models import parse_stage
 
-_AB_SCHEMA = {"columns": [{"name": "a", "type": "str"}, {"name": "b", "type": "int"}]}
+_AB_SCHEMA = {"columns": [{"name": "a", "type": "str", "nullable": True}, {"name": "b", "type": "int", "nullable": True}]}
 
 
 def _filter_stage(*, output_schema=None, filter_cfg=None):
@@ -22,14 +22,14 @@ def test_matching_output_schema_ok():
 
 
 def test_output_schema_must_equal_input_schema():
-    wrong_output = {"columns": [{"name": "a", "type": "str"}]}
+    wrong_output = {"columns": [{"name": "a", "type": "str", "nullable": True}]}
     with pytest.raises(ValidationError, match="output_schema"):
         parse_stage(_filter_stage(output_schema=wrong_output))
 
 
 def test_output_schema_extra_column_rejected():
-    extra = {"columns": [{"name": "a", "type": "str"}, {"name": "b", "type": "int"},
-                          {"name": "c", "type": "str"}]}
+    extra = {"columns": [{"name": "a", "type": "str", "nullable": True}, {"name": "b", "type": "int", "nullable": True},
+                          {"name": "c", "type": "str", "nullable": True}]}
     with pytest.raises(ValidationError, match="output_schema"):
         parse_stage(_filter_stage(output_schema=extra))
 
