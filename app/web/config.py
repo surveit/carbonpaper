@@ -34,10 +34,22 @@ def friendly_time(v: object) -> Markup:
     the formatter script). The ISO string stays in the datetime attribute (and
     as fallback text for no-JS), so nothing machine-readable is lost. Empty/None
     renders as empty — callers keep their own `or '—'`-style fallbacks."""
+    return _time_element(v, "")
+
+
+def relative_time(v: object) -> Markup:
+    """Like friendly_time, but the browser writes "2 hours ago" for a recent one."""
+    # The exact value stays one hover away, the same convention friendly_time
+    # already set; older timestamps fall back to its absolute form.
+    return _time_element(v, " data-relative")
+
+
+def _time_element(v: object, attrs: str) -> Markup:
     if v is None or v == "":
         return Markup("")
     iso = v.isoformat() if isinstance(v, (datetime, date)) else str(v).strip()
-    return Markup(f'<time datetime="{escape(iso)}">{escape(iso)}</time>')
+    return Markup(f'<time datetime="{escape(iso)}"{attrs}>{escape(iso)}</time>')
 
 
 templates.env.filters["friendly_time"] = friendly_time
+templates.env.filters["relative_time"] = relative_time

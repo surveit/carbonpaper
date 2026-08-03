@@ -800,21 +800,6 @@ a.fact-chip:hover { background: var(--hover); color: var(--fg); }
 .btn.danger:hover { background: #fbdada; }
 .btn.danger:disabled { opacity: 0.6; cursor: default; }
 
-/* A workflow test's run — see RunManifest.is_test_run */
-.badge-test {
-    display: inline-block;
-    margin-left: 6px;
-    padding: 2px 7px;
-    border-radius: 3px;
-    font-size: 10px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.4px;
-    background: #f3e8fd;
-    color: #5a2a8c;
-    border: 1px solid #8a5cf6;
-}
-
 /* Run status badges */
 .run-status {
     display: inline-block;
@@ -1136,33 +1121,61 @@ table.data-preview.scratch th { background: #f3ecd0; }
     font-weight: 600;
 }
 
-/* ── Run page redesign: progress framing, full-width workflow, nested-tab panel ── */
+/* ── Run page: full-width workflow, nested-tab panel ── */
 .run-topbar h1 { margin-bottom: .1rem; }
-.run-progress { display: flex; align-items: center; gap: 1rem; margin: 1rem 0 .4rem; flex-wrap: wrap; }
-.run-progress form { margin: 0 0 0 auto; }
 .spinner { width: 18px; height: 18px; border: 3px solid #e3e3e0; border-top-color: var(--accent);
     border-radius: 50%; animation: spin .8s linear infinite; display: inline-block; flex: none; }
 .spinner[hidden] { display: none; }
 @keyframes spin { to { transform: rotate(360deg); } }
-.overall-status { font-weight: 600; text-transform: capitalize; padding: .15rem .6rem;
-    border-radius: 5px; background: var(--hover); }
-.overall-status.status-running { background: var(--state-warn-bg); color: var(--state-warn-ink); }
-.overall-status.status-ok { background: var(--state-done-bg); color: var(--state-done-ink); }
-.overall-status.status-errors, .overall-status.status-error { background: var(--state-failed-bg); color: var(--state-failed-ink); }
-.overall-status.status-awaiting_review { background: var(--state-review-bg); color: var(--state-review-ink); }
-.overall-status.status-cancelled { background: var(--state-idle-bg); color: var(--state-idle-ink); }
-.progress-track { flex: 1; min-width: 160px; max-width: 420px; height: 10px; background: #e8e8e4;
-    border-radius: 6px; overflow: hidden; }
-.progress-fill { height: 100%; background: var(--state-done); transition: width .4s ease; }
-.progress-counts { font-size: .9rem; }
-.alert-strip { display: flex; gap: .6rem; margin: 0 0 1rem; flex-wrap: wrap; }
-.alert-strip[hidden] { display: none; }
-.alert { padding: .2rem .6rem; border-radius: 5px; font-size: .85rem; }
-.alert[hidden] { display: none; }
-.alert.err { background: var(--state-failed-bg); color: var(--state-failed-ink); }
-.alert.warn { background: var(--state-warn-bg); color: var(--state-warn-ink); }
-.alert.awaiting { background: var(--state-review-bg); color: var(--state-review-ink); }
-.alert.cancelled { background: var(--state-idle-bg); color: var(--state-idle-ink); }
+
+/* ── The run header: grounding line → CTA → stage strip (app/web/run_header.py).
+      The run's state is not stated in words anywhere; the CTA is how it is read,
+      so the CTA is the only large thing here. ── */
+.run-header { margin: 0 0 1.2rem; }
+.run-ground { display: flex; flex-wrap: wrap; align-items: center; gap: .45em;
+    margin: 0 0 .75rem; font-size: .82rem; color: var(--muted); }
+.run-ground .sep { opacity: .45; }
+.run-ground .run-id { font-size: .74rem; background: var(--code-bg); color: var(--muted);
+    padding: 1px 6px; border-radius: 3px; }
+.run-ground .unresolved { color: var(--state-warn-ink); cursor: help; }
+.run-ground .flagchip { background: #f3e8fd; color: #5a2a8c; border: 1px solid #d9c2f5;
+    padding: 1px 7px; border-radius: 3px; font-size: .74rem; cursor: help; }
+.cta-row { display: flex; flex-wrap: wrap; align-items: center; gap: .6rem; margin: 0 0 .85rem; }
+.cta-row form { margin: 0; }
+.cta-row .btn { font-size: .95rem; font-weight: 600; padding: 9px 16px; border-radius: 7px; }
+.cta-row .btn.ghost { background: #fff; color: var(--fg); border-color: var(--border);
+    font-weight: 500; }
+.cta-row .btn.ghost:hover { background: var(--hover); }
+.cta-row .btn:disabled { opacity: .6; cursor: default; }
+.cta-aside { font-size: .82rem; color: var(--muted); }
+
+/* ── The stage strip (_stage_strip.html): one square per stage in topological
+      order, coloured by status. Status only — the squares are not links. ── */
+.stage-strip { display: inline-flex; gap: 3px; align-items: flex-end; vertical-align: -2px; }
+.stage-strip i { display: block; width: 26px; height: 16px; border-radius: 3px; flex: none; }
+.stage-strip.compact { gap: 2px; }
+.stage-strip.compact i { width: 8px; height: 10px; border-radius: 2px; }
+.strip-counts { display: flex; flex-wrap: wrap; gap: .95rem; margin: .5rem 0 0;
+    font-size: .8rem; color: var(--muted); }
+.strip-counts span { display: flex; align-items: center; gap: .4em; }
+.strip-counts i { display: block; width: 9px; height: 9px; border-radius: 2px; }
+.stage-strip i, .strip-counts i { background: var(--state-idle); }
+.stage-strip i.status-pending, .strip-counts i.status-pending { background: #d5d7d3; }
+.stage-strip i.status-ok, .strip-counts i.status-ok { background: var(--state-done); }
+.stage-strip i.status-validation_warnings,
+.strip-counts i.status-validation_warnings,
+.stage-strip i.status-running, .strip-counts i.status-running { background: var(--state-warn); }
+.stage-strip i.status-awaiting_review,
+.strip-counts i.status-awaiting_review { background: var(--state-review); }
+.stage-strip i.status-error, .strip-counts i.status-error { background: var(--state-failed); }
+.stage-strip i.status-cancelled, .strip-counts i.status-cancelled { background: var(--state-idle); }
+
+/* ── Runs index rows (section_runs.html) ── */
+.runs-table td { vertical-align: top; }
+.runs-table .run-sub { display: block; font-size: .74rem; color: var(--muted);
+    font-family: "SFMono-Regular", "Consolas", monospace; }
+.runs-table .run-diff { font-size: .82rem; color: var(--muted); }
+.runs-table .unresolved { color: var(--state-warn-ink); cursor: help; }
 
 .workflow-full { width: 100%; margin: 1rem 0 .3rem; }
 .stage-panel-full { margin-top: 1.2rem; border-top: 2px solid var(--border); padding-top: 1rem; min-height: 120px; }
@@ -1192,11 +1205,6 @@ table.data-preview.scratch th { background: #f3ecd0; }
 .model-input-prompt { margin: .4rem 0; }
 .model-input-prompt summary { cursor: pointer; color: var(--accent); font-size: .88rem; }
 .mi-missing { background: var(--warn-bg); padding: .4rem .6rem; border-radius: 5px; }
-
-/* ── Re-run failed stages action ── */
-.rerun-bar { display: flex; align-items: center; gap: .8rem; margin: 0 0 1rem; flex-wrap: wrap; }
-.rerun-bar form { margin: 0; }
-.rerun-bar .muted { font-size: .85rem; }
 
 /* ── Full stage-output table page (/runs/{id}/stage/{id}/rows) ── */
 .rows-toolbar { display: flex; align-items: center; gap: .8rem; margin: 0 0 1rem; flex-wrap: wrap; }
@@ -1292,9 +1300,6 @@ td.row-num, th.row-num { text-align: right; color: #98a1b3; font-variant-numeric
 }
 .nr-issues[hidden] { display: none; }
 .nr-issues li { color: #802020; font-family: "SFMono-Regular", "Consolas", monospace; font-size: 12px; margin: 2px 0; }
-
-/* Run-detail: "ran against version" line. */
-.ran-against { margin-top: 2px; }
 
 /* == Project shell . dashboard . section layout =======================================
    The sidebar shell (.app-*), home dashboard cards (.project-*, .dash-*), overview

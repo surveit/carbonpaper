@@ -15,14 +15,12 @@ from typing import Any
 
 import pandas as pd
 from fastapi import HTTPException
-from pydantic import ValidationError
 
 from app.core.errors import NoVersionToRunError
 from app.core.frames import PARQUET_SUFFIX
 from app.models import Stage, StageType
 from app.models.stages.llm_transform import LLMTransformStage
 from app.runtime.manifest import load_manifest_model
-from app.core.run_status import StageStatus
 from app.services.run import resolve_version
 from app.services.loader import CompiledStageFile, load_compiled_dir
 from app.services.versioning import list_versions, load_version_stages
@@ -47,7 +45,7 @@ def list_projects() -> list[dict[str, Any]]:
     just-created project whose data model is still being generated must show up,
     not appear only once generation finishes. A dir with none of those markers is
     not a project and is omitted. A run counts only if it has a manifest.json
-    (mirrors list_runs), so the count is real runs, never inflated."""
+    (mirrors the runs index), so the count is real runs, never inflated."""
     if not projects_dir().exists():
         return []
     cards: list[dict[str, Any]] = []
@@ -87,7 +85,7 @@ def _build_project_card(p: Path) -> dict[str, Any] | None:
 
 def _count_runs_with_manifest(rdir: Path) -> int:
     """Non-test runs only: a run dir counts iff it carries a manifest.json
-    (mirrors list_runs) AND that manifest is not a test run's, so an
+    (mirrors the runs index) AND that manifest is not a test run's, so an
     in-progress/abandoned run dir, or a workflow test's run, is never counted."""
     if not rdir.is_dir():
         return 0
@@ -225,64 +223,6 @@ def load_manifest(run_dir: Path) -> dict[str, Any]:
     if not (run_dir / "manifest.json").exists():
         raise HTTPException(status_code=404, detail="Run not found")
     return load_manifest_model(run_dir).to_dict()
-
-
-def list_runs(project: str) -> list[dict[str, Any]]:
-    """One index row per manifest-backed run of `project`, newest first.
-
-    Every row is parsed through the typed `RunManifest`, the same reader the run
-    pages use, so the counts a row reports are the counts that manifest actually
-    holds. A manifest this reader cannot parse — malformed JSON, or a file
-    written against an older on-disk vocabulary the model now rejects — yields a
-    `corrupt` row with None counts rather than a zero the reader never read; the
-    template shows those as unreadable. One unreadable run never takes the index
-    down with it."""
-    rdir = runs_dir(project)
-    if not rdir.is_dir():
-        return []
-    return [
-        _run_index_row(run)
-        for run in sorted(rdir.iterdir(), reverse=True)
-        if run.is_dir() and (run / "manifest.json").exists()
-    ]
-
-
-def _run_index_row(run: Path) -> dict[str, Any]:
-    try:
-        manifest = load_manifest_model(run)
-    except ValidationError:  # also how the model reports unparseable JSON
-        return _unreadable_run_row(run)
-    records = manifest.stage_records
-    return {
-        "run_id": run.name,
-        "status": manifest.status,
-        "started_at": manifest.started_at,
-        "finished_at": manifest.finished_at,
-        # None for legacy (pre-versioning) runs; the template renders
-        # "(unversioned)" — a displayed truth, not a fabricated id.
-        "workflow_version": manifest.workflow_version,
-        "stages_total": len(records),
-        "stages_ok": sum(1 for s in records if s.status == StageStatus.OK),
-        "stages_error": sum(1 for s in records if s.status == StageStatus.ERROR),
-        "is_test_run": manifest.is_test_run,
-    }
-
-
-def _unreadable_run_row(run: Path) -> dict[str, Any]:
-    """The index row for a run whose manifest could not be parsed: identity only.
-    Every field the manifest would have supplied is None — no count, timestamp,
-    or version is invented for a file that was never read."""
-    return {
-        "run_id": run.name,
-        "status": "corrupt",
-        "started_at": None,
-        "finished_at": None,
-        "workflow_version": None,
-        "stages_total": None,
-        "stages_ok": None,
-        "stages_error": None,
-        "is_test_run": None,
-    }
 
 
 # ─── Tabular output previews ─────────────────────────────────────────────────
