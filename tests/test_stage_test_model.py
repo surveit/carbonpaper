@@ -288,6 +288,82 @@ def test_stage_tests_model_accepts_an_explicit_null_in_a_nullable_column():
     assert suite.tests[0].inputs["load"] == [{"amount": 1.0, "label": None}]
 
 
+_KEYED_SCHEMA = {
+    "columns": [
+        {"name": "client", "type": "str", "nullable": False},
+        {"name": "paid", "type": "float", "nullable": False},
+    ],
+    "primary_key": ["client"],
+}
+
+
+def test_stage_tests_model_rejects_an_input_frame_repeating_a_primary_key():
+    """Each row is well-formed alone, so only a cross-row check catches this."""
+    bad = {
+        "name": "one_client_paid_two_firms",
+        "inputs": {"load": [{"client": "Gamma", "paid": 10000.0},
+                            {"client": "Gamma", "paid": 15000.0}]},
+        "expected": [{"client": "Gamma", "paid": 25000.0}],
+    }
+    with pytest.raises(ValidationError) as excinfo:
+        _frame_suite_model(_KEYED_SCHEMA).model_validate({"tests": [bad]})
+    message = str(excinfo.value)
+    assert "one_client_paid_two_firms" in message
+    assert "load" in message
+    assert "Primary key duplicated" in message
+
+
+def test_stage_tests_model_rejects_an_input_frame_repeating_a_whole_row():
+    """The runner rejects exact duplicate input rows for every stage type."""
+    bad = {
+        "name": "the_same_row_twice",
+        "inputs": {"load": [{"amount": 1.0, "label": "a"},
+                            {"amount": 1.0, "label": "a"}]},
+        "expected": [{"amount": 1.0, "label": "a"}],
+    }
+    with pytest.raises(ValidationError) as excinfo:
+        _frame_suite_model(_TWO_COLUMN_SCHEMA).model_validate({"tests": [bad]})
+    message = str(excinfo.value)
+    assert "the_same_row_twice" in message
+    assert "exact duplicate rows" in message
+
+
+def test_stage_tests_model_rejects_expected_rows_repeating_a_primary_key():
+    bad = {
+        "name": "two_rows_for_one_client",
+        "inputs": {"load": [{"client": "Gamma", "paid": 10000.0}]},
+        "expected": [{"client": "Gamma", "paid": 10000.0},
+                     {"client": "Gamma", "paid": 15000.0}],
+    }
+    with pytest.raises(ValidationError) as excinfo:
+        _frame_suite_model(_KEYED_SCHEMA).model_validate({"tests": [bad]})
+    message = str(excinfo.value)
+    assert "expected rows" in message
+    assert "Primary key duplicated" in message
+
+
+def test_stage_tests_model_accepts_distinct_rows_under_a_primary_key():
+    suite = _frame_suite_model(_KEYED_SCHEMA).model_validate({"tests": [{
+        "name": "two_clients_each_paid",
+        "inputs": {"load": [{"client": "Gamma", "paid": 10000.0},
+                            {"client": "Delta", "paid": 15000.0}]},
+        "expected": [{"client": "Gamma", "paid": 10000.0},
+                     {"client": "Delta", "paid": 15000.0}],
+    }]})
+    assert len(suite.tests[0].inputs["load"]) == 2
+
+
+def test_stage_tests_model_accepts_repeated_expected_rows_under_no_key():
+    """A run applies the duplicate-row rule to a stage's INPUTS only."""
+    # So a step that legitimately emits identical rows can still state that.
+    suite = _frame_suite_model(_TWO_COLUMN_SCHEMA).model_validate({"tests": [{
+        "name": "one_row_in_two_identical_rows_out",
+        "inputs": {"load": [{"amount": 1.0, "label": "a"}]},
+        "expected": [{"amount": 1.0, "label": "a"}, {"amount": 1.0, "label": "a"}],
+    }]})
+    assert len(suite.tests[0].expected) == 2
+
+
 _FAILURE_TEST = {
     "name": "another_currency_is_not_recorded_as_dollars",
     "inputs": {"load": [{"amount": 2.0}]},

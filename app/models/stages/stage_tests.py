@@ -16,6 +16,9 @@ from pydantic import (
     model_validator,
 )
 
+import pandas as pd
+
+from app.core.frame_checks import find_frame_violations, find_primary_key_violations
 from app.core.utils import format_errors
 from app.models.schema import TableSchema, _Base
 
@@ -128,6 +131,24 @@ def validate_test_rows(
         raise ValueError("; ".join(problems))
 
 
+def validate_test_frames(
+    input_schemas: dict[StageId, TableSchema],
+    output_schema: TableSchema,
+    tests: list[StageTest],
+) -> None:
+    """Raise ValueError if a test's rows break a cross-row rule a real run enforces."""
+    # The row-by-row checks (validate_test_rows) cannot see these: a row is
+    # well-formed on its own and the suite still states a frame no stage could
+    # ever be handed. Assumes validate_stage_tests passed.
+    problems = [
+        problem
+        for test in tests
+        for problem in _find_test_frame_problems(test, input_schemas, output_schema)
+    ]
+    if problems:
+        raise ValueError("; ".join(problems))
+
+
 def build_stage_tests_model(
     test_class: type[StageTest],
     input_schemas: dict[StageId, TableSchema],
@@ -146,6 +167,7 @@ def build_stage_tests_model(
         def _stage_rules(self) -> "StageTestSuite":
             validate_stage_tests(list(input_schemas), self.tests)
             validate_test_rows(input_schemas, output_schema, self.tests)
+            validate_test_frames(input_schemas, output_schema, self.tests)
             return self
 
     # `list[test_class]` is a runtime type, so it enters through an Any-typed handle
@@ -171,6 +193,33 @@ def _find_test_row_problems(
     problems += [
         f"test {test.name!r}, expected rows: {problem}"
         for problem in _find_row_problems(test.expected, expected_model)
+    ]
+    return problems
+
+
+def _find_test_frame_problems(
+    test: StageTest,
+    input_schemas: dict[StageId, TableSchema],
+    output_schema: TableSchema,
+) -> list[str]:
+    # An input frame must pass every rule the runner applies to a stage input
+    # (key uniqueness AND no exact duplicate rows); the expected rows only the one
+    # it applies to a stage output (key uniqueness). A test states frames a real
+    # run would have to accept — no stricter, no looser.
+    problems = [
+        f"test {test.name!r}, input {input_id!r}: {violation.message}"
+        for input_id, schema in input_schemas.items()
+        for violation in find_frame_violations(
+            pd.DataFrame(test.inputs[input_id]), primary_key=schema.primary_key
+        )
+    ]
+    if test.expected is None:
+        return problems  # a failure case claims no output rows to form a frame
+    problems += [
+        f"test {test.name!r}, expected rows: {violation.message}"
+        for violation in find_primary_key_violations(
+            pd.DataFrame(test.expected), output_schema.primary_key
+        )
     ]
     return problems
 
