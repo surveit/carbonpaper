@@ -1,8 +1,11 @@
+import re
+
 import pytest
 from pydantic import ValidationError
 
 from app.models.schema import Column, TableSchema
 from app.models.stage_base import StageInput, StageType
+from app.models.stages.node_types import NODE_TYPES
 from app.models.stages.starlark import StarlarkFunction, StarlarkRowFunctionStage
 
 GOOD = "def transform(row):\n    return {'n': row['n'] + 1}\n"
@@ -97,3 +100,34 @@ def test_fingerprint_blocks_names_the_starlark_block():
 def test_find_authored_code_block_returns_the_config():
     stage = _stage()
     assert stage.find_authored_code_block() is stage.starlark
+
+
+# The row-merge idiom both authoring-guidance passages teach, pulled out of the real
+# text (never duplicated) so a future edit to either passage is checked against the
+# actual interpreter rather than trusted on its word. The right-hand side of an
+# illustrative `name=value` pair is prose ("value"), not a bound Starlark name, so
+# it is swapped for a literal before compiling — the CALL SHAPE quoted in the prose
+# is what is under test, not its placeholder wording.
+_ROW_MERGE_IDIOM = re.compile(r"`(return\s+[^`]+)`")
+
+
+def _compilable_idiom_from(description: str) -> str:
+    match = _ROW_MERGE_IDIOM.search(description)
+    assert match, (
+        "expected a `return ...` row-merge idiom quoted in this authoring-guidance "
+        f"text, found none: {description!r}"
+    )
+    return re.sub(r"=\s*\w+", "=1", match.group(1))
+
+
+@pytest.mark.parametrize("description", [
+    StarlarkFunction.model_fields["code"].description,
+    NODE_TYPES["starlark_row_function"]["notes"],
+], ids=["StarlarkFunction.code field description", "NODE_TYPES notes"])
+def test_authoring_guidance_teaches_a_row_merge_idiom_the_parser_accepts(description):
+    # Regression: an earlier revision of both passages told an author (including the
+    # compiler agent, which reads this exact text) to write `return {**row, ...}` —
+    # syntax starlark-pyo3's parser rejects outright, so every stage authored by
+    # following the guidance would fail to save.
+    code = f"def transform(row):\n    {_compilable_idiom_from(description)}\n"
+    assert StarlarkFunction(code=code).code == code
