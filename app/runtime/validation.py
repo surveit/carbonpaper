@@ -1,6 +1,7 @@
-"""Schema validation for stage I/O: column presence, type coercion, range
-constraints, nullability, and primary-key uniqueness against a stage's declared
-output_schema. Results are returned as structured records, not raised.
+"""Schema validation for stage I/O: column presence, type coercion, enum
+vocabularies, range constraints, nullability, and primary-key uniqueness against
+a stage's declared output_schema. Results are returned as structured records,
+not raised.
 """
 
 from __future__ import annotations
@@ -49,7 +50,9 @@ assert set(CELL_TYPE_PREDICATES) == SCALAR_COLUMN_TYPES, (
 )
 
 # How many offending values to name in an Issue message.
-_TYPE_SAMPLE_N = 3
+_OFFENDER_SAMPLE_N = 3
+# How many of a column's declared enum values to quote back as the vocabulary.
+_VOCABULARY_SAMPLE_N = 8
 
 
 class Severity(str, Enum):
@@ -178,8 +181,8 @@ def _find_type_issues(series: pd.Series, col: Column) -> list[Issue]:
     offenders = [v for v in non_null if not check(v)]
     if not offenders:
         return []
-    sample = ", ".join(repr(v) for v in offenders[:_TYPE_SAMPLE_N])
-    ellipsis = "…" if len(offenders) > _TYPE_SAMPLE_N else ""
+    sample = ", ".join(repr(v) for v in offenders[:_OFFENDER_SAMPLE_N])
+    ellipsis = "…" if len(offenders) > _OFFENDER_SAMPLE_N else ""
     return [
         Issue(
             "error", col.name,
@@ -210,21 +213,36 @@ def _find_numeric_range_issues(series: pd.Series, col: Column) -> list[Issue]:
 
 
 def _find_enum_issues(series: pd.Series, col: Column) -> list[Issue]:
+    """Values outside a `str` column's declared vocabulary — an error, like a bad type."""
+    # `enum` is declared only where the vocabulary is CLOSED and known at authoring
+    # time, so a value outside it is one the schema says cannot exist — the same
+    # standing as a value of the wrong type, and a downstream stage switching on the
+    # vocabulary has no branch for it. Error severity, so an output report carrying
+    # one fails the stage rather than passing the frame on with a note.
     if not (col.enum and col.type == STR_COLUMN_TYPE):
         return []
     non_null = series.dropna()
     if not len(non_null):
         return []
     allowed = set(col.enum)
-    bad = (~non_null.astype(str).isin(allowed)).sum()
-    if bad:
-        return [
-            Issue(
-                "warning", col.name,
-                f"{bad} value(s) outside enum {sorted(allowed)[:8]}{'…' if len(allowed) > 8 else ''}",
-            )
-        ]
-    return []
+    rendered = non_null.astype(str)
+    offending = rendered[~rendered.isin(allowed)]
+    if not len(offending):
+        return []
+    # The DISTINCT bad values, not the first N rows: one typo repeated 400 times is
+    # one thing to fix, and the count already says how many rows carry it.
+    distinct = list(offending.unique())
+    sample = ", ".join(repr(v) for v in distinct[:_OFFENDER_SAMPLE_N])
+    ellipsis = "…" if len(distinct) > _OFFENDER_SAMPLE_N else ""
+    vocabulary = sorted(allowed)[:_VOCABULARY_SAMPLE_N]
+    unshown = "…" if len(allowed) > _VOCABULARY_SAMPLE_N else ""
+    return [
+        Issue(
+            "error", col.name,
+            f"{len(offending)} value(s) outside enum {vocabulary}{unshown} "
+            f"(e.g. {sample}{ellipsis})",
+        )
+    ]
 
 
 def _find_duplicate_primary_keys(df: pd.DataFrame, pk: list[str] | None) -> list[Issue]:

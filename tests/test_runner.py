@@ -323,6 +323,54 @@ def test_output_validation_error_other_than_a_missing_column_also_errors_the_sta
     assert manifest["status"] == "errors"
 
 
+def test_value_outside_a_declared_enum_errors_the_stage_and_blocks_downstream(tmp_path):
+    # A declared enum is a CLOSED vocabulary — a claim about what can exist, not
+    # a preference. A value outside it is error-severity like a wrong type, so
+    # the stage fails and its downstream never sees the frame.
+    (tmp_path / "compiled").mkdir(parents=True)
+    (tmp_path / "data").mkdir(parents=True)
+    pd.DataFrame({"name": ["a"], "val": [1]}).to_csv(
+        tmp_path / "data" / "items.csv", index=False)
+    labelled_schema = {"columns": [
+        {"name": "name", "type": "str"},
+        {"name": "status", "type": "str", "enum": ["open", "closed"]},
+    ]}
+    load = {
+        "id": "load", "name": "Load items", "type": "input_data",
+        "connector": {"kind": "file",
+                      "params": {"path": str(tmp_path / "data" / "items.csv"), "format": "csv"}},
+        "output_schema": _NAME_VAL_SCHEMA,
+    }
+    label = {
+        "id": "label", "name": "Label items", "type": "python_frame_function",
+        "inputs": [{"id": "load", "schema": _NAME_VAL_SCHEMA}],
+        "output_schema": labelled_schema,
+        "function": {"kind": "inline",
+                     "code": "def transform(df):\n"
+                             "    return df.assign(status='pending')[['name', 'status']]\n"},
+    }
+    tail = {
+        "id": "tail", "name": "Tail", "type": "python_frame_function",
+        "inputs": [{"id": "label", "schema": labelled_schema}],
+        "output_schema": labelled_schema,
+        "function": {"kind": "inline", "code": "def transform(df):\n    return df\n"},
+    }
+    for filename, stage in (("01_load.json", load), ("02_label.json", label),
+                            ("03_tail.json", tail)):
+        (tmp_path / "compiled" / filename).write_text(json.dumps(stage), encoding="utf-8")
+    _seed_version(tmp_path)
+    manifest = execute_run(tmp_path, tmp_path, *pinned_stages(tmp_path))
+
+    records = {r["stage_id"]: r for r in manifest["stage_records"]}
+    assert records["label"]["status"] == "error"
+    assert records["label"]["error"]["type"] == "OutputSchemaViolation"
+    # Names the column and the value that is not in the vocabulary.
+    assert "status" in records["label"]["error"]["message"]
+    assert "'pending'" in records["label"]["error"]["message"]
+    assert records["tail"]["status"] == "pending"
+    assert manifest["status"] == "errors"
+
+
 def _llm_transform_project(root):
     """input_data loading one row, feeding an llm_transform. Exercises the
     runner's row-error surfacing when a row's generation fails."""

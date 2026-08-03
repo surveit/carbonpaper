@@ -462,14 +462,14 @@ def _finalize_stage_output(
     its terminal status. Two things make it a stage error, both recorded
     exactly like a raised exception: a per-row generation failure, and an
     error-severity issue in the OUTPUT validation report (a missing declared
-    column, a failed coercion, a null in a non-nullable column, a duplicated
-    primary key) — a frame that violates the declared schema must not be
-    consumed downstream. The output file stays on disk for inspection, and the
-    stage's own `error` status keeps a resume from reusing it. Otherwise the
-    status is `ok`, or `validation_warnings` when an INPUT report carries an
-    error. Returns True if the caller must join this stage to `blocked`, so
-    every transitive consumer is skipped rather than run on this stage's
-    non-conforming frame and marked `ok`; False otherwise."""
+    column, a failed coercion, a value outside a declared enum, a null in a
+    non-nullable column, a duplicated primary key) — a frame that violates the
+    declared schema must not be consumed downstream. The output file stays on
+    disk for inspection, and the stage's own `error` status keeps a resume from
+    reusing it. Otherwise the status is `ok`, or `validation_warnings` when an
+    INPUT report carries an error. Returns True if the caller must join this
+    stage to `blocked`, so every transitive consumer is skipped rather than run
+    on this stage's non-conforming frame and marked `ok`; False otherwise."""
     sid = stage.id
     # Read the stage's contribution off the handler's frame BEFORE any slicing
     # (which builds a new frame and drops `.attrs`), then merge usage into this

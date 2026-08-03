@@ -27,6 +27,9 @@ is ready; if it is rejected, fix the reported issues and call it again.
 - Declare a column's `enum` whenever its vocabulary is CLOSED — a fixed set of values the
   methodology itself names (a status, a category, a reason code), not free text. The set is
   enforced wherever the column is used, so a closed vocabulary left as bare `str` gives that up.
+  Enforcement is hard: a stage emitting a value outside the set FAILS, so declare the enum
+  only where the methodology genuinely fixes the vocabulary, never to sketch example values
+  for a column whose set is open or still being discovered.
 - NEVER fabricate data values, URLs, or numbers — encode STRUCTURE only; record genuine
   ambiguity in a schema's or a column's `description`.
 
