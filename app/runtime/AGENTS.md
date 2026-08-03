@@ -31,8 +31,9 @@ validate the output, write `outputs/<stage>.parquet`, append to `manifest.json`.
   outputs and continues once cached decisions exist for the pending rows.
 
 ## `stages/` — one module per stage type (`HANDLERS`)
-`input_data` connector `file` (csv/parquet/json/geojson; `_read_geojson` flattens a
-FeatureCollection); `python_row_function`/`python_frame_function`
+`input_data` connector `file` (csv/parquet/json/geojson/xlsx; `_read_geojson` flattens a
+FeatureCollection; a column the stage's `output_schema` declares `str` is read as source
+text, not left to the reader's type inference); `python_row_function`/`python_frame_function`
 (`function: {kind: module|inline}`, row variant mapped per row); `enrich`/`expand`
 (left join of inputs[1] into inputs[0]; `enrich` verifies m:1 and fails the run on a
 non-unique reference, `expand` allows m:n fan-out); `aggregate`;

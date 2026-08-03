@@ -390,6 +390,10 @@ class TableSchema(_Base):
                 return c
         return None
 
+    def find_columns_of_type(self, type_name: str) -> list[str]:
+        """The names of the columns declared `type_name`, in declaration order."""
+        return [c.name for c in self.columns if c.type == type_name]
+
     def subtract(self, other: "TableSchema", strict: bool = True) -> "TableSchema":
         """The columns of `self` that `other` does not spec-match: absent from
         `other` by name, or present but differing on a spec field per

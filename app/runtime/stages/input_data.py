@@ -8,12 +8,13 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Hashable, Mapping
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import pandas as pd
 
-from app.models import Stage, XlsxReadParams
+from app.models import STR_COLUMN_TYPE, Stage, XlsxReadParams
 from app.models.stages.input_data import InputDataStage
 
 from ..context import RunContext
@@ -44,7 +45,8 @@ def preflight_input_data(stage: Stage) -> tuple[list[str], dict[str, Any] | None
 
 
 def read_input_data(stage: Stage, ctx: RunContext) -> pd.DataFrame:
-    params = narrow_stage(stage, InputDataStage).connector.params
+    input_stage = narrow_stage(stage, InputDataStage)
+    params = input_stage.connector.params
 
     if "path" not in params:
         raise ValueError(
@@ -54,16 +56,19 @@ def read_input_data(stage: Stage, ctx: RunContext) -> pd.DataFrame:
         )
     path = Path(params["path"])   # absolute: the model rejects a relative path when present
     fmt = params.get("format", "csv")
+    str_dtypes = _find_str_dtypes(input_stage)
     if fmt == "csv":
-        df = pd.read_csv(path)
+        # pandas-stubs keys read_csv's dtype map on Hashable and read_excel's on
+        # str; Mapping is invariant in its key, so one of the two has to widen.
+        df = pd.read_csv(path, dtype=cast(Mapping[Hashable, type[str]], str_dtypes))
     elif fmt == "parquet":
         df = pd.read_parquet(path)
     elif fmt == "json":
-        df = pd.read_json(path, lines=True)
+        df = pd.read_json(path, lines=True, dtype=str_dtypes)
     elif fmt == "geojson":
         df = _read_geojson(path)
     elif fmt == "xlsx":
-        df = _read_xlsx(path, XlsxReadParams.model_validate(params))
+        df = _read_xlsx(path, XlsxReadParams.model_validate(params), str_dtypes=str_dtypes)
     else:
         raise ValueError(f"Unsupported file format: {fmt}")
 
@@ -78,6 +83,20 @@ def read_input_data(stage: Stage, ctx: RunContext) -> pd.DataFrame:
             df[col] = pd.to_datetime(df[col], errors="coerce")
 
     return df
+
+
+def _find_str_dtypes(stage: InputDataStage) -> dict[str, type[str]]:
+    # A column the stage declares `str` is read as source text rather than left to
+    # the reader's type inference, which turns an all-digits column (a year, a
+    # zero-padded id, money as exported) into int/float and fails the stage against
+    # its own output_schema. Only `str` is pinned: a column declared int/float that
+    # arrives as text is a real mismatch, and validation should still say so. Names
+    # the source doesn't carry — an over-declared schema, or the xlsx
+    # source_row_column added after the read — are ignored by every reader here.
+    schema = stage.output_schema
+    if schema is None:
+        return {}
+    return {name: str for name in schema.find_columns_of_type(STR_COLUMN_TYPE)}
 
 
 def _read_geojson(path: Path) -> pd.DataFrame:
@@ -98,13 +117,18 @@ def _read_geojson(path: Path) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def _read_xlsx(path: Path, params: XlsxReadParams) -> pd.DataFrame:
+def _read_xlsx(
+    path: Path, params: XlsxReadParams, *, str_dtypes: dict[str, type[str]] | None = None
+) -> pd.DataFrame:
     # header_row/first_column are 0-based indices into the sheet as it appears in
     # Excel; rows above and columns left of them are discarded before parsing.
     # sheet_name is str|int (exactly one sheet), so pd.read_excel always hands back
     # a single DataFrame here, never the dict it returns for a None/list sheet_name.
+    # str_dtypes keys on the header row's names, so first_column's later slicing
+    # does not shift it.
     frame = pd.read_excel(
-        path, sheet_name=params.sheet_name, header=params.header_row, engine="openpyxl"
+        path, sheet_name=params.sheet_name, header=params.header_row, engine="openpyxl",
+        dtype=str_dtypes,
     )
     assert isinstance(frame, pd.DataFrame)
     if params.first_column:
