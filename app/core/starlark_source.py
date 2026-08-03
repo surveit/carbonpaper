@@ -1,13 +1,23 @@
-"""Compiling Starlark source and asking what it bound. The interpreter wrapper,
-with no knowledge of stages: what a bound function MEANS is the caller's business."""
+"""Loading Starlark source and asking what it bound. Loading EXECUTES the
+source's top-level statements, not merely compiles them. The interpreter
+wrapper, with no knowledge of stages: what a bound function MEANS is the
+caller's business."""
 from __future__ import annotations
 
 from typing import Callable, Mapping, Sequence
 
 import starlark
 
-_FUNCTION_TYPE_NAME = "function"
-_UNBOUND_TEMPLATE = "Variable `{name}` not found"
+_UNSERIALIZABLE_FUNCTION_MARKER = "not supported on type `function`"
+
+# The function name validation falls back to, and execution falls back to in
+# turn — one definition so the two layers cannot drift apart.
+DEFAULT_FUNCTION_NAME = "transform"
+
+# The builtin name an author calls to refuse a row, injected identically at
+# write-time validation and at execution — one definition so the two layers
+# cannot drift apart.
+REFUSE_BUILTIN = "refuse"
 
 
 def compile_starlark_module(
@@ -27,18 +37,18 @@ def find_bound_function(module: starlark.Module, names: Sequence[str]) -> str | 
 
 
 def _is_bound_function(module: starlark.Module, name: str) -> bool:
-    # `name` is interpolated into a Starlark expression below; a non-identifier
-    # (stage config, not a trusted literal) could otherwise inject arbitrary
-    # Starlark into the probe. Not "unbound" — a malformed name is an error.
+    # Not interpolated into Starlark source (see the `__getitem__` probe below),
+    # but still validated: a malformed name is a config error, not "unbound".
     if not name.isidentifier():
         raise ValueError(f"Not a valid Starlark identifier: {name!r}")
-    # Module has no `get`; indexing an absent name returns None and indexing a
-    # FUNCTION raises. Evaluating `type(name)` as a top-level EXPRESSION is the
-    # only probe that answers this — as a statement, eval returns None instead.
-    probe = starlark.parse("<probe>", f"type({name})")
+    # `module[name]` reads only what THIS module's own top-level statements
+    # bound — unlike evaluating `name` as a Starlark expression, it never falls
+    # back to a standard-library name (`len`, `dict`, `fail`, ...) that the code
+    # never bound itself, and it still sees a name that genuinely shadows one.
+    # A bound function is the one value this binding can't marshal to Python,
+    # so failing to marshal it for exactly that reason is itself the signal.
     try:
-        return starlark.eval(module, probe, starlark.Globals.standard()) == _FUNCTION_TYPE_NAME
+        module[name]
     except starlark.StarlarkError as exc:
-        if _UNBOUND_TEMPLATE.format(name=name) in str(exc):
-            return False
-        raise
+        return _UNSERIALIZABLE_FUNCTION_MARKER in str(exc)
+    return False
