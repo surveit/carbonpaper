@@ -190,8 +190,12 @@ def measure_elapsed_seconds(
     if finished_at:
         end = _read_timestamp(finished_at)
     else:
-        end = datetime.now() if still_running else None
+        end = datetime.now(tz=start.tzinfo) if still_running else None
     if end is None:
+        return None
+    # One stored timestamp carrying an offset and the other not leaves the naive one's
+    # offset unknown, and assuming it would invent the duration.
+    if (start.tzinfo is None) != (end.tzinfo is None):
         return None
     seconds = (end - start).total_seconds()
     return seconds if seconds >= 0 else None
