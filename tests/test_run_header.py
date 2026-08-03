@@ -214,6 +214,23 @@ def test_an_unparseable_timestamp_gets_no_duration():
                                    still_running=False) is None
 
 
+@pytest.mark.parametrize("started_at,finished_at", [
+    ("2026-07-20T21:00:00+00:00", "2026-07-21T13:47:14"),
+    ("2026-07-20T21:00:00", "2026-07-21T13:47:14+00:00"),
+])
+def test_one_timestamp_with_an_offset_and_one_without_gets_no_duration(
+    started_at: str, finished_at: str
+):
+    assert measure_elapsed_seconds(started_at, finished_at,
+                                   still_running=False) is None
+
+
+def test_a_running_run_started_with_an_offset_still_gets_a_duration():
+    seconds = measure_elapsed_seconds("2026-07-20T21:00:00+00:00", None,
+                                      still_running=True)
+    assert seconds is not None and seconds > 0
+
+
 @pytest.mark.parametrize("path,expected", [
     (r"C:\Users\a\data\q2_filings.csv", "q2_filings.csv"),
     ("/tmp/proj/data/a.csv", "a.csv"),
