@@ -8,9 +8,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Hashable, Mapping
 from pathlib import Path
-from collections.abc import Hashable
-from typing import Any
+from typing import Any, cast
 
 import pandas as pd
 
@@ -37,10 +37,13 @@ from .execution import narrow_stage
 _TEXT_ON_DISK_TYPES = frozenset({STR_COLUMN_TYPE, JSON_COLUMN_TYPE, "date", "datetime"})
 _DATE_TYPES = frozenset({"date", "datetime"})
 
-# The formats pandas type-INFERS from untyped values, and so the only ones the
-# declared schema has anything to add to. parquet and xlsx carry real types;
-# geojson is built from json.loads dicts.
-_INFERRING_FORMATS = frozenset({FileFormat.csv, FileFormat.json})
+# The formats pandas type-INFERS, and so the only ones the declared schema has
+# anything to add to. xlsx is one of them: a workbook does type its cells, but
+# pd.read_excel hands openpyxl's values to the same inference csv goes through,
+# so a cell the sheet marks as text still comes back a number. parquet is read
+# through arrow, which hands pandas an already-typed column; geojson is built
+# from json.loads dicts.
+_INFERRING_FORMATS = frozenset({FileFormat.csv, FileFormat.json, FileFormat.xlsx})
 
 
 def preflight_input_data(stage: Stage) -> tuple[list[str], dict[str, Any] | None]:
@@ -88,16 +91,10 @@ def read_input_data(stage: Stage, ctx: RunContext) -> pd.DataFrame:
     elif fmt == FileFormat.geojson:
         df = _read_geojson(path)
     elif fmt == FileFormat.xlsx:
-        df = _read_xlsx(path, XlsxReadParams.model_validate(params))
+        df = _read_xlsx(path, XlsxReadParams.model_validate(params),
+                        dtype=_read_dtype(schema, fmt, params))
     else:
         raise ValueError(f"Unsupported file format: {fmt}")
-
-    # A typed format still has to honour a declared `str`: an xlsx cell holding
-    # 40000 is a real number, but a schema saying that column is text is the
-    # author's statement about the column, not a guess pandas may overrule.
-    for col in _typed_format_str_columns(schema, fmt):
-        if col in df.columns:
-            df[col] = df[col].map(_as_declared_text)
 
     # Optional list-column splitting (e.g., "[a, b]" → ["a", "b"])
     for col in params.get("list_columns", []):
@@ -134,8 +131,11 @@ def _text_on_disk_columns(schema: TableSchema | None, fmt: str) -> list[str]:
         return []
     # csv holds nothing but text, so every text-on-disk type — and `list[X]`, whose
     # cells the `list_columns` path re-reads as text — is pinned to str and typed
-    # afterwards by code that knows the declaration.
-    if fmt == FileFormat.csv:
+    # afterwards by code that knows the declaration. xlsx pins the same set: a cell
+    # holds one scalar, never a real list or dict, and a date pinned to str is
+    # re-read below by pd.to_datetime, which round-trips a genuine Excel date and
+    # rescues a compact YYYYMMDD one that inference would call a number.
+    if fmt in (FileFormat.csv, FileFormat.xlsx):
         return [c.name for c in schema.columns
                 if c.type in _TEXT_ON_DISK_TYPES or c.type.startswith("list[")]
     # json (lines) carries real JSON types, so only `str` is pinned: a JSON string
@@ -147,33 +147,11 @@ def _text_on_disk_columns(schema: TableSchema | None, fmt: str) -> list[str]:
     return []
 
 
-def _as_declared_text(value: Any) -> Any:
-    # A whole number renders without the `.0`: one null anywhere makes the column
-    # float64, so the identifier 2026 arrives as 2026.0 — and "2026.0" is the same
-    # silent corruption as reading "002" as 2.
-    """One cell of a declared-`str` column, as text; nulls pass through."""
-    if value is None or value != value:
-        return value
-    if isinstance(value, float) and value.is_integer():
-        return str(int(value))
-    return str(value)
-
-
-def _typed_format_str_columns(schema: TableSchema | None, fmt: str) -> list[str]:
-    # Only `str`: a declared `list[X]`/`json` column arrives as a real list or dict
-    # that stringifying would corrupt, and every other declared type is what the
-    # file already holds.
-    """Declared `str` columns in a format that carries its own types."""
-    if schema is None or fmt in _INFERRING_FORMATS:
-        return []
-    return [c.name for c in schema.columns if c.type == STR_COLUMN_TYPE]
-
-
 def _date_columns(schema: TableSchema | None, fmt: str, params: dict[str, Any]) -> list[str]:
     """Columns to run through pd.to_datetime: the authored `parse_dates`, then declared dates."""
     columns = list(params.get("parse_dates", []))
-    # Only formats whose values arrive untyped (csv, json) contribute declared
-    # columns — parquet, xlsx and geojson carry real types already.
+    # Only formats pandas type-infers contribute declared columns — parquet and
+    # geojson carry real types already.
     if schema is None or fmt not in _INFERRING_FORMATS:
         return columns
     seen = set(columns)
@@ -200,13 +178,19 @@ def _read_geojson(path: Path) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def _read_xlsx(path: Path, params: XlsxReadParams) -> pd.DataFrame:
+def _read_xlsx(
+    path: Path, params: XlsxReadParams, *, dtype: dict[Hashable, Any] | None = None
+) -> pd.DataFrame:
     # header_row/first_column are 0-based indices into the sheet as it appears in
     # Excel; rows above and columns left of them are discarded before parsing.
     # sheet_name is str|int (exactly one sheet), so pd.read_excel always hands back
     # a single DataFrame here, never the dict it returns for a None/list sheet_name.
+    # dtype keys on the header row's names, so first_column's later slicing cannot
+    # shift it; pandas types this parameter Mapping[str, ...] here and
+    # Mapping[Hashable, ...] on read_csv, and an invariant key blocks one of the two.
     frame = pd.read_excel(
-        path, sheet_name=params.sheet_name, header=params.header_row, engine="openpyxl"
+        path, sheet_name=params.sheet_name, header=params.header_row, engine="openpyxl",
+        dtype=cast("Mapping[str, Any] | None", dtype),
     )
     assert isinstance(frame, pd.DataFrame)
     if params.first_column:
