@@ -82,13 +82,29 @@ def shape_test_views(stage: Optional[Stage]) -> list[dict[str, Any]]:
     if stage is None or not stage.tests:
         return []
     results = run_tests_for_stage(stage)
+    new_columns = _find_new_output_columns(stage)
     return [
-        _shape_one_test(test, result)
+        _shape_one_test(test, result, new_columns)
         for test, result in zip(stage.tests, results)
     ]
 
 
-def _shape_one_test(test: StageTest, result: StageTestResult) -> dict[str, Any]:
+def _find_new_output_columns(stage: Stage) -> list[str]:
+    """The output columns no input declares — what this step adds."""
+    # Read off the declared schemas rather than the example rows: a case with an
+    # empty input would otherwise read as adding every column.
+    upstream = {
+        column.name
+        for stage_input in stage.inputs
+        for column in stage_input.table_schema.columns
+    }
+    declared = stage.output_schema.columns if stage.output_schema else []
+    return [column.name for column in declared if column.name not in upstream]
+
+
+def _shape_one_test(
+    test: StageTest, result: StageTestResult, new_columns: list[str]
+) -> dict[str, Any]:
     return {
         "name": test.name,
         "description": test.description,
@@ -101,7 +117,8 @@ def _shape_one_test(test: StageTest, result: StageTestResult) -> dict[str, Any]:
         # None, not an empty table: a failure case claims the step must fail, which
         # the template must not render as "succeeded, returned nothing".
         "expected": None if test.expected is None else {
-            "columns": _list_row_columns(test.expected), "rows": test.expected
+            "columns": _list_row_columns(test.expected), "rows": test.expected,
+            "new_columns": new_columns,
         },
         "diffs": [
             {"row": diff.row, "column": diff.column,

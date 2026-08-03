@@ -1988,6 +1988,12 @@ html[data-diagram-clickable] .mermaid g.node.clickable { cursor: pointer; }
 .test-status-malformed { background: var(--belief-stale-bg); color: #7a4a00; border-color: var(--belief-stale-bd); }
 .test-rows { border-collapse: collapse; margin: 0.3rem 0 0.6rem; }
 .test-rows th, .test-rows td { border: 1px solid var(--border); padding: 0.15rem 0.5rem; font-size: 0.85rem; }
+/* A column the step ADDS: in its output schema, in none of its input schemas. Tinted
+   the full height of the column so the eye separates produced values from carried-through
+   ones in one pass; the caption names the same columns for a reader who cannot see the tint. */
+.test-rows th.test-col-new { background: #dde9fb; }
+.test-rows td.test-col-new { background: #eef4fe; }
+.test-rows caption { caption-side: top; text-align: left; font-size: 0.78rem; color: var(--muted); padding-bottom: 2px; }
 .test-message { color: #802020; }
 .node-review-full .nr-edit-hint { margin: 0 0 10px; }
 
