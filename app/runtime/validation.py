@@ -49,10 +49,10 @@ assert set(CELL_TYPE_PREDICATES) == SCALAR_COLUMN_TYPES, (
     f"SCALAR_COLUMN_TYPES: {SCALAR_COLUMN_TYPES ^ set(CELL_TYPE_PREDICATES)}"
 )
 
-# How many offending values to name in an Issue message.
-_OFFENDER_SAMPLE_N = 3
-# How many of a column's declared enum values to quote back as the vocabulary.
-_VOCABULARY_SAMPLE_N = 8
+# How many offending values to name in an Issue message. A column's declared
+# vocabulary is NOT sampled — an enum issue names the whole set, and where that
+# is too long to show is the display's call, not this layer's.
+_OFFENDER_SAMPLE_N = 10
 
 
 class Severity(str, Enum):
@@ -234,12 +234,10 @@ def _find_enum_issues(series: pd.Series, col: Column) -> list[Issue]:
     distinct = list(offending.unique())
     sample = ", ".join(repr(v) for v in distinct[:_OFFENDER_SAMPLE_N])
     ellipsis = "…" if len(distinct) > _OFFENDER_SAMPLE_N else ""
-    vocabulary = sorted(allowed)[:_VOCABULARY_SAMPLE_N]
-    unshown = "…" if len(allowed) > _VOCABULARY_SAMPLE_N else ""
     return [
         Issue(
             "error", col.name,
-            f"{len(offending)} value(s) outside enum {vocabulary}{unshown} "
+            f"{len(offending)} value(s) outside enum {sorted(allowed)} "
             f"(e.g. {sample}{ellipsis})",
         )
     ]

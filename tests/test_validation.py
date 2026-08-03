@@ -50,21 +50,23 @@ def test_enum_error_names_the_distinct_offenders_not_the_repeats():
 
 def test_enum_error_truncates_a_long_offender_list():
     schema = _schema(columns=[{"name": "status", "type": "str", "enum": ["open"]}])
-    df = pd.DataFrame({"status": ["a", "b", "c", "d"]})
+    df = pd.DataFrame({"status": [f"v{n}" for n in range(11)]})
     _, issues = _issues_for("status", df, schema)
     assert issues[0].message == (
-        "4 value(s) outside enum ['open'] (e.g. 'a', 'b', 'c'…)"
+        "11 value(s) outside enum ['open'] (e.g. 'v0', 'v1', 'v2', 'v3', 'v4', "
+        "'v5', 'v6', 'v7', 'v8', 'v9'…)"
     )
 
 
-def test_enum_error_truncates_a_long_vocabulary():
+def test_enum_error_names_the_whole_vocabulary_however_long():
+    """The set is never sampled — what is too long to show is the display's call."""
     vocabulary = [f"v{n}" for n in range(9)]
     schema = _schema(columns=[{"name": "status", "type": "str", "enum": vocabulary}])
     df = pd.DataFrame({"status": ["nope"]})
     _, issues = _issues_for("status", df, schema)
     assert issues[0].message == (
-        "1 value(s) outside enum ['v0', 'v1', 'v2', 'v3', 'v4', 'v5', 'v6', 'v7']… "
-        "(e.g. 'nope')"
+        "1 value(s) outside enum "
+        "['v0', 'v1', 'v2', 'v3', 'v4', 'v5', 'v6', 'v7', 'v8'] (e.g. 'nope')"
     )
 
 
@@ -175,9 +177,12 @@ def test_bool_column_holding_strings_errors():
 
 def test_type_mismatch_sample_is_truncated():
     schema = _schema(columns=[{"name": "n", "type": "int"}])
-    df = pd.DataFrame({"n": ["a", "b", "c", "d"]})
+    df = pd.DataFrame({"n": [f"v{n}" for n in range(11)]})
     _, issues = _issues_for("n", df, schema)
-    assert issues[0].message == "4 value(s) not of declared type 'int' (e.g. 'a', 'b', 'c'…)"
+    assert issues[0].message == (
+        "11 value(s) not of declared type 'int' (e.g. 'v0', 'v1', 'v2', 'v3', 'v4', "
+        "'v5', 'v6', 'v7', 'v8', 'v9'…)"
+    )
 
 
 def test_nulls_are_not_reported_as_type_mismatches():
