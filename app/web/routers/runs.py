@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import mimetypes
 import traceback
 from dataclasses import dataclass
 from pathlib import Path
@@ -15,6 +16,7 @@ from typing import Any, AsyncIterator
 from fastapi import APIRouter, File, Form, HTTPException, Request, Response, UploadFile
 from fastapi.datastructures import FormData
 from fastapi.responses import (
+    FileResponse,
     HTMLResponse,
     JSONResponse,
     RedirectResponse,
@@ -714,14 +716,21 @@ async def run_stage_scratch_preview(
     return JSONResponse({"ok": True, **result})
 
 
-@router.get("/project/{project}/runs/{run_id}/artifact/{filename:path}", response_class=HTMLResponse)
+@router.get("/project/{project}/runs/{run_id}/artifact/{filename:path}")
 async def run_artifact(project: str, run_id: str, filename: str):
-    """Serve generated HTML artifacts (per-org profiles etc.) inline."""
+    # A publish stage writes whatever its format says — an .xlsx workbook as
+    # readily as an HTML profile — so decoding every artifact as text answers a
+    # binary one with a UnicodeDecodeError.
+    """Serve a run's artifact: HTML inline, anything else as its own file type."""
     run_dir = runs_dir(project) / run_id
     candidate = (run_dir / "artifacts" / filename).resolve()
     if not candidate.exists() or not str(candidate).startswith(str(run_dir.resolve())):
         raise HTTPException(status_code=404, detail="Artifact not found")
-    return HTMLResponse(content=candidate.read_text(encoding="utf-8"))
+    media_type, _ = mimetypes.guess_type(candidate.name)
+    if media_type == "text/html":
+        return HTMLResponse(content=candidate.read_text(encoding="utf-8"))
+    return FileResponse(candidate, media_type=media_type or "application/octet-stream",
+                        filename=candidate.name)
 
 
 @router.post("/project/{project}/runs/{run_id}/resume")
