@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Sequence
 
 from app.models import StageDraft, parse_stage
+from app.models.stages.code import SUMMARY_MAX_CHARS
 from app.models.workflow import (
     detect_cycle,
     sort_stages_by_dependency,
@@ -124,7 +125,15 @@ def _find_description_issues(candidate: dict) -> list[str]:
         if not isinstance(block, dict):
             continue
         issues = []
-        if not (block.get("summary") or "").strip():
+        summary = (block.get("summary") or "").strip()
+        if len(summary) > SUMMARY_MAX_CHARS:
+            issues.append(
+                f"`{block_name}.summary` is {len(summary)} characters; the limit is "
+                f"{SUMMARY_MAX_CHARS}. A summary a non-engineer will actually read is "
+                f"short — state the rule and stop. Anything conditional or surprising "
+                f"belongs in `corner_cases`, which has no limit."
+            )
+        if not summary:
             issues.append(
                 f"`{block_name}.summary` is required: this stage's behaviour is authored "
                 f"code, and the person reviewing it reads prose, not Python. Write one "
