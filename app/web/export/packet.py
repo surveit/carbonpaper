@@ -13,9 +13,10 @@ from app.services.loader import stage_to_spec_dict
 from app.services.review_packet import ReviewPacket
 from app.services.review_packet.checksums import write_checksums
 from app.services.review_packet.data import write_packet_data
-from app.services.review_packet.views import build_run_view
+from app.services.review_packet.views import RunView, build_run_view
 from app.services.run_guide import RunGuideView, build_run_guide_view
 from app.services.workspace import resolve_project_dir
+from app.web.diagrams import build_mermaid_graph
 from app.web.export.pages import write_packet_pages
 
 
@@ -31,7 +32,14 @@ def export_review_packet(project: str, run_id: str, dest_root: Path) -> ReviewPa
     root = dest_root / f"{project}-{run_id}"
     root.mkdir(parents=True, exist_ok=True)
     data = write_packet_data(root, run_dir, project_dir, view, workflow)
-    pages = write_packet_pages(root, run_dir, view, data, _load_guide(project, manifest))
+    pages = write_packet_pages(
+        root,
+        run_dir,
+        view,
+        data,
+        _load_guide(project, manifest),
+        _build_diagram(stages, project, view),
+    )
     checksums = write_checksums(root)
 
     return ReviewPacket(
@@ -41,6 +49,15 @@ def export_review_packet(project: str, run_id: str, dest_root: Path) -> ReviewPa
         files=sorted([*data.written, *pages, checksums]),
         omitted=data.omitted,
     )
+
+
+def _build_diagram(stages: list[Stage], project: str, view: RunView) -> str:
+    """The run's workflow flowchart; empty when the pinned version was unreadable."""
+    # The index then draws no graph at all, rather than an empty one.
+    if not stages:
+        return ""
+    statuses = {s.stage_id: s.status for s in view.stages}
+    return build_mermaid_graph(stages, project, status_by_id=statuses)
 
 
 def _load_guide(project: str, manifest: dict[str, Any]) -> RunGuideView | None:

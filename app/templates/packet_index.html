@@ -23,6 +23,36 @@
 </section>
 {% endif %}
 
+{% if mermaid %}
+<section>
+  <h2>The workflow this run executed</h2>
+  <p class="muted packet-note">Click a step to open it.
+    <strong>This diagram is the only thing in this packet that reaches the internet</strong> —
+    it draws with <a href="{{ mermaid_url }}">mermaid</a> from a CDN, pinned to one exact version
+    and checked against a hash, so a substituted file will not run. Open this folder with the
+    network off and you lose the picture and nothing else; the same flowchart is in
+    <a href="{{ diagram_source_href }}">{{ diagram_source_href }}</a> as text.</p>
+  <pre class="mermaid">
+{{ mermaid }}
+  </pre>
+</section>
+<script src="{{ node_script }}"></script>
+<script src="{{ mermaid_url }}" integrity="{{ mermaid_sri }}" crossorigin="anonymous"></script>
+<script>
+  // mermaid resolves the graph's `click … call dvNode(…)` binding by name at click
+  // time; diagram_nodes.js re-broadcasts it, and subscribing is what makes the node
+  // clickable. In the packet a click navigates, there being no panel to load into.
+  if (window.mermaid) {
+    mermaid.initialize({ startOnLoad: true, theme: "default", securityLevel: "loose" });
+  }
+  if (window.onDiagramNode) {
+    onDiagramNode(function (stageId) {
+      location.href = "{{ stages_dir }}/" + encodeURIComponent(stageId) + ".html";
+    });
+  }
+</script>
+{% endif %}
+
 <section class="packet-caveats">
   <h2>What this packet cannot tell you</h2>
   <ul>

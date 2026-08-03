@@ -162,10 +162,37 @@ def _markup_of(page) -> str:
     return _SCRIPT_BODY.sub(r"\1\2", page.read_text(encoding="utf-8"))
 
 
-def test_pages_reference_no_network_url(exported):
-    """The packet opens from disk, so nothing may resolve against a host."""
+# The packet reaches the network for exactly one thing: the diagram renderer.
+# Everything else — data, records, workflow, panels, styles — is local, so a
+# reader can open the folder with the network off and lose only the picture.
+# Loading it is a deliberate call (the reader is a data fact-checker at a
+# publication, not a source), and SRI is what makes it safe: a substituted file
+# fails the hash and does not execute.
+_ALLOWED_EXTERNAL = "https://cdn.jsdelivr.net/npm/mermaid@11.16.0/dist/mermaid.min.js"
+
+
+def test_only_the_diagram_renderer_reaches_the_network(exported):
+    """One permitted external URL; anything else means the packet stopped being self-contained."""
     for page in exported.root.rglob("*.html"):
-        assert not re.search(r'(?:href|src)="(?:https?:)?//', _markup_of(page)), page
+        for url in re.findall(r'(?:href|src)="((?:https?:)?//[^"]*)"', _markup_of(page)):
+            assert url == _ALLOWED_EXTERNAL, f"{page.name} reaches {url}"
+
+
+def test_the_one_external_script_is_pinned_and_hash_checked(exported):
+    """No integrity+crossorigin and a compromised CDN executes in the reader's browser."""
+    index = (exported.root / "index.html").read_text(encoding="utf-8")
+    tag = re.search(r"<script[^>]*cdn\.jsdelivr[^>]*>", index)
+    assert tag, "no diagram renderer tag on the index"
+    assert 'integrity="sha384-' in tag.group(0)
+    assert 'crossorigin="anonymous"' in tag.group(0)
+    assert "mermaid@11.16.0" in tag.group(0), "version must be pinned, not floating"
+
+
+def test_the_diagram_survives_the_link_rotting(exported):
+    """A URL is not archival, so the flowchart also travels as text."""
+    source = (exported.root / "workflow.mmd").read_text(encoding="utf-8")
+    assert "flowchart" in source
+    assert "double" in source
 
 
 def test_pages_reference_no_root_relative_url(exported):
@@ -196,6 +223,8 @@ def test_every_referenced_asset_exists_in_the_packet(exported):
     """Each stylesheet and page link resolves to a file that is actually here."""
     for page in exported.root.rglob("*.html"):
         for href in re.findall(r'(?:href|src)="([^"#?]+)"', _markup_of(page)):
+            if href.startswith(("http://", "https://", "//")):
+                continue  # covered by the two external-URL tests above
             target = (page.parent / href).resolve()
             assert target.exists(), f"{page.name} -> {href}"
 

@@ -24,6 +24,16 @@ STYLESHEETS = (APP_STYLESHEET, PACKET_STYLESHEET)
 _APP_STATIC = Path(__file__).resolve().parents[2] / "static"
 _PACKET_STATIC = Path(__file__).parent / "static"
 
+# The node-click dispatcher, vendored so the packet's graph nodes are live.
+NODE_SCRIPT = "diagram_nodes.js"
+
+# The diagram renderer is the packet's ONE external request; the index says so.
+# Version-pinned rather than `mermaid@11`, so the URL and the hash cannot drift
+# apart: a floating tag would start failing SRI the day jsDelivr serves 11.17.
+MERMAID_URL = "https://cdn.jsdelivr.net/npm/mermaid@11.16.0/dist/mermaid.min.js"
+MERMAID_SRI = "sha384-T/0lMUdJpd2S1ZHtRiofG3htU3xPCrFVeAQ1UUE2TJwlEJSV5NUwn30kP28n238E"
+WORKFLOW_DIAGRAM_FILE = "workflow.mmd"
+
 
 def write_packet_pages(
     root: Path,
@@ -31,17 +41,24 @@ def write_packet_pages(
     view: RunView,
     data: DataReport,
     guide: RunGuideView | None,
+    diagram: str,
 ) -> list[str]:
-    """index.html, one page per stage, and the stylesheets; returns their paths."""
+    """index.html, one page per stage, the stylesheets and the diagram source."""
     written = _write_stylesheets(root)
-    written.append(_write_index(root, view, data, guide))
+    written.append(_write_node_script(root))
+    written.append(_write_diagram_source(root, diagram))
+    written.append(_write_index(root, view, data, guide, diagram))
     for stage in view.stages:
         written.append(_write_stage_page(root, run_dir, view, stage))
     return written
 
 
 def _write_index(
-    root: Path, view: RunView, data: DataReport, guide: RunGuideView | None
+    root: Path,
+    view: RunView,
+    data: DataReport,
+    guide: RunGuideView | None,
+    diagram: str,
 ) -> str:
     html = _render(
         "packet_index.html",
@@ -53,10 +70,27 @@ def _write_index(
         checksums_href=CHECKSUMS_FILE,
         project=view.project,
         links=PacketPanelLinks(),
+        mermaid=diagram,
+        mermaid_url=MERMAID_URL,
+        mermaid_sri=MERMAID_SRI,
+        diagram_source_href=WORKFLOW_DIAGRAM_FILE,
+        node_script=f"{ASSETS_DIR}/{NODE_SCRIPT}",
         type_glyph=TYPE_GLYPH,
         type_class=TYPE_CLASS,
     )
     return _write(root / "index.html", html, "index.html")
+
+
+def _write_diagram_source(root: Path, diagram: str) -> str:
+    """The flowchart as text, so the diagram outlives the CDN link rotting."""
+    return _write_text(root / WORKFLOW_DIAGRAM_FILE, diagram, WORKFLOW_DIAGRAM_FILE)
+
+
+def _write_node_script(root: Path) -> str:
+    relative = f"{ASSETS_DIR}/{NODE_SCRIPT}"
+    return _write_text(
+        root / relative, (_APP_STATIC / NODE_SCRIPT).read_text(encoding="utf-8"), relative
+    )
 
 
 def _write_stage_page(root: Path, run_dir: Path, view: RunView, stage: StageView) -> str:
@@ -130,8 +164,12 @@ def _render(template: str, **context: Any) -> str:
 
 
 def _write(dest: Path, html: str, relative: str) -> str:
+    return _write_text(dest, html, relative)
+
+
+def _write_text(dest: Path, text: str, relative: str) -> str:
     dest.parent.mkdir(parents=True, exist_ok=True)
-    dest.write_text(html, encoding="utf-8")
+    dest.write_text(text, encoding="utf-8")
     return relative
 
 
