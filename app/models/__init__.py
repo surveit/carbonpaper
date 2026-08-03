@@ -65,12 +65,12 @@ from app.models.stages.code import PythonFunction as PythonFunction
 from app.models.stages.stage_tests import StageTest as StageTest
 from app.models.workflow import (
     Workflow as Workflow,
-    validate_inputs_resolve as validate_inputs_resolve,
-    validate_unique_ids as validate_unique_ids,
     detect_cycle as detect_cycle,
-    validate_publish_is_terminal as validate_publish_is_terminal,
-    validate_edge_schemas as validate_edge_schemas,
     parse_workflow as parse_workflow,
+    validate_edge_schemas as validate_edge_schemas,
+    validate_inputs_resolve as validate_inputs_resolve,
+    validate_publish_is_terminal as validate_publish_is_terminal,
+    validate_unique_ids as validate_unique_ids,
     validate_workflow as validate_workflow,
     validate_workflow_draft as validate_workflow_draft,
 )
@@ -79,12 +79,12 @@ from app.models.named_schemas import (
     NamedSchema as NamedSchema,
     SchemaKind as SchemaKind,
     SchemaLibrary as SchemaLibrary,
-    validate_references_resolve as validate_references_resolve,
-    validate_unique_schema_names as validate_unique_schema_names,
     parse_reference as parse_reference,
     parse_schema_library as parse_schema_library,
     validate_named_schema as validate_named_schema,
+    validate_references_resolve as validate_references_resolve,
     validate_schema_library as validate_schema_library,
+    validate_unique_schema_names as validate_unique_schema_names,
 )
 from app.models.table import TableRef as TableRef
 from app.models.eval import (
