@@ -70,6 +70,13 @@ def preflight_input_data(stage: Stage) -> tuple[list[str], dict[str, Any] | None
 
 
 def read_input_data(stage: Stage, ctx: RunContext) -> pd.DataFrame:
+    # The registry-shaped handler: `ctx` is part of the uniform (stage, ctx)
+    # signature but plays no part in reading a file, so the whole read lives in
+    # load_input_frame — which app.runtime.observation calls context-free.
+    return load_input_frame(stage)
+
+
+def load_input_frame(stage: Stage) -> pd.DataFrame:
     input_stage = narrow_stage(stage, InputDataStage)
     params = input_stage.connector.params
 

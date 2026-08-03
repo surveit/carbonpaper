@@ -58,7 +58,7 @@ def test_allowed_names_cover_every_tool(examples_root: Path) -> None:
     _server, allowed, _tools = _build("congresswatch")
     specs = make_editing_tools(EditingContext(project_id="congresswatch"))
     assert set(allowed) == {f"mcp__tools__{spec.name}" for spec in specs}
-    assert len(allowed) == 14
+    assert len(allowed) == 15
 
 
 def test_read_stage_handler_returns_text_content(examples_root: Path) -> None:
@@ -230,3 +230,50 @@ def test_as_content_serializes_a_pydantic_model_to_its_fields() -> None:
 
     out = as_tool_content(_Sample(ok=True, label="draft"))
     assert json.loads(out["content"][0]["text"]) == {"ok": True, "label": "draft"}
+
+
+def _seed_bound_input(examples: Path, tmp_path: Path, name: str, csv_text: str) -> None:
+    """A project whose single input_data stage is bound to a real csv on disk."""
+    csv = tmp_path / f"{name}.csv"
+    csv.write_text(csv_text, encoding="utf-8")
+    compiled = examples / name / "compiled"
+    compiled.mkdir(parents=True, exist_ok=True)
+    stage = {
+        "id": "load", "name": "Load rows", "type": "input_data",
+        "connector": {"kind": "file", "params": {"path": str(csv)}},
+        "output_schema": {"columns": [{"name": "status", "type": "str"}]},
+    }
+    (compiled / "01_load.json").write_text(json.dumps(stage), encoding="utf-8")
+
+
+def test_list_distinct_values_answers_from_the_bound_file(
+    examples_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.runtime.observation import profile_input_stage
+    from app.services import observation
+
+    _seed_bound_input(examples_root, tmp_path, "permits", "status\nfiled\ngranted\nfiled\n")
+    monkeypatch.setattr(observation, "_input_profiler", profile_input_stage)
+
+    _server, _allowed, tools = _build("permits")
+    tool = next(t for t in tools if t.name == "list_distinct_values")
+    out = _call(tool, {"project_id": "permits", "stage_id": "load", "column": "status"})
+    profile = json.loads(out["content"][0]["text"])
+    assert profile["values"] == ["filed", "granted"]
+    assert profile["distinct_count"] == 2
+
+
+def test_list_distinct_values_unknown_column_is_a_tool_error(
+    examples_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.runtime.observation import profile_input_stage
+    from app.services import observation
+
+    _seed_bound_input(examples_root, tmp_path, "permits", "status\nfiled\n")
+    monkeypatch.setattr(observation, "_input_profiler", profile_input_stage)
+
+    _server, _allowed, tools = _build("permits")
+    tool = next(t for t in tools if t.name == "list_distinct_values")
+    out = _call(tool, {"project_id": "permits", "stage_id": "load", "column": "nope"})
+    assert out.get("is_error") is True
+    assert "status" in out["content"][0]["text"]  # names the observed columns

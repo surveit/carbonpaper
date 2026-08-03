@@ -68,6 +68,7 @@ def test_mcp_lists_the_authoring_tools(client):
         "edit_stage",
         "add_stage",
         "remove_stage",
+        "list_distinct_values",
         "generate_stage_tests",
         "run_stage_tests",
         "save_version",

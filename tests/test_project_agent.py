@@ -15,6 +15,7 @@ _EXPECTED_TOOL_NAMES = {
     "edit_stage",
     "add_stage",
     "remove_stage",
+    "list_distinct_values",
     "create_draft",
     "read_draft",
     "set_draft_stage",

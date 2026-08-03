@@ -12,9 +12,10 @@ from pydantic import BaseModel
 
 from app.core.agent.bound_tool import BoundToolSpec
 from app.models import StageDraft
+from app.models.observation import ColumnValueProfile
 from app.models.review_guide import ReviewGuideDraft
 from app.services.versioning import ReviewGuide
-from app.services import drafts, project as project_service
+from app.services import drafts, observation, project as project_service
 from app.tools.tool_specs import SAVE_VERSION_FROM_DRAFT, TOOL_SPECS
 from app.services.drafts import DraftDetail, DraftEdit, DraftView, SaveResult
 
@@ -49,6 +50,11 @@ def make_editing_tools(ctx: EditingContext) -> list[BoundToolSpec]:
         result = project_service.remove_stage(project_id, stage_id)
         return {"ok": result.ok, "issues": result.issues}
 
+    def list_distinct_values(
+        project_id: str, stage_id: str, column: str
+    ) -> ColumnValueProfile:
+        return observation.observed_column_profile(project_id, stage_id, column)
+
     def create_draft(project_id: str, from_version: str = "") -> DraftView:
         return drafts.create_draft(project_id, from_version=from_version or None)
 
@@ -80,6 +86,7 @@ def make_editing_tools(ctx: EditingContext) -> list[BoundToolSpec]:
         edit_stage,
         add_stage,
         remove_stage,
+        list_distinct_values,
         create_draft,
         read_draft,
         set_draft_stage,
@@ -147,6 +154,19 @@ TOOL_SCHEMAS: dict[str, ToolInputSchema] = {
             str,
             "The id of the stage to delete from the workflow. Refused if another "
             "stage still lists it in its inputs.",
+        ],
+    },
+    "list_distinct_values": {
+        "project_id": Annotated[str, "The project id (call get_current_project first)."],
+        "stage_id": Annotated[
+            str,
+            "The id of the input_data stage whose bound file to observe — it must "
+            "already carry a file (connector params.path).",
+        ],
+        "column": Annotated[
+            str,
+            "The column to profile, as named in the file. A column the file does "
+            "not hold is a loud error naming the ones it does.",
         ],
     },
     "create_draft": {
@@ -227,6 +247,7 @@ TOOL_LABELS: dict[str, str] = {
     "edit_stage": "Editing a stage",
     "add_stage": "Adding a stage",
     "remove_stage": "Removing a stage",
+    "list_distinct_values": "Reading a column's observed values",
     "create_draft": "Starting a draft",
     "read_draft": "Reading the draft",
     "set_draft_stage": "Editing the draft",

@@ -5,6 +5,37 @@ different operations — see SAVE_VERSION_* below."""
 from __future__ import annotations
 
 from app.core.agent.tool_spec import ToolSpec
+from app.models.observation import DISTINCT_FULL_SET_CAP
+
+# How to use list_distinct_values when declaring a column's schema — shared by the
+# editing agent's system prompt and the glassbox instructions, held once so the two
+# surfaces cannot drift on when a vocabulary deserves freezing. Both prompts embed
+# it verbatim; tests assert the embedding.
+OBSERVED_ENUM_GUIDANCE = """\
+Declaring enums from observed data: before settling the schema of a column that
+looks categorical (a status, a category, a reason code), call
+list_distinct_values(project_id, stage_id, column) against the input_data stage
+whose bound file carries it — the real file's observed vocabulary, not the
+document's guess. (The stage must already exist with its file bound; add it,
+observe, then tighten its schema with edit_stage.) Then DECIDE, per column,
+whether to freeze the observed set as the column's `enum`. Your declaration is
+the maintenance surface a NON-ENGINEER data owner lives with: an enum on an LLM
+stage's output compiles into the reply model, so an out-of-vocabulary answer is
+refused outright; on data that drifts, a run's validation report tells the owner
+their data now holds a value the workflow has only ever seen alongside the
+declared set, for a human to review. So freeze exactly the sets whose GROWTH
+should stop and be reviewed, and leave open the ones that legitimately grow.
+- Freeze: a `permit_status` column observing 3 distinct values across 12,000
+  rows — filed | granted | denied — the very statuses the methodology reasons
+  about. A fourth status appearing means the source changed underneath the
+  workflow; declare enum: ["filed", "granted", "denied"] so that surfaces
+  instead of flowing through unexamined.
+- Leave open: a `city` column observing 38 distinct values. Small, but not
+  closed — next month's export may legitimately name a new city, and stopping
+  the run for it would be noise. Leave it a bare `str`.
+An enum never replaces guard code: a rule a declaration cannot state (a
+cross-column consistency rule, normalization before comparison) still belongs
+in the stage's authored code."""
 
 TOOL_SPECS: dict[str, ToolSpec] = {
     "add_stage": ToolSpec(
@@ -132,6 +163,19 @@ The current manifest of one production run as a dict: its overall status
 (running / ok / errors / halted), per-stage statuses, and run metadata. Poll
 this after run_workflow to follow progress and see the outcome. An unknown or
 expired run_id returns {ok: False, error} rather than a fabricated status.""",
+    ),
+    "list_distinct_values": ToolSpec(
+        name="list_distinct_values",
+        description=f"""\
+The observed distinct values of ONE column in an input_data stage's bound
+file — read from the real file, never from the methodology's prose. Reports
+row_count, null_count, distinct_count, and either `values` (the COMPLETE
+observed set, when {DISTINCT_FULL_SET_CAP} or fewer) or `sample` (a taste of
+a larger set — never the whole vocabulary). Consult it before deciding
+whether a column's schema should freeze its vocabulary as an `enum`; your
+instructions say how to decide. Fails loudly — never inventing a value —
+when the stage has no bound file, the file is missing, or the column does
+not exist in it.""",
     ),
     "list_projects": ToolSpec(
         name="list_projects",

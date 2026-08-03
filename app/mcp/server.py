@@ -27,13 +27,19 @@ from app.models import (
     StageType,
 )
 from app.models.authoring_lifecycle_note import AUTHORING_LIFECYCLE_GUIDANCE
-from app.tools.tool_specs import SAVE_VERSION_FROM_WORKING_COPY, TOOL_SPECS
+from app.tools.tool_specs import (
+    OBSERVED_ENUM_GUIDANCE,
+    SAVE_VERSION_FROM_WORKING_COPY,
+    TOOL_SPECS,
+)
 from app.models.review_guide import ReviewGuideDraft
 from app.services.versioning import ReviewGuide
 from app.models.stages.node_types import NODE_TYPES
 from app.runtime import stage_tests
+from app.runtime.observation import profile_input_stage
 from app.services import generation
 from app.services import loader
+from app.services import observation
 from app.services import project as project_service
 from app.services import run as run_service
 from app.services import versioning
@@ -61,6 +67,12 @@ _RUN_TOOL_ERRORS = (
 # project with no compiled workflow to snapshot.
 # Anything outside this set propagates as a genuine internal fault.
 _STAGE_TOOL_ERRORS = (WorkflowLoadError, FileNotFoundError)
+
+# The observation seam: services must not import the runtime, so this surface —
+# a composition root the import contracts allow to import app.runtime — injects
+# the frame profiler at import time (app.web.routers.editing does the same for
+# the editing agent). See app.services.observation.
+observation.set_input_profiler(profile_input_stage)
 
 
 def _render_node_type_constraints() -> str:
@@ -115,6 +127,8 @@ run_workflow.)
    edit_stage(project_id, stage_id, changes_json) to change only the fields you name (a
    JSON Merge Patch), remove_stage(project_id, stage_id) to undo a stage you added
    (refused while another stage still lists it in `inputs`).
+
+{OBSERVED_ENUM_GUIDANCE}
 
 # The review guide, and why it exists
 A workflow you author is not self-explaining. The human who owns the methodology has to
@@ -313,6 +327,13 @@ def add_stage(project_id: str, stages: list[StageDraft]) -> dict[str, Any]:
 @mcp.tool(description=TOOL_SPECS["remove_stage"].description)
 def remove_stage(project_id: str, stage_id: str) -> dict[str, Any]:
     return catch_stage_edit_refusals(lambda: project_service.remove_stage(project_id, stage_id))
+
+
+@mcp.tool(description=TOOL_SPECS["list_distinct_values"].description)
+def list_distinct_values(project_id: str, stage_id: str, column: str) -> dict[str, Any]:
+    _resolve_existing_project(project_id)  # loud if the project doesn't exist
+    profile = observation.observed_column_profile(project_id, stage_id, column)
+    return profile.model_dump(mode="json", exclude_none=True)
 
 
 def catch_stage_edit_refusals(edit: Callable[[], EditStageResult]) -> dict[str, Any]:
