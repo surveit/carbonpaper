@@ -13,7 +13,10 @@ from app.core.agent.store import SessionStore
 from app.core.agent.turns import TurnManager
 from app.core.errors import GenerationError
 from app.models import TableSchema
-from app.models.stages.stage_tests import build_stage_tests_model
+from app.models.stages.stage_tests import (
+    PythonRowFunctionStageTest,
+    build_stage_tests_model,
+)
 
 _IN_SCHEMA = {"columns": [{"name": "amount", "type": "float", "nullable": False}]}
 _OUT_SCHEMA = {"columns": [
@@ -26,7 +29,7 @@ def _suite_model(output_schema: dict = _OUT_SCHEMA) -> Any:
     """The suite model for the `double` stage: one input `load` carrying
     _IN_SCHEMA, a python_row_function so each test is one row in / one row out."""
     return build_stage_tests_model(
-        "python_row_function",
+        PythonRowFunctionStageTest,
         {"load": TableSchema.model_validate(_IN_SCHEMA)},
         TableSchema.model_validate(output_schema),
     )
@@ -107,9 +110,9 @@ def test_finish_with_no_answer_raises(tmp_path: Path):
 
 
 def test_finish_with_empty_suite_raises(tmp_path: Path):
-    """`{"tests": []}` validates as a suite (validate_stage_tests short-circuits on an
-    empty list), but writing it through would wipe any existing tests while reporting
-    success. The completion hook must reject it before it reaches stage_edit."""
+    """`{"tests": []}` validates as a suite (there is no case to refuse), but writing it
+    through would wipe any existing tests while reporting success. The completion hook
+    must reject it before it reaches stage_edit."""
     project_dir = tmp_path / "demo"
     _seed_project(project_dir, existing_tests=[{
         "name": "old_case",

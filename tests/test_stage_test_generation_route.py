@@ -15,7 +15,10 @@ import app.compiler.stage_tests as compiler_stage_tests
 from app.core.agent.store import SessionStore
 from app.core.agent.turns import TurnManager
 from app.models import TableSchema
-from app.models.stages.stage_tests import build_stage_tests_model
+from app.models.stages.stage_tests import (
+    PythonRowFunctionStageTest,
+    build_stage_tests_model,
+)
 from app.main import app
 from app.services import workspace
 
@@ -60,7 +63,7 @@ def _valid_suite() -> Any:
     """A validated StageTestSuite for the `double` stage's shape (one input
     `load`, a python_row_function so each test is one row in / one row out)."""
     suite_model = build_stage_tests_model(
-        "python_row_function",
+        PythonRowFunctionStageTest,
         {"load": TableSchema.model_validate(_IN_SCHEMA)},
         TableSchema.model_validate(_OUT_SCHEMA),
     )

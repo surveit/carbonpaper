@@ -15,6 +15,7 @@ from app.core.agent.agent import Agent
 from app.core.agent.store import open_session_store
 from app.core.agent.turns import default_turn_manager
 from app.models import Stage
+from app.models.stage_base import find_stage_test_class
 from app.models.stages.stage_tests import build_stage_tests_model
 
 
@@ -84,7 +85,7 @@ def build_stage_test_deriver(
     return Agent(
         system_prompt=STAGE_TESTS_SYSTEM_PROMPT,
         target_schema=build_stage_tests_model(
-            stage.type,
+            find_stage_test_class(type(stage)),
             {ref.id: ref.table_schema for ref in stage.inputs},
             stage.output_schema,
         ),

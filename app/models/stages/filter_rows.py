@@ -3,6 +3,7 @@ subset of its single input's rows unchanged, so a declared output_schema must
 equal the input schema."""
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import ClassVar, Literal, Optional
 
 from pydantic import Field, model_validator
@@ -17,6 +18,7 @@ from app.models.stages.code import (
     CornerCase,
     validate_inline_function_code,
 )
+from app.models.stages.stage_tests import FilterRowsStageTest
 
 
 class FilterConfig(StageConfig):
@@ -73,6 +75,7 @@ class FilterRowsStage(StageBase):
     # Exactly one input: a predicate decides row by row, and two inputs is a
     # join or a python_frame_function.
     inputs: list[StageInput] = Field(default_factory=list, min_length=1, max_length=1)
+    tests: Optional[Sequence[FilterRowsStageTest]] = None
 
     def fingerprint_blocks(self) -> dict[str, StageConfig]:
         return {"filter": self.filter}
