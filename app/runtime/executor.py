@@ -7,7 +7,6 @@ from the production run entry points."""
 from __future__ import annotations
 
 import enum
-import hashlib
 import time
 import traceback
 from datetime import datetime
@@ -18,6 +17,7 @@ import pandas as pd
 import pyarrow.lib as pa_lib
 
 from app.core.errors import SubsetRunError
+from app.core.frame_checks import find_duplicate_row_violations
 from app.models import Stage, StageType, Workflow
 from app.core.run_status import RunStatus, StageStatus
 
@@ -763,38 +763,11 @@ def _final_run_status(stage_statuses: Iterable[str]) -> RunStatus:
 # --- duplicate-input-row rejection (every stage type) ------------------------
 
 
-def _duplicate_row_groups(df: pd.DataFrame) -> list[list[int]]:
-    """Groups of 0-based row positions whose FULL row content is identical.
-    Identity is a content hash over every column's string-rendered value —
-    the declared primary_key plays no part (it is optional and may
-    legitimately duplicate)."""
-    if df is None or len(df) == 0:
-        return []
-    groups: dict[str, list[int]] = {}
-    for pos, cells in enumerate(df.itertuples(index=False, name=None)):
-        # repr() (not str()) so cells of different types with the same face
-        # value ("1" vs 1) stay distinct, and NaN/None/lists all render.
-        rendered = "\x1f".join(repr(c) for c in cells)
-        digest = hashlib.sha1(rendered.encode("utf-8")).hexdigest()
-        groups.setdefault(digest, []).append(pos)
-    return [positions for positions in groups.values() if len(positions) > 1]
-
-
 def _reject_duplicate_input_rows(df: pd.DataFrame, input_id: str, stage_id: str) -> None:
-    """Fail the stage if an input dataframe contains exact duplicate
-    full-content rows. Duplicates at a stage boundary are ambiguous intent —
-    either an upstream bug, or sampling smuggled in implicitly. If N draws
-    per row are intended, the author adds an explicit row_id/draw_id column
-    upstream, making the rows distinct."""
-    dupes = _duplicate_row_groups(df)
-    if not dupes:
+    """Fail the stage if an input frame carries exact duplicate rows."""
+    violations = find_duplicate_row_violations(df)
+    if not violations:
         return
-    shown = "; ".join(f"rows {group}" for group in dupes[:5])
-    more = f" (+{len(dupes) - 5} more group(s))" if len(dupes) > 5 else ""
     raise ValueError(
-        f"Input '{input_id}' to stage '{stage_id}' contains exact duplicate "
-        f"rows: {shown}{more} (0-based row numbers). Duplicates at a stage "
-        "boundary are ambiguous intent — an upstream bug, or sampling smuggled "
-        "in implicitly. If N draws per row are intended, add an explicit "
-        "row_id/draw_id column upstream so the rows are distinct."
+        f"Input '{input_id}' to stage '{stage_id}' contains {violations[0].message}"
     )

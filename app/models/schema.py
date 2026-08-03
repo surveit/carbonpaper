@@ -298,6 +298,21 @@ def _numeric_range(col: Column) -> Optional[tuple[float, float]]:
     return (lo, hi)
 
 
+def _render_primary_key(primary_key: list[str] | None) -> list[str]:
+    """The uniqueness the key states, for a reader building rows. [] when none."""
+    # Without this the key is invisible in the rendered schema, and a reader
+    # asked to build a table of rows has no way to know which of them a real
+    # frame could never hold side by side.
+    if not primary_key:
+        return []
+    if len(primary_key) == 1:
+        return [
+            f"Primary key: {primary_key[0]!r} — no two rows may carry the same value."
+        ]
+    keys = " + ".join(repr(name) for name in primary_key)
+    return [f"Primary key: {keys} — no two rows may carry the same combination."]
+
+
 def _render_column(col: Column, indent: str) -> list[str]:
     """One `"name": <shape> (required...)[ — description]` line for `col`,
     followed by indented sub-lines when the shape is a nested object (a
@@ -480,6 +495,7 @@ class TableSchema(_Base):
         for c in self.columns:
             lines.extend(_render_column(c, ""))
         lines.append("Any other key is invalid.")
+        lines.extend(_render_primary_key(self.primary_key))
         return "\n".join(lines)
 
     def to_pydantic_model(self, name: str) -> type[BaseModel]:

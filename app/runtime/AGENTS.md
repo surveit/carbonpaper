@@ -13,6 +13,8 @@ validate the output, write `outputs/<stage>.parquet`, append to `manifest.json`.
   exact duplicate full-content rows — the error names the input id + 0-based row numbers.
   Identity is a content hash over the whole row; `primary_key` plays no part (optional, may
   legitimately duplicate). If N draws per row are intended, add an explicit row_id upstream.
+  The rule lives in `app/core/frame_checks.py` with the other cross-row rule (key
+  uniqueness), so the stage-test suite validator applies both to a derived test's frames.
 - **Incremental manifest:** flushed after every stage (`running` → terminal), so the UI
   shows live progress and a run can execute in a background thread (`prepare_run`/`run_prepared`).
 - **Row slicing:** any stage may carry `limit: N` (throttle the LLM fan-out for a dry run).
