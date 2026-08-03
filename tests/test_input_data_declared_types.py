@@ -229,3 +229,35 @@ def test_typed_formats_do_not_get_a_pinned_dtype(fmt):
 
     schema = TableSchema.model_validate({"columns": [{"name": "id", "type": "str"}]})
     assert _read_dtype(schema, fmt, {}) is None
+
+
+# ── a typed format still honours a declared str ──────────────────────────────
+
+def _xlsx(tmp_path: Path, frame: pd.DataFrame) -> Path:
+    path = tmp_path / "book.xlsx"
+    frame.to_excel(path, index=False)
+    return path
+
+
+def test_an_xlsx_numeric_cell_declared_str_is_read_as_text(tmp_path):
+    """The declaration is the author's statement, not a guess pandas may overrule."""
+    path = _xlsx(tmp_path, pd.DataFrame({"code": [2026, None]}))
+    df = _read(path, [{"name": "code", "type": "str", "nullable": True}], format="xlsx")
+    assert df["code"].dropna().tolist() == ["2026"]
+
+
+def test_an_empty_xlsx_cell_declared_str_stays_null(tmp_path):
+    """str(nan) is the text 'nan' — a blank must not become one."""
+    # The second row carries a value in the other column, so the row survives the read.
+    path = _xlsx(tmp_path, pd.DataFrame({"code": [2026, None], "keep": ["a", "b"]}))
+    df = _read(path, [{"name": "code", "type": "str", "nullable": True},
+                      {"name": "keep", "type": "str", "nullable": False}], format="xlsx")
+    assert df["code"].tolist()[0] == "2026"
+    assert int(df["code"].isna().sum()) == 1
+
+
+def test_an_xlsx_column_declared_int_is_left_alone(tmp_path):
+    """Only `str` is pinned; every other declared type is what the file holds."""
+    path = _xlsx(tmp_path, pd.DataFrame({"n": [7]}))
+    df = _read(path, [{"name": "n", "type": "int", "nullable": False}], format="xlsx")
+    assert df["n"].tolist() == [7]

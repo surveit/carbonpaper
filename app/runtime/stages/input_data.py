@@ -92,6 +92,13 @@ def read_input_data(stage: Stage, ctx: RunContext) -> pd.DataFrame:
     else:
         raise ValueError(f"Unsupported file format: {fmt}")
 
+    # A typed format still has to honour a declared `str`: an xlsx cell holding
+    # 40000 is a real number, but a schema saying that column is text is the
+    # author's statement about the column, not a guess pandas may overrule.
+    for col in _typed_format_str_columns(schema, fmt):
+        if col in df.columns:
+            df[col] = df[col].map(_as_declared_text)
+
     # Optional list-column splitting (e.g., "[a, b]" → ["a", "b"])
     for col in params.get("list_columns", []):
         if col in df.columns:
@@ -138,6 +145,28 @@ def _text_on_disk_columns(schema: TableSchema | None, fmt: str) -> list[str]:
     if fmt == FileFormat.json:
         return [c.name for c in schema.columns if c.type == STR_COLUMN_TYPE]
     return []
+
+
+def _as_declared_text(value: Any) -> Any:
+    # A whole number renders without the `.0`: one null anywhere makes the column
+    # float64, so the identifier 2026 arrives as 2026.0 — and "2026.0" is the same
+    # silent corruption as reading "002" as 2.
+    """One cell of a declared-`str` column, as text; nulls pass through."""
+    if value is None or value != value:
+        return value
+    if isinstance(value, float) and value.is_integer():
+        return str(int(value))
+    return str(value)
+
+
+def _typed_format_str_columns(schema: TableSchema | None, fmt: str) -> list[str]:
+    # Only `str`: a declared `list[X]`/`json` column arrives as a real list or dict
+    # that stringifying would corrupt, and every other declared type is what the
+    # file already holds.
+    """Declared `str` columns in a format that carries its own types."""
+    if schema is None or fmt in _INFERRING_FORMATS:
+        return []
+    return [c.name for c in schema.columns if c.type == STR_COLUMN_TYPE]
 
 
 def _date_columns(schema: TableSchema | None, fmt: str, params: dict[str, Any]) -> list[str]:
