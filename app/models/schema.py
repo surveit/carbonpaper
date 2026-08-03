@@ -128,7 +128,14 @@ class Column(_Base):
     description: Optional[str] = None
     range: Optional[list[Any]] = None
     source: Optional[str] = None
-    enum: Optional[list[str]] = None
+    enum: Optional[list[str]] = Field(
+        default=None,
+        description=(
+            "The closed set of values a `str` column may hold — declare it whenever the "
+            "vocabulary is fixed and known at authoring time. Enforced at runtime, not "
+            "decorative."
+        ),
+    )
     fields: Optional[list["Column"]] = Field(
         default=None,
         description=(
