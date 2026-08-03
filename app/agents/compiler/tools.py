@@ -124,7 +124,7 @@ TOOL_SCHEMAS: dict[str, ToolInputSchema] = {
             "A JSON object (encoded as a string) of ONLY the fields to change — a "
             "JSON Merge Patch. Fields you omit are preserved verbatim; a null value "
             "deletes a field. Nested objects merge (they are not replaced whole). "
-            'Examples: {"limit": 100} sets limit; {"llm": {"model": "opus"}} '
+            'Examples: {"limit": 100} sets limit; {"llm": {"model": "claude-opus-5"}} '
             "changes only llm.model. You cannot change a stage's id this way.",
         ],
     },
@@ -248,7 +248,7 @@ Return the JSON of one stage from the loaded workflow. Read before editing.""",
     "edit_stage": """\
 Change specific fields of one stage. `changes_json` is a JSON object of
 ONLY the fields to change (a JSON Merge Patch): {"limit": 100} sets limit;
-{"llm": {"model": "opus"}} changes only llm.model and leaves the rest of the
+{"llm": {"model": "claude-opus-5"}} changes only llm.model and leaves the rest of the
 llm block intact; {"name": null} deletes a field. Fields you do not mention
 are preserved exactly — so you never alter anything you were not asked to.
 The result is validated first; if invalid, nothing is written and the issues

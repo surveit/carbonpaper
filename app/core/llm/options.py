@@ -1,18 +1,29 @@
-"""Available LLM options.
-
-The menu of models the platform may call. An org-specific deployment narrows or
-extends this list; the workflow contract (app/models) references it so a stage can only
-name a model the deployment actually offers.
-"""
+"""The menu of models the platform may call — pinned, version-bearing ids only. An
+unversioned alias (haiku/sonnet/opus) resolves to whatever the CLI maps it to that week,
+so the id a stage names would stop identifying the model that actually answered. A
+deployment narrows or extends this list; the workflow contract (app/models) references it
+so a stage can only name a model the deployment offers."""
 from enum import Enum
 
 
 class LLMModel(str, Enum):
-    haiku = "haiku"
-    sonnet = "sonnet"
-    opus = "opus"
+    claude_haiku_4_5 = "claude-haiku-4-5"
     claude_sonnet_4_6 = "claude-sonnet-4-6"
+    claude_sonnet_5 = "claude-sonnet-5"
+    claude_opus_5 = "claude-opus-5"
 
     def __str__(self) -> str:
         """The wire id, not `LLMModel.x` — this is the string handed to the CLI."""
         return self.value
+
+    @classmethod
+    def parse(cls, value: str, *, source: str) -> "LLMModel":
+        """Refuse anything outside the menu, naming `source` so the caller knows what to fix."""
+        try:
+            return cls(value)
+        except ValueError as exc:
+            raise ValueError(
+                f"{source}={value!r} is not a model this deployment offers; choose one of "
+                f"{[member.value for member in cls]}. An unversioned alias (haiku, sonnet, "
+                f"opus) is refused on purpose: it names a different model after each release."
+            ) from exc

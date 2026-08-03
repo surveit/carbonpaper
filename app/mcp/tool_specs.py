@@ -102,7 +102,7 @@ Return the JSON of one stage from the workflow. Read before editing.""",
         description="""\
 Change specific fields of one stage. `changes_json` is a JSON object of
 ONLY the fields to change (a JSON Merge Patch): {"limit": 100} sets limit;
-{"llm": {"model": "opus"}} changes only llm.model and leaves the rest of the
+{"llm": {"model": "claude-opus-5"}} changes only llm.model and leaves the rest of the
 llm block intact; {"name": null} deletes a field. Fields you do not mention
 are preserved exactly. Validated first; if invalid, nothing is written and
 the issues are returned. A successful edit drops the node to 'edited_stale'
