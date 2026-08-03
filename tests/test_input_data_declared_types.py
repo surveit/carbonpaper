@@ -267,7 +267,7 @@ def test_an_xlsx_text_cell_declared_str_keeps_its_zero_padding(tmp_path):
     # The sheet says text; pd.read_excel calls it int64 anyway. Coercing back
     # AFTER the read cannot recover the padding — this has to be pinned at the read.
     path = _xlsx_cells(tmp_path, ["id"], [["002"], ["017"]], {"id"})
-    df = _read(path, [{"name": "id", "type": "str"}], format="xlsx")
+    df = _read(path, [{"name": "id", "type": "str", "nullable": True}], format="xlsx")
     assert list(df["id"]) == ["002", "017"]
 
 
@@ -278,8 +278,8 @@ def test_an_xlsx_text_cell_declared_str_keeps_the_digits_it_was_written_with(tmp
     path = _xlsx_cells(
         tmp_path, ["income", "big_id"],
         [["40000.00", "00123456789012345678901"]], {"income", "big_id"})
-    df = _read(path, [{"name": "income", "type": "str"},
-                      {"name": "big_id", "type": "str"}], format="xlsx")
+    df = _read(path, [{"name": "income", "type": "str", "nullable": True},
+                      {"name": "big_id", "type": "str", "nullable": True}], format="xlsx")
     assert df["income"].iloc[0] == "40000.00"
     assert df["big_id"].iloc[0] == "00123456789012345678901"
 
@@ -288,7 +288,7 @@ def test_a_real_excel_date_declared_date_survives_the_str_pin(tmp_path):
     # Pinned to str for the read, then parsed back by the same to_datetime pass
     # csv goes through — a genuine date cell round-trips rather than being lost.
     path = _xlsx(tmp_path, pd.DataFrame({"filed_on": [pd.Timestamp("2026-04-02")]}))
-    df = _read(path, [{"name": "filed_on", "type": "date"}], format="xlsx")
+    df = _read(path, [{"name": "filed_on", "type": "date", "nullable": True}], format="xlsx")
     assert df["filed_on"].iloc[0] == pd.Timestamp("2026-04-02")
 
 
@@ -296,7 +296,7 @@ def test_a_compact_yyyymmdd_xlsx_cell_declared_date_is_not_read_as_a_number(tmp_
     # The nanoseconds-since-epoch trap, in a numeric Excel cell: unpinned,
     # pd.to_datetime(20260115) returns a 1970 timestamp.
     path = _xlsx(tmp_path, pd.DataFrame({"filed_on": [20260115]}))
-    df = _read(path, [{"name": "filed_on", "type": "date"}], format="xlsx")
+    df = _read(path, [{"name": "filed_on", "type": "date", "nullable": True}], format="xlsx")
     assert df["filed_on"].iloc[0] == pd.Timestamp("2026-01-15")
 
 
