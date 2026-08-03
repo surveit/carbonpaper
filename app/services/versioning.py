@@ -33,13 +33,7 @@ def _no_coverage() -> Coverage:
 
 
 class WorkflowVersion(PersistedModel):
-    """One frozen snapshot, stored in the "workflow_version" collection. `id` (inherited
-    from PersistedModel) is the composite `f"{project}/{version_id}"`; `version_id`
-    is the plain local id every caller of this module's public functions
-    works with. `stages` and `schemas` are the frozen artifacts; `coverage` is
-    approval coverage computed against `stages` at creation time. `published`
-    (plus `published_at`/`published_by`) records the approval act that makes a
-    version runnable — see the module docstring."""
+    """`id`, inherited from PersistedModel, is the composite `f"{project}/{version_id}"`."""
 
     collection: ClassVar[str] = "workflow_version"
     SCOPE: ClassVar[PersistenceScope] = PersistenceScope.PROJECT_READ
@@ -72,27 +66,7 @@ def create_version_from_stages(
     reviewer: str,
     parent_version: str | None = None,
 ) -> WorkflowVersion:
-    """The single write chokepoint for a WorkflowVersion: strict-parse `stages`
-    (raw spec dicts) as a whole Workflow, embed the project's CURRENT schemas,
-    freeze approval coverage against the live node_decisions store, and save —
-    born unpublished. Returns the saved WorkflowVersion.
-
-    `stages` is parsed via app.models.workflow.parse_workflow, which raises
-    pydantic.ValidationError (per-stage schema errors AND cross-stage graph
-    issues alike) on anything invalid; nothing is written in that case. Every
-    version is therefore a loadable workflow, from this seam or any other.
-
-    Coverage is computed from the SNAPSHOT's stages against the live
-    node_decisions store, so the recorded coverage is exactly what was believed
-    about these specs at this instant. schemas/ is read via
-    workspace.load_schemas, which returns [] when the project has no schema
-    library yet — a project with no data model still versions cleanly (the
-    absence is truthful, not an error).
-
-    version_id has 1-second resolution; two versions minted within the same
-    wall-clock second for the same project collide on doc id, and the second
-    save simply overwrites the first — an accepted same-second clobber, not
-    guarded against."""
+    """version_id has 1-second resolution: two versions minted in the same second clobber."""
     project_dir = Path(project_dir)
     workflow = parse_workflow(stages)
     schemas = load_schemas(project_dir)
@@ -123,12 +97,7 @@ def create_version_from_stages(
 
 
 def publish_version(project_dir: Path, version_id: str, *, reviewer: str) -> WorkflowVersion:
-    """Mark a version published: the metadata-only act that makes it eligible to
-    run (see app.runtime.runner.resolve_version_id). Idempotent — publishing an
-    already-published version returns it unchanged, keeping the FIRST
-    published_at/published_by rather than overwriting them with the second
-    caller's. Fails loudly (FileNotFoundError) if no such version is stored, or
-    if the stored document no longer validates (WorkflowLoadError)."""
+    """Idempotent: republishing returns it unchanged, keeping the FIRST published_at/published_by."""
     name = Path(project_dir).name
     doc_id = f"{name}/{version_id}"
     try:
@@ -210,21 +179,12 @@ def _find_repeated_step_stage_ids(guide: ReviewGuide) -> list[str]:
 
 
 def _invalid_version_document(doc_id: str, exc: ValidationError) -> WorkflowLoadError:
-    """A stored version document no longer validates — store corruption, or a
-    version written under older model rules (e.g. a repo-relative path from
-    before absolute paths were enforced). One error type meaning "this workflow
-    doesn't validate", raised LOUDLY wherever the document is read: never a
-    silent skip, which would make the version invisible while its id still
-    occupies the store. The fix is a store migration/cleanup, not tolerance."""
+    """Raised LOUDLY wherever a version document is read — never a skip that hides the stored id."""
     return WorkflowLoadError(f"version document {doc_id}", format_errors(exc))
 
 
 def list_versions(project_dir: Path) -> list[WorkflowVersion]:
-    """All versions for a project, NEWEST-FIRST. A stored document that fails
-    the WorkflowVersion contract raises WorkflowLoadError (see
-    _invalid_version_document) — the whole listing fails rather than quietly
-    presenting a store with an invalid document in it as healthy. No versions
-    stored yet -> []."""
+    """NEWEST-FIRST. One invalid stored document fails the whole listing rather than being skipped."""
     name = Path(project_dir).name
     versions: list[WorkflowVersion] = []
     for doc_id, data in get_store().read_all("workflow_version", f"{name}/"):
@@ -240,26 +200,20 @@ def list_versions(project_dir: Path) -> list[WorkflowVersion]:
 
 
 def find_latest_version_id(project_dir: Path) -> str | None:
-    """The newest stored version's id whatever its published state, or None when the
-    project has no version yet. Not a substitute for
-    app.runtime.runner.resolve_version_id, which a production run uses because it
-    gates on publication."""
+    """Whatever its published state — a production run uses runner.resolve_version_id instead."""
     versions = list_versions(project_dir)  # newest-first
     return versions[0].version_id if versions else None
 
 
 def validate_version_exists(project_dir: Path, version_id: str) -> None:
-    """Raise FileNotFoundError unless this project stores this version id. Existence
-    only — unlike load_version it reads no document body, so a stored version that no
-    longer validates still passes."""
+    """Existence only: reads no document body, so a version that no longer validates still passes."""
     name = Path(project_dir).name
     if not WorkflowVersion.exists(f"{name}/{version_id}"):
         raise FileNotFoundError(f"No version '{version_id}' for project '{name}'")
 
 
 def load_version(project_dir: Path, version_id: str) -> WorkflowVersion:
-    """This version, in full. Fails loudly if no such version is stored, or
-    if the stored document no longer validates (WorkflowLoadError)."""
+    """Fails loudly if the version is missing, or if the stored document no longer validates."""
     name = Path(project_dir).name
     try:
         v = WorkflowVersion.load(f"{name}/{version_id}")
@@ -271,12 +225,7 @@ def load_version(project_dir: Path, version_id: str) -> WorkflowVersion:
 
 
 def load_version_stages(project_dir: Path, version_id: str) -> list[Stage]:
-    """This version's frozen stages, as typed Stage objects — already valid
-    (embedded from a strict load at creation time), so WorkflowVersion.load's pydantic
-    validation is the on-read integrity check and no re-load through the
-    working-copy loader is needed. Fails loudly if the version is missing rather
-    than falling back to the working copy (a run pinned to a version must read
-    THAT version)."""
+    """Fails loudly if the version is missing — never falls back to the working copy."""
     name = Path(project_dir).name
     try:
         v = WorkflowVersion.load(f"{name}/{version_id}")

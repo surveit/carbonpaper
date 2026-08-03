@@ -87,9 +87,6 @@ _GRAIN_AND_ORDER_PRESERVING_TYPES: frozenset[StageType] = frozenset({
 
 
 def is_grain_and_order_preserving(stage_type: StageType) -> bool:
-    """Does one input row of this stage type map to exactly one output row, in the
-    same order? Fixed entirely by stage type — see the
-    StageBase.is_grain_and_order_preserving property for the per-type contract."""
     return stage_type in _GRAIN_AND_ORDER_PRESERVING_TYPES
 
 
@@ -110,9 +107,7 @@ class StageInput(_Base):
 
 # ── The shared field list ────────────────────────────────────────────────────
 class StageCommon(_Base):
-    """The fields every stage carries whether it is being authored (`StageDraft`)
-    or stored (`StageBase` and its per-type subclasses), declared once so the two
-    cannot drift apart."""
+    """Declared once so the authored (`StageDraft`) and stored (`StageBase`) shapes cannot drift."""
     id: str
     type: StageType
     name: str
@@ -144,10 +139,8 @@ class StageCommon(_Base):
 
 # ── The per-type stage base ──────────────────────────────────────────────────
 class StageBase(StageCommon):
-    """One node in the workflow: the authored fields plus the ones only the
-    server writes, and every rule a stored stage must satisfy regardless of its
-    type. Each type's own required config blocks and input arity are declared by
-    its subclass under `app/models/stages/`."""
+    """Per-type required config blocks and input arity are declared by subclasses in
+    `app/models/stages/`."""
 
     # False for the one type that emits files rather than a table (publish).
     REQUIRES_OUTPUT_SCHEMA: ClassVar[bool] = True
@@ -198,29 +191,24 @@ class StageBase(StageCommon):
 
     # ── the per-type hooks a subclass answers ────────────────────────────────
     def fingerprint_blocks(self) -> dict[str, StageConfig]:
-        """The config blocks that decide what this stage computes, keyed by the
-        name they are spelled with on the stage."""
+        """Config blocks deciding what this stage computes, keyed by their spelling on the stage."""
         raise NotImplementedError
 
     def find_config_column_issues(self) -> list[str]:
-        """Every column this stage's config names that its own input edge cannot
-        supply. [] for a type whose config names no column."""
+        """Columns this stage's config names that its input edge cannot supply; [] if it names none."""
         return []
 
     def find_output_schema_issues(self) -> list[str]:
-        """Every way the declared output_schema is undeliverable. [] for a type
-        whose internals, not its config, fix the output."""
+        """Every way the declared output_schema is undeliverable; [] if internals, not config, fix it."""
         return []
 
     def find_authored_code_block(self) -> Optional["AuthoredCode"]:
-        """The block holding code a reviewer would otherwise have to read (it
-        carries `summary` and `corner_cases`), None for a stage fixed entirely by
-        config."""
+        """The block holding code a reviewer must read (`summary`, `corner_cases`); None if
+        config-only."""
         return None
 
     def find_handle_compiler_warnings(self) -> list["CompilerWarning"]:
-        """What the module owning this type's config block says; [] when a reviewer reads the
-        config directly."""
+        """What the module owning this type's config block says; [] when a reviewer reads it."""
         return []
 
     def llm_reply_schema(self) -> Optional[TableSchema]:
@@ -230,19 +218,8 @@ class StageBase(StageCommon):
 
     # ── the fingerprint ──────────────────────────────────────────────────────
     def compute_definition_fingerprint(self) -> str:
-        """sha1[:16] over a sorted-key JSON dump of the output-determining subset
-        of this stage: {"type", "output_schema"} plus one entry per block
-        `fingerprint_blocks` names.
-        Every other field (id, name, source, inputs, review, cache, limit,
-        compiler_notes, eval, tests) is incidental — it does not change what this
-        stage computes — and stays out, `cache` included: it decides whether the
-        cache is consulted, not what the stage computes, so flipping it must not
-        invalidate an existing entry. Each block itself is trimmed to its class's
-        own `FINGERPRINT_FIELDS` (every config class declares
-        `FINGERPRINT_FIELDS`/`INCIDENTAL_FIELDS` explicitly, exhaustively over its
-        own fields — see e.g. QueueConfig, whose
-        `routing`/`conflict_resolution`/`estimated_volume_per_week` route or match
-        a decision without changing what the human is asked)."""
+        """Every field NOT dumped here is incidental: it must not change what this stage
+        computes."""
         output_dump = (
             self.output_schema.model_dump(mode="json", exclude_none=True)
             if self.output_schema is not None else None
@@ -269,9 +246,7 @@ class StageBase(StageCommon):
     @field_validator("tests", mode="before")
     @classmethod
     def _empty_tests_means_absent(cls, v: Any) -> Any:
-        """Normalise `tests: []` to absent, so the model dump (and the
-        belief hash computed over it) is identical whether the key was omitted
-        or given empty."""
+        """`tests: []` → absent, so the dump (and its belief hash) matches an omitted key."""
         return None if v == [] else v
 
     @model_validator(mode="after")
@@ -287,8 +262,8 @@ class StageBase(StageCommon):
 
     @model_validator(mode="after")
     def _schemas_declared(self) -> "StageBase":
-        """Every schema this stage declares must be usable: non-empty, and naming no
-        column in the reserved `_` namespace (find_internal_namespace_column_issues)."""
+        """Every declared schema must be non-empty and name no column in the reserved `_`
+        namespace."""
         issues = [
             f"input `{ref.id}` declares a schema with no columns"
             for ref in self.inputs
@@ -305,17 +280,8 @@ class StageBase(StageCommon):
 
     @model_validator(mode="after")
     def _config_columns_resolve(self) -> "StageBase":
-        """Every column this stage's config directly names (a join key, an
-        aggregate group_by/value_column, publish.one_file_per, an llm prompt
-        {placeholder} — single-braced, since a double-braced one is never
-        injected) or references via a where/filter predicate (aggregate
-        `where`, human_review_queue `filter`) must resolve against that
-        reference's own input edge — `inputs[index].table_schema`, per
-        `app.models.stages.shared.resolve_input_columns`. EDGE-ONLY: this says
-        nothing about what an upstream producer itself declares, so it holds
-        for a single stage in isolation, independent of the rest of any
-        workflow. Cross-stage checks (unique ids, inputs resolve, acyclic) live
-        in `workflow.graph_issues`."""
+        """EDGE-ONLY — resolves against `inputs[].table_schema`; cross-stage checks in
+        `workflow.graph_issues`."""
         issues = self.find_config_column_issues()
         if issues:
             raise ValueError("; ".join(issues))
@@ -323,11 +289,8 @@ class StageBase(StageCommon):
 
     @model_validator(mode="after")
     def _output_schema_deliverable(self) -> "StageBase":
-        """A declared output_schema must be deliverable by this stage's own
-        config: for the types whose output is fixed by config (join, aggregate,
-        union, filter_rows), every declared column must be producible by name,
-        with the declared type matching the derivation where it can be known.
-        EDGE-ONLY and per-stage, like _config_columns_resolve."""
+        """EDGE-ONLY, per-stage: the declared output_schema must be producible from this
+        stage's own config."""
         issues = self.find_output_schema_issues()
         if issues:
             raise ValueError("; ".join(issues))
@@ -335,37 +298,8 @@ class StageBase(StageCommon):
 
     @property
     def is_grain_and_order_preserving(self) -> bool:
-        """Does one input row map to exactly one output row, IN THE SAME ORDER?
-        Grain-preserving means both: 1:1 (no rows added or dropped) AND order-
-        preserving (the Nth output row was produced from the Nth input row).
-        Declaring a type grain-preserving commits it to both — a stage that
-        reordered rows would break the guarantee even at 1:1.
-
-        This is the v1 eval gate AND the property a declarative (single-table,
-        row-aligned) eval relies on to align a target's output rows back to the
-        eval-dataset rows that produced them BY POSITION — no lineage id needed,
-        because position IS the identity through a grain-preserving path. Fixed
-        entirely by stage type (the module function is_grain_and_order_preserving):
-          - python_row_function → yes (runtime maps it per row, in emit order — enforced 1:1)
-          - python_frame_function → NO (may reshape OR reorder the frame)
-          - llm_transform      → yes (per-row 1:1 in emit order in v1; a fan-out LLM
-                                 like doc→pieces is out of scope until fan-out evals)
-          - input_data         → yes (originates the rows)
-          - human_review_queue → yes — the runtime maps it per row, so an output row
-                                 is in its input row's position, and every input row
-                                 produces one: a rejected row stays, carrying the
-                                 rejection. Removing rows is a downstream filter
-                                 stage's job, not this one's.
-          - join (fan-out) / aggregate (fan-in) → NO; grain changes are deferred
-          - publish            → NO — handle_publish runs an authored function whose
-                                 output is a table of artifact paths, not the input
-                                 rows (and it is terminal — nothing downstream).
-          - filter_rows / union → NO — a filter drops rows, a union interleaves rows
-                                 from several inputs, so neither is 1:1-by-position.
-                                 Each output row's exact source (stage id + row
-                                 ordinal) is still recorded, in
-                                 app.runtime.lineage, for the trace to follow.
-        """
+        """A declarative eval aligns output rows to eval-dataset rows BY POSITION when
+        this holds."""
         return is_grain_and_order_preserving(self.type)
 
 

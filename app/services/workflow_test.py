@@ -27,24 +27,7 @@ def run_workflow_test(
     limit: int = 20,
     offset: int = 0,
 ) -> dict[str, Any]:
-    """Run the resolved version's frontier over a slice of its bound source, as a
-    real run (marked `is_test_run`) under `<project_dir>/runs/<run_id>/`. Returns
-    `{ok, run_id, version_id, stages_run, error}`.
-
-    The same run app.services.run.start_run produces, differing on exactly five
-    axes — the reason this is its own seam rather than a flag on that one:
-
-    1. VERSION: any stored version, published or not (_resolve_workflow_test_version).
-    2. SOURCE: a `limit`/`offset` slice, injected (get_source_data_with_limit_and_offset)
-       rather than read whole through the input_data stage — which is why the
-       frontier excludes input_data (_frontier_stages).
-    3. EXECUTION: synchronous; start_run launches a background daemon thread.
-    4. REVIEW QUEUE: auto-approves in memory (queue_auto_approve) instead of halting.
-    5. STAGE CACHE: read-only (RunContext.for_workflow_test_run) instead of read+write.
-
-    Collapsing these into start_run would mean five flags with two valid
-    combinations, so they stay two functions; only version resolution is shared
-    vocabulary (cf. app.services.run.resolve_version, which gates on published)."""
+    """Its own seam, not a flag on run.start_run: five axes differ, with two valid combinations."""
     project_dir = resolve_project_dir(project)
     version = _resolve_workflow_test_version(project_dir, version_id)
     stages = load_version_stages(project_dir, version)
@@ -72,12 +55,7 @@ def run_workflow_test(
 
 
 def _resolve_workflow_test_version(project_dir: Path, version_id: str | None) -> str:
-    """The stored immutable version a workflow test runs — any version, published
-    or not, unlike a production run (which pins a published version). A workflow
-    test is the tool the author uses to evaluate a candidate BEFORE deciding to
-    publish, so gating it on publication would be circular. None resolves to the
-    newest stored version; raises NoWorkflowTestVersionError, naming the project,
-    when None is given and no version is stored."""
+    """Any version, published or not: a workflow test evaluates a candidate BEFORE publishing it."""
     if version_id is not None:
         load_version(project_dir, version_id)  # loud FileNotFoundError if missing
         return version_id
@@ -99,13 +77,7 @@ def _run_frontier(
     run_id: str,
     workflow_version: str,
 ) -> tuple[bool, str | None]:
-    """Execute the frontier subset: normal return -> (True, None); a SubsetRunError
-    (a stage errored) -> (False, its message). run_subset owns the manifest under
-    `run_dir`, records it `is_test_run=True`, and grants project scope
-    (`identity` + a read-only stage cache — see RunContext.for_stages_outside_a_run)
-    so a publish stage's `trace_links` resolves; a mid-frontier
-    human_review_queue auto-approves in memory (queue_auto_approve=True) rather
-    than halting."""
+    """A SubsetRunError (a stage errored) becomes (False, its message); a normal run (True, None)."""
     try:
         run_subset(
             workflow, injected_outputs=injected, stage_ids=stage_ids,
@@ -118,18 +90,14 @@ def _run_frontier(
 
 
 def _frontier_stages(stages: list[Stage]) -> list[Stage]:
-    """The stages a workflow test executes: every stage except the source
-    (input_data — its output is injected, not computed). Publish stages run; their
-    artifacts land run-scoped under the run dir, like any production run's."""
+    """Every stage but input_data — its output is injected, not computed. Publish stages DO run."""
     return [stage for stage in stages if stage.type != StageType.input_data.value]
 
 
 def get_source_data_with_limit_and_offset(
     stages: list[Stage], *, limit: int, offset: int,
 ) -> dict[str, pd.DataFrame]:
-    """Read each input_data stage's bound file and take `df.iloc[offset:offset+limit]`,
-    keyed by stage id. Raises NoWorkflowTestSourceError if the workflow declares no
-    input_data stage."""
+    """Raises NoWorkflowTestSourceError if the workflow declares no input_data stage."""
     sources = [stage for stage in stages if stage.type == StageType.input_data.value]
     if not sources:
         raise NoWorkflowTestSourceError(
@@ -146,7 +114,5 @@ def get_source_data_with_limit_and_offset(
 
 
 def _mint_run_id() -> str:
-    """A fresh run id, in the same timestamp format app.runtime.runner mints
-    production run ids with, so a workflow test's run sorts and reads
-    consistently among a project's other runs."""
+    """Same timestamp format app.runtime.runner mints production run ids with, so they sort alike."""
     return datetime.now().strftime("%Y%m%dT%H%M%S")

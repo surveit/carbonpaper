@@ -44,9 +44,6 @@ _StageT = TypeVar("_StageT", bound=StageBase)
 
 
 def narrow_stage(stage: Stage, model: type[_StageT]) -> _StageT:
-    """`stage` as the per-type model the handler it was dispatched to is written
-    against. Raises when the type-keyed registry handed a handler a stage of
-    another type."""
     if isinstance(stage, model):
         return stage
     raise TypeError(
@@ -105,9 +102,7 @@ ROW_DEFERRED_KEY = "_deferred"
 
 
 class _InternalRowColumn(NamedTuple):
-    """One internal column a mapper may attach, and what the driver does about
-    it. Both behaviors are stated per column so a new one cannot be given one
-    and silently forgotten the other."""
+    """Both behaviors are declared per column, so a new one cannot get one and silently miss the other."""
 
     column: str
     # Machinery, not stage output: dropped off every mapped frame, and NOT
@@ -130,19 +125,7 @@ _INTERNAL_ROW_COLUMNS = (
 
 @runtime_checkable
 class PostMapRowMapper(Protocol):
-    """A row mapper that also carries the step to run once its map is over.
-
-    `make_mapper` may return a plain function — one row in, one row out — or an
-    object of this shape, which additionally gets `finish_mapped_rows` once the
-    assembled frame exists, with every internal column still on it. The two
-    halves then share whatever per-execution state the object holds, instead of
-    needing a channel outside the mapper to pass it through.
-
-    `finish_mapped_rows` runs on the assembled frame — one row per input row —
-    and before the driver strips the internal columns, so it is the last step
-    that sees one at all. It is handed the stage's `StageContribution` to report
-    onto — the manifest fields the mapper owns — and may raise, which aborts the
-    stage."""
+    """`finish_mapped_rows` runs on the assembled frame before internal columns are stripped."""
 
     def __call__(self, row: Row, index: int) -> Row: ...
 
@@ -156,10 +139,6 @@ class PostMapRowMapper(Protocol):
 
 
 class StageHandler(ABC):
-    """One stage type's calling convention. `execute` runs the stage; the concrete
-    shape fixes what the runtime hands the handler (a row at a time, nothing, or
-    whole frames), which is what makes grain-and-order preservation structural."""
-
     @abstractmethod
     def execute(
         self, stage: Stage, inputs: dict[str, pd.DataFrame], ctx: RunContext
@@ -168,39 +147,11 @@ class StageHandler(ABC):
     @property
     @abstractmethod
     def preserves_grain_and_order(self) -> bool:
-        """Does this handler guarantee that output row i came from input row i —
-        1:1 and in the same order? Compared against the core
-        is_grain_and_order_preserving fact for the stage type this handler is
-        registered under (validate_registry_matches_model)."""
+        """Output row i came from input row i — 1:1, same order; checked against the stage type's fact."""
 
 
 class RowMapHandler(StageHandler):
-    """Driven per row by the runtime; the mapper never sees the frame, so it
-    cannot reorder or fan out rows.
-
-    `drops_rows` widens the mapper's return to `Row | None`, None meaning DROP
-    THIS ROW — the one way a row-mapped stage may emit fewer rows than it was
-    given (filter_rows). Order and 1-to-at-most-1 still hold by construction, so
-    the driver knows exactly which input ordinal each surviving row came from
-    and records it as this stage's lineage; grain no longer holds, which is why
-    the property below reports it. `caches_rows=False` skips row-grain caching
-    for a stage whose per-row compute is cheaper than the fingerprint a lookup
-    would have to hash (the frame-level counterpart is FrameHandler's
-    `caches_frames`).
-
-    `make_mapper` runs once per stage execution (resolve code, render prompt
-    additions, record backend info, work anything frame-wide out ahead of the
-    map) and returns the per-row callable — a plain function, or a
-    `PostMapRowMapper`, which the driver also hands the assembled frame once the
-    map is over. `parallelism` > 1 lets the driver run the mapper over rows
-    concurrently — results are written back by input index, so output order is
-    input order regardless of completion order. `project_output_to_declared`
-    asks the driver to project the assembled frame onto exactly the columns
-    output_schema declares — a column-only operation that cannot change row
-    count or order. A row-mapped stage resolves each row against the
-    stage-result cache before calling the mapper (see `_open_row_caching`)
-    unless it registers `caches_rows=False`.
-    """
+    """`caches_rows=False` skips row caching where compute is cheaper than the lookup's fingerprint."""
 
     def __init__(
         self,
@@ -227,25 +178,7 @@ class RowMapHandler(StageHandler):
 
 
 class LLMTransformHandler(RowMapHandler):
-    """llm_transform's handler. `batch_size` picks between two SEPARATE execution
-    functions — never a mode folded into one — because they differ in more than
-    speed:
-
-    - batch_size == 1 → `_run_row_mapper` (the inherited per-row path): grain,
-      order, AND per-row independence hold by construction — the mapper never
-      sees the frame.
-    - batch_size  > 1 → `run_batches`: N rows per call, rejoined by a runtime-
-      assigned batch row number. Grain and order still hold (one pre-allocated
-      slot per input row, filled by index, assembled in order — and `run_batches`
-      VERIFIES this before returning). Per-row INDEPENDENCE does not: the model
-      sees a whole chunk in one prompt, so a row's answer can be influenced by
-      its batch-mates.
-
-    Subclassing RowMapHandler keeps `preserves_grain_and_order` honest for the
-    property the registry invariant is about — grain and order, which BOTH paths
-    keep. It deliberately does not claim per-row independence; batch_size>1 trades
-    that for cost, which is why it is opt-in and defaults to 1.
-    """
+    """batch_size > 1 keeps grain and order but NOT per-row independence: the model sees a whole chunk."""
 
     def __init__(
         self,
@@ -266,8 +199,6 @@ class LLMTransformHandler(RowMapHandler):
 
 
 class SourceHandler(StageHandler):
-    """Originates rows from outside the run; takes no upstream frames."""
-
     def __init__(self, read: Callable[[Stage, RunContext], pd.DataFrame]) -> None:
         self.read = read
 
@@ -282,15 +213,7 @@ class SourceHandler(StageHandler):
 
 
 class FrameHandler(StageHandler):
-    """Sees whole input frame(s) keyed by upstream id; may reshape them.
-
-    `caches_frames` lets the runtime resolve the WHOLE output frame against the
-    stage-result cache instead of calling `apply` (see
-    `frame_caching.open_frame_caching`). Two kinds of registration pass it
-    False: one whose stage is terminal and side-effecting — its output is read
-    by the world, not by a later run — and one whose compute is cheaper than
-    fingerprinting the input a lookup would have to hash.
-    """
+    """`caches_frames=False` for a terminal side-effecting stage, or compute cheaper than the hash."""
 
     def __init__(
         self,
@@ -319,11 +242,7 @@ class FrameHandler(StageHandler):
 
 
 def validate_registry_matches_model(handlers: dict[StageType, StageHandler]) -> None:
-    """Raise unless each registered handler's `preserves_grain_and_order` agrees
-    with the core is_grain_and_order_preserving fact for its stage type. Called
-    when the registry module is imported, so a mis-shaped registration — a
-    preserving type wired as a FrameHandler, or the reverse — cannot start the
-    app."""
+    """Called at registry import, so a mis-shaped registration cannot start the app."""
     for stage_type, handler in handlers.items():
         handler_preserves = handler.preserves_grain_and_order
         if handler_preserves != is_grain_and_order_preserving(stage_type):
@@ -341,17 +260,7 @@ def _run_row_mapper(
     inputs: dict[str, pd.DataFrame],
     ctx: RunContext,
 ) -> pd.DataFrame:
-    """Map the stage's per-row function over its single input, in input order.
-
-    Grain and order hold by construction: exactly one result slot exists per
-    input row, filled by input index (also under concurrency), and the output
-    frame is assembled in index order. A result with no rows AND no columns —
-    an empty input — takes the input's columns instead of being handed on as a
-    0x0 frame.
-
-    Under `handler.drops_rows` a slot may come back None, meaning the row is
-    dropped; order still holds, and the assembly loop below keeps the input
-    ordinals it emitted as the stage's lineage."""
+    """One result slot per input row, filled by input index — so order holds under concurrency too."""
     if len(stage.inputs) != 1:
         raise ValueError(
             f"stage {stage.id}: a row-mapped stage takes exactly one input, "
@@ -423,12 +332,7 @@ def _run_row_mapper(
 
 
 class _RowCaching(NamedTuple):
-    """One row-mapped execution's row-grain cache state.
-
-    `recorded_outputs` is read ONCE for the whole execution — a per-row store
-    lookup would make a stage's store cost scale with its row count — and is
-    empty where nothing may be replayed. `writer` is None under a read-only
-    accessor, which reuses hits and records nothing."""
+    """`writer` is None under a read-only cache accessor: hits are reused, nothing is recorded."""
 
     project: str
     stage_id: str
@@ -438,13 +342,7 @@ class _RowCaching(NamedTuple):
 
 
 def _open_row_caching(stage: Stage, ctx: RunContext) -> _RowCaching | None:
-    """None where caching does not apply: the stage declares `cache: false`
-    (intentionally non-deterministic — always re-roll), or the run carries no
-    project scope (a subset run, a preview, an authored-test run).
-
-    Under `ctx.bust_cache` nothing already recorded is read, while what this run
-    computes is still recorded — so a busted run ends with the cache re-pinned,
-    not stale."""
+    """Under `ctx.bust_cache` nothing recorded is read but this run still records: re-pinned, not stale."""
     if not stage.cache:
         return None
     if ctx.identity is None or ctx.stage_cache is None:
@@ -468,9 +366,7 @@ def _find_cached_row(caching: _RowCaching, input_row: Row) -> Row | None:
 
 
 def _record_row_output(caching: _RowCaching, input_row: Row, output_row: Row) -> None:
-    """Pin one computed row, unless the run cannot write or an internal column on
-    the row says it is not an output the stage produced. No internal column is
-    ever part of the recorded row, so a replayed row reports no spend."""
+    """No internal column ever enters a recorded row, so a replayed row reports no spend."""
     if caching.writer is None:
         return
     if any(
@@ -516,7 +412,6 @@ def _map_row_through_cache(
 
 
 def _log_row_lifecycle(map_row: RowMapper, log: RunLog | None, stage_id: str) -> RowMapper:
-    """`map_row` wrapped in its own row_start/row_ok/row_error events."""
     if log is None:
         return map_row
 
@@ -554,9 +449,6 @@ def _run_batched(
     inputs: dict[str, pd.DataFrame],
     ctx: RunContext,
 ) -> pd.DataFrame:
-    """Run the stage's batched execution function over only the rows the cache
-    cannot already answer, and assemble its rows back into INPUT order alongside
-    the hits."""
     src = inputs[stage.inputs[0].id]
     records = list_rows(src)
     caching = _open_row_caching(stage, ctx)
@@ -581,7 +473,6 @@ def _run_batched(
 def _find_cached_rows_by_position(
     caching: _RowCaching, records: list[Row]
 ) -> dict[int, Row]:
-    """Every input row the cache can already answer, by input position."""
     found: dict[int, Row] = {}
     for index, record in enumerate(records):
         cached = _find_cached_row(caching, record)
@@ -597,9 +488,7 @@ def _compute_batched_rows(
     misses: list[int],
     ctx: RunContext,
 ) -> list[Row]:
-    """One raw output row per MISS, in miss order. No miss at all means the
-    execution function is never called, so a fully-cached stage makes no model
-    call."""
+    """One raw row per MISS, in miss order; no misses at all means no model call is made."""
     if not misses:
         return []
     return handler.run_batches(
@@ -614,10 +503,7 @@ def _order_by_input_position(
     computed: list[Row],
     row_count: int,
 ) -> list[Row]:
-    """One row per input row, in input order: the cache hit where there was one,
-    the freshly computed row where there was not. Raises unless exactly one
-    computed row came back per miss — a gap would silently mis-grain the
-    stage."""
+    """One row per input row, in input order: the cache hit, else the freshly computed row."""
     if len(computed) != len(misses):
         raise RuntimeError(
             f"stage {stage.id}: batched execution returned {len(computed)} rows "
@@ -631,9 +517,7 @@ def _order_by_input_position(
 def _finish_batched_frame(
     rows: list[Row], handler: RowMapHandler, stage: Stage
 ) -> pd.DataFrame:
-    """The batched path's counterpart of `_finish_mapped_frame`: no mapper, so
-    no post-map step — the internal columns are collected off the assembled
-    frame, then stripped and the frame projected."""
+    """`_finish_mapped_frame` without the post-map step: the batched path has no mapper object."""
     df = pd.DataFrame(rows)
     return _strip_and_project(df, _collect_internal_columns(df), handler, stage)
 
@@ -641,20 +525,7 @@ def _finish_batched_frame(
 def _restore_input_columns_when_nothing_named_them(
     mapped: pd.DataFrame, src: pd.DataFrame
 ) -> pd.DataFrame:
-    """The mapped frame, or — when it has neither rows nor columns — an empty
-    slice of the stage's input, carrying the mapped frame's `.attrs`.
-
-    A frame assembled from no results at all is 0 rows BY 0 COLUMNS: the input
-    was empty, so no mapper result named a single column. A downstream stage
-    keyed on an upstream column would then raise `KeyError` instead of producing
-    an empty result, and the input's own columns are the one honest shape
-    available. A frame that still carries a row or a column is returned
-    untouched.
-
-    The substituted frame takes the mapped one's `.attrs` verbatim, because the
-    stage's StageContribution rides there: an empty-input stage still reported
-    whatever it reported onto that contribution, and swapping the frame must not
-    swallow it."""
+    """0x0 out takes the input's columns (else downstream KeyError); `.attrs` carries the contribution."""
     if len(mapped.columns) > 0 or len(mapped) > 0:
         return mapped
     empty = src.iloc[0:0].copy()
@@ -669,17 +540,7 @@ def _finish_mapped_frame(
     stage: Stage,
     ctx: RunContext,
 ) -> pd.DataFrame:
-    """Turn the assembled per-row results into the stage's output frame: collect
-    the driver's own internal columns onto this stage's `StageContribution`, hand
-    the frame back to the mapper where the mapper is a `PostMapRowMapper`, then
-    strip every internal column and — where the handler asks for it — project
-    onto the declared columns.
-
-    The mapper's window is exact: `finish_mapped_rows` runs before the strip, so
-    it is the last step that sees an internal column at all.
-
-    The contribution rides out on the returned frame's `.attrs`; the executor
-    merges it into the manifest. Nothing accumulates in the (frozen) context."""
+    """The contribution rides out on the frame's `.attrs`; nothing accumulates in the frozen context."""
     contribution = _collect_internal_columns(df)
     if isinstance(map_row, PostMapRowMapper):
         map_row.finish_mapped_rows(stage, df, ctx, contribution)
@@ -687,8 +548,6 @@ def _finish_mapped_frame(
 
 
 def _collect_internal_columns(df: pd.DataFrame) -> StageContribution:
-    """This stage's contribution, carrying what the driver reads off the internal
-    columns of the assembled frame."""
     contribution = StageContribution()
     _collect_row_errors(df, contribution)
     _collect_row_usage(df, contribution)
@@ -701,13 +560,7 @@ def _strip_and_project(
     handler: RowMapHandler,
     stage: Stage,
 ) -> pd.DataFrame:
-    """`df` with every internal column dropped and — where the handler asks for
-    it — projected onto the declared columns, carrying `contribution` out on its
-    `.attrs` for the executor to merge into the manifest.
-
-    Strip before project, in that order: the projection reports every column it
-    drops as a user column the stage produced and discarded, and an internal
-    column is driver machinery, not that."""
+    """Strip before project: the projection reports dropped columns as user columns; internals aren't."""
     df = _strip_internal_columns(df)
     if handler.project_output_to_declared:
         df = _project_onto_declared_columns(df, stage, contribution)
@@ -716,10 +569,7 @@ def _strip_and_project(
 
 
 def _strip_internal_columns(df: pd.DataFrame) -> pd.DataFrame:
-    """Drop every column `_INTERNAL_ROW_COLUMNS` declares strippable that is
-    present on `df`. Unconditional — an internal column is driver machinery, so
-    it must never reach stage output, whether or not the stage declares an
-    output_schema."""
+    """Unconditional: an internal column must never reach output, output_schema declared or not."""
     stripped = {
         internal.column
         for internal in _INTERNAL_ROW_COLUMNS
@@ -730,23 +580,14 @@ def _strip_internal_columns(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def _consume_cancel(ctx: RunContext) -> bool:
-    """Consume this run's cancel message if one is pending — read-once, so a
-    True means one was pending and is now gone. False when `ctx.identity` is
-    None: a subset/eval run's ctx carries no identity (see
-    executor._subset_ctx), so those runs are never cancellable."""
+    """Read-once: True means a cancel was pending and is now gone. No identity = never cancellable."""
     if ctx.identity is None:
         return False
     return consume_cancel(ctx.identity.project, ctx.identity.run_id)
 
 
 def _collect_row_errors(df: pd.DataFrame, contribution: StageContribution) -> None:
-    """Record EVERY row carrying the `ROW_ERROR_KEY` sentinel onto `contribution`.
-    `pd.isna` alone is the test: it distinguishes a successful row (NaN — the
-    mapper never set the sentinel) from a failed row (any string, including the
-    empty string a message-less exception stringifies to). The runner surfaces
-    these as error-severity output issues and marks the stage `error`; the stage
-    keeps EVERY row (a failed row simply carries null/missing generated columns),
-    so one failed row does not abort the stage."""
+    """`pd.isna` is the whole test: an empty-string message is still a failure, not a success."""
     if ROW_ERROR_KEY not in df.columns:
         return
     contribution.row_errors = [
@@ -757,9 +598,7 @@ def _collect_row_errors(df: pd.DataFrame, contribution: StageContribution) -> No
 
 
 def _collect_row_usage(df: pd.DataFrame, contribution: StageContribution) -> None:
-    """Sum every row's `ROW_USAGE_KEY` usage dict onto `contribution.llm_usage` —
-    the stage's total token/cost spend. No column means a non-LLM stage (or a
-    stage where usage was never reported): nothing is recorded, never a zero."""
+    """No usage column means usage was never reported: nothing is recorded, never a zero."""
     if ROW_USAGE_KEY not in df.columns:
         return
     parts = [value for value in df[ROW_USAGE_KEY] if isinstance(value, LlmUsage)]
@@ -769,13 +608,7 @@ def _collect_row_usage(df: pd.DataFrame, contribution: StageContribution) -> Non
 def _project_onto_declared_columns(
     df: pd.DataFrame, stage: Stage, contribution: StageContribution
 ) -> pd.DataFrame:
-    """Project onto exactly the columns output_schema declares, in declared
-    order. Column selection only — row count and order are untouched. Every
-    column it drops is recorded on `contribution`, never silently discarded —
-    and each is a user column, since the internal columns were already stripped
-    off before this runs. Raises when a declared column is absent, except on a
-    frame whose rows already reported generation failures — a failed row
-    produces no generated value, and its row errors fail the stage anyway."""
+    """Raises on a missing declared column, except where rows already reported generation failures."""
     declared = [c.name for c in stage.output_schema.columns] if stage.output_schema else []
     if not declared:
         return df
