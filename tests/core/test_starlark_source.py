@@ -36,10 +36,32 @@ def test_an_injected_builtin_is_callable_from_the_source():
 
 
 def test_a_starlark_error_that_is_not_an_unbound_variable_still_propagates():
-    # Swallowing a real error here would misreport it as "not bound".
-    module = compile_starlark_module("def transform(row):\n    return row\n", {})
+    # `type = 5` shadows the probe's own builtin, so `type(transform)` raises
+    # "Operation `call()` not supported on type `int`" — a real StarlarkError,
+    # not an unbound-variable one. Swallowing it here would misreport it as
+    # "not bound" instead of surfacing the actual error.
+    module = compile_starlark_module("type = 5\ndef transform(row):\n    return row\n", {})
     with pytest.raises(starlark.StarlarkError):
-        find_bound_function(module, ("1bad-name",))
+        find_bound_function(module, ("transform",))
+
+
+def test_a_non_identifier_name_is_rejected_rather_than_read_as_unbound():
+    # function_name is stage config an author writes, not a trusted literal. A
+    # crafted non-identifier string can otherwise make the probe expression
+    # evaluate to something other than a plain name lookup.
+    module = compile_starlark_module("def transform(row):\n    return row\n", {})
+    with pytest.raises(ValueError):
+        find_bound_function(module, ('transform) if False else ("function"',))
+
+
+def test_a_non_identifier_name_cannot_execute_a_builtin_during_the_probe():
+    calls = []
+    module = compile_starlark_module(
+        "def transform(row):\n    return row\n", {"refuse": lambda reason: calls.append(reason)}
+    )
+    with pytest.raises(ValueError):
+        find_bound_function(module, ('refuse("side effect")) or (1',))
+    assert calls == []
 
 
 def test_a_builtin_must_be_injected_before_the_source_referencing_it_is_compiled():

@@ -27,6 +27,11 @@ def find_bound_function(module: starlark.Module, names: Sequence[str]) -> str | 
 
 
 def _is_bound_function(module: starlark.Module, name: str) -> bool:
+    # `name` is interpolated into a Starlark expression below; a non-identifier
+    # (stage config, not a trusted literal) could otherwise inject arbitrary
+    # Starlark into the probe. Not "unbound" — a malformed name is an error.
+    if not name.isidentifier():
+        raise ValueError(f"Not a valid Starlark identifier: {name!r}")
     # Module has no `get`; indexing an absent name returns None and indexing a
     # FUNCTION raises. Evaluating `type(name)` as a top-level EXPRESSION is the
     # only probe that answers this — as a statement, eval returns None instead.

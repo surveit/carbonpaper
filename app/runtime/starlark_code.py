@@ -24,6 +24,14 @@ _REFUSAL_MARKER = f"\nerror: {StepRefused.__name__}: "
 # author's own text is everything before the LAST occurrence.
 _SPAN_MARKER = "\n --> "
 
+# starlark-pyo3 renders exactly one "error: " line per failure, always the FIRST
+# one in the text — the traceback frames above it never start a line this way.
+# An author's own multi-line message (via fail(), or via row data threaded
+# through fail()) can contain this text too, but only ever LATER in the string,
+# which is why matching "first occurrence" rather than "anywhere" tells refusal
+# apart from a forged look-alike.
+_ERROR_LINE_MARKER = "\nerror: "
+
 
 class StarlarkFunctionHandle:
     """One compiled Starlark function, callable per row."""
@@ -58,9 +66,9 @@ def _refuse(reason: str) -> None:
 
 
 def _find_refusal_message(text: str) -> str | None:
-    start = text.find(_REFUSAL_MARKER)
-    if start == -1:
+    first_error_line = text.find(_ERROR_LINE_MARKER)
+    if first_error_line == -1 or not text.startswith(_REFUSAL_MARKER, first_error_line):
         return None
-    rest = text[start + len(_REFUSAL_MARKER):]
+    rest = text[first_error_line + len(_REFUSAL_MARKER):]
     end = rest.rfind(_SPAN_MARKER)
     return rest if end == -1 else rest[:end]
