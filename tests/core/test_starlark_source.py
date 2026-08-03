@@ -3,7 +3,43 @@ from __future__ import annotations
 import pytest
 import starlark
 
-from app.core.starlark_source import compile_starlark_module, find_bound_function
+from app.core.starlark_source import (
+    DEFAULT_FUNCTION_NAME,
+    REFUSE_BUILTIN,
+    compile_starlark_module,
+    find_bound_function,
+)
+
+
+def test_the_module_docstring_says_loading_source_executes_it():
+    # Regression: `compile_starlark_module` (via `starlark.eval`) runs the
+    # source's top-level statements at "compile" time — a module docstring
+    # describing this as mere compilation would be false.
+    import app.core.starlark_source as module
+
+    assert "execute" in (module.__doc__ or "").lower()
+
+
+def test_the_model_and_runtime_layers_import_the_same_default_function_name():
+    # Regression: the model layer (write-time validation) and the runtime layer
+    # (execution) each once declared "transform" as their own private constant,
+    # linked only by a comment. Both must import this one definition so they
+    # cannot drift apart.
+    from app.models.stages.starlark import DEFAULT_FUNCTION_NAME as model_name
+    from app.runtime.stages.starlark_functions import DEFAULT_FUNCTION_NAME as runtime_name
+
+    assert model_name is DEFAULT_FUNCTION_NAME
+    assert runtime_name is DEFAULT_FUNCTION_NAME
+
+
+def test_the_model_and_runtime_layers_import_the_same_refuse_builtin_name():
+    # Regression: "refuse" was likewise declared twice — once in the model
+    # layer's write-time validation, once in the runtime's execution path.
+    from app.models.stages.starlark import REFUSE_BUILTIN as model_refuse
+    from app.runtime.starlark_code import REFUSE_BUILTIN as runtime_refuse
+
+    assert model_refuse is REFUSE_BUILTIN
+    assert runtime_refuse is REFUSE_BUILTIN
 
 
 def test_a_bound_def_returns_its_name():
@@ -14,6 +50,22 @@ def test_a_bound_def_returns_its_name():
 def test_an_absent_name_returns_none():
     module = compile_starlark_module("x = 1\n", {})
     assert find_bound_function(module, ("transform",)) is None
+
+
+@pytest.mark.parametrize("name", ["len", "dict", "fail", "str", "type", "sorted", "range"])
+def test_a_standard_global_the_module_never_bound_returns_none(name):
+    # Regression: the probe once evaluated `type(name)` against the standard
+    # globals, so a name the STANDARD LIBRARY provides (never bound by `code`
+    # itself) read as bound — a stage saved even though it defines nothing.
+    module = compile_starlark_module("x = 1\n", {})
+    assert find_bound_function(module, (name,)) is None
+
+
+def test_a_module_level_def_shadowing_a_standard_global_is_still_found():
+    # The fix for the above must not over-reject: a module that genuinely
+    # defines its own `len` (shadowing the builtin) is bound and found.
+    module = compile_starlark_module("def len(row):\n    return row\n", {})
+    assert find_bound_function(module, ("len",)) == "len"
 
 
 def test_a_name_bound_to_a_non_function_returns_none():
@@ -35,14 +87,14 @@ def test_an_injected_builtin_is_callable_from_the_source():
     assert starlark.eval(module, probe, starlark.Globals.standard()) == 6
 
 
-def test_a_starlark_error_that_is_not_an_unbound_variable_still_propagates():
-    # `type = 5` shadows the probe's own builtin, so `type(transform)` raises
-    # "Operation `call()` not supported on type `int`" — a real StarlarkError,
-    # not an unbound-variable one. Swallowing it here would misreport it as
-    # "not bound" instead of surfacing the actual error.
+def test_a_module_rebinding_an_unrelated_builtin_does_not_confuse_the_probe():
+    # Regression guard for an earlier probe design: it evaluated `type(name)` as
+    # Starlark source, so a module that rebinds `type` itself (to something not
+    # callable) broke the PROBE EXPRESSION, not the lookup of `transform`. The
+    # current probe reads `module[name]` directly and never runs `type(...)`,
+    # so this rebinding cannot interfere with finding `transform`.
     module = compile_starlark_module("type = 5\ndef transform(row):\n    return row\n", {})
-    with pytest.raises(starlark.StarlarkError):
-        find_bound_function(module, ("transform",))
+    assert find_bound_function(module, ("transform",)) == "transform"
 
 
 def test_a_non_identifier_name_is_rejected_rather_than_read_as_unbound():

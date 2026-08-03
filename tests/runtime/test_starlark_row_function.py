@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pandas as pd
 import pytest
+import starlark
 
 from app.models import parse_stage
 from app.models.errors import StepRefused
@@ -45,7 +46,7 @@ def test_maps_the_function_over_every_row():
 
 def test_starlark_cannot_reach_the_python_object_graph():
     stage = _stage("def transform(row):\n    return row.__class__\n")
-    with pytest.raises(Exception, match="__class__"):
+    with pytest.raises(starlark.StarlarkError, match="has no attribute `__class__`"):
         _handler().execute(stage, {"src": pd.DataFrame({"n": [1]})}, make_run_context())
 
 
@@ -63,7 +64,7 @@ def test_a_function_returning_a_non_dict_fails_loudly():
 
 def test_an_oversized_int_in_the_input_stops_the_stage():
     stage = _stage("def transform(row):\n    return row\n")
-    with pytest.raises(ValueError, match="n"):
+    with pytest.raises(ValueError, match=r"column 'n': integer .* exceeds"):
         _handler().execute(
             stage, {"src": pd.DataFrame({"n": [2**70 + 7]})}, make_run_context()
         )

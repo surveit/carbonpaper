@@ -24,6 +24,15 @@ def _stage(**overrides):
     return StarlarkRowFunctionStage(**fields)
 
 
+def test_validate_docstring_says_it_executes_the_code():
+    # Regression: `validate_starlark_function_code` compiles via `starlark.eval`,
+    # which runs `code`'s top-level statements — describing this as a mere
+    # binding check without saying it executes would be misleading.
+    from app.models.stages.starlark import validate_starlark_function_code
+
+    assert "execut" in (validate_starlark_function_code.__doc__ or "").lower()
+
+
 def test_accepts_source_defining_transform():
     assert StarlarkFunction(code=GOOD).code == GOOD
 
@@ -49,6 +58,15 @@ def test_honours_a_named_function():
     assert StarlarkFunction(code=source, function="relabel").function == "relabel"
     with pytest.raises(ValueError):
         StarlarkFunction(code=source, function="absent")
+
+
+@pytest.mark.parametrize("name", ["len", "dict", "fail", "str", "type", "sorted", "range"])
+def test_naming_a_standard_global_as_function_is_rejected_not_saved(name):
+    # Regression: the probe once evaluated `type(<name>)` against the standard
+    # globals, so a name the standard library provides (never bound by `code`
+    # itself) read as bound, and a stage saved that defines nothing.
+    with pytest.raises(ValueError):
+        StarlarkFunction(code="x = 1\n", function=name)
 
 
 def test_source_calling_refuse_validates():
@@ -123,13 +141,13 @@ def test_find_authored_code_block_returns_the_config():
 _ROW_MERGE_IDIOM = re.compile(r"`(return\s+[^`]+)`")
 
 
-def _compilable_idiom_from(description: str) -> str:
-    match = _ROW_MERGE_IDIOM.search(description)
-    assert match, (
+def _compilable_idioms_from(description: str) -> list[str]:
+    matches = _ROW_MERGE_IDIOM.findall(description)
+    assert matches, (
         "expected a `return ...` row-merge idiom quoted in this authoring-guidance "
         f"text, found none: {description!r}"
     )
-    return re.sub(r"=\s*\w+", "=1", match.group(1))
+    return [re.sub(r"=\s*\w+", "=1", match) for match in matches]
 
 
 @pytest.mark.parametrize("description", [
@@ -140,6 +158,8 @@ def test_authoring_guidance_teaches_a_row_merge_idiom_the_parser_accepts(descrip
     # Regression: an earlier revision of both passages told an author (including the
     # compiler agent, which reads this exact text) to write `return {**row, ...}` —
     # syntax starlark-pyo3's parser rejects outright, so every stage authored by
-    # following the guidance would fail to save.
-    code = f"def transform(row):\n    {_compilable_idiom_from(description)}\n"
-    assert StarlarkFunction(code=code).code == code
+    # following the guidance would fail to save. Checks EVERY quoted `return ...`
+    # idiom in the passage, not just the first — a passage may quote more than one.
+    for idiom in _compilable_idioms_from(description):
+        code = f"def transform(row):\n    {idiom}\n"
+        assert StarlarkFunction(code=code).code == code

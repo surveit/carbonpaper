@@ -35,7 +35,10 @@ def _marshal_value(column: str, value: Any) -> Any:
     if isinstance(value, (float, np.floating)):
         number = float(value)
         return None if math.isnan(number) else number
-    # Before the general missing test: pd.NaT is an instance of dt.datetime.
+    # Must run before the generic scalar/missing branch below: that branch only
+    # ever returns None for a missing value, never formats one, so a valid
+    # (non-missing) date reaching it instead of here would fall through
+    # unconverted all the way to the final "unrepresentable type" raise.
     if isinstance(value, (dt.datetime, dt.date)):
         return None if pd.isna(value) else value.isoformat()
     if pd.api.types.is_scalar(value) and pd.isna(value):
@@ -50,8 +53,8 @@ def _marshal_value(column: str, value: Any) -> Any:
 def _marshal_int(column: str, value: int) -> int:
     if abs(value) > MAX_EXACT_INT:
         raise ValueError(
-            f"column {column!r}: integer {value} exceeds {MAX_EXACT_INT} and the "
-            f"Starlark boundary would convert it to a float, silently losing the "
-            f"exact value. Pass it as a string if the exact digits matter."
+            f"column {column!r}: integer {value} exceeds {MAX_EXACT_INT}, the "
+            f"largest magnitude guaranteed to cross the Starlark boundary without "
+            f"losing exact digits. Pass it as a string if the exact digits matter."
         )
     return value

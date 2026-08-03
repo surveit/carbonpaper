@@ -44,6 +44,17 @@ def test_the_boundary_value_itself_is_allowed():
     assert marshal_row_for_starlark({"n": MAX_EXACT_INT}) == {"n": MAX_EXACT_INT}
 
 
+def test_oversized_int_message_states_the_guarantee_not_a_false_mechanism():
+    # Regression: the message once claimed crossing the boundary "would convert
+    # it to a float, silently losing the exact value" — false right at the
+    # boundary, since 2**63 round-trips through float exactly (it's a power of
+    # two). State the guaranteed-exact bound, not an always-lossy mechanism.
+    with pytest.raises(ValueError) as err:
+        marshal_row_for_starlark({"n": 2**63})
+    assert "convert it to a float" not in str(err.value)
+    assert "guaranteed" in str(err.value)
+
+
 def test_unrepresentable_type_raises_rather_than_being_stringified():
     with pytest.raises(ValueError) as err:
         marshal_row_for_starlark({"blob": object()})
