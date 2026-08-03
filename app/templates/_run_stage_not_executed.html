@@ -20,7 +20,7 @@
     <p class="stage-id">{{ stage.name }}</p>
 </div>
 
-<p class="banner banner-review" id="stage-not-executed">
+<p class="banner" id="stage-not-executed">
     ⏭ <strong>Not executed in this run</strong> — so there is no output, no timing, and no
     validation to show for it.
     {% if is_test_run and stage.type == 'input_data' %}

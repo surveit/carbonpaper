@@ -144,7 +144,7 @@
 </p>
 {% endif %}
 {% if artifact_links %}
-<p class="banner">📤 Generated outputs:
+<p class="banner banner-done">📤 Generated outputs:
     {% for a in artifact_links %}<a href="{{ a.url }}">{{ a.name }}</a>{% if not loop.last %} · {% endif %}{% endfor %}
 </p>
 {% endif %}
@@ -153,7 +153,7 @@
       this run pinned; with graph_error set NO graph is drawn, because the
       working copy may not be what ran. ── #}
 {% if graph_error %}
-<p class="banner banner-review" id="graph-error">⚠ Workflow graph unavailable — {{ graph_error }}</p>
+<p class="banner banner-warn" id="graph-error">⚠ Workflow graph unavailable — {{ graph_error }}</p>
 {% else %}
 <div class="workflow workflow-full">
     <pre class="mermaid">
