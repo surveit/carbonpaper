@@ -22,13 +22,13 @@ from app.core.errors import (
 )
 from app.models import (
     HUMAN_REVIEW_QUEUE_CONTRACT_NOTE,
-    NODE_TYPES,
     StageDraft,
     find_workflow_compiler_warnings,
     StageType,
 )
 from app.tools.tool_specs import SAVE_VERSION_FROM_WORKING_COPY, TOOL_SPECS
 from app.models.review_guide import ReviewGuide
+from app.models.stages.node_types import NODE_TYPES
 from app.runtime import stage_tests
 from app.services import generation
 from app.services import loader

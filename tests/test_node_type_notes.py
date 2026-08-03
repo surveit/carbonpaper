@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from app import models as m
+from app.models import HUMAN_REVIEW_QUEUE_CONTRACT_NOTE
+from app.models.stages.node_types import NODE_TYPES
 
 
 def test_human_review_queue_note_states_the_fingerprint_matching():
-    note = m.NODE_TYPES["human_review_queue"].get("notes")
+    note = NODE_TYPES["human_review_queue"].get("notes")
     assert note, "human_review_queue must carry a `notes` explanation"
     # the authoring agent needs to know editing filter/reviewer_instructions
     # invalidates every decision cached for this stage
@@ -15,14 +16,14 @@ def test_human_review_queue_note_states_the_fingerprint_matching():
 def test_note_reaches_the_editing_agent_prompt():
     from app.agents.compiler.prompt import EDITING_SYSTEM_PROMPT
 
-    note = m.NODE_TYPES["human_review_queue"]["notes"]
+    note = NODE_TYPES["human_review_queue"]["notes"]
     assert note in EDITING_SYSTEM_PROMPT
 
 
 def test_fixed_output_columns_contract_reaches_the_editing_agent_prompt():
     from app.agents.compiler.prompt import EDITING_SYSTEM_PROMPT
 
-    assert m.HUMAN_REVIEW_QUEUE_CONTRACT_NOTE in EDITING_SYSTEM_PROMPT
+    assert HUMAN_REVIEW_QUEUE_CONTRACT_NOTE in EDITING_SYSTEM_PROMPT
 
 
 def test_hrq_note_names_the_decision_values_the_runtime_actually_emits():
@@ -38,11 +39,11 @@ def test_hrq_note_names_the_decision_values_the_runtime_actually_emits():
 
     for value in (RowReviewDecision.reject.value, RowReviewDecision.approve.value,
                   RowReviewDecision.modify.value, NOT_REVIEWED):
-        assert f'"{value}"' in m.HUMAN_REVIEW_QUEUE_CONTRACT_NOTE, value
+        assert f'"{value}"' in HUMAN_REVIEW_QUEUE_CONTRACT_NOTE, value
 
 
 def test_publish_note_names_the_trace_link_helper():
-    note = m.NODE_TYPES["publish"].get("notes")
+    note = NODE_TYPES["publish"].get("notes")
     assert note, "publish must carry a `notes` explanation"
     # the authoring agent has to know the keyword to declare and the call to make
     assert "trace_links" in note
@@ -52,5 +53,5 @@ def test_publish_note_names_the_trace_link_helper():
 def test_publish_note_reaches_the_editing_agent_prompt():
     from app.agents.compiler.prompt import EDITING_SYSTEM_PROMPT
 
-    note = m.NODE_TYPES["publish"]["notes"]
+    note = NODE_TYPES["publish"]["notes"]
     assert note in EDITING_SYSTEM_PROMPT
