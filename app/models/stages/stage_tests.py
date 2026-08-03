@@ -134,12 +134,23 @@ def build_stage_tests_model(
     return StageTestSuite
 
 
+def _count_rows_in_the_single_input(test: StageTest) -> int:
+    try:
+        (rows,) = test.inputs.values()
+    except ValueError:
+        raise ValueError(
+            f"test {test.name!r}: a test of a one-input stage states exactly one "
+            f"input, not {sorted(test.inputs)}"
+        ) from None
+    return len(rows)
+
+
 def _validate_row_function_row_counts(test: StageTest) -> None:
-    input_rows = len(next(iter(test.inputs.values()), []))
-    if input_rows != 1:
+    input_row_count = _count_rows_in_the_single_input(test)
+    if input_row_count != 1:
         raise ValueError(
             f"test {test.name!r}: a python_row_function test is one row in "
-            f"(got {input_rows} in)"
+            f"(got {input_row_count} in)"
         )
     # A failure case (expected is None) claims no output rows at all, so only a
     # rows case has an output count left to hold.
@@ -151,11 +162,11 @@ def _validate_row_function_row_counts(test: StageTest) -> None:
 
 
 def _validate_filter_row_counts(test: StageTest) -> None:
-    input_rows = len(next(iter(test.inputs.values()), []))
-    if input_rows != 1:
+    input_row_count = _count_rows_in_the_single_input(test)
+    if input_row_count != 1:
         raise ValueError(
             f"test {test.name!r}: a filter_rows test is one row in "
-            f"(got {input_rows} in)"
+            f"(got {input_row_count} in)"
         )
     # A failure case (expected is None) claims no output rows at all. A rows case
     # states the kept row ([row]) or the drop ([]) — never more than it was given.

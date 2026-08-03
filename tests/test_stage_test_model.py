@@ -49,6 +49,15 @@ def test_every_testable_type_has_an_arity_rule(stage_cls):
     )
 
 
+@pytest.mark.parametrize("stage_type", ["python_row_function", "filter_rows"])
+def test_a_test_supplying_no_inputs_says_so(stage_type):
+    """No input at all is a malformed test, not a test with zero rows in."""
+    with pytest.raises(ValueError, match="states exactly one input"):
+        validate_stage_tests(
+            stage_type, [], [StageTest(name="no_inputs", inputs={}, expected=None)]
+        )
+
+
 def test_valid_test_parses_on_python_row_stage():
     stage = parse_stage(_row_stage([_GOOD_TEST]))
     assert stage.tests is not None
