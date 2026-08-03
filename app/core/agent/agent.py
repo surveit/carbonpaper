@@ -33,6 +33,53 @@ input schema exactly. Call it once, when the ENTIRE answer is ready. If it is
 rejected, fix the reported problems and call submit_answer again. Once it is
 accepted you are done — do not restate the answer."""
 
+# ─────────────────────────────────────────────────────────────────────────────
+# WORKAROUND for a defect OUTSIDE this codebase — delete it when that is fixed.
+#
+# Nothing here is a design choice. It exists because a tool whose whole parameter
+# list is a single array-of-objects gets called as {"prop": {"prop": [...]}}: the
+# model collapses the arguments object into the answer object and builds it twice.
+# MCP rejects that before our handler runs, so the whole answer is regenerated.
+#
+# The schema we send is correct and reaches the model intact — verified by asking
+# it to recite its own tool definition. Ruled out with their own runs: $defs/$ref,
+# payload size (fails at 1.8KB), the schema title, the property name, the prompt
+# wording, the model tier, and attention (an agent made to recite the schema first
+# still wrapped 3/3). The ONLY variable is the shape: 12/12 runs wrapped with one
+# list property, 0/9 with any second argument.
+#
+# Not isolated to the model versus the CLI — that needs the same tool definition
+# sent straight to the API, and there is no API key on the dev machines.
+#
+# TO CHECK WHETHER IT IS STILL NEEDED: delete advertise_more_than_one_argument and
+# its two call sites, then run tests/test_agent_answer_arguments.py, which exercises
+# the failing shape end to end. If it passes, this whole block can go.
+# ─────────────────────────────────────────────────────────────────────────────
+COMPANION_FIELD = "answer_is_complete"
+
+
+def advertise_more_than_one_argument(schema: dict[str, Any]) -> dict[str, Any]:
+    # Both halves measured over 6 runs of the failing shape: the companion argument
+    # alone still retried 2/6, spelling the lone argument out alone 0/6, together 0/6
+    # (and 0/8 on a longer run). Both kept — one breaks the shape, the other says what
+    # to pass. See the WORKAROUND note above before touching either.
+    """`schema` made non-degenerate iff it declares exactly one property."""
+    properties = schema.get("properties", {})
+    if len(properties) != 1:
+        return schema
+    (name, only), = properties.items()
+    spelled_out = "Pass this argument's own value directly — do not wrap the whole answer in it."
+    described = {**only, "description": f"{only['description']} {spelled_out}"
+                 if only.get("description") else spelled_out}
+    return {
+        **schema,
+        "properties": {name: described, COMPANION_FIELD: {
+            "type": "boolean",
+            "description": "True once every other argument is filled in. Always true.",
+        }},
+        "required": [*schema.get("required", []), COMPANION_FIELD],
+    }
+
 
 class Agent(Generic[Model]):
     """A headless agent that produces a validated `target_schema` instance.
@@ -140,6 +187,7 @@ class Agent(Generic[Model]):
         # failure it raises; the registry's tool wrapper turns the raise into an is_error
         # tool result carrying these issues, which the agent then corrects and re-submits.
         self._attempts += 1
+        fields.pop(COMPANION_FIELD, None)  # advertised only; see build_companion_property
         try:
             self._answer = self._target_schema.model_validate(fields)
         except ValidationError as err:
@@ -156,7 +204,8 @@ class Agent(Generic[Model]):
         max_attempts turns (+ a small buffer for any preamble/closing turn) so an agent
         that never submits a valid answer cannot loop forever. Used by run(), and by a
         caller driving the agent as a live turn: turns.start(engine=agent.build_engine()...)."""
-        input_schema = self._target_schema.model_json_schema()
+        input_schema = advertise_more_than_one_argument(
+            self._target_schema.model_json_schema())
         server, allowed, _wrapped = build_mcp_server([
             BoundToolSpec(
                 name=SUBMIT_ANSWER_TOOL,
