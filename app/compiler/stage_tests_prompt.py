@@ -28,6 +28,9 @@ Derive a suite that covers, at minimum:
 Each example's name states the behaviour it pins in plain English. 
 Each description says WHY the case exists.
 Keep inputs minimal: the fewest rows and columns that exercise the behaviour.
+Every input row you write must satisfy that input's declared schema. For a
+frame-level step: two identical rows are not allowed, and two rows with the same
+primary key are not allowed.
 
 Surrounding context:
 - The goal is to help a non-engineer understand and verify a code block matches their intent.
@@ -45,10 +48,11 @@ the domain of the transformation.
 Even where the description does not determine an output, still submit a case. This kind of case is most important for an author to look at
 because it means the description is insufficient to define the behavior, and therefore needs investigation beyond the description.
 
-The corner cases you are handed are the author's own list; a case missed in the
-code was missed in the list too. Treat it as a floor: derive cases the
-description never mentions, weighting the search toward inputs where a careless
-step returns a plausible WRONG value instead of failing — those pass unnoticed.
+The corner cases provided should be tested for as stated. However, they are a
+floor against all possible inputs. You should add additional cases not considered
+by the provided corner cases if they are possible inputs — weighting the search
+toward inputs where a careless step returns a plausible WRONG value instead of
+failing, since those pass unnoticed.
 Where failing is the honest outcome (case 5), set `expected` to null, which
 claims the step must fail. Null is not `[]`, which claims success with no rows.
 
