@@ -11,12 +11,10 @@ import os
 from pathlib import Path
 from typing import Any
 
-from app.core.paths import REPO_ROOT, repo_root
+from app.core.paths import REPO_ROOT, repo_root as repo_root
 from app.services import node_review
 from app.services.loader import load_compiled_dir, stage_to_spec_dict
 
-__all__ = ["REPO_ROOT", "repo_root", "projects_dir", "set_projects_dir",
-           "configure_projects_dir_from_env"]
 
 # The projects storage root: <root>/<name>/ working copies live here. There is
 # exactly ONE in a running process — the app does not serve multiple
