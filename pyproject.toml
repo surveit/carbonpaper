@@ -142,13 +142,18 @@ allowed_importers = ["app.main"]
 # nothing else imports it. It depends only on app.services (+ app.core).
 
 [[tool.importlinter.contracts]]
-name = "app.agents imported only by the entrypoint"
+name = "an agent package is imported only by the entrypoint"
 type = "protected"
-protected_modules = ["app.agents"]
+protected_modules = ["app.agents.compiler"]
 allowed_importers = ["app.main"]
-# The hydrated editing agent is a top-level interface like app.web / app.mcp:
-# app.main registers it on the shared engine, nothing else imports it. It leans
-# on app.core.agent (the engine) + app.services (to read/edit projects).
+# A hydrated agent is a top-level interface like app.web / app.mcp: app.main
+# registers it on the shared engine, nothing else imports it. It leans on
+# app.core.agent (the engine) + app.services (to read/edit projects).
+#
+# Scoped to the agent PACKAGES rather than all of app.agents, because
+# app.agents.tool_specs is shared vocabulary the MCP surface reads too — it
+# describes tools, it does not run one. app/agents/_arch_tests keeps this list
+# honest: a new agent package that is not named here fails.
 
 [[tool.importlinter.contracts]]
 name = "production run entry points reached only by the run service"
