@@ -115,10 +115,6 @@ def _is_range_bound(v: Any) -> bool:
 
 # ── Typed columns / schemas ──────────────────────────────────────────────────
 class Column(_Base):
-    # `type` and `nullable` are REQUIRED: every column owes an answer on both, so a
-    # declaration that never decided is unrepresentable rather than silently loosest.
-    # The requirement rides out through model_json_schema() into the submit_answer
-    # input schema every authoring agent fills in (tests/test_column_tightness.py).
     name: str
     type: str = Field(
         description=(
