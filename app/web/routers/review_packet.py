@@ -9,7 +9,7 @@ from fastapi import APIRouter, HTTPException, Response
 from starlette.concurrency import run_in_threadpool
 
 from app.core.errors import RunNotFoundError
-from app.services.review_packet import export_review_packet
+from app.web.export import export_review_packet
 
 router = APIRouter()
 

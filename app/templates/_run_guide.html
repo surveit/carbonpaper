@@ -32,7 +32,7 @@
      not-executed case, showing the pinned definition and saying it did not run.
      The dashed border is the warning; the panel is the explanation. #}
   <a class="guide-stage-row{% if not s.executed %} absent{% endif %}"
-     href="#{{ s.stage_id }}" data-stage-link="{{ s.stage_id }}"
+     href="{{ links.guide_stage(s.stage_id) }}" data-stage-link="{{ s.stage_id }}"
      {% if not s.executed %}title="This run has no record for this stage"{% endif %}>
     <span class="guide-stage-name">{{ s.stage.name }}</span>
     <span class="type-tag {{ type_class.get(s.stage.type, 'custom') }}">{{ type_glyph.get(s.stage.type, '') }} {{ s.stage.type }}</span>
@@ -170,6 +170,7 @@
   document.addEventListener('click', function (ev) {
     const a = ev.target.closest('[data-stage-link]');
     if (!a) return;
+    if (!window._loadStage) return;   // no panel to load into — let the href navigate
     ev.preventDefault();
     const id = a.getAttribute('data-stage-link');
     document.querySelectorAll('.guide-stage-row.active')
@@ -184,6 +185,7 @@
   const guide = document.getElementById('run-guide');
   const gExpand = document.getElementById('guide-expand');
   const gCollapse = document.getElementById('guide-collapse');
+  if (!shell || !guide || !gExpand || !gCollapse) return;
   const GKEY = 'run-guide-collapsed:' + {{ project | tojson }};
 
   function setGuideCollapsed(on) {

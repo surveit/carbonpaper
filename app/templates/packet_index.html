@@ -1,0 +1,116 @@
+{% extends "_packet_layout.html" %}
+{% block title %}Review packet · {{ run.project }} · {{ run.run_id }}{% endblock %}
+{% block content %}
+
+<div class="stage-header">
+  <h1>Run <code>{{ run.run_id }}</code></h1>
+  <span class="run-status status-{{ run.status }}">{{ run.status }}</span>
+  <p class="stage-id">project <strong>{{ run.project }}</strong> · started {{ run.started_at }}{% if run.finished_at %} · finished {{ run.finished_at }}{% endif %}{% if run.workflow_version %} · workflow version <code>{{ run.workflow_version }}</code>{% endif %}</p>
+</div>
+
+{% if run.is_test_run %}
+<p class="banner banner-review">🧪 <strong>Workflow test</strong> — this was a test run. Its numbers are not the project's published output.</p>
+{% endif %}
+
+<p class="banner">📦 <strong>What this is.</strong> Everything this run read, did and produced —
+  enough to check the result without the software that made it. Read
+  <a href="methodology.md">methodology.md</a> for what the author set out to do, the review guide
+  below for what they say is worth scrutinising, then each step for what actually ran.</p>
+
+{% if guide %}
+<section class="packet-guide">
+  {% include "_run_guide.html" %}
+</section>
+{% endif %}
+
+<section class="packet-caveats">
+  <h2>What this packet cannot tell you</h2>
+  <ul>
+    <li><strong>Cached rows.</strong> Rows served from the stage cache were computed by an
+      <em>earlier</em> run, and the manifest does not record which one — so their model prompts are
+      not in this packet's <code>events.jsonl</code>. This run
+      {% if run.bust_cache %}<strong>bypassed the cache entirely</strong>, so every row was computed fresh{% else %}<strong>used the cache where it could</strong>, so an unknown number of rows were not recomputed{% endif %}.</li>
+    <li><strong>Row lineage.</strong> Which input row produced which output row is not recorded here,
+      so each step's rows carry no lineage link.</li>
+    <li><strong>Example results.</strong> A step's authored examples are not included. Running them
+      now would report today's code, not the code this run executed — a pass here would not be
+      evidence about this run.</li>
+  </ul>
+</section>
+
+{% if omitted %}
+<section>
+  <h2>Files that could not be written ({{ omitted|length }})</h2>
+  <table class="stages">
+    <thead><tr><th>expected file</th><th>why it is missing</th></tr></thead>
+    <tbody>{% for item in omitted %}<tr><td><code>{{ item.path }}</code></td><td>{{ item.reason }}</td></tr>{% endfor %}</tbody>
+  </table>
+</section>
+{% endif %}
+
+<section>
+  <h2>Steps</h2>
+  <table class="stages">
+    <thead><tr><th>#</th><th>step</th><th>status</th><th>rows out</th><th>checks</th><th>data</th></tr></thead>
+    <tbody>
+      {% for stage in run.stages %}
+      <tr>
+        <td class="packet-num">{{ loop.index }}</td>
+        <td>
+          <a href="{{ stages_dir }}/{{ stage.stage_id }}.html">{{ type_glyph.get(stage.type, "") }} {{ stage.name }}</a>
+          <div class="stage-id"><code>{{ stage.stage_id }}</code> ·
+            <span class="type-tag {{ type_class.get(stage.type, 'custom') }}">{{ stage.type }}</span></div>
+        </td>
+        <td><span class="run-status status-{{ stage.status }}">{{ stage.status }}</span></td>
+        <td class="packet-num">{{ "{:,}".format(stage.row_count) }}</td>
+        <td>
+          {% set failures = stage.validations | rejectattr("ok") | list %}
+          {% if not stage.validations %}<span class="muted">none declared</span>
+          {% elif failures %}<span class="signal packet-bad">{{ failures|length }} failed</span>
+          {% else %}<span class="signal packet-good">passed</span>{% endif %}
+        </td>
+        <td>{% if stage.data_file %}<a href="{{ stage.data_file }}">CSV</a>{% else %}<span class="muted">—</span>{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<section>
+  <h2>Inputs this run read</h2>
+  {% if run.inputs %}
+  <p class="muted packet-note">The hash is what the run recorded when it read the file — check the
+    copy in <code>inputs/</code> against it to confirm these are the same bytes. The full path each
+    file was read from is in <a href="manifest.json">manifest.json</a>.</p>
+  <table class="stages">
+    <thead><tr><th>step</th><th>file</th><th>SHA-256</th><th>bytes</th><th>source</th></tr></thead>
+    <tbody>
+      {% for input in run.inputs %}
+      <tr>
+        <td><code>{{ input.stage_id }}</code></td>
+        <td>{{ input.filename }}</td>
+        <td><code class="packet-hash">{{ input.sha256 or "not recorded" }}</code></td>
+        <td class="packet-num">{{ input.bytes if input.bytes is not none else "—" }}</td>
+        <td>{{ input.source or "—" }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}<p class="muted">This run recorded no bound input files.</p>{% endif %}
+</section>
+
+<section>
+  <h2>Everything else in this folder</h2>
+  <table class="stages">
+    <tbody>
+      <tr><td><a href="methodology.md">methodology.md</a></td><td>the prose the workflow was compiled from</td></tr>
+      <tr><td><a href="workflow.json">workflow.json</a></td><td>the frozen step definitions this run executed</td></tr>
+      <tr><td><a href="manifest.json">manifest.json</a></td><td>the run's own record: timings, statuses, checks, input bindings</td></tr>
+      <tr><td><a href="events.jsonl">events.jsonl</a></td><td>the run event log, including the prompt text sent to the model</td></tr>
+      <tr><td><code>data/</code></td><td>one CSV per step, uncapped; <code>data/raw/</code> holds the files the run actually wrote</td></tr>
+      <tr><td><a href="{{ checksums_href }}">checksums.txt</a></td><td>SHA-256 of every file above</td></tr>
+    </tbody>
+  </table>
+</section>
+
+{% endblock %}

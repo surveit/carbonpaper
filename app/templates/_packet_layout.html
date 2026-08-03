@@ -1,0 +1,30 @@
+{# The packet's page shell. Deliberately NOT project_shell.html: that carries the
+   sidebar, live polling and run controls, which are navigation and actions a
+   sealed offline record has none of. #}
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}Review packet{% endblock %}</title>
+{% for sheet in assets %}<link rel="stylesheet" href="{{ sheet }}">
+{% endfor %}
+</head>
+<body class="packet">
+<header>
+  <span class="brand">workflow</span>
+  <span class="packet-kicker">review packet</span>
+  <span class="packet-run muted">{{ run.project }} · <code>{{ run.run_id }}</code></span>
+</header>
+<main>
+{% block content %}{% endblock %}
+</main>
+<footer>
+  <small>
+    Every file in this folder is listed with its SHA-256 in
+    <a href="{{ checksums_href }}">checksums.txt</a> — verify with
+    <code>shasum -a 256 -c checksums.txt</code>.
+  </small>
+</footer>
+</body>
+</html>

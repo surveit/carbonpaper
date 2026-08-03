@@ -42,6 +42,10 @@ class InputBindingView(BaseModel):
 
 
 class StageView(BaseModel):
+    """`record` is the stage's manifest entry verbatim."""
+    # The app's own stage-panel template reads it directly, so it passes unshaped.
+
+    record: dict[str, Any]
     stage_id: str
     name: str
     type: str
@@ -114,6 +118,7 @@ def _build_stage_view(
     stage_id = str(record.get("stage_id") or "")
     output_path = _read_optional_str(record, "output_path")
     return StageView(
+        record=record,
         stage_id=stage_id,
         name=str(record.get("name") or stage_id),
         type=_read_plain_str(record.get("type")),

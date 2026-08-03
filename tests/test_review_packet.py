@@ -12,8 +12,9 @@ import pandas as pd
 import pytest
 
 import app.services.run as run_service
+from app.models.review_guide import ReviewGuide, ReviewGuideStep
 from app.services import versioning, workspace
-from app.services.review_packet import export_review_packet
+from app.web.export import export_review_packet
 from app.services.review_packet.checksums import compute_sha256
 
 _PROJECT = "proj"
@@ -151,25 +152,50 @@ def test_stage_page_renders_the_output_rows(exported):
     assert "<td>4</td>" in page
 
 
+# The panel ships an inline <script> whose JS contains href="${...}" template
+# literals. Strip script BODIES before scanning markup — but keep the opening
+# tag, so a real `<script src="https://cdn...">` is still caught.
+_SCRIPT_BODY = re.compile(r"(<script[^>]*>).*?(</script>)", re.DOTALL)
+
+
+def _markup_of(page) -> str:
+    return _SCRIPT_BODY.sub(r"\1\2", page.read_text(encoding="utf-8"))
+
+
 def test_pages_reference_no_network_url(exported):
     """The packet opens from disk, so nothing may resolve against a host."""
     for page in exported.root.rglob("*.html"):
-        text = page.read_text(encoding="utf-8")
-        assert not re.search(r'(?:href|src)="(?:https?:)?//', text), page
+        assert not re.search(r'(?:href|src)="(?:https?:)?//', _markup_of(page)), page
 
 
 def test_pages_reference_no_root_relative_url(exported):
     """A leading `/` resolves against the filesystem root once the folder moves."""
     for page in exported.root.rglob("*.html"):
-        text = page.read_text(encoding="utf-8")
-        assert not re.search(r'(?:href|src)="/', text), page
+        assert not re.search(r'(?:href|src)="/', _markup_of(page)), page
+
+
+def test_vendored_app_stylesheet_pulls_nothing_off_the_network(exported):
+    """A packet vendors style.css, so an @import there breaks offline rendering."""
+    css = (exported.root / "assets" / "style.css").read_text(encoding="utf-8")
+    for pattern in (r"@import", r"url\(", r"@font-face"):
+        assert not re.search(pattern, css), (
+            f"app/static/style.css now contains {pattern!r}; the review packet "
+            "vendors it and needs it to resolve with no network"
+        )
+
+
+def test_packet_uses_the_apps_own_visual_vocabulary(exported):
+    """A reader's source should recognise the packet as the same product."""
+    index = (exported.root / "index.html").read_text(encoding="utf-8")
+    assert "assets/style.css" in index
+    assert 'class="run-status status-ok"' in index
+    assert 'class="stages"' in index
 
 
 def test_every_referenced_asset_exists_in_the_packet(exported):
     """Each stylesheet and page link resolves to a file that is actually here."""
     for page in exported.root.rglob("*.html"):
-        text = page.read_text(encoding="utf-8")
-        for href in re.findall(r'(?:href|src)="([^"#?]+)"', text):
+        for href in re.findall(r'(?:href|src)="([^"#?]+)"', _markup_of(page)):
             target = (page.parent / href).resolve()
             assert target.exists(), f"{page.name} -> {href}"
 
@@ -261,6 +287,57 @@ def test_missing_run_raises_rather_than_writing_an_empty_packet(project_dir, tmp
         export_review_packet(_PROJECT, "20990101T000000", tmp_path / "packets")
 
 
+def test_index_carries_the_versions_review_guide(project_dir, tmp_path):
+    """The author's own account of what to scrutinise, from `_run_guide.html`."""
+    _make_project(project_dir)
+    version_id = _seed_version(project_dir)
+    versioning.save_version_guide(
+        project_dir,
+        version_id,
+        ReviewGuide(
+            steps=[
+                ReviewGuideStep(
+                    title="Check the doubling",
+                    prose="Confirm every `val` is exactly twice its input.",
+                    stage_ids=["double"],
+                )
+            ],
+            unnarrated=["load"],
+        ),
+    )
+    run_id = run_service.start_run(_PROJECT)
+
+    packet = export_review_packet(_PROJECT, run_id, tmp_path / "packets")
+
+    index = (packet.root / "index.html").read_text(encoding="utf-8")
+    assert "Review guide" in index
+    assert "Check the doubling" in index
+    assert "twice its input" in index
+    assert 'href="stages/double.html"' in index
+
+
+def test_guide_stage_links_reach_the_packets_own_pages(project_dir, tmp_path):
+    """A packet chip must navigate, not sit on a `#id` with no panel to load."""
+    _make_project(project_dir)
+    version_id = _seed_version(project_dir)
+    versioning.save_version_guide(
+        project_dir,
+        version_id,
+        ReviewGuide(
+            steps=[
+                ReviewGuideStep(title="Step", prose="p", stage_ids=["load", "double"])
+            ]
+        ),
+    )
+    run_id = run_service.start_run(_PROJECT)
+
+    packet = export_review_packet(_PROJECT, run_id, tmp_path / "packets")
+
+    index = (packet.root / "index.html").read_text(encoding="utf-8")
+    assert 'data-stage-link="double"' in index
+    assert '#double"' not in index
+
+
 def test_download_route_streams_a_zip_of_the_packet(project_dir):
     """The whole packet, zipped, leaving nothing behind in the project."""
     _make_project(project_dir)
@@ -285,8 +362,7 @@ def test_download_route_404s_for_a_run_that_does_not_exist(project_dir):
 
 
 def _client():
-    """Imported here: app.main mounts routers at import time, and the workspace
-    fixture must point at tmp_path first."""
+    """Imported late: app.main mounts routers at import time."""
     from fastapi.testclient import TestClient
 
     from app.main import app

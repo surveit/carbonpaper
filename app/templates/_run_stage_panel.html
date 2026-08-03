@@ -15,7 +15,7 @@
      data-project="{{ project }}" data-run="{{ run_id }}" data-stage="{{ stage.stage_id }}">
 
 <div class="stage-header">
-    <span class="type-tag {{ type_class.get(stage.type, 'custom') }}">{{ type_glyph.get(stage.type, '') }} {{ stage.type }}</span>
+    <span class="type-tag {{ type_class.get(stage.type, 'custom') }}">{{ type_glyph.get(stage.type, '') }} {{ stage.type | plain_value }}</span>
     <span class="run-status status-{{ stage.status }}">{{ stage.status }}</span>
     <h2><code>{{ stage.stage_id }}</code></h2>
     <p class="stage-id">{{ stage.name }}</p>
@@ -40,7 +40,7 @@
 {% if stage.status == 'awaiting_review' %}
 <section class="banner banner-review">
     <p>⏸ <strong>{{ stage.output_row_count }} item{% if stage.output_row_count != 1 %}s{% endif %}</strong> awaiting human review. Downstream stages won't run until the queue is cleared.</p>
-    <p><a href="/project/{{ project }}/runs/{{ run_id }}/queue/{{ stage.stage_id }}" class="btn primary">Open review queue →</a></p>
+    {% if links.review_queue(stage.stage_id) %}<p><a href="{{ links.review_queue(stage.stage_id) }}" class="btn primary">Open review queue →</a></p>{% endif %}
 </section>
 {% elif stage.status == 'pending' %}
 <p class="muted"><em>This stage hasn't run yet.</em></p>
@@ -69,7 +69,7 @@
     {% if stage_def and stage_def.inputs %}
       {% for inp in stage_def.inputs %}
       <div class="schema-card">
-        <h4>input <a href="/project/{{ project }}/runs/{{ run_id }}#{{ inp.id }}"><code>{{ inp.id }}</code></a> schema</h4>
+        <h4>input <a href="{{ links.stage_anchor(inp.id) }}"><code>{{ inp.id }}</code></a> schema</h4>
         {{ schema_table(inp.table_schema) }}
       </div>
       {% endfor %}
@@ -100,11 +100,11 @@
     {% elif preview and preview.preview %}
     <div class="preview-block">
       <div class="preview-head">output data {% set shown = preview.preview | length %}<span class="muted">· {% if preview.rows_total > shown %}first {{ shown }} of {% endif %}{{ "{:,}".format(preview.rows_total) }} row{% if preview.rows_total != 1 %}s{% endif %}</span>
-        <span class="preview-actions">· <a href="/project/{{ project }}/runs/{{ run_id }}/stage/{{ stage.stage_id }}/rows">view all rows</a>
-        · <a href="/project/{{ project }}/runs/{{ run_id }}/stage/{{ stage.stage_id }}/rows.csv">⬇ CSV</a></span></div>
+        <span class="preview-actions">· <a href="{{ links.stage_rows(stage.stage_id) }}">view all rows</a>
+        · <a href="{{ links.stage_csv(stage.stage_id) }}">⬇ CSV</a></span></div>
       <div class="table-scroll"><table class="data-preview">
         <thead><tr><th class="syw-col">lineage</th>{% for c in preview.columns %}<th>{{ c }}</th>{% endfor %}</tr></thead>
-        <tbody>{% for row in preview.preview %}<tr><td class="syw-cell"><a href="/project/{{ project }}/runs/{{ run_id }}/stage/{{ stage.stage_id }}/row/{{ loop.index0 }}/trace/view" target="_blank" rel="noopener" title="trace this row's provenance back through the pipeline">View lineage</a></td>{% for c in preview.columns %}{% set v = row[c] | string %}{% if v[:4] == 'http' %}<td class="cell-url"><a href="{{ v }}" target="_blank" rel="noopener">{{ v }}</a></td>{% else %}<td>{{ v | truncate(240) }}</td>{% endif %}{% endfor %}</tr>{% endfor %}</tbody>
+        <tbody>{% for row in preview.preview %}<tr><td class="syw-cell">{% set trace_href = links.row_trace(stage.stage_id, loop.index0) %}{% if trace_href %}<a href="{{ trace_href }}" target="_blank" rel="noopener" title="trace this row's provenance back through the pipeline">View lineage</a>{% endif %}</td>{% for c in preview.columns %}{% set v = row[c] | string %}{% if v[:4] == 'http' %}<td class="cell-url"><a href="{{ v }}" target="_blank" rel="noopener">{{ v }}</a></td>{% else %}<td>{{ v | truncate(240) }}</td>{% endif %}{% endfor %}</tr>{% endfor %}</tbody>
       </table></div>
     </div>
     {% elif preview and preview.error %}<p class="muted"><em>output preview unavailable: {{ preview.error }}</em></p>
@@ -132,10 +132,10 @@
       {% for ip in input_previews %}
       <div class="preview-block input-preview" {% if loop.first %}data-primary="1"{% endif %}>
         <div class="preview-head">
-          <a href="/project/{{ project }}/runs/{{ run_id }}#{{ ip.id }}"><code>{{ ip.id }}</code></a>
+          <a href="{{ links.stage_anchor(ip.id) }}"><code>{{ ip.id }}</code></a>
           {% if ip.preview and ip.preview.preview %}{% set shown = ip.preview.preview | length %}<span class="muted">· {% if ip.preview.rows_total > shown %}first {{ shown }} of {% endif %}{{ "{:,}".format(ip.preview.rows_total) }} row{% if ip.preview.rows_total != 1 %}s{% endif %}</span>
-          <span class="preview-actions">· <a href="/project/{{ project }}/runs/{{ run_id }}/stage/{{ ip.id }}/rows">view all rows</a>
-          · <a href="/project/{{ project }}/runs/{{ run_id }}/stage/{{ ip.id }}/rows.csv">⬇ CSV</a></span>{% endif %}
+          <span class="preview-actions">· <a href="{{ links.stage_rows(ip.id) }}">view all rows</a>
+          · <a href="{{ links.stage_csv(ip.id) }}">⬇ CSV</a></span>{% endif %}
         </div>
         {% if ip.preview and ip.preview.preview %}
         {% set selectable = loop.first and previewable %}

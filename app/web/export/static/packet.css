@@ -1,0 +1,53 @@
+/* Loads after the app's vendored style.css and adds only what the app has no
+   class for. Everything else — .banner, .stage-header, .run-status, .stages,
+   .run-stage-panel, .run-guide — is the app's own, so the packet reads like the
+   app that produced it. */
+
+.packet-kicker {
+  color: var(--muted);
+  font-size: 13px;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+}
+.packet-run { font-size: 13px; margin-left: auto; }
+
+/* The run view scrolls its panes inside a viewport-height shell. A packet is one
+   ordinary document, so the panel expands to its full height instead. */
+body.packet .run-stage-panel,
+body.packet .stage-panel-full { max-height: none; overflow: visible; }
+body.packet .table-scroll { max-height: none; }
+
+/* The guide is a fixed right-hand rail in the app; here it is a section in the
+   reading order, because there is no panel beside it to stay in view for. */
+.packet-guide .run-guide {
+  position: static;
+  width: auto;
+  max-width: none;
+  height: auto;
+  max-height: none;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 20px 16px;
+  overflow: visible;
+}
+.packet-guide .drawer-btn { display: none; }
+
+/* The section a reader must not skip: what the packet is NOT evidence of. */
+.packet-caveats {
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--muted);
+  border-radius: 6px;
+  background: var(--code-bg);
+  padding: 4px 20px 14px;
+  margin: 22px 0;
+}
+.packet-caveats h2 { font-size: 15px; margin-bottom: 4px; }
+.packet-caveats ul { margin: 0; padding-left: 18px; font-size: 14px; line-height: 1.65; }
+.packet-caveats li { margin-bottom: 7px; color: var(--muted); }
+
+.packet-note { font-size: 13px; margin: 4px 0 8px; max-width: 80ch; }
+.packet-num { text-align: right; font-variant-numeric: tabular-nums; }
+.packet-hash { font-size: 11px; word-break: break-all; }
+
+.packet-good { background: #e8f8e8; color: #1f5a1f; }
+.packet-bad { background: #fde8e8; color: #802020; }
