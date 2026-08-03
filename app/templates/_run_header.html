@@ -2,8 +2,9 @@
   RUN HEADER — three elements, in this order:
 
     1. the grounding line: when it started, how long it took, the run id, the
-       version it pinned and that version's message, and (for a test run) a chip
-       whose tooltip carries what a test run does;
+       version it pinned — named by its message, or by its id when it carries no
+       message — and (for a test run) a chip whose tooltip carries what a test
+       run does;
     2. the CTA row: exactly ONE primary action, chosen by run state
        (app.web.run_header.choose_run_cta). The state is never spelled out — you
        read it off the button, and a run that finished clean has no imperative
@@ -22,9 +23,10 @@
     <span class="sep">·</span><code class="run-id">{{ run_id }}</code>
     {%- if header.version.version_id %}
     <span class="sep">·</span><span>version
-      <a href="/project/{{ project }}/workflow/version/{{ header.version.version_id }}"><code>{{ header.version.version_id }}</code></a>
-      {%- if header.version.message %} “{{ header.version.message }}”
-      {%- elif header.version.error %} <span class="unresolved" title="{{ header.version.error }}">— this version could not be read</span>
+      <a href="/project/{{ project }}/workflow/version/{{ header.version.version_id }}">
+        {%- if header.version.message %}“{{ header.version.message }}”
+        {%- else %}<code>{{ header.version.version_id }}</code>{% endif %}</a>
+      {%- if header.version.error %} <span class="unresolved" title="{{ header.version.error }}">— this version could not be read</span>
       {%- endif %}</span>
     {%- else %}
     <span class="sep">·</span><span class="unresolved">no workflow version recorded</span>
