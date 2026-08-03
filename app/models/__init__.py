@@ -87,29 +87,11 @@ from app.models.eval import (
 # filesystem I/O, which is service work, not schema). Import it from there;
 # app.models stays a pure, side-effect-free schema package.
 
-# ── Compat vocabularies (the plain-data surface the compiler + prompt render) ──
-# The Pydantic models above are the contract. The string/dict vocabularies below
-# are what `app/prompt.py` renders into the LLM prompt and fenced-block contracts,
-# and what `app/compiler.py` reads to name kinds. They are DERIVED from the enums
-# where the two agree, so they can't drift; where the emit-vocabulary is broader
-# than what the runtime executes, it is spelled out (see CONNECTOR_KINDS).
 from typing import Any as _Any
 
 # Scalar column-type vocabulary, re-exported from schema.py (its single
 # definition). `list[<type>]` / dict / json are handled by is_valid_column_type.
 from app.models.schema import SCALAR_COLUMN_TYPES
-
-# Kind/type vocabularies as string sets, derived from the enums so they stay in
-# lockstep with the models the runtime validates against.
-SCHEMA_KINDS: set[str] = {k.value for k in SchemaKind}
-
-# The connector kinds the compiler may EMIT and the prompt advertises to the LLM
-# (the six listed below). This is deliberately broader than the ConnectorKind
-# enum, which lists only the kinds the runtime executes today (file); a stage
-# using any other kind is a valid draft but not yet runnable.
-CONNECTOR_KINDS: set[str] = {
-    "file", "http", "scrape", "api", "manual_upload", "sql",
-}
 
 # ── The node types as prompt copy ────────────────────────────────────────────
 # app.agents.compiler.prompt renders this into the editing agent's system prompt:
@@ -329,8 +311,6 @@ for _type_name in CODE_CARRYING_TYPES:
     _spec["notes"] = f"{_spec['notes']} {CODE_SUMMARY_CONTRACT_NOTE}"
     _spec["optional"] = [*_spec["optional"], "summary"]
 
-NODE_TYPE_NAMES: set[str] = set(NODE_TYPES)
-
 __all__ = [
     "Coverage",
     "StepRefused",
@@ -356,8 +336,8 @@ __all__ = [
     "StageOutputOverride", "ExpectedOutput", "ScoringMetric", "CodeScorer", "EvalConfig",
     "EvalRunSettings", "EvalRun",
     # compat vocabularies (rendered into the authoring prompts)
-    "SCALAR_COLUMN_TYPES", "SCHEMA_KINDS", "CONNECTOR_KINDS",
-    "NODE_TYPES", "NODE_TYPE_NAMES", "HUMAN_REVIEW_QUEUE_CONTRACT_NOTE",
+    "SCALAR_COLUMN_TYPES",
+    "NODE_TYPES", "HUMAN_REVIEW_QUEUE_CONTRACT_NOTE",
     "CODE_SUMMARY_CONTRACT_NOTE", "CODE_CARRYING_TYPES",
     # individual column-type comparison constants
     "STR_COLUMN_TYPE", "JSON_COLUMN_TYPE", "LIST_JSON_COLUMN_TYPE",
