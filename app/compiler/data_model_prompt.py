@@ -47,11 +47,11 @@ For a method that reads quarterly lobbying filings and totals what each client r
 four columns of the `filing` table:
 
 - `filing_row_id` — `str`, not null. The quarter plus the source row; the primary key.
-- `income_usd` — `float`, NOT NULL. Tight on purpose: a later stage reads `income` into it
-  and REFUSES a figure it cannot read rather than recording a zero, so every value that
-  exists is one a person can stand behind.
+- `income_usd` — `float`, NOT NULL. Tight on purpose: a later stage reads the amount as
+  filed into it and REFUSES a figure it cannot read rather than recording a zero, so every
+  value that exists is one a person can stand behind.
 - `filing_type` — `str`, not null, `enum` ["registration", "report", "termination"]. The
-  three the filing form itself offers
-- `issue_codes` — a real judgement about free text or enum. most likely a an enum, but
-  comes down ultimately to whether it's free text on input. can infer all similar values
-  are represented by one value (Budget) or many (budget, budgeting, budgets)"""
+  three the filing form itself offers.
+- `issue_codes` — a real judgement about free text or enum. Most likely an enum, but it
+  comes down ultimately to whether it's free text on input. Can infer whether all similar
+  values are represented by one value (Budget) or many (budget, budgeting, budgets)."""
