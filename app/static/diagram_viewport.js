@@ -56,6 +56,28 @@
     // Re-grab the (possibly new) svg after a re-render and fit to width again.
     vp._refit = function () { if (grabSvg()) fit(); };
 
+    // Outline one node and bring it into view, zooming in first when the diagram is
+    // fitted so small that the node is unreadable. Returns false when the id names no
+    // node — the caller may be racing a re-render and want to retry.
+    vp._focusNode = function (stageId, minScale) {
+      if (!svg && !grabSvg()) return false;
+      svg.querySelectorAll("g.node.wf-node-active")
+        .forEach(function (n) { n.classList.remove("wf-node-active"); });
+      if (!stageId) return true;
+      var esc = (window.CSS && CSS.escape) ? CSS.escape(stageId) : stageId;
+      // mermaid renders each flowchart node as <g class="node …" id="flowchart-<id>-<n>">
+      var node = svg.querySelector('g.node[id^="flowchart-' + esc + '-"]')
+              || svg.querySelector('g.node[id*="' + esc + '"]');
+      if (!node) return false;
+      node.classList.add("wf-node-active");
+      if (scale < (minScale || 1)) { scale = minScale || 1; apply(); }
+      // Measure AFTER any zoom: the box moves when the svg is rescaled.
+      var box = node.getBoundingClientRect(), port = vp.getBoundingClientRect();
+      vp.scrollLeft += (box.left + box.width / 2) - (port.left + port.width / 2);
+      vp.scrollTop += (box.top + box.height / 2) - (port.top + port.height / 2);
+      return true;
+    };
+
     if (grabSvg()) fit();
 
     block.querySelectorAll("[data-zoom]").forEach(function (b) {

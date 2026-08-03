@@ -55,8 +55,8 @@
     </div>
     <div class="tabs tabs-l2">
         <button data-l2="inputs">Inputs</button>
-        <button data-l2="transform">Transform</button>
-        <button data-l2="outputs" class="active">Outputs</button>
+        <button data-l2="transform" class="active">Transform</button>
+        <button data-l2="outputs">Outputs</button>
     </div>
 </div>
 
@@ -172,7 +172,9 @@
   root._wired = true;
 
   // ── two-layer tabs ──
-  let l1 = 'run', l2 = 'outputs';
+  // Opens on the transform: someone arriving from the review guide, the graph or a
+  // deep link is asking what this step DOES; the rows it produced are one click away.
+  let l1 = 'run', l2 = 'transform';
   function apply() {
     root.querySelectorAll('[data-l1]').forEach(b => b.classList.toggle('active', b.dataset.l1 === l1));
     root.querySelectorAll('[data-l2]').forEach(b => b.classList.toggle('active', b.dataset.l2 === l2));

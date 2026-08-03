@@ -9,12 +9,22 @@ from pydantic import Field
 
 from app.models.schema import _Base
 
+# A step a journalist will actually skim is short.
+PROSE_MAX_CHARS = 255
+
 
 class ReviewGuideStep(_Base):
     """One step of the walkthrough. `prose` may carry `backticked` column names."""
 
     title: str
-    prose: str
+    prose: str = Field(
+        max_length=PROSE_MAX_CHARS,
+        description=(
+            "One or two plain sentences saying what this step does to the data. A "
+            "caution belongs here only where a human made an editorial choice the "
+            "reader could disagree with."
+        ),
+    )
     stage_ids: list[str]
 
 
