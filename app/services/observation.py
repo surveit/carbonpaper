@@ -1,76 +1,77 @@
-"""Observed distinct values for the authoring surfaces: name-based lookup of one
-input_data stage's column profile. Reading the file needs the runtime's input_data
-path, and services must not import app.runtime — so the profiler is INJECTED:
-a composition root allowed to import the runtime (app.web, app.mcp) calls
-set_input_profiler(app.runtime.observation.profile_input_stage) at wiring time."""
+"""Observed distinct values for the authoring surfaces: profile one column of one
+stage's output in one run, so a declared `enum` comes from data a run produced
+rather than from the methodology's prose. Any stage is observable — the run's
+manifest says where each one's frame landed."""
 from __future__ import annotations
 
-from typing import Callable
+import pandas as pd
 
-from app.models import Stage, StageType
+from app.core.frames import read_frame_file
 from app.models.observation import (
     DEFAULT_MAX_DISTINCT_VALUES,
     ColumnValueProfile,
-    InputFrameProfile,
+    FrameProfile,
+    ObservedColumnValues,
 )
+from app.services import run as run_service
 from app.services import workspace
-from app.services.errors import InputProfilerNotConfiguredError
-from app.services.loader import load_workflow
-
-# The injected capability: given an input_data Stage and the most distinct values
-# to list per column, load its bound file and report the frame's observed
-# per-column value profiles. Opaque here — this module never learns how the file
-# is read.
-InputProfiler = Callable[[Stage, int], InputFrameProfile]
-
-_input_profiler: InputProfiler | None = None
 
 
-def set_input_profiler(profiler: InputProfiler) -> None:
-    """Inject the frame profiler, once, from a composition root (like set_projects_dir)."""
-    global _input_profiler
-    _input_profiler = profiler
-
-
-def observed_column_profile(
+def observed_column_values(
     project_id: str,
+    run_id: str,
     stage_id: str,
     column: str,
     max_values: int = DEFAULT_MAX_DISTINCT_VALUES,
-) -> ColumnValueProfile:
-    """One column's observed values in an input stage's bound file. Every miss raises."""
-    stage = _find_input_stage(project_id, stage_id)
-    if _input_profiler is None:
-        raise InputProfilerNotConfiguredError()
-    profile = _input_profiler(stage, max_values)
+) -> ObservedColumnValues:
+    """One column's observed values in a run's stored stage output. Every miss raises."""
+    if not workspace.resolve_project_dir(project_id).is_dir():
+        raise ValueError(f"no project '{project_id}' in the workspace")
+    path = run_service.resolve_stage_output_path(project_id, run_id, stage_id)
+    profile = profile_frame(read_frame_file(path), max_values)
     column_profile = profile.column_named(column)
     if column_profile is None:
         observed = ", ".join(c.name for c in profile.columns) or "(none)"
         raise ValueError(
-            f"input '{stage_id}' of project '{project_id}' has no column "
-            f"'{column}' — its file's observed columns: {observed}"
+            f"stage '{stage_id}' of run '{run_id}' in project '{project_id}' output "
+            f"no column '{column}' — the columns it did output: {observed}"
         )
-    return column_profile
+    return ObservedColumnValues(
+        run_id=run_id, stage_id=stage_id, **column_profile.model_dump()
+    )
 
 
-def _find_input_stage(project_id: str, stage_id: str) -> Stage:
-    """The input_data stage called `stage_id`, or a loud error naming the real ones."""
-    project_dir = workspace.resolve_project_dir(project_id)
-    if not project_dir.is_dir():
-        raise ValueError(f"no project '{project_id}' in the workspace")
-    stages = load_workflow(project_dir)
-    stage = next((s for s in stages if s.id == stage_id), None)
-    if stage is None:
-        input_ids = ", ".join(
-            s.id for s in stages if s.type == StageType.input_data
-        ) or "(none)"
-        raise ValueError(
-            f"no stage '{stage_id}' in project '{project_id}' — its input_data "
-            f"stages: {input_ids}"
-        )
-    if stage.type != StageType.input_data:
-        raise ValueError(
-            f"stage '{stage_id}' is `{stage.type}`, not `input_data` — observed "
-            "values come from an input stage's bound file"
-        )
-    return stage
+def profile_frame(
+    frame: pd.DataFrame, max_values: int = DEFAULT_MAX_DISTINCT_VALUES
+) -> FrameProfile:
+    """Profile every column, listing at most `max_values` distinct values per column."""
+    if max_values < 1:
+        raise ValueError(f"max_values must be at least 1, got {max_values}")
+    return FrameProfile(
+        row_count=len(frame),
+        columns=[
+            _profile_column(str(name), frame[name], max_values) for name in frame.columns
+        ],
+    )
+
+
+def _profile_column(name: str, series: pd.Series, max_values: int) -> ColumnValueProfile:
+    non_null = series.dropna()
+    # String form first: it is what the profile reports, and it keeps unhashable
+    # cells (a parsed list/json column) countable without special-casing them.
+    distinct = sorted({_cell_text(value) for value in non_null})
+    # distinct_count is the TRUE count even when `values` is truncated — that gap
+    # is what tells a reader the list is not the whole vocabulary.
+    return ColumnValueProfile(
+        name=name,
+        row_count=len(series),
+        null_count=len(series) - len(non_null),
+        distinct_count=len(distinct),
+        values=distinct[:max_values],
+    )
+
+
+def _cell_text(value: object) -> str:
+    # A str cell passes through untouched; everything else reports its str() form
+    # (so 2 and "2" collapse — the profile is about vocabulary, not dtype).
+    return value if isinstance(value, str) else str(value)

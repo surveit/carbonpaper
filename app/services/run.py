@@ -6,9 +6,14 @@ from __future__ import annotations
 import threading
 import traceback
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Mapping
 
-from app.core.errors import RunNotFoundError, RunVersionUnresolvableError
+from app.core.errors import (
+    RunNotFoundError,
+    RunVersionUnresolvableError,
+    StageOutputNotFoundError,
+)
 from app.models import Stage
 from app.runtime.manifest import load_manifest_model
 from app.runtime.runner import prepare_run, resume_run, run_prepared
@@ -136,6 +141,48 @@ def read_run_status(project: str, run_id: str) -> dict[str, Any]:
             f"(no manifest at {run_dir / 'manifest.json'})"
         )
     return load_manifest_model(run_dir).to_dict()
+
+
+def list_run_ids(project: str) -> list[str]:
+    """Newest first — run ids are strftime timestamps, so lexical order is chronological."""
+    runs = resolve_project_dir(project) / "runs"
+    if not runs.is_dir():
+        return []
+    return sorted(
+        (run.name for run in runs.iterdir() if (run / "manifest.json").is_file()),
+        reverse=True,
+    )
+
+
+def resolve_stage_output_path(project: str, run_id: str, stage_id: str) -> Path:
+    # Off the manifest record, never assembled from the stage id: the executor
+    # falls back to CSV for a frame parquet cannot hold, so the extension is a fact
+    # of the run, not a convention. Every miss names what does exist.
+    run_dir = resolve_project_dir(project) / "runs" / run_id
+    if not (run_dir / "manifest.json").exists():
+        raise RunNotFoundError(
+            f"no run '{run_id}' for project '{project}' — its runs, newest first: "
+            f"{_named_or_none(list_run_ids(project))}"
+        )
+    manifest = load_manifest_model(run_dir)
+    record = manifest.find_stage_record(stage_id)
+    if record is None or not record.output_path:
+        raise StageOutputNotFoundError(
+            f"run '{run_id}' of '{project}' holds no output for stage '{stage_id}' "
+            "— the stages it does hold one for: "
+            f"{_named_or_none([r.stage_id for r in manifest.stage_records if r.output_path])}"
+        )
+    path = run_dir / record.output_path
+    if not path.is_file():
+        raise StageOutputNotFoundError(
+            f"run '{run_id}' of '{project}' records output '{record.output_path}' "
+            f"for stage '{stage_id}', but no such file is on disk at {path}"
+        )
+    return path
+
+
+def _named_or_none(names: list[str]) -> str:
+    return ", ".join(names) or "(none)"
 
 
 def resolve_version(project: str, version_id: str | None) -> str:

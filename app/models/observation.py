@@ -1,7 +1,7 @@
-"""Observed value profiles of a loaded input frame: what the data actually holds,
-per column, so an authoring agent can decide which observed vocabularies to freeze
-as a declared `enum`. Pure shapes only — the profiling itself lives in
-app.runtime.observation, and app.services.observation serves it by name."""
+"""Observed value profiles of a frame a run actually produced: what the data
+holds, per column, so an authoring agent can decide which observed vocabularies
+to freeze as a declared `enum`. Pure shapes only — app.services.observation does
+the profiling and serves one column by name."""
 from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -38,8 +38,28 @@ class ColumnValueProfile(BaseModel):
     )
 
 
-class InputFrameProfile(BaseModel):
-    """A whole loaded frame's observed profile: one ColumnValueProfile per column."""
+class ObservedColumnValues(ColumnValueProfile):
+    """One column's profile plus the run and stage output it was read from."""
+
+    run_id: str = Field(
+        description=(
+            "The run whose stored output was read. The profile describes THAT run's "
+            "rows and nothing wider — a different slice of the source, or a rerun "
+            "after an upstream edit, can hold values this one never saw."
+        )
+    )
+    stage_id: str = Field(
+        description=(
+            "The stage whose output was read. `row_count` is that output's size, "
+            "which downstream of a filter or an aggregate is far smaller than the "
+            "source: a vocabulary frozen off a short tail is a guess, not an "
+            "observation."
+        )
+    )
+
+
+class FrameProfile(BaseModel):
+    """A whole frame's observed profile: one ColumnValueProfile per column."""
 
     model_config = ConfigDict(extra="forbid")
 

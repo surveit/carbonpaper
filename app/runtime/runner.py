@@ -15,7 +15,7 @@ import pyarrow.lib as pa_lib
 from pydantic import ValidationError as PydanticValidationError
 
 from app.core.errors import MissingInputBindingError
-from app.core.frames import PARQUET_SUFFIX
+from app.core.frames import read_frame_file
 from app.models import Connector, Stage, StageType
 from app.models.stages.input_data import InputDataStage
 from app.core.run_status import StageStatus
@@ -299,10 +299,7 @@ def resume_run(
         if not path.exists():
             continue
         try:
-            if path.suffix == PARQUET_SUFFIX:
-                outputs_so_far[record.stage_id] = pd.read_parquet(path)
-            else:
-                outputs_so_far[record.stage_id] = pd.read_csv(path)
+            outputs_so_far[record.stage_id] = read_frame_file(path)
         except (pa_lib.ArrowException, pd.errors.ParserError, OSError, ValueError):
             # A prior output file that's missing/corrupt/unreadable is
             # treated as not-yet-produced; the stage simply re-runs.

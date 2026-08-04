@@ -12,30 +12,34 @@ from app.models.observation import DEFAULT_MAX_DISTINCT_VALUES
 # surfaces cannot drift on when a vocabulary deserves freezing. Both prompts embed
 # it verbatim; tests assert the embedding.
 OBSERVED_ENUM_GUIDANCE = """\
-Declaring enums from observed data: before settling the schema of a column that
-looks categorical (a status, a category, a reason code), call
-list_distinct_values(project_id, stage_id, column) against the input_data stage
-whose bound file carries it — the real file's observed vocabulary, not the
-document's guess. (The stage must already exist with its file bound; add it,
-observe, then tighten its schema with edit_stage.) A distinct_count above the
-number of values returned means the list was TRUNCATED — re-read with a larger
-max_values, since a vocabulary can be thousands long and still closed. Then
-DECIDE, per column,
-whether to freeze the observed set as the column's `enum`. Your declaration is
-the maintenance surface a NON-ENGINEER data owner lives with: an enum on an LLM
-stage's output compiles into the reply model, so an out-of-vocabulary answer is
-refused outright; on data that drifts, a run's validation report tells the owner
-their data now holds a value the workflow has only ever seen alongside the
-declared set, for a human to review. So freeze exactly the sets whose GROWTH
-should stop and be reviewed, and leave open the ones that legitimately grow.
-- Freeze: a `permit_status` column observing 3 distinct values across 12,000
-  rows — filed | granted | denied — the very statuses the methodology reasons
-  about. A fourth status appearing means the source changed underneath the
-  workflow; declare enum: ["filed", "granted", "denied"] so that surfaces
-  instead of flowing through unexamined.
-- Leave open: a `city` column observing 38 distinct values. Small, but not
-  closed — next month's export may legitimately name a new city, and stopping
-  the run for it would be noise. Leave it a bare `str`.
+Declaring enums from observed data: author a categorical-looking column (a
+status, a category, a reason code) as a bare type, run a workflow test, then LOOK
+at what it produced — list_distinct_values(project_id, run_id, stage_id, column)
+reports one stage output's real vocabulary, and edit_stage tightens the schema
+afterwards. run_workflow_test(project_id, use_working_copy=True) runs the stages
+you are editing right now, so nothing has to be saved as a version first. The
+document's prose is a guess; the run is evidence.
+Read the profile before trusting it: distinct_count above len(values) means the
+list was TRUNCATED — re-read with a larger max_values, since a vocabulary can be
+thousands long and still closed — and row_count is THAT STAGE's output, which
+below a filter or an aggregate is a fraction of the source. A set frozen off a
+short tail is still a guess.
+Then DECIDE, per column, whether to freeze the observed set as its `enum`. The
+declaration is the maintenance surface a NON-ENGINEER data owner lives with, and
+a value outside a declared enum FAILS the stage. Freeze the sets whose GROWTH
+should stop and be reviewed; leave open the ones that legitimately grow.
+- Freeze: `permit_status`, 3 values across 12,000 rows — filed | granted |
+  denied — the statuses the methodology reasons about. A fourth means the source
+  changed underneath the workflow; declare enum: ["filed", "granted", "denied"]
+  so that surfaces instead of flowing through unexamined.
+- Leave open: `city`, 38 values. Small but not closed — next month's export may
+  legitimately name a new one, and stopping the run for that would be noise.
+  Leave it a bare `str`.
+Two stages observation cannot settle for you: an `llm_transform` column whose
+enum you already declared compiles into that stage's reply model, so the run
+returns a subset of your own declaration and corroborates nothing; and a
+`human_review_queue` decision column auto-approves every row in a TEST run, so
+its observed values are an artifact of the test, not the data.
 An enum never replaces guard code: a rule a declaration cannot state (a
 cross-column consistency rule, normalization before comparison) still belongs
 in the stage's authored code."""
@@ -170,18 +174,25 @@ expired run_id returns {ok: False, error} rather than a fabricated status.""",
     "list_distinct_values": ToolSpec(
         name="list_distinct_values",
         description=f"""\
-The observed distinct values of ONE column in an input_data stage's bound
-file — read from the real file, never from the methodology's prose. Reports
-row_count, null_count, distinct_count (the TRUE number of distinct values)
-and `values`, the sorted values truncated to `max_values` (default
-{DEFAULT_MAX_DISTINCT_VALUES}). `values` is the COMPLETE vocabulary ONLY
-when distinct_count == len(values); when distinct_count is larger you are
-looking at a truncated prefix, so re-read with a bigger max_values before
-freezing anything — a large vocabulary can still be a closed one. Consult it
-before deciding whether a column's schema should freeze its vocabulary as an
-`enum`; your instructions say how to decide. Fails loudly — never inventing
-a value — when the stage has no bound file, the file is missing, or the
-column does not exist in it.""",
+The observed distinct values of ONE column of ONE stage's output in ONE run —
+read from what that run actually wrote, never from the methodology's prose.
+Any stage that produced an output is readable, not just the inputs, so run a
+workflow test first and observe the stage you care about.
+
+`run_id` is REQUIRED: there is no latest-run default, because which run you
+read is part of what the answer means. The reply names the run and stage back
+to you, plus row_count (that OUTPUT's size — a stage below a filter or an
+aggregate sees far fewer rows than the source), null_count, distinct_count
+(the TRUE number of distinct values) and `values`, sorted and truncated to
+`max_values` (default {DEFAULT_MAX_DISTINCT_VALUES}). `values` is the COMPLETE
+vocabulary ONLY when distinct_count == len(values); when distinct_count is
+larger you are looking at a truncated prefix, so re-read with a bigger
+max_values before freezing anything — a large vocabulary can still be a closed
+one. Consult it before deciding whether a column's schema should freeze its
+vocabulary as an `enum`; your instructions say how to decide. Fails loudly —
+never inventing a value — for an unknown project, an unknown run, a stage that
+wrote no output in that run, or a column that output does not hold; each names
+the real alternatives.""",
     ),
     "list_projects": ToolSpec(
         name="list_projects",
@@ -274,10 +285,17 @@ data before publishing. It IS a real run — same `runs/` dir, manifest, and
 trace/view routes as run_workflow's — and differs from run_workflow on
 exactly five axes:
 
-1. VERSION: any stored version, published or not (run_workflow pins a
-   published one). Omit `version_id` for the newest stored.
+1. WORKFLOW: any stored version, published or not (run_workflow pins a
+   published one) — omit `version_id` for the newest stored — OR, with
+   `use_working_copy: true`, the stages you are editing right now, saved as no
+   version at all. That is what lets you observe a stage's real output before
+   deciding its schema. Naming BOTH a version and the working copy is a loud
+   error; a working-copy run reports `version_id` null, because there is none.
 2. SOURCE: the `limit` rows from `offset` of the workflow's bound source,
-   injected (run_workflow reads the whole source through input_data).
+   injected (run_workflow reads the whole source through input_data). The
+   slice is still written out as the input stage's own output, so every stage
+   of the graph — inputs included — is readable back with
+   list_distinct_values.
 3. EXECUTION: synchronous — this returns when the run is done (run_workflow
    returns a run_id immediately and executes on a background thread).
 4. REVIEW QUEUE: a human_review_queue stage auto-approves every row in
@@ -289,7 +307,8 @@ Marked `is_test_run` on the manifest, so it never counts as the project's
 latest run. Returns the verdict {ok, run_id, version_id, stages_run, error}:
 `ok` False on any stage error, with `error` naming what failed; poll
 get_run_status(project_id, run_id) for the same live/final manifest
-run_workflow exposes. A project with no stored version is a loud error.""",
+run_workflow exposes. Asking for a stored version when the project has none is
+a loud error — `use_working_copy: true` is the way to test before any exists.""",
     ),
     "set_draft_stage": ToolSpec(
         name="set_draft_stage",

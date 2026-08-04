@@ -12,7 +12,7 @@ from pydantic import BaseModel
 
 from app.core.agent.bound_tool import BoundToolSpec
 from app.models import StageDraft
-from app.models.observation import DEFAULT_MAX_DISTINCT_VALUES, ColumnValueProfile
+from app.models.observation import DEFAULT_MAX_DISTINCT_VALUES, ObservedColumnValues
 from app.models.review_guide import ReviewGuideDraft
 from app.services.versioning import ReviewGuide
 from app.services import drafts, observation, project as project_service
@@ -52,11 +52,13 @@ def make_editing_tools(ctx: EditingContext) -> list[BoundToolSpec]:
 
     def list_distinct_values(
         project_id: str,
+        run_id: str,
         stage_id: str,
         column: str,
         max_values: int = DEFAULT_MAX_DISTINCT_VALUES,
-    ) -> ColumnValueProfile:
-        return observation.observed_column_profile(project_id, stage_id, column, max_values)
+    ) -> ObservedColumnValues:
+        return observation.observed_column_values(
+            project_id, run_id, stage_id, column, max_values)
 
     def create_draft(project_id: str, from_version: str = "") -> DraftView:
         return drafts.create_draft(project_id, from_version=from_version or None)
@@ -161,15 +163,20 @@ TOOL_SCHEMAS: dict[str, ToolInputSchema] = {
     },
     "list_distinct_values": {
         "project_id": Annotated[str, "The project id (call get_current_project first)."],
+        "run_id": Annotated[
+            str,
+            "The run whose stored output to read. Required — there is no latest-run "
+            "default; an unknown id is a loud error naming the runs that exist.",
+        ],
         "stage_id": Annotated[
             str,
-            "The id of the input_data stage whose bound file to observe — it must "
-            "already carry a file (connector params.path).",
+            "The id of the stage whose output to profile. Any stage that wrote an "
+            "output in that run, not just an input.",
         ],
         "column": Annotated[
             str,
-            "The column to profile, as named in the file. A column the file does "
-            "not hold is a loud error naming the ones it does.",
+            "The column to profile, as named in that output. A column the output "
+            "does not hold is a loud error naming the ones it does.",
         ],
         "max_values": Annotated[
             int,

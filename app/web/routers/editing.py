@@ -8,16 +8,8 @@ from fastapi import APIRouter
 from fastapi.responses import RedirectResponse
 
 from app.core.agent.session import create_agent_session
-from app.runtime.observation import profile_input_stage
-from app.services import observation
 
 router = APIRouter()
-
-# The observation seam for the editing agent's list_distinct_values tool: the
-# services layer must not import app.runtime, so this router — part of app.web,
-# a composition root the import contracts allow to import the runtime — injects
-# the frame profiler at import time. See app.services.observation.
-observation.set_input_profiler(profile_input_stage)
 
 
 @router.post("/project/{name}/edit-agent")

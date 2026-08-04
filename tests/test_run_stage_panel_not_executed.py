@@ -1,8 +1,8 @@
-"""A workflow test runs the frontier and injects each input_data stage's rows, so
-those stages have no manifest record — while the run's graph, drawn from the whole
-pinned version, still shows them. Clicking one must open its frozen definition and
-say it never ran, not the bare 404 the panel used to render; a stage absent from the
-pinned version too is still a 404."""
+"""A workflow test injects its input_data stages' rows rather than computing them,
+but run_subset still writes that slice out and records it — so the input stage's
+panel shows this run's own output, and the 1:1 stage below it can be read as a diff
+against it. A stage the run holds NO record for still opens on its frozen definition
+saying it never ran; a stage absent from the pinned version too is still a 404."""
 from __future__ import annotations
 
 import json
@@ -66,13 +66,40 @@ def _panel(run_id: str, stage_id: str):
         f"/project/{PROJECT}/runs/{run_id}/stage/{stage_id}/partial")
 
 
-def test_input_stage_of_a_workflow_test_opens_instead_of_404ing(project: Path):
-    """The run the workflow test wrote has a record for `classify` only — but its
-    graph still draws `load`, so `load`'s panel must open."""
-    run_id = run_workflow_test(PROJECT, limit=2, offset=0)["run_id"]
-    manifest = json.loads(
+def _manifest(project: Path, run_id: str) -> dict:
+    return json.loads(
         (project / "runs" / run_id / "manifest.json").read_text(encoding="utf-8"))
-    assert [r["stage_id"] for r in manifest["stage_records"]] == ["classify"]
+
+
+def test_a_workflow_tests_input_stage_shows_the_slice_it_ran_on(project: Path):
+    """The injected rows are this run's input output, not a hole in it."""
+    run_id = run_workflow_test(PROJECT, limit=2, offset=0)["run_id"]
+    assert [r["stage_id"] for r in _manifest(project, run_id)["stage_records"]] == [
+        "load", "classify"]
+
+    response = _panel(run_id, "load")
+    assert response.status_code == 200
+    assert "Not executed in this run" not in response.text
+    assert "output data" in response.text
+
+
+def test_the_stage_below_an_input_now_reads_as_a_diff_against_it(project: Path):
+    # The diff aligns a 1:1 stage's output with its input's STORED frame, so with
+    # no input frame on disk there was nothing to align a workflow test's first
+    # transform against and the pane fell back to the plain output view.
+    run_id = run_workflow_test(PROJECT, limit=2, offset=0)["run_id"]
+    body = _panel(run_id, "classify").text
+    assert 'class="preview-block stage-diff"' in body
+
+
+def test_a_stage_the_run_holds_no_record_for_opens_instead_of_404ing(project: Path):
+    """A run whose manifest never covered a stage the graph still draws."""
+    run_id = run_workflow_test(PROJECT, limit=2, offset=0)["run_id"]
+    manifest = _manifest(project, run_id)
+    manifest["stage_records"] = [
+        r for r in manifest["stage_records"] if r["stage_id"] != "load"]
+    (project / "runs" / run_id / "manifest.json").write_text(
+        json.dumps(manifest), encoding="utf-8")
 
     response = _panel(run_id, "load")
     assert response.status_code == 200

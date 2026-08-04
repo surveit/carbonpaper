@@ -232,51 +232,55 @@ def test_as_content_serializes_a_pydantic_model_to_its_fields() -> None:
     assert json.loads(out["content"][0]["text"]) == {"ok": True, "label": "draft"}
 
 
-def _seed_bound_input(examples: Path, tmp_path: Path, name: str, csv_text: str) -> None:
-    """A project whose single input_data stage is bound to a real csv on disk."""
-    csv = tmp_path / f"{name}.csv"
-    csv.write_text(csv_text, encoding="utf-8")
-    compiled = examples / name / "compiled"
+def _seed_and_run(examples: Path, name: str, csv_text: str) -> str:
+    """One csv-bound input_data stage, workflow-tested once. Returns the run id."""
+    from app.services.workflow_test import run_workflow_test
+
+    project = examples / name
+    compiled = project / "compiled"
     compiled.mkdir(parents=True, exist_ok=True)
+    csv = project / f"{name}.csv"
+    csv.write_text(csv_text, encoding="utf-8")
     stage = {
         "id": "load", "name": "Load rows", "type": "input_data",
         "connector": {"kind": "file", "params": {"path": str(csv)}},
         "output_schema": {"columns": [{"name": "status", "type": "str", "nullable": True}]},
     }
     (compiled / "01_load.json").write_text(json.dumps(stage), encoding="utf-8")
+    result = run_workflow_test(name, use_working_copy=True, limit=10_000)
+    assert result["ok"] is True, result["error"]
+    return str(result["run_id"])
 
 
-def test_list_distinct_values_answers_from_the_bound_file(
-    examples_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+def test_list_distinct_values_answers_from_the_runs_stored_output(
+    examples_root: Path,
 ) -> None:
-    from app.runtime.observation import profile_input_stage
-    from app.services import observation
-
-    _seed_bound_input(examples_root, tmp_path, "permits", "status\nfiled\ngranted\nfiled\n")
-    monkeypatch.setattr(observation, "_input_profiler", profile_input_stage)
+    run_id = _seed_and_run(examples_root, "permits", "status\nfiled\ngranted\nfiled\n")
 
     _server, _allowed, tools = _build("permits")
     tool = next(t for t in tools if t.name == "list_distinct_values")
-    out = _call(tool, {"project_id": "permits", "stage_id": "load", "column": "status"})
+    out = _call(tool, {"project_id": "permits", "run_id": run_id,
+                       "stage_id": "load", "column": "status"})
     profile = json.loads(out["content"][0]["text"])
     assert profile["values"] == ["filed", "granted"]
     assert profile["distinct_count"] == 2
+    assert profile["run_id"] == run_id
+    assert profile["stage_id"] == "load"
+    assert profile["row_count"] == 3
 
 
 def test_list_distinct_values_truncates_but_reports_the_true_count(
-    examples_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    examples_root: Path,
 ) -> None:
     from app.models.observation import DEFAULT_MAX_DISTINCT_VALUES
-    from app.runtime.observation import profile_input_stage
-    from app.services import observation
 
     codes = [f"c{i:04d}" for i in range(DEFAULT_MAX_DISTINCT_VALUES + 7)]
-    _seed_bound_input(examples_root, tmp_path, "permits", "status\n" + "\n".join(codes) + "\n")
-    monkeypatch.setattr(observation, "_input_profiler", profile_input_stage)
+    run_id = _seed_and_run(examples_root, "permits", "status\n" + "\n".join(codes) + "\n")
 
     _server, _allowed, tools = _build("permits")
     tool = next(t for t in tools if t.name == "list_distinct_values")
-    args = {"project_id": "permits", "stage_id": "load", "column": "status"}
+    args = {"project_id": "permits", "run_id": run_id,
+            "stage_id": "load", "column": "status"}
 
     capped = json.loads(_call(tool, args)["content"][0]["text"])
     assert capped["distinct_count"] == len(codes)
@@ -288,17 +292,24 @@ def test_list_distinct_values_truncates_but_reports_the_true_count(
     assert whole["distinct_count"] == len(whole["values"])
 
 
-def test_list_distinct_values_unknown_column_is_a_tool_error(
-    examples_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    from app.runtime.observation import profile_input_stage
-    from app.services import observation
-
-    _seed_bound_input(examples_root, tmp_path, "permits", "status\nfiled\n")
-    monkeypatch.setattr(observation, "_input_profiler", profile_input_stage)
+def test_list_distinct_values_unknown_column_is_a_tool_error(examples_root: Path) -> None:
+    run_id = _seed_and_run(examples_root, "permits", "status\nfiled\n")
 
     _server, _allowed, tools = _build("permits")
     tool = next(t for t in tools if t.name == "list_distinct_values")
-    out = _call(tool, {"project_id": "permits", "stage_id": "load", "column": "nope"})
+    out = _call(tool, {"project_id": "permits", "run_id": run_id,
+                       "stage_id": "load", "column": "nope"})
     assert out.get("is_error") is True
     assert "status" in out["content"][0]["text"]  # names the observed columns
+
+
+def test_list_distinct_values_unknown_run_is_a_tool_error(examples_root: Path) -> None:
+    """No latest-run default: the miss names the runs the project does have."""
+    run_id = _seed_and_run(examples_root, "permits", "status\nfiled\n")
+
+    _server, _allowed, tools = _build("permits")
+    tool = next(t for t in tools if t.name == "list_distinct_values")
+    out = _call(tool, {"project_id": "permits", "run_id": "nope",
+                       "stage_id": "load", "column": "status"})
+    assert out.get("is_error") is True
+    assert run_id in out["content"][0]["text"]

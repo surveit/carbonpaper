@@ -11,11 +11,17 @@ from typing import Any
 
 import pandas as pd
 
-from app.core.errors import NoWorkflowTestSourceError, NoWorkflowTestVersionError, SubsetRunError
+from app.core.errors import (
+    NoWorkflowTestSourceError,
+    NoWorkflowTestVersionError,
+    SubsetRunError,
+    WorkflowTestTargetConflictError,
+)
 from app.models import Stage, StageType, Workflow
 from app.runtime.context import RunContext, RunIdentity
 from app.runtime.executor import run_subset, topological_sort
 from app.runtime.stages.input_data import read_input_data
+from app.services.loader import load_workflow
 from app.services.versioning import list_versions, load_version, load_version_stages
 from app.services.workspace import repo_root, resolve_project_dir
 
@@ -24,20 +30,30 @@ def run_workflow_test(
     project: str,
     *,
     version_id: str | None = None,
+    use_working_copy: bool = False,
     limit: int = 20,
     offset: int = 0,
 ) -> dict[str, Any]:
-    """Run the resolved version's frontier over a slice of its bound source, as a
-    real run (marked `is_test_run`) under `<project_dir>/runs/<run_id>/`. Returns
+    """Run a workflow's frontier over a slice of its bound source, as a real run
+    (marked `is_test_run`) under `<project_dir>/runs/<run_id>/`. Returns
     `{ok, run_id, version_id, stages_run, error}`.
+
+    WHICH workflow is an explicit choice with no overlap: `use_working_copy` runs
+    the project's `compiled/` stages — what the authoring tools edit, unsaved — and
+    reports `version_id` None, because an unversioned edit has no id and none is
+    invented; otherwise a STORED version runs, `version_id` naming it or None
+    resolving to the newest (_resolve_workflow_test_version). Asking for both
+    raises WorkflowTestTargetConflictError rather than one silently winning.
 
     The same run app.services.run.start_run produces, differing on exactly five
     axes — the reason this is its own seam rather than a flag on that one:
 
-    1. VERSION: any stored version, published or not (_resolve_workflow_test_version).
+    1. WORKFLOW: any stored version, published or not, or the working copy.
     2. SOURCE: a `limit`/`offset` slice, injected (get_source_data_with_limit_and_offset)
        rather than read whole through the input_data stage — which is why the
-       frontier excludes input_data (_frontier_stages).
+       frontier excludes input_data (_frontier_stages). run_subset still persists
+       that slice as the input stage's own output, so every stage of the graph is
+       readable back off the run.
     3. EXECUTION: synchronous; start_run launches a background daemon thread.
     4. REVIEW QUEUE: auto-approves in memory (queue_auto_approve) instead of halting.
     5. STAGE CACHE: read-only (RunContext.for_workflow_test_run) instead of read+write.
@@ -46,8 +62,7 @@ def run_workflow_test(
     combinations, so they stay two functions; only version resolution is shared
     vocabulary (cf. app.services.run.resolve_version, which gates on published)."""
     project_dir = resolve_project_dir(project)
-    version = _resolve_workflow_test_version(project_dir, version_id)
-    stages = load_version_stages(project_dir, version)
+    stages, version = _resolve_workflow_test_stages(project_dir, version_id, use_working_copy)
     # Read the source(s) before building the Workflow, so a sourceless workflow
     # fails on the missing source rather than on downstream graph validation.
     injected = get_source_data_with_limit_and_offset(stages, limit=limit, offset=offset)
@@ -69,6 +84,21 @@ def run_workflow_test(
         "stages_run": stage_ids,
         "error": error,
     }
+
+
+def _resolve_workflow_test_stages(
+    project_dir: Path, version_id: str | None, use_working_copy: bool
+) -> tuple[list[Stage], str | None]:
+    """The stages to run and the version id to record — None for the working copy."""
+    if not use_working_copy:
+        version = _resolve_workflow_test_version(project_dir, version_id)
+        return load_version_stages(project_dir, version), version
+    if version_id is not None:
+        raise WorkflowTestTargetConflictError(
+            f"workflow test of '{project_dir.name}' asked for BOTH version "
+            f"'{version_id}' and the working copy — name one: drop version_id to "
+            "run the working copy, or drop use_working_copy to run the version")
+    return load_workflow(project_dir), None
 
 
 def _resolve_workflow_test_version(project_dir: Path, version_id: str | None) -> str:
@@ -97,7 +127,7 @@ def _run_frontier(
     *,
     project: str,
     run_id: str,
-    workflow_version: str,
+    workflow_version: str | None,
 ) -> tuple[bool, str | None]:
     """Execute the frontier subset: normal return -> (True, None); a SubsetRunError
     (a stage errored) -> (False, its message). run_subset owns the manifest under
@@ -119,8 +149,9 @@ def _run_frontier(
 
 def _frontier_stages(stages: list[Stage]) -> list[Stage]:
     """The stages a workflow test executes: every stage except the source
-    (input_data — its output is injected, not computed). Publish stages run; their
-    artifacts land run-scoped under the run dir, like any production run's."""
+    (input_data — its output is injected, not computed, though run_subset still
+    writes it out and records it). Publish stages run; their artifacts land
+    run-scoped under the run dir, like any production run's."""
     return [stage for stage in stages if stage.type != StageType.input_data.value]
 
 

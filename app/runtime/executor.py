@@ -85,6 +85,12 @@ def run_subset(
     outputs of stages OUTSIDE the subset (their upstream is cut off — the output is
     given, not computed). Returns the outputs of every executed stage.
 
+    An injected stage is a stage of this run like any other: its frame is written
+    to `outputs/` through the same persistence the executed stages use and it gets
+    an `ok` manifest record naming that file, so every stage the run covers is
+    readable back off disk. It is not EXECUTED — the loop skips it on the output
+    already in hand. An injected id naming no stage of the workflow raises.
+
     Owns its run manifest as a first-class, live-updated artifact: it mints the
     manifest here (create_run_manifest, the single source of the manifest shape)
     and drives it through the same `_execute_stages` engine a production run uses,
@@ -118,12 +124,18 @@ def run_subset(
     missing = [sid for sid in stage_ids if sid not in by_id]
     if missing:
         raise SubsetRunError(f"subset names stage(s) not in the workflow: {missing}")
-    ordered = topological_sort([by_id[sid] for sid in stage_ids])
+    unknown_injected = [sid for sid in injected_outputs if sid not in by_id]
+    if unknown_injected:
+        raise SubsetRunError(
+            f"injected outputs name stage(s) not in the workflow: {unknown_injected}")
+    injected_stages = [by_id[sid] for sid in injected_outputs if sid not in stage_ids]
+    ordered = topological_sort([by_id[sid] for sid in stage_ids] + injected_stages)
     (run_dir / "outputs").mkdir(parents=True, exist_ok=True)
     manifest = create_run_manifest(
         ordered, run_id=run_dir.name, project=project,
         workflow_version=workflow_version, run_bindings={}, input_bindings={},
         limits={}, offsets={}, bust_cache=False, is_test_run=is_test_run)
+    _settle_injected_stage_records(manifest, injected_stages, injected_outputs, run_dir)
     write_manifest(run_dir, manifest)
     outputs: dict[str, pd.DataFrame] = dict(injected_outputs)
     manifest = _execute_stages(
@@ -131,6 +143,33 @@ def run_subset(
         manifest, run_dir, outputs)
     _raise_if_run_failed(manifest)
     return outputs
+
+
+def _settle_injected_stage_records(
+    manifest: RunManifest,
+    stages: list[Stage],
+    injected_outputs: dict[str, pd.DataFrame],
+    run_dir: Path,
+) -> None:
+    """Write each injected frame to `outputs/` and settle its pending record `ok`."""
+    settled = {
+        stage.id: _record_injected_output(stage, injected_outputs[stage.id], run_dir)
+        for stage in stages
+    }
+    manifest.settle_stage_records(
+        [settled.get(record.stage_id, record) for record in manifest.stage_records])
+
+
+def _record_injected_output(stage: Stage, frame: pd.DataFrame, run_dir: Path) -> StageRecord:
+    # No validation report either side: nothing was read in and nothing computed
+    # it, so there is no edge and no handler whose conformance could be judged.
+    # The note is what keeps the `ok` record from reading as work this run did.
+    record = StageRecord.record_with_status(stage, StageStatus.OK)
+    output_path = _persist_stage_output(frame, stage.id, run_dir, record)
+    record.output_row_count = int(len(frame))
+    record.output_path = output_path.relative_to(run_dir).as_posix()
+    record.add_note("output injected into this run, not computed by it")
+    return record
 
 
 def _subset_ctx(

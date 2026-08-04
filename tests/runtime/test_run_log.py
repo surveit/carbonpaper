@@ -205,7 +205,9 @@ def test_a_run_writes_its_lifecycle_spine_to_the_run_dir(tmp_path):
         "row_start", "row_ok", "row_start", "row_ok",
         "stage_done", RUN_DONE,
     ]
-    assert events[0]["run_id"] == "subset1" and events[0]["stage_count"] == 1
+    # 2 stages: the executed one plus the injected source, which the run persists
+    # and records but never runs — hence no stage_start of its own above.
+    assert events[0]["run_id"] == "subset1" and events[0]["stage_count"] == 2
     assert events[-2]["stage"] == "double" and events[-2]["rows"] == 2
     assert [e["seq"] for e in events] == list(range(len(events)))
 

@@ -5,7 +5,11 @@ import json
 import pandas as pd
 import pytest
 
-from app.core.errors import NoWorkflowTestSourceError, NoWorkflowTestVersionError
+from app.core.errors import (
+    NoWorkflowTestSourceError,
+    NoWorkflowTestVersionError,
+    WorkflowTestTargetConflictError,
+)
 from app.models import parse_stage
 from app.services import workspace
 from app.services.workflow_test import run_workflow_test
@@ -220,6 +224,65 @@ def test_workflow_test_default_picks_newest_version_even_when_unpublished(demo):
 
 def test_workflow_test_raises_when_no_versions_exist(demo):
     """A project with no stored version has nothing to run — raise loudly,
-    naming the project, rather than falling back to the working copy."""
+    naming the project, rather than silently falling back to the working copy."""
     with pytest.raises(NoWorkflowTestVersionError, match="demo"):
         run_workflow_test("demo")
+
+
+# ── the working copy ─────────────────────────────────────────────────────────
+
+def _write_working_copy(demo, stage_dicts):
+    compiled = demo / "compiled"
+    compiled.mkdir(parents=True, exist_ok=True)
+    for index, stage in enumerate(stage_dicts, start=1):
+        (compiled / f"{index:02d}_{stage['id']}.json").write_text(
+            json.dumps(stage), encoding="utf-8")
+
+
+def test_working_copy_runs_with_no_version_stored_at_all(demo):
+    """Runs the stages the authoring tools edit, with nothing saved as a version."""
+    _write_working_copy(demo, [_load_stage(demo), _CLASSIFY])
+    result = run_workflow_test("demo", use_working_copy=True)
+    assert result["ok"] is True
+    assert result["stages_run"] == ["classify"]
+    # No version exists and none is invented for the record.
+    assert result["version_id"] is None
+    manifest = json.loads(
+        (demo / "runs" / result["run_id"] / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["workflow_version"] is None
+    assert manifest["is_test_run"] is True
+
+
+def test_working_copy_runs_the_edit_the_stored_version_does_not_carry(demo):
+    """Genuinely different workflows: only the working copy carries `boom`."""
+    _seed(demo, [_load_stage(demo), _CLASSIFY])
+    _write_working_copy(demo, [_load_stage(demo), _BOOM])
+    assert run_workflow_test("demo")["ok"] is True
+    assert run_workflow_test("demo", use_working_copy=True)["ok"] is False
+
+
+def test_naming_both_a_version_and_the_working_copy_is_refused(demo):
+    """Two different workflows asked for at once — neither is chosen for the caller."""
+    _seed(demo, [_load_stage(demo), _CLASSIFY])
+    _write_working_copy(demo, [_load_stage(demo), _CLASSIFY])
+    with pytest.raises(WorkflowTestTargetConflictError, match="v1"):
+        run_workflow_test("demo", version_id="v1", use_working_copy=True)
+
+
+# ── the injected slice is materialised like any other stage output ───────────
+
+def test_the_input_stages_slice_is_written_out_as_its_own_output(demo):
+    """Injected rather than computed, but still this run's input stage output."""
+    _seed(demo, [_load_stage(demo), _CLASSIFY])
+    result = run_workflow_test("demo", limit=2, offset=1)
+    run_dir = demo / "runs" / result["run_id"]
+    manifest = json.loads((run_dir / "manifest.json").read_text(encoding="utf-8"))
+    records = {r["stage_id"]: r for r in manifest["stage_records"]}
+    assert set(records) == {"load", "classify"}
+    load = records["load"]
+    assert load["status"] == "ok"
+    assert load["output_row_count"] == 2
+    assert (run_dir / load["output_path"]).is_file()
+    assert pd.read_parquet(run_dir / load["output_path"])["doc_id"].tolist() == ["b", "c"]
+    # `stages_run` still reports what EXECUTED — the input was not run.
+    assert result["stages_run"] == ["classify"]

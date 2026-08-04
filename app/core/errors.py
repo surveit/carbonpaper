@@ -82,6 +82,15 @@ class NoWorkflowTestVersionError(Exception):
     working copy or fabricating a version."""
 
 
+class StageOutputNotFoundError(Exception):
+    """A run holds no readable output file for the stage asked about."""
+
+
+class WorkflowTestTargetConflictError(Exception):
+    """A workflow test named BOTH a stored version and the working copy — two different
+    workflows."""
+
+
 class LLMError(Exception):
     """A live-LLM call failed, or no LLM backend is available."""
 

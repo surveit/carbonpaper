@@ -1,150 +1,149 @@
-"""app.services.observation: name-based observed-value lookup behind the injected
-profiler seam. Misses raise (unknown project/stage/column, a stage that is not
-input_data, a seam nobody wired); the composition roots (app.web.routers.editing,
-app.mcp.server) inject app.runtime.observation.profile_input_stage at import."""
+"""app.services.observation: one column of one stage's output in one run, read
+back off what the run wrote. Every miss raises naming the real alternatives —
+unknown project, unknown run, a stage with no output, a column it never held."""
 from __future__ import annotations
 
 import json
 from pathlib import Path
 
+import pandas as pd
 import pytest
 
-from app.models import Stage
-from app.models.observation import (
-    DEFAULT_MAX_DISTINCT_VALUES,
-    ColumnValueProfile,
-    InputFrameProfile,
-)
-from app.runtime.observation import profile_input_stage
+from app.core.errors import RunNotFoundError, StageOutputNotFoundError
+from app.models.observation import DEFAULT_MAX_DISTINCT_VALUES
 from app.services import observation
-from app.services.errors import InputProfilerNotConfiguredError
+from app.services.workflow_test import run_workflow_test
+
+_LOAD_SCHEMA = {"columns": [{"name": "status", "type": "str", "nullable": True},
+                            {"name": "zip", "type": "str", "nullable": True}]}
+_LABELLED_SCHEMA = {"columns": [*_LOAD_SCHEMA["columns"],
+                                {"name": "band", "type": "str", "nullable": True}]}
 
 
-def _seed_project(root: Path, name: str, csv_path: Path | None) -> Path:
-    """One project whose workflow is a single input_data stage bound to `csv_path`."""
-    compiled = root / name / "compiled"
-    compiled.mkdir(parents=True, exist_ok=True)
-    params: dict = {} if csv_path is None else {"path": str(csv_path)}
-    stage = {
-        "id": "load", "name": "Load rows", "type": "input_data",
-        "connector": {"kind": "file", "params": params},
-        "output_schema": {"columns": [{"name": "status", "type": "str", "nullable": True},
-                                      {"name": "zip", "type": "str", "nullable": True}]},
-    }
-    (compiled / "01_load.json").write_text(json.dumps(stage), encoding="utf-8")
-    return root / name
-
-
-def _csv(tmp_path: Path) -> Path:
-    path = tmp_path / "permits.csv"
-    path.write_text("status,zip\nfiled,02134\ngranted,90210\nfiled,02134\n",
-                    encoding="utf-8")
-    return path
-
-
-@pytest.fixture
-def real_profiler(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(observation, "_input_profiler", profile_input_stage)
-
-
-# ── the injection seam ───────────────────────────────────────────────────────
-
-def test_unwired_seam_raises_rather_than_fabricating(
-    projects_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    _seed_project(projects_root, "permits", _csv(tmp_path))
-    monkeypatch.setattr(observation, "_input_profiler", None)
-    with pytest.raises(InputProfilerNotConfiguredError):
-        observation.observed_column_profile("permits", "load", "status")
-
-
-def test_web_editing_router_injects_the_runtime_profiler() -> None:
-    import app.web.routers.editing  # noqa: F401  (wiring happens at import)
-    assert observation._input_profiler is profile_input_stage
-
-
-def test_mcp_server_injects_the_runtime_profiler() -> None:
-    import app.mcp.server  # noqa: F401  (wiring happens at import)
-    assert observation._input_profiler is profile_input_stage
-
-
-def test_stub_profiler_is_called_with_the_resolved_stage(
-    projects_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    _seed_project(projects_root, "permits", _csv(tmp_path))
-    seen: list[tuple[Stage, int]] = []
-
-    def stub(stage: Stage, max_values: int) -> InputFrameProfile:
-        seen.append((stage, max_values))
-        return InputFrameProfile(row_count=1, columns=[
-            ColumnValueProfile(name="status", row_count=1, null_count=0,
-                               distinct_count=1, values=["filed"]),
-        ])
-
-    monkeypatch.setattr(observation, "_input_profiler", stub)
-    profile = observation.observed_column_profile("permits", "load", "status")
-    assert profile.values == ["filed"]
-    assert [(stage.id, cap) for stage, cap in seen] == [
-        ("load", DEFAULT_MAX_DISTINCT_VALUES)
+def _stages(csv_path: Path) -> list[dict]:
+    return [
+        {"id": "load", "name": "Load rows", "type": "input_data",
+         "connector": {"kind": "file", "params": {"path": str(csv_path), "format": "csv"}},
+         "output_schema": _LOAD_SCHEMA},
+        {"id": "band", "name": "Band it", "type": "python_row_function",
+         "inputs": [{"id": "load", "schema": _LOAD_SCHEMA}],
+         "function": {"kind": "inline", "code":
+                      "def transform(row):\n"
+                      "    return {**row, 'band': 'east' if row['zip'].startswith('0') "
+                      "else 'west'}"},
+         "output_schema": _LABELLED_SCHEMA},
     ]
 
 
-def test_caller_maximum_reaches_the_profiler(
-    projects_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    _seed_project(projects_root, "permits", _csv(tmp_path))
-    seen: list[int] = []
+@pytest.fixture
+def run_id(projects_root: Path) -> str:
+    """A `permits` project workflow-tested once, so every stage has a stored output."""
+    project = projects_root / "permits"
+    compiled = project / "compiled"
+    compiled.mkdir(parents=True)
+    csv_path = project / "permits.csv"
+    csv_path.write_text(
+        "status,zip\nfiled,02134\ngranted,90210\nfiled,02135\n", encoding="utf-8")
+    for index, stage in enumerate(_stages(csv_path), start=1):
+        (compiled / f"{index:02d}_{stage['id']}.json").write_text(
+            json.dumps(stage), encoding="utf-8")
+    result = run_workflow_test("permits", use_working_copy=True)
+    assert result["ok"] is True, result["error"]
+    return str(result["run_id"])
 
-    def stub(stage: Stage, max_values: int) -> InputFrameProfile:
-        seen.append(max_values)
-        return InputFrameProfile(row_count=1, columns=[
-            ColumnValueProfile(name="status", row_count=1, null_count=0,
-                               distinct_count=1, values=["filed"]),
-        ])
 
-    monkeypatch.setattr(observation, "_input_profiler", stub)
-    observation.observed_column_profile("permits", "load", "status", max_values=5000)
-    assert seen == [5000]
+# ── what a run makes observable ──────────────────────────────────────────────
+
+def test_values_come_from_the_input_stages_own_stored_output(run_id: str) -> None:
+    observed = observation.observed_column_values("permits", run_id, "load", "status")
+    assert observed.values == ["filed", "granted"]
+    assert observed.row_count == 3
+    assert observed.null_count == 0
+    assert observed.distinct_count == 2
 
 
-# ── end to end over a real file ──────────────────────────────────────────────
+def test_a_computed_stages_column_is_observable_too(run_id: str) -> None:
+    """The whole point of the repoint: a column no input file carries."""
+    observed = observation.observed_column_values("permits", run_id, "band", "band")
+    assert observed.values == ["east", "west"]
 
-def test_observed_values_come_from_the_real_file(
-    projects_root: Path, tmp_path: Path, real_profiler: None
-) -> None:
-    _seed_project(projects_root, "permits", _csv(tmp_path))
-    profile = observation.observed_column_profile("permits", "load", "status")
-    assert profile.values == ["filed", "granted"]
-    assert profile.row_count == 3
-    assert profile.null_count == 0
+
+def test_the_profile_names_the_run_and_stage_it_was_read_from(run_id: str) -> None:
+    """A set frozen off a short tail is a guess, so say which run and stage, and how big."""
+    observed = observation.observed_column_values("permits", run_id, "band", "status")
+    assert observed.run_id == run_id
+    assert observed.stage_id == "band"
+    assert observed.row_count == 3
+
+
+def test_declared_types_survive_into_the_observed_values(run_id: str) -> None:
+    """The zero-padded zip stays text — the run read it under its declared `str`."""
+    observed = observation.observed_column_values("permits", run_id, "load", "zip")
+    assert observed.values == ["02134", "02135", "90210"]
+
+
+def test_caller_maximum_truncates_while_distinct_count_stays_true(run_id: str) -> None:
+    observed = observation.observed_column_values(
+        "permits", run_id, "load", "status", max_values=1)
+    assert observed.values == ["filed"]
+    assert observed.distinct_count == 2
+
+
+def test_default_maximum_applies_when_the_caller_names_none(run_id: str) -> None:
+    observed = observation.observed_column_values("permits", run_id, "load", "status")
+    assert len(observed.values) <= DEFAULT_MAX_DISTINCT_VALUES
 
 
 # ── loud misses ──────────────────────────────────────────────────────────────
 
-def test_unknown_project_raises(real_profiler: None) -> None:
+def test_unknown_project_raises(projects_root: Path) -> None:
     with pytest.raises(ValueError, match="no project 'ghost'"):
-        observation.observed_column_profile("ghost", "load", "status")
+        observation.observed_column_values("ghost", "20260101T000000", "load", "status")
 
 
-def test_unknown_stage_names_the_real_input_stages(
-    projects_root: Path, tmp_path: Path, real_profiler: None
-) -> None:
-    _seed_project(projects_root, "permits", _csv(tmp_path))
-    with pytest.raises(ValueError, match="no stage 'nope'.*load"):
-        observation.observed_column_profile("permits", "nope", "status")
+def test_unknown_run_names_the_runs_that_exist(run_id: str) -> None:
+    """No latest-run default to fall back to, so the miss names the real runs."""
+    with pytest.raises(RunNotFoundError) as excinfo:
+        observation.observed_column_values("permits", "nope", "load", "status")
+    assert run_id in str(excinfo.value)
 
 
-def test_unknown_column_names_the_observed_columns(
-    projects_root: Path, tmp_path: Path, real_profiler: None
-) -> None:
-    _seed_project(projects_root, "permits", _csv(tmp_path))
+def test_unknown_stage_names_the_stages_with_an_output(run_id: str) -> None:
+    with pytest.raises(StageOutputNotFoundError) as excinfo:
+        observation.observed_column_values("permits", run_id, "nope", "status")
+    message = str(excinfo.value)
+    assert "load" in message and "band" in message
+
+
+def test_unknown_column_names_the_columns_that_output_holds(run_id: str) -> None:
     with pytest.raises(ValueError, match="no column 'nope'.*status"):
-        observation.observed_column_profile("permits", "load", "nope")
+        observation.observed_column_values("permits", run_id, "load", "nope")
 
 
-def test_unbound_input_raises_not_an_empty_profile(
-    projects_root: Path, real_profiler: None
+def test_a_recorded_output_missing_from_disk_raises(
+    projects_root: Path, run_id: str
 ) -> None:
-    _seed_project(projects_root, "permits", None)
-    with pytest.raises(ValueError, match="no file bound"):
-        observation.observed_column_profile("permits", "load", "status")
+    """A gone file is a loud error, never an empty profile that reads as a real
+    (empty) vocabulary."""
+    outputs = projects_root / "permits" / "runs" / run_id / "outputs"
+    for path in outputs.iterdir():
+        path.unlink()
+    with pytest.raises(StageOutputNotFoundError, match="no such file"):
+        observation.observed_column_values("permits", run_id, "load", "status")
+
+
+def test_a_csv_fallback_output_is_read_through_the_recorded_path(
+    projects_root: Path, run_id: str
+) -> None:
+    """Follow the manifest's recorded path, never rebuild `outputs/<stage>.parquet`."""
+    run_dir = projects_root / "permits" / "runs" / run_id
+    manifest = json.loads((run_dir / "manifest.json").read_text(encoding="utf-8"))
+    record = next(r for r in manifest["stage_records"] if r["stage_id"] == "load")
+    frame = pd.read_parquet(run_dir / record["output_path"])
+    (run_dir / record["output_path"]).unlink()
+    record["output_path"] = "outputs/load.csv"
+    frame.to_csv(run_dir / "outputs" / "load.csv", index=False)
+    (run_dir / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+
+    observed = observation.observed_column_values("permits", run_id, "load", "status")
+    assert observed.values == ["filed", "granted"]

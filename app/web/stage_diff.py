@@ -13,9 +13,9 @@ from typing import ClassVar, Optional, Union
 
 import pandas as pd
 
+from app.core.frames import read_frame_file
 from app.models import Stage, StageType
 from app.runtime.lineage import RowLineage, lineage_sidecar_path
-from app.web.loading import read_table
 
 # The 1:1-by-position stage types the aligned diff covers: their runtime
 # contract maps output row i to input row i, so a positional comparison states
@@ -394,7 +394,7 @@ def _read_frame(run_dir: Path, rel_path: Optional[str]) -> Optional[pd.DataFrame
     if not path.exists():
         return None
     try:
-        return read_table(path)
+        return read_frame_file(path)
     except (OSError, ValueError):
         # An unreadable frame means fallback to the plain output view, whose own
         # loader reports the read error in the pane — nothing is hidden here.

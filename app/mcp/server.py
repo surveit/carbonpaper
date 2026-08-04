@@ -19,6 +19,7 @@ from app.core.errors import (
     NoVersionToRunError,
     NoWorkflowTestVersionError,
     RunNotFoundError,
+    WorkflowTestTargetConflictError,
 )
 from app.models import (
     HUMAN_REVIEW_QUEUE_CONTRACT_NOTE,
@@ -37,7 +38,6 @@ from app.models.review_guide import ReviewGuideDraft
 from app.services.versioning import ReviewGuide
 from app.models.stages.node_types import NODE_TYPES
 from app.runtime import stage_tests
-from app.runtime.observation import profile_input_stage
 from app.services import generation
 from app.services import loader
 from app.services import observation
@@ -58,6 +58,7 @@ _RUN_TOOL_ERRORS = (
     WorkflowLoadError,
     RunNotFoundError,
     NoWorkflowTestVersionError,
+    WorkflowTestTargetConflictError,
     ValueError,
 )
 
@@ -68,13 +69,6 @@ _RUN_TOOL_ERRORS = (
 # project with no compiled workflow to snapshot.
 # Anything outside this set propagates as a genuine internal fault.
 _STAGE_TOOL_ERRORS = (WorkflowLoadError, FileNotFoundError)
-
-# The observation seam: services must not import the runtime, so this surface —
-# a composition root the import contracts allow to import app.runtime — injects
-# the frame profiler at import time (app.web.routers.editing does the same for
-# the editing agent). See app.services.observation.
-observation.set_input_profiler(profile_input_stage)
-
 
 def _render_node_type_constraints() -> str:
     """Every node type's own runtime facts as bullets for the instructions
@@ -169,8 +163,9 @@ Runs execute a stored version; save_version(project_id, message) creates one, th
 run_workflow_test against it is how you finish. Publishing is human-only.
 run_workflow(project_id, version_id?) starts a real run and returns a run_id,
 get_run_status(project_id, run_id) follows it to its outcome, and
-run_workflow_test(project_id, version_id?, limit, offset) executes any stored version —
-published or not — over a small slice of the real source, as a run marked is_test_run.
+run_workflow_test(project_id, version_id?, use_working_copy?, limit, offset) executes any
+stored version — published or not — or, with use_working_copy, the stages you are editing
+right now, over a small slice of the real source, as a run marked is_test_run.
 
 # Constraints
 {_NODE_TYPE_CONSTRAINTS}
@@ -333,13 +328,15 @@ def remove_stage(project_id: str, stage_id: str) -> dict[str, Any]:
 @mcp.tool(description=TOOL_SPECS["list_distinct_values"].description)
 def list_distinct_values(
     project_id: str,
+    run_id: str,
     stage_id: str,
     column: str,
     max_values: int = DEFAULT_MAX_DISTINCT_VALUES,
 ) -> dict[str, Any]:
     _resolve_existing_project(project_id)  # loud if the project doesn't exist
-    profile = observation.observed_column_profile(project_id, stage_id, column, max_values)
-    return profile.model_dump(mode="json", exclude_none=True)
+    observed = observation.observed_column_values(
+        project_id, run_id, stage_id, column, max_values)
+    return observed.model_dump(mode="json", exclude_none=True)
 
 
 def catch_stage_edit_refusals(edit: Callable[[], EditStageResult]) -> dict[str, Any]:
@@ -406,12 +403,14 @@ def get_run_status(project_id: str, run_id: str) -> dict[str, Any]:
 
 @mcp.tool(description=TOOL_SPECS["run_workflow_test"].description)
 def run_workflow_test(
-    project_id: str, version_id: str | None = None, limit: int = 20, offset: int = 0,
+    project_id: str, version_id: str | None = None, use_working_copy: bool = False,
+    limit: int = 20, offset: int = 0,
 ) -> dict[str, Any]:
     _resolve_existing_project(project_id)  # loud if the project doesn't exist
     try:
         return workflow_test_service.run_workflow_test(
-            project_id, version_id=version_id, limit=limit, offset=offset)
+            project_id, version_id=version_id, use_working_copy=use_working_copy,
+            limit=limit, offset=offset)
     except _RUN_TOOL_ERRORS as exc:
         return {"ok": False, "error": str(exc)}
 
