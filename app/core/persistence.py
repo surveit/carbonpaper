@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timedelta
 from enum import Enum
 from threading import RLock
 from uuid import uuid4
@@ -187,12 +187,23 @@ def is_store_configured() -> bool:
     return _store is not None
 
 
+_stamp_lock = RLock()
+_last_stamp: datetime | None = None
+
+
 def _now_iso() -> str:
-    # Microseconds, not seconds: `created_at` is what newest-first ordering sorts on
-    # (AgentSession.list, and any "latest record wins" read), and a second-resolution
-    # stamp ties for every record written in the same second. Fixed-width ISO, so
-    # lexicographic comparison stays chronological.
-    return datetime.now().isoformat(timespec="microseconds")
+    # Newest-first reads sort on `created_at`, but the OS tick is coarse (15.6ms on
+    # Windows), so back-to-back calls read one instant. Forced strictly increasing —
+    # +1us whenever the clock has not moved; fixed-width ISO keeps string order
+    # chronological. Total WITHIN a process only: two processes can still tie in the
+    # same tick, which the `id` tiebreak at each sort site covers.
+    global _last_stamp
+    with _stamp_lock:
+        now = datetime.now()
+        if _last_stamp is not None and now <= _last_stamp:
+            now = _last_stamp + timedelta(microseconds=1)
+        _last_stamp = now
+    return now.isoformat(timespec="microseconds")
 
 
 class PersistenceScope(str, Enum):
