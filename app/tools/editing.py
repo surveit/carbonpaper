@@ -12,7 +12,8 @@ from pydantic import BaseModel
 
 from app.core.agent.bound_tool import BoundToolSpec
 from app.models import StageDraft
-from app.models.review_guide import ReviewGuide
+from app.models.review_guide import ReviewGuideDraft
+from app.services.versioning import ReviewGuide
 from app.services import drafts, project as project_service
 from app.tools.tool_specs import SAVE_VERSION_FROM_DRAFT, TOOL_SPECS
 from app.services.drafts import DraftDetail, DraftEdit, DraftView, SaveResult
@@ -67,7 +68,7 @@ def make_editing_tools(ctx: EditingContext) -> list[BoundToolSpec]:
         return project_service.read_review_guide(project_id, version_id)
 
     def write_review_guide(
-        project_id: str, version_id: str, guide: ReviewGuide
+        project_id: str, version_id: str, guide: ReviewGuideDraft
     ) -> ReviewGuide:
         return project_service.write_review_guide(project_id, version_id, guide)
 

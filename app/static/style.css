@@ -1117,6 +1117,30 @@ table.data-preview.selectable tbody tr:hover { background: #f3f7ff; }
 .scratch-result .scratch-head.err { color: #802020; }
 table.data-preview.scratch th { background: #f3ecd0; }
 
+/* Outputs-pane stage diff (app/templates/_stage_diff.html). A column the stage
+   ADDS takes the same palette tint the stage-tests table uses for its added
+   columns (--state-review-bg), and the table caption names those columns in
+   words; a changed cell carries the warn tint plus the input value it replaced
+   struck through, so the change reads without colour; a dropped row carries the
+   failed tint. Unchanged cells go muted, so the eye lands on what the stage
+   touched. */
+.stage-diff th.diff-col-new,
+.stage-diff td.diff-col-new { background: var(--state-review-bg); }
+.stage-diff td.diff-cell-changed { background: var(--state-warn-bg); }
+.stage-diff td.diff-cell-same { color: var(--muted); }
+.stage-diff .diff-was { display: block; color: var(--muted); text-decoration: line-through; }
+.stage-diff tr.diff-row-dropped td { background: var(--state-failed-bg); color: var(--state-failed-ink); }
+.stage-diff caption { caption-side: top; text-align: left; font-size: 0.78rem; color: var(--muted); padding-bottom: 2px; }
+.diff-summary { margin: 6px 0 2px; font-size: 12.5px; }
+.diff-summary .diff-note { margin-right: 12px; }
+.diff-summary .diff-note-added code { background: var(--state-review-bg); }
+
+/* The Data pane's input-rows disclosure: the upstream previews and the scratch
+   row picker, folded below the (diff-aware) output so the pane leads with what
+   the stage produced while the picker stays one click away. */
+.data-inputs { margin: 14px 0 4px; }
+.data-inputs > summary { color: var(--accent); font-size: 12px; cursor: pointer; }
+
 /* Validation block inside the Outputs tier. */
 .tier-outputs .validation-block { background: #fff; border: 1px solid var(--border); margin-top: 12px; }
 .validation-block .val-phase {

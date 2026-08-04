@@ -20,8 +20,8 @@ from app.services.workflow_test import run_workflow_test
 from conftest import pinned_stages
 
 _ROWS = [{"name": "a", "val": 1}, {"name": "b", "val": 2}, {"name": "c", "val": 3}]
-_LOADED = [{"name": "name", "type": "str"}, {"name": "val", "type": "int"}]
-_DOUBLED = [*_LOADED, {"name": "doubled", "type": "int"}]
+_LOADED = [{"name": "name", "type": "str", "nullable": True}, {"name": "val", "type": "int", "nullable": True}]
+_DOUBLED = [*_LOADED, {"name": "doubled", "type": "int", "nullable": True}]
 
 
 def _clean_code(probe: Path) -> str:

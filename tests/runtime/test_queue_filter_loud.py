@@ -17,7 +17,7 @@ def test_bad_filter_raises_instead_of_skipping_review(tmp_path):
         # about the frame that actually arrives not having the column.
         "inputs": [{"id": "a", "schema": {"columns": [
             {"name": "claim_id", "type": "str", "nullable": False},
-            {"name": "nonexistent", "type": "bool"}]}}],
+            {"name": "nonexistent", "type": "bool", "nullable": True}]}}],
         "output_schema": {"columns": [{"name": "claim_id", "type": "str", "nullable": False}],
                           "primary_key": ["claim_id"]},
         "queue": {"filter": "nonexistent == True"},
@@ -41,7 +41,7 @@ def test_a_cell_the_filter_cannot_answer_names_the_stage_and_the_filter(tmp_path
         "id": "q", "type": "human_review_queue", "name": "q",
         "inputs": [{"id": "a", "schema": {"columns": [
             {"name": "claim_id", "type": "str", "nullable": False},
-            {"name": "score", "type": "int"}]}}],
+            {"name": "score", "type": "int", "nullable": True}]}}],
         "output_schema": {"columns": [{"name": "claim_id", "type": "str", "nullable": False}],
                           "primary_key": ["claim_id"]},
         "queue": {"filter": "score > 1"},

@@ -292,7 +292,7 @@ def test_mcp_add_stage_drops_server_owned_fields_and_names_them(tmp_path, monkey
     echoed = {
         "id": "load", "name": "Load", "type": "input_data",
         "connector": {"kind": "file"},
-        "output_schema": {"columns": [{"name": "doc_id", "type": "str"}]},
+        "output_schema": {"columns": [{"name": "doc_id", "type": "str", "nullable": True}]},
         "tests": [], "source": {"section": "para 3"},
     }
 
@@ -331,7 +331,7 @@ _UNADDITIVE_LLM_STAGE = {
     "inputs": [{"id": "load", "schema": _IN_SCHEMA}],
     # llm_transform must be additive and 1:1 — dropping the input's `amount`
     # column breaks that, and `Stage` is where that rule lives.
-    "output_schema": {"columns": [{"name": "verdict", "type": "str"}]},
+    "output_schema": {"columns": [{"name": "verdict", "type": "str", "nullable": True}]},
     "llm": {"prompt_data_template": "judge {amount}"},
 }
 
@@ -512,7 +512,8 @@ def test_mcp_review_guide_round_trips_through_the_tool_boundary(tmp_path, monkey
     asyncio.run(server.mcp.call_tool("write_review_guide", {**args, "guide": _GUIDE}))
 
     _content, stored = asyncio.run(server.mcp.call_tool("read_review_guide", args))
-    assert stored["result"] == _GUIDE
+    assert stored["result"]["steps"] == _GUIDE["steps"]
+    assert stored["result"]["unnarrated"] == _GUIDE["unnarrated"]
 
 
 def test_mcp_write_review_guide_refuses_a_mismatch_naming_the_stage(tmp_path, monkeypatch):

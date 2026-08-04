@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import mimetypes
 import traceback
 from dataclasses import dataclass
 from pathlib import Path
@@ -15,6 +16,7 @@ from typing import Any, AsyncIterator
 from fastapi import APIRouter, File, Form, HTTPException, Request, Response, UploadFile
 from fastapi.datastructures import FormData
 from fastapi.responses import (
+    FileResponse,
     HTMLResponse,
     JSONResponse,
     RedirectResponse,
@@ -25,9 +27,7 @@ from starlette.concurrency import run_in_threadpool
 from app.core.errors import (
     MissingInputBindingError,
     NoVersionToRunError,
-    RowOutOfRange,
     RunVersionUnresolvableError,
-    StageNotInRun,
 )
 from app.core.run_status import RunStatus, StageStatus
 from app.services.errors import WorkflowLoadError
@@ -39,18 +39,16 @@ from app.runtime.cancellation import request_cancel
 from app.runtime.errors import PreviewError
 from app.runtime.preview import PREVIEWABLE_TYPES, run_stage_preview
 from app.runtime.run_log import RUN_DONE, read_events_since, read_events_window
-from app.runtime.trace import trace_row, trace_to_dict
-from app.runtime.trace_view import build_trace_view
 from app.web.config import projects_dir, REPO_ROOT, templates
 from app.web.stage_test_views import build_certification, shape_test_views
 from app.web.diagrams import TYPE_CLASS, TYPE_GLYPH, build_mermaid_graph
 from app.web.loading import (
     build_llm_example,
+    csv_download_body,
     list_file_inputs,
     save_uploaded_input,
     load_manifest,
     load_output_preview,
-    load_output_row,
     load_output_table,
     manifest_stage,
     read_output_df,
@@ -60,6 +58,7 @@ from app.web.project_view import shell_state
 from app.web.run_header import build_live_view, build_run_header
 from app.web.run_index import build_run_index_rows
 from app.web.run_stage_panel import not_executed_panel
+from app.web.stage_diff import build_stage_diff
 
 router = APIRouter()
 
@@ -494,6 +493,12 @@ async def run_stage_partial(
             "stage_def": stage_def,
             "stage_def_error": pinned.error,
             "preview": output_preview,
+            # None for every stage type outside the diff's scope, and for any
+            # stage whose alignment can't be verified — the pane then shows the
+            # plain output view (app.web.stage_diff).
+            "diff": build_stage_diff(
+                stage_def, run_dir, stage_record.get("output_path"), output_by_id
+            ),
             "input_previews": input_previews,
             "function_code": function_code,
             "llm_example": llm_example,
@@ -535,118 +540,16 @@ async def run_stage_rows(
 @router.get("/project/{project}/runs/{run_id}/stage/{stage_id}/rows.csv")
 async def run_stage_rows_csv(project: str, run_id: str, stage_id: str):
     """One stage's complete output as a CSV download (no row cap)."""
+    # UTF-8 behind a byte-order mark, so accented rows survive Excel on
+    # Windows — `csv_download_body` carries the why.
     run_dir = runs_dir(project) / run_id
     stage_record = manifest_stage(run_dir, stage_id)
     df = read_output_df(run_dir, stage_record.get("output_path"))
     filename = f"{project}__{run_id}__{stage_id}.csv"
     return Response(
-        content=df.to_csv(index=False),
+        content=csv_download_body(df),
         media_type="text/csv; charset=utf-8",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
-    )
-
-
-@router.get(
-    "/project/{project}/runs/{run_id}/stage/{stage_id}/lineage_panel",
-    response_class=HTMLResponse,
-)
-async def run_stage_lineage_panel(
-    request: Request, project: str, run_id: str, stage_id: str, row: int
-):
-    """Minimal stage view for the lineage page: the transform, the output
-    schema, and the output trimmed to `row`. Reuses `_stage_executable.html`
-    and `schema_table` — not the whole run-detail panel."""
-    run_dir = runs_dir(project) / run_id
-    manifest = load_manifest(run_dir)
-    stage_record = next(
-        (s for s in manifest.get("stage_records", []) if s.get("stage_id") == stage_id),
-        None,
-    )
-    if stage_record is None:
-        raise HTTPException(status_code=404, detail=f"No stage '{stage_id}' in run")
-    # Transform detail is part of the lineage of THIS run, so it comes from the
-    # version the run pinned. Unresolvable → no transform and a stated reason;
-    # the row's output table still renders, because that data is still true.
-    pinned = run_service.load_pinned_stage_def(project, manifest, stage_id)
-    return templates.TemplateResponse(
-        request,
-        "_lineage_stage.html",
-        {
-            "project": project,
-            "run_id": run_id,
-            "stage": stage_record,
-            "stage_def": pinned.stage,
-            "stage_def_error": pinned.error,
-            "function_code": resolve_function_code(pinned.stage),
-            "test_views": (lineage_views := shape_test_views(pinned.stage)),
-            "certification": (
-                build_certification(pinned.stage, lineage_views) if pinned.stage else None
-            ),
-            "preview": load_output_row(run_dir, stage_record.get("output_path"), row),
-            "scoped_row": row,
-            "type_glyph": TYPE_GLYPH,
-            "type_class": TYPE_CLASS,
-        },
-    )
-
-
-@router.get("/project/{project}/runs/{run_id}/stage/{stage_id}/row/{row}/trace")
-async def run_stage_row_trace(project: str, run_id: str, stage_id: str, row: int):
-    """Show-your-work for one output row: its ancestry through row-preserving
-    stages, as JSON. 404 if the run/stage is absent, 400 if the row ordinal is
-    out of range."""
-    run_dir = runs_dir(project) / run_id
-    load_manifest(run_dir)  # 404s if the run doesn't exist
-    try:
-        trace = trace_row(run_dir, stage_id, row)
-    except StageNotInRun as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    except RowOutOfRange as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return JSONResponse(trace_to_dict(trace))
-
-
-@router.get(
-    "/project/{project}/runs/{run_id}/stage/{stage_id}/row/{row}/trace/view",
-    response_class=HTMLResponse,
-)
-async def run_stage_row_trace_view(
-    request: Request, project: str, run_id: str, stage_id: str, row: int
-):
-    """The row's show-your-work as a read-only HTML page: a numbered story and a
-    graph toggle on top; clicking a stage loads the row-trimmed panel below."""
-    run_dir = runs_dir(project) / run_id
-    manifest = load_manifest(run_dir)
-    try:
-        trace = trace_row(run_dir, stage_id, row)
-    except StageNotInRun as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    except RowOutOfRange as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-    # Node detail and the graph both describe THIS run, so both read the version
-    # it pinned. With no resolvable version neither falls back to the working
-    # copy: the story still lists the ancestry, transforms show as "unknown",
-    # and no graph is drawn.
-    try:
-        stages = run_service.load_run_stages(project, manifest)
-    except RunVersionUnresolvableError:
-        stages = []
-    stages_by_id = {s.id: s for s in stages}
-
-    view = build_trace_view(trace_to_dict(trace), stages_by_id)
-    ordered = [stages_by_id[n["stage_id"]] for n in view["nodes"]
-               if n["stage_id"] in stages_by_id]
-    mermaid = build_mermaid_graph(ordered, project) if len(ordered) == len(view["nodes"]) else ""
-    return templates.TemplateResponse(
-        request,
-        "lineage.html",
-        {
-            "title": f"{view['start_stage']} · row {view['start_row']}",
-            "view": view,
-            "project": project,
-            "mermaid": mermaid,
-        },
     )
 
 
@@ -714,14 +617,21 @@ async def run_stage_scratch_preview(
     return JSONResponse({"ok": True, **result})
 
 
-@router.get("/project/{project}/runs/{run_id}/artifact/{filename:path}", response_class=HTMLResponse)
+@router.get("/project/{project}/runs/{run_id}/artifact/{filename:path}")
 async def run_artifact(project: str, run_id: str, filename: str):
-    """Serve generated HTML artifacts (per-org profiles etc.) inline."""
+    # A publish stage writes whatever its format says — an .xlsx workbook as
+    # readily as an HTML profile — so decoding every artifact as text answers a
+    # binary one with a UnicodeDecodeError.
+    """Serve a run's artifact: HTML inline, anything else as its own file type."""
     run_dir = runs_dir(project) / run_id
     candidate = (run_dir / "artifacts" / filename).resolve()
     if not candidate.exists() or not str(candidate).startswith(str(run_dir.resolve())):
         raise HTTPException(status_code=404, detail="Artifact not found")
-    return HTMLResponse(content=candidate.read_text(encoding="utf-8"))
+    media_type, _ = mimetypes.guess_type(candidate.name)
+    if media_type == "text/html":
+        return HTMLResponse(content=candidate.read_text(encoding="utf-8"))
+    return FileResponse(candidate, media_type=media_type or "application/octet-stream",
+                        filename=candidate.name)
 
 
 @router.post("/project/{project}/runs/{run_id}/resume")

@@ -25,10 +25,10 @@ from conftest import pinned_stages, resumed_stages
 # The two shapes every fixture in this file loads: the (name, val) items csv and
 # the (id, text) csv an llm_transform scores. Declared once so an upstream's
 # output_schema and its downstream's input `schema` cannot drift apart.
-_NAME_VAL_SCHEMA = {"columns": [{"name": "name", "type": "str"},
-                                {"name": "val", "type": "int"}]}
-_ID_TEXT_SCHEMA = {"columns": [{"name": "id", "type": "str"},
-                               {"name": "text", "type": "str"}],
+_NAME_VAL_SCHEMA = {"columns": [{"name": "name", "type": "str", "nullable": True},
+                                {"name": "val", "type": "int", "nullable": True}]}
+_ID_TEXT_SCHEMA = {"columns": [{"name": "id", "type": "str", "nullable": True},
+                               {"name": "text", "type": "str", "nullable": True}],
                    "primary_key": ["id"]}
 
 
@@ -306,7 +306,7 @@ def test_output_validation_error_other_than_a_missing_column_also_errors_the_sta
     blank = {
         "id": "blank", "name": "Blank the value", "type": "python_frame_function",
         "inputs": [{"id": "load", "schema": _NAME_VAL_SCHEMA}],
-        "output_schema": {"columns": [{"name": "name", "type": "str"},
+        "output_schema": {"columns": [{"name": "name", "type": "str", "nullable": True},
                                       {"name": "val", "type": "int", "nullable": False}]},
         "function": {"kind": "inline",
                      "code": "def transform(df):\n    df['val'] = None\n    return df\n"},
@@ -320,6 +320,50 @@ def test_output_validation_error_other_than_a_missing_column_also_errors_the_sta
     assert record["status"] == "error"
     assert record["error"]["type"] == "OutputSchemaViolation"
     assert "val" in record["error"]["message"]
+    assert manifest["status"] == "errors"
+
+
+def test_value_outside_a_declared_enum_errors_the_stage_and_blocks_downstream(tmp_path):
+    (tmp_path / "compiled").mkdir(parents=True)
+    (tmp_path / "data").mkdir(parents=True)
+    pd.DataFrame({"name": ["a"], "val": [1]}).to_csv(
+        tmp_path / "data" / "items.csv", index=False)
+    labelled_schema = {"columns": [
+        {"name": "name", "type": "str", "nullable": True},
+        {"name": "status", "type": "str", "enum": ["open", "closed"], "nullable": True},
+    ]}
+    load = {
+        "id": "load", "name": "Load items", "type": "input_data",
+        "connector": {"kind": "file",
+                      "params": {"path": str(tmp_path / "data" / "items.csv"), "format": "csv"}},
+        "output_schema": _NAME_VAL_SCHEMA,
+    }
+    label = {
+        "id": "label", "name": "Label items", "type": "python_frame_function",
+        "inputs": [{"id": "load", "schema": _NAME_VAL_SCHEMA}],
+        "output_schema": labelled_schema,
+        "function": {"kind": "inline",
+                     "code": "def transform(df):\n"
+                             "    return df.assign(status='pending')[['name', 'status']]\n"},
+    }
+    tail = {
+        "id": "tail", "name": "Tail", "type": "python_frame_function",
+        "inputs": [{"id": "label", "schema": labelled_schema}],
+        "output_schema": labelled_schema,
+        "function": {"kind": "inline", "code": "def transform(df):\n    return df\n"},
+    }
+    for filename, stage in (("01_load.json", load), ("02_label.json", label),
+                            ("03_tail.json", tail)):
+        (tmp_path / "compiled" / filename).write_text(json.dumps(stage), encoding="utf-8")
+    _seed_version(tmp_path)
+    manifest = execute_run(tmp_path, tmp_path, *pinned_stages(tmp_path))
+
+    records = {r["stage_id"]: r for r in manifest["stage_records"]}
+    assert records["label"]["status"] == "error"
+    assert records["label"]["error"]["type"] == "OutputSchemaViolation"
+    assert "status" in records["label"]["error"]["message"]
+    assert "'pending'" in records["label"]["error"]["message"]
+    assert records["tail"]["status"] == "pending"
     assert manifest["status"] == "errors"
 
 
@@ -340,7 +384,7 @@ def _llm_transform_project(root):
         "id": "score", "name": "Score items", "type": "llm_transform",
         "inputs": [{"id": "load", "schema": _ID_TEXT_SCHEMA}],
         "output_schema": {
-            "columns": [{"name": "id", "type": "str"}, {"name": "text", "type": "str"},
+            "columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "text", "type": "str", "nullable": True},
                         {"name": "score", "type": "int", "nullable": False}],
             "primary_key": ["id"]},
         "llm": {"prompt_template": "Rate: {text}"},
@@ -395,7 +439,7 @@ def test_run_subset_surfaces_the_real_row_failure_message(tmp_path, monkeypatch)
         "id": "score", "name": "Score items", "type": "llm_transform",
         "inputs": [{"id": "load", "schema": _ID_TEXT_SCHEMA}],
         "output_schema": {
-            "columns": [{"name": "id", "type": "str"}, {"name": "text", "type": "str"},
+            "columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "text", "type": "str", "nullable": True},
                         {"name": "score", "type": "int", "nullable": False}],
             "primary_key": ["id"]},
         "llm": {"prompt_template": "Rate: {text}"},
@@ -427,17 +471,17 @@ def test_run_subset_preserves_partial_work_in_the_manifest_on_a_mid_frontier_err
     clean = parse_stage({
         "id": "clean", "name": "Clean rows", "type": "python_row_function",
         "inputs": [{"id": "load", "schema": {
-            "columns": [{"name": "id", "type": "str"}, {"name": "text", "type": "str"}]}}],
+            "columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "text", "type": "str", "nullable": True}]}}],
         "output_schema": {
-            "columns": [{"name": "id", "type": "str"}, {"name": "text", "type": "str"}]},
+            "columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "text", "type": "str", "nullable": True}]},
         "function": {"kind": "inline", "code": "def transform(row): return row"},
     })
     boom = parse_stage({
         "id": "score", "name": "Score rows", "type": "python_row_function",
         "inputs": [{"id": "clean", "schema": {
-            "columns": [{"name": "id", "type": "str"}, {"name": "text", "type": "str"}]}}],
+            "columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "text", "type": "str", "nullable": True}]}}],
         "output_schema": {
-            "columns": [{"name": "id", "type": "str"}, {"name": "score", "type": "int"}]},
+            "columns": [{"name": "id", "type": "str", "nullable": True}, {"name": "score", "type": "int", "nullable": True}]},
         "function": {"kind": "inline",
                      "code": "def transform(row):\n    raise ValueError('kaboom')"},
     })
@@ -689,7 +733,7 @@ def _add_frame_stage(root):
         "id": "totals", "name": "Totals", "type": "python_frame_function",
         "inputs": [{"id": "load", "schema": _NAME_VAL_SCHEMA}],
         "output_schema": {"columns": [*_NAME_VAL_SCHEMA["columns"],
-                                      {"name": "double", "type": "int"}]},
+                                      {"name": "double", "type": "int", "nullable": True}]},
         "function": {"kind": "inline", "code": _FRAME_STAGE_CODE},
     }), encoding="utf-8")
 

@@ -8,7 +8,8 @@ from pydantic import ValidationError
 from app.tools.editing import EditingContext, make_editing_tools
 from app.core.agent.bound_tool import BoundToolSpec
 from app.core.errors import ReviewGuideValidationError
-from app.models.review_guide import ReviewGuide, ReviewGuideStep
+from app.models.review_guide import ReviewGuideDraft, ReviewGuideStep
+from app.services.versioning import ReviewGuide
 from app.services import workspace
 from app.services.project import Project
 
@@ -146,8 +147,8 @@ def _versioned(examples: Path, name: str) -> tuple[list[BoundToolSpec], str]:
     return tools, saved.version_id
 
 
-def _guide(step_ids: list[str], unnarrated: list[str]) -> ReviewGuide:
-    return ReviewGuide(
+def _guide(step_ids: list[str], unnarrated: list[str]) -> ReviewGuideDraft:
+    return ReviewGuideDraft(
         steps=[
             ReviewGuideStep(
                 title="Score each row",
@@ -198,7 +199,7 @@ def test_write_review_guide_rejects_a_mismatch_naming_the_stage(
 
 def test_write_review_guide_rejects_a_stage_narrated_by_two_steps(examples_root: Path) -> None:
     tools, version_id = _versioned(examples_root, "alpha")
-    two_steps = ReviewGuide(
+    two_steps = ReviewGuideDraft(
         steps=[
             ReviewGuideStep(title="Load", prose="Reads the rows.", stage_ids=["load"]),
             ReviewGuideStep(title="Load again", prose="Reads them again.", stage_ids=["load"]),

@@ -10,8 +10,8 @@ from app.models import Stage, parse_stage
 from app.runtime.stages.join import handle_enrich, handle_expand
 from conftest import make_run_context
 
-_SUBJECT = {"columns": [{"name": "x", "type": "int"}]}
-_REFERENCE = {"columns": [{"name": "x", "type": "int"}, {"name": "z", "type": "str"}]}
+_SUBJECT = {"columns": [{"name": "x", "type": "int", "nullable": True}]}
+_REFERENCE = {"columns": [{"name": "x", "type": "int", "nullable": True}, {"name": "z", "type": "str", "nullable": True}]}
 
 
 def _join_stage(stage_type: str) -> Stage:
@@ -19,8 +19,8 @@ def _join_stage(stage_type: str) -> Stage:
         "id": "m", "name": "Join", "type": stage_type,
         "inputs": [{"id": "subject", "schema": _SUBJECT},
                    {"id": "reference", "schema": _REFERENCE}],
-        "output_schema": {"columns": [{"name": "x", "type": "int"},
-                                      {"name": "z", "type": "str"}]},
+        "output_schema": {"columns": [{"name": "x", "type": "int", "nullable": True},
+                                      {"name": "z", "type": "str", "nullable": True}]},
         "join": {"keys": [{"left": "x", "right": "x"}]},
     })
 

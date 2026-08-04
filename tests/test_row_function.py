@@ -13,7 +13,7 @@ from conftest import make_run_context
 
 # Every frame below is a single int column `x`; `output_columns` names what the
 # `code` under test returns.
-_X_COLUMN = [{"name": "x", "type": "int"}]
+_X_COLUMN = [{"name": "x", "type": "int", "nullable": True}]
 
 
 def _stage(code, inputs=("src",), output_columns=_X_COLUMN):
@@ -32,7 +32,7 @@ def _run(stage, frames):
 def test_row_function_maps_per_row():
     df = pd.DataFrame({"x": [1, 2, 3]})
     code = "def transform(row):\n    return {'x': row['x'], 'y': row['x'] * 10}\n"
-    out = _run(_stage(code, output_columns=_X_COLUMN + [{"name": "y", "type": "int"}]),
+    out = _run(_stage(code, output_columns=_X_COLUMN + [{"name": "y", "type": "int", "nullable": True}]),
                {"src": df})
     assert len(out) == 3                    # 1:1 — one row out per row in
     assert list(out["y"]) == [10, 20, 30]

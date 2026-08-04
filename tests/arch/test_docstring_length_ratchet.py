@@ -1,8 +1,8 @@
-"""Architecture: every function, method, and class docstring in ``app/`` and ``tests/``
-at or under 100 characters. `_GRANDFATHERED` carries the symbols that predate the rule
-and may only shrink; `_JUSTIFIED_EXCEPTIONS` (reason-mandatory, empty today) is for
-post-rule exceptions and is meant to stay very rare — normally cut the docstring or
-move the content to docs/.
+"""Architecture: every function, method, and class docstring in ``app/`` and ``tests/`` at
+or under 100 characters. A docstring that restates its code doubles the maintenance surface
+— every later change has to read and update both — so prose earns its place only where it is
+ORTHOGONAL to the code, saying what the code cannot. `_GRANDFATHERED` (predates the rule, may
+only shrink) / `_JUSTIFIED_EXCEPTIONS` (reason-mandatory, rare); else cut it, or move to docs/.
 """
 from __future__ import annotations
 
@@ -627,9 +627,6 @@ _GRANDFATHERED: frozenset[str] = frozenset(
         "app/web/routers/runs.py::cancel_run_route",
         "app/web/routers/runs.py::resume_run_route",
         "app/web/routers/runs.py::run_inputs",
-        "app/web/routers/runs.py::run_stage_lineage_panel",
-        "app/web/routers/runs.py::run_stage_row_trace",
-        "app/web/routers/runs.py::run_stage_row_trace_view",
         "app/web/routers/runs.py::run_stage_rows",
         "app/web/routers/runs.py::run_stage_scratch_preview",
         "app/web/routers/runs.py::run_status",

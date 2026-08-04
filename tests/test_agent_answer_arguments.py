@@ -62,7 +62,7 @@ def test_a_genuinely_invalid_answer_is_still_rejected():
 def test_every_agent_tool_advertises_more_than_one_argument():
     """The invariant, over the answer models the app actually ships."""
     from app.compiler.data_model import SchemaLibrary
-    from app.compiler.review_guide import ReviewGuide
+    from app.models.review_guide import ReviewGuideDraft as ReviewGuide
 
     for model in (SchemaLibrary, ReviewGuide, OneField, TwoFields):
         assert len(_advertised(model)["properties"]) > 1, model.__name__

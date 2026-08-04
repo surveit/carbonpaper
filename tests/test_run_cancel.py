@@ -18,13 +18,13 @@ from conftest import pinned_stages, resumed_stages
 # The two shapes the fixtures below load: the (name, val) items csv, and the
 # (id, text) csv the llm project scores. Declared once so an upstream's
 # output_schema and its downstream's input `schema` cannot drift apart.
-_NAME_VAL_SCHEMA = {"columns": [{"name": "name", "type": "str"},
-                                {"name": "val", "type": "int"}]}
-_ID_TEXT_SCHEMA = {"columns": [{"name": "id", "type": "str"},
-                               {"name": "text", "type": "str"}],
+_NAME_VAL_SCHEMA = {"columns": [{"name": "name", "type": "str", "nullable": True},
+                                {"name": "val", "type": "int", "nullable": True}]}
+_ID_TEXT_SCHEMA = {"columns": [{"name": "id", "type": "str", "nullable": True},
+                               {"name": "text", "type": "str", "nullable": True}],
                    "primary_key": ["id"]}
-_SCORED_SCHEMA = {"columns": [{"name": "id", "type": "str"},
-                              {"name": "text", "type": "str"},
+_SCORED_SCHEMA = {"columns": [{"name": "id", "type": "str", "nullable": True},
+                              {"name": "text", "type": "str", "nullable": True},
                               {"name": "score", "type": "int", "nullable": False}],
                   "primary_key": ["id"]}
 

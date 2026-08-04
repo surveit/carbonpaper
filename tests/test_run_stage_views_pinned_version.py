@@ -33,8 +33,8 @@ def _load_stage(data_path: Path) -> dict:
         "id": LOAD_ID, "name": "Load rows", "type": "input_data",
         "connector": {"kind": "file",
                       "params": {"path": str(data_path), "format": "csv"}},
-        "output_schema": {"columns": [{"name": "name", "type": "str"},
-                                      {"name": "val", "type": "int"}]},
+        "output_schema": {"columns": [{"name": "name", "type": "str", "nullable": True},
+                                      {"name": "val", "type": "int", "nullable": True}]},
     }
 
 
@@ -45,13 +45,13 @@ def _classify_stage(marker: str) -> dict:
         "id": CLASSIFY_ID, "name": f"Classify ({marker})",
         "type": "python_row_function",
         "inputs": [{"id": LOAD_ID,
-                    "schema": {"columns": [{"name": "name", "type": "str"},
-                                           {"name": "val", "type": "int"}]}}],
+                    "schema": {"columns": [{"name": "name", "type": "str", "nullable": True},
+                                           {"name": "val", "type": "int", "nullable": True}]}}],
         "function": {"kind": "inline",
                      "code": f'def transform(row):\n    return {{**row, "label": "{marker}"}}\n'},
-        "output_schema": {"columns": [{"name": "name", "type": "str"},
-                                      {"name": "val", "type": "int"},
-                                      {"name": "label", "type": "str"}]},
+        "output_schema": {"columns": [{"name": "name", "type": "str", "nullable": True},
+                                      {"name": "val", "type": "int", "nullable": True},
+                                      {"name": "label", "type": "str", "nullable": True}]},
     }
 
 

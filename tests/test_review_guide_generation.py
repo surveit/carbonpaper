@@ -20,7 +20,7 @@ from app.core.agent.store import SessionStore
 from app.core.agent.turns import TurnManager
 from app.core.errors import GenerationError, ReviewGuideValidationError
 from app.main import app
-from app.models.review_guide import ReviewGuide, ReviewGuideStep
+from app.models.review_guide import ReviewGuideDraft, ReviewGuideStep
 from app.services import versioning, workspace
 from app.services import project as project_service
 
@@ -66,10 +66,22 @@ def _add_stage_to_the_working_copy(project_dir: Path) -> None:
     )
 
 
-def _guide_of(stage_ids: list[str]) -> ReviewGuide:
-    return ReviewGuide(steps=[ReviewGuideStep(
+def _guide_of(stage_ids: list[str]) -> ReviewGuideDraft:
+    return ReviewGuideDraft(steps=[ReviewGuideStep(
         title="What this does", prose="Each `amount` is doubled.", stage_ids=stage_ids,
     )])
+
+
+def _save_guide(project_dir: Path, version_id: str, stage_ids: list[str]) -> None:
+    draft = _guide_of(stage_ids)
+    versioning.save_version_guide(
+        project_dir,
+        version_id,
+        versioning.ReviewGuide(
+            project=project_dir.name, version_id=version_id,
+            steps=draft.steps, unnarrated=draft.unnarrated,
+        ),
+    )
 
 
 class _FakeAuthor:
@@ -77,12 +89,12 @@ class _FakeAuthor:
 
     task = "make a guide for this version"
 
-    def __init__(self, answer: ReviewGuide | None) -> None:
+    def __init__(self, answer: ReviewGuideDraft | None) -> None:
         self._submitted = answer
-        self._answer: ReviewGuide | None = None
+        self._answer: ReviewGuideDraft | None = None
 
     @property
-    def answer(self) -> ReviewGuide | None:
+    def answer(self) -> ReviewGuideDraft | None:
         return self._answer
 
     def build_engine(self) -> Any:
@@ -153,7 +165,7 @@ def test_the_author_is_given_the_versions_stages_not_the_working_copy(
     assert "triple" not in seen["task"]
     # And the guide the turn wrote is the version's — the working copy's extra stage
     # is nowhere in it, which is also the only way save_version_guide would accept it.
-    stored = versioning.load_version(project_dir, version.version_id).guide
+    stored = versioning.find_latest_review_guide(project_dir.name, version.version_id)
     assert stored is not None
     assert stored.steps[0].stage_ids == ["load", "double"]
 
@@ -220,9 +232,7 @@ def test_start_refuses_a_version_that_already_has_a_guide(
     version = project_service.save_working_copy_as_version(
         project_dir, message="v1", reviewer="local"
     )
-    versioning.save_version_guide(
-        project_dir, version.version_id, _guide_of(["load", "double"])
-    )
+    _save_guide(project_dir, version.version_id, ["load", "double"])
     store = SessionStore()
     monkeypatch.setattr(compiler_review_guide, "open_session_store", lambda: store)
     before = len(store.list_sessions())
@@ -268,7 +278,7 @@ def test_finish_stores_the_guide_on_the_version(tmp_path: Path) -> None:
         project_dir, version.version_id, _guide_of(["load", "double"])
     )
 
-    stored = versioning.load_version(project_dir, version.version_id).guide
+    stored = versioning.find_latest_review_guide(project_dir.name, version.version_id)
     assert stored is not None
     assert stored.steps[0].stage_ids == ["load", "double"]
 
@@ -282,7 +292,7 @@ def test_finish_with_no_guide_raises_and_writes_nothing(tmp_path: Path) -> None:
     with pytest.raises(GenerationError, match="did not submit a guide"):
         generation._finish_review_guide(project_dir, version.version_id, None)
 
-    assert versioning.load_version(project_dir, version.version_id).guide is None
+    assert versioning.find_latest_review_guide(project_dir.name, version.version_id) is None
 
 
 def test_finish_refuses_a_guide_that_misses_a_stage(tmp_path: Path) -> None:
@@ -297,7 +307,7 @@ def test_finish_refuses_a_guide_that_misses_a_stage(tmp_path: Path) -> None:
             project_dir, version.version_id, _guide_of(["load"])
         )
 
-    assert versioning.load_version(project_dir, version.version_id).guide is None
+    assert versioning.find_latest_review_guide(project_dir.name, version.version_id) is None
 
 
 # ── the route ───────────────────────────────────────────────────────────────
@@ -322,7 +332,7 @@ def test_post_generates_the_guide_and_stores_it_on_the_version(
     assert response.json()["ok"] is True
     status = _poll_until_inactive(client, response.json()["session"])
     assert status["error"] is None
-    assert versioning.load_version(project_dir, version.version_id).guide is not None
+    assert versioning.find_latest_review_guide(project_dir.name, version.version_id) is not None
 
 
 def test_post_reports_a_turn_that_submitted_nothing(
@@ -343,7 +353,7 @@ def test_post_reports_a_turn_that_submitted_nothing(
     status = _poll_until_inactive(client, response.json()["session"])
     assert status["error"] is not None
     assert "did not submit a guide" in status["error"]
-    assert versioning.load_version(project_dir, version.version_id).guide is None
+    assert versioning.find_latest_review_guide(project_dir.name, version.version_id) is None
 
 
 def test_post_for_an_unknown_version_is_404(client: TestClient, tmp_path: Path) -> None:
@@ -367,9 +377,7 @@ def test_post_for_a_version_that_already_has_a_guide_is_400(
     version = project_service.save_working_copy_as_version(
         project_dir, message="v1", reviewer="local"
     )
-    versioning.save_version_guide(
-        project_dir, version.version_id, _guide_of(["load", "double"])
-    )
+    _save_guide(project_dir, version.version_id, ["load", "double"])
 
     response = client.post(f"/project/alpha/workflow/version/{version.version_id}/guide")
 

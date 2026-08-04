@@ -9,7 +9,8 @@ from typing import Any
 import pytest
 
 from app.models import parse_stage
-from app.models.review_guide import ReviewGuide, ReviewGuideStep
+from app.models.review_guide import ReviewGuideStep
+from app.services.versioning import ReviewGuide
 from app.services import workspace
 from app.services.run_guide import (
     build_run_guide_view,
@@ -18,7 +19,6 @@ from app.services.run_guide import (
 )
 from app.services.versioning import (
     create_version_from_stages,
-    load_version,
     save_version_guide,
 )
 
@@ -55,16 +55,14 @@ _STAGES: list[dict[str, Any]] = [
 ]
 
 # attach_source is named first, though the run reaches it last.
-_GUIDE = ReviewGuide(
-    steps=[
-        ReviewGuideStep(title="Read the rows", prose="Reads every `doc_id` filed.",
-                        stage_ids=["load_rows"]),
-        ReviewGuideStep(title="Decide what counts",
-                        prose="A row is kept on `flag`, then given its `source`.",
-                        stage_ids=["attach_source", "add_flag"]),
-    ],
-    unnarrated=["load_sources", "keep_flagged"],
-)
+_STEPS = [
+    ReviewGuideStep(title="Read the rows", prose="Reads every `doc_id` filed.",
+                    stage_ids=["load_rows"]),
+    ReviewGuideStep(title="Decide what counts",
+                    prose="A row is kept on `flag`, then given its `source`.",
+                    stage_ids=["attach_source", "add_flag"]),
+]
+_UNNARRATED = ["load_sources", "keep_flagged"]
 
 
 @pytest.fixture
@@ -84,9 +82,15 @@ def _manifest(version_id: str, *, executed: list[str] | None = None) -> dict:
     }
 
 
-def _version_with_guide(project_dir: Path, guide: ReviewGuide = _GUIDE) -> str:
+def _version_with_guide(project_dir: Path, **overrides) -> str:
     version = create_version_from_stages(
         project_dir, _STAGES, message="v1", reviewer="ada"
+    )
+    guide = ReviewGuide(
+        project=project_dir.name,
+        version_id=version.version_id,
+        steps=overrides.get("steps", _STEPS),
+        unnarrated=overrides.get("unnarrated", _UNNARRATED),
     )
     save_version_guide(project_dir, version.version_id, guide)
     return version.version_id
@@ -196,13 +200,14 @@ def test_a_stage_this_run_did_not_execute_is_flagged_not_dropped(project_dir):
 def test_a_stage_id_the_version_does_not_define_is_kept_unresolved(project_dir):
     """A document written past save_version_guide's validation must not lose a stage."""
     version_id = _version_with_guide(project_dir)
-    stored = load_version(project_dir, version_id)
-    stored.guide = ReviewGuide(
+    # Saved past save_version_guide, which would have rejected the unknown id.
+    ReviewGuide(
+        project=project_dir.name,
+        version_id=version_id,
         steps=[ReviewGuideStep(title="Read the rows", prose="Reads every `doc_id`.",
                                stage_ids=["load_rows", "renamed_away"])],
         unnarrated=["load_sources", "add_flag", "keep_flagged", "attach_source"],
-    )
-    stored.save()
+    ).save()
 
     view = build_run_guide_view("demo", _manifest(version_id))
 
