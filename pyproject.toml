@@ -94,6 +94,15 @@ allowed_importers = ["app.evals", "app.web", "app.mcp", "app.services.run", "app
 # status/review helpers must not reach in.
 
 [[tool.importlinter.contracts]]
+name = "app.runtime.preview imported only by web"
+type = "protected"
+protected_modules = ["app.runtime.preview"]
+allowed_importers = ["app.web"]
+# The scratch re-run is a DISPLAY path: it runs a stage in memory, persists nothing, and
+# renders its frame to text for the panel. Nothing that computes a persisted value may
+# reach it — the runner writes outputs from real frames, never from a rendered preview.
+
+[[tool.importlinter.contracts]]
 name = "app.evals is a leaf — imported only by web"
 type = "protected"
 protected_modules = ["app.evals"]
