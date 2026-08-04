@@ -71,12 +71,25 @@
       if (!node) return false;
       node.classList.add("wf-node-active");
       if (scale < (minScale || 1)) { scale = minScale || 1; apply(); }
-      // Measure AFTER any zoom: the box moves when the svg is rescaled.
+      // Measure AFTER any zoom: the box moves when the svg is rescaled. clientWidth,
+      // not the rect's width, so a visible scrollbar does not shift the centre.
       var box = node.getBoundingClientRect(), port = vp.getBoundingClientRect();
-      vp.scrollLeft += (box.left + box.width / 2) - (port.left + port.width / 2);
-      vp.scrollTop += (box.top + box.height / 2) - (port.top + port.height / 2);
+      vp.scrollTo({
+        left: vp.scrollLeft + (box.left + box.width / 2) - (port.left + vp.clientWidth / 2),
+        top: vp.scrollTop + (box.top + box.height / 2) - (port.top + vp.clientHeight / 2),
+        behavior: "smooth",
+      });
+      pulse(node);
       return true;
     };
+
+    // Restart the arrival pulse even when the same node is focused twice in a row:
+    // re-adding a class the element already carries does not replay its animation.
+    function pulse(node) {
+      node.classList.remove("wf-node-arriving");
+      void node.getBoundingClientRect();          // force a style flush between removal and re-add
+      node.classList.add("wf-node-arriving");
+    }
 
     if (grabSvg()) fit();
 
