@@ -41,7 +41,7 @@ def test_llm_transform_notes_document_the_additive_rule():
 
 def test_output_schema_documents_the_signature_fallback():
     d = _desc(StageBase, "output_schema")
-    assert "signature" in d and "resolves" in d
+    assert "transform_signature" in d and "resolves" in d
 
 
 def test_function_code_documents_the_three_signatures():

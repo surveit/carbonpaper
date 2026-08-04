@@ -73,12 +73,12 @@ class HumanReviewQueueStage(StageBase):
     type: Literal[StageType.human_review_queue]
     queue: QueueConfig
     inputs: list[StageInput] = Field(default_factory=list, min_length=1, max_length=1)
-    signature: Optional[ExtendsSignature] = None
+    transform_signature: Optional[ExtendsSignature] = None
 
     def fingerprint_blocks(self) -> dict[str, StageConfig]:
         return {"queue": self.queue}
 
-    def find_config_column_issues(self) -> list[str]:
+    def find_unsupplied_reads(self) -> list[str]:
         sid, queue = self.id, self.queue
         input_schema = self.inputs[0].table_schema
         return (
@@ -88,7 +88,7 @@ class HumanReviewQueueStage(StageBase):
             + _find_added_column_collisions(sid, queue, input_schema)
         )
 
-    def find_output_schema_issues(self) -> list[str]:
+    def find_unaccounted_writes(self) -> list[str]:
         sid, queue = self.id, self.queue
         output_schema = self.resolve_output_schema()
         assert output_schema is not None  # _schemas_declared runs first and requires one
@@ -98,28 +98,28 @@ class HumanReviewQueueStage(StageBase):
             + _find_review_record_target_issues(sid, queue, output_schema)
         )
 
-    # The signature is optional and names only what its author chose to declare, so it
-    # cannot own "this stage never overwrites an input column" — `queue` names the added
-    # columns whether or not a signature exists, and `_find_added_column_collisions` is
-    # the check that enforces it. What this adds is the tie between the two accounts: a
-    # signature may only claim adds the queue block already names, and may not claim a
-    # rewrite at all. Given that, the signature's own anchor-collision check
-    # (signature._find_extends_issues) can only ever restate the config check's verdict.
-    def find_signature_config_issues(self) -> list[str]:
-        signature = self.signature
-        assert signature is not None  # find_signature_config_issues runs only with one
+    # The transform_signature is optional and names only what its author chose to declare,
+    # so it cannot own "this stage never overwrites an input column" — `queue` names the
+    # added columns either way, and `_find_added_column_collisions` is the check that
+    # enforces it. What this adds is the tie between the two accounts: a transform_signature
+    # may only create what the queue block already names, and may not update at all. Given
+    # that, its own first-input collision check (signature._find_extends_issues) can only
+    # ever restate the config check's verdict.
+    def find_signature_disagreements(self) -> list[str]:
+        signature = self.transform_signature
+        assert signature is not None  # find_signature_disagreements runs only with one
         declared = {name for _, name in find_added_columns(self.queue)}
         issues = [
-            f"stage '{self.id}': signature adds `{column.name}`, which the review "
+            f"stage '{self.id}': transform_signature creates `{column.name}`, which the review "
             f"runtime never writes — this stage adds exactly the columns its queue "
             f"block names ({sorted(declared)})"
-            for column in signature.adds
+            for column in signature.creates
             if column.name not in declared
         ]
-        if signature.rewrites:
+        if signature.updates:
             issues.append(
                 f"stage '{self.id}': human_review_queue never revises an input "
-                f"column; rewrites are not supported"
+                f"column; updates are not supported"
             )
         return issues
 
@@ -133,7 +133,7 @@ def resolve_queue_config(stage: StageBase) -> Optional[QueueConfig]:
 
 def find_queue_column_issues(stage: HumanReviewQueueStage) -> list[str]:
     """Every issue in one queue stage's column configuration, input side then output side."""
-    return stage.find_config_column_issues() + stage.find_output_schema_issues()
+    return stage.find_unsupplied_reads() + stage.find_unaccounted_writes()
 
 
 def find_added_columns(queue: QueueConfig) -> list[tuple[str, str]]:
@@ -193,9 +193,9 @@ def _find_added_column_collisions(
     sid: str, queue: QueueConfig, input_schema: TableSchema
 ) -> list[str]:
     # THE check for "a review stage adds columns and never overwrites one": it runs on
-    # every queue stage, signature or not, and covers every name the queue block adds.
+    # every queue stage, transform_signature or not, and covers every name it adds.
     # This also catches two review stages in series where the second reuses the first's
-    # names. `find_signature_config_issues` keeps a declared signature pinned to these
+    # names. `find_signature_disagreements` keeps a transform_signature pinned to these
     # names rather than restating the rule.
     existing = {c.name for c in input_schema.columns}
     return [
@@ -279,7 +279,7 @@ def _find_review_record_target_issues(
 NODE_TYPE_SPECS: dict[str, NodeTypeSpec] = {
     "human_review_queue": NodeTypeSpec(
         summary="Pulls flagged rows for human decision; halts the run.",
-        signature_form="extends",
+        transform_signature_form="extends",
         blocks=["queue"],
         requires_inputs=True,
         min_inputs=1,

@@ -21,7 +21,7 @@ from app.models.stages.shared import (
     resolve_input_columns,
 )
 from app.models.stages.node_spec import NodeTypeSpec
-from app.models.stages.signature import ReplacesSignature
+from app.models.stages.signature import OverwritesSignature
 
 
 
@@ -65,18 +65,18 @@ class AggregateStage(StageBase):
     type: Literal[StageType.aggregate]
     aggregate: AggregateConfig
     inputs: list[StageInput] = Field(default_factory=list, min_length=1, max_length=1)
-    signature: Optional[ReplacesSignature] = None
+    transform_signature: Optional[OverwritesSignature] = None
 
     def fingerprint_blocks(self) -> dict[str, StageConfig]:
         return {"aggregate": self.aggregate}
 
-    def find_config_column_issues(self) -> list[str]:
+    def find_unsupplied_reads(self) -> list[str]:
         return find_aggregate_column_issues(self)
 
-    def find_output_schema_issues(self) -> list[str]:
+    def find_unaccounted_writes(self) -> list[str]:
         return find_aggregate_output_issues(self)
 
-    def find_signature_config_issues(self) -> list[str]:
+    def find_signature_disagreements(self) -> list[str]:
         return find_aggregate_signature_issues(self)
 
 
@@ -131,9 +131,9 @@ def find_aggregate_output_issues(stage: "AggregateStage") -> list[str]:
 
 
 def find_aggregate_signature_issues(stage: "AggregateStage") -> list[str]:
-    """Reads must be exactly what the config consumes; produces exactly what the formulas compute."""
-    signature = stage.signature
-    assert signature is not None  # find_signature_config_issues runs only with one
+    """Reads = what the config consumes; writes = what the formulas compute. Exactly."""
+    signature = stage.transform_signature
+    assert signature is not None  # find_signature_disagreements runs only with one
     aggregate = stage.aggregate
     input_id = stage.inputs[0].id
 
@@ -152,25 +152,25 @@ def find_aggregate_signature_issues(stage: "AggregateStage") -> list[str]:
         for column in entry.columns
     }
     issues = [
-        f"stage '{stage.id}': signature reads `{name}` but the aggregate config "
+        f"stage '{stage.id}': transform_signature reads `{name}` but the aggregate config "
         f"never consumes it"
         for name in sorted(declared - consumed)
     ]
     issues.extend(
         f"stage '{stage.id}': the aggregate config consumes `{name}` but the "
-        f"signature does not read it"
+        f"transform_signature does not read it"
         for name in sorted(consumed - declared)
     )
 
     computed = compute_aggregate_output_types(aggregate, stage.inputs[0].table_schema)
     issues.extend(find_declared_vs_computed_issues(
-        stage.id, "aggregate signature",
-        TableSchema(columns=signature.produces), computed,
+        stage.id, "aggregate transform_signature",
+        TableSchema(columns=signature.writes), computed,
     ))
-    produced = {column.name for column in signature.produces}
+    produced = {column.name for column in signature.writes}
     issues.extend(
         f"stage '{stage.id}': the aggregate config emits `{name}` but the "
-        f"signature's produces omits it"
+        f"transform_signature's writes omit it"
         for name in sorted(set(computed) - produced)
     )
     return issues
@@ -213,7 +213,7 @@ def compute_aggregate_output_types(
 NODE_TYPE_SPECS: dict[str, NodeTypeSpec] = {
     "aggregate": NodeTypeSpec(
         summary="Structured group-by aggregation.",
-        signature_form="replaces",
+        transform_signature_form="overwrites",
         blocks=["aggregate"],
         requires_inputs=True,
         min_inputs=1,

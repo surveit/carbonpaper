@@ -109,15 +109,15 @@ class LLMTransformStage(StageBase):
     type: Literal[StageType.llm_transform]
     llm: LLMConfig
     inputs: list[StageInput] = Field(default_factory=list, min_length=1)
-    signature: Optional[ExtendsSignature] = None
+    transform_signature: Optional[ExtendsSignature] = None
 
     def fingerprint_blocks(self) -> dict[str, StageConfig]:
         return {"llm": self.llm}
 
-    def find_config_column_issues(self) -> list[str]:
+    def find_unsupplied_reads(self) -> list[str]:
         return find_llm_prompt_column_issues(self)
 
-    def find_signature_config_issues(self) -> list[str]:
+    def find_signature_disagreements(self) -> list[str]:
         return find_llm_signature_issues(self)
 
     def llm_reply_schema(self) -> Optional[TableSchema]:
@@ -145,7 +145,7 @@ class LLMTransformStage(StageBase):
         the runtime computes (`output_schema.subtract(input_schema)`) is exactly
         the added columns and can never throw mid-run. This is about schema
         SHAPE, not config columns, so it is not part of
-        find_config_column_issues."""
+        find_unsupplied_reads."""
         issues = find_llm_one_to_one_issues(self)
         if issues:
             raise ValueError("llm_transform not strictly 1:1: " + "; ".join(issues))
@@ -153,31 +153,31 @@ class LLMTransformStage(StageBase):
 
 
 def find_llm_signature_issues(stage: "LLMTransformStage") -> list[str]:
-    """Reads must match the template's placeholders exactly; an llm_transform never rewrites."""
-    signature = stage.signature
-    assert signature is not None  # find_signature_config_issues runs only with one
-    anchor_id = stage.inputs[0].id
+    """Reads must match the template's placeholders exactly; an llm_transform never updates."""
+    signature = stage.transform_signature
+    assert signature is not None  # find_signature_disagreements runs only with one
+    first_input_id = stage.inputs[0].id
     declared = {
         column.name
         for entry in signature.reads
-        if entry.input == anchor_id
+        if entry.input == first_input_id
         for column in entry.columns
     }
     injected = find_template_fields(stage.llm.prompt_data_template)
     issues = [
-        f"stage '{stage.id}': signature reads `{name}` but the prompt template "
+        f"stage '{stage.id}': transform_signature reads `{name}` but the prompt template "
         f"never injects it"
         for name in sorted(declared - injected)
     ]
     issues.extend(
         f"stage '{stage.id}': the prompt template injects {{{name}}} but the "
-        f"signature does not read it"
+        f"transform_signature does not read it"
         for name in sorted(injected - declared)
     )
-    if signature.rewrites:
+    if signature.updates:
         issues.append(
             f"stage '{stage.id}': llm_transform passes its input through untouched "
-            f"and only adds columns; rewrites are not supported"
+            f"and only creates columns; updates are not supported"
         )
     return issues
 
@@ -228,7 +228,7 @@ def find_double_braced_input_issues(
 def find_llm_one_to_one_issues(stage: "LLMTransformStage") -> list[str]:
     """An llm_transform maps one input row to one output row, so on its
     DECLARED schemas alone it must: take exactly one input; keep every input
-    column unchanged (a transform never rewrites an existing column's
+    column unchanged (a transform never revises an existing column's
     schema); and add at least one new column.
 
     Checked so the reply spec the runtime computes
@@ -264,7 +264,7 @@ def _find_additive_shape_issues(input_schema: TableSchema, output_schema: TableS
 NODE_TYPE_SPECS: dict[str, NodeTypeSpec] = {
     "llm_transform": NodeTypeSpec(
         summary="Row-by-row LLM call producing structured output.",
-        signature_form="extends",
+        transform_signature_form="extends",
         blocks=["llm"],
         requires_inputs=True,
         min_inputs=1,

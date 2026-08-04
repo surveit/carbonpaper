@@ -388,12 +388,12 @@ class TableSchema(_Base):
                 return c
         return None
 
-    def extend(self, rewrites: Sequence[Column], adds: Sequence[Column]) -> "TableSchema":
-        """This schema with same-named `rewrites` replacing columns in place and `adds` appended."""
-        rewrites_by_name = {column.name: column for column in rewrites}
+    def extend(self, updates: Sequence[Column], creates: Sequence[Column]) -> "TableSchema":
+        """This schema with same-named `updates` replacing columns in place and `creates` appended."""
+        updates_by_name = {column.name: column for column in updates}
         return TableSchema(columns=[
-            *(rewrites_by_name.get(column.name, column) for column in self.columns),
-            *adds,
+            *(updates_by_name.get(column.name, column) for column in self.columns),
+            *creates,
         ])
 
     def subtract(self, other: "TableSchema", strict: bool = True) -> "TableSchema":

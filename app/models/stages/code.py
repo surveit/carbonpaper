@@ -16,7 +16,7 @@ from app.models.errors import StepRefused
 from app.models.schema import FunctionKind, StageConfig, _Base
 from app.models.stage_base import StageBase, StageInput, StageType
 from app.models.stages.node_spec import NodeTypeSpec
-from app.models.stages.signature import ExtendsSignature, ReplacesSignature
+from app.models.stages.signature import ExtendsSignature, OverwritesSignature
 from app.models.stages.stage_tests import (
     PythonFrameFunctionStageTest,
     PythonRowFunctionStageTest,
@@ -262,8 +262,8 @@ class PythonRowFunctionStage(CarriesPythonFunctionStage):
     # types nothing here cross-checks the block. The function is held to its
     # claimed writes at run time instead: the stage's output frame is validated
     # against output_schema, which find_signature_issues pins to this
-    # signature.
-    signature: Optional[ExtendsSignature] = None
+    # transform_signature.
+    transform_signature: Optional[ExtendsSignature] = None
 
 
 class PythonFrameFunctionStage(CarriesPythonFunctionStage):
@@ -271,13 +271,13 @@ class PythonFrameFunctionStage(CarriesPythonFunctionStage):
     CARRIES_RUNNABLE_TESTS: ClassVar[bool] = True
     inputs: list[StageInput] = Field(default_factory=list, min_length=1)
     tests: Optional[Sequence[PythonFrameFunctionStageTest]] = None
-    signature: Optional[ReplacesSignature] = None
+    transform_signature: Optional[OverwritesSignature] = None
 
 # Authoring copy for this module's stage type(s); assembled into NODE_TYPES.
 NODE_TYPE_SPECS: dict[str, NodeTypeSpec] = {
     "python_row_function": NodeTypeSpec(
         summary="Python run once per row: one row in → one row out (cannot fan rows out/in or reorder).",
-        signature_form="extends",
+        transform_signature_form="extends",
         blocks=["function"],
         requires_inputs=True,
         min_inputs=1,
@@ -299,7 +299,7 @@ NODE_TYPE_SPECS: dict[str, NodeTypeSpec] = {
     ),
     "python_frame_function": NodeTypeSpec(
         summary="Python over the whole dataframe(s); may reshape (dedup, pivot, multi-input merge).",
-        signature_form="replaces",
+        transform_signature_form="overwrites",
         blocks=["function"],
         requires_inputs=True,
         min_inputs=1,

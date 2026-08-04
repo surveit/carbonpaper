@@ -59,7 +59,7 @@ This describes what the code does today, not an aspiration:
 - **Rule 1 is enforced by `Stage` construction, not in the handler.** The
   `Stage` model's 1:1 validator (`app/models/stage.py`) rejects any
   `llm_transform` whose *declared* schemas aren't 1:1: exactly one input, the
-  output keeping every input column unchanged (a transform never rewrites a
+  output keeping every input column unchanged (a transform never revises a
   column's schema — checked via `TableSchema.is_subset_of`), and adding at
   least one new column. Because a stage carries its own contract, an ineligible stage can't be
   built — so it can't be loaded, versioned, or run — and `TableSchema.subtract`

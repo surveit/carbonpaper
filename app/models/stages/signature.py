@@ -1,8 +1,7 @@
-"""Transform signatures — the authored contract of what a stage reads and
-writes, separate from the mechanism (code, prompt, join keys) that honours it.
-Extends = the anchored family: output is the FIRST input extended by
-rewrites/adds, every other anchor column flowing through untouched. Replaces =
-the reshaping family: nothing flows, output is exactly `produces`."""
+"""What a stage's transform reads and writes, apart from the mechanism (code,
+prompt, join keys) that honours it. Extends = the output is the FIRST INPUT with
+columns created and updated. Overwrites = the output is exactly `writes`. Both
+forms expose `.reads` and `.writes`, so generic code never branches on form."""
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Annotated, Literal, Union
@@ -39,63 +38,65 @@ class InputReads(_Base):
 
 
 class ExtendsSignature(_Base):
-    """An anchored stage's contract: the first input's rows, rewritten and extended."""
+    """The output is the first input's rows, with columns created and updated."""
 
     form: Literal["extends"] = "extends"
     reads: list[InputReads] = Field(
         default_factory=list,
         description=(
-            "What the transform consumes, per input. Columns it merely passes "
-            "through are NOT reads — they flow without being consumed."
+            "What the transform consumes, per input. A column the stage carries "
+            "through untouched is not a read."
         ),
     )
-    adds: list[Column] = Field(
+    creates: list[Column] = Field(
         default_factory=list,
         description=(
-            "Columns this stage introduces. Each name must be NEW to the anchor "
-            "input — a collision is refused, never renamed."
+            "Columns new to the first input. A name it already supplies is "
+            "refused, never renamed — declare an update."
         ),
     )
-    rewrites: list[Column] = Field(
+    updates: list[Column] = Field(
         default_factory=list,
         description=(
-            "Anchor columns this stage revises in place, each carrying the spec "
-            "it has AFTER this stage (the type may change). Every rewrite must "
-            "also be read from the anchor input."
+            "First-input columns revised in place, with the spec they have AFTER "
+            "(the type may change). Every update is also a read."
         ),
     )
+
+    @property
+    def writes(self) -> list[Column]:
+        return [*self.creates, *self.updates]
 
     @model_validator(mode="after")
     def _writes_consistent(self) -> "ExtendsSignature":
-        _refuse_duplicate_names([*self.adds, *self.rewrites], "adds + rewrites")
+        _refuse_duplicate_names(self.writes, "creates + updates")
         return self
 
 
-class ReplacesSignature(_Base):
-    """The contract of a reshaping stage: nothing flows through, the output is
-    exactly `produces`."""
+class OverwritesSignature(_Base):
+    """The output is exactly `writes`; the inputs' columns do not carry through."""
 
-    form: Literal["replaces"] = "replaces"
+    form: Literal["overwrites"] = "overwrites"
     reads: list[InputReads] = Field(
         default_factory=list,
         description="What the transform consumes, per input.",
     )
-    produces: list[Column] = Field(
+    writes: list[Column] = Field(
         default_factory=list,
         description=(
-            "Every output column, with its spec. Empty only for publish, which "
+            "The whole output, column by column. Empty only for publish, which "
             "emits files rather than a table."
         ),
     )
 
     @model_validator(mode="after")
-    def _no_duplicate_produces(self) -> "ReplacesSignature":
-        _refuse_duplicate_names(self.produces, "produces")
+    def _no_duplicate_writes(self) -> "OverwritesSignature":
+        _refuse_duplicate_names(self.writes, "writes")
         return self
 
 
 TransformSignature = Annotated[
-    Union[ExtendsSignature, ReplacesSignature], Field(discriminator="form")
+    Union[ExtendsSignature, OverwritesSignature], Field(discriminator="form")
 ]
 
 
@@ -108,19 +109,19 @@ def _refuse_duplicate_names(columns: list[Column], where: str) -> None:
 
 
 # ── The stage-level rules ────────────────────────────────────────────────────
-SIGNATURE_ISSUE = "stage '{sid}': signature {problem}"
+SIGNATURE_ISSUE = "stage '{sid}': transform_signature {problem}"
 
 
 def find_signature_issues(stage: "StageBase") -> list[str]:
-    """Signature-vs-stage disagreements; edge-only, per stage, [] without a signature."""
-    signature = stage.signature
+    """Edge-only, per stage; [] for a stage carrying no transform_signature."""
+    signature = stage.transform_signature
     if signature is None:
         return []
     issues = _find_read_issues(stage, signature.reads)
     if isinstance(signature, ExtendsSignature):
         issues.extend(_find_extends_issues(stage, signature))
     else:
-        issues.extend(_find_replaces_issues(stage, signature))
+        issues.extend(_find_overwrites_issues(stage, signature))
     return issues
 
 
@@ -151,75 +152,76 @@ def _find_read_issues(stage: "StageBase", reads: list[InputReads]) -> list[str]:
 
 def _find_extends_issues(stage: "StageBase", signature: ExtendsSignature) -> list[str]:
     if not stage.inputs:
-        return [_issue(stage, "is extends-form, which needs an anchor: at least one input")]
-    anchor = stage.inputs[0]
+        return [_issue(stage, "is extends-form, which needs a first input: this stage has none")]
+    first_input = stage.inputs[0]
     issues: list[str] = []
 
-    anchor_reads = {
+    first_input_reads = {
         column.name
         for entry in signature.reads
-        if entry.input == anchor.id
+        if entry.input == first_input.id
         for column in entry.columns
     }
     issues.extend(
-        _issue(stage, f"rewrites `{column.name}` without reading it from the anchor "
-                      f"input `{anchor.id}`")
-        for column in signature.rewrites
-        if column.name not in anchor_reads
+        _issue(stage, f"updates `{column.name}` without reading it from the first "
+                      f"input `{first_input.id}`")
+        for column in signature.updates
+        if column.name not in first_input_reads
     )
 
-    anchor_columns = {column.name for column in anchor.table_schema.columns}
+    first_input_columns = {column.name for column in first_input.table_schema.columns}
     colliding = [
-        column.name for column in signature.adds if column.name in anchor_columns
+        column.name for column in signature.creates
+        if column.name in first_input_columns
     ]
     issues.extend(
-        _issue(stage, f"adds `{name}`, which the anchor input `{anchor.id}` "
+        _issue(stage, f"creates `{name}`, which the first input `{first_input.id}` "
                       f"already supplies — a collision is refused, never renamed; "
-                      f"declare a rewrite or use a different name")
+                      f"declare an update or use a different name")
         for name in colliding
     )
 
-    # A colliding add makes the promised output ill-defined, so the comparison
-    # below only runs once the adds are genuinely new. The comparison exists
-    # because output_schema is authored BESIDE the signature — two accounts of
-    # one output can drift; an output_schema computed from the anchor edge and
-    # the signature satisfies it by construction.
+    # A colliding create makes the promised output ill-defined, so the comparison
+    # below only runs once the creates are genuinely new. The comparison exists
+    # because output_schema is authored BESIDE the transform_signature — two
+    # accounts of one output can drift; an output_schema computed from the
+    # first-input edge and the transform_signature satisfies it by construction.
     if stage.output_schema is not None and not colliding:
-        expected = anchor.table_schema.extend(signature.rewrites, signature.adds)
+        expected = first_input.table_schema.extend(signature.updates, signature.creates)
         differing = sorted(stage.output_schema.differing_column_names(expected))
         if differing:
             issues.append(_issue(
                 stage,
-                f"output_schema disagrees with the anchor edge extended by this "
-                f"signature on column(s) {differing}",
+                f"output_schema disagrees with the first input extended by this "
+                f"transform_signature on column(s) {differing}",
             ))
     return issues
 
 
-def _find_replaces_issues(stage: "StageBase", signature: ReplacesSignature) -> list[str]:
-    if stage.output_schema is None or not signature.produces:
+def _find_overwrites_issues(stage: "StageBase", signature: OverwritesSignature) -> list[str]:
+    if stage.output_schema is None or not signature.writes:
         return []
-    produced = TableSchema(columns=signature.produces)
-    differing = sorted(stage.output_schema.differing_column_names(produced))
+    written = TableSchema(columns=signature.writes)
+    differing = sorted(stage.output_schema.differing_column_names(written))
     if differing:
         return [_issue(
-            stage, f"output_schema disagrees with `produces` on column(s) {differing}"
+            stage, f"output_schema disagrees with `writes` on column(s) {differing}"
         )]
     return []
 
 
 def promised_output_schema(stage: "StageBase") -> "TableSchema | None":
-    """The output the signature promises; None without one (or empty produces)."""
-    signature = stage.signature
+    """The output the transform_signature promises; None without one (or empty writes)."""
+    signature = stage.transform_signature
     if signature is None:
         return None
     if isinstance(signature, ExtendsSignature):
         if not stage.inputs:
             return None
-        return stage.inputs[0].table_schema.extend(signature.rewrites, signature.adds)
-    if not signature.produces:
+        return stage.inputs[0].table_schema.extend(signature.updates, signature.creates)
+    if not signature.writes:
         return None
-    return TableSchema(columns=signature.produces)
+    return TableSchema(columns=signature.writes)
 
 
 def _issue(stage: "StageBase", problem: str) -> str:
@@ -228,11 +230,11 @@ def _issue(stage: "StageBase", problem: str) -> str:
 
 # Rendered once above the stage-type catalog; each type's line names only its form.
 SIGNATURE_CONTRACT_NOTE = (
-    "Every stage MUST declare `signature` — what its transform reads and "
-    "writes, checked against its edges and config at save. Form `extends`: "
-    "output = the first input's rows plus `rewrites` (revised in place) and "
-    "`adds` (new columns); every other column flows through untouched. Form "
-    "`replaces`: nothing flows; output is exactly `produces`. `reads` lists "
-    "what the transform consumes per input — a column that merely passes "
+    "Every stage MUST declare `transform_signature` — what its transform reads "
+    "and writes, checked against its edges and config at save. Form `extends`: "
+    "output = the first input's rows plus `updates` (revised in place) and "
+    "`creates` (new columns); every other column carries through untouched. Form "
+    "`overwrites`: nothing carries through; output is exactly `writes`. `reads` "
+    "lists what the transform consumes per input — a column that merely passes "
     "through is not a read."
 )

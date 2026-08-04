@@ -63,18 +63,18 @@ class JoinStage(StageBase):
     the config, the arity and the column rules are the same."""
     join: JoinConfig
     inputs: list[StageInput] = Field(default_factory=list, min_length=2, max_length=2)
-    signature: Optional[ExtendsSignature] = None
+    transform_signature: Optional[ExtendsSignature] = None
 
     def fingerprint_blocks(self) -> dict[str, StageConfig]:
         return {"join": self.join}
 
-    def find_config_column_issues(self) -> list[str]:
+    def find_unsupplied_reads(self) -> list[str]:
         return find_join_column_issues(self)
 
-    def find_output_schema_issues(self) -> list[str]:
+    def find_unaccounted_writes(self) -> list[str]:
         return find_join_output_issues(self)
 
-    def find_signature_config_issues(self) -> list[str]:
+    def find_signature_disagreements(self) -> list[str]:
         return find_join_signature_issues(self)
 
 
@@ -143,9 +143,9 @@ def find_join_output_issues(stage: "JoinStage") -> list[str]:
 
 
 def find_join_signature_issues(stage: "JoinStage") -> list[str]:
-    """Keys must be read from their side, adds must be exactly `enrich_with`; rewrites are refused."""
-    signature = stage.signature
-    assert signature is not None  # find_signature_config_issues runs only with one
+    """Keys read from their own side; creates exactly `enrich_with`; updates refused."""
+    signature = stage.transform_signature
+    assert signature is not None  # find_signature_disagreements runs only with one
     subject, reference = stage.inputs[0], stage.inputs[1]
     reads_by_input = {
         entry.input: {column.name for column in entry.columns}
@@ -161,30 +161,30 @@ def find_join_signature_issues(stage: "JoinStage") -> list[str]:
 
     src_by_landed = {landed: src for src, landed in stage.join.enrich_with.items()}
     reference_types = {c.name: c.type for c in reference.table_schema.columns}
-    for column in signature.adds:
+    for column in signature.creates:
         src = src_by_landed.get(column.name)
         if src is None:
             issues.append(
-                f"stage '{stage.id}': signature adds `{column.name}`, which "
+                f"stage '{stage.id}': transform_signature creates `{column.name}`, which "
                 f"join.enrich_with does not land (landed: {sorted(src_by_landed)})"
             )
         elif reference_types.get(src, column.type) != column.type:
             issues.append(
-                f"stage '{stage.id}': signature adds `{column.name}` as "
+                f"stage '{stage.id}': transform_signature creates `{column.name}` as "
                 f"{column.type!r} but its source `{src}` supplies "
                 f"{reference_types[src]!r}"
             )
-    added = {column.name for column in signature.adds}
+    added = {column.name for column in signature.creates}
     issues.extend(
-        f"stage '{stage.id}': join.enrich_with lands `{landed}` but the signature "
-        f"does not add it"
+        f"stage '{stage.id}': join.enrich_with lands `{landed}` but the "
+        f"transform_signature does not create it"
         for landed in src_by_landed
         if landed not in added
     )
-    if signature.rewrites:
+    if signature.updates:
         issues.append(
             f"stage '{stage.id}': a join never revises a subject column; "
-            f"rewrites are not supported"
+            f"updates are not supported"
         )
     return issues
 
@@ -204,7 +204,7 @@ def compute_join_output_types(
 NODE_TYPE_SPECS: dict[str, NodeTypeSpec] = {
     "enrich": NodeTypeSpec(
         summary="Adds brought reference columns to each subject row; the reference must be unique on the key (many-to-one).",
-        signature_form="extends",
+        transform_signature_form="extends",
         blocks=["join"],
         requires_inputs=True,
         min_inputs=2,
@@ -224,7 +224,7 @@ NODE_TYPE_SPECS: dict[str, NodeTypeSpec] = {
     ),
     "expand": NodeTypeSpec(
         summary="Joins brought reference columns into each subject row, fanning one subject row out to several (many-to-many).",
-        signature_form="extends",
+        transform_signature_form="extends",
         blocks=["join"],
         requires_inputs=True,
         min_inputs=2,

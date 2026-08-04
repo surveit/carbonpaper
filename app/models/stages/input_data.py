@@ -12,7 +12,7 @@ from pydantic import ConfigDict, Field, model_validator
 from app.models.schema import StageConfig, _Base
 from app.models.stage_base import StageBase, StageType
 from app.models.stages.node_spec import NodeTypeSpec
-from app.models.stages.signature import ReplacesSignature
+from app.models.stages.signature import OverwritesSignature
 
 
 class ConnectorKind(str, Enum):
@@ -66,9 +66,9 @@ class Connector(StageConfig):
 class InputDataStage(StageBase):
     type: Literal[StageType.input_data]
     connector: Connector
-    # The root of the schema graph: no inputs, so `produces` IS the declaration
-    # of what the source supplies — the degenerate replaces form.
-    signature: Optional[ReplacesSignature] = None
+    # The root of the schema graph: no inputs, so `writes` IS the declaration
+    # of what the source supplies — the degenerate overwrites form.
+    transform_signature: Optional[OverwritesSignature] = None
 
     def fingerprint_blocks(self) -> dict[str, StageConfig]:
         return {"connector": self.connector}
@@ -87,7 +87,7 @@ class XlsxReadParams(_Base):
 NODE_TYPE_SPECS: dict[str, NodeTypeSpec] = {
     "input_data": NodeTypeSpec(
         summary="Declares a source dataset with a typed schema.",
-        signature_form="replaces",
+        transform_signature_form="overwrites",
         blocks=["connector"],
         requires_inputs=False,
         min_inputs=0,

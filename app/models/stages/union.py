@@ -10,7 +10,7 @@ from pydantic import Field
 from app.models.schema import StageConfig, TableSchema
 from app.models.stage_base import StageBase, StageInput, StageType
 from app.models.stages.node_spec import NodeTypeSpec
-from app.models.stages.signature import ReplacesSignature
+from app.models.stages.signature import OverwritesSignature
 
 
 class UnionConfig(StageConfig):
@@ -24,18 +24,18 @@ class UnionStage(StageBase):
     type: Literal[StageType.union]
     union: UnionConfig
     inputs: list[StageInput] = Field(default_factory=list, min_length=2)
-    signature: Optional[ReplacesSignature] = None
+    transform_signature: Optional[OverwritesSignature] = None
 
     def fingerprint_blocks(self) -> dict[str, StageConfig]:
         return {"union": self.union}
 
-    def find_config_column_issues(self) -> list[str]:
+    def find_unsupplied_reads(self) -> list[str]:
         return find_union_column_issues(self)
 
-    def find_output_schema_issues(self) -> list[str]:
+    def find_unaccounted_writes(self) -> list[str]:
         return find_union_output_issues(self)
 
-    def find_signature_config_issues(self) -> list[str]:
+    def find_signature_disagreements(self) -> list[str]:
         return find_union_signature_issues(self)
 
 
@@ -70,16 +70,16 @@ def find_union_output_issues(stage: "UnionStage") -> list[str]:
 
 
 def find_union_signature_issues(stage: "UnionStage") -> list[str]:
-    """A union reads no columns, and every input must supply `produces`."""
-    signature = stage.signature
-    assert signature is not None  # find_signature_config_issues runs only with one
+    """A union reads no columns, and every input must supply `writes`."""
+    signature = stage.transform_signature
+    assert signature is not None  # find_signature_disagreements runs only with one
     issues = [
         f"stage '{stage.id}': a union concatenates without consuming any column; "
-        f"signature reads must be empty"
+        f"transform_signature reads must be empty"
     ] if signature.reads else []
-    produced = TableSchema(columns=signature.produces)
+    produced = TableSchema(columns=signature.writes)
     issues.extend(
-        f"stage '{stage.id}': signature produces vs input `{ref.id}` — {reason}"
+        f"stage '{stage.id}': transform_signature writes vs input `{ref.id}` — {reason}"
         for ref in stage.inputs
         for reason in produced.find_unsatisfied_columns(ref.table_schema)
     )
@@ -89,7 +89,7 @@ def find_union_signature_issues(stage: "UnionStage") -> list[str]:
 NODE_TYPE_SPECS: dict[str, NodeTypeSpec] = {
     "union": NodeTypeSpec(
         summary="Concatenate two or more upstream dataframes with an identical schema.",
-        signature_form="replaces",
+        transform_signature_form="overwrites",
         blocks=["union"],
         requires_inputs=True,
         min_inputs=2,
