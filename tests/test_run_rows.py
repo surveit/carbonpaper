@@ -99,6 +99,31 @@ def test_rows_page_links_each_row_to_its_trace(examples_dir, client):
         assert f"/stage/{STAGE}/row/{i}/trace/view" in r.text
 
 
+def test_rows_page_filters_to_named_ordinals(examples_dir, client):
+    _write_run(examples_dir, _df(5))
+    r = client.get(f"/project/{PROJ}/runs/{RUN}/stage/{STAGE}/rows?ordinals=1,3")
+    assert r.status_code == 200
+    assert "rowval_0001" in r.text and "rowval_0003" in r.text
+    assert "rowval_0000" not in r.text and "rowval_0002" not in r.text
+    assert "Showing 2 of 5 rows" in r.text
+
+
+def test_a_filtered_row_keeps_its_own_trace_link(examples_dir, client):
+    _write_run(examples_dir, _df(5))
+    r = client.get(f"/project/{PROJ}/runs/{RUN}/stage/{STAGE}/rows?ordinals=3")
+    # The link opens row 3, not row 0 — a position in the filtered list would
+    # trace a different row than the one the reader is looking at.
+    assert f"/stage/{STAGE}/row/3/trace/view" in r.text
+    assert f"/stage/{STAGE}/row/0/trace/view" not in r.text
+
+
+def test_an_out_of_range_or_unparseable_ordinal_is_skipped(examples_dir, client):
+    _write_run(examples_dir, _df(3))
+    r = client.get(f"/project/{PROJ}/runs/{RUN}/stage/{STAGE}/rows?ordinals=1,99,abc")
+    assert r.status_code == 200
+    assert "rowval_0001" in r.text
+
+
 def test_load_output_row_scopes_to_one_row(tmp_path):
     from app.web.loading import load_output_row
     (tmp_path / "outputs").mkdir()

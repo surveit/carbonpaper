@@ -78,6 +78,38 @@ function bchip(b){
   return `<a class="branch" href="${traceUrl(b.stage_id, b.row_ordinal)}"`
        + ` title="trace this row instead">${esc(b.stage_id)} row ${b.row_ordinal}</a>`;
 }
+// A fan-in row has one branch per contributing input row — fifty of them reads
+// as noise, so they collapse to a count. Branches carrying the same `columns`
+// share a chip: an aggregate whose columns all rest on the same rows shows one,
+// and only a per-column `where` splits it into several.
+const CONTRIBUTORS_SHOWN = 3;
+function contributorGroups(branches){
+  const groups = new Map();
+  branches.forEach(b => {
+    const key = (b.columns || []).join(',');
+    if(!groups.has(key)) groups.set(key, { columns: b.columns, rows: [] });
+    groups.get(key).rows.push(b);
+  });
+  return [...groups.values()];
+}
+function gchip(g){
+  const into = g.columns ? ` into ${g.columns.map(esc).join(' and ')}` : '';
+  if(g.rows.length <= CONTRIBUTORS_SHOWN){
+    return g.rows.map(bchip).join(' ') + into;
+  }
+  const stage = g.rows[0].stage_id;
+  const rows = g.rows.map(b => b.row_ordinal).join(',');
+  return `<a class="branch" href="${rowsUrl(stage, rows)}"`
+       + ` title="open just these rows of ${esc(stage)}">${g.rows.length} rows of `
+       + `${esc(stage)} contributed</a>${into}`;
+}
+// Opens the contributing rows in the parent stage's own rows view, filtered to
+// them. Highlight-in-place would mean paging a reader to the right offset of a
+// large table; the filtered list answers the question directly.
+function rowsUrl(stageId, ordinals){
+  return `/project/${encodeURIComponent(PROJECT)}/runs/${encodeURIComponent(V.run_id)}`
+       + `/stage/${encodeURIComponent(stageId)}/rows?ordinals=${encodeURIComponent(ordinals)}`;
+}
 // A join row with only ONE recorded parent matched nothing on its reference side.
 // That is a recorded fact, not an inference from null cells — which is exactly
 // what distinguishes it from having matched a row whose columns are null.
@@ -86,6 +118,9 @@ function matchedTo(n){
   if(!n.branches || !n.branches.length){
     return JOIN_KINDS.includes(n.transform.kind)
       ? `, <span class="nomatch">matching no reference row</span>` : '';
+  }
+  if(n.branches.some(b => b.kind === 'contribution')){
+    return ', summarizing ' + contributorGroups(n.branches).map(gchip).join('; ');
   }
   return ', matched to ' + n.branches.map(bchip).join(' and ');
 }
@@ -108,7 +143,8 @@ const offAll = V.nodes.flatMap(n => (n.branches || []).map(b => ({ n, b })));
 if(offAll.length){
   const off = document.getElementById('offpath');
   off.innerHTML = '<b>Not on this path:</b> '
-    + offAll.map(({n, b}) => `${bchip(b)} <span style="color:#999">(step ${n.step})</span>`).join(' · ')
+    + V.nodes.flatMap(n => contributorGroups(n.branches || []).map(g =>
+        `${gchip(g)} <span style="color:#999">(step ${n.step})</span>`)).join(' · ')
     + ' — each is a trace of its own; opening one makes it the path shown.';
   off.classList.remove('hidden');
 }
