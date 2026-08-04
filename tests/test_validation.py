@@ -22,23 +22,74 @@ def _issues_for(column, df, schema):
     return report, [i for i in report.issues if i.column == column]
 
 
-def test_enum_value_outside_vocabulary_warns():
+def test_enum_value_outside_vocabulary_errors():
     schema = _schema(columns=[
         {"name": "status", "type": "str", "enum": ["open", "closed"], "nullable": True},
     ])
     df = pd.DataFrame({"status": ["open", "pending"]})
-    report = validate_dataframe(df, schema, stage_id="s", phase="output")
-    msgs = [i.message for i in report.issues if i.column == "status"]
-    assert any("enum" in msg for msg in msgs), msgs
+    report, issues = _issues_for("status", df, schema)
+    assert len(issues) == 1
+    assert issues[0].severity == "error"
+    assert issues[0].message == (
+        "1 value(s) outside enum ['closed', 'open'] (e.g. 'pending')"
+    )
+    assert not report.ok
 
 
-def test_enum_all_values_valid_no_warning():
+def test_enum_error_names_the_distinct_offenders_not_the_repeats():
+    schema = _schema(columns=[
+        {"name": "status", "type": "str", "enum": ["open", "closed"], "nullable": True},
+    ])
+    df = pd.DataFrame({"status": ["pending", "pending", "pending", "draft"]})
+    _, issues = _issues_for("status", df, schema)
+    assert issues[0].message == (
+        "4 value(s) outside enum ['closed', 'open'] (e.g. 'pending', 'draft')"
+    )
+
+
+def test_enum_error_truncates_a_long_offender_list():
+    schema = _schema(columns=[
+        {"name": "status", "type": "str", "enum": ["open"], "nullable": True},
+    ])
+    df = pd.DataFrame({"status": [f"v{n}" for n in range(11)]})
+    _, issues = _issues_for("status", df, schema)
+    assert issues[0].message == (
+        "11 value(s) outside enum ['open'] (e.g. 'v0', 'v1', 'v2', 'v3', 'v4', "
+        "'v5', 'v6', 'v7', 'v8', 'v9'…)"
+    )
+
+
+def test_enum_error_names_the_whole_vocabulary_however_long():
+    vocabulary = [f"v{n}" for n in range(9)]
+    schema = _schema(columns=[
+        {"name": "status", "type": "str", "enum": vocabulary, "nullable": True},
+    ])
+    df = pd.DataFrame({"status": ["nope"]})
+    _, issues = _issues_for("status", df, schema)
+    assert issues[0].message == (
+        "1 value(s) outside enum "
+        "['v0', 'v1', 'v2', 'v3', 'v4', 'v5', 'v6', 'v7', 'v8'] (e.g. 'nope')"
+    )
+
+
+def test_enum_all_values_valid_raises_no_issue():
     schema = _schema(columns=[
         {"name": "status", "type": "str", "enum": ["open", "closed"], "nullable": True},
     ])
     df = pd.DataFrame({"status": ["open", "closed"]})
-    report = validate_dataframe(df, schema, stage_id="s", phase="output")
-    assert [i for i in report.issues if i.column == "status"] == []
+    report, issues = _issues_for("status", df, schema)
+    assert issues == []
+    assert report.ok
+
+
+def test_enum_nulls_are_not_reported_as_outside_the_vocabulary():
+    schema = _schema(columns=[
+        {"name": "status", "type": "str", "enum": ["open"], "nullable": True},
+    ])
+    df = pd.DataFrame({"status": ["open", None]})
+    report, issues = _issues_for("status", df, schema)
+    assert issues == []
+    assert report.ok
 
 
 def test_numeric_range_value_outside_bounds_warns():
@@ -127,9 +178,12 @@ def test_bool_column_holding_strings_errors():
 
 def test_type_mismatch_sample_is_truncated():
     schema = _schema(columns=[{"name": "n", "type": "int", "nullable": True}])
-    df = pd.DataFrame({"n": ["a", "b", "c", "d"]})
+    df = pd.DataFrame({"n": [f"v{n}" for n in range(11)]})
     _, issues = _issues_for("n", df, schema)
-    assert issues[0].message == "4 value(s) not of declared type 'int' (e.g. 'a', 'b', 'c'…)"
+    assert issues[0].message == (
+        "11 value(s) not of declared type 'int' (e.g. 'v0', 'v1', 'v2', 'v3', 'v4', "
+        "'v5', 'v6', 'v7', 'v8', 'v9'…)"
+    )
 
 
 def test_nulls_are_not_reported_as_type_mismatches():

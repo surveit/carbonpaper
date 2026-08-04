@@ -1,6 +1,7 @@
-"""Schema validation for stage I/O: column presence, type coercion, range
-constraints, nullability, and primary-key uniqueness against a stage's declared
-output_schema. Results are returned as structured records, not raised.
+"""Schema validation for stage I/O: column presence, type coercion, enum
+vocabularies, range constraints, nullability, and primary-key uniqueness against
+a stage's declared output_schema. Results are returned as structured records,
+not raised.
 """
 
 from __future__ import annotations
@@ -49,7 +50,7 @@ assert set(CELL_TYPE_PREDICATES) == SCALAR_COLUMN_TYPES, (
 )
 
 # How many offending values to name in an Issue message.
-_TYPE_SAMPLE_N = 3
+_OFFENDER_SAMPLE_N = 10
 
 
 class Severity(str, Enum):
@@ -178,8 +179,8 @@ def _find_type_issues(series: pd.Series, col: Column) -> list[Issue]:
     offenders = [v for v in non_null if not check(v)]
     if not offenders:
         return []
-    sample = ", ".join(repr(v) for v in offenders[:_TYPE_SAMPLE_N])
-    ellipsis = "…" if len(offenders) > _TYPE_SAMPLE_N else ""
+    sample = ", ".join(repr(v) for v in offenders[:_OFFENDER_SAMPLE_N])
+    ellipsis = "…" if len(offenders) > _OFFENDER_SAMPLE_N else ""
     return [
         Issue(
             "error", col.name,
@@ -210,21 +211,27 @@ def _find_numeric_range_issues(series: pd.Series, col: Column) -> list[Issue]:
 
 
 def _find_enum_issues(series: pd.Series, col: Column) -> list[Issue]:
+    """Values outside a `str` column's declared vocabulary — an error, like a bad type."""
     if not (col.enum and col.type == STR_COLUMN_TYPE):
         return []
     non_null = series.dropna()
     if not len(non_null):
         return []
     allowed = set(col.enum)
-    bad = (~non_null.astype(str).isin(allowed)).sum()
-    if bad:
-        return [
-            Issue(
-                "warning", col.name,
-                f"{bad} value(s) outside enum {sorted(allowed)[:8]}{'…' if len(allowed) > 8 else ''}",
-            )
-        ]
-    return []
+    rendered = non_null.astype(str)
+    offending = rendered[~rendered.isin(allowed)]
+    if not len(offending):
+        return []
+    distinct = list(offending.unique())
+    sample = ", ".join(repr(v) for v in distinct[:_OFFENDER_SAMPLE_N])
+    ellipsis = "…" if len(distinct) > _OFFENDER_SAMPLE_N else ""
+    return [
+        Issue(
+            "error", col.name,
+            f"{len(offending)} value(s) outside enum {sorted(allowed)} "
+            f"(e.g. {sample}{ellipsis})",
+        )
+    ]
 
 
 def _find_duplicate_primary_keys(df: pd.DataFrame, pk: list[str] | None) -> list[Issue]:
